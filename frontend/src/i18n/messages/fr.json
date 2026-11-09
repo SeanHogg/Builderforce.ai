@@ -13379,6 +13379,8 @@
     "chatTicketStatsCount": "{pct} % · {count} tickets",
     "chatTicketStatsCountAria": "{pct} % terminé sur {count} tickets",
     "chatTicketStatsCountOnly": "{count} tickets",
+    "chatTicketStatsCountOne": "{count} ticket",
+    "chatUntitled": "Discussion {id}",
     "chatTicketStatsNone": "Aucun ticket",
     "aiDisclosureAria": "Avis relatif à l’IA",
     "aiDisclosureBody": "Vous interagissez avec des agents d'IA. Les résultats peuvent être inexacts ; vérifiez-les avant de fonder une décision importante dessus. Les actions qui modifient des données nécessitent votre approbation, sauf si vous activez explicitement l'approbation automatique.",

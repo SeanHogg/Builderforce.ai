@@ -3319,10 +3319,10 @@ function chatTicketStatsText(input, labels) {
   if (count === 0) return { text: labels.ticketStatsNone, aria: labels.ticketStatsNone, empty: true };
   const pct = displayChatProgressPct(input.ticketProgressPct);
   if (pct == null) {
-    const text = fill(labels.ticketStatsCountOnly, { count });
+    const text = fill(count === 1 ? labels.ticketStatsCountOne : labels.ticketStatsCountOnly, { count });
     return { text, aria: text, empty: false };
   }
-  if (isCount(input.ticketOpenCount) && isCount(input.ticketDoneCount)) {
+  if (isCount(input.ticketOpenCount) && isCount(input.ticketDoneCount) && input.ticketOpenCount + input.ticketDoneCount > 0) {
     const values2 = { pct, open: input.ticketOpenCount, done: input.ticketDoneCount, count };
     return { text: fill(labels.ticketStats, values2), aria: fill(labels.ticketStatsAria, values2), empty: false };
   }
@@ -3338,8 +3338,6 @@ function ChatTicketStats({ chat, labels }) {
       className: "bf-chatrow__tickets",
       "data-empty": stats.empty ? "true" : void 0,
       title: stats.aria,
-      "aria-label": stats.aria,
-      role: "note",
       children: stats.text
     }
   );
@@ -3358,11 +3356,13 @@ var DEFAULT_CHAT_HISTORY_LABELS = {
   delete: "Delete",
   archive: "Archive",
   unarchive: "Unarchive",
+  untitled: "Chat {id}",
   ticketStats: "{pct}% \xB7 {open} open \xB7 {done} done",
   ticketStatsAria: "{pct}% complete: {open} open and {done} done tickets",
   ticketStatsCount: "{pct}% \xB7 {count} tickets",
   ticketStatsCountAria: "{pct}% complete across {count} tickets",
   ticketStatsCountOnly: "{count} tickets",
+  ticketStatsCountOne: "{count} ticket",
   ticketStatsNone: "No tickets"
 };
 function chatHistoryLabelsFrom(lookup) {
@@ -3426,7 +3426,7 @@ var ChatHistoryRow = memo7(function ChatHistoryRow2({
               onClick: () => onOpen(chat.id),
               children: [
                 marker != null && /* @__PURE__ */ jsx30("span", { className: "bf-chatrow__marker", children: marker }),
-                /* @__PURE__ */ jsx30("span", { className: "bf-chatrow__title", children: chat.title.trim() || `Chat ${chat.id}` })
+                /* @__PURE__ */ jsx30("span", { className: "bf-chatrow__title", children: chat.title.trim() || fill(labels.untitled, { id: chat.id }) })
               ]
             }
           ),
@@ -5898,10 +5898,7 @@ function chatSwitcherLabel(input) {
   const count = input.ticketCount ?? 0;
   const pct = displayChatProgressPct(input.ticketProgressPct);
   if (count <= 0 || pct == null) return `${glyph}${title}`;
-  const open = input.ticketOpenCount;
-  const done = input.ticketDoneCount;
-  const openDone = open != null && done != null ? ` \xB7 ${open} open \xB7 ${done} done` : "";
-  return `${glyph}${count} tickets \xB7 ${pct}%${openDone} \xB7 ${title}`;
+  return `${glyph}${count} tickets \xB7 ${pct}% \xB7 ${title}`;
 }
 
 // src/chatTickets/MergeSection.tsx

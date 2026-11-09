@@ -2617,7 +2617,7 @@
 .bf-chatrow[data-active='true'] { background: var(--bf-surface-2); border-left-color: var(--bf-accent); }
 .bf-chatrow__head { display: flex; align-items: center; gap: 6px; }
 .bf-chatrow__open {
-  flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;
+  flex: 1 10 0; min-width: 0; display: flex; align-items: center; gap: 6px;
   padding: 0; border: 0; background: transparent; color: var(--bf-text); font: inherit; text-align: left; cursor: pointer;
 }
 .bf-chatrow__open:focus-visible { outline: 2px solid var(--bf-accent); outline-offset: 2px; border-radius: 4px; }
@@ -2628,13 +2628,13 @@
   color: var(--bf-text-muted); background: var(--bf-surface-2); border: 1px solid var(--bf-border); border-radius: 999px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%;
 }
-/* <ChatTicketStats>: the linked-ticket column on every row. Never shrinks — the title
-   (min-width: 0 inside the flex:1 open button) truncates first, the overflow menu stays. */
+/* <ChatTicketStats>: the linked-ticket column on every row. The open button shrinks
+   10x faster (flex-shrink: 10), so the title truncates first; on a very narrow row the
+   column ellipsizes too; the overflow menu (flex-shrink: 0) always stays. */
 .bf-chatrow__tickets {
-  flex-shrink: 0; margin-left: auto; font-size: 11px; font-variant-numeric: tabular-nums;
-  color: var(--bf-text-muted); white-space: nowrap;
+  flex: 0 1 auto; min-width: 0; margin-left: auto; font-size: 11px; font-variant-numeric: tabular-nums;
+  color: var(--bf-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.bf-chatrow__tickets[data-empty='true'] { opacity: 0.7; }
 .bf-chatrow__tickets + .bf-chatrow__stats { margin-left: 0; }
 .bf-chatrow__rename {
   flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 2px 4px;

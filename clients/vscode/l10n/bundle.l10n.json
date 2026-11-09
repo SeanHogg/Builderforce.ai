@@ -405,6 +405,8 @@
   "{pct}% · {count} tickets": "{pct}% · {count} tickets",
   "{pct}% complete across {count} tickets": "{pct}% complete across {count} tickets",
   "{count} tickets": "{count} tickets",
+  "{count} ticket": "{count} ticket",
+  "Chat {id}": "Chat {id}",
   "No tickets": "No tickets",
   "Running {0}…": "Running {0}…",
   "Running {tool}": "Running {tool}",

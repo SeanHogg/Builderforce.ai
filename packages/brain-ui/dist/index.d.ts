@@ -1458,7 +1458,9 @@ declare function StarterTile({ icon, label, hint, onClick, pressed, disabled }: 
  * - `ticketCount` 0: one muted "No tickets", so every row has the column without a
  *   wall of zeros.
  * - open/done absent (an older server): `62% · 8 tickets` — absent is UNKNOWN, never 0.
- * - percent absent but tickets linked: `8 tickets`.
+ *   Every linked ticket cancelled (open + done = 0) reads the same count form, never
+ *   `0 open · 0 done`.
+ * - percent absent but tickets linked: `8 tickets` (`1 ticket` when there is one).
  */
 /** The copy the column reads (fields of `ChatHistoryLabels`). */
 interface ChatTicketStatsLabels {
@@ -1472,6 +1474,8 @@ interface ChatTicketStatsLabels {
     ticketStatsCountAria: string;
     /** "{count} tickets" — tickets linked, no percent. */
     ticketStatsCountOnly: string;
+    /** "{count} ticket" — exactly one ticket linked, no percent. */
+    ticketStatsCountOne: string;
     /** "No tickets". */
     ticketStatsNone: string;
 }
@@ -1525,6 +1529,8 @@ interface ChatHistoryLabels extends ChatTicketStatsLabels {
     archive: string;
     /** Restore an archived chat to the live list (offered on an already-archived row). */
     unarchive: string;
+    /** "Chat {id}" — a row whose title is blank. */
+    untitled: string;
 }
 declare const DEFAULT_CHAT_HISTORY_LABELS: ChatHistoryLabels;
 /** THE chat-history copy from a host catalog (canonical keys = the field names). */
@@ -3270,15 +3276,12 @@ declare function RailSyncSummary({ summary, labels, locale }: {
  * Live-run glyphs (`❓` awaiting confirm, `●` running) already tell the user
  * the chat is busy. Linked-ticket progress is the other come-back signal:
  * a chat at 67% still has open work, even when nothing is running right now.
- * Open/done counts are added only when the server sent them (absent = unknown).
  */
 declare function chatSwitcherLabel(input: {
     title: string;
     id: number;
     ticketCount?: number | null;
     ticketProgressPct?: number | null;
-    ticketOpenCount?: number | null;
-    ticketDoneCount?: number | null;
     runGlyph?: string;
 }): string;
 

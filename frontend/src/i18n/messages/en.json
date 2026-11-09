@@ -13379,6 +13379,8 @@
     "chatTicketStatsCount": "{pct}% · {count} tickets",
     "chatTicketStatsCountAria": "{pct}% complete across {count} tickets",
     "chatTicketStatsCountOnly": "{count} tickets",
+    "chatTicketStatsCountOne": "{count} ticket",
+    "chatUntitled": "Chat {id}",
     "chatTicketStatsNone": "No tickets",
     "aiDisclosureAria": "AI disclosure",
     "aiDisclosureBody": "You are interacting with AI agents. Outputs can be inaccurate; review consequential results before relying on them. Mutating actions require your approval unless you explicitly enable auto-approve.",

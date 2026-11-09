@@ -13379,6 +13379,8 @@
     "chatTicketStatsCount": "{pct} % · {count} Tickets",
     "chatTicketStatsCountAria": "{pct} % abgeschlossen über {count} Tickets",
     "chatTicketStatsCountOnly": "{count} Tickets",
+    "chatTicketStatsCountOne": "{count} Ticket",
+    "chatUntitled": "Chat {id}",
     "chatTicketStatsNone": "Keine Tickets",
     "aiDisclosureAria": "KI-Hinweis",
     "aiDisclosureBody": "Sie interagieren mit KI-Agenten. Ergebnisse können fehlerhaft sein; prüfen Sie sie, bevor Sie wichtige Entscheidungen darauf stützen. Ändernde Aktionen erfordern Ihre Freigabe, sofern Sie die automatische Freigabe nicht ausdrücklich aktivieren.",

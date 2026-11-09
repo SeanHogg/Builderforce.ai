@@ -123,6 +123,8 @@ const CHAT_HISTORY_KEY: Readonly<Record<string, string>> = {
   ticketStatsCount: 'app.chatTicketStatsCount',
   ticketStatsCountAria: 'app.chatTicketStatsCountAria',
   ticketStatsCountOnly: 'app.chatTicketStatsCountOnly',
+  ticketStatsCountOne: 'app.chatTicketStatsCountOne',
+  untitled: 'app.chatUntitled',
   ticketStatsNone: 'app.chatTicketStatsNone',
 };
 const TOOL_CONFIRM_KEY: Readonly<Record<string, string>> = {

@@ -10,7 +10,9 @@ import { fill } from '../spend/format';
  * - `ticketCount` 0: one muted "No tickets", so every row has the column without a
  *   wall of zeros.
  * - open/done absent (an older server): `62% · 8 tickets` — absent is UNKNOWN, never 0.
- * - percent absent but tickets linked: `8 tickets`.
+ *   Every linked ticket cancelled (open + done = 0) reads the same count form, never
+ *   `0 open · 0 done`.
+ * - percent absent but tickets linked: `8 tickets` (`1 ticket` when there is one).
  */
 
 /** The copy the column reads (fields of `ChatHistoryLabels`). */
@@ -25,6 +27,8 @@ export interface ChatTicketStatsLabels {
   ticketStatsCountAria: string;
   /** "{count} tickets" — tickets linked, no percent. */
   ticketStatsCountOnly: string;
+  /** "{count} ticket" — exactly one ticket linked, no percent. */
+  ticketStatsCountOne: string;
   /** "No tickets". */
   ticketStatsNone: string;
 }
@@ -55,10 +59,10 @@ export function chatTicketStatsText(input: ChatTicketStatsInput, labels: ChatTic
   if (count === 0) return { text: labels.ticketStatsNone, aria: labels.ticketStatsNone, empty: true };
   const pct = displayChatProgressPct(input.ticketProgressPct);
   if (pct == null) {
-    const text = fill(labels.ticketStatsCountOnly, { count });
+    const text = fill(count === 1 ? labels.ticketStatsCountOne : labels.ticketStatsCountOnly, { count });
     return { text, aria: text, empty: false };
   }
-  if (isCount(input.ticketOpenCount) && isCount(input.ticketDoneCount)) {
+  if (isCount(input.ticketOpenCount) && isCount(input.ticketDoneCount) && input.ticketOpenCount + input.ticketDoneCount > 0) {
     const values = { pct, open: input.ticketOpenCount, done: input.ticketDoneCount, count };
     return { text: fill(labels.ticketStats, values), aria: fill(labels.ticketStatsAria, values), empty: false };
   }
@@ -74,8 +78,6 @@ export function ChatTicketStats({ chat, labels }: { chat: ChatTicketStatsInput; 
       className="bf-chatrow__tickets"
       data-empty={stats.empty ? 'true' : undefined}
       title={stats.aria}
-      aria-label={stats.aria}
-      role="note"
     >
       {stats.text}
     </span>

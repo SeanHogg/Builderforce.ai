@@ -24,6 +24,8 @@ const CHAT_HISTORY_PATH: Readonly<Record<string, string>> = {
   ticketStatsCount: 'brain.chatTicketStatsCount',
   ticketStatsCountAria: 'brain.chatTicketStatsCountAria',
   ticketStatsCountOnly: 'brain.chatTicketStatsCountOnly',
+  ticketStatsCountOne: 'brain.chatTicketStatsCountOne',
+  untitled: 'brain.chatUntitled',
   ticketStatsNone: 'brain.chatTicketStatsNone',
 };
 const chatHistoryPath = (key: string): string | undefined => CHAT_HISTORY_PATH[key];

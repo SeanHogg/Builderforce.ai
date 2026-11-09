@@ -13379,6 +13379,8 @@
     "chatTicketStatsCount": "{pct}% · {count} 个工单",
     "chatTicketStatsCountAria": "{count} 个工单整体完成 {pct}%",
     "chatTicketStatsCountOnly": "{count} 个工单",
+    "chatTicketStatsCountOne": "{count} 个工单",
+    "chatUntitled": "聊天 {id}",
     "chatTicketStatsNone": "没有工单",
     "aiDisclosureAria": "AI 声明",
     "aiDisclosureBody": "您正在与 AI 智能体互动。输出结果可能不准确；在依据重要结果采取行动前请先复核。除非您明确启用自动批准，否则更改数据的操作都需要您的批准。",

@@ -34,8 +34,8 @@ export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatC
   const { runTool, needsConfirm, persistence } = req;
   return async (rawCall, ctx) => {
     const iter = ctx.step;
-    run.pendingReplay = null;
-    run.pendingRun = null;
+    // This call starts clean: only ITS entry, never a sibling's still in flight (D8 batches run concurrently).
+    run.pending.forget(rawCall.id);
     // Router calls resolve against the in-memory catalog FIRST. `find`/`describe`
     // are answered locally (no network, no host dispatch); `invoke` unwraps to the
     // real tool and then falls through to the normal path below — so a routed call
@@ -210,7 +210,7 @@ export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatC
             advisory: revisit ? `${replayNote}\n\n${revisit}` : replayNote,
             contextWindowTokens: await run.windowFit.contextWindow?.(),
           });
-          run.pendingReplay = { name: call.name, args, result: cached.result, served: replayed.served };
+          run.pending.replayed(call.id, { name: call.name, args, result: cached.result, served: replayed.served });
           pushTrace(c, {
             ts: nowIso(),
             category: 'tool',
@@ -246,7 +246,7 @@ export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatC
           // read's own window from its first line (PRD 35 E1).
           const requested = requestedReadWindow(covered.cached.result ?? null, covered.start, covered.end);
           const replayed = trimToolResult(call.name, requested, { advisory: note, contextWindowTokens: await run.windowFit.contextWindow?.() });
-          run.pendingReplay = { name: call.name, args, result: requested, served: replayed.served };
+          run.pending.replayed(call.id, { name: call.name, args, result: requested, served: replayed.served });
           pushTrace(c, {
             ts: nowIso(),
             category: 'tool',
@@ -274,7 +274,7 @@ export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatC
         const target = visit ? visitTarget(args) : undefined;
         const revisit = visit && target ? revisitAdvisory(call.name, target, visit) : null;
         const served = trimToolResult(call.name, derived, { advisory: revisit, contextWindowTokens: await run.windowFit.contextWindow?.() });
-        run.pendingReplay = { name: call.name, args, result: derived };
+        run.pending.replayed(call.id, { name: call.name, args, result: derived });
         pushTrace(c, {
           ts: nowIso(),
           category: 'tool',

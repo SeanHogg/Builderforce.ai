@@ -21,6 +21,7 @@ import type { turnInterruption } from '../finishReason.js';
 import type { RunWindowFit } from '../windowFit/runWindowFit';
 import type { RunCell } from './runCell';
 import type { PublishHold } from './publishHold';
+import type { PendingCalls } from './pendingCalls';
 import { nowIso, pushTrace, recordAppended } from './runCells';
 import { canonicalTurnText, provenanceMetadata } from './turnPersistence';
 import type { BrainRunRequest } from './runTypes';
@@ -133,12 +134,9 @@ export interface BrainRunContext {
    * or the resolver returned null).
    */
   pendingAskAutoAnswer?: string;
-  /** A replayed read waits for its row to be pushed so the cache can anchor to it. */
-  pendingReplay: { name: string; args: unknown; result: unknown; served?: unknown } | null;
-  /** What dispatch learned about the call it just ran — for the durable step + the read cache.
-   *  `served` is the `read_file` window the model was handed (before the advisory), which
-   *  read coverage records instead of the untrimmed `out`. */
-  pendingRun: { out: unknown; toolStart: number; isReadTool: boolean; threw: boolean; bytes?: number; truncated?: boolean; served?: unknown } | null;
+  /** What each in-flight call carries from preflight / dispatch to its post step, keyed by call id — the calls of one read-only
+   *  batch run concurrently (D8), so no state of "the" call in flight may be shared (`pendingCalls.ts`). */
+  pending: PendingCalls;
   /** The finish reason of the turn that produced the call being dispatched. A malformed
    *  call is either the tail of a response that hit the output ceiling or JSON the model
    *  simply got wrong, and the advice for the two is opposite. */

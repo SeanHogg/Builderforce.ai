@@ -20,17 +20,17 @@ export function callPostStep(run: BrainRunContext): NonNullable<Hooks['afterDisp
   return (call, result, row) => {
     // Every call the model made, cache-answered or run — the progress detector judges both.
     run.progress.observe(call.name, call.args, result);
-    if (run.pendingReplay) {
+    // THIS call's entry only: the calls of a read-only batch ran concurrently, and a sibling's entry is the sibling's.
+    const pending = run.pending.take(call.id);
+    if (pending?.kind === 'replay') {
       // Keep the replayed read anchored to the message that now carries it.
-      const replay = run.pendingReplay;
+      const { replay } = pending;
       readCoverage.cacheResult(replay.name, replay.args, { result: replay.result, ...(replay.served !== undefined ? { served: replay.served } : {}), anchor: row });
-      run.pendingReplay = null;
       return undefined;
     }
-    const ran = run.pendingRun;
-    run.pendingRun = null;
     // Router answers, declined confirms and dedupe stubs carry no run of their own.
-    if (!ran) return undefined;
+    if (!pending) return undefined;
+    const { ran } = pending;
     // The host ran this call: the run touched the world again (`cacheServedStreak.ts`).
     run.cacheStreak.ran();
     const args = call.args;

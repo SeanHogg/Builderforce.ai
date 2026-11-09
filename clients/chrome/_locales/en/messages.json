@@ -123,6 +123,14 @@
     "message": "$1 tickets",
     "description": "Chat history row: tickets linked but no percent yet; $1 = ticket count"
   },
+  "chatTicketStatsCountOne": {
+    "message": "$1 ticket",
+    "description": "Chat history row: exactly one ticket linked, no percent yet; $1 = ticket count"
+  },
+  "chatUntitled": {
+    "message": "Chat $1",
+    "description": "Chat history row: title of a chat that has none; $1 = chat id"
+  },
   "chatTicketStatsNone": {
     "message": "No tickets",
     "description": "Chat history row: the chat has no linked tickets"

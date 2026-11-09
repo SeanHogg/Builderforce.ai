@@ -8,15 +8,12 @@ import { displayChatProgressPct } from '@builderforce/agent-loop';
  * Live-run glyphs (`❓` awaiting confirm, `●` running) already tell the user
  * the chat is busy. Linked-ticket progress is the other come-back signal:
  * a chat at 67% still has open work, even when nothing is running right now.
- * Open/done counts are added only when the server sent them (absent = unknown).
  */
 export function chatSwitcherLabel(input: {
   title: string;
   id: number;
   ticketCount?: number | null;
   ticketProgressPct?: number | null;
-  ticketOpenCount?: number | null;
-  ticketDoneCount?: number | null;
   runGlyph?: string;
 }): string {
   const title = input.title.trim() || `Chat ${input.id}`;
@@ -25,9 +22,5 @@ export function chatSwitcherLabel(input: {
   // The ONE display rule the Sessions tree and the ticket rail share.
   const pct = displayChatProgressPct(input.ticketProgressPct);
   if (count <= 0 || pct == null) return `${glyph}${title}`;
-  const open = input.ticketOpenCount;
-  const done = input.ticketDoneCount;
-  const openDone =
-    open != null && done != null ? ` · ${open} open · ${done} done` : '';
-  return `${glyph}${count} tickets · ${pct}%${openDone} · ${title}`;
+  return `${glyph}${count} tickets · ${pct}% · ${title}`;
 }

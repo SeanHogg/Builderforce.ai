@@ -31,6 +31,8 @@ const CHAT_HISTORY_KEY: Readonly<Record<string, MessageKey>> = {
   ticketStatsCount: 'chatTicketStatsCount',
   ticketStatsCountAria: 'chatTicketStatsCountAria',
   ticketStatsCountOnly: 'chatTicketStatsCountOnly',
+  ticketStatsCountOne: 'chatTicketStatsCountOne',
+  untitled: 'chatUntitled',
   ticketStatsNone: 'chatTicketStatsNone',
 };
 
@@ -45,6 +47,8 @@ const LITERAL_PLACEHOLDERS: Readonly<Record<string, Readonly<Record<string, stri
   ticketStatsCount: { pct: '{pct}', count: '{count}' },
   ticketStatsCountAria: { pct: '{pct}', count: '{count}' },
   ticketStatsCountOnly: { count: '{count}' },
+  ticketStatsCountOne: { count: '{count}' },
+  untitled: { id: '{id}' },
 };
 
 /** The rows' copy through brain-ui's one table, placeholders handed through literally. */

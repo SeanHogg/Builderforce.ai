@@ -12,9 +12,14 @@
  * consulted, because a closed surface skips it.
  *
  * A capped role keeps:
- *   • its role tool set — the shared core names ({@link coreToolNames}) plus the
+ *   • the surface's REQUIRED set, always — every tool the prompt or the turn block names,
+ *     the host's workspace vocabulary (`localToolsIn`), `hand_off`. Dropping a tool the
+ *     prompt tells the model to call is what cost a 78-call / 44-minute run
+ *     (`brain-embedded/src/runStore/runPreamble.ts`), so the cap never narrows it;
+ *   • its role tool set — the shared core names ({@link coreToolNames}), the
  *     navigation/inspection companions a host advertises under its own names
- *     ({@link ROLE_COMPANION_TOOLS}) — wherever the catalog holds them;
+ *     ({@link ROLE_COMPANION_TOOLS}) and the delivery/coordination tools every code and
+ *     verify turn needs ({@link ROLE_GUARANTEED_TOOLS}) — wherever the catalog holds them;
  *   • any other tool only when it MATCHES the turn's request (no catalog-order backfill),
  *     so platform/ticket tools reach a code turn only when the ask is about them;
  *   • the tools the run already called or loaded through the router (pinned, appended);
@@ -48,6 +53,19 @@ export const ROLE_COMPANION_TOOLS: Readonly<Record<CappedToolRole, readonly stri
   ],
 };
 
+/**
+ * The tools a code or verify turn may never lose (where the catalog holds them): shipping the
+ * change (commit, push, pull request), reading a retained command output, coordinating
+ * sub-agents, reporting state and handing off, recording a review and updating the ticket.
+ */
+export const ROLE_GUARANTEED_TOOLS: readonly string[] = [
+  "git_commit", "git_push", "open_pull_request", "output_filter", "wait_agents", "stop_agent", "message_agent",
+  "update_task_state", "hand_off", "builtin_reviews_record", "builtin_tasks_update",
+];
+
+/** Room a capped role keeps for tools that MATCH the request, on top of its required set. */
+export const ROLE_MATCH_ROOM: Readonly<Record<CappedToolRole, number>> = { code: 6, verify: 4 };
+
 /** Whether a turn's role is capped. */
 export function isCappedToolRole(role: string | null | undefined): role is CappedToolRole {
   return role === "code" || role === "verify";
@@ -60,30 +78,33 @@ export function roleToolLimit(role: string | null | undefined): number {
 
 /** A capped role's tool names, core first, deduped. */
 export function roleToolNames(role: CappedToolRole): string[] {
-  return [...new Set([...coreToolNames(role), ...ROLE_COMPANION_TOOLS[role]])];
+  return [...new Set([...coreToolNames(role), ...ROLE_COMPANION_TOOLS[role], ...ROLE_GUARANTEED_TOOLS])];
 }
 
 /** What a capped role's selection asks of `selectToolsForTurn`. */
 export interface RoleCappedSelection {
   limit: number;
-  /** The role set the catalog holds, plus the surface's own role keep-set: held to the limit. */
+  /** The surface's required set, the role set and the surface's role keep-set the catalog holds — never dropped. */
   required: string[];
   /** Fill only with tools that match the request — never the catalog-order backfill. */
   backfill: false;
 }
 
 /**
- * The selection a capped role's turn makes over `catalogNames`. `keep` is the surface's own
- * vocabulary a role must not lose (e.g. a Studio's build tools); the surface's wider required set
- * (every workspace tool, every tool the persona names) is NOT carried — the router reaches those.
+ * The selection a capped role's turn makes over `catalogNames`. `surfaceRequired` is the surface's
+ * required set (the tools the prompt names, its workspace vocabulary, `hand_off`) and `keep` its
+ * own vocabulary a role must not lose (e.g. a Studio's build tools): both always survive. The cap
+ * removes only the catalog-order backfill and the tools that neither the role nor the request needs.
  */
 export function roleCappedSelection(
   role: CappedToolRole,
   catalogNames: Iterable<string>,
   keep: Iterable<string> = [],
+  surfaceRequired: Iterable<string> = [],
 ): RoleCappedSelection {
   const present = new Set(catalogNames);
-  const required = [...new Set([...roleToolNames(role), ...keep])].filter((n) => present.has(n));
-  // A keep-set larger than the cap widens it rather than dropping a tool the surface IS.
-  return { limit: Math.max(ROLE_TOOL_LIMIT[role], required.length), required, backfill: false };
+  const required = [...new Set([...surfaceRequired, ...roleToolNames(role), ...keep])].filter((n) => present.has(n));
+  // A required set larger than the cap widens it rather than dropping a tool the prompt names; the
+  // match room leaves the request's own tools a slot beside it.
+  return { limit: Math.max(ROLE_TOOL_LIMIT[role], required.length + ROLE_MATCH_ROOM[role]), required, backfill: false };
 }

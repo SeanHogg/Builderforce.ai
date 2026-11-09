@@ -7,10 +7,9 @@
  *
  *   - {@link withPipefail}: a model's `pnpm install 2>&1 | tail -20` that FAILED reported
  *     exit 0, because a pipeline's status is its last stage's. Under `pipefail` it is the
- *     failing stage's.
- *   - {@link stripTrailingTrim}: a trailing `| tail -N` / `| head -N` only throws output away
- *     (the shell's output budget already bounds it) — and it hid the failure above. It is
- *     dropped, and the result shows the head AND the tail of the real output instead.
+ *     failing stage's. The command itself is never rewritten: a `| head -N` is a real limit
+ *     (`git log | head -20`, `yes | head`) and a `| tail -N` reads the end of output the shell
+ *     would otherwise clamp, so both run as the model wrote them.
  *   - {@link searchNoMatch}: `grep` exiting 1 with no output found nothing; that is an
  *     answer, not a failed step.
  */
@@ -50,9 +49,12 @@ function closesEarly(stage: string): boolean {
  * the host routes it to, `null` = the platform shell (cmd.exe on Windows — left alone; `/bin/sh`
  * elsewhere, where `pipefail` is set only if that sh has it). Untouched: a command with no pipe,
  * a script that sets its own options (`set -e` scripts the git tools build depend on a
- * substitution's pipeline NOT failing), and a pipeline with a stage that closes early (`| head`,
- * `grep -q`), whose producer would die of SIGPIPE. `platform` is the host's `process.platform`,
- * passed in by the node shell that runs the command — this module never reads `process`.
+ * substitution's pipeline NOT failing), a pipeline with a stage that closes early (`| head`,
+ * `grep -q`), whose producer would die of SIGPIPE, and a pipeline with a search BEFORE its last
+ * stage (`grep -rn foo src | wc -l`): a search that matched nothing exits 1, and under pipefail
+ * that "0" would read as a failed step that {@link searchNoMatch} cannot rescue (it only reads a
+ * search in last place). `platform` is the host's `process.platform`, passed in by the node
+ * shell that runs the command — this module never reads `process`.
  */
 export function withPipefail(command: string, bash: string | null, platform: string): string {
   const bare = withoutQuoted(command);
@@ -60,62 +62,33 @@ export function withPipefail(command: string, bash: string | null, platform: str
   if (parts.length < 2) return command;
   if (/(^|\n)\s*set\s+[-+]/.test(bare)) return command;
   if (parts.slice(1).some(closesEarly)) return command;
+  if (searchesMidPipeline(bare)) return command;
   if (bash) return `set -o pipefail\n${command}`;
   if (platform === "win32") return command;
   // A POSIX sh without the option (old dash) would EXIT on a bad `set`: probe in a subshell first.
   return `(set -o pipefail) 2>/dev/null && set -o pipefail\n${command}`;
 }
 
-/** What {@link stripTrailingTrim} removed. */
-export interface OutputTrim {
-  kind: "head" | "tail";
-  lines: number;
-}
-
-const TRAILING_TRIM = /\s*(?:2>&1\s*)?\|\s*(head|tail)\s+(?:-n\s*|--lines[=\s]\s*|-)(\d+)\s*$/;
-
-/**
- * Drop a trailing `| tail -N` / `| head -N` (with or without `2>&1`, `-n N`, `--lines=N`).
- * Everything before it is kept — a `grep … | sort` that does real work still runs. A command
- * whose trim is inside quotes (`bash -c "x | tail -5"`), after `||`, or that is ONLY the trim is unchanged.
- */
-export function stripTrailingTrim(command: string): { command: string; trim?: OutputTrim } {
-  const m = TRAILING_TRIM.exec(command);
-  // Still there once quoted text is blanked ⇒ the trim is real syntax, not the end of a string.
-  if (!m || !TRAILING_TRIM.test(withoutQuoted(command))) return { command };
-  const kept = command.slice(0, m.index).trimEnd();
-  if (!kept || /\|\s*$/.test(kept)) return { command };
-  return { command: kept, trim: { kind: m[1] as OutputTrim["kind"], lines: Number(m[2]) } };
-}
-
-/** Lines kept from each end of a trimmed command's output (at least what the trim asked for). */
-const TRIM_WINDOW_LINES = 40;
-
-/**
- * A stripped command's output as its first and last lines — the head says what started (and,
- * as in `ERR_PNPM_NO_PKG_MANIFEST`, often what failed), the tail says how it ended.
- */
-export function shapeTrimmed(text: string, trim: OutputTrim, outputId?: string): string {
-  const lines = text.split("\n");
-  const head = Math.max(TRIM_WINDOW_LINES, trim.kind === "head" ? trim.lines : 0);
-  const tail = Math.max(TRIM_WINDOW_LINES, trim.kind === "tail" ? trim.lines : 0);
-  if (lines.length <= head + tail) return text;
-  const omitted = lines.length - head - tail;
-  const more = outputId ? `; output_filter { "outputId": "${outputId}" } reads them` : "";
-  return [...lines.slice(0, head), `…(${omitted} lines omitted${more})…`, ...lines.slice(lines.length - tail)].join("\n");
-}
-
 const SEARCH_VERBS = new Set(["grep", "egrep", "fgrep", "rg", "findstr", "ag", "ack"]);
+
+/** A pipeline stage that is a text search (`grep`, `rg`, `findstr`, `git grep`, `Select-String`). */
+function isSearchStage(stage: string): boolean {
+  const verb = verbOf(stage);
+  if (SEARCH_VERBS.has(verb)) return true;
+  if (verb === "git") return /^\S+\s+(?:-\S+\s+)*grep\b/.test(stage.replace(/^(?:\w+=\S*\s+)+/, ""));
+  return verb === "select-string" || verb === "sls";
+}
+
+/** True when any pipeline of the (quote-blanked) command has a search before its last stage. */
+function searchesMidPipeline(bare: string): boolean {
+  return bare.split(/&&|\|\||;|\n/).some((pipeline) => stages(pipeline).slice(0, -1).some(isSearchStage));
+}
 
 /** A single pipeline whose last stage is a text search (`grep`, `rg`, `findstr`, `git grep`, `Select-String`). */
 export function isSearchCommand(command: string): boolean {
   const bare = withoutQuoted(command);
   if (isChained(bare)) return false;
-  const last = stages(bare).pop() ?? "";
-  const verb = verbOf(last);
-  if (SEARCH_VERBS.has(verb)) return true;
-  if (verb === "git") return /^\S+\s+(?:-\S+\s+)*grep\b/.test(last.replace(/^(?:\w+=\S*\s+)+/, ""));
-  return verb === "select-string" || verb === "sls";
+  return isSearchStage(stages(bare).pop() ?? "");
 }
 
 const NO_OUTPUT = /^\s*(\(no output\))?\s*$/;

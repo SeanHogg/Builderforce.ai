@@ -1,5 +1,6 @@
 import { memo, type ReactNode } from 'react';
 import { stringsFrom, type LabelLookup } from '../labelCatalog';
+import { fill } from '../spend/format';
 import { ChatTicketStats, type ChatTicketStatsLabels } from './ChatTicketStats';
 
 /**
@@ -31,6 +32,8 @@ export interface ChatHistoryLabels extends ChatTicketStatsLabels {
   archive: string;
   /** Restore an archived chat to the live list (offered on an already-archived row). */
   unarchive: string;
+  /** "Chat {id}" — a row whose title is blank. */
+  untitled: string;
 }
 
 export const DEFAULT_CHAT_HISTORY_LABELS: ChatHistoryLabels = {
@@ -44,11 +47,13 @@ export const DEFAULT_CHAT_HISTORY_LABELS: ChatHistoryLabels = {
   delete: 'Delete',
   archive: 'Archive',
   unarchive: 'Unarchive',
+  untitled: 'Chat {id}',
   ticketStats: '{pct}% · {open} open · {done} done',
   ticketStatsAria: '{pct}% complete: {open} open and {done} done tickets',
   ticketStatsCount: '{pct}% · {count} tickets',
   ticketStatsCountAria: '{pct}% complete across {count} tickets',
   ticketStatsCountOnly: '{count} tickets',
+  ticketStatsCountOne: '{count} ticket',
   ticketStatsNone: 'No tickets',
 };
 
@@ -176,7 +181,7 @@ export const ChatHistoryRow = memo(function ChatHistoryRow({
             onClick={() => onOpen(chat.id)}
           >
             {marker != null && <span className="bf-chatrow__marker">{marker}</span>}
-            <span className="bf-chatrow__title">{chat.title.trim() || `Chat ${chat.id}`}</span>
+            <span className="bf-chatrow__title">{chat.title.trim() || fill(labels.untitled, { id: chat.id })}</span>
           </button>
         )}
         {renaming && (

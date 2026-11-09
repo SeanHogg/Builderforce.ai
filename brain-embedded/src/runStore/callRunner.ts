@@ -62,7 +62,9 @@ export function callRunner(run: BrainRunContext): LoopPorts<ChatCompletionMessag
     // Name the tool AND what it is working on, before it runs. This is the
     // step that most often takes tens of seconds, and the one the trace could
     // never show until it was already over.
-    setActivity(c, toolActivity(call.name, args, iter, Date.now()));
+    const live = toolActivity(call.name, args, iter, Date.now());
+    run.pending.begin(call.id, live);
+    setActivity(c, live);
     // Unreachable: the model port advertises no tool calls without a runner.
     if (!runTool) throw new Error('tool call without a tool runner');
     let out: unknown;
@@ -81,14 +83,15 @@ export function callRunner(run: BrainRunContext): LoopPorts<ChatCompletionMessag
       // reads. The DURABLE step keeps the untouched error.
       const repeat = failureAdvisoryFor(run, call.name, args, out, iter);
       if (!isReadTool) writeLedger.record(call.name, args, { ok: false, unscoped: isUnscopedMutation(call.name, args) });
-      run.pendingRun = { out, toolStart, isReadTool, threw: true };
+      run.pending.ran(call.id, { out, toolStart, isReadTool, threw: true });
       // Errors are small; push as-is (trimming a short error would only add noise).
       return { data: repeat ? withAdvisory(out, repeat) : out, isError: true };
     } finally {
       // The call is OVER: it must stop being the live step. Without this the finished tool stayed the activity until
       // the next completion opened, so everything between (the guards, the steering drain, the tool menu, the context
       // fold's own model call) read as the tool still running (chat #60338: `remember_fact` "running 3m53s").
-      setActivity(c, betweenTurnsActivity(iter, Date.now()));
+      // A sibling of a read-only batch (D8) still running stays the live step; "between turns" only once the last one returned.
+      setActivity(c, run.pending.end(call.id) ?? betweenTurnsActivity(iter, Date.now()));
     }
     // Backstop bookkeeping (see startRun's finally): a successful workspace
     // file-change marks the run as code-changing (and remembers the file), while
@@ -207,7 +210,7 @@ export function callRunner(run: BrainRunContext): LoopPorts<ChatCompletionMessag
     const trimmedOut = trimToolResult(call.name, out ?? null, { advisory, contextWindowTokens });
     // `served` — the window the model was actually handed — is what read coverage
     // records (PRD 35 E1); the untrimmed `out` is kept only for a replay.
-    run.pendingRun = { out, toolStart, isReadTool, threw: false, bytes: trimmedOut.bytes, truncated: trimmedOut.truncated, served: trimmedOut.served };
+    run.pending.ran(call.id, { out, toolStart, isReadTool, threw: false, bytes: trimmedOut.bytes, truncated: trimmedOut.truncated, served: trimmedOut.served });
     return { data: trimmedOut.content, isError: isFailedToolResult(out) };
   };
 }

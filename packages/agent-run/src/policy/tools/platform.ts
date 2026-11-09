@@ -27,10 +27,10 @@ export function selectPlatformCatalog(ctx: PolicyContext, pinned: readonly strin
   const catalog = platform.schemas({ rungs: ctx.state.stall?.rungs ?? {} });
   const selection = platform.selection;
   const { query } = selection;
-  // A code or verify turn is capped to its role's tool set plus what matches the request (`roleCap.ts`); every other turn keeps the
-  // surface's own limit and required set.
+  // A code or verify turn is capped to the surface's required set (always kept), its role's tool set and what matches the request
+  // (`roleCap.ts`); every other turn keeps the surface's own limit and required set.
   const capped = isCappedToolRole(selection.role)
-    ? roleCappedSelection(selection.role, catalog.map((t) => t.function?.name ?? ""), selection.roleKeep ?? [])
+    ? roleCappedSelection(selection.role, catalog.map((t) => t.function?.name ?? ""), selection.roleKeep ?? [], selection.required)
     : undefined;
   const limit = capped?.limit ?? selection.limit;
   const required = capped?.required ?? [...selection.required];

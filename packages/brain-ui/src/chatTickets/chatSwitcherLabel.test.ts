@@ -29,18 +29,6 @@ describe('chatSwitcherLabel', () => {
     ).toBe('● 3 tickets · 50% · review the Roadmap.md file');
   });
 
-  it('adds open/done counts when the server sent them', () => {
-    expect(
-      chatSwitcherLabel({ title: 'ship it', id: 3, ticketCount: 8, ticketProgressPct: 62, ticketOpenCount: 3, ticketDoneCount: 5 }),
-    ).toBe('8 tickets · 62% · 3 open · 5 done · ship it');
-  });
-
-  it('treats absent open/done as unknown, not zero', () => {
-    expect(chatSwitcherLabel({ title: 'ship it', id: 3, ticketCount: 8, ticketProgressPct: 62, ticketOpenCount: 3 })).toBe(
-      '8 tickets · 62% · ship it',
-    );
-  });
-
   it('falls back to Chat <id> when the title is blank', () => {
     expect(chatSwitcherLabel({ title: '  ', id: 9, ticketCount: 1, ticketProgressPct: 0 })).toBe(
       '1 tickets · 0% · Chat 9',

@@ -21,7 +21,7 @@ import type { ChatRunStatus } from './useVsCodeChats';
 
 /** `$1.20` — always two decimals so the chip's width stays stable across rows. */
 function usd(n: number): string {
-  return `${n.toFixed(2)}`;
+  return `$${n.toFixed(2)}`;
 }
 
 /**

@@ -92,6 +92,12 @@
   "chatTicketStatsCountOnly": {
     "message": "$1 个工单"
   },
+  "chatTicketStatsCountOne": {
+    "message": "$1 个工单"
+  },
+  "chatUntitled": {
+    "message": "聊天 $1"
+  },
   "chatTicketStatsNone": {
     "message": "没有工单"
   },

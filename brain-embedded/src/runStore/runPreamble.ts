@@ -43,6 +43,7 @@ import type { BrainRunRequest } from './runTypes';
 import { attachTurnContext, restoreTurnContext, turnContextBlock, turnContextCarrier } from './turnContext';
 import { resolveServerChatId } from './serverChat';
 import { decideRunPipeline, pipelineMetadata, pipelinePolicyOptions } from './pipelineRoute';
+import { PendingCalls } from './pendingCalls';
 
 /** B1 (`b1_stable_prefix`): per-turn blocks ride AFTER the history instead of in the
  *  system prompt (`COST_LEVER_B1_STABLE_PREFIX=off` turns it off). */
@@ -401,8 +402,7 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
     restateRecoveryUsed: false,
     stopHookRounds: 0,
     redirectAskToDelegation: false,
-    pendingReplay: null,
-    pendingRun: null,
+    pending: new PendingCalls(),
     lastTurnInterruption: null,
   };
   // Attached LAST: every read of the user's own words above (`userRequest`,

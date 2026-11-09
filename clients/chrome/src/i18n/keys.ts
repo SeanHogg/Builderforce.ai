@@ -37,6 +37,8 @@ export const MESSAGE_KEYS = [
   'chatTicketStatsCount',
   'chatTicketStatsCountAria',
   'chatTicketStatsCountOnly',
+  'chatTicketStatsCountOne',
+  'chatUntitled',
   'chatTicketStatsNone',
   // THE inline-editable header title: the button's accessible name, the field's label,
   // and the two outcomes (which are also Enter and Escape).

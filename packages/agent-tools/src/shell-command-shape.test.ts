@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { findBash } from "./node-posix-shell.js";
-import { isSearchCommand, searchNoMatch, shapeTrimmed, stripTrailingTrim, withPipefail } from "./shell-command-shape.js";
+import { isSearchCommand, searchNoMatch, withPipefail } from "./shell-command-shape.js";
 
 describe("withPipefail", () => {
   it("runs a bash-routed pipeline under pipefail", () => {
@@ -36,43 +36,25 @@ describe("withPipefail", () => {
   });
 });
 
-describe("stripTrailingTrim", () => {
-  it("drops a trailing tail / head, with 2>&1, -n N or -N", () => {
-    expect(stripTrailingTrim("pnpm install --lockfile-only 2>&1 | tail -20")).toEqual({ command: "pnpm install --lockfile-only", trim: { kind: "tail", lines: 20 } });
-    expect(stripTrailingTrim("git log --oneline | head -n 5")).toEqual({ command: "git log --oneline", trim: { kind: "head", lines: 5 } });
-    expect(stripTrailingTrim("pnpm type-check | tail -n40")).toEqual({ command: "pnpm type-check", trim: { kind: "tail", lines: 40 } });
+describe("withPipefail — a search before the last stage", () => {
+  it("leaves a pipeline alone when a search feeds a later stage (no match = exit 1 = a count of 0, not a failure)", () => {
+    expect(withPipefail("grep -rn foo src | wc -l", "/bin/bash", "linux")).toBe("grep -rn foo src | wc -l");
+    expect(withPipefail("grep foo f | sort | uniq", "/bin/bash", "linux")).toBe("grep foo f | sort | uniq");
+    expect(withPipefail("cd api && rg foo | wc -l", "/bin/bash", "linux")).toBe("cd api && rg foo | wc -l");
+    expect(withPipefail("git grep -n foo | sort", "/bin/bash", "linux")).toBe("git grep -n foo | sort");
   });
 
-  it("keeps the stages that do real work", () => {
-    expect(stripTrailingTrim("grep -rn foo src | sort | head -3")).toEqual({ command: "grep -rn foo src | sort", trim: { kind: "head", lines: 3 } });
+  it("still guards a pipeline whose search is LAST (searchNoMatch rescues its exit 1)", () => {
+    expect(withPipefail("git log | grep fix", "/bin/bash", "linux")).toBe("set -o pipefail\ngit log | grep fix");
   });
 
-  it("leaves a quoted trim, an `||` fallback, a bare tail and a non-trailing one alone", () => {
-    for (const c of ['bash -c "make | tail -5"', "make || tail -5", "tail -5 log.txt", "git log | head -5 > out.txt", "tail -f app.log"]) {
-      expect(stripTrailingTrim(c)).toEqual({ command: c });
+  it("regression: `grep … | wc -l` with no match exits 0 once routed", () => {
+    const bash = process.platform === "win32" ? findBash() : "/bin/sh";
+    if (!bash) return;
+    for (const command of ['printf "a\\n" | grep zzz | wc -l', 'printf "a\\n" | grep zzz | sort | uniq']) {
+      const run = spawnSync(bash, ["-c", withPipefail(command, process.platform === "win32" ? bash : null, process.platform)]);
+      expect(run.status).toBe(0);
     }
-  });
-});
-
-describe("shapeTrimmed", () => {
-  const lines = Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join("\n");
-
-  it("shows the head and the tail of the real output, and where the rest is", () => {
-    const out = shapeTrimmed(lines, { kind: "tail", lines: 20 }, "out-7");
-    expect(out.startsWith("line 1\n")).toBe(true);
-    expect(out.endsWith("line 200")).toBe(true);
-    expect(out).toContain("120 lines omitted");
-    expect(out).toContain('"outputId": "out-7"');
-  });
-
-  it("keeps at least as many lines as the trim asked for", () => {
-    const out = shapeTrimmed(lines, { kind: "tail", lines: 100 });
-    expect(out).toContain("line 101\n");
-    expect(out).toContain("60 lines omitted");
-  });
-
-  it("returns a short output whole", () => {
-    expect(shapeTrimmed("a\nb", { kind: "head", lines: 5 })).toBe("a\nb");
   });
 });
 

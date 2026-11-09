@@ -92,6 +92,12 @@
   "chatTicketStatsCountOnly": {
     "message": "$1 tickets"
   },
+  "chatTicketStatsCountOne": {
+    "message": "$1 ticket"
+  },
+  "chatUntitled": {
+    "message": "Chat $1"
+  },
   "chatTicketStatsNone": {
     "message": "Sin tickets"
   },

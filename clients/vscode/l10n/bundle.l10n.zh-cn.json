@@ -405,6 +405,8 @@
   "{pct}% · {count} tickets": "{pct}% · {count} 个工单",
   "{pct}% complete across {count} tickets": "{count} 个工单已完成 {pct}%",
   "{count} tickets": "{count} 个工单",
+  "{count} ticket": "{count} 个工单",
+  "Chat {id}": "聊天 {id}",
   "No tickets": "无工单",
   "Running {0}…": "正在运行 {0}…",
   "Running {tool}": "正在运行 {tool}",

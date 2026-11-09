@@ -171,15 +171,14 @@ describe("run_command / command_status — a wait a steer may cut short (PRD 35 
 });
 
 describe("run_command — reading the result honestly (chat #60338)", () => {
-  it("drops a trailing `| tail -N` before running, and shows the head and the tail of the real output", async () => {
-    const lines = Array.from({ length: 300 }, (_, i) => (i === 0 ? "ERR_PNPM_NO_PKG_MANIFEST No package.json" : `line ${i}`)).join("\n");
-    const run = vi.fn(async () => ({ ok: false, exitCode: 1, stdout: lines, outputId: "out-4" }));
-    const r = await runCommandTool.execute({ command: "pnpm install --lockfile-only 2>&1 | tail -20" }, ctxWith({ run }));
-    expect(run).toHaveBeenCalledWith("pnpm install --lockfile-only");
-    expect(r.data).toMatchObject({ ok: false, exitCode: 1, outputId: "out-4" });
-    expect(String(r.data.stdout)).toContain("ERR_PNPM_NO_PKG_MANIFEST");
-    expect(String(r.data.stdout)).toContain("line 299");
-    expect(String(r.data.note)).toMatch(/tail -20/);
+  it("runs a trailing `| tail -N` / `| head -N` exactly as written (they are real limits; pipefail carries the exit code)", async () => {
+    const run = vi.fn(async () => ({ ok: false, exitCode: 1, stdout: "Test Files  1 failed", outputId: "out-4" }));
+    for (const command of ["pnpm vitest run 2>&1 | tail -30", "git log | head -20", "yes | head -3"]) {
+      const r = await runCommandTool.execute({ command }, ctxWith({ run }));
+      expect(run).toHaveBeenLastCalledWith(command);
+      expect(r.data).toMatchObject({ ok: false, exitCode: 1, outputId: "out-4", stdout: "Test Files  1 failed" });
+      expect(String(r.data.note ?? "")).not.toMatch(/was not run/);
+    }
   });
 
   it("a grep that found nothing is ok with matches 0, not a failed step", async () => {

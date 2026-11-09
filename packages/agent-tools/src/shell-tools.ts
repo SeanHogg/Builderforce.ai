@@ -15,7 +15,7 @@ import { defineTool, type ToolContext, type ToolDefinition, type ToolResult } fr
 import { safeRepoArg, shellRunWithStop } from "./git-repo-scope.js";
 import { compressShellResult } from "./compress.js";
 import type { ShellJobStatus, ShellResult } from "./capabilities.js";
-import { searchNoMatch, shapeTrimmed, stripTrailingTrim, type OutputTrim } from "./shell-command-shape.js";
+import { searchNoMatch } from "./shell-command-shape.js";
 import { outputFilterTool } from "./shell-output-filter.js";
 
 /** The longest a `yieldMs` / `waitMs` may hold the call (the foreground ceiling). */
@@ -62,22 +62,17 @@ function finishedJob(st: ShellJobStatus): ShellResult {
 
 /**
  * A finished command's result, read honestly: a search that found nothing is an answer
- * (`searchNoMatch`), and a command whose trailing `| tail -N` was dropped shows the head and
- * the tail of its real output.
+ * (`searchNoMatch`). The command ran exactly as written — a `| head` / `| tail` is the model's
+ * real limit, and the shell's pipefail already reports a failing stage's exit code.
  */
-function shapeResult(command: string, r: ShellResult, trim: OutputTrim | undefined): ShellResult {
-  const read = searchNoMatch(command, r);
-  if (!trim || typeof read.stdout !== "string" || read.matches === 0) return read;
-  const said = `the trailing "| ${trim.kind} -${trim.lines}" was not run: this is the start and the end of the full output`;
-  return { ...read, stdout: shapeTrimmed(read.stdout, trim, read.outputId), note: read.note ? `${read.note}; ${said}` : said };
+function shapeResult(command: string, r: ShellResult): ShellResult {
+  return searchNoMatch(command, r);
 }
 
 /** `run_command`'s body. */
 export async function runShellCommand(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
-  const asked = typeof args.command === "string" ? args.command : "";
-  if (!asked.trim()) return { data: { ok: false, error: "command is required" } };
-  // A trailing `| tail -N` only throws output away — and hides the exit code of what it trims.
-  const { command, trim } = stripTrailingTrim(asked);
+  const command = typeof args.command === "string" ? args.command : "";
+  if (!command.trim()) return { data: { ok: false, error: "command is required" } };
   const cwd = cwdArg(args.cwd);
   if (cwd === null) {
     return { data: { ok: false, error: "`cwd` must be a directory inside the workspace, relative to its root (no `..`, no absolute path)." } };
@@ -105,7 +100,7 @@ export async function runShellCommand(args: Record<string, unknown>, ctx: ToolCo
         const why = ctx.signal?.aborted ? "The wait was interrupted" : `Still running after ${yieldMs}ms`;
         return { data: { ok: true, background: true, id, status: "running", output: st.output ?? "", note: `${why}, so it moved to the background. ${jobNote(id)}`, ...where } };
       }
-      const r = await compressShellResult(shapeResult(command, finishedJob(st), trim), ctx);
+      const r = await compressShellResult(shapeResult(command, finishedJob(st)), ctx);
       // A job the sandbox no longer knows has no result to show: name it, so the model can poll or stop it.
       return { data: { ...(r as unknown as Record<string, unknown>), ...(st.status === "unknown" ? { id } : {}), ...where } };
     }
@@ -116,7 +111,7 @@ export async function runShellCommand(args: Record<string, unknown>, ctx: ToolCo
   const ran = args.fresh === true
     ? await shell.run(command, { ...(ctx.signal ? { signal: ctx.signal } : {}), ...where, fresh: true })
     : await shellRunWithStop(ctx, command, dir);
-  const r = await compressShellResult(shapeResult(command, ran, trim), ctx);
+  const r = await compressShellResult(shapeResult(command, ran), ctx);
   const notes = [r.note, note].filter(Boolean).join(" ");
   return { data: { ...(r as unknown as Record<string, unknown>), ...where, ...(notes ? { note: notes } : {}) } };
 }
