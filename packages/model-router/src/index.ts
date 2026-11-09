@@ -15,6 +15,20 @@ export {
   roleUsesLearnedRanking,
 } from './objective.js';
 export { orderForRole } from './orderForRole.js';
+export {
+  LATENCY_SAMPLE_WINDOW,
+  clearLatency,
+  latencySnapshot,
+  p50,
+  recordLatency,
+  type LatencySamples,
+} from './latency.js';
+export {
+  MAX_FAILOVER_LATENCY_RATIO,
+  latencyDemotion,
+  roleAppliesLatencyGuard,
+  type LatencyGuardInput,
+} from './latencyGuard.js';
 export { rankConnectedForRole, type RankConnectedOptions } from './rankConnected.js';
 export { expectedCostUsd, orderByExpectedCost, type CostWorkload } from './expectedCost.js';
 export { orderPoolForWorkload, poolOrderIsCostFirst, type PoolEvidence, type PoolWorkload } from './orderPool.js';

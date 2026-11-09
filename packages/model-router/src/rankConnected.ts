@@ -20,6 +20,8 @@ import { rankModelsForAction, type ActionModelRankStat, type RoutingExploration 
 import type { CatalogView } from '@builderforce/model-catalog';
 import type { ArcStage } from '@builderforce/workload';
 import { resolveRoleObjective, roleUsesLearnedRanking } from './objective.js';
+import { latencySnapshot } from './latency.js';
+import { roleAppliesLatencyGuard, type LatencyGuardInput } from './latencyGuard.js';
 import { orderForRole } from './orderForRole.js';
 import { liftUntriedStronger } from './untriedStronger.js';
 
@@ -37,6 +39,11 @@ export interface RankConnectedOptions {
    *  and the call may explore (no strict pin, BYO-strict chain or premium override).
    *  Absent = the deterministic learned order. */
   explore?: RoutingExploration;
+  /** Latency guard input for the code/verify failover ranking (fix #8). Defaults to the
+   *  package store's `latencySnapshot()` with the pool's first model as primary; the
+   *  guard applies only when `role` is code or verify — other roles pass it through
+   *  untouched. Set `primaryDown` when the primary is unreachable to lift the guard. */
+  latency?: LatencyGuardInput;
 }
 
 export function rankConnectedForRole(
@@ -45,7 +52,12 @@ export function rankConnectedForRole(
   opts: RankConnectedOptions = {},
 ): string[] {
   const objective = resolveRoleObjective(opts.role, opts.arcStage);
-  const byRole = orderForRole(models, objective, view, opts.demotedVendors);
+  // Fix #8: code/verify failover ranks against measured p50 latency. Default source is
+  // the package store; the pool's first model is the primary unless the caller says otherwise.
+  const latencyGuard = roleAppliesLatencyGuard(opts.role)
+    ? (opts.latency ?? { primary: models[0], samples: latencySnapshot() })
+    : undefined;
+  const byRole = orderForRole(models, objective, view, opts.demotedVendors, latencyGuard);
   if (!roleUsesLearnedRanking(opts.role, opts.arcStage)) return byRole;
   const bias = opts.bias && Object.keys(opts.bias).length > 0 ? opts.bias : undefined;
   const learned = rankModelsForAction(byRole, opts.stats, {
@@ -53,5 +65,5 @@ export function rankConnectedForRole(
     ...(bias ? { bias } : {}),
     ...(opts.explore ? { explore: opts.explore } : {}),
   });
-  return orderForRole(liftUntriedStronger(learned, opts.stats, objective, view, opts.minSamples), 0, view, opts.demotedVendors);
+  return orderForRole(liftUntriedStronger(learned, opts.stats, objective, view, opts.minSamples), 0, view, opts.demotedVendors, latencyGuard);
 }

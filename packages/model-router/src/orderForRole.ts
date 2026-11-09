@@ -10,10 +10,16 @@
  * Vendor HEALTH is the outermost key: a vendor known to be failing never leads because
  * a role asked for its tier. Stable, so equal keys keep the given order; never adds,
  * drops or invents a model. Pure.
+ *
+ * The optional LATENCY guard demotes a failover candidate whose measured p50 is more
+ * than 3× the primary's ({@link latencyDemotion}): it sorts behind every candidate
+ * within budget within the same tier, never ahead. Unmeasured models and a down
+ * primary are neutral; the caller decides when the guard applies (code/verify roles).
  */
 
 import { UNKNOWN_TIER_RANK, tierRank, type CatalogView } from '@builderforce/model-catalog';
 import { isBalancedObjective } from './objective.js';
+import { latencyDemotion, type LatencyGuardInput } from './latencyGuard.js';
 
 /** Blended per-token price used when only an ORDER is needed (no token estimate):
  *  output dominates agent turns, so it weighs 3:1. */
@@ -27,9 +33,10 @@ export function orderForRole(
   objective: number,
   view: CatalogView,
   demotedVendors?: ReadonlySet<string>,
+  latency?: LatencyGuardInput,
 ): string[] {
   const byTier = !isBalancedObjective(objective);
-  if (!byTier && !demotedVendors?.size) return [...models];
+  if (!byTier && !demotedVendors?.size && !latency) return [...models];
   const costFirst = byTier && objective < 0;
   const health = (m: string): number => (demotedVendors?.has(view.vendorOf(m)) ? 1 : 0);
   const tier = (m: string): number => {
@@ -43,9 +50,15 @@ export function orderForRole(
   // its place behind the priced models of the same tier.
   const price = (m: string): number =>
     costFirst ? (blendedUnitPrice(view, m) ?? Number.POSITIVE_INFINITY) : 0;
+  const slow = (m: string): number => latencyDemotion(m, latency);
   return models
     .map((m, i) => ({ m, i, p: price(m) }))
-    .sort((a, b) => health(a.m) - health(b.m) || tier(a.m) - tier(b.m) || compareNumbers(a.p, b.p) || a.i - b.i)
+    .sort((a, b) =>
+      health(a.m) - health(b.m) ||
+      tier(a.m) - tier(b.m) ||
+      slow(a.m) - slow(b.m) ||
+      compareNumbers(a.p, b.p) ||
+      a.i - b.i)
     .map(({ m }) => m);
 }
 
