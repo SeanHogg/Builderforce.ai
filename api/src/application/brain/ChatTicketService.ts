@@ -27,7 +27,7 @@ import { searchTickets } from './ticketLookup';
 import { ticketHealthBatch } from './ticketHealth';
 import { linkTicket, listTicketPageForChat, listTicketsForChat, unlinkTicket } from './chatTicketLinking';
 import { listChatsForTicket } from './ticketChatLineage';
-import { attachChatTicketSummaries } from './chatTicketSummaries';
+import { attachChatTicketSummaries, type ChatTicketSummaryFields } from './chatTicketSummaries';
 import { listChatMessages } from './chatMessageHistory';
 import { consolidateChats, type ConsolidateResult } from './chatConsolidation';
 import { inviteChatAgent, listChatAgents, removeChatAgent } from './chatAgents';
@@ -78,7 +78,7 @@ export class ChatTicketService {
 
   attachChatTicketSummaries<T extends { id: number }>(
     tenantId: number, rows: T[],
-  ): Promise<Array<T & { ticketCount: number; ticketProgressPct: number | null }>> {
+  ): Promise<Array<T & ChatTicketSummaryFields>> {
     return attachChatTicketSummaries(this.deps.db, tenantId, rows);
   }
 

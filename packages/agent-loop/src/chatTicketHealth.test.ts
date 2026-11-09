@@ -82,20 +82,20 @@ describe('rollupChatTicketHealth', () => {
       { progressPct: 100, done: 1, total: 1, status: 'done' },
       { progressPct: 0, done: 0, total: 1, status: 'cancelled' },
     ]);
-    expect(result).toEqual({ pct: 100, done: 3, total: 3 });
+    expect(result).toEqual({ pct: 100, done: 3, total: 3, openTickets: 0, completedTickets: 3 });
   });
 
   it('treats an all-cancelled list as 100% (nothing left owed)', () => {
     expect(rollupChatTicketHealth([
       { progressPct: 0, done: 0, total: 1, status: 'cancelled' },
-    ])).toEqual({ pct: 100, done: 0, total: 0 });
+    ])).toEqual({ pct: 100, done: 0, total: 0, openTickets: 0, completedTickets: 0 });
   });
 
   it('accepts US spelling canceled', () => {
     expect(rollupChatTicketHealth([
       { progressPct: 50, done: 0, total: 1, status: 'in_progress' },
       { progressPct: 0, done: 0, total: 1, status: 'canceled' },
-    ])).toEqual({ pct: 50, done: 0, total: 1 });
+    ])).toEqual({ pct: 50, done: 0, total: 1, openTickets: 1, completedTickets: 0 });
   });
 
   it('does not let an unsupported epic 100 pull the session to complete', () => {
@@ -108,6 +108,46 @@ describe('rollupChatTicketHealth', () => {
     ]);
     expect(result.pct).toBeLessThan(100);
     expect(result.pct).toBe(25);
+  });
+});
+
+/** The history row's "N open · M done" line: tickets, not sub-items. */
+describe('rollupChatTicketHealth open / completed tickets', () => {
+  it('splits a mixed list into open and completed tickets', () => {
+    const result = rollupChatTicketHealth([
+      { progressPct: 100, done: 1, total: 1, status: 'done' },
+      { progressPct: 100, done: 4, total: 4, status: 'done' },
+      { progressPct: 75, done: 0, total: 1, status: 'in_review' },
+      { progressPct: 0, done: 0, total: 0 },
+    ]);
+    expect(result.completedTickets).toBe(2);
+    expect(result.openTickets).toBe(2);
+  });
+
+  it('counts a cancelled ticket as neither open nor completed', () => {
+    const result = rollupChatTicketHealth([
+      { progressPct: 100, done: 1, total: 1, status: 'done' },
+      { progressPct: 20, done: 0, total: 1, status: 'in_progress' },
+      { progressPct: 100, done: 0, total: 1, status: 'cancelled' },
+      { progressPct: 0, done: 0, total: 1, status: 'canceled' },
+    ]);
+    expect(result.completedTickets).toBe(1);
+    expect(result.openTickets).toBe(1);
+  });
+
+  it('keeps an unsupported-delivery 100 open', () => {
+    const result = rollupChatTicketHealth([
+      { progressPct: 100, done: 1, total: 1, status: 'done', unsupportedDelivery: true },
+      { progressPct: 100, done: 1, total: 1, status: 'done' },
+    ]);
+    expect(result.completedTickets).toBe(1);
+    expect(result.openTickets).toBe(1);
+  });
+
+  it('reports 0 / 0 for an empty list', () => {
+    const result = rollupChatTicketHealth([]);
+    expect(result.openTickets).toBe(0);
+    expect(result.completedTickets).toBe(0);
   });
 });
 

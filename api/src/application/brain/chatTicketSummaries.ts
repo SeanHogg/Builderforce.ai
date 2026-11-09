@@ -1,6 +1,7 @@
 /**
  * chatTicketSummaries — the per-chat ticket rollup the conversation picker shows
- * (ticket count + overall % done), for many chats at once.
+ * (ticket count + overall % done + open / completed tickets), for many chats at once.
+ * Every figure comes from the ONE `rollupChatTicketHealth`.
  */
 import { and, eq, inArray } from 'drizzle-orm';
 import { rollupChatTicketHealth } from '@builderforce/agent-loop';
@@ -13,7 +14,19 @@ import { ticketHealthBatch } from './ticketHealth';
 export interface ChatTicketSummary {
   ticketCount: number;
   ticketProgressPct: number;
+  /** Non-cancelled linked tickets not yet complete. */
+  ticketOpenCount: number;
+  /** Non-cancelled linked tickets at 100% effective progress. */
+  ticketDoneCount: number;
 }
+
+/** The ticket fields `attachChatTicketSummaries` folds onto every chat row. */
+export type ChatTicketSummaryFields = {
+  ticketCount: number;
+  ticketProgressPct: number | null;
+  ticketOpenCount: number;
+  ticketDoneCount: number;
+};
 
 /**
  * Per-chat ticket rollup for the conversation picker. ONE query for all links
@@ -55,9 +68,12 @@ export async function summarizeChatsTicketHealth(
       byChat.set(l.chatId, list);
     }
     for (const [chatId, tickets] of byChat) {
+      const rollup = rollupChatTicketHealth(tickets);
       out.set(chatId, {
         ticketCount: tickets.length,
-        ticketProgressPct: rollupChatTicketHealth(tickets).pct,
+        ticketProgressPct: rollup.pct,
+        ticketOpenCount: rollup.openTickets,
+        ticketDoneCount: rollup.completedTickets,
       });
     }
     return out;
@@ -70,12 +86,12 @@ export async function summarizeChatsTicketHealth(
   }
 }
 
-/** Fold ticketCount + ticketProgressPct onto chat rows for the picker. */
+/** Fold the ticket summary fields onto chat rows for the picker (0 / 0 / null without one). */
 export async function attachChatTicketSummaries<T extends { id: number }>(
   db: Db,
   tenantId: number,
   rows: T[],
-): Promise<Array<T & { ticketCount: number; ticketProgressPct: number | null }>> {
+): Promise<Array<T & ChatTicketSummaryFields>> {
   const summaries = await summarizeChatsTicketHealth(db, tenantId, rows.map((r) => r.id));
   return rows.map((r) => {
     const s = summaries.get(r.id);
@@ -83,6 +99,8 @@ export async function attachChatTicketSummaries<T extends { id: number }>(
       ...r,
       ticketCount: s?.ticketCount ?? 0,
       ticketProgressPct: s ? s.ticketProgressPct : null,
+      ticketOpenCount: s?.ticketOpenCount ?? 0,
+      ticketDoneCount: s?.ticketDoneCount ?? 0,
     };
   });
 }

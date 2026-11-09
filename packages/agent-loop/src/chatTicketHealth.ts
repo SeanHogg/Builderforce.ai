@@ -25,6 +25,13 @@
  *   work that was delivered. An all-cancelled list is 100% (nothing owed). An empty
  *   list is 0%.
  * - `done`/`total` are still returned for the "4/6" counter beside the percent.
+ *
+ * OPEN / COMPLETED TICKETS
+ * `openTickets` / `completedTickets` count TICKETS (not sub-items) for the history
+ * row's "3 open · 2 done" line. A ticket is completed when its effective progress is
+ * at least 100, so the unsupported-delivery cap applies: a documentation-only "done"
+ * stays open. Cancelled tickets count as neither. open = counted − completed, so an
+ * empty or all-cancelled list is 0 / 0.
  */
 
 import { isCancelledTaskStatus } from "./taskClosedState.js";
@@ -61,6 +68,10 @@ export interface ChatTicketHealth {
   done: number;
   /** Items across the counted tickets. */
   total: number;
+  /** Counted (non-cancelled) tickets whose effective progress is below 100. */
+  openTickets: number;
+  /** Counted (non-cancelled) tickets whose effective progress is 100 or more. */
+  completedTickets: number;
 }
 
 /** True when this lane must not sit in the chat-health denominator. */
@@ -81,6 +92,7 @@ export function rollupChatTicketHealth(tickets: readonly ChatTicketHealthInput[]
   let total = 0;
   let weightedPct = 0;
   let counted = 0;
+  let completedTickets = 0;
   for (const tk of tickets) {
     if (isExcludedFromChatHealth(tk.status)) continue;
     const pct = effectiveProgressPct(tk);
@@ -89,9 +101,18 @@ export function rollupChatTicketHealth(tickets: readonly ChatTicketHealthInput[]
     total += weight;
     weightedPct += pct * weight;
     counted++;
+    if (pct >= 100) completedTickets++;
   }
-  if (counted === 0) return { pct: tickets.length ? 100 : 0, done: 0, total: 0 };
-  return { pct: Math.round(weightedPct / total), done, total };
+  if (counted === 0) {
+    return { pct: tickets.length ? 100 : 0, done: 0, total: 0, openTickets: 0, completedTickets: 0 };
+  }
+  return {
+    pct: Math.round(weightedPct / total),
+    done,
+    total,
+    openTickets: counted - completedTickets,
+    completedTickets,
+  };
 }
 
 /**

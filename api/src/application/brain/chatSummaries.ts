@@ -3,6 +3,7 @@
  * chat list and the single-chat read can never drift on what a chat "knows" about itself.
  *
  *   ticket health  — `ticketCount` / `ticketProgressPct` (the health ring, the picker's %)
+ *                    and `ticketOpenCount` / `ticketDoneCount` (the row's open / done tickets)
  *   spend & saved  — `spend` (`spendSavingsSummary`): what the conversation cost, split
  *                    platform / your key, and what memory saved it
  *
@@ -13,11 +14,10 @@
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { ChatTicketService } from './ChatTicketService';
+import type { ChatTicketSummaryFields } from './chatTicketSummaries';
 import { chatsSpendSavings, type SpendSavingsSummary } from '../llm/spendSavingsSummary';
 
-export type ChatSummaryFields = {
-  ticketCount: number;
-  ticketProgressPct: number | null;
+export type ChatSummaryFields = ChatTicketSummaryFields & {
   /** Null when the chat has no usage yet. */
   spend: SpendSavingsSummary | null;
 };
