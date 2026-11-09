@@ -45,6 +45,12 @@ export { SUBAGENT_REPORT_CHARS, clipChildOutput };
 // defined ONCE in agent-tools so every surface's dispatch seam enforces the same ones.
 export { duplicateOfLiveChild, trivialDelegationRefusal, commandsInBrief, normalizeCommand, RUN_COMMAND_TOOL } from "@builderforce/agent-tools";
 export type { LiveChildWork } from "@builderforce/agent-tools";
+// The delegation-economy GATE (fix #3): the refusals, applied before a call dispatches,
+// with the live-child registry re-read on every decision so a child's completion is
+// visible to the very next call (the property that lets wait_agents return on the
+// completion event, never by polling to the timeout).
+export { delegationGate } from "./commandDedup.js";
+export type { DelegationGate, DelegationGateChildren } from "./commandDedup.js";
 // What a child is, derived from its owner's run (policy, capabilities, result).
 export { childPolicy, childProvider, childResult } from "./child.js";
 export type { DelegationTraceEvent, SubagentLiveOwner, SubagentPersona };
