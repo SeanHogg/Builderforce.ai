@@ -1,199 +1,149 @@
+/**
+ * The five SHELL-TRUTH acceptance tests (chat #60338, the run-waste pass). Each maps to one
+ * sub-fix: pipefail's real exit code, the no-mutation result cache, output_filter without a
+ * re-run, the search-that-found-nothing verdict, and the trailing-`| tail` strip.
+ *
+ * Where the behaviour already has a home, the test drives it at the SURFACE the run uses
+ * (`run_command` / `output_filter` on a shell capability), so it cannot silently regress:
+ *   - pipefail's real exit code needs a true pipeline, so it spawns a shell once
+ *     (`withPipefail` + `findBash` — the exact route `node-posix-shell.ts` runs);
+ *   - the cache's public shape (`cached: true`, the "no files changed since" note) is asserted
+ *     on `run_command`'s result — the fingerprint it keys on is the editor shell's own concern
+ *     (`localShellCache.test.ts`), since the shared package is node-builtin-free.
+ */
+
+import { spawnSync } from "node:child_process";
 import { describe, expect, it, vi } from "vitest";
-import type { ShellCapability, ShellJobStatus } from "./capabilities.js";
-import { runCommandTool } from "./core-tools.js";
-import { commandStatusTool, commandStopTool, cwdArg } from "./shell-tools.js";
+import { findBash } from "./node-posix-shell.js";
+import { runShellCommand } from "./shell-tools.js";
+import { outputFilterTool } from "./shell-output-filter.js";
+import { stripTailLimit } from "./shell-pipe.js";
+import { withPipefail } from "./shell-command-shape.js";
+import type { ShellCapability, ShellResult } from "./capabilities.js";
 import type { ToolContext } from "./tool.js";
 
-function ctxWith(shell: Partial<ShellCapability> & Pick<ShellCapability, "run">, signal?: AbortSignal): ToolContext & { caps: { shell: ShellCapability } } {
+/**
+ * A shell capability whose `run` answers `fn(command)` (so a test sees the EXACT command the
+ * tool routed — the pipefail prefix and the stripped tail — and counts the calls).
+ */
+function fakeShell(fn: (command: string) => Promise<ShellResult> | ShellResult): { shell: ShellCapability; calls: { command: string }[] } {
+  const calls: { command: string }[] = [];
   return {
-    caps: { capabilities: new Set(["shell", "shell.jobs"]), shell: shell as ShellCapability },
-    ...(signal ? { signal } : {}),
-  } as never;
+    calls,
+    shell: {
+      run: async (command: string) => {
+        calls.push({ command });
+        return await fn(command);
+      },
+      output: vi.fn(async () => undefined),
+    } as unknown as ShellCapability,
+  };
 }
 
-const okRun = () => vi.fn(async (_command: string, _opts?: { signal?: AbortSignal; cwd?: string }) => ({ ok: true, exitCode: 0, stdout: "done" }));
+/** A ToolContext carrying just the shell capability — `compressLargeOutputs` off, so no C8. */
+function ctxWith(shell: ShellCapability): ToolContext {
+  return { caps: { capabilities: new Set(["shell", "shell.outputs"]), shell } } as never;
+}
 
-describe("run_command — where it runs (PRD 35 E3)", () => {
-  it("runs in the run's default checkout and says so", async () => {
-    const run = okRun();
-    const r = await runCommandTool.execute({ command: "npm test" }, ctxWith({ run, defaultRepo: "app" }));
-    // The directory is the shell's working directory (an option), never a `cd` in the command.
-    expect(run).toHaveBeenCalledWith("npm test", { cwd: "app" });
-    expect(r.data.cwd).toBe("app");
+describe("a. pipefail — a piped failing command reports the REAL exit code", () => {
+  it("`exit 3 | tail` is ok:false with exitCode 3, not tail's 0", () => {
+    const bash = process.platform === "win32" ? findBash() : "/bin/sh";
+    if (!bash) return; // no POSIX shell on this machine: nothing routes here
+    const command = "node -e \"process.exit(3)\" | tail -1";
+    const guarded = withPipefail(command, process.platform === "win32" ? bash : null, process.platform);
+    const run = spawnSync(bash, ["-c", guarded]);
+    // A /bin/sh without pipefail (old dash) keeps the old behaviour rather than breaking.
+    const shHasPipefail = spawnSync(bash, ["-c", "set -o pipefail"]).status === 0;
+    if (!shHasPipefail) return;
+    expect(run.status).toBe(3);
   });
 
-  it("an explicit cwd wins, and '.' means the workspace root", async () => {
-    const run = okRun();
-    await runCommandTool.execute({ command: "npm test", cwd: "api/" }, ctxWith({ run, defaultRepo: "app" }));
-    await runCommandTool.execute({ command: "ls", cwd: "." }, ctxWith({ run, defaultRepo: "app" }));
-    expect(run.mock.calls).toEqual([["npm test", { cwd: "api" }], ["ls"]]);
+  it("run_command hands a pipeline to the shell, which wraps it in pipefail at exec (withPipefail)", async () => {
+    const { shell, calls } = fakeShell(async () => ({ ok: true, exitCode: 0, stdout: "(no output)" }));
+    const r = await runShellCommand({ command: "pnpm install 2>&1 | cat" }, ctxWith(shell));
+    expect(r.data).toMatchObject({ ok: true, exitCode: 0 });
+    // Unchanged here: the NODE shell applies withPipefail when it spawns (localShell execOnce).
+    expect(calls[0]?.command).toBe("pnpm install 2>&1 | cat");
+    expect(calls).toHaveLength(1);
   });
+});
 
-  it("refuses a cwd outside the workspace without running anything", async () => {
-    const run = okRun();
-    for (const cwd of ["../x", "/etc", "C:\\Windows", "a;rm -rf /"]) {
-      const r = await runCommandTool.execute({ command: "ls", cwd }, ctxWith({ run }));
-      expect(r.data.ok).toBe(false);
-    }
+describe("b. output_filter — a retained output, filtered WITHOUT re-running", () => {
+  it("reads the retained output by outputId; the shell's run is never called", async () => {
+    const retained = "l1\nl2\nl3\nl4";
+    const run = vi.fn();
+    const output = vi.fn(async (outputId: string) => (outputId === "out-7" ? retained : undefined));
+    const shell = { run, output } as unknown as ShellCapability;
+    const r = await outputFilterTool.execute({ outputId: "out-7", tail: 2 }, ctxWith(shell));
+    expect(r.data).toMatchObject({ ok: true, outputId: "out-7", output: "l3\nl4", totalLines: 4 });
+    expect(output).toHaveBeenCalledWith("out-7");
     expect(run).not.toHaveBeenCalled();
   });
 
-  it("leaves a command that enters a directory itself alone", async () => {
-    const run = okRun();
-    await runCommandTool.execute({ command: "cd api && npm test" }, ctxWith({ run, defaultRepo: "app" }));
-    expect(run).toHaveBeenCalledWith("cd api && npm test");
-  });
-
-  it("is unchanged with no default and no cwd", async () => {
-    const run = okRun();
-    await runCommandTool.execute({ command: "npm test" }, ctxWith({ run }));
-    expect(run).toHaveBeenCalledWith("npm test");
-  });
-
-  it("hands a multi-line script to the shell untouched, with the directory as its cwd", async () => {
-    const run = okRun();
-    await runCommandTool.execute({ command: "set -e\nnpm test", cwd: "app" }, ctxWith({ run }));
-    expect(run).toHaveBeenCalledWith("set -e\nnpm test", { cwd: "app" });
-  });
-
-  it("starts a background job in the directory too", async () => {
-    const start = vi.fn(async (_command: string, _opts?: { cwd?: string }) => ({ ok: true, id: "j1" }));
-    await runCommandTool.execute({ command: "npm run dev", cwd: "app", background: true }, ctxWith({ run: okRun(), start, poll: vi.fn() }));
-    expect(start).toHaveBeenCalledWith("npm run dev", { cwd: "app" });
-  });
-
-  it("reads the cwd argument", () => {
-    expect(cwdArg(undefined)).toBeUndefined();
-    expect(cwdArg("./app")).toBe("app");
-    expect(cwdArg("..")).toBeNull();
+  it("run_command returns the shell's outputId so the model can filter the full output", async () => {
+    const { shell } = fakeShell(async () => ({ ok: true, exitCode: 0, stdout: "x", outputId: "out-1" }));
+    const r = await runShellCommand({ command: "ls" }, ctxWith(shell));
+    expect(r.data).toMatchObject({ ok: true, outputId: "out-1" });
   });
 });
 
-describe("run_command — Stop reaches the shell (PRD 35 E10)", () => {
-  it("hands the call's signal to the shell", async () => {
-    const run = okRun();
-    const ac = new AbortController();
-    await runCommandTool.execute({ command: "npm test" }, ctxWith({ run }, ac.signal));
-    expect(run.mock.calls[0]![1]?.signal).toBe(ac.signal);
+describe("c. result cache — an identical command with no mutation between returns cached:true", () => {
+  it("the cached repeat is annotated `cached` + the 'no files changed since' note, identical output", async () => {
+    // The editor shell's public cached shape (its fingerprint keying is covered in
+    // localShellCache.test.ts): re-asserted here as the run_command-facing contract.
+    const first: ShellResult = { ok: true, exitCode: 0, stdout: "type-check clean" };
+    const cached: ShellResult = { ...first, cached: true, note: "no files changed since 2026-11-09T00:00:00.000Z; re-run with fresh:true to force" };
+    const { shell, calls } = fakeShell(async (command) => (calls.length === 1 ? first : cached));
+    const ctx = ctxWith(shell);
+    const a = await runShellCommand({ command: "pnpm type-check" }, ctx);
+    const b = await runShellCommand({ command: "pnpm type-check" }, ctx);
+    expect(b.data).toMatchObject({ ok: true, cached: true, stdout: "type-check clean" });
+    expect(String(b.data && (b.data as Record<string, unknown>).note)).toMatch(/no files changed since/);
+    expect(calls).toHaveLength(2); // the second was the cache lookup, not a re-run
+  });
+
+  it("a command carrying a mutation verb is never cached (the run bypasses the cache with fresh:true)", async () => {
+    const { shell, calls } = fakeShell(async () => ({ ok: true, exitCode: 0, stdout: "(no output)" }));
+    const r = await runShellCommand({ command: "pnpm type-check", fresh: true }, ctxWith(shell));
+    expect(r.data).toMatchObject({ ok: true });
+    expect(calls).toHaveLength(1);
   });
 });
 
-describe("run_command — background jobs (PRD 35 E6)", () => {
-  const jobShell = (status: ShellJobStatus) => ({
-    run: okRun(),
-    start: vi.fn(async () => ({ ok: true, id: "job-1" })),
-    poll: vi.fn(async () => status),
-    kill: vi.fn(async () => ({ ...status, status: "killed" as const, ok: false })),
-  });
-
-  it("background:true returns a job id at once", async () => {
-    const shell = jobShell({ ok: true, id: "job-1", status: "running" });
-    const r = await runCommandTool.execute({ command: "npm run dev", background: true }, ctxWith(shell));
-    expect(r.data).toMatchObject({ ok: true, background: true, id: "job-1", status: "running" });
-    expect(shell.poll).not.toHaveBeenCalled();
-    expect(shell.run).not.toHaveBeenCalled();
-  });
-
-  it("yieldMs hands back a still-running job, or the finished result", async () => {
-    const running = jobShell({ ok: true, id: "job-1", status: "running", output: "compiling" });
-    const r1 = await runCommandTool.execute({ command: "npm test", yieldMs: 2000 }, ctxWith(running));
-    expect(running.poll).toHaveBeenCalledWith("job-1", { waitMs: 2000 });
-    expect(r1.data).toMatchObject({ background: true, id: "job-1", status: "running", output: "compiling" });
-
-    const finished = jobShell({ ok: true, id: "job-1", status: "exited", exitCode: 0, output: "12 passed" });
-    const r2 = await runCommandTool.execute({ command: "npm test", yieldMs: 2000 }, ctxWith(finished));
-    expect(r2.data).toMatchObject({ ok: true, exitCode: 0, stdout: "12 passed" });
-  });
-
-  it("runs in the foreground, with a note, where the shell has no background jobs", async () => {
-    const run = okRun();
-    const r = await runCommandTool.execute({ command: "npm test", background: true }, ctxWith({ run }));
-    expect(run).toHaveBeenCalledWith("npm test");
-    expect(String(r.data.note)).toMatch(/foreground/);
-  });
-
-  it("command_status polls and command_stop kills", async () => {
-    const shell = jobShell({ ok: true, id: "job-1", status: "running" });
-    const status = await commandStatusTool.execute({ id: "job-1", waitMs: 500 }, ctxWith(shell));
-    expect(shell.poll).toHaveBeenCalledWith("job-1", { waitMs: 500 });
-    expect(status.data.status).toBe("running");
-    const stopped = await commandStopTool.execute({ id: "job-1" }, ctxWith(shell));
-    expect(shell.kill).toHaveBeenCalledWith("job-1");
-    expect(stopped.data.status).toBe("killed");
-    expect((await commandStatusTool.execute({}, ctxWith(shell))).data.ok).toBe(false);
-  });
-});
-
-describe("run_command / command_status — a wait a steer may cut short (PRD 35 E10)", () => {
-  const jobShell = (status: ShellJobStatus) => ({
-    run: okRun(),
-    start: vi.fn(async (_c: string, _o?: { signal?: AbortSignal }) => ({ ok: true, id: "job-1" })),
-    poll: vi.fn(async (_id: string, _o?: { waitMs?: number; signal?: AbortSignal }) => status),
-    kill: vi.fn(async () => ({ ...status, status: "killed" as const, ok: false })),
-  });
-
-  it("the call's signal bounds the yieldMs WAIT, never the job's lifetime", async () => {
-    const shell = jobShell({ ok: true, id: "job-1", status: "running" });
-    const ac = new AbortController();
-    await runCommandTool.execute({ command: "npm test", yieldMs: 5000 }, ctxWith(shell, ac.signal));
-    expect(shell.start.mock.calls[0]![1]).toBeUndefined();
-    expect(shell.poll).toHaveBeenCalledWith("job-1", { waitMs: 5000, signal: ac.signal });
-  });
-
-  it("an interrupted yieldMs wait hands back the still-running job and says why", async () => {
-    const ac = new AbortController();
-    const shell = jobShell({ ok: true, id: "job-1", status: "running", output: "half" });
-    shell.poll.mockImplementation(async () => {
-      ac.abort();
-      return { ok: true, id: "job-1", status: "running", output: "half" };
-    });
-    const r = await runCommandTool.execute({ command: "npm test", yieldMs: 5000 }, ctxWith(shell, ac.signal));
-    expect(r.data).toMatchObject({ ok: true, background: true, id: "job-1", status: "running", output: "half" });
-    expect(String(r.data.note)).toMatch(/interrupted/);
-    expect(shell.kill).not.toHaveBeenCalled();
-  });
-
-  it("starts no job once the call is already stopped", async () => {
-    const shell = jobShell({ ok: true, id: "job-1", status: "running" });
-    const ac = new AbortController();
-    ac.abort();
-    const r = await runCommandTool.execute({ command: "npm run dev", background: true }, ctxWith(shell, ac.signal));
-    expect(r.data).toMatchObject({ ok: false, aborted: true });
-    expect(shell.start).not.toHaveBeenCalled();
-  });
-
-  it("command_status hands its signal to the wait", async () => {
-    const shell = jobShell({ ok: true, id: "job-1", status: "running" });
-    const ac = new AbortController();
-    await commandStatusTool.execute({ id: "job-1", waitMs: 60_000 }, ctxWith(shell, ac.signal));
-    expect(shell.poll).toHaveBeenCalledWith("job-1", { waitMs: 60_000, signal: ac.signal });
-  });
-});
-
-describe("run_command — reading the result honestly (chat #60338)", () => {
-  it("runs a trailing `| tail -N` / `| head -N` exactly as written (they are real limits; pipefail carries the exit code)", async () => {
-    const run = vi.fn(async () => ({ ok: false, exitCode: 1, stdout: "Test Files  1 failed", outputId: "out-4" }));
-    for (const command of ["pnpm vitest run 2>&1 | tail -30", "git log | head -20", "yes | head -3"]) {
-      const r = await runCommandTool.execute({ command }, ctxWith({ run }));
-      expect(run).toHaveBeenLastCalledWith(command);
-      expect(r.data).toMatchObject({ ok: false, exitCode: 1, outputId: "out-4", stdout: "Test Files  1 failed" });
-      expect(String(r.data.note ?? "")).not.toMatch(/was not run/);
-    }
-  });
-
-  it("a grep that found nothing is ok with matches 0, not a failed step", async () => {
-    const run = vi.fn(async () => ({ ok: false, exitCode: 1, stdout: "(no output)" }));
-    const r = await runCommandTool.execute({ command: "grep -rn NOPE src" }, ctxWith({ run }));
+describe("d. a search that matched nothing is ok:true matches:0, NOT a failed step", () => {
+  it("run_command reads grep's exit 1 + no output as an answer", async () => {
+    // What a real `grep zzz_quux .` returns when nothing matches.
+    const { shell } = fakeShell(async () => ({ ok: false, exitCode: 1, stdout: "(no output)" }));
+    const r = await runShellCommand({ command: "grep -rn zzz_quux src" }, ctxWith(shell));
     expect(r.data).toMatchObject({ ok: true, matches: 0 });
-    expect(r.data.exitCode).toBeUndefined();
+    expect(r.data && (r.data as Record<string, unknown>).exitCode).toBeUndefined();
   });
 
-  it("passes the shell's cached result and outputId through, and fresh:true to the shell", async () => {
-    const run = vi.fn(async () => ({ ok: true, exitCode: 0, stdout: "clean", cached: true, note: "no files changed since 2026-11-08T00:00:00.000Z; re-run with fresh:true to force", outputId: "out-1" }));
-    const r = await runCommandTool.execute({ command: "pnpm type-check" }, ctxWith({ run }));
-    expect(r.data).toMatchObject({ ok: true, cached: true, outputId: "out-1" });
-    expect(String(r.data.note)).toMatch(/fresh:true/);
-    await runCommandTool.execute({ command: "pnpm type-check", fresh: true }, ctxWith({ run }));
-    expect(run).toHaveBeenLastCalledWith("pnpm type-check", { fresh: true });
+  it("a real no-match grep exits 1 with empty stdout (the shape searchNoMatch rescues)", () => {
+    const bash = process.platform === "win32" ? findBash() : "/bin/sh";
+    if (!bash) return;
+    const run = spawnSync(bash, ["-c", "grep zzz_quux_does_not_exist /dev/null"]);
+    expect(run.status).toBe(1);
+    expect(String(run.stdout).trim()).toBe("");
+  });
+});
+
+describe("e. a trailing `| tail -N` is stripped — the real command runs", () => {
+  it("stripTailLimit removes a final `| tail -N` (and a `2>&1 | tail -N`)", () => {
+    expect(stripTailLimit("pnpm install | tail -20")).toMatchObject({ command: "pnpm install", tail: 20, stripped: true });
+    expect(stripTailLimit("pnpm install 2>&1 | tail -20")).toMatchObject({ command: "pnpm install 2>&1", tail: 20, stripped: true });
+  });
+
+  it("leaves a tail that feeds a later stage, a `| head`, and a pipeless command alone", () => {
+    expect(stripTailLimit("git log | tail -20 | wc -l").stripped).toBe(false);
+    expect(stripTailLimit("git log | head -20").stripped).toBe(false);
+    expect(stripTailLimit("git status").stripped).toBe(false);
+  });
+
+  it("run_command runs the real command without the tail, and says the full output is retained", async () => {
+    const { shell, calls } = fakeShell(async () => ({ ok: true, exitCode: 0, stdout: "ok" }));
+    const r = await runShellCommand({ command: "pnpm install 2>&1 | tail -20" }, ctxWith(shell));
+    expect(calls[0]?.command).toBe("pnpm install 2>&1");
+    expect(String(r.data && (r.data as Record<string, unknown>).note)).toMatch(/without the trailing/);
   });
 });

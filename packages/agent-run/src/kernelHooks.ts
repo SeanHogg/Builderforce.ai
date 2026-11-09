@@ -21,9 +21,18 @@ import { volatileTail } from "./policy/compaction/pack.js";
 import type { UsdBudget } from "./policy/budget/usd.js";
 import type { CacheServedStreak } from "./policy/tools/cacheServedStreak.js";
 import { lastFinishReason } from "./policy/finish/index.js";
-import { tallyCall, tallyTurn, tallyVerify, type RunTally } from "./telemetry/runTally.js";
+import { bumpMutations, tallyCall, tallyTurn, tallyVerify, type RunTally } from "./telemetry/runTally.js";
+import { isReadOnlyShellCall } from "@builderforce/run-guards";
 import type { ToolSchema } from "@builderforce/agent-tools";
 import type { TurnInterruption } from "./surface.js";
+
+/** A call that changed (or may have changed) the workspace: a write/edit/delete tool, or a `run_command` the read classifier cannot clear. */
+const MUTATING_TOOLS: ReadonlySet<string> = new Set(["write_file", "edit_file", "delete_file"]);
+
+function isMutationCall(name: string, args: Record<string, unknown>): boolean {
+  if (MUTATING_TOOLS.has(name)) return true;
+  return !isReadOnlyShellCall(name, args);
+}
 
 /** The tools a run asks a human through — held back while a requested delegation is undone. */
 const ASK_TOOLS: ReadonlySet<string> = new Set(["ask_human", "ask_user"]);
@@ -279,6 +288,10 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
         // The trace and the tally take the same verdict, so the outcome row and the
         // event trace never disagree.
         tallyCall(tally, ctx.step, call.name, call.args, result.data, ok);
+        // The mutation count is the shell result cache's key (a cached result is valid only
+        // while the count is unchanged): feed it from the SAME verdict and call the read
+        // classifier trusts, so a cache entry never outlives the mutation that moves the key.
+        if (ok && isMutationCall(call.name, call.args)) bumpMutations(tally);
         // `ctx.step` is the kernel's live step; `state.step` lags until the loop returns.
         await emit(ports.events, { kind: "tool.dispatched", step: ctx.step, tool: call.name, ok, callId: call.id, args: call.args, result: result.data }, { durationMs: Date.now() - (starts.get(call.id) ?? Date.now()) });
         starts.delete(call.id);

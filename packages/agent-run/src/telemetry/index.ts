@@ -10,4 +10,4 @@
 
 export { buildOutcomeRow, type OutcomeRowInput } from "./outcomeRow.js";
 export { outcomeSourceOf, outcomeTerminalStatus, runOutcomeRequestOf, type RunOutcomeScope } from "./runOutcomeRequest.js";
-export { freshTally, resumeTally, tallyCall, tallyTurn, tallyVerify, type RunTally } from "./runTally.js";
+export { freshTally, resumeTally, tallyCall, tallyTurn, tallyVerify, bumpMutations, type RunTally } from "./runTally.js";

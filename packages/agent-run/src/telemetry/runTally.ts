@@ -39,6 +39,10 @@ export interface RunTally {
   firstSpawnTurn?: number;
   /** `cat`/`sed`/`head`/`tail` prints of one workspace file through the shell. */
   shellFileReads: number;
+  /** Workspace mutations the run dispatched (write/edit/delete tools, or a shell command the
+   *  read classifier cannot clear): a shell result cache is valid only while the current
+   *  count equals the count stored when the result was cached. */
+  mutations: number;
   /** Calls that came back "not a git repository". */
   repoErrors: number;
   /** The run-end verify's verdict, when the declared verify ran. */
@@ -49,7 +53,7 @@ export interface RunTally {
 
 /** A fresh run's tally: nothing spent, nothing done. */
 export function freshTally(): RunTally {
-  return { toolCalls: 0, toolErrors: 0, tokens: 0, cacheReadTokens: 0, shellFileReads: 0, repoErrors: 0, costLatch: true };
+  return { toolCalls: 0, toolErrors: 0, tokens: 0, cacheReadTokens: 0, shellFileReads: 0, repoErrors: 0, mutations: 0, costLatch: true };
 }
 
 /**
@@ -92,6 +96,16 @@ export function tallyCall(tally: RunTally, step: number, name: string, args: Rec
 /** The run-end verify answered. */
 export function tallyVerify(tally: RunTally, ok: boolean): void {
   tally.verify = ok ? "passed" : "failed";
+}
+
+/**
+ * One workspace mutation dispatched: a write/edit/delete tool, or a `run_command` the shared
+ * read classifier (`@builderforce/run-guards`) cannot clear. A shell result cache keys its
+ * entries on this counter — a hit is valid only while the count is unchanged — so every
+ * mutation moves the key and invalidates what ran before it.
+ */
+export function bumpMutations(tally: RunTally): void {
+  tally.mutations += 1;
 }
 
 /** The text a failed result carries, in the shape `isNotARepo` reads. */

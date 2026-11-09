@@ -16,6 +16,7 @@ import { safeRepoArg, shellRunWithStop } from "./git-repo-scope.js";
 import { compressShellResult } from "./compress.js";
 import type { ShellJobStatus, ShellResult } from "./capabilities.js";
 import { searchNoMatch } from "./shell-command-shape.js";
+import { stripTailLimit } from "./shell-pipe.js";
 import { outputFilterTool } from "./shell-output-filter.js";
 
 /** The longest a `yieldMs` / `waitMs` may hold the call (the foreground ceiling). */
@@ -71,7 +72,14 @@ function shapeResult(command: string, r: ShellResult): ShellResult {
 
 /** `run_command`'s body. */
 export async function runShellCommand(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
-  const command = typeof args.command === "string" ? args.command : "";
+  // A trailing `| tail -N` is the model's window on output the shell retains in full (`outputId`
+  // + `output_filter`): run the REAL command without the tail, so the full output is retained and
+  // its head — where the first error of a long log lives — stays filterable instead of being cut.
+  const stripped = stripTailLimit(typeof args.command === "string" ? args.command : "");
+  const command = stripped.command;
+  const tailNote = stripped.stripped
+    ? `ran without the trailing \`| tail -${stripped.tail}\` — the full output is retained under \`outputId\`; read its head with output_filter { outputId, head: … }. `
+    : "";
   if (!command.trim()) return { data: { ok: false, error: "command is required" } };
   const cwd = cwdArg(args.cwd);
   if (cwd === null) {
@@ -112,7 +120,7 @@ export async function runShellCommand(args: Record<string, unknown>, ctx: ToolCo
     ? await shell.run(command, { ...(ctx.signal ? { signal: ctx.signal } : {}), ...where, fresh: true })
     : await shellRunWithStop(ctx, command, dir);
   const r = await compressShellResult(shapeResult(command, ran), ctx);
-  const notes = [r.note, note].filter(Boolean).join(" ");
+  const notes = [tailNote, r.note, note].filter(Boolean).join(" ");
   return { data: { ...(r as unknown as Record<string, unknown>), ...where, ...(notes ? { note: notes } : {}) } };
 }
 
