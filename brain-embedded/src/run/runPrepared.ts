@@ -18,6 +18,7 @@ import { brainSpendMeter } from './brainSpend';
 import { brainSteeringSource, personSteers } from './brainSteering';
 import { settleBrainRun } from './brainSettle';
 import { brainEventSink } from './eventSink';
+import { withDeterministicFinish } from '../runStore/deterministicFinish';
 import { discardAnswered, brainTurnObserver } from './brainTurn';
 import { toRunMessage } from './runMessages';
 import { withoutUncallableTurns } from './brainModelRules';
@@ -82,7 +83,7 @@ export async function runPrepared(run: BrainRunContext): Promise<void> {
     // ... and the preamble ran the host's model preflight already (`hostRunContext.ts`): the agent's own would ask the host again and warn
     // about a model the loop never warned about (a QUICK run's quick model), so the Brain's says the verdict and nothing more.
     // ... and the finish module carries the host's engine ports (`brainFinish.ts`): an owner never ends with its sub-agents still working.
-    modules: { compaction: compaction.hook, model: recordedModelHook(c, req.model), finish: brainFinishHook(req) },
+    modules: { compaction: compaction.hook, model: recordedModelHook(c, req.model), finish: withDeterministicFinish(run, brainFinishHook(req)) },
     // The Brain's read-coverage owns the no-progress counter (`callPreflight`/`callPostStep`
     // feed it); hand the kernel that ONE instance to persist, so a circling run keeps its count
     // across the step yield it is steered into — not a kernel-built twin the Brain never feeds.

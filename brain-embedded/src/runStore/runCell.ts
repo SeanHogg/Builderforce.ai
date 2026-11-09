@@ -117,6 +117,12 @@ export interface RunCell {
    */
   deltaTitleCount: number | null;
   /**
+   * Set when `startRun`'s finally ran the deterministic close-out over the cell's final trace,
+   * so the finish-hook wrapper (`deterministicFinish.ts`) — the closer for a run `startRun`
+   * never drives — stands down. Keeps the close-out single-writer across both paths.
+   */
+  finishClosedOut: boolean;
+  /**
    * Index in `trace` of the CURRENT run's first event. The trace is a per-CHAT sliding
    * window that spans every run in the session, so any question about "what did THIS run
    * do" must be asked of {@link runTrace}, never of `trace` — reading the whole window let
@@ -288,6 +294,7 @@ export function makeCell(): RunCell {
     publishHold: null,
     authorModels: new Set<string>(),
     shipReviews: [],
+    finishClosedOut: false,
     snapshot: EMPTY_SNAPSHOT,
   };
 }

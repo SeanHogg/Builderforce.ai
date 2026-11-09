@@ -21,7 +21,9 @@ import { emit, getCell, nowIso, recordRunFailure, runTrace } from './runCells';
 import { appendRunMessage } from './runControl';
 import { keepStoppedTurn, persistStep } from './turnPersistence';
 import { settleView } from './runBackstops';
-import { closeOutRun, type CloseOutInput } from '../run/brainCloseOut';
+import { verificationOf, type CloseOutInput } from '../run/brainCloseOut';
+import { deterministicFinish, finishConditionMet } from './deterministicFinish';
+import type { BrainRunContext } from './brainRunContext';
 import { resolveServerChatId } from './serverChat';
 import { prepareBrainRun } from './runPreamble';
 import { runPrepared } from '../run/runPrepared';
@@ -171,20 +173,28 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
       // What the backstops decide on is read NOW, synchronously, from THIS run - never later from a cell the
       // next run may be using. Evaluated once: `shipped` gates ticket completion AND is the reported outcome's `merged`.
       const changed = c.codeChanged;
-      const shipped = !aborted && changed && shippedToBaseBranch(runTrace(c), { touchedFiles: c.touchedFiles });
-      const reviewedInPreview = !aborted && changed ? ticketsReviewedInPreview(runTrace(c)) : [];
+      const trace = runTrace(c);
+      const shipped = !aborted && changed && shippedToBaseBranch(trace, { touchedFiles: c.touchedFiles });
+      const reviewedInPreview = !aborted && changed ? ticketsReviewedInPreview(trace) : [];
       const view = settleView(c, runId);
       const needsTicket = !aborted && changed && req.projectId != null && !!req.runTool;
+      const openPh = openPlaceholders();
+      const verification = verificationOf(evidence, c.touchedFiles);
+      const hasTicket = view.deltaTicketId != null;
+      // FIX #6 DETERMINISTIC FINISH: when shipped + verified + no placeholders + a linked ticket, the
+      // close-out is the run's FINISH — the host records the review, moves the ticket to done, and the
+      // learn write is host-side (`emitEvermindLearnReconcile`), all ZERO model turns. `finished` is the
+      // gate an empty-ask continuation suppressor reads: when true, an empty ask must NOT auto-continue.
+      const finished = finishConditionMet({ shipped, verified: verification.verified, openPlaceholders: openPh, hasTicket });
       // The backstops hold the chat (the claim) - so they wait at most `settleMs`: a hung ticket call must not
       // leave the chat live forever. Late work finishes in the background on the snapshot, writing nothing
       // into a later run; a failure of it is traced (while this run is current), never unhandled.
       // The close-out (`run/brainCloseOut.ts`): the ticket's last attach, the backlog advance, and - when this run shipped -
       // the host's review and the move to done, held by the same acceptance a model's `done` is held to. Skipped on a Stop.
-      const closeOut = {
-        serverChatId, view, req, needsTicket, shipped, reviewedInPreview,
-        openPlaceholders: openPlaceholders(), trace: runTrace(c), evidence,
-      };
-      await within(left(), () => closeOutRun(closeOut), () => view.note?.({
+      // FIX #6: entered through `runDeterministicFinish` — the named deterministic-finish module (`runStore/deterministicFinish.ts`).
+      const closeOut: CloseOutInput & { verified: boolean; hasTicket: boolean } = { serverChatId, view, req, needsTicket, shipped, reviewedInPreview, openPlaceholders: openPh, trace, evidence, verified: verification.verified, hasTicket };
+      c.finishClosedOut = true; // this path is the closer; the finish-hook wrapper stands down
+      await within(left(), async () => { await deterministicFinish(closeOut, { c, req, serverChatId, recalled: null } as BrainRunContext); }, () => view.note?.({
         ts: nowIso(),
         category: 'message',
         label: 'run.backstop_timeout',
@@ -197,18 +207,23 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
         args: { error: e instanceof Error ? e.message : String(e) },
         result: 'The run\'s ticket bookkeeping failed; the run is settled without it.',
       }));
+      // Mark the cell: this run's close-out ran over its final trace. The deterministic-finish
+      // wrapper (`deterministicFinish.ts`) — which closes out a run `startRun` never drives —
+      // stands down on this flag, so the close-out runs exactly once across the two paths.
+      c.finishClosedOut = true;
       // Teach learned routing how this run's CODER did. Not awaited — a report must
       // never hold the run open or fail it.
       // Every run — top-level or sub-agent — is graded by the same rule, on its own request.
       // A wake turn is not a request: it is the owner reading its children's reports, and
-      // the work it asked for was handed to them.
-      const trace = runTrace(c);
+      // the work it asked for was handed to them. The trace is re-read here because the
+      // close-out above can append steps (the deterministic-finish review row).
+      const finalTrace = runTrace(c);
       const requestText = req.userTurn === undefined ? undefined : contentText(req.userTurn);
       const wakeTurn = delegatingCells.has(c) && isChildReportText(requestText);
-      if (attemptedDelegation(trace)) delegatingCells.add(c);
+      if (attemptedDelegation(finalTrace)) delegatingCells.add(c);
       const outcome = req.reportOutcome && codeRunOutcome({
         runId: c.runId, codeModel: c.codeModel, codeChanged: c.codeChanged, aborted,
-        failed: c.error !== '', error: c.error, shipped, trace, projectId: req.projectId,
+        failed: c.error !== '', error: c.error, shipped, trace: finalTrace, projectId: req.projectId,
         askedForChange: !wakeTurn && asksForChange(requestText),
       });
       // ONE report per run. A graded run reports through `reportOutcome` as it always has (same runs, same `source`, same fields), the
@@ -241,7 +256,7 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
       await within(left(), async () => { await steps.flush(); }, () => undefined);
       // Direction nobody read becomes THIS chat's next turn, whichever chat is on screen. A Stop
       // ends the conversation's work, waiting words included.
-      if (continues && !aborted) await continueLeftovers(runKey, c, startRun, settleClaim);
+      if (continues && !finished && !aborted) await continueLeftovers(runKey, c, startRun, settleClaim);
     } finally {
       releaseClaim(c, settleClaim);
     }

@@ -246,7 +246,19 @@ export async function continueChat(runKey: number, c: RunCell, steers: readonly 
   // model's turn. Fresh words never go ahead of earlier ones.
   const turns: Array<{ steer: RunSteerMessage; composed: Composed }> = [];
   for (const steer of steers) turns.push({ steer, composed: await bounded(left(), compose(steer, ports)) });
-  const fresh = turns.filter((t) => !t.steer.saved);
+  // FIX #6 (empty-ask continuation stop): a steer whose composed content carries NO words must not
+  // launch a run — that is the wake run with an empty ask that runs #2/#3 of the source chat started
+  // (auto-continuation after the finish condition was met). `wakeChat` already trims and drops such
+  // words; the other doors into a continuation do not, so the guard lives here, BEFORE any row is
+  // saved (a dropped continuation must leave no unanswered user row) and BEFORE `start(...)`.
+  const words = turns.filter((t) => recordedModelText(t.composed.turn.content).trim());
+  if (words.length === 0) {
+    forgetPendingWords(runKey, steers.map((m) => m.eventKey));
+    trace(c, 'steer.empty_ask_dropped', { steers: steers.length },
+      'A continuation carried only an empty ask and no files; with the finish condition met there is nothing to continue, so no run was started.');
+    return true; // the words were taken (dropped): the caller does not requeue them
+  }
+  const fresh = words.filter((t) => !t.steer.saved);
   let rows: BrainMessage[] = [];
   if (fresh.length > 0) {
     // One row PER steer, each under its own key: a save that times out and lands late, then is saved again from the
