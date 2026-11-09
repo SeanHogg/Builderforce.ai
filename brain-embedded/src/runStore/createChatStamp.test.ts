@@ -80,6 +80,14 @@ describe("a model's create call carries the run's chat", () => {
     expect(calls.find((c) => c.name === 'builtin_tasks_create')?.args.chatId).toBe(4800);
   });
 
+  it("regression: a sub-agent run the editor host starts (own negative key, the root's bound server chat) stamps the PARENT chat on its create", async () => {
+    // The VS Code host binds the ROOT local chat (4800) and passes its server chat (217);
+    // the child's own key never names a chat.
+    const lineage: RunLineage = { rootChatId: 4800, ownerKey: 4800, ownerName: 'BuilderForce', handle: 'a2', label: 'file it', agent: { ref: 'subagent:file it', name: 'file it' }, depth: 1 };
+    const calls = await runWith(-9002, 217, lineage);
+    expect(calls.find((c) => c.name === 'builtin_tasks_create')?.args.chatId).toBe(217);
+  });
+
   it('strips a model-sent chatId for an unbound local chat', async () => {
     const calls = await run(6, null);
     const create = calls.find((c) => c.name === 'builtin_tasks_create');
