@@ -92,7 +92,8 @@ export const NodeCanvas = memo(function NodeCanvas({ ordered, layout, lens, sele
         return ordered.flatMap((n): NodeMark[] => {
             const at = layout.positions.get(n.ref);
             if (!at) return [];
-            return [{ id: n.ref, x: at[0], y: at[1], r: Math.max(nodeRadius(n.importance), 3 * perPx), ...lens.nodeStyle(n) }];
+            const style = lens.nodeStyle(n);
+            return [{ id: n.ref, x: at[0], y: at[1], r: Math.max(nodeRadius(n.importance), 3 * perPx), tone: style.tone, dim: style.emphasis === 'dim', shape: style.shape }];
         });
     }, [ordered, layout, lens, perPx]);
 
