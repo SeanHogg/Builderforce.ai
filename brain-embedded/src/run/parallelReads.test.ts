@@ -77,12 +77,16 @@ describe('the Brain runs one turn\'s independent reads concurrently (D8)', () =>
   });
 
   it('dispatches independent read-only calls together', async () => {
-    const { peak } = await runTurn(4801, [
+    const { peak, events } = await runTurn(4801, [
       { id: 'r1', name: 'read_file', args: JSON.stringify({ path: 'a.ts' }) },
       { id: 'r2', name: 'read_file', args: JSON.stringify({ path: 'b.ts' }) },
       { id: 's1', name: 'search_code', args: JSON.stringify({ query: 'needle' }) },
     ]);
     expect(peak).toBeGreaterThanOrEqual(2);
+    // Two independent reads start in the SAME batch — neither waits for the other to end.
+    const starts = events.filter((e) => e.startsWith('start:'));
+    expect(starts.slice(0, 2).sort()).toEqual(['start:read_file', 'start:read_file']);
+    expect(events.indexOf('end:read_file')).toBeGreaterThan(events.indexOf('start:read_file'));
   });
 
   it('keeps a mutating call in order: it starts only after the reads before it ended', async () => {
