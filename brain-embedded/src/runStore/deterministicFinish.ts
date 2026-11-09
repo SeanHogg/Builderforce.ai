@@ -23,10 +23,12 @@
 
 import { isFailedToolResult } from '../brainTriage';
 import type { PolicyContext } from '@builderforce/agent-run';
-import { linkedTicketsToComplete } from '../chatWorkLinking';
-import { nowIso, nowMs, runTrace } from './runCells';
+import { linkedTicketsToComplete, linkedTicketsReviewedComplete, linkedTicketsToAdvance } from '../chatWorkLinking';
+import { recordCodeChangeTicket, retitleShippedDeltaTicket, updateLinkedTickets } from './runBackstops';
+import { recordShipReview, verificationOf, type CloseOutInput } from '../run/brainCloseOut';
 import type { BrainRunContext } from './brainRunContext';
-import type { CloseOutInput } from '../run/brainCloseOut';
+import type { BrainRunRequest } from './runTypes';
+import { nowIso, nowMs, runTrace } from './runCells';
 import { shippedToBaseBranch } from '../shipVerification';
 import { settleView } from './runBackstops';
 
@@ -54,17 +56,6 @@ export interface DeterministicFinishResult {
   factWritten: boolean;
 }
 
-function reviewedThisRun(trace: readonly { category: string; label?: string; args?: unknown }[]): Set<number> {
-  const reviewed = new Set<number>();
-  for (const ev of trace) {
-    if (ev.category === 'tool' && ev.label === 'builtin_reviews_record') {
-      const id = (ev.args as { taskId?: unknown } | undefined)?.taskId;
-      if (typeof id === 'number') reviewed.add(id);
-    }
-  }
-  return reviewed;
-}
-
 /**
  * Run the deterministic close-out: the host records the review on the run's ticket, moves the
  * linked ticket to done, and writes the learned fact — all as HOST ACTIONS through `req.runTool`,
@@ -84,20 +75,51 @@ export async function deterministicFinish(
   if (req.projectId == null || !req.runTool) return result;
 
   const runTool = req.runTool;
-  const trace = runTrace(run.c);
-  const ticketId = input.view.deltaTicketId;
+  const { view, needsTicket, shipped, reviewedInPreview } = input;
+  const fullReq = req as BrainRunRequest;
 
-  // 1. Record the self-review on the run's own ticket — unless the run already reviewed it.
-  if (ticketId != null && !reviewedThisRun(trace).has(ticketId)) {
-    const args = { taskId: ticketId, verdict: 'complete', summary: 'Closed out deterministically by the host: this run shipped its change to the base branch (verified), with no model turns.' };
-    const start = nowMs();
-    let out: unknown;
-    try { out = await runTool('builtin_reviews_record', args); } catch (e) { out = { ok: false, error: e instanceof Error ? e.message : String(e) }; }
-    input.view.note?.({ ts: nowIso(), category: 'tool', label: 'builtin_reviews_record', durationMs: nowMs() - start, args: { ...args, auto: true, reason: 'deterministic-finish' }, result: out ?? null, isError: isFailedToolResult(out) });
-    result.reviewRecorded = !isFailedToolResult(out);
+  // 0. The ticket itself was opened on the run's first edit; this pass ATTACHES whatever was
+  // touched afterwards to the same ticket — and still mints one in the case the opening call
+  // failed. Runs on EVERY settle (independent of the finish gate), as the original close-out did.
+  if (needsTicket && (!view.ticketRecorded || view.deltaTicketId != null)) {
+    await recordCodeChangeTicket(input.serverChatId, view, fullReq, 'settle');
+  }
+  // Keep the board honest about STATUS: advance any linked task still in a not-started lane to
+  // in_progress — after the mint, so a freshly minted review-status ticket is never touched.
+  if (needsTicket) {
+    await updateLinkedTickets(input.serverChatId, view, fullReq, linkedTicketsToAdvance, 'in_progress', 'worked-ticket-off-backlog');
   }
 
-  // 2. Move the linked ticket(s) to done — only those the chat still lists as completable.
+  // 1. Shipped: re-title the delta ticket (PRD 45 §4.7 B9), then close it out. The acceptance the
+  // completion guard holds a model's `done` to holds the host's too: a placeholder left in the code
+  // keeps the ticket open, and the step says so instead of closing it. Shipping is not verification:
+  // with no passing evidence for the change, nobody reviewed it — the host records no review, moves
+  // nothing to done, and says why. (The `finishConditionMet` gate already returned early on any of
+  // these holds; this block records the hold note so the trace says WHY.)
+  if (shipped && req.projectId != null) {
+    await retitleShippedDeltaTicket(view, fullReq);
+    if (input.openPlaceholders > 0) {
+      view.note?.({
+        ts: nowIso(), category: 'message', label: 'run.close_out_held',
+        args: { reason: 'placeholders', open: input.openPlaceholders },
+        result: 'The change shipped, but this run left placeholders in the code: its ticket stays open until they are finished.',
+      });
+    } else {
+      const verification = verificationOf(input.evidence, view.touchedFiles);
+      if (!verification.verified) {
+        view.note?.({
+          ts: nowIso(), category: 'message', label: 'run.close_out_held',
+          args: { reason: 'unverified', detail: verification.reason },
+          result: `The change shipped, but this run holds no passing verification for it (${verification.reason}): no review was recorded and its ticket stays in review.`,
+        });
+      } else if (view.deltaTicketId != null) {
+        await recordShipReview(input, view.deltaTicketId, verification.checks);
+      }
+    }
+  }
+
+  // 2. Move the linked ticket(s) to done — only those the chat still lists as completable. The
+  // review (step 1) ran first when the change shipped; this closes the linked ticket(s).
   let listed: unknown;
   try { listed = await runTool('builtin_chats_list_tickets', { chatId: run.serverChatId }); } catch { listed = null; }
   const completable = linkedTicketsToComplete(listed);
@@ -116,10 +138,17 @@ export async function deterministicFinish(
     if (!isFailedToolResult(out)) result.ticketClosed = true;
   }
 
-  // 3. The close-out is complete: the review is recorded and the ticket moved to done. The
-  // learned fact is written by the host's learn reconcile alongside this close-out (host-side,
-  // not a runTool call), so `factWritten` stays false — the finish reports the review + ticket
-  // close it performed, not the reconcile.
+  // 3. The Studio's equivalent of a verified push: a "complete" review after a passing preview
+  // inspection of THIS run's last change. Closes exactly the tickets that were reviewed.
+  if (reviewedInPreview.length && req.projectId != null) {
+    await updateLinkedTickets(input.serverChatId, view, fullReq, (l) => linkedTicketsReviewedComplete(l, reviewedInPreview), 'done', 'reviewed-in-preview');
+  }
+
+  // The review ran when the change shipped and verified with no placeholder outstanding (step 1);
+  // the ticket close (step 2) is the paired host action. The learned fact is written by the host's
+  // learn reconcile alongside this close-out (host-side, not a runTool call), so `factWritten`
+  // stays false — the finish reports the review + ticket close it performed, not the reconcile.
+  result.reviewRecorded = shipped && view.deltaTicketId != null && input.openPlaceholders === 0;
   result.finished = true;
   return result;
 }

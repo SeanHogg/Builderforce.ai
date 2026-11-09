@@ -1,29 +1,15 @@
 /**
- * The run's CLOSE-OUT: the host actions a settled run's ticket bookkeeping takes, with ZERO model turns.
- *
- * Extracted from `startRun.ts`'s settle (the one place it ran) so the whole close-out is one unit: the delta ticket's last
- * attach, advancing linked tickets off the backlog, and - when THIS run shipped - the review and the move to done.
- *
- * Before, a run that pushed its change still owed the review: `selfReviewShip.ts` tells the model to record it, and a model
- * that ran out of patience said "close it out next run" instead (chat #60338). The person had to send another message, and
- * that run spent three model turns on `builtin_reviews_record`, `builtin_tasks_update(done)` and `remember_fact`. Now the HOST
- * records the review on the ticket THIS run created, through the same tool executor (`req.runTool`) the model would have
- * reached - never through the model - and only when the acceptance the existing gates hold is met: the change landed on the
- * base branch (`shippedToBaseBranch`), no placeholder this run wrote is outstanding (`completionGuard.ts`), AND the run's
- * evidence ledger (`@builderforce/run-guards`, fed only by the host verifier - the ledger `shipGates.ts` gates a push on)
- * holds a passing check for every file the run changed and no failing one ({@link verificationOf}). Shipping is not
- * verification: without that evidence the host records NO review and moves nothing to done - the ticket stays in review,
- * and a held close-out is a trace step saying why. Never a rubber stamp. The learned facts are already written host-side
- * at run end (`emitEvermindLearnReconcile`, and the editor's run note), so no fact writer is added here.
- *
- * Best-effort throughout: every action is a durable step, and none throws (the callers bound it by the settle deadline).
+ * The run's CLOSE-OUT shared seam: the input it decides on, the review tool name, the verification
+ * read, and the evidence-based review summary the host records. The close-out itself moved to
+ * `runStore/deterministicFinish.ts` `deterministicFinish` (fix #6) — the run's ticket bookkeeping as
+ * pure host actions, entered from `startRun`'s settle and the finish-hook wrapper. This module keeps
+ * the shared helpers that fold lives on.
  */
 
-import { normalizeEvidencePath, type EvidenceLedger } from '@builderforce/run-guards';
+import { normalizeEvidencePath, createEvidenceLedger, type EvidenceLedger } from '@builderforce/run-guards';
 import { isFailedToolResult, type BrainTraceEvent } from '../brainTriage';
-import { linkedTicketsReviewedComplete, linkedTicketsToAdvance, linkedTicketsToComplete } from '../chatWorkLinking';
 import { nowIso, nowMs } from '../runStore/runCells';
-import { recordCodeChangeTicket, retitleShippedDeltaTicket, updateLinkedTickets, type BackstopRun } from '../runStore/runBackstops';
+import type { BackstopRun } from '../runStore/runBackstops';
 import type { BrainRunRequest } from '../runStore/runTypes';
 
 /** The tool a review is recorded with - the model's and the host's alike. */
@@ -35,7 +21,7 @@ export interface CloseOutInput {
   serverChatId: number | null;
   /** The run's detached settle snapshot (`settleView`). */
   view: BackstopRun;
-  req: Pick<BrainRunRequest, 'runTool' | 'projectId'>;
+  req: Pick<BrainRunRequest, 'runTool'> & { projectId?: number | null };
   /** The run changed code and may mint/advance tickets (not stopped, a project, a tool runner). */
   needsTicket: boolean;
   /** The run's change landed on the base branch (`shippedToBaseBranch`). */
@@ -88,19 +74,19 @@ export function reviewedThisRun(trace: readonly BrainTraceEvent[]): Set<number> 
   return ids;
 }
 
-/** The review the host records for a shipped, verified change: the evidence it holds, nothing it does not. */
-function shipReviewSummary(files: readonly string[], checks: readonly string[]): string {
-  const shown = files.slice(0, 10).join(', ');
-  const more = files.length > 10 ? ` (+${files.length - 10} more)` : '';
-  const passed = checks.slice(0, 10).join('; ') + (checks.length > 10 ? ` (+${checks.length - 10} more)` : '');
-  return `Closed out by the host: this run's change${files.length ? ` (${files.length} file${files.length === 1 ? '' : 's'}: ${shown}${more})` : ''} was pushed to the base branch and verified landed, with no placeholder outstanding. Passing checks on the shipped bytes: ${passed}.`;
-}
-
-/** Record the host's review on the ticket THIS run created, unless the run recorded one itself. */
-async function recordShipReview(input: CloseOutInput, taskId: number, checks: readonly string[]): Promise<void> {
+/**
+ * Record the host's review on the ticket THIS run created, unless the run recorded one itself. The
+ * summary names the files and the PASSING checks the run's evidence ledger holds — nothing it does
+ * not (never a rubber stamp).
+ */
+export async function recordShipReview(input: CloseOutInput, taskId: number, checks: readonly string[]): Promise<void> {
   const { view, req } = input;
   if (!req.runTool || reviewedThisRun(input.trace).has(taskId)) return;
-  const args = { taskId, verdict: 'complete', summary: shipReviewSummary(view.touchedFiles, checks) };
+  const shown = view.touchedFiles.slice(0, 10).join(', ');
+  const more = view.touchedFiles.length > 10 ? ` (+${view.touchedFiles.length - 10} more)` : '';
+  const passed = checks.slice(0, 10).join('; ') + (checks.length > 10 ? ` (+${checks.length - 10} more)` : '');
+  const summary = `Closed out by the host: this run's change${view.touchedFiles.length ? ` (${view.touchedFiles.length} file${view.touchedFiles.length === 1 ? '' : 's'}: ${shown}${more})` : ''} was pushed to the base branch and verified landed, with no placeholder outstanding. Passing checks on the shipped bytes: ${passed}.`;
+  const args = { taskId, verdict: 'complete', summary };
   const toolStart = nowMs();
   let out: unknown;
   try {
@@ -119,54 +105,10 @@ async function recordShipReview(input: CloseOutInput, taskId: number, checks: re
   });
 }
 
-/** Run the close-out. Each step is skipped when its evidence is absent; none throws past the tool runner's own failures. */
-export async function closeOutRun(input: CloseOutInput): Promise<void> {
-  const { serverChatId, view, needsTicket, shipped, reviewedInPreview } = input;
-  const req = input.req as BrainRunRequest;
-  // The ticket itself was already opened on the run's first edit (see the tool loop), so this pass ATTACHES whatever was
-  // touched afterwards to that same ticket - and still mints one in the case the opening call failed.
-  if (needsTicket && (!view.ticketRecorded || view.deltaTicketId != null)) {
-    await recordCodeChangeTicket(serverChatId, view, req, 'settle');
-  }
-  // Keep the board honest about STATUS: advance any linked task still in a not-started lane to in_progress - after the mint,
-  // so a freshly minted review-status ticket is never touched.
-  if (needsTicket) {
-    await updateLinkedTickets(serverChatId, view, req, linkedTicketsToAdvance, 'in_progress', 'worked-ticket-off-backlog');
-  }
-  if (shipped && req.projectId != null && req.runTool) {
-    // PRD 45 §4.7 B9: the delta ticket's title carries the file-count minted on the first edit; re-title it at ship.
-    await retitleShippedDeltaTicket(view, req);
-    // The acceptance the completion guard holds a model's `done` to holds the host's too: a placeholder left in the code
-    // keeps the ticket open, and the step says so instead of closing it.
-    if (input.openPlaceholders > 0) {
-      view.note?.({
-        ts: nowIso(),
-        category: 'message',
-        label: 'run.close_out_held',
-        args: { reason: 'placeholders', open: input.openPlaceholders },
-        result: 'The change shipped, but this run left placeholders in the code: its ticket stays open until they are finished.',
-      });
-    } else {
-      // Shipping is not verification: with no passing evidence for the change, nobody reviewed it - the host records no
-      // review, moves nothing to done, and says why.
-      const verification = verificationOf(input.evidence, view.touchedFiles);
-      if (!verification.verified) {
-        view.note?.({
-          ts: nowIso(),
-          category: 'message',
-          label: 'run.close_out_held',
-          args: { reason: 'unverified', detail: verification.reason },
-          result: `The change shipped, but this run holds no passing verification for it (${verification.reason}): no review was recorded and its ticket stays in review.`,
-        });
-      } else {
-        if (view.deltaTicketId != null) await recordShipReview(input, view.deltaTicketId, verification.checks);
-        await updateLinkedTickets(serverChatId, view, req, linkedTicketsToComplete, 'done', 'shipped-to-base-branch');
-      }
-    }
-  }
-  // The Studio's equivalent of a verified push: a "complete" review after a passing preview inspection of THIS run's last
-  // change. Closes exactly the tickets that were reviewed.
-  if (reviewedInPreview.length && req.projectId != null && req.runTool) {
-    await updateLinkedTickets(serverChatId, view, req, (listed) => linkedTicketsReviewedComplete(listed, reviewedInPreview), 'done', 'reviewed-in-preview');
-  }
+/** An evidence ledger holding `checks` against `path` (as the host verifier records them). */
+export function evidenceLedgerOf(path: string, outcomes: Array<'pass' | 'fail' | 'unavailable'>): EvidenceLedger {
+  const ledger = createEvidenceLedger();
+  outcomes.forEach((outcome, i) => ledger.record(path, 'h1', { kind: 'test', name: `check-${i}`, outcome, exitCode: outcome === 'pass' ? 0 : 1, findings: [], at: 1 }));
+  return ledger;
 }
+
