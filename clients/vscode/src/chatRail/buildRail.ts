@@ -18,6 +18,7 @@ import type { ChatTicketLinkValue, LocalRecord } from "@builderforce/local-first
 import type { LocalFirstView } from "../localFirstView";
 import { presentRecordSyncStatus } from "../syncStatusPresenter";
 import { railTicketProgress, type RailRunPayload, type RailTicketPayload } from "./railPayloads";
+import { ticketsOfChats } from "./ticketsOfChat";
 import type {
   ChatRef, RailFreshness, RailLink, RailRun, RailRunHistory, RailTicket,
 } from "./railProtocol";
@@ -88,9 +89,9 @@ export function readRailFromFacts(facts: RailFacts, ref: ChatRef, lastRefreshAt?
     if (row.provenance?.evidence === "server-observed") observed.push(row.updatedAt);
   };
 
-  linkRecords.forEach((link, index) => {
-    const ticket = tickets.get(link.payload.ticketClientId);
-    if (!ticket) return;
+  // The chat's tickets: the ONE selection the chat list's row summary rolls up too.
+  const chatTickets = ticketsOfChats(linkRecords, (id) => tickets.get(id), new Set([chatClientId])).get(chatClientId) ?? [];
+  for (const { link, ticket, index } of chatTickets) {
     const payload = ticket.payload;
     const ticketServerId = serverIdOf("ticket", ticket.id);
     const linkId = numeric(serverIdOf("chat-ticket-link", link.id)) ?? -(index + 1);
@@ -114,7 +115,7 @@ export function readRailFromFacts(facts: RailFacts, ref: ChatRef, lastRefreshAt?
     });
     // A ticket is not evidence of a read: linking an unseen work item lands a stub of it.
     noteObserved(link);
-  });
+  }
 
   const runs: RailRun[] = runRecords
     .map((row) => {

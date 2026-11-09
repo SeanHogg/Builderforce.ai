@@ -80,9 +80,8 @@ export function localBrainApplication(ctx: vscode.ExtensionContext): LocalApplic
     store,
     durableStore: store,
     deviceId,
-    // Deleting a chat also drops its rail read mark (`pruneRailReadMarkOnDelete`). Every chat row
-    // also counts the tickets filed on this device that the platform has not seen yet
-    // (`mergeLocalTicketSummaries`).
+    // Deleting a chat also drops its rail read mark (`pruneRailReadMarkOnDelete`). Every chat row's
+    // ticket summary is rolled up from the same tickets its rail shows (`mergeLocalTicketSummaries`).
     persistence: mergeLocalTicketSummaries(pruneRailReadMarkOnDelete(createLocalBrainPersistence({
       store,
       deviceId,
