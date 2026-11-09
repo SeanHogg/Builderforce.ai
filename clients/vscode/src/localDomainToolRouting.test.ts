@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createMemoryLocalFirstStore } from "@builderforce/local-first";
 import type { ToolDef } from "./fileTools";
 import { installLocalDomainTools, type DomainToolRequest } from "./installLocalDomainTools";
-import { LOCAL_DOMAIN_TOOL_SPECS, SERVER_TWIN_TOOL_NAMES, filesTicketsLocally, routeToLocalDomainTools } from "./localDomainToolRouting";
+import { LOCAL_DOMAIN_TOOL_SPECS, SERVER_TWIN_TOOL_NAMES, routeToLocalDomainTools } from "./localDomainToolRouting";
 
 const serverTool = (name: string, mutating = true): ToolDef => ({
   name,
@@ -40,17 +40,6 @@ function host() {
     }, chatClientId);
   return { store, installed, requests, tools };
 }
-
-describe("filesTicketsLocally", () => {
-  it("regression: signed in with sync NOT granted keeps the server create — a local ticket would stay unbound and never link to the chat", () => {
-    // 2026-11-08: 43 tickets filed by runs and sub-agents sat unbound on the device, none
-    // pushed, so their chats showed 0 tickets.
-    expect(filesTicketsLocally(CATALOG, false)).toBe(false);
-    expect(filesTicketsLocally(CATALOG, true)).toBe(true);
-    // Signed out: no server create to keep, so local is the only way to file.
-    expect(filesTicketsLocally([{ name: "read_file" }], false)).toBe(true);
-  });
-});
 
 describe("routeToLocalDomainTools", () => {
   it("hides the server twins and keeps every read and unrelated tool", () => {

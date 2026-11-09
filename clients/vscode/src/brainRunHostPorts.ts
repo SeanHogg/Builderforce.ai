@@ -30,8 +30,7 @@ import { changeSetIdentityForHostRun, recordChangeSetAroundRun } from "./runChan
 import { installRunRecovery } from "./installRunRecovery";
 import { createHostRunLifecycle } from "./hostRunLifecycle";
 import { installLocalDomainTools, type DomainToolRequest } from "./installLocalDomainTools";
-import { filesTicketsLocally, routeToLocalDomainTools } from "./localDomainToolRouting";
-import { platformPolicy } from "./platformPolicy";
+import { routeToLocalDomainTools } from "./localDomainToolRouting";
 import { ticketServerIdLookup } from "./localTicketIdBridge";
 import type { ToolDef } from "./fileTools";
 import { changeTouches, type LocalFirstStore } from "@builderforce/local-first";
@@ -131,8 +130,6 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     tools: async (projectId, children, signal, opts) => {
       const tools = await brainToolCatalog(secrets, workspaceRoot() || undefined, projectId, children, signal, opts);
       const catalog = opts.audit && projectId != null ? auditToolCatalog(secrets, tools, projectId, opts.audit) : tools;
-      // Sync not granted ⇒ a local ticket never reaches the account: keep the server create.
-      if (!filesTicketsLocally(catalog, platformPolicy().allows("synchronize") === true)) return catalog;
       return routeDomainToolsLocal(ctx, local.store, catalog, opts.chatIdentity?.clientChatId);
     },
     workspaceRoot,

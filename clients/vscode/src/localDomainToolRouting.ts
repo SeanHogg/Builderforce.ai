@@ -1,12 +1,11 @@
 /**
- * Project and ticket tools in the editor are LOCAL whenever local work can reach the
- * account ({@link filesTicketsLocally}).
+ * Project and ticket tools in the editor are LOCAL — always.
  *
  * Filing a program of tickets through the server MCP tools is two API calls per ticket
  * (`builtin_tasks_create` + `builtin_chats_link_ticket`) fired back to back, which trips
  * the tenant's rate window (shared with the person) — measured on chat #210: 26 tickets,
- * HTTP 429 on both tools. So in the editor the local repository IS the ticket tool when
- * sync is granted, or when there is no server create at all (signed out):
+ * HTTP 429 on both tools. So in the editor the local repository IS the ticket tool,
+ * signed in or not, sync granted or not:
  *
  *   • a `ticket-create` writes this device's store and returns at once; the batched
  *     local-first sync (`chatSyncHost.ts`) carries it to the account in the background,
@@ -35,22 +34,6 @@ export const SERVER_TWIN_TOOL_NAMES: ReadonlySet<string> = new Set([
   "builtin_tasks_create", // → ticket-create
   "builtin_chats_link_ticket", // → ticket-create stamps the creating chat itself
 ]);
-
-/**
- * Whether the editor's catalog files tickets LOCALLY (`ticket-create`) or keeps the
- * server create. Local only when that ticket can reach the account: sync granted (the
- * sync pass binds the unbound row and pushes it, linked to its chat), or no server create
- * in the catalog (signed out — local is the only way to file at all).
- *
- * Signed in with sync NOT granted, a local ticket sits in the unbound partition for good:
- * never pushed, never linked to the server chat — every ticket a run (or its sub-agents)
- * filed showed as 0 on the chat. The server create stays then, and the run stamps its
- * chat — the ROOT chat for a sub-agent — onto it (brain-embedded `stampRunChat`), so the
- * server links the item in the create call itself.
- */
-export function filesTicketsLocally(tools: readonly Pick<ToolDef, "name">[], syncGranted: boolean): boolean {
-  return syncGranted || !tools.some((tool) => SERVER_TWIN_TOOL_NAMES.has(tool.name));
-}
 
 /**
  * Only names the landed library actually implements. `memory-recall` is

@@ -91,11 +91,19 @@ export function useTicketRail({ init, apiReq, serverChatId, chatClientId, chats,
   // The host pushes the chat's rail whenever a commit touches it (a link, a refresh). The push only
   // lands in the store: the panel repaints from `liveTickets`, with no read and no platform call.
   // A frame for another chat (a late one from before a switch) is dropped.
+  // The same push re-reads the chat list when the chat's tickets moved (one filed, a status or
+  // progress change): the history row counts this device's unsynced tickets
+  // (`mergeLocalTicketSummaries` on the host), and nothing else tells the list a local ticket changed.
   const railChatRef = useRef(railChatId);
-  useEffect(() => { railChatRef.current = railChatId; }, [railChatId]);
+  const railTicketSig = useRef<string | null>(null);
+  useEffect(() => { railChatRef.current = railChatId; railTicketSig.current = null; }, [railChatId]);
   useEffect(() => onHostMessage<ChatRailFrame>('local.chatRail', (frame) => {
-    if (isFrameFor(frame, railChatRef.current)) railStore.set(frame.rail);
-  }), [railStore]);
+    if (!isFrameFor(frame, railChatRef.current)) return;
+    railStore.set(frame.rail);
+    const sig = frame.rail.tickets.map((tk) => `${tk.clientId}:${tk.status}:${tk.progressPct}`).join('|');
+    if (railTicketSig.current !== null && railTicketSig.current !== sig) reloadChats();
+    railTicketSig.current = sig;
+  }), [railStore, reloadChats]);
 
   // The composer's #-ticket typeahead: the chat's linked tickets, from the local rail copy.
   //

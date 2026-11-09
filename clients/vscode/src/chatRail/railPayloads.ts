@@ -36,6 +36,27 @@ export interface RailTicketPayload extends TicketValue {
   parent?: RailTicketParent;
 }
 
+/** A ticket's progress as the rail draws it — and as the chat list rolls it up (`ChatTicketHealthInput`). */
+export interface RailTicketProgress {
+  status: string;
+  progressPct: number;
+  done: number;
+  total: number;
+}
+
+/**
+ * The ONE mapping from a ticket record to its progress. A ticket the platform listed carries the
+ * rail's progress; a locally authored one carries none, so its status stands in (done = 100).
+ */
+export function railTicketProgress(payload: TicketValue & Partial<Pick<RailTicketPayload, "progressPct" | "done" | "total">>): RailTicketProgress {
+  return {
+    status: payload.status,
+    progressPct: payload.progressPct ?? (payload.status === "done" ? 100 : 0),
+    done: payload.done ?? 0,
+    total: payload.total ?? 0,
+  };
+}
+
 /** A run the platform listed for a chat. */
 export interface RailRunPayload extends RailRun {
   chatClientId: string;

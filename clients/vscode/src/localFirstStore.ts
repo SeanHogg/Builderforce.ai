@@ -31,6 +31,7 @@ import { createDurableLocalFirstStore, type DurableLocalFirstStore } from "./dur
 import { chatAccountDestination, chatBindingPort, serverChatSpend } from "./chatAccount";
 import { gatewaySummaryCompletion } from "./chatSummarizer";
 import { pruneRailReadMarkOnDelete } from "./chatRail/refreshRail";
+import { mergeLocalTicketSummaries } from "./chatRail/localTicketSummary";
 import { hostLog } from "./hostLog";
 
 /** The durable store over this extension's global storage. */
@@ -79,8 +80,10 @@ export function localBrainApplication(ctx: vscode.ExtensionContext): LocalApplic
     store,
     durableStore: store,
     deviceId,
-    // Deleting a chat also drops its rail read mark (`pruneRailReadMarkOnDelete`).
-    persistence: pruneRailReadMarkOnDelete(createLocalBrainPersistence({
+    // Deleting a chat also drops its rail read mark (`pruneRailReadMarkOnDelete`). Every chat row
+    // also counts the tickets filed on this device that the platform has not seen yet
+    // (`mergeLocalTicketSummaries`).
+    persistence: mergeLocalTicketSummaries(pruneRailReadMarkOnDelete(createLocalBrainPersistence({
       store,
       deviceId,
       summarizeUnavailable: vscode.l10n.t("Summarizing a chat needs a BuilderForce account. This conversation is only on this machine."),
@@ -90,7 +93,7 @@ export function localBrainApplication(ctx: vscode.ExtensionContext): LocalApplic
       accountDestination: chatAccountDestination,
       serverSpend: serverChatSpend(ctx.secrets),
       bindChat: (chatId) => identity.bind(chatId),
-    }), store),
+    }), store), store),
     identity,
     usage: createRunUsageLedger({ store, deviceId }),
   };

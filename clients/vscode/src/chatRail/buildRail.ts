@@ -17,7 +17,7 @@
 import type { ChatTicketLinkValue, LocalRecord } from "@builderforce/local-first";
 import type { LocalFirstView } from "../localFirstView";
 import { presentRecordSyncStatus } from "../syncStatusPresenter";
-import type { RailRunPayload, RailTicketPayload } from "./railPayloads";
+import { railTicketProgress, type RailRunPayload, type RailTicketPayload } from "./railPayloads";
 import type {
   ChatRef, RailFreshness, RailLink, RailRun, RailRunHistory, RailTicket,
 } from "./railProtocol";
@@ -106,10 +106,7 @@ export function readRailFromFacts(facts: RailFacts, ref: ChatRef, lastRefreshAt?
       kind: payload.railKind ?? payload.taskType ?? "task",
       ref: payload.railRef ?? ticketServerId ?? ticket.id,
       label: payload.title,
-      status: payload.status,
-      progressPct: payload.progressPct ?? (payload.status === "done" ? 100 : 0),
-      done: payload.done ?? 0,
-      total: payload.total ?? 0,
+      ...railTicketProgress(payload),
       exists: payload.exists ?? true,
       linkType: link.payload.linkType,
       ...(payload.parent ? { parent: payload.parent } : {}),
