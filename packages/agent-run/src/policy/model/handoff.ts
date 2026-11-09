@@ -64,9 +64,13 @@ export function routeAround(
   };
 }
 
-/** The turn succeeded: lock onto what served it (when configured to) and record it proven when it acted. */
-export function turnSucceeded(state: RunState, served: { model?: string; acted: boolean }): void {
-  state.model = recordSuccess(asModelRunState(state), { ...(served.model ? { model: served.model } : {}), acted: served.acted }).policy;
+/** The turn succeeded: lock onto what served it (when configured to), record it proven when it acted, and time it (the latency-aware failover). */
+export function turnSucceeded(state: RunState, served: { model?: string; acted: boolean; durationMs?: number }): void {
+  state.model = recordSuccess(asModelRunState(state), {
+    ...(served.model ? { model: served.model } : {}),
+    acted: served.acted,
+    ...(served.durationMs !== undefined ? { durationMs: served.durationMs } : {}),
+  }).policy;
   // The forced tool choice was one-shot: this request spent it.
   delete state.forceToolChoice;
 }

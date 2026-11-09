@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyStringEdit, editFacts, EDIT_EXCERPT_MAX_LINES } from "./edit.js";
+import { applyStringEdit, conformToExistingEol, dominantEol, editFacts, EDIT_EXCERPT_MAX_LINES } from "./edit.js";
 
 const LF = "const a = 1;\nconst b = 2;\nconst c = 3;\n";
 const CRLF = LF.replace(/\n/g, "\r\n");
@@ -95,6 +95,66 @@ describe("applyStringEdit", () => {
     const before = "line1\n\tindented\nline3\n";
     const r = applyStringEdit(before, "\tindented", "\tINDENTED");
     expect(r.content).toBe("line1\n\tINDENTED\nline3\n");
+  });
+});
+
+describe("applyStringEdit — the file keeps ONE line-ending style", () => {
+  const isPureCRLF = (s: string) => !/(^|[^\r])\n/.test(s);
+  const RUN = ["export const run = {", "  chatId: input.chatId,", "  tenantId: input.tenantId,", "};", ""].join("\r\n");
+
+  it("regression: a CRLF file edited with LF old/new strings stays pure CRLF with no duplicated lines", () => {
+    // chat #60338: a one-line oldString matched LITERALLY, and the two-line LF newString went
+    // in as given — an LF line inside agentReplyRun.ts (CRLF), then a duplicated property.
+    for (const oldString of ["  chatId: input.chatId,", "  chatId: input.chatId,\n"]) {
+      const tail = oldString.endsWith("\n") ? "\n" : "";
+      const r = applyStringEdit(RUN, oldString, `  chatId: input.chatId,\n  hostChatId: input.chatId,${tail}`);
+      expect(r.ok).toBe(true);
+      expect(isPureCRLF(r.content!)).toBe(true);
+      expect(r.content!.match(/hostChatId/g)).toHaveLength(1);
+      expect(r.content).toBe(RUN.replace("  chatId: input.chatId,", "  chatId: input.chatId,\r\n  hostChatId: input.chatId,"));
+    }
+  });
+
+  it("matches an old_string that spans lines of an ALREADY-mixed file, and writes the dominant EOL", () => {
+    const mixed = "a\r\nb\nc\r\nd\r\n";
+    const r = applyStringEdit(mixed, "a\nb\nc", "A\nB\nC");
+    expect(r.ok).toBe(true);
+    expect(r.content).toBe("A\r\nB\r\nC\r\nd\r\n");
+  });
+
+  it("writes an LF new_string into an LF file unchanged, and a CRLF one as LF", () => {
+    expect(applyStringEdit(LF, "const b = 2;", "x\r\ny").content).toBe("const a = 1;\nx\ny\nconst c = 3;\n");
+  });
+
+  it("a file with no newline keeps none", () => {
+    expect(applyStringEdit("abc", "b", "B").content).toBe("aBc");
+  });
+
+  it("replaceAll on a CRLF file counts and rewrites every occurrence in CRLF", () => {
+    const r = applyStringEdit("x\r\ny\r\nx\r\n", "x\n", "z\nz\n", true);
+    expect(r.replaced).toBe(2);
+    expect(r.content).toBe("z\r\nz\r\ny\r\nz\r\nz\r\n");
+  });
+
+  it("refuses a non-unique match across EOL styles", () => {
+    expect(applyStringEdit("x\r\nx\n", "x\n", "y\n").error).toMatch(/not unique/);
+  });
+});
+
+describe("dominantEol / conformToExistingEol — the whole-file write keeps the file's EOL", () => {
+  it("picks the style most lines use, CRLF on a tie, null for no newline", () => {
+    expect(dominantEol(CRLF)).toBe("\r\n");
+    expect(dominantEol(LF)).toBe("\n");
+    expect(dominantEol("a\r\nb\n")).toBe("\r\n");
+    expect(dominantEol("a\nb\nc\r\n")).toBe("\n");
+    expect(dominantEol("abc")).toBeNull();
+  });
+
+  it("rewrites an LF body over a CRLF file to CRLF, and leaves a new file as given", () => {
+    expect(conformToExistingEol(CRLF, "one\ntwo\n")).toBe("one\r\ntwo\r\n");
+    expect(conformToExistingEol(LF, "one\r\ntwo\r\n")).toBe("one\ntwo\n");
+    expect(conformToExistingEol(null, "one\r\ntwo\n")).toBe("one\r\ntwo\n");
+    expect(conformToExistingEol("no newline", "one\ntwo")).toBe("one\ntwo");
   });
 });
 

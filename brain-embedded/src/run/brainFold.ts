@@ -16,6 +16,8 @@ import { buildWorkingTranscript } from '@seanhogg/builderforce-memory/working';
 import { summarizeMiddle } from '../transcriptSummarizer';
 import { compactionSavedTokens } from '../runStore/compactionSaved';
 import { recordFold } from '../runStore/runFoldMarker';
+import { setActivity } from '../runStore/runCells';
+import { contextFoldActivity } from '../runActivity';
 import type { BrainRunContext } from '../runStore/brainRunContext';
 import { toRunMessage } from './runMessages';
 
@@ -51,7 +53,11 @@ export function brainCompaction(run: BrainRunContext): BrainCompaction {
         const working = await buildWorkingTranscript(
           c,
           systemPrompt,
-          (msgs) => summarizeMiddle(req.stream, run.policy.model, msgs, c.abort?.signal, req.onDeviceTasks),
+          (msgs) => {
+            // The fold's summary is a model call of its own: the live step says so, never the tool that ran before it.
+            setActivity(c, contextFoldActivity(ctx.step, Date.now()));
+            return summarizeMiddle(req.stream, run.policy.model, msgs, c.abort?.signal, req.onDeviceTasks);
+          },
           (fold) => { folded = true; recordFold(run, fold); },
         );
         // What compaction kept out of THIS call's prompt, measured against what it would have been without it.

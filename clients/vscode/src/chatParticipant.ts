@@ -1,5 +1,6 @@
 import { RunKnowledgeRecorder, type PolicyGate } from "@builderforce/agent-tools";
 import { recordEditorRunEnd } from "./editorRunEnd";
+import { editorChatSessionKey } from "./sessionNotes";
 import { editorRunSettings } from "./editorRunSettings";
 import * as vscode from "vscode";
 import { isRunning, runAbortSignal, withRunUsage } from "@seanhogg/builderforce-brain-embedded";
@@ -374,7 +375,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
       // is on exactly when it has one) — the code map and the learned facts, into the
       // project this turn STARTED in. Best-effort, like every memory step.
       if (claimed && root && !knowledge.isEmpty) {
-        await recordEditorRunEnd(ctx.secrets, root, `chat-${brainChatId}`, knowledge, {
+        await recordEditorRunEnd(ctx.secrets, root, editorChatSessionKey(brainChatId), knowledge, {
           memory: !!activeProject,
           ...(activeProject ? { projectId: activeProject.id } : {}),
         }, { ledger: local.usage, chatId: runChatId, runKey: runChatId, identity: local.identity }).catch(() => undefined);

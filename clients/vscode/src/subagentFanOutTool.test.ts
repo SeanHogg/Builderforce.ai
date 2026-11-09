@@ -21,6 +21,7 @@ function fakeControls(over: Partial<ChildControls> = {}): ChildControls & { requ
     message: vi.fn(() => ({ ok: true as const })),
     stop: vi.fn(() => []),
     wait: vi.fn(async () => ({ reports: [], running: [] })),
+    runningCommand: vi.fn(() => null),
     ...over,
   };
 }
@@ -35,6 +36,15 @@ describe("spawn_agents", () => {
     expect(children.requests.map((r) => r.task)).toEqual(["look at a", "look at b"]);
     expect(out).toMatchObject({ ok: true, running: true });
     expect(out.agents.map((a: { handle: string }) => a.handle)).toEqual(["a1", "a2"]);
+  });
+
+  it("refuses a fan-out with a commands-only workstream before any child starts", async () => {
+    const children = fakeControls();
+    const out = await run(children, { workstreams: [{ label: "A", task: "look at a" }, { label: "checks", task: ["pnpm test", "pnpm lint"].join("\n") }] });
+    expect(out.ok).toBe(false);
+    expect(out.error).toContain("workstream 'checks'");
+    expect(out.error).toContain("run these yourself with run_command background:true");
+    expect(children.spawn).not.toHaveBeenCalled();
   });
 
   it("refuses more workstreams than it may start", async () => {

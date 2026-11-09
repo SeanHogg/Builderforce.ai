@@ -18,7 +18,9 @@
  * No `vscode` import; failures go to `log`.
  */
 
+import { parseResumeState, type RunResumeState } from "@seanhogg/builderforce-brain-embedded";
 import type { RunHostMessage, RunSink } from "./brainRunHostProtocol";
+import { describeInterruptedChildren } from "./childRunJournal";
 import type { InstalledRunRecovery } from "./installRunRecovery";
 import type { InterruptedRun } from "./runRecovery";
 
@@ -29,15 +31,33 @@ export interface InterruptedRunView {
   chatId?: string;
   /** When the run was marked interrupted (ISO). */
   interruptedAt: string;
+  /** What Resume continues from (`interruptedResumeTurn.ts`): the journaled resume state and its sub-agents. */
+  resume?: InterruptedRunResume;
+}
+
+/** The DATA of a resume: the run's journaled state, plus what became of the sub-agents it started. */
+export interface InterruptedRunResume extends RunResumeState {
+  /** `describeInterruptedChildren` of the record; absent when the run started none. */
+  children?: string;
+}
+
+/** The resume data of an interrupted run's record, or undefined when it journaled nothing to continue from. */
+export function resumeOfRecord(record: InterruptedRun["record"]): InterruptedRunResume | undefined {
+  const state = parseResumeState(record.payload.checkpoint?.state);
+  const children = describeInterruptedChildren(record);
+  if (!state && !children) return undefined;
+  return { ...state, ...(children ? { children } : {}) };
 }
 
 /** The pure projection of a recovered run into its list row. */
 export function toInterruptedRunView(run: InterruptedRun): InterruptedRunView {
   const { chatId } = run.record.payload;
+  const resume = resumeOfRecord(run.record);
   return {
     runId: run.runId,
     ...(chatId ? { chatId: String(chatId) } : {}),
     interruptedAt: run.record.updatedAt,
+    ...(resume ? { resume } : {}),
   };
 }
 

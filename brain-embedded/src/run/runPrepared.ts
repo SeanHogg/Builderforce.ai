@@ -11,6 +11,7 @@ import { pipelinePolicyOptions } from '../runStore/pipelineRoute';
 import { brainDeliveryLedger } from './brainDelivery';
 import { brainPlatformTools } from './brainPlatformTools';
 import { brainCompaction } from './brainFold';
+import { brainFinishHook } from './brainFinish';
 import { recordedModelHook } from './preflightRecorded';
 import { brainRunStorePort } from './brainStore';
 import { brainSpendMeter } from './brainSpend';
@@ -80,7 +81,8 @@ export async function runPrepared(run: BrainRunContext): Promise<void> {
     // The Brain's own fold (`brainFold.ts`), not the agent's compaction adapted to imitate it.
     // ... and the preamble ran the host's model preflight already (`hostRunContext.ts`): the agent's own would ask the host again and warn
     // about a model the loop never warned about (a QUICK run's quick model), so the Brain's says the verdict and nothing more.
-    modules: { compaction: compaction.hook, model: recordedModelHook(c, req.model) },
+    // ... and the finish module carries the host's engine ports (`brainFinish.ts`): an owner never ends with its sub-agents still working.
+    modules: { compaction: compaction.hook, model: recordedModelHook(c, req.model), finish: brainFinishHook(req) },
     // The Brain's read-coverage owns the no-progress counter (`callPreflight`/`callPostStep`
     // feed it); hand the kernel that ONE instance to persist, so a circling run keeps its count
     // across the step yield it is steered into — not a kernel-built twin the Brain never feeds.

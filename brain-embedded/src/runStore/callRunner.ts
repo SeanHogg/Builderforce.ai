@@ -16,11 +16,12 @@ import { codeChangesOf, isDelegationTool } from '../codeChanges';
 import { delegationPlaceholders, placeholderAdvisory, placeholdersWritten, placeholderTraceEvent } from '../placeholderGuard';
 import { canCompleteTicket, completionAdvisory, isTicketCompletion, notOnBaseBranchAdvisory } from '../completionGuard';
 import { shippedToBaseBranch } from '../shipVerification';
-import { toolActivity, visitTarget } from '../runActivity';
+import { betweenTurnsActivity, toolActivity, visitTarget } from '../runActivity';
 import { runToolInterruptibly } from '@builderforce/agent-run';
 import { revisitAdvisory, withAdvisory } from '@builderforce/run-guards';
 import { isUnscopedMutation } from '../readCoverage';
 import { trimToolResult } from '../toolResultBudget';
+import { postEditDiagnostics } from './postEditDiagnostics';
 import { nowIso, nowMs, pushTrace, setActivity } from './runCells';
 import { recordCodeChangeTicket } from './runBackstops';
 import { earlyDelegationAdvisory } from './earlyDelegation';
@@ -83,6 +84,11 @@ export function callRunner(run: BrainRunContext): LoopPorts<ChatCompletionMessag
       run.pendingRun = { out, toolStart, isReadTool, threw: true };
       // Errors are small; push as-is (trimming a short error would only add noise).
       return { data: repeat ? withAdvisory(out, repeat) : out, isError: true };
+    } finally {
+      // The call is OVER: it must stop being the live step. Without this the finished tool stayed the activity until
+      // the next completion opened, so everything between (the guards, the steering drain, the tool menu, the context
+      // fold's own model call) read as the tool still running (chat #60338: `remember_fact` "running 3m53s").
+      setActivity(c, betweenTurnsActivity(iter, Date.now()));
     }
     // Backstop bookkeeping (see startRun's finally): a successful workspace
     // file-change marks the run as code-changing (and remembers the file), while
@@ -181,6 +187,17 @@ export function callRunner(run: BrainRunContext): LoopPorts<ChatCompletionMessag
     // told on the read that crosses the threshold, not only at the final answer.
     const delegate = earlyDelegationAdvisory(run, call.name, args, isReadTool, iter);
     if (delegate) advisory = advisory ? `${advisory}\n\n${delegate}` : delegate;
+    // PRD 45 §4.5 row 1 — post-edit diagnostics: a successful edit_file / write_file
+    // is checked by the host's FAST verifier tier on the spot, and any error is
+    // appended in the D7 post-edit note format (chat #216's hooks-in-map violation,
+    // caught only by luck, is surfaced deterministically here). ADVISORY ONLY — the
+    // bytes stand; the note rides the trimmed result below, after the budget cut, so
+    // the guard can never be trimmed away. No verifier bound, it passed, or the port
+    // threw: nothing is added (the push-time gate reports "unavailable" instead).
+    if (!advisory && !isReadTool) {
+      const diag = await postEditDiagnostics({ name: call.name, args, result: out }, req.verifier);
+      if (diag) advisory = diag;
+    }
     // Trimmed to the transcript budget with the advisory attached AFTER the cut, so
     // the budget can never delete the guard — and a `read_file` is paged by LINE with
     // its continuation offset intact, instead of sliced mid-line with the paging

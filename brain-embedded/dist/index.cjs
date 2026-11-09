@@ -113,6 +113,8 @@ __export(src_exports, {
   PromptInput: () => PromptInput,
   READ_FILE_RESULT_CHARS: () => READ_FILE_RESULT_CHARS2,
   RESTING_CHAT_MODE: () => RESTING_CHAT_MODE,
+  RESUME_FILES: () => RESUME_FILES,
+  RESUME_STEPS: () => RESUME_STEPS,
   REVISIT_HARD_AT: () => REVISIT_HARD_AT,
   REVISIT_NUDGE_AT: () => REVISIT_NUDGE_AT,
   ROLE_GATE_REMEDIATION: () => ROLE_GATE_REMEDIATION,
@@ -394,6 +396,7 @@ __export(src_exports, {
   parseMessageAuthor: () => parseMessageAuthor,
   parseMessageProvenance: () => parseMessageProvenance,
   parsePmoFocus: () => parsePmoFocus,
+  parseResumeState: () => parseResumeState,
   parseRoleGateRefusal: () => parseRoleGateRefusal,
   parseStepMessage: () => parseStepMessage,
   parseSubagentOrigin: () => parseSubagentOrigin,
@@ -448,6 +451,7 @@ __export(src_exports, {
   resolveRecipient: () => resolveRecipient,
   resolveRunConfirm: () => resolveRunConfirm,
   restoreTurn: () => restoreTurn,
+  resumeStateOf: () => resumeStateOf,
   retryOnConnectFailure: () => retryOnConnectFailure,
   revealsModelId: () => revealsModelId,
   revisitAdvisory: () => revisitAdvisory,
@@ -3157,7 +3161,7 @@ var PRICE_SNAPSHOT = {
   "~deepseek/deepseek-v4-flash-latest": [434e-10, 3e-7],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [1824e-10, 105572e-10],
+  "~moonshotai/kimi-latest": [1634e-10, 101489e-10],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -3234,7 +3238,7 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v4-flash-0731": [434e-10, 3e-7],
   "deepseek/deepseek-v4-flash-0731:batch": [48e-9, 144e-9],
   "deepseek/deepseek-v4-flash-vision-exp": [44e-8, 132e-8],
-  "deepseek/deepseek-v4-pro": [9483e-10, 18966e-10],
+  "deepseek/deepseek-v4-pro": [95526e-11, 191052e-11],
   "deepseek/deepseek-v4-pro-0813": [111e-9, 444e-8],
   "deepseek/deepseek-v4.1-flash": [51e-9, 567e-9],
   "deepseek/deepseek-v4.1-flash-1017": [6e-9, 5e-7],
@@ -3278,7 +3282,7 @@ var PRICE_SNAPSHOT = {
   "google/gemini-omni-1.2-flash": [15e-7, 9e-6],
   "google/gemma-2-27b-it": [65e-8, 65e-8],
   "google/gemma-3-12b-it": [5e-8, 15e-8],
-  "google/gemma-3-27b-it": [8e-8, 35e-8],
+  "google/gemma-3-27b-it": [8e-8, 45e-8],
   "google/gemma-3-4b-it": [5e-8, 1e-7],
   "google/gemma-4-26b-a4b-it": [675e-10, 225e-9],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
@@ -3600,7 +3604,7 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-5-turbo": [12e-7, 4e-6],
   "z-ai/glm-5.1": [14e-7, 44e-7],
   "z-ai/glm-5.2": [6e-9, 68e-7],
-  "z-ai/glm-5.2:batch": [504e-9, 1271e-9],
+  "z-ai/glm-5.2:batch": [623e-9, 1271e-9],
   "z-ai/glm-5.3": [699e-10, 14e-7],
   "z-ai/glm-5.3-flash": [335e-10, 83e-9],
   "z-ai/glm-5.3-flash:batch": [5e-8, 18e-8],
@@ -8287,6 +8291,42 @@ function chooseStallFailover(input) {
   return next && !input.tried.includes(next) ? next : void 0;
 }
 
+// ../packages/run-policy/src/latencyGuard.ts
+var LATENCY_SAMPLE_WINDOW = 9;
+var MAX_FAILOVER_LATENCY_RATIO = 3;
+function p50(samples) {
+  const valid = (samples ?? []).filter((n2) => Number.isFinite(n2) && n2 >= 0);
+  if (valid.length === 0) return void 0;
+  const sorted = [...valid].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+function recordLatency(samples, model, durationMs, window2 = LATENCY_SAMPLE_WINDOW) {
+  const base = samples ?? {};
+  if (!model || !Number.isFinite(durationMs) || durationMs < 0) return base;
+  const next = [...base[model] ?? [], durationMs].slice(-Math.max(1, window2));
+  return { ...base, [model]: next };
+}
+function withinLatencyBudget(candidate, input) {
+  const { primary } = input;
+  if (input.primaryUnavailable || !primary || candidate === primary) return true;
+  const base = p50(input.latency?.[primary]);
+  const theirs = p50(input.latency?.[candidate]);
+  if (base === void 0 || theirs === void 0 || base <= 0) return true;
+  return theirs <= base * (input.maxRatio ?? MAX_FAILOVER_LATENCY_RATIO);
+}
+var MAX_GUARDED_PICKS = 32;
+function guardedPick(pick2, skip, input) {
+  const skipped = [...skip];
+  for (let i = 0; i < MAX_GUARDED_PICKS; i++) {
+    const next = pick2(skipped);
+    if (!next) return void 0;
+    if (withinLatencyBudget(next, input)) return next;
+    skipped.push(next);
+  }
+  return void 0;
+}
+
 // ../packages/run-policy/src/policy.ts
 var PIN_RELEASE_STATUSES = [429, 413, 503];
 var DECLINE_STATUS = 400;
@@ -8304,6 +8344,7 @@ function initialRunPolicy(opts = {}) {
     broken: [...new Set((opts.excludeModels ?? []).filter(Boolean))],
     proven: [],
     tried: [],
+    ...opts.latencySeed && Object.keys(opts.latencySeed).length > 0 ? { latency: opts.latencySeed } : {},
     failovers: 0,
     turnRetries: 0,
     planTurns: 0,
@@ -8369,7 +8410,7 @@ function reduceRunPolicy(state, event) {
   const s = { ...state, outcome: NONE };
   switch (event.type) {
     case "turn_succeeded":
-      return succeeded(s, event.model, event.acted === true);
+      return succeeded(s, event.model, event.acted === true, event.durationMs);
     case "code_change_attempted":
       if (s.phase !== "plan") return s;
       return { ...s, phase: "code", outcome: s.model ? NONE : { kind: "reask_as_coder" } };
@@ -8414,10 +8455,12 @@ function reduceRunPolicy(state, event) {
     }
   }
 }
-function succeeded(s, resolved, acted) {
+function succeeded(s, resolved, acted, durationMs) {
   const proven = acted && resolved && resolved !== "default" && !s.proven.includes(resolved) ? [...s.proven, resolved] : s.proven;
+  const timed = resolved && resolved !== "default" ? resolved : s.model;
   const next = {
     ...s,
+    ...timed && durationMs !== void 0 ? { latency: recordLatency(s.latency, timed, durationMs) } : {},
     turnRetries: 0,
     proven,
     planTurns: s.phase === "plan" ? s.planTurns + 1 : s.planTurns,
@@ -8457,11 +8500,18 @@ function stalled(s, e) {
 function failoverPicker(s, e) {
   const proven = s.options.preferProvenFailover ? [...s.proven].reverse() : [];
   if (proven.length === 0 && !e.pick && !e.surface) return void 0;
-  if (proven.length === 0 && s.broken.length === 0) return e.pick;
+  const guard = latencyGuardFor(s, e);
+  if (proven.length === 0 && s.broken.length === 0 && !guard) return e.pick;
+  const source = (skip) => e.pick ? e.pick(skip) : nextFallbackModel(e.surface, skip);
   return (tried) => {
     const skip = [...tried, ...s.broken];
-    return proven.find((m) => !skip.includes(m)) ?? (e.pick ? e.pick(skip) : nextFallbackModel(e.surface, skip));
+    const fast = (m) => !guard || withinLatencyBudget(m, guard);
+    return proven.find((m) => !skip.includes(m) && fast(m)) ?? (guard ? guardedPick(source, skip, guard) : source(skip));
   };
+}
+function latencyGuardFor(s, e) {
+  if (s.phase === "plan" || e.primaryUnavailable || !s.latency) return void 0;
+  return { primary: s.pin ?? s.proven[0] ?? e.resolvedModel ?? s.model, latency: s.latency };
 }
 function transportFailed(s, e) {
   if (s.turnRetries >= 1 || e.kind === "unreachable") return { ...s, outcome: { kind: "fail_turn" } };
@@ -9104,8 +9154,38 @@ function delegationRole(raw) {
 
 // ../packages/agent-tools/src/edit.ts
 var toLF = (s) => s.replace(/\r\n/g, "\n");
-var toCRLF = (s) => toLF(s).replace(/\n/g, "\r\n");
 var countNewlines = (s) => s.split("\n").length - 1;
+function dominantEol(content) {
+  const all = countNewlines(content);
+  if (all === 0) return null;
+  const crlf = content.split("\r\n").length - 1;
+  return crlf >= all - crlf ? "\r\n" : "\n";
+}
+function withEol(text2, eol) {
+  if (!eol) return text2;
+  const lf = toLF(text2);
+  return eol === "\n" ? lf : lf.replace(/\n/g, "\r\n");
+}
+function foldToLF(content) {
+  const lf = toLF(content);
+  const at2 = new Int32Array(lf.length + 1);
+  let j = 0;
+  for (let i = 0; i < content.length; i += 1) {
+    at2[j] = i;
+    if (content.charCodeAt(i) === 13 && content.charCodeAt(i + 1) === 10) i += 1;
+    j += 1;
+  }
+  at2[j] = content.length;
+  return { lf, at: at2 };
+}
+function spansOf(hay, needle, all) {
+  const spans = [];
+  for (let at2 = hay.indexOf(needle); at2 !== -1; at2 = hay.indexOf(needle, at2 + needle.length)) {
+    spans.push([at2, at2 + needle.length]);
+    if (!all && spans.length === 2) break;
+  }
+  return spans;
+}
 var MIN_CONTAINS_NEEDLE = 8;
 var EXCERPT_RADIUS = 3;
 var EDIT_EXCERPT_CONTEXT = 2;
@@ -9142,32 +9222,27 @@ function applyStringEdit(content, oldString, newString, replaceAll = false) {
   if (typeof oldString !== "string" || oldString.length === 0) {
     return { ok: false, error: "oldString is required" };
   }
-  const fileIsCRLF = content.includes("\r\n");
-  const ordered = fileIsCRLF ? [
-    { oldS: oldString, newS: newString },
-    { oldS: toCRLF(oldString), newS: toCRLF(newString) },
-    { oldS: toLF(oldString), newS: toLF(newString) }
-  ] : [
-    { oldS: oldString, newS: newString },
-    { oldS: toLF(oldString), newS: toLF(newString) },
-    { oldS: toCRLF(oldString), newS: toCRLF(newString) }
-  ];
-  const candidates = ordered.filter(
-    (c, i) => ordered.findIndex((d) => d.oldS === c.oldS) === i
-  );
-  for (const { oldS, newS } of candidates) {
-    const first = content.indexOf(oldS);
-    if (first === -1) continue;
-    if (!replaceAll && content.indexOf(oldS, first + oldS.length) !== -1) {
-      return {
-        ok: false,
-        error: "oldString is not unique; add more surrounding context or set replaceAll"
-      };
+  const newS = withEol(newString, dominantEol(content));
+  const { lf, at: at2 } = foldToLF(content);
+  let spans = spansOf(lf, toLF(oldString), replaceAll).map(([s, e]) => [at2[s], at2[e]]);
+  if (spans.length === 0) spans = spansOf(content, oldString, replaceAll);
+  if (spans.length > 1 && !replaceAll) {
+    return {
+      ok: false,
+      error: "oldString is not unique; add more surrounding context or set replaceAll"
+    };
+  }
+  if (spans.length > 0) {
+    const parts = [];
+    let from = 0;
+    for (const [s, e] of spans) {
+      parts.push(content.slice(from, s), newS);
+      from = e;
     }
-    const next = replaceAll ? content.split(oldS).join(newS) : content.replace(oldS, newS);
-    const replaced = replaceAll ? content.split(oldS).length - 1 : 1;
-    const region = regionAt(content, first, newS);
-    return { ok: true, content: next, replaced, region, excerpt: excerptAfterEdit(next, region) };
+    parts.push(content.slice(from));
+    const next = parts.join("");
+    const region = regionAt(content, spans[0][0], newS);
+    return { ok: true, content: next, replaced: spans.length, region, excerpt: excerptAfterEdit(next, region) };
   }
   const nearest = findNearest(content, oldString);
   return {
@@ -9561,6 +9636,8 @@ var TOOL_SIDE_EFFECT = {
   run_command: "mutate",
   // A background job's status is a read; stopping one kills processes.
   command_status: "read",
+  // Filters an output already retained from an earlier run_command — runs nothing.
+  output_filter: "read",
   command_stop: "mutate",
   git_status: "read",
   git_diff: "read",
@@ -10263,6 +10340,9 @@ async function compressWebFetchResult(r, ctx) {
 function safeGitArg(v) {
   return typeof v === "string" && /^[\w./@-]+$/.test(v) ? v : null;
 }
+function shellQuote(v) {
+  return `'${v.replace(/'/g, `'\\''`)}'`;
+}
 function safeRepoArg(repo) {
   const arg = safeGitArg(typeof repo === "string" ? repo.replace(/\\/g, "/") : repo);
   return arg && !arg.split("/").includes("..") && !arg.startsWith("/") ? arg : null;
@@ -10356,6 +10436,127 @@ async function runInRepoScope(ctx, scope, run) {
   return null;
 }
 
+// ../packages/agent-tools/src/shell-command-shape.ts
+function withoutQuoted(command) {
+  return command.replace(/"(?:[^"\\]|\\.)*"|'[^']*'/g, '""');
+}
+function isChained(bare) {
+  return /&&|\|\||;|\n/.test(bare);
+}
+function stages(bare) {
+  return bare.split(/(?<!\|)\|(?!\|)/).map((s) => s.trim());
+}
+function verbOf(stage) {
+  const word = /^[\w./-]+/.exec(stage.replace(/^(?:\w+=\S*\s+)+/, ""))?.[0] ?? "";
+  return word.slice(word.lastIndexOf("/") + 1).toLowerCase().replace(/\.exe$/, "");
+}
+var TRAILING_TRIM = /\s*(?:2>&1\s*)?\|\s*(head|tail)\s+(?:-n\s*|--lines[=\s]\s*|-)(\d+)\s*$/;
+function stripTrailingTrim(command) {
+  const m = TRAILING_TRIM.exec(command);
+  if (!m || !TRAILING_TRIM.test(withoutQuoted(command))) return { command };
+  const kept = command.slice(0, m.index).trimEnd();
+  if (!kept || /\|\s*$/.test(kept)) return { command };
+  return { command: kept, trim: { kind: m[1], lines: Number(m[2]) } };
+}
+var TRIM_WINDOW_LINES = 40;
+function shapeTrimmed(text2, trim, outputId) {
+  const lines = text2.split("\n");
+  const head = Math.max(TRIM_WINDOW_LINES, trim.kind === "head" ? trim.lines : 0);
+  const tail = Math.max(TRIM_WINDOW_LINES, trim.kind === "tail" ? trim.lines : 0);
+  if (lines.length <= head + tail) return text2;
+  const omitted = lines.length - head - tail;
+  const more = outputId ? `; output_filter { "outputId": "${outputId}" } reads them` : "";
+  return [...lines.slice(0, head), `\u2026(${omitted} lines omitted${more})\u2026`, ...lines.slice(lines.length - tail)].join("\n");
+}
+var SEARCH_VERBS = /* @__PURE__ */ new Set(["grep", "egrep", "fgrep", "rg", "findstr", "ag", "ack"]);
+function isSearchCommand(command) {
+  const bare = withoutQuoted(command);
+  if (isChained(bare)) return false;
+  const last = stages(bare).pop() ?? "";
+  const verb = verbOf(last);
+  if (SEARCH_VERBS.has(verb)) return true;
+  if (verb === "git") return /^\S+\s+(?:-\S+\s+)*grep\b/.test(last.replace(/^(?:\w+=\S*\s+)+/, ""));
+  return verb === "select-string" || verb === "sls";
+}
+var NO_OUTPUT = /^\s*(\(no output\))?\s*$/;
+function searchNoMatch(command, result) {
+  if (result.ok || result.exitCode !== 1 || result.aborted || result.error) return result;
+  if (!NO_OUTPUT.test(result.stdout ?? "") || !isSearchCommand(command)) return result;
+  const { exitCode: _exit, ...rest } = result;
+  return { ...rest, ok: true, matches: 0, stdout: "(no matches \u2014 the search exited 1 with no output)" };
+}
+
+// ../packages/agent-tools/src/shell-output-filter.ts
+var DEFAULT_WINDOW = 200;
+var MAX_LINE_CHARS = 2e3;
+function lineCount(v) {
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.floor(v) : void 0;
+}
+function matcher(grep, ignoreCase) {
+  try {
+    const re = new RegExp(grep, ignoreCase ? "i" : "");
+    return (line2) => re.test(line2);
+  } catch {
+    const needle = ignoreCase ? grep.toLowerCase() : grep;
+    return (line2) => (ignoreCase ? line2.toLowerCase() : line2).includes(needle);
+  }
+}
+function filterShellOutput(text2, filter) {
+  const all = text2.split("\n");
+  const numbered2 = all.map((line2, i) => ({ n: i + 1, line: line2 }));
+  const test = filter.grep ? matcher(filter.grep, filter.ignoreCase === true) : void 0;
+  const matched = test ? numbered2.filter((l) => test(l.line)) : numbered2;
+  let head = lineCount(filter.head);
+  let tail = lineCount(filter.tail);
+  if (head === void 0 && tail === void 0 && matched.length > DEFAULT_WINDOW) {
+    head = DEFAULT_WINDOW / 2;
+    tail = DEFAULT_WINDOW / 2;
+  }
+  let kept = matched;
+  if (head !== void 0 || tail !== void 0) {
+    const first = matched.slice(0, head ?? 0);
+    const last = tail ? matched.slice(Math.max(first.length, matched.length - tail)) : [];
+    kept = [...first, ...last];
+  }
+  const cut = (line2) => line2.length > MAX_LINE_CHARS ? `${line2.slice(0, MAX_LINE_CHARS)}\u2026` : line2;
+  const output = kept.map((l) => test ? `${l.n}: ${cut(l.line)}` : cut(l.line)).join("\n");
+  return { totalLines: all.length, matchedLines: matched.length, output, truncated: kept.length < matched.length };
+}
+var outputFilterTool = defineTool({
+  name: "output_filter",
+  description: "Filter the FULL output of a command you already ran \u2014 by the outputId run_command / command_status returned \u2014 with grep / head / tail. Nothing is re-run. Use this instead of running a command again to grep, head or tail its output.",
+  parameters: {
+    type: "object",
+    properties: {
+      outputId: { type: "string", description: "The outputId a run_command or command_status result returned." },
+      grep: { type: "string", description: "Optional: keep only lines matching this regular expression (each kept line is prefixed with its line number)." },
+      head: { type: "number", description: "Optional: keep the first N (matching) lines." },
+      tail: { type: "number", description: "Optional: keep the last N (matching) lines." },
+      ignoreCase: { type: "boolean", description: "Optional: case-insensitive grep." }
+    },
+    required: ["outputId"]
+  },
+  requires: ["shell.outputs"],
+  async execute(args, ctx) {
+    const outputId = typeof args.outputId === "string" ? args.outputId.trim() : "";
+    if (!outputId) return { data: { ok: false, error: "outputId is required" } };
+    const read2 = ctx.caps.shell?.output;
+    if (!read2) return { data: { ok: false, error: "retained command outputs are not available on this surface" } };
+    const text2 = await read2.call(ctx.caps.shell, outputId);
+    if (text2 === void 0) {
+      return { data: { ok: false, outputId, error: `no retained output "${outputId}" in this run (only the last commands are kept) \u2014 run the command again` } };
+    }
+    const filter = {
+      ...typeof args.grep === "string" && args.grep ? { grep: args.grep } : {},
+      ...lineCount(args.head) !== void 0 ? { head: lineCount(args.head) } : {},
+      ...lineCount(args.tail) !== void 0 ? { tail: lineCount(args.tail) } : {},
+      ...args.ignoreCase === true ? { ignoreCase: true } : {}
+    };
+    const r = filterShellOutput(text2, filter);
+    return { data: { ok: true, outputId, ...r, ...filter.grep ? { matches: r.matchedLines } : {} } };
+  }
+});
+
 // ../packages/agent-tools/src/shell-tools.ts
 var SHELL_WAIT_MAX_MS = 10 * 60 * 1e3;
 function waitArg(v) {
@@ -10379,12 +10580,20 @@ function finishedJob(st) {
     ok: st.status === "exited" && st.exitCode === 0,
     ...st.exitCode !== void 0 ? { exitCode: st.exitCode } : {},
     stdout: st.output ?? "",
+    ...st.outputId ? { outputId: st.outputId } : {},
     ...st.status === "killed" ? { aborted: true, error: st.error ?? "the job was stopped" } : st.error ? { error: st.error } : {}
   };
 }
+function shapeResult(command, r, trim) {
+  const read2 = searchNoMatch(command, r);
+  if (!trim || typeof read2.stdout !== "string" || read2.matches === 0) return read2;
+  const said = `the trailing "| ${trim.kind} -${trim.lines}" was not run: this is the start and the end of the full output`;
+  return { ...read2, stdout: shapeTrimmed(read2.stdout, trim, read2.outputId), note: read2.note ? `${read2.note}; ${said}` : said };
+}
 async function runShellCommand(args, ctx) {
-  const command = typeof args.command === "string" ? args.command : "";
-  if (!command.trim()) return { data: { ok: false, error: "command is required" } };
+  const asked = typeof args.command === "string" ? args.command : "";
+  if (!asked.trim()) return { data: { ok: false, error: "command is required" } };
+  const { command, trim } = stripTrailingTrim(asked);
   const cwd = cwdArg(args.cwd);
   if (cwd === null) {
     return { data: { ok: false, error: "`cwd` must be a directory inside the workspace, relative to its root (no `..`, no absolute path)." } };
@@ -10407,13 +10616,15 @@ async function runShellCommand(args, ctx) {
         const why = ctx.signal?.aborted ? "The wait was interrupted" : `Still running after ${yieldMs}ms`;
         return { data: { ok: true, background: true, id, status: "running", output: st.output ?? "", note: `${why}, so it moved to the background. ${jobNote(id)}`, ...where } };
       }
-      const r2 = await compressShellResult(finishedJob(st), ctx);
+      const r2 = await compressShellResult(shapeResult(command, finishedJob(st), trim), ctx);
       return { data: { ...r2, ...st.status === "unknown" ? { id } : {}, ...where } };
     }
     note = "This surface has no background shell, so the command ran in the foreground.";
   }
-  const r = await compressShellResult(await shellRunWithStop(ctx, command, dir), ctx);
-  return { data: { ...r, ...where, ...note ? { note } : {} } };
+  const ran = args.fresh === true ? await shell.run(command, { ...ctx.signal ? { signal: ctx.signal } : {}, ...where, fresh: true }) : await shellRunWithStop(ctx, command, dir);
+  const r = await compressShellResult(shapeResult(command, ran, trim), ctx);
+  const notes2 = [r.note, note].filter(Boolean).join(" ");
+  return { data: { ...r, ...where, ...notes2 ? { note: notes2 } : {} } };
 }
 async function compressedJobStatus(st, ctx) {
   if (st.status === "running" || typeof st.output !== "string") return st;
@@ -10463,149 +10674,157 @@ var commandStopTool = defineTool({
     return { data: await compressedJobStatus(st, ctx) };
   }
 });
-var SHELL_JOB_TOOLS = [commandStatusTool, commandStopTool];
+var SHELL_JOB_TOOLS = [commandStatusTool, commandStopTool, outputFilterTool];
 
-// ../packages/agent-tools/src/git-tools.ts
+// ../packages/agent-tools/src/git-status.ts
+var GIT_STATUS_COMMAND = "git status --short --branch";
+var GIT_STATUS_MAX_PATHS = 20;
+var MAX_ENTRIES = 200;
+var PATH_MARK = "@@bf-path";
+var PUSHED_MARK = "@@bf-pushed";
+var LOG_FORMAT = "%H %an%x1f%ae%x1f%aI%x1f%s";
+var US = "";
+function statusPaths(paths) {
+  const clean = (paths ?? []).filter((p) => typeof p === "string").map((p) => p.trim()).filter(Boolean);
+  return [...new Set(clean)].slice(0, GIT_STATUS_MAX_PATHS);
+}
+function buildStatusCommand(paths, repo) {
+  const wanted = statusPaths(paths);
+  if (wanted.length === 0) return GIT_STATUS_COMMAND;
+  const candidatesOf = (p) => commitPathCandidates(p, repo);
+  const spec2 = [...new Set(wanted.flatMap(candidatesOf))].map(shellQuote).join(" ");
+  const log = (p) => `"$(git --no-pager log -1 --format='${LOG_FORMAT}' -- ${shellQuote(p)} 2>/dev/null)"`;
+  const lines = [`${GIT_STATUS_COMMAND} -- ${spec2} || exit $?`];
+  wanted.forEach((p, i) => {
+    const [first, ...rest] = candidatesOf(p);
+    lines.push(`echo "${PATH_MARK} ${i}"`);
+    lines.push(`L=${log(first ?? p)}`);
+    for (const c of rest) lines.push(`[ -n "$L" ] || L=${log(c)}`);
+    lines.push(
+      `[ -z "$L" ] || { printf '%s\\n' "$L"; git merge-base --is-ancestor "\${L%% *}" '@{u}' 2>/dev/null && echo "${PUSHED_MARK} yes" || echo "${PUSHED_MARK} no"; }`
+    );
+  });
+  return lines.join("\n");
+}
+function unquoteGitPath(s) {
+  if (s.length < 2 || !s.startsWith('"') || !s.endsWith('"')) return s;
+  const body = s.slice(1, -1);
+  const enc = new TextEncoder();
+  const bytes = [];
+  const simple = { n: "\n", t: "	", r: "\r", '"': '"', "\\": "\\", a: "\x07", b: "\b", f: "\f", v: "\v" };
+  for (let i = 0; i < body.length; i += 1) {
+    const c = body[i];
+    if (c !== "\\" || i === body.length - 1) {
+      bytes.push(...enc.encode(c));
+      continue;
+    }
+    const next = body[i + 1];
+    const octal = /^[0-7]{3}/.exec(body.slice(i + 1));
+    if (octal) {
+      bytes.push(parseInt(octal[0], 8));
+      i += 3;
+    } else {
+      bytes.push(...enc.encode(simple[next] ?? next));
+      i += 1;
+    }
+  }
+  return new TextDecoder().decode(new Uint8Array(bytes));
+}
+function parseHeader(line2) {
+  const header = { branch: null, upstream: null, ahead: 0, behind: 0 };
+  if (!line2) return header;
+  const text2 = line2.replace(/^##\s*/, "");
+  const initial = /^(?:No commits yet on|Initial commit on) (.+)$/.exec(text2);
+  if (initial) return { ...header, branch: initial[1].trim(), noCommits: true };
+  if (/^HEAD \(no branch\)/.test(text2)) return { ...header, detached: true };
+  const [names = "", bracket = ""] = text2.split(/ \[(.*)\]$/);
+  const dots = names.indexOf("...");
+  header.branch = (dots === -1 ? names : names.slice(0, dots)).trim() || null;
+  if (dots !== -1) header.upstream = names.slice(dots + 3).trim() || null;
+  header.ahead = Number(/ahead (\d+)/.exec(bracket)?.[1] ?? 0);
+  header.behind = Number(/behind (\d+)/.exec(bracket)?.[1] ?? 0);
+  if (/\bgone\b/.test(bracket)) header.upstreamGone = true;
+  return header;
+}
+var CONFLICT = /* @__PURE__ */ new Set(["DD", "AU", "UD", "UA", "DU", "AA", "UU"]);
+function parseEntries(lines) {
+  const out = { staged: [], unstaged: [], untracked: [], conflicted: [] };
+  for (const line2 of lines) {
+    if (line2.length < 4 || line2.startsWith("##")) continue;
+    const xy = line2.slice(0, 2);
+    const rest = line2.slice(3);
+    if (xy === "!!") continue;
+    if (xy === "??") {
+      out.untracked.push(unquoteGitPath(rest));
+      continue;
+    }
+    const arrow = rest.indexOf(" -> ");
+    const path2 = unquoteGitPath(arrow === -1 ? rest : rest.slice(arrow + 4));
+    const from = arrow === -1 ? void 0 : unquoteGitPath(rest.slice(0, arrow));
+    if (CONFLICT.has(xy)) {
+      out.conflicted.push(path2);
+      continue;
+    }
+    const [x, y] = [xy[0], xy[1]];
+    if (x !== " ") out.staged.push({ path: path2, status: x, ...from && (x === "R" || x === "C") ? { from } : {} });
+    if (y !== " ") out.unstaged.push({ path: path2, status: y });
+  }
+  return out;
+}
+function parsePathSections(sections, paths, upstreamUsable) {
+  return paths.map((path2, i) => {
+    const lines = sections[i] ?? [];
+    const logLine = lines.find((l) => l.includes(US));
+    if (!logLine) return { path: path2, lastCommit: null, onUpstream: null };
+    const space = logLine.indexOf(" ");
+    const [author = "", email = "", date = "", ...subject] = logLine.slice(space + 1).split(US);
+    const pushed = lines.find((l) => l.startsWith(PUSHED_MARK));
+    return {
+      path: path2,
+      lastCommit: { sha: logLine.slice(0, space), subject: subject.join(US), author, email, date },
+      onUpstream: upstreamUsable && pushed ? pushed.endsWith(" yes") : null
+    };
+  });
+}
+function parseGitStatusOutput(stdout, paths) {
+  const lines = stdout.replace(/\r\n/g, "\n").split("\n");
+  const firstMark = lines.findIndex((l) => l.startsWith(PATH_MARK));
+  const statusLines = firstMark === -1 ? lines : lines.slice(0, firstMark);
+  const sections = [];
+  if (firstMark !== -1) {
+    for (const line2 of lines.slice(firstMark)) {
+      const mark = new RegExp(`^${PATH_MARK} (\\d+)$`).exec(line2);
+      if (mark) sections[Number(mark[1])] = [];
+      else sections[sections.length - 1]?.push(line2);
+    }
+  }
+  const header = parseHeader(statusLines.find((l) => l.startsWith("##")));
+  const entries = parseEntries(statusLines);
+  const truncated = Object.values(entries).some((list3) => list3.length > MAX_ENTRIES);
+  const report = {
+    ...header,
+    staged: entries.staged.slice(0, MAX_ENTRIES),
+    unstaged: entries.unstaged.slice(0, MAX_ENTRIES),
+    untracked: entries.untracked.slice(0, MAX_ENTRIES),
+    conflicted: entries.conflicted.slice(0, MAX_ENTRIES),
+    clean: Object.values(entries).every((list3) => list3.length === 0),
+    ...truncated ? { truncated: true } : {}
+  };
+  const wanted = statusPaths(paths);
+  if (wanted.length > 0) report.paths = parsePathSections(sections, wanted, !!header.upstream && !header.upstreamGone);
+  return { output: statusLines.join("\n").trim(), report };
+}
+
+// ../packages/agent-tools/src/git-script-parts.ts
 var RESOLVE_BASE = `BASE="$(git remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p')"; [ -n "$BASE" ] || BASE=main`;
 var IDENTITY_EMAIL = 'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"';
 var IDENTITY_NAME = 'git config user.name  >/dev/null 2>&1 || git config user.name  "Builderforce Agent"';
-function buildGitCommand(action, opts) {
-  const path2 = safeGitArg(opts?.path);
-  const pathArg = path2 ? ` -- "${path2}"` : "";
-  const tracked = safeGitArg(opts?.trackedBranch);
-  const viaSandbox = opts?.remoteViaSandbox === true;
-  const fetchTracked = viaSandbox ? "" : `git fetch origin "${tracked}" 2>/dev/null && `;
-  const absorb = tracked ? ["set -e", IDENTITY_EMAIL, IDENTITY_NAME, `${fetchTracked}git merge --ff-only "origin/${tracked}" 2>/dev/null || true`] : [];
-  const publish = (force) => tracked && !viaSandbox ? [force ? "git push --force-with-lease origin HEAD" : "git push origin HEAD"] : [];
-  switch (action) {
-    case "status":
-      return "git status --short --branch";
-    case "diff":
-      return `git --no-pager diff${pathArg}`;
-    case "history": {
-      const limit = Number.isFinite(opts?.limit) && opts.limit > 0 ? Math.min(Math.floor(opts.limit), 200) : 30;
-      return `git --no-pager log --oneline -n ${limit}${pathArg}`;
-    }
-    case "sync_latest": {
-      const base = safeGitArg(opts?.baseBranch);
-      const resolveBase = base ? `BASE="${base}"` : RESOLVE_BASE;
-      return [
-        ...tracked ? absorb : ["set -e"],
-        resolveBase,
-        ...tracked ? [] : [IDENTITY_EMAIL, IDENTITY_NAME],
-        ...viaSandbox ? [] : ['git fetch origin "$BASE"'],
-        'git merge --no-edit "origin/$BASE" || { git merge --abort; echo MERGE_CONFLICT; exit 3; }',
-        ...publish(false),
-        'echo "Synced with origin/$BASE"'
-      ].join("\n");
-    }
-    case "undo":
-      return [
-        ...absorb,
-        '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }',
-        "git reset --hard HEAD~1",
-        ...publish(true),
-        'echo "Undid the last commit (use git_redo to reapply)"'
-      ].join("\n");
-    case "redo":
-      return [
-        ...absorb,
-        '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }',
-        'git reset --hard "HEAD@{1}"',
-        ...publish(true),
-        'echo "Reapplied the last undone change"'
-      ].join("\n");
-  }
-}
-function gitToolResult(action, r) {
-  const out = (r.stdout ?? "").trim();
-  if (r.exitCode === 3 || /MERGE_CONFLICT/.test(out)) {
-    return { data: { ok: false, action, error: "merge conflict \u2014 the base branch has changes that conflict with your branch; the merge was aborted (working tree is clean). Resolve by editing the conflicting files, or ask a human.", output: out } };
-  }
-  if (r.exitCode === 4 || /\bDIRTY\b/.test(out)) {
-    return { data: { ok: false, action, error: "you have uncommitted changes \u2014 commit or discard them before git_" + action + " (it refuses to discard uncommitted work)." } };
-  }
-  return { data: { ok: r.ok, action, output: out.slice(0, 2e4), ...r.error ? { error: r.error } : {} } };
-}
-async function runGitTool(action, opts, ctx) {
-  const refused = invalidRepoResult(action, opts.repo);
-  if (refused) return refused;
-  const trackedBranch = ctx.caps.shell?.trackedBranch;
-  const remote = trackedBranch && (action === "sync_latest" || action === "undo" || action === "redo") ? ctx.caps.shell?.git : void 0;
-  let baseBranch = opts.baseBranch;
-  if (remote) {
-    const synced = await remote.sync({ baseBranch: opts.baseBranch });
-    if (!synced.ok) return { data: { ok: false, action, error: `could not fetch from the remote: ${synced.error ?? "unknown error"}` } };
-    baseBranch = synced.baseBranch ?? baseBranch;
-  }
-  const ran = await runInRepoScope(ctx, opts, (repo, path2) => shellRunWithStop(ctx, buildGitCommand(action, { baseBranch, limit: opts.limit, path: path2, ...trackedBranch ? { trackedBranch } : {}, ...remote ? { remoteViaSandbox: true } : {} }), safeRepoArg(repo) ?? void 0));
-  if (!ran) return notARepoWithCandidates(action, ctx);
-  if (remote && ran.r.ok) {
-    const published = await remote.publish({ force: action !== "sync_latest" });
-    if (!published.ok) return { data: { ok: false, action, error: `the change was made locally but could not be published: ${published.error ?? "unknown error"}` } };
-  }
-  const result = gitToolResult(action, ran.r);
-  if (ran.repo && result.data.ok) {
-    result.data.repo = ran.repo;
-  }
-  return result;
-}
 var REPO_PARAM = {
   type: "string",
   description: 'Optional subdirectory holding the repository, when the open folder CONTAINS checkouts rather than being one (e.g. "my-project"). Omit when the workspace root is itself the repo.'
 };
-var gitStatusTool = defineTool({
-  name: "git_status",
-  description: "Show the current branch and any uncommitted changes (git status). Use it to see what you have modified before committing, syncing, or finishing. If the open folder contains several checkouts rather than being one repo, pass `repo` to name the one you mean.",
-  parameters: { type: "object", properties: { repo: REPO_PARAM } },
-  requires: ["shell"],
-  execute: (args, ctx) => runGitTool("status", { repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
-});
-var gitDiffTool = defineTool({
-  name: "git_diff",
-  description: "Show the uncommitted diff of your working tree (optionally for one path). Use it to review exactly what you changed before finishing.",
-  parameters: { type: "object", properties: { path: { type: "string", description: "Optional repo-relative file/dir to scope the diff to." }, repo: REPO_PARAM } },
-  requires: ["shell"],
-  execute: (args, ctx) => runGitTool("diff", { path: typeof args.path === "string" ? args.path : void 0, repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
-});
-var gitHistoryTool = defineTool({
-  name: "git_history",
-  description: "Show recent commit history (git log --oneline), optionally scoped to a path. Use it to understand how a file evolved before changing it.",
-  parameters: {
-    type: "object",
-    properties: {
-      path: { type: "string", description: "Optional repo-relative file/dir to scope history to." },
-      limit: { type: "number", description: "Max commits to return (default 30, max 200)." },
-      repo: REPO_PARAM
-    }
-  },
-  requires: ["shell"],
-  execute: (args, ctx) => runGitTool("history", { path: typeof args.path === "string" ? args.path : void 0, limit: typeof args.limit === "number" ? args.limit : void 0, repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
-});
-var gitSyncLatestTool = defineTool({
-  name: "git_sync_latest",
-  description: "Fetch the latest base branch (e.g. main) and merge it into your working branch so you are NOT building on stale code. Run this FIRST, before editing \u2014 a branch created earlier can be far behind main, so its build fails against old dependencies and its pull request would revert newer work. On a merge conflict it safely aborts and tells you which to resolve.",
-  parameters: { type: "object", properties: { baseBranch: { type: "string", description: "Base branch to sync from. Defaults to the remote's default branch (usually main)." }, repo: REPO_PARAM } },
-  requires: ["shell"],
-  execute: (args, ctx) => runGitTool("sync_latest", { baseBranch: typeof args.baseBranch === "string" ? args.baseBranch : void 0, repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
-});
-var gitUndoTool = defineTool({
-  name: "git_undo",
-  description: "Undo your most recent commit (keeps the change recoverable \u2014 use git_redo to reapply). Refuses if you have uncommitted changes, so it can never discard unsaved work. Use it to back out a change that was wrong.",
-  parameters: { type: "object", properties: { repo: REPO_PARAM } },
-  requires: ["shell"],
-  execute: (args, ctx) => runGitTool("undo", { repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
-});
-var gitRedoTool = defineTool({
-  name: "git_redo",
-  description: "Reapply the change you most recently undid with git_undo (reflog redo). Refuses if you have uncommitted changes.",
-  parameters: { type: "object", properties: { repo: REPO_PARAM } },
-  requires: ["shell"],
-  execute: (args, ctx) => runGitTool("redo", { repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
-});
-function shellQuote(v) {
-  return `'${v.replace(/'/g, `'\\''`)}'`;
-}
+
+// ../packages/agent-tools/src/git-publish-tools.ts
 function buildCommitCommand(opts) {
   const branch = safeGitArg(opts.branch);
   const resolveLines = opts.paths.map((p, i) => {
@@ -10856,6 +11075,159 @@ var gitCleanupMergedTool = defineTool({
       ctx
     );
   }
+});
+
+// ../packages/agent-tools/src/git-tools.ts
+function buildGitCommand(action, opts) {
+  const path2 = safeGitArg(opts?.path);
+  const pathArg = path2 ? ` -- "${path2}"` : "";
+  const tracked = safeGitArg(opts?.trackedBranch);
+  const viaSandbox = opts?.remoteViaSandbox === true;
+  const fetchTracked = viaSandbox ? "" : `git fetch origin "${tracked}" 2>/dev/null && `;
+  const absorb = tracked ? ["set -e", IDENTITY_EMAIL, IDENTITY_NAME, `${fetchTracked}git merge --ff-only "origin/${tracked}" 2>/dev/null || true`] : [];
+  const publish = (force) => tracked && !viaSandbox ? [force ? "git push --force-with-lease origin HEAD" : "git push origin HEAD"] : [];
+  switch (action) {
+    case "status":
+      return buildStatusCommand(opts?.paths, opts?.repo);
+    case "diff":
+      return `git --no-pager diff${pathArg}`;
+    case "history": {
+      const limit = Number.isFinite(opts?.limit) && opts.limit > 0 ? Math.min(Math.floor(opts.limit), 200) : 30;
+      return `git --no-pager log --oneline -n ${limit}${pathArg}`;
+    }
+    case "sync_latest": {
+      const base = safeGitArg(opts?.baseBranch);
+      const resolveBase = base ? `BASE="${base}"` : RESOLVE_BASE;
+      return [
+        ...tracked ? absorb : ["set -e"],
+        resolveBase,
+        ...tracked ? [] : [IDENTITY_EMAIL, IDENTITY_NAME],
+        ...viaSandbox ? [] : ['git fetch origin "$BASE"'],
+        'git merge --no-edit "origin/$BASE" || { git merge --abort; echo MERGE_CONFLICT; exit 3; }',
+        ...publish(false),
+        'echo "Synced with origin/$BASE"'
+      ].join("\n");
+    }
+    case "undo":
+      return [
+        ...absorb,
+        '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }',
+        "git reset --hard HEAD~1",
+        ...publish(true),
+        'echo "Undid the last commit (use git_redo to reapply)"'
+      ].join("\n");
+    case "redo":
+      return [
+        ...absorb,
+        '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }',
+        'git reset --hard "HEAD@{1}"',
+        ...publish(true),
+        'echo "Reapplied the last undone change"'
+      ].join("\n");
+  }
+}
+function gitToolResult(action, r, paths) {
+  const out = (r.stdout ?? "").trim();
+  if (action === "status" && r.ok) {
+    const { output, report } = parseGitStatusOutput(out, paths);
+    return { data: { ok: true, action, output: output.slice(0, 2e4), ...report, ...r.error ? { error: r.error } : {} } };
+  }
+  if (r.exitCode === 3 || /MERGE_CONFLICT/.test(out)) {
+    return { data: { ok: false, action, error: "merge conflict \u2014 the base branch has changes that conflict with your branch; the merge was aborted (working tree is clean). Resolve by editing the conflicting files, or ask a human.", output: out } };
+  }
+  if (r.exitCode === 4 || /\bDIRTY\b/.test(out)) {
+    return { data: { ok: false, action, error: "you have uncommitted changes \u2014 commit or discard them before git_" + action + " (it refuses to discard uncommitted work)." } };
+  }
+  return { data: { ok: r.ok, action, output: out.slice(0, 2e4), ...r.error ? { error: r.error } : {} } };
+}
+async function runGitTool(action, opts, ctx) {
+  const refused = invalidRepoResult(action, opts.repo);
+  if (refused) return refused;
+  const trackedBranch = ctx.caps.shell?.trackedBranch;
+  const remote = trackedBranch && (action === "sync_latest" || action === "undo" || action === "redo") ? ctx.caps.shell?.git : void 0;
+  let baseBranch = opts.baseBranch;
+  if (remote) {
+    const synced = await remote.sync({ baseBranch: opts.baseBranch });
+    if (!synced.ok) return { data: { ok: false, action, error: `could not fetch from the remote: ${synced.error ?? "unknown error"}` } };
+    baseBranch = synced.baseBranch ?? baseBranch;
+  }
+  const scope = { repo: opts.repo, path: opts.path ?? opts.paths?.[0] };
+  const ran = await runInRepoScope(ctx, scope, (repo, path2) => shellRunWithStop(ctx, buildGitCommand(action, {
+    baseBranch,
+    limit: opts.limit,
+    path: path2,
+    ...opts.paths?.length ? { paths: opts.paths, ...repo ? { repo } : {} } : {},
+    ...trackedBranch ? { trackedBranch } : {},
+    ...remote ? { remoteViaSandbox: true } : {}
+  }), safeRepoArg(repo) ?? void 0));
+  if (!ran) return notARepoWithCandidates(action, ctx);
+  if (remote && ran.r.ok) {
+    const published = await remote.publish({ force: action !== "sync_latest" });
+    if (!published.ok) return { data: { ok: false, action, error: `the change was made locally but could not be published: ${published.error ?? "unknown error"}` } };
+  }
+  const result = gitToolResult(action, ran.r, opts.paths);
+  if (ran.repo && result.data.ok) {
+    result.data.repo = ran.repo;
+  }
+  return result;
+}
+var gitStatusTool = defineTool({
+  name: "git_status",
+  description: 'ONE call answers "is it committed? is it pushed? by whom?" \u2014 do not chain git_diff / git_history / run_command `git log` for that. Returns the branch, its upstream, ahead/behind counts, and the staged / unstaged / untracked / conflicted files. Pass `paths` to limit it to those files AND get, for each, the last commit that touched it (sha, subject, author, date) and `onUpstream` (true = already pushed). A path with no uncommitted entry and `onUpstream: true` is committed and pushed \u2014 possibly by someone else; the author says who. If the open folder contains several checkouts rather than being one repo, pass `repo` to name the one you mean.',
+  parameters: {
+    type: "object",
+    properties: {
+      paths: { type: "array", items: { type: "string" }, description: `Optional files/dirs to ask about (at most ${GIT_STATUS_MAX_PATHS}): limits the entries to them and reports each one's last commit and whether it is pushed.` },
+      repo: REPO_PARAM
+    }
+  },
+  requires: ["shell"],
+  execute: (args, ctx) => {
+    const paths = statusPaths(Array.isArray(args.paths) ? args.paths : void 0);
+    return runGitTool("status", { repo: typeof args.repo === "string" ? args.repo : void 0, ...paths.length ? { paths } : {} }, ctx);
+  }
+});
+var gitDiffTool = defineTool({
+  name: "git_diff",
+  description: "Show the uncommitted diff of your working tree (optionally for one path). Use it to review exactly what you changed before finishing.",
+  parameters: { type: "object", properties: { path: { type: "string", description: "Optional repo-relative file/dir to scope the diff to." }, repo: REPO_PARAM } },
+  requires: ["shell"],
+  execute: (args, ctx) => runGitTool("diff", { path: typeof args.path === "string" ? args.path : void 0, repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
+});
+var gitHistoryTool = defineTool({
+  name: "git_history",
+  description: "Show recent commit history (git log --oneline), optionally scoped to a path. Use it to understand how a file evolved before changing it.",
+  parameters: {
+    type: "object",
+    properties: {
+      path: { type: "string", description: "Optional repo-relative file/dir to scope history to." },
+      limit: { type: "number", description: "Max commits to return (default 30, max 200)." },
+      repo: REPO_PARAM
+    }
+  },
+  requires: ["shell"],
+  execute: (args, ctx) => runGitTool("history", { path: typeof args.path === "string" ? args.path : void 0, limit: typeof args.limit === "number" ? args.limit : void 0, repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
+});
+var gitSyncLatestTool = defineTool({
+  name: "git_sync_latest",
+  description: "Fetch the latest base branch (e.g. main) and merge it into your working branch so you are NOT building on stale code. Run this FIRST, before editing \u2014 a branch created earlier can be far behind main, so its build fails against old dependencies and its pull request would revert newer work. On a merge conflict it safely aborts and tells you which to resolve.",
+  parameters: { type: "object", properties: { baseBranch: { type: "string", description: "Base branch to sync from. Defaults to the remote's default branch (usually main)." }, repo: REPO_PARAM } },
+  requires: ["shell"],
+  execute: (args, ctx) => runGitTool("sync_latest", { baseBranch: typeof args.baseBranch === "string" ? args.baseBranch : void 0, repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
+});
+var gitUndoTool = defineTool({
+  name: "git_undo",
+  description: "Undo your most recent commit (keeps the change recoverable \u2014 use git_redo to reapply). Refuses if you have uncommitted changes, so it can never discard unsaved work. Use it to back out a change that was wrong.",
+  parameters: { type: "object", properties: { repo: REPO_PARAM } },
+  requires: ["shell"],
+  execute: (args, ctx) => runGitTool("undo", { repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
+});
+var gitRedoTool = defineTool({
+  name: "git_redo",
+  description: "Reapply the change you most recently undid with git_undo (reflog redo). Refuses if you have uncommitted changes.",
+  parameters: { type: "object", properties: { repo: REPO_PARAM } },
+  requires: ["shell"],
+  execute: (args, ctx) => runGitTool("redo", { repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
 });
 var GIT_TOOLS = [
   gitStatusTool,
@@ -11932,8 +12304,8 @@ var editFileTool = defineTool({
         }
       });
       if (!batch.ok) {
-        const failed3 = batch.files[batch.files.length - 1];
-        return { data: { ok: false, error: failed3.error ?? "batch failed", files: batch.files.map(({ content: _c, ...rest }) => rest) } };
+        const failed4 = batch.files[batch.files.length - 1];
+        return { data: { ok: false, error: failed4.error ?? "batch failed", files: batch.files.map(({ content: _c, ...rest }) => rest) } };
       }
       return {
         data: {
@@ -12173,14 +12545,15 @@ var runChecksTool = defineTool({
 });
 var runCommandTool = defineTool({
   name: "run_command",
-  description: "Run a shell command in the checked-out repository (real shell). Use it to install dependencies and run the build, type-check, lint, and tests. Returns combined stdout/stderr and the exit code. Verify your changes this way BEFORE calling finish.",
+  description: "Run a shell command in the checked-out repository (real shell). Use it to install dependencies and run the build, type-check, lint, and tests. Returns combined stdout/stderr and the exit code. Verify your changes this way BEFORE calling finish. Do not re-run a command to grep/head/tail its output: when the result has an outputId, use output_filter on it.",
   parameters: {
     type: "object",
     properties: {
       command: { type: "string", description: 'The shell command to run, e.g. "npm install" or "npm test".' },
       cwd: { type: "string", description: 'Optional directory to run in, relative to the workspace root (e.g. "my-project"). Defaults to the run\'s repository; "." is the workspace root. Use this instead of a `cd X &&` prefix.' },
       background: { type: "boolean", description: "Run a long command (a dev server, a full test suite, a build) in the background: returns a job id at once; check it with command_status, stop it with command_stop." },
-      yieldMs: { type: "number", description: "Optional: run in the foreground up to this many milliseconds, then hand back a background job id if it is still running." }
+      yieldMs: { type: "number", description: "Optional: run in the foreground up to this many milliseconds, then hand back a background job id if it is still running." },
+      fresh: { type: "boolean", description: "Optional: run it even if an identical read-only command (type-check, test, lint, git status\u2026) already ran with no file changed since \u2014 by default that earlier result comes back marked cached." }
     },
     required: ["command"]
   },
@@ -12559,7 +12932,7 @@ function delegationNote(caps) {
 function withDelegationNote(def) {
   return { ...def, describeFor: (caps) => def.schema.function.description.replace(LIVE_DELEGATION_NOTE, delegationNote(caps)) };
 }
-var VERIFY_DELEGATION_STEP = 'Hand the checking to ONE verify sub-agent (spawn_agent, role "verify"): brief it with the files changed and how to know the change is done; it runs the narrowest type-check, build and tests on a cheaper model and reports each failure verbatim. Fix what it reports \u2014 yourself or with a code sub-agent \u2014 and verify again until it passes.';
+var VERIFY_DELEGATION_STEP = 'Hand the checking to ONE verify sub-agent (spawn_agent, role "verify"): brief it with the files changed and how to know the change is done; it runs the narrowest type-check, build and tests on a cheaper model and reports each failure verbatim. Fix what it reports \u2014 yourself or with a code sub-agent \u2014 and verify again until it passes. When the checks are only a few known commands, do not delegate them: run them yourself with run_command background:true. Never run a command a live child was briefed to run \u2014 call wait_agents for its result.';
 var VERIFY_STEP = `${VERIFY_DELEGATION_STEP} Where you cannot spawn, run the narrowest type-check, build and tests that cover what you touched yourself, and fix whatever fails.`;
 var RESOLVE_OPEN_ISSUES = "resolve every open issue the reports name: fix it yourself, send it back with message_agent, or hand it to a code sub-agent";
 var LIVE_FANOUT_NEXT = `Keep working on anything not delegated. When their reports are in (they arrive on their own, or call wait_agents), ${RESOLVE_OPEN_ISSUES}; fix anything the slices broke between them, then check the combined result. ${VERIFY_DELEGATION_STEP} Report per workstream and ticket.`;
@@ -13343,9 +13716,9 @@ function committingHandlers(handlers, commit, servedAs) {
     ...servedAs ? { onModel: () => void 0 } : {}
   };
 }
-function withFailedAccounts(e, failed3) {
-  if (!(e instanceof BrainRequestError) || failed3.length === 0) return e;
-  const prefix = failed3.map((r) => `${r.attempt.kind === "local" ? r.attempt.ref : "account"} could not take this turn (${r.detail ?? r.outcome}). `).join("");
+function withFailedAccounts(e, failed4) {
+  if (!(e instanceof BrainRequestError) || failed4.length === 0) return e;
+  const prefix = failed4.map((r) => `${r.attempt.kind === "local" ? r.attempt.ref : "account"} could not take this turn (${r.detail ?? r.outcome}). `).join("");
   const out = new BrainRequestError(prefix + e.message, {
     status: e.status,
     ...e.code ? { code: e.code } : {},
@@ -15977,14 +16350,14 @@ function createEngineWorker(options) {
   const now = options.now ?? (() => Date.now());
   let live2;
   const crashes = /* @__PURE__ */ new Map();
-  const failed3 = /* @__PURE__ */ new Set();
+  const failed4 = /* @__PURE__ */ new Set();
   const recordCrash = (key) => {
     const at2 = now();
     const recent = (crashes.get(key) ?? []).filter((t) => at2 - t < ENGINE_WORKER_CRASH_WINDOW_MS);
     recent.push(at2);
     crashes.set(key, recent);
-    if (recent.length >= ENGINE_WORKER_CRASH_LIMIT && !failed3.has(key)) {
-      failed3.add(key);
+    if (recent.length >= ENGINE_WORKER_CRASH_LIMIT && !failed4.has(key)) {
+      failed4.add(key);
       warn(`engine worker: ${key} crashed ${recent.length}\xD7 in ${ENGINE_WORKER_CRASH_WINDOW_MS / 6e4} min; not loading it again this session`);
     }
   };
@@ -16003,8 +16376,8 @@ function createEngineWorker(options) {
   };
   const withoutFailed = (message2) => {
     const probe = message2.probe;
-    if (!probe || failed3.size === 0) return message2;
-    const models = probe.models.filter((m) => !failed3.has(modelKey(probe.provider, m.model)));
+    if (!probe || failed4.size === 0) return message2;
+    const models = probe.models.filter((m) => !failed4.has(modelKey(probe.provider, m.model)));
     if (models.length === probe.models.length) return message2;
     return { ...message2, probe: models.length > 0 ? { ...probe, models } : null };
   };
@@ -16039,7 +16412,7 @@ function createEngineWorker(options) {
         const m = message2;
         if (m.type === "pageEngine.chat" && typeof m.id === "string") {
           const key = modelKey(m.runtime, m.body?.model);
-          if (failed3.has(key)) {
+          if (failed4.has(key)) {
             const id = m.id;
             queueMicrotask(
               () => options.onMessage({
@@ -16349,10 +16722,10 @@ function createBfiWorkerEngine(options) {
     ...options.idleMs !== void 0 ? { idleMs: options.idleMs } : {}
   });
   const anyDownloaded = () => options.store ? anyBfiModelDownloaded(options.store) : Promise.resolve(true);
-  const onceMore = async (ask2, failed3) => {
+  const onceMore = async (ask2, failed4) => {
     const before = threadRestarts;
     const value = await ask2();
-    return failed3(value) && threadRestarts !== before ? ask2() : value;
+    return failed4(value) && threadRestarts !== before ? ask2() : value;
   };
   const ownSupport = () => {
     const id = `s${++seq}`;
@@ -17975,6 +18348,44 @@ var ReadinessAdvisory = class {
   }
 };
 
+// ../packages/run-guards/src/batching.ts
+var SERIAL_SINGLE_CALLS_AT = 2;
+
+// ../packages/run-guards/src/batchingNudge.ts
+var BATCHING_NUDGE_NOTE = "You have made one read-only call per turn for several turns. When the calls are independent, batch them into one: use the `edit_file` `edits` array for several edits, or one `run_command` that runs the checks together.";
+var BatchingNudge = class {
+  streak;
+  fired;
+  constructor(state) {
+    this.streak = state?.streak ?? 0;
+    this.fired = state?.fired ?? false;
+  }
+  /**
+   * `turnCalls` — every call of the turn that just ended, with whether each was
+   * read-only. Exactly one read-only call (and no other call) extends the streak;
+   * anything else — a write, two or more calls, or zero calls — resets it, because
+   * that turn was real work, not serial reading. When the streak reaches
+   * {@link SERIAL_SINGLE_CALLS_AT} and the note has not fired this run yet, the note
+   * is produced (once — `fired` persists in the JSON snapshot, so a resume never
+   * re-fires it). Returns the pending note ("" when none).
+   */
+  observe(turnCalls) {
+    const singleReadOnly = turnCalls.length === 1 && turnCalls[0]?.readOnly === true;
+    this.streak = singleReadOnly ? this.streak + 1 : 0;
+    if (!this.fired && this.streak >= SERIAL_SINGLE_CALLS_AT) {
+      this.fired = true;
+      return BATCHING_NUDGE_NOTE;
+    }
+    return "";
+  }
+  snapshot() {
+    return { streak: this.streak, ...this.fired ? { fired: true } : {} };
+  }
+};
+function turnCallsOf(calls, isReadOnly) {
+  return calls.map((c) => ({ readOnly: isReadOnly?.(c.tool, c.args) === true }));
+}
+
 // ../packages/run-guards/src/progressDetector.ts
 var LADDER_RESET_TURNS = 8;
 var SIGNAL_RANK = {
@@ -18012,8 +18423,10 @@ var ProgressDetector = class {
     this.quietTurns = state.quietTurns ?? 0;
     this.steer = state.steer;
     this.readiness = new ReadinessAdvisory(state.advisory);
+    this.batching = new BatchingNudge(state.batching);
     this.writtenPaths = /* @__PURE__ */ new Set();
     this.readThisTurn = [];
+    this.turnCalls = [];
   }
   ports;
   visits;
@@ -18028,11 +18441,16 @@ var ProgressDetector = class {
   steer;
   /** B1: the readiness advisory — one note at the FIRST unkept claim, never a trip. */
   readiness;
+  /** B4: the batching nudge — one note after SERIAL_SINGLE_CALLS_AT single-readonly
+   *  turns, never a trip and never touching UNKEPT_READY_AT or any other signal. */
+  batching;
   turnSignal = null;
   /** Every path this run has written, so a re-read of one is re-verification, not discovery. */
   writtenPaths;
   /** Read-only targets seen this turn, to tell an all-written re-read turn from real work. */
   readThisTurn;
+  /** Every call of the current turn, for the B4 batching nudge's read-only count. */
+  turnCalls;
   raise(signal) {
     if (!this.turnSignal || SIGNAL_RANK[signal.kind] < SIGNAL_RANK[this.turnSignal.kind]) this.turnSignal = signal;
   }
@@ -18042,6 +18460,7 @@ var ProgressDetector = class {
   }
   /** One call of the current turn ran. */
   observe(tool, args, result) {
+    this.turnCalls.push({ tool, args, result });
     this.claims.observe(this.ports.isReadOnly?.(tool, args) === true);
     const ok = succeeded2(result);
     const unscoped = (this.ports.isUnscopedMutation ?? ((t) => t === "run_command"))(tool, args);
@@ -18088,6 +18507,9 @@ var ProgressDetector = class {
   /** Every call of the turn ran. The trip this turn caused, if any — or, earlier and
    *  cheaper (B1), the readiness advisory on the FIRST unkept claim (never a trip). */
   endTurn() {
+    const turnCalls = this.turnCalls;
+    this.turnCalls = [];
+    const batchNote = this.batching.observe(turnCallsOf(turnCalls, this.ports.isReadOnly));
     this.steer = void 0;
     const idle = this.progress.endTurn();
     if (!this.turnSignal && this.readThisTurn.length > 0) {
@@ -18108,6 +18530,7 @@ var ProgressDetector = class {
       this.readiness.endTurn();
       const advisoryNote = this.readiness.observe(this.unkeptTurns);
       if (advisoryNote) return { kind: "advisory", note: advisoryNote };
+      if (batchNote) return { kind: "advisory", note: batchNote };
       if (this.progress.lastTurnGround) this.quietTurns += 1;
       else if (idle > 0) this.quietTurns = 0;
       if (this.quietTurns >= LADDER_RESET_TURNS) {
@@ -18161,7 +18584,11 @@ var ProgressDetector = class {
       ...this.unkeptTurns ? { unkeptTurns: this.unkeptTurns } : {},
       ...this.quietTurns ? { quietTurns: this.quietTurns } : {},
       ...this.steer ? { steer: this.steer } : {},
-      ...this.readiness.snapshot().note ? { advisory: this.readiness.snapshot() } : {}
+      ...this.readiness.snapshot().note ? { advisory: this.readiness.snapshot() } : {},
+      ...(() => {
+        const b = this.batching.snapshot();
+        return b.streak || b.fired ? { batching: b } : {};
+      })()
     };
   }
 };
@@ -18390,6 +18817,70 @@ var ReadsWithoutSpawn = class {
     return { ...this.state };
   }
 };
+
+// ../packages/run-guards/src/evidence/ledger.ts
+var MAX_CHECK_FINDINGS = 20;
+function normalizeEvidencePath(path2) {
+  return path2.replace(/\\/g, "/").replace(/\/+/g, "/");
+}
+function createEvidenceLedger(resume) {
+  const entries = /* @__PURE__ */ new Map();
+  if (resume) {
+    for (const ev of resume) {
+      entries.set(normalizeEvidencePath(ev.path), {
+        latestHash: ev.contentHash,
+        byHash: /* @__PURE__ */ new Map([[ev.contentHash, [...ev.checks]]])
+      });
+    }
+  }
+  const entryFor = (path2) => {
+    const key = normalizeEvidencePath(path2);
+    let e = entries.get(key);
+    if (!e) {
+      e = { latestHash: null, byHash: /* @__PURE__ */ new Map() };
+      entries.set(key, e);
+    }
+    return e;
+  };
+  return {
+    noteWrite(path2) {
+      const e = entryFor(path2);
+      e.latestHash = null;
+      e.byHash.clear();
+    },
+    record(path2, contentHash2, check) {
+      const e = entryFor(path2);
+      if (e.latestHash !== null && e.latestHash !== contentHash2) return;
+      e.latestHash = contentHash2;
+      const capped2 = {
+        ...check,
+        findings: check.findings.slice(0, MAX_CHECK_FINDINGS)
+      };
+      const list3 = e.byHash.get(contentHash2);
+      if (list3) list3.push(capped2);
+      else e.byHash.set(contentHash2, [capped2]);
+    },
+    for(path2, contentHash2) {
+      const e = entries.get(normalizeEvidencePath(path2));
+      if (!e || e.latestHash !== contentHash2) return [];
+      return e.byHash.get(contentHash2) ?? [];
+    },
+    current(path2) {
+      const key = normalizeEvidencePath(path2);
+      const e = entries.get(key);
+      if (!e || e.latestHash === null) return null;
+      return { path: key, contentHash: e.latestHash, checks: e.byHash.get(e.latestHash) ?? [] };
+    },
+    snapshot() {
+      const out = [];
+      for (const [key, e] of entries) {
+        if (e.latestHash === null) continue;
+        out.push({ path: key, contentHash: e.latestHash, checks: e.byHash.get(e.latestHash) ?? [] });
+      }
+      return out;
+    }
+  };
+}
 
 // ../packages/run-guards/src/evidence/gitCommandPattern.ts
 function gitCommandPattern(verbs) {
@@ -19434,12 +19925,12 @@ function resetRungs(state, keep2 = []) {
   if (!spent || Object.keys(spent).length === 0) return;
   save(state, { rungs: Object.fromEntries(Object.entries(spent).filter(([id]) => keep2.includes(id))) });
 }
-function handOffToProven(ctx, ledger, failed3) {
-  const next = reduceRunPolicy(ctx.state.model, { type: "stalled", ...failed3 ? { resolvedModel: failed3 } : {} });
+function handOffToProven(ctx, ledger, failed4, unavailable2 = false) {
+  const next = reduceRunPolicy(ctx.state.model, { type: "stalled", ...failed4 ? { resolvedModel: failed4 } : {}, ...unavailable2 ? { primaryUnavailable: true } : {} });
   ctx.state.model = next;
   if (next.outcome.kind !== "failed_over") return void 0;
   resetRungs(ctx.state, ledger?.sticky);
-  ledger?.handedOff?.(failed3, next.outcome.to);
+  ledger?.handedOff?.(failed4, next.outcome.to);
   return next.outcome.to;
 }
 function restatement(ctx, rung, attempt, nudgeRole, quoteEmpty) {
@@ -19506,7 +19997,7 @@ function walkRungs(ctx, ledger, rungs) {
 function recoverProviderFailure(ctx, failure, failedModel, message2) {
   const ledger = ctx.ports.delivery;
   const wording = ledger?.providerFailure;
-  const to = handOffToProven(ctx, ledger, failedModel);
+  const to = handOffToProven(ctx, ledger, failedModel, true);
   if (to) return { kind: "retry", ...wording ? { note: wording.handoff(to) } : {} };
   const next = reduceRunPolicy(ctx.state.model, failure);
   ctx.state.model = next;
@@ -19719,7 +20210,8 @@ function recordSuccess(state, served) {
   const policy = reduceRunPolicy(state.policy, {
     type: "turn_succeeded",
     ...served.model ? { model: served.model } : {},
-    ...served.acted ? { acted: true } : {}
+    ...served.acted ? { acted: true } : {},
+    ...served.durationMs !== void 0 ? { durationMs: served.durationMs } : {}
   });
   return { ...state, policy, forceToolChoice: void 0 };
 }
@@ -20639,8 +21131,8 @@ function hasNoCodeDeliverable(writtenPaths) {
 var MAX_PLACEHOLDER_FINISH_BLOCKS = 2;
 
 // ../packages/agent-run/src/policy/finish/gates.ts
-function matchesRequiredReviewSignoff(required, toolName, args, succeeded6) {
-  if (!required || !succeeded6 || toolName !== "builtin_kanban_signoff") return false;
+function matchesRequiredReviewSignoff(required, toolName, args, succeeded7) {
+  if (!required || !succeeded7 || toolName !== "builtin_kanban_signoff") return false;
   const roleKey = typeof args.roleKey === "string" ? args.roleKey.trim() : "";
   const laneKey = typeof args.laneKey === "string" ? args.laneKey.trim() : void 0;
   return roleKey === required.roleKey && laneKey === required.laneKey;
@@ -21341,8 +21833,8 @@ function recordVerifyEvents(outcome) {
 function describeVerifyResult(outcome) {
   if (outcome.kind === "skipped") return `verify skipped (${outcome.reason})`;
   if (outcome.commands.length === 0) return `verify ${outcome.kind}, no commands`;
-  const failed3 = outcome.failedCommands.length;
-  return `verify ${outcome.kind}: ${outcome.commands.join("; ")}${failed3 > 0 ? ` \u2014 ${failed3} failed` : ""}`;
+  const failed4 = outcome.failedCommands.length;
+  return `verify ${outcome.kind}: ${outcome.commands.join("; ")}${failed4 > 0 ? ` \u2014 ${failed4} failed` : ""}`;
 }
 
 // ../packages/agent-run/src/policy/verify/index.ts
@@ -21849,12 +22341,14 @@ function selectToolsForTurn(tools, options = {}) {
   const ranked2 = options.rank ? options.rank(rest, options.query ?? "") : [...rest].map((tool) => ({
     tool,
     score: scoreTool(tool.function?.name ?? "", tool.function?.description ?? "", stems, synonyms)
-  })).sort((a, b) => b.score - a.score || (a.tool.function?.name ?? "").localeCompare(b.tool.function?.name ?? "")).map((entry) => entry.tool);
+  })).filter((entry) => options.backfill !== false || entry.score > 0).sort((a, b) => b.score - a.score || (a.tool.function?.name ?? "").localeCompare(b.tool.function?.name ?? "")).map((entry) => entry.tool);
   for (const tool of ranked2.slice(0, roomAfterRequired)) push(tool);
   const inFixed = new Set(wanted.map((t) => t.function?.name));
-  for (const tool of catalog) {
-    const name = tool.function?.name;
-    if (name && !inFixed.has(name) && wanted.length < limit) push(tool);
+  if (options.backfill !== false) {
+    for (const tool of catalog) {
+      const name = tool.function?.name;
+      if (name && !inFixed.has(name) && wanted.length < limit) push(tool);
+    }
   }
   const fixed = [];
   const fixedNames = new Set(wanted.map((t) => t.function?.name));
@@ -21875,14 +22369,60 @@ function selectToolsForTurn(tools, options = {}) {
   return { tools: [...fixed, ...pinnedOut], trimmed: true, available };
 }
 
+// ../packages/agent-run/src/policy/tools/roleCap.ts
+var ROLE_TOOL_LIMIT = { code: 22, verify: 18 };
+var ROLE_COMPANION_TOOLS = {
+  code: [
+    "find_symbol",
+    "file_outline",
+    "semantic_search",
+    "command_status",
+    "command_stop",
+    "git_status",
+    "git_diff",
+    "recall_facts",
+    "remember_fact",
+    "ask_user",
+    "builtin_skills_read"
+  ],
+  verify: [
+    "find_symbol",
+    "file_outline",
+    "command_status",
+    "command_stop",
+    "git_status",
+    "git_diff",
+    "git_history",
+    "recall_facts",
+    "ask_user"
+  ]
+};
+function isCappedToolRole(role) {
+  return role === "code" || role === "verify";
+}
+function roleToolLimit(role) {
+  return isCappedToolRole(role) ? ROLE_TOOL_LIMIT[role] : DEFAULT_TOOL_LIMIT;
+}
+function roleToolNames(role) {
+  return [.../* @__PURE__ */ new Set([...coreToolNames(role), ...ROLE_COMPANION_TOOLS[role]])];
+}
+function roleCappedSelection(role, catalogNames, keep2 = []) {
+  const present = new Set(catalogNames);
+  const required = [.../* @__PURE__ */ new Set([...roleToolNames(role), ...keep2])].filter((n2) => present.has(n2));
+  return { limit: Math.max(ROLE_TOOL_LIMIT[role], required.length), required, backfill: false };
+}
+
 // ../packages/agent-run/src/policy/tools/platform.ts
 function selectPlatformCatalog(ctx, pinned) {
   const platform = ctx.ports.platform;
   if (!platform?.closed) return void 0;
   const catalog = platform.schemas({ rungs: ctx.state.stall?.rungs ?? {} });
   const selection = platform.selection;
-  const { query, limit, required } = selection;
-  return selectToolsForTurn(catalog, { query, limit, pinned: selection.pinned ? [...selection.pinned] : pinned, required: [...required], ...selection.rank ? { rank: selection.rank } : {}, ...selection.capRequired ? { capRequired: true } : {} }).tools;
+  const { query } = selection;
+  const capped2 = isCappedToolRole(selection.role) ? roleCappedSelection(selection.role, catalog.map((t) => t.function?.name ?? ""), selection.roleKeep ?? []) : void 0;
+  const limit = capped2?.limit ?? selection.limit;
+  const required = capped2?.required ?? [...selection.required];
+  return selectToolsForTurn(catalog, { query, limit, pinned: selection.pinned ? [...selection.pinned] : pinned, required, ...selection.rank ? { rank: selection.rank } : {}, ...selection.capRequired ? { capRequired: true } : {}, ...capped2 ? { backfill: false } : {} }).tools;
 }
 
 // ../packages/agent-run/src/policy/tools/toolset.ts
@@ -22670,9 +23210,9 @@ function failedResult(data) {
   const error = data.error;
   return typeof error === "string" ? { error: error.slice(0, ERROR_CHARS) } : {};
 }
-function fittedText(text2, failed3, maxChars, originalChars) {
+function fittedText(text2, failed4, maxChars, originalChars) {
   const note = truncatedResultNote(originalChars, maxChars);
-  const head = failed3 ? { ok: false, ...failed3 } : {};
+  const head = failed4 ? { ok: false, ...failed4 } : {};
   let body = text2;
   for (; ; ) {
     const result = { ...head, truncated: true, note, output: body };
@@ -22684,17 +23224,17 @@ function fittedText(text2, failed3, maxChars, originalChars) {
 function capToolResult(tool, data, maxChars) {
   const shaped = shapeToolResult(tool, data, { maxChars });
   if (!shaped.truncated) return data;
-  const failed3 = failedResult(data);
+  const failed4 = failedResult(data);
   let parsed;
   try {
     parsed = JSON.parse(shaped.content);
   } catch {
-    return fittedText(shaped.content, failed3, maxChars, shaped.bytes);
+    return fittedText(shaped.content, failed4, maxChars, shaped.bytes);
   }
-  if (failed3 && parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+  if (failed4 && parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
     return { ...parsed, ok: false };
   }
-  return failed3 ? fittedText(shaped.content, failed3, maxChars, shaped.bytes) : parsed;
+  return failed4 ? fittedText(shaped.content, failed4, maxChars, shaped.bytes) : parsed;
 }
 
 // ../packages/agent-run/src/policy/tools/index.ts
@@ -23010,7 +23550,11 @@ function routeAround(state, status2) {
   };
 }
 function turnSucceeded(state, served) {
-  state.model = recordSuccess(asModelRunState(state), { ...served.model ? { model: served.model } : {}, acted: served.acted }).policy;
+  state.model = recordSuccess(asModelRunState(state), {
+    ...served.model ? { model: served.model } : {},
+    acted: served.acted,
+    ...served.durationMs !== void 0 ? { durationMs: served.durationMs } : {}
+  }).policy;
   delete state.forceToolChoice;
 }
 
@@ -23153,6 +23697,7 @@ async function completeTurn(input, state, hooks, ctx, offered, transcript, pack2
   });
   let asked = model;
   let completion;
+  let startedAt = Date.now();
   try {
     completion = await input.ports.model.complete(requestFor(model, firstAsk), input.signal);
   } catch (err) {
@@ -23171,6 +23716,7 @@ async function completeTurn(input, state, hooks, ctx, offered, transcript, pack2
     if (!routed) return { failed: reason };
     await emit(input.ports.events, { kind: "model.cascade", step: ctx.step, from: routed.from, status: err instanceof ModelTransportError ? err.status ?? null : null, released: routed.released });
     asked = routed.retry.model;
+    startedAt = Date.now();
     try {
       completion = await input.ports.model.complete(requestFor(routed.retry.model, routed.retry), input.signal);
     } catch (retryErr) {
@@ -23183,6 +23729,7 @@ async function completeTurn(input, state, hooks, ctx, offered, transcript, pack2
   if (reask) {
     await emit(input.ports.events, { kind: "model.coder_reask", step: ctx.step, ...completion.model ? { model: completion.model } : {} });
     asked = reask.ask.model;
+    startedAt = Date.now();
     try {
       completion = await input.ports.model.complete(requestFor(reask.ask.model, reask.ask, [reask.brief]), input.signal);
     } catch (err) {
@@ -23191,7 +23738,7 @@ async function completeTurn(input, state, hooks, ctx, offered, transcript, pack2
       return { failed: err instanceof Error ? err.message : String(err) };
     }
   }
-  turnSucceeded(state, { acted: (completion.toolCalls ?? []).length > 0, ...completion.model ? { model: completion.model } : {} });
+  turnSucceeded(state, { acted: (completion.toolCalls ?? []).length > 0, durationMs: Date.now() - startedAt, ...completion.model ? { model: completion.model } : {} });
   adoptServedModel(input.policy, state, completion.model);
   const downgrade = hooks.model.downgrade?.(pctx, asked, completion.model);
   if (downgrade) await emit(input.ports.events, downgrade);
@@ -23277,8 +23824,8 @@ async function dispatchCall(input, state, call2, watch, facts = { refused: false
     const data = own && platform?.watchesItself ? await exec(call2.name, call2.args) : await runToolWithWatch(exec, watch, signal, call2.name, call2.args, own ? platform?.interruptible : void 0);
     const surfaceCap = own ? platform?.resultCap?.(state.model.model) : void 0;
     const capped2 = capToolResult(call2.name, data, surfaceCap ?? resultCapFor(call2.name, ports.model, state.model.model));
-    const failed3 = box.failed === true || !own && !!capped2 && capped2.ok === false && capped2.skipped !== true;
-    const dispatched = { data: capped2, ...box.control ? { control: box.control } : {}, ...failed3 ? { isError: true } : {} };
+    const failed4 = box.failed === true || !own && !!capped2 && capped2.ok === false && capped2.skipped !== true;
+    const dispatched = { data: capped2, ...box.control ? { control: box.control } : {}, ...failed4 ? { isError: true } : {} };
     if (box.kind) callKinds.set(dispatched, box.kind);
     if (box.native) nativeResults.set(dispatched, box.native);
     if (box.killed) killedResults.add(dispatched);
@@ -24216,6 +24763,7 @@ function makeCell() {
     deltaTicketId: null,
     deltaRecordedFiles: [],
     deltaCaptureRefused: false,
+    deltaTitleCount: null,
     runTraceFrom: 0,
     persistStep: null,
     compactMemo: null,
@@ -24232,6 +24780,8 @@ function makeCell() {
     claim: null,
     stoppedTurn: null,
     publishHold: null,
+    authorModels: /* @__PURE__ */ new Set(),
+    shipReviews: [],
     snapshot: EMPTY_SNAPSHOT
   };
 }
@@ -24444,6 +24994,14 @@ function toolActivity(label, args, step, startedAt) {
   const detail = activityTarget(args);
   return { phase: "tool", label, startedAt, step, ...detail ? { detail } : {} };
 }
+var BETWEEN_TURNS_LABEL = "between-turns";
+var CONTEXT_FOLD_LABEL = "context-fold";
+function betweenTurnsActivity(step, startedAt) {
+  return { phase: "thinking", label: BETWEEN_TURNS_LABEL, startedAt, step };
+}
+function contextFoldActivity(step, startedAt) {
+  return { phase: "thinking", label: CONTEXT_FOLD_LABEL, startedAt, step };
+}
 function formatBytes(bytes) {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
   return bytes < 1024 ? `${Math.round(bytes)} B` : `${(bytes / 1024).toFixed(1)} KB`;
@@ -24455,7 +25013,7 @@ function elapsedText(ms) {
 }
 function describeLiveStep(step, capturedAtMs) {
   const elapsed = elapsedText(Number.isFinite(capturedAtMs) ? capturedAtMs - step.startedAt : 0);
-  const what = step.phase === "tool" ? `running \`${step.label}\`${step.detail ? ` on ${step.detail}` : ""}` : step.phase === "awaiting" ? `PAUSED waiting for the user to approve \`${step.label}\` \u2014 nothing advances until they answer` : step.phase === "composing" ? `composing a \`${step.label || "tool"}\` call${step.bytes != null ? ` \u2014 ${formatBytes(step.bytes)} of arguments so far` : ""}` : step.phase === "thinking" ? "waiting on the model (no token received yet)" : step.phase === "writing" ? "streaming the reply" : step.phase === "finishing" ? "doing post-run work (ticket capture / status reconciliation)" : "starting up";
+  const what = step.phase === "tool" ? `running \`${step.label}\`${step.detail ? ` on ${step.detail}` : ""}` : step.phase === "awaiting" ? `PAUSED waiting for the user to approve \`${step.label}\` \u2014 nothing advances until they answer` : step.phase === "composing" ? `composing a \`${step.label || "tool"}\` call${step.bytes != null ? ` \u2014 ${formatBytes(step.bytes)} of arguments so far` : ""}` : step.phase === "thinking" && step.label === BETWEEN_TURNS_LABEL ? "preparing the next model turn after the last tool returned (guards, steering, tool menu, context fold)" : step.phase === "thinking" && step.label === CONTEXT_FOLD_LABEL ? "waiting on the model for the context-fold summary" : step.phase === "thinking" ? "waiting on the model (no token received yet)" : step.phase === "writing" ? "streaming the reply" : step.phase === "finishing" ? "doing post-run work (ticket capture / status reconciliation)" : "starting up";
   return `${what} (${elapsed} so far${step.step > 0 ? `, loop step ${step.step}` : ""})`;
 }
 function midRunNotice(activity, capturedAtMs) {
@@ -26435,14 +26993,14 @@ function progressOf(events, editIntent) {
     else seenCalls.set(sig2, subject);
     const cached2 = isCacheAnswered(ev);
     if (cached2) cacheAnswered += 1;
-    const failed3 = Boolean(ev.isError) || isFailedToolResult(ev.result);
+    const failed4 = Boolean(ev.isError) || isFailedToolResult(ev.result);
     if (current && current.sig === sig2) {
       current.streak.count += 1;
-      if (failed3) current.streak.failed += 1;
+      if (failed4) current.streak.failed += 1;
       if (current.streak.count === 2) streaks += 1;
       if (!longestStreak || current.streak.count > longestStreak.count) longestStreak = current.streak;
     } else {
-      current = { sig: sig2, streak: { label: ev.label, count: 1, failed: failed3 ? 1 : 0 } };
+      current = { sig: sig2, streak: { label: ev.label, count: 1, failed: failed4 ? 1 : 0 } };
     }
     const target = targetSignature(ev);
     if (target) {
@@ -26768,6 +27326,37 @@ function requestedReadWindow2(out, start, end) {
 
 // src/brainTriage.ts
 var import_working9 = require("@seanhogg/builderforce-memory/working");
+
+// src/toolExposure.ts
+function toolExposureInTrace(events) {
+  let lastTurn = null;
+  let min = null;
+  let catalog = null;
+  for (const ev of events) {
+    if (ev.category !== "llm") continue;
+    const a = ev.args;
+    if (typeof a?.advertisedTools === "number") {
+      lastTurn = a.advertisedTools;
+      min = min == null ? a.advertisedTools : Math.min(min, a.advertisedTools);
+    }
+    if (typeof a?.catalogTools === "number") catalog = a.catalogTools;
+  }
+  return { lastTurn, min, catalog };
+}
+function formatAdvertised(tools, defaultToolLimit) {
+  const last = tools.advertisedLastTurn;
+  const min = tools.advertisedMin;
+  if (last != null) {
+    const range = min != null && min !== last ? `${min}\u2013${last}` : `${last}`;
+    return ` \xB7 ${range} advertised per turn (measured)${min === 0 ? " \xB7 \u26A0 a turn was offered NONE" : ""}`;
+  }
+  if (tools.count > defaultToolLimit) {
+    return ` \xB7 per-turn selection capped at ${defaultToolLimit}, not yet measured (no turn in this run advertised tools)`;
+  }
+  return "";
+}
+
+// src/brainTriage.ts
 var CONTEXT_PROMPT_PEAK = Math.round(import_working9.HISTORY_TOKEN_BUDGET * 1.5);
 var LARGE_LOSSY_RESULT_BYTES = 2e4;
 function isFailedToolResult(result) {
@@ -26844,21 +27433,6 @@ function streamRetriesInTrace(events) {
     const model = e.args?.model;
     return typeof model === "string" && model ? model : "unknown model";
   });
-}
-function toolExposureInTrace(events) {
-  let lastTurn = null;
-  let min = null;
-  let catalog = null;
-  for (const ev of events) {
-    if (ev.category !== "llm") continue;
-    const a = ev.args;
-    if (typeof a?.advertisedTools === "number") {
-      lastTurn = a.advertisedTools;
-      min = min == null ? a.advertisedTools : Math.min(min, a.advertisedTools);
-    }
-    if (typeof a?.catalogTools === "number") catalog = a.catalogTools;
-  }
-  return { lastTurn, min, catalog };
 }
 function narratedUnadvertisedInTrace(events) {
   const seen = [];
@@ -27510,6 +28084,7 @@ function settleView(c, runId) {
     deltaTicketId: c.deltaTicketId,
     ticketRecorded: c.ticketRecorded,
     deltaCaptureRefused: c.deltaCaptureRefused,
+    deltaTitleCount: c.deltaTitleCount,
     note: (ev) => {
       if (c.runId === runId) pushTrace(c, ev);
     }
@@ -27557,6 +28132,7 @@ async function recordCodeChangeTicket(serverChatId, c, req, phase) {
   }
   if (!isFailedToolResult(out)) {
     c.deltaRecordedFiles = [...c.deltaRecordedFiles, ...files];
+    if (files.length) c.deltaTitleCount = files.length;
     const id = out?.id;
     if (c.deltaTicketId == null && typeof id === "number") c.deltaTicketId = id;
     c.ticketRecorded = true;
@@ -27600,6 +28176,96 @@ async function updateLinkedTickets(serverChatId, c, req, select, status2, reason
       result: out ?? null,
       isError: isFailedToolResult(out)
     });
+  }
+}
+async function retitleShippedDeltaTicket(c, req) {
+  if (!req.runTool) return;
+  const id = c.deltaTicketId;
+  if (id == null || c.deltaTitleCount == null) return;
+  const finalCount = c.touchedFiles.length;
+  if (finalCount === 0 || finalCount === c.deltaTitleCount) return;
+  const title = `Code change (${finalCount} file${finalCount === 1 ? "" : "s"})`;
+  const toolStart = nowMs2();
+  let out;
+  try {
+    out = await req.runTool("builtin_tasks_update", { id, title });
+  } catch (e) {
+    out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  noteOf(c)({
+    ts: nowIso(),
+    category: "tool",
+    label: "builtin_tasks_update",
+    durationMs: nowMs2() - toolStart,
+    args: { id, title, auto: true, reason: "retitle-shipped-delta" },
+    result: out ?? null,
+    isError: isFailedToolResult(out)
+  });
+}
+
+// src/run/brainCloseOut.ts
+var REVIEW_RECORD_TOOL2 = "builtin_reviews_record";
+function reviewedThisRun(trace4) {
+  const ids2 = /* @__PURE__ */ new Set();
+  for (const ev of trace4) {
+    if (ev.category !== "tool" || ev.label !== REVIEW_RECORD_TOOL2 || ev.isError || isFailedToolResult(ev.result)) continue;
+    const id = Number(ev.args?.taskId);
+    if (Number.isInteger(id)) ids2.add(id);
+  }
+  return ids2;
+}
+function shipReviewSummary(files) {
+  const shown = files.slice(0, 10).join(", ");
+  const more = files.length > 10 ? ` (+${files.length - 10} more)` : "";
+  return `Closed out by the host: this run's change${files.length ? ` (${files.length} file${files.length === 1 ? "" : "s"}: ${shown}${more})` : ""} was pushed to the base branch and verified landed, with no placeholder outstanding.`;
+}
+async function recordShipReview(input, taskId) {
+  const { view, req } = input;
+  if (!req.runTool || reviewedThisRun(input.trace).has(taskId)) return;
+  const args = { taskId, verdict: "complete", summary: shipReviewSummary(view.touchedFiles) };
+  const toolStart = nowMs2();
+  let out;
+  try {
+    out = await req.runTool(REVIEW_RECORD_TOOL2, args);
+  } catch (e) {
+    out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  view.note?.({
+    ts: nowIso(),
+    category: "tool",
+    label: REVIEW_RECORD_TOOL2,
+    durationMs: nowMs2() - toolStart,
+    args: { ...args, auto: true, reason: "shipped-to-base-branch" },
+    result: out ?? null,
+    isError: isFailedToolResult(out)
+  });
+}
+async function closeOutRun(input) {
+  const { serverChatId, view, needsTicket, shipped, reviewedInPreview } = input;
+  const req = input.req;
+  if (needsTicket && (!view.ticketRecorded || view.deltaTicketId != null)) {
+    await recordCodeChangeTicket(serverChatId, view, req, "settle");
+  }
+  if (needsTicket) {
+    await updateLinkedTickets(serverChatId, view, req, linkedTicketsToAdvance, "in_progress", "worked-ticket-off-backlog");
+  }
+  if (shipped && req.projectId != null && req.runTool) {
+    await retitleShippedDeltaTicket(view, req);
+    if (input.openPlaceholders > 0) {
+      view.note?.({
+        ts: nowIso(),
+        category: "message",
+        label: "run.close_out_held",
+        args: { reason: "placeholders", open: input.openPlaceholders },
+        result: "The change shipped, but this run left placeholders in the code: its ticket stays open until they are finished."
+      });
+    } else {
+      if (view.deltaTicketId != null) await recordShipReview(input, view.deltaTicketId);
+      await updateLinkedTickets(serverChatId, view, req, linkedTicketsToComplete, "done", "shipped-to-base-branch");
+    }
+  }
+  if (reviewedInPreview.length && req.projectId != null && req.runTool) {
+    await updateLinkedTickets(serverChatId, view, req, (listed) => linkedTicketsReviewedComplete(listed, reviewedInPreview), "done", "reviewed-in-preview");
   }
 }
 
@@ -27754,10 +28420,10 @@ async function fileTickets(plan, ports) {
       taskType: "task"
     });
     const record3 = asRecord(out);
-    const failed3 = isFailed(record3 ?? out);
-    const id = !failed3 ? record3?.id : void 0;
+    const failed4 = isFailed(record3 ?? out);
+    const id = !failed4 ? record3?.id : void 0;
     ids2.push(typeof id === "number" || vocabulary.local && typeof id === "string" && id ? id : void 0);
-    if (!failed3) await ports.afterCreate?.(createTool, out).catch(() => void 0);
+    if (!failed4) await ports.afterCreate?.(createTool, out).catch(() => void 0);
   }
   return ids2;
 }
@@ -27906,6 +28572,7 @@ function turnOptimizationDirective() {
     "\u2022 Infer a workable brief from the conversation, project memory, attachments and current request. Ask one grouped set of questions only when different answers would materially change the result; otherwise state a reasonable assumption briefly and proceed.",
     "\u2022 Treat corrections and \u201Cactually\u2026\u201D follow-ups as patches to the active brief. Preserve approved work and change the smallest requested scope; never regenerate unrelated content.",
     "\u2022 Complete all requested deliverables in this run. Batch independent reads/actions when the tool supports it, while preserving dependencies and confirmation boundaries.",
+    "\u2022 Batch independent reads/searches into ONE turn as parallel tool calls.",
     "\u2022 In Work mode, plan enough to act safely and then execute in the same run. Do not make the user move to another surface just to turn a plan into work.",
     "\u2022 For attachments, inspect only the relevant pages/sections with builtin_attachments_read and its offset/limit controls. Accept the original file; never ask the user to convert, split, trim, or re-upload it merely to save context.",
     "\u2022 Reuse established project conventions, examples and explicit user preferences. A topic change is a new internal context segment, not a reason to make the user restart the chat.",
@@ -27919,7 +28586,7 @@ function selfReviewShipDirective(chatId) {
   const trackingTicket = chatId != null ? "builtin_chats_list_tickets with chatId=" + chatId + " lists it" : "the one builtin_tickets_from_delta returned for it";
   return `SHIP YOUR OWN CHANGE \u2014 in this session YOU are its reviewer. This is a local editor session: no other agent or reviewer can ever reach a change you leave in the working tree, so a ticket you leave "in_review" sits at 75% on the board forever. When your turn changes code, finish it in this order:
 1. VERIFY \u2014 ${VERIFY_STEP}
-2. SELF-REVIEW \u2014 read your own diff with \`git_diff\` against what the ticket and the user asked for: bugs, leftover debug code, edits unrelated to the task, missing tests or localisation. If you find a problem, FIX it and review again. Then record the pass with builtin_reviews_record (taskId = the ticket tracking this change \u2014 ` + trackingTicket + '; verdict "complete"; a one-paragraph summary of what you checked).\n3. SHIP \u2014 `git_commit` with allowBaseBranch:true and exactly the `paths` you changed (never a catch-all: the tree may hold the human\'s own work), then `git_push` with allowBaseBranch:true. Both are shown to the human for approval \u2014 that approval is their review of your review, so do not ask for it in prose as well.\n4. CLOSE \u2014 the push reports the branch it landed on. Once it lands on the base branch with nothing left to push, the in_review ticket this chat opened for the change moves to done automatically. Move any OTHER linked ticket this change fully delivers to done yourself with builtin_tasks_update. Report the commit hash and the push result.\nExceptions, and only these: if the user asked for a pull request or a ticket branch, commit on a `branch` and `open_pull_request` instead (the ticket then closes when that PR merges); if the user said not to commit or push, leave the change uncommitted and say so. If a commit or push is refused or fails, report the exact error \u2014 never claim a change shipped when it did not.';
+2. SELF-REVIEW \u2014 read your own diff with \`git_diff\` against what the ticket and the user asked for: bugs, leftover debug code, edits unrelated to the task, missing tests or localisation. If you find a problem, FIX it and review again. Then record the pass with builtin_reviews_record (taskId = the ticket tracking this change \u2014 ` + trackingTicket + '; verdict "complete"; a one-paragraph summary of what you checked).\n3. SHIP \u2014 `git_commit` with allowBaseBranch:true and exactly the `paths` you changed (never a catch-all: the tree may hold the human\'s own work), then `git_push` with allowBaseBranch:true. Both are shown to the human for approval \u2014 that approval is their review of your review, so do not ask for it in prose as well.\n4. CLOSE \u2014 the push reports the branch it landed on. Once it lands on the base branch with nothing left to push, the in_review ticket this chat opened for the change moves to done automatically, and the host records its review if you have not. Never defer the close-out to a later run or ask the user to continue for it. Move any OTHER linked ticket this change fully delivers to done yourself with builtin_tasks_update. Report the commit hash and the push result.\nExceptions, and only these: if the user asked for a pull request or a ticket branch, commit on a `branch` and `open_pull_request` instead (the ticket then closes when that PR merges); if the user said not to commit or push, leave the change uncommitted and say so. If a commit or push is refused or fails, report the exact error \u2014 never claim a change shipped when it did not.';
 }
 var RAW_PUBLISH = gitCommandPattern("commit|push");
 function attemptedPublish(events) {
@@ -29447,6 +30114,9 @@ ${turnContext}` : systemPrompt),
     // Placeholders this run wrote and has not removed — read when a ticket is marked done
     // (see `completionGuard.ts`).
     placeholderLedger: new PlaceholderLedger(),
+    // The evidence ledger the ship gates read (PRD 45 §4.2) — one per run, fed only by
+    // the host's verifier; a host that binds no port leaves every gate inert.
+    evidence: createEvidenceLedger(),
     // THE model hand-off policy (`@builderforce/run-policy`), shared with every other agent
     // loop. ANALYSIS first, then the CODE: under auto-routing each turn tells the gateway
     // what kind of call it is. Until the run reaches its first code change the turns are
@@ -29903,6 +30573,33 @@ ${revisit}` : covered.note;
   };
 }
 
+// src/runStore/postEditDiagnostics.ts
+var EDIT_TOOLS2 = /* @__PURE__ */ new Set(["edit_file", "write_file"]);
+var NOTE_ERRORS2 = 5;
+function succeeded6(data) {
+  return !(data && typeof data === "object" && data.ok === false);
+}
+async function postEditDiagnostics(call2, verifier) {
+  if (!verifier || !EDIT_TOOLS2.has(call2.name) || !succeeded6(call2.result)) return null;
+  const path2 = typeof call2.args.path === "string" ? call2.args.path.trim() : "";
+  if (!path2) return null;
+  let record3;
+  try {
+    record3 = await verifier.diagnostics([path2]);
+  } catch {
+    return null;
+  }
+  if (!record3 || record3.outcome !== "fail") return null;
+  return postEditNote2(record3);
+}
+function postEditNote2(record3) {
+  const lines = record3.findings.slice(0, NOTE_ERRORS2).map((f) => `- ${f}`);
+  const more = record3.findings.length > NOTE_ERRORS2 ? `
+- \u2026and ${record3.findings.length - NOTE_ERRORS2} more` : "";
+  return `Post-edit check FAILED (${record3.name}${record3.exitCode != null ? `, exit ${record3.exitCode}` : ""}) \u2014 fix this before building on it:
+${lines.join("\n")}${more}`;
+}
+
 // src/runStore/callRunner.ts
 function declineMalformedCall2(run, call2) {
   const truncated = run.lastTurnInterruption === "truncated";
@@ -29941,6 +30638,8 @@ function callRunner(run) {
       if (!isReadTool) writeLedger.record(call2.name, args, { ok: false, unscoped: isUnscopedMutation(call2.name, args) });
       run.pendingRun = { out, toolStart, isReadTool, threw: true };
       return { data: repeat ? withAdvisory(out, repeat) : out, isError: true };
+    } finally {
+      setActivity(c, betweenTurnsActivity(iter, Date.now()));
     }
     const changed2 = codeChangesOf(call2.name, args, out);
     if (changed2) {
@@ -29999,6 +30698,10 @@ function callRunner(run) {
     if (delegate) advisory = advisory ? `${advisory}
 
 ${delegate}` : delegate;
+    if (!advisory && !isReadTool) {
+      const diag = await postEditDiagnostics({ name: call2.name, args, result: out }, req.verifier);
+      if (diag) advisory = diag;
+    }
     const contextWindowTokens = await run.windowFit.contextWindow?.();
     const trimmedOut = trimToolResult(call2.name, out ?? null, { advisory, contextWindowTokens });
     run.pendingRun = { out, toolStart, isReadTool, threw: false, bytes: trimmedOut.bytes, truncated: trimmedOut.truncated, served: trimmedOut.served };
@@ -30048,9 +30751,113 @@ function callPostStep(run) {
   };
 }
 
+// src/run/progressLine.ts
+var WRITE_TOOL_KINDS = /* @__PURE__ */ new Map([
+  ["write_file", "create"],
+  ["write", "create"],
+  ["create", "create"],
+  ["edit_file", "edit"],
+  ["edit", "edit"],
+  ["apply_patch", "edit"],
+  ["delete_file", "delete"],
+  ["delete", "delete"]
+]);
+function pathOf2(args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return void 0;
+  const direct = args.path;
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+  const edits = args.edits;
+  if (Array.isArray(edits)) {
+    for (const e of edits) {
+      const p = e?.path;
+      if (typeof p === "string" && p.trim()) return p.trim();
+    }
+  }
+  return void 0;
+}
+function isCheckCall(label, args) {
+  return /tsc|typecheck|type-check|vitest|jest|mocha|\.test\.|\.spec\.|\btest\b|\btests\b|lint/i.test(`${label} ${JSON.stringify(args ?? {})}`);
+}
+function isGlobalTypecheck(label, args) {
+  const text2 = `${label} ${JSON.stringify(args ?? {})}`.toLowerCase();
+  if (!/tsc|typecheck|type-check/.test(text2)) return false;
+  return !/\b(grep|vitest|jest|mocha|test|spec)\b/.test(text2);
+}
+function isTestRunCall(label, args) {
+  const text2 = `${label} ${JSON.stringify(args ?? {})}`;
+  return /vitest|jest|mocha|\.test\.|\.spec\.|\btest\b|\btests\b/i.test(text2) && !/tsc|typecheck|type-check/i.test(text2);
+}
+function isTestPath2(path2) {
+  const p = path2.replace(/\\/g, "/");
+  return /\.(test|spec)\.[^/]+$/.test(p) || /\/__tests__\//.test(p);
+}
+function baseOf2(path2) {
+  const base = path2.replace(/\\/g, "/").split("/").pop() ?? path2;
+  const dot = base.lastIndexOf(".");
+  return dot > 0 ? base.slice(0, dot) : base;
+}
+function mentionText(ev) {
+  return `${ev.label} ${JSON.stringify(ev.args ?? {})} ${typeof ev.result === "string" ? ev.result : JSON.stringify(ev.result ?? {})}`;
+}
+function computeProgressLine(trace4) {
+  const files = /* @__PURE__ */ new Map();
+  const checkCalls = [];
+  trace4.forEach((ev, step) => {
+    if (ev.category === "tool") {
+      const kind = WRITE_TOOL_KINDS.get(ev.label);
+      if (kind) {
+        if (ev.isError) return;
+        const path2 = pathOf2(ev.args);
+        if (path2) files.set(path2, { path: path2, kind, at: step });
+        return;
+      }
+      if (!ev.isError && isCheckCall(ev.label, ev.args)) {
+        const text2 = mentionText(ev);
+        const typecheck = /tsc|typecheck|type-check/i.test(`${ev.label} ${JSON.stringify(ev.args ?? {})}`);
+        checkCalls.push({ at: step, text: text2, typecheck, globalTypecheck: isGlobalTypecheck(ev.label, ev.args), testRun: isTestRunCall(ev.label, ev.args) });
+      }
+      return;
+    }
+    if (ev.category === "message" && /diagnostics/i.test(ev.label) && ev.args && typeof ev.args === "object") {
+      const a = ev.args;
+      if (typeof a.path === "string" && a.path.trim()) {
+        const text2 = mentionText(ev);
+        checkCalls.push({ at: step, text: text2, typecheck: /tsc|typecheck|type-check/i.test(text2), globalTypecheck: false, testRun: false });
+      }
+    }
+  });
+  for (const [path2, st] of files) if (st.kind === "delete") files.delete(path2);
+  const changed2 = [...files.values()];
+  if (changed2.length === 0) return "";
+  const checksFor = (st) => checkCalls.filter((c) => c.at >= st.at);
+  const mentions = (c, st) => c.text.includes(st.path) || c.text.includes(baseOf2(st.path));
+  const isChecked = (st) => checksFor(st).some((c) => mentions(c, st));
+  const hasTypecheck = (st) => checksFor(st).some((c) => c.globalTypecheck || c.typecheck && mentions(c, st));
+  const hasTestRunMention = (st) => checksFor(st).some((c) => c.testRun && mentions(c, st));
+  const isSourceLike = (p) => /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|py|rs|go|java|rb|php|cs|cpp|c|h|hpp|swift|kt|swift)$/i.test(p);
+  const typecheckNeeds = [];
+  const testNeeds = [];
+  for (const st of [...changed2].sort((a, b) => a.path.localeCompare(b.path))) {
+    if (!hasTypecheck(st)) typecheckNeeds.push(`${st.path} not typechecked`);
+    if (st.kind === "create" && isSourceLike(st.path) && !isTestPath2(st.path) && !hasTestRunMention(st)) {
+      testNeeds.push(`test for ${st.path.split(/[\\/]/).pop()}`);
+    }
+  }
+  const checked = changed2.filter(isChecked).length;
+  const base = `${changed2.length} files changed \xB7 ${checked} checked`;
+  const needs = [...testNeeds, ...typecheckNeeds];
+  return needs.length === 0 ? base : `${base} \xB7 push needs: ${needs.join("; ")}`;
+}
+
 // src/run/brainTurnTail.ts
+function progressLine(run, tools) {
+  if (tools <= 0) return "";
+  return computeProgressLine(runTrace(run.c));
+}
 function runBrief(run, tools) {
-  return tools > 0 ? run.knowledge.brief() ?? "" : "";
+  const brief = tools > 0 ? run.knowledge.brief() ?? "" : "";
+  const progress = progressLine(run, tools);
+  return [brief, progress].map((section) => section.trim()).filter(Boolean).join("\n\n");
 }
 function withRunBrief(run, menu) {
   const ledger = runBrief(run, (menu?.tools ?? run.allTools ?? []).length);
@@ -30092,7 +30899,7 @@ async function brainTurnMenu(run, env, catalogSize) {
   const steer = run.progress.steerNote();
   const tail = [...forced ? [userTextOf(forced.brief)] : [], ...steer ? [steer] : []];
   if (forced) return { tools: forced.tools, toolChoice: forced.toolChoice, tail };
-  if (catalogSize > DEFAULT_TOOL_LIMIT) {
+  if (catalogSize > roleToolLimit(run.policy.phase)) {
     pushTrace(run.c, {
       ts: nowIso(),
       category: "message",
@@ -30137,7 +30944,7 @@ function brainPlatformTools(run) {
         return [...catalog, ...conversational.filter((t) => !names.has(t.function.name))];
       },
       get selection() {
-        return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT, capRequired: true, rank: (tools, query) => relevantTools(tools, query), pinned: [...run.usedTools], required: new Set(offersHandOff(run.policy) && run.canAskUser ? [...run.alwaysAdvertised, HAND_OFF_TOOL] : run.alwaysAdvertised) };
+        return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT, capRequired: true, role: run.policy.phase, roleKeep: studioToolsIn(run.catalogToolNames), rank: (tools, query) => relevantTools(tools, query), pinned: [...run.usedTools], required: new Set(offersHandOff(run.policy) && run.canAskUser ? [...run.alwaysAdvertised, HAND_OFF_TOOL] : run.alwaysAdvertised) };
       },
       // ONE cap on a result: the Brain's own, applied inside `callRunner` (`trimToolResult`, by LINE, sized to the serving
       // model's window). The agent's per-tool cap would cut the already budgeted text a second time and drop its paging fields.
@@ -30258,7 +31065,10 @@ function brainCompaction(run) {
         const working = await (0, import_working15.buildWorkingTranscript)(
           c,
           systemPrompt,
-          (msgs) => summarizeMiddle(req.stream, run.policy.model, msgs, c.abort?.signal, req.onDeviceTasks),
+          (msgs) => {
+            setActivity(c, contextFoldActivity(ctx.step, Date.now()));
+            return summarizeMiddle(req.stream, run.policy.model, msgs, c.abort?.signal, req.onDeviceTasks);
+          },
           (fold) => {
             folded = true;
             recordFold(run, fold);
@@ -30271,6 +31081,17 @@ function brainCompaction(run) {
       }
     }
   };
+}
+
+// src/run/brainFinish.ts
+function brainFinishHook(req) {
+  const ports = req.liveChildren ? {
+    // The run IS a delegation owner as soon as the host can say who its live children are: an owner, not only a child
+    // (`parentRunId`), holds its end for them.
+    delegated: true,
+    liveChildren: req.liveChildren
+  } : {};
+  return createFinishHook(ports);
 }
 
 // src/run/preflightRecorded.ts
@@ -31284,9 +32105,10 @@ function brainRunPolicy(b) {
     // Both modes offer the full catalog (`runPreamble.ts`): the mode changes the directive the model reads, never the menu.
     toolScope: req.lineage ? "subagent" : "chat-work",
     role: "general",
-    // No guard lever is switched on in the agent's own policy: A3's detector (and its device lever) is the Brain's
-    // `RunProgressGuard`, which the platform tools run, so the run has ONE detector (`brainPlatformTools.ts`).
-    levers: [],
+    // A3's detector (and its device lever) is the Brain's `RunProgressGuard`, which the platform tools run, so the run has ONE
+    // detector (`brainPlatformTools.ts`) and the agent's A3 stays off. D8 is the one guard lever on: the independent read-only calls
+    // of one model turn (read_file, search_code, git_diff, ...) dispatch concurrently instead of one after another (chat #61651).
+    levers: deviceLeverOn("d8_parallel_tool_calls") ? ["d8_parallel_tool_calls"] : [],
     // A Brain run has NO tool-iteration ceiling: the kernel's consecutive-failure breaker
     // is its only limit (`@builderforce/agent-loop`'s `DEFAULT_TOOL_FAILURE_STREAK`).
     budgets: req.maxRunBudgetUsd && req.maxRunBudgetUsd > 0 ? { usd: req.maxRunBudgetUsd } : {},
@@ -31371,7 +32193,8 @@ async function runPrepared(run) {
     // The Brain's own fold (`brainFold.ts`), not the agent's compaction adapted to imitate it.
     // ... and the preamble ran the host's model preflight already (`hostRunContext.ts`): the agent's own would ask the host again and warn
     // about a model the loop never warned about (a QUICK run's quick model), so the Brain's says the verdict and nothing more.
-    modules: { compaction: compaction.hook, model: recordedModelHook(c, req.model) },
+    // ... and the finish module carries the host's engine ports (`brainFinish.ts`): an owner never ends with its sub-agents still working.
+    modules: { compaction: compaction.hook, model: recordedModelHook(c, req.model), finish: brainFinishHook(req) },
     // The Brain's read-coverage owns the no-progress counter (`callPreflight`/`callPostStep`
     // feed it); hand the kernel that ONE instance to persist, so a circling run keeps its count
     // across the step yield it is steered into — not a kernel-built twin the Brain never feeds.
@@ -31396,6 +32219,7 @@ function beginRun(c, outcomeKey) {
   c.deltaTicketId = null;
   c.deltaRecordedFiles = [];
   c.deltaCaptureRefused = false;
+  c.deltaTitleCount = null;
   c.runTraceFrom = c.trace.length;
   c.codeModel = null;
   c.liveTurn = null;
@@ -31456,9 +32280,11 @@ async function startRun(runKey, request, claim) {
   if (req.userTurn !== void 0) c.transcript.push(markPersonTurn({ role: "user", content: req.userTurn }));
   emit2(c);
   c.runUsage = emptyRunUsage();
+  let openPlaceholders = () => 0;
   try {
     const prepared = await prepareBrainRun(chatId, c, req, runKey, holdRunRow);
     if (prepared) {
+      openPlaceholders = () => prepared.placeholderLedger.outstanding().length;
       noteRunId(c, prepared.metadata.guestTurnId);
       await runPrepared(prepared);
     }
@@ -31490,27 +32316,17 @@ async function startRun(runKey, request, claim) {
       const reviewedInPreview = !aborted && changed2 ? ticketsReviewedInPreview(runTrace(c)) : [];
       const view = settleView(c, runId);
       const needsTicket = !aborted && changed2 && req.projectId != null && !!req.runTool;
-      await within(left(), async () => {
-        if (needsTicket && (!view.ticketRecorded || view.deltaTicketId != null)) {
-          await recordCodeChangeTicket(serverChatId, view, req, "settle");
-        }
-        if (needsTicket) {
-          await updateLinkedTickets(serverChatId, view, req, linkedTicketsToAdvance, "in_progress", "worked-ticket-off-backlog");
-        }
-        if (shipped && req.projectId != null && req.runTool) {
-          await updateLinkedTickets(serverChatId, view, req, linkedTicketsToComplete, "done", "shipped-to-base-branch");
-        }
-        if (reviewedInPreview.length && req.projectId != null && req.runTool) {
-          await updateLinkedTickets(
-            serverChatId,
-            view,
-            req,
-            (listed) => linkedTicketsReviewedComplete(listed, reviewedInPreview),
-            "done",
-            "reviewed-in-preview"
-          );
-        }
-      }, () => view.note?.({
+      const closeOut = {
+        serverChatId,
+        view,
+        req,
+        needsTicket,
+        shipped,
+        reviewedInPreview,
+        openPlaceholders: openPlaceholders(),
+        trace: runTrace(c)
+      };
+      await within(left(), () => closeOutRun(closeOut), () => view.note?.({
         ts: nowIso(),
         category: "message",
         label: "run.backstop_timeout",
@@ -32334,7 +33150,7 @@ function contextUsageOf(messages, trace4) {
 var ENTRY_RESULT_CHARS = 1200;
 var ENTRY_ARGS_CHARS = 200;
 var DIGEST_CHARS = 12e3;
-var MAX_ENTRIES = 40;
+var MAX_ENTRIES2 = 40;
 var HEADER = [
   "## Already done earlier in this chat",
   "Earlier turns of this conversation already ran the tool calls below (newest first, each result trimmed). Their results are NOT in the transcript above \u2014 this list is the record of them.",
@@ -32355,7 +33171,7 @@ function priorResearchDigest(history) {
   const entries = [];
   const seen = /* @__PURE__ */ new Set();
   let size = HEADER.length;
-  for (let i = history.length - 1; i >= 0 && entries.length < MAX_ENTRIES; i -= 1) {
+  for (let i = history.length - 1; i >= 0 && entries.length < MAX_ENTRIES2; i -= 1) {
     const message2 = history[i];
     if (!isStepMessage(message2)) continue;
     const parsed = parseStepMessage(message2.metadata);
@@ -32983,6 +33799,56 @@ function installIndexedDbStepDurability(opts) {
     online: opts.online,
     scope: opts.scope
   });
+}
+
+// src/run/runResumeState.ts
+var RESUME_STEPS = 6;
+var RESUME_FILES = 40;
+var MAX_ASK = 4e3;
+var TASK_STATE_TOOL = "update_task_state";
+function failed3(ev) {
+  return ev.isError === true || !!ev.result && typeof ev.result === "object" && ev.result.ok === false;
+}
+function resumeStateOf(ask2, events) {
+  const tools = events.filter((ev) => ev.category === "tool");
+  let task;
+  const files = [];
+  for (const ev of tools) {
+    const args = ev.args && typeof ev.args === "object" ? ev.args : {};
+    if (ev.label === TASK_STATE_TOOL && !failed3(ev)) {
+      const next = applyTaskStateUpdate(task, args);
+      if (next.ok) task = next.state;
+      continue;
+    }
+    for (const file of codeChangesOf(ev.label, args, ev.result) ?? []) if (!files.includes(file)) files.push(file);
+  }
+  const steps = tools.filter((ev) => ev.label !== TASK_STATE_TOOL).slice(-RESUME_STEPS).map((ev) => {
+    const target = activityTarget(ev.args);
+    return `${ev.label}${target ? ` on ${target}` : ""} \u2014 ${failed3(ev) ? "failed" : "ok"}`;
+  });
+  const plan = renderTaskState(task);
+  const asked = ask2?.trim();
+  return {
+    ...asked ? { ask: asked.slice(0, MAX_ASK) } : {},
+    ...plan ? { plan } : {},
+    ...files.length ? { files: files.slice(0, RESUME_FILES) } : {},
+    ...steps.length ? { steps } : {}
+  };
+}
+var strings = (value) => {
+  if (!Array.isArray(value)) return void 0;
+  const list3 = value.filter((v) => typeof v === "string" && v.trim() !== "");
+  return list3.length ? list3 : void 0;
+};
+function parseResumeState(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return void 0;
+  const raw = value;
+  const ask2 = typeof raw.ask === "string" && raw.ask.trim() ? raw.ask : void 0;
+  const plan = typeof raw.plan === "string" && raw.plan.trim() ? raw.plan : void 0;
+  const files = strings(raw.files);
+  const steps = strings(raw.steps);
+  if (!ask2 && !plan && !files && !steps) return void 0;
+  return { ...ask2 ? { ask: ask2 } : {}, ...plan ? { plan } : {}, ...files ? { files } : {}, ...steps ? { steps } : {} };
 }
 
 // src/transcriptBudget.ts
@@ -33792,28 +34658,16 @@ function runHistoryLines(runs) {
     const who = run.agentName?.trim() || run.agentRef || "no agent recorded";
     const ticket = `#${run.taskId}${run.taskTitle ? ` "${run.taskTitle}"` : ""}`;
     const produced = run.produced === true ? " \xB7 produced output" : run.produced === false ? " \xB7 produced NOTHING" : "";
-    const failed3 = run.errorMessage ? ` \xB7 ${run.errorMessage}` : "";
+    const failed4 = run.errorMessage ? ` \xB7 ${run.errorMessage}` : "";
     const where = run.hostName ? ` \xB7 on on-prem "${run.hostName}"` : run.executor ? ` \xB7 on ${run.executor}${run.sandbox ? ` (sandbox: ${run.sandbox})` : ""}` : " \xB7 on ? (executor not recorded)";
     out.push(
-      `  - run #${run.executionId} \xB7 ${who} \xB7 ${ticket} \xB7 ${run.status}${produced}${where} \xB7 by ${run.submittedBy}${run.source ? ` via ${run.source}` : ""} \xB7 ${shortTime(run.createdAt)}${run.completedAt ? ` \u2192 ${shortTime(run.completedAt)}` : ""}${failed3}`
+      `  - run #${run.executionId} \xB7 ${who} \xB7 ${ticket} \xB7 ${run.status}${produced}${where} \xB7 by ${run.submittedBy}${run.source ? ` via ${run.source}` : ""} \xB7 ${shortTime(run.createdAt)}${run.completedAt ? ` \u2192 ${shortTime(run.completedAt)}` : ""}${failed4}`
     );
   }
   if (runs.runs.length > MAX_RUNS_LISTED) {
     out.push(`  - \u2026and ${runs.runs.length - MAX_RUNS_LISTED} earlier run(s) not listed.`);
   }
   return out;
-}
-function fmtAdvertised(tools) {
-  const last = tools.advertisedLastTurn;
-  const min = tools.advertisedMin;
-  if (last != null) {
-    const range = min != null && min !== last ? `${min}\u2013${last}` : `${last}`;
-    return ` \xB7 ${range} advertised per turn (measured)${min === 0 ? " \xB7 \u26A0 a turn was offered NONE" : ""}`;
-  }
-  if (tools.count > DEFAULT_TOOL_LIMIT) {
-    return ` \xB7 per-turn selection capped at ${DEFAULT_TOOL_LIMIT}, not yet measured (no turn in this run advertised tools)`;
-  }
-  return "";
 }
 function usd2(n2) {
   return String.fromCharCode(36) + n2.toFixed(n2 >= 1 ? 2 : 4);
@@ -33903,7 +34757,7 @@ function formatChatDiagnostics(d) {
   const tools = d.tools;
   if (tools) {
     lines.push(
-      `- Tools available to the model: ${tools.count} registered` + fmtAdvertised(tools) + `${tools.loading ? " (catalog still loading)" : ""}${tools.error ? ` \xB7 catalog error: ${tools.error}` : ""}`
+      `- Tools available to the model: ${tools.count} registered` + formatAdvertised(tools, DEFAULT_TOOL_LIMIT) + `${tools.loading ? " (catalog still loading)" : ""}${tools.error ? ` \xB7 catalog error: ${tools.error}` : ""}`
     );
   } else {
     lines.push('- Tools available to the model: not gathered (this surface did not report its tool registry \u2014 a zero here is invisible, so treat any "announced a tool call and stopped" turn as unexplained)');
@@ -35099,6 +35953,8 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   PromptInput,
   READ_FILE_RESULT_CHARS,
   RESTING_CHAT_MODE,
+  RESUME_FILES,
+  RESUME_STEPS,
   REVISIT_HARD_AT,
   REVISIT_NUDGE_AT,
   ROLE_GATE_REMEDIATION,
@@ -35380,6 +36236,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   parseMessageAuthor,
   parseMessageProvenance,
   parsePmoFocus,
+  parseResumeState,
   parseRoleGateRefusal,
   parseStepMessage,
   parseSubagentOrigin,
@@ -35434,6 +36291,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   resolveRecipient,
   resolveRunConfirm,
   restoreTurn,
+  resumeStateOf,
   retryOnConnectFailure,
   revealsModelId,
   revisitAdvisory,

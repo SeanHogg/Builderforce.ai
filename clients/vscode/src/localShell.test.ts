@@ -103,3 +103,35 @@ describe("localShell background jobs", () => {
     expect(r.status).toBe("unknown");
   });
 });
+
+describe("localShell pipelines and retained output", () => {
+  it("regression: a failing stage before a pipe reports its exit code, not the last stage's 0 (chat #60338)", async () => {
+    // `| cat` routes to bash on Windows; elsewhere /bin/sh runs it, with pipefail when that sh has it.
+    const shHasPipefail = process.platform === "win32" || (await createLocalShell(os.tmpdir()).run("set -o pipefail")).ok;
+    const r = await createLocalShell(os.tmpdir()).run('node -e "console.log(1);process.exit(3)" | cat');
+    if (!shHasPipefail) return;
+    expect(r.ok).toBe(false);
+    expect(r.exitCode).toBe(3);
+  }, 15_000);
+
+  it("within a run, every result names its retained FULL output — beyond the model's clamp", async () => {
+    const shell = createLocalShell(os.tmpdir(), { jobOwner: 7301 });
+    const r = await shell.run(`node -e "process.stdout.write('x'.repeat(70000)+'END')"`);
+    expect(r.ok).toBe(true);
+    expect(r.stdout).not.toContain("END");
+    expect(r.outputId).toMatch(/^out-\d+$/);
+    const full = await shell.output(r.outputId!);
+    expect(full?.endsWith("END")).toBe(true);
+    // Another run cannot read it; a shell with no run (a hook) retains nothing.
+    expect(await createLocalShell(os.tmpdir(), { jobOwner: 7302 }).output(r.outputId!)).toBeUndefined();
+    expect((await createLocalShell(os.tmpdir()).run("node -e \"console.log(1)\"")).outputId).toBeUndefined();
+  }, 15_000);
+
+  it("a finished background job's full output is retained too", async () => {
+    const shell = createLocalShell(os.tmpdir(), { jobOwner: 7303 });
+    const started = await shell.start("node -e \"console.log('built')\"");
+    const done = await shell.poll(started.id!, { waitMs: 5_000 });
+    expect(done.status).toBe("exited");
+    expect(await shell.output(done.outputId!)).toContain("built");
+  }, 10_000);
+});

@@ -28,6 +28,7 @@ import {
   type LocalRecord,
   type TerminalExecutionStatus,
 } from "@builderforce/local-first";
+import { childrenOfRecord } from "./childRunJournal";
 
 export const RUN_LIFECYCLE_SCHEMA_VERSION = 1;
 
@@ -56,7 +57,7 @@ function requireRunId(runId: string | null | undefined): string {
 export async function recordRunStarted(
   store: LocalFirstStore,
   deps: RunLifecycleDeps,
-  args: { runId: string; chatId?: string; ticketId?: string; destination?: EntityDestination },
+  args: { runId: string; chatId?: string; ticketId?: string; destination?: EntityDestination; state?: unknown },
 ): Promise<void> {
   requireRunId(args.runId);
   const at = (deps.now?.() ?? new Date()).toISOString();
@@ -74,7 +75,8 @@ export async function recordRunStarted(
         ...(args.chatId ? { chatId: args.chatId } : {}),
         ...(args.ticketId ? { ticketId: args.ticketId } : {}),
         status: "running",
-        checkpoint: { step: 0, safeToResume: false },
+        // The resume state as the run starts (its ask): a run interrupted before its first step still resumes on it.
+        checkpoint: { step: 0, safeToResume: false, ...(args.state !== undefined ? { state: args.state } : {}) },
       },
     });
     await tx.put(record);
@@ -151,17 +153,25 @@ export async function recordRunFinished(
 }
 
 /**
- * Restart recovery: every run the dead host left `running`, `queued` or
- * `awaiting_input` is marked `interrupted` — truthfully unfinished, never falsely
+ * Did the dead host leave this run in flight? A run still `running`, `queued` or `awaiting_input` - and a run whose own
+ * turn COMPLETED while sub-agents it started were still working (`childRunJournal.ts` keeps them on the record): those
+ * children died with the editor, so the parent's work is not over, and without this it was never surfaced to resume.
+ */
+export function leftInFlight(record: LocalRecord<ExecutionValue>): boolean {
+  const { status } = record.payload;
+  if (status === "running" || status === "queued" || status === "awaiting_input") return true;
+  return status === "completed" && childrenOfRecord(record).some((child) => child.state === "running");
+}
+
+/**
+ * Restart recovery: every run the dead host left in flight ({@link leftInFlight}) is marked `interrupted` — truthfully unfinished, never falsely
  * completed — and returned so the caller can surface it. Nothing is replayed here:
  * resuming is a separate, explicit, checkpoint-gated decision.
  */
 export async function recoverInterruptedRuns(store: LocalFirstStore, deps: RunLifecycleDeps): Promise<InterruptedRun[]> {
   const at = (deps.now?.() ?? new Date()).toISOString();
   const recovered = await store.transact(async (tx) => {
-    const stale = await selectRecords<ExecutionValue>(tx, "execution", (record) =>
-      record.payload.status === "running" || record.payload.status === "queued" || record.payload.status === "awaiting_input",
-    );
+    const stale = await selectRecords<ExecutionValue>(tx, "execution", leftInFlight);
     for (const run of stale) {
       await tx.put<ExecutionValue>(
         {

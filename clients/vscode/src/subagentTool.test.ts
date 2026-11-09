@@ -31,6 +31,7 @@ function fakeControls(over: Partial<ChildControls> = {}): ChildControls & { requ
     message: vi.fn(() => ({ ok: true as const })),
     stop: vi.fn(() => []),
     wait: vi.fn(async () => ({ reports: [], running: [] })),
+    runningCommand: vi.fn(() => null),
     ...over,
   };
 }
@@ -53,6 +54,15 @@ describe("subagentToolDef", () => {
     const children = fakeControls();
     const out = JSON.parse(await subagentToolDef({ children }).execute({ label: "x", task: "  " }, "/repo"));
     expect(out.ok).toBe(false);
+    expect(children.spawn).not.toHaveBeenCalled();
+  });
+
+  it("refuses a brief that is only a few shell commands — the owner runs them itself (chat #60338)", async () => {
+    const children = fakeControls();
+    const task = ["Run these and report failures verbatim:", "1. pnpm exec tsc --noEmit", "2. pnpm vitest run src/a.test.ts", "3. pnpm install --frozen-lockfile"].join("\n");
+    const out = JSON.parse(await subagentToolDef({ children }).execute({ label: "verify", task, role: "verify" }, "/repo"));
+    expect(out.ok).toBe(false);
+    expect(out.error).toContain("run these yourself with run_command background:true");
     expect(children.spawn).not.toHaveBeenCalled();
   });
 

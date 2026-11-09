@@ -14,6 +14,7 @@
 import type * as vscode from "vscode";
 import { detectTools, type DetectedTools, type ToolProbe } from "@builderforce/agent-tools/prefetch";
 import { nodeToolProbe } from "@builderforce/agent-tools/node-prefetch";
+import { invalidateWorkspaceMap } from "../contextPack/workspaceMapScan";
 
 export interface ToolDetector {
   /** The memoised tools for `root`, or undefined until a detection finished. Never blocks. */
@@ -63,21 +64,26 @@ export function createToolDetector(probeFor: (root: string) => ToolProbe = nodeT
 /** The editor's ONE detector — every PreFetch port in this window reads it. */
 export const workspaceTools: ToolDetector = createToolDetector();
 
-/** The files whose change can change what is installed. */
-export const TOOL_MANIFEST_GLOB = "**/{package.json,package-lock.json,npm-shrinkwrap.json,pnpm-lock.yaml}";
+/** The files whose change can change what is installed — or the workspace's package layout. */
+export const TOOL_MANIFEST_GLOB = "**/{package.json,package-lock.json,npm-shrinkwrap.json,pnpm-lock.yaml,pnpm-workspace.yaml,yarn.lock,bun.lock*}";
 
 /**
  * Forget the detection when a manifest or lockfile changes (every root: a nested
- * package's manifest can be hoisted into the root's tools). Wired once at activation.
+ * package's manifest can be hoisted into the root's tools), and with it the context pack's
+ * workspace map (`contextPack/workspaceMapScan.ts`), which is read from the same files.
+ * Wired once at activation.
  */
 export function watchToolManifests(
   workspace: Pick<typeof vscode.workspace, "createFileSystemWatcher">,
   subscriptions: { push(d: { dispose(): unknown }): unknown },
   detector: ToolDetector = workspaceTools,
+  forgetWorkspaceMap: () => void = () => invalidateWorkspaceMap(),
 ): void {
   const watcher = workspace.createFileSystemWatcher(TOOL_MANIFEST_GLOB);
   const forget = (uri: vscode.Uri): void => {
-    if (!/[\\/]node_modules[\\/]/.test(uri.fsPath)) detector.invalidate();
+    if (/[\\/]node_modules[\\/]/.test(uri.fsPath)) return;
+    detector.invalidate();
+    forgetWorkspaceMap();
   };
   watcher.onDidChange(forget);
   watcher.onDidCreate(forget);

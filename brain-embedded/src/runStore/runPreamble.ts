@@ -16,6 +16,7 @@ import { skillToolsIn } from '../skillLibraryTools';
 import { chatModeDirective, normalizeChatMode } from '../chatMode';
 import { routingQueryForTurn, turnOptimizationDirective } from '../turnOptimization';
 import { selfReviewShipDirective } from '../selfReviewShip';
+import { createEvidenceLedger } from '@builderforce/run-guards';
 import { publishHold, publishHoldDirective, attemptedPublishWhileHeld } from './publishHold';
 import { previewReviewDirective } from '../previewReview';
 import { ticketToolVocabulary } from '../ticketToolVocabulary';
@@ -361,6 +362,9 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
     // Placeholders this run wrote and has not removed — read when a ticket is marked done
     // (see `completionGuard.ts`).
     placeholderLedger: new PlaceholderLedger(),
+    // The evidence ledger the ship gates read (PRD 45 §4.2) — one per run, fed only by
+    // the host's verifier; a host that binds no port leaves every gate inert.
+    evidence: createEvidenceLedger(),
     // THE model hand-off policy (`@builderforce/run-policy`), shared with every other agent
     // loop. ANALYSIS first, then the CODE: under auto-routing each turn tells the gateway
     // what kind of call it is. Until the run reaches its first code change the turns are

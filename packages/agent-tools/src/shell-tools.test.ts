@@ -169,3 +169,32 @@ describe("run_command / command_status — a wait a steer may cut short (PRD 35 
     expect(shell.poll).toHaveBeenCalledWith("job-1", { waitMs: 60_000, signal: ac.signal });
   });
 });
+
+describe("run_command — reading the result honestly (chat #60338)", () => {
+  it("drops a trailing `| tail -N` before running, and shows the head and the tail of the real output", async () => {
+    const lines = Array.from({ length: 300 }, (_, i) => (i === 0 ? "ERR_PNPM_NO_PKG_MANIFEST No package.json" : `line ${i}`)).join("\n");
+    const run = vi.fn(async () => ({ ok: false, exitCode: 1, stdout: lines, outputId: "out-4" }));
+    const r = await runCommandTool.execute({ command: "pnpm install --lockfile-only 2>&1 | tail -20" }, ctxWith({ run }));
+    expect(run).toHaveBeenCalledWith("pnpm install --lockfile-only");
+    expect(r.data).toMatchObject({ ok: false, exitCode: 1, outputId: "out-4" });
+    expect(String(r.data.stdout)).toContain("ERR_PNPM_NO_PKG_MANIFEST");
+    expect(String(r.data.stdout)).toContain("line 299");
+    expect(String(r.data.note)).toMatch(/tail -20/);
+  });
+
+  it("a grep that found nothing is ok with matches 0, not a failed step", async () => {
+    const run = vi.fn(async () => ({ ok: false, exitCode: 1, stdout: "(no output)" }));
+    const r = await runCommandTool.execute({ command: "grep -rn NOPE src" }, ctxWith({ run }));
+    expect(r.data).toMatchObject({ ok: true, matches: 0 });
+    expect(r.data.exitCode).toBeUndefined();
+  });
+
+  it("passes the shell's cached result and outputId through, and fresh:true to the shell", async () => {
+    const run = vi.fn(async () => ({ ok: true, exitCode: 0, stdout: "clean", cached: true, note: "no files changed since 2026-11-08T00:00:00.000Z; re-run with fresh:true to force", outputId: "out-1" }));
+    const r = await runCommandTool.execute({ command: "pnpm type-check" }, ctxWith({ run }));
+    expect(r.data).toMatchObject({ ok: true, cached: true, outputId: "out-1" });
+    expect(String(r.data.note)).toMatch(/fresh:true/);
+    await runCommandTool.execute({ command: "pnpm type-check", fresh: true }, ctxWith({ run }));
+    expect(run).toHaveBeenLastCalledWith("pnpm type-check", { fresh: true });
+  });
+});

@@ -281,44 +281,15 @@ export function streamRetriesInTrace(events: BrainTraceEvent[]): string[] {
     });
 }
 
-/** Tool-catalog exposure for a run, read off the `llm` turns the loop records. */
-export interface ToolExposure {
-  /** Tools advertised on the LAST measured turn (what the model could call at the end). */
-  lastTurn: number | null;
-  /** Fewest tools advertised on any measured turn — a zero here explains everything. */
-  min: number | null;
-  /** Size of the whole registered catalog the selection drew from. */
-  catalog: number | null;
-}
-
 /**
- * How many tools the model was actually OFFERED, per turn, versus how many exist.
- *
- * The registry-wide total is not the same question: a turn that was handed ZERO tools
- * and a turn that was handed sixty-four and ignored them produce byte-identical reports,
- * and only one of them is the model's fault. The loop records the real per-turn number
- * and this reads it back. Nulls when the run predates the field.
- *
- * This is now the SINGLE source of the per-turn figure: the chat-diagnostics header used
- * to render a ceiling derived from the registry size while the Diagnostics block below it
- * rendered this measurement, so one report answered one question two ways. Both lines
- * read this function now (via `gatherChatDiagnostics`).
+ * Tool-catalog exposure (`ToolExposure` / `toolExposureInTrace`) is extracted to its
+ * own module (`toolExposure.ts`, PRD 45 §4.7 B8 — chat #216: the "Tools advertised"
+ * counter must read the trace, not the registry ceiling). Re-exported here so
+ * existing import sites keep working.
  */
-export function toolExposureInTrace(events: BrainTraceEvent[]): ToolExposure {
-  let lastTurn: number | null = null;
-  let min: number | null = null;
-  let catalog: number | null = null;
-  for (const ev of events) {
-    if (ev.category !== 'llm') continue;
-    const a = ev.args as { advertisedTools?: unknown; catalogTools?: unknown } | undefined;
-    if (typeof a?.advertisedTools === 'number') {
-      lastTurn = a.advertisedTools;
-      min = min == null ? a.advertisedTools : Math.min(min, a.advertisedTools);
-    }
-    if (typeof a?.catalogTools === 'number') catalog = a.catalogTools;
-  }
-  return { lastTurn, min, catalog };
-}
+import { toolExposureInTrace } from './toolExposure';
+
+export { toolExposureInTrace, type ToolExposure } from './toolExposure';
 
 /**
  * Tools the model WROTE OUT by name on a turn that made no call, which it had never been

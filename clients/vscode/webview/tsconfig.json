@@ -38,6 +38,8 @@
       "@builderforce/kimi-oauth": ["../../../packages/kimi-oauth/src/index.ts"],
       "@builderforce/learned-routing": ["../../../packages/learned-routing/src/index.ts"],
       "@builderforce/run-context": ["../../../packages/run-context/src/index.ts"],
+      // The editor shell's result cache (`../src/localShellCache.ts`) classifies read-only commands with it.
+      "@builderforce/run-guards": ["../../../packages/run-guards/src/index.ts"],
       "@builderforce/write-outbox": ["../../../packages/write-outbox/src/index.ts"],
       // The page-engine bridge protocol (`../src/pageEngineBridgeProtocol.ts`) names
       // the local-runtime ids, and the webview reaches it by a relative import.

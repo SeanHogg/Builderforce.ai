@@ -358,6 +358,8 @@ export {
 } from './brainRunStore';
 export type { BrainRunRequest, BrainRunSnapshot, BrainRunPersistence, BrainStreamFn, BrainRunEngine, RunEngineControl, RunKey, RunServedBy, RunTurn } from './brainRunStore';
 export type { AvoidedRunCall, RunOutcomeReport, RunPipelineSettings, RunStageModels } from './runStore/runTypes';
+// PRD 45 §4.4 host ports (verifier / git / reviewer) — the deterministic run gates read these.
+export type { VerifierPort, GitPort, ReviewerPort } from './runStore/runTypes';
 // PRD 35 E7: what a host's pre-turn BYO health check hands the run.
 export type { ModelPreflightResult } from '@builderforce/agent-run';
 export type { ServedRead } from './runStore/hostRunContext';
@@ -463,6 +465,8 @@ export type { RunProgress, RepeatedTarget, RepeatStreak } from './runProgress';
 // the CURRENT step instead of only rendering settled ones.
 export { activityTarget, toolActivity, shortenTarget, describeLiveStep, midRunNotice, formatBytes } from './runActivity';
 export type { BrainRunActivity, BrainRunPhase } from './runActivity';
+export { resumeStateOf, parseResumeState, RESUME_STEPS, RESUME_FILES } from './run/runResumeState';
+export type { RunResumeState, ResumeTraceEvent } from './run/runResumeState';
 // The `composing` phase: a turn streaming a tool call's ARGUMENTS, which is invisible
 // to any indicator that only watches text deltas.
 export { createComposingActivity, toolCallArgBytes, utf8ByteLength } from './composingActivity';

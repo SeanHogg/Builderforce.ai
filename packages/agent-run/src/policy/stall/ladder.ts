@@ -57,13 +57,14 @@ export function resetRungs(state: RunState, keep: readonly string[] = []): void 
  * Move the run to a model that already acted, or nothing when none can take over. The ONE
  * hand-off: the stall ladder and the provider-failure route both take it, in the order
  * `preferProvenFailover` defines. `failed` names the model that just failed, as the
- * gateway resolved it.
+ * gateway resolved it; `unavailable` says it errored, was rate-limited or is down rather than
+ * merely stalling — then the latency guard steps aside (`@builderforce/run-policy` `latencyGuard`).
  *
  * The reduced policy state stands whether or not anyone took over: with nobody left the
  * policy has returned the run to its pin, which is where the next turn must start.
  */
-export function handOffToProven(ctx: PolicyContext, ledger: DeliveryLedger | undefined, failed: string | undefined): string | undefined {
-  const next = reduceRunPolicy(ctx.state.model, { type: "stalled", ...(failed ? { resolvedModel: failed } : {}) });
+export function handOffToProven(ctx: PolicyContext, ledger: DeliveryLedger | undefined, failed: string | undefined, unavailable = false): string | undefined {
+  const next = reduceRunPolicy(ctx.state.model, { type: "stalled", ...(failed ? { resolvedModel: failed } : {}), ...(unavailable ? { primaryUnavailable: true } : {}) });
   ctx.state.model = next;
   if (next.outcome.kind !== "failed_over") return undefined;
   resetRungs(ctx.state, ledger?.sticky);

@@ -21,6 +21,7 @@ import { subagentToolDef } from "./subagentTool";
 import { subagentFanOutToolDef } from "./subagentFanOutTool";
 import { subagentControlToolDefs } from "./subagentControlTools";
 import type { ChildControls } from "./childRunSpawner";
+import { withChildCommandGuard } from "./subagentCommandGuard";
 import { ticketBranchReviewToolDef } from "./ticketBranchTool";
 import { desktopBackedTools } from "./desktopContext";
 import { withLocalResearch } from "./localResearch/researchPort";
@@ -75,7 +76,8 @@ export async function brainToolCatalog(
         ...subagentControlToolDefs(children!, signal ?? (() => undefined)),
       ]
     : [];
-  return [...localTools, ...cognitionTools, ...platformTools, ...delegation];
+  // The owner's `run_command` refuses what a live child of its own already owns (chat #60338).
+  return withChildCommandGuard([...localTools, ...cognitionTools, ...platformTools, ...delegation], children);
 }
 
 /** The read-only platform tool that answers "who is this agent, and what are they for?". */

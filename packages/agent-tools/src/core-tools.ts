@@ -564,7 +564,7 @@ const runChecksTool: ToolDefinition = defineTool({
 export const runCommandTool: ToolDefinition = defineTool({
   name: "run_command",
   description:
-    'Run a shell command in the checked-out repository (real shell). Use it to install dependencies and run the build, type-check, lint, and tests. Returns combined stdout/stderr and the exit code. Verify your changes this way BEFORE calling finish.',
+    'Run a shell command in the checked-out repository (real shell). Use it to install dependencies and run the build, type-check, lint, and tests. Returns combined stdout/stderr and the exit code. Verify your changes this way BEFORE calling finish. Do not re-run a command to grep/head/tail its output: when the result has an outputId, use output_filter on it.',
   parameters: {
     type: "object",
     properties: {
@@ -572,6 +572,7 @@ export const runCommandTool: ToolDefinition = defineTool({
       cwd: { type: "string", description: 'Optional directory to run in, relative to the workspace root (e.g. "my-project"). Defaults to the run\'s repository; "." is the workspace root. Use this instead of a `cd X &&` prefix.' },
       background: { type: "boolean", description: "Run a long command (a dev server, a full test suite, a build) in the background: returns a job id at once; check it with command_status, stop it with command_stop." },
       yieldMs: { type: "number", description: "Optional: run in the foreground up to this many milliseconds, then hand back a background job id if it is still running." },
+      fresh: { type: "boolean", description: "Optional: run it even if an identical read-only command (type-check, test, lint, git status…) already ran with no file changed since — by default that earlier result comes back marked cached." },
     },
     required: ["command"],
   },

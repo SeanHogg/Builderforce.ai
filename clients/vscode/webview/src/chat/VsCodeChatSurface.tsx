@@ -74,6 +74,8 @@ import { useChatAudience } from './useChatAudience';
 import { useChatMemory } from './useChatMemory';
 import { useChatSend } from './useChatSend';
 import { useInterruptedResume } from './useInterruptedResume';
+import { useInterruptedRuns } from './interruptedRunsStore';
+import { interruptedResumeTurn } from '../../../src/interruptedResumeTurn';
 import { useAssociatedProject, useChatSystemPrompt } from './useChatSystemPrompt';
 import { useComposerModels } from './useComposerModels';
 import { useCopyDiagnostics } from './useCopyDiagnostics';
@@ -225,10 +227,12 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   const { queued, submit, queueAfter, stop, answerQuestion, continueChat, replayMessage, sendSteers } = useChatSend({
     conv, chatId, drafts, draftStore, recipient, chooseRecipient, liveChildren, setTurnLimbic, reloadChats,
   });
+  const interruptedRuns = useInterruptedRuns();
   // An interrupted run's Resume: open its chat, send the continuation through THIS door (it builds the seed, model, project and spec), ack the run once the host claims it.
   const interruptedResume = useInterruptedResume({
     chatId, openChat, send: continueChat, isRunning: (id) => runStatus(id) != null,
-    continuation: t('ir.continue', 'Continue the task that was interrupted when the editor closed.'),
+    // Built from the run's JOURNALED record (ask verbatim, plan, files, last steps, sub-agents), never the bare headline.
+    continuation: (runId) => interruptedResumeTurn(t, interruptedRuns.find((run) => run.runId === runId)?.resume),
   });
 
   // The question this chat is BLOCKED on, restated at the composer — one shared predicate,

@@ -22,8 +22,16 @@ import {
   type RunLineage,
 } from "@seanhogg/builderforce-brain-embedded";
 import { parseSubagentReport } from "@builderforce/agent-loop";
-import { WAIT_INTERRUPTED_NOTE, childReportText as reportText, clipChildOutput, ownerDirectionText as directionText } from "@builderforce/agent-tools";
+import {
+  RUN_COMMAND_TOOL,
+  WAIT_INTERRUPTED_NOTE,
+  childReportText as reportText,
+  clipChildOutput,
+  duplicateOfLiveChild,
+  ownerDirectionText as directionText,
+} from "@builderforce/agent-tools";
 import { MAX_CHILD_DEPTH, type ChildReport, type ChildRuns } from "./childRuns";
+import { createChildLedger, type ChildLedger } from "./childLedger";
 
 /** One delegation, as the spawn tools describe it. */
 export interface ChildRequest {
@@ -49,6 +57,9 @@ export interface ChildControls {
   stop(handles: readonly string[] | "all"): string[];
   /** Block until the named (or all live) children settle, or the timeout. */
   wait(handles: readonly string[], timeoutMs: number, signal?: AbortSignal): Promise<{ reports: ChildReport[]; running: string[]; note?: string }>;
+  /** The refusal for an owner `run_command` a live child of this owner already owns
+   *  (briefed to run, or started) — `duplicateOfLiveChild`; null when none does. */
+  runningCommand(command: string): string | null;
 }
 
 /** The run a set of controls acts for. */
@@ -77,12 +88,38 @@ export interface ChildRunHost {
   postDirection(rootChatId: number, from: "owner" | "person", fromName: string, to: { ref: string; name: string } | null, text: string): void;
   /** The chat's set of live children changed. */
   changed(rootChatId: number): void;
+  /** Every child's brief, commands and outcome — persisted with the parent run when the
+   *  host wires a `persist` port (`childRunJournal.ts`). Absent ⇒ an in-memory ledger per host. */
+  ledger?: ChildLedger;
+}
+
+/** The ledger a host without one of its own shares across every owner's controls. */
+const hostLedgers = new WeakMap<ChildRunHost, ChildLedger>();
+
+function ledgerOf(host: ChildRunHost): ChildLedger {
+  if (host.ledger) return host.ledger;
+  let ledger = hostLedgers.get(host);
+  if (!ledger) {
+    ledger = createChildLedger({ startedCommands: startedCommandsOf });
+    hostLedgers.set(host, ledger);
+  }
+  return ledger;
+}
+
+/** The `run_command` commands a child run has started, read from its trace. */
+export function startedCommandsOf(key: number): string[] {
+  return getRunTrace(key).flatMap((ev) => {
+    const command = ev.category === "tool" && ev.label === RUN_COMMAND_TOOL ? (ev.args as { command?: unknown } | undefined)?.command : undefined;
+    return typeof command === "string" && command.trim() ? [command] : [];
+  });
 }
 
 export function childControls(host: ChildRunHost, owner: ChildOwner): ChildControls {
+  const ledger = ledgerOf(host);
   const settle = (key: number, lineage: RunLineage, req: ChildRequest): void => {
     const report = reportOf(key, lineage, req, host.registry.stopRequested(key));
     const undelivered = host.registry.settle(key, report);
+    ledger.settled(key, report, undelivered ? "inbox" : "wait");
     host.changed(owner.rootChatId);
     if (!undelivered) return;
     queueRunSteering(owner.key, reportText(report));
@@ -107,6 +144,17 @@ export function childControls(host: ChildRunHost, owner: ChildOwner): ChildContr
       });
       if ("error" in registered) return { ok: false, error: registered.error };
       const { key, lineage } = registered;
+      ledger.spawned({
+        key,
+        ownerKey: owner.key,
+        rootChatId: owner.rootChatId,
+        handle: lineage.handle,
+        label: lineage.label,
+        owner: owner.name,
+        brief: req.task,
+        role: req.role,
+        ...(req.ticket ? { ticket: req.ticket } : {}),
+      });
       host.changed(owner.rootChatId);
       // Not awaited — the owner keeps working. A start that throws settles as failed.
       void host
@@ -143,6 +191,8 @@ export function childControls(host: ChildRunHost, owner: ChildOwner): ChildContr
       const { reports, running, interrupted } = await host.registry.wait(owner.key, handles, timeoutMs, signal);
       return { reports, running, ...(interrupted ? { note: WAIT_INTERRUPTED_NOTE } : {}) };
     },
+
+    runningCommand: (command) => duplicateOfLiveChild(command, ledger.liveWork(owner.key)),
   };
 }
 

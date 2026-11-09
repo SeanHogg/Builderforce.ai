@@ -24,6 +24,7 @@ import {
 } from "@seanhogg/builderforce-brain-embedded";
 import type { ChildRuns } from "./childRuns";
 import type { ChildOwner, ChildRequest, ChildRunHost } from "./childRunSpawner";
+import type { ChildLedger } from "./childLedger";
 import type { WebviewRunStart } from "./brainRunHostProtocol";
 import { modelForChildRun } from "./roleModelPin";
 
@@ -58,6 +59,8 @@ export interface ChildRunHostDeps {
   announce(rootChatId: number): void;
   /** The editor's sub-agent stage model (`builderforce.models.subagent`), read per spawn. */
   subagentModel?(): Promise<string | undefined>;
+  /** The persisted child ledger (`childLedger.ts`); absent ⇒ the spawner's in-memory one. */
+  ledger?: ChildLedger;
 }
 
 export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { afterRun(key: number): void } {
@@ -94,6 +97,7 @@ export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { aft
     },
 
     registry: deps.registry,
+    ...(deps.ledger ? { ledger: deps.ledger } : {}),
 
     async startChild(key, lineage, owner, req) {
       const spec = deps.specOf(owner.key);

@@ -11,6 +11,7 @@
 import * as path from "path";
 import * as vscode from "vscode";
 import { PREFETCH_LIST_CAP_LINES, type LspDiagnostics } from "./executors";
+import { formatDiagnostic } from "../verify/formatDiagnostic";
 
 const CODE_LANGUAGES = new Set(["typescript", "typescriptreact", "javascript", "javascriptreact"]);
 
@@ -29,8 +30,6 @@ export function openWorkspaceFiles(root: string): string[] {
   return out;
 }
 
-const SEVERITY: Record<number, string> = { 0: "error", 1: "warning" };
-
 /** The language servers' errors and warnings for the open code documents under `root`. */
 export const lspDiagnostics: LspDiagnostics = async (root) => {
   const docs = vscode.workspace.textDocuments.filter((d) =>
@@ -40,10 +39,8 @@ export const lspDiagnostics: LspDiagnostics = async (root) => {
   for (const doc of docs) {
     const rel = path.relative(root, doc.uri.fsPath).split(path.sep).join("/");
     for (const d of vscode.languages.getDiagnostics(doc.uri)) {
-      const severity = SEVERITY[d.severity];
-      if (!severity) continue;
-      const code = typeof d.code === "object" ? d.code.value : d.code;
-      lines.push(`${rel}:${d.range.start.line + 1}:${d.range.start.character + 1} ${severity} ${d.message.split("\n")[0]}${code !== undefined ? ` (${d.source ?? ""}${d.source ? " " : ""}${code})` : ""}`);
+      if ((d.severity ?? 0) > 1) continue; // only errors and warnings count
+      lines.push(formatDiagnostic(rel, d));
       if (lines.length >= PREFETCH_LIST_CAP_LINES) return { available: true, lines, files: docs.length };
     }
   }

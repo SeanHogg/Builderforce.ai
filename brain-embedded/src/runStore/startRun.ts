@@ -7,7 +7,6 @@
 import { batchStepPersistence, stepDurabilityFor } from '../stepOutbox';
 import { getRunDriver } from '../runDriver';
 import { chatErrorAction } from '../chatError';
-import { linkedTicketsToAdvance, linkedTicketsToComplete, linkedTicketsReviewedComplete } from '../chatWorkLinking';
 import { asksForChange } from '@builderforce/agent-stall';
 import { isChildReportText } from '@builderforce/agent-tools';
 import { contentText } from '../localSuccess/turnFeatures';
@@ -21,7 +20,8 @@ import { emptyRunUsage } from '../memorySavings';
 import { emit, getCell, nowIso, recordRunFailure, runTrace } from './runCells';
 import { appendRunMessage } from './runControl';
 import { keepStoppedTurn, persistStep } from './turnPersistence';
-import { recordCodeChangeTicket, settleView, updateLinkedTickets } from './runBackstops';
+import { settleView } from './runBackstops';
+import { closeOutRun } from '../run/brainCloseOut';
 import { resolveServerChatId } from './serverChat';
 import { prepareBrainRun } from './runPreamble';
 import { runPrepared } from '../run/runPrepared';
@@ -110,10 +110,13 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
   emit(c);
 
   c.runUsage = emptyRunUsage();
+  // The placeholders this run wrote and has not removed, for the close-out's acceptance (none before a run is prepared).
+  let openPlaceholders = (): number => 0;
   try {
     const prepared = await prepareBrainRun(chatId, c, req, runKey, holdRunRow);
     // Memory answered: the run is over before a model was asked.
     if (prepared) {
+      openPlaceholders = () => prepared.placeholderLedger.outstanding().length;
       // The id this run's calls carry - what its end is reported under (`runEndOutcome.ts`).
       noteRunId(c, prepared.metadata.guestTurnId);
       await runPrepared(prepared);
@@ -172,34 +175,13 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
       // The backstops hold the chat (the claim) - so they wait at most `settleMs`: a hung ticket call must not
       // leave the chat live forever. Late work finishes in the background on the snapshot, writing nothing
       // into a later run; a failure of it is traced (while this run is current), never unhandled.
-      await within(left(), async () => {
-        // The ticket itself was already opened on the run's first edit (see the tool loop), so this pass ATTACHES
-        // whatever was touched afterwards to that same ticket - and still mints one in the case the opening call
-        // failed. It is skipped on a Stop.
-        if (needsTicket && (!view.ticketRecorded || view.deltaTicketId != null)) {
-          await recordCodeChangeTicket(serverChatId, view, req, 'settle');
-        }
-        // Keep the board honest about STATUS: advance any task/epic/gap linked to this chat that is still in a
-        // not-started lane to in_progress. Independent of the from_delta backstop above (that MINTS; this
-        // ADVANCES), and after it so a freshly minted review-status ticket is never touched.
-        if (needsTicket) {
-          await updateLinkedTickets(serverChatId, view, req, linkedTicketsToAdvance, 'in_progress', 'worked-ticket-off-backlog');
-        }
-        // If the run MERGED its change to the base branch, the review lane is moot - the code is live.
-        if (shipped && req.projectId != null && req.runTool) {
-          await updateLinkedTickets(serverChatId, view, req, linkedTicketsToComplete, 'done', 'shipped-to-base-branch');
-        }
-        // The Studio's equivalent of a verified push: a "complete" review after a passing preview inspection of
-        // THIS run's last change. Closes exactly the tickets that were reviewed.
-        if (reviewedInPreview.length && req.projectId != null && req.runTool) {
-          await updateLinkedTickets(
-            serverChatId, view, req,
-            (listed) => linkedTicketsReviewedComplete(listed, reviewedInPreview),
-            'done',
-            'reviewed-in-preview',
-          );
-        }
-      }, () => view.note?.({
+      // The close-out (`run/brainCloseOut.ts`): the ticket's last attach, the backlog advance, and - when this run shipped -
+      // the host's review and the move to done, held by the same acceptance a model's `done` is held to. Skipped on a Stop.
+      const closeOut = {
+        serverChatId, view, req, needsTicket, shipped, reviewedInPreview,
+        openPlaceholders: openPlaceholders(), trace: runTrace(c),
+      };
+      await within(left(), () => closeOutRun(closeOut), () => view.note?.({
         ts: nowIso(),
         category: 'message',
         label: 'run.backstop_timeout',

@@ -24,7 +24,8 @@
 
 import type { SpendSavingsSummary } from './spendSavings';
 import { classifyModelFunding, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsMeter, type ChatDiagnosticsRuns } from './chatDiagnostics';
-import { toolExposureInTrace, type BrainTraceEvent } from './brainTriage';
+import { toolExposureInTrace } from './toolExposure';
+import type { BrainTraceEvent } from './brainTriage';
 import { publishHoldFromPersonTurns } from './runStore/publishHold';
 import { isStepMessage } from './types';
 

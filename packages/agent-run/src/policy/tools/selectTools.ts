@@ -51,6 +51,12 @@ export interface SelectToolsOptions<T extends ToolSchemaLike = ToolSchemaLike> {
    * other surface keeps.
    */
   capRequired?: boolean;
+  /**
+   * Fill the fixed set up to the limit from the catalog, in catalog order, after the ranked tools (default true). False (a capped
+   * code/verify turn, `roleCap.ts`) advertises only the required and the MATCHING tools, so a turn never carries schemas it was
+   * handed merely because they came first in the catalog.
+   */
+  backfill?: boolean;
 }
 
 /** What the selector returns. */
@@ -149,14 +155,18 @@ export function selectToolsForTurn<T extends ToolSchemaLike>(
           tool,
           score: scoreTool(tool.function?.name ?? "", tool.function?.description ?? "", stems, synonyms),
         }))
+        // Without the backfill only a tool that MATCHES may fill a slot: a zero score is the backfill by another name.
+        .filter((entry) => options.backfill !== false || entry.score > 0)
         .sort((a, b) => b.score - a.score || (a.tool.function?.name ?? "").localeCompare(b.tool.function?.name ?? ""))
         .map((entry) => entry.tool);
   for (const tool of ranked.slice(0, roomAfterRequired)) push(tool);
 
   const inFixed = new Set(wanted.map((t) => t.function?.name));
-  for (const tool of catalog) {
-    const name = tool.function?.name;
-    if (name && !inFixed.has(name) && wanted.length < limit) push(tool);
+  if (options.backfill !== false) {
+    for (const tool of catalog) {
+      const name = tool.function?.name;
+      if (name && !inFixed.has(name) && wanted.length < limit) push(tool);
+    }
   }
 
   const fixed: T[] = [];

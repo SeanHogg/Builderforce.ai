@@ -4,15 +4,22 @@
  * commands run through (via `hooks/runHooks.ts`). One runner, so a hook command and an
  * agent's command behave identically: the same POSIX-script routing on Windows, the same
  * timeout and output bound, the same result shape.
+ *
+ * A pipeline runs under `pipefail` (`withPipefail`), so a failing stage is not exit 0. Within
+ * a run (a `jobOwner`) the shell also keeps each command's FULL output for `output_filter`
+ * (`localShellOutputs.ts`) and hands back the earlier result of an unchanged read-only
+ * command (`localShellCache.ts`).
  */
 
 import * as path from "path";
 import type { ChildProcess } from "child_process";
 import type { ShellJobStart, ShellJobStatus, ShellResult } from "@builderforce/agent-tools";
-import { posixRoute, runRouted } from "@builderforce/agent-tools/node-posix-shell";
+import { posixRoute, runRouted, withPipefail } from "@builderforce/agent-tools/node-posix-shell";
 import { resolveShellCwd } from "@builderforce/agent-tools/node-path";
 import { spawnCommand, stopCommand } from "./processTree";
 import { killJob, pollJob, startJob, type JobOwner } from "./localShellJobs";
+import { readOutput, retainOutput } from "./localShellOutputs";
+import { cachedResult, invalidateRunCache, isCacheableCommand, rememberResult, workspaceFingerprint } from "./localShellCache";
 
 // Bound a command's wall-clock + the output handed back to the model. Matches the cloud
 // Container's COMMAND_TIMEOUT_MS (api/container/server.mjs) — a build/type-check/test
@@ -23,6 +30,7 @@ export const RUN_TIMEOUT_MS = 10 * 60 * 1000;
 const RUN_MAX_BUFFER = 4 * 1024 * 1024;
 const RUN_MAX_OUTPUT = 60_000;
 
+/** Within a run the full text stays retained under the result's `outputId` (`output_filter`). */
 function clamp(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max)}\n…(${text.length - max} more chars truncated)`;
 }
@@ -65,6 +73,8 @@ export interface LocalShellOptions {
    * grammar for. Omitted ⇒ the shell's root.
    */
   cwd?: string;
+  /** Run it even when an unchanged read-only command's cached result exists (`localShellCache.ts`). */
+  fresh?: boolean;
   /** Wall-clock bound for this command; defaults to {@link RUN_TIMEOUT_MS}. */
   timeoutMs?: number;
   /** Extra environment for this command, layered over the editor's own. */
@@ -84,6 +94,8 @@ export interface LocalShell {
   /** Aborting `signal` ends the WAIT (the status so far); the job runs on. */
   poll(id: string, opts?: { waitMs?: number; signal?: AbortSignal }): Promise<ShellJobStatus>;
   kill(id: string): Promise<ShellJobStatus>;
+  /** A retained full output of this run's, by the `outputId` a result carried (`output_filter`). */
+  output(outputId: string): Promise<string | undefined>;
 }
 
 const aborted = (out: string): ShellResult => ({
@@ -110,7 +122,7 @@ export function createLocalShell(root: string, opts: { jobOwner?: JobOwner } = {
     // `spawnCommand` puts it in its own process group, so Stop can kill the group.
     let child: ChildProcess;
     try {
-      child = spawnCommand(command, bash, { cwd: dir, ...(options.env ? { env: { ...process.env, ...options.env } } : {}) });
+      child = spawnCommand(withPipefail(command, bash, process.platform), bash, { cwd: dir, ...(options.env ? { env: { ...process.env, ...options.env } } : {}) });
     } catch (e) {
       return { ok: false, exitCode: 1, stdout: e instanceof Error ? e.message : String(e) };
     }
@@ -132,15 +144,19 @@ export function createLocalShell(root: string, opts: { jobOwner?: JobOwner } = {
     try {
       const r = await exited;
       const out = [r.stdout, r.stderr].filter((s) => s.trim()).join("\n").trim();
-      if (signal?.aborted) return aborted(out);
-      if (overflowed) {
-        return { ok: false, error: `stopped — it printed more than ${RUN_MAX_BUFFER / (1024 * 1024)}MB of output`, stdout: clamp(out, RUN_MAX_OUTPUT) };
-      }
-      if (r.code === 0 && !r.error) return { ok: true, exitCode: 0, stdout: clamp(out || "(no output)", RUN_MAX_OUTPUT) };
-      if (timedOut || r.signal === "SIGTERM") {
-        return { ok: false, error: `timed out after ${timeout / 1000}s`, stdout: clamp(out, RUN_MAX_OUTPUT) };
-      }
-      return { ok: false, exitCode: r.code ?? 1, stdout: clamp(out || r.error?.message || "(no output)", RUN_MAX_OUTPUT) };
+      const settled = ((): ShellResult => {
+        if (signal?.aborted) return aborted(out);
+        if (overflowed) {
+          return { ok: false, error: `stopped — it printed more than ${RUN_MAX_BUFFER / (1024 * 1024)}MB of output`, stdout: clamp(out, RUN_MAX_OUTPUT) };
+        }
+        if (r.code === 0 && !r.error) return { ok: true, exitCode: 0, stdout: clamp(out || "(no output)", RUN_MAX_OUTPUT) };
+        if (timedOut || r.signal === "SIGTERM") {
+          return { ok: false, error: `timed out after ${timeout / 1000}s`, stdout: clamp(out, RUN_MAX_OUTPUT) };
+        }
+        return { ok: false, exitCode: r.code ?? 1, stdout: clamp(out || r.error?.message || "(no output)", RUN_MAX_OUTPUT) };
+      })();
+      // Within a run, the FULL output is kept for `output_filter`, and the result says where.
+      return owner !== undefined && out ? { ...settled, outputId: retainOutput(owner, out) } : settled;
     } finally {
       clearTimeout(onTimeout);
       signal?.removeEventListener("abort", onAbort);
@@ -152,14 +168,31 @@ export function createLocalShell(root: string, opts: { jobOwner?: JobOwner } = {
       const where = resolveShellCwd(cwd, options.cwd);
       if (!where.ok) return { ok: false, error: where.error };
       // Which interpreter, and the one cmd→bash retry, are THE shared routing rule.
-      return runRouted(command, (bash) => execOnce(command, bash, options, where.dir), options.signal);
+      const exec = (): Promise<ShellResult> => runRouted(command, (bash) => execOnce(command, bash, options, where.dir), options.signal);
+      // Only a run's commands are cached; one that may write drops the run's cache.
+      if (owner === undefined || !isCacheableCommand(command)) {
+        const r = await exec();
+        if (owner !== undefined) invalidateRunCache(owner);
+        return r;
+      }
+      if (!options.fresh) {
+        const hit = await cachedResult(owner, where.dir, command);
+        if (hit) return hit;
+      }
+      const startedAt = new Date();
+      const before = workspaceFingerprint(where.dir);
+      const r = await exec();
+      await rememberResult(owner, where.dir, command, r, before, startedAt);
+      return r;
     },
     async start(command: string, options: LocalShellOptions = {}): Promise<ShellJobStart> {
       const route = posixRoute(command);
       if ("error" in route) return { ok: false, error: route.error };
       const where = resolveShellCwd(cwd, options.cwd);
       if (!where.ok) return { ok: false, error: where.error };
-      return startJob(command, {
+      // A background job may write at any time: the run's cached results are no longer safe.
+      if (owner !== undefined) invalidateRunCache(owner);
+      return startJob(withPipefail(command, route.bash, process.platform), {
         cwd: where.dir,
         bash: route.bash,
         maxOutput: RUN_MAX_OUTPUT,
@@ -170,5 +203,6 @@ export function createLocalShell(root: string, opts: { jobOwner?: JobOwner } = {
     },
     poll: (id, poll) => pollJob(id, poll?.waitMs ?? 0, { owner, ...(poll?.signal ? { signal: poll.signal } : {}) }),
     kill: (id) => killJob(id, owner),
+    output: async (outputId) => readOutput(owner, outputId),
   };
 }

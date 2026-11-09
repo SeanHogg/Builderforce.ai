@@ -55,6 +55,8 @@ export const TOOL_SIDE_EFFECT = {
   run_command: "mutate",
   // A background job's status is a read; stopping one kills processes.
   command_status: "read",
+  // Filters an output already retained from an earlier run_command — runs nothing.
+  output_filter: "read",
   command_stop: "mutate",
   git_status: "read",
   git_diff: "read",

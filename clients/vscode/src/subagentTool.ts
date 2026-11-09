@@ -11,7 +11,7 @@
  * execution. Nothing here decides what it may do.
  */
 
-import { schemaForCapabilities, spawnAgentTool, delegationRole } from "@builderforce/agent-tools";
+import { schemaForCapabilities, spawnAgentTool, delegationRole, trivialDelegationRefusal } from "@builderforce/agent-tools";
 import type { ToolDef } from "./fileTools";
 import { toolMutating } from "./toolMutating";
 import { EDITOR_DELEGATION_CAPS } from "./localCapabilities";
@@ -32,6 +32,9 @@ export function subagentToolDef(deps: SubagentToolDeps & Required<Pick<SubagentT
       if (!task) {
         return JSON.stringify({ ok: false, error: "task is required — the child sees none of your conversation" });
       }
+      // A brief that is only a few shell commands is not a delegation: the owner runs them.
+      const trivial = trivialDelegationRefusal(task);
+      if (trivial) return JSON.stringify({ ok: false, label, error: trivial });
       const role = delegationRole(args.role);
       // WHO does this slice. An unresolvable name is REFUSED rather than run anonymously.
       const who = await resolveChildPersona(deps, str(args.as_agent), role);

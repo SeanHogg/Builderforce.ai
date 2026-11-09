@@ -16,7 +16,7 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import { hostCostLeverOn } from "./hostCostLevers";
-import { matchGlobInScope, dirMayContainGlobMatch, applyStringEdit, editFacts, normalizeScopeDir, DELEGATION_CAPABILITIES } from "@builderforce/agent-tools";
+import { matchGlobInScope, dirMayContainGlobMatch, applyStringEdit, conformToExistingEol, editFacts, normalizeScopeDir, DELEGATION_CAPABILITIES } from "@builderforce/agent-tools";
 // The ONE workspace-containment resolver, shared with the agent-runtime Node provider.
 // Node-only, so it comes from the `/node-path` export condition (the package root stays
 // node-builtin-free for the Worker).
@@ -61,6 +61,9 @@ export const LOCAL_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   // Background shell jobs (`run_command` background / yieldMs → `command_status` /
   // `command_stop`), backed by `localShell.ts`'s job table.
   "shell.jobs",
+  // Retained full command outputs (`localShellOutputs.ts`) behind `output_filter`: grep/head/tail
+  // an earlier result instead of re-running it. Cloud sandboxes keep no outputs, so it is its own cap.
+  "shell.outputs",
   // The definition index behind `find_symbol` / `file_outline` (see workspaceSymbols.ts):
   // "where is X defined" in one call, and a file's map before paging through it.
   "repo.symbols",
@@ -256,11 +259,13 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
   const repoWrite = {
     async writeFile(p: string, content: string): Promise<RepoWriteResult> {
       const abs = resolveInRoot(rootResolved, p);
-      const existed = await fs.stat(abs).then(() => true, () => false);
+      const existing = await fs.readFile(abs, "utf-8").catch(() => null);
       await fs.mkdir(path.dirname(abs), { recursive: true });
-      await fs.writeFile(abs, content, "utf-8");
+      // A rewrite keeps the file's line endings (shared rule with the edit core): an LF
+      // body over a CRLF file would otherwise flip, or mix, every line of it.
+      await fs.writeFile(abs, conformToExistingEol(existing, content), "utf-8");
       symbols.markDirty(abs);
-      return { ok: true, change: existed ? "modified" : "created" };
+      return { ok: true, change: existing !== null ? "modified" : "created" };
     },
     async deleteFile(p: string): Promise<RepoDeleteResult> {
       const abs = resolveInRoot(rootResolved, p);

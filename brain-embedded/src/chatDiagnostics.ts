@@ -158,6 +158,7 @@ export function classifyModelFunding(
 }
 
 import { DEFAULT_TOOL_LIMIT } from '@builderforce/agent-run';
+import { formatAdvertised } from './toolExposure';
 import { PROJECT_EVERMIND_MODEL_PREFIX } from './modelChoice';
 
 /** Everything the diagnostics block needs — already gathered by the host (pure in). */
@@ -730,29 +731,6 @@ function runHistoryLines(runs: ChatDiagnosticsRuns | null | undefined): string[]
   return out;
 }
 
-/**
- * The per-turn half of the tool line: what the model was ACTUALLY handed, never a
- * ceiling derived from the registry size.
- *
- * Three states, deliberately distinct:
- *  - measured (a run has advertised tools)      → "40–64 advertised per turn (measured)"
- *  - unmeasured but the registry exceeds the cap → says the selection is capped and NOT
- *    yet measured, so nobody reads a bound as an observation
- *  - registry already under the cap              → nothing; every tool goes every turn
- */
-function fmtAdvertised(tools: NonNullable<ChatDiagnosticsData['tools']>): string {
-  const last = tools.advertisedLastTurn;
-  const min = tools.advertisedMin;
-  if (last != null) {
-    const range = min != null && min !== last ? `${min}–${last}` : `${last}`;
-    return ` · ${range} advertised per turn (measured)${min === 0 ? ' · ⚠ a turn was offered NONE' : ''}`;
-  }
-  if (tools.count > DEFAULT_TOOL_LIMIT) {
-    return ` · per-turn selection capped at ${DEFAULT_TOOL_LIMIT}, not yet measured (no turn in this run advertised tools)`;
-  }
-  return '';
-}
-
 function usd(n: number): string {
   return String.fromCharCode(36) + n.toFixed(n >= 1 ? 2 : 4);
 }
@@ -922,7 +900,7 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
     // plainly when nothing has been measured yet rather than inventing a bound.
     lines.push(
       `- Tools available to the model: ${tools.count} registered`
-        + fmtAdvertised(tools)
+        + formatAdvertised(tools, DEFAULT_TOOL_LIMIT)
         + `${tools.loading ? ' (catalog still loading)' : ''}`
         + `${tools.error ? ` · catalog error: ${tools.error}` : ''}`,
     );

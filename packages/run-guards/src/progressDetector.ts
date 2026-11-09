@@ -27,6 +27,7 @@ import { REVISIT_HARD_AT, VisitTally, type VisitTallyState } from "./visitTally.
 import { pathArgOf } from "./fingerprint.js";
 import { UNKEPT_READY_AT, UnkeptClaimTracker, type UnkeptClaimState } from "./readinessClaim.js";
 import { ReadinessAdvisory, type ReadinessAdvisoryState } from "./readinessAdvisory.js";
+import { BatchingNudge, type BatchingNudgeState, turnCallsOf } from "./batchingNudge.js";
 
 /** Ground-progress, signal-free turns in a row that clear the trip ladder: trips far apart are
  *  separate stuck stretches, and only back-to-back ones should end in a pause. */
@@ -80,6 +81,8 @@ export interface ProgressDetectorState {
   steer?: string;
   /** B1: the one-off readiness advisory awaiting its one turn ("" when none). */
   advisory?: ReadinessAdvisoryState;
+  /** B4: the batching nudge's plain-JSON state (streak + one-shot fired flag). */
+  batching?: BatchingNudgeState;
 }
 
 export interface ProgressDetectorPorts extends NoProgressPorts {
@@ -126,11 +129,16 @@ export class ProgressDetector {
   private steer: string | undefined;
   /** B1: the readiness advisory — one note at the FIRST unkept claim, never a trip. */
   private readonly readiness: ReadinessAdvisory;
+  /** B4: the batching nudge — one note after SERIAL_SINGLE_CALLS_AT single-readonly
+   *  turns, never a trip and never touching UNKEPT_READY_AT or any other signal. */
+  private readonly batching: BatchingNudge;
   private turnSignal: ProgressSignal | null = null;
   /** Every path this run has written, so a re-read of one is re-verification, not discovery. */
   private writtenPaths: Set<string>;
   /** Read-only targets seen this turn, to tell an all-written re-read turn from real work. */
   private readThisTurn: string[];
+  /** Every call of the current turn, for the B4 batching nudge's read-only count. */
+  private turnCalls: Array<{ tool: string; args: unknown; result: ObservedResult }>;
 
   constructor(state: ProgressDetectorState = {}, private readonly ports: ProgressDetectorPorts = {}) {
     this.visits = new VisitTally(state.visits);
@@ -144,8 +152,10 @@ export class ProgressDetector {
     this.quietTurns = state.quietTurns ?? 0;
     this.steer = state.steer;
     this.readiness = new ReadinessAdvisory(state.advisory);
+    this.batching = new BatchingNudge(state.batching);
     this.writtenPaths = new Set();
     this.readThisTurn = [];
+    this.turnCalls = [];
   }
 
   private raise(signal: ProgressSignal): void {
@@ -159,6 +169,7 @@ export class ProgressDetector {
 
   /** One call of the current turn ran. */
   observe(tool: string, args: unknown, result: ObservedResult): void {
+    this.turnCalls.push({ tool, args, result });
     // Kept or not is about what the model CHOSE to do: a failed edit still acted.
     // Without an `isReadOnly` port nothing is judged read-only, so no claim goes unkept.
     this.claims.observe(this.ports.isReadOnly?.(tool, args) === true);
@@ -211,6 +222,11 @@ export class ProgressDetector {
   /** Every call of the turn ran. The trip this turn caused, if any — or, earlier and
    *  cheaper (B1), the readiness advisory on the FIRST unkept claim (never a trip). */
   endTurn(): ProgressAction | null {
+    // B4: judge the batching streak on EVERY turn (a write or a busy turn resets it,
+    // whatever else the turn did); the note itself surfaces only on a signal-free turn.
+    const turnCalls = this.turnCalls;
+    this.turnCalls = [];
+    const batchNote = this.batching.observe(turnCallsOf(turnCalls, this.ports.isReadOnly));
     // The previous trip's steer has now been shown for one turn.
     this.steer = undefined;
     const idle = this.progress.endTurn();
@@ -244,6 +260,10 @@ export class ProgressDetector {
       this.readiness.endTurn();
       const advisoryNote = this.readiness.observe(this.unkeptTurns);
       if (advisoryNote) return { kind: "advisory", note: advisoryNote };
+      // B4: the batching nudge, on the next turn after SERIAL_SINGLE_CALLS_AT
+      // consecutive single-readonly turns. Advisory only — the ladder, UNKEPT_READY_AT
+      // and every other signal are untouched.
+      if (batchNote) return { kind: "advisory", note: batchNote };
       // Sustained GROUND progress ends the stuck stretch the ladder was counting. A churn
       // turn neither adds to the streak nor breaks it; an idle turn resets it.
       if (this.progress.lastTurnGround) this.quietTurns += 1;
@@ -306,6 +326,10 @@ export class ProgressDetector {
       ...(this.quietTurns ? { quietTurns: this.quietTurns } : {}),
       ...(this.steer ? { steer: this.steer } : {}),
       ...(this.readiness.snapshot().note ? { advisory: this.readiness.snapshot() } : {}),
+      ...((): Record<string, unknown> => {
+        const b = this.batching.snapshot();
+        return b.streak || b.fired ? { batching: b } : {};
+      })(),
     };
   }
 }

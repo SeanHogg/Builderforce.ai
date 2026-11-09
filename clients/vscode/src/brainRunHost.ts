@@ -63,6 +63,7 @@ import { runRequestFields } from "./stageModels";
 import { createRunSteer } from "./runSteer";
 import { createTurnQueue } from "./runTurnQueue";
 import { askedText } from "./runAsked";
+import { liveChildrenBlock } from "./liveChildrenFinish";
 import { fallbackDetail } from "./modelFallbackDetail";
 
 export { syncMessageFor } from "./brainRunHostProtocol";
@@ -323,6 +324,9 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
         ...(p.reasoning ? { reasoning: p.reasoning } : {}),
         runTool,
         needsConfirm,
+        // An owner never ends while sub-agents it started are still working (`liveChildrenFinish.ts`): a late report
+        // would otherwise wake it into a new run with no ask of its own.
+        liveChildren: async () => liveChildrenBlock(childHost.registry.liveOf(key)),
         stream,
         persistence: ports.persistence,
         onActivity: () => ports.onChatsChanged?.(),
@@ -333,6 +337,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
         // tool calls; and the BYO preflight (E7), said before turn 1 (`runSetup.ts`).
         ...runContextFields(ports, {
           ...(projectId != null ? { projectId } : {}),
+          chatId,
           serverChatId,
           request: asked ?? "",
           memory: p.evermind,
@@ -387,6 +392,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     autoApproveOf,
     persistence: ports.persistence,
     announce,
+    ...(ports.childLedger ? { ledger: ports.childLedger } : {}),
   });
   const steering = createRunSteer({
     registry,

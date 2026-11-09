@@ -77,6 +77,10 @@ export type Capability =
    *  and `command_stop`. Separate from `shell` so a surface whose shell runs only in the
    *  foreground never advertises two tools it cannot back. */
   | "shell.jobs"
+  /** RETAINED command outputs (`ShellCapability.output`): `output_filter` greps / heads / tails
+   *  a finished command's full output by its `outputId` instead of re-running it. Separate
+   *  from `shell.jobs` because a sandbox with a job table need not keep outputs. */
+  | "shell.outputs"
   /**
    * PUBLISH work from the checked-out repo: commit, push, open a pull request.
    *
@@ -242,6 +246,8 @@ export interface ShellCapability {
   poll?(id: string, opts?: { waitMs?: number; signal?: AbortSignal }): Promise<ShellJobStatus>;
   /** Kill a background job (its process tree). */
   kill?(id: string): Promise<ShellJobStatus>;
+  /** A RETAINED command output by the `outputId` a result carried (`output_filter`); undefined once evicted. */
+  output?(outputId: string): Promise<string | undefined>;
   /**
    * The remote ticket branch this shell's clone mirrors, when the SURFACE owns that
    * branch rather than the clone (a cloud run commits through its git provider; the
@@ -742,6 +748,14 @@ export interface ShellResult {
   error?: string;
   /** The command was killed by its cancel signal (Stop, or the person's steer). */
   aborted?: boolean;
+  /** The shell RETAINED this command's full output under this id: `output_filter` greps / heads / tails it without a re-run. */
+  outputId?: string;
+  /** A repeat of a read-only command with no workspace change since: the earlier result, not a new run (`note` says since when). */
+  cached?: boolean;
+  /** A text search that found nothing (exit 1, no output) — `ok: true`, not a failed step. */
+  matches?: number;
+  /** A one-line explanation of how this result was produced (cached, trimmed output). */
+  note?: string;
 }
 export interface WebFetchResult {
   ok: boolean;

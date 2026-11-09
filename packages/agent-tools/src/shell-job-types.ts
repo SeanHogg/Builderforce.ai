@@ -21,6 +21,8 @@ export interface ShellRunOptions {
    * cannot kill simply finishes; the caller still drops the late result.
    */
   signal?: AbortSignal;
+  /** Run it even when the shell holds a cached result of the same read-only command (`run_command` `fresh`). */
+  fresh?: boolean;
 }
 
 /** A background job's state as `poll` / `kill` report it. */
@@ -33,6 +35,8 @@ export interface ShellJobStatus {
   output?: string;
   /** True when earlier output was dropped from the bounded buffer. */
   truncated?: boolean;
+  /** A finished job's full output, retained for `output_filter`. */
+  outputId?: string;
   error?: string;
 }
 

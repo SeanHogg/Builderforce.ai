@@ -1,5 +1,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { withoutQuoted } from "./shell-command-shape.js";
+
+/** How a pipeline's exit status is made honest — one rule, shared with the pure shapers. */
+export { withPipefail } from "./shell-command-shape.js";
 
 /**
  * Run POSIX shell scripts on Windows.
@@ -124,10 +128,6 @@ const POWERSHELL_UNSUPPORTED = [
   /(^|[|;&\n]\s*)[A-Za-z_]\w*=\S*\s+\S/,         // VAR=value cmd
 ];
 
-/** A command with its quoted strings blanked, so an `&&` inside text is not read as a chain. */
-function withoutQuoted(command: string): string {
-  return command.replace(/"(?:[^"\\]|\\.)*"|'[^']*'/g, '""');
-}
 
 /**
  * Does this command require bash on a machine whose default shell is Windows PowerShell 5.1?

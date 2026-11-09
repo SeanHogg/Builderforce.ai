@@ -305,7 +305,7 @@ fix → commit. **Opus review:** A1–A4 (gating, cross-package), A5 (OD-1), A6 
 
 | WS | Scope | Done when |
 |---|---|---|
-| **W0** Baseline | Replay chats #214 and #216 with `api/scripts/telemetry-baseline.cjs` | Numbers written into §8 |
+| **W0** Baseline | Replay chats #214 and #216 with `api/scripts/chat-replay-baseline.cjs` (journal replay, not the aggregate `telemetry-baseline.cjs`) | Numbers written into §8 |
 | **A1** Ledger + gates | §4.2, §4.3; move `gitCommandPattern` | Unit tests for every verdict, including `regression: tsc piped through grep is not evidence`, `regression: new source without a test is refused (chat #214)`, `regression: a file changed by run_command is still checked at push`, `regression: reviewer on an author model is refused` |
 | **A2** VSIX verifier | §4.4 `verify/*` | With a fake `vscode` and a temp package: diagnostics for an unopened file; failing script's exit code captured; plan filtered to typecheck; targeted tests only; Windows `.cmd` launch covered; timeout → `unavailable` |
 | **A3** Post-edit diagnostics | §4.5 row 1 in `callRunner.ts` | `regression: hooks-in-map violation reported on the edit result (chat #216)` |
@@ -328,8 +328,25 @@ Rules:
 | Measure | Baseline (W0) | Target |
 |---|---|---|
 | Base-branch pushes on the VSIX without passing (or reported-unavailable) evidence and a different-model review | unknown (live telemetry behind gates; measure at W9) | 0 |
+| #214 replay: prompt tokens | 3,023,666 (measured, session = lifetime — #214 ran entirely on 2026-11-08; matches narrative 3.02M) | — |
+| #214 replay: completion tokens | 33,643 (measured; matches narrative 33.6k) | — |
+| #214 replay: prompt peak | 70,714 (measured, max single-call prompt) | — |
+| #214 replay: turns (model steps) / code turns / exactly-one-edit turns | 70 turns / 10 edit turns / 1 exactly-one-edit turn (measured; narrative "69 turns" ≈ the 69 journaled code-role calls) | — |
+| #214 replay: median tool calls per turn | 2 (measured, 70 active turns) | — |
 | #214 replay: defects reaching main (missing params via a failing test, no tests) | 2 — git-verified at `4df6b756e`: `inbound.ts` calls `runEmbeddedAgent` without `timeoutMs`/`runId`; 6 new source files, 0 tests; plus unused `spawnSync`/`messageToText` | 0 |
-| #216 replay: prompt tokens | 2.08M (PRD narrative) | ≤ 1.0M |
-| #216 replay: code turns for the same edits | 15 (PRD narrative) | ≤ 5 |
-| Median tool calls per turn (VSIX, 7-day telemetry) | ~1.5 (PRD narrative) | ≥ 2.5 |
-| Readiness claims followed by ≥ 2 read-only turns | 3 in #216 (PRD narrative) | ≤ 1 |
+| #216 replay: prompt tokens | session 4,109,351 (measured, 2026-11-08) — the plan phase alone was 2,083,188 ≈ narrative 2.08M; lifetime 16.4M after the chat kept re-running on 11-09 | ≤ 1.0M |
+| #216 replay: completion tokens | session 32,241 (measured); lifetime 173,974 | — |
+| #216 replay: prompt peak | 93,201 session (measured, ≈ narrative 93k); 107,847 lifetime | — |
+| #216 replay: code turns for the same edits | 66 edit turns / 12 exactly-one-edit turns (measured, lifetime) — narrative 15 ≈ the 12 single-edit turns | ≤ 5 |
+| #216 replay: median tool calls per turn | 2 (measured, 294 active turns) | — |
+| Median tool calls per turn (VSIX, 7-day telemetry) | 2 (measured, 2026-11-03..2026-11-09, 3,788 active turns across 49 chats; replaces narrative ~1.5) | ≥ 2.5 |
+| Readiness claims followed by ≥ 2 read-only turns | #216: 4 (measured, 7 claims) — narrative 3; #214: 0 | ≤ 1 |
+
+> **W0 harness** (measured 2026-11-09): `api/scripts/chat-replay-baseline.cjs` — replays the VSIX
+> `local-first-v3.journal` READ-ONLY and prints these §8 baselines. Chats identified by content
+> fingerprint (the "#NNN" display number is not stored locally): **#214** = serverId 55221
+> ("I see messages being sent back and forth between…", 2026-11-08T21:20Z, kimi-for-coding,
+> names commits `4df6b756e`/`41b0ff264`); **#216** = serverId 56654 ("REview the Visualizer's Map,
+> Graph, Tower, and 3D…", 2026-11-08T22:47Z, mentions `Towers.tsx` + the verbatim "mid-implementation
+> across the four views" narration). "Session" = the chat's creation-day (UTC) window, matching when
+> PRD 45 was written.

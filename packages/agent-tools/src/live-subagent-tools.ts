@@ -12,6 +12,9 @@
 import { defineTool, type ToolDefinition, type ToolResult } from "./tool.js";
 import type { Capability, ChildReportLike, LiveChildControls } from "./capabilities.js";
 
+// The two rules that stop an owner paying twice (duplicate commands, trivial briefs).
+export * from "./delegation-economy.js";
+
 /** Appended to both spawn tools' description on a surface whose children run live. */
 export const LIVE_DELEGATION_NOTE =
   "HERE the child runs IN THE BACKGROUND: the call returns its handle at once and you keep working — plan, code, or start more children — while it does its slice. Its messages appear in the chat under its own name, and its report reaches you on its own when it finishes (call wait_agents only when you cannot go on without it). Redirect it with message_agent; cancel it with stop_agent. Do not edit the files a child is working on while it runs.";
@@ -42,7 +45,8 @@ export function withDelegationNote(def: ToolDefinition): ToolDefinition {
  */
 export const VERIFY_DELEGATION_STEP =
   'Hand the checking to ONE verify sub-agent (spawn_agent, role "verify"): brief it with the files changed and how to know the change is done; it runs the narrowest type-check, build and tests on a cheaper model and reports each failure verbatim. ' +
-  "Fix what it reports — yourself or with a code sub-agent — and verify again until it passes.";
+  "Fix what it reports — yourself or with a code sub-agent — and verify again until it passes. " +
+  "When the checks are only a few known commands, do not delegate them: run them yourself with run_command background:true. Never run a command a live child was briefed to run — call wait_agents for its result.";
 
 /** The verify step for a run that may not be able to spawn (a child at the depth cap,
  *  a host without delegation): delegate where it can, check itself where it cannot. */

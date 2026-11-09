@@ -3,7 +3,7 @@
  * is the thin hook over this).
  *
  * Resume is not a host-side start: the host holds no seed, model, project or spec for the
- * chat. The webview opens the interrupted run's chat and sends the localized continuation
+ * chat. The webview opens the interrupted run's chat and sends the continuation built from the run's journaled record (`interruptedResumeTurn.ts`)
  * as an ordinary turn through the ONE send path (which builds all of that). The host is
  * told to acknowledge the interrupted run (`ack`) only once the new run is really claimed:
  * the first run event seen for that chat after the continuation was sent.
@@ -28,7 +28,8 @@ export interface ResumeDeps {
   /** Tell the host to journal the interrupted run as acknowledged. */
   ack(runId: string): void;
   isRunning(chatId: number): boolean;
-  continuation(): string;
+  /** The continuation turn for THIS interrupted run (`interruptedResumeTurn.ts`: its ask, plan, files, steps, sub-agents). */
+  continuation(runId: string): string;
   timeoutMs?: number;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (timer: unknown) => void;
@@ -112,7 +113,7 @@ export function createResumeTracker(deps: ResumeDeps): ResumeTracker {
           fail(entry);
           publish();
         };
-        deps.send(deps.continuation()).then((kept) => { if (!kept) notKept(); }, notKept);
+        deps.send(deps.continuation(entry.runId)).then((kept) => { if (!kept) notKept(); }, notKept);
       }
     },
     runEvent(event) {

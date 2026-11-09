@@ -41,6 +41,10 @@ import { asksForSubagents, attemptedDelegation, canSpawnHere, earlyDelegationNud
 export { parseSubagentReport, subagentSystemPrompt, asksForSubagents, attemptedDelegation, canSpawnHere, earlyDelegationNudge, leftDelegationUndone, undelegatedRequestNudge };
 // A child's report is clipped ONCE, by agent-tools' rule (WS8j) — never a second cap here.
 export { SUBAGENT_REPORT_CHARS, clipChildOutput };
+// The delegation-economy rules (no duplicate of a live child's command, no trivial brief),
+// defined ONCE in agent-tools so every surface's dispatch seam enforces the same ones.
+export { duplicateOfLiveChild, trivialDelegationRefusal, commandsInBrief, normalizeCommand, RUN_COMMAND_TOOL } from "@builderforce/agent-tools";
+export type { LiveChildWork } from "@builderforce/agent-tools";
 // What a child is, derived from its owner's run (policy, capabilities, result).
 export { childPolicy, childProvider, childResult } from "./child.js";
 export type { DelegationTraceEvent, SubagentLiveOwner, SubagentPersona };

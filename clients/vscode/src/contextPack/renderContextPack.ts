@@ -2,7 +2,8 @@
  * The TASK CONTEXT PACK, rendered (PRD 35 §3.2 `ContextPack`, §6.10, E2) — what a run
  * knows at turn 1 without a tool call: the files the request names (whole when small,
  * else their outline with line numbers), the chat's linked tickets and runs, git state
- * per checkout, and the `codemap:` facts for the areas those files sit in.
+ * per checkout, the workspace map (package folders, their scripts, the lockfile root
+ * that owns each), and the `codemap:` facts for the areas those files sit in.
  *
  * It rides the volatile turn-context block (`runContextFor` → `turnContext.ts`), never
  * the cached system prefix. Capped: when the parts exceed the budget the LARGEST is
@@ -69,6 +70,8 @@ export interface ContextPackParts {
   chat?: ContextPackChat;
   repos?: ContextPackRepo[];
   facts: Array<{ key: string; content: string }>;
+  /** The rendered workspace map (`workspaceMap.ts`) — package folders, scripts, lockfile roots. */
+  workspaceMap?: string;
 }
 
 export interface RenderedContextPack {
@@ -131,6 +134,7 @@ function repoLine(r: ContextPackRepo): string {
 function sectionsOf(parts: ContextPackParts): Section[] {
   const out: Section[] = parts.focus.map(focusSection);
   if (parts.chat) out.push(chatSection(parts.chat));
+  if (parts.workspaceMap) out.push({ name: "workspace map", text: parts.workspaceMap });
   if (parts.repos?.length) out.push({ name: "git state", text: `### Git state per checkout\n${parts.repos.map(repoLine).join("\n")}` });
   if (parts.facts.length) {
     out.push({

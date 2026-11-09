@@ -142,6 +142,8 @@ export async function completeTurn(
 
   let asked = model;
   let completion: ModelCompletion;
+  // When the call that ANSWERED started — re-set before a retry or a re-ask — so the run policy times the serving model alone.
+  let startedAt = Date.now();
   try {
     completion = await input.ports.model.complete(requestFor(model, firstAsk), input.signal);
   } catch (err) {
@@ -162,6 +164,7 @@ export async function completeTurn(
     if (!routed) return { failed: reason };
     await emit(input.ports.events, { kind: "model.cascade", step: ctx.step, from: routed.from, status: err instanceof ModelTransportError ? err.status ?? null : null, released: routed.released });
     asked = routed.retry.model;
+    startedAt = Date.now();
     try {
       completion = await input.ports.model.complete(requestFor(routed.retry.model, routed.retry), input.signal);
     } catch (retryErr) {
@@ -176,6 +179,7 @@ export async function completeTurn(
   if (reask) {
     await emit(input.ports.events, { kind: "model.coder_reask", step: ctx.step, ...(completion.model ? { model: completion.model } : {}) });
     asked = reask.ask.model;
+    startedAt = Date.now();
     try {
       completion = await input.ports.model.complete(requestFor(reask.ask.model, reask.ask, [reask.brief]), input.signal);
     } catch (err) {
@@ -188,7 +192,7 @@ export async function completeTurn(
   // The turn answered: the policy locks onto what served it (when configured to) and records it
   // proven when it acted - the hand-off a later stall or failure draws on; the served model is
   // then the run's current one.
-  turnSucceeded(state, { acted: (completion.toolCalls ?? []).length > 0, ...(completion.model ? { model: completion.model } : {}) });
+  turnSucceeded(state, { acted: (completion.toolCalls ?? []).length > 0, durationMs: Date.now() - startedAt, ...(completion.model ? { model: completion.model } : {}) });
   adoptServedModel(input.policy, state, completion.model);
   // A turn answered by another model than it asked for — or an auto-routed turn that
   // landed on a degraded one — is said, never silent (E7).

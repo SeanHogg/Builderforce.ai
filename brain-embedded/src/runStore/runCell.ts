@@ -17,6 +17,7 @@ import type { PendingTurn } from '../usePendingTurns';
 import type { PendingGateOutcome } from './prefetchGate';
 import type { RunClaim } from './runClaim';
 import type { PublishHold } from './publishHold';
+import type { ReviewVerdict } from '@builderforce/run-guards';
 
 /** The completion streaming right now — and, once the gateway names it, the model serving it. */
 export interface LiveTurn {
@@ -108,6 +109,13 @@ export interface RunCell {
    * `from_delta` twice (open + settle) and traces two identical 403 failures.
    */
   deltaCaptureRefused: boolean;
+  /**
+   * The file-count the delta ticket's TITLE was minted with (PRD 45 §4.7 B9). The title
+   * is built at mint-time from the files recorded THEN; at ship the count is recomputed
+   * from the run's final `touchedFiles` and, when it differs, the ticket is re-titled.
+   * Null until a mint with files happened this run.
+   */
+  deltaTitleCount: number | null;
   /**
    * Index in `trace` of the CURRENT run's first event. The trace is a per-CHAT sliding
    * window that spans every run in the session, so any question about "what did THIS run
@@ -203,6 +211,16 @@ export interface RunCell {
    * is seeded), so a child can never lift its owner's hold.
    */
   publishHold: PublishHold | null;
+  /**
+   * PRD 45 OD-1: the models that AUTHORED this run's code changes — the review gate
+   * refuses a reviewer on an author model. Fed by the runner as edits land.
+   */
+  authorModels: Set<string>;
+  /**
+   * PRD 45 OD-1: review-gate-APPROVED verdicts this run has recorded, newest last. The
+   * `complete` review-record and the push gate match one to the current diffHash.
+   */
+  shipReviews: ReviewVerdict[];
   /** Cached immutable snapshot; identity changes only when something changed. */
   snapshot: BrainRunSnapshot;
 }
@@ -251,6 +269,7 @@ export function makeCell(): RunCell {
     deltaTicketId: null,
     deltaRecordedFiles: [],
     deltaCaptureRefused: false,
+    deltaTitleCount: null,
     runTraceFrom: 0,
     persistStep: null,
     compactMemo: null,
@@ -267,6 +286,8 @@ export function makeCell(): RunCell {
     claim: null,
     stoppedTurn: null,
     publishHold: null,
+    authorModels: new Set<string>(),
+    shipReviews: [],
     snapshot: EMPTY_SNAPSHOT,
   };
 }

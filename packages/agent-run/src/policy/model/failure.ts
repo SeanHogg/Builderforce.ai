@@ -30,7 +30,8 @@ export function recoverProviderFailure(
   const ledger = ctx.ports.delivery;
   const wording = ledger?.providerFailure;
 
-  const to = handOffToProven(ctx, ledger, failedModel);
+  // The provider BROKE (not a stall): the model is unavailable, so a slower proven model may take over.
+  const to = handOffToProven(ctx, ledger, failedModel, true);
   if (to) return { kind: "retry", ...(wording ? { note: wording.handoff(to) } : {}) };
 
   const next = reduceRunPolicy(ctx.state.model, failure);

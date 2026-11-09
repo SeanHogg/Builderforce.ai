@@ -28,6 +28,7 @@ import type { RunDirectives } from "./hooks/runHooks";
 import type { RunSink, WebviewRunStart } from "./brainRunHostProtocol";
 import type { ChildControls, ChildOwner } from "./childRunSpawner";
 import type { ChildApprover } from "./childApprovalRelay";
+import type { ChildLedger } from "./childLedger";
 import type { EditorRunSettings } from "./stageModels";
 import type { RunOutcomeReport } from "@seanhogg/builderforce-brain-embedded";
 import type { PlatformChatIdentity } from "./platformTools";
@@ -141,9 +142,10 @@ export interface BrainRunHostPorts {
    * prompt once, when it opens; without this every later run in that panel started
    * from the notes of the runs before the panel opened, never from the run that just
    * finished. Joined to the run-context block — the volatile per-run seam — so the
-   * system prompt itself stays a stable, cacheable prefix. Omitted ⇒ none.
+   * system prompt itself stays a stable, cacheable prefix. `chatId` is the run's own chat, whose notes are marked
+   * "(this chat)" while every other session's stay labelled foreign. Omitted ⇒ none.
    */
-  recentActivity?(): Promise<string>;
+  recentActivity?(chatId?: number): Promise<string>;
   /**
    * PRD 35 E2: the task context pack — the files the request names, the chat's tickets
    * and runs, git state per checkout and the matching `codemap:` facts — built once
@@ -161,6 +163,9 @@ export interface BrainRunHostPorts {
   prefetch?: PrefetchPort;
   /** Record a model call a PreFetch ANSWER avoided, beside the chat's usage ledger. Omitted ⇒ none. */
   recordAvoidedCall?(run: { chatId: number }, call: AvoidedRunCall): Promise<void>;
+  /** Every sub-agent's brief, commands and outcome, persisted with its parent run's journal record
+   *  (`childLedger.ts` + `childRunJournal.ts`) so a resumed run learns its children. Omitted ⇒ in memory only. */
+  childLedger?: ChildLedger;
   /**
    * PRD 35 E7: the BYO health check before turn 1 — unresolved accounts in the gateway
    * header's `provider:reason` form, shown on the run's banner before any work.

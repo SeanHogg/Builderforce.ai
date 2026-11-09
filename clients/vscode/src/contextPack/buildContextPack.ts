@@ -5,9 +5,10 @@
  *   focus files ─┐
  *   chat state ──┤ each part optional, all under ONE deadline (~1.5 s): a slow or failed
  *   git state ───┤ part is left out, never waited on, never a run failure
- *   codemap facts┘ (after focus: the areas come from the focus files)
+ *   codemap facts┤ (after focus: the areas come from the focus files)
+ *   workspace map┘ (package folders + lockfile roots, cached per session: `workspaceMapScan.ts`)
  *
- * Skipped entirely when the run has no project and names no file. Rendered by the pure
+ * Skipped entirely when the run has no project, names no file and has no open folder. Rendered by the pure
  * `renderContextPack`; the host hands the block to the volatile turn-context seam and
  * the recall hint to Evermind (`BrainRunRequest.recallHint`).
  */
@@ -22,6 +23,7 @@ import { readCheckoutState } from "./checkoutState";
 import { workspaceSymbolIndex } from "../workspaceSymbols";
 import { codemapFactsForRequest } from "./requestAreas";
 import { withinMs } from "./withinMs";
+import { workspaceMapFor } from "./workspaceMapScan";
 import { extractFocusPaths, isRelativePath, resolveUnderRoot, workspaceRelative } from "./focusPaths";
 import {
   FOCUS_INLINE_CHARS,
@@ -98,7 +100,8 @@ export async function buildContextPack(
   deadlineMs: number = CONTEXT_PACK_DEADLINE_MS,
 ): Promise<ContextPackResult | undefined> {
   const candidates = input.root ? extractFocusPaths(input.request) : [];
-  if (input.projectId == null && candidates.length === 0) return undefined;
+  // An open folder alone is enough: its workspace map answers "where do I run this?".
+  if (input.projectId == null && candidates.length === 0 && !input.root) return undefined;
   const focusLoad = Promise.all(candidates.map((c) => loadFocusFile(input.root, c))).then((all) => all.filter((f): f is NonNullable<typeof f> => !!f));
   const projectId = input.projectId;
   const facts: Promise<Array<{ key: string; content: string }>> = projectId == null || !input.memory
@@ -112,16 +115,18 @@ export async function buildContextPack(
             ...(input.symbols ? { symbols: input.symbols } : input.root ? { symbols: workspaceSymbolIndex(input.root) } : {}),
           },
         ));
-  const [loaded, chat, repos, codemap] = await Promise.all([
+  const [loaded, chat, repos, codemap, workspaceMap] = await Promise.all([
     withinMs(focusLoad, deadlineMs, []),
     input.serverChatId != null ? withinMs<ContextPackChat | undefined>(readChatState(secrets, input.serverChatId), deadlineMs, undefined) : Promise.resolve(undefined),
     withinMs<ContextPackRepo[]>(readCheckoutState(), deadlineMs, []),
     withinMs<Array<{ key: string; content: string }>>(facts, deadlineMs, []),
+    withinMs(workspaceMapFor(input.root), deadlineMs, ""),
   ]);
   const parts: ContextPackParts = {
     focus: loaded.map((f) => f.focus),
     ...(chat ? { chat } : {}),
     ...(repos.length ? { repos } : {}),
+    ...(workspaceMap ? { workspaceMap } : {}),
     facts: codemap.map((f) => ({ key: f.key, content: f.content })),
   };
   const rendered = renderContextPack(parts);

@@ -15,6 +15,8 @@ import { defineTool, type ToolContext, type ToolDefinition, type ToolResult } fr
 import { safeRepoArg, shellRunWithStop } from "./git-repo-scope.js";
 import { compressShellResult } from "./compress.js";
 import type { ShellJobStatus, ShellResult } from "./capabilities.js";
+import { searchNoMatch, shapeTrimmed, stripTrailingTrim, type OutputTrim } from "./shell-command-shape.js";
+import { outputFilterTool } from "./shell-output-filter.js";
 
 /** The longest a `yieldMs` / `waitMs` may hold the call (the foreground ceiling). */
 const SHELL_WAIT_MAX_MS = 10 * 60 * 1000;
@@ -53,14 +55,29 @@ function finishedJob(st: ShellJobStatus): ShellResult {
     ok: st.status === "exited" && st.exitCode === 0,
     ...(st.exitCode !== undefined ? { exitCode: st.exitCode } : {}),
     stdout: st.output ?? "",
+    ...(st.outputId ? { outputId: st.outputId } : {}),
     ...(st.status === "killed" ? { aborted: true, error: st.error ?? "the job was stopped" } : st.error ? { error: st.error } : {}),
   };
 }
 
+/**
+ * A finished command's result, read honestly: a search that found nothing is an answer
+ * (`searchNoMatch`), and a command whose trailing `| tail -N` was dropped shows the head and
+ * the tail of its real output.
+ */
+function shapeResult(command: string, r: ShellResult, trim: OutputTrim | undefined): ShellResult {
+  const read = searchNoMatch(command, r);
+  if (!trim || typeof read.stdout !== "string" || read.matches === 0) return read;
+  const said = `the trailing "| ${trim.kind} -${trim.lines}" was not run: this is the start and the end of the full output`;
+  return { ...read, stdout: shapeTrimmed(read.stdout, trim, read.outputId), note: read.note ? `${read.note}; ${said}` : said };
+}
+
 /** `run_command`'s body. */
 export async function runShellCommand(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
-  const command = typeof args.command === "string" ? args.command : "";
-  if (!command.trim()) return { data: { ok: false, error: "command is required" } };
+  const asked = typeof args.command === "string" ? args.command : "";
+  if (!asked.trim()) return { data: { ok: false, error: "command is required" } };
+  // A trailing `| tail -N` only throws output away — and hides the exit code of what it trims.
+  const { command, trim } = stripTrailingTrim(asked);
   const cwd = cwdArg(args.cwd);
   if (cwd === null) {
     return { data: { ok: false, error: "`cwd` must be a directory inside the workspace, relative to its root (no `..`, no absolute path)." } };
@@ -88,15 +105,20 @@ export async function runShellCommand(args: Record<string, unknown>, ctx: ToolCo
         const why = ctx.signal?.aborted ? "The wait was interrupted" : `Still running after ${yieldMs}ms`;
         return { data: { ok: true, background: true, id, status: "running", output: st.output ?? "", note: `${why}, so it moved to the background. ${jobNote(id)}`, ...where } };
       }
-      const r = await compressShellResult(finishedJob(st), ctx);
+      const r = await compressShellResult(shapeResult(command, finishedJob(st), trim), ctx);
       // A job the sandbox no longer knows has no result to show: name it, so the model can poll or stop it.
       return { data: { ...(r as unknown as Record<string, unknown>), ...(st.status === "unknown" ? { id } : {}), ...where } };
     }
     note = "This surface has no background shell, so the command ran in the foreground.";
   }
 
-  const r = await compressShellResult(await shellRunWithStop(ctx, command, dir), ctx);
-  return { data: { ...(r as unknown as Record<string, unknown>), ...where, ...(note ? { note } : {}) } };
+  // `fresh` bypasses the shell's cache of an unchanged read-only command.
+  const ran = args.fresh === true
+    ? await shell.run(command, { ...(ctx.signal ? { signal: ctx.signal } : {}), ...where, fresh: true })
+    : await shellRunWithStop(ctx, command, dir);
+  const r = await compressShellResult(shapeResult(command, ran, trim), ctx);
+  const notes = [r.note, note].filter(Boolean).join(" ");
+  return { data: { ...(r as unknown as Record<string, unknown>), ...where, ...(notes ? { note: notes } : {}) } };
 }
 
 /** A finished job's status, its `output` compressed like a foreground command's (C8: a
@@ -155,5 +177,5 @@ export const commandStopTool: ToolDefinition = defineTool({
   },
 });
 
-/** The background-job tools, spliced into `CORE_TOOLS` right after `run_command`. */
-export const SHELL_JOB_TOOLS: readonly ToolDefinition[] = [commandStatusTool, commandStopTool];
+/** The background-job tools and `output_filter` (the run's retained outputs), spliced into `CORE_TOOLS` right after `run_command`. */
+export const SHELL_JOB_TOOLS: readonly ToolDefinition[] = [commandStatusTool, commandStopTool, outputFilterTool];

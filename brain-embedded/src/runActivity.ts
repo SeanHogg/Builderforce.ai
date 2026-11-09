@@ -146,6 +146,26 @@ export function toolActivity(label: string, args: unknown, step: number, started
 }
 
 /**
+ * The label of the `thinking` phase a run is in BETWEEN a tool's result and the next model turn
+ * (the guards' observation, the steering drain, the tool menu, the context fold). Without it the
+ * finished tool stayed the live step until the next completion opened: chat #60338 showed
+ * "running `remember_fact` (3m 53s so far, loop step 2)" for a call whose result came back in 1s.
+ */
+export const BETWEEN_TURNS_LABEL = 'between-turns';
+/** The label of the `thinking` phase while the context fold's summary is asked of the model. */
+export const CONTEXT_FOLD_LABEL = 'context-fold';
+
+/** The live activity once a tool call has RETURNED: the tool is over, the next turn is being prepared. */
+export function betweenTurnsActivity(step: number, startedAt: number): BrainRunActivity {
+  return { phase: 'thinking', label: BETWEEN_TURNS_LABEL, startedAt, step };
+}
+
+/** The live activity while the context fold summarises the transcript's middle (a model call of its own). */
+export function contextFoldActivity(step: number, startedAt: number): BrainRunActivity {
+  return { phase: 'thinking', label: CONTEXT_FOLD_LABEL, startedAt, step };
+}
+
+/**
  * Human-readable byte size — `812 B`, `12.4 KB`. THE size formatter for this package:
  * the triage report's tool-result sizes, the turn log's argument bytes and the live
  * composing indicator all render a size the same way, so a reader who learns to read
@@ -182,6 +202,8 @@ export function describeLiveStep(step: BrainRunActivity, capturedAtMs: number): 
       : step.phase === 'awaiting' ? `PAUSED waiting for the user to approve \`${step.label}\` — nothing advances until they answer`
         : step.phase === 'composing'
           ? `composing a \`${step.label || 'tool'}\` call${step.bytes != null ? ` — ${formatBytes(step.bytes)} of arguments so far` : ''}`
+          : step.phase === 'thinking' && step.label === BETWEEN_TURNS_LABEL ? 'preparing the next model turn after the last tool returned (guards, steering, tool menu, context fold)'
+            : step.phase === 'thinking' && step.label === CONTEXT_FOLD_LABEL ? 'waiting on the model for the context-fold summary'
           : step.phase === 'thinking' ? 'waiting on the model (no token received yet)'
             : step.phase === 'writing' ? 'streaming the reply'
               : step.phase === 'finishing' ? 'doing post-run work (ticket capture / status reconciliation)'

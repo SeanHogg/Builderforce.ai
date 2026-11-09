@@ -5,7 +5,7 @@
  * list, as of {@link PRICE_SNAPSHOT_AT}. Read through `snapshotPriceBook()`.
  */
 
-export const PRICE_SNAPSHOT_AT = "2026-11-09T01:44:04.332Z";
+export const PRICE_SNAPSHOT_AT = "2026-11-09T03:21:09.083Z";
 
 export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>> = {
   "~anthropic/claude-fable-latest": [0.00001, 0.00005],
@@ -17,7 +17,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "~deepseek/deepseek-v4-flash-latest": [4.34e-8, 3e-7],
   "~google/gemini-flash-latest": [7.5e-7, 0.00000375],
   "~google/gemini-pro-latest": [0.000002, 0.00001],
-  "~moonshotai/kimi-latest": [1.824e-7, 0.0000105572],
+  "~moonshotai/kimi-latest": [1.634e-7, 0.0000101489],
   "~openai/gpt-astra-latest": [0.00001, 0.00005],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [7.5e-7, 0.0000045],
@@ -94,7 +94,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "deepseek/deepseek-v4-flash-0731": [4.34e-8, 3e-7],
   "deepseek/deepseek-v4-flash-0731:batch": [4.8e-8, 1.44e-7],
   "deepseek/deepseek-v4-flash-vision-exp": [4.4e-7, 0.00000132],
-  "deepseek/deepseek-v4-pro": [9.483e-7, 0.0000018966],
+  "deepseek/deepseek-v4-pro": [9.5526e-7, 0.00000191052],
   "deepseek/deepseek-v4-pro-0813": [1.11e-7, 0.00000444],
   "deepseek/deepseek-v4.1-flash": [5.1e-8, 5.67e-7],
   "deepseek/deepseek-v4.1-flash-1017": [6e-9, 5e-7],
@@ -138,7 +138,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "google/gemini-omni-1.2-flash": [0.0000015, 0.000009],
   "google/gemma-2-27b-it": [6.5e-7, 6.5e-7],
   "google/gemma-3-12b-it": [5e-8, 1.5e-7],
-  "google/gemma-3-27b-it": [8e-8, 3.5e-7],
+  "google/gemma-3-27b-it": [8e-8, 4.5e-7],
   "google/gemma-3-4b-it": [5e-8, 1e-7],
   "google/gemma-4-26b-a4b-it": [6.75e-8, 2.25e-7],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
@@ -460,7 +460,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "z-ai/glm-5-turbo": [0.0000012, 0.000004],
   "z-ai/glm-5.1": [0.0000014, 0.0000044],
   "z-ai/glm-5.2": [6e-9, 0.0000068],
-  "z-ai/glm-5.2:batch": [5.04e-7, 0.000001271],
+  "z-ai/glm-5.2:batch": [6.23e-7, 0.000001271],
   "z-ai/glm-5.3": [6.99e-8, 0.0000014],
   "z-ai/glm-5.3-flash": [3.35e-8, 8.3e-8],
   "z-ai/glm-5.3-flash:batch": [5e-8, 1.8e-7],

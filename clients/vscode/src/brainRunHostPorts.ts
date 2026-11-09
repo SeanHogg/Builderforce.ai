@@ -7,7 +7,7 @@
  */
 
 import * as vscode from "vscode";
-import { getGlobalRunState, getRunSnapshot, isRunning, type BrainStreamFn, type ModelFallbackEvent, utilityUsageObserver } from "@seanhogg/builderforce-brain-embedded";
+import { getGlobalRunState, getRunSnapshot, isRunning, type BrainStreamFn, type LocalChatIdentity, type ModelFallbackEvent, utilityUsageObserver } from "@seanhogg/builderforce-brain-embedded";
 import { getApiKey, postRunOutcome } from "./gateway";
 import { fetchRunContextSection, projectEvermindHooks } from "./bfApi";
 import { localBrainApplication } from "./localFirstStore";
@@ -24,6 +24,11 @@ import { boundServerIds } from "./sessionChats";
 import { recentActivitySection, RUN_GROUNDING_BUDGET_MS, stableGroundingWithin } from "./grounding";
 import { setLocalChatRuns } from "./attention";
 import { createInterruptedRuns } from "./interruptedRunsView";
+import { createChildLedger } from "./childLedger";
+import { persistChildrenTo } from "./childRunJournal";
+import { startedCommandsOf } from "./childRunSpawner";
+import { askedText } from "./runAsked";
+import { editorChatSessionKey } from "./sessionNotes";
 import { createBrainRunHost, type BrainRunHost } from "./brainRunHost";
 import { gateStarts } from "./hostStartGate";
 import { changeSetIdentityForHostRun, recordChangeSetAroundRun } from "./runChangeSets";
@@ -32,6 +37,8 @@ import { createHostRunLifecycle } from "./hostRunLifecycle";
 import { installLocalDomainTools, type DomainToolRequest } from "./installLocalDomainTools";
 import { routeToLocalDomainTools } from "./localDomainToolRouting";
 import { ticketServerIdLookup } from "./localTicketIdBridge";
+import { localChatTicketScope } from "./localTicketScope";
+import type { PlatformChatIdentity } from "./platformTools";
 import type { ToolDef } from "./fileTools";
 import { changeTouches, type LocalFirstStore } from "@builderforce/local-first";
 import type { LocalModelsConfig } from "./localModels";
@@ -86,17 +93,25 @@ function runInstalledDomainTool(ctx: vscode.ExtensionContext, request: DomainToo
 /**
  * Project and ticket tools are the installed adapter ALWAYS — signed in or not, sync
  * granted or not (`localDomainToolRouting.ts` says why): the write lands on this
- * device and the batched sync carries it to the account. `chatClientId` is the run's
- * local chat, stamped onto a created ticket.
+ * device and the batched sync carries it to the account. `chat` is the run's chat: its
+ * client id is stamped onto a created ticket, and it scopes the ticket reads (this
+ * device's unsynced tickets included) and status changes (its own tickets only).
  */
 function routeDomainToolsLocal(
   ctx: vscode.ExtensionContext,
   store: LocalFirstStore,
+  identity: LocalChatIdentity,
   tools: readonly ToolDef[],
-  chatClientId?: string,
+  chat?: PlatformChatIdentity,
 ): readonly ToolDef[] {
   installHostDomainTools(ctx, store);
-  return routeToLocalDomainTools(tools, (request) => runInstalledDomainTool(ctx, request), chatClientId, ticketServerIdLookup(store));
+  return routeToLocalDomainTools(
+    tools,
+    (request) => runInstalledDomainTool(ctx, request),
+    chat?.clientChatId,
+    ticketServerIdLookup(store),
+    localChatTicketScope(store, identity, chat),
+  );
 }
 
 export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeRunHostHooks): BrainRunHost {
@@ -130,7 +145,7 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     tools: async (projectId, children, signal, opts) => {
       const tools = await brainToolCatalog(secrets, workspaceRoot() || undefined, projectId, children, signal, opts);
       const catalog = opts.audit && projectId != null ? auditToolCatalog(secrets, tools, projectId, opts.audit) : tools;
-      return routeDomainToolsLocal(ctx, local.store, catalog, opts.chatIdentity?.clientChatId);
+      return routeDomainToolsLocal(ctx, local.store, local.identity, catalog, opts.chatIdentity);
     },
     workspaceRoot,
     stream: streamForRoute,
@@ -157,6 +172,8 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     runSettings: () => editorRunSettings(secrets),
     // The chat's usage ledger on this device: every call, the outcome, an avoided call.
     ...deviceLedgerPorts(local.usage, hostLog),
+    // Every sub-agent journaled WITH its parent run, so a run the editor dies inside resumes knowing its children.
+    childLedger: createChildLedger({ startedCommands: startedCommandsOf, persist: persistChildrenTo(local.store), log: hostLog }),
     // How a code-changing run's coder did — so the next run's coder is picked on evidence.
     reportOutcome: (outcome) => postRunOutcome(outcome),
     reportRunRecord: (record) => postRunOutcome(record),
@@ -191,9 +208,9 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     // The note, then (Memory on) the code map + learned facts — the one run-end step the
     // native chat participant shares.
     sessionNote: (chatId, run, opts) =>
-      recordEditorRunEnd(secrets, workspaceRoot(), `chat-${chatId}`, run, opts, { ledger: local.usage, chatId, runKey: chatId, identity: local.identity }),
+      recordEditorRunEnd(secrets, workspaceRoot(), editorChatSessionKey(chatId), run, opts, { ledger: local.usage, chatId, runKey: chatId, identity: local.identity }),
     // Fresh per run: the notes of the run that just finished, not the panel's copy.
-    recentActivity: () => recentActivitySection(workspaceRoot() || undefined),
+    recentActivity: (chatId) => recentActivitySection(workspaceRoot() || undefined, chatId != null ? editorChatSessionKey(chatId) : undefined),
     // Bounded like the panel's init: a run never waits on a cold definition index's
     // whole-workspace parse; the runs after it lands get the memoised index. Late, it
     // hands back nothing, so the prompt keeps the (possibly fuller) map it already has.
@@ -243,7 +260,7 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     acknowledgeInterrupted: interrupted.acknowledge,
     ...gateStarts(host, (payload, start) => {
       const { runId, author } = changeSetIdentityForHostRun(payload, () => crypto.randomUUID());
-      if (!isRunning(payload.chatId)) lifecycle.started(payload.chatId, runId);
+      if (!isRunning(payload.chatId)) lifecycle.started(payload.chatId, runId, askedText(payload.userTurn));
       return recordChangeSetAroundRun(
         {
           store: local.store,

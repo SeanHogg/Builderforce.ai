@@ -10,12 +10,15 @@
  * `command_stop` from another run is told there is no such job. The host kills a run's
  * jobs when the run settles (finish, fail or Stop — `killRunJobs`) and every job when the
  * extension deactivates (`killAllJobs`), so no run leaves a dev server behind. A job
- * started with a `signal` also dies with it. Output is a bounded tail.
+ * started with a `signal` also dies with it. Output is a bounded tail; a finished job's
+ * full output (to {@link MAX_FULL_OUTPUT}) is retained for `output_filter` (`localShellOutputs.ts`).
  */
 
 import type { ChildProcess } from "child_process";
 import type { ShellJobStart, ShellJobStatus } from "@builderforce/agent-tools";
 import { killProcessTree, spawnCommand } from "./processTree";
+import { forgetRunOutputs, retainOutput } from "./localShellOutputs";
+import { invalidateRunCache } from "./localShellCache";
 
 /** The run a job belongs to; `undefined` = a caller with no run (a hook, a test). */
 export type JobOwner = number | undefined;
@@ -28,6 +31,9 @@ interface Job {
   exitCode?: number;
   output: string;
   truncated: boolean;
+  /** Everything it printed, to {@link MAX_FULL_OUTPUT} — retained when it finishes. */
+  full: string;
+  outputId?: string;
   done: Promise<void>;
 }
 
@@ -39,6 +45,8 @@ const nextJobOf = new Map<JobOwner, number>();
 const keyOf = (owner: JobOwner, id: string): string => `${owner ?? "-"}:${id}`;
 /** Finished jobs kept for a late `command_status`; the oldest finished go first. */
 const MAX_JOBS = 32;
+/** The most of a job's output retained for `output_filter` (the foreground buffer's bound). */
+const MAX_FULL_OUTPUT = 4 * 1024 * 1024;
 
 export interface StartJobOptions {
   cwd: string;
@@ -68,6 +76,7 @@ function statusOf(job: Job): ShellJobStatus {
     ...(job.exitCode !== undefined ? { exitCode: job.exitCode } : {}),
     output: job.output.trim(),
     ...(job.truncated ? { truncated: true } : {}),
+    ...(job.outputId ? { outputId: job.outputId } : {}),
   };
 }
 
@@ -95,8 +104,9 @@ export function startJob(command: string, opts: StartJobOptions): ShellJobStart 
   nextJobOf.set(owner, n);
   const id = `job-${n}`;
   let settle!: () => void;
-  const job: Job = { id, owner, child, status: "running", output: "", truncated: false, done: new Promise<void>((r) => { settle = r; }) };
+  const job: Job = { id, owner, child, status: "running", output: "", truncated: false, full: "", done: new Promise<void>((r) => { settle = r; }) };
   const append = (chunk: string): void => {
+    if (job.full.length < MAX_FULL_OUTPUT) job.full += chunk;
     job.output += chunk;
     if (job.output.length > opts.maxOutput) {
       job.output = job.output.slice(job.output.length - opts.maxOutput);
@@ -110,6 +120,8 @@ export function startJob(command: string, opts: StartJobOptions): ShellJobStart 
   const finish = (code: number | null): void => {
     if (job.status === "running") job.status = "exited";
     if (typeof code === "number") job.exitCode = code;
+    if (owner !== undefined && job.full.trim() && !job.outputId) job.outputId = retainOutput(owner, job.full.trim());
+    job.full = "";
     opts.signal?.removeEventListener("abort", onAbort);
     settle();
   };
@@ -163,10 +175,13 @@ export async function killJob(id: string, owner?: JobOwner): Promise<ShellJobSta
   return { ...statusOf(job), ...(job.status === "killed" ? { error: "stopped" } : {}) };
 }
 
-/** Kill every job a run still has running — called when the run settles. */
+/** Kill every job a run still has running — called when the run settles — and drop the
+ *  run's retained outputs and cached results with it. */
 export async function killRunJobs(owner: JobOwner): Promise<void> {
   const mine = [...jobs.values()].filter((job) => job.owner === owner && job.status === "running");
   await Promise.all(mine.map((job) => killJob(job.id, owner)));
+  forgetRunOutputs(owner);
+  invalidateRunCache(owner);
 }
 
 /** Kill every running job of every run — the extension is deactivating. */

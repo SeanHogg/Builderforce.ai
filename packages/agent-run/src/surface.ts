@@ -96,6 +96,14 @@ export interface PlatformSelection {
   rank?(candidates: readonly ToolSchema[], query: string): readonly ToolSchema[];
   /** Hold {@link required} to {@link limit} too, in catalog order (additive; the Brain's rule). Absent ⇒ a required tool is never dropped. */
   capRequired?: boolean;
+  /**
+   * The role this turn asks for (additive; the run policy's phase). A `code` or `verify` turn is CAPPED (`policy/tools/roleCap.ts`):
+   * the role's tool set plus the tools that match the request, never the catalog-order backfill, and {@link required} narrows to the
+   * role set plus {@link roleKeep}. Absent, or any other role ⇒ the selection above stands.
+   */
+  role?: string;
+  /** The surface's own vocabulary a capped role keeps (a Studio's build tools). */
+  roleKeep?: Iterable<string>;
 }
 
 /** The surface's own tools, as a capability provider on the same run. */

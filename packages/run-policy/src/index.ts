@@ -28,6 +28,17 @@ export {
   type TransportFailureKind,
   type TurnRequest,
 } from './policy.js';
+export {
+  LATENCY_SAMPLE_WINDOW,
+  MAX_FAILOVER_LATENCY_RATIO,
+  guardedPick,
+  latencyEligible,
+  p50,
+  recordLatency,
+  withinLatencyBudget,
+  type LatencyGuardInput,
+  type LatencySamples,
+} from './latencyGuard.js';
 export { coderHandoffBrief, isCoderReask, type HandoffCall } from './coderHandoff.js';
 export { resolveStallStep, type StallFailoverSource, type StallStep, type StallTurn } from './stallStep.js';
 export {

@@ -6,7 +6,7 @@
  */
 
 import { offersHandOff } from '@builderforce/run-policy';
-import { DEFAULT_TOOL_LIMIT, type TurnEnv, type TurnMenu } from '@builderforce/agent-run';
+import { roleToolLimit, type TurnEnv, type TurnMenu } from '@builderforce/agent-run';
 import type { ToolSchema } from '@builderforce/agent-tools';
 import type { BrainToolSpec } from '../streamChatCompletion';
 import { HAND_OFF_TOOL } from '../planHandoff';
@@ -38,8 +38,9 @@ export async function brainTurnMenu(run: BrainRunContext, env: TurnEnv, catalogS
   const tail = [...(forced ? [userTextOf(forced.brief)] : []), ...(steer ? [steer] : [])];
   if (forced) return { tools: forced.tools as unknown as ToolSchema[], toolChoice: forced.toolChoice, tail };
   // The ROUTER rides along whenever selection trimmed something, so the tools that missed the cut stay REACHABLE. A catalog at or under
-  // the limit is never trimmed (the agent's `selectToolsForTurn`): `hand_off` leaving the menu is not a trim.
-  if (catalogSize > DEFAULT_TOOL_LIMIT) {
+  // the limit is never trimmed (the agent's `selectToolsForTurn`): `hand_off` leaving the menu is not a trim. The limit is the turn's role's
+  // (a code or verify turn is capped far below the wide default), so the router rides every turn the cap trimmed.
+  if (catalogSize > roleToolLimit(run.policy.phase)) {
     pushTrace(run.c, {
       ts: nowIso(),
       category: 'message',

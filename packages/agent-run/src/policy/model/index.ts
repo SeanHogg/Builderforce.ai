@@ -249,11 +249,12 @@ export function retryOutcome(state: ModelRunState): RetryOutcome | null {
  * The turn succeeded: lock onto what served it (when configured to), record it proven
  * when it acted, and clear the one-shot forced tool choice — it was spent on this call.
  */
-export function recordSuccess(state: ModelRunState, served: { model?: string; acted?: boolean }): ModelRunState {
+export function recordSuccess(state: ModelRunState, served: { model?: string; acted?: boolean; durationMs?: number }): ModelRunState {
   const policy = reduceRunPolicy(state.policy, {
     type: "turn_succeeded",
     ...(served.model ? { model: served.model } : {}),
     ...(served.acted ? { acted: true } : {}),
+    ...(served.durationMs !== undefined ? { durationMs: served.durationMs } : {}),
   });
   return { ...state, policy, forceToolChoice: undefined };
 }

@@ -18,6 +18,26 @@ import type { RunKnowledgeLog } from '@builderforce/agent-tools';
 import type { ServedRead } from './hostRunContext';
 import type { PrefetchPort } from '@builderforce/prefetch';
 import type { ModelPreflightResult } from '@builderforce/agent-run';
+import type { CheckRecord, EvidencePolicy, OutgoingFile, ReviewVerdict } from '@builderforce/run-guards';
+
+/** The verifier port every deterministic run gate reads (PRD 45 §4.4). */
+export interface VerifierPort {
+  /** Fast tier, ≤ 3 s: language-server diagnostics for exactly these files. Null = unavailable. */
+  diagnostics(absPaths: readonly string[]): Promise<CheckRecord | null>;
+  /** Full tier for these files: owning packages' typecheck + targeted tests + repo guards. Cached by (path, hash, check). */
+  full(absPaths: readonly string[]): Promise<ReadonlyMap<string, readonly CheckRecord[]>>;
+}
+
+/** The git port: the host reads the REAL commits, never the model's claims. */
+export interface GitPort {
+  /** Files in commits not yet on upstream plus the HEAD tree's bytes for each path. */
+  outgoing(repo: string): Promise<{ files: OutgoingFile[]; diffHash: string; baseBranch: boolean }>;
+}
+
+/** The reviewer port: OD-1, one review sub-run by a model that did not author the change. */
+export interface ReviewerPort {
+  review(input: { repo: string; diff: string; evidence: string; authorModels: readonly string[] }): Promise<ReviewVerdict | { refused: string }>;
+}
 
 /**
  * What a run cell is keyed by. A CHAT's run is keyed by its chat id (a number — the
@@ -94,6 +114,13 @@ export interface BrainRunRequest {
   /** `signal` is passed for a call the person's steer may interrupt (a foreground
    *  command); otherwise the host lends the call the run's own Stop. */
   runTool?: (name: string, args: unknown, signal?: AbortSignal) => Promise<unknown>;
+  /**
+   * The host's LIVE-CHILDREN port (the agent's `FinishPorts.liveChildren`): the block reason while sub-agents THIS run
+   * started are still working, or null when none is. Bound, it holds every end of the run - the `finish` tool and a prose
+   * answer alike - until their reports are in (`run/brainFinish.ts`). Unbound, the owner could end with children still
+   * working, and each late report then woke it into a new run with no ask of its own (chats #60338, #61651).
+   */
+  liveChildren?: () => Promise<string | null>;
   /** Pure predicate: true → pause the loop for an explicit user confirmation. */
   needsConfirm?: (req: { name: string; args: unknown }) => boolean;
   /**
@@ -108,6 +135,15 @@ export interface BrainRunRequest {
    * live ref as `needsConfirm`, so a mid-run toggle is honoured.
    */
   answerQuestion?: (question: import('@builderforce/agent-loop').AskUserPayload) => string | null;
+  /**
+   * PRD 45 §4.4 — the deterministic ship-gate ports. EVERY gate is inert unless its
+   * port is bound: the web Brain and the parity harness bind none and are unchanged.
+   */
+  verifier?: VerifierPort;
+  git?: GitPort;
+  reviewer?: ReviewerPort;
+  /** The evidence policy the ship gates enforce — policy is data (PRD 45 §4.3). Defaults to DEFAULT_EVIDENCE_POLICY. */
+  evidencePolicy?: EvidencePolicy;
   stream: BrainStreamFn;
   /**
    * `max_tokens` for this run's completions — the composer's Effort level (see

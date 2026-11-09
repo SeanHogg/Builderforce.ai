@@ -18,6 +18,7 @@
 import type { ToolSchema } from "@builderforce/agent-tools";
 import type { PolicyContext } from "../hooks.js";
 import { selectToolsForTurn } from "./selectTools.js";
+import { isCappedToolRole, roleCappedSelection } from "./roleCap.js";
 
 /** The platform tools this turn advertises, or nothing when the run has no platform port. */
 export function selectPlatformCatalog(ctx: PolicyContext, pinned: readonly string[]): readonly ToolSchema[] | undefined {
@@ -25,8 +26,15 @@ export function selectPlatformCatalog(ctx: PolicyContext, pinned: readonly strin
   if (!platform?.closed) return undefined;
   const catalog = platform.schemas({ rungs: ctx.state.stall?.rungs ?? {} });
   const selection = platform.selection;
-  const { query, limit, required } = selection;
+  const { query } = selection;
+  // A code or verify turn is capped to its role's tool set plus what matches the request (`roleCap.ts`); every other turn keeps the
+  // surface's own limit and required set.
+  const capped = isCappedToolRole(selection.role)
+    ? roleCappedSelection(selection.role, catalog.map((t) => t.function?.name ?? ""), selection.roleKeep ?? [])
+    : undefined;
+  const limit = capped?.limit ?? selection.limit;
+  const required = capped?.required ?? [...selection.required];
   // The surface knows what it ran: its own pins (a call through its router counts as the tool it reached; a compaction that dropped the
   // call keeps the pin; an earlier run pins nothing) replace the ones read off the transcript.
-  return selectToolsForTurn(catalog, { query, limit, pinned: selection.pinned ? [...selection.pinned] : pinned, required: [...required], ...(selection.rank ? { rank: selection.rank } : {}), ...(selection.capRequired ? { capRequired: true } : {}) }).tools;
+  return selectToolsForTurn(catalog, { query, limit, pinned: selection.pinned ? [...selection.pinned] : pinned, required, ...(selection.rank ? { rank: selection.rank } : {}), ...(selection.capRequired ? { capRequired: true } : {}), ...(capped ? { backfill: false } : {}) }).tools;
 }

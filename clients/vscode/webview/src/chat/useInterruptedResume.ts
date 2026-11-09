@@ -26,8 +26,8 @@ export function useInterruptedResume({ chatId, openChat, send, isRunning, contin
   /** The composer's door for the chat showing (`useChatSend().continueChat`): resolves whether the turn was kept. */
   send: (text: string) => Promise<boolean>;
   isRunning: (chatId: number) => boolean;
-  /** The localized continuation turn. */
-  continuation: string;
+  /** The continuation turn of an interrupted run, by its id (`interruptedResumeTurn.ts`). */
+  continuation: (runId: string) => string;
 }): InterruptedResume {
   // The tracker is created once; what it calls is read through this ref, so it always
   // sees the render's own `send` (bound to the chat showing now).
@@ -40,7 +40,7 @@ export function useInterruptedResume({ chatId, openChat, send, isRunning, contin
       send: (text) => live.current.send(text),
       ack: acknowledgeInterruptedRun,
       isRunning: (id) => live.current.isRunning(id),
-      continuation: () => live.current.continuation,
+      continuation: (runId) => live.current.continuation(runId),
     }),
     [],
   );

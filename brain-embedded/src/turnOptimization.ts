@@ -39,6 +39,7 @@ export function turnOptimizationDirective(): string {
     '• Infer a workable brief from the conversation, project memory, attachments and current request. Ask one grouped set of questions only when different answers would materially change the result; otherwise state a reasonable assumption briefly and proceed.',
     '• Treat corrections and “actually…” follow-ups as patches to the active brief. Preserve approved work and change the smallest requested scope; never regenerate unrelated content.',
     '• Complete all requested deliverables in this run. Batch independent reads/actions when the tool supports it, while preserving dependencies and confirmation boundaries.',
+    '• Batch independent reads/searches into ONE turn as parallel tool calls.',
     '• In Work mode, plan enough to act safely and then execute in the same run. Do not make the user move to another surface just to turn a plan into work.',
     '• For attachments, inspect only the relevant pages/sections with builtin_attachments_read and its offset/limit controls. Accept the original file; never ask the user to convert, split, trim, or re-upload it merely to save context.',
     '• Reuse established project conventions, examples and explicit user preferences. A topic change is a new internal context segment, not a reason to make the user restart the chat.',

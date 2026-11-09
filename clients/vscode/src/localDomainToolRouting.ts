@@ -16,13 +16,17 @@
  *     so the model has exactly one way to do each job.
  *
  * Pure of `vscode`: the caller supplies how a request is executed, so this is testable
- * headlessly. Read tools (`builtin_tasks_list`, `builtin_chats_list_tickets`, …) are
- * untouched — only the writes the local adapter now does are replaced.
+ * headlessly. The account's read tools stay the server's, but given the run's chat scope
+ * their answer includes this device's unsynced tickets (`localTicketReads.ts`), and a status
+ * change on a ticket the run's chat does not link is refused (`chatTicketGuard.ts`).
  */
 
 import type { DomainToolRequest } from "./installLocalDomainTools";
 import type { LocalDomainToolName } from "./localDomainTools";
 import { bridgeLocalTicketIds, type TicketServerIdLookup } from "./localTicketIdBridge";
+import { unionLocalTicketReads } from "./localTicketReads";
+import type { ChatTicketScope } from "./localTicketScope";
+import { guardChatTicketWrites, serverLinkedRefsVia } from "./chatTicketGuard";
 import type { ToolDef } from "./fileTools";
 import { toolMutating } from "./toolMutating";
 
@@ -193,12 +197,15 @@ function stampedArgs(
  *
  * `run` executes one request on the installed adapter; `chatClientId` is the current
  * run's local chat (its client entity id) — `ticket-create` stamps it on the ticket.
+ * `chatTickets` is the run's chat as this device knows it: with it, the ticket reads union
+ * in local tickets and status changes are held to the chat's own tickets.
  */
 export function routeToLocalDomainTools(
   tools: readonly ToolDef[],
   run: (request: DomainToolRequest) => Promise<unknown>,
   chatClientId?: string,
   ticketServerId?: TicketServerIdLookup,
+  chatTickets?: ChatTicketScope,
 ): readonly ToolDef[] {
   const localExecute = (name: LocalDomainToolName): ToolDef["execute"] => async (args) =>
     JSON.stringify(await run({ tool: name, args: stampedArgs(name, args, chatClientId) }));
@@ -219,5 +226,10 @@ export function routeToLocalDomainTools(
   );
   const all = added.length === 0 ? routed : [...routed, ...added];
   // The account's own ticket tools take numeric ids; translate a local id to its server id.
-  return ticketServerId ? bridgeLocalTicketIds(all, ticketServerId) : all;
+  const bridged = ticketServerId ? bridgeLocalTicketIds(all, ticketServerId) : all;
+  if (!chatTickets) return bridged;
+  // Outermost: a read sees the model's own id (an unsynced local id answers locally before the
+  // bridge would refuse it), and the guard checks the id the model named.
+  const reads = unionLocalTicketReads(bridged, chatTickets);
+  return guardChatTicketWrites(reads, chatTickets, serverLinkedRefsVia(tools, chatTickets.current), ticketServerId);
 }

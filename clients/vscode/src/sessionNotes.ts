@@ -127,6 +127,14 @@ export async function readRecentSessionNotes(
 }
 
 /**
+ * The session key an editor chat's run notes are written under (`recordEditorRunEnd`) and recognised by when they are
+ * read back for that same chat ({@link neutraliseSessionNotes}'s "(this chat)").
+ */
+export function editorChatSessionKey(chatId: number): string {
+  return `chat-${chatId}`;
+}
+
+/**
  * The guardrail prepended to every served block. The notes below describe runs from
  * ANY session in this workspace, most of them not this chat's — exactly what the
  * Evermind block calls "(elsewhere in the project)". Reference only: never resume,

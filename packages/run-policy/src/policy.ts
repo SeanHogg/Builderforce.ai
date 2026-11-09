@@ -26,6 +26,7 @@ import {
   nextFallbackModel,
   type ModelFallbackSurface,
 } from '@builderforce/agent-stall';
+import { guardedPick, recordLatency, withinLatencyBudget, type LatencyGuardInput, type LatencySamples } from './latencyGuard.js';
 
 /** The working phase of a tool-using run. Only ever moves forward. */
 export type RunPhase = Extract<ModelRole, 'plan' | 'code' | 'verify'>;
@@ -113,6 +114,9 @@ export interface RunPolicyOptions {
   phaseModels?: Partial<Record<RunPhase, string | null>>;
   /** Review model for the verify phase. `null` means none is configured. */
   reviewModel?: string | null;
+  /** Per-model turn durations the host already measured (earlier runs) — the latency guard's
+   *  starting evidence, before this run times its own turns (`latencyGuard.ts`). */
+  latencySeed?: LatencySamples;
 }
 
 /** What the host must do about the event it just reported. */
@@ -152,6 +156,9 @@ export interface RunPolicyState {
   readonly proven: readonly string[];
   /** Every model a stall failover has already burned, asked-for and resolved. */
   readonly tried: readonly string[];
+  /** Recent turn durations per served model (`turn_succeeded.durationMs`) — what keeps a code or
+   *  verify failover off a model many times slower than the primary. Optional: older snapshots lack it. */
+  readonly latency?: LatencySamples;
   readonly failovers: number;
   /** Transport retries spent on the CURRENT turn; a success resets it. */
   readonly turnRetries: number;
@@ -190,7 +197,7 @@ export type TransportFailureKind =
 export type RunPolicyEvent =
   /** The turn answered. `model` is what the gateway RESOLVED, when it said; `acted` —
    *  the turn called tools — makes that model a proven failover candidate. */
-  | { type: 'turn_succeeded'; model?: string; acted?: boolean }
+  | { type: 'turn_succeeded'; model?: string; acted?: boolean; durationMs?: number }
   /** The turn's tool calls include a code change (the implicit plan→code re-ask). */
   | { type: 'code_change_attempted' }
   /** The model called `hand_off` (planning ends explicitly). */
@@ -215,6 +222,9 @@ export type RunPolicyEvent =
       resolvedModel?: string;
       surface?: ModelFallbackSurface | null;
       pick?: (tried: readonly string[]) => string | undefined;
+      /** The model errored, was rate-limited or is down — not merely stalling: the latency guard
+       *  steps aside, because any model that serves beats none. */
+      primaryUnavailable?: boolean;
     }
   | { type: 'transport_failed'; kind: TransportFailureKind; model?: string; status?: number }
   /**
@@ -249,6 +259,7 @@ export function initialRunPolicy(opts: RunPolicyOptions = {}): RunPolicyState {
     broken: [...new Set((opts.excludeModels ?? []).filter(Boolean))],
     proven: [],
     tried: [],
+    ...(opts.latencySeed && Object.keys(opts.latencySeed).length > 0 ? { latency: opts.latencySeed } : {}),
     failovers: 0,
     turnRetries: 0,
     planTurns: 0,
@@ -361,7 +372,7 @@ export function reduceRunPolicy(state: RunPolicyState, event: RunPolicyEvent): R
   const s: RunPolicyState = { ...state, outcome: NONE };
   switch (event.type) {
     case 'turn_succeeded':
-      return succeeded(s, event.model, event.acted === true);
+      return succeeded(s, event.model, event.acted === true, event.durationMs);
     case 'code_change_attempted':
       // The analysis model just decided to change code; that edit is the first line of
       // the deliverable, so it is re-asked of the coding model. The RE-ASK only when
@@ -418,12 +429,14 @@ export function reduceRunPolicy(state: RunPolicyState, event: RunPolicyEvent): R
   }
 }
 
-function succeeded(s: RunPolicyState, resolved: string | undefined, acted: boolean): RunPolicyState {
+function succeeded(s: RunPolicyState, resolved: string | undefined, acted: boolean, durationMs: number | undefined): RunPolicyState {
   const proven = acted && resolved && resolved !== 'default' && !s.proven.includes(resolved)
     ? [...s.proven, resolved]
     : s.proven;
+  const timed = resolved && resolved !== 'default' ? resolved : s.model;
   const next = {
     ...s,
+    ...(timed && durationMs !== undefined ? { latency: recordLatency(s.latency, timed, durationMs) } : {}),
     turnRetries: 0,
     proven,
     planTurns: s.phase === 'plan' ? s.planTurns + 1 : s.planTurns,
@@ -487,12 +500,25 @@ function failoverPicker(
 ): ((tried: readonly string[]) => string | undefined) | undefined {
   const proven = s.options.preferProvenFailover ? [...s.proven].reverse() : [];
   if (proven.length === 0 && !e.pick && !e.surface) return undefined;
-  if (proven.length === 0 && s.broken.length === 0) return e.pick;
+  const guard = latencyGuardFor(s, e);
+  if (proven.length === 0 && s.broken.length === 0 && !guard) return e.pick;
+  const source = (skip: readonly string[]) => (e.pick ? e.pick(skip) : nextFallbackModel(e.surface, skip));
   return (tried) => {
     const skip = [...tried, ...s.broken];
-    return proven.find((m) => !skip.includes(m))
-      ?? (e.pick ? e.pick(skip) : nextFallbackModel(e.surface, skip));
+    const fast = (m: string) => !guard || withinLatencyBudget(m, guard);
+    return proven.find((m) => !skip.includes(m) && fast(m))
+      ?? (guard ? guardedPick(source, skip, guard) : source(skip));
   };
+}
+
+/**
+ * The latency guard for a code or verify hand-off (`latencyGuard.ts`), or undefined when it does
+ * not apply: a planning turn, a primary that is unavailable, or no turn timed yet. The primary is
+ * the run's pin, else the first model that acted, else the model that just stalled.
+ */
+function latencyGuardFor(s: RunPolicyState, e: Extract<RunPolicyEvent, { type: 'stalled' }>): LatencyGuardInput | undefined {
+  if (s.phase === 'plan' || e.primaryUnavailable || !s.latency) return undefined;
+  return { primary: s.pin ?? s.proven[0] ?? e.resolvedModel ?? s.model, latency: s.latency };
 }
 
 /**

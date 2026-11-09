@@ -64,6 +64,8 @@ export interface InstalledRunRecovery {
     chatId?: string | number;
     ticketId?: string | number;
     destination?: EntityDestination;
+    /** The run's resume state as it starts (`RunResumeState`: its ask). */
+    state?: unknown;
   }): Promise<void>;
   recordCheckpoint(args: { runId: string; step: number; safeToResume: boolean; state?: unknown }): Promise<void>;
   /**
@@ -139,6 +141,7 @@ function bindHandle(
           ...(chatId ? { chatId } : {}),
           ...(ticketId ? { ticketId } : {}),
           ...(args.destination ? { destination: args.destination } : {}),
+          ...(args.state !== undefined ? { state: args.state } : {}),
         });
       } catch (error) {
         // The run still starts; the next activation recovers whatever did commit.

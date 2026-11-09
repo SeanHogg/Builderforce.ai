@@ -64,6 +64,14 @@ export {
 } from "./progressDetector.js";
 // "Now I have everything I need", then another read (PRD 35 WS8p).
 export { UNKEPT_READY_AT, UnkeptClaimTracker, claimsReady, type UnkeptClaimState } from "./readinessClaim.js";
+// B4: the one-off batching nudge after SERIAL_SINGLE_CALLS_AT single-readonly turns
+// (PRD 45 §4.7) — advisory only, never a trip.
+export {
+  BATCHING_NUDGE_NOTE,
+  BatchingNudge,
+  SERIAL_SINGLE_CALLS_AT,
+  type BatchingNudgeState,
+} from "./batchingNudge.js";
 // B1: the one-off advisory on the FIRST unkept claim (PRD 45 §4.7) — earlier than the ladder.
 export {
   READINESS_ADVISORY_NOTE,

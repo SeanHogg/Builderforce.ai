@@ -27,6 +27,7 @@ import {
 } from '@builderforce/agent-run';
 import type { RunPolicyOptions } from '@builderforce/run-policy';
 import { CODE_CHANGE_TOOLS } from '../localWorkspaceTools';
+import { deviceLeverOn } from '../runStore/deviceLevers';
 import type { BrainRunRequest, RunEntryPoint } from '../runStore/runTypes';
 import { brainContextSource } from './contextSource';
 import { brainHumanChannel } from './humanChannel';
@@ -118,9 +119,10 @@ export function brainRunPolicy(b: Pick<BrainRunBinding, 'entryPoint' | 'req' | '
     // Both modes offer the full catalog (`runPreamble.ts`): the mode changes the directive the model reads, never the menu.
     toolScope: req.lineage ? 'subagent' : 'chat-work',
     role: 'general',
-    // No guard lever is switched on in the agent's own policy: A3's detector (and its device lever) is the Brain's
-    // `RunProgressGuard`, which the platform tools run, so the run has ONE detector (`brainPlatformTools.ts`).
-    levers: [],
+    // A3's detector (and its device lever) is the Brain's `RunProgressGuard`, which the platform tools run, so the run has ONE
+    // detector (`brainPlatformTools.ts`) and the agent's A3 stays off. D8 is the one guard lever on: the independent read-only calls
+    // of one model turn (read_file, search_code, git_diff, ...) dispatch concurrently instead of one after another (chat #61651).
+    levers: deviceLeverOn('d8_parallel_tool_calls') ? ['d8_parallel_tool_calls'] : [],
     // A Brain run has NO tool-iteration ceiling: the kernel's consecutive-failure breaker
     // is its only limit (`@builderforce/agent-loop`'s `DEFAULT_TOOL_FAILURE_STREAK`).
     budgets: req.maxRunBudgetUsd && req.maxRunBudgetUsd > 0 ? { usd: req.maxRunBudgetUsd } : {},

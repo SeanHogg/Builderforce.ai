@@ -18,7 +18,7 @@ import type { BrainRunRequest } from './runTypes';
  *  snapshot ({@link settleView}), so work that outlives its deadline never touches the NEXT run's cell. */
 export type BackstopState = Pick<
   RunCell,
-  'deltaRecordedFiles' | 'touchedFiles' | 'deltaTicketId' | 'ticketRecorded' | 'deltaCaptureRefused'
+  'deltaRecordedFiles' | 'touchedFiles' | 'deltaTicketId' | 'ticketRecorded' | 'deltaCaptureRefused' | 'deltaTitleCount'
 >;
 export type BackstopRun = BackstopState & { note?: (ev: BrainTraceEvent) => void };
 
@@ -31,6 +31,7 @@ export function settleView(c: RunCell, runId: string): BackstopRun {
     deltaTicketId: c.deltaTicketId,
     ticketRecorded: c.ticketRecorded,
     deltaCaptureRefused: c.deltaCaptureRefused,
+    deltaTitleCount: c.deltaTitleCount,
     note: (ev) => { if (c.runId === runId) pushTrace(c, ev); },
   };
 }
@@ -136,6 +137,9 @@ export async function recordCodeChangeTicket(
   }
   if (!isFailedToolResult(out)) {
     c.deltaRecordedFiles = [...c.deltaRecordedFiles, ...files];
+    // The title carries the count of the files recorded in THIS capture; remember it so
+    // the post-ship pass can re-title from the final diff (PRD 45 §4.7 B9).
+    if (files.length) c.deltaTitleCount = files.length;
     // Only a MINT yields an id to attach to; an attach returns the same ticket, so
     // reading the id back off either result is correct and keeps this one branch.
     const id = (out as { id?: unknown } | null)?.id;
@@ -219,4 +223,45 @@ export async function updateLinkedTickets(
       isError: isFailedToolResult(out),
     });
   }
+}
+
+/**
+ * Re-title the run's delta ticket from the REAL diff (PRD 45 §4.7 B9).
+ *
+ * The title is minted on the run's FIRST edit from the files recorded THEN — usually
+ * one file — and was never updated, so a change that grew to eight files read "Code
+ * change (1 file)" on the board forever. At ship the final changed-path count is known
+ * (`touchedFiles` holds every file this run changed, so it IS the final changed-path
+ * set), and a mint with files happened (`deltaTitleCount` is set). When the final count
+ * differs from the minted one, the ticket is re-titled through the same
+ * `builtin_tasks_update` the other backstops use — no new writer. Best-effort: a durable
+ * step records the attempt, and it never throws.
+ */
+export async function retitleShippedDeltaTicket(
+  c: RunCell | BackstopRun,
+  req: BrainRunRequest,
+): Promise<void> {
+  if (!req.runTool) return;
+  const id = c.deltaTicketId;
+  // Nothing minted with files this run, or the count already matches the title.
+  if (id == null || c.deltaTitleCount == null) return;
+  const finalCount = c.touchedFiles.length;
+  if (finalCount === 0 || finalCount === c.deltaTitleCount) return;
+  const title = `Code change (${finalCount} file${finalCount === 1 ? '' : 's'})`;
+  const toolStart = nowMs();
+  let out: unknown;
+  try {
+    out = await req.runTool('builtin_tasks_update', { id, title });
+  } catch (e) {
+    out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  noteOf(c)({
+    ts: nowIso(),
+    category: 'tool',
+    label: 'builtin_tasks_update',
+    durationMs: nowMs() - toolStart,
+    args: { id, title, auto: true, reason: 'retitle-shipped-delta' },
+    result: out ?? null,
+    isError: isFailedToolResult(out),
+  });
 }

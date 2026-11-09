@@ -22,6 +22,13 @@ export function safeGitArg(v: unknown): string | null {
   return typeof v === "string" && /^[\w./@-]+$/.test(v) ? v : null;
 }
 
+/** Shell-quote a model-supplied string for a single-quoted POSIX argument. Commit
+ *  messages, PR bodies and paths with spaces are free text — they cannot go through
+ *  `safeGitArg`, which rejects spaces — so they are QUOTED rather than validated. */
+export function shellQuote(v: string): string {
+  return `'${v.replace(/'/g, `'\\''`)}'`;
+}
+
 /**
  * The validated `repo` subdirectory, or null.
  *

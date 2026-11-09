@@ -15,7 +15,7 @@ import { isRepoStateReadTool } from '../localWorkspaceTools';
 import { isReadOnlyPlatformTool } from '../chatWorkLinking';
 import type { ReadCoverage } from '../readCoverage';
 import type { RunKnowledgeLog } from '@builderforce/agent-tools';
-import { failureReason, repeatedFailureAdvisory, type FailureTally, type WriteLedger } from '@builderforce/run-guards';
+import { failureReason, repeatedFailureAdvisory, type EvidenceLedger, type FailureTally, type WriteLedger } from '@builderforce/run-guards';
 import type { PlaceholderLedger } from '../completionGuard';
 import type { turnInterruption } from '../finishReason.js';
 import type { RunWindowFit } from '../windowFit/runWindowFit';
@@ -103,6 +103,10 @@ export interface BrainRunContext {
   failures: FailureTally;
   writeLedger: WriteLedger;
   placeholderLedger: PlaceholderLedger;
+  /** The run's evidence ledger (PRD 45 §4.2): checks the HOST ran, keyed by the bytes
+   *  on disk. The ship gates read it; the model's prose can never write to it. One
+   *  run's lifetime — a resumed run re-checks (the host verifier caches). */
+  evidence: EvidenceLedger;
 
   /** The run's pipeline route (`pipelineRoute.ts`), or null when the run was not routed. */
   pipeline: RunPipeline | null;

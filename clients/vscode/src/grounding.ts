@@ -116,8 +116,10 @@ async function buildStableGrounding(root: string, map: string | undefined): Prom
  * Volatile by construction: the run host sends it through the per-run context seam,
  * never the cached system prefix. '' when there is nothing (or nothing readable).
  */
-export async function recentActivitySection(root: string | undefined): Promise<string> {
+export async function recentActivitySection(root: string | undefined, currentSessionKey?: string): Promise<string> {
   if (!root) return "";
-  const notes = await readRecentSessionNotes(root);
+  // The run's OWN chat is named "(this chat)"; every other session's notes stay labelled foreign (`neutraliseSessionNotes`),
+  // so a run - a resumed one above all - cannot adopt another session's task from them (chat #61651).
+  const notes = await readRecentSessionNotes(root, currentSessionKey ? { currentSessionKey } : undefined);
   return notes ? `## Recent activity in this workspace\n${notes}` : "";
 }

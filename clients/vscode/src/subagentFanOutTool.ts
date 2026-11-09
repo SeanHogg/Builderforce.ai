@@ -17,6 +17,7 @@ import {
   parseWorkstreams,
   schemaForCapabilities,
   spawnAgentsTool,
+  trivialDelegationRefusal,
 } from "@builderforce/agent-tools";
 import type { ToolDef } from "./fileTools";
 import { toolMutating } from "./toolMutating";
@@ -36,6 +37,12 @@ export function subagentFanOutToolDef(deps: SubagentToolDeps & Required<Pick<Sub
     execute: async (args) => {
       const parsed = parseWorkstreams(args.workstreams);
       if (typeof parsed === "string") return JSON.stringify({ ok: false, error: parsed });
+      // A workstream that is only a few shell commands is not a delegation — refused before
+      // any child starts, as a persona refusal is.
+      for (const w of parsed) {
+        const trivial = trivialDelegationRefusal(w.task);
+        if (trivial) return JSON.stringify({ ok: false, error: `workstream '${w.label}': ${trivial}` });
+      }
       // Every persona resolves before any child starts: a refusal found halfway through
       // would leave some slices started and the rest not.
       const roles = parsed.map((w) => delegationRole(w.role));

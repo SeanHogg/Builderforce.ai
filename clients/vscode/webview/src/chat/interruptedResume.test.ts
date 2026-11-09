@@ -42,6 +42,22 @@ describe('createResumeTracker', () => {
     expect(tracker.snapshot().failed.size).toBe(0);
   });
 
+  it('sends THE interrupted run\'s own continuation (built from its journaled record), by its id', () => {
+    const sent: string[] = [];
+    const tracker = createResumeTracker({
+      openChat: () => undefined,
+      send: async (text) => { sent.push(text); return true; },
+      ack: () => undefined,
+      isRunning: () => false,
+      continuation: (runId) => `continue ${runId}`,
+      setTimer: () => 0,
+      clearTimer: () => undefined,
+    });
+    tracker.begin({ runId: 'r9', chatId: 2 });
+    tracker.activeChat(2);
+    expect(sent).toEqual(['continue r9']);
+  });
+
   it('ignores a run event for another chat or one seen before the continuation was sent', () => {
     const { tracker, calls } = setup();
     tracker.begin({ runId: 'r1', chatId: 7 });

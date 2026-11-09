@@ -38,15 +38,19 @@ describe("detectTools memo", () => {
     const handlers: Array<(uri: { fsPath: string }) => void> = [];
     const watcher = { onDidChange: (h: never) => handlers.push(h), onDidCreate: (h: never) => handlers.push(h), onDidDelete: (h: never) => handlers.push(h), dispose: () => {} };
     const subscriptions: unknown[] = [];
-    watchToolManifests({ createFileSystemWatcher: () => watcher } as never, { push: (d) => subscriptions.push(d) }, detector);
+    let mapForgotten = 0;
+    watchToolManifests({ createFileSystemWatcher: () => watcher } as never, { push: (d) => subscriptions.push(d) }, detector, () => void mapForgotten++);
     expect(subscriptions).toEqual([watcher]);
 
     deps = { vitest: "4" };
     // A nested node_modules manifest is not the workspace's own: no re-detection.
     handlers[0]!({ fsPath: "/w/node_modules/x/package.json" });
     expect(detector.current("/w")?.has("vitest")).toBe(false);
+    expect(mapForgotten).toBe(0);
     handlers[0]!({ fsPath: "/w/package.json" });
     expect(detector.current("/w")).toBeUndefined();
+    // The context pack's workspace map is read from the same files: it is forgotten with the tools.
+    expect(mapForgotten).toBe(1);
     expect((await detector.ensure("/w")).has("vitest")).toBe(true);
     expect(reads).toHaveBeenCalledTimes(2);
   });

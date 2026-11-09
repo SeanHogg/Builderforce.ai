@@ -163,6 +163,8 @@ export { evaluatePolicyGateSeam, isPolicyRefusal, isToolWithheld, policyRefusalM
 
 // The per-turn tool selection's advertised-set size (a surface that ranks its own way hands `rank` to the selector and keeps this cap).
 export { DEFAULT_TOOL_LIMIT, PINNED_OVERFLOW, selectToolsForTurn, type SelectToolsOptions, type SelectToolsResult } from "./policy/tools/selectTools.js";
+// The code/verify turn cap (`roleCap.ts`): a surface that decides when its router rides reads the same limit the selection holds.
+export { ROLE_TOOL_LIMIT, ROLE_COMPANION_TOOLS, isCappedToolRole, roleToolLimit, roleToolNames, roleCappedSelection, type CappedToolRole } from "./policy/tools/roleCap.js";
 
 // The window-sized cut of a tool result's text, for the surfaces that cut a message themselves (the on-prem runner's
 // persistence guard and pre-send guard). The cost-lever log summarizer is theirs: they pass it as `hooks`.

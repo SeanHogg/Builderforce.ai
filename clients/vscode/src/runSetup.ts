@@ -36,6 +36,8 @@ export function startRunRepo(ports: Pick<BrainRunHostPorts, "defaultRepo">, inpu
 
 export interface RunContextInput {
   projectId?: number;
+  /** The run's own (local) chat: its run notes are recognised as "(this chat)" in the recent-activity block. */
+  chatId?: number;
   serverChatId: number | null;
   /** The user's request for this run. */
   request: string;
@@ -54,7 +56,7 @@ type RunContextFields = Pick<BrainRunRequest, "augmentSystemPrompt" | "turnConte
  * The system-prompt augmentation (the same seam the limbic block uses): the project's
  * platform context + memory, and the workspace's run notes as they are now.
  */
-function augmentFor(ports: SetupPorts, projectId: number | undefined, serverChatId: number | null): Pick<RunContextFields, "augmentSystemPrompt"> {
+function augmentFor(ports: SetupPorts, projectId: number | undefined, serverChatId: number | null, chatId: number | undefined): Pick<RunContextFields, "augmentSystemPrompt"> {
   const platform = projectId != null && ports.runContext ? ports.runContext : undefined;
   const recent = ports.recentActivity;
   if (!platform && !recent) return {};
@@ -62,7 +64,7 @@ function augmentFor(ports: SetupPorts, projectId: number | undefined, serverChat
     augmentSystemPrompt: async (text: string) => {
       const parts = await Promise.all([
         platform ? platform(projectId!, serverChatId, text).catch(() => "") : "",
-        recent ? recent().catch(() => "") : "",
+        recent ? recent(chatId).catch(() => "") : "",
       ]);
       return parts.filter((part) => part.trim()).join("\n\n") || undefined;
     },
@@ -84,7 +86,7 @@ export function runContextFields(ports: SetupPorts, input: RunContextInput): Run
   };
   const preflight = ports.modelPreflight && !input.child ? ports.modelPreflight : undefined;
   return {
-    ...augmentFor(ports, projectId, serverChatId),
+    ...augmentFor(ports, projectId, serverChatId, input.chatId),
     ...(pack
       ? {
           turnContext: async () => {

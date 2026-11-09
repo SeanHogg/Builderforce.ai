@@ -12,7 +12,8 @@
  * before writing — fine for a throwaway sandbox, but it would rewrite every line ending
  * in a user's working tree and produce a massive spurious diff), this matches tolerantly
  * yet writes back with the file's ORIGINAL line endings untouched: only the edited span
- * changes, using whichever EOL style actually matched.
+ * changes, and the replacement is written in the file's DOMINANT EOL, so a CRLF file
+ * stays pure CRLF. {@link conformToExistingEol} is the same rule for a whole-file write.
  */
 
 /** Result of {@link applyStringEdit}. `content` is the new file text when `ok`. */
@@ -39,8 +40,62 @@ export interface StringEditResult {
 }
 
 const toLF = (s: string): string => s.replace(/\r\n/g, "\n");
-const toCRLF = (s: string): string => toLF(s).replace(/\n/g, "\r\n");
 const countNewlines = (s: string): number => s.split("\n").length - 1;
+
+/** A file's line-ending style: the one most of its lines use, or `null` for a file with none. */
+export type Eol = "\r\n" | "\n";
+
+/** The dominant EOL of `content` — CRLF wins a tie; `null` when it has no newline at all. */
+export function dominantEol(content: string): Eol | null {
+  const all = countNewlines(content);
+  if (all === 0) return null;
+  const crlf = content.split("\r\n").length - 1;
+  return crlf >= all - crlf ? "\r\n" : "\n";
+}
+
+/** `text` with every line ending (CRLF or LF) rewritten to `eol`; untouched when `eol` is null. */
+export function withEol(text: string, eol: Eol | null): string {
+  if (!eol) return text;
+  const lf = toLF(text);
+  return eol === "\n" ? lf : lf.replace(/\n/g, "\r\n");
+}
+
+/**
+ * Whole-file write that keeps the file's line endings: `next` rewritten to the EOL style
+ * `existing` already uses. A new file (`existing` null) or one with no newline is written as
+ * given. So `write_file` over a CRLF file cannot turn it into a mixed or LF file.
+ */
+export function conformToExistingEol(existing: string | null | undefined, next: string): string {
+  return existing == null ? next : withEol(next, dominantEol(existing));
+}
+
+/**
+ * `content` with its CRLFs folded to LF, plus `at[i]` = the offset in `content` of the
+ * character that produced `lf[i]` (a folded CRLF maps to its `\r`). `at[lf.length]` is
+ * `content.length`, so an LF span `[s, e)` is `[at[s], at[e])` in the original.
+ */
+function foldToLF(content: string): { lf: string; at: Int32Array } {
+  const lf = toLF(content);
+  const at = new Int32Array(lf.length + 1);
+  let j = 0;
+  for (let i = 0; i < content.length; i += 1) {
+    at[j] = i;
+    if (content.charCodeAt(i) === 13 && content.charCodeAt(i + 1) === 10) i += 1;
+    j += 1;
+  }
+  at[j] = content.length;
+  return { lf, at };
+}
+
+/** The non-overlapping `[start, end)` spans of `needle` in `hay`, in order — all of them, or at most two (enough to tell "not unique"). */
+function spansOf(hay: string, needle: string, all: boolean): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  for (let at = hay.indexOf(needle); at !== -1; at = hay.indexOf(needle, at + needle.length)) {
+    spans.push([at, at + needle.length]);
+    if (!all && spans.length === 2) break;
+  }
+  return spans;
+}
 
 /** Shortest needle the "contains" fallback of {@link findNearest} will try — shorter
  *  text (`}`, `return;`) matches everywhere and would point at noise. */
@@ -92,11 +147,17 @@ function findNearest(content: string, oldString: string): { line: number; excerp
 }
 
 /**
- * Replace `oldString` with `newString` in `content`. Tries the literal text first, then
- * (only when the literal misses) EOL-normalized variants so an LF `oldString` still
- * matches a CRLF file and vice-versa. `newString` is rewritten to the SAME EOL style as
- * the variant that matched, so the edited region stays consistent with the file and the
- * rest of the file is left byte-for-byte intact. Pure/testable.
+ * Replace `oldString` with `newString` in `content`. The match is EOL-NORMALISED (CRLF and
+ * LF compare equal, on both sides), so an LF `oldString` matches a CRLF file, a CRLF one an
+ * LF file, and either matches a file that is already mixed. `newString` is ALWAYS written in
+ * the file's dominant EOL ({@link dominantEol}) — so a CRLF file stays pure CRLF and a file
+ * with no newline gets `newString` as given. The rest of the file is byte-for-byte intact.
+ * Pure/testable.
+ *
+ * Observed (chat #60338): the old matcher tried the LITERAL text first and wrote `newString`
+ * as given whenever that hit — so a one-line `oldString` (no newline, so it matched
+ * literally) replaced by a two-line LF `newString` put an LF line inside a CRLF file. The
+ * model then distrusted its own edit for three turns and ended up with a duplicated line.
  *
  * Uniqueness is enforced on the matched variant: without `replaceAll`, a non-unique
  * `oldString` is an error (the caller must add context) — identical to the native edit
@@ -115,38 +176,29 @@ export function applyStringEdit(
   if (typeof oldString !== "string" || oldString.length === 0) {
     return { ok: false, error: "oldString is required" };
   }
-  // Candidate (search, replacement) pairs, most-specific first: the literal text, then
-  // the file's dominant EOL style, then the other. Deduped so a single-line edit (no
-  // newlines → every variant equal) collapses to exactly one literal attempt.
-  const fileIsCRLF = content.includes("\r\n");
-  const ordered = fileIsCRLF
-    ? [
-        { oldS: oldString, newS: newString },
-        { oldS: toCRLF(oldString), newS: toCRLF(newString) },
-        { oldS: toLF(oldString), newS: toLF(newString) },
-      ]
-    : [
-        { oldS: oldString, newS: newString },
-        { oldS: toLF(oldString), newS: toLF(newString) },
-        { oldS: toCRLF(oldString), newS: toCRLF(newString) },
-      ];
-  const candidates = ordered.filter(
-    (c, i) => ordered.findIndex((d) => d.oldS === c.oldS) === i,
-  );
-
-  for (const { oldS, newS } of candidates) {
-    const first = content.indexOf(oldS);
-    if (first === -1) continue;
-    if (!replaceAll && content.indexOf(oldS, first + oldS.length) !== -1) {
-      return {
-        ok: false,
-        error: "oldString is not unique; add more surrounding context or set replaceAll",
-      };
+  const newS = withEol(newString, dominantEol(content));
+  // Spans in ORIGINAL offsets: the EOL-normalised match, then (only for an oldString whose
+  // lone `\r` the fold cannot see) the literal one.
+  const { lf, at } = foldToLF(content);
+  let spans = spansOf(lf, toLF(oldString), replaceAll).map(([s, e]): [number, number] => [at[s]!, at[e]!]);
+  if (spans.length === 0) spans = spansOf(content, oldString, replaceAll);
+  if (spans.length > 1 && !replaceAll) {
+    return {
+      ok: false,
+      error: "oldString is not unique; add more surrounding context or set replaceAll",
+    };
+  }
+  if (spans.length > 0) {
+    const parts: string[] = [];
+    let from = 0;
+    for (const [s, e] of spans) {
+      parts.push(content.slice(from, s), newS);
+      from = e;
     }
-    const next = replaceAll ? content.split(oldS).join(newS) : content.replace(oldS, newS);
-    const replaced = replaceAll ? content.split(oldS).length - 1 : 1;
-    const region = regionAt(content, first, newS);
-    return { ok: true, content: next, replaced, region, excerpt: excerptAfterEdit(next, region) };
+    parts.push(content.slice(from));
+    const next = parts.join("");
+    const region = regionAt(content, spans[0]![0], newS);
+    return { ok: true, content: next, replaced: spans.length, region, excerpt: excerptAfterEdit(next, region) };
   }
   const nearest = findNearest(content, oldString);
   return {

@@ -13,6 +13,7 @@
 
 import type { LocalFirstStore } from "@builderforce/local-first";
 import type { ToolDef } from "./fileTools";
+import { LOCAL_TICKET_ID as LOCAL_ID } from "./localTicketScope";
 
 /** Server tool → the arguments that carry a TICKET id (a task id on the account). Data, not branches. */
 export const SERVER_TICKET_ID_ARGS: Readonly<Record<string, readonly string[]>> = {
@@ -46,8 +47,6 @@ export const SERVER_TICKET_ID_ARGS: Readonly<Record<string, readonly string[]>> 
   builtin_marketplace_publish_ticket: ["ticketId"],
   builtin_marketplace_unpublish_ticket: ["ticketId"],
 };
-
-const LOCAL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** The account's id for a local ticket, or undefined while it has not synced. */
 export type TicketServerIdLookup = (localId: string) => Promise<string | undefined>;

@@ -18,6 +18,7 @@ import { offersHandOff } from '@builderforce/run-policy';
 import type { BrainToolSpec, ChatCompletionMessage } from '../streamChatCompletion';
 import { HAND_OFF_TOOL } from '../planHandoff';
 import { relevantTools } from '../selectTools';
+import { studioToolsIn } from '../localWorkspaceTools';
 import { callPreflight } from '../runStore/callPreflight';
 import { callRunner, declineMalformedCall } from '../runStore/callRunner';
 import { callPostStep } from '../runStore/callPostStep';
@@ -79,7 +80,9 @@ export function brainPlatformTools(run: BrainRunContext): BrainPlatform {
         // The pins are the tools THIS run called (`callPostStep`): a tool reached through the router is the tool it reached, a fold does not
         // forget one, and an earlier run's calls pin nothing - the transcript the agent would read them off holds all three wrongly.
         // The ranking stays the Brain's own (`selectTools.ts`), not the shared scorer the cloud and the canvas keep, and the required tools are held to the cap as the Brain's loop always held them.
-        return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT, capRequired: true, rank: (tools: readonly ToolSchema[], query: string) => relevantTools(tools as unknown as BrainToolSpec[], query) as unknown as ToolSchema[], pinned: [...run.usedTools], required: new Set(offersHandOff(run.policy) && run.canAskUser ? [...run.alwaysAdvertised, HAND_OFF_TOOL] : run.alwaysAdvertised) };
+        // A code or verify turn is capped to its role's tools plus what matches the request (`@builderforce/agent-run` `roleCap.ts`); a
+        // Studio keeps its build vocabulary through it.
+        return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT, capRequired: true, role: run.policy.phase, roleKeep: studioToolsIn(run.catalogToolNames), rank: (tools: readonly ToolSchema[], query: string) => relevantTools(tools as unknown as BrainToolSpec[], query) as unknown as ToolSchema[], pinned: [...run.usedTools], required: new Set(offersHandOff(run.policy) && run.canAskUser ? [...run.alwaysAdvertised, HAND_OFF_TOOL] : run.alwaysAdvertised) };
       },
       // ONE cap on a result: the Brain's own, applied inside `callRunner` (`trimToolResult`, by LINE, sized to the serving
       // model's window). The agent's per-tool cap would cut the already budgeted text a second time and drop its paging fields.

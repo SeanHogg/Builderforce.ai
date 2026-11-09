@@ -27,6 +27,7 @@ describe('turnOptimizationDirective', () => {
     expect(directive).toContain('Ask one grouped set of questions only when');
     expect(directive).toContain('change the smallest requested scope');
     expect(directive).toContain('Batch independent reads/actions');
+    expect(directive).toContain('Batch independent reads/searches into ONE turn as parallel tool calls.');
     expect(directive).toContain('never ask the user to convert');
     expect(directive).toContain('not a reason to make the user restart the chat');
   });

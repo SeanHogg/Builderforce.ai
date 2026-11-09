@@ -1,4 +1,4 @@
-import { L as LocalRuntimeId, b as LocalEndpoint, a as LocalRuntimeProbe, c as LocalModel } from './probe-DkPrGnWT.js';
+import { L as LocalRuntimeId, b as LocalEndpoint, a as LocalRuntimeProbe, c as LocalModel } from './probe-DkPrGnWT.cjs';
 import { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import { ConsolidateOptions, ConsolidatedMemory } from '@seanhogg/builderforce-memory/working';
 
@@ -480,6 +480,102 @@ interface StreamFailureDetail {
 }
 /** One human line for logs and triage. */
 declare function describeStreamFailure(d: StreamFailureDetail): string;
+
+/**
+ * Evidence ledger (PRD 45 §4.2) — the pure half of the deterministic run gates.
+ *
+ * Evidence is a host fact keyed by the BYTES ON DISK. The ledger never hashes
+ * anything itself (pure: no I/O, no clock — callers pass `at`) and never accepts
+ * model prose: the only way a check lands here is the host calling `record` with
+ * the content hash the host computed. A model's transcript line
+ * `npx tsc | grep | head; echo DONE` has no path into this module — and even a
+ * forged CheckRecord is useless, because the gate looks evidence up by the hash
+ * of the file's real bytes, which the model does not control.
+ *
+ * Keys are normalised through {@link normalizeEvidencePath}: backslashes become
+ * forward slashes so a Windows absolute path and a repo-relative path for the
+ * same file share one entry. Hosts that want repo-relative display paths
+ * (FileEvidence.path) simply pass repo-relative keys; the module echoes them.
+ *
+ * Rules:
+ * - `record` for a non-latest hash is DROPPED — a stale check finishing late,
+ *   after the file was rewritten, must never bless the new bytes.
+ * - `noteWrite` drops evidence for older hashes of the path. Correctness never
+ *   depends on it: the gate hashes the bytes at gate time and asks `for(hash)`,
+ *   so a forgotten `noteWrite` only leaves memory that a lookup then misses.
+ * - Lifetime is one run; `snapshot`/`createEvidenceLedger(resume)` exist so a
+ *   host persisting between steps (the cloud durable loop) can carry it.
+ */
+type CheckKind = "diagnostics" | "typecheck" | "test" | "guard";
+interface CheckRecord {
+    kind: CheckKind;
+    /** "lsp", "pnpm --filter @builderforce/agent-tools typecheck", "check:source-package-graph" */
+    name: string;
+    /** unavailable = no such check here, or it timed out (OD-3) — never a pass. */
+    outcome: "pass" | "fail" | "unavailable";
+    /** The process exit code the HOST captured; null for lsp/unavailable. */
+    exitCode: number | null;
+    /** ≤ 20 lines "path:line:col severity message (code)". */
+    findings: readonly string[];
+    /** epoch ms, passed in — the module stays clock-free. */
+    at: number;
+}
+
+/**
+ * Gate decisions (PRD 45 §4.3) — the pure half of the deterministic run gates.
+ *
+ * Every gate takes facts and returns a {@link GateVerdict}; none does I/O. The gates
+ * trust only what is in the {@link EvidenceLedger}, and the ledger is keyed by the
+ * bytes on disk — so evidence the model *claims* in its output can never satisfy a
+ * gate. A line in a model's transcript such as
+ *
+ *     npx tsc | grep error | head -20; echo DONE
+ *
+ * never reaches this module: no host code parses model output into CheckRecords.
+ * Even a forged record is useless, because the gate looks evidence up by the hash of
+ * the file's real bytes at gate time (`OutgoingFile.hash`, computed by the host from
+ * the file itself), and the model does not control that hash. A `tsc | grep | head`
+ * pipe also hides the real exit code behind `head`'s — which is exactly why the host
+ * captures process exit codes itself and why a record without a host-captured hash
+ * match counts for nothing here.
+ *
+ * A required check passes when its `outcome` is "pass". "unavailable" passes AND is
+ * reported in the verdict's `unavailable` list (OD-3: shown in the approval prompt,
+ * never reported as verified). "fail" refuses. A diagnostics record additionally
+ * fails on any `error`-severity finding for the file, even when its outcome says
+ * pass — the LSP is the source of truth there, not the exit code.
+ *
+ * `outgoingGate` is THE ship gate: it fires at `git_commit` (advisory), `git_push`
+ * and `open_pull_request` (refusal), and ticket completion (via the host). A file
+ * changed by `run_command`, a sub-agent, or the human in the editor is handled
+ * identically — the host re-hashes the bytes and the gate asks for evidence against
+ * the new hash. Deleted paths need no checks of their own; the owning package's
+ * typecheck covers what imported them (PRD §4.2).
+ */
+
+interface EvidencePolicy {
+    /** By extension, e.g. ".ts": ["diagnostics","typecheck","test"]. */
+    required: Readonly<Record<string, readonly CheckKind[]>>;
+    /** A NEW source file must ship with a test in the same push. */
+    newSourceNeedsTest: boolean;
+    /** Per check; a timeout records "unavailable", never "pass" (OD-3). */
+    checkTimeoutMs: number;
+}
+interface OutgoingFile {
+    /** Key the ledger was recorded under (repo-relative with forward slashes, or absolute). */
+    absPath: string;
+    /** Hash of the file's CURRENT bytes, computed by the host at gate time. */
+    hash: string;
+    isNew: boolean;
+    deleted: boolean;
+}
+/** OD-1: an independent review verdict, produced by a different model over the diff. */
+interface ReviewVerdict {
+    reviewerModel: string;
+    verdict: "approved" | "changes_requested";
+    diffHash: string;
+    findings: readonly string[];
+}
 
 /**
  * Did the run actually GET ANYWHERE?
@@ -1109,29 +1205,6 @@ declare function stallRecoveriesInTrace(events: BrainTraceEvent[]): number;
 declare function modelFailoversInTrace(events: BrainTraceEvent[]): number;
 /** True when the stall survived every recovery AND every failover this run. */
 declare function stallUnrecoveredInTrace(events: BrainTraceEvent[]): boolean;
-/** Tool-catalog exposure for a run, read off the `llm` turns the loop records. */
-interface ToolExposure {
-    /** Tools advertised on the LAST measured turn (what the model could call at the end). */
-    lastTurn: number | null;
-    /** Fewest tools advertised on any measured turn — a zero here explains everything. */
-    min: number | null;
-    /** Size of the whole registered catalog the selection drew from. */
-    catalog: number | null;
-}
-/**
- * How many tools the model was actually OFFERED, per turn, versus how many exist.
- *
- * The registry-wide total is not the same question: a turn that was handed ZERO tools
- * and a turn that was handed sixty-four and ignored them produce byte-identical reports,
- * and only one of them is the model's fault. The loop records the real per-turn number
- * and this reads it back. Nulls when the run predates the field.
- *
- * This is now the SINGLE source of the per-turn figure: the chat-diagnostics header used
- * to render a ceiling derived from the registry size while the Diagnostics block below it
- * rendered this measurement, so one report answered one question two ways. Both lines
- * read this function now (via `gatherChatDiagnostics`).
- */
-declare function toolExposureInTrace(events: BrainTraceEvent[]): ToolExposure;
 /**
  * Tools the model WROTE OUT by name on a turn that made no call, which it had never been
  * advertised — recorded per-turn by the run loop (only it holds both halves).
@@ -3054,6 +3127,33 @@ interface ModelPreflightResult {
     fallback?: string;
 }
 
+/** The verifier port every deterministic run gate reads (PRD 45 §4.4). */
+interface VerifierPort {
+    /** Fast tier, ≤ 3 s: language-server diagnostics for exactly these files. Null = unavailable. */
+    diagnostics(absPaths: readonly string[]): Promise<CheckRecord | null>;
+    /** Full tier for these files: owning packages' typecheck + targeted tests + repo guards. Cached by (path, hash, check). */
+    full(absPaths: readonly string[]): Promise<ReadonlyMap<string, readonly CheckRecord[]>>;
+}
+/** The git port: the host reads the REAL commits, never the model's claims. */
+interface GitPort {
+    /** Files in commits not yet on upstream plus the HEAD tree's bytes for each path. */
+    outgoing(repo: string): Promise<{
+        files: OutgoingFile[];
+        diffHash: string;
+        baseBranch: boolean;
+    }>;
+}
+/** The reviewer port: OD-1, one review sub-run by a model that did not author the change. */
+interface ReviewerPort {
+    review(input: {
+        repo: string;
+        diff: string;
+        evidence: string;
+        authorModels: readonly string[];
+    }): Promise<ReviewVerdict | {
+        refused: string;
+    }>;
+}
 /**
  * What a run cell is keyed by. A CHAT's run is keyed by its chat id (a number — the
  * key every chat surface, run driver and the cross-chat {@link GlobalRunState} speak).
@@ -3124,6 +3224,13 @@ interface BrainRunRequest {
     /** `signal` is passed for a call the person's steer may interrupt (a foreground
      *  command); otherwise the host lends the call the run's own Stop. */
     runTool?: (name: string, args: unknown, signal?: AbortSignal) => Promise<unknown>;
+    /**
+     * The host's LIVE-CHILDREN port (the agent's `FinishPorts.liveChildren`): the block reason while sub-agents THIS run
+     * started are still working, or null when none is. Bound, it holds every end of the run - the `finish` tool and a prose
+     * answer alike - until their reports are in (`run/brainFinish.ts`). Unbound, the owner could end with children still
+     * working, and each late report then woke it into a new run with no ask of its own (chats #60338, #61651).
+     */
+    liveChildren?: () => Promise<string | null>;
     /** Pure predicate: true → pause the loop for an explicit user confirmation. */
     needsConfirm?: (req: {
         name: string;
@@ -3141,6 +3248,15 @@ interface BrainRunRequest {
      * live ref as `needsConfirm`, so a mid-run toggle is honoured.
      */
     answerQuestion?: (question: AskUserPayload) => string | null;
+    /**
+     * PRD 45 §4.4 — the deterministic ship-gate ports. EVERY gate is inert unless its
+     * port is bound: the web Brain and the parity harness bind none and are unchanged.
+     */
+    verifier?: VerifierPort;
+    git?: GitPort;
+    reviewer?: ReviewerPort;
+    /** The evidence policy the ship gates enforce — policy is data (PRD 45 §4.3). Defaults to DEFAULT_EVIDENCE_POLICY. */
+    evidencePolicy?: EvidencePolicy;
     stream: BrainStreamFn;
     /**
      * `max_tokens` for this run's completions — the composer's Effort level (see
@@ -3422,4 +3538,4 @@ declare function replayPendingWords(chatId: number, persistence: Pick<BrainRunPe
 /** The app started: replay every chat this person left words in, not only the one that happens to be opened. */
 declare function replayAllPendingWords(persistence: Pick<BrainRunPersistence, 'sendMessages'>): Promise<number>;
 
-export { type AskUserToolSpec as $, type RunWindowSources as A, type BrainMessage as B, type ChatInputAttachment as C, type DetectedLanguage as D, type Effort as E, type ReasoningIntent as F, type ChatRosterAgent as G, type ContentPart as H, type RunProgress as I, type JsonTaskOptions as J, type TicketToolVocabulary as K, type LocalFirstAccount as L, type BrainDiagnostics as M, type StaffingSummary as N, type OnDeviceTasks as O, type ProjectMemoryRequest as P, ASK_USER_TOOL as Q, type RunKey as R, type SpendSavingsSummary as S, type TranslateOptions as T, type UsageSurface as U, ASK_USER_TOOL_SPEC as V, type WriteOptions as W, type AnswerOriginCost as X, type AskUserMessageLike as Y, type AskUserOption as Z, type AskUserPayload as _, type BrainTraceEvent as a, USAGE_SURFACE_HEADER as a$, type AssembledToolCall as a0, type AvoidedRunCall as a1, type BrainDiagnosticsContext as a2, type BrainRunOutcome as a3, type BrainRunPhase as a4, type BuildBrainTriageOptions as a5, type ByoUnresolvedEntry as a6, CHAT_MODES as a7, CHAT_MODE_ICON as a8, type ChatWorkDirectiveOptions as a9, type RepeatedTarget as aA, RepetitionLoopError as aB, type RunLineage as aC, type RunOutcomeReport as aD, type RunPipelineSettings as aE, type RunStageModels as aF, type RunStopHook as aG, type RunStopInput as aH, SERVER_TICKET_CREATE_TOOL as aI, SERVER_TICKET_TOOLS as aJ, STEP_MESSAGE_ROLE as aK, SUBAGENT_OF_META_KEY as aL, type SavingsBreakdown as aM, type SavingsBySource as aN, type SavingsSourceKey as aO, type ServedOption as aP, type ServedRead as aQ, type SpendBreakdown as aR, type StreamFailureDetail as aS, StreamInterruptedError as aT, type SubagentOrigin as aU, type TextContentPart as aV, type ToolExposure as aW, TransportError as aX, UNBACKED_TICKET_CLAIM_NOTICE as aY, UNBACKED_WRITE_CLAIM_NOTICE as aZ, USAGE_SURFACES as a_, type CompletionMetadata as aa, type DispatchRefusal as ab, type EffortProfile as ac, type EvermindLearnOutcome as ad, type EvermindLearnTarget as ae, type ImageUrlContentPart as af, LOCAL_TICKET_CREATE_TOOL as ag, type LocalFirstAttemptSummary as ah, MAX_STOP_HOOK_ROUNDS as ai, type MemoryAnswerOptions as aj, type MemoryFirstAnswer as ak, type MemorySurface as al, type ModelPreflightResult as am, type ModelScore as an, type ModelTurn as ao, type ModelWindowSources as ap, NEW_CHAT_MODE as aq, type OnDeviceEngine as ar, type OnDeviceTaskEvent as as, type PendingAskUser as at, type PersonaSubagent as au, type PrefetchResult as av, RESTING_CHAT_MODE as aw, ROLE_GATE_REMEDIATION as ax, type ReasoningLevel as ay, type RepeatStreak as az, type BrainRunActivity as b, serverChatIdOf as b$, type UpstreamTurnEvidence as b0, accountUsedInTrace as b1, activityTarget as b2, answeredInProseInTrace as b3, askStopHook as b4, askUserAnchorId as b5, askUserBlock as b6, attachEvermindLearn as b7, buildBrainTriageReport as b8, byoReasonHint as b9, isChatMode as bA, isDispatchTool as bB, isEffort as bC, isEvermindModel as bD, isFailedToolResult as bE, isMutationTool as bF, isStepMessage as bG, isTicketWriteTool as bH, isUsageSurface as bI, localFallbackTrace as bJ, midRunNotice as bK, modelFailoversInTrace as bL, modelScorecard as bM, modelTurnLog as bN, modelsUsedInTrace as bO, narratedUnadvertisedInTrace as bP, normalizeChatMode as bQ, parseAskUser as bR, parseByoUnresolved as bS, parseRoleGateRefusal as bT, parseSubagentOrigin as bU, projectMemoryHooks as bV, reasoningForRun as bW, resolveContextWindow as bX, savedChatOf as bY, selectPendingAskUser as bZ, serializeAskUser as b_, byoUnresolvedInTrace as ba, byoUnresolvedSummary as bb, chatConversationDirective as bc, chatModeDirective as bd, chatRosterFromParticipants as be, chatWorkDirective as bf, clearPendingWords as bg, coerceAskUserPayload as bh, computeBrainDiagnostics as bi, computeRunProgress as bj, contextWindowOf as bk, describeLiveStep as bl, describeStreamFailure as bm, detectAnnouncedButUnmadeToolCall as bn, detectUnbackedTicketClaim as bo, detectUnbackedWriteClaim as bp, effortProfile as bq, formatBrainDiagnostics as br, formatBrainProvenance as bs, formatBytes as bt, formatDispatchRefusals as bu, formatEvermindLearnStep as bv, formatModelScorecard as bw, formatModelTurnLog as bx, formatStaffingSummary as by, hasEditIntent as bz, type ChatCompletionMessage as c, setPendingWordsOwner as c0, shortenTarget as c1, staffingSummaryInTrace as c2, stallRecoveriesInTrace as c3, stallUnrecoveredInTrace as c4, streamChatCompletion as c5, stripAskUser as c6, summarizeLocalFirstAttempt as c7, ticketToolVocabulary as c8, toolActivity as c9, toolExposureInTrace as ca, workFiledNotStaffedVerdict as cb, forgetPendingWords as cc, markPendingWordsRead as cd, registerPendingWordsReplay as ce, rememberPendingWords as cf, replayAllPendingWords as cg, replayPendingWords as ch, type BrainRunPersistence as d, type BrainRunRequest as e, type BrainTransport as f, type BrainChat as g, type BrainStreamFn as h, type RunEndOutcome as i, type CompletionUsage as j, type StreamChatOptions as k, type StreamHandlers as l, type StreamChatResult as m, type LocalFirstAttemptRecord as n, type LocalFirstAttempt as o, type LocalFirstWorkload as p, type OnDeviceObserver as q, type OnDeviceTaskKind as r, type ServedBy as s, type SummarizeOptions as t, type RewriteOptions as u, type JsonSchema as v, type EvermindRunHooks as w, type BrainToolSpec as x, type BrainModality as y, type ChatMode as z };
+export { type AskUserToolSpec as $, type RunWindowSources as A, type BrainTraceEvent as B, type ChatInputAttachment as C, type DetectedLanguage as D, type Effort as E, type ReasoningIntent as F, type ChatRosterAgent as G, type ContentPart as H, type RunProgress as I, type JsonTaskOptions as J, type TicketToolVocabulary as K, type LocalFirstAccount as L, type BrainDiagnostics as M, type StaffingSummary as N, type OnDeviceTasks as O, type ProjectMemoryRequest as P, ASK_USER_TOOL as Q, type RunKey as R, type SpendSavingsSummary as S, type TranslateOptions as T, type UsageSurface as U, ASK_USER_TOOL_SPEC as V, type WriteOptions as W, type AnswerOriginCost as X, type AskUserMessageLike as Y, type AskUserOption as Z, type AskUserPayload as _, type BrainMessage as a, USAGE_SURFACES as a$, type AssembledToolCall as a0, type AvoidedRunCall as a1, type BrainDiagnosticsContext as a2, type BrainRunOutcome as a3, type BrainRunPhase as a4, type BuildBrainTriageOptions as a5, type ByoUnresolvedEntry as a6, CHAT_MODES as a7, CHAT_MODE_ICON as a8, type ChatWorkDirectiveOptions as a9, type RepeatStreak as aA, type RepeatedTarget as aB, RepetitionLoopError as aC, type ReviewerPort as aD, type RunLineage as aE, type RunOutcomeReport as aF, type RunPipelineSettings as aG, type RunStageModels as aH, type RunStopHook as aI, type RunStopInput as aJ, SERVER_TICKET_CREATE_TOOL as aK, SERVER_TICKET_TOOLS as aL, STEP_MESSAGE_ROLE as aM, SUBAGENT_OF_META_KEY as aN, type SavingsBreakdown as aO, type SavingsBySource as aP, type SavingsSourceKey as aQ, type ServedOption as aR, type ServedRead as aS, type SpendBreakdown as aT, type StreamFailureDetail as aU, StreamInterruptedError as aV, type SubagentOrigin as aW, type TextContentPart as aX, TransportError as aY, UNBACKED_TICKET_CLAIM_NOTICE as aZ, UNBACKED_WRITE_CLAIM_NOTICE as a_, type CompletionMetadata as aa, type DispatchRefusal as ab, type EffortProfile as ac, type EvermindLearnOutcome as ad, type EvermindLearnTarget as ae, type GitPort as af, type ImageUrlContentPart as ag, LOCAL_TICKET_CREATE_TOOL as ah, type LocalFirstAttemptSummary as ai, MAX_STOP_HOOK_ROUNDS as aj, type MemoryAnswerOptions as ak, type MemoryFirstAnswer as al, type MemorySurface as am, type ModelPreflightResult as an, type ModelScore as ao, type ModelTurn as ap, type ModelWindowSources as aq, NEW_CHAT_MODE as ar, type OnDeviceEngine as as, type OnDeviceTaskEvent as at, type PendingAskUser as au, type PersonaSubagent as av, type PrefetchResult as aw, RESTING_CHAT_MODE as ax, ROLE_GATE_REMEDIATION as ay, type ReasoningLevel as az, type BrainRunActivity as b, selectPendingAskUser as b$, USAGE_SURFACE_HEADER as b0, type UpstreamTurnEvidence as b1, type VerifierPort as b2, accountUsedInTrace as b3, activityTarget as b4, answeredInProseInTrace as b5, askStopHook as b6, askUserAnchorId as b7, askUserBlock as b8, attachEvermindLearn as b9, formatStaffingSummary as bA, hasEditIntent as bB, isChatMode as bC, isDispatchTool as bD, isEffort as bE, isEvermindModel as bF, isFailedToolResult as bG, isMutationTool as bH, isStepMessage as bI, isTicketWriteTool as bJ, isUsageSurface as bK, localFallbackTrace as bL, midRunNotice as bM, modelFailoversInTrace as bN, modelScorecard as bO, modelTurnLog as bP, modelsUsedInTrace as bQ, narratedUnadvertisedInTrace as bR, normalizeChatMode as bS, parseAskUser as bT, parseByoUnresolved as bU, parseRoleGateRefusal as bV, parseSubagentOrigin as bW, projectMemoryHooks as bX, reasoningForRun as bY, resolveContextWindow as bZ, savedChatOf as b_, buildBrainTriageReport as ba, byoReasonHint as bb, byoUnresolvedInTrace as bc, byoUnresolvedSummary as bd, chatConversationDirective as be, chatModeDirective as bf, chatRosterFromParticipants as bg, chatWorkDirective as bh, clearPendingWords as bi, coerceAskUserPayload as bj, computeBrainDiagnostics as bk, computeRunProgress as bl, contextWindowOf as bm, describeLiveStep as bn, describeStreamFailure as bo, detectAnnouncedButUnmadeToolCall as bp, detectUnbackedTicketClaim as bq, detectUnbackedWriteClaim as br, effortProfile as bs, formatBrainDiagnostics as bt, formatBrainProvenance as bu, formatBytes as bv, formatDispatchRefusals as bw, formatEvermindLearnStep as bx, formatModelScorecard as by, formatModelTurnLog as bz, type ChatCompletionMessage as c, serializeAskUser as c0, serverChatIdOf as c1, setPendingWordsOwner as c2, shortenTarget as c3, staffingSummaryInTrace as c4, stallRecoveriesInTrace as c5, stallUnrecoveredInTrace as c6, streamChatCompletion as c7, stripAskUser as c8, summarizeLocalFirstAttempt as c9, ticketToolVocabulary as ca, toolActivity as cb, workFiledNotStaffedVerdict as cc, forgetPendingWords as cd, markPendingWordsRead as ce, registerPendingWordsReplay as cf, rememberPendingWords as cg, replayAllPendingWords as ch, replayPendingWords as ci, type BrainRunPersistence as d, type BrainRunRequest as e, type BrainTransport as f, type BrainChat as g, type BrainStreamFn as h, type RunEndOutcome as i, type CompletionUsage as j, type StreamChatOptions as k, type StreamHandlers as l, type StreamChatResult as m, type LocalFirstAttemptRecord as n, type LocalFirstAttempt as o, type LocalFirstWorkload as p, type OnDeviceObserver as q, type OnDeviceTaskKind as r, type ServedBy as s, type SummarizeOptions as t, type RewriteOptions as u, type JsonSchema as v, type EvermindRunHooks as w, type BrainToolSpec as x, type BrainModality as y, type ChatMode as z };

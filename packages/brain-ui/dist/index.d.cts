@@ -3277,6 +3277,8 @@ declare function chatSwitcherLabel(input: {
     id: number;
     ticketCount?: number | null;
     ticketProgressPct?: number | null;
+    ticketOpenCount?: number | null;
+    ticketDoneCount?: number | null;
     runGlyph?: string;
 }): string;
 
