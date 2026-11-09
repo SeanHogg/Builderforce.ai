@@ -9,13 +9,17 @@
  * that run spent three model turns on `builtin_reviews_record`, `builtin_tasks_update(done)` and `remember_fact`. Now the HOST
  * records the review on the ticket THIS run created, through the same tool executor (`req.runTool`) the model would have
  * reached - never through the model - and only when the acceptance the existing gates hold is met: the change landed on the
- * base branch (`shippedToBaseBranch`) and no placeholder this run wrote is outstanding (`completionGuard.ts`). A held
- * close-out is a trace step saying why; nothing is forced done. The learned facts are already written host-side at run end
- * (`emitEvermindLearnReconcile`, and the editor's run note), so no fact writer is added here.
+ * base branch (`shippedToBaseBranch`), no placeholder this run wrote is outstanding (`completionGuard.ts`), AND the run's
+ * evidence ledger (`@builderforce/run-guards`, fed only by the host verifier - the ledger `shipGates.ts` gates a push on)
+ * holds a passing check for every file the run changed and no failing one ({@link verificationOf}). Shipping is not
+ * verification: without that evidence the host records NO review and moves nothing to done - the ticket stays in review,
+ * and a held close-out is a trace step saying why. Never a rubber stamp. The learned facts are already written host-side
+ * at run end (`emitEvermindLearnReconcile`, and the editor's run note), so no fact writer is added here.
  *
  * Best-effort throughout: every action is a durable step, and none throws (the callers bound it by the settle deadline).
  */
 
+import { normalizeEvidencePath, type EvidenceLedger } from '@builderforce/run-guards';
 import { isFailedToolResult, type BrainTraceEvent } from '../brainTriage';
 import { linkedTicketsReviewedComplete, linkedTicketsToAdvance, linkedTicketsToComplete } from '../chatWorkLinking';
 import { nowIso, nowMs } from '../runStore/runCells';
@@ -42,6 +46,35 @@ export interface CloseOutInput {
   openPlaceholders: number;
   /** THIS run's trace, for the reviews it recorded itself. */
   trace: readonly BrainTraceEvent[];
+  /** THIS run's evidence ledger (`BrainRunContext.evidence`): the checks the host verifier ran. Absent = no evidence. */
+  evidence?: Pick<EvidenceLedger, 'snapshot'>;
+}
+
+/** Whether the run's evidence verifies its change: the passing checks it holds, or why it does not. */
+export type Verification = { verified: true; checks: string[] } | { verified: false; reason: string };
+
+/**
+ * The run's verification, read from its evidence ledger: every file it changed has at least one PASSING check against its
+ * current bytes, and no check the ledger holds failed. An `unavailable` check is never a pass (PRD 45 OD-3).
+ */
+export function verificationOf(evidence: CloseOutInput['evidence'], touchedFiles: readonly string[]): Verification {
+  const entries = evidence?.snapshot() ?? [];
+  if (!entries.length) return { verified: false, reason: 'no verification evidence was recorded for this run' };
+  const failed = entries.flatMap((e) => e.checks.filter((c) => c.outcome === 'fail').map((c) => `${e.path} ${c.kind} "${c.name}"`));
+  if (failed.length) return { verified: false, reason: `failing checks: ${failed.slice(0, 5).join('; ')}` };
+  const passing = entries.filter((e) => e.checks.some((c) => c.outcome === 'pass'));
+  if (!passing.length) return { verified: false, reason: 'no check passed (only unavailable checks were recorded)' };
+  // A ledger path may be absolute while the run names files repo-relative: matched on the path's tail.
+  const covers = (file: string): boolean => {
+    const rel = normalizeEvidencePath(file).replace(/^\.\//, '');
+    return passing.some((e) => e.path === rel || e.path.endsWith(`/${rel}`));
+  };
+  const unverified = touchedFiles.filter((f) => !covers(f));
+  if (unverified.length) return { verified: false, reason: `no passing check for: ${unverified.slice(0, 10).join(', ')}` };
+  return {
+    verified: true,
+    checks: passing.flatMap((e) => e.checks.filter((c) => c.outcome === 'pass').map((c) => `${e.path} ${c.kind} "${c.name}"`)),
+  };
 }
 
 /** The tickets THIS run recorded a successful review for itself. */
@@ -55,18 +88,19 @@ export function reviewedThisRun(trace: readonly BrainTraceEvent[]): Set<number> 
   return ids;
 }
 
-/** The review the host records for a shipped change: the evidence it holds, nothing it does not. */
-function shipReviewSummary(files: readonly string[]): string {
+/** The review the host records for a shipped, verified change: the evidence it holds, nothing it does not. */
+function shipReviewSummary(files: readonly string[], checks: readonly string[]): string {
   const shown = files.slice(0, 10).join(', ');
   const more = files.length > 10 ? ` (+${files.length - 10} more)` : '';
-  return `Closed out by the host: this run's change${files.length ? ` (${files.length} file${files.length === 1 ? '' : 's'}: ${shown}${more})` : ''} was pushed to the base branch and verified landed, with no placeholder outstanding.`;
+  const passed = checks.slice(0, 10).join('; ') + (checks.length > 10 ? ` (+${checks.length - 10} more)` : '');
+  return `Closed out by the host: this run's change${files.length ? ` (${files.length} file${files.length === 1 ? '' : 's'}: ${shown}${more})` : ''} was pushed to the base branch and verified landed, with no placeholder outstanding. Passing checks on the shipped bytes: ${passed}.`;
 }
 
 /** Record the host's review on the ticket THIS run created, unless the run recorded one itself. */
-async function recordShipReview(input: CloseOutInput, taskId: number): Promise<void> {
+async function recordShipReview(input: CloseOutInput, taskId: number, checks: readonly string[]): Promise<void> {
   const { view, req } = input;
   if (!req.runTool || reviewedThisRun(input.trace).has(taskId)) return;
-  const args = { taskId, verdict: 'complete', summary: shipReviewSummary(view.touchedFiles) };
+  const args = { taskId, verdict: 'complete', summary: shipReviewSummary(view.touchedFiles, checks) };
   const toolStart = nowMs();
   let out: unknown;
   try {
@@ -79,7 +113,7 @@ async function recordShipReview(input: CloseOutInput, taskId: number): Promise<v
     category: 'tool',
     label: REVIEW_RECORD_TOOL,
     durationMs: nowMs() - toolStart,
-    args: { ...args, auto: true, reason: 'shipped-to-base-branch' },
+    args: { ...args, auto: true, reason: 'shipped-and-verified' },
     result: out ?? null,
     isError: isFailedToolResult(out),
   });
@@ -113,8 +147,21 @@ export async function closeOutRun(input: CloseOutInput): Promise<void> {
         result: 'The change shipped, but this run left placeholders in the code: its ticket stays open until they are finished.',
       });
     } else {
-      if (view.deltaTicketId != null) await recordShipReview(input, view.deltaTicketId);
-      await updateLinkedTickets(serverChatId, view, req, linkedTicketsToComplete, 'done', 'shipped-to-base-branch');
+      // Shipping is not verification: with no passing evidence for the change, nobody reviewed it - the host records no
+      // review, moves nothing to done, and says why.
+      const verification = verificationOf(input.evidence, view.touchedFiles);
+      if (!verification.verified) {
+        view.note?.({
+          ts: nowIso(),
+          category: 'message',
+          label: 'run.close_out_held',
+          args: { reason: 'unverified', detail: verification.reason },
+          result: `The change shipped, but this run holds no passing verification for it (${verification.reason}): no review was recorded and its ticket stays in review.`,
+        });
+      } else {
+        if (view.deltaTicketId != null) await recordShipReview(input, view.deltaTicketId, verification.checks);
+        await updateLinkedTickets(serverChatId, view, req, linkedTicketsToComplete, 'done', 'shipped-to-base-branch');
+      }
     }
   }
   // The Studio's equivalent of a verified push: a "complete" review after a passing preview inspection of THIS run's last

@@ -15,38 +15,31 @@
  * already-acknowledged run is a no-op.
  *
  * The list rides the run host's existing relay as `run.interrupted` (`RunHostMessage`).
+ * Its VIEW types live in the pure `interruptedRunTypes.ts`, which the webview imports
+ * instead of this module (so the host's graph never enters the webview's).
  * No `vscode` import; failures go to `log`.
  */
 
 import { parseResumeState, type RunResumeState } from "@seanhogg/builderforce-brain-embedded";
 import type { RunHostMessage, RunSink } from "./brainRunHostProtocol";
-import { describeInterruptedChildren } from "./childRunJournal";
+import { interruptedChildrenOf } from "./childRunJournal";
 import type { InstalledRunRecovery } from "./installRunRecovery";
+import type { InterruptedRunResume, InterruptedRunView, ResumeStateView } from "./interruptedRunTypes";
 import type { InterruptedRun } from "./runRecovery";
 
-/** One interrupted run, as the webview lists it. */
-export interface InterruptedRunView {
-  runId: string;
-  /** The chat the run belonged to (the host's local chat id), when it had one. */
-  chatId?: string;
-  /** When the run was marked interrupted (ISO). */
-  interruptedAt: string;
-  /** What Resume continues from (`interruptedResumeTurn.ts`): the journaled resume state and its sub-agents. */
-  resume?: InterruptedRunResume;
-}
+export type { InterruptedRunResume, InterruptedRunView } from "./interruptedRunTypes";
 
-/** The DATA of a resume: the run's journaled state, plus what became of the sub-agents it started. */
-export interface InterruptedRunResume extends RunResumeState {
-  /** `describeInterruptedChildren` of the record; absent when the run started none. */
-  children?: string;
-}
+/** The pure view restates `RunResumeState`; this fails to compile the moment the two shapes part. */
+type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+const resumeStateFits: Same<RunResumeState, ResumeStateView> = true;
+void resumeStateFits;
 
 /** The resume data of an interrupted run's record, or undefined when it journaled nothing to continue from. */
 export function resumeOfRecord(record: InterruptedRun["record"]): InterruptedRunResume | undefined {
   const state = parseResumeState(record.payload.checkpoint?.state);
-  const children = describeInterruptedChildren(record);
-  if (!state && !children) return undefined;
-  return { ...state, ...(children ? { children } : {}) };
+  const children = interruptedChildrenOf(record);
+  if (!state && !children.length) return undefined;
+  return { ...state, ...(children.length ? { children } : {}) };
 }
 
 /** The pure projection of a recovered run into its list row. */

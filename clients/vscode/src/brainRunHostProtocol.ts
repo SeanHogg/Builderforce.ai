@@ -16,7 +16,7 @@ import {
   type ReasoningIntent,
 } from "@seanhogg/builderforce-brain-embedded";
 import type { ChildView } from "./childRuns";
-import type { InterruptedRunView } from "./interruptedRunsView";
+import type { InterruptedRunView } from "./interruptedRunTypes";
 import { listDelta, sentOf, type SentList } from "./listDelta";
 
 /** The serializable half of a `BrainRunRequest`, as the webview posts it. */

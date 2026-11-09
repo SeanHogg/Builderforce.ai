@@ -26,7 +26,7 @@ import {
   nextFallbackModel,
   type ModelFallbackSurface,
 } from '@builderforce/agent-stall';
-import { guardedPick, recordLatency, withinLatencyBudget, type LatencyGuardInput, type LatencySamples } from './latencyGuard.js';
+import { fastestCandidate, guardedPick, recordLatency, withinLatencyBudget, type LatencyGuardInput, type LatencySamples } from './latencyGuard.js';
 
 /** The working phase of a tool-using run. Only ever moves forward. */
 export type RunPhase = Extract<ModelRole, 'plan' | 'code' | 'verify'>;
@@ -159,6 +159,9 @@ export interface RunPolicyState {
   /** Recent turn durations per served model (`turn_succeeded.durationMs`) — what keeps a code or
    *  verify failover off a model many times slower than the primary. Optional: older snapshots lack it. */
   readonly latency?: LatencySamples;
+  /** The model the pin RESOLVED to on its first acting turn — the latency guard's primary, keyed the
+   *  way {@link latency} is (by resolved name), never by the unresolved pin. Optional: older snapshots lack it. */
+  readonly pinResolved?: string;
   readonly failovers: number;
   /** Transport retries spent on the CURRENT turn; a success resets it. */
   readonly turnRetries: number;
@@ -433,10 +436,14 @@ function succeeded(s: RunPolicyState, resolved: string | undefined, acted: boole
   const proven = acted && resolved && resolved !== 'default' && !s.proven.includes(resolved)
     ? [...s.proven, resolved]
     : s.proven;
-  const timed = resolved && resolved !== 'default' ? resolved : s.model;
+  const served = resolved && resolved !== 'default' ? resolved : undefined;
+  const timed = served ?? s.model;
+  // Only a turn that ACTED is timed: a model that answers fast without calling a tool (a stall in
+  // the making) must not earn a low p50 that walls every honest failover target off as "slow".
   const next = {
     ...s,
-    ...(timed && durationMs !== undefined ? { latency: recordLatency(s.latency, timed, durationMs) } : {}),
+    ...(acted && timed && durationMs !== undefined ? { latency: recordLatency(s.latency, timed, durationMs) } : {}),
+    ...(acted && served && s.pin && s.model === s.pin && !s.pinResolved ? { pinResolved: served } : {}),
     turnRetries: 0,
     proven,
     planTurns: s.phase === 'plan' ? s.planTurns + 1 : s.planTurns,
@@ -505,20 +512,28 @@ function failoverPicker(
   const source = (skip: readonly string[]) => (e.pick ? e.pick(skip) : nextFallbackModel(e.surface, skip));
   return (tried) => {
     const skip = [...tried, ...s.broken];
-    const fast = (m: string) => !guard || withinLatencyBudget(m, guard);
-    return proven.find((m) => !skip.includes(m) && fast(m))
-      ?? (guard ? guardedPick(source, skip, guard) : source(skip));
+    const open = proven.filter((m) => !skip.includes(m));
+    if (!guard) return open[0] ?? source(skip);
+    // Latency orders the hand-off, it never blocks it: an in-budget proven model, else an
+    // in-budget pick from the source, else the FASTEST candidate seen — a slow model beats none.
+    const fastProven = open.find((m) => withinLatencyBudget(m, guard));
+    if (fastProven) return fastProven;
+    const picked = guardedPick(source, skip, guard);
+    if (picked && withinLatencyBudget(picked, guard)) return picked;
+    return fastestCandidate([...open, ...(picked ? [picked] : [])], guard.latency);
   };
 }
 
 /**
  * The latency guard for a code or verify hand-off (`latencyGuard.ts`), or undefined when it does
  * not apply: a planning turn, a primary that is unavailable, or no turn timed yet. The primary is
- * the run's pin, else the first model that acted, else the model that just stalled.
+ * keyed by its RESOLVED name (the latency samples are): what the pin resolved to, else the first
+ * model that acted, else the model that just stalled.
  */
 function latencyGuardFor(s: RunPolicyState, e: Extract<RunPolicyEvent, { type: 'stalled' }>): LatencyGuardInput | undefined {
   if (s.phase === 'plan' || e.primaryUnavailable || !s.latency) return undefined;
-  return { primary: s.pin ?? s.proven[0] ?? e.resolvedModel ?? s.model, latency: s.latency };
+  const pinPrimary = s.pin ? s.pinResolved : undefined;
+  return { primary: pinPrimary ?? s.proven[0] ?? e.resolvedModel ?? s.model, latency: s.latency };
 }
 
 /**

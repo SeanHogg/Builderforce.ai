@@ -65,6 +65,29 @@ describe("stateful resume of an interrupted run (chat #61651)", () => {
     expect(turn).toContain("died with the editor");
   });
 
+  it("regression: chat #61651 — the resume turn carries THIS chat's ask, never another session's", async () => {
+    const store = createMemoryLocalFirstStore();
+    await recordRunStarted(store, deps, { runId: "mine", chatId: "61651", state: { ask: "Fix the legend overlap" } });
+    await recordRunStarted(store, deps, { runId: "theirs", chatId: "70000", state: { ask: "Rewrite the billing page" } });
+    const runs = await recoverInterruptedRuns(store, deps);
+    const mine = runs.find((run) => run.runId === "mine")!;
+    const turn = interruptedResumeTurn(english, toInterruptedRunView(mine).resume);
+    expect(turn).toContain("> Fix the legend overlap");
+    expect(turn).not.toContain("billing");
+    expect(turn).toContain(RESUME_TURN_DEFAULTS["ir.continueScope"]);
+  });
+
+  it("words the sub-agents in the person's language through the ir.* labels, keeping the data literal", async () => {
+    const store = createMemoryLocalFirstStore();
+    await recordRunStarted(store, deps, { runId: "r9", chatId: "9", state: { ask: "Audit it" } });
+    await recordRunChildren(store, { chatId: "9", children: [child({})], now: () => at });
+    const [run] = await recoverInterruptedRuns(store, deps);
+    const german = (key: string, fallback: string): string => (key === "ir.childStartedBy" ? "gestartet von {owner}" : fallback);
+    const turn = interruptedResumeTurn(german, toInterruptedRunView(run!).resume);
+    expect(turn).toContain("a1 (audit; gestartet von BuilderForce)");
+    expect(turn).toContain("Audit the legend.");
+  });
+
   it("keeps the headline alone for a run that journaled nothing (an older record)", async () => {
     expect(interruptedResumeTurn(english, undefined)).toBe(RESUME_TURN_DEFAULTS["ir.continue"]);
   });

@@ -11,10 +11,11 @@
  * result is kept only when the fingerprint is the same before and after its run, so a
  * command that wrote a tracked file, or ran while one was being edited, is never kept.
  *
- * Only commands that cannot change the workspace are considered at all: the shared read-only
- * classifier (`isReadOnlyShellCommand`, what the read guard trusts) plus the package
- * verification scripts. Installs, writes and git mutations never are — and any command that is
- * not cacheable drops the run's cache outright. Outside a git checkout nothing is cached.
+ * Only the package verification scripts and checkers are cached - a cheap read costs less to
+ * re-run than the fingerprint that guards a hit. A read-only command (the shared classifier
+ * `isReadOnlyShellCommand`, what the read guard trusts) leaves the cache alone; installs, writes
+ * and git mutations drop the run's cache outright ({@link shellCacheEffect}). Outside a git
+ * checkout nothing is cached.
  */
 
 import { execFile } from "child_process";
@@ -50,7 +51,19 @@ const NOT_WORKSPACE_STATE = /(^|[\s|;&(])(?:date|hostname|whoami|uptime)(?=\s|$|
 export function isCacheableCommand(command: string): boolean {
   const c = command.trim().replace(/\s+/g, " ");
   if (!c || NOT_WORKSPACE_STATE.test(c)) return false;
-  return isReadOnlyShellCommand(c) || isVerificationCommand(c);
+  // Only expensive verification (type-check, tests, lint, build) is worth a cache: a cheap read
+  // (ls, cat, grep, git status/log) costs less to re-run than the git fingerprint that guards a hit.
+  return isVerificationCommand(c);
+}
+
+/**
+ * What a run's command does to its cache: `cache` - a verification command whose result may be reused;
+ * `keep` - a read-only command (`git status`, `ls`) that is not worth caching but cannot change the workspace,
+ * so the cached results survive it; `drop` - anything that may write, which invalidates the run's cache.
+ */
+export function shellCacheEffect(command: string): "cache" | "keep" | "drop" {
+  if (isCacheableCommand(command)) return "cache";
+  return isReadOnlyShellCommand(command) ? "keep" : "drop";
 }
 
 /** A git invocation's stdout, or null (not a checkout, git missing, too slow). */

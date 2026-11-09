@@ -564,7 +564,7 @@ const runChecksTool: ToolDefinition = defineTool({
 export const runCommandTool: ToolDefinition = defineTool({
   name: "run_command",
   description:
-    'Run a shell command in the checked-out repository (real shell). Use it to install dependencies and run the build, type-check, lint, and tests. Returns combined stdout/stderr and the exit code. Verify your changes this way BEFORE calling finish. Do not re-run a command to grep/head/tail its output: when the result has an outputId, use output_filter on it.',
+    'Run a shell command in the checked-out repository (real shell). Use it to install dependencies and run the build, type-check, lint, and tests. Returns combined stdout/stderr and the exit code. Verify your changes this way BEFORE calling finish. Do not re-run a command to grep/head/tail its output: when the result has an outputId and the output_filter tool is available, use output_filter on it.',
   parameters: {
     type: "object",
     properties: {

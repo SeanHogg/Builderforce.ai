@@ -8,11 +8,13 @@
  * the hand-off had no idea what the model it chose cost in wall-clock time.
  *
  * The rule: during a code or verify turn, a candidate whose measured p50 turn latency is
- * more than {@link MAX_FAILOVER_LATENCY_RATIO}× the primary's is not a failover target,
- * UNLESS the primary is unavailable (an error, a 429, a model that is down) — then any
- * model beats none. A model with no measurement is not evidence of slowness and stays
- * eligible. The samples are the run's own turn durations (`turn_succeeded.durationMs`),
- * optionally seeded by the host from earlier runs (`RunPolicyOptions.latencySeed`).
+ * more than {@link MAX_FAILOVER_LATENCY_RATIO}× the primary's is passed over for one within
+ * that budget. It is an ORDERING preference, never a veto: when every candidate is over budget
+ * the fastest of them still takes the turn (a slow model beats none), and when the primary is
+ * unavailable (an error, a 429, a model that is down) latency does not apply at all. A model
+ * with no measurement is not evidence of slowness and stays eligible. The samples are the run's
+ * own durations of turns that ACTED (`turn_succeeded.durationMs` with `acted`), keyed by the
+ * RESOLVED model name, optionally seeded by the host from earlier runs (`RunPolicyOptions.latencySeed`).
  *
  * Pure and I/O-free.
  */
@@ -49,7 +51,7 @@ export function recordLatency(
 }
 
 export interface LatencyGuardInput {
-  /** The model the run treats as its primary (its pin, else the first that acted). */
+  /** The model the run treats as its primary, by RESOLVED name (what its pin resolved to, else the first that acted). */
   primary: string | undefined;
   latency: LatencySamples | undefined;
   /** The primary errored, was rate-limited (429) or is down: latency no longer restricts the hand-off. */
@@ -72,12 +74,31 @@ export function latencyEligible(candidates: readonly string[], input: LatencyGua
   return candidates.filter((m) => withinLatencyBudget(m, input));
 }
 
+/**
+ * The candidate with the lowest measured p50 (an unmeasured one counts as fastest: no evidence of
+ * slowness), ties to the earlier one; undefined with no candidates.
+ */
+export function fastestCandidate(candidates: readonly string[], latency: LatencySamples | undefined): string | undefined {
+  let best: string | undefined;
+  let bestP50 = Number.POSITIVE_INFINITY;
+  for (const m of candidates) {
+    const t = p50(latency?.[m]) ?? 0;
+    if (best === undefined || t < bestP50) {
+      best = m;
+      bestP50 = t;
+    }
+  }
+  return best;
+}
+
 /** How many picks a guarded picker walks past before it gives up (a surface is never longer in practice). */
 const MAX_GUARDED_PICKS = 32;
 
 /**
- * A picker that skips candidates over the latency budget: asks `pick` again with each
- * rejected model added to the skip list, until one passes or the source runs dry.
+ * A picker that PREFERS candidates within the latency budget: asks `pick` again with each
+ * over-budget model added to the skip list, until one passes. When the source runs dry with
+ * only over-budget models seen, the fastest of them is the answer — latency orders a hand-off,
+ * it never cancels one. Undefined only when the source offered nothing at all.
  */
 export function guardedPick(
   pick: (skip: readonly string[]) => string | undefined,
@@ -85,11 +106,13 @@ export function guardedPick(
   input: LatencyGuardInput,
 ): string | undefined {
   const skipped = [...skip];
+  const slow: string[] = [];
   for (let i = 0; i < MAX_GUARDED_PICKS; i++) {
     const next = pick(skipped);
-    if (!next) return undefined;
+    if (!next) break;
     if (withinLatencyBudget(next, input)) return next;
+    slow.push(next);
     skipped.push(next);
   }
-  return undefined;
+  return fastestCandidate(slow, input.latency);
 }

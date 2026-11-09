@@ -26,7 +26,9 @@ export function withChildCommandGuard(defs: readonly ToolDef[], children: Pick<C
           ...def,
           execute: async (args, root, run) => {
             const command = typeof args.command === "string" ? args.command : "";
-            const refusal = command ? children.runningCommand(command) : null;
+            // The owner's own `cwd`: the same command in another directory is other work.
+            const cwd = typeof args.cwd === "string" ? args.cwd : undefined;
+            const refusal = command ? children.runningCommand(command, cwd) : null;
             return refusal ? JSON.stringify({ ok: false, refused: true, error: refusal }) : def.execute(args, root, run);
           },
         },

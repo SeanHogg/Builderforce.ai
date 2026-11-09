@@ -1532,7 +1532,7 @@ var PRICE_SNAPSHOT = {
   "~deepseek/deepseek-v4-flash-latest": [434e-10, 3e-7],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [1634e-10, 101489e-10],
+  "~moonshotai/kimi-latest": [1824e-10, 93388e-10],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -6187,16 +6187,30 @@ function withinLatencyBudget(candidate, input) {
   if (base === void 0 || theirs === void 0 || base <= 0) return true;
   return theirs <= base * (input.maxRatio ?? MAX_FAILOVER_LATENCY_RATIO);
 }
+function fastestCandidate(candidates, latency) {
+  let best;
+  let bestP50 = Number.POSITIVE_INFINITY;
+  for (const m of candidates) {
+    const t = p50(latency?.[m]) ?? 0;
+    if (best === void 0 || t < bestP50) {
+      best = m;
+      bestP50 = t;
+    }
+  }
+  return best;
+}
 var MAX_GUARDED_PICKS = 32;
 function guardedPick(pick, skip, input) {
   const skipped = [...skip];
+  const slow = [];
   for (let i = 0; i < MAX_GUARDED_PICKS; i++) {
     const next = pick(skipped);
-    if (!next) return void 0;
+    if (!next) break;
     if (withinLatencyBudget(next, input)) return next;
+    slow.push(next);
     skipped.push(next);
   }
-  return void 0;
+  return fastestCandidate(slow, input.latency);
 }
 
 // ../packages/run-policy/src/policy.ts
@@ -6329,10 +6343,12 @@ function reduceRunPolicy(state, event) {
 }
 function succeeded(s, resolved, acted, durationMs) {
   const proven = acted && resolved && resolved !== "default" && !s.proven.includes(resolved) ? [...s.proven, resolved] : s.proven;
-  const timed = resolved && resolved !== "default" ? resolved : s.model;
+  const served = resolved && resolved !== "default" ? resolved : void 0;
+  const timed = served ?? s.model;
   const next = {
     ...s,
-    ...timed && durationMs !== void 0 ? { latency: recordLatency(s.latency, timed, durationMs) } : {},
+    ...acted && timed && durationMs !== void 0 ? { latency: recordLatency(s.latency, timed, durationMs) } : {},
+    ...acted && served && s.pin && s.model === s.pin && !s.pinResolved ? { pinResolved: served } : {},
     turnRetries: 0,
     proven,
     planTurns: s.phase === "plan" ? s.planTurns + 1 : s.planTurns,
@@ -6377,13 +6393,19 @@ function failoverPicker(s, e) {
   const source = (skip) => e.pick ? e.pick(skip) : nextFallbackModel(e.surface, skip);
   return (tried) => {
     const skip = [...tried, ...s.broken];
-    const fast = (m) => !guard || withinLatencyBudget(m, guard);
-    return proven.find((m) => !skip.includes(m) && fast(m)) ?? (guard ? guardedPick(source, skip, guard) : source(skip));
+    const open2 = proven.filter((m) => !skip.includes(m));
+    if (!guard) return open2[0] ?? source(skip);
+    const fastProven = open2.find((m) => withinLatencyBudget(m, guard));
+    if (fastProven) return fastProven;
+    const picked = guardedPick(source, skip, guard);
+    if (picked && withinLatencyBudget(picked, guard)) return picked;
+    return fastestCandidate([...open2, ...picked ? [picked] : []], guard.latency);
   };
 }
 function latencyGuardFor(s, e) {
   if (s.phase === "plan" || e.primaryUnavailable || !s.latency) return void 0;
-  return { primary: s.pin ?? s.proven[0] ?? e.resolvedModel ?? s.model, latency: s.latency };
+  const pinPrimary = s.pin ? s.pinResolved : void 0;
+  return { primary: pinPrimary ?? s.proven[0] ?? e.resolvedModel ?? s.model, latency: s.latency };
 }
 function transportFailed(s, e) {
   if (s.turnRetries >= 1 || e.kind === "unreachable") return { ...s, outcome: { kind: "fail_turn" } };
@@ -8322,33 +8344,17 @@ function verbOf(stage) {
   const word = /^[\w./-]+/.exec(stage.replace(/^(?:\w+=\S*\s+)+/, ""))?.[0] ?? "";
   return word.slice(word.lastIndexOf("/") + 1).toLowerCase().replace(/\.exe$/, "");
 }
-var TRAILING_TRIM = /\s*(?:2>&1\s*)?\|\s*(head|tail)\s+(?:-n\s*|--lines[=\s]\s*|-)(\d+)\s*$/;
-function stripTrailingTrim(command) {
-  const m = TRAILING_TRIM.exec(command);
-  if (!m || !TRAILING_TRIM.test(withoutQuoted(command))) return { command };
-  const kept = command.slice(0, m.index).trimEnd();
-  if (!kept || /\|\s*$/.test(kept)) return { command };
-  return { command: kept, trim: { kind: m[1], lines: Number(m[2]) } };
-}
-var TRIM_WINDOW_LINES = 40;
-function shapeTrimmed(text2, trim, outputId) {
-  const lines = text2.split("\n");
-  const head = Math.max(TRIM_WINDOW_LINES, trim.kind === "head" ? trim.lines : 0);
-  const tail = Math.max(TRIM_WINDOW_LINES, trim.kind === "tail" ? trim.lines : 0);
-  if (lines.length <= head + tail) return text2;
-  const omitted = lines.length - head - tail;
-  const more = outputId ? `; output_filter { "outputId": "${outputId}" } reads them` : "";
-  return [...lines.slice(0, head), `\u2026(${omitted} lines omitted${more})\u2026`, ...lines.slice(lines.length - tail)].join("\n");
-}
 var SEARCH_VERBS = /* @__PURE__ */ new Set(["grep", "egrep", "fgrep", "rg", "findstr", "ag", "ack"]);
+function isSearchStage(stage) {
+  const verb = verbOf(stage);
+  if (SEARCH_VERBS.has(verb)) return true;
+  if (verb === "git") return /^\S+\s+(?:-\S+\s+)*grep\b/.test(stage.replace(/^(?:\w+=\S*\s+)+/, ""));
+  return verb === "select-string" || verb === "sls";
+}
 function isSearchCommand(command) {
   const bare = withoutQuoted(command);
   if (isChained(bare)) return false;
-  const last = stages(bare).pop() ?? "";
-  const verb = verbOf(last);
-  if (SEARCH_VERBS.has(verb)) return true;
-  if (verb === "git") return /^\S+\s+(?:-\S+\s+)*grep\b/.test(last.replace(/^(?:\w+=\S*\s+)+/, ""));
-  return verb === "select-string" || verb === "sls";
+  return isSearchStage(stages(bare).pop() ?? "");
 }
 var NO_OUTPUT = /^\s*(\(no output\))?\s*$/;
 function searchNoMatch(command, result) {
@@ -8456,16 +8462,12 @@ function finishedJob(st) {
     ...st.status === "killed" ? { aborted: true, error: st.error ?? "the job was stopped" } : st.error ? { error: st.error } : {}
   };
 }
-function shapeResult(command, r, trim) {
-  const read = searchNoMatch(command, r);
-  if (!trim || typeof read.stdout !== "string" || read.matches === 0) return read;
-  const said = `the trailing "| ${trim.kind} -${trim.lines}" was not run: this is the start and the end of the full output`;
-  return { ...read, stdout: shapeTrimmed(read.stdout, trim, read.outputId), note: read.note ? `${read.note}; ${said}` : said };
+function shapeResult(command, r) {
+  return searchNoMatch(command, r);
 }
 async function runShellCommand(args, ctx) {
-  const asked = typeof args.command === "string" ? args.command : "";
-  if (!asked.trim()) return { data: { ok: false, error: "command is required" } };
-  const { command, trim } = stripTrailingTrim(asked);
+  const command = typeof args.command === "string" ? args.command : "";
+  if (!command.trim()) return { data: { ok: false, error: "command is required" } };
   const cwd = cwdArg(args.cwd);
   if (cwd === null) {
     return { data: { ok: false, error: "`cwd` must be a directory inside the workspace, relative to its root (no `..`, no absolute path)." } };
@@ -8488,13 +8490,13 @@ async function runShellCommand(args, ctx) {
         const why = ctx.signal?.aborted ? "The wait was interrupted" : `Still running after ${yieldMs}ms`;
         return { data: { ok: true, background: true, id, status: "running", output: st.output ?? "", note: `${why}, so it moved to the background. ${jobNote(id)}`, ...where } };
       }
-      const r2 = await compressShellResult(shapeResult(command, finishedJob(st), trim), ctx);
+      const r2 = await compressShellResult(shapeResult(command, finishedJob(st)), ctx);
       return { data: { ...r2, ...st.status === "unknown" ? { id } : {}, ...where } };
     }
     note = "This surface has no background shell, so the command ran in the foreground.";
   }
   const ran = args.fresh === true ? await shell.run(command, { ...ctx.signal ? { signal: ctx.signal } : {}, ...where, fresh: true }) : await shellRunWithStop(ctx, command, dir);
-  const r = await compressShellResult(shapeResult(command, ran, trim), ctx);
+  const r = await compressShellResult(shapeResult(command, ran), ctx);
   const notes2 = [r.note, note].filter(Boolean).join(" ");
   return { data: { ...r, ...where, ...notes2 ? { note: notes2 } : {} } };
 }
@@ -10421,7 +10423,7 @@ var runChecksTool = defineTool({
 });
 var runCommandTool = defineTool({
   name: "run_command",
-  description: "Run a shell command in the checked-out repository (real shell). Use it to install dependencies and run the build, type-check, lint, and tests. Returns combined stdout/stderr and the exit code. Verify your changes this way BEFORE calling finish. Do not re-run a command to grep/head/tail its output: when the result has an outputId, use output_filter on it.",
+  description: "Run a shell command in the checked-out repository (real shell). Use it to install dependencies and run the build, type-check, lint, and tests. Returns combined stdout/stderr and the exit code. Verify your changes this way BEFORE calling finish. Do not re-run a command to grep/head/tail its output: when the result has an outputId and the output_filter tool is available, use output_filter on it.",
   parameters: {
     type: "object",
     properties: {
@@ -19534,6 +19536,20 @@ var ROLE_COMPANION_TOOLS = {
     "ask_user"
   ]
 };
+var ROLE_GUARANTEED_TOOLS = [
+  "git_commit",
+  "git_push",
+  "open_pull_request",
+  "output_filter",
+  "wait_agents",
+  "stop_agent",
+  "message_agent",
+  "update_task_state",
+  "hand_off",
+  "builtin_reviews_record",
+  "builtin_tasks_update"
+];
+var ROLE_MATCH_ROOM = { code: 6, verify: 4 };
 function isCappedToolRole(role) {
   return role === "code" || role === "verify";
 }
@@ -19541,12 +19557,12 @@ function roleToolLimit(role) {
   return isCappedToolRole(role) ? ROLE_TOOL_LIMIT[role] : DEFAULT_TOOL_LIMIT;
 }
 function roleToolNames(role) {
-  return [.../* @__PURE__ */ new Set([...coreToolNames(role), ...ROLE_COMPANION_TOOLS[role]])];
+  return [.../* @__PURE__ */ new Set([...coreToolNames(role), ...ROLE_COMPANION_TOOLS[role], ...ROLE_GUARANTEED_TOOLS])];
 }
-function roleCappedSelection(role, catalogNames, keep2 = []) {
+function roleCappedSelection(role, catalogNames, keep2 = [], surfaceRequired = []) {
   const present = new Set(catalogNames);
-  const required = [.../* @__PURE__ */ new Set([...roleToolNames(role), ...keep2])].filter((n2) => present.has(n2));
-  return { limit: Math.max(ROLE_TOOL_LIMIT[role], required.length), required, backfill: false };
+  const required = [.../* @__PURE__ */ new Set([...surfaceRequired, ...roleToolNames(role), ...keep2])].filter((n2) => present.has(n2));
+  return { limit: Math.max(ROLE_TOOL_LIMIT[role], required.length + ROLE_MATCH_ROOM[role]), required, backfill: false };
 }
 
 // ../packages/agent-run/src/policy/tools/platform.ts
@@ -19556,7 +19572,7 @@ function selectPlatformCatalog(ctx, pinned) {
   const catalog = platform.schemas({ rungs: ctx.state.stall?.rungs ?? {} });
   const selection = platform.selection;
   const { query } = selection;
-  const capped = isCappedToolRole(selection.role) ? roleCappedSelection(selection.role, catalog.map((t) => t.function?.name ?? ""), selection.roleKeep ?? []) : void 0;
+  const capped = isCappedToolRole(selection.role) ? roleCappedSelection(selection.role, catalog.map((t) => t.function?.name ?? ""), selection.roleKeep ?? [], selection.required) : void 0;
   const limit = capped?.limit ?? selection.limit;
   const required = capped?.required ?? [...selection.required];
   return selectToolsForTurn(catalog, { query, limit, pinned: selection.pinned ? [...selection.pinned] : pinned, required, ...selection.rank ? { rank: selection.rank } : {}, ...selection.capRequired ? { capRequired: true } : {}, ...capped ? { backfill: false } : {} }).tools;
@@ -25342,6 +25358,24 @@ async function retitleShippedDeltaTicket(c, req) {
 
 // src/run/brainCloseOut.ts
 var REVIEW_RECORD_TOOL2 = "builtin_reviews_record";
+function verificationOf(evidence, touchedFiles) {
+  const entries = evidence?.snapshot() ?? [];
+  if (!entries.length) return { verified: false, reason: "no verification evidence was recorded for this run" };
+  const failed4 = entries.flatMap((e) => e.checks.filter((c) => c.outcome === "fail").map((c) => `${e.path} ${c.kind} "${c.name}"`));
+  if (failed4.length) return { verified: false, reason: `failing checks: ${failed4.slice(0, 5).join("; ")}` };
+  const passing = entries.filter((e) => e.checks.some((c) => c.outcome === "pass"));
+  if (!passing.length) return { verified: false, reason: "no check passed (only unavailable checks were recorded)" };
+  const covers = (file) => {
+    const rel2 = normalizeEvidencePath(file).replace(/^\.\//, "");
+    return passing.some((e) => e.path === rel2 || e.path.endsWith(`/${rel2}`));
+  };
+  const unverified = touchedFiles.filter((f) => !covers(f));
+  if (unverified.length) return { verified: false, reason: `no passing check for: ${unverified.slice(0, 10).join(", ")}` };
+  return {
+    verified: true,
+    checks: passing.flatMap((e) => e.checks.filter((c) => c.outcome === "pass").map((c) => `${e.path} ${c.kind} "${c.name}"`))
+  };
+}
 function reviewedThisRun(trace4) {
   const ids2 = /* @__PURE__ */ new Set();
   for (const ev of trace4) {
@@ -25351,15 +25385,16 @@ function reviewedThisRun(trace4) {
   }
   return ids2;
 }
-function shipReviewSummary(files) {
+function shipReviewSummary(files, checks) {
   const shown = files.slice(0, 10).join(", ");
   const more = files.length > 10 ? ` (+${files.length - 10} more)` : "";
-  return `Closed out by the host: this run's change${files.length ? ` (${files.length} file${files.length === 1 ? "" : "s"}: ${shown}${more})` : ""} was pushed to the base branch and verified landed, with no placeholder outstanding.`;
+  const passed = checks.slice(0, 10).join("; ") + (checks.length > 10 ? ` (+${checks.length - 10} more)` : "");
+  return `Closed out by the host: this run's change${files.length ? ` (${files.length} file${files.length === 1 ? "" : "s"}: ${shown}${more})` : ""} was pushed to the base branch and verified landed, with no placeholder outstanding. Passing checks on the shipped bytes: ${passed}.`;
 }
-async function recordShipReview(input, taskId) {
+async function recordShipReview(input, taskId, checks) {
   const { view, req } = input;
   if (!req.runTool || reviewedThisRun(input.trace).has(taskId)) return;
-  const args = { taskId, verdict: "complete", summary: shipReviewSummary(view.touchedFiles) };
+  const args = { taskId, verdict: "complete", summary: shipReviewSummary(view.touchedFiles, checks) };
   const toolStart = nowMs2();
   let out;
   try {
@@ -25372,7 +25407,7 @@ async function recordShipReview(input, taskId) {
     category: "tool",
     label: REVIEW_RECORD_TOOL2,
     durationMs: nowMs2() - toolStart,
-    args: { ...args, auto: true, reason: "shipped-to-base-branch" },
+    args: { ...args, auto: true, reason: "shipped-and-verified" },
     result: out ?? null,
     isError: isFailedToolResult(out)
   });
@@ -25397,8 +25432,19 @@ async function closeOutRun(input) {
         result: "The change shipped, but this run left placeholders in the code: its ticket stays open until they are finished."
       });
     } else {
-      if (view.deltaTicketId != null) await recordShipReview(input, view.deltaTicketId);
-      await updateLinkedTickets(serverChatId, view, req, linkedTicketsToComplete, "done", "shipped-to-base-branch");
+      const verification = verificationOf(input.evidence, view.touchedFiles);
+      if (!verification.verified) {
+        view.note?.({
+          ts: nowIso(),
+          category: "message",
+          label: "run.close_out_held",
+          args: { reason: "unverified", detail: verification.reason },
+          result: `The change shipped, but this run holds no passing verification for it (${verification.reason}): no review was recorded and its ticket stays in review.`
+        });
+      } else {
+        if (view.deltaTicketId != null) await recordShipReview(input, view.deltaTicketId, verification.checks);
+        await updateLinkedTickets(serverChatId, view, req, linkedTicketsToComplete, "done", "shipped-to-base-branch");
+      }
     }
   }
   if (reviewedInPreview.length && req.projectId != null && req.runTool) {
@@ -27053,6 +27099,41 @@ function turnContextTokens(c) {
   return measured2.get(c) ?? 0;
 }
 
+// src/runStore/pendingCalls.ts
+var PendingCalls = class {
+  byCall = /* @__PURE__ */ new Map();
+  /** The live step of each call whose tool is running now, in the order they started. */
+  running = /* @__PURE__ */ new Map();
+  /** A call's preflight starts it clean: nothing a former call with the same id left behind can be read as its own. */
+  forget(callId) {
+    this.byCall.delete(callId);
+  }
+  replayed(callId, replay) {
+    this.byCall.set(callId, { kind: "replay", replay });
+  }
+  ran(callId, ran) {
+    this.byCall.set(callId, { kind: "ran", ran });
+  }
+  /** The call's entry, removed — read exactly once, by its post step. */
+  take(callId) {
+    const entry = this.byCall.get(callId);
+    this.byCall.delete(callId);
+    return entry;
+  }
+  /** The call's tool started running with `activity` as its live step. */
+  begin(callId, activity) {
+    this.running.delete(callId);
+    this.running.set(callId, activity);
+  }
+  /** The call's tool returned. The live step of the most recently started sibling still running, or undefined when none is. */
+  end(callId) {
+    this.running.delete(callId);
+    let latest;
+    for (const activity of this.running.values()) latest = activity;
+    return latest;
+  }
+};
+
 // src/runStore/runPreamble.ts
 function stablePrefixOn() {
   return deviceLeverOn("b1_stable_prefix");
@@ -27294,8 +27375,7 @@ ${turnContext}` : systemPrompt),
     restateRecoveryUsed: false,
     stopHookRounds: 0,
     redirectAskToDelegation: false,
-    pendingReplay: null,
-    pendingRun: null,
+    pending: new PendingCalls(),
     lastTurnInterruption: null
   };
   if (turnContext && !attachTurnContext(c, convo, turnContext)) {
@@ -27512,8 +27592,7 @@ function callPreflight(run) {
   const { runTool, needsConfirm, persistence } = req;
   return async (rawCall, ctx) => {
     const iter = ctx.step;
-    run.pendingReplay = null;
-    run.pendingRun = null;
+    run.pending.forget(rawCall.id);
     let call2 = rawCall;
     {
       const aliased = resolveToolAlias(call2.name);
@@ -27633,7 +27712,7 @@ function callPreflight(run) {
 ${revisit}` : replayNote,
             contextWindowTokens: await run.windowFit.contextWindow?.()
           });
-          run.pendingReplay = { name: call2.name, args, result: cached2.result, served: replayed.served };
+          run.pending.replayed(call2.id, { name: call2.name, args, result: cached2.result, served: replayed.served });
           pushTrace(c, {
             ts: nowIso(),
             category: "tool",
@@ -27664,7 +27743,7 @@ ${revisit}` : covered.note;
         if (covered.cached && !stillInWorkingContext(c, covered.cached.anchor)) {
           const requested = requestedReadWindow2(covered.cached.result ?? null, covered.start, covered.end);
           const replayed = trimToolResult(call2.name, requested, { advisory: note, contextWindowTokens: await run.windowFit.contextWindow?.() });
-          run.pendingReplay = { name: call2.name, args, result: requested, served: replayed.served };
+          run.pending.replayed(call2.id, { name: call2.name, args, result: requested, served: replayed.served });
           pushTrace(c, {
             ts: nowIso(),
             category: "tool",
@@ -27688,7 +27767,7 @@ ${revisit}` : covered.note;
         const target = visit ? visitTarget(args) : void 0;
         const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
         const served = trimToolResult(call2.name, derived, { advisory: revisit, contextWindowTokens: await run.windowFit.contextWindow?.() });
-        run.pendingReplay = { name: call2.name, args, result: derived };
+        run.pending.replayed(call2.id, { name: call2.name, args, result: derived });
         pushTrace(c, {
           ts: nowIso(),
           category: "tool",
@@ -27767,7 +27846,9 @@ function callRunner(run) {
     if (declined) return declined;
     const isReadTool = isDedupableRead(call2.name);
     const toolStart = nowMs2();
-    setActivity(c, toolActivity(call2.name, args, iter, Date.now()));
+    const live2 = toolActivity(call2.name, args, iter, Date.now());
+    run.pending.begin(call2.id, live2);
+    setActivity(c, live2);
     if (!runTool) throw new Error("tool call without a tool runner");
     let out;
     try {
@@ -27777,10 +27858,10 @@ function callRunner(run) {
       out = { ok: false, error: message };
       const repeat = failureAdvisoryFor(run, call2.name, args, out, iter);
       if (!isReadTool) writeLedger.record(call2.name, args, { ok: false, unscoped: isUnscopedMutation(call2.name, args) });
-      run.pendingRun = { out, toolStart, isReadTool, threw: true };
+      run.pending.ran(call2.id, { out, toolStart, isReadTool, threw: true });
       return { data: repeat ? withAdvisory(out, repeat) : out, isError: true };
     } finally {
-      setActivity(c, betweenTurnsActivity(iter, Date.now()));
+      setActivity(c, run.pending.end(call2.id) ?? betweenTurnsActivity(iter, Date.now()));
     }
     const changed2 = codeChangesOf(call2.name, args, out);
     if (changed2) {
@@ -27845,7 +27926,7 @@ ${delegate}` : delegate;
     }
     const contextWindowTokens = await run.windowFit.contextWindow?.();
     const trimmedOut = trimToolResult(call2.name, out ?? null, { advisory, contextWindowTokens });
-    run.pendingRun = { out, toolStart, isReadTool, threw: false, bytes: trimmedOut.bytes, truncated: trimmedOut.truncated, served: trimmedOut.served };
+    run.pending.ran(call2.id, { out, toolStart, isReadTool, threw: false, bytes: trimmedOut.bytes, truncated: trimmedOut.truncated, served: trimmedOut.served });
     return { data: trimmedOut.content, isError: isFailedToolResult(out) };
   };
 }
@@ -27855,15 +27936,14 @@ function callPostStep(run) {
   const { c, readCoverage: readCoverage2, usedTools } = run;
   return (call2, result, row) => {
     run.progress.observe(call2.name, call2.args, result);
-    if (run.pendingReplay) {
-      const replay = run.pendingReplay;
+    const pending = run.pending.take(call2.id);
+    if (pending?.kind === "replay") {
+      const { replay } = pending;
       readCoverage2.cacheResult(replay.name, replay.args, { result: replay.result, ...replay.served !== void 0 ? { served: replay.served } : {}, anchor: row });
-      run.pendingReplay = null;
       return void 0;
     }
-    const ran = run.pendingRun;
-    run.pendingRun = null;
-    if (!ran) return void 0;
+    if (!pending) return void 0;
+    const { ran } = pending;
     run.cacheStreak.ran();
     const args = call2.args;
     if (ran.threw) {
@@ -28145,7 +28225,7 @@ function brainPlatformTools(run) {
 }
 
 // src/run/brainFold.ts
-import { buildWorkingTranscript } from "@seanhogg/builderforce-memory/working";
+import { buildWorkingTranscript, foldWorkingTranscript } from "@seanhogg/builderforce-memory/working";
 
 // src/runStore/compactionSaved.ts
 import { HISTORY_TOKEN_BUDGET as HISTORY_TOKEN_BUDGET3, transcriptTokens as transcriptTokens2 } from "@seanhogg/builderforce-memory/working";
@@ -28188,6 +28268,31 @@ function toRunMessage(row) {
 }
 
 // src/run/brainFold.ts
+var foldLimits = { summaryMs: 15e3 };
+function linkedAbort(parent) {
+  const own = new AbortController();
+  const onParent = () => own.abort();
+  if (parent?.aborted) own.abort();
+  else parent?.addEventListener("abort", onParent, { once: true });
+  return { signal: own.signal, abort: () => own.abort(), release: () => parent?.removeEventListener("abort", onParent) };
+}
+async function summaryWithin(ms, summarize, parent, onLate) {
+  const link = linkedAbort(parent);
+  let timer;
+  const late = new Promise((resolve) => {
+    timer = setTimeout(() => resolve("late"), ms);
+  });
+  try {
+    const out = await Promise.race([summarize(link.signal).catch(() => null), late]);
+    if (out !== "late") return out;
+    link.abort();
+    onLate();
+    return null;
+  } finally {
+    clearTimeout(timer);
+    link.release();
+  }
+}
 function sameRows(a, b) {
   if (a.length !== b.length) return false;
   return a.every((row, i) => {
@@ -28198,6 +28303,7 @@ function sameRows(a, b) {
 function brainCompaction(run) {
   const { c, systemPrompt, req } = run;
   let saved = 0;
+  let foldTimedOut = false;
   return {
     savedTokens: () => saved,
     hook: {
@@ -28207,8 +28313,24 @@ function brainCompaction(run) {
           c,
           systemPrompt,
           (msgs) => {
+            if (foldTimedOut) return Promise.resolve(null);
             setActivity(c, contextFoldActivity(ctx.step, Date.now()));
-            return summarizeMiddle(req.stream, run.policy.model, msgs, c.abort?.signal, req.onDeviceTasks);
+            const limit = foldLimits.summaryMs;
+            return summaryWithin(
+              limit,
+              (signal) => summarizeMiddle(req.stream, run.policy.model, msgs, signal, req.onDeviceTasks),
+              c.abort?.signal,
+              () => {
+                foldTimedOut = true;
+                pushTrace(c, {
+                  ts: nowIso(),
+                  category: "message",
+                  label: "context.fold_timeout",
+                  args: { step: ctx.step, waitedMs: limit, messages: msgs.length },
+                  result: "The context summary did not finish in time; this run goes on with the most recent history instead."
+                });
+              }
+            );
           },
           (fold) => {
             folded = true;
@@ -28216,7 +28338,7 @@ function brainCompaction(run) {
           }
         );
         saved = c.compactMemo ? compactionSavedTokens([{ role: "system", content: systemPrompt }, ...c.transcript], working) : 0;
-        const rows = working.map(toRunMessage);
+        const rows = foldWorkingTranscript(working).map(toRunMessage);
         if (sameRows(ctx.messages, rows)) return void 0;
         return { messages: rows, dropped: Math.max(0, ctx.messages.length - rows.length), ...folded ? {} : { reused: true } };
       }
@@ -29422,10 +29544,12 @@ async function startRun(runKey, request, claim) {
   emit2(c);
   c.runUsage = emptyRunUsage();
   let openPlaceholders = () => 0;
+  let evidence;
   try {
     const prepared = await prepareBrainRun(chatId, c, req, runKey, holdRunRow);
     if (prepared) {
       openPlaceholders = () => prepared.placeholderLedger.outstanding().length;
+      evidence = prepared.evidence;
       noteRunId(c, prepared.metadata.guestTurnId);
       await runPrepared(prepared);
     }
@@ -29465,7 +29589,8 @@ async function startRun(runKey, request, claim) {
         shipped,
         reviewedInPreview,
         openPlaceholders: openPlaceholders(),
-        trace: runTrace(c)
+        trace: runTrace(c),
+        evidence
       };
       await within(left(), () => closeOutRun(closeOut), () => view.note?.({
         ts: nowIso(),

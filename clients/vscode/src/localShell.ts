@@ -7,7 +7,7 @@
  *
  * A pipeline runs under `pipefail` (`withPipefail`), so a failing stage is not exit 0. Within
  * a run (a `jobOwner`) the shell also keeps each command's FULL output for `output_filter`
- * (`localShellOutputs.ts`) and hands back the earlier result of an unchanged read-only
+ * (`localShellOutputs.ts`) and hands back the earlier result of an unchanged verification
  * command (`localShellCache.ts`).
  */
 
@@ -19,7 +19,7 @@ import { resolveShellCwd } from "@builderforce/agent-tools/node-path";
 import { spawnCommand, stopCommand } from "./processTree";
 import { killJob, pollJob, startJob, type JobOwner } from "./localShellJobs";
 import { readOutput, retainOutput } from "./localShellOutputs";
-import { cachedResult, invalidateRunCache, isCacheableCommand, rememberResult, workspaceFingerprint } from "./localShellCache";
+import { cachedResult, invalidateRunCache, rememberResult, shellCacheEffect, workspaceFingerprint } from "./localShellCache";
 
 // Bound a command's wall-clock + the output handed back to the model. Matches the cloud
 // Container's COMMAND_TIMEOUT_MS (api/container/server.mjs) — a build/type-check/test
@@ -73,7 +73,7 @@ export interface LocalShellOptions {
    * grammar for. Omitted ⇒ the shell's root.
    */
   cwd?: string;
-  /** Run it even when an unchanged read-only command's cached result exists (`localShellCache.ts`). */
+  /** Run it even when an unchanged verification command's cached result exists (`localShellCache.ts`). */
   fresh?: boolean;
   /** Wall-clock bound for this command; defaults to {@link RUN_TIMEOUT_MS}. */
   timeoutMs?: number;
@@ -169,10 +169,11 @@ export function createLocalShell(root: string, opts: { jobOwner?: JobOwner } = {
       if (!where.ok) return { ok: false, error: where.error };
       // Which interpreter, and the one cmd→bash retry, are THE shared routing rule.
       const exec = (): Promise<ShellResult> => runRouted(command, (bash) => execOnce(command, bash, options, where.dir), options.signal);
-      // Only a run's commands are cached; one that may write drops the run's cache.
-      if (owner === undefined || !isCacheableCommand(command)) {
+      // Only a run's verification commands are cached; a read-only one leaves the cache alone, one that may write drops it.
+      const effect = owner === undefined ? "keep" : shellCacheEffect(command);
+      if (owner === undefined || effect !== "cache") {
         const r = await exec();
-        if (owner !== undefined) invalidateRunCache(owner);
+        if (owner !== undefined && effect === "drop") invalidateRunCache(owner);
         return r;
       }
       if (!options.fresh) {

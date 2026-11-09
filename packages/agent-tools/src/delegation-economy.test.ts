@@ -44,6 +44,23 @@ describe("duplicateOfLiveChild (chat #60338)", () => {
     );
   });
 
+  it("compares the directory too: `cd X &&` and the owner's cwd say where a command runs", () => {
+    const apiChild = { handle: "a3", brief: "Run the API suite.", started: [{ command: "pnpm test", cwd: "api" }] };
+    expect(duplicateOfLiveChild("pnpm test", [apiChild], "clients/vscode")).toBeNull();
+    expect(duplicateOfLiveChild("pnpm test", [apiChild], "api")).toBe("a3 is already running this — call wait_agents for its result");
+    expect(duplicateOfLiveChild("cd api && pnpm test", [apiChild])).toBe("a3 is already running this — call wait_agents for its result");
+    const briefed = { handle: "a4", brief: "1. cd api && pnpm test", started: [] as string[] };
+    expect(duplicateOfLiveChild("pnpm test", [briefed], "./api/")).not.toBeNull();
+    expect(duplicateOfLiveChild("pnpm test", [briefed])).toBeNull();
+  });
+
+  it("never refuses a cheap read-only command a brief merely mentions", () => {
+    const mentions = { handle: "a5", brief: "- git status\n- ls src\n- cat package.json\n- grep -rn foo src", started: ["git log --oneline"] };
+    for (const c of ["git status", "ls src", "cat package.json", "grep -rn foo src", "git log --oneline", "git -C api diff"]) {
+      expect(duplicateOfLiveChild(c, [mentions])).toBeNull();
+    }
+  });
+
   it("lets through a command no live child owns", () => {
     expect(duplicateOfLiveChild("pnpm -C api exec tsc --noEmit", [child])).toBeNull();
     expect(duplicateOfLiveChild("pnpm install --frozen-lockfile", [])).toBeNull();

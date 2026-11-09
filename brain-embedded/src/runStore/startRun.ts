@@ -21,7 +21,7 @@ import { emit, getCell, nowIso, recordRunFailure, runTrace } from './runCells';
 import { appendRunMessage } from './runControl';
 import { keepStoppedTurn, persistStep } from './turnPersistence';
 import { settleView } from './runBackstops';
-import { closeOutRun } from '../run/brainCloseOut';
+import { closeOutRun, type CloseOutInput } from '../run/brainCloseOut';
 import { resolveServerChatId } from './serverChat';
 import { prepareBrainRun } from './runPreamble';
 import { runPrepared } from '../run/runPrepared';
@@ -112,11 +112,14 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
   c.runUsage = emptyRunUsage();
   // The placeholders this run wrote and has not removed, for the close-out's acceptance (none before a run is prepared).
   let openPlaceholders = (): number => 0;
+  // The checks the host verifier ran for this run - the close-out's verification (none before a run is prepared).
+  let evidence: CloseOutInput['evidence'];
   try {
     const prepared = await prepareBrainRun(chatId, c, req, runKey, holdRunRow);
     // Memory answered: the run is over before a model was asked.
     if (prepared) {
       openPlaceholders = () => prepared.placeholderLedger.outstanding().length;
+      evidence = prepared.evidence;
       // The id this run's calls carry - what its end is reported under (`runEndOutcome.ts`).
       noteRunId(c, prepared.metadata.guestTurnId);
       await runPrepared(prepared);
@@ -179,7 +182,7 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
       // the host's review and the move to done, held by the same acceptance a model's `done` is held to. Skipped on a Stop.
       const closeOut = {
         serverChatId, view, req, needsTicket, shipped, reviewedInPreview,
-        openPlaceholders: openPlaceholders(), trace: runTrace(c),
+        openPlaceholders: openPlaceholders(), trace: runTrace(c), evidence,
       };
       await within(left(), () => closeOutRun(closeOut), () => view.note?.({
         ts: nowIso(),

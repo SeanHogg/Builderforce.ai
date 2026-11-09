@@ -7,15 +7,18 @@
  *     commands they have started, which the duplicate-command rule reads
  *     (`duplicateOfLiveChild`, `@builderforce/agent-tools`; chat #60338).
  *   - `persist`: after every spawn and settle the chat's children are handed to a port that
- *     writes them onto the parent run's journal record (`childRunJournal.ts`), so a run the
- *     editor dies inside comes back knowing its children (chat #61651).
+ *     writes each onto the journal record of the run that started it (`childRunJournal.ts`),
+ *     so a run the editor dies inside comes back knowing its children (chat #61651). The
+ *     writes of a chat are SERIAL (a later state never lands under an earlier one) and each
+ *     is retried before it is given up and logged — a settle is never fire-and-forget;
+ *     {@link ChildLedger.flush} awaits them.
  *
  * The registry (`childRuns.ts`) owns handles, delivery and waits; this holds only what the
  * registry does not: the brief and the report as the owner will need them after a restart.
  * Pure — no editor, no store; the ports are injected.
  */
 
-import type { LiveChildWork } from "@builderforce/agent-tools";
+import type { LiveChildWork, StartedCommand } from "@builderforce/agent-tools";
 import type { ChildReport, ChildState } from "./childRuns";
 
 /** Longest brief the journal keeps per child — enough to re-spawn or do the slice by hand. */
@@ -51,11 +54,14 @@ export interface LedgerSpawn {
 
 export interface ChildLedgerPorts {
   /** The `run_command` commands a child run has started so far (from its trace). */
-  startedCommands?(key: number): string[];
-  /** Write a chat's children onto its parent run's record. Best-effort. */
+  startedCommands?(key: number): StartedCommand[];
+  /** Write a chat's children onto the records of the runs that started them. Retried, then logged. */
   persist?(rootChatId: number, children: PersistedChild[]): Promise<void> | void;
   log?(line: string): void;
 }
+
+/** How many times one persist is tried before it is logged as lost. */
+export const PERSIST_ATTEMPTS = 3;
 
 export interface ChildLedger {
   spawned(child: LedgerSpawn): void;
@@ -65,6 +71,8 @@ export interface ChildLedger {
   liveWork(ownerKey: number): LiveChildWork[];
   /** Every child a chat started this session, as persisted. */
   childrenOf(rootChatId: number): PersistedChild[];
+  /** Resolves once every persist queued so far (for one chat, or all) has been written or given up. */
+  flush(rootChatId?: number): Promise<void>;
 }
 
 interface Entry {
@@ -82,15 +90,30 @@ export function createChildLedger(ports: ChildLedgerPorts = {}): ChildLedger {
   const childrenOf = (rootChatId: number): PersistedChild[] =>
     [...entries.values()].filter((e) => e.rootChatId === rootChatId).map((e) => e.child);
 
+  /** Per chat, the tail of its serial write queue. */
+  const queues = new Map<number, Promise<void>>();
+
+  /** One write of the chat's children AS THEY ARE NOW, tried {@link PERSIST_ATTEMPTS} times; never rejects. */
+  const write = async (rootChatId: number): Promise<void> => {
+    for (let attempt = 1; attempt <= PERSIST_ATTEMPTS; attempt += 1) {
+      try {
+        await ports.persist!(rootChatId, childrenOf(rootChatId));
+        return;
+      } catch (error) {
+        if (attempt === PERSIST_ATTEMPTS) {
+          ports.log?.(`[child ledger] persisting chat ${rootChatId}'s sub-agents failed after ${PERSIST_ATTEMPTS} attempts: ${String(error)}`);
+        }
+      }
+    }
+  };
+
   const persist = (rootChatId: number): void => {
     if (!ports.persist) return;
-    try {
-      void Promise.resolve(ports.persist(rootChatId, childrenOf(rootChatId))).catch((error: unknown) =>
-        ports.log?.(`[child ledger] persisting chat ${rootChatId}'s sub-agents failed: ${String(error)}`),
-      );
-    } catch (error) {
-      ports.log?.(`[child ledger] persisting chat ${rootChatId}'s sub-agents failed: ${String(error)}`);
-    }
+    const next = (queues.get(rootChatId) ?? Promise.resolve()).then(() => write(rootChatId));
+    queues.set(rootChatId, next);
+    void next.then(() => {
+      if (queues.get(rootChatId) === next) queues.delete(rootChatId);
+    });
   };
 
   return {
@@ -127,5 +150,9 @@ export function createChildLedger(ports: ChildLedgerPorts = {}): ChildLedger {
     },
 
     childrenOf,
+
+    async flush(rootChatId) {
+      await Promise.all(rootChatId == null ? [...queues.values()] : [queues.get(rootChatId)]);
+    },
   };
 }

@@ -45,12 +45,19 @@ function selectFor(role: string | undefined, query: string, opts: { pinned?: str
   return (selectPlatformCatalog(ctx, []) ?? []).map((t) => t.function.name);
 }
 
+/** The role set the test catalog holds. */
+const heldRoleSet = (role: "code" | "verify"): string[] => {
+  const held = new Set(CATALOG.map((t) => t.function.name));
+  return roleToolNames(role).filter((n) => held.has(n));
+};
+
 describe("the code/verify turn cap", () => {
-  it("a code turn with a small required set advertises at most ~25 tools, its role set included", () => {
+  it("a code turn with a small required set advertises its role set plus at most the match room — never the ~480-tool backfill", () => {
     const names = selectFor("code", "fix the null check in the parser", { required: ["read_file"] });
-    expect(names.length).toBeLessThanOrEqual(ROLE_TOOL_LIMIT.code);
-    expect(names.length).toBeLessThanOrEqual(25);
+    expect(names.length).toBeLessThanOrEqual(Math.max(ROLE_TOOL_LIMIT.code, heldRoleSet("code").length + ROLE_MATCH_ROOM.code));
+    expect(names.length).toBeLessThan(40);
     for (const must of ["read_file", "search_code", "edit_file", "write_file", "run_command", "git_diff", "find_symbol"]) expect(names).toContain(must);
+    expect(names.some((n) => n.startsWith("builtin_platform_"))).toBe(false);
   });
 
   it("keeps the surface's whole required set: every workspace tool survives a code and a verify turn", () => {
@@ -98,8 +105,10 @@ describe("the code/verify turn cap", () => {
 
   it("a verify turn is capped tighter", () => {
     const names = selectFor("verify", "check the change", { required: [] });
-    expect(names.length).toBeLessThanOrEqual(ROLE_TOOL_LIMIT.verify);
+    expect(names.length).toBeLessThanOrEqual(Math.max(ROLE_TOOL_LIMIT.verify, heldRoleSet("verify").length + ROLE_MATCH_ROOM.verify));
+    expect(heldRoleSet("verify").length).toBeLessThan(heldRoleSet("code").length);
     expect(names).toContain("git_diff");
+    expect(names.some((n) => n.startsWith("builtin_platform_"))).toBe(false);
   });
 
   it("a tool found through the router and called stays advertised (pinned beyond the cap)", () => {

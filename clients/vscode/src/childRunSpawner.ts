@@ -18,6 +18,7 @@ import {
   getRunSnapshot,
   getRunTrace,
   isModelReply,
+  noteRunStep,
   queueRunSteering,
   type RunLineage,
 } from "@seanhogg/builderforce-brain-embedded";
@@ -29,9 +30,11 @@ import {
   clipChildOutput,
   duplicateOfLiveChild,
   ownerDirectionText as directionText,
+  type StartedCommand,
 } from "@builderforce/agent-tools";
 import { MAX_CHILD_DEPTH, type ChildReport, type ChildRuns } from "./childRuns";
 import { createChildLedger, type ChildLedger } from "./childLedger";
+import { createLiveChildrenHold, hungChildrenNote, type HeldChild } from "./liveChildrenFinish";
 
 /** One delegation, as the spawn tools describe it. */
 export interface ChildRequest {
@@ -58,8 +61,8 @@ export interface ChildControls {
   /** Block until the named (or all live) children settle, or the timeout. */
   wait(handles: readonly string[], timeoutMs: number, signal?: AbortSignal): Promise<{ reports: ChildReport[]; running: string[]; note?: string }>;
   /** The refusal for an owner `run_command` a live child of this owner already owns
-   *  (briefed to run, or started) — `duplicateOfLiveChild`; null when none does. */
-  runningCommand(command: string): string | null;
+   *  (briefed to run, or started) — `duplicateOfLiveChild`; null when none does. `cwd` is the owner's `run_command` cwd. */
+  runningCommand(command: string, cwd?: string): string | null;
 }
 
 /** The run a set of controls acts for. */
@@ -106,23 +109,63 @@ function ledgerOf(host: ChildRunHost): ChildLedger {
   return ledger;
 }
 
-/** The `run_command` commands a child run has started, read from its trace. */
-export function startedCommandsOf(key: number): string[] {
+/** The `run_command` commands a child run has started, read from its trace - with the `cwd` each ran in, when it named one. */
+export function startedCommandsOf(key: number): StartedCommand[] {
   return getRunTrace(key).flatMap((ev) => {
-    const command = ev.category === "tool" && ev.label === RUN_COMMAND_TOOL ? (ev.args as { command?: unknown } | undefined)?.command : undefined;
-    return typeof command === "string" && command.trim() ? [command] : [];
+    if (ev.category !== "tool" || ev.label !== RUN_COMMAND_TOOL) return [];
+    const args = ev.args as { command?: unknown; cwd?: unknown } | undefined;
+    const command = args?.command;
+    if (typeof command !== "string" || !command.trim()) return [];
+    return [typeof args?.cwd === "string" && args.cwd.trim() ? { command, cwd: args.cwd } : command];
+  });
+}
+
+/** A token that moves whenever a child run does something — a trace step or streamed text (the finish hold's progress). */
+export function childProgressOf(key: number): string {
+  const trace = getRunTrace(key);
+  return `${trace.length}:${trace[trace.length - 1]?.ts ?? ""}:${getRunSnapshot(key).streamingText?.length ?? 0}`;
+}
+
+/** Ask the host to stop these children — the same two calls `stop_agent` makes. */
+function stopChildren(host: ChildRunHost, children: ReadonlyArray<{ key: number }>): void {
+  for (const child of children) {
+    host.registry.requestStop(child.key);
+    host.stop(child.key);
+  }
+}
+
+/**
+ * The owner run's live-children finish hold (`liveChildrenFinish.ts`) over this host's registry: stop-requested children
+ * do not hold it, and children hung across the stalled-hold cap are stopped with a note on the owner's trace.
+ */
+export function ownerFinishHold(host: ChildRunHost, ownerKey: number): () => Promise<string | null> {
+  return createLiveChildrenHold({
+    live: () => host.registry.liveOf(ownerKey),
+    stopRequested: (key) => host.registry.stopRequested(key),
+    progress: childProgressOf,
+    stop: (children) => stopChildren(host, children),
+    released: (children: ReadonlyArray<HeldChild>, holds) =>
+      noteRunStep(ownerKey, {
+        label: "run.children_hold_released",
+        args: { stopped: children.map((c) => c.handle), holds },
+        result: hungChildrenNote(children, holds),
+      }),
   });
 }
 
 export function childControls(host: ChildRunHost, owner: ChildOwner): ChildControls {
   const ledger = ledgerOf(host);
   const settle = (key: number, lineage: RunLineage, req: ChildRequest): void => {
-    const report = reportOf(key, lineage, req, host.registry.stopRequested(key));
+    const stopped = host.registry.stopRequested(key);
+    const report = reportOf(key, lineage, req, stopped);
     const undelivered = host.registry.settle(key, report);
     ledger.settled(key, report, undelivered ? "inbox" : "wait");
     host.changed(owner.rootChatId);
     if (!undelivered) return;
     queueRunSteering(owner.key, reportText(report));
+    // A child someone asked to stop reports into the inbox (read with the owner's next turn) but never WAKES the owner:
+    // its stop was a decision already made, and a wake would be a run with no ask of its own (chat #61651).
+    if (stopped) return;
     // A running owner reads it before its next turn; an idle one is woken with it; one
     // whose run is just ending is woken once it has.
     host.wake(owner.key);
@@ -180,10 +223,7 @@ export function childControls(host: ChildRunHost, owner: ChildOwner): ChildContr
             const c = host.registry.find(owner.key, h);
             return c && c.state === "running" ? [{ key: c.key, handle: h }] : [];
           });
-      for (const t of targets) {
-        host.registry.requestStop(t.key);
-        host.stop(t.key);
-      }
+      stopChildren(host, targets);
       return targets.map((t) => t.handle);
     },
 
@@ -192,7 +232,7 @@ export function childControls(host: ChildRunHost, owner: ChildOwner): ChildContr
       return { reports, running, ...(interrupted ? { note: WAIT_INTERRUPTED_NOTE } : {}) };
     },
 
-    runningCommand: (command) => duplicateOfLiveChild(command, ledger.liveWork(owner.key)),
+    runningCommand: (command, cwd) => duplicateOfLiveChild(command, ledger.liveWork(owner.key), cwd),
   };
 }
 

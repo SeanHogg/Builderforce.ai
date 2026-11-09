@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@seanhogg/builderforce-memory':
-        specifier: ^2026.10.62
-        version: 2026.10.62(@seanhogg/builderforce-memory-engine@2026.10.62)
+        specifier: ^2026.10.63
+        version: 2026.10.63(@seanhogg/builderforce-memory-engine@2026.10.62)
       '@seanhogg/builderforce-memory-engine':
         specifier: ^2026.10.62
         version: 2026.10.62
@@ -162,8 +162,8 @@ packages:
     resolution: {integrity: sha512-C+9Hd3t+1FVte1eQqM+vIPCj+Bwly+l1sHn9pqYaH3mOnYoEQparKG7k7ACJqJ175f9nQYZgJlZC9asQUIqK6Q==}
     engines: {node: '>=18.0.0'}
 
-  '@seanhogg/builderforce-memory@2026.10.62':
-    resolution: {integrity: sha512-UMrmSlLGBuQdGb+rey0Kl7z+AzG+on/ZxjY0DblkMs5DmJe3CqMEDqhBxS2Q8ph9zIeYDDGklSiJ5/qH3CRI8Q==}
+  '@seanhogg/builderforce-memory@2026.10.63':
+    resolution: {integrity: sha512-BHpbpXhYgcaXrnIOxX4n38uaVLuTergLCmTI6q+Pxgo0LunWr1AqpX3jGt4CawwCspDJiZZSaeRCDfmM5i52MA==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       '@seanhogg/builderforce-memory-engine': ^2026.10.62
@@ -707,7 +707,7 @@ snapshots:
 
   '@seanhogg/builderforce-memory-engine@2026.10.62': {}
 
-  '@seanhogg/builderforce-memory@2026.10.62(@seanhogg/builderforce-memory-engine@2026.10.62)':
+  '@seanhogg/builderforce-memory@2026.10.63(@seanhogg/builderforce-memory-engine@2026.10.62)':
     dependencies:
       '@seanhogg/builderforce-memory-engine': 2026.10.62
 

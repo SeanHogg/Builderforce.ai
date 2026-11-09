@@ -1,4 +1,23 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import type { CheckRecord } from '@builderforce/run-guards';
+
+/**
+ * The run's evidence ledger is fed only by the host verifier. A test stands in for it here: every ledger a run creates
+ * starts with a passing check on each path in `evidenceSeed.passing` (empty = the run recorded no evidence).
+ */
+const evidenceSeed = vi.hoisted(() => ({ passing: [] as string[] }));
+vi.mock('@builderforce/run-guards', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@builderforce/run-guards')>();
+  const pass: CheckRecord = { kind: 'typecheck', name: 'tsc --noEmit', outcome: 'pass', exitCode: 0, findings: [], at: 1 };
+  return {
+    ...actual,
+    createEvidenceLedger: (...args: Parameters<typeof actual.createEvidenceLedger>) => {
+      const ledger = actual.createEvidenceLedger(...args);
+      for (const path of evidenceSeed.passing) ledger.record(path, 'seeded', pass);
+      return ledger;
+    },
+  };
+});
 import {
   startRun,
   subscribeRun,
@@ -705,6 +724,12 @@ describe('a run that ships its change closes its own ticket', () => {
   const persistence = { sendMessages: async () => [] };
   const TICKET = [{ kind: 'task', ref: '2394', status: 'in_review', exists: true }];
 
+  const SHIP_TOOLS = ['edit_file', 'run_command', 'git_status'].map((name) => ({
+    type: 'function' as const,
+    function: { name, description: name, parameters: {} },
+  }));
+  afterEach(() => { evidenceSeed.passing = []; });
+
   /** A run that edits a file, then commits + pushes, then checks git status. */
   function shippingRun(statusOutput: string) {
     const calls: { name: string; args: unknown }[] = [];
@@ -729,16 +754,14 @@ describe('a run that ships its change closes its own ticket', () => {
     return { stream, runTool, calls };
   }
 
-  it('moves the linked in_review ticket to done, with the reason on the step', async () => {
+  it('moves the linked in_review ticket to done once passing evidence covers the change, with the reason on the step', async () => {
+    // The host verifier recorded a passing check on the file the run changed.
+    evidenceSeed.passing = ['/repo/a.css'];
     const { stream, runTool, calls } = shippingRun('## main...origin/main');
     await startRun(4601, {
       resolvedSystemPrompt: 'sys',
       projectId: 11,
-      tools: [
-        { type: 'function', function: { name: 'edit_file', description: 'e', parameters: {} } },
-        { type: 'function', function: { name: 'run_command', description: 'r', parameters: {} } },
-        { type: 'function', function: { name: 'git_status', description: 'g', parameters: {} } },
-      ],
+      tools: SHIP_TOOLS,
       runTool,
       stream,
       persistence,
@@ -756,16 +779,31 @@ describe('a run that ships its change closes its own ticket', () => {
     expect(step?.args).toMatchObject({ id: 2394, status: 'done', auto: true, reason: 'shipped-to-base-branch' });
   });
 
+  it('holds the shipped ticket in review when the run recorded no verification evidence', async () => {
+    const { stream, runTool, calls } = shippingRun('## main...origin/main');
+    await startRun(4603, {
+      resolvedSystemPrompt: 'sys',
+      projectId: 11,
+      tools: SHIP_TOOLS,
+      runTool,
+      stream,
+      persistence,
+      userTurn: 'reduce the height and push to main',
+    });
+    // Shipping is not verification: nothing moves to done...
+    expect(calls.some((c) => c.name === 'builtin_tasks_update' && (c.args as { status?: string }).status === 'done')).toBe(false);
+    // ...and the run says why instead of closing the ticket silently.
+    const held = getRunTrace(4603).find((e) => e.label === 'run.close_out_held');
+    expect(held?.args).toMatchObject({ reason: 'unverified' });
+  });
+
   it('leaves the ticket in review when the work stayed on a branch', async () => {
+    evidenceSeed.passing = ['/repo/a.css'];
     const { stream, runTool, calls } = shippingRun('## feature/x...origin/feature/x');
     await startRun(4602, {
       resolvedSystemPrompt: 'sys',
       projectId: 11,
-      tools: [
-        { type: 'function', function: { name: 'edit_file', description: 'e', parameters: {} } },
-        { type: 'function', function: { name: 'run_command', description: 'r', parameters: {} } },
-        { type: 'function', function: { name: 'git_status', description: 'g', parameters: {} } },
-      ],
+      tools: SHIP_TOOLS,
       runTool,
       stream,
       persistence,
@@ -807,6 +845,9 @@ describe('a local run is its own reviewer: it ships its change instead of parkin
   }
   const doneUpdate = (calls: { name: string; args: unknown }[]) =>
     calls.find((c) => c.name === 'builtin_tasks_update' && (c.args as { status?: string }).status === 'done');
+  // The host verifier passed the files these runs change: the close-out's verification.
+  beforeEach(() => { evidenceSeed.passing = ['/repo/src/a.ts', '/repo/src/b.ts']; });
+  afterEach(() => { evidenceSeed.passing = []; });
 
   it('tells a session that can commit and push that it IS the reviewer', async () => {
     const { stream, runTool, systems } = scripted(['Nothing to change.']);

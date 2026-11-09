@@ -11,6 +11,7 @@ import {
   type RunPolicyEvent,
   type RunPolicyState,
 } from './index.js';
+import { fastestCandidate } from './latencyGuard.js';
 
 const KIMI = 'local/kimi-code/kimi-for-coding';
 const FLASH = 'direct/minimax/MiniMax-M3.1-Flash-Preview';
@@ -58,11 +59,21 @@ describe('withinLatencyBudget', () => {
     expect(withinLatencyBudget(FLASH, { primary: undefined, latency })).toBe(true);
   });
 
-  it('a guarded pick walks past slow candidates and gives up when only slow ones remain', () => {
+  it('a guarded pick prefers an in-budget candidate, and falls back to the fastest when only slow ones remain', () => {
     const order = [FLASH, QWEN];
     const pick = (skip: readonly string[]) => order.find((m) => !skip.includes(m));
     expect(guardedPick(pick, [], { primary: KIMI, latency })).toBe(QWEN);
-    expect(guardedPick(pick, [QWEN], { primary: KIMI, latency })).toBeUndefined();
+    expect(guardedPick(pick, [QWEN], { primary: KIMI, latency })).toBe(FLASH);
+    const slower = { ...latency, 'direct/x/slower': [200_000] };
+    const both = ['direct/x/slower', FLASH];
+    expect(guardedPick((skip) => both.find((m) => !skip.includes(m)), [], { primary: KIMI, latency: slower })).toBe(FLASH);
+    expect(guardedPick(() => undefined, [], { primary: KIMI, latency })).toBeUndefined();
+  });
+
+  it('fastestCandidate orders by p50, unmeasured first, ties to the earlier one', () => {
+    expect(fastestCandidate([FLASH, QWEN], latency)).toBe(QWEN);
+    expect(fastestCandidate([FLASH, 'direct/x/unmeasured'], latency)).toBe('direct/x/unmeasured');
+    expect(fastestCandidate([], latency)).toBeUndefined();
   });
 });
 
@@ -84,9 +95,45 @@ describe('the run policy fails over latency-aware on code and verify turns', () 
     expect(s.latency?.[FLASH]).toEqual([97_000, 46_000]);
   });
 
-  it('a stall on the primary does not hand the turn to the slow proven model', () => {
+  it('a stall on the primary with ONLY a slow candidate still fails over to it — latency orders, it never cancels', () => {
     const s = reduceRunPolicy(codingRun(), { type: 'stalled', resolvedModel: KIMI });
-    expect(s.outcome.kind).toBe('failover_exhausted');
+    expect(s.outcome).toMatchObject({ kind: 'failed_over', to: FLASH });
+  });
+
+  it('with only slow candidates the fastest of them takes the turn', () => {
+    const SLOWEST = 'direct/x/slowest';
+    const s = run(
+      codingRun(),
+      { type: 'turn_succeeded', model: SLOWEST, acted: true, durationMs: 300_000 },
+      { type: 'stalled', resolvedModel: KIMI },
+    );
+    expect(s.outcome).toMatchObject({ kind: 'failed_over', to: FLASH });
+  });
+
+  it('a turn that did not act is not timed, so a fast-stalling primary earns no low p50', () => {
+    const s = run(
+      initialRunPolicy({ preferProvenFailover: true, startPhase: 'code' }),
+      { type: 'turn_succeeded', model: KIMI, acted: false, durationMs: 1_000 },
+      { type: 'turn_succeeded', model: KIMI, durationMs: 900 },
+      { type: 'turn_succeeded', model: FLASH, acted: true, durationMs: 20_000 },
+    );
+    expect(s.latency?.[KIMI]).toBeUndefined();
+    expect(s.latency?.[FLASH]).toEqual([20_000]);
+  });
+
+  it('keys a pinned primary by its RESOLVED name, not the unresolved pin', () => {
+    const FAST = 'direct/x/fast';
+    const s = run(
+      initialRunPolicy({ preferProvenFailover: true, startPhase: 'code', pinnedModel: 'kimi' }),
+      { type: 'turn_succeeded', model: KIMI, acted: true, durationMs: 6_000 },
+      { type: 'turn_succeeded', model: FAST, acted: true, durationMs: 7_000 },
+      { type: 'turn_succeeded', model: QWEN, acted: true, durationMs: 30_000 },
+    );
+    expect(s.pinResolved).toBe(KIMI);
+    // QWEN is the most recent proven model but 5x the RESOLVED primary (keyed by the pin 'kimi' it would
+    // be unmeasured and QWEN would win): the in-budget FAST takes the turn.
+    const out = reduceRunPolicy(s, { type: 'stalled', resolvedModel: KIMI });
+    expect(out.outcome).toMatchObject({ kind: 'failed_over', to: FAST });
   });
 
   it('a stall still fails over to a proven model within budget', () => {
@@ -100,7 +147,7 @@ describe('the run policy fails over latency-aware on code and verify turns', () 
 
   it('the host picker is walked past slow models too', () => {
     const s = reduceRunPolicy(
-      run(initialRunPolicy({ startPhase: 'code' }), { type: 'turn_succeeded', model: KIMI, acted: true, durationMs: 6_000 }, { type: 'turn_succeeded', model: FLASH, durationMs: 60_000 }),
+      run(initialRunPolicy({ startPhase: 'code' }), { type: 'turn_succeeded', model: KIMI, acted: true, durationMs: 6_000 }, { type: 'turn_succeeded', model: FLASH, acted: true, durationMs: 60_000 }),
       { type: 'stalled', resolvedModel: KIMI, pick: (skip) => [FLASH, QWEN].find((m) => !skip.includes(m)) },
     );
     expect(s.outcome).toMatchObject({ kind: 'failed_over', to: QWEN });
@@ -123,11 +170,13 @@ describe('the run policy fails over latency-aware on code and verify turns', () 
 
   it('a host seed is the starting evidence', () => {
     const s = run(
-      initialRunPolicy({ preferProvenFailover: true, startPhase: 'verify', latencySeed: { [KIMI]: [6_000], [FLASH]: [90_000] } }),
+      initialRunPolicy({ preferProvenFailover: true, startPhase: 'verify', latencySeed: { [KIMI]: [6_000], [FLASH]: [90_000], [QWEN]: [12_000] } }),
       { type: 'turn_succeeded', model: KIMI, acted: true },
+      { type: 'turn_succeeded', model: QWEN, acted: true },
       { type: 'turn_succeeded', model: FLASH, acted: true },
       { type: 'stalled', resolvedModel: KIMI },
     );
-    expect(s.outcome.kind).toBe('failover_exhausted');
+    // FLASH is the most recent proven model, but the seed says it is slow: QWEN (in budget) wins.
+    expect(s.outcome).toMatchObject({ kind: 'failed_over', to: QWEN });
   });
 });

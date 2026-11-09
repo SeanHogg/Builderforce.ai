@@ -52,7 +52,7 @@ import { createChildRuns } from "./childRuns";
 import { createRunRelay } from "./runRelay";
 import { createLlmFailureLogger } from "./llmFailureLog";
 import { hostLog } from "./hostLog";
-import { childControls } from "./childRunSpawner";
+import { childControls, ownerFinishHold } from "./childRunSpawner";
 import { createChildRunHost, ownerOf, type RunSpec } from "./childRunHost";
 import { createChildApprovalRelay } from "./childApprovalRelay";
 import { createRunWatches } from "./runWatches";
@@ -63,7 +63,6 @@ import { runRequestFields } from "./stageModels";
 import { createRunSteer } from "./runSteer";
 import { createTurnQueue } from "./runTurnQueue";
 import { askedText } from "./runAsked";
-import { liveChildrenBlock } from "./liveChildrenFinish";
 import { fallbackDetail } from "./modelFallbackDetail";
 
 export { syncMessageFor } from "./brainRunHostProtocol";
@@ -325,8 +324,9 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
         runTool,
         needsConfirm,
         // An owner never ends while sub-agents it started are still working (`liveChildrenFinish.ts`): a late report
-        // would otherwise wake it into a new run with no ask of its own.
-        liveChildren: async () => liveChildrenBlock(childHost.registry.liveOf(key)),
+        // would otherwise wake it into a new run with no ask of its own. Stop-requested children do not hold it, and hung
+        // ones are stopped after `MAX_STALLED_HOLDS` holds without progress, so the hold always has an exit.
+        liveChildren: ownerFinishHold(childHost, key),
         stream,
         persistence: ports.persistence,
         onActivity: () => ports.onChatsChanged?.(),

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { BrainTraceEvent } from '../brainTriage';
 import type { BackstopRun } from '../runStore/runBackstops';
-import { closeOutRun, REVIEW_RECORD_TOOL, reviewedThisRun, type CloseOutInput } from './brainCloseOut';
+import { createEvidenceLedger } from '@builderforce/run-guards';
+import { closeOutRun, REVIEW_RECORD_TOOL, reviewedThisRun, verificationOf, type CloseOutInput } from './brainCloseOut';
 
 /** A fake tool runner over the host's executors: records every call, answers the ticket list. */
 function fakeTools(tickets: unknown[] = [{ kind: 'task', ref: 41, status: 'in_review' }]) {
@@ -22,10 +23,17 @@ function view(over: Partial<BackstopRun> = {}): BackstopRun & { notes: BrainTrac
   };
 }
 
+/** An evidence ledger holding `checks` against `path` (as the host verifier records them). */
+function evidence(path: string, outcomes: Array<'pass' | 'fail' | 'unavailable'>) {
+  const ledger = createEvidenceLedger();
+  outcomes.forEach((outcome, i) => ledger.record(path, 'h1', { kind: 'test', name: `check-${i}`, outcome, exitCode: outcome === 'pass' ? 0 : 1, findings: [], at: 1 }));
+  return ledger;
+}
+
 function input(tools: ReturnType<typeof fakeTools>, over: Partial<CloseOutInput> = {}): CloseOutInput {
   return {
     serverChatId: 7, view: view(), req: { runTool: tools.runTool, projectId: 3 }, needsTicket: true, shipped: true,
-    reviewedInPreview: [], openPlaceholders: 0, trace: [], ...over,
+    reviewedInPreview: [], openPlaceholders: 0, trace: [], evidence: evidence('/repo/src/a.ts', ['pass']), ...over,
   };
 }
 
@@ -70,6 +78,33 @@ describe('the host close-out of a shipped run (zero model turns)', () => {
     const tools = fakeTools();
     await closeOutRun(input(tools, { view: view({ deltaTicketId: null }) }));
     expect(tools.calls.some((c) => c.name === REVIEW_RECORD_TOOL)).toBe(false);
+  });
+
+  it('regression: chat #60338 close-out never records a "complete" review nobody performed — shipped with no verification stays in review', async () => {
+    const tools = fakeTools();
+    const v = view();
+    await closeOutRun(input(tools, { view: v, evidence: undefined }));
+    expect(tools.calls.some((c) => c.name === REVIEW_RECORD_TOOL)).toBe(false);
+    expect(tools.calls.some((c) => c.args.status === 'done')).toBe(false);
+    const held = v.notes.find((n) => n.label === 'run.close_out_held');
+    expect(held?.args).toMatchObject({ reason: 'unverified' });
+  });
+
+  it('holds on a failing check, and on a changed file no passing check covers', async () => {
+    for (const ev of [evidence('/repo/src/a.ts', ['pass', 'fail']), evidence('/repo/src/other.ts', ['pass']), evidence('/repo/src/a.ts', ['unavailable'])]) {
+      const tools = fakeTools();
+      const v = view();
+      await closeOutRun(input(tools, { view: v, evidence: ev }));
+      expect(tools.calls.some((c) => c.name === REVIEW_RECORD_TOOL || c.args.status === 'done')).toBe(false);
+      expect(v.notes.some((n) => n.label === 'run.close_out_held')).toBe(true);
+    }
+  });
+
+  it('a verified close-out names the passing checks in the review', async () => {
+    const tools = fakeTools();
+    await closeOutRun(input(tools));
+    expect(String(tools.calls.find((c) => c.name === REVIEW_RECORD_TOOL)?.args.summary)).toContain('/repo/src/a.ts test "check-0"');
+    expect(verificationOf(undefined, ['src/a.ts'])).toMatchObject({ verified: false });
   });
 
   it('reads only SUCCESSFUL reviews as recorded', () => {
