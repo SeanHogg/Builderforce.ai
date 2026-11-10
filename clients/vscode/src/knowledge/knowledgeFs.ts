@@ -4,12 +4,13 @@
  * without an extension host.
  *
  *   - {@link vscodeKnowledgeFs}: the directory source's filesystem (walk, stat, read) and a
- *     FileSystemWatcher for its `watch`;
+ *     FileSystemWatcher for its `watch` (it drops `.builderforce/cache/**`, our own SQLite
+ *     writes). Stat is node's BigInt stat for a disk path, the workspace fs otherwise;
  *   - {@link workspaceKnowledgeFiles}: the local snapshot and manifest files under a
  *     workspace folder's `.builderforce/knowledge/`.
  */
 
-import { appendFile, mkdir, open, rename, rm, type FileHandle } from "node:fs/promises";
+import { appendFile, mkdir, open, rename, rm, stat as nodeStat, type FileHandle } from "node:fs/promises";
 import { dirname } from "node:path";
 import * as vscode from "vscode";
 import type { KnowledgeFs } from "./vscodeDirectorySource";
@@ -46,8 +47,15 @@ export function vscodeKnowledgeFs(): KnowledgeFs {
         .map(([name, type]) => [name, (type & vscode.FileType.Directory) !== 0 ? "dir" : "file"] as [string, "file" | "dir"]);
     },
     async stat(path) {
-      const st = await fs.stat(uriOf(path));
-      return { mtime: st.mtime, size: st.size };
+      // A disk path: node's BigInt stat, so the stat prefilter compares ns mtimes and file ids losslessly (PRD 41 B2).
+      try {
+        const st = await nodeStat(path, { bigint: true });
+        return { mtime: Number(st.mtimeMs), size: Number(st.size), mtimeNs: st.mtimeNs, fileId: st.ino };
+      } catch {
+        // What node cannot stat (a path a file-system provider serves): the workspace fs, ms mtime only.
+        const st = await fs.stat(uriOf(path));
+        return { mtime: st.mtime, size: st.size };
+      }
     },
     readFile: (path) => Promise.resolve(fs.readFile(uriOf(path))),
     watch(base, cb) {

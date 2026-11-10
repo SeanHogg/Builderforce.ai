@@ -29,14 +29,13 @@ import { repoMapPort } from "@builderforce/repo-map";
 import { boundedStep } from "../boundedStep";
 import { buildLocalCapabilityProvider } from "../localCapabilities";
 import { workspaceSymbolIndex } from "../workspaceSymbols";
-import type { PersistentHashCache } from "./hashCacheFile";
 import { getHostKnowledgeIndex } from "./index/hostKnowledgeIndex";
 import { vscodeKnowledgeFs } from "./knowledgeFs";
 import { replicaQueueFor } from "./knowledgeReplica";
 import { editorJudgement, judgeConfigured } from "./knowledgeJudgement";
 import type { OpenRoot } from "./knowledgeService";
 
-/** Longest the plan waits on a step it needs (the code layers, the saved hash cache). */
+/** Longest the plan waits on a step it needs (the code layers, whether a judge is configured). */
 export const PLAN_STEP_MS = 10_000;
 /** Safety cap on one run-only setup step (a 16k-file repo's symbol or knowledge index can take a minute). */
 export const RUN_STEP_MS = 120_000;
@@ -93,15 +92,13 @@ export interface RootPortsDeps {
   open: OpenRoot;
   recorder: ReviewRecorder;
   log: Log;
-  /** The walk's hash cache, kept across sessions. */
-  hashCache?: PersistentHashCache;
   /** Overrides, for tests. */
   planMs?: number;
   runMs?: number;
 }
 
 export function reviewPortsFor(deps: RootPortsDeps): RootPortsBuilder {
-  const { secrets, open, recorder, log, hashCache } = deps;
+  const { secrets, open, recorder, log } = deps;
   const planMs = deps.planMs ?? PLAN_STEP_MS;
   const runMs = deps.runMs ?? RUN_STEP_MS;
   const { root, client } = open;
@@ -179,7 +176,6 @@ export function reviewPortsFor(deps: RootPortsDeps): RootPortsBuilder {
     const [parts, judge] = await Promise.all([
       boundedStep(partitions, planMs, { fallback: undefined, onTimeout: (elapsed) => log("partitions", `no answer after ${elapsed}ms; the plan goes on without them`) }),
       planOnly("judge configured", judgeConfigured, false),
-      hashCache ? planOnly("hash cache", () => hashCache.load(), undefined) : undefined,
     ]);
     const portsMs = Date.now() - started;
     const walkStarted = Date.now();
@@ -201,9 +197,6 @@ export function reviewPortsFor(deps: RootPortsDeps): RootPortsBuilder {
     } catch (error) {
       log("plan failed", `${root.rootPath} after ${Date.now() - started}ms (${files} files walked): ${error instanceof Error ? error.message : String(error)}`);
       throw error;
-    } finally {
-      // What the walk hashed is kept for the next session; a failed write costs only a re-hash.
-      void hashCache?.save().catch((error: unknown) => log("hash cache", error));
     }
   }
 

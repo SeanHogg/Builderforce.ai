@@ -71,9 +71,10 @@ export const containerKnowledgeFs: KnowledgeFs = {
       .filter((e) => !e.isSymbolicLink() && (e.isFile() || e.isDirectory()))
       .map((e) => [e.name, e.isDirectory() ? "dir" : "file"] as [string, "file" | "dir"]);
   },
+  // BigInt stat: the stat prefilter compares ns mtimes and file ids losslessly (PRD 41 B2).
   async stat(path) {
-    const st = await stat(path);
-    return { mtime: st.mtimeMs, size: st.size };
+    const st = await stat(path, { bigint: true });
+    return { mtime: Number(st.mtimeMs), size: Number(st.size), mtimeNs: st.mtimeNs, fileId: st.ino };
   },
   readFile: async (path) => new Uint8Array(await readFile(path)),
   watch: (base, cb) => watchFolder(base, cb),

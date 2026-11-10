@@ -15,8 +15,8 @@ import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
 import type { KnowledgeStore } from "@seanhogg/builderforce-memory/knowledge";
 import { migrateLegacyKnowledge, nodeKnowledgeStore, type NodeKnowledgeStore } from "@builderforce/agent-tools/node-knowledge-store.js";
 import {
-  createReplicaHost, dirtyFileName, forgetRootPorts, migratingRootFiles, queuedRootIdOf, rootManifest, rootStore,
-  type KnowledgeFiles, type PumpSource, type ReplicaHost,
+  createReplicaHost, deferredHashCache, dirtyFileName, forgetRootPorts, migratingRootFiles, queuedRootIdOf, rootManifest, rootStore,
+  type HashCache, type KnowledgeFiles, type PumpSource, type ReplicaHost,
 } from "@builderforce/agent-tools/knowledge/index.js";
 import type { KnowledgeClient } from "@builderforce/knowledge-client";
 import { logDebug } from "../../logger.js";
@@ -92,6 +92,8 @@ export interface OnPremRootPorts {
   files: KnowledgeFiles;
   local: KnowledgeStore;
   manifest: IngestManifest;
+  /** The plan's stat manifest in the folder's SQLite file (PRD 41 B2): the directory source's `hashCache`. */
+  hashCache: HashCache;
   /** Resolves when the root's legacy files are imported (never rejects); a read of the manifest that must see them awaits it. */
   migrated: Promise<void>;
 }
@@ -115,7 +117,8 @@ export function onPremRootPorts(workspaceRoot: string, rootId: string, legacyRoo
     }).then(() => undefined, loggedFallback("legacy manifest import", undefined)));
     return folder.manifest;
   }, workspaceRoot);
-  return { files, local, manifest, migrated: migrations.get(migrationKey) ?? Promise.resolve() };
+  const hashCache = deferredHashCache(() => folderOf(workspaceRoot).hashCache);
+  return { files, local, manifest, hashCache, migrated: migrations.get(migrationKey) ?? Promise.resolve() };
 }
 
 /** What the pump sends from: the root's local store to the linked project. */

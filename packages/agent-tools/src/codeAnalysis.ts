@@ -10,6 +10,8 @@ export interface CodeAnalysisSnapshot {
   nodes: string[];
   edges: Array<{ from: string; to: string; circular: boolean }>;
   issues: AnalysisIssue[];
+  /** Set when the analyzed scope held more files than the L3 cap (`MAX_LISTED_FILES`), or its listing was cut short: the analysis is partial and not comparable (PRD 41 B2, C9). */
+  truncated?: true;
 }
 export interface CodeAnalysisComparison { current: CodeAnalysisSnapshot; baseline?: CodeAnalysisSnapshot }
 const record = (v: unknown): Record<string, any> => v && typeof v === 'object' ? v as Record<string, any> : {};

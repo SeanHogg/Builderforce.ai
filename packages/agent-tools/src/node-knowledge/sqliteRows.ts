@@ -2,7 +2,9 @@
  * node-knowledge/sqliteRows.ts — memory's `RowPersistence` over one SQLite file (G03, PRD 41 B4; design C0-C3).
  *
  * Tables: `meta(k, v)` (format, generation, per-root migration markers), `scope`, `fact`, `relation`, `recheck(hash)`
- * (one global set), `extracted(hash, json)` (bodies, loaded lazily per hash), `manifest(source_id, json)`.
+ * (one global set), `extracted(hash, json)` (bodies, loaded lazily per hash), `manifest(source_id, json)`, and `stat` (the plan's
+ * stat manifest, read and written by `statRows.ts` only). `stat` is ADDITIVE: a reader of the same format that predates it
+ * never looks at it, so it does not move {@link FORMAT_VERSION}.
  *
  * `apply` runs in ONE `BEGIN IMMEDIATE`, synchronously (node:sqlite is synchronous), so a body read can never see half of it:
  *   - it compares `meta.generation` with the generation this store last saw; on a mismatch another window wrote, and the
@@ -32,6 +34,7 @@ CREATE TABLE IF NOT EXISTS relation(root_id TEXT NOT NULL, from_ref TEXT NOT NUL
 CREATE TABLE IF NOT EXISTS recheck(hash TEXT PRIMARY KEY) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS extracted(hash TEXT PRIMARY KEY, json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS manifest(source_id TEXT PRIMARY KEY, json TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS stat(root_id TEXT NOT NULL, path TEXT NOT NULL, size INTEGER NOT NULL, mtime_ns TEXT NOT NULL, file_id TEXT, hash TEXT NOT NULL, git_blob TEXT, PRIMARY KEY(root_id, path)) WITHOUT ROWID;
 `;
 
 /** The format a file was written with (0 for a new file with no `meta` table yet; any other failure, e.g. SQLITE_BUSY, is rethrown). The ONE reader. */
@@ -260,6 +263,26 @@ export class SqliteKnowledgeDb implements RowPersistence, ManifestSink {
                 throw err;
             }
         }).catch((err: unknown) => { this.buffer.restore(taken); throw err; });
+    }
+
+    /**
+     * ONE write transaction of rows outside the fact graph (the plan's stat manifest, `statRows.ts`): on the gate, refused on a
+     * file of a newer format, and the generation stays (no fact changed, so no other window reloads its facts for it).
+     */
+    writeOwn(work: (db: LocalSqliteDb) => void): Promise<void> {
+        try { this.assertWritable(); } catch (err) { return Promise.reject(err); }
+        return this.serial(() => {
+            this.assertWritable();
+            try {
+                this.db.exec('BEGIN IMMEDIATE');
+                work(this.db);
+                this.setMeta('format', FORMAT_VERSION);
+                this.db.exec('COMMIT');
+            } catch (err) {
+                this.rollback();
+                throw err;
+            }
+        });
     }
 
     /** ONE transaction (a migration's). Every apply and load waits behind it. It commits when `work` resolves and rolls back when it throws. The generation moves only when rows were written. */

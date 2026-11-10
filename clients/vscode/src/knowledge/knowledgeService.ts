@@ -19,11 +19,12 @@
 
 import * as vscode from "vscode";
 import {
-  buildStoredGraph, createReviewRecorder, migratingRootFiles, reviewPacks,
+  buildStoredGraph, createReviewRecorder, deferredHashCache, migratingRootFiles, reviewPacks,
   rootManifest, rootStore, runKnowledgeReview,
   type FsDirectorySource, type KnowledgeReviewOptions,
 } from "@builderforce/agent-tools/knowledge";
 import { readPartitions } from "@builderforce/agent-tools/prefetch";
+import { gitIndexHints } from "@builderforce/agent-tools/node-knowledge-store";
 import { createKnowledgeClient, type KnowledgeClient } from "@builderforce/knowledge-client";
 import type { KnowledgeGraph, KnowledgeStore, LocalSnapshotStore, PlanDetail, ReviewReport } from "@seanhogg/builderforce-memory/knowledge";
 import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
@@ -36,20 +37,16 @@ import { buildLocalCapabilityProvider } from "../localCapabilities";
 import { logLine } from "../errorReporter";
 import { getHostKnowledgeIndex } from "./index/hostKnowledgeIndex";
 import { vscodeKnowledgeFs, workspaceKnowledgeFiles } from "./knowledgeFs";
-import { createDirectorySource, type HashCache } from "./vscodeDirectorySource";
+import { createDirectorySource } from "./vscodeDirectorySource";
 import type { KnowledgeFiles } from "./knowledgeStores";
 import { openRootKnowledge, rootMigration } from "./folderKnowledge";
 import { configureReplicaLog, duringReview, replicatedStoreOf, type PumpSource } from "./knowledgeReplica";
 import { legacyRootIdOf, rememberRoot, rootById, type KnowledgeRoot, type RootsMemento, type WorkspaceFolderRef } from "./knowledgeRoots";
 import type { TrackedJudgement } from "./knowledgeJudgement";
-import { persistentHashCache } from "./hashCacheFile";
 import { reviewPortsFor } from "./reviewPortsFor";
 import { reviewRecords, useRecordMemento } from "./knowledgeSyncStatus";
 import { reviewParallelism } from "./review/extractPoolHost";
 import { UNTIMED, type LoadTimer } from "./knowledgeLoadTrace";
-
-/** Hashes remembered across reviews, so a re-review re-hashes only what changed on disk. */
-const hashCache: HashCache = new Map();
 
 /** Where the reviewed roots are listed (`workspaceState`), set at activation. */
 let reviewedRootsMemento: RootsMemento | undefined;
@@ -133,10 +130,16 @@ export function openRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot, opt
   const local = rootStore(rootId, () => folder().store, "local");
   const manifest = rootManifest(rootId, () => folder().manifest, root.folderPath);
   const projectId = linkedProject()?.id;
-  const pump: PumpSource | undefined = client && projectId !== undefined ? { rootId, files, local, client, projectId, manifest, sizeOf: (p: string) => hashCache.get(`${root.rootPath.replace(/\\/g, "/").replace(/\/+$/, "")}/${p}`)?.size } : undefined;
+  // The plan's stat manifest lives in the folder's SQLite file (PRD 41 B2): a re-plan after a restart re-reads only what changed.
+  const hashCache = deferredHashCache(() => folder().hashCache);
+  const pump: PumpSource | undefined = client && projectId !== undefined ? { rootId, files, local, client, projectId, manifest, sizeOf: (p: string) => hashCache.sizeOf?.(rootId, p) } : undefined;
   return {
     root,
-    source: createDirectorySource({ fs: vscodeKnowledgeFs(), rootPath: root.rootPath, rootId, title: root.title, hashCache }),
+    source: createDirectorySource({
+      fs: vscodeKnowledgeFs(), rootPath: root.rootPath, rootId, title: root.title, hashCache,
+      gitHints: (path) => gitIndexHints(path),
+      onHashCacheError: (error) => log("stat manifest", error),
+    }),
     // A kicked pump resolves its source when it STARTS, never holding the client of a project the workspace left.
     store: replicatedStoreOf(rootId, files, local, pump, !!opts.readThrough, () => openRoot(secrets, root).pump),
     local,
@@ -180,7 +183,7 @@ export function reviewRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot, o
   const open = openRoot(secrets, root, { readThrough: !!opts.seed });
   // What this review skips (plan, folders, coverage, uploads during the run) is recorded per root for the sync status.
   const recorder = createReviewRecorder({ rootId: root.rootId, store: reviewRecords, folders: () => open.source.skippedFolders() });
-  const ports = reviewPortsFor({ secrets, open, recorder, log, hashCache: persistentHashCache(open.files, root.rootPath, hashCache) });
+  const ports = reviewPortsFor({ secrets, open, recorder, log });
   return {
     open,
     async plan(force) {

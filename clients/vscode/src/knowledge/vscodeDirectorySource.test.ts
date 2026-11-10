@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { sha256Hex } from "@seanhogg/builderforce-memory/knowledge";
+import { memoryHashCache } from "@builderforce/agent-tools/knowledge";
 import { createDirectorySource, EVENT_LOOP_YIELD_EVERY, withEventLoopYield, type KnowledgeFs } from "./vscodeDirectorySource";
 
 const enc = new TextEncoder();
@@ -60,7 +61,7 @@ describe("the editor's DirectorySource", () => {
 
   it("re-hashes only files whose mtime or size changed", async () => {
     const { fs, state } = fakeFs(tree);
-    const cache = new Map();
+    const cache = memoryHashCache();
     const source = createDirectorySource({ fs, rootPath: "/ws", rootId: "ws", title: "ws", hashCache: cache });
     await listAll(source);
     const first = state.reads;

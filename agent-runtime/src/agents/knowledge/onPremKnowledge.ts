@@ -21,6 +21,7 @@ import { basename, resolve } from "node:path";
 import { realpath, stat } from "node:fs/promises";
 import type { CapabilityProvider } from "@builderforce/agent-tools";
 import { gitHistoryPort } from "@builderforce/agent-tools/node-git-history.js";
+import { gitIndexHints } from "@builderforce/agent-tools/node-knowledge-store.js";
 import {
   claimSimilarity, indexedSymbolSource, planKnowledgeReviewDetail,
   reviewIndexPort, reviewPacks, runKnowledgeReview, watchFileEdits, workspaceCodeAnalyzers, createFsDirectorySource,
@@ -179,6 +180,10 @@ async function reviewPorts(
   const ports: KnowledgeReviewPorts = {
     source: createFsDirectorySource({
       fs: containerKnowledgeFs, rootPath, rootId, title,
+      // The stat manifest and git's clean blob ids: a re-plan re-reads only what changed (PRD 41 B2).
+      hashCache: root.hashCache,
+      gitHints: (path) => gitIndexHints(path),
+      onHashCacheError: loggedFallback("stat manifest", undefined),
     }),
     store: shared.store,
     manifest: shared.manifest,

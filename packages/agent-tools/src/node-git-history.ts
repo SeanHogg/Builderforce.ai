@@ -56,10 +56,10 @@ export interface GitRun {
  * THE git exec wrapper (history, churn and the knowledge fixes all use it): `git` in `cwd`
  * with `core.quotepath=false`. `stdout` is set only on success; a failure says why.
  */
-export function runGit(cwd: string, args: string[]): Promise<GitRun> {
+export function runGit(cwd: string, args: string[], opts: { timeoutMs?: number } = {}): Promise<GitRun> {
   return new Promise((resolve) => {
     try {
-      execFile("git", ["-c", "core.quotepath=false", ...args], { cwd, maxBuffer: MAX_BUFFER, timeout: TIMEOUT_MS, windowsHide: true }, (error, stdout, stderr) => {
+      execFile("git", ["-c", "core.quotepath=false", ...args], { cwd, maxBuffer: MAX_BUFFER, timeout: opts.timeoutMs ?? TIMEOUT_MS, windowsHide: true }, (error, stdout, stderr) => {
         if (!error) return resolve({ stdout, stderr });
         const e = error as NodeJS.ErrnoException & { killed?: boolean };
         resolve({ stderr, failure: e.killed ? "timeout" : e.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" ? "buffer" : "error" });

@@ -25,7 +25,7 @@ import type { CodeAnalysisSnapshot } from '../codeAnalysis.js';
 import { createAnalysisProgress, type AnalysisProgress } from './analysisProgress.js';
 import { runCodeAnalysis } from './codeAnalyzers.js';
 import type { SerializedRepoGraphShape } from './codeExtracted.js';
-import { isSkippedPath } from './fsDirectorySource.js';
+import { isSkippedPath, MAX_LISTED_FILES } from './fsDirectorySource.js';
 import { reviewIgnore } from './graphIgnore.js';
 import { GraphReadTally, type GraphFileReads } from './graphReads.js';
 import { folderPrefix, underFolder } from './rootRelative.js';
@@ -77,9 +77,13 @@ export interface WorkspaceAnalysis {
     graphReads?: GraphFileReads;
 }
 
-/** The repo map's file graph over `path`, read through `repoRead`; null when it cannot list files. A truncated listing gives a partial graph, said so via `onWarn`. */
+/**
+ * The repo map's file graph over `path`, read through `repoRead`; null when it cannot list files. The L3 scope is capped at
+ * `maxFiles` (default {@link MAX_LISTED_FILES}) candidate files, in sorted order: over the cap, or with a truncated listing,
+ * the graph is partial, said so via `onWarn` and `onTruncated` (the analysis record is then `truncated`).
+ */
 export async function readRepoGraph(
-    deps: Pick<WorkspaceAnalysisDeps, 'caps' | 'path' | 'repoGraph' | 'onWarn' | 'onReads'> & { progress?: AnalysisProgress },
+    deps: Pick<WorkspaceAnalysisDeps, 'caps' | 'path' | 'repoGraph' | 'onWarn' | 'onReads'> & { progress?: AnalysisProgress; maxFiles?: number; onTruncated?(): void },
     signal?: AbortSignal,
 ): Promise<SerializedRepoGraphShape | null> {
     const read = deps.caps.repoRead;
@@ -88,15 +92,29 @@ export async function readRepoGraph(
     // Every file: the graph streams the list, so it is not held to the model-facing listing's cap.
     const listed = await read.listFiles(deps.path || undefined, ALL_FILES_GLOB, { unbounded: true }).catch(() => undefined);
     if (!listed?.ok || !listed.paths) { deps.progress?.plan(0); return null; }
-    if (listed.truncated) deps.onWarn?.(`The file listing was truncated at ${listed.paths.length} files: the repo graph is partial.`);
+    if (listed.truncated) {
+        deps.onWarn?.(`The file listing was truncated at ${listed.paths.length} files: the repo graph is partial.`);
+        deps.onTruncated?.();
+    }
     const prefix = folderPrefix(deps.path);
     const rootRel = (p: string): string => underFolder(p, prefix) ?? p;
     const all = listed.paths.map((p) => p.replace(/\\/g, '/'));
     // What the review excludes (`.gitignore`, `.builderforce/ignore`) is not a file node of the map either.
     const ignored = await reviewIgnore(read, prefix, all.map(rootRel));
     const tally = new GraphReadTally();
-    const paths = all.filter((p) => !isSkippedPath(p) && port.accepts(p, 0) && !ignored(rootRel(p)));
-    // No file-count cap: files are read in bounded concurrent batches and fed to the builder as they arrive,
+    const candidates = all.filter((p) => !isSkippedPath(p) && port.accepts(p, 0) && !ignored(rootRel(p)));
+    // The L3 cap (the plan lists every file; the analyzer scope is where the file count is bounded): the first `maxFiles` in
+    // sorted order, so two runs over one tree cap at the same files. Files the cap leaves out count as unlisted below.
+    const maxFiles = deps.maxFiles ?? MAX_LISTED_FILES;
+    const sorted = candidates.length > maxFiles ? [...candidates].sort() : candidates;
+    const paths = sorted.slice(0, maxFiles);
+    if (paths.length < candidates.length) {
+        // Counted, never dropped silently: the systems record shows them as left out by the cap.
+        for (const p of sorted.slice(maxFiles)) tally.skip(rootRel(p), 'listing-truncated');
+        deps.onWarn?.(`The analyzer scope holds ${candidates.length} files, over the cap of ${maxFiles}: the repo graph reads the first ${maxFiles} and the analysis is marked truncated.`);
+        deps.onTruncated?.();
+    }
+    // Files are read in bounded concurrent batches and fed to the builder as they arrive,
     // which keeps only what it parsed (imports, symbols), so memory follows the graph, not the source.
     const builder = port.create();
     deps.progress?.plan(paths.length);
@@ -160,14 +178,17 @@ export async function analyseWorkspace(deps: WorkspaceAnalysisDeps, signal?: Abo
         const ctx = { caps: deps.caps, ...(shared ? { signal: shared } : {}) };
         let graphReads: GraphFileReads | undefined;
         const progress = createAnalysisProgress(deps.onProgress);
-        const [snapshot, repoGraph] = await Promise.all([
+        let truncated = false;
+        const [measured, repoGraph] = await Promise.all([
             runCodeAnalysis(ctx, {
                 ...(deps.path ? { path: deps.path } : {}),
                 ...(deps.partitions ? { partitions: deps.partitions } : {}),
                 onToolSettled: () => progress.toolSettled(),
             }),
-            readRepoGraph({ ...deps, progress, onReads: (reads) => { graphReads = reads; deps.onReads?.(reads); } }, shared),
+            readRepoGraph({ ...deps, progress, onTruncated: () => { truncated = true; }, onReads: (reads) => { graphReads = reads; deps.onReads?.(reads); } }, shared),
         ]);
+        // A scope over the L3 cap is a partial analysis: the record says so, and comparability (C9) holds it not comparable.
+        const snapshot = measured && truncated ? { ...measured, truncated: true as const } : measured;
         // A run every asker stopped did not finish: it must not report done === total.
         if (!shared?.aborted) progress.finish();
         // A run every asker stopped is nothing: neither part is trustworthy, and none is kept.

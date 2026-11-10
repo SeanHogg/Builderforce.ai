@@ -40,6 +40,7 @@ export {
     KNOWLEDGE_SKIP_DIRS, MAX_LISTED_FILES, createFsDirectorySource, isBuilderforceState, isSkippedPath, listsFile, normalizePath, textDocument,
     type FsDirectorySource, type FsDirectorySourceOptions, type HashCache, type KnowledgeFs,
 } from './fsDirectorySource.js';
+export { deferredHashCache, memoryHashCache, type GitHints, type StatRow, type StatSet } from './statManifest.js';
 export { documentDoc, EXTRACTABLE_DOCUMENT_MEDIA_TYPES, extractDocumentText, withDocumentText } from './documents/index.js';
 export { extractedLogFileName, manifestFileName, migratingRootFiles, analysisPendingFileName, dirtyFileName, replicaFileName, runFileName, runsIndexFileName, snapshotFileName, type KnowledgeFiles } from './fileManifest.js';
 export {
