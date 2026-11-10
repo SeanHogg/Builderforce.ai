@@ -9,8 +9,9 @@
  *
  *   - BOOTSTRAP. Signed out and never asked = Local only = the denied default:
  *     every capability REFUSED, nothing leaves for the platform. Signed in and
- *     never asked = Hybrid (gateway inference + connected features; sync per its
- *     own grant), so an existing person's chat, heartbeat and insights keep
+ *     never asked = Hybrid (gateway inference + connected features + sync — the web
+ *     runs no sync driver, so sync only stops refusing the sync transport; an explicit
+ *     `synchronize: false` override still refuses it), so an existing person's chat, heartbeat and insights keep
  *     working; the composer asks them once, on their first turn, and stores the
  *     answer. Connectivity alone grants nothing. The signed-in fact is THE web's
  *     one definition, `webSignedIn` (a stored web or tenant session — a guest token

@@ -2,7 +2,9 @@
  * The editor's platform policy is DERIVED from the inference mode (`resolveInferencePolicy`)
  * with the `builderforce.platform.*` settings as advanced overrides — only the ones the
  * person explicitly set. Signed out and undecided sends nothing; signed in and undecided
- * runs Hybrid, so heartbeat / assigned work / personality keep working with sync off.
+ * runs Hybrid, so heartbeat / assigned work / personality keep working — and sync is on,
+ * so what the run wrote locally reaches the account (chat #70776), unless the person
+ * explicitly turned `builderforce.platform.synchronize` off.
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -87,34 +89,76 @@ describe("mode-derived platform policy", () => {
     }
   });
 
-  it("signed in and undecided: Hybrid — gateway and connected features on, sync off", async () => {
+  it("signed in and undecided: Hybrid — gateway, connected features and sync on", async () => {
     await signIn("bfk_test");
     expect(inferenceModeState()).toEqual({ mode: "hybrid", chosen: false, signedIn: true });
     const policy = platformPolicy();
     expect(policy.allows("gateway-inference")).toBe(true);
     expect(policy.allows("connected-feature")).toBe(true);
-    expect(policy.allows("synchronize")).toBe(false);
+    expect(policy.allows("synchronize")).toBe(true);
   });
 
   it("signed in Hybrid with sync off: a run's ordinary writes and stream are NOT refused (the web's answer)", () => {
     // 2026.10.57 refused these in the editor (strict `allows('synchronize')` on a write).
     const api = "https://api.builderforce.ai";
     expect(platformInferenceMode()).toBe("hybrid");
+    // Sync is on by default in Hybrid; "sync off" is the person's explicit setting.
+    expect(platformRequestRefusalFor(`${api}/api/sync/v1/push`, { method: "POST" })).toBeNull();
+    host.explicit["platform.synchronize"] = false;
+    configChanged();
     expect(platformRequestRefusalFor(`${api}/api/projects/11/tickets`, { method: "POST" })).toBeNull();
     expect(platformRequestRefusalFor(`${api}/api/brain/chats/3/messages`, { method: "POST" })).toBeNull();
     expect(platformRequestRefusalFor(`${api}/api/brain/stream`, { method: "POST" })).toBeNull();
     expect(platformRequestRefusalFor(`${api}/llm/v1/chat/completions`, { method: "POST" })).toBeNull();
     // The named sync transport still answers to the sync switch.
     expect(platformRequestRefusalFor(`${api}/api/sync/v1/push`, { method: "POST" })).toBe("synchronize");
+    delete host.explicit["platform.synchronize"];
+    configChanged();
   });
 
   it("an explicitly set platform setting overrides the mode; an unset one follows it", () => {
-    host.explicit["platform.synchronize"] = true;
-    configChanged();
-    expect(platformPolicy().allows("synchronize")).toBe(true);
-    delete host.explicit["platform.synchronize"];
+    host.explicit["platform.synchronize"] = false;
     configChanged();
     expect(platformPolicy().allows("synchronize")).toBe(false);
+    delete host.explicit["platform.synchronize"];
+    configChanged();
+    expect(platformPolicy().allows("synchronize")).toBe(true);
+  });
+
+  it("regression: connected modes sync by default (chat #70776, 389 queued, never pushed)", async () => {
+    // The person: signed in, `inferenceMode: "specific"`, no sync setting. Sync was off, so
+    // `chatSyncHost` never ran a pass and the ticket rail sat on "Syncing" forever.
+    await setInferenceMode("specific");
+    configChanged();
+    expect(platformPolicy().allows("synchronize")).toBe(true);
+    // An explicit USER-settings "off" still wins over the mode.
+    host.explicit["platform.synchronize"] = false;
+    configChanged();
+    expect(platformPolicy().allows("synchronize")).toBe(false);
+    delete host.explicit["platform.synchronize"];
+    configChanged();
+    // Local only keeps it off, even over an explicit "on".
+    host.explicit["platform.synchronize"] = true;
+    await setInferenceMode("local-only");
+    configChanged();
+    expect(platformPolicy().allows("synchronize")).toBe(false);
+    delete host.explicit["platform.synchronize"];
+    await setInferenceMode("hybrid");
+    configChanged();
+    expect(platformPolicy().allows("synchronize")).toBe(true);
+    // Sync needs an account: signed out, a chosen Specific (or an explicit "on") never opens it.
+    await setInferenceMode("specific");
+    await signIn(undefined);
+    expect(inferenceModeState()).toMatchObject({ mode: "specific", chosen: true, signedIn: false });
+    expect(platformPolicy().allows("gateway-inference")).toBe(true);
+    expect(platformPolicy().allows("synchronize")).toBe(false);
+    host.explicit["platform.synchronize"] = true;
+    configChanged();
+    expect(platformPolicy().allows("synchronize")).toBe(false);
+    delete host.explicit["platform.synchronize"];
+    await signIn("bfk_test");
+    expect(platformPolicy().allows("synchronize")).toBe(true);
+    await setInferenceMode("hybrid");
   });
 
   it("a chosen mode applies at once, and Local only keeps its promise over an override", async () => {

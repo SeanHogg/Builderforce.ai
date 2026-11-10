@@ -24,7 +24,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PlatformAccessDenied } from '@builderforce/local-first';
 import { API_ORIGIN } from '../apiOrigin';
 import {
-  WEB_PLATFORM_POLICY_STORAGE_KEY,
   bootWebPlatformPolicy,
   resetWebPlatformPolicyForTests,
   webPlatformFetch,
@@ -90,10 +89,9 @@ describe('G27 boot-time web network-denial self-check', () => {
   });
 
   it('skips (does not assert a denial) when the applied policy permits synchronize', async () => {
-    // Signed out = Local only, which refuses synchronize even with a stored
-    // grant. Sign in (Hybrid leaves sync to its own grant), then grant sync.
+    // Signed out = Local only, which refuses synchronize. Signed in and undecided =
+    // Hybrid, which permits it by default (chat #70776) — no stored grant needed.
     window.localStorage.setItem('bf_web_token', 'present');
-    window.localStorage.setItem(WEB_PLATFORM_POLICY_STORAGE_KEY, JSON.stringify({ synchronize: true }));
     const native = vi.fn(async () => new Response('{}', { status: 200 }));
     vi.stubGlobal('fetch', native);
 

@@ -1159,7 +1159,7 @@
         "builderforce.platform.synchronize": {
           "scope": "application",
           "type": "boolean",
-          "default": false,
+          "default": true,
           "description": "%config.platform.synchronize.desc%"
         },
         "builderforce.platform.gatewayInference": {

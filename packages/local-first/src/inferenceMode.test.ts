@@ -27,11 +27,32 @@ describe('inference mode', () => {
       gatewayInference: false, connectedFeatures: false, synchronize: false, directProviders: false,
     });
     expect(policyForInferenceMode('hybrid')).toEqual({
-      gatewayInference: true, connectedFeatures: true, directProviders: false,
+      gatewayInference: true, connectedFeatures: true, synchronize: true, directProviders: false,
     });
     expect(policyForInferenceMode('specific')).toEqual({
-      gatewayInference: true, connectedFeatures: true, directProviders: true,
+      gatewayInference: true, connectedFeatures: true, synchronize: true, directProviders: true,
     });
+  });
+
+  it('regression: connected modes sync by default (chat #70776, 389 queued, never pushed)', () => {
+    // A signed-in editor in Specific with no sync setting queued 389 events and never pushed:
+    // the mode left `synchronize` to a setting nobody had set, so no pass ever ran.
+    expect(resolveInferencePolicy({ mode: 'specific', signedIn: true }).snapshot.synchronize).toBe(true);
+    expect(resolveInferencePolicy({ mode: 'hybrid', signedIn: true }).snapshot.synchronize).toBe(true);
+    // An explicit "off" still turns it off in a connected mode …
+    expect(resolveInferencePolicy({ mode: 'specific', signedIn: true, overrides: { synchronize: false } }).snapshot.synchronize).toBe(false);
+    expect(resolveInferencePolicy({ mode: 'hybrid', signedIn: true, overrides: { synchronize: false } }).snapshot.synchronize).toBe(false);
+    // … and Local only keeps it off whatever an override says.
+    expect(resolveInferencePolicy({ mode: 'local-only', signedIn: true }).snapshot.synchronize).toBe(false);
+    expect(resolveInferencePolicy({ mode: 'local-only', signedIn: true, overrides: { synchronize: true } }).snapshot.synchronize).toBe(false);
+    // Sync needs an account: signed out, a chosen connected mode does not open it, nor does
+    // an explicit "on" override.
+    for (const mode of ['hybrid', 'specific'] as const) {
+      expect(resolveInferencePolicy({ mode, signedIn: false }).snapshot.synchronize).toBe(false);
+      expect(resolveInferencePolicy({ mode, signedIn: false, overrides: { synchronize: true } }).snapshot.synchronize).toBe(false);
+      // … while the rest of the chosen mode still applies.
+      expect(resolveInferencePolicy({ mode, signedIn: false }).snapshot.gatewayInference).toBe(true);
+    }
   });
 
   it('a signed-out person who never chose sends nothing to the platform', () => {
@@ -41,14 +62,14 @@ describe('inference mode', () => {
     expect(policy.allows('authenticate')).toBe(false);
   });
 
-  it('a signed-in person who never chose runs Hybrid — sync stays per its own setting', () => {
+  it('a signed-in person who never chose runs Hybrid — sync on unless turned off', () => {
     const resolved = resolveInferencePolicy({ signedIn: true });
     expect(resolved.mode).toBe('hybrid');
     expect(resolved.chosen).toBe(false);
     expect(resolved.snapshot.gatewayInference).toBe(true);
     expect(resolved.snapshot.connectedFeatures).toBe(true);
-    expect(resolved.snapshot.synchronize).toBe(false);
-    expect(resolveInferencePolicy({ signedIn: true, overrides: { synchronize: true } }).snapshot.synchronize).toBe(true);
+    expect(resolved.snapshot.synchronize).toBe(true);
+    expect(resolveInferencePolicy({ signedIn: true, overrides: { synchronize: false } }).snapshot.synchronize).toBe(false);
   });
 
   it('a chosen mode wins over the derived default', () => {

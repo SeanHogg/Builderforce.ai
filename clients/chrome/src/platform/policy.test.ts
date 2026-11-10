@@ -46,12 +46,12 @@ describe('Rovr platform policy', () => {
     const worker = createRovrPlatformPolicy(storage);
     await Promise.all([panel.ready(), worker.ready()]);
 
-    await panel.setCapability('synchronize', true);
-    await vi.waitFor(() => expect(worker.allows('synchronize')).toBe(true));
-
-    // Removing the override hands the capability back to the mode: Hybrid keeps sync off.
-    await storage.remove('policy.synchronize');
+    await panel.setCapability('synchronize', false);
     await vi.waitFor(() => expect(worker.allows('synchronize')).toBe(false));
+
+    // Removing the override hands the capability back to the mode: Hybrid syncs (chat #70776).
+    await storage.remove('policy.synchronize');
+    await vi.waitFor(() => expect(worker.allows('synchronize')).toBe(true));
   });
 
   // The send gate is "the platform is reachable" (gateway, connected features or sync), not the
@@ -80,11 +80,11 @@ describe('Rovr platform policy', () => {
     expect(outbox.size()).toBe(1); // nothing dropped
 
     // Signing in moves an undecided person onto Hybrid: the platform is reachable, so the backlog
-    // goes and a request may carry the queue - with sync still off (`synchronize` waits for its own grant).
+    // goes and a request may carry the queue. Hybrid syncs by default (chat #70776).
     await storage.set('session.key', 'bfk_live_example');
     await vi.waitFor(() => expect(sent).toEqual(['queued while denied']));
     expect(outbox.size()).toBe(0);
-    expect(policy.allows('synchronize')).toBe(false);
+    expect(policy.allows('synchronize')).toBe(true);
     await expect(outbox.drainWith('chat', async () => ' ridden')).resolves.toBe(' ridden');
 
     // Signing out makes the platform unreachable again: sends stop and the backlog is kept.
@@ -111,17 +111,21 @@ describe('Rovr platform policy', () => {
     expect(platformSendPermission(policy).isAllowed()).toBe(false); // genuinely unreachable
 
     // Signing in (unchosen) is Hybrid: the gateway and connected features open, so the
-    // person's turns and reads work — but sync still waits for its own grant.
+    // person's turns and reads work — and sync is on, so their local work reaches the account
+    // (chat #70776).
     await storage.set('session.key', 'bfk_live_example');
     await storage.set('session.tenantId', 7);
     await vi.waitFor(() => expect(policy.allows('gateway-inference')).toBe(true));
     expect(policy.inferenceMode()).toEqual({ mode: 'hybrid', chosen: false, signedIn: true, loaded: true });
     expect(policy.allows('connected-feature')).toBe(true);
     expect(policy.allows('authenticate')).toBe(true);
-    expect(policy.allows('synchronize')).toBe(false);
+    expect(policy.allows('synchronize')).toBe(true);
     // The send permission is "the platform is reachable", not the sync switch (7dbaaeb25, 2026-10-22):
-    // a signed-in Hybrid person's activity beats, run writes and outcomes go with sync still off.
+    // a signed-in Hybrid person's activity beats, run writes and outcomes go even with sync turned off.
+    await policy.setCapability('synchronize', false);
+    expect(policy.allows('synchronize')).toBe(false);
     expect(platformSendPermission(policy).isAllowed()).toBe(true);
+    await storage.remove('policy.synchronize');
 
     // Signing out returns to Local only.
     await storage.remove('session.key');
@@ -171,6 +175,19 @@ describe('Rovr platform policy', () => {
       expect(policy.snapshot()).toMatchObject({ gatewayInference: false, connectedFeatures: false, synchronize: false, directProviders: false });
     });
 
+    it('sync needs an account: a chosen connected mode, even with a stored grant, never syncs signed out', async () => {
+      for (const mode of ['hybrid', 'specific']) {
+        const storage = createMemoryKeyValue({ 'policy.inferenceMode': mode, 'policy.synchronize': true });
+        const policy = createRovrPlatformPolicy(storage);
+        await policy.ready();
+        expect(policy.inferenceMode()).toMatchObject({ mode, chosen: true, signedIn: false });
+        expect(policy.allows('gateway-inference')).toBe(true);
+        expect(policy.allows('synchronize')).toBe(false);
+        await storage.set('session.key', 'bfk_live_example');
+        await vi.waitFor(() => expect(policy.allows('synchronize')).toBe(true));
+      }
+    });
+
     it('Specific opens direct providers; an invalid stored mode reads as unchosen', async () => {
       const storage = createMemoryKeyValue({ 'session.key': 'bfk_live_example', 'policy.inferenceMode': 'specific' });
       const policy = createRovrPlatformPolicy(storage);
@@ -211,7 +228,10 @@ describe('Rovr platform policy', () => {
     });
 
     it("signed-in Hybrid with sync off: a run's writes, transcript and stream go (the web's and the editor's answer)", async () => {
-      const policy = createRovrPlatformPolicy(createMemoryKeyValue({ 'session.key': 'bfk_live_example' }));
+      // Hybrid syncs by default; "sync off" is the person's explicit override.
+      const policy = createRovrPlatformPolicy(
+        createMemoryKeyValue({ 'session.key': 'bfk_live_example', 'policy.synchronize': false }),
+      );
       await policy.ready();
       expect(policy.inferenceMode().mode).toBe('hybrid');
       expect(policy.allows('synchronize')).toBe(false);

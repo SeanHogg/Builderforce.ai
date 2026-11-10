@@ -72,7 +72,8 @@ export function bootRovrServiceWorker(options: BootRovrServiceWorkerOptions = {}
   // the worker derives it at startup from the person's inference mode, sign-in and any
   // advanced `policy.*` override, and refuses every platform request and every outbox send
   // it denies. A fresh, signed-out install is Local only — nothing leaves; signed in and
-  // unchosen it is Hybrid, where sync still waits for its own grant. `ready()` is the FIRST
+  // unchosen it is Hybrid, where sync is on (an explicit `policy.synchronize: false` turns it
+  // off), so the queued chats reach the account once connected. `ready()` is the FIRST
   // read of storage, awaited below before any fetch or flush runs.
   const platformPolicy = createRovrPlatformPolicy(local);
 

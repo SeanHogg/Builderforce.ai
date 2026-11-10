@@ -12,22 +12,27 @@ const refusal = (method: string, pathname: string, mode: InferenceMode, override
 
 describe('the ONE platform request gate', () => {
   it("lets a signed-in Hybrid run's ordinary writes, reads and stream through with sync off", () => {
-    // The 2026.10.57 editor refused these where the web let them go.
-    expect(refusal('POST', '/api/brain/chats', 'hybrid')).toBeNull();
-    expect(refusal('POST', '/api/projects/11/tickets', 'hybrid')).toBeNull();
-    expect(refusal('PATCH', '/api/tasks/5', 'hybrid')).toBeNull();
-    expect(refusal('POST', '/api/brain/chats/3/messages', 'hybrid')).toBeNull();
-    expect(refusal('POST', '/api/brain/stream', 'hybrid')).toBeNull();
-    expect(refusal('POST', '/llm/v1/chat/completions', 'hybrid')).toBeNull();
-    expect(refusal('POST', '/api/limbic/block', 'hybrid')).toBeNull();
-    expect(refusal('POST', '/api/projects/11/evermind/recall', 'hybrid')).toBeNull();
-    expect(refusal('GET', '/api/projects', 'hybrid')).toBeNull();
+    // The 2026.10.57 editor refused these where the web let them go. Sync is on by default in
+    // Hybrid, so "sync off" is the person's explicit override.
+    const off = { synchronize: false };
+    expect(refusal('POST', '/api/brain/chats', 'hybrid', off)).toBeNull();
+    expect(refusal('POST', '/api/projects/11/tickets', 'hybrid', off)).toBeNull();
+    expect(refusal('PATCH', '/api/tasks/5', 'hybrid', off)).toBeNull();
+    expect(refusal('POST', '/api/brain/chats/3/messages', 'hybrid', off)).toBeNull();
+    expect(refusal('POST', '/api/brain/stream', 'hybrid', off)).toBeNull();
+    expect(refusal('POST', '/llm/v1/chat/completions', 'hybrid', off)).toBeNull();
+    expect(refusal('POST', '/api/limbic/block', 'hybrid', off)).toBeNull();
+    expect(refusal('POST', '/api/projects/11/evermind/recall', 'hybrid', off)).toBeNull();
+    expect(refusal('GET', '/api/projects', 'hybrid', off)).toBeNull();
   });
 
   it('holds the named sync transport to the sync switch in every mode', () => {
-    expect(refusal('POST', '/api/sync/v1/push', 'hybrid')).toBe('synchronize');
-    expect(refusal('GET', '/api/sync/v1/pull', 'hybrid')).toBe('synchronize');
-    expect(refusal('POST', '/api/sync/v1/push', 'hybrid', { synchronize: true })).toBeNull();
+    // Connected modes sync by default (chat #70776); an explicit "off" refuses the transport.
+    expect(refusal('POST', '/api/sync/v1/push', 'hybrid')).toBeNull();
+    expect(refusal('POST', '/api/sync/v1/push', 'specific')).toBeNull();
+    expect(refusal('POST', '/api/sync/v1/push', 'hybrid', { synchronize: false })).toBe('synchronize');
+    expect(refusal('GET', '/api/sync/v1/pull', 'hybrid', { synchronize: false })).toBe('synchronize');
+    expect(refusal('POST', '/api/sync/v1/push', 'specific', { synchronize: false })).toBe('synchronize');
     expect(refusal('POST', '/api/sync/v1/push', 'local-only', { synchronize: true })).toBe('synchronize');
   });
 
@@ -52,7 +57,7 @@ describe('the durable outbox send gate', () => {
     expect(platformReachable(stance('hybrid').snapshot)).toBe(true);
     expect(platformReachable(stance('specific').snapshot)).toBe(true);
     expect(platformReachable(stance('local-only').snapshot)).toBe(false);
-    const policy = createPlatformPolicy(stance('hybrid').snapshot);
+    const policy = createPlatformPolicy(stance('hybrid', { synchronize: false }).snapshot);
     expect(policy.allows('synchronize')).toBe(false);
     expect(platformSendPermission(policy).isAllowed()).toBe(true);
     const seen: boolean[] = [];

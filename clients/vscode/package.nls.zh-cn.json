@@ -78,7 +78,7 @@
   "config.inferenceMode.localOnly": "**仅本地**——只使用本设备上的模型，不向 BuilderForce 网关发送任何内容。",
   "config.inferenceMode.specific": "**指定模型**——始终运行你选择的模型：云模型、已连接账号、Kimi Code 或一个本地模型。",
   "config.inferenceMode.unset": "未选择——登录后为混合，未登录为仅本地。你首次登录后发送消息时会被询问。",
-  "config.platform.synchronize.desc": "“推理模式”设置的高级覆盖项——不设置则跟随该模式。允许账号同步批量发送和接收 BuilderForce 数据。任何模式都不会自动开启此项；仅本地会保持关闭。",
+  "config.platform.synchronize.desc": "“推理模式”设置的高级覆盖项——不设置则跟随该模式。允许账号同步批量发送和接收 BuilderForce 数据。此项跟随模式：混合和指定模型会开启它，使在本设备上完成的工作在你联网时同步到账号。设为 false 可将其关闭。无论此项如何设置，仅本地都会保持关闭。",
   "config.platform.gatewayInference.desc": "“推理模式”设置的高级覆盖项——不设置则跟随该模式。允许模型通过 BuilderForce 网关运行。混合和指定模型会开启此项；无论此处如何设置，仅本地都会保持关闭。",
   "config.platform.connectedFeatures.desc": "“推理模式”设置的高级覆盖项——不设置则跟随该模式。允许明确使用的联网功能读取 BuilderForce 数据或打开平台数据流和框架。本地执行不需要此权限。",
   "config.platform.modelDownloads.desc": "“推理模式”设置的高级覆盖项——不设置则跟随该模式。允许下载模型资源。能力检查绝不会自动下载资源。",

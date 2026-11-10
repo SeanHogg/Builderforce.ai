@@ -225,17 +225,24 @@ describe('G27 Rovr packaged network denial', () => {
     const pendingBeforeGrant = await restarted.read((tx) => tx.pending(DESTINATION));
     expect(pendingBeforeGrant.map((event) => event.eventId)).toEqual(eventIds);
 
-    // Sync opens only on the person's acts: signing in (Hybrid — sync still off) and then
-    // granting sync. Local only (signed out) would hold it off whatever was granted.
+    // Sync opens only on the person's act of signing in: Hybrid syncs by default (chat #70776).
+    // Local only (signed out) would hold it off whatever was granted.
     await fileKeyValue(policyFile).set('session.key', 'bfk_live_example');
     await deniedPolicy.refresh();
-    expect(deniedPolicy.allows('synchronize')).toBe(false);
-    await deniedPolicy.setCapability('synchronize', true);
+    expect(deniedPolicy.allows('synchronize')).toBe(true);
+    // The person's explicit "off" is a stored override that survives a new context …
+    await deniedPolicy.setCapability('synchronize', false);
+    const held = createRovrPlatformPolicy(fileKeyValue(policyFile));
+    await held.ready();
+    expect(held.allows('synchronize')).toBe(false);
+    expect(held.inferenceMode()).toMatchObject({ mode: 'hybrid', chosen: false });
+    expect(JSON.parse(readFileSync(policyFile, 'utf8'))).toMatchObject({ 'policy.synchronize': false });
+    // … and removing it hands sync back to the mode.
+    await fileKeyValue(policyFile).remove('policy.synchronize');
     const granted = createRovrPlatformPolicy(fileKeyValue(policyFile));
     await granted.ready();
     expect(granted.allows('synchronize')).toBe(true);
-    expect(granted.inferenceMode()).toMatchObject({ mode: 'hybrid', chosen: false });
-    expect(JSON.parse(readFileSync(policyFile, 'utf8'))).toMatchObject({ 'policy.synchronize': true });
+    expect(JSON.parse(readFileSync(policyFile, 'utf8'))).not.toHaveProperty(['policy.synchronize']);
 
     const pushedBatches: Array<{ events: ReadonlyArray<{ eventId: string }> }> = [];
     const coordinator = createSyncCoordinator({

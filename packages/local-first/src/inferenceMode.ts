@@ -7,11 +7,19 @@
  *     direct providers are off whatever an override says (the promise the mode makes).
  *   - `hybrid`     — local first, then the gateway's Auto route (the gateway itself puts
  *     the free tier first). A picked model runs FIRST, never hard-pinned: if it fails,
- *     the turn falls back to the local engine and then Auto. Connected features on; sync
- *     per its own setting.
+ *     the turn falls back to the local engine and then Auto. Connected features and sync on.
  *   - `specific`   — exactly the person's pick (a cloud model, the BYO pool, Kimi Code, or
  *     one local model), hard-pinned: no local attempt, no fallback; no pick is an error
- *     (`no_specific_model`), never a silent Hybrid. Gateway inference AND direct providers on.
+ *     (`no_specific_model`), never a silent Hybrid. Gateway inference, direct providers and
+ *     sync on.
+ *
+ * SYNC follows the mode: work runs locally and, when the person is connected (Hybrid or
+ * Specific), what it wrote goes to the account. A host with a sync driver (the editor's
+ * chat sync, Rovr's chat queue) runs it; a host without one (the web app) only stops
+ * refusing the sync transport. An explicit `synchronize: false` override still turns it
+ * off; in Local only it stays off whatever an override says. Sync needs an ACCOUNT: signed
+ * out it is off in every mode — a chosen Hybrid/Specific does not open it, and neither does
+ * an explicit `synchronize: true` override (there is nothing to sync to).
  *
  * A pick moves the mode with it (brain-embedded `inferenceModeForModelPick`): picking a
  * model selects Specific, so the model picked is the model that runs; Auto returns to Hybrid.
@@ -41,8 +49,10 @@ export function defaultInferenceMode(context: { signedIn: boolean }): InferenceM
 }
 
 /**
- * The capability patch a mode decides. Fields it does not name (sync in Hybrid and
- * Specific, model downloads, external MCP, git remotes) keep their own setting.
+ * The capability patch a mode decides. The connected modes turn sync ON (chat #70776: a
+ * Specific editor queued 389 events and never pushed, because sync was left to a setting
+ * nobody had set). Fields it does not name (model downloads, external MCP, git remotes)
+ * keep their own setting.
  */
 export function policyForInferenceMode(mode: InferenceMode): Partial<PlatformPolicySnapshot> {
   switch (mode) {
@@ -52,9 +62,9 @@ export function policyForInferenceMode(mode: InferenceMode): Partial<PlatformPol
       // scoped `authenticate` grant, and is the way onto Hybrid.)
       return { gatewayInference: false, connectedFeatures: false, synchronize: false, directProviders: false };
     case 'hybrid':
-      return { gatewayInference: true, connectedFeatures: true, directProviders: false };
+      return { gatewayInference: true, connectedFeatures: true, synchronize: true, directProviders: false };
     case 'specific':
-      return { gatewayInference: true, connectedFeatures: true, directProviders: true };
+      return { gatewayInference: true, connectedFeatures: true, synchronize: true, directProviders: true };
   }
 }
 
@@ -94,5 +104,7 @@ export function resolveInferencePolicy(input: {
     ...(input.overrides ?? {}),
   };
   if (mode === 'local-only') for (const field of LOCAL_ONLY_LOCKED) snapshot[field] = false;
+  // Sync needs an account: signed out it is off whatever the mode or an override says.
+  if (!input.signedIn) snapshot.synchronize = false;
   return { mode, chosen, snapshot };
 }

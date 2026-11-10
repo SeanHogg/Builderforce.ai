@@ -93,31 +93,52 @@ describe('the web platform policy refuses by default', () => {
 
   it('restores an explicit choice on the next load, and only what was chosen', () => {
     // Local only (the mode a signed-out person chose) keeps sync off whatever is
-    // granted; Hybrid (signed in, never asked) keeps it per its own grant.
+    // granted; Hybrid syncs (signed in) unless an override turns it off. The stored
+    // choice here is the explicit "off", which must beat the mode's "on" after a reload.
+    window.localStorage.setItem('bf_web_token', 'present');
     window.localStorage.setItem(WEB_INFERENCE_MODE_STORAGE_KEY, 'hybrid');
-    storeGrants({ synchronize: true });
+    storeGrants({ synchronize: false });
     resetWebPlatformPolicyForTests(); // A reload: no in-memory state carries over.
 
     bootWebPlatformPolicy();
-    expect(webPlatformPolicy().allows('synchronize')).toBe(true);
+    expect(webPlatformPolicy().allows('synchronize')).toBe(false);
+    expect(webPlatformPolicy().allows('gateway-inference')).toBe(true);
     // A choice about one capability is not a choice about the ones the mode leaves alone.
     expect(webPlatformPolicy().allows('model-download')).toBe(false);
     expect(webPlatformPolicy().allows('direct-provider')).toBe(false);
   });
 
-  it('follows an override removed in another tab, and comes back refused after a reload', () => {
+  it('sync needs an account: a chosen Hybrid with a stored grant stays unsynced while signed out', () => {
     window.localStorage.setItem(WEB_INFERENCE_MODE_STORAGE_KEY, 'hybrid');
     storeGrants({ synchronize: true });
     bootWebPlatformPolicy();
+    expect(webInferenceMode()).toEqual({ mode: 'hybrid', chosen: true });
+    expect(webPlatformPolicy().allows('gateway-inference')).toBe(true);
+    expect(webPlatformPolicy().allows('synchronize')).toBe(false);
+    window.localStorage.setItem('bf_web_token', 'present');
+    refreshWebPlatformPolicy();
+    expect(webPlatformPolicy().allows('synchronize')).toBe(true);
+  });
+
+  it('follows an override removed in another tab, and comes back refused after a reload', () => {
+    window.localStorage.setItem('bf_web_token', 'present');
+    window.localStorage.setItem(WEB_INFERENCE_MODE_STORAGE_KEY, 'hybrid');
+    storeGrants({ synchronize: false });
+    bootWebPlatformPolicy();
+    expect(webPlatformPolicy().allows('synchronize')).toBe(false);
+
+    // Another tab dropped the override; this tab sees the event and follows the mode again.
+    window.localStorage.removeItem(WEB_PLATFORM_POLICY_STORAGE_KEY);
+    window.dispatchEvent(new StorageEvent('storage', { key: WEB_PLATFORM_POLICY_STORAGE_KEY, newValue: null }));
     expect(webPlatformPolicy().allows('synchronize')).toBe(true);
 
-    // Another tab chose Local only and dropped the override; this tab sees the events.
-    window.localStorage.removeItem(WEB_PLATFORM_POLICY_STORAGE_KEY);
+    // Another tab chose Local only; this tab sees the event.
     window.localStorage.setItem(WEB_INFERENCE_MODE_STORAGE_KEY, 'local-only');
-    window.dispatchEvent(new StorageEvent('storage', { key: WEB_PLATFORM_POLICY_STORAGE_KEY, newValue: null }));
+    window.dispatchEvent(new StorageEvent('storage', { key: WEB_INFERENCE_MODE_STORAGE_KEY, newValue: 'local-only' }));
     expect(webPlatformPolicy().allows('synchronize')).toBe(false);
     expect(webInferenceMode()).toEqual({ mode: 'local-only', chosen: true });
 
+    window.localStorage.removeItem('bf_web_token');
     resetWebPlatformPolicyForTests();
     bootWebPlatformPolicy();
     expect(snapshot()).toEqual(ALL_REFUSED);
@@ -125,14 +146,18 @@ describe('the web platform policy refuses by default', () => {
 });
 
 describe('the inference mode', () => {
-  it('a signed-in person who never chose runs Hybrid — chat, connected features, no sync', () => {
+  it('a signed-in person who never chose runs Hybrid — chat, connected features and sync', () => {
     window.localStorage.setItem('bf_web_token', 'present');
     bootWebPlatformPolicy();
     expect(webInferenceMode()).toEqual({ mode: 'hybrid', chosen: false });
     const policy = webPlatformPolicy();
     expect(policy.allows('gateway-inference')).toBe(true);
     expect(policy.allows('connected-feature')).toBe(true);
-    expect(policy.allows('synchronize')).toBe(false);
+    // Connected modes sync by default (chat #70776); an explicit override turns it off.
+    expect(policy.allows('synchronize')).toBe(true);
+    storeGrants({ synchronize: false });
+    refreshWebPlatformPolicy();
+    expect(webPlatformPolicy().allows('synchronize')).toBe(false);
   });
 
   it('follows sign-in and sign-out in this tab when the auth provider re-applies it', () => {
@@ -220,6 +245,8 @@ describe('the platform transport', () => {
   });
 
   it('issues the request once the capability is granted', async () => {
+    // Sync needs an account, so the grant applies only when signed in.
+    window.localStorage.setItem('bf_web_token', 'present');
     window.localStorage.setItem(WEB_INFERENCE_MODE_STORAGE_KEY, 'hybrid');
     storeGrants({ synchronize: true });
     bootWebPlatformPolicy();

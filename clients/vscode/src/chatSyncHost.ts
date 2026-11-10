@@ -1,10 +1,12 @@
 /**
  * SYNC ON ENABLE for the editor's chats (PRD 36 §36.4; local-first G15/G24, chat slice).
  *
- * Nothing here runs until the person turns sync on (`builderforce.platform.synchronize`
- * — the `synchronize` capability). Signing in alone binds a chat (title + project, see
- * `chatAccount.ts`); it never uploads a transcript. Once sync is granted and the editor
- * knows which workspace it acts as, ONE coordinator per device store
+ * Runs whenever the `synchronize` capability is granted: it follows the inference mode —
+ * ON in the connected modes (Hybrid, Specific), OFF and locked in Local only — and an
+ * explicit `builderforce.platform.synchronize: false` in user settings turns it off. Work
+ * runs locally first; what it wrote reaches the account at the end, when connected
+ * (chat #70776: sync was off by omission, 389 events queued and never pushed). Once sync
+ * is granted and the editor knows which workspace it acts as, ONE coordinator per device store
  * (`installSyncCoordinator`) is handed this device's chat history
  * (`bindChatHistoryForSync`): every offline chat, its messages and its local-model usage
  * go to the account once, as imports the server deduplicates on retry, and the sync
