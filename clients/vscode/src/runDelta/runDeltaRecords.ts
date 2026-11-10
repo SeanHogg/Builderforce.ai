@@ -31,7 +31,11 @@ export interface RunDeltaRecordValue {
   delta: RunDelta;
   /** Wall time of the computation, ms. */
   computedMs: number;
-  /** §12.5: an autonomous run whose delta holds blocking codes. */
+  /**
+   * §12.5: the blocking rule ids that HELD this autonomous run at its finalize gate (`runHoldGate.ts`): its execution is
+   * `awaiting_input` with a hold naming them, not `completed`. Absent when this delta held nothing (an interactive run, no
+   * blocking codes, or codes computed after the gate's verdict).
+   */
   blocked?: { rules: string[] };
   /** Ignored `.builderforce/delta.json` entries, redacted ({@link redactDropped}). */
   overridesDropped?: string[];
@@ -57,6 +61,8 @@ export interface RunDeltaCard {
   /** The absolute local repository root: a card path opens under it (`run-delta/openFile`). */
   root: string;
   delta: RunDelta;
+  /** The rules that held the run (the record's `blocked`): the card shows the run as held on them. */
+  blocked?: { rules: string[] };
 }
 
 /** What a delta is stored with: the synced value and the device's side record. */
@@ -114,8 +120,10 @@ export function runDeltaId(changeSetId: string): string {
 
 const localIdOf = (deltaId: string): string => `run-delta-local:${deltaId.slice("run-delta:".length)}`;
 
-export const cardOf = (stored: StoredRunDelta): RunDeltaCard =>
-  ({ chatId: stored.value.chatId, runId: stored.value.runId, repo: stored.local.repo, root: stored.local.root, delta: stored.value.delta });
+export const cardOf = (stored: StoredRunDelta): RunDeltaCard => ({
+  chatId: stored.value.chatId, runId: stored.value.runId, repo: stored.local.repo, root: stored.local.root, delta: stored.value.delta,
+  ...(stored.value.blocked ? { blocked: { rules: [...stored.value.blocked.rules] } } : {}),
+});
 
 /** Stores the delta once (and its side record). Returns false when one was already stored for this run and repository. */
 export async function storeRunDelta(

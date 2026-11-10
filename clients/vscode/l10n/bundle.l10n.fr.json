@@ -942,6 +942,7 @@
   "Sign in to save the audit conversation.": "Connectez-vous pour enregistrer la conversation d’audit.",
   "The audit has not saved its findings. Open its conversation to continue.": "L’audit n’a pas enregistré ses résultats. Ouvrez sa conversation pour continuer.",
   "Audit complete. Findings and remediation tickets are saved.": "Audit terminé. Résultats et tickets de correction enregistrés.",
+  "The audit is held for review, not complete: its changes hit blocking rules ({0}).": "L'audit est retenu pour revue, pas terminé : ses modifications enfreignent des règles bloquantes ({0}).",
   "Open audit conversation": "Ouvrir la conversation d’audit",
   "Sign in to run audits.": "Connectez-vous pour exécuter des audits.",
   "Could not load the saved audit.": "Impossible de charger l’audit enregistré.",

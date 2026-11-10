@@ -260,8 +260,11 @@ export interface BrainRunHost {
   attach(sink: RunSink): () => void;
   /** The run list's interrupted rows (`interruptedRunsView.ts`): journal one as acknowledged (dismissed, or resumed by the webview through the composer). Idempotent. Absent on a host without a run journal. */
   acknowledgeInterrupted?(runId: string): Promise<void>;
-  /** The stored run deltas of a run or of a chat (`run-delta/get`, PRD 41 §C14). Absent on a host that records none. */
-  runDeltas?(query: { runId?: string; chatId?: number }): Promise<Array<{ chatId: number; runId: string; repo: string; root: string; delta: RunDelta }>>;
+  /**
+   * The stored run deltas of a run or of a chat (`run-delta/get`, PRD 41 §C14). `blocked`: the rules that held the
+   * autonomous run at its finalize gate (§12.5). Absent on a host that records none.
+   */
+  runDeltas?(query: { runId?: string; chatId?: number }): Promise<Array<{ chatId: number; runId: string; repo: string; root: string; delta: RunDelta; blocked?: { rules: string[] } }>>;
   /** A run-delta card's Open code (`run-delta/open`): the confined absolute file, or undefined when refused. */
   openRunDeltaFile?(request: { runId: string; path: string }): Promise<string | undefined>;
   /** Resolves once the durable writes this host queued (its sub-agent journal) have landed or been given up — awaited on deactivate so a child settling during close is not left `running`. */

@@ -96,9 +96,10 @@ export type RunHostMessage =
    * A finished run's delta for one repository (PRD 41 §C14), posted once it is stored (`runDelta/finalizeRunDelta.ts`).
    * `repo` is the change set's repository identity (its remote URL, else its root path); `root` is the repository's absolute
    * local root, where a card path opens (`root + '/' + path`). The panel holding `chatId` shows the card; `run-delta/get`
-   * answers the same payloads for a reopened chat.
+   * answers the same payloads for a reopened chat. `blocked`: the rules that held this autonomous run at its finalize gate
+   * (PRD 41 §12.5) — the card shows the run as held on them, not complete.
    */
-  | { type: "run-delta/card"; chatId: number; runId: string; repo: string; root: string; delta: RunDelta };
+  | { type: "run-delta/card"; chatId: number; runId: string; repo: string; root: string; delta: RunDelta; blocked?: { rules: string[] } };
 
 /** A webview panel watching the runs — anything that can be posted to. */
 export interface RunSink {

@@ -42,6 +42,9 @@ export type InterruptedRun = { runId: string; record: LocalRecord<ExecutionValue
 /** How a run ended, as the host observed it. Stored as-is on the execution row. */
 export type RunTerminalStatus = TerminalExecutionStatus;
 
+/** Why a completed run is held for a person instead of finished (PRD 41 §12.5): the blocking rule ids, and a reason naming them. */
+export type RunHold = NonNullable<ExecutionValue["hold"]>;
+
 /** Thrown, before the store is touched, when a start names no run. */
 export const RUN_ID_REQUIRED = "run_id_required";
 
@@ -153,12 +156,46 @@ export async function recordRunFinished(
 }
 
 /**
- * Did the dead host leave this run in flight? A run still `running`, `queued` or `awaiting_input` - and a run whose own
- * turn COMPLETED while sub-agents it started were still working (`childRunJournal.ts` keeps them on the record): those
- * children died with the editor, so the parent's work is not over, and without this it was never surfaced to resume.
+ * Hold a run whose turn completed (PRD 41 §12.5): it becomes `awaiting_input` with its `hold`, never `completed`. Written
+ * instead of {@link recordRunFinished}; a run already terminal is left alone.
+ */
+export async function recordRunHeld(
+  store: LocalFirstStore,
+  deps: RunLifecycleDeps,
+  args: { runId: string; hold: RunHold },
+): Promise<void> {
+  const at = (deps.now?.() ?? new Date()).toISOString();
+  const hold: RunHold = { reason: args.hold.reason, rules: [...args.hold.rules] };
+  await store.transact(async (tx) => {
+    const run = await tx.get<ExecutionValue>("execution", args.runId);
+    if (!run || isTerminalExecutionStatus(run.payload.status)) return;
+    await tx.put<ExecutionValue>(
+      { ...run, version: run.version + 1, updatedAt: at, payload: { ...run.payload, status: "awaiting_input", hold } },
+      run.version,
+    );
+    await tx.append({
+      idempotencyKey: `execution:held:${args.runId}`,
+      clientEntityId: args.runId,
+      entityType: "execution",
+      operation: "update",
+      schemaVersion: run.schemaVersion,
+      occurredAt: at,
+      dependsOn: [],
+      destination: run.destination,
+      payload: { status: "awaiting_input", hold },
+    });
+  });
+}
+
+/**
+ * Did the dead host leave this run in flight? A run still `running`, `queued` or `awaiting_input` (but not one HELD
+ * there: its hold outlives the host) - and a run whose own turn COMPLETED while sub-agents it started were still working
+ * (`childRunJournal.ts` keeps them on the record): those children died with the editor, so the parent's work is not over,
+ * and without this it was never surfaced to resume.
  */
 export function leftInFlight(record: LocalRecord<ExecutionValue>): boolean {
   const { status } = record.payload;
+  if (record.payload.hold) return false;
   if (status === "running" || status === "queued" || status === "awaiting_input") return true;
   return status === "completed" && childrenOfRecord(record).some((child) => child.state === "running");
 }

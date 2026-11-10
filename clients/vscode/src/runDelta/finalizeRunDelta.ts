@@ -3,9 +3,10 @@
  * `computeRunDelta` over this host's ports, stored as a `run-delta` record, posted to the chat as `run-delta/card`, and
  * counted as `delta.computed`.
  *
- * It must never fail or delay the run's own result: {@link startRunDelta} is called from the change set's `onFinalized`
- * (after the run settled, never awaited), catches everything into `onError`, and abandons a computation that outlives its
- * budget — that delta is then simply absent (nothing is stored or posted late).
+ * It must never fail the run: {@link startRunDelta} is called from the change set's `onFinalized` (after the run settled,
+ * never awaited), catches everything into `onError`, and abandons a computation that outlives its budget — that delta is
+ * then simply absent (nothing is stored or posted late). Only an autonomous run's terminal status waits for it, through the
+ * finalize gate (below).
  *
  * The registry is the built-in one merged with the repository's `.builderforce/delta.json` AS OF THE BASELINE (the engine's
  * `DELTA_CONFIG_PATH`; a change to it within the run is the engine's own blocking `delta-config-changed`). The run's `kind`
@@ -14,9 +15,10 @@
  * The inputs are gathered on this thread (`runDeltaPorts.ts`); the engine runs in a worker (`deltaWorkerHost.ts`) that the
  * budget terminates.
  *
- * POLICY (§12.5). An autonomous run whose delta has blocking findings is recorded `blocked` with their rule ids. There is no
- * finalize gate to refuse in this host: an audit run's completion is written DURING the run by the agent's findings tool
- * (`saveLocalAuditFindings`), and `markLocalAuditRun` never moves a completed run. The flag is what a gate will read.
+ * POLICY (§12.5). An autonomous run carries a {@link RunHoldPort} (`runHoldGate.ts`): the run host holds back its terminal
+ * status until its deltas settle (within the budget), and a delta's blocking codes, reported through `block`, hold the run
+ * (`awaiting_input` with those rule ids) instead of letting it complete. The record's `blocked` is exactly what the gate
+ * accepted: absent for an interactive run, and for codes computed after the verdict was given.
  *
  * Pre-images: the run's hold on them is released once its deltas are settled (recorded or failed), and expired rows are
  * swept, in each repository's knowledge file (`deps.release`). A run that never finalizes (a crash, a closed editor) has its
@@ -32,6 +34,7 @@ import { deltaAttribution, overlappingRun, writesInRepo } from "./attribution";
 import { computeInWorker } from "./deltaWorkerHost";
 import { headSwitched, type RepoGit } from "./gitSide";
 import { prepareDelta } from "./runDeltaPorts";
+import type { RunHoldPort } from "./runHoldGate";
 import {
   cardOf, pastBlastScores, redactDropped, storeRunDelta, syncedRepository, type RunDeltaCard, type StoredRunDelta,
 } from "./runDeltaRecords";
@@ -93,6 +96,8 @@ export interface RunDeltaRun {
   writes?: readonly string[];
   /** The folder the tools resolve a relative path against. */
   workspaceRoot?: string;
+  /** An autonomous run's finalize gate (§12.5). Absent: nothing this run's delta computes can hold it. */
+  hold?: RunHoldPort;
 }
 
 const nowOf = (deps: Pick<RunDeltaDeps, "now">): Date => deps.now?.() ?? new Date();
@@ -172,11 +177,13 @@ async function repoDelta(
     onError: deps.onError,
   });
   const delta = await computeInWorker(prepared, signal);
+  // Reported as soon as computed, before the store: a computed blocking code holds the run even if its record is late.
+  const held = delta.blocking.length > 0 && run.hold?.block(delta.blocking) === true;
   return {
     value: {
       runId, repository, changeSetId: set.id, chatId: run.chatId, mode: run.mode, delta,
       computedMs: Date.now() - started,
-      ...(run.mode === "autonomous" && delta.blocking.length > 0 ? { blocked: { rules: [...delta.blocking] } } : {}),
+      ...(held ? { blocked: { rules: [...delta.blocking] } } : {}),
       ...(dropped.length > 0 ? { overridesDropped: redactDropped(dropped) } : {}),
     },
     local: { kind: "local", runId, chatId: run.chatId, root: set.root, repo: cs.repository },
@@ -224,7 +231,8 @@ export async function finalizeRunDelta(
 
 /**
  * {@link finalizeRunDelta}, bounded and detached: never rejects, and past `budgetMs` it is abandoned (logged through
- * `onError`); nothing is stored or posted after that. The promise is for tests and shutdown; the run never waits on it.
+ * `onError`); nothing is stored or posted after that. Either way the run's hold port is then told it settled. The promise
+ * is for tests and shutdown; the run never waits on it (an autonomous run's terminal status waits on the gate instead).
  */
 export function startRunDelta(deps: RunDeltaDeps, run: RunDeltaRun): Promise<void> {
   let live = true;
@@ -240,5 +248,8 @@ export function startRunDelta(deps: RunDeltaDeps, run: RunDeltaRun): Promise<voi
     }, budget);
   });
   const work = finalizeRunDelta(deps, run, () => live, abort.signal).then(() => undefined, (error: unknown) => deps.onError(error));
-  return Promise.race([work, timeout]).finally(() => { if (timer) clearTimeout(timer); });
+  return Promise.race([work, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+    run.hold?.settled();
+  });
 }

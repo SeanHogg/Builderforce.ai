@@ -54,6 +54,20 @@ export class AuditExecution implements vscode.Disposable {
     void vscode.window.showErrorMessage(vscode.l10n.t('Audit failed: {0}', String(error)));
   }
 
+  /**
+   * PRD 41 §12.5: an audit is autonomous, so its run is HELD when its run delta computed blocking codes (the host's start
+   * resolves after that verdict; the rules are on its run-delta cards). A held audit is never reported complete: its
+   * conversation opens and the rules are named instead. True when it was held.
+   */
+  private async reportHeld(runId: string, chatId: number): Promise<boolean> {
+    const cards = (await this.host.runDeltas?.({ runId }).catch(() => [])) ?? [];
+    const rules = [...new Set(cards.flatMap((card) => card.blocked?.rules ?? []))];
+    if (rules.length === 0) return false;
+    await openWorkspace(this.ctx, { kind: 'focus', chatId });
+    void vscode.window.showWarningMessage(vscode.l10n.t('The audit is held for review, not complete: its changes hit blocking rules ({0}).', rules.join(', ')));
+    return true;
+  }
+
   private selected(): string[] {
     return vscode.workspace.getConfiguration('builderforce.audits').get<string[]>('selected', ['quality-audit']);
   }
@@ -140,6 +154,7 @@ export class AuditExecution implements vscode.Disposable {
         throw new Error(saved.error ?? vscode.l10n.t('The audit has not saved its findings. Open its conversation to continue.'));
       }
       await vscode.commands.executeCommand('builderforce.refreshDiagnostics');
+      if (await this.reportHeld(run.runId, chatId)) return;
       const catalog = await listSystemAudits(this.ctx.secrets);
       const definition = catalog.find((d) => d.id === auditId);
       if (saved.result?.codeAnalysis) AuditResultsPanel.open(this.ctx, saved.result);
@@ -212,6 +227,7 @@ export class AuditExecution implements vscode.Disposable {
         throw new Error(saved?.record.payload.error ?? vscode.l10n.t('The audit has not saved its findings. Open its conversation to continue.'));
       }
       await vscode.commands.executeCommand('builderforce.refreshDiagnostics');
+      if (await this.reportHeld(started.runId, chat.id)) return;
       const findings = await listLocalAuditFindings(store, started.runId);
       await vscode.commands.executeCommand('builderforce.openDiagnosticReport', {
         auditId, name: started.definition.name, emoji: started.definition.icon, projectId, ticketIds: [],

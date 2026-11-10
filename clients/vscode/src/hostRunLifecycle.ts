@@ -10,6 +10,9 @@
  *   - `run.failed`   → `failed` (the run never got going)
  *   - `run.settled`  → `failed` when the run cell carries an error, `cancelled` when
  *                      the person pressed Stop during this run, otherwise `completed`
+ *   - before the terminal status is written, `beforeTerminal` (the finalize gate,
+ *     `runDelta/runHoldGate.ts`) may HOLD a completed run: it is journaled
+ *     `awaiting_input` with the hold (PRD 41 §12.5), never `completed`
  *   - `run.tool`     → a checkpoint; `safeToResume` only after a successful,
  *                      non-mutating, local tool (a step whose replay cannot repeat an
  *                      external effect). Each checkpoint carries the run's resume state
@@ -22,7 +25,7 @@
 import { resumeStateOf, STOPPED_TURN_STEP, type ResumeTraceEvent, type RunResumeState } from "@seanhogg/builderforce-brain-embedded";
 import type { RunHostMessage, RunSink } from "./brainRunHostProtocol";
 import type { InstalledRunRecovery } from "./installRunRecovery";
-import type { RunTerminalStatus } from "./runRecovery";
+import type { RunHold, RunTerminalStatus } from "./runRecovery";
 
 /** The slice of a run snapshot the terminal-status decision reads. */
 export interface RunOutcomeSnapshot {
@@ -32,8 +35,13 @@ export interface RunOutcomeSnapshot {
 }
 
 export interface HostRunLifecycleDeps {
-  recovery: Pick<InstalledRunRecovery, "recordStarted" | "recordCheckpoint" | "recordFinished">;
+  recovery: Pick<InstalledRunRecovery, "recordStarted" | "recordCheckpoint" | "recordFinished" | "recordHeld">;
   snapshot(chatId: number): RunOutcomeSnapshot;
+  /**
+   * Asked before a run's terminal status is written, with that status. A hold — only ever for a `completed` run — is
+   * journaled instead of the status. Absent: every run is finished as observed.
+   */
+  beforeTerminal?(run: { runId: string; chatId: number; status: RunTerminalStatus }): Promise<RunHold | undefined>;
   log(line: string): void;
   now?: () => Date;
 }
@@ -68,6 +76,14 @@ export function createHostRunLifecycle(deps: HostRunLifecycleDeps): HostRunLifec
   const report = (what: string, runId: string) => (error: unknown): void => {
     deps.log(`[run journal] ${what} ${runId} failed: ${error instanceof Error ? error.message : String(error)}`);
   };
+  /** The terminal write, after the gate (if any) has decided. A gate that throws holds nothing. */
+  const finish = async (runId: string, chatId: number, status: RunTerminalStatus): Promise<void> => {
+    const hold = deps.beforeTerminal
+      ? await deps.beforeTerminal({ runId, chatId, status }).catch((error: unknown) => (report("hold gate", runId)(error), undefined))
+      : undefined;
+    if (hold && status === "completed") return deps.recovery.recordHeld({ runId, hold }).catch(report("held", runId));
+    return deps.recovery.recordFinished({ runId, status }).catch(report(status, runId));
+  };
 
   return {
     started(chatId, runId, ask) {
@@ -91,8 +107,7 @@ export function createHostRunLifecycle(deps: HostRunLifecycleDeps): HostRunLifec
           return;
         }
         live.delete(message.chatId);
-        const status = terminalStatusOf(message, deps.snapshot(message.chatId), run.startedAt);
-        void deps.recovery.recordFinished({ runId: run.runId, status }).catch(report(status, run.runId));
+        void finish(run.runId, message.chatId, terminalStatusOf(message, deps.snapshot(message.chatId), run.startedAt));
       },
     },
   };

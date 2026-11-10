@@ -13,7 +13,9 @@
  *     cannot repeat an external effect (a successful, non-mutating, local tool);
  *   - `recordFinished` from the host's TERMINAL run-status event (`completed`,
  *     `failed`, `cancelled`) — not because a start promise settled, which it does on
- *     failure too.
+ *     failure too;
+ *   - `recordHeld` instead of `completed` when the finalize gate holds the run
+ *     (`runDelta/runHoldGate.ts`, PRD 41 §12.5): `awaiting_input` with its hold.
  *
  * A run with a recorded terminal status is never rewritten to `interrupted` by the
  * next activation; a run the host died inside still is. A continuation is a new turn
@@ -27,9 +29,11 @@ import {
   recordRunAcknowledged,
   recordRunCheckpoint,
   recordRunFinished,
+  recordRunHeld,
   recordRunStarted,
   safeToResume,
   type InterruptedRun,
+  type RunHold,
   type RunLifecycleDeps,
   type RunTerminalStatus,
 } from "./runRecovery";
@@ -73,6 +77,8 @@ export interface InstalledRunRecovery {
    * resolved — that promise resolves on failure too.
    */
   recordFinished(args: { runId: string; status: RunTerminalStatus }): Promise<void>;
+  /** A completed run the finalize gate held: `awaiting_input` with its hold, never `completed`. */
+  recordHeld(args: { runId: string; hold: RunHold }): Promise<void>;
   /** Every run still `interrupted` and unacknowledged: this activation's and earlier ones'. */
   interrupted(): Promise<InterruptedRun[]>;
   /** The person dismissed or resumed an interrupted run; it is never listed or recovered again. */
@@ -155,6 +161,10 @@ function bindHandle(
     async recordFinished(args) {
       const { store, deps } = await afterRecovery();
       await recordRunFinished(store, deps, args);
+    },
+    async recordHeld(args) {
+      const { store, deps } = await afterRecovery();
+      await recordRunHeld(store, deps, args);
     },
     async interrupted() {
       const { store } = await afterRecovery();

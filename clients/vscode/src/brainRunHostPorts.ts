@@ -274,12 +274,6 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
   });
   // The run list's "Interrupted" rows: host state, re-sent to every panel that attaches.
   const interrupted = createInterruptedRuns({ recovery, log: hostLog });
-  const lifecycle = createHostRunLifecycle({
-    recovery,
-    snapshot: (chatId) => getRunSnapshot(chatId),
-    log: hostLog,
-  });
-  const detachLifecycle = host.attach(lifecycle.sink);
   // PRD 41: each finalized change set gets its run delta, computed after the run settled and posted to the chat.
   const deviceId = (): string => ctx.globalState.get<string>(LOCAL_DEVICE_KEY) ?? "";
   const delta = editorRunDelta({
@@ -288,6 +282,14 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     deviceId,
     workspaceFolders: () => (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath),
   });
+  const lifecycle = createHostRunLifecycle({
+    recovery,
+    snapshot: (chatId) => getRunSnapshot(chatId),
+    log: hostLog,
+    // §12.5: an autonomous run's terminal status waits for its delta; blocking codes hold it (`runDelta/runHoldGate.ts`).
+    beforeTerminal: delta.hold.beforeTerminal,
+  });
+  const detachLifecycle = host.attach(lifecycle.sink);
   // A commit while chats run may have bound one of them (the run's own bind, a sync
   // receipt, an adopt): re-read the bound ids. Commits are per message or model call, so
   // only one that touched a mapping or a chat row (or whose change is unknown) is worth the read.
@@ -314,11 +316,15 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     openRunDeltaFile: delta.openFile,
     ...gateStarts(host, async (payload, start) => {
       const { runId, author } = changeSetIdentityForHostRun(payload, () => crypto.randomUUID());
+      // §12.5: an audit, or a turn started with Auto on (no human approves its writes), is autonomous; only a human-driven
+      // turn with approvals is interactive. Sub-agents start through the host's internal start, never through here.
+      const mode = payload.audit || payload.autoApprove ? "autonomous" : "interactive";
       if (!isRunning(payload.chatId)) {
         lifecycle.started(payload.chatId, runId, askedText(payload.userTurn));
+        if (mode === "autonomous") delta.hold.expect(runId);
         runWrites.delete(payload.chatId); // this turn's evidence only
       }
-      return recordChangeSetAroundRun(
+      await recordChangeSetAroundRun(
         {
           store: local.store,
           deviceId,
@@ -327,17 +333,17 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
           stillRunning: () => isRunning(payload.chatId),
           onError: (error) => hostLog(`[change set] ${error instanceof Error ? error.message : String(error)}`),
           capture: await delta.capture(runId),
-          // §12.5: an audit, or a turn started with Auto on (no human approves its writes), is autonomous; only a human-driven
-          // turn with approvals is interactive. Sub-agents start through the host's internal start, never through here.
           onFinalized: delta.onFinalized({
             chatId: payload.chatId,
-            mode: payload.audit || payload.autoApprove ? "autonomous" : "interactive",
+            mode,
             writes: () => runWrites.get(payload.chatId),
             ...(workspaceRoot() ? { workspaceRoot: workspaceRoot() } : {}),
           }),
         },
         start,
       );
+      // An autonomous start resolves after the gate's verdict: whoever awaits it (an audit) never reports a held run complete.
+      if (mode === "autonomous") await delta.hold.verdict(runId);
     }),
     dispose() {
       offBindings();

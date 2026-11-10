@@ -84,4 +84,46 @@ describe("host run lifecycle", () => {
     const nextActivation = installRunRecovery(ctx(), { store, deviceId: "device-1", now: () => at });
     expect((await nextActivation.recovered).map((run) => run.runId)).toEqual(["host-run:3:b"]);
   });
+
+  it("journals a completed run its finalize gate holds as awaiting_input with the hold, which the next activation leaves alone (PRD 41 §12.5)", async () => {
+    const store = createMemoryLocalFirstStore();
+    const recovery = installRunRecovery(ctx(), { store, deviceId: "device-1", now: () => at });
+    const hold = { reason: "run_delta_blocking:guard-removed", rules: ["guard-removed"] };
+    const beforeTerminal = vi.fn(async () => hold);
+    const lifecycle = createHostRunLifecycle({ recovery, snapshot: () => ({ error: "", trace: [] }), log: vi.fn(), now: () => at, beforeTerminal });
+    lifecycle.started(4, "host-run:4:held");
+    await settle();
+    lifecycle.sink.post({ type: "run.settled", chatId: 4 });
+    await settle();
+    expect(beforeTerminal).toHaveBeenCalledWith({ runId: "host-run:4:held", chatId: 4, status: "completed" });
+    const row = await store.read((tx) => tx.get<ExecutionValue>("execution", "host-run:4:held"));
+    expect(row?.payload.status).toBe("awaiting_input");
+    expect(row?.payload.hold).toEqual(hold);
+    const snapshot = await store.export();
+    const held = snapshot.events.filter((e) => e.entityType === "execution" && e.clientEntityId === "host-run:4:held" && e.operation === "update");
+    expect(held.map((e) => e.payload)).toEqual([{ status: "awaiting_input", hold }]);
+    const nextActivation = installRunRecovery(ctx(), { store, deviceId: "device-1", now: () => at });
+    expect(await nextActivation.recovered).toEqual([]);
+  });
+
+  it("never holds a failed run, whatever the gate says, and finishes a run the gate does not hold", async () => {
+    const store = createMemoryLocalFirstStore();
+    const recovery = installRunRecovery(ctx(), { store, deviceId: "device-1", now: () => at });
+    const failing = { error: "gateway 500", trace: [] };
+    const lifecycle = createHostRunLifecycle({
+      recovery, snapshot: (chatId) => (chatId === 8 ? failing : { error: "", trace: [] }), log: vi.fn(), now: () => at,
+      beforeTerminal: async ({ status }) => (status === "failed" ? { reason: "run_delta_blocking:guard-removed", rules: ["guard-removed"] } : undefined),
+    });
+    lifecycle.started(8, "host-run:8:failed");
+    lifecycle.started(9, "host-run:9:clean");
+    await settle();
+    lifecycle.sink.post({ type: "run.settled", chatId: 8 });
+    lifecycle.sink.post({ type: "run.settled", chatId: 9 });
+    await settle();
+    const failed = await store.read((tx) => tx.get<ExecutionValue>("execution", "host-run:8:failed"));
+    expect(failed?.payload).toMatchObject({ status: "failed" });
+    expect(failed?.payload.hold).toBeUndefined();
+    const clean = await store.read((tx) => tx.get<ExecutionValue>("execution", "host-run:9:clean"));
+    expect(clean?.payload.status).toBe("completed");
+  });
 });

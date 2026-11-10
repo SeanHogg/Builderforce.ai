@@ -3,7 +3,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createMemoryLocalFirstStore, newLocalRecord, type LocalFirstStore } from "@builderforce/local-first";
+import { createMemoryLocalFirstStore, newLocalRecord, type ExecutionValue, type LocalFirstStore } from "@builderforce/local-first";
 import { localSqliteAvailable } from "@builderforce/agent-tools/node-local-sqlite";
 import { nodeKnowledgeStore, putPreimages, readPreimages, sweepPreimages, unpinPreimages, type NodeKnowledgeStore } from "@builderforce/agent-tools/node-knowledge-store";
 
@@ -39,7 +39,10 @@ vi.mock("../gitApi", async () => {
 
 import { captureRunChangeBaseline, type ChangeSetRepoBaseline } from "../runChangeBaseline";
 import { recordChangeSetAroundRun, type FinalizedRunChangeSets, type LocalChangeSetValue } from "../runChangeSets";
-import { finalizeRunDelta, startRunDelta, type RepoHostSources, type RunDeltaDeps } from "./finalizeRunDelta";
+import { createHostRunLifecycle } from "../hostRunLifecycle";
+import { installRunRecovery } from "../installRunRecovery";
+import { finalizeRunDelta, RUN_DELTA_BUDGET_MS, startRunDelta, type RepoHostSources, type RunDeltaDeps } from "./finalizeRunDelta";
+import { createRunHoldGate, type RunHoldPort } from "./runHoldGate";
 import { repoGit } from "./gitSide";
 import { PreimageBudget, PREIMAGE_MAX_FILE_BYTES } from "./preimageBudget";
 import { readRunDeltas, type RunDeltaCard, type RunDeltaRecordValue } from "./runDeltaRecords";
@@ -116,7 +119,7 @@ function deltaDeps(store: LocalFirstStore, sources: RunDeltaDeps["sources"], ext
 /** One run through the change set's own wrapper, with the delta started from its `onFinalized`. */
 async function runWithDelta(
   store: LocalFirstStore, k: NodeKnowledgeStore, runId: string, edit: () => Promise<void>,
-  extra: Partial<RunDeltaDeps> = {}, mode: "interactive" | "autonomous" = "interactive", writes?: string[],
+  extra: Partial<RunDeltaDeps> = {}, mode: "interactive" | "autonomous" = "interactive", writes?: string[], hold?: RunHoldPort,
 ) {
   const { deps, cards, errors, events } = deltaDeps(store, sourcesFor(k), { release: releaseFor(k), ...extra });
   let delta: Promise<void> | undefined;
@@ -124,13 +127,39 @@ async function runWithDelta(
     {
       store, deviceId: "device-1", runId, author: "agent:test",
       capture: { preimages: (_root, items) => putPreimages(k.persistence, runId, items, Date.now()) },
-      onFinalized: (closed) => { delta = startRunDelta(deps, { chatId: 7, mode, closed, ...(writes ? { writes, workspaceRoot: closed.committed[0]?.root ?? "" } : {}) }); },
+      onFinalized: (closed) => { delta = startRunDelta(deps, { chatId: 7, mode, closed, ...(writes ? { writes, workspaceRoot: closed.committed[0]?.root ?? "" } : {}), ...(hold ? { hold } : {}) }); },
       onError: (error) => errors.push(error),
     },
     edit,
   );
   await delta;
   return { cards, errors, events, finalized: delta !== undefined };
+}
+
+/**
+ * An AUTONOMOUS run as the editor host runs it (§12.5): its journal, its lifecycle with the finalize gate as
+ * `beforeTerminal`, the run settling (the host's `run.settled`) before its change set is finalized, and the delta reporting
+ * to the gate. Returns the run's execution row once the terminal write has landed.
+ */
+async function autonomousRun(store: LocalFirstStore, k: NodeKnowledgeStore, runId: string, edit: () => Promise<void>, extra: Partial<RunDeltaDeps> = {}) {
+  const recovery = installRunRecovery({ globalState: { get: () => undefined, update: async () => undefined } }, { store, deviceId: "device-1" });
+  await recovery.recovered;
+  const gate = createRunHoldGate({ budgetMs: RUN_DELTA_BUDGET_MS });
+  const lifecycle = createHostRunLifecycle({ recovery, snapshot: () => ({ error: "", trace: [] }), log: () => undefined, beforeTerminal: gate.beforeTerminal });
+  lifecycle.started(7, runId);
+  gate.expect(runId);
+  const result = await runWithDelta(store, k, runId, async () => {
+    await edit();
+    lifecycle.sink.post({ type: "run.settled", chatId: 7 });
+  }, extra, "autonomous", undefined, gate.port(runId));
+  const verdict = await gate.verdict(runId);
+  let execution: ExecutionValue | undefined;
+  for (let i = 0; i < 200; i += 1) {
+    execution = (await store.read((tx) => tx.get<ExecutionValue>("execution", runId)))?.payload;
+    if (execution && execution.status !== "running") break;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  return { ...result, verdict, execution };
 }
 
 /** The synced `run-delta` rows (the device-only side records share the entity type). */
@@ -173,14 +202,50 @@ describe.skipIf(!localSqliteAvailable())("run delta at run finalization (PRD 41 
     expect(event.dependsOn).toEqual([`change-set:create:${value.changeSetId}`]);
   });
 
-  it("flags an autonomous run's blocking findings on the record (§12.5)", async () => {
+  it("holds an autonomous run whose delta has blocking findings, with its rules, instead of completing it (§12.5)", async () => {
     const root = await repo({ "api/routes.ts": GUARDED });
     const k = knowledgeFile(root);
     const store = createMemoryLocalFirstStore();
-    await runWithDelta(store, k, "run-audit", () => write(root, "api/routes.ts", UNGUARDED), {}, "autonomous");
+    const { cards, errors, verdict, execution } = await autonomousRun(store, k, "run-audit", () => write(root, "api/routes.ts", UNGUARDED));
+    expect(errors).toEqual([]);
     const value = (await deltaRows(store))[0]!.payload;
     expect(value.mode).toBe("autonomous");
     expect(value.blocked?.rules).toContain("guard-removed");
+    // The run's terminal status is the held one, naming the same rules — never `completed`.
+    expect(execution?.status).toBe("awaiting_input");
+    expect(execution?.hold?.rules).toEqual(value.blocked?.rules);
+    expect(execution?.hold?.reason).toContain("guard-removed");
+    expect(verdict).toEqual(execution?.hold);
+    // The card shows it.
+    expect(cards[0]?.blocked?.rules).toContain("guard-removed");
+    expect(await readRunDeltas(store, { runId: "run-audit" })).toEqual(cards);
+  });
+
+  it("completes an autonomous run whose delta has no blocking findings (§12.5)", async () => {
+    const root = await repo({ "src/a.ts": "export const a = 1;\n" });
+    const k = knowledgeFile(root);
+    const store = createMemoryLocalFirstStore();
+    const { cards, verdict, execution } = await autonomousRun(store, k, "run-clean", () => write(root, "src/a.ts", "export const a = 2;\n"));
+    const value = (await deltaRows(store))[0]!.payload;
+    expect(value.delta.blocking).toEqual([]);
+    expect(value.blocked).toBeUndefined();
+    expect(cards[0]?.blocked).toBeUndefined();
+    expect(verdict).toBeUndefined();
+    expect(execution?.status).toBe("completed");
+    expect(execution?.hold).toBeUndefined();
+  });
+
+  it("does not hold an autonomous run whose delta ran out of budget (§12.5: fail-closed only for computed codes)", async () => {
+    const root = await repo({ "api/routes.ts": GUARDED });
+    const k = knowledgeFile(root);
+    const store = createMemoryLocalFirstStore();
+    // A delta that cannot meet its budget (its sources never answer): abandoned, nothing stored, and the run completes.
+    const { verdict, execution } = await autonomousRun(store, k, "run-late", () => write(root, "api/routes.ts", UNGUARDED), {
+      sources: () => new Promise(() => undefined), budgetMs: 20,
+    });
+    expect(await deltaRows(store)).toEqual([]);
+    expect(verdict).toBeUndefined();
+    expect(execution?.status).toBe("completed");
   });
 
   it("reads delta.json overrides from the baseline, never from the run's own edit of it", async () => {
@@ -189,11 +254,11 @@ describe.skipIf(!localSqliteAvailable())("run delta at run finalization (PRD 41 
     const root = await repo({ "api/r.ts": route("requireTeamLead, "), ".builderforce/delta.json": JSON.stringify({ guards: { requireTeamLead: 20 } }) });
     const k = knowledgeFile(root);
     const store = createMemoryLocalFirstStore();
-    await runWithDelta(store, k, "run-weaken", async () => {
+    await autonomousRun(store, k, "run-weaken", async () => {
       await write(root, "api/r.ts", route(""));
       // The run tries to drop the guard from the registry in the same edit.
       await write(root, ".builderforce/delta.json", JSON.stringify({ guards: {} , blocking: [] }));
-    }, {}, "autonomous");
+    });
     const value = (await deltaRows(store))[0]!.payload;
     const security = value.delta.dimensions.find((d) => d.id === "security")!;
     expect(security.findings.map((f) => f.ruleId)).toContain("guard-removed");

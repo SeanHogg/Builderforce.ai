@@ -1,7 +1,8 @@
 /**
  * The run delta, assembled for the editor's host-owned runs (`brainRunHostPorts.ts`): what a run start hands the change set's
  * baseline (pre-images, the stat hint, the workspace folders), the `onFinalized` hook that starts the delta once the run has
- * settled, the card relay the chat panels attach to, and the `run-delta/get` read.
+ * settled, the finalize gate an autonomous run's terminal status waits on (`hold`, `runHoldGate.ts`, PRD 41 §12.5), the card
+ * relay the chat panels attach to, and the `run-delta/get` read.
  *
  * The editor adapters (`runDeltaHost.ts` — knowledge store, folder SQLite) are loaded LAZILY, on the first run start: the run
  * host must not pull the knowledge host's module graph in at construction.
@@ -13,18 +14,25 @@ import type { RunHostMessage, RunSink } from "../brainRunHostProtocol";
 import { hostLog } from "../hostLog";
 import type { BaselineCaptureOptions } from "../runChangeBaseline";
 import type { FinalizedRunChangeSets } from "../runChangeSets";
-import { startRunDelta } from "./finalizeRunDelta";
+import { RUN_DELTA_BUDGET_MS, startRunDelta } from "./finalizeRunDelta";
 import { runDeltaFile, type OpenCodeRequest } from "./openCode";
 import { readRunDeltas, type RunDeltaCard } from "./runDeltaRecords";
+import { createRunHoldGate, type RunHoldGate } from "./runHoldGate";
 
 type DeltaHost = typeof import("./runDeltaHost");
 
 export interface EditorRunDelta {
+  /**
+   * The finalize gate: `expect` an autonomous run the host owns as it starts; the run lifecycle's `beforeTerminal` waits
+   * for its delta, and the start awaits the `verdict`. The change set's paths below tell it when the delta settled (or will
+   * never come).
+   */
+  hold: Pick<RunHoldGate, "expect" | "beforeTerminal" | "verdict">;
   /** The baseline options of one run (resolves the adapters on first use). */
   capture(runId: string): Promise<BaselineCaptureOptions>;
   /**
-   * The change set's `onFinalized` for one run: starts the delta, detached. `writes` is read then: the run's own file-tool
-   * writes (its write evidence), as recorded by the run host.
+   * The change set's `onFinalized` for one run: starts the delta, detached (an autonomous run's through its hold port).
+   * `writes` is read then: the run's own file-tool writes (its write evidence), as recorded by the run host.
    */
   onFinalized(run: { chatId: number; mode: "interactive" | "autonomous"; writes?: () => readonly string[] | undefined; workspaceRoot?: string }):
     (closed: FinalizedRunChangeSets) => void;
@@ -53,8 +61,14 @@ export function editorRunDelta(args: {
       try { sink.post(message); } catch { /* a disposed panel; its detach follows */ }
     }
   };
+  const gate = createRunHoldGate({
+    budgetMs: RUN_DELTA_BUDGET_MS,
+    onTimeout: (runId, ms) => log(`run ${runId}`, new Error(`run_hold_gate: no settled delta within ${ms} ms; the run is not held`)),
+  });
   return {
+    hold: gate,
     async capture(runId) {
+      // `release` is the change set's exit that never reaches `onFinalized`: no delta will come, so the gate decides now.
       try {
         const h = await loadHost();
         return {
@@ -62,16 +76,20 @@ export function editorRunDelta(args: {
           hint: h.statHashHint(),
           folders: args.workspaceFolders(),
           onPreimageError: (error) => log("pre-images", error),
-          release: () => { void h.releaseRun(runId).catch((error: unknown) => log("pre-image release", error)); },
+          release: () => {
+            gate.port(runId).settled();
+            void h.releaseRun(runId).catch((error: unknown) => log("pre-image release", error));
+          },
         };
       } catch (error) {
         log("baseline adapters", error);
-        return { folders: args.workspaceFolders() };
+        return { folders: args.workspaceFolders(), release: () => gate.port(runId).settled() };
       }
     },
     onFinalized({ writes, ...run }) {
       return (closed) => {
         const written = writes?.();
+        const hold = run.mode === "autonomous" ? gate.port(closed.runId) : undefined;
         void loadHost().then((h) => startRunDelta({
           store: args.store,
           deviceId: args.deviceId,
@@ -80,7 +98,10 @@ export function editorRunDelta(args: {
           post,
           telemetry: h.deltaTelemetry(hostLog),
           onError: (error) => log(`run ${closed.runId}`, error),
-        }, { ...run, closed, ...(written ? { writes: written } : {}) }), (error: unknown) => log("load", error));
+        }, { ...run, closed, ...(written ? { writes: written } : {}), ...(hold ? { hold } : {}) }), (error: unknown) => {
+          log("load", error);
+          hold?.settled();
+        });
       };
     },
     attach(sink) {
