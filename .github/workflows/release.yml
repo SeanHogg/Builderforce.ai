@@ -706,7 +706,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [agent-run, agent-loop, agent-tools, run-guards]
+        package: [agent-run, agent-loop, agent-tools, run-guards, run-delta]
     defaults:
       run:
         working-directory: packages/${{ matrix.package }}

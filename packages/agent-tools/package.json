@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./symbols": "./src/symbols.ts",
     "./knowledge": "./src/knowledge/index.ts",
+    "./code-mask": "./src/knowledge/codeMask.ts",
     "./documents": "./src/documents.ts",
     "./knowledge-index": "./src/knowledge-index.ts",
     "./prefetch": "./src/prefetch/index.ts",

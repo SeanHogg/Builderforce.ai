@@ -1,0 +1,22 @@
+{
+  "name": "@builderforce/run-delta",
+  "version": "2026.10.1",
+  "private": true,
+  "type": "module",
+  "description": "THE run delta engine (PRD 41 Part C): both sides of an agent run reduced to findings and metrics by registry rules, lineage and comparability from builderforce-memory, per-dimension verdicts, a headline sentence model, the v1 blast radius and a quantized digest. Pure: no I/O, no clock, no randomness; hosts supply DeltaPorts.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@seanhogg/builderforce-memory": "^2026.10.68"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vitest": "^4.0.18"
+  }
+}
