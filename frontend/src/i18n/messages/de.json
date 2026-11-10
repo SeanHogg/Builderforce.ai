@@ -38835,7 +38835,7 @@
     "metricsHeading": "Metriken",
     "evidenceHeading": "Belege",
     "paramsHeading": "Details",
-    "excludedHeading": "Dateien außerhalb der Bewertung",
+    "excludedHeading": "Ausgeschlossene Dateien",
     "failedHeading": "Prüfungen, die nicht liefen",
     "metricValue": "{before} → {after}[[ {unit}]]",
     "notMeasuredValue": "nicht gemessen",
@@ -38915,7 +38915,9 @@
       "repoChanged": "Repository geändert",
       "branchChanged": "Branch geändert",
       "truncated": "Ergebnisse wurden gekürzt",
-      "insufficientHistory": "Zu wenige frühere Läufe für eine Einordnung"
+      "insufficientHistory": "Zu wenige frühere Läufe für eine Einordnung",
+      "notComparableRule": "{rule} konnte nicht bestätigt werden",
+      "unsafeRegex": "{key}: unsicheres Muster verworfen ({reason})"
     },
     "clauses": {
       "findingsResolved": "Befunde behoben",
@@ -38953,7 +38955,8 @@
       "godFileGrowth": "Übergroße Datei ist gewachsen",
       "destructiveDdl": "Destruktive Schemaänderung",
       "forcePush": "Force-Push in einem Skript",
-      "rmRf": "Rekursives Löschen in einem Skript"
+      "rmRf": "Rekursives Löschen in einem Skript",
+      "deltaConfigChanged": "Delta-Richtliniendatei geändert"
     },
     "metrics": {
       "complexityMax": "Höchste Komplexität",
@@ -38972,6 +38975,64 @@
       "changedOutsideRun": "Außerhalb dieses Laufs geändert",
       "submoduleMoved": "Submodul verschoben",
       "binary": "Binärdatei"
+    },
+    "unresolvedHeading": "Dateien ohne Vorher-Version",
+    "aggregated": "zusammengefasst ({count})",
+    "blockingHeading": "Was einen autonomen Lauf blockiert",
+    "params": {
+      "route": "Route",
+      "guard": "Guard",
+      "via": "Erkannt über",
+      "file": "Datei",
+      "from": "Vorher",
+      "replacement": "Ersetzt durch",
+      "kind": "Art",
+      "guards": "Guards",
+      "symbol": "Symbol",
+      "change": "Änderung",
+      "before": "Vorher",
+      "after": "Nachher",
+      "crossed": "Größengrenze überschritten",
+      "test": "Test",
+      "assertions": "Assertions",
+      "to": "Jetzt",
+      "loop": "Schleife",
+      "call": "Aufruf",
+      "key": "Treffer",
+      "count": "Anzahl",
+      "members": "Mitglieder"
+    },
+    "paramValues": {
+      "via": {
+        "chain": "Handler-Kette",
+        "middleware": "Middleware",
+        "rekeyed": "Route umbenannt",
+        "unguardedSibling": "Ungeschützt zwischen geschützten Nachbarrouten"
+      },
+      "change": {
+        "added": "Hinzugefügt",
+        "edited": "Bearbeitet",
+        "deleted": "Gelöscht",
+        "removed": "Entfernt",
+        "changed": "Geändert"
+      },
+      "kind": {
+        "httpRoute": "HTTP-Route",
+        "middleware": "Middleware",
+        "vscodeCommand": "VS-Code-Befehl",
+        "webviewMessage": "Webview-Nachricht"
+      },
+      "crossed": {
+        "0": "Nein",
+        "1": "Ja"
+      }
+    },
+    "unsafeReasons": {
+      "tooLong": "zu lang",
+      "invalid": "ungültig",
+      "backreference": "Rückverweis",
+      "nestedQuantifier": "verschachtelter Quantor",
+      "quantifiedAlternation": "quantifizierte Alternative"
     }
   }
 }

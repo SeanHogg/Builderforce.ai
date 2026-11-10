@@ -12,7 +12,7 @@ import { Panel } from '../Sheet';
 import { list, muted } from '../styles';
 import { TYPE } from '../surface/ui/type';
 import type { KnowledgePanelRenderer } from '../types';
-import { dimensionLabel, headlineText, lineageGroup, metricLabel, metricValueText, reasonLabel, type LineageGroup } from './deltaText';
+import { blockingLabel, dimensionLabel, headlineText, lineageGroup, metricLabel, metricValueText, reasonLabel, type LineageGroup } from './deltaText';
 import { DeltaFindingItem, type RunDeltaCodeTarget } from './DeltaFindingItem';
 import { labelKey, type RunDeltaLabels } from './labels';
 import { VerdictMark } from './VerdictMark';
@@ -64,6 +64,25 @@ function DimensionSection({ dimension, labels, onOpenCode }: { dimension: Dimens
     );
 }
 
+/** A before side that could not be read: the file is still analyzed on its after side (lineage `present`), so it is not "excluded". */
+const UNRESOLVED: ReadonlySet<string> = new Set(['preimage-too-large', 'preimage-missing', 'git-unavailable']);
+
+function FileList({ heading, files, labels }: { heading: string; files: RunDelta['excluded']; labels: RunDeltaLabels }) {
+    if (files.length === 0) return null;
+    return (
+        <section style={{ display: 'grid', gap: 4 }}>
+            <h3 style={TYPE.title}>{heading}</h3>
+            <ul style={{ ...list, gap: 2 }}>
+                {files.map((e) => (
+                    <li key={e.path} data-excluded={e.reason} style={{ ...TYPE.meta, overflowWrap: 'anywhere' }}>
+                        <code style={TYPE.monoValue}>{e.path}</code> · {labels.excluded[labelKey(e.reason)] ?? e.reason}
+                    </li>
+                ))}
+            </ul>
+        </section>
+    );
+}
+
 export interface RunDeltaPanelProps {
     open: boolean;
     delta: RunDelta;
@@ -95,18 +114,16 @@ export function RunDeltaPanel({ open, delta, labels, onClose, onOpenCode, compac
                     </ul>
                 </section>
             )}
-            {delta.excluded.length > 0 && (
-                <section style={{ display: 'grid', gap: 4 }}>
-                    <h3 style={TYPE.title}>{labels.excludedHeading}</h3>
+            {delta.blocking.length > 0 && (
+                <section data-blocking style={{ display: 'grid', gap: 4 }}>
+                    <h3 style={TYPE.title}>{labels.blockingHeading}</h3>
                     <ul style={{ ...list, gap: 2 }}>
-                        {delta.excluded.map((e) => (
-                            <li key={e.path} data-excluded={e.reason} style={{ ...TYPE.meta, overflowWrap: 'anywhere' }}>
-                                <code style={TYPE.monoValue}>{e.path}</code> · {labels.excluded[labelKey(e.reason)] ?? e.reason}
-                            </li>
-                        ))}
+                        {delta.blocking.map((code) => <li key={code} style={{ ...TYPE.meta, overflowWrap: 'anywhere' }}>{blockingLabel(labels, code)}</li>)}
                     </ul>
                 </section>
             )}
+            <FileList heading={labels.unresolvedHeading} files={delta.excluded.filter((e) => UNRESOLVED.has(e.reason))} labels={labels} />
+            <FileList heading={labels.excludedHeading} files={delta.excluded.filter((e) => !UNRESOLVED.has(e.reason))} labels={labels} />
         </Panel>
     );
 }

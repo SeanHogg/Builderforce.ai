@@ -38835,7 +38835,7 @@
     "metricsHeading": "Metrics",
     "evidenceHeading": "Evidence",
     "paramsHeading": "Details",
-    "excludedHeading": "Files outside the verdicts",
+    "excludedHeading": "Excluded files",
     "failedHeading": "Checks that did not run",
     "metricValue": "{before} → {after}[[ {unit}]]",
     "notMeasuredValue": "not measured",
@@ -38915,7 +38915,9 @@
       "repoChanged": "Repository changed",
       "branchChanged": "Branch changed",
       "truncated": "Results were truncated",
-      "insufficientHistory": "Not enough past runs to rank"
+      "insufficientHistory": "Not enough past runs to rank",
+      "notComparableRule": "{rule} could not be certified",
+      "unsafeRegex": "{key}: unsafe pattern dropped ({reason})"
     },
     "clauses": {
       "findingsResolved": "findings resolved",
@@ -38953,7 +38955,8 @@
       "godFileGrowth": "Oversized file grew",
       "destructiveDdl": "Destructive schema change",
       "forcePush": "Force push in a script",
-      "rmRf": "Recursive delete in a script"
+      "rmRf": "Recursive delete in a script",
+      "deltaConfigChanged": "Delta policy file changed"
     },
     "metrics": {
       "complexityMax": "Highest complexity",
@@ -38972,6 +38975,64 @@
       "changedOutsideRun": "Changed outside this run",
       "submoduleMoved": "Submodule moved",
       "binary": "Binary file"
+    },
+    "unresolvedHeading": "Files without a before side",
+    "aggregated": "aggregated ({count})",
+    "blockingHeading": "What blocks an autonomous run",
+    "params": {
+      "route": "Route",
+      "guard": "Guard",
+      "via": "Detected by",
+      "file": "File",
+      "from": "Previously",
+      "replacement": "Replaced by",
+      "kind": "Kind",
+      "guards": "Guards",
+      "symbol": "Symbol",
+      "change": "Change",
+      "before": "Before",
+      "after": "After",
+      "crossed": "Crossed the size limit",
+      "test": "Test",
+      "assertions": "Assertions",
+      "to": "Now",
+      "loop": "Loop",
+      "call": "Call",
+      "key": "Match",
+      "count": "Count",
+      "members": "Members"
+    },
+    "paramValues": {
+      "via": {
+        "chain": "Handler chain",
+        "middleware": "Middleware",
+        "rekeyed": "Route renamed",
+        "unguardedSibling": "Unguarded among guarded siblings"
+      },
+      "change": {
+        "added": "Added",
+        "edited": "Edited",
+        "deleted": "Deleted",
+        "removed": "Removed",
+        "changed": "Changed"
+      },
+      "kind": {
+        "httpRoute": "HTTP route",
+        "middleware": "Middleware",
+        "vscodeCommand": "VS Code command",
+        "webviewMessage": "Webview message"
+      },
+      "crossed": {
+        "0": "No",
+        "1": "Yes"
+      }
+    },
+    "unsafeReasons": {
+      "tooLong": "too long",
+      "invalid": "invalid",
+      "backreference": "backreference",
+      "nestedQuantifier": "nested quantifier",
+      "quantifiedAlternation": "quantified alternation"
     }
   }
 }

@@ -6,7 +6,7 @@ export { DimensionRow, lineageCounts, type DimensionRowProps } from './Dimension
 export { DeltaFindingItem, type RunDeltaCodeTarget } from './DeltaFindingItem';
 export { VerdictMark, VerdictIcon, VERDICT_TONE } from './VerdictMark';
 export {
-    clauseLabel, dimensionLabel, headlineText, metricLabel, metricValueText, quantizedValue, reasonLabel, ruleLabel, verdictLabel,
+    blockingLabel, clauseLabel, dimensionLabel, headlineText, lineageGroup, metricLabel, noteLabel, paramLabel, paramValueLabel, metricValueText, quantizedValue, reasonLabel, ruleLabel, verdictLabel,
 } from './deltaText';
 export { DEFAULT_RUN_DELTA_LABELS, RUN_DELTA_NAMESPACE, labelKey, runDeltaLabels, type RunDeltaLabels } from './labels';
 export {

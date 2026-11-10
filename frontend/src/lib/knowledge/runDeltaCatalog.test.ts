@@ -12,6 +12,7 @@ import {
   labelKey,
   runDeltaLabels,
 } from '@builderforce/knowledge-graph-view';
+import { ALL_DIMENSIONS, BUILT_IN_RULES, DELTA_CONFIG_RULE, FACT_FINDING_KINDS, HEADLINE_ORDER, TEST_INTEGRITY_RULES } from '@builderforce/run-delta';
 import en from '@/i18n/messages/en.json';
 import zh from '@/i18n/messages/zh.json';
 import es from '@/i18n/messages/es.json';
@@ -36,36 +37,39 @@ function leaves(tree: Tree, prefix = ''): string[] {
 
 const holes = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort();
 
-/**
- * The engine's own registries, read from its SOURCE (`@builderforce/run-delta`): the rule rows'
- * `id`s, the fact-finding kinds, and the `DimensionId` / `Verdict` unions of the contract. Read as
- * text rather than imported, so this catalog test does not execute the engine (and its analyzer
- * imports) to learn a list of names.
- */
+/** The engine's own registries (`@builderforce/run-delta`), imported: every rule row, every dimension, every verdict. */
 const ENGINE = join(__dirname, '../../../../packages/run-delta/src');
 const engineFile = (rel: string) => readFileSync(join(ENGINE, rel), 'utf8');
 const literals = (block: string) => [...block.matchAll(/'([^']+)'/g)].map((m) => m[1]!);
-const unionOf = (name: string) => literals(new RegExp(`export type ${name} =([^;]+);`).exec(engineFile('contract.ts'))![1]!);
 
 function engineRuleIds(): string[] {
-  const rows = readdirSync(join(ENGINE, 'rules'))
-    .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && f !== 'index.ts')
-    .map((f) => engineFile(`rules/${f}`))
-    .filter((src) => !src.includes('MetricRule'))
-    .flatMap((src) => [...src.matchAll(/^ {4}id: '([a-z-]+)'/gm)].map((m) => m[1]!));
-  const kinds = /FACT_FINDING_KINDS[^{]*\{([\s\S]*?)\n\};/.exec(engineFile('rules/factFindings.ts'))![1]!;
-  return [...rows, ...[...kinds.matchAll(/^\s+'?([a-z-]+)'?:/gm)].map((m) => m[1]!)];
+  return [...new Set([...BUILT_IN_RULES.map((r) => r.id), ...TEST_INTEGRITY_RULES, DELTA_CONFIG_RULE, ...Object.keys(FACT_FINDING_KINDS)])];
+}
+
+/** Coded param values (`routeDelta.ts` `via`, the change kinds, route kinds), read from the engine's own unions. */
+function codedParamValues(): Array<[string, string]> {
+  const via = literals(/via: ([^;]+);/.exec(engineFile('rules/support/routeDelta.ts'))![1]!);
+  const kind = literals(/kind: ('http-route'[^;]+);/.exec(engineFile('rules/support/routes.ts'))![1]!);
+  const apiChange = literals(/change: ([^;]+);/.exec(engineFile('rules/support/apiDiff.ts'))![1]!);
+  const configChange = literals(/const change = ([^;]+);/.exec(engineFile('rules/deltaConfigChanged.ts'))![1]!);
+  expect(via).toEqual(expect.arrayContaining(['chain', 'middleware', 'rekeyed', 'unguarded-sibling']));
+  return [...via.map((v) => ['via', v] as [string, string]), ...kind.map((v) => ['kind', v] as [string, string]),
+    ...[...apiChange, ...configChange].map((v) => ['change', v] as [string, string])];
 }
 
 /** Every key the engine's codes resolve to, by label map. */
 function requiredKeys(): string[] {
   const rules = engineRuleIds();
+  expect(rules).toContain('delta-config-changed');
   expect(rules).toEqual(expect.arrayContaining(['guard-removed', 'test-deleted', 'clone-group', 'unused-file', 'rm-rf']));
   expect(rules.length).toBeGreaterThanOrEqual(31);
   return [
     ...rules.map((r) => `rules.${labelKey(r)}`),
-    ...unionOf('DimensionId').map((d) => `dimensions.${labelKey(d)}`),
-    ...unionOf('Verdict').map((v) => `verdicts.${labelKey(v)}`),
+    ...ALL_DIMENSIONS.map((d) => `dimensions.${labelKey(d)}`),
+    ...HEADLINE_ORDER.map((v) => `verdicts.${labelKey(v)}`),
+    // `not-comparable:<ruleId>` / `unsafe-regex:<key>.<reason>` (blocking and override codes).
+    'reasons.notComparableRule', 'reasons.unsafeRegex',
+    ...codedParamValues().map(([k, v]) => `paramValues.${labelKey(k)}.${labelKey(v)}`),
     ...RUN_DELTA_REASON_CODES.map((r) => `reasons.${labelKey(r)}`),
     ...RUN_DELTA_TOOL_REASON_PREFIXES.map((p) => `reasons.${labelKey(p)}`),
     ...RUN_DELTA_CLAUSE_CODES.map((c) => `clauses.${labelKey(c)}`),
@@ -77,7 +81,8 @@ function requiredKeys(): string[] {
 /** Values that are legitimately identical to English in a locale (marks, templates, cognates). */
 const SAME_AS_ENGLISH = new Set([
   'heuristicMark', 'metricValue', 'headline.sentenceNoClauses', 'headline.clause', 'headline.detail', 'headline.listSeparator',
-  'headline.clauseSeparator', 'headline.sentence', 'paramsHeading', 'dimensions.performance', 'severities.info', 'severities.error',
+  'headline.clauseSeparator', 'headline.sentence', 'paramsHeading', 'params.route', 'params.guard', 'params.guards', 'params.test',
+  'params.assertions', 'params.symbol', 'paramValues.via.middleware', 'paramValues.kind.middleware', 'paramValues.crossed.0', 'dimensions.performance', 'severities.info', 'severities.error',
   'reasons.notComparable',
 ]);
 

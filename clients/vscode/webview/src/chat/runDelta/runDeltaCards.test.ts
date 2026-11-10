@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardKey, cardsFromAnswer, codePathOf, mergeCards, placeCards, type RunDeltaCardPayload } from './runDeltaCards';
+import { cardKey, cardsFromAnswer, mergeCards, placeCards, safeRepoPath, type RunDeltaCardPayload } from './runDeltaCards';
 
 const card = (runId: string, repo = '/repo', headline: 'worse' | 'same' = 'same'): RunDeltaCardPayload =>
   ({ chatId: 7, runId, repo, root: repo, delta: { runId, headline, dimensions: [] } }) as unknown as RunDeltaCardPayload;
@@ -25,12 +25,11 @@ describe('run delta cards of a chat', () => {
     expect(placeCards([card('a')], [], () => undefined).size).toBe(0);
   });
 
-  it('opens code at root + path whenever the host names a root, even when the repo identity is a remote URL', () => {
-    const remote = { repo: 'git@github.com:org/repo.git', root: 'C:\\work\\repo\\' };
-    expect(codePathOf(remote, 'api/routes.ts')).toBe('C:\\work\\repo/api/routes.ts');
-    expect(codePathOf({ repo: '/home/me/repo', root: '/home/me/repo' }, 'a.ts')).toBe('/home/me/repo/a.ts');
-    // An older host sent no root: a local repo identity still opens, a remote one cannot.
-    expect(codePathOf({ repo: '/home/me/repo' } as { repo: string; root: string }, 'a.ts')).toBe('/home/me/repo/a.ts');
-    expect(codePathOf({ repo: 'https://x/y.git' } as { repo: string; root: string }, 'a.ts')).toBeUndefined();
+  it('asks the host to open repo-relative paths only, refusing absolute paths and .. segments', () => {
+    expect(safeRepoPath('api/routes.ts')).toBe('api/routes.ts');
+    expect(safeRepoPath('api\\routes.ts')).toBe('api/routes.ts');
+    for (const bad of ['/etc/passwd', 'C:\\Windows\\win.ini', 'c:/x', '\\\\server\\share\\x', '../secret', 'a/../../b', 'a\\..\\b', '']) {
+      expect(safeRepoPath(bad), bad).toBeUndefined();
+    }
   });
 });

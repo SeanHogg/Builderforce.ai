@@ -38835,7 +38835,7 @@
     "metricsHeading": "Métricas",
     "evidenceHeading": "Evidencia",
     "paramsHeading": "Detalles",
-    "excludedHeading": "Archivos fuera de los veredictos",
+    "excludedHeading": "Archivos excluidos",
     "failedHeading": "Comprobaciones que no se ejecutaron",
     "metricValue": "{before} → {after}[[ {unit}]]",
     "notMeasuredValue": "sin medir",
@@ -38915,7 +38915,9 @@
       "repoChanged": "Cambió el repositorio",
       "branchChanged": "Cambió la rama",
       "truncated": "Los resultados se truncaron",
-      "insufficientHistory": "No hay suficientes ejecuciones anteriores para clasificar"
+      "insufficientHistory": "No hay suficientes ejecuciones anteriores para clasificar",
+      "notComparableRule": "No se pudo certificar {rule}",
+      "unsafeRegex": "{key}: patrón inseguro descartado ({reason})"
     },
     "clauses": {
       "findingsResolved": "hallazgos resueltos",
@@ -38953,7 +38955,8 @@
       "godFileGrowth": "Un archivo demasiado grande creció",
       "destructiveDdl": "Cambio destructivo en el esquema",
       "forcePush": "Push forzado en un script",
-      "rmRf": "Borrado recursivo en un script"
+      "rmRf": "Borrado recursivo en un script",
+      "deltaConfigChanged": "Archivo de política de cambios modificado"
     },
     "metrics": {
       "complexityMax": "Complejidad máxima",
@@ -38972,6 +38975,64 @@
       "changedOutsideRun": "Modificado fuera de esta ejecución",
       "submoduleMoved": "Submódulo movido",
       "binary": "Archivo binario"
+    },
+    "unresolvedHeading": "Archivos sin versión anterior",
+    "aggregated": "agregados ({count})",
+    "blockingHeading": "Qué bloquea una ejecución autónoma",
+    "params": {
+      "route": "Ruta",
+      "guard": "Protección",
+      "via": "Detectado por",
+      "file": "Archivo",
+      "from": "Antes era",
+      "replacement": "Sustituido por",
+      "kind": "Tipo",
+      "guards": "Protecciones",
+      "symbol": "Símbolo",
+      "change": "Cambio",
+      "before": "Antes",
+      "after": "Después",
+      "crossed": "Superó el límite de tamaño",
+      "test": "Prueba",
+      "assertions": "Aserciones",
+      "to": "Ahora",
+      "loop": "Bucle",
+      "call": "Llamada",
+      "key": "Coincidencia",
+      "count": "Cantidad",
+      "members": "Miembros"
+    },
+    "paramValues": {
+      "via": {
+        "chain": "Cadena de handlers",
+        "middleware": "Middleware",
+        "rekeyed": "Ruta renombrada",
+        "unguardedSibling": "Sin protección entre rutas hermanas protegidas"
+      },
+      "change": {
+        "added": "Añadido",
+        "edited": "Editado",
+        "deleted": "Eliminado",
+        "removed": "Quitado",
+        "changed": "Modificado"
+      },
+      "kind": {
+        "httpRoute": "Ruta HTTP",
+        "middleware": "Middleware",
+        "vscodeCommand": "Comando de VS Code",
+        "webviewMessage": "Mensaje de webview"
+      },
+      "crossed": {
+        "0": "No",
+        "1": "Sí"
+      }
+    },
+    "unsafeReasons": {
+      "tooLong": "demasiado largo",
+      "invalid": "no válido",
+      "backreference": "referencia inversa",
+      "nestedQuantifier": "cuantificador anidado",
+      "quantifiedAlternation": "alternancia cuantificada"
     }
   }
 }

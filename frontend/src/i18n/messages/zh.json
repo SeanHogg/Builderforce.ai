@@ -38835,7 +38835,7 @@
     "metricsHeading": "指标",
     "evidenceHeading": "证据",
     "paramsHeading": "详情",
-    "excludedHeading": "未计入结论的文件",
+    "excludedHeading": "已排除的文件",
     "failedHeading": "未运行的检查",
     "metricValue": "{before} → {after}[[ {unit}]]",
     "notMeasuredValue": "未测量",
@@ -38915,7 +38915,9 @@
       "repoChanged": "仓库已变化",
       "branchChanged": "分支已变化",
       "truncated": "结果被截断",
-      "insufficientHistory": "历史运行不足，无法排名"
+      "insufficientHistory": "历史运行不足，无法排名",
+      "notComparableRule": "无法认证 {rule}",
+      "unsafeRegex": "{key}：已丢弃不安全的模式（{reason}）"
     },
     "clauses": {
       "findingsResolved": "个发现已解决",
@@ -38953,7 +38955,8 @@
       "godFileGrowth": "过大的文件继续变大",
       "destructiveDdl": "破坏性的数据库结构变更",
       "forcePush": "脚本中的强制推送",
-      "rmRf": "脚本中的递归删除"
+      "rmRf": "脚本中的递归删除",
+      "deltaConfigChanged": "变化策略文件被修改"
     },
     "metrics": {
       "complexityMax": "最高复杂度",
@@ -38972,6 +38975,64 @@
       "changedOutsideRun": "在本次运行之外被修改",
       "submoduleMoved": "子模块已移动",
       "binary": "二进制文件"
+    },
+    "unresolvedHeading": "缺少修改前版本的文件",
+    "aggregated": "已合并（{count}）",
+    "blockingHeading": "阻止自主运行的原因",
+    "params": {
+      "route": "路由",
+      "guard": "守卫",
+      "via": "检测方式",
+      "file": "文件",
+      "from": "原先",
+      "replacement": "替换为",
+      "kind": "类型",
+      "guards": "守卫数",
+      "symbol": "符号",
+      "change": "变更",
+      "before": "之前",
+      "after": "之后",
+      "crossed": "超过大小上限",
+      "test": "测试",
+      "assertions": "断言数",
+      "to": "现在",
+      "loop": "循环",
+      "call": "调用",
+      "key": "匹配项",
+      "count": "数量",
+      "members": "成员"
+    },
+    "paramValues": {
+      "via": {
+        "chain": "处理器链",
+        "middleware": "中间件",
+        "rekeyed": "路由已重命名",
+        "unguardedSibling": "在受保护的同级路由中未受保护"
+      },
+      "change": {
+        "added": "已新增",
+        "edited": "已编辑",
+        "deleted": "已删除",
+        "removed": "已移除",
+        "changed": "已变更"
+      },
+      "kind": {
+        "httpRoute": "HTTP 路由",
+        "middleware": "中间件",
+        "vscodeCommand": "VS Code 命令",
+        "webviewMessage": "Webview 消息"
+      },
+      "crossed": {
+        "0": "否",
+        "1": "是"
+      }
+    },
+    "unsafeReasons": {
+      "tooLong": "过长",
+      "invalid": "无效",
+      "backreference": "反向引用",
+      "nestedQuantifier": "嵌套量词",
+      "quantifiedAlternation": "带量词的分支"
     }
   }
 }

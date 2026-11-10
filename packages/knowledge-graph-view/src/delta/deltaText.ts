@@ -56,13 +56,13 @@ export const blockingLabel = (l: RunDeltaLabels, code: string): string => pick(l
 /** A finding param's name. */
 export const paramLabel = (l: RunDeltaLabels, key: string): string => pick(l.params, key) ?? key;
 
-/** A param value: localized when the param is a coded one (, , , ) and the value is known, else as is. */
+/** A param value: localized when the param is a coded one (`via`, `change`, `kind`, `crossed`) and the value is known, else as is. */
 export function paramValueLabel(l: RunDeltaLabels, key: string, value: string | number): string {
     const values = l.paramValues[labelKey(key)];
     return (values && pick(values, String(value))) ?? String(value);
 }
 
-/** An evidence note: the finding's own rule id (fact findings) or its  code reads localized; any other note is data. */
+/** An evidence note: the finding's own rule id (fact findings) or its `change` code reads localized; any other note is data. */
 export function noteLabel(l: RunDeltaLabels, finding: Pick<DeltaFinding, 'ruleId' | 'params'>, note: string): string {
     if (note === finding.ruleId) return ruleLabel(l, note);
     if (finding.params.change !== undefined && String(finding.params.change) === note) return paramValueLabel(l, 'change', note);

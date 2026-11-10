@@ -13,7 +13,7 @@ import { quietButton } from '../styles';
 import { TYPE } from '../surface/ui/type';
 import { fillTemplate } from '../template';
 import type { FindingEvidence } from '../types';
-import { ruleLabel } from './deltaText';
+import { noteLabel, paramLabel, paramValueLabel, ruleLabel } from './deltaText';
 import type { RunDeltaLabels } from './labels';
 import { reasonTag } from './VerdictMark';
 
@@ -25,9 +25,9 @@ export interface RunDeltaCodeTarget {
 
 const SEVERITY_TONE = { error: cssVar('sev5'), warn: cssVar('sev3'), info: cssVar('muted') } as const;
 
-function evidenceItems(evidence: readonly Evidence[], labels: RunDeltaLabels, canOpen: boolean): FindingEvidence[] {
-    return evidence.map((e) => ({
-        label: [e.side === 'before' ? labels.sideBefore : labels.sideAfter, e.note].filter(Boolean).join(' · '),
+function evidenceItems(finding: DeltaFinding, labels: RunDeltaLabels, canOpen: boolean): FindingEvidence[] {
+    return finding.evidence.map((e: Evidence) => ({
+        label: [e.side === 'before' ? labels.sideBefore : labels.sideAfter, e.note ? noteLabel(labels, finding, e.note) : undefined].filter(Boolean).join(' · '),
         locations: [{ path: e.path, startLine: e.line ?? 0, endLine: e.line ?? 0, openable: canOpen && e.side === 'after' }],
         ...(e.snippet ? { excerpt: e.snippet } : {}),
     }));
@@ -40,7 +40,9 @@ export interface DeltaFindingItemProps {
 }
 
 export function DeltaFindingItem({ finding, labels, onOpenCode }: DeltaFindingItemProps) {
-    const params = Object.entries(finding.params);
+    // `aggregated: 1` is not a detail to read: it marks hits folded into one finding, shown as an ≈ chip with their count.
+    const aggregated = finding.params.aggregated === 1;
+    const params = Object.entries(finding.params).filter(([k]) => k !== 'aggregated' && !(aggregated && k === 'count'));
     const firstAfter = finding.evidence.find((e) => e.side === 'after');
     return (
         <li data-rule={finding.ruleId} style={{ display: 'grid', gap: 6, minWidth: 0, padding: '8px 0', borderTop: `1px solid ${cssVar('border')}` }}>
@@ -50,7 +52,12 @@ export function DeltaFindingItem({ finding, labels, onOpenCode }: DeltaFindingIt
                     {finding.change ? <span style={{ ...TYPE.meta, marginInlineStart: 6 }}>{labels.changes[finding.change]}</span> : null}
                 </span>
                 <span style={{ ...TYPE.status, color: SEVERITY_TONE[finding.severity] }}>{labels.severities[finding.severity]}</span>
-                {finding.confidence === 'heuristic' && (
+                {aggregated && (
+                    <span data-aggregated style={reasonTag} title={labels.heuristicHint}>
+                        {labels.heuristicMark} {fillTemplate(labels.aggregated, { count: finding.params.count })}
+                    </span>
+                )}
+                {finding.confidence === 'heuristic' && !aggregated && (
                     <span style={reasonTag} title={labels.heuristicHint} aria-label={labels.heuristicHint}>{labels.heuristicMark}</span>
                 )}
             </div>
@@ -59,14 +66,14 @@ export function DeltaFindingItem({ finding, labels, onOpenCode }: DeltaFindingIt
                 <dl aria-label={labels.paramsHeading} style={{ margin: 0, display: 'grid', gridTemplateColumns: 'minmax(0, max-content) minmax(0, 1fr)', columnGap: 8, rowGap: 2 }}>
                     {params.map(([k, v]) => (
                         <div key={k} style={{ display: 'contents' }}>
-                            <dt style={{ ...TYPE.monoMeta, overflowWrap: 'anywhere' }}>{k}</dt>
-                            <dd style={{ ...TYPE.monoValue, margin: 0, color: cssVar('text'), overflowWrap: 'anywhere' }}>{String(v)}</dd>
+                            <dt style={{ ...TYPE.meta, overflowWrap: 'anywhere' }}>{paramLabel(labels, k)}</dt>
+                            <dd style={{ ...TYPE.monoValue, margin: 0, color: cssVar('text'), overflowWrap: 'anywhere' }}>{paramValueLabel(labels, k, v)}</dd>
                         </div>
                     ))}
                 </dl>
             )}
             <EvidenceList
-                items={evidenceItems(finding.evidence, labels, !!onOpenCode)}
+                items={evidenceItems(finding, labels, !!onOpenCode)}
                 onOpenSource={onOpenCode ? (l) => onOpenCode({ path: l.path, line: l.startLine > 0 ? l.startLine : undefined }) : undefined}
             />
             {onOpenCode && firstAfter && (

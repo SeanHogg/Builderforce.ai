@@ -10,7 +10,7 @@ import { BrainTimeline, ownMessageOf } from '@seanhogg/builderforce-brain-ui';
 import type { InitData } from '../vscodeBridge';
 import { useViewerId } from './useViewerId';
 import { VsCodeTranslationProvider } from './VsCodeTranslationProvider';
-import { useRunDeltaCards } from './runDelta/useRunDeltaCards';
+import { RunDeltaFootersProvider, renderRunDeltaAfter, useRunDeltaCards } from './runDelta/useRunDeltaCards';
 
 type TimelineProps = ComponentProps<typeof BrainTimeline>;
 
@@ -31,9 +31,10 @@ export function VsCodeChatThread({ init, conv, chatId, labels, modelIdentity, on
   const viewerId = useViewerId();
   const isOwnMessage = useMemo(() => ownMessageOf(viewerId), [viewerId]);
   // The run delta card at the end of each run, and its details panel (PRD 41 §C11).
-  const runDelta = useRunDeltaCards(chatId, conv.messages, labels);
+  const runDelta = useRunDeltaCards(chatId, conv.messages);
   return (
     <VsCodeTranslationProvider init={init}>
+      <RunDeltaFootersProvider value={runDelta.footers}>
       <BrainTimeline
         messages={conv.messages}
         trace={conv.trace}
@@ -57,8 +58,9 @@ export function VsCodeChatThread({ init, conv, chatId, labels, modelIdentity, on
         revealMessage={revealMessage}
         conversationKey={chatId}
         prefetch={prefetch}
-        renderMessage={runDelta.renderMessage}
+        renderAfterMessage={renderRunDeltaAfter}
       />
+      </RunDeltaFootersProvider>
       {runDelta.panel}
     </VsCodeTranslationProvider>
   );

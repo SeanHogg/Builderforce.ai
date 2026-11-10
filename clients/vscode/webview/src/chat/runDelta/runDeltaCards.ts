@@ -17,6 +17,8 @@ export type RunDeltaCardPayload = Omit<Extract<RunHostMessage, { type: 'run-delt
 
 export const RUN_DELTA_CARD = 'run-delta/card';
 export const RUN_DELTA_GET = 'run-delta/get';
+/** Request `{ runId, path, line? }` (path repo-relative): the host opens a path the stored delta names, under its repository root. */
+export const RUN_DELTA_OPEN_FILE = 'run-delta/open';
 
 /** One card's identity: a run can cover more than one repository. */
 export const cardKey = (c: Pick<RunDeltaCardPayload, 'runId' | 'repo'>): string => `${c.runId}\u0000${c.repo}`;
@@ -37,16 +39,14 @@ export function cardsFromAnswer(answer: unknown): RunDeltaCardPayload[] {
         && !!c.delta && typeof c.delta === 'object' && Array.isArray(c.delta.dimensions));
 }
 
-/** A local repository root (POSIX or Windows), as opposed to a remote URL identity. */
-const isLocalRoot = (repo: string): boolean => /^(\/|[A-Za-z]:[\\/])/.test(repo);
-
 /**
- * Where a card's file opens: `root + '/' + path` (the host's absolute repository root), else the repo identity when it is a local
- * path (an older host sent no root); undefined when neither names a local folder.
+ * A card path the webview may ask the host to open: repo-relative only. An absolute path (POSIX, Windows drive or UNC), a
+ * `..` segment or an empty path is refused here; the host resolves the rest under the delta's repository root and confines it.
  */
-export function codePathOf(card: Pick<RunDeltaCardPayload, 'repo' | 'root'>, path: string): string | undefined {
-    const root = typeof card.root === 'string' && card.root ? card.root : isLocalRoot(card.repo) ? card.repo : undefined;
-    return root === undefined ? undefined : `${root.replace(/[\\/]+$/, '')}/${path}`;
+export function safeRepoPath(path: string): string | undefined {
+    const p = path.replace(/\\/g, '/');
+    if (!p || p.startsWith('/') || /^[A-Za-z]:/.test(p) || p.split('/').some((seg) => seg === '..')) return undefined;
+    return p;
 }
 
 const ANCHOR_KEY = 'bf.runDelta.anchors';
