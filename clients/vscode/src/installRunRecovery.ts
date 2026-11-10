@@ -15,7 +15,8 @@
  *     `failed`, `cancelled`) — not because a start promise settled, which it does on
  *     failure too;
  *   - `recordHeld` instead of `completed` when the finalize gate holds the run
- *     (`runDelta/runHoldGate.ts`, PRD 41 §12.5): `awaiting_input` with its hold.
+ *     (`runDelta/runHoldGate.ts`, PRD 41 §12.5): `awaiting_input` with its hold;
+ *     `recordReleased` when a person releases it (`completed`, with a waiver).
  *
  * A run with a recorded terminal status is never rewritten to `interrupted` by the
  * next activation; a run the host died inside still is. A continuation is a new turn
@@ -30,10 +31,12 @@ import {
   recordRunCheckpoint,
   recordRunFinished,
   recordRunHeld,
+  recordRunReleased,
   recordRunStarted,
   safeToResume,
   type InterruptedRun,
   type RunHold,
+  type RunWaiver,
   type RunLifecycleDeps,
   type RunTerminalStatus,
 } from "./runRecovery";
@@ -79,6 +82,8 @@ export interface InstalledRunRecovery {
   recordFinished(args: { runId: string; status: RunTerminalStatus }): Promise<void>;
   /** A completed run the finalize gate held: `awaiting_input` with its hold, never `completed`. */
   recordHeld(args: { runId: string; hold: RunHold }): Promise<void>;
+  /** A person's audited release of a held run: `completed` with its waiver. Rejects `run_delta_release_refused` otherwise. */
+  recordReleased(args: { runId: string; by: string }): Promise<RunWaiver>;
   /** Every run still `interrupted` and unacknowledged: this activation's and earlier ones'. */
   interrupted(): Promise<InterruptedRun[]>;
   /** The person dismissed or resumed an interrupted run; it is never listed or recovered again. */
@@ -165,6 +170,10 @@ function bindHandle(
     async recordHeld(args) {
       const { store, deps } = await afterRecovery();
       await recordRunHeld(store, deps, args);
+    },
+    async recordReleased(args) {
+      const { store, deps } = await afterRecovery();
+      return recordRunReleased(store, deps, args);
     },
     async interrupted() {
       const { store } = await afterRecovery();

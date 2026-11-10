@@ -19,7 +19,7 @@
  * Fail-closed only for COMPUTED blocking codes: a delta that fails, is abandoned or misses the deadline holds nothing.
  */
 
-import type { RunHold, RunTerminalStatus } from "../runRecovery";
+import { RUN_DELTA_HOLD_PREFIX, type RunHold, type RunTerminalStatus } from "../runRecovery";
 
 /** What one run's delta tells the gate. */
 export interface RunHoldPort {
@@ -44,7 +44,7 @@ export interface RunHoldGate {
 }
 
 /** The hold's reason: names the blocking rule ids. */
-export const holdReason = (rules: readonly string[]): string => `run_delta_blocking:${rules.join(",")}`;
+export const holdReason = (rules: readonly string[]): string => `${RUN_DELTA_HOLD_PREFIX}${rules.join(",")}`;
 
 interface Pending {
   rules: Set<string>;

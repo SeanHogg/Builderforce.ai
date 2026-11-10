@@ -30,6 +30,8 @@ export type {
   EntityScope,
   ExecutionStatus,
   ExecutionValue,
+  RunHold,
+  RunWaiver,
   JournalEvent,
   JournalOperation,
   LocalEntityType,

@@ -26,6 +26,8 @@ import {
   type ExecutionValue,
   type LocalFirstStore,
   type LocalRecord,
+  type RunHold,
+  type RunWaiver,
   type TerminalExecutionStatus,
 } from "@builderforce/local-first";
 import { childrenOfRecord } from "./childRunJournal";
@@ -42,8 +44,18 @@ export type InterruptedRun = { runId: string; record: LocalRecord<ExecutionValue
 /** How a run ended, as the host observed it. Stored as-is on the execution row. */
 export type RunTerminalStatus = TerminalExecutionStatus;
 
-/** Why a completed run is held for a person instead of finished (PRD 41 §12.5): the blocking rule ids, and a reason naming them. */
-export type RunHold = NonNullable<ExecutionValue["hold"]>;
+export type { RunHold, RunWaiver };
+
+/** The finalize gate's hold reason prefix (`runDelta/runHoldGate.ts`): the only hold a person may release. */
+export const RUN_DELTA_HOLD_PREFIX = "run_delta_blocking:";
+
+/** Refused: the run is not held at its finalize gate (absent, not `awaiting_input`, or held for another reason). */
+export const RUN_DELTA_RELEASE_REFUSED = "run_delta_release_refused";
+
+/** Is this execution held at its finalize gate, and so releasable? */
+export function isReleasableHold(run: ExecutionValue | undefined): run is ExecutionValue & { hold: RunHold } {
+  return run?.status === "awaiting_input" && !!run.hold && run.hold.reason.startsWith(RUN_DELTA_HOLD_PREFIX);
+}
 
 /** Thrown, before the store is touched, when a start names no run. */
 export const RUN_ID_REQUIRED = "run_id_required";
@@ -188,6 +200,40 @@ export async function recordRunHeld(
 }
 
 /**
+ * A person's audited release of a run held at its finalize gate: `completed`, with its `hold` kept and the `waiver` (who,
+ * when, the hold's rules) beside it. Any other run — absent, not held, held for another reason — rejects with
+ * {@link RUN_DELTA_RELEASE_REFUSED} and nothing is written. Returns the waiver.
+ */
+export async function recordRunReleased(
+  store: LocalFirstStore,
+  deps: RunLifecycleDeps,
+  args: { runId: string; by: string },
+): Promise<RunWaiver> {
+  const at = (deps.now?.() ?? new Date()).toISOString();
+  return store.transact(async (tx) => {
+    const run = await tx.get<ExecutionValue>("execution", args.runId);
+    if (!run || !isReleasableHold(run.payload)) throw new Error(RUN_DELTA_RELEASE_REFUSED);
+    const waiver: RunWaiver = { by: args.by, at, rules: [...run.payload.hold.rules] };
+    await tx.put<ExecutionValue>(
+      { ...run, version: run.version + 1, updatedAt: at, payload: { ...run.payload, status: "completed", waiver } },
+      run.version,
+    );
+    await tx.append({
+      idempotencyKey: `execution:released:${args.runId}`,
+      clientEntityId: args.runId,
+      entityType: "execution",
+      operation: "update",
+      schemaVersion: run.schemaVersion,
+      occurredAt: at,
+      dependsOn: [`execution:held:${args.runId}`],
+      destination: run.destination,
+      payload: { status: "completed", waiver },
+    });
+    return waiver;
+  });
+}
+
+/**
  * Did the dead host leave this run in flight? A run still `running`, `queued` or `awaiting_input` (but not one HELD
  * there: its hold outlives the host) - and a run whose own turn COMPLETED while sub-agents it started were still working
  * (`childRunJournal.ts` keeps them on the record): those children died with the editor, so the parent's work is not over,
@@ -195,7 +241,7 @@ export async function recordRunHeld(
  */
 export function leftInFlight(record: LocalRecord<ExecutionValue>): boolean {
   const { status } = record.payload;
-  if (record.payload.hold) return false;
+  if (status === "awaiting_input" && record.payload.hold) return false;
   if (status === "running" || status === "queued" || status === "awaiting_input") return true;
   return status === "completed" && childrenOfRecord(record).some((child) => child.state === "running");
 }

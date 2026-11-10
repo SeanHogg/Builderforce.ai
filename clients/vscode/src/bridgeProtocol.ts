@@ -130,6 +130,10 @@ export const BRAIN_HOST_MESSAGES = [
    *  error when refused. The HOST resolves the path under that run's repository root, and only for a path its delta names
    *  (`runDelta/openCode.ts`); the webview never sends an absolute path. */
   'run-delta/open',
+  /** Release a run held at its finalize gate (PRD 41 §12.5) — `{ runId }`; answers `true`, or the error
+   *  `run_delta_release_refused` for a run that is not held there. The host writes it `completed` with an audited waiver
+   *  and re-posts its cards `released: true`. Never touches auto-approve. */
+  'run-delta/release',
   'llm.fetch',
   'llm.abort',
   'model.set',

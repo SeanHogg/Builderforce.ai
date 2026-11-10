@@ -265,6 +265,12 @@ export interface BrainRunHost {
    * autonomous run at its finalize gate (§12.5). Absent on a host that records none.
    */
   runDeltas?(query: { runId?: string; chatId?: number }): Promise<Array<{ chatId: number; runId: string; repo: string; root: string; delta: RunDelta; blocked?: { rules: string[] } }>>;
+  /**
+   * A person's audited release of a run held at its finalize gate (`run-delta/release`, PRD 41 §12.5): `completed` with a
+   * waiver, and its cards re-posted `released`. Rejects `run_delta_release_refused` for any run not held there. Absent on a
+   * host without a run journal.
+   */
+  releaseHeldRun?(runId: string): Promise<void>;
   /** A run-delta card's Open code (`run-delta/open`): the confined absolute file, or undefined when refused. */
   openRunDeltaFile?(request: { runId: string; path: string }): Promise<string | undefined>;
   /** Resolves once the durable writes this host queued (its sub-agent journal) have landed or been given up — awaited on deactivate so a child settling during close is not left `running`. */

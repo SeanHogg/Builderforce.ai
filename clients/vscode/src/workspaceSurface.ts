@@ -320,6 +320,16 @@ export class WorkspaceSurface implements vscode.Disposable {
           this.respond(msg.id, false, undefined, error instanceof Error ? error.message : String(error));
         }
         break;
+      // A person's audited release of a run held at its finalize gate (PRD 41 §12.5); any other run is refused.
+      case "run-delta/release":
+        try {
+          if (typeof msg.runId !== "string" || !hooks.runHost?.releaseHeldRun) throw new Error("run_delta_release_refused");
+          await hooks.runHost.releaseHeldRun(msg.runId);
+          this.respond(msg.id, true, true);
+        } catch (error) {
+          this.respond(msg.id, false, undefined, error instanceof Error ? error.message : String(error));
+        }
+        break;
       // A run's (or a chat's) stored deltas — the `run-delta/card` payloads again, for a reopened chat (PRD 41 §C14).
       case "run-delta/get":
         try {

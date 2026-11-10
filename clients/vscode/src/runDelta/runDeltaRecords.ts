@@ -15,7 +15,7 @@
 
 import { createHash } from "node:crypto";
 import * as path from "node:path";
-import { defineRecordIndex, newLocalRecord, scanByIndex, type EntityDestination, type LocalFirstStore } from "@builderforce/local-first";
+import { defineRecordIndex, newLocalRecord, scanByIndex, type EntityDestination, type ExecutionValue, type LocalFirstStore } from "@builderforce/local-first";
 import type { RunDelta } from "@builderforce/run-delta";
 
 /** The synced value. */
@@ -63,6 +63,8 @@ export interface RunDeltaCard {
   delta: RunDelta;
   /** The rules that held the run (the record's `blocked`): the card shows the run as held on them. */
   blocked?: { rules: string[] };
+  /** The held run was released by a person (its execution carries the waiver): the hold no longer stands. */
+  released?: boolean;
 }
 
 /** What a delta is stored with: the synced value and the device's side record. */
@@ -167,6 +169,7 @@ export async function readRunDeltas(store: LocalFirstStore, query: { runId?: str
   if (query.runId === undefined && query.chatId === undefined) return [];
   const values = new Map<string, { at: string; value: RunDeltaRecordValue }>();
   const locals = new Map<string, RunDeltaLocalValue>();
+  const released = new Set<string>();
   await store.read(async (tx) => {
     const visit = (row: { id: string; occurredAt: string; deletedAt?: string; payload: RunDeltaRecordValue | RunDeltaLocalValue }): void => {
       if (row.deletedAt) return;
@@ -177,11 +180,18 @@ export async function readRunDeltas(store: LocalFirstStore, query: { runId?: str
     };
     if (query.runId !== undefined) await scanByIndex(tx, RUN_DELTAS_BY_RUN, query.runId, visit);
     else await scanByIndex(tx, RUN_DELTAS_BY_CHAT, query.chatId!, visit);
+    // §12.5: a held run a person released (its execution carries the waiver) shows its blocking cards as released.
+    for (const { value } of values.values()) {
+      if (!value.blocked || released.has(value.runId)) continue;
+      if ((await tx.get<ExecutionValue>("execution", value.runId))?.payload.waiver) released.add(value.runId);
+    }
   });
   return [...values]
     .flatMap(([id, { at, value }]) => {
       const local = locals.get(id);
-      return local ? [{ at, card: cardOf({ value, local }) }] : [];
+      if (!local) return [];
+      const card = cardOf({ value, local });
+      return [{ at, card: value.blocked && released.has(value.runId) ? { ...card, released: true } : card }];
     })
     .sort((a, b) => a.at.localeCompare(b.at) || a.card.repo.localeCompare(b.card.repo))
     .map((f) => f.card);

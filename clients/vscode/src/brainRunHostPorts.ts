@@ -10,7 +10,7 @@ import * as vscode from "vscode";
 import { getGlobalRunState, getRunSnapshot, isRunning, type BrainPersistenceAdapter, type BrainStreamFn, type LocalChatIdentity, type ModelFallbackEvent, utilityUsageObserver } from "@seanhogg/builderforce-brain-embedded";
 import { getApiKey, postRunOutcome } from "./gateway";
 import { activeEntityScope } from "./chatAccount";
-import { fetchRunContextSection, projectEvermindHooks } from "./bfApi";
+import { fetchRunContextSection, getCurrentUserId, projectEvermindHooks } from "./bfApi";
 import { localBrainApplication } from "./localFirstStore";
 import { hostLog } from "./hostLog";
 import { editorRunSettings } from "./editorRunSettings";
@@ -35,6 +35,7 @@ import { editorShipPorts } from "./verify/editorShipPorts";
 import { gateStarts } from "./hostStartGate";
 import { changeSetIdentityForHostRun, recordChangeSetAroundRun } from "./runChangeSets";
 import { editorRunDelta } from "./runDelta/editorRunDelta";
+import { releaseHeldRun, releaserOf } from "./runDelta/releaseHeldRun";
 import { installRunRecovery } from "./installRunRecovery";
 import { createHostRunLifecycle } from "./hostRunLifecycle";
 import { installLocalDomainTools, type DomainToolRequest } from "./installLocalDomainTools";
@@ -314,6 +315,13 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     acknowledgeInterrupted: interrupted.acknowledge,
     runDeltas: delta.runDeltas,
     openRunDeltaFile: delta.openFile,
+    // §12.5: a person's audited release of a run held at its finalize gate (`runDelta/releaseHeldRun.ts`).
+    releaseHeldRun: async (runId) => {
+      await releaseHeldRun({
+        recovery, store: local.store, by: () => releaserOf(() => getCurrentUserId(secrets)),
+        repost: delta.repost, log: (what, error) => hostLog(`[run delta] ${what}: ${String(error)}`),
+      }, runId);
+    },
     ...gateStarts(host, async (payload, start) => {
       const { runId, author } = changeSetIdentityForHostRun(payload, () => crypto.randomUUID());
       // §12.5: an audit, or a turn started with Auto on (no human approves its writes), is autonomous; only a human-driven

@@ -12,6 +12,7 @@ import type { LocalFirstStore } from "@builderforce/local-first";
 import type * as vscode from "vscode";
 import type { RunHostMessage, RunSink } from "../brainRunHostProtocol";
 import { hostLog } from "../hostLog";
+import { recordLocalAuditGate } from "../localAuditStore";
 import type { BaselineCaptureOptions } from "../runChangeBaseline";
 import type { FinalizedRunChangeSets } from "../runChangeSets";
 import { RUN_DELTA_BUDGET_MS, startRunDelta } from "./finalizeRunDelta";
@@ -40,6 +41,8 @@ export interface EditorRunDelta {
   runDeltas(query: { runId?: string; chatId?: number }): Promise<RunDeltaCard[]>;
   /** A card's Open code: the confined absolute file (`openCode.ts`), or undefined when refused. */
   openFile(request: OpenCodeRequest): Promise<string | undefined>;
+  /** Posts a run's stored cards again (after its release, §12.5: they read back `released`). */
+  repost(runId: string): Promise<void>;
 }
 
 const log = (what: string, error: unknown): void =>
@@ -66,7 +69,17 @@ export function editorRunDelta(args: {
     onTimeout: (runId, ms) => log(`run ${runId}`, new Error(`run_hold_gate: no settled delta within ${ms} ms; the run is not held`)),
   });
   return {
-    hold: gate,
+    hold: {
+      expect: gate.expect,
+      beforeTerminal: gate.beforeTerminal,
+      // An audit's run carries its hold on its audit-run record too, written before the start resolves (so the audit flow
+      // reads it). Not an audit: nothing is written.
+      async verdict(runId) {
+        const hold = await gate.verdict(runId);
+        if (hold) await recordLocalAuditGate(args.store, {}, { runId, hold }).catch((error: unknown) => log(`audit hold ${runId}`, error));
+        return hold;
+      },
+    },
     async capture(runId) {
       // `release` is the change set's exit that never reaches `onFinalized`: no delta will come, so the gate decides now.
       try {
@@ -110,5 +123,8 @@ export function editorRunDelta(args: {
     },
     runDeltas: (query) => readRunDeltas(args.store, query),
     openFile: (request) => runDeltaFile(args.store, request),
+    async repost(runId) {
+      for (const card of await readRunDeltas(args.store, { runId })) post(card);
+    },
   };
 }

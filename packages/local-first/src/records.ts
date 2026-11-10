@@ -396,11 +396,29 @@ export interface ExecutionValue {
   status: ExecutionStatus;
   checkpoint?: { step: number; safeToResume: boolean; state?: unknown };
   /**
-   * Why a run whose own turn completed is held for a person (status `awaiting_input`) instead of being finished: an
-   * autonomous run whose run delta computed blocking codes (PRD 41 §12.5). `rules` are those blocking rule ids, and
-   * `reason` names them. A held run is not in flight: restart recovery leaves it as it is.
+   * Why a run whose own turn completed is held for a person (status `awaiting_input`) instead of being finished. A held
+   * run is not in flight: restart recovery leaves it as it is. Kept after a release, next to its `waiver`.
    */
-  hold?: { reason: string; rules: string[] };
+  hold?: RunHold;
+  /** The audited release of a held run: it is then `completed`, and this says who released it, when, and over which rules. */
+  waiver?: RunWaiver;
+}
+
+/**
+ * A run held at its finalize gate: an autonomous run whose run delta computed blocking codes (PRD 41 §12.5). `rules` are
+ * those blocking rule ids; `reason` names them (`run_delta_blocking:<ids>`). Carried by the run's execution record and,
+ * for an audit, by its audit-run record.
+ */
+export interface RunHold {
+  reason: string;
+  rules: string[];
+}
+
+/** A person's audited release of a {@link RunHold}: who (a signed-in user id, else `local`), when (ISO), over which rules. */
+export interface RunWaiver {
+  by: string;
+  at: string;
+  rules: string[];
 }
 
 export interface ChangeSetValue {

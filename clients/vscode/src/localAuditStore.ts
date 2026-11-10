@@ -27,6 +27,8 @@ import {
   type EntityDestination,
   type LocalFirstStore,
   type LocalRecord,
+  type RunHold,
+  type RunWaiver,
 } from "@builderforce/local-first";
 import {
   buildLocalAuditBriefing,
@@ -82,6 +84,13 @@ export interface LocalAuditRunValue {
   checkpoint?: { safeToResume: boolean; note?: string };
   /** Close recorded a local completion. A later activation must not launch cloud work for it. */
   closedLocally?: boolean;
+  /**
+   * PRD 41 §12.5: the audit's run was held at its finalize gate (its run delta computed blocking codes). `status` stays
+   * `completed` — its findings ARE filed — but a held audit is not complete: `hold` present means held.
+   */
+  hold?: RunHold;
+  /** The audited release of that hold (who, when, which rules), as on the run's execution record. */
+  waiver?: RunWaiver;
 }
 
 export interface LocalRemediationValue {
@@ -517,6 +526,29 @@ export async function recoverInterruptedAuditRuns(store: LocalFirstStore, deps: 
       .filter((record) => record.payload.status === "interrupted")
       .map((record) => ({ runId: record.id, record })),
   );
+}
+
+/**
+ * Records the finalize gate's outcome on an audit's run (PRD 41 §12.5): its `hold`, or a person's `waiver` of it. The
+ * status is never moved. A run that is not stored here (not an audit) is left alone; returns whether one was written.
+ */
+export async function recordLocalAuditGate(
+  store: LocalFirstStore,
+  deps: Pick<StoreDeps, "now">,
+  args: { runId: string } & ({ hold: RunHold } | { waiver: RunWaiver }),
+): Promise<boolean> {
+  const run = await store.read((tx) => tx.get<LocalAuditRunValue>("audit-run", args.runId));
+  if (!run) return false;
+  const at = (deps.now?.() ?? new Date()).toISOString();
+  const kind = "hold" in args ? "held" : "released";
+  const change = "hold" in args ? { hold: args.hold } : { waiver: args.waiver };
+  await persistRun(
+    store,
+    { ...run, version: run.version + 1, updatedAt: at, payload: { ...run.payload, ...change } },
+    "update",
+    `audit-run:${kind}:${args.runId}`,
+  );
+  return true;
 }
 
 /** One local audit session, for completion checks and result rendering. */
