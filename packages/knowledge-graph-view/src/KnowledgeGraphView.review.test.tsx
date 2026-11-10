@@ -130,7 +130,6 @@ describe('review run', () => {
   it('offers Continue when sections were left unjudged, and Continue reviews the same root again', async () => {
     const { source, run } = scripted({ unjudged: 3 });
     await startReview(source);
-    fireEvent.click(await screen.findByTestId('kg-footer-action'));
     await screen.findByText('Judging · 2 of 5');
     run.finish();
     expect(await screen.findByText('3 sections were left for later by the budget.')).toBeTruthy();
@@ -162,7 +161,6 @@ describe('Live after a review', () => {
     await waitFor(() => expect(subscribeLive).toHaveBeenCalledTimes(1));
     expect(subscribeLive.mock.calls[0]![0]).toBe('docs');
 
-    fireEvent.click(await screen.findByTestId('kg-footer-action'));
     await screen.findByText('Judging · 2 of 5');
     run.finish();
     await screen.findByText(L.reviewDoneTitle);

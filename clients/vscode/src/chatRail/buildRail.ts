@@ -14,7 +14,7 @@
  *   it from its kind and ref in the reader's language.
  */
 
-import { parseSyncId, syncIdText, type ChatTicketLinkValue, type LocalRecord, type SyncId } from "@builderforce/local-first";
+import { compareMappingAge, inEntityScope, parseSyncId, syncIdText, type ChatTicketLinkValue, type EntityScope, type LocalRecord, type ServerMapping, type SyncId } from "@builderforce/local-first";
 import type { LocalFirstView } from "../localFirstView";
 import { presentRecordSyncStatus } from "../syncStatusPresenter";
 import { railTicketProgress, type RailRunPayload, type RailTicketPayload } from "./railPayloads";
@@ -41,13 +41,18 @@ const RUNNABLE = new Set(["task", "epic", "gap"]);
 const EMPTY_HISTORY: RailRunHistory = { linkedRunnableTickets: 0, runs: [], dispatchers: [], executors: [] };
 
 /** The client id of the chat `ref` names, or undefined when the store holds no such chat. */
-export function chatClientIdOf(facts: Pick<RailFacts, "records" | "mappings">, ref: ChatRef): string | undefined {
+export function chatClientIdOf(facts: Pick<RailFacts, "records" | "mappings">, ref: ChatRef, scope?: EntityScope): string | undefined {
   if (typeof ref === "string") {
     return facts.records.some((row) => row.entityType === "chat" && row.id === ref && !row.deletedAt) ? ref : undefined;
   }
   const sync = parseSyncId(ref);
   if (sync === null) return undefined;
-  const mapping = facts.mappings.find((row) => row.entityType === "chat" && parseSyncId(row.syncId) === sync);
+  // The same answer the store's `mappingByServerId` gives: the earliest mapping, in the active account.
+  let mapping: ServerMapping | undefined;
+  for (const row of facts.mappings) {
+    if (row.entityType !== "chat" || parseSyncId(row.syncId) !== sync || !inEntityScope(row.destination, scope)) continue;
+    if (!mapping || compareMappingAge(row, mapping) < 0) mapping = row;
+  }
   if (!mapping) return undefined;
   const live = facts.records.some((row) => row.entityType === "chat" && row.id === mapping.clientEntityId && !row.deletedAt);
   return live ? mapping.clientEntityId : undefined;
@@ -56,8 +61,8 @@ export function chatClientIdOf(facts: Pick<RailFacts, "records" | "mappings">, r
 const newest = (values: ReadonlyArray<string | undefined>): string | undefined =>
   values.reduce<string | undefined>((best, at) => (at !== undefined && (best === undefined || at > best) ? at : best), undefined);
 
-export function readRailFromFacts(facts: RailFacts, ref: ChatRef, lastRefreshAt?: string): RailRead {
-  const chatClientId = chatClientIdOf(facts, ref);
+export function readRailFromFacts(facts: RailFacts, ref: ChatRef, lastRefreshAt?: string, scope?: EntityScope): RailRead {
+  const chatClientId = chatClientIdOf(facts, ref, scope);
   if (!chatClientId) {
     return { found: false, tickets: [], links: [], runHistory: EMPTY_HISTORY, freshness: { source: "device" }, runClientIds: [] };
   }

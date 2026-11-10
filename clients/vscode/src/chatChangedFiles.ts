@@ -22,7 +22,7 @@
  * a local read always settles. Pure read — no fetch, no mutation, no journal append.
  */
 
-import { isIntegerIdText, type LocalFirstStore, type LocalFirstTransaction } from "@builderforce/local-first";
+import { isIntegerIdText, type EntityScope, type LocalFirstStore, type LocalFirstTransaction } from "@builderforce/local-first";
 import type { ChatRef } from "./chatRail/railProtocol";
 import { resolveChat } from "./chatRail/resolveChat";
 import type { LocalChangeSetValue } from "./runChangeSets";
@@ -50,8 +50,8 @@ function localChatNumberOf(record: { id: string; payload?: unknown } | undefined
 }
 
 /** Resolve a ref to its local numeric chat id (what a host-run change-set id embeds). */
-async function resolveLocalChatNumber(tx: LocalFirstTransaction, ref: ChatRef): Promise<number | undefined> {
-  const chat = await resolveChat(tx, ref);
+async function resolveLocalChatNumber(tx: LocalFirstTransaction, ref: ChatRef, scope: EntityScope | undefined): Promise<number | undefined> {
+  const chat = await resolveChat(tx, ref, scope);
   if (!chat) return undefined;
   const record = await tx.get("chat", chat.clientId);
   return localChatNumberOf(record) ?? viewKeyOf(chat.clientId);
@@ -64,10 +64,12 @@ async function resolveLocalChatNumber(tx: LocalFirstTransaction, ref: ChatRef): 
 export async function readLocalChatChangedFiles(
   store: LocalFirstStore,
   ref: ChatRef,
+  /** The active account: a server chat id names that tenant's chat only. */
+  scope?: EntityScope,
 ): Promise<ChatChangedFilesResult> {
   let rootChatId: number | undefined;
   await store.read(async (tx) => {
-    rootChatId = await resolveLocalChatNumber(tx, ref);
+    rootChatId = await resolveLocalChatNumber(tx, ref, scope);
   });
   if (rootChatId === undefined) return { found: false };
 

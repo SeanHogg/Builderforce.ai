@@ -9,6 +9,7 @@
 
 import type * as vscode from "vscode";
 import { authed } from "../bfApi";
+import { activeEntityScope } from "../chatAccount";
 import { localBrainApplication } from "../localFirstStore";
 import { platformCapabilityAllows } from "../platformPolicy";
 import { hostSyncSummaryPorts } from "../sync/hostSyncSummary";
@@ -29,6 +30,7 @@ export function chatRailServiceFor(ctx: vscode.ExtensionContext): ChatRailServic
     deviceId: app.deviceId,
     facts: () => app.durableStore.view(),
     summary: () => readSyncSummary(summaryPorts),
+    scope: activeEntityScope,
     platform: {
       platformAllowed: () => platformCapabilityAllows("connected-feature"),
       get: <T>(path: string) => authed<T>(ctx.secrets, path),

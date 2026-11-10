@@ -11,7 +11,7 @@
  * client id names it, no server chat is needed.
  */
 
-import { ingestServerRecords, linkChatTicket, unlinkChatTicket, type LocalFirstStore } from "@builderforce/local-first";
+import { ingestServerRecords, linkChatTicket, unlinkChatTicket, type EntityScope, type LocalFirstStore } from "@builderforce/local-first";
 import { linkTierFields, ticketMappingOf } from "./railPayloads";
 import type { ChatRailMutationOutcome, ChatRef, RailLinkType, RailTicketRef } from "./railProtocol";
 import { ticketRows } from "./railRows";
@@ -20,6 +20,8 @@ import { resolveChat, type ResolvedChat } from "./resolveChat";
 export interface RailLinkPorts {
   deviceId: string;
   now?: () => Date;
+  /** The active account (`activeEntityScope`), read per call: server ids are only unique per tenant. */
+  scope?: () => EntityScope | undefined;
 }
 
 function failure(error: unknown): ChatRailMutationOutcome {
@@ -28,17 +30,17 @@ function failure(error: unknown): ChatRailMutationOutcome {
 }
 
 /** The local ticket a `(kind, ref)` names, or undefined when the device has none. */
-async function knownTicket(store: LocalFirstStore, ticket: RailTicketRef): Promise<string | undefined> {
+async function knownTicket(store: LocalFirstStore, ticket: RailTicketRef, scope: EntityScope | undefined): Promise<string | undefined> {
   return store.read(async (tx) => {
-    const mapped = await ticketMappingOf(tx, ticket.kind, ticket.ref);
+    const mapped = await ticketMappingOf(tx, ticket.kind, ticket.ref, scope);
     if (mapped) return mapped.clientEntityId;
     const local = await tx.get("ticket", ticket.ref);
     return local && !local.deletedAt ? local.id : undefined;
   });
 }
 
-async function ticketForLink(store: LocalFirstStore, chat: ResolvedChat, ticket: RailTicketRef, at: string): Promise<string | undefined> {
-  const known = await knownTicket(store, ticket);
+async function ticketForLink(store: LocalFirstStore, chat: ResolvedChat, ticket: RailTicketRef, at: string, scope: EntityScope | undefined): Promise<string | undefined> {
+  const known = await knownTicket(store, ticket, scope);
   if (known) return known;
   const stub = await ingestServerRecords(store, ticketRows([{ kind: ticket.kind, ref: ticket.ref }], chat.destination, at));
   return stub.clientIds[0];
@@ -52,10 +54,11 @@ export async function linkRailTicket(
   linkType: RailLinkType,
 ): Promise<ChatRailMutationOutcome> {
   try {
-    const chat = await store.read((tx) => resolveChat(tx, ref));
+    const scope = ports.scope?.();
+    const chat = await store.read((tx) => resolveChat(tx, ref, scope));
     if (!chat) return { ok: false, error: "chat_not_found" };
     const at = (ports.now ?? (() => new Date()))().toISOString();
-    const ticketClientId = await ticketForLink(store, chat, ticket, at);
+    const ticketClientId = await ticketForLink(store, chat, ticket, at, scope);
     if (!ticketClientId) return { ok: false, error: "ticket_not_found" };
     await linkChatTicket(store, {
       chatClientId: chat.clientId,
@@ -79,9 +82,10 @@ export async function unlinkRailTicket(
   ticket: RailTicketRef,
 ): Promise<ChatRailMutationOutcome> {
   try {
-    const chat = await store.read((tx) => resolveChat(tx, ref));
+    const scope = ports.scope?.();
+    const chat = await store.read((tx) => resolveChat(tx, ref, scope));
     if (!chat) return { ok: false, error: "chat_not_found" };
-    const ticketClientId = await knownTicket(store, ticket);
+    const ticketClientId = await knownTicket(store, ticket, scope);
     if (!ticketClientId) return { ok: false, error: "ticket_not_found" };
     const removed = await unlinkChatTicket(store, {
       chatClientId: chat.clientId,

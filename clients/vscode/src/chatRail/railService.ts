@@ -10,7 +10,7 @@
  * `read` NEVER touches the platform. `refresh` does, when allowed, then answers with the local copy.
  */
 
-import type { LocalFirstStore } from "@builderforce/local-first";
+import type { EntityScope, LocalFirstStore } from "@builderforce/local-first";
 import { readLocalChatChangedFiles } from "../chatChangedFiles";
 import { chatClientIdOf, readRailFromFacts, type RailFacts } from "./buildRail";
 import { linkRailTicket, unlinkRailTicket } from "./railLinks";
@@ -29,6 +29,8 @@ export interface ChatRailDeps {
   /** The device's sync summary (shown in the rail header). */
   summary(): Promise<SyncSummary>;
   platform: RailRefreshPorts;
+  /** The active account (`activeEntityScope`), read per call: a server chat/ticket id is per tenant. */
+  scope?: () => EntityScope | undefined;
 }
 
 export interface ChatRailService {
@@ -44,15 +46,16 @@ export function createChatRailService(deps: ChatRailDeps): ChatRailService {
   /** The snapshot the webview gets, and the ids it drew (the watch's scope). */
   async function readScoped(ref: ChatRef): Promise<{ rail: RailSnapshot; scope: RailScope }> {
     const [facts, summary] = await Promise.all([deps.facts(), deps.summary()]);
-    const clientId = chatClientIdOf(facts, ref);
+    const entityScope = deps.scope?.();
+    const clientId = chatClientIdOf(facts, ref, entityScope);
     // When the rail was last taken from the platform: the store's read mark, which a refresh that
     // changed no row still moves, and which survives a reload.
     const refreshedAt = clientId ? await deps.store.read((tx) => tx.readMark(railReadMark(clientId))) : undefined;
-    const rail = readRailFromFacts(facts, ref, refreshedAt);
+    const rail = readRailFromFacts(facts, ref, refreshedAt, entityScope);
     // The pill's offline scope: the files this chat's own runs recorded changing, from
     // local change-set records only (no platform). Absent when the store holds no such
     // chat; the webview falls back to the server / keep-all then.
-    const changed = await readLocalChatChangedFiles(deps.store, ref);
+    const changed = await readLocalChatChangedFiles(deps.store, ref, entityScope);
     return {
       rail: {
         chatId: ref,
@@ -74,7 +77,7 @@ export function createChatRailService(deps: ChatRailDeps): ChatRailService {
   return {
     read,
     async refresh(ref) {
-      const outcome = await refreshRail(deps.store, deps.platform, ref);
+      const outcome = await refreshRail(deps.store, deps.platform, ref, deps.scope?.());
       return { outcome, rail: await read(ref) };
     },
     link: (ref, ticket, linkType) => linkRailTicket(deps.store, deps, ref, ticket, linkType),

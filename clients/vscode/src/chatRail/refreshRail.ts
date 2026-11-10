@@ -14,7 +14,7 @@
  * - Offline or local-only the platform is not touched at all (`skipped`).
  */
 
-import { ingestServerRecords, type LocalFirstStore } from "@builderforce/local-first";
+import { ingestServerRecords, type EntityScope, type LocalFirstStore } from "@builderforce/local-first";
 import { readChatRunHistory, readChatTicketLinks, type BrainPersistenceAdapter, type ChatStateGet } from "@seanhogg/builderforce-brain-embedded";
 import { linkRows, listedTickets, runRows, ticketRows, type WireRun, type WireTicket } from "./railRows";
 import type { ChatRailRefreshOutcome, ChatRef } from "./railProtocol";
@@ -91,8 +91,10 @@ export async function refreshRail(
   store: LocalFirstStore,
   ports: RailRefreshPorts,
   ref: ChatRef,
+  /** The active account: a server chat id names that tenant's chat only. */
+  scope?: EntityScope,
 ): Promise<ChatRailRefreshOutcome> {
-  const chat = await store.read((tx) => resolveChat(tx, ref));
+  const chat = await store.read((tx) => resolveChat(tx, ref, scope));
   if (!chat) return { status: "error", message: "chat_not_found" };
   if (!ports.platformAllowed() || chat.serverId === undefined) return { status: "skipped" };
 

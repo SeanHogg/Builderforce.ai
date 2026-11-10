@@ -11,7 +11,7 @@
  * never disagree about what names a ticket.
  */
 
-import { TASK_TABLE_KINDS, tierRefText, type LocalFirstTransaction, type ServerMapping, type TicketValue } from "@builderforce/local-first";
+import { TASK_TABLE_KINDS, tierRefText, type EntityScope, type LocalFirstTransaction, type ServerMapping, type TicketValue } from "@builderforce/local-first";
 import type { RailRun, RailTicketParent } from "./railProtocol";
 
 /**
@@ -23,11 +23,14 @@ export function ticketServerId(kind: string, ref: string): string {
   return TASK_TABLE_KINDS.has(kind) ? ref : tierRefText({ kind, ref });
 }
 
-/** The mapping of the ticket `(kind, ref)` names: a task-table kind by its server id, any other tier by its `externalRef`. */
-export function ticketMappingOf(tx: LocalFirstTransaction, kind: string, ref: string): Promise<ServerMapping | undefined> {
+/**
+ * The mapping of the ticket `(kind, ref)` names: a task-table kind by its server id, any other tier
+ * by its `externalRef` — inside `scope` (the active account: server ids are per tenant).
+ */
+export function ticketMappingOf(tx: LocalFirstTransaction, kind: string, ref: string, scope?: EntityScope): Promise<ServerMapping | undefined> {
   return TASK_TABLE_KINDS.has(kind)
-    ? tx.mappingByServerId("ticket", ref)
-    : tx.mappingByExternalRef("ticket", tierRefText({ kind, ref }));
+    ? tx.mappingByServerId("ticket", ref, scope)
+    : tx.mappingByExternalRef("ticket", tierRefText({ kind, ref }), scope);
 }
 
 /** A ticket the platform listed for a chat: a `TicketValue` plus what the rail draws. */
