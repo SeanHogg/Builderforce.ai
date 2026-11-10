@@ -293,7 +293,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     const surface = p.modelSurface ?? null;
     // Stage models, pipeline routing and the USD cap (`editorRunSettings.ts`); a sub-agent
     // takes only the cap — its model is `modelForChildRun`'s and it is never routed.
-    const runSettings = runRequestFields(await ports.runSettings?.(), { child: !!p.child });
+    const settings = await ports.runSettings?.();
+    const runSettings = runRequestFields(settings, { child: !!p.child });
     try {
       // Stopped during the setup above: the loop never starts (`settled` drops what waits).
       if (steering.stopped(key)) return void (await stopBeforeStart(key, chatId, ports.persistence));
@@ -323,6 +324,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
         ...(p.reasoning ? { reasoning: p.reasoning } : {}),
         runTool,
         needsConfirm,
+        // PRD 45 ship-gate ports: post-edit diagnostics, the outgoing gate, the reviewer (PRD 46 §3.6).
+        ...(ports.shipPorts && root ? ports.shipPorts({ root, stream, ...(settings ? { settings } : {}) }) : {}),
         // An owner never ends while sub-agents it started are still working (`liveChildrenFinish.ts`): a late report
         // would otherwise wake it into a new run with no ask of its own. Stop-requested children do not hold it, and hung
         // ones are stopped after `MAX_STALLED_HOLDS` holds without progress, so the hold always has an exit.

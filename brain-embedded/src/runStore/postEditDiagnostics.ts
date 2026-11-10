@@ -50,14 +50,12 @@ export async function postEditDiagnostics(
   verifier: VerifierPort | undefined,
 ): Promise<string | null> {
   if (!verifier || !EDIT_TOOLS.has(call.name) || !succeeded(call.result)) return null;
-  const path = typeof (call.args as { path?: unknown }).path === 'string'
-    ? (call.args as { path: string }).path.trim()
-    : '';
-  if (!path) return null;
+  const paths = editedPaths(call.args);
+  if (!paths.length) return null;
 
   let record: CheckRecord | null;
   try {
-    record = await verifier.diagnostics([path]);
+    record = await verifier.diagnostics(paths);
   } catch {
     // A broken or slow verifier is an availability fact, not an edit failure — the
     // §4.3 gate reports it at push time. The edit's result must not be disturbed.
@@ -65,6 +63,13 @@ export async function postEditDiagnostics(
   }
   if (!record || record.outcome !== 'fail') return null;
   return postEditNote(record);
+}
+
+/** The files ONE edit call wrote: its `path`, and each entry of an `edit_file` batch's `edits[]`. */
+function editedPaths(args: unknown): string[] {
+  const a = (args ?? {}) as { path?: unknown; edits?: unknown };
+  const raw = [a.path, ...(Array.isArray(a.edits) ? a.edits.map((e) => (e as { path?: unknown } | null)?.path) : [])];
+  return [...new Set(raw.filter((p): p is string => typeof p === 'string' && !!p.trim()).map((p) => p.trim()))];
 }
 
 /** The D7 note a failed diagnostics check adds to the tool result. */

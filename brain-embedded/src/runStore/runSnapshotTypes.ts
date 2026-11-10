@@ -24,7 +24,8 @@ export interface BrainRunSnapshot {
    * Null when nothing but dismissing applies.
    */
   errorAction: ChatErrorAction | null;
-  pendingConfirm: { name: string; args: unknown } | null;
+  /** `evidence`: the ship gate's verdict line for a gated publish (PRD 45 §4.5) — "checks passed · reviewed by <model>". */
+  pendingConfirm: { name: string; args: unknown; evidence?: string } | null;
   /** Bumped whenever a new assistant message is persisted. */
   messagesEpoch: number;
   /**

@@ -33,9 +33,9 @@ function runFor(phase: string, systemPrompt = SYSTEM_PROMPT): BrainRunContext {
 const requiredFor = (run: BrainRunContext): string[] => [...brainPlatformTools(run).tools.selection.required];
 
 describe("the Brain's required set per turn role", () => {
-  it('a code turn requires what the prompt names and ask_user, never the unnamed vocabulary', () => {
+  it('a code turn requires ask_user, never the unnamed vocabulary nor the board tools only the system prompt names', () => {
     const required = requiredFor(runFor('code'));
-    expect(required).toEqual(['builtin_reviews_record', 'builtin_tasks_update', 'builtin_chats_link_ticket', 'ask_user']);
+    expect(required).toEqual(['ask_user']);
     for (const vocab of ['git_undo', 'git_sync_latest', 'run_command', 'recall_facts', 'builtin_skills_read']) expect(required).not.toContain(vocab);
   });
 

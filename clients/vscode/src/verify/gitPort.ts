@@ -46,10 +46,14 @@ async function outgoingPaths(runner: GitRunner, cwd: string): Promise<readonly s
   return [...paths];
 }
 
-/** Is this path tracked at HEAD (a new file is one `git log` does not know)? */
-async function isNew(runner: GitRunner, cwd: string, rel: string): Promise<boolean> {
-  const out = await gitExec(runner, cwd, ["log", "@{u}..HEAD", "--format=%H", "--", rel]);
-  return out.trim() === "";
+/**
+ * Is this path NEW in the push — absent from the tree it lands on (the merge-base, else the
+ * upstream)? `git log @{u}..HEAD -- rel` cannot answer it: every outgoing path is in an
+ * outgoing commit, so that read called every file "not new" and `newSourceNeedsTest` never fired.
+ */
+async function isNew(runner: GitRunner, cwd: string, rel: string, base: string | null): Promise<boolean> {
+  const r = await runner(["cat-file", "-e", `${base ?? "@{u}"}:${rel}`], { cwd });
+  return r.exitCode !== 0;
 }
 
 /** The current bytes' sha-256, keyed to the HEAD tree's bytes for the path. */
@@ -66,7 +70,7 @@ async function fileHash(runner: GitRunner, cwd: string, rel: string, readFile: (
  */
 export function createGitPort(runner: GitRunner, readFile: (abs: string) => Promise<string | null>) {
   return {
-    async outgoing(repo: string): Promise<{ files: OutgoingFile[]; diffHash: string; baseBranch: boolean }> {
+    async outgoing(repo: string): Promise<{ files: OutgoingFile[]; diffHash: string; baseBranch: boolean; diff: string }> {
       const upstream = (await gitExec(runner, repo, ["rev-parse", "--abbrev-ref", "@{u}"])).trim();
       const current = (await gitExec(runner, repo, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
       const baseBranch = upstream !== "" && current === upstream.split("/").pop();
@@ -83,11 +87,12 @@ export function createGitPort(runner: GitRunner, readFile: (abs: string) => Prom
         files.push({
           absPath: `${repo}/${rel}`.replace(/\\/g, "/"),
           hash: hash ?? "",
-          isNew: await isNew(runner, repo, rel),
+          isNew: await isNew(runner, repo, rel, base),
           deleted: hash === null,
         });
       }
-      return { files, diffHash, baseBranch };
+      // `diff` is the exact text `diffHash` hashes: the reviewer reads it and hashes it the same way.
+      return { files, diffHash, baseBranch, diff: diffText };
     },
   };
 }

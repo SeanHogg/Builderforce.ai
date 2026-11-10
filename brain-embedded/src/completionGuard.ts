@@ -15,6 +15,7 @@
  * no I/O — it never reads the disk, so it can only under-report, never invent.
  */
 
+import type { GateVerdict } from '@builderforce/run-guards';
 import { markedLines, type PlaceholderHit } from './placeholderGuard';
 
 /** A tool call that marks a ticket finished. */
@@ -43,8 +44,17 @@ export function isTicketCompletion(tool: string, args: unknown): boolean {
 export function canCompleteTicket(
   isOnBaseBranch: boolean,
   userDeclinedShipping: boolean,
-  opts?: { wroteCodeThisRun?: boolean; ticketGitBranch?: string | null },
+  opts?: {
+    wroteCodeThisRun?: boolean;
+    ticketGitBranch?: string | null;
+    /** PRD 45 §4.3: the outgoing gate's verdict on the run's unpushed changes — present only
+     *  when the host bound a git port (`shipGates.outgoingEvidenceVerdict`). Absent ⇒ unchanged. */
+    outgoing?: GateVerdict;
+  },
 ): boolean {
+  // Never while the host's git port shows outgoing changes that fail the outgoing gate
+  // (a failing check, a new source file without its test) — wherever the code sits.
+  if (opts?.outgoing && !opts.outgoing.ok) return false;
   // Always allow if code is on base branch (main/master)
   if (isOnBaseBranch) return true;
   // Allow if user explicitly declined shipping (asked to leave uncommitted)
@@ -67,6 +77,15 @@ export function canCompleteTicket(
  */
 export function notOnBaseBranchAdvisory(): string {
   return 'CANNOT MARK DONE — code is not on the base branch (main/master). Either ship to main/master first, or if you intentionally left the code uncommitted, say so explicitly in your reply so this guard knows to allow it.';
+}
+
+/** What the model reads when {@link canCompleteTicket} refused: the outgoing gate's own
+ *  reason when that is what failed, else the base-branch advisory. */
+export function completionBlockedAdvisory(outgoing?: GateVerdict): string {
+  if (outgoing && !outgoing.ok) {
+    return `CANNOT MARK DONE — this run's outgoing changes fail the ship gate: ${outgoing.reason} Mark the ticket done once they pass.`;
+  }
+  return notOnBaseBranchAdvisory();
 }
 
 /** Placeholders this run wrote and has not removed, by file. */

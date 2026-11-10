@@ -87,7 +87,10 @@ export type KnowledgeCall =
   | { op: "runRecord"; runId: string }
   | { op: "stopRun"; runId: string }
   // Exclude from review (PRD 41 A9): appends `path/` to the root's `.builderforce/ignore`. It writes that file only; the view then runs its normal Re-review (plan, estimate, confirm). Refused while a review of the root runs.
-  | { op: "excludeFromReview"; rootId: string; path: string };
+  | { op: "excludeFromReview"; rootId: string; path: string }
+  // Agent-run findings (PRD 46 §3.4): the recent local chats that ran tools, and one run's report.
+  | { op: "agentRuns" }
+  | { op: "agentRunReport"; id: string };
 
 /** How a run ended; `interrupted` is the host's own word for a record left `running` by a window that closed. */
 export type KnowledgeRunOutcome = NonNullable<ReviewRun["outcome"]> | "interrupted";

@@ -15,7 +15,7 @@
  */
 
 import * as path from "path";
-import * as vscode from "vscode";
+// No runtime `vscode` import: the live module arrives as `VscodeLike`, so this tier runs under a fake in tests.
 import type { CheckRecord } from "./types";
 import { formatDiagnostic } from "./formatDiagnostic";
 

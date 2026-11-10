@@ -37384,9 +37384,13 @@
     "panelApi": "API",
     "panelResolve": "Korrekturliste",
     "panelSimulate": "Simulieren",
+    "panelAgentRuns": "Agentenläufe",
     "viewGraph": "Graph",
     "viewMap": "Mindmap",
     "viewTransit": "Karte",
+    "viewFourPlusOne": "4+1-Sichten",
+    "viewStyle": "Stil",
+    "viewFeatures": "Funktionen",
     "viewModesLabel": "Ansicht",
     "graphHint": "Scrollen oder Pinch zum Zoomen, Ziehen zum Verschieben, einen Knoten für Details auswählen.",
     "nodeAria": "{label}, {kind}",
@@ -37583,6 +37587,46 @@
       "done": "Fertig"
     },
     "surface": {
+      "agentRuns": {
+        "loading": "Die aufgezeichneten Agentenläufe werden gelesen…",
+        "failed": "Die Agentenläufe konnten nicht gelesen werden.",
+        "emptyRuns": "Auf diesem Rechner sind noch keine Agentenläufe aufgezeichnet.",
+        "emptyFindings": "In diesem Lauf gibt es nichts zu beanstanden.",
+        "runsTitle": "Letzte Läufe",
+        "runMeta": "{turns} Runden · {models}",
+        "runCounts": "{error} Fehler · {warn} Warnungen · {info} Hinweise",
+        "reportLoading": "Dieser Lauf wird gelesen…",
+        "reportMissing": "Dieser Lauf ist nicht mehr aufgezeichnet.",
+        "stripTitle": "Runden",
+        "stripBar": "Runde {index} · {role} · {model} · {kind} · {prompt} Prompt-Tokens · {completion} Antwort-Tokens · {tools} Tool-Aufrufe · {seconds} s",
+        "legendTitle": "Rundenarten",
+        "findingsTitle": "Befunde",
+        "evidenceRow": "[[Runde {turn} · ]]{label}",
+        "filesTitle": "Berührte Dateien",
+        "filesEmpty": "Dieser Lauf hat keine Dateien geschrieben.",
+        "fileWrites": "{count} Schreibvorgänge",
+        "fileChecked": "Geprüft",
+        "fileUnchecked": "Nicht geprüft",
+        "showOnGraph": "Im Graphen zeigen",
+        "notOnGraph": "Nicht in diesem Graphen",
+        "severity": { "info": "Hinweis", "warn": "Warnung", "error": "Fehler" },
+        "turnKinds": { "read": "Lesen", "write": "Schreiben", "forced": "Erzwungene Übergabe", "text": "Nur Text", "failed": "Fehlgeschlagen" },
+        "findings": {
+          "analysis_overrun": { "title": "Lange Analyse vor dem ersten Schreiben", "description": "{readTurns} reine Leserunden vor dem ersten Schreiben (Runde {firstWriteTurn})." },
+          "unkept_readiness": { "title": "Bereitschaft gemeldet, weiter gelesen", "description": "Auf {claims} Bereitschaftsmeldungen folgten {readTurnsAfter} reine Leserunden." },
+          "serial_single_writes": { "title": "Ein Schreibvorgang pro Runde", "description": "{turns} Runden machten je nur einen Schreibvorgang und kosteten {promptTokens} Prompt-Tokens." },
+          "prompt_bloat": { "title": "Prompt weit größer als die Ausgabe", "description": "Der Prompt war {ratio}× so groß wie die Antwort: {promptTokens} Prompt-Tokens, {perWrite} pro Schreibvorgang." },
+          "unverified_writes": { "title": "Schreibvorgänge nie geprüft", "description": "{files} Dateien ({writes} Schreibvorgänge) wurden danach nie erfolgreich geprüft." },
+          "bracket_break": { "title": "Eine Änderung brach die Klammerbalance", "description": "Eine Änderung an {path} veränderte die Klammerbalance ({delta})." },
+          "edit_churn": { "title": "Dieselbe Datei immer wieder umgeschrieben", "description": "{path} wurde {writes}-mal geschrieben." },
+          "filed_then_inline": { "title": "Tickets angelegt, dann selbst erledigt", "description": "{tickets} Tickets wurden angelegt und keines vergeben; danach schrieb die Sitzung den Code selbst." },
+          "same_model_roles": { "title": "Planen und Programmieren mit einem Modell", "description": "Planen und Programmieren liefen beide auf {model}, obwohl die Arbeit übergeben wurde." },
+          "oversized_args": { "title": "Übergroße Tool-Argumente", "description": "{calls} {tool}-Aufrufe trugen bis zu {bytes} Bytes an Argumenten." },
+          "slow_turns": { "title": "Langsame Runden", "description": "{turns} Runden dauerten eine Minute oder länger; die langsamste dauerte {slowestMs} ms." },
+          "repeated_narration": { "title": "Wiederholte Erzählung", "description": "{turns} Runden wiederholten vor einem Tool-Aufruf dieselbe Erzählung." },
+          "stopped_unverified": { "title": "Mit ungeprüften Schreibvorgängen gestoppt", "description": "Der Lauf wurde gestoppt, während {files} geschriebene Dateien nie geprüft wurden." }
+        }
+      },
       "spineLabel": "Wo Sie sind",
       "panelsLabel": "Bereiche",
       "panelToggles": {
@@ -37772,7 +37816,10 @@
         "groupSelectedOne": "{count} Gruppe ausgewählt", "groupSelectedOther": "{count} Gruppen ausgewählt",
         "previewFixOne": "{count} Korrektur ansehen", "previewFixOther": "{count} Korrekturen ansehen",
         "applyFixesOne": "{count} Korrektur anwenden", "applyFixesOther": "{count} Korrekturen anwenden",
-        "applyFailedOne": "{count} Korrektur konnte nicht angewendet werden", "applyFailedOther": "{count} Korrekturen konnten nicht angewendet werden"
+        "applyFailedOne": "{count} Korrektur konnte nicht angewendet werden", "applyFailedOther": "{count} Korrekturen konnten nicht angewendet werden",
+        "dependentOne": "{count} Datei hängt davon ab", "dependentOther": "{count} Dateien hängen davon ab",
+        "callerOne": "{count} Aufrufer", "callerOther": "{count} Aufrufer",
+        "moreFeaturesOne": "+{count} weiterer Eintrag wird nicht angezeigt.", "moreFeaturesOther": "+{count} weitere Einträge werden nicht angezeigt."
       },
       "heat": {
         "description": "Hitzeraster: {layers}, {components}. Wählen Sie eine Zelle für Details.",
@@ -38327,6 +38374,64 @@
           "unusedDependency": "Ungenutzte Abhängigkeiten entfernen",
           "splitByCommand": "Nach Befehlsgruppe aufteilen",
           "extractClone": "Gemeinsamen Code herausziehen"
+        }
+      },
+      "fourPlusOne": {
+        "viewsLabel": "4+1-Sichten",
+        "views": { "logical": "Logisch", "development": "Entwicklung", "process": "Prozess", "physical": "Physisch", "scenarios": "Szenarien" },
+        "hints": {
+          "logical": "Woraus das System besteht: seine Komponenten, Schicht für Schicht.",
+          "development": "Wie der Code organisiert ist: Ordner und Module.",
+          "process": "Was wann läuft: die Aufrufe entlang der gewählten Linie.",
+          "physical": "Wo es läuft: die auslieferbaren Einheiten und die Speicher und Dienste, die sie erreichen.",
+          "scenarios": "Wofür es da ist: die Pfade, die an jedem Einstiegspunkt beginnen."
+        },
+        "unitsTitle": "Auslieferbare Einheiten",
+        "unitApps": "Apps: {apps}",
+        "storesTitle": "Datenspeicher und externe Dienste",
+        "storesEmpty": "Keine Linie endet in einem Datenspeicher oder einem externen Dienst.",
+        "scenariosTitle": "Szenarien",
+        "scenariosEmpty": "Es wurden keine Einstiegspunkte gefunden, daher gibt es keine Szenarien.",
+        "scenarioRoute": "{from} → {to}"
+      },
+      "architectureStyle": {
+        "title": "Architekturstil",
+        "description": "Allein aus dem Code gelesen: Jeder Stil wird anhand fester Prüfungen zu Schichten, Abhängigkeitsrichtungen, Dateinamen und auslieferbaren Einheiten bewertet.",
+        "verdict": "Beste Übereinstimmung: {style} ({percent} % der Prüfungen erfüllt)",
+        "verdictNone": "Kein Stil passt eindeutig: Keiner erfüllt mehr als die Hälfte seiner Prüfungen vor den anderen.",
+        "fit": "{percent} % Übereinstimmung",
+        "styles": { "ddd": "Domain-Driven Design", "onion": "Onion", "nLayer": "N-Layer", "nTier": "N-Tier", "clientServer": "Client-Server", "microservices": "Microservices" },
+        "checks": {
+          "domainLayer": "Eine Domänenschicht hält einen echten Anteil des Codes",
+          "dddNamed": "Dateien heißen wie Aggregate, Entitäten, Wertobjekte oder Repositories",
+          "domainIsolated": "Die Domäne hängt von keiner anderen Schicht ab",
+          "inverted": "Die Infrastruktur hängt nach innen ab, von Domäne oder Anwendung",
+          "layered": "Der Code ist in mehrere Schichten geteilt",
+          "downward": "Abhängigkeiten zeigen nach unten, nie zu einer höheren Schicht",
+          "noSkips": "Keine Abhängigkeit überspringt eine Schicht",
+          "singleUnit": "Die Schichten werden als eine Einheit ausgeliefert",
+          "tierSplit": "Präsentation und Daten liegen in getrennten auslieferbaren Einheiten",
+          "clientSide": "Eine Client-Seite hat eigene Ordner",
+          "serverSide": "Eine Server-Seite hat eigene Ordner",
+          "routes": "Der Server stellt Routen bereit",
+          "manyUnits": "Mehrere auslieferbare Einheiten haben eigene Einstiegspunkte",
+          "independent": "Die Einheiten verweisen kaum aufeinander"
+        },
+        "evidence": "Gemessen: {count} von {total}",
+        "status": { "met": "Erfüllt", "partial": "Teilweise erfüllt", "missed": "Nicht erfüllt" },
+        "examples": "Beispiele",
+        "empty": "Keine Quelldatei liegt in einer Schicht, daher gibt es nichts zu klassifizieren."
+      },
+      "keyFeatures": {
+        "title": "Kernfunktionen",
+        "description": "Allein aus dem Code gelesen: die Fähigkeiten, die API, die Einstiegspunkte, die genutzten Muster und die Teile, von denen alles abhängt.",
+        "groups": { "capabilities": "Fähigkeiten", "endpoints": "API-Endpunkte", "entryPoints": "Einstiegspunkte", "patterns": "Genutzte Muster", "core": "Am meisten benötigt" },
+        "empty": {
+          "capabilities": "Es wurden keine Bereiche oder Ordner gefunden.",
+          "endpoints": "Keine Datei registriert eine Route.",
+          "entryPoints": "Keine Datei liegt in der Einstiegsschicht.",
+          "patterns": "Es wurde kein Entwurfsmuster erkannt.",
+          "core": "Keine Datei wird von einer anderen referenziert."
         }
       },
       "pinpoint": {

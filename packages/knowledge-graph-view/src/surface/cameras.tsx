@@ -19,7 +19,12 @@ import type { CameraDef, SceneProps } from './registry';
 import { stationRolesOf } from './towerHighlight';
 import type { Station } from './stations';
 import { TYPE } from './ui/type';
+import { ArchitectureStyleCamera } from './ArchitectureStyleCamera';
+import { FourPlusOneCamera } from './FourPlusOneCamera';
 import { HeatGrid } from './HeatGrid';
+import { KeyFeaturesCamera } from './KeyFeaturesCamera';
+import { hasSourceFiles } from './sourceFiles';
+import { hasLayeredCode } from './style/signals';
 import { SequenceDiagram } from './SequenceDiagram';
 import { SystemTiers } from './SystemTiers';
 import { TransitMap } from './TransitMap';
@@ -173,6 +178,8 @@ const SystemCamera = scaled(SystemTiers);
 const HeatCamera = scaled(HeatGrid);
 const SequenceCamera = scaled(SequenceDiagram);
 const ListScaled = scaled(ListCamera);
+const StyleCamera = scaled(ArchitectureStyleCamera);
+const FeaturesCamera = scaled(KeyFeaturesCamera);
 
 /**
  * `switcher: false` keeps a camera registered (the path strip's Sequence toggle draws it, a host
@@ -186,6 +193,10 @@ export const CAMERAS: readonly CameraDef[] = [
     { id: 'tower', labelKey: 'viewTower', component: TowerCamera, available: (_graph, env) => env.hasLines },
     { id: '3d', labelKey: 'view3d', component: Scene3DCamera, available: (_graph, env) => env.webgl },
     { id: 'heat', labelKey: 'viewHeat', component: HeatCamera, available: () => true },
+    // The architecture cameras read the source files only: a graph with none (docs, nothing reviewed) hides them.
+    { id: '4plus1', labelKey: 'viewFourPlusOne', component: FourPlusOneCamera, available: (graph) => hasSourceFiles(graph) },
+    { id: 'style', labelKey: 'viewStyle', component: StyleCamera, available: (graph) => hasLayeredCode(graph) },
+    { id: 'features', labelKey: 'viewFeatures', component: FeaturesCamera, available: (graph) => hasSourceFiles(graph) },
     { id: 'sequence', labelKey: 'viewSequence', component: SequenceCamera, available: (_graph, env) => env.hasLines, switcher: false },
     { id: 'list', labelKey: 'viewList', component: ListScaled, available: () => true },
 ];

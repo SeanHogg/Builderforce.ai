@@ -1,0 +1,69 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { BrainChat, BrainMessage } from "@seanhogg/builderforce-brain-embedded";
+
+vi.mock("@seanhogg/builderforce-brain-embedded/runFindings", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@seanhogg/builderforce-brain-embedded/runFindings")>();
+  return { ...real, detectRunFindings: vi.fn(real.detectRunFindings) };
+});
+
+import { detectRunFindings } from "@seanhogg/builderforce-brain-embedded/runFindings";
+import { createAgentRuns, type AgentRunsStore } from "./agentRuns";
+
+const detect = vi.mocked(detectRunFindings);
+
+const chat = (id: number, title: string, projectId: number | null = 1): BrainChat => ({ id, title, projectId } as BrainChat);
+let seq = 0;
+const msg = (role: string, content: string, metadata: string | null = null): BrainMessage =>
+  ({ id: ++seq, role, content, metadata, seq, createdAt: `2026-11-09T10:00:${String(seq).padStart(2, "0")}Z` });
+const step = (label: string, category = "tool") =>
+  msg("tool", "", JSON.stringify({ kind: "step", category, label, args: { path: "src/a.ts" }, ts: `2026-11-09T10:00:${String(seq + 1).padStart(2, "0")}Z` }));
+
+function fakeStore(chats: BrainChat[], messages: Map<number, BrainMessage[]>) {
+  const store: AgentRunsStore = {
+    listChats: vi.fn(async (params?: { projectId?: string; limit?: number }) =>
+      chats.filter((c) => params?.projectId === undefined || String(c.projectId) === params.projectId).slice(0, params?.limit)),
+    getMessages: vi.fn(async (chatId: number) => messages.get(chatId) ?? []),
+  };
+  return store;
+}
+
+describe("createAgentRuns", () => {
+  beforeEach(() => { detect.mockClear(); seq = 0; });
+
+  it("lists only chats with step rows, of the linked project, through the memo", async () => {
+    const messages = new Map<number, BrainMessage[]>([
+      [1, [msg("user", "fix it"), step("read_file"), msg("assistant", "done")]],
+      [2, [msg("user", "just chatting"), msg("assistant", "hi")]],
+      [3, [msg("user", "other project"), step("read_file")]],
+    ]);
+    const store = fakeStore([chat(1, "Run one"), chat(2, "No tools"), chat(3, "Elsewhere", 2)], messages);
+    const runs = createAgentRuns(store, () => 1);
+    const list = await runs.list();
+    expect(list.map((s) => [s.id, s.title])).toEqual([["1", "Run one"]]);
+    expect(detect).toHaveBeenCalledTimes(1);
+
+    const report = await runs.report("1");
+    expect(report?.summary.id).toBe("1");
+    expect(detect).toHaveBeenCalledTimes(1); // memo hit: the run has not moved
+  });
+
+  it("recomputes a run once its last message seq moves, and never for an unchanged one", async () => {
+    const messages = new Map<number, BrainMessage[]>([[5, [msg("user", "go"), step("read_file")]]]);
+    const runs = createAgentRuns(fakeStore([chat(5, "Five")], messages), () => undefined);
+    await runs.list();
+    await runs.list();
+    expect(detect).toHaveBeenCalledTimes(1);
+    messages.get(5)!.push(step("write_file"));
+    await runs.report("5");
+    expect(detect).toHaveBeenCalledTimes(2);
+    await runs.report("5");
+    expect(detect).toHaveBeenCalledTimes(2);
+  });
+
+  it("answers null for an unknown or non-run chat", async () => {
+    const runs = createAgentRuns(fakeStore([chat(1, "No tools")], new Map([[1, [msg("user", "hi")]]])), () => undefined);
+    expect(await runs.report("1")).toBeNull();
+    expect(await runs.report("99")).toBeNull();
+    expect(await runs.report("nope")).toBeNull();
+  });
+});

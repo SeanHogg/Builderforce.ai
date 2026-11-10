@@ -233,25 +233,25 @@ describe('OverlayMenu', () => {
 
 describe('registries', () => {
     it('orders the cameras and gates them on the environment', () => {
-        expect(CAMERAS.map((c) => c.id)).toEqual(['transit', 'system', 'graph', 'map', 'tower', '3d', 'heat', 'sequence', 'list']);
+        expect(CAMERAS.map((c) => c.id)).toEqual(['transit', 'system', 'graph', 'map', 'tower', '3d', 'heat', '4plus1', 'style', 'features', 'sequence', 'list']);
         const ids = (e: Partial<SurfaceEnv>) => CAMERAS.filter((c) => c.available(graph, { ...env, ...e })).map((c) => c.id);
-        expect(ids({})).toEqual(['transit', 'system', 'graph', 'map', 'tower', 'heat', 'sequence', 'list']);
-        expect(ids({ hasLines: false })).toEqual(['system', 'graph', 'map', 'heat', 'list']);
+        expect(ids({})).toEqual(['transit', 'system', 'graph', 'map', 'tower', 'heat', '4plus1', 'style', 'features', 'sequence', 'list']);
+        expect(ids({ hasLines: false })).toEqual(['system', 'graph', 'map', 'heat', '4plus1', 'style', 'features', 'list']);
         // Tower is the SVG map (needs lines); 3D is the WebGL view (needs WebGL): both are listed when both are available.
-        expect(ids({ webgl: true })).toEqual(['transit', 'system', 'graph', 'map', 'tower', '3d', 'heat', 'sequence', 'list']);
+        expect(ids({ webgl: true })).toEqual(['transit', 'system', 'graph', 'map', 'tower', '3d', 'heat', '4plus1', 'style', 'features', 'sequence', 'list']);
     });
 
-    it('holds the six drawers (the Reviews drawer comes first, with no header button), and a toggle with no panel available draws nothing', () => {
-        expect(PANELS.map((p) => p.id)).toEqual(['run', 'coverage', 'patterns', 'api', 'resolve', 'simulate']);
+    it('holds the seven drawers (the Reviews drawer comes first, with no header button), and a toggle with no panel available draws nothing', () => {
+        expect(PANELS.map((p) => p.id)).toEqual(['run', 'coverage', 'patterns', 'api', 'resolve', 'simulate', 'agentRuns']);
         const { container } = render(<PanelToggle graph={graph} env={env} labels={L} panel={null} onPanel={vi.fn()} panels={[]} />);
         expect(container.innerHTML).toBe('');
     });
 
-    it('the header shows Coverage, Patterns, API in that order; Resolve and Simulate have no button', () => {
+    it('the header shows Coverage, Patterns, API, Agent runs in that order; Resolve and Simulate have no button', () => {
         const all = PANELS.map((p) => ({ ...p, available: () => true }));
         render(<PanelToggle graph={graph} env={env} labels={L} panel={null} onPanel={vi.fn()} panels={all} />);
         const names = within(screen.getByRole('group', { name: L.surface.panelsLabel })).getAllByRole('button').map((b) => b.textContent);
-        expect(names).toEqual([L.panelCoverage, L.panelPatterns, L.panelApi]);
+        expect(names).toEqual([L.panelCoverage, L.panelPatterns, L.panelApi, L.panelAgentRuns]);
     });
 
     it('draws a button and a controlled drawer (with its subtitle) for each available panel row', () => {

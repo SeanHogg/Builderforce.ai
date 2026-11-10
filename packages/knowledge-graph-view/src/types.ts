@@ -42,7 +42,7 @@ export type LensId =
  * deep-linked `3d` still opens the WebGL view), the folder mind map, or the accessible list. A new
  * camera is a value here plus a row in `surface/cameras.tsx`.
  */
-export type ViewMode = 'transit' | 'system' | 'graph' | 'tower' | '3d' | 'map' | 'heat' | 'sequence' | 'list';
+export type ViewMode = 'transit' | 'system' | 'graph' | 'tower' | '3d' | 'map' | 'heat' | '4plus1' | 'style' | 'features' | 'sequence' | 'list';
 
 /** What a screenshot pinpointed: the AI read the image, the host matched the strings deterministically. */
 export type PinpointResult = {
@@ -113,6 +113,23 @@ export interface ReviewRunsPort {
     /** Stops a running run by its id. */
     stop(runId: string): Promise<void>;
 }
+
+// Agent-run findings (PRD 46 §3.3): consumer-owned. The host's detector returns a structurally identical type; the
+// adapter is where the two meet and the compiler proves they match. This package never imports the detector.
+export type AgentRunSeverity = 'info' | 'warn' | 'error';
+export interface AgentRunSummary { id: string; title: string; startedAt: string; endedAt: string; models: readonly string[];
+    turns: number; counts: Readonly<Record<AgentRunSeverity, number>> }
+export type AgentRunTurnKind = 'read' | 'write' | 'forced' | 'text' | 'failed';
+export interface AgentRunTurn { index: number; role: string; model: string; kind: AgentRunTurnKind; toolCalls: number;
+    promptTokens: number; completionTokens: number; durationMs: number }
+export interface AgentRunEvidence { step: number; turn?: number; label: string; path?: string; excerpt?: string }
+export interface AgentRunFinding { id: string; kind: string; severity: AgentRunSeverity;
+    params: Readonly<Record<string, string | number>>; evidence: readonly AgentRunEvidence[] }
+export interface AgentRunFile { path: string; writes: number; checked: boolean }
+export interface AgentRunReport { summary: AgentRunSummary; turns: readonly AgentRunTurn[];
+    findings: readonly AgentRunFinding[]; files: readonly AgentRunFile[] }
+/** The host's recorded agent runs and what each did wrong. Absent ⇒ no Agent runs drawer. */
+export interface AgentRunsPort { list(): Promise<readonly AgentRunSummary[]>; report(id: string): Promise<AgentRunReport | null> }
 
 /**
  * `load`'s answer when the host holds no review of the root on THIS machine (PRD 41 A7): the view says
@@ -212,6 +229,8 @@ export interface KnowledgeGraphSource {
     review?(req: ReviewRequest, ctl: ReviewControl): AsyncIterable<KnowledgeReviewEvent>;
     /** The review as a watchable run (PRD 41 A8). Absent ⇒ no Run panel. (A sibling of `review`, which is the plan/confirm/run function.) */
     runs?: ReviewRunsPort;
+    /** Recorded agent runs and their findings (PRD 46). Absent ⇒ no Agent runs drawer. */
+    agentRuns?: AgentRunsPort;
     search?(rootId: string, q: string): Promise<KnowledgeSearchHit[]>;
     subscribeLive?(rootId: string, cb: (g: KnowledgeGraph) => void): () => void;
     rememberFact?(fact: { content: string; ref: string; rootId: string }): Promise<void>;

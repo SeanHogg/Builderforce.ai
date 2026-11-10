@@ -9328,6 +9328,94 @@ async function applyBatchEdits(plan, io) {
   return { ok: true, files: outcomes.map(({ content: _c, ...rest }) => rest) };
 }
 
+// ../packages/agent-tools/src/editBalance.ts
+var LEXED_EXTENSIONS = /* @__PURE__ */ new Set([
+  "js",
+  "jsx",
+  "ts",
+  "tsx",
+  "mjs",
+  "cjs",
+  "mts",
+  "cts",
+  "json",
+  "jsonc"
+]);
+var ZERO = Object.freeze({ curly: 0, paren: 0, square: 0 });
+function extensionOf(ext) {
+  const dot = ext.lastIndexOf(".");
+  return (dot >= 0 ? ext.slice(dot + 1) : ext).toLowerCase();
+}
+function bracketBalance(text2) {
+  const out = { curly: 0, paren: 0, square: 0 };
+  const braces = [];
+  let i = 0;
+  const n2 = text2.length;
+  const template = () => {
+    while (i < n2) {
+      const ch = text2[i];
+      if (ch === "\\") {
+        i += 2;
+        continue;
+      }
+      if (ch === "`") {
+        i += 1;
+        return;
+      }
+      if (ch === "$" && text2[i + 1] === "{") {
+        braces.push(true);
+        i += 2;
+        return;
+      }
+      i += 1;
+    }
+  };
+  while (i < n2) {
+    const ch = text2[i];
+    const next = text2[i + 1];
+    if (ch === "/" && next === "/") {
+      const end = text2.indexOf("\n", i);
+      i = end < 0 ? n2 : end + 1;
+    } else if (ch === "/" && next === "*") {
+      const end = text2.indexOf("*/", i + 2);
+      i = end < 0 ? n2 : end + 2;
+    } else if (ch === '"' || ch === "'") {
+      i += 1;
+      while (i < n2 && text2[i] !== ch && text2[i] !== "\n") i += text2[i] === "\\" ? 2 : 1;
+      i += 1;
+    } else if (ch === "`") {
+      i += 1;
+      template();
+    } else {
+      if (ch === "{") {
+        out.curly += 1;
+        braces.push(false);
+      } else if (ch === "}") {
+        if (braces.pop() === true) {
+          i += 1;
+          template();
+          continue;
+        }
+        out.curly -= 1;
+      } else if (ch === "(") out.paren += 1;
+      else if (ch === ")") out.paren -= 1;
+      else if (ch === "[") out.square += 1;
+      else if (ch === "]") out.square -= 1;
+      i += 1;
+    }
+  }
+  return out;
+}
+function bracketDelta(before, after, ext) {
+  if (!LEXED_EXTENSIONS.has(extensionOf(ext))) return { ...ZERO };
+  const b = bracketBalance(before);
+  const a = bracketBalance(after);
+  return { curly: a.curly - b.curly, paren: a.paren - b.paren, square: a.square - b.square };
+}
+function changesBalance(delta) {
+  return delta.curly !== 0 || delta.paren !== 0 || delta.square !== 0;
+}
+
 // ../packages/agent-tools/src/workstreamScope.ts
 function normalizeScopePath(path2) {
   return path2.trim().replace(/\\/g, "/").replace(/^(\.\/)+/, "").replace(/\/+$/, "");
@@ -9892,13 +9980,13 @@ var LANGUAGE_BY_EXT = {
   md: "markdown",
   mdx: "markdown"
 };
-function extensionOf(path2) {
+function extensionOf2(path2) {
   const base = path2.slice(path2.lastIndexOf("/") + 1);
   const dot = base.lastIndexOf(".");
   return dot > 0 ? base.slice(dot + 1).toLowerCase() : "";
 }
 function languageOf(path2) {
-  return LANGUAGE_BY_EXT[extensionOf(path2.replace(/\\/g, "/"))];
+  return LANGUAGE_BY_EXT[extensionOf2(path2.replace(/\\/g, "/"))];
 }
 function group(m, n2) {
   return m[n2] ?? "";
@@ -10492,6 +10580,15 @@ function searchNoMatch(command, result) {
   return { ...rest, ok: true, matches: 0, stdout: "(no matches \u2014 the search exited 1 with no output)" };
 }
 
+// ../packages/agent-tools/src/shell-pipe.ts
+var TRAILING_TAIL = /\s*\|\s*(?:2>&1\s*\|\s*)?tail\s+(?:-\s*(?:n\s+)?)?(\d+)\s*$/;
+function stripTailLimit(command) {
+  const m = TRAILING_TAIL.exec(command);
+  if (!m) return { command, stripped: false };
+  const n2 = Number.parseInt(m[1] ?? "", 10);
+  return { command: command.slice(0, m.index).trimEnd(), tail: Number.isFinite(n2) ? n2 : void 0, stripped: true };
+}
+
 // ../packages/agent-tools/src/shell-output-filter.ts
 var DEFAULT_WINDOW = 200;
 var MAX_LINE_CHARS = 2e3;
@@ -10594,7 +10691,9 @@ function shapeResult(command, r) {
   return searchNoMatch(command, r);
 }
 async function runShellCommand(args, ctx) {
-  const command = typeof args.command === "string" ? args.command : "";
+  const stripped = stripTailLimit(typeof args.command === "string" ? args.command : "");
+  const command = stripped.command;
+  const tailNote = stripped.stripped ? `ran without the trailing \`| tail -${stripped.tail}\` \u2014 the full output is retained under \`outputId\`; read its head with output_filter { outputId, head: \u2026 }. ` : "";
   if (!command.trim()) return { data: { ok: false, error: "command is required" } };
   const cwd = cwdArg(args.cwd);
   if (cwd === null) {
@@ -10625,7 +10724,7 @@ async function runShellCommand(args, ctx) {
   }
   const ran = args.fresh === true ? await shell.run(command, { ...ctx.signal ? { signal: ctx.signal } : {}, ...where, fresh: true }) : await shellRunWithStop(ctx, command, dir);
   const r = await compressShellResult(shapeResult(command, ran), ctx);
-  const notes2 = [r.note, note].filter(Boolean).join(" ");
+  const notes2 = [tailNote, r.note, note].filter(Boolean).join(" ");
   return { data: { ...r, ...where, ...notes2 ? { note: notes2 } : {} } };
 }
 async function compressedJobStatus(st, ctx) {
@@ -18162,6 +18261,7 @@ var NoProgressTracker = class {
   churnThisTurn = false;
   churnTurns;
   lastGround = false;
+  lastIdle = false;
   turn = 0;
   lastSeenAt;
   targetOf;
@@ -18224,6 +18324,7 @@ var NoProgressTracker = class {
       progressed2 = this.churnTurns <= CHURN_TURNS;
     }
     this.lastGround = this.groundThisTurn;
+    this.lastIdle = !progressed2;
     this.idleTurns = progressed2 ? 0 : this.idleTurns + 1;
     this.groundThisTurn = false;
     this.churnThisTurn = false;
@@ -18233,6 +18334,11 @@ var NoProgressTracker = class {
   /** Whether the turn {@link endTurn} last closed made GROUND progress (not churn alone). */
   get lastTurnGround() {
     return this.lastGround;
+  }
+  /** Whether the turn {@link endTurn} last closed made NO progress at all (neither
+   *  ground nor churn) — the pure-idle turn the B4 batching nudge targets. */
+  get lastTurnIdle() {
+    return this.lastIdle;
   }
   /** Start the window over (the run was steered, escalated or resumed by a human). */
   reset() {
@@ -18258,15 +18364,23 @@ var UNKEPT_STEER_AT = 1;
 var READY_PATTERNS = [
   // "Now I have everything I need", "I've got all the context", "we now have enough"
   /\b(?:i|we)(?:'ve| have)?\s+(?:now\s+)?(?:have|got)\s+(?:got\s+)?(?:everything|all\s+(?:the\s+)?(?:context|information|info|details|i\s+need|we\s+need)|enough)\b/,
-  // "Now I have the full picture", "I have a complete understanding", "we now have a clear overview"
-  /\b(?:now\s+)?(?:i|we)(?:'ve|\s+have)?\s+(?:now\s+)?(?:have\s+|got\s+)?(?:a|the)\s+(?:clear|complete|full|good|solid|whole)\s+(?:picture|understanding|view|overview|grasp)\b/,
+  // "I've got all the component contracts", "we have all of the pieces" (run #70776)
+  /\b(?:i|we)(?:'ve| have)?\s+(?:now\s+)?(?:have|got)\s+all\s+(?:of\s+)?(?:the\s+)?(?:[\w/-]+\s+){0,3}(?:contracts|pieces|interfaces|signatures)\b/,
+  // "Now I have the full picture", "I have a complete understanding", "I have a thorough map" (run #70776)
+  /\b(?:now\s+)?(?:i|we)(?:'ve|\s+have)?\s+(?:now\s+)?(?:have\s+|got\s+)?(?:a|the)\s+(?:clear|complete|full|good|solid|whole|thorough)\s+(?:picture|understanding|view|overview|grasp|map)\b/,
+  // "Analysis is over; time to build." (run #70776)
+  /\b(?:analysis|investigation|exploration|research)\s+(?:is|'s)\s+(?:over|done|complete|finished)\b/,
+  // "Now I understand the camera registry pattern" (run #70776) — never "I don't understand"
+  /\b(?:now\s+(?:i|we)|(?:i|we)\s+now)\s+(?:fully\s+|clearly\s+)?understand\b/,
+  // "Implementing now", "now implementing" (run #70776)
+  /^\s*(?:(?:implementing|building|coding)(?:\s+(?:it|this|that))?\s+now|now\s+(?:implementing|building|coding))\b/,
   // "one final check, then I write", "one more file before I implement"
   /\bone\s+(?:last|final|more)\s+(?:check|look|read|thing|file)\b[^.!?\n]*\b(?:then|before)\b[^.!?\n]*\b(?:write|implement|edit|make|apply|update|change|fix|code)\b/,
   // "now I'll write", "let me now implement", "time to make the change" — never "make sure"
-  /\b(?:now\s+(?:i'll|i\s+will|let\s+me|let's)|(?:i'll|i\s+will|let\s+me|let's)\s+now|time\s+to)\s+(?:write|implement|make(?!\s+(?:sure|certain))|apply|edit|update(?!\s+(?:my|our)\s+(?:understanding|notes|picture))|create|fix|start\s+(?:writing|implementing|coding|the\s+(?:edit|change|implementation)))\b/,
+  /\b(?:now\s+(?:i'll|i\s+will|let\s+me|let's)|(?:i'll|i\s+will|let\s+me|let's)\s+now|time\s+to)\s+(?:write|implement|build|code|make(?!\s+(?:sure|certain))|apply|edit|update(?!\s+(?:my|our)\s+(?:understanding|notes|picture))|create|fix|start\s+(?:writing|implementing|coding|the\s+(?:edit|change|implementation)))\b/,
   /\blet\s+me\s+(?:write|make|apply)\s+the\s+(?:update|change|changes|edit|edits|fix|implementation)\s+now\b/
 ];
-var NEGATION = /\b(?:don't|do\s+not|doesn't|haven't|have\s+not|not\s+yet|still\s+need|need\s+(?:more|to\s+(?:read|check|look|see|find|understand))|before\s+(?:i|we)\s+have|until\s+(?:i|we)\s+have|once\s+(?:i|we)\s+have|when\s+(?:i|we)\s+have|if\s+(?:i|we)\s+(?:have|had))\b/;
+var NEGATION = /\b(?:don't|do\s+not|doesn't|haven't|have\s+not|isn't|is\s+not|not\s+yet|not\s+(?:time|ready)|still\s+need|need\s+(?:more|to\s+(?:read|check|look|see|find|understand))|before\s+(?:i|we)\s+have|until\s+(?:i|we)\s+have|once|unless|when\s+(?:i|we)\s+have|if\s+(?:i|we)\s+(?:have|had)|(?:if|when|after|until|before)\s+(?:the|my|our)\s+(?:\w+\s+){1,2}(?:is|are|'s))\b/;
 function ownWords(text2) {
   return text2.replace(/```[\s\S]*?(?:```|$)/g, " ").replace(/`[^`\n]*`/g, " ").replace(/^\s*>.*$/gm, " ").replace(/"[^"\n]*"|“[^”\n]*”/g, " ").replace(/[’‘]/g, "'");
 }
@@ -18427,7 +18541,9 @@ var ProgressDetector = class {
     this.readiness = new ReadinessAdvisory(state.advisory);
     this.batching = new BatchingNudge(state.batching);
     this.writtenPaths = /* @__PURE__ */ new Set();
+    this.readBackSinceWrite = /* @__PURE__ */ new Set();
     this.readThisTurn = [];
+    this.allReadsRepeatReadBacks = true;
     this.turnCalls = [];
   }
   ports;
@@ -18447,10 +18563,16 @@ var ProgressDetector = class {
    *  turns, never a trip and never touching UNKEPT_READY_AT or any other signal. */
   batching;
   turnSignal = null;
-  /** Every path this run has written, so a re-read of one is re-verification, not discovery. */
+  /** Every path this run has written, so a repeat read-back of one is re-verification, not discovery. */
   writtenPaths;
+  /** Read targets on written paths already read back since that path's last write: the
+   *  first read-back after a write inspects the edit (it may have half-applied); only a
+   *  later look at the same unchanged bytes is re-verification. Cleared per path on write. */
+  readBackSinceWrite;
   /** Read-only targets seen this turn, to tell an all-written re-read turn from real work. */
   readThisTurn;
+  /** Whether every read this turn was a repeat read-back of an unchanged written path. */
+  allReadsRepeatReadBacks;
   /** Every call of the current turn, for the B4 batching nudge's read-only count. */
   turnCalls;
   raise(signal) {
@@ -18470,6 +18592,7 @@ var ProgressDetector = class {
     if (unscoped) {
       this.visits.markAllMayHaveChanged();
       this.edits.reset();
+      if (wrote) this.readBackSinceWrite.clear();
     } else if ((this.ports.isDelete ?? ((t) => t === "delete_file"))(tool)) {
       this.edits.record(tool, args, { ok, deleted: ok });
       this.forgetVisitsOf(pathArgOf(args));
@@ -18481,12 +18604,19 @@ var ProgressDetector = class {
         this.forgetVisitsOf(path2);
         if (path2) {
           this.writtenPaths.add(path2);
+          this.readBackSinceWrite.delete(path2);
         }
       }
     } else if (ok && this.ports.isReadOnly?.(tool, args)) {
       const target = visitTargetOf(args);
       if (target) {
         this.readThisTurn.push(target);
+        if (this.writtenPaths.has(target)) {
+          if (!this.readBackSinceWrite.has(target)) this.allReadsRepeatReadBacks = false;
+          this.readBackSinceWrite.add(target);
+        } else {
+          this.allReadsRepeatReadBacks = false;
+        }
         const visit = this.visits.record(`${tool}:${target}`, args);
         if (visit.count >= REVISIT_HARD_AT && !visit.mayHaveChanged) this.raise({ kind: "circling_read", tool, target, count: visit.count });
       }
@@ -18514,13 +18644,13 @@ var ProgressDetector = class {
     const batchNote = this.batching.observe(turnCallsOf(turnCalls, this.ports.isReadOnly));
     this.steer = void 0;
     const idle = this.progress.endTurn();
-    if (!this.turnSignal && this.readThisTurn.length > 0) {
-      const allWritten = this.readThisTurn.every((t) => this.writtenPaths.has(t));
-      if (allWritten && !this.progress.lastTurnGround && idle > 0) {
+    if (!this.turnSignal && this.readThisTurn.length > 0 && this.allReadsRepeatReadBacks) {
+      if (!this.progress.lastTurnGround && idle > 0) {
         this.raise({ kind: "reverifying", count: this.readThisTurn.length });
       }
     }
     this.readThisTurn = [];
+    this.allReadsRepeatReadBacks = true;
     const unkeptBefore = this.claims.snapshot().unkept;
     const unkept = this.claims.endTurn();
     if (unkept > unkeptBefore) this.unkeptTurns += 1;
@@ -18532,7 +18662,7 @@ var ProgressDetector = class {
       this.readiness.endTurn();
       const advisoryNote = this.readiness.observe(this.unkeptTurns);
       if (advisoryNote) return { kind: "advisory", note: advisoryNote };
-      if (batchNote) return { kind: "advisory", note: batchNote };
+      if (batchNote && this.progress.lastTurnIdle) return { kind: "advisory", note: batchNote };
       if (this.progress.lastTurnGround) this.quietTurns += 1;
       else if (idle > 0) this.quietTurns = 0;
       if (this.quietTurns >= LADDER_RESET_TURNS) {
@@ -18624,6 +18754,27 @@ function progressPauseQuestion(signal, trip) {
     no_progress: "has stopped making progress (no new files, no test changes)"
   };
   return `This run ${what[signal.kind]} \u2014 progress check ${trip}, after earlier warnings. How should it proceed? Reply with guidance to continue, or stop the run.`;
+}
+
+// ../packages/run-guards/src/progressTrace.ts
+function advisorySourceOf(note) {
+  return note === BATCHING_NUDGE_NOTE ? "batching" : "readiness";
+}
+function progressTraceStep(action, override = {}) {
+  if (action.kind === "advisory") {
+    const source = advisorySourceOf(action.note);
+    return {
+      label: "loop.progress_advisory",
+      args: { advisory: source },
+      result: `progress advisory (${source}): a one-off note on the next turn, not a trip`
+    };
+  }
+  const outcome = override.outcome ?? action.kind;
+  return {
+    label: "loop.progress_check",
+    args: override.detail ?? { trip: action.trip, signal: action.signal.kind, action: action.kind },
+    result: `progress check ${action.trip}: ${action.signal.kind} \u2192 ${outcome}`
+  };
 }
 
 // ../packages/run-guards/src/inRunVerify.ts
@@ -18887,6 +19038,128 @@ function createEvidenceLedger(resume) {
 // ../packages/run-guards/src/evidence/gitCommandPattern.ts
 function gitCommandPattern(verbs) {
   return new RegExp(`\\bgit\\s+(?:-[Cc]\\s+\\S+\\s+|-\\S+\\s+|--\\S+(?:=\\S+)?\\s+)*(?:${verbs})\\b`, "i");
+}
+
+// ../packages/run-guards/src/evidence/gates.ts
+var DEFAULT_EVIDENCE_POLICY = {
+  required: {
+    ".ts": ["diagnostics", "typecheck", "test"],
+    ".tsx": ["diagnostics", "typecheck", "test"],
+    ".mts": ["diagnostics", "typecheck", "test"],
+    ".cts": ["diagnostics", "typecheck", "test"],
+    ".js": ["typecheck", "test"],
+    ".jsx": ["typecheck", "test"],
+    ".mjs": ["typecheck", "test"],
+    ".cjs": ["typecheck", "test"]
+  },
+  newSourceNeedsTest: true,
+  checkTimeoutMs: 12e4
+};
+function basenameOf2(path2) {
+  const normalized = normalizeEvidencePath(path2);
+  return normalized.slice(normalized.lastIndexOf("/") + 1);
+}
+function extOf(path2) {
+  const base = basenameOf2(path2);
+  const dot = base.lastIndexOf(".");
+  return dot > 0 ? base.slice(dot).toLowerCase() : "";
+}
+function stemOf(path2) {
+  const base = basenameOf2(path2);
+  const dot = base.lastIndexOf(".");
+  return dot > 0 ? base.slice(0, dot) : base;
+}
+var SOURCE_EXTENSIONS = /* @__PURE__ */ new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"]);
+function isSourceFile(path2) {
+  return SOURCE_EXTENSIONS.has(extOf(path2));
+}
+function isTestPath2(path2) {
+  return /\.test\.tsx?$/.test(basenameOf2(path2));
+}
+function isErrorFinding(finding) {
+  const tokens2 = finding.trim().split(/\s+/);
+  return (tokens2[1] ?? "").toLowerCase() === "error";
+}
+function pass() {
+  return { ok: true, unavailable: [] };
+}
+function refuse(reason) {
+  return { ok: false, reason };
+}
+function firstFindings(check, max = 3) {
+  const shown = check.findings.slice(0, max);
+  const more = check.findings.length > max ? ` (+${check.findings.length - max} more)` : "";
+  return shown.length ? shown.join("; ") + more : "(no findings recorded)";
+}
+function checkFailureReason(path2, check, detail) {
+  return `git_push refused: ${path2} failed ${check.kind} "${check.name}"${detail}. First findings: ${firstFindings(check)}. Fix the failure and push again \u2014 the host runs the checks.`;
+}
+function outgoingGate(files, ledger, policy) {
+  const unavailable2 = [];
+  for (const file of files) {
+    if (file.deleted) continue;
+    const checks = ledger.for(file.absPath, file.hash);
+    const required = policy.required[extOf(file.absPath)] ?? [];
+    for (const kind of required) {
+      const records = checks.filter((c) => c.kind === kind);
+      if (records.length === 0) {
+        unavailable2.push(`${file.absPath}: ${kind} (no record \u2014 verifier unavailable)`);
+        continue;
+      }
+      for (const record3 of records) {
+        if (record3.outcome === "fail") {
+          const detail = record3.exitCode != null ? ` (exit ${record3.exitCode})` : "";
+          return refuse(checkFailureReason(file.absPath, record3, detail));
+        }
+        if (record3.outcome === "unavailable") {
+          unavailable2.push(`${file.absPath}: ${record3.name} (${kind}) unavailable`);
+        }
+      }
+      if (kind === "diagnostics") {
+        const failing = records.find((r) => r.findings.some(isErrorFinding));
+        if (failing) return refuse(checkFailureReason(file.absPath, failing, " (LSP error)"));
+      }
+    }
+    if (policy.newSourceNeedsTest && file.isNew && isSourceFile(file.absPath) && !isTestPath2(file.absPath)) {
+      const stem = stemOf(file.absPath);
+      const hasTest = files.some(
+        (t) => t !== file && !t.deleted && isTestPath2(t.absPath) && basenameOf2(t.absPath).startsWith(stem + ".")
+      );
+      if (!hasTest) {
+        return refuse(
+          `git_push refused: ${file.absPath} is new and has no test in this push. Add ${stem}.test.ts covering it, commit, and push again \u2014 the host runs the checks.`
+        );
+      }
+    }
+  }
+  return unavailable2.length ? { ok: true, unavailable: unavailable2 } : pass();
+}
+function reviewGate(review, authorModels, currentDiffHash) {
+  if (!review) {
+    return refuse(
+      "git_push refused: no independent review. The push gate requires one review sub-run by a model that did not author the change (PRD 45 OD-1); record it with the reviewer port, then push again."
+    );
+  }
+  if (authorModels.includes(review.reviewerModel)) {
+    return refuse(
+      `git_push refused: reviewer ${review.reviewerModel} is one of the author models (${authorModels.join(", ")}). Run the review on a different model and push again.`
+    );
+  }
+  if (review.diffHash !== currentDiffHash) {
+    return refuse(
+      "git_push refused: the diff changed after the review was recorded. Re-run the review on the current diff and push again."
+    );
+  }
+  if (review.verdict === "changes_requested") {
+    return refuse(
+      `git_push refused: reviewer ${review.reviewerModel} requested changes. Findings: ${review.findings.slice(0, 5).join("; ") || "(none recorded)"}. Address them and push again.`
+    );
+  }
+  return pass();
+}
+function shellPublishHint(command) {
+  if (!gitCommandPattern("commit|push").test(command)) return null;
+  return "That shell command publishes. Use the git_commit / git_push tools instead: git_push runs the evidence gates and the independent review before the push leaves the machine.";
 }
 
 // src/finishReason.ts
@@ -19492,6 +19765,20 @@ function ticketToolVocabulary(toolNames) {
 }
 function isLocalTicketCreateLabel(label) {
   return LOCAL_TICKET_CREATE_LABEL.test(label);
+}
+var SERVER_TICKET_MOVE_TOOL = "builtin_tasks_update";
+var LOCAL_TICKET_MOVE_TOOL = "ticket-move";
+function serverTicketId(raw) {
+  const id = typeof raw === "number" ? raw : typeof raw === "string" && /^\d+$/.test(raw.trim()) ? Number(raw.trim()) : NaN;
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+function ticketStatusMove(ref, status2, vocabulary) {
+  if (vocabulary.local) {
+    const id2 = String(ref).trim();
+    return id2 ? { tool: LOCAL_TICKET_MOVE_TOOL, args: { id: id2, status: status2 } } : null;
+  }
+  const id = serverTicketId(ref);
+  return id != null ? { tool: SERVER_TICKET_MOVE_TOOL, args: { id, status: status2 } } : null;
 }
 
 // src/chatWorkLinking.ts
@@ -20910,9 +21197,9 @@ function leftDelegationUndone(input) {
   return canSpawnHere(input.toolNames) && asksForSubagents(input.requestText) && !attemptedDelegation(input.events);
 }
 function undelegatedRequestNudge(toolNames) {
-  const fanOut = toolNames.includes("spawn_agents");
-  const call2 = fanOut ? 'Call spawn_agents NOW: one workstream per open ticket whose files do not overlap \u2014 ticket=<id>, a complete standalone task brief, role "code". Each child is a clone of you and makes its change itself. It takes up to 4 per call and returns at once \u2014 the children run in the background, so start the next batch right away if there are more. Use spawn_agent for a slice that must run alone.' : 'Call spawn_agent NOW, one slice at a time, with a complete standalone task brief and role "code". The child is a clone of you and makes its change itself.';
-  return `The user asked for this work to be done by SUB-AGENTS, and none has been started. Do not ask how to proceed \u2014 the user already said. A sub-agent here is a LOCAL child run on this machine: it needs no cloud dispatch, no ticket assignment and no Developer on the roster. The workspace execution kill-switch and every \`autoRun: execution_disabled\` verdict stop CLOUD runs only \u2014 they do not apply to it. as_agent is optional: with no fitting teammate, OMIT it \u2014 the spawn tools staff the role on this project themselves (a capable teammate, or a Developer hired into the workspace and project, with the ticket assigned) and the child runs AS that agent. ${call2} ${delegationShape(fanOut ? "spawn_agents" : "spawn_agent")} Keep working while they run; when their reports are in (they arrive on their own, or call wait_agents), verify their changes and report what each child delivered, per ticket.`;
+  const fanOut2 = toolNames.includes("spawn_agents");
+  const call2 = fanOut2 ? 'Call spawn_agents NOW: one workstream per open ticket whose files do not overlap \u2014 ticket=<id>, a complete standalone task brief, role "code". Each child is a clone of you and makes its change itself. It takes up to 4 per call and returns at once \u2014 the children run in the background, so start the next batch right away if there are more. Use spawn_agent for a slice that must run alone.' : 'Call spawn_agent NOW, one slice at a time, with a complete standalone task brief and role "code". The child is a clone of you and makes its change itself.';
+  return `The user asked for this work to be done by SUB-AGENTS, and none has been started. Do not ask how to proceed \u2014 the user already said. A sub-agent here is a LOCAL child run on this machine: it needs no cloud dispatch, no ticket assignment and no Developer on the roster. The workspace execution kill-switch and every \`autoRun: execution_disabled\` verdict stop CLOUD runs only \u2014 they do not apply to it. as_agent is optional: with no fitting teammate, OMIT it \u2014 the spawn tools staff the role on this project themselves (a capable teammate, or a Developer hired into the workspace and project, with the ticket assigned) and the child runs AS that agent. ${call2} ${delegationShape(fanOut2 ? "spawn_agents" : "spawn_agent")} Keep working while they run; when their reports are in (they arrive on their own, or call wait_agents), verify their changes and report what each child delivered, per ticket.`;
 }
 function delegationShape(spawnTool) {
   return `The shape of this run: you read only the document the request names and the chat state already in your context \u2014 no source files. Research (reading code, searching, tracing callers) goes to children: ${spawnTool} with role "explore", one per question, each brief stating the question, the files or folders to start from, what is already known and ruled out, and the answer's shape (paths with line numbers, short excerpts, a word cap). When they report, write the deliverable the request names (the document or plan edit) yourself in that same turn \u2014 filing tickets is not the deliverable.`;
@@ -21104,8 +21391,8 @@ async function verifyWrittenFiles(read2, paths) {
 function assertsUnrunVerification(summary) {
   const s = summary.toLowerCase();
   const check = /(type[\s-]?check|typecheck|typescript|\btsc\b|lint|eslint|\btest(s|ing|ed)?\b|\bbuild(s|ing)?\b|compil)/;
-  const pass = /(pass(es|ed|ing)?|succeed(s|ed)?|success|green|no\s+errors?|error[\s-]?free|will\s+now\s+pass|are\s+resolved|is\s+resolved)/;
-  return check.test(s) && pass.test(s);
+  const pass2 = /(pass(es|ed|ing)?|succeed(s|ed)?|success|green|no\s+errors?|error[\s-]?free|will\s+now\s+pass|are\s+resolved|is\s+resolved)/;
+  return check.test(s) && pass2.test(s);
 }
 var DOCUMENT_EXTENSIONS = /* @__PURE__ */ new Set([
   ".md",
@@ -21133,8 +21420,8 @@ function hasNoCodeDeliverable(writtenPaths) {
 var MAX_PLACEHOLDER_FINISH_BLOCKS = 2;
 
 // ../packages/agent-run/src/policy/finish/gates.ts
-function matchesRequiredReviewSignoff(required, toolName, args, succeeded7) {
-  if (!required || !succeeded7 || toolName !== "builtin_kanban_signoff") return false;
+function matchesRequiredReviewSignoff(required, toolName, args, succeeded9) {
+  if (!required || !succeeded9 || toolName !== "builtin_kanban_signoff") return false;
   const roleKey = typeof args.roleKey === "string" ? args.roleKey.trim() : "";
   const laneKey = typeof args.laneKey === "string" ? args.laneKey.trim() : void 0;
   return roleKey === required.roleKey && laneKey === required.laneKey;
@@ -21646,6 +21933,8 @@ var RunGuards = class {
   async onTrip(action, ports) {
     let outcome = action.kind;
     if (action.kind === "advisory") {
+      const s2 = progressTraceStep(action);
+      await ports.onEvent?.({ tool: s2.label, detail: s2.args, result: s2.result });
       return;
     }
     if (action.kind === "escalate") {
@@ -21663,11 +21952,11 @@ var RunGuards = class {
     } else if (action.kind === "pause") {
       this.pendingPause = action.question;
     }
-    await ports.onEvent?.({
-      tool: "loop.progress_check",
-      detail: { trip: action.trip, signal: action.signal, outcome, model: ports.model?.get().model ?? null },
-      result: `progress check ${action.trip}: ${action.signal.kind} \u2192 ${outcome}`
+    const s = progressTraceStep(action, {
+      outcome,
+      detail: { trip: action.trip, signal: action.signal, outcome, model: ports.model?.get().model ?? null }
     });
+    await ports.onEvent?.({ tool: s.label, detail: s.args, result: s.result });
   }
   /** A3: a pause parked the run — the next dispatched call returns it, once. */
   consumePendingPause() {
@@ -22377,15 +22666,12 @@ var ROLE_COMPANION_TOOLS = {
   code: [
     "find_symbol",
     "file_outline",
-    "semantic_search",
     "command_status",
     "command_stop",
     "git_status",
     "git_diff",
     "recall_facts",
-    "remember_fact",
-    "ask_user",
-    "builtin_skills_read"
+    "ask_user"
   ],
   verify: [
     "find_symbol",
@@ -22402,15 +22688,9 @@ var ROLE_COMPANION_TOOLS = {
 var ROLE_GUARANTEED_TOOLS = [
   "git_commit",
   "git_push",
-  "open_pull_request",
   "output_filter",
   "wait_agents",
-  "stop_agent",
-  "message_agent",
-  "update_task_state",
-  "hand_off",
-  "builtin_reviews_record",
-  "builtin_tasks_update"
+  "hand_off"
 ];
 var ROLE_MATCH_ROOM = { code: 6, verify: 4 };
 function isCappedToolRole(role) {
@@ -22422,9 +22702,9 @@ function roleToolLimit(role) {
 function roleToolNames(role) {
   return [.../* @__PURE__ */ new Set([...coreToolNames(role), ...ROLE_COMPANION_TOOLS[role], ...ROLE_GUARANTEED_TOOLS])];
 }
-function roleCappedSelection(role, catalogNames, keep2 = [], surfaceRequired = []) {
+function roleCappedSelection(role, catalogNames, keep2 = [], surfaceRequired2 = []) {
   const present = new Set(catalogNames);
-  const required = [.../* @__PURE__ */ new Set([...surfaceRequired, ...roleToolNames(role), ...keep2])].filter((n2) => present.has(n2));
+  const required = [.../* @__PURE__ */ new Set([...surfaceRequired2, ...roleToolNames(role), ...keep2])].filter((n2) => present.has(n2));
   return { limit: Math.max(ROLE_TOOL_LIMIT[role], required.length + ROLE_MATCH_ROOM[role]), required, backfill: false };
 }
 
@@ -23362,7 +23642,7 @@ function reportedRunCost(running) {
 
 // ../packages/agent-run/src/telemetry/runTally.ts
 function freshTally() {
-  return { toolCalls: 0, toolErrors: 0, tokens: 0, cacheReadTokens: 0, shellFileReads: 0, repoErrors: 0, costLatch: true };
+  return { toolCalls: 0, toolErrors: 0, tokens: 0, cacheReadTokens: 0, shellFileReads: 0, repoErrors: 0, mutations: 0, costLatch: true };
 }
 function resumeTally(saved) {
   const tally = { ...freshTally(), ...saved ?? {} };
@@ -23388,6 +23668,9 @@ function tallyCall(tally, step, name, args, data, ok) {
 }
 function tallyVerify(tally, ok) {
   tally.verify = ok ? "passed" : "failed";
+}
+function bumpMutations(tally) {
+  tally.mutations += 1;
 }
 function errorText(data) {
   if (typeof data === "string") return { error: data };
@@ -24109,6 +24392,11 @@ ${notice}` : notice };
 }
 
 // ../packages/agent-run/src/kernelHooks.ts
+var MUTATING_TOOLS = /* @__PURE__ */ new Set(["write_file", "edit_file", "delete_file"]);
+function isMutationCall(name, args) {
+  if (MUTATING_TOOLS.has(name)) return true;
+  return !isReadOnlyShellCall(name, args);
+}
 var ASK_TOOLS = /* @__PURE__ */ new Set(["ask_human", "ask_user"]);
 function asLoopControl(control) {
   return control;
@@ -24275,6 +24563,7 @@ function kernelHooks(run) {
       const ok = !result.isError && !(result.data && typeof result.data === "object" && result.data.ok === false);
       if (!stub) {
         tallyCall(tally, ctx.step, call2.name, call2.args, result.data, ok);
+        if (ok && isMutationCall(call2.name, call2.args)) bumpMutations(tally);
         await emit(ports.events, { kind: "tool.dispatched", step: ctx.step, tool: call2.name, ok, callId: call2.id, args: call2.args, result: result.data }, { durationMs: Date.now() - (starts.get(call2.id) ?? Date.now()) });
         starts.delete(call2.id);
       }
@@ -24798,6 +25087,7 @@ function makeCell() {
     publishHold: null,
     authorModels: /* @__PURE__ */ new Set(),
     shipReviews: [],
+    finishClosedOut: false,
     snapshot: EMPTY_SNAPSHOT
   };
 }
@@ -25251,7 +25541,7 @@ function requestRunConfirm(chatId, req, opts) {
   if (driverFor(chatId)) return Promise.resolve(false);
   const c = getCell(chatId);
   return new Promise((resolve) => {
-    c.pendingConfirm = { name: req.name, args: req.args };
+    c.pendingConfirm = { name: req.name, args: req.args, ...req.evidence ? { evidence: req.evidence } : {} };
     c.confirmResolver = resolve;
     c.activity = {
       ...toolActivity(req.name, req.args, opts?.step ?? c.activity?.step ?? 0, Date.now()),
@@ -25422,7 +25712,18 @@ async function continueChat(runKey, c, steers, start, claim, left, progress = { 
   const ports = binding.ports();
   const turns = [];
   for (const steer of steers) turns.push({ steer, composed: await bounded(left(), compose(steer, ports)) });
-  const fresh = turns.filter((t) => !t.steer.saved);
+  const words3 = turns.filter((t) => recordedModelText(t.composed.turn.content).trim());
+  if (words3.length === 0) {
+    forgetPendingWords(runKey, steers.map((m) => m.eventKey));
+    trace(
+      c,
+      "steer.empty_ask_dropped",
+      { steers: steers.length },
+      "A continuation carried only an empty ask and no files; with the finish condition met there is nothing to continue, so no run was started."
+    );
+    return true;
+  }
+  const fresh = words3.filter((t) => !t.steer.saved);
   let rows = [];
   if (fresh.length > 0) {
     const saving = Promise.resolve(request.persistence.sendMessages(chatId, fresh.map(({ steer, composed }) => {
@@ -27179,7 +27480,68 @@ function gatewayRoutingArgs(routing) {
   };
 }
 
+// src/handOffParallelism.ts
+var scopeOf = (t) => ({ label: t.title, paths: t.paths });
+function planScopeClash(tasks) {
+  return overlappingScopes(tasks.filter((t) => t.paths.length > 0).map(scopeOf));
+}
+function canRunInParallel(tasks) {
+  if (tasks.length < 2 || tasks.some((t) => t.paths.length === 0)) return false;
+  return planScopeClash(tasks) === null;
+}
+function splitForParallel(tasks) {
+  const all = tasks.map((_, i) => i);
+  let lead = 0;
+  while (lead < tasks.length && tasks[lead].paths.length > 0 && overlappingScopes(tasks.slice(0, lead + 1).map(scopeOf)) === null) lead += 1;
+  const parallel = lead >= 2 ? all.slice(0, lead) : [];
+  return { parallel, inline: all.slice(parallel.length), clash: planScopeClash(tasks) };
+}
+var HAND_OFF_MODE_LABEL = "hand_off.mode";
+var HAND_OFF_CLASH_LABEL = "hand_off.scope_clash";
+function handOffModeSentence(d) {
+  const why = d.clash ? ` (${describeClash(d.clash)})` : "";
+  if (d.mode === "parallel") return `All ${d.parallelTasks.length} tasks ran side by side as coding sub-agents.`;
+  if (d.mode === "mixed") return `${d.parallelTasks.length} task(s) ran side by side as coding sub-agents; ${d.inlineTasks.length} went to the coding model inline${why}.`;
+  return `All ${d.inlineTasks.length} task(s) went to the coding model inline${why}.`;
+}
+function modeOf(split) {
+  if (split.parallel.length === 0) return "inline";
+  return split.inline.length === 0 ? "parallel" : "mixed";
+}
+function describeClash(clash) {
+  return `"${clash.a}" and "${clash.b}" both own ${clash.path}`;
+}
+function taskNumbers(indexes) {
+  const n2 = indexes.map((i) => String(i + 1));
+  return n2.length <= 1 ? n2.join("") : `${n2.slice(0, -1).join(", ")} and ${n2[n2.length - 1]}`;
+}
+function splitLayoutLine(split) {
+  const why = split.clash ? ` \u2014 ${describeClash(split.clash)}, so they cannot run at the same time` : "";
+  const mode = modeOf(split);
+  if (mode === "mixed") {
+    return `Side by side: task${split.parallel.length === 1 ? "" : "s"} ${taskNumbers(split.parallel)}. Then in order, by the coding model: task${split.inline.length === 1 ? "" : "s"} ${taskNumbers(split.inline)}${why}.`;
+  }
+  return mode === "inline" && split.clash ? `In order, by the coding model${why}.` : "";
+}
+function scopeClashCorrective(clash) {
+  return `hand_off not filed: the tasks cannot run side by side \u2014 ${describeClash(clash)}. Narrow each task's paths to the files and directories it actually changes: a parent directory that contains another task's paths blocks parallel work. Then call hand_off again with the same tasks. If they genuinely share files, call it again unchanged: every task from the first overlapping one onward then runs inline, in plan order, after any tasks before it.`;
+}
+
 // src/routingByRole.ts
+function decisionOf(e) {
+  const a = e.args;
+  if (!a || a.mode !== "parallel" && a.mode !== "inline" && a.mode !== "mixed") return null;
+  return {
+    mode: a.mode,
+    parallelTasks: Array.isArray(a.parallelTasks) ? a.parallelTasks : [],
+    inlineTasks: Array.isArray(a.inlineTasks) ? a.inlineTasks : [],
+    clash: a.clash ?? null
+  };
+}
+function decisionLine(d) {
+  const counts = d.mode === "parallel" ? `${d.parallelTasks.length} side by side` : d.mode === "mixed" ? `${d.parallelTasks.length} side by side, ${d.inlineTasks.length} inline` : `${d.inlineTasks.length} inline`;
+  return `  \u2022 hand_off: ${d.mode} \u2014 ${counts}${d.clash && d.mode !== "parallel" ? ` \xB7 overlap: ${describeClash(d.clash)}` : ""}`;
+}
 var ranked = (counts) => [...counts.entries()].sort((a, b) => b[1] - a[1]);
 function routingByRole(turns, events) {
   const byRole = /* @__PURE__ */ new Map();
@@ -27204,7 +27566,9 @@ function routingByRole(turns, events) {
     coderReasks: roleHandoffs.filter((e) => hasArg(e, "from")).length,
     handOffs: roleHandoffs.filter((e) => hasArg(e, "via")).length,
     handOffsForced: count2("loop.hand_off_due"),
-    planBudgetsSpent: count2("loop.plan_budget_spent")
+    planBudgetsSpent: count2("loop.plan_budget_spent"),
+    handOffModes: events.filter((e) => e.label === HAND_OFF_MODE_LABEL).map(decisionOf).filter((d) => d !== null),
+    handOffClashesRefused: count2(HAND_OFF_CLASH_LABEL)
   };
 }
 function formatRoutingByRole(r) {
@@ -27216,8 +27580,9 @@ function formatRoutingByRole(r) {
     lines.push(`  \u2022 ${role.role}: ${role.turns} turn(s) \u2014 ${models}${left}`);
   }
   lines.push(
-    `  \u2022 analysis \u2192 code: ${r.coderReasks} re-ask(s) on a first edit \xB7 ${r.handOffs} hand_off call(s)` + (r.handOffsForced ? ` \xB7 ${r.handOffsForced} forced by the analysis budget` : "") + (r.planBudgetsSpent ? ` \xB7 ${r.planBudgetsSpent} ended analysis with no hand-off` : "")
+    `  \u2022 analysis \u2192 code: ${r.coderReasks} re-ask(s) on a first edit \xB7 ${r.handOffs} hand_off call(s)` + (r.handOffsForced ? ` \xB7 ${r.handOffsForced} forced by the analysis budget` : "") + (r.planBudgetsSpent ? ` \xB7 ${r.planBudgetsSpent} ended analysis with no hand-off` : "") + (r.handOffClashesRefused ? ` \xB7 ${r.handOffClashesRefused} plan(s) sent back once for overlapping paths` : "")
   );
+  for (const d of r.handOffModes ?? []) lines.push(decisionLine(d));
   const plan = r.roles.find((x) => x.role === "plan")?.models[0]?.model;
   const code = r.roles.find((x) => x.role === "code");
   if (r.coderReasks > 0 && plan && code && code.models.length === 1 && code.models[0].model === plan) {
@@ -27226,14 +27591,8 @@ function formatRoutingByRole(r) {
   return lines;
 }
 
-// src/staffingSummary.ts
-var DISPATCH_TOOL = /chats[._](dispatch_agent|execute_as_agent)|kanban[._](coordinate|materialize_work_items|assess_resource|assign_participant)|executions[._]submit|run[._-]?now/i;
-function isDispatchTool(label) {
-  return DISPATCH_TOOL.test(label);
-}
-var MAX_REFUSAL_CHARS = 180;
-function resultObject2(result) {
-  if (result && typeof result === "object") return result;
+// src/toolResultRecord.ts
+function toolResultRecord(result) {
   if (typeof result === "string") {
     try {
       const parsed = JSON.parse(result);
@@ -27242,11 +27601,18 @@ function resultObject2(result) {
       return null;
     }
   }
-  return null;
+  return result && typeof result === "object" ? result : null;
 }
+
+// src/staffingSummary.ts
+var DISPATCH_TOOL = /chats[._](dispatch_agent|execute_as_agent)|kanban[._](coordinate|materialize_work_items|assess_resource|assign_participant)|executions[._]submit|run[._-]?now/i;
+function isDispatchTool(label) {
+  return DISPATCH_TOOL.test(label);
+}
+var MAX_REFUSAL_CHARS = 180;
 function didDispatch(ev) {
   if (ev.isError || isFailedToolResult(ev.result)) return false;
-  const r = resultObject2(ev.result);
+  const r = toolResultRecord(ev.result);
   if (!r) return true;
   const autoRun = r.autoRun && typeof r.autoRun === "object" ? r.autoRun : null;
   if (autoRun && typeof autoRun.dispatched === "boolean") return autoRun.dispatched;
@@ -27254,7 +27620,7 @@ function didDispatch(ev) {
   return true;
 }
 function refusalMessage(ev) {
-  const r = resultObject2(ev.result);
+  const r = toolResultRecord(ev.result);
   const raw = r && typeof r.error === "string" && r.error || r && typeof r.detail === "string" && r.detail || (r && r.autoRun && typeof r.autoRun === "object" && typeof r.autoRun.detail === "string" ? String(r.autoRun.detail) : "") || (typeof ev.result === "string" ? ev.result : "") || (r ? JSON.stringify(r) : "") || "no reason given";
   const flat = String(raw).replace(/\s+/g, " ").trim();
   return flat.length > MAX_REFUSAL_CHARS ? `${flat.slice(0, MAX_REFUSAL_CHARS)}\u2026` : flat || "no reason given";
@@ -27286,7 +27652,7 @@ function staffingSummaryInTrace(events) {
       const agent = asAgentOf(ev.args);
       if (!agent) continue;
       const args = ev.args;
-      const result = resultObject2(ev.result);
+      const result = toolResultRecord(ev.result);
       const label = typeof args?.label === "string" && args.label.trim() || typeof result?.label === "string" && result.label.trim() || (typeof args?.task === "string" ? args.task.trim().slice(0, 60) : "") || "delegated work";
       personaSubagents.push({
         agent,
@@ -27312,7 +27678,7 @@ function formatStaffingSummary(s, opts) {
   const refused = s.dispatchRefusals.length ? ` (${s.dispatchRefusals.length} refused: ${formatDispatchRefusals(s.dispatchRefusals)})` : "";
   const shipped = opts?.sessionShipped ?? 0;
   const sessionDidIt = shipped > 0 && (s.verdict === "filed-not-staffed" || s.verdict === "staffing-refused");
-  const tail = sessionDidIt ? ` \u2014 the session itself changed the code (${shipped} write/commit call(s) succeeded); a cloud dispatch was not required` : s.verdict === "filed-not-staffed" ? " \u2014 the work was filed but nobody is running it" : s.verdict === "filed-locally" ? " \u2014 filed on this device, staffing after it syncs to the account" : s.verdict === "staffing-refused" ? " \u2014 every attempt to staff the work was refused, so nobody is running it" : "";
+  const tail = sessionDidIt ? ` \u2014 the session itself changed the code (${shipped} write/commit call(s) succeeded); a cloud dispatch was not required` : s.verdict === "filed-not-staffed" ? " \u2014 the work was filed but nobody is running it" : s.verdict === "filed-locally" ? " \u2014 filed on this device; the work runs here, by the session and its local sub-agents, and the tickets sync to the account when sync is on" : s.verdict === "staffing-refused" ? " \u2014 every attempt to staff the work was refused, so nobody is running it" : "";
   const lines = [
     `Staffing: ${s.ticketsCreated} ticket(s) filed \xB7 ${s.dispatched} dispatched${refused} \xB7 ${s.personaSubagents.length} persona sub-agent(s)${tail}`
   ];
@@ -28149,8 +28515,9 @@ async function recordCodeChangeTicket(serverChatId, c, req, phase) {
   if (!isFailedToolResult(out)) {
     c.deltaRecordedFiles = [...c.deltaRecordedFiles, ...files];
     if (files.length) c.deltaTitleCount = files.length;
-    const id = out?.id;
-    if (c.deltaTicketId == null && typeof id === "number") c.deltaTicketId = id;
+    const record3 = toolResultRecord(out);
+    const id = serverTicketId(record3?.taskId ?? record3?.id);
+    if (c.deltaTicketId == null && id != null) c.deltaTicketId = id;
     c.ticketRecorded = true;
   } else if (isRoleRefusal(out)) {
     c.deltaCaptureRefused = true;
@@ -28166,33 +28533,83 @@ async function recordCodeChangeTicket(serverChatId, c, req, phase) {
   });
 }
 async function updateLinkedTickets(serverChatId, c, req, select, status2, reason) {
-  if (!req.runTool || serverChatId == null) return;
+  if (!req.runTool || serverChatId == null) return 0;
   let listed;
   try {
     listed = await req.runTool("builtin_chats_list_tickets", { chatId: serverChatId });
   } catch {
-    return;
+    return 0;
   }
+  let moved = 0;
   for (const t of select(listed)) {
-    const id = Number(t.ref);
-    if (!Number.isInteger(id)) continue;
-    const toolStart = nowMs2();
-    let out;
-    try {
-      out = await req.runTool("builtin_tasks_update", { id, status: status2 });
-    } catch (e) {
-      out = { ok: false, error: e instanceof Error ? e.message : String(e) };
-    }
-    noteOf(c)({
-      ts: nowIso(),
-      category: "tool",
-      label: "builtin_tasks_update",
-      durationMs: nowMs2() - toolStart,
-      args: { id, status: status2, auto: true, reason },
-      result: out ?? null,
-      isError: isFailedToolResult(out)
-    });
+    const move = ticketStatusMove(t.ref, status2, SERVER_TICKET_TOOLS);
+    if (move && await moveTicket(c, req, move, reason)) moved += 1;
   }
+  return moved;
+}
+async function moveTicket(c, req, move, reason) {
+  if (!req.runTool) return false;
+  const toolStart = nowMs2();
+  let out;
+  try {
+    out = await req.runTool(move.tool, { ...move.args });
+  } catch (e) {
+    out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  const failed4 = isFailedToolResult(out);
+  noteOf(c)({
+    ts: nowIso(),
+    category: "tool",
+    label: move.tool,
+    durationMs: nowMs2() - toolStart,
+    args: reason ? { ...move.args, auto: true, reason } : { ...move.args },
+    result: out ?? null,
+    isError: failed4
+  });
+  return !failed4;
+}
+var LOCAL_VOCABULARY = ticketToolVocabulary([LOCAL_TICKET_CREATE_TOOL]);
+var MOVE_LABEL = /^(ticket[-_.]move|builtin_tasks_update)$/i;
+var succeeded6 = (ev) => ev.category === "tool" && !ev.isError && !isFailedToolResult(ev.result);
+function localTicketsFiledInRun(trace4) {
+  const ids2 = [];
+  for (const ev of trace4) {
+    if (!succeeded6(ev) || !isLocalTicketCreateLabel(ev.label)) continue;
+    if (ev.args?.reason !== "hand_off") continue;
+    const id = toolResultRecord(ev.result)?.id;
+    const ref = typeof id === "string" ? id.trim() : typeof id === "number" ? String(id) : "";
+    if (ref && !ids2.includes(ref)) ids2.push(ref);
+  }
+  return ids2;
+}
+function statusesInRun(trace4) {
+  const moved = /* @__PURE__ */ new Map();
+  for (const ev of trace4) {
+    if (!succeeded6(ev) || !MOVE_LABEL.test(ev.label)) continue;
+    const a = ev.args ?? {};
+    if ((typeof a.id === "string" || typeof a.id === "number") && typeof a.status === "string") moved.set(String(a.id).trim(), a.status);
+  }
+  return moved;
+}
+function mayMove(current, status2) {
+  if (current === void 0 || NOT_STARTED_TASK_STATUSES.has(current)) return true;
+  return status2 === "done" && current === "in_progress";
+}
+async function updateRunLocalTickets(trace4, c, req, status2, reason, deltaTicketId = null) {
+  if (!req.runTool) return 0;
+  const already = statusesInRun(trace4);
+  const moves = [];
+  for (const ref of localTicketsFiledInRun(trace4)) {
+    const move = mayMove(already.get(ref), status2) ? ticketStatusMove(ref, status2, LOCAL_VOCABULARY) : null;
+    if (move) moves.push(move);
+  }
+  if (status2 === "done" && deltaTicketId != null && mayMove(already.get(String(deltaTicketId)), status2)) {
+    const move = ticketStatusMove(deltaTicketId, status2, SERVER_TICKET_TOOLS);
+    if (move) moves.push(move);
+  }
+  let moved = 0;
+  for (const move of moves) if (await moveTicket(c, req, move, reason)) moved += 1;
+  return moved;
 }
 async function retitleShippedDeltaTicket(c, req) {
   if (!req.runTool) return;
@@ -28248,16 +28665,14 @@ function reviewedThisRun(trace4) {
   }
   return ids2;
 }
-function shipReviewSummary(files, checks) {
-  const shown = files.slice(0, 10).join(", ");
-  const more = files.length > 10 ? ` (+${files.length - 10} more)` : "";
-  const passed = checks.slice(0, 10).join("; ") + (checks.length > 10 ? ` (+${checks.length - 10} more)` : "");
-  return `Closed out by the host: this run's change${files.length ? ` (${files.length} file${files.length === 1 ? "" : "s"}: ${shown}${more})` : ""} was pushed to the base branch and verified landed, with no placeholder outstanding. Passing checks on the shipped bytes: ${passed}.`;
-}
 async function recordShipReview(input, taskId, checks) {
   const { view, req } = input;
   if (!req.runTool || reviewedThisRun(input.trace).has(taskId)) return;
-  const args = { taskId, verdict: "complete", summary: shipReviewSummary(view.touchedFiles, checks) };
+  const shown = view.touchedFiles.slice(0, 10).join(", ");
+  const more = view.touchedFiles.length > 10 ? ` (+${view.touchedFiles.length - 10} more)` : "";
+  const passed = checks.slice(0, 10).join("; ") + (checks.length > 10 ? ` (+${checks.length - 10} more)` : "");
+  const summary = `Closed out by the host: this run's change${view.touchedFiles.length ? ` (${view.touchedFiles.length} file${view.touchedFiles.length === 1 ? "" : "s"}: ${shown}${more})` : ""} was pushed to the base branch and verified landed, with no placeholder outstanding. Passing checks on the shipped bytes: ${passed}.`;
+  const args = { taskId, verdict: "complete", summary };
   const toolStart = nowMs2();
   let out;
   try {
@@ -28275,17 +28690,27 @@ async function recordShipReview(input, taskId, checks) {
     isError: isFailedToolResult(out)
   });
 }
-async function closeOutRun(input) {
-  const { serverChatId, view, needsTicket, shipped, reviewedInPreview } = input;
+
+// src/runStore/deterministicFinish.ts
+function finishConditionMet(input) {
+  return input.shipped && input.verified && input.openPlaceholders === 0 && input.hasTicket;
+}
+async function deterministicFinish(input, run) {
+  const result = { finished: false, reviewRecorded: false, ticketClosed: false, factWritten: false };
+  const finishing = finishConditionMet(input);
   const req = input.req;
+  if (req.projectId == null || !req.runTool) return result;
+  const { view, needsTicket, shipped, reviewedInPreview } = input;
+  const fullReq = req;
   if (needsTicket && (!view.ticketRecorded || view.deltaTicketId != null)) {
-    await recordCodeChangeTicket(serverChatId, view, req, "settle");
+    await recordCodeChangeTicket(input.serverChatId, view, fullReq, "settle");
   }
   if (needsTicket) {
-    await updateLinkedTickets(serverChatId, view, req, linkedTicketsToAdvance, "in_progress", "worked-ticket-off-backlog");
+    await updateLinkedTickets(input.serverChatId, view, fullReq, linkedTicketsToAdvance, "in_progress", "worked-ticket-off-backlog");
+    await updateRunLocalTickets(input.trace, view, fullReq, "in_progress", "worked-ticket-off-backlog");
   }
-  if (shipped && req.projectId != null && req.runTool) {
-    await retitleShippedDeltaTicket(view, req);
+  if (shipped && req.projectId != null) {
+    await retitleShippedDeltaTicket(view, fullReq);
     if (input.openPlaceholders > 0) {
       view.note?.({
         ts: nowIso(),
@@ -28304,15 +28729,70 @@ async function closeOutRun(input) {
           args: { reason: "unverified", detail: verification.reason },
           result: `The change shipped, but this run holds no passing verification for it (${verification.reason}): no review was recorded and its ticket stays in review.`
         });
-      } else {
-        if (view.deltaTicketId != null) await recordShipReview(input, view.deltaTicketId, verification.checks);
-        await updateLinkedTickets(serverChatId, view, req, linkedTicketsToComplete, "done", "shipped-to-base-branch");
+      } else if (finishing && view.deltaTicketId != null) {
+        await recordShipReview(input, view.deltaTicketId, verification.checks);
+        result.reviewRecorded = true;
       }
     }
   }
-  if (reviewedInPreview.length && req.projectId != null && req.runTool) {
-    await updateLinkedTickets(serverChatId, view, req, (listed) => linkedTicketsReviewedComplete(listed, reviewedInPreview), "done", "reviewed-in-preview");
+  if (finishing && await updateLinkedTickets(run.serverChatId, view, req, linkedTicketsToComplete, "done", null) > 0) result.ticketClosed = true;
+  const unlistedDelta = run.serverChatId == null ? view.deltaTicketId : null;
+  if (finishing && await updateRunLocalTickets(input.trace, view, fullReq, "done", "shipped-to-base-branch", unlistedDelta) > 0) result.ticketClosed = true;
+  if (reviewedInPreview.length && req.projectId != null) {
+    await updateLinkedTickets(input.serverChatId, view, fullReq, (l) => linkedTicketsReviewedComplete(l, reviewedInPreview), "done", "reviewed-in-preview");
   }
+  result.finished = finishing;
+  return result;
+}
+function shippedOf(run) {
+  return run.c.codeChanged && run.c.touchedFiles.length > 0 && shippedToBaseBranch(runTrace(run.c), { touchedFiles: run.c.touchedFiles });
+}
+async function hasLinkedTicket(run) {
+  const { req, serverChatId } = run;
+  if (!req.runTool) return false;
+  if (localTicketsFiledInRun(runTrace(run.c)).length > 0) return true;
+  if (serverChatId == null) return false;
+  let listed;
+  try {
+    listed = await req.runTool("builtin_chats_list_tickets", { chatId: serverChatId });
+  } catch {
+    return false;
+  }
+  return linkedTicketsToComplete(listed).length > 0;
+}
+async function finishCloseOut(run) {
+  const c = run.c;
+  if (c.finishClosedOut) return;
+  const { req } = run;
+  if (req.projectId == null || !req.runTool || c.abort?.signal.aborted || !c.codeChanged) return;
+  if (!shippedOf(run)) return;
+  if (!await hasLinkedTicket(run)) return;
+  const openPlaceholders = run.placeholderLedger.outstanding().length;
+  const view = settleView(c, c.runId);
+  const input = {
+    serverChatId: run.serverChatId,
+    view,
+    req,
+    needsTicket: true,
+    shipped: true,
+    reviewedInPreview: [],
+    openPlaceholders,
+    trace: runTrace(c),
+    evidence: run.evidence
+  };
+  const verified = verificationOf(run.evidence, view.touchedFiles).verified;
+  await deterministicFinish({ ...input, verified, hasTicket: true }, run);
+}
+function withDeterministicFinish(run, inner) {
+  return {
+    ...inner,
+    gate: async (ctx) => {
+      await finishCloseOut(run).catch((reason) => {
+        console.warn("deterministic-finish close-out failed", reason);
+      });
+      return inner.gate(ctx);
+    }
+  };
 }
 
 // src/runStore/serverChat.ts
@@ -28326,10 +28806,58 @@ function deviceLeverOn(id) {
   return isCostLeverOn(env, id, null);
 }
 
-// src/planHandoff.ts
-var HAND_OFF_TOOL = "hand_off";
+// src/handOffNext.ts
+var INLINE_NEXT = `HAND-OFF: the analysis is complete and you are the coding model. Implement the tasks below in order \u2014 do not re-plan or re-read what the planner already read. When all are done, check them. ${VERIFY_STEP} Then commit and push, and report per ticket.`;
+var RESOLVE_REPORTS = `Each report ends with its Open issues \u2014 ${RESOLVE_OPEN_ISSUES}. Fix what the slices broke between them, and implement any task that failed.`;
+var PARALLEL_NEXT = `HAND-OFF: the tasks ran side by side, one coding agent each, and each has reported into the chat. You are the coding model. ${RESOLVE_REPORTS} Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
+var BACKGROUND_NEXT = `HAND-OFF: one coding agent per task is now running IN THE BACKGROUND, each posting into the chat under its own name. You are the coding model: do not redo their tasks. Work on anything not delegated, then call wait_agents for their reports (or act on each as it arrives). ${RESOLVE_REPORTS} Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
+var MIXED_PARALLEL_NEXT = `HAND-OFF: some of the tasks ran side by side, one coding agent each, and each has reported into the chat. You are the coding model. ${RESOLVE_REPORTS} Then implement the remaining tasks below in plan order \u2014 they overlap those paths or own none, so they were not run beside them; do not re-plan or re-read what the planner already read. Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
+var MIXED_BACKGROUND_NEXT = `HAND-OFF: some of the tasks are now running IN THE BACKGROUND, one coding agent each, posting into the chat under its own name. You are the coding model: do not redo their tasks. The remaining tasks below are yours and come after theirs in the plan; they overlap those paths or own none, so call wait_agents for their reports FIRST, then implement them in plan order \u2014 do not re-plan or re-read what the planner already read. ${RESOLVE_REPORTS} Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
+
+// src/handOffFanOut.ts
 var FAN_OUT_TOOL = "spawn_agents";
 var FAN_OUT_BATCH = 4;
+function inlineTaskList(plan, indexes, ids2, brief) {
+  return indexes.map((i) => `${i + 1}. ${ids2[i] != null ? `#${ids2[i]} ` : ""}${plan.tasks[i].title}
+${brief(i)}`).join("\n\n");
+}
+async function fanOut(plan, indexes, ids2, brief, call2) {
+  const workstreams = [];
+  const changed2 = /* @__PURE__ */ new Set();
+  const placeholders = [];
+  let background = false;
+  for (let start = 0; start < indexes.length; start += FAN_OUT_BATCH) {
+    const batch = indexes.slice(start, start + FAN_OUT_BATCH);
+    const out = toolResultRecord(await call2(FAN_OUT_TOOL, {
+      workstreams: batch.map((i) => {
+        const t = plan.tasks[i];
+        const id = ids2[i];
+        return {
+          label: id != null ? `#${id} ${t.title}` : t.title,
+          task: brief(i),
+          role: "code",
+          ...id != null ? { ticket: String(id) } : {}
+        };
+      })
+    }));
+    const started = Array.isArray(out?.agents) ? out.agents : Array.isArray(out?.workstreams) ? out.workstreams : null;
+    if (!out || out.ok === false && !started) {
+      if (start === 0) return null;
+      workstreams.push({ ok: false, error: typeof out?.error === "string" ? out.error : "fan-out failed", tasks: batch.map((i) => plan.tasks[i].title) });
+      continue;
+    }
+    if (started) workstreams.push(...started);
+    if (out.running === true) background = true;
+    if (Array.isArray(out.changedFiles)) {
+      for (const f of out.changedFiles) if (typeof f === "string") changed2.add(f);
+    }
+    if (Array.isArray(out.placeholders)) placeholders.push(...out.placeholders);
+  }
+  return { workstreams, changedFiles: [...changed2], placeholders, background };
+}
+
+// src/planHandoff.ts
+var HAND_OFF_TOOL = "hand_off";
 var MAX_HAND_OFF_TASKS = 12;
 var HAND_OFF_TOOL_SPEC = {
   type: "function",
@@ -28394,13 +28922,15 @@ function parseHandOff(args) {
   }
   return { summary, tasks };
 }
+var TICKET_CONTEXT_MAX_CHARS = 600;
 function ticketDescription(task, summary) {
+  const context = summary.length > TICKET_CONTEXT_MAX_CHARS ? `${summary.slice(0, TICKET_CONTEXT_MAX_CHARS - 1).trimEnd()}\u2026` : summary;
   return [
     task.brief,
     task.paths.length ? `Paths: ${task.paths.join(", ")}` : "",
     task.acceptance ? `Done when: ${task.acceptance}` : "",
     task.constraints ? `Do not: ${task.constraints}` : "",
-    summary ? `Context: ${summary}` : ""
+    context ? `Context: ${context}` : ""
   ].filter(Boolean).join("\n\n");
 }
 var MAX_REQUEST_CHARS = 2e3;
@@ -28419,17 +28949,16 @@ ${ctx.knowledge}` : "",
     "Make the change now. Read only what the change itself needs."
   ].filter(Boolean).join("\n\n");
 }
-function canRunInParallel(tasks) {
-  if (tasks.length < 2 || tasks.some((t) => t.paths.length === 0)) return false;
-  return overlappingScopes(tasks.map((t) => ({ label: t.title, paths: t.paths }))) === null;
-}
-function planMessage(plan, ticketIds, parallel) {
+function planMessage(plan, ticketIds, layout) {
   const lines = plan.tasks.map((t, i) => {
     const id = ticketIds[i];
     return `${i + 1}. ${id != null ? `#${id} ` : ""}${t.title}${t.paths.length ? ` \u2014 ${t.paths.join(", ")}` : ""}`;
   });
+  const mode = typeof layout === "boolean" ? layout ? "parallel" : "inline" : modeOf(layout);
+  const header = mode === "parallel" ? " (running side by side; each reports back here)" : mode === "mixed" ? " (partly side by side; each agent reports back here)" : "";
   return [
-    `**Plan \u2014 ${plan.tasks.length} task${plan.tasks.length === 1 ? "" : "s"}**${parallel ? " (running side by side; each reports back here)" : ""}`,
+    `**Plan \u2014 ${plan.tasks.length} task${plan.tasks.length === 1 ? "" : "s"}**${header}`,
+    typeof layout === "boolean" ? "" : splitLayoutLine(layout),
     plan.summary,
     lines.join("\n")
   ].filter(Boolean).join("\n\n");
@@ -28465,7 +28994,7 @@ async function fileTickets(plan, ports) {
       description: ticketDescription(task, plan.summary),
       taskType: "task"
     });
-    const record3 = asRecord(out);
+    const record3 = toolResultRecord(out);
     const failed4 = isFailed(record3 ?? out);
     const id = !failed4 ? record3?.id : void 0;
     ids2.push(typeof id === "number" || vocabulary.local && typeof id === "string" && id ? id : void 0);
@@ -28473,82 +29002,58 @@ async function fileTickets(plan, ports) {
   }
   return ids2;
 }
-function asRecord(out) {
-  if (typeof out === "string") {
-    try {
-      const parsed = JSON.parse(out);
-      return parsed && typeof parsed === "object" ? parsed : null;
-    } catch {
-      return null;
-    }
+async function startTickets(ids2, ports) {
+  const vocabulary = ticketToolVocabulary(ports.toolNames);
+  for (const id of ids2) {
+    if (id == null) continue;
+    const move = ticketStatusMove(id, "in_progress", vocabulary);
+    if (!move || !ports.toolNames.has(move.tool)) continue;
+    await call(ports, move.tool, { ...move.args });
   }
-  return out && typeof out === "object" ? out : null;
 }
-var INLINE_NEXT = `HAND-OFF: the analysis is complete and you are the coding model. Implement the tasks below in order \u2014 do not re-plan or re-read what the planner already read. When all are done, check them. ${VERIFY_STEP} Then commit and push, and report per ticket.`;
-var RESOLVE_REPORTS = `Each report ends with its Open issues \u2014 ${RESOLVE_OPEN_ISSUES}. Fix what the slices broke between them, and implement any task that failed.`;
-var PARALLEL_NEXT = `HAND-OFF: the tasks ran side by side, one coding agent each, and each has reported into the chat. You are the coding model. ${RESOLVE_REPORTS} Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
-var BACKGROUND_NEXT = `HAND-OFF: one coding agent per task is now running IN THE BACKGROUND, each posting into the chat under its own name. You are the coding model: do not redo their tasks. Work on anything not delegated, then call wait_agents for their reports (or act on each as it arrives). ${RESOLVE_REPORTS} Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
 async function executeHandOff(plan, ports) {
   const ids2 = await fileTickets(plan, ports);
+  await startTickets(ids2, ports);
   const tickets = plan.tasks.map((t, i) => ({ title: t.title, ...ids2[i] != null ? { id: ids2[i] } : {} }));
-  const parallel = ports.toolNames.has(FAN_OUT_TOOL) && canRunInParallel(plan.tasks);
+  const all = plan.tasks.map((_, i) => i);
+  const canFanOut = ports.toolNames.has(FAN_OUT_TOOL);
+  const split = canFanOut ? splitForParallel(plan.tasks) : { parallel: [], inline: all, clash: null };
   const briefContext = { summary: plan.summary, request: ports.request, knowledge: ports.knowledge };
-  await ports.postPlan?.(planMessage(plan, ids2, parallel)).catch(() => void 0);
-  if (parallel) {
-    const workstreams = [];
-    const changed2 = /* @__PURE__ */ new Set();
-    const placeholders = [];
-    let fanOutOk = true;
-    let background = false;
-    for (let start = 0; start < plan.tasks.length; start += FAN_OUT_BATCH) {
-      const batch = plan.tasks.slice(start, start + FAN_OUT_BATCH);
-      const out = asRecord(await call(ports, FAN_OUT_TOOL, {
-        workstreams: batch.map((t, k) => {
-          const id = ids2[start + k];
-          return {
-            label: id != null ? `#${id} ${t.title}` : t.title,
-            task: childTaskBrief(t, briefContext, id),
-            role: "code",
-            ...id != null ? { ticket: String(id) } : {}
-          };
-        })
-      }));
-      const started = Array.isArray(out?.agents) ? out.agents : Array.isArray(out?.workstreams) ? out.workstreams : null;
-      if (!out || out.ok === false && !started) {
-        if (start === 0) {
-          fanOutOk = false;
-          break;
-        }
-        workstreams.push({ ok: false, error: typeof out?.error === "string" ? out.error : "fan-out failed", tasks: batch.map((t) => t.title) });
-        continue;
-      }
-      if (started) workstreams.push(...started);
-      if (out.running === true) background = true;
-      if (Array.isArray(out.changedFiles)) {
-        for (const f of out.changedFiles) if (typeof f === "string") changed2.add(f);
-      }
-      if (Array.isArray(out.placeholders)) placeholders.push(...out.placeholders);
-    }
-    if (fanOutOk) {
-      return {
-        ok: true,
-        mode: "parallel",
-        tickets,
-        workstreams,
-        ...changed2.size ? { changedFiles: [...changed2] } : {},
-        ...placeholders.length ? { placeholders } : {},
-        next: background ? BACKGROUND_NEXT : PARALLEL_NEXT
-      };
-    }
+  const brief = (i) => childTaskBrief(plan.tasks[i], briefContext, ids2[i]);
+  await ports.postPlan?.(planMessage(plan, ids2, split)).catch(() => void 0);
+  const decide = (mode, parallel, inline) => ports.decided?.({
+    mode,
+    parallelTasks: parallel.map((i) => plan.tasks[i].title),
+    inlineTasks: inline.map((i) => plan.tasks[i].title),
+    clash: split.clash
+  });
+  const clash = split.clash ? { clash: split.clash } : {};
+  const ran = split.parallel.length ? await fanOut(plan, split.parallel, ids2, brief, (name, args) => call(ports, name, args)) : null;
+  if (ran) {
+    const mode = modeOf(split);
+    decide(mode, split.parallel, split.inline);
+    return {
+      ok: true,
+      mode,
+      tickets,
+      workstreams: ran.workstreams,
+      ...ran.changedFiles.length ? { changedFiles: ran.changedFiles } : {},
+      ...ran.placeholders.length ? { placeholders: ran.placeholders } : {},
+      ...mode === "mixed" ? clash : {},
+      next: mode === "parallel" ? ran.background ? BACKGROUND_NEXT : PARALLEL_NEXT : `${ran.background ? MIXED_BACKGROUND_NEXT : MIXED_PARALLEL_NEXT}
+
+${inlineTaskList(plan, split.inline, ids2, brief)}`
+    };
   }
+  decide("inline", [], all);
   return {
     ok: true,
     mode: "inline",
     tickets,
+    ...clash,
     next: `${INLINE_NEXT}
 
-${plan.tasks.map((t, i) => `${i + 1}. ${ids2[i] != null ? `#${ids2[i]} ` : ""}${t.title}
-${childTaskBrief(t, briefContext, ids2[i])}`).join("\n\n")}`
+${inlineTaskList(plan, all, ids2, brief)}`
   };
 }
 
@@ -29099,6 +29604,8 @@ var RunProgressGuard = class {
   due = null;
   /** The note the next turn opens with, when the host shows it in place of an escalation. */
   steer;
+  /** The B1 / B4 advisory the last turn produced, waiting to be traced. */
+  advisory = null;
   constructor(on = deviceLeverOn("a3_progress_detector")) {
     this.detector = on ? new ProgressDetector({}, { isReadOnly: isReadOnlyCall, isUnscopedMutation, isPlatformProgress: isMutatingPlatformTool }) : null;
   }
@@ -29119,6 +29626,7 @@ var RunProgressGuard = class {
     if (!action) return null;
     if (action.kind === "advisory") {
       this.steer = action.note;
+      this.advisory = action;
       return null;
     }
     if (action.kind === "escalate") this.detector?.setSteer(void 0);
@@ -29128,6 +29636,12 @@ var RunProgressGuard = class {
   /** The note the next turn opens with ("" when none) — a trip steer, or the B1 advisory. */
   steerNote() {
     return this.steer ?? this.detector?.steerNote() ?? "";
+  }
+  /** The advisory the last turn produced, taken once (null when none). */
+  takeAdvisory() {
+    const advisory = this.advisory;
+    this.advisory = null;
+    return advisory;
   }
   /** The escalation or pause waiting for this turn, taken once. */
   takeDue() {
@@ -29143,15 +29657,14 @@ var RunProgressGuard = class {
 function progressAfterToolCalls(run) {
   return (ctx) => {
     const action = run.progress.endTurn();
+    const advisory = run.progress.takeAdvisory();
+    if (advisory) traceStep(run, ctx.step, progressTraceStep(advisory));
     if (!action) return;
-    pushTrace(run.c, {
-      ts: nowIso(),
-      category: "message",
-      label: "loop.progress_check",
-      args: { step: ctx.step, trip: action.trip, signal: action.signal.kind, action: action.kind },
-      result: `progress check ${action.trip}: ${action.signal.kind} \u2192 ${action.kind}`
-    });
+    traceStep(run, ctx.step, progressTraceStep(action));
   };
+}
+function traceStep(run, step, s) {
+  pushTrace(run.c, { ts: nowIso(), category: "message", label: s.label, args: { step, ...s.args }, result: s.result });
 }
 function progressGuardTurn(run, step, selected) {
   const due = run.progress.takeDue();
@@ -29316,6 +29829,7 @@ function isTicketCompletion(tool, args) {
   return typeof status2 === "string" && DONE_STATUSES.has(status2.toLowerCase());
 }
 function canCompleteTicket(isOnBaseBranch, userDeclinedShipping, opts) {
+  if (opts?.outgoing && !opts.outgoing.ok) return false;
   if (isOnBaseBranch) return true;
   if (userDeclinedShipping) return true;
   const branch = (opts?.ticketGitBranch ?? "").trim();
@@ -29325,6 +29839,12 @@ function canCompleteTicket(isOnBaseBranch, userDeclinedShipping, opts) {
 }
 function notOnBaseBranchAdvisory() {
   return "CANNOT MARK DONE \u2014 code is not on the base branch (main/master). Either ship to main/master first, or if you intentionally left the code uncommitted, say so explicitly in your reply so this guard knows to allow it.";
+}
+function completionBlockedAdvisory(outgoing) {
+  if (outgoing && !outgoing.ok) {
+    return `CANNOT MARK DONE \u2014 this run's outgoing changes fail the ship gate: ${outgoing.reason} Mark the ticket done once they pass.`;
+  }
+  return notOnBaseBranchAdvisory();
 }
 var PlaceholderLedger = class {
   open = /* @__PURE__ */ new Map();
@@ -29748,13 +30268,13 @@ function confirmVia(port, runKey, stop) {
     }
   };
 }
-function decisionTrace(c, pass) {
-  const { decision } = pass;
+function decisionTrace(c, pass2) {
+  const { decision } = pass2;
   pushTrace(c, {
     ts: nowIso(),
     category: "message",
     label: "prefetch.decision",
-    durationMs: pass.elapsedMs,
+    durationMs: pass2.elapsedMs,
     args: {
       route: decision.route,
       actions: decision.actions.map(({ id, p, tier: tier2 }) => ({ id, p, tier: tier2 })),
@@ -29762,10 +30282,10 @@ function decisionTrace(c, pass) {
       tiers: decision.tiersRun
     },
     result: {
-      settled: pass.settled,
+      settled: pass2.settled,
       classifyMs: decision.elapsedMs,
-      elapsedMs: pass.elapsedMs,
-      ran: pass.ran.map(({ action, result, confirmed }) => ({
+      elapsedMs: pass2.elapsedMs,
+      ran: pass2.ran.map(({ action, result, confirmed }) => ({
         id: action.id,
         ok: !!result,
         ...confirmed !== void 0 ? { confirmed } : {},
@@ -29784,7 +30304,7 @@ async function answerDeterministically(chatId, c, req, runId, runKey = chatId) {
   if (!query) return NOTHING;
   settlePending(c, port, req, query);
   const stop = c.abort?.signal;
-  const pass = await runGate(query, port, {
+  const pass2 = await runGate(query, port, {
     ...stop ? { signal: stop } : {},
     confirm: confirmVia(port, runKey, stop),
     adopt: ({ action, candidate, result }) => adoptAnswerWithoutModel(chatId, c, req, result.text, {
@@ -29800,21 +30320,21 @@ async function answerDeterministically(chatId, c, req, runId, runKey = chatId) {
       }
     })
   });
-  if (!pass) return NOTHING;
-  decisionTrace(c, pass);
-  const lead = pass.lead;
+  if (!pass2) return NOTHING;
+  decisionTrace(c, pass2);
+  const lead = pass2.lead;
   if (lead) {
     c.pendingGate = {
       request: query,
-      outcome: { actionId: lead.action.id, route: pass.settled === "answer" ? "answer" : "prefetch", p: lead.candidate.p, tier: lead.candidate.tier, features: lead.candidate.features },
+      outcome: { actionId: lead.action.id, route: pass2.settled === "answer" ? "answer" : "prefetch", p: lead.candidate.p, tier: lead.candidate.tier, features: lead.candidate.features },
       ...runId ? { runId } : {}
     };
   }
-  if (pass.answer) {
-    recordAvoided(c, req, pass.answer.action.id, runId);
+  if (pass2.answer) {
+    recordAvoided(c, req, pass2.answer.action.id, runId);
     return { answered: true, tail: [] };
   }
-  return { answered: false, tail: pass.tail };
+  return { answered: false, tail: pass2.tail };
 }
 function recordAvoided(c, req, actionId, runId) {
   if (!req.recordAvoidedCall) return;
@@ -30446,6 +30966,139 @@ function relevantTools(tools, query) {
 
 // src/runStore/callPreflight.ts
 var import_working13 = require("@seanhogg/builderforce-memory/working");
+
+// src/runStore/shipGates.ts
+function authorModelsOf(run) {
+  return [...run.c.authorModels];
+}
+function policyOf(run) {
+  return run.req.evidencePolicy ?? DEFAULT_EVIDENCE_POLICY;
+}
+async function verifyPaths(run, files) {
+  const verifier = run.req.verifier;
+  if (!verifier || !files.length) return;
+  const byPath = new Map(files.map((f) => [f.absPath, f.hash]));
+  const records = await verifier.full(files.map((f) => f.absPath));
+  const now = Date.now();
+  for (const [absPath, hash2] of byPath) {
+    for (const check of records.get(absPath) ?? []) {
+      run.evidence.record(absPath, hash2, { ...check, at: check.at || now });
+    }
+  }
+}
+async function runOutgoingGate(run, repo, tool = "git_push") {
+  const git = run.req.git;
+  if (!git) return { verdict: { ok: true, unavailable: [] }, diffHash: null, gated: false };
+  const { files, diffHash, baseBranch, diff } = await git.outgoing(repo);
+  if (!baseBranch && tool !== "open_pull_request") return { verdict: { ok: true, unavailable: [] }, diffHash, gated: false };
+  await verifyPaths(run, files);
+  const verdict = outgoingGate(files, run.evidence, policyOf(run));
+  if (!verdict.ok) return { verdict, diffHash, gated: true };
+  const reviewed = await runReviewGate(run, diffHash, { repo, diff: diff ?? "", tool });
+  if (!reviewed.ok) return { verdict: reviewed, diffHash, gated: true };
+  return { verdict, diffHash, gated: true };
+}
+function approvedReviewFor(run, currentDiffHash) {
+  for (const review of run.c.shipReviews) {
+    if (reviewGate(review, authorModelsOf(run), currentDiffHash).ok) return review;
+  }
+  return null;
+}
+async function runReviewGate(run, currentDiffHash, change = { repo: "", diff: "", tool: "git_push" }) {
+  const reviewer = run.req.reviewer;
+  if (!reviewer) return { ok: true, unavailable: [] };
+  if (approvedReviewFor(run, currentDiffHash)) return { ok: true, unavailable: [] };
+  const authors = authorModelsOf(run);
+  const evidence = evidenceSummary(run);
+  const res = await reviewer.review({ repo: change.repo, diff: change.diff, evidence, authorModels: authors });
+  if ("refused" in res) {
+    return { ok: false, reason: `${change.tool} refused: ${res.refused}` };
+  }
+  const verdict = reviewGate(res, authors, currentDiffHash);
+  if (verdict.ok) run.c.shipReviews.push(res);
+  return verdict;
+}
+function evidenceSummary(run) {
+  const lines = [];
+  for (const ev of run.evidence.snapshot()) {
+    for (const check of ev.checks) {
+      lines.push(`${ev.path} ${check.kind} "${check.name}": ${check.outcome}`);
+    }
+  }
+  return lines.join("\n") || "(no evidence recorded yet)";
+}
+var isBaseBranchPush = (name, args) => name === "git_push" && args?.allowBaseBranch === true;
+function isCompleteReviewRecord(name, args) {
+  if (name !== "builtin_reviews_record") return false;
+  return args?.verdict === "complete";
+}
+async function shipGatePreflight(run, name, args) {
+  if (!run.req.git) return {};
+  const publish = isBaseBranchPush(name, args) || name === "open_pull_request";
+  if (!publish && !isCompleteReviewRecord(name, args)) return {};
+  try {
+    if (publish) {
+      const { verdict, diffHash: diffHash2, gated } = await runOutgoingGate(run, repoArgOf(args), name);
+      if (!verdict.ok) return { refusal: { ok: false, error: verdict.reason } };
+      return gated ? { evidence: approvalEvidence(run, verdict.unavailable, diffHash2) } : {};
+    }
+    const { diffHash } = await run.req.git.outgoing(repoArgOf(args));
+    const approved = diffHash ? approvedReviewFor(run, diffHash) : null;
+    if (!approved) {
+      return {
+        refusal: {
+          ok: false,
+          error: "builtin_reviews_record refused: no reviewGate-approved independent review exists for the current diff. The push gate runs one review sub-run by a model that did not author the change (PRD 45 OD-1) \u2014 push (or open a pull request) so the host records the review, then record complete again."
+        }
+      };
+    }
+    args.reviewerRef = approved.reviewerModel;
+    args.evidence = evidenceSummary(run);
+    return {};
+  } catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    return { refusal: { ok: false, error: `${name} refused: the ship gate could not read the outgoing change (${why}). Fix the repository state and retry.` } };
+  }
+}
+function approvalEvidence(run, unavailable2, diffHash) {
+  const checks = unavailable2.length ? `checks passed \xB7 ${unavailable2.length} check${unavailable2.length === 1 ? "" : "s"} could not run here (not verified)` : "checks passed";
+  const reviewer = diffHash ? approvedReviewFor(run, diffHash)?.reviewerModel : void 0;
+  return reviewer ? `${checks} \xB7 reviewed by ${reviewer}` : checks;
+}
+function repoArgOf(args) {
+  const r = args?.repo;
+  return typeof r === "string" ? r : "";
+}
+async function shipGateAdvisory(run, name, args, out) {
+  if (!run.req.git) return null;
+  if (name === "run_command") {
+    const command = args?.command;
+    if (typeof command === "string") return shellPublishHint(command);
+    return null;
+  }
+  if (name === "git_commit" && run.req.verifier && !isFailed2(out)) {
+    const verdict = await outgoingEvidenceVerdict(run, repoArgOf(args));
+    return verdict && !verdict.ok ? `ADVISORY (commit not refused): ${verdict.reason}` : null;
+  }
+  return null;
+}
+async function outgoingEvidenceVerdict(run, repo) {
+  const git = run.req.git;
+  if (!git) return void 0;
+  try {
+    const { files } = await git.outgoing(repo);
+    await verifyPaths(run, files);
+    return outgoingGate(files, run.evidence, policyOf(run));
+  } catch {
+    return void 0;
+  }
+}
+function isFailed2(out) {
+  const o = out;
+  return o != null && typeof o === "object" && o.ok === false;
+}
+
+// src/runStore/callPreflight.ts
 function callPreflight(run) {
   const { c, chatId, runKey, req, allTools, catalogToolNames, usedTools, readCoverage: readCoverage2, writeLedger, placeholderLedger } = run;
   const { runTool, needsConfirm, persistence } = req;
@@ -30498,6 +31151,13 @@ function callPreflight(run) {
       }
       const plan = parseHandOff(call2.args);
       if (typeof plan === "string") return { result: { data: { ok: false, error: plan } } };
+      const clash = !run.handOffClashRefused && !run.policy.handOffForced && new Set(catalogToolNames).has(FAN_OUT_TOOL) ? planScopeClash(plan.tasks) : null;
+      if (clash) {
+        run.handOffClashRefused = true;
+        const error = scopeClashCorrective(clash);
+        pushTrace(c, { ts: nowIso(), category: "message", label: HAND_OFF_CLASH_LABEL, args: { step: iter, ...clash }, result: error });
+        return { result: { data: { ok: false, error } } };
+      }
       reportToPolicy(run, { type: "hand_off" });
       pushTrace(c, handOffTrace(nowIso(), ctx.step, plan.tasks.length, HAND_OFF_TOOL));
       const outcome = await executeHandOff(plan, {
@@ -30524,6 +31184,15 @@ function callPreflight(run) {
           result: out ?? null,
           isError: isFailedToolResult(out)
         }),
+        // How the plan ran — side by side, inline or mixed, and the overlap that decided it —
+        // so the diagnostics report can say why tasks did not run as sub-agents.
+        decided: (decision) => pushTrace(c, {
+          ts: nowIso(),
+          category: "message",
+          label: HAND_OFF_MODE_LABEL,
+          args: { step: iter, ...decision },
+          result: handOffModeSentence(decision)
+        }),
         postPlan: async (text2) => {
           const [msg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text2, metadata: JSON.stringify({ [MID_TURN_META_KEY]: true }) }]);
           if (!msg) return;
@@ -30549,8 +31218,13 @@ function callPreflight(run) {
       pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: { publishHold: c.publishHold.messageNumber, note: refusal2.error } });
       return { result: { data: refusal2 } };
     }
+    const ship = await shipGatePreflight(run, call2.name, args);
+    if ("refusal" in ship) {
+      pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: ship.refusal, isError: true });
+      return { result: { data: ship.refusal } };
+    }
     if (needsConfirm && needsConfirm({ name: call2.name, args })) {
-      const ok = await requestRunConfirm(runKey, { name: call2.name, args }, { step: iter });
+      const ok = await requestRunConfirm(runKey, { name: call2.name, args, ...ship.evidence ? { evidence: ship.evidence } : {} }, { step: iter });
       if (!ok) {
         const declined = { cancelled: true, reason: "User declined this action." };
         pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: declined });
@@ -30655,21 +31329,26 @@ ${revisit}` : covered.note;
 // src/runStore/postEditDiagnostics.ts
 var EDIT_TOOLS2 = /* @__PURE__ */ new Set(["edit_file", "write_file"]);
 var NOTE_ERRORS2 = 5;
-function succeeded6(data) {
+function succeeded7(data) {
   return !(data && typeof data === "object" && data.ok === false);
 }
 async function postEditDiagnostics(call2, verifier) {
-  if (!verifier || !EDIT_TOOLS2.has(call2.name) || !succeeded6(call2.result)) return null;
-  const path2 = typeof call2.args.path === "string" ? call2.args.path.trim() : "";
-  if (!path2) return null;
+  if (!verifier || !EDIT_TOOLS2.has(call2.name) || !succeeded7(call2.result)) return null;
+  const paths = editedPaths(call2.args);
+  if (!paths.length) return null;
   let record3;
   try {
-    record3 = await verifier.diagnostics([path2]);
+    record3 = await verifier.diagnostics(paths);
   } catch {
     return null;
   }
   if (!record3 || record3.outcome !== "fail") return null;
   return postEditNote2(record3);
+}
+function editedPaths(args) {
+  const a = args ?? {};
+  const raw = [a.path, ...Array.isArray(a.edits) ? a.edits.map((e) => e?.path) : []];
+  return [...new Set(raw.filter((p) => typeof p === "string" && !!p.trim()).map((p) => p.trim()))];
 }
 function postEditNote2(record3) {
   const lines = record3.findings.slice(0, NOTE_ERRORS2).map((f) => `- ${f}`);
@@ -30677,6 +31356,55 @@ function postEditNote2(record3) {
 - \u2026and ${record3.findings.length - NOTE_ERRORS2} more` : "";
   return `Post-edit check FAILED (${record3.name}${record3.exitCode != null ? `, exit ${record3.exitCode}` : ""}) \u2014 fix this before building on it:
 ${lines.join("\n")}${more}`;
+}
+
+// src/runStore/postEditStructure.ts
+var BALANCE_TOOLS = /* @__PURE__ */ new Set(["edit_file"]);
+function succeeded8(data) {
+  return !(data && typeof data === "object" && data.ok === false);
+}
+function stringEditOf(raw, fallbackPath = "") {
+  const e = raw ?? {};
+  const path2 = typeof e.path === "string" && e.path.trim() ? e.path.trim() : fallbackPath;
+  if (!path2 || typeof e.old_string !== "string" || typeof e.new_string !== "string") return null;
+  return { path: path2, old_string: e.old_string, new_string: e.new_string };
+}
+function stringEditsOf(args) {
+  const a = args ?? {};
+  const fallback = typeof a.path === "string" ? a.path.trim() : "";
+  const out = [];
+  const single = stringEditOf(a);
+  if (single) out.push(single);
+  if (Array.isArray(a.edits)) {
+    for (const raw of a.edits) {
+      const e = stringEditOf(raw, fallback);
+      if (e) out.push(e);
+    }
+  }
+  return out;
+}
+function describeDelta(d) {
+  const parts = [];
+  const sign = (n2) => n2 > 0 ? `+${n2}` : `${n2}`;
+  if (d.curly) parts.push(`\`{}\` ${sign(d.curly)}`);
+  if (d.paren) parts.push(`\`()\` ${sign(d.paren)}`);
+  if (d.square) parts.push(`\`[]\` ${sign(d.square)}`);
+  return parts.join(", ");
+}
+function bracketBalanceNote(call2) {
+  if (!BALANCE_TOOLS.has(call2.name) || !succeeded8(call2.result)) return null;
+  const lines = [];
+  for (const e of stringEditsOf(call2.args)) {
+    const delta = bracketDelta(e.old_string, e.new_string, e.path);
+    if (changesBalance(delta)) lines.push(`- ${e.path}: ${describeDelta(delta)} (new_string vs old_string)`);
+  }
+  if (!lines.length) return null;
+  return `Post-edit check FAILED (bracket balance) \u2014 the replacement changed the bracket balance of the text it replaced, so the file is likely unparseable. Read the edited lines and fix this before building on it:
+${lines.join("\n")}`;
+}
+async function postEditNotes(call2, verifier) {
+  const notes2 = [bracketBalanceNote(call2), await postEditDiagnostics(call2, verifier)].filter((n2) => !!n2);
+  return notes2.length ? notes2.join("\n\n") : null;
 }
 
 // src/runStore/callRunner.ts
@@ -30750,10 +31478,11 @@ function callRunner(run) {
         const placeholderWarning = completionAdvisory(placeholderLedger.outstanding());
         const events = c.trace;
         const isOnBaseBranch = shippedToBaseBranch(events);
-        const canComplete = canCompleteTicket(isOnBaseBranch, false, { wroteCodeThisRun: c.codeChanged });
+        const outgoing = await outgoingEvidenceVerdict(run, repoArgOf(args));
+        const canComplete = canCompleteTicket(isOnBaseBranch, false, { wroteCodeThisRun: c.codeChanged, ...outgoing ? { outgoing } : {} });
         if (!canComplete) {
-          const said = notOnBaseBranchAdvisory();
-          pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call2.name, isOnBaseBranch }, result: said });
+          const said = completionBlockedAdvisory(outgoing);
+          pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call2.name, isOnBaseBranch, ...outgoing ? { outgoingOk: outgoing.ok } : {} }, result: said });
           advisory = said;
         } else if (placeholderWarning) {
           pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call2.name, open: placeholderLedger.outstanding() }, result: placeholderWarning });
@@ -30779,9 +31508,15 @@ function callRunner(run) {
     if (delegate) advisory = advisory ? `${advisory}
 
 ${delegate}` : delegate;
-    if (!advisory && !isReadTool) {
-      const diag = await postEditDiagnostics({ name: call2.name, args, result: out }, req.verifier);
-      if (diag) advisory = diag;
+    if (!isReadTool) {
+      const notes2 = await postEditNotes({ name: call2.name, args, result: out }, req.verifier);
+      if (notes2) advisory = advisory ? `${advisory}
+
+${notes2}` : notes2;
+      const ship = await shipGateAdvisory(run, call2.name, args, out);
+      if (ship) advisory = advisory ? `${advisory}
+
+${ship}` : ship;
     }
     const contextWindowTokens = await run.windowFit.contextWindow?.();
     const trimmedOut = trimToolResult(call2.name, out ?? null, { advisory, contextWindowTokens });
@@ -30867,7 +31602,7 @@ function isTestRunCall(label, args) {
   const text2 = `${label} ${JSON.stringify(args ?? {})}`;
   return /vitest|jest|mocha|\.test\.|\.spec\.|\btest\b|\btests\b/i.test(text2) && !/tsc|typecheck|type-check/i.test(text2);
 }
-function isTestPath2(path2) {
+function isTestPath3(path2) {
   const p = path2.replace(/\\/g, "/");
   return /\.(test|spec)\.[^/]+$/.test(p) || /\/__tests__\//.test(p);
 }
@@ -30919,7 +31654,7 @@ function computeProgressLine(trace4) {
   const testNeeds = [];
   for (const st of [...changed2].sort((a, b) => a.path.localeCompare(b.path))) {
     if (!hasTypecheck(st)) typecheckNeeds.push(`${st.path} not typechecked`);
-    if (st.kind === "create" && isSourceLike(st.path) && !isTestPath2(st.path) && !hasTestRunMention(st)) {
+    if (st.kind === "create" && isSourceLike(st.path) && !isTestPath3(st.path) && !hasTestRunMention(st)) {
       testNeeds.push(`test for ${st.path.split(/[\\/]/).pop()}`);
     }
   }
@@ -30997,7 +31732,46 @@ function kernelCall(run, id, name, args, step, rawArguments) {
   const raw = { id, name, arguments: rawArguments ?? JSON.stringify(args) };
   return { call: { id, name, args, raw, malformed: rawArguments !== void 0 }, ctx: { step, messages: run.convo } };
 }
+var TURN_BLOCK = /<turn_context>[\s\S]*?<\/turn_context>/g;
+function namingText(run) {
+  const carrier = turnContextCarrier(run.c);
+  if (carrier) return { system: run.systemPrompt, turn: userTextOf(carrier) };
+  return { system: run.systemPrompt.replace(TURN_BLOCK, ""), turn: (run.systemPrompt.match(TURN_BLOCK) ?? []).join("\n\n") };
+}
+function vocabularyOf(names) {
+  return [...localToolsIn(names), ...studioToolsIn(names), ...memoryToolsIn(names), ...skillToolsIn(names)];
+}
+function unnamedVocabulary(run) {
+  const { system, turn } = namingText(run);
+  const named = new Set(toolNamesMentionedIn(`${system}
+
+${turn}`));
+  return new Set(vocabularyOf(run.catalogToolNames).filter((n2) => !named.has(n2)));
+}
+function promptOnlyNamed(run) {
+  const { system, turn } = namingText(run);
+  const kept = /* @__PURE__ */ new Set([...toolNamesMentionedIn(turn), ...vocabularyOf(run.catalogToolNames), ASK_USER_TOOL, HAND_OFF_TOOL]);
+  return new Set(toolNamesMentionedIn(system).filter((n2) => !kept.has(n2)));
+}
+function surfaceRequired(run, naming) {
+  const base = isCappedToolRole(run.policy.phase) ? run.alwaysAdvertised.filter((n2) => !naming().unnamed.has(n2) && !naming().promptOnly.has(n2)) : run.alwaysAdvertised;
+  return new Set(offersHandOff(run.policy) && run.canAskUser ? [...base, HAND_OFF_TOOL] : base);
+}
 function brainPlatformTools(run) {
+  let naming;
+  const named = () => naming ??= { unnamed: unnamedVocabulary(run), promptOnly: promptOnlyNamed(run) };
+  let cappedMenu;
+  const traceUnadvertised = (raw, step) => {
+    const name = resolveToolAlias(raw);
+    if (!cappedMenu || cappedMenu.step !== step || cappedMenu.names.has(name) || isRouterTool(name) || !run.catalogToolNames.includes(name)) return;
+    pushTrace(run.c, {
+      ts: nowIso(),
+      category: "message",
+      label: "tools.routed",
+      args: { step, via: "direct" },
+      result: `Called ${name} directly; it was not advertised this turn, so it ran as a tool-router call.`
+    });
+  };
   const before = callPreflight(run);
   const dispatch = callRunner(run);
   const after = callPostStep(run);
@@ -31024,14 +31798,18 @@ function brainPlatformTools(run) {
         return [...catalog, ...conversational.filter((t) => !names.has(t.function.name))];
       },
       get selection() {
-        return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT, capRequired: true, role: run.policy.phase, roleKeep: studioToolsIn(run.catalogToolNames), rank: (tools, query) => relevantTools(tools, query), pinned: [...run.usedTools], required: new Set(offersHandOff(run.policy) && run.canAskUser ? [...run.alwaysAdvertised, HAND_OFF_TOOL] : run.alwaysAdvertised) };
+        return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT, capRequired: true, role: run.policy.phase, roleKeep: studioToolsIn(run.catalogToolNames), rank: (tools, query) => relevantTools(tools, query), pinned: [...run.usedTools], required: surfaceRequired(run, named) };
       },
       // ONE cap on a result: the Brain's own, applied inside `callRunner` (`trimToolResult`, by LINE, sized to the serving
       // model's window). The agent's per-tool cap would cut the already budgeted text a second time and drop its paging fields.
       resultCap: () => Number.MAX_SAFE_INTEGER,
       // No `handsOff`: `hand_off` reports itself to the model policy inside `callPreflight` (through the run's view), and a
       // call the agent hands off first would find the plan already closed.
-      turn: async (env) => withRunBrief(run, await brainTurnMenu(run, env, run.allTools?.length ?? 0)),
+      turn: async (env) => {
+        const menu = withRunBrief(run, await brainTurnMenu(run, env, run.allTools?.length ?? 0));
+        cappedMenu = isCappedToolRole(run.policy.phase) && menu?.tools ? { step: env.step, names: new Set(menu.tools.map((t) => t.function.name)) } : void 0;
+        return menu;
+      },
       // A3's detector is the Brain's own (`progressGuard.ts`): the turn is judged when its calls have all run, as the loop does.
       turnEnded: progressAfterToolCalls(run),
       // The turn's step, as the kernel numbers it: the router, the hand-off, the confirm gate, the guards, the activity line and the
@@ -31042,6 +31820,7 @@ function brainPlatformTools(run) {
       // The preflight (router, `ask_user`, `hand_off`, confirm gate, dedupe) runs where the loop runs it: ahead of the dispatch, not raced
       // against the person's Stop. A Stop pressed during a hand-off waits for it to end, so its tickets and children are on the trace.
       async preflight(raw, { step }) {
+        traceUnadvertised(raw.name, step);
         const { call: call2, ctx } = kernelCall(run, raw.id, raw.name, raw.malformed ? {} : raw.args, step, raw.malformed ? raw.arguments : void 0);
         const pre = await before(call2, ctx);
         if (pre && "result" in pre) {
@@ -31058,6 +31837,7 @@ function brainPlatformTools(run) {
         prepared.delete(id);
         let early;
         if (!held) {
+          traceUnadvertised(name, env.step);
           const fresh = kernelCall(run, id, name, args, env.step);
           const pre = await before(fresh.call, fresh.ctx);
           if (pre && "result" in pre) early = pre.result;
@@ -31135,14 +31915,20 @@ function linkedAbort(parent) {
   else parent?.addEventListener("abort", onParent, { once: true });
   return { signal: own.signal, abort: () => own.abort(), release: () => parent?.removeEventListener("abort", onParent) };
 }
-async function summaryWithin(ms, summarize, parent, onLate) {
+async function summaryWithin(ms, summarize, parent, onLate, onError) {
   const link = linkedAbort(parent);
   let timer;
   const late = new Promise((resolve) => {
     timer = setTimeout(() => resolve("late"), ms);
   });
   try {
-    const out = await Promise.race([summarize(link.signal).catch(() => null), late]);
+    const out = await Promise.race([
+      summarize(link.signal).catch((reason) => {
+        onError?.(reason);
+        return null;
+      }),
+      late
+    ]);
     if (out !== "late") return out;
     link.abort();
     onLate();
@@ -31187,6 +31973,17 @@ function brainCompaction(run) {
                   label: "context.fold_timeout",
                   args: { step: ctx.step, waitedMs: limit, messages: msgs.length },
                   result: "The context summary did not finish in time; this run goes on with the most recent history instead."
+                });
+              },
+              // A failed summary (not a timeout) is still a `null` fallback, but the reason is traced so a persistently
+              // failing summarizer is diagnosable, never silently dropped.
+              (reason) => {
+                pushTrace(c, {
+                  ts: nowIso(),
+                  category: "message",
+                  label: "context.fold_error",
+                  args: { step: ctx.step, messages: msgs.length },
+                  result: `The context summary failed: ${reason instanceof Error ? reason.message : String(reason)}. This run goes on with the most recent history instead.`
                 });
               }
             );
@@ -32316,7 +33113,7 @@ async function runPrepared(run) {
     // ... and the preamble ran the host's model preflight already (`hostRunContext.ts`): the agent's own would ask the host again and warn
     // about a model the loop never warned about (a QUICK run's quick model), so the Brain's says the verdict and nothing more.
     // ... and the finish module carries the host's engine ports (`brainFinish.ts`): an owner never ends with its sub-agents still working.
-    modules: { compaction: compaction.hook, model: recordedModelHook(c, req.model), finish: brainFinishHook(req) },
+    modules: { compaction: compaction.hook, model: recordedModelHook(c, req.model), finish: withDeterministicFinish(run, brainFinishHook(req)) },
     // The Brain's read-coverage owns the no-progress counter (`callPreflight`/`callPostStep`
     // feed it); hand the kernel that ONE instance to persist, so a circling run keeps its count
     // across the step yield it is steered into — not a kernel-built twin the Brain never feeds.
@@ -32436,22 +33233,20 @@ async function startRun(runKey, request, claim) {
         emit2(c);
       }
       const changed2 = c.codeChanged;
-      const shipped = !aborted && changed2 && shippedToBaseBranch(runTrace(c), { touchedFiles: c.touchedFiles });
-      const reviewedInPreview = !aborted && changed2 ? ticketsReviewedInPreview(runTrace(c)) : [];
+      const trace4 = runTrace(c);
+      const shipped = !aborted && changed2 && shippedToBaseBranch(trace4, { touchedFiles: c.touchedFiles });
+      const reviewedInPreview = !aborted && changed2 ? ticketsReviewedInPreview(trace4) : [];
       const view = settleView(c, runId);
       const needsTicket = !aborted && changed2 && req.projectId != null && !!req.runTool;
-      const closeOut = {
-        serverChatId,
-        view,
-        req,
-        needsTicket,
-        shipped,
-        reviewedInPreview,
-        openPlaceholders: openPlaceholders(),
-        trace: runTrace(c),
-        evidence
-      };
-      await within(left(), () => closeOutRun(closeOut), () => view.note?.({
+      const openPh = openPlaceholders();
+      const verification = verificationOf(evidence, c.touchedFiles);
+      const hasTicket = view.deltaTicketId != null || localTicketsFiledInRun(trace4).length > 0;
+      const finished = finishConditionMet({ shipped, verified: verification.verified, openPlaceholders: openPh, hasTicket });
+      const closeOut = { serverChatId, view, req, needsTicket, shipped, reviewedInPreview, openPlaceholders: openPh, trace: trace4, evidence, verified: verification.verified, hasTicket };
+      c.finishClosedOut = true;
+      await within(left(), async () => {
+        await deterministicFinish(closeOut, { c, req, serverChatId, recalled: null });
+      }, () => view.note?.({
         ts: nowIso(),
         category: "message",
         label: "run.backstop_timeout",
@@ -32464,10 +33259,11 @@ async function startRun(runKey, request, claim) {
         args: { error: e instanceof Error ? e.message : String(e) },
         result: "The run's ticket bookkeeping failed; the run is settled without it."
       }));
-      const trace4 = runTrace(c);
+      c.finishClosedOut = true;
+      const finalTrace = runTrace(c);
       const requestText = req.userTurn === void 0 ? void 0 : contentText(req.userTurn);
       const wakeTurn = delegatingCells.has(c) && isChildReportText(requestText);
-      if (attemptedDelegation(trace4)) delegatingCells.add(c);
+      if (attemptedDelegation(finalTrace)) delegatingCells.add(c);
       const outcome = req.reportOutcome && codeRunOutcome({
         runId: c.runId,
         codeModel: c.codeModel,
@@ -32476,7 +33272,7 @@ async function startRun(runKey, request, claim) {
         failed: c.error !== "",
         error: c.error,
         shipped,
-        trace: trace4,
+        trace: finalTrace,
         projectId: req.projectId,
         askedForChange: !wakeTurn && asksForChange(requestText)
       });
@@ -32494,7 +33290,7 @@ async function startRun(runKey, request, claim) {
       await within(left(), async () => {
         await steps.flush();
       }, () => void 0);
-      if (continues && !aborted) await continueLeftovers(runKey, c, startRun, settleClaim);
+      if (continues && !finished && !aborted) await continueLeftovers(runKey, c, startRun, settleClaim);
     } finally {
       releaseClaim(c, settleClaim);
     }

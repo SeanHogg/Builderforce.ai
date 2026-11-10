@@ -18,6 +18,7 @@ import type {
 } from "@seanhogg/builderforce-brain-embedded";
 import type { ToolDef } from "./fileTools";
 import type { EditorRunSettings } from "./stageModels";
+import type { ShipPorts, ShipPortsRun } from "./verify/shipPorts";
 import type { RunDirectives } from "./hooks/runHooks";
 import type { InstalledRunRecovery } from "./installRunRecovery";
 
@@ -113,6 +114,8 @@ export interface NativeBrainRunOptions {
   approve(request: NativeApprovalRequest): Promise<boolean>;
   /** Transport-bound streaming completion fn. */
   stream: BrainStreamFn;
+  /** PRD 45 ship-gate ports for this run, built from its root, stream and settings (`verify/shipPorts.ts`). */
+  shipPorts?: (run: ShipPortsRun) => ShipPorts;
   /**
    * Where the loop writes its intermediate turns. Defaults to
    * {@link transientRunPersistence} — the native participant persists the WHOLE turn

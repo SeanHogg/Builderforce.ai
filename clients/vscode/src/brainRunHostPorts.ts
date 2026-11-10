@@ -30,6 +30,7 @@ import { startedCommandsOf } from "./childRunSpawner";
 import { askedText } from "./runAsked";
 import { editorChatSessionKey } from "./sessionNotes";
 import { createBrainRunHost, type BrainRunHost } from "./brainRunHost";
+import { editorShipPorts } from "./verify/editorShipPorts";
 import { gateStarts } from "./hostStartGate";
 import { changeSetIdentityForHostRun, recordChangeSetAroundRun } from "./runChangeSets";
 import { installRunRecovery } from "./installRunRecovery";
@@ -205,6 +206,8 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     ...deviceLedgerPorts(local.usage, hostLog),
     // Every sub-agent journaled WITH its parent run, so a run the editor dies inside resumes knowing its children.
     childLedger: createChildLedger({ startedCommands: startedCommandsOf, persist: persistChildrenTo(local.store), log: hostLog }),
+    // PRD 45 ship-gate ports — verifier + git once per workspace root, the reviewer per run.
+    shipPorts: editorShipPorts,
     // How a code-changing run's coder did — so the next run's coder is picked on evidence.
     reportOutcome: (outcome) => postRunOutcome(outcome),
     reportRunRecord: (record) => postRunOutcome(record),

@@ -30,6 +30,7 @@ import type { ChildControls, ChildOwner } from "./childRunSpawner";
 import type { ChildApprover } from "./childApprovalRelay";
 import type { ChildLedger } from "./childLedger";
 import type { EditorRunSettings } from "./stageModels";
+import type { ShipPorts, ShipPortsRun } from "./verify/shipPorts";
 import type { RunOutcomeReport } from "@seanhogg/builderforce-brain-embedded";
 import type { PlatformChatIdentity } from "./platformTools";
 
@@ -179,6 +180,12 @@ export interface BrainRunHostPorts {
    * it stays a cacheable prefix. Omitted ⇒ the prompt's own copy is used as sent.
    */
   grounding?(): Promise<string | undefined>;
+  /**
+   * PRD 45 §4.4 / PRD 46 §3.6: the ship-gate ports (`verifier`, `git`, `reviewer`) for ONE run,
+   * spread onto its request next to `needsConfirm` (`verify/shipPorts.ts`). Omitted ⇒ every
+   * gate stays inert, exactly as a host that binds none.
+   */
+  shipPorts?(run: ShipPortsRun): ShipPorts;
   /** Report a settled code-changing run's outcome to learned routing. Best-effort. */
   reportOutcome?(outcome: BrainRunOutcome): Promise<unknown>;
   /** The uniform §8.2 record of a run that made no coder grade (recorded, never taught to routing); the same door as {@link reportOutcome}. */

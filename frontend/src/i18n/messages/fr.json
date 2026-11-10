@@ -37384,9 +37384,13 @@
     "panelApi": "API",
     "panelResolve": "File de corrections",
     "panelSimulate": "Simuler",
+    "panelAgentRuns": "Exécutions d'agents",
     "viewGraph": "Graphe",
     "viewMap": "Carte mentale",
     "viewTransit": "Carte",
+    "viewFourPlusOne": "Vues 4+1",
+    "viewStyle": "Style",
+    "viewFeatures": "Fonctionnalités",
     "viewModesLabel": "Vue",
     "graphHint": "Faites défiler ou pincez pour zoomer, glissez pour déplacer, sélectionnez un nœud pour ses détails.",
     "nodeAria": "{label}, {kind}",
@@ -37583,6 +37587,46 @@
       "done": "Terminé"
     },
     "surface": {
+      "agentRuns": {
+        "loading": "Lecture des exécutions d'agents enregistrées…",
+        "failed": "Les exécutions d'agents n'ont pas pu être lues.",
+        "emptyRuns": "Aucune exécution d'agent enregistrée sur cette machine pour l'instant.",
+        "emptyFindings": "Rien à signaler dans cette exécution.",
+        "runsTitle": "Exécutions récentes",
+        "runMeta": "{turns} tours · {models}",
+        "runCounts": "{error} erreurs · {warn} avertissements · {info} remarques",
+        "reportLoading": "Lecture de cette exécution…",
+        "reportMissing": "Cette exécution n'est plus enregistrée.",
+        "stripTitle": "Tours",
+        "stripBar": "Tour {index} · {role} · {model} · {kind} · {prompt} jetons de prompt · {completion} jetons de réponse · {tools} appels d'outils · {seconds} s",
+        "legendTitle": "Types de tour",
+        "findingsTitle": "Constats",
+        "evidenceRow": "[[Tour {turn} · ]]{label}",
+        "filesTitle": "Fichiers touchés",
+        "filesEmpty": "Cette exécution n'a écrit aucun fichier.",
+        "fileWrites": "{count} écritures",
+        "fileChecked": "Vérifié",
+        "fileUnchecked": "Non vérifié",
+        "showOnGraph": "Afficher sur le graphe",
+        "notOnGraph": "Absent de ce graphe",
+        "severity": { "info": "Remarque", "warn": "Avertissement", "error": "Erreur" },
+        "turnKinds": { "read": "Lecture", "write": "Écriture", "forced": "Passage forcé", "text": "Texte seul", "failed": "Échec" },
+        "findings": {
+          "analysis_overrun": { "title": "Longue analyse avant la première écriture", "description": "{readTurns} tours en lecture seule avant la première écriture (tour {firstWriteTurn})." },
+          "unkept_readiness": { "title": "Se disait prêt, a continué à lire", "description": "{claims} annonces de disponibilité ont été suivies de {readTurnsAfter} tours en lecture seule." },
+          "serial_single_writes": { "title": "Une écriture par tour", "description": "{turns} tours n'ont fait chacun qu'une écriture, pour un coût de {promptTokens} jetons de prompt." },
+          "prompt_bloat": { "title": "Prompt bien plus grand que la sortie", "description": "Le prompt valait {ratio}× la réponse : {promptTokens} jetons de prompt, {perWrite} par écriture." },
+          "unverified_writes": { "title": "Écritures jamais vérifiées", "description": "{files} fichiers ({writes} écritures) n'ont fait l'objet d'aucune vérification réussie ensuite." },
+          "bracket_break": { "title": "Une modification a cassé l'équilibre des accolades", "description": "Une modification de {path} a changé l'équilibre des accolades et parenthèses ({delta})." },
+          "edit_churn": { "title": "Le même fichier réécrit encore et encore", "description": "{path} a été écrit {writes} fois." },
+          "filed_then_inline": { "title": "Tickets créés, puis travail fait soi-même", "description": "{tickets} tickets ont été créés sans qu'aucun soit attribué ; la session a ensuite écrit le code elle-même." },
+          "same_model_roles": { "title": "Planification et code sur un seul modèle", "description": "La planification et le code ont tous deux tourné sur {model} alors que le travail a été passé." },
+          "oversized_args": { "title": "Arguments d'outil surdimensionnés", "description": "{calls} appels à {tool} ont transporté jusqu'à {bytes} octets d'arguments." },
+          "slow_turns": { "title": "Tours lents", "description": "{turns} tours ont duré une minute ou plus ; le plus lent a duré {slowestMs} ms." },
+          "repeated_narration": { "title": "Narration répétée", "description": "{turns} tours ont répété la même narration avant d'appeler un outil." },
+          "stopped_unverified": { "title": "Arrêtée avec des écritures non vérifiées", "description": "L'exécution a été arrêtée avec {files} fichiers écrits jamais vérifiés." }
+        }
+      },
       "spineLabel": "Où vous êtes",
       "panelsLabel": "Panneaux",
       "panelToggles": {
@@ -37772,7 +37816,10 @@
         "groupSelectedOne": "{count} groupe sélectionné", "groupSelectedOther": "{count} groupes sélectionnés",
         "previewFixOne": "Prévisualiser {count} correctif", "previewFixOther": "Prévisualiser {count} correctifs",
         "applyFixesOne": "Appliquer {count} correctif", "applyFixesOther": "Appliquer {count} correctifs",
-        "applyFailedOne": "{count} correctif n’a pas pu être appliqué", "applyFailedOther": "{count} correctifs n’ont pas pu être appliqués"
+        "applyFailedOne": "{count} correctif n’a pas pu être appliqué", "applyFailedOther": "{count} correctifs n’ont pas pu être appliqués",
+        "dependentOne": "{count} fichier en dépend", "dependentOther": "{count} fichiers en dépendent",
+        "callerOne": "{count} appelant", "callerOther": "{count} appelants",
+        "moreFeaturesOne": "+{count} autre n’est pas affiché.", "moreFeaturesOther": "+{count} autres ne sont pas affichés."
       },
       "heat": {
         "description": "Grille de chaleur : {layers}, {components}. Sélectionnez une cellule pour voir ses détails.",
@@ -38327,6 +38374,64 @@
           "unusedDependency": "Supprimer les dépendances inutilisées",
           "splitByCommand": "Scinder par groupe de commandes",
           "extractClone": "Extraire le code commun"
+        }
+      },
+      "fourPlusOne": {
+        "viewsLabel": "Vues 4+1",
+        "views": { "logical": "Logique", "development": "Développement", "process": "Processus", "physical": "Physique", "scenarios": "Scénarios" },
+        "hints": {
+          "logical": "De quoi le système est fait : ses composants, couche par couche.",
+          "development": "Comment le code est organisé : dossiers et modules.",
+          "process": "Ce qui s’exécute et quand : les appels le long de la ligne sélectionnée.",
+          "physical": "Où il s’exécute : les unités déployables et les stockages et services qu’elles atteignent.",
+          "scenarios": "À quoi il sert : les chemins qui partent de chaque point d’entrée."
+        },
+        "unitsTitle": "Unités déployables",
+        "unitApps": "Applications : {apps}",
+        "storesTitle": "Stockages de données et services externes",
+        "storesEmpty": "Aucune ligne ne se termine dans un stockage de données ou un service externe.",
+        "scenariosTitle": "Scénarios",
+        "scenariosEmpty": "Aucun point d’entrée trouvé, il n’y a donc aucun scénario à tracer.",
+        "scenarioRoute": "{from} → {to}"
+      },
+      "architectureStyle": {
+        "title": "Style d’architecture",
+        "description": "Lu à partir du code seul : chaque style est noté selon des vérifications fixes sur ses couches, le sens des dépendances, les noms de fichiers et les unités déployables.",
+        "verdict": "Correspondance la plus proche : {style} ({percent} % de ses vérifications satisfaites)",
+        "verdictNone": "Aucun style ne correspond clairement : aucun ne satisfait plus de la moitié de ses vérifications devant les autres.",
+        "fit": "{percent} % de correspondance",
+        "styles": { "ddd": "Conception pilotée par le domaine", "onion": "Oignon", "nLayer": "N couches", "nTier": "N tiers", "clientServer": "Client-serveur", "microservices": "Microservices" },
+        "checks": {
+          "domainLayer": "Une couche domaine contient une vraie part du code",
+          "dddNamed": "Des fichiers sont nommés comme des agrégats, entités, objets valeur ou dépôts",
+          "domainIsolated": "Le domaine ne dépend d’aucune autre couche",
+          "inverted": "L’infrastructure dépend vers l’intérieur, du domaine ou de l’application",
+          "layered": "Le code est réparti en plusieurs couches",
+          "downward": "Les dépendances pointent vers le bas, jamais vers une couche supérieure",
+          "noSkips": "Aucune dépendance ne saute une couche",
+          "singleUnit": "Les couches sont livrées en une seule unité déployable",
+          "tierSplit": "La présentation et les données sont dans des unités déployables séparées",
+          "clientSide": "Un côté client a ses propres dossiers",
+          "serverSide": "Un côté serveur a ses propres dossiers",
+          "routes": "Le serveur expose des routes",
+          "manyUnits": "Plusieurs unités déployables ont leurs propres points d’entrée",
+          "independent": "Les unités se référencent à peine entre elles"
+        },
+        "evidence": "Mesuré : {count} sur {total}",
+        "status": { "met": "Satisfaite", "partial": "Partiellement satisfaite", "missed": "Non satisfaite" },
+        "examples": "Exemples",
+        "empty": "Aucun fichier source n’est dans une couche, il n’y a donc rien à classer."
+      },
+      "keyFeatures": {
+        "title": "Fonctionnalités clés",
+        "description": "Lu à partir du code seul : les capacités, l’API, les points d’entrée, les patrons utilisés et les parties dont tout dépend.",
+        "groups": { "capabilities": "Capacités", "endpoints": "Points de terminaison de l’API", "entryPoints": "Points d’entrée", "patterns": "Patrons utilisés", "core": "Les plus sollicités" },
+        "empty": {
+          "capabilities": "Aucune zone ni aucun dossier trouvé.",
+          "endpoints": "Aucun fichier n’enregistre de route.",
+          "entryPoints": "Aucun fichier n’est dans la couche d’entrée.",
+          "patterns": "Aucun patron de conception reconnu.",
+          "core": "Aucun fichier n’est référencé par un autre."
         }
       },
       "pinpoint": {

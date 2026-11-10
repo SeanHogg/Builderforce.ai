@@ -32,7 +32,10 @@ export default defineConfig(libraryConfig({
   // context, Rovr's composition root): importing the root there pulled the whole Brain core into the auth chunk. The ESM
   // output is code-split, so this entry and the root share ONE `pendingWords` module (one owner, one journal) - both
   // hosts that use it are ESM bundles.
-  entry: { index: 'src/index.ts', chatError: 'src/chatError.ts', bfi: 'src/pageEngines/bfiLoader.ts', pendingWords: 'src/pendingWords.ts' },
+  //
+  // `runFindings` is a FIFTH (PRD 46): the pure run-findings detectors the VS Code extension host runs over a chat's
+  // journal for the Visualizer's Agent-runs drawer. No React, so the host reads them without the hook layer.
+  entry: { index: 'src/index.ts', chatError: 'src/chatError.ts', bfi: 'src/pageEngines/bfiLoader.ts', pendingWords: 'src/pendingWords.ts', runFindings: 'src/runFindings/index.ts' },
   // `resolve`, not a bare `true`. The JS bundles already inline
   // `@builderforce/agent-stall` (it is a devDependency, so tsup does not treat it
   // as external) — but `dts: true` left the DECLARATIONS re-exporting the bare

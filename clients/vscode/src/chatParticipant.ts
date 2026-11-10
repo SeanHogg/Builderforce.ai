@@ -26,6 +26,7 @@ import type { ToolDef } from "./fileTools";
 import { brainToolCatalog } from "./brainToolCatalog";
 import { withWorkspaceStaleness } from "./memoryStaleness";
 import { runNativeBrain, type NativeApprovalRequest } from "./nativeBrainRun";
+import { editorShipPorts } from "./verify/editorShipPorts";
 import { referencesTurnBlock, workspaceReferenceReader } from "./chatReferences";
 import { hostIngressDeps, routeMentionBudget } from "./hostIngress";
 import { whereDefinedOnce } from "./contextPack/preSearchSource";
@@ -335,6 +336,8 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
           local.usage,
           { chatId: runChatId, runKey: runChatId, mode: "work" },
         ),
+        // The PRD 45 ship-gate ports — the same editor binding the panel's runs get.
+        shipPorts: editorShipPorts,
         // Journal this turn's tool work for restart recovery (G22): same handle as the
         // panel's host, so a restart RESUMES a safe run or CLEANLY REPORTS it interrupted.
         recovery,

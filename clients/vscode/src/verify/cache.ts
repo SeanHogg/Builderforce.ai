@@ -15,9 +15,10 @@ export function cacheKey(absPath: string, hash: string, checkName: string): Cach
   return `${absPath.replace(/\\/g, "/")}\u0000${hash}\u0000${checkName}`;
 }
 
-export interface VerifyCache {
-  get(absPath: string, hash: string, checkName: string): CheckRecord | undefined;
-  set(absPath: string, hash: string, checkName: string, record: CheckRecord): void;
+/** `T` is what one key holds: a single record, or (the full tier) every record a file's checks produced. */
+export interface VerifyCache<T = CheckRecord> {
+  get(absPath: string, hash: string, checkName: string): T | undefined;
+  set(absPath: string, hash: string, checkName: string, record: T): void;
   /** Drop every entry for a path (its bytes changed). Memory only — a gate that re-hashes would miss anyway. */
   invalidate(absPath: string): void;
   /** Bounded, so a long session's cache cannot grow without limit. */
@@ -27,8 +28,8 @@ export interface VerifyCache {
 /** Most-recently-used bound; beyond it the oldest entries are evicted. */
 const DEFAULT_MAX_ENTRIES = 500;
 
-export function createVerifyCache(maxEntries: number = DEFAULT_MAX_ENTRIES): VerifyCache {
-  const store = new Map<CacheKey, CheckRecord>(); // insertion order = oldest first
+export function createVerifyCache<T = CheckRecord>(maxEntries: number = DEFAULT_MAX_ENTRIES): VerifyCache<T> {
+  const store = new Map<CacheKey, T>(); // insertion order = oldest first
   return {
     get(absPath, hash, checkName) {
       const key = cacheKey(absPath, hash, checkName);

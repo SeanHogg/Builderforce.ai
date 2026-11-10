@@ -35,6 +35,8 @@ import { notReviewedHere } from "./knowledgeNotHere";
 import { assertWritable, packRootGraph, packScopeRows, readOnlyPack } from "./packs/packRoots";
 import { linkedKnowledgeClient, linkedProject, loadGraph, log, openRoot, rootKnowledgeFiles, workspaceFolders, type GraphQuery } from "./knowledgeService";
 import { getRun, listRuns } from "./review/reviewRuns";
+import { createAgentRuns, type AgentRuns } from "./agentRuns";
+import { localBrainApplication } from "../localFirstStore";
 
 /** Search hits the view shows at most. */
 const SEARCH_HITS = 20;
@@ -64,6 +66,11 @@ export class KnowledgeBridge implements vscode.Disposable {
   private readonly loadedBy = new Map<string, GraphQuery>();
   /** Delete rights per root, read once per graph version (the facts endpoint's viewer + authors). */
   private readonly rights: FactRightsCache = factRightsCache(async (rootId) => (await linkedKnowledgeClient(this.secrets)?.facts(rootId)) ?? null);
+  /** The recent local agent runs and their findings (PRD 46), memoised per chat; the linked project's chats only. */
+  private agentRunsMemo: AgentRuns | undefined;
+  private get agentRuns(): AgentRuns {
+    return (this.agentRunsMemo ??= createAgentRuns(localBrainApplication(this.host.ctx).persistence, () => linkedProject()?.id));
+  }
 
   /** Apply, undo and check of a fix: the trust gate, the once-per-root confirmation, the per-root lock. */
   private readonly fixes = new KnowledgeFixSession({
@@ -146,6 +153,8 @@ export class KnowledgeBridge implements vscode.Disposable {
       case "cancelFixCheck": this.fixes.cancel(call.rootId); return null;
       case "tryRequest": return tryRequestOf(call.req);
       case "runs": return listRuns(rootKnowledgeFiles(this.rootOf(call.rootId)), call.rootId);
+      case "agentRuns": return this.agentRuns.list();
+      case "agentRunReport": return this.agentRuns.report(call.id);
       case "runRecord": return getRun(this.workspaceRoots().map(rootKnowledgeFiles), call.runId);
       case "stopRun": this.reviews.stopRun(call.runId); return null;
       case "excludeFromReview": {

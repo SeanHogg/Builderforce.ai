@@ -56,11 +56,17 @@ export interface CoreLabels {
     panelApi: string;
     panelResolve: string;
     panelSimulate: string;
+    /** The Agent runs drawer (PRD 46). */
+    panelAgentRuns: string;
     viewGraph: string;
     /** The folder mind map. */
     viewMap: string;
     /** The transit map: lines from the entry points through the layers. */
     viewTransit: string;
+    /** The architecture cameras: Kruchten's 4+1 views, the architecture style, the key features. */
+    viewFourPlusOne: string;
+    viewStyle: string;
+    viewFeatures: string;
     /** The view-mode group's name. */
     viewModesLabel: string;
     /** The graph / map's one-line how-to (also its SVG description). */
@@ -260,9 +266,13 @@ panelPatterns: 'Patterns',
 panelApi: 'API',
 panelResolve: 'Fix queue',
 panelSimulate: 'Simulate',
+panelAgentRuns: 'Agent runs',
 viewGraph: 'Graph',
 viewMap: 'Mind map',
 viewTransit: 'Map',
+viewFourPlusOne: '4+1',
+viewStyle: 'Style',
+viewFeatures: 'Features',
 viewModesLabel: 'View',
 graphHint: 'Scroll or pinch to zoom, drag to pan, select a node for its details.',
 nodeAria: '{label}, {kind}',

@@ -28,6 +28,7 @@ import { requestRunConfirm } from './runControl';
 import { createLinkedToChat, isTicketRecordingTool, stampRunChat } from '../chatWorkLinking';
 import { attachDeltaToRunTicket } from './runBackstops';
 import { isPublishCall, publishHoldRefusal } from './publishHold';
+import { shipGatePreflight } from './shipGates';
 import { isDedupableRead, reportToPolicy, type BrainRunContext } from './brainRunContext';
 
 export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatCompletionMessage>['beforeDispatch']> {
@@ -191,12 +192,20 @@ export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatC
       pushTrace(c, { ts: nowIso(), category: 'tool', label: call.name, args, result: { publishHold: c.publishHold.messageNumber, note: refusal.error } });
       return { result: { data: refusal } };
     }
+    // SHIP GATES (PRD 45 §4.5): a base-branch push, a pull request, a `complete` review
+    // record — refused on failing evidence or no independent review, WITHOUT asking the
+    // human. Inert unless the host bound the ports; a pass hands the prompt its evidence.
+    const ship = await shipGatePreflight(run, call.name, args);
+    if ('refusal' in ship) {
+      pushTrace(c, { ts: nowIso(), category: 'tool', label: call.name, args, result: ship.refusal, isError: true });
+      return { result: { data: ship.refusal } };
+    }
     // Human-in-the-loop gate: pause for an explicit confirm when the host's
     // predicate says so. The resolver lives on the cell, so whichever Brain
     // instance is mounted (even after a navigation swapped it) can answer.
     if (needsConfirm && needsConfirm({ name: call.name, args })) {
       // The prompt belongs to THIS run's cell — a sub-agent asks on its own, named.
-      const ok = await requestRunConfirm(runKey, { name: call.name, args }, { step: iter });
+      const ok = await requestRunConfirm(runKey, { name: call.name, args, ...(ship.evidence ? { evidence: ship.evidence } : {}) }, { step: iter });
       if (!ok) {
         const declined = { cancelled: true, reason: 'User declined this action.' };
         pushTrace(c, { ts: nowIso(), category: 'tool', label: call.name, args, result: declined });

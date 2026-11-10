@@ -76,15 +76,13 @@ describe('a catalog of exactly 65 is trimmed by its size, `hand_off` included', 
       request: () => ({ tools: catalog, model: 'pin-1', modelStrict: true, userTurn: 'hand off the plan and tasks to the coder, then edit the file' }),
     };
     const run = await runOn(s);
-    // The menu is derived from the scenario's rules, not read off a run. Candidates, in catalog order: the 63 host tools, then `ask_user`
-    // and `hand_off` (65, over the 64 limit, so the turn is trimmed). `ask_user` is always advertised, and `hand_off` ranks in on the
-    // request, so both take a slot of the 64 and the backfill, in catalog order, fills the other 62 with the head of the host's tools.
-    // The last host tool is the one that goes. `hand_off` leaves the menu once the edit closes planning, and the router rides along
-    // because the selection trimmed something (a catalog of 65 is trimmed whichever tool leaves it).
+    // The menu is derived from the scenario's rules, not read off a run. The edit closes planning, so the second turn is a CODE turn,
+    // capped by its role (`@builderforce/agent-run` `roleCap.ts`, limit 22, no catalog-order backfill): it keeps the role's tools the
+    // catalog holds (`edit_file`, `ask_user`) and only tools that match the request - none of `tool_N` does. `hand_off` leaves the menu
+    // once planning closes, and the router rides along because the cap trimmed the 65-tool catalog.
     const host = catalog.map((t) => t.function.name);
-    const limit = 64;
     const fixed = ['ask_user', 'hand_off'];
-    const expected = [...host.slice(0, limit - fixed.length), 'ask_user', ...routerToolSpecs(host.length + fixed.length).map((t) => t.function.name)];
+    const expected = ['edit_file', 'ask_user', ...routerToolSpecs(host.length + fixed.length).map((t) => t.function.name)];
     expect(run.wire[1]!.tools).toEqual(expected);
     expect(run.wire[1]!.tools).not.toContain(host[host.length - 1]);
     expect(run.wire[1]!.tools).not.toContain('hand_off');
@@ -100,8 +98,9 @@ describe('R9: the router and the selection step', () => {
   });
 
   it('a catalog the limit holds whole shows no router once `hand_off` closes', async () => {
-    // 62 host tools + `ask_user` + `hand_off` = 64: never trimmed. A pinned model makes the first edit close planning.
-    const catalog = [spec('edit_file'), ...Array.from({ length: 61 }, (_, i) => spec(`tool_${i + 1}`))];
+    // 20 host tools + `ask_user` + `hand_off` = 22: within the code turn's role limit (`roleCap.ts`, 22), so never trimmed, before or
+    // after planning closes. A pinned model makes the first edit close planning.
+    const catalog = [spec('edit_file'), ...Array.from({ length: 19 }, (_, i) => spec(`tool_${i + 1}`))];
     const s: Scenario = {
       key: 9105,
       script: () => [calls({ name: 'edit_file', args: { path: 'a.ts', old: 'a', new: 'b' } }), say('Done.')],

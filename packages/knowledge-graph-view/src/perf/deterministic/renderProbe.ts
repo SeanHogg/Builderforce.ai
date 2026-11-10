@@ -64,7 +64,7 @@ export interface RenderReport {
 }
 
 /** The order the views are visited in (fixed: a view's cost depends on what the views before it left memoised). */
-export const VIEW_ORDER = ['system', 'graph', 'map', 'tower', '3d', 'heat', 'list', 'transit'] as const;
+export const VIEW_ORDER = ['system', 'graph', 'map', 'tower', '3d', 'heat', 'list', 'transit', '4plus1', 'style', 'features'] as const;
 const MAX_ROUNDS = 400;
 
 export async function probeViews(graph: KnowledgeGraph, host: ViewHost): Promise<RenderReport> {

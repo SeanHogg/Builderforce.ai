@@ -14,14 +14,15 @@ import { createLinkedToChat, isTicketRecordingTool } from '../chatWorkLinking';
 import { isCodeChangeTool } from '../localWorkspaceTools';
 import { codeChangesOf, isDelegationTool } from '../codeChanges';
 import { delegationPlaceholders, placeholderAdvisory, placeholdersWritten, placeholderTraceEvent } from '../placeholderGuard';
-import { canCompleteTicket, completionAdvisory, isTicketCompletion, notOnBaseBranchAdvisory } from '../completionGuard';
+import { canCompleteTicket, completionAdvisory, completionBlockedAdvisory, isTicketCompletion } from '../completionGuard';
+import { outgoingEvidenceVerdict, repoArgOf, shipGateAdvisory } from './shipGates';
 import { shippedToBaseBranch } from '../shipVerification';
 import { betweenTurnsActivity, toolActivity, visitTarget } from '../runActivity';
 import { runToolInterruptibly } from '@builderforce/agent-run';
 import { revisitAdvisory, withAdvisory } from '@builderforce/run-guards';
 import { isUnscopedMutation } from '../readCoverage';
 import { trimToolResult } from '../toolResultBudget';
-import { postEditDiagnostics } from './postEditDiagnostics';
+import { postEditNotes } from './postEditStructure';
 import { nowIso, nowMs, pushTrace, setActivity } from './runCells';
 import { recordCodeChangeTicket } from './runBackstops';
 import { earlyDelegationAdvisory } from './earlyDelegation';
@@ -159,10 +160,12 @@ export function callRunner(run: BrainRunContext): LoopPorts<ChatCompletionMessag
         // Second check: is code on the base branch?
         const events = c.trace;
         const isOnBaseBranch = shippedToBaseBranch(events);
-        const canComplete = canCompleteTicket(isOnBaseBranch, false, { wroteCodeThisRun: c.codeChanged }); // userDeclinedShipping defaults to false; no gitBranch evidence available on the ticket — rely on this run's own writes
+        // PRD 45 §4.3: with the host's git port bound, the outgoing changes must pass the gate too.
+        const outgoing = await outgoingEvidenceVerdict(run, repoArgOf(args));
+        const canComplete = canCompleteTicket(isOnBaseBranch, false, { wroteCodeThisRun: c.codeChanged, ...(outgoing ? { outgoing } : {}) }); // userDeclinedShipping defaults to false; no gitBranch evidence available on the ticket — rely on this run's own writes
         if (!canComplete) {
-          const said = notOnBaseBranchAdvisory();
-          pushTrace(c, { ts: nowIso(), category: 'message', label: 'tools.completion_guard', args: { tool: call.name, isOnBaseBranch }, result: said });
+          const said = completionBlockedAdvisory(outgoing);
+          pushTrace(c, { ts: nowIso(), category: 'message', label: 'tools.completion_guard', args: { tool: call.name, isOnBaseBranch, ...(outgoing ? { outgoingOk: outgoing.ok } : {}) }, result: said });
           advisory = said;
         } else if (placeholderWarning) {
           pushTrace(c, { ts: nowIso(), category: 'message', label: 'tools.completion_guard', args: { tool: call.name, open: placeholderLedger.outstanding() }, result: placeholderWarning });
@@ -190,16 +193,16 @@ export function callRunner(run: BrainRunContext): LoopPorts<ChatCompletionMessag
     // told on the read that crosses the threshold, not only at the final answer.
     const delegate = earlyDelegationAdvisory(run, call.name, args, isReadTool, iter);
     if (delegate) advisory = advisory ? `${advisory}\n\n${delegate}` : delegate;
-    // PRD 45 §4.5 row 1 — post-edit diagnostics: a successful edit_file / write_file
-    // is checked by the host's FAST verifier tier on the spot, and any error is
-    // appended in the D7 post-edit note format (chat #216's hooks-in-map violation,
-    // caught only by luck, is surfaced deterministically here). ADVISORY ONLY — the
-    // bytes stand; the note rides the trimmed result below, after the budget cut, so
-    // the guard can never be trimmed away. No verifier bound, it passed, or the port
-    // threw: nothing is added (the push-time gate reports "unavailable" instead).
-    if (!advisory && !isReadTool) {
-      const diag = await postEditDiagnostics({ name: call.name, args, result: out }, req.verifier);
-      if (diag) advisory = diag;
+    // PRD 45 §4.5 row 1 / PRD 46 §3.6 — the post-edit notes (bracket balance, the host's
+    // fast verifier tier), APPENDED to whatever advisory the call already carries, in the
+    // D7 post-edit note format. ADVISORY ONLY — the bytes stand; the notes ride the
+    // trimmed result below, after the budget cut, so they can never be trimmed away.
+    if (!isReadTool) {
+      const notes = await postEditNotes({ name: call.name, args, result: out }, req.verifier);
+      if (notes) advisory = advisory ? `${advisory}\n\n${notes}` : notes;
+      // PRD 45 §4.5: `run_command` gets the shell-publish hint, `git_commit` the early full-tier advisory.
+      const ship = await shipGateAdvisory(run, call.name, args, out);
+      if (ship) advisory = advisory ? `${advisory}\n\n${ship}` : ship;
     }
     // Trimmed to the transcript budget with the advisory attached AFTER the cut, so
     // the budget can never delete the guard — and a `read_file` is paged by LINE with

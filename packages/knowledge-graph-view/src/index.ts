@@ -28,5 +28,7 @@ export type {
     KnowledgePanelRenderProps, KnowledgeConfirm, KnowledgeBaseline, KnowledgeSnapshot, EvidenceSide,
     SourceLocation, FindingEvidence, ViewMode, PinpointResult, SyncStatus, SkippedFile, TryRequest, TryResponse, SymbolRecord,
     NotReviewedHere, ReplicaState, ReviewRunsPort, ReviewRunSummary, StoredReviewRun,
+    AgentRunSeverity, AgentRunSummary, AgentRunTurnKind, AgentRunTurn, AgentRunEvidence, AgentRunFinding, AgentRunFile,
+    AgentRunReport, AgentRunsPort,
 } from './types';
 export { isNotReviewedHere } from './types';

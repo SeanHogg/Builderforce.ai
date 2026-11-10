@@ -10,6 +10,7 @@
 export * from "./capabilities.js";
 export * from "./modelRoles.js";
 export * from "./edit.js";
+export * from "./editBalance.js";
 // Path overlap — the rule a planner's hand-off uses to decide which tasks may run side
 // by side in one working tree.
 export * from "./workstreamScope.js";

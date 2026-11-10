@@ -1,0 +1,10 @@
+{
+  "id": "a2a",
+  "name": "A2A (agent-to-agent) bridge",
+  "description": "Agent-to-agent messaging: send messages to Claude Code (and other A2A agents) and expose this agent as an A2A endpoint.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

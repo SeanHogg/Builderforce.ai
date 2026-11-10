@@ -12,10 +12,13 @@
  * consulted, because a closed surface skips it.
  *
  * A capped role keeps:
- *   • the surface's REQUIRED set, always — every tool the prompt or the turn block names,
- *     `ask_user`, `hand_off`. Dropping a tool the prompt tells the model to call is what
- *     cost a 78-call / 44-minute run (`brain-embedded/src/runStore/runPreamble.ts`), so the
- *     cap never narrows it. The surface's VOCABULARY (the host's workspace, memory and skill
+ *   • the surface's REQUIRED set, always — the tools the turn block names, the vocabulary the
+ *     prompt names, `ask_user`, `hand_off`. Dropping a tool the prompt tells the model to call is
+ *     what cost a 78-call / 44-minute run (`brain-embedded/src/runStore/runPreamble.ts`), so the
+ *     cap never narrows it. The board tools ONLY the Brain's system prompt names (its standing
+ *     ticket and close-out directives, ~19 names) are not required on a capped turn: they compete
+ *     on relevance, and a direct call to one still runs, because a closed surface is handed every
+ *     name (`ownsCall`) and nothing on that path checks the menu. The surface's VOCABULARY (the host's workspace, memory and skill
  *     tools the prompt does NOT name) is not the surface's to require on a capped turn (the
  *     Brain splits it off, `brain-embedded/src/run/brainPlatformTools.ts`): the role set below keeps the part of it a code or verify
  *     turn needs, and the rest competes on relevance like any tool. Chat #61651 (VSIX

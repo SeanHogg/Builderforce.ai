@@ -37384,9 +37384,13 @@
     "panelApi": "API",
     "panelResolve": "Cola de correcciones",
     "panelSimulate": "Simular",
+    "panelAgentRuns": "Ejecuciones de agentes",
     "viewGraph": "Grafo",
     "viewMap": "Mapa mental",
     "viewTransit": "Mapa",
+    "viewFourPlusOne": "Vistas 4+1",
+    "viewStyle": "Estilo",
+    "viewFeatures": "Funciones",
     "viewModesLabel": "Vista",
     "graphHint": "Desplázate o pellizca para hacer zoom, arrastra para mover y selecciona un nodo para ver sus detalles.",
     "nodeAria": "{label}, {kind}",
@@ -37583,6 +37587,46 @@
       "done": "Listo"
     },
     "surface": {
+      "agentRuns": {
+        "loading": "Leyendo las ejecuciones de agentes registradas…",
+        "failed": "No se pudieron leer las ejecuciones de agentes.",
+        "emptyRuns": "Aún no hay ejecuciones de agentes registradas en este equipo.",
+        "emptyFindings": "Nada que señalar en esta ejecución.",
+        "runsTitle": "Ejecuciones recientes",
+        "runMeta": "{turns} turnos · {models}",
+        "runCounts": "{error} errores · {warn} advertencias · {info} notas",
+        "reportLoading": "Leyendo esta ejecución…",
+        "reportMissing": "Esta ejecución ya no está registrada.",
+        "stripTitle": "Turnos",
+        "stripBar": "Turno {index} · {role} · {model} · {kind} · {prompt} tokens de prompt · {completion} tokens de respuesta · {tools} llamadas a herramientas · {seconds} s",
+        "legendTitle": "Tipos de turno",
+        "findingsTitle": "Hallazgos",
+        "evidenceRow": "[[Turno {turn} · ]]{label}",
+        "filesTitle": "Archivos modificados",
+        "filesEmpty": "Esta ejecución no escribió ningún archivo.",
+        "fileWrites": "{count} escrituras",
+        "fileChecked": "Comprobado",
+        "fileUnchecked": "Sin comprobar",
+        "showOnGraph": "Mostrar en el grafo",
+        "notOnGraph": "No está en este grafo",
+        "severity": { "info": "Nota", "warn": "Advertencia", "error": "Error" },
+        "turnKinds": { "read": "Lectura", "write": "Escritura", "forced": "Traspaso forzado", "text": "Solo texto", "failed": "Fallido" },
+        "findings": {
+          "analysis_overrun": { "title": "Análisis largo antes de la primera escritura", "description": "{readTurns} turnos de solo lectura antes de la primera escritura (turno {firstWriteTurn})." },
+          "unkept_readiness": { "title": "Dijo estar listo y siguió leyendo", "description": "A {claims} afirmaciones de estar listo les siguieron {readTurnsAfter} turnos de solo lectura." },
+          "serial_single_writes": { "title": "Una escritura por turno", "description": "{turns} turnos hicieron una sola escritura cada uno, con un coste de {promptTokens} tokens de prompt." },
+          "prompt_bloat": { "title": "Prompt mucho mayor que la salida", "description": "El prompt fue {ratio}× la respuesta: {promptTokens} tokens de prompt, {perWrite} por escritura." },
+          "unverified_writes": { "title": "Escrituras nunca comprobadas", "description": "{files} archivos ({writes} escrituras) no tuvieron ninguna comprobación correcta después." },
+          "bracket_break": { "title": "Una edición rompió el equilibrio de llaves", "description": "Una edición de {path} cambió el equilibrio de llaves y paréntesis ({delta})." },
+          "edit_churn": { "title": "El mismo archivo reescrito una y otra vez", "description": "{path} se escribió {writes} veces." },
+          "filed_then_inline": { "title": "Creó tickets y luego hizo el trabajo él mismo", "description": "Se crearon {tickets} tickets y ninguno se asignó; después la sesión escribió el código ella misma." },
+          "same_model_roles": { "title": "Planificación y código con un solo modelo", "description": "La planificación y el código se ejecutaron en {model} aunque el trabajo se traspasó." },
+          "oversized_args": { "title": "Argumentos de herramienta demasiado grandes", "description": "{calls} llamadas a {tool} llevaron hasta {bytes} bytes de argumentos." },
+          "slow_turns": { "title": "Turnos lentos", "description": "{turns} turnos tardaron un minuto o más; el más lento tardó {slowestMs} ms." },
+          "repeated_narration": { "title": "Narración repetida", "description": "{turns} turnos repitieron la misma narración antes de llamar a una herramienta." },
+          "stopped_unverified": { "title": "Detenida con escrituras sin comprobar", "description": "La ejecución se detuvo con {files} archivos escritos sin comprobar." }
+        }
+      },
       "spineLabel": "Dónde estás",
       "panelsLabel": "Paneles",
       "panelToggles": {
@@ -37772,7 +37816,10 @@
         "groupSelectedOne": "{count} grupo seleccionado", "groupSelectedOther": "{count} grupos seleccionados",
         "previewFixOne": "Previsualizar {count} corrección", "previewFixOther": "Previsualizar {count} correcciones",
         "applyFixesOne": "Aplicar {count} corrección", "applyFixesOther": "Aplicar {count} correcciones",
-        "applyFailedOne": "No se pudo aplicar {count} corrección", "applyFailedOther": "No se pudieron aplicar {count} correcciones"
+        "applyFailedOne": "No se pudo aplicar {count} corrección", "applyFailedOther": "No se pudieron aplicar {count} correcciones",
+        "dependentOne": "{count} archivo depende de él", "dependentOther": "{count} archivos dependen de él",
+        "callerOne": "{count} llamador", "callerOther": "{count} llamadores",
+        "moreFeaturesOne": "+{count} más no se muestra.", "moreFeaturesOther": "+{count} más no se muestran."
       },
       "heat": {
         "description": "Cuadrícula de calor: {layers}, {components}. Selecciona una celda para ver sus detalles.",
@@ -38327,6 +38374,64 @@
           "unusedDependency": "Quitar dependencias sin usar",
           "splitByCommand": "Dividir por grupo de comandos",
           "extractClone": "Extraer el código compartido"
+        }
+      },
+      "fourPlusOne": {
+        "viewsLabel": "Vistas 4+1",
+        "views": { "logical": "Lógica", "development": "Desarrollo", "process": "Proceso", "physical": "Física", "scenarios": "Escenarios" },
+        "hints": {
+          "logical": "De qué está hecho el sistema: sus componentes, capa por capa.",
+          "development": "Cómo se organiza el código: carpetas y módulos.",
+          "process": "Qué se ejecuta y cuándo: las llamadas a lo largo de la línea seleccionada.",
+          "physical": "Dónde se ejecuta: las unidades desplegables y los almacenes y servicios que alcanzan.",
+          "scenarios": "Para qué sirve: los caminos que parten de cada punto de entrada."
+        },
+        "unitsTitle": "Unidades desplegables",
+        "unitApps": "Aplicaciones: {apps}",
+        "storesTitle": "Almacenes de datos y servicios externos",
+        "storesEmpty": "Ninguna línea termina en un almacén de datos ni en un servicio externo.",
+        "scenariosTitle": "Escenarios",
+        "scenariosEmpty": "No se encontraron puntos de entrada, así que no hay escenarios que trazar.",
+        "scenarioRoute": "{from} → {to}"
+      },
+      "architectureStyle": {
+        "title": "Estilo de arquitectura",
+        "description": "Leído solo del código: cada estilo se puntúa con comprobaciones fijas sobre sus capas, direcciones de dependencia, nombres de archivo y unidades desplegables.",
+        "verdict": "Coincidencia más cercana: {style} ({percent} % de sus comprobaciones cumplidas)",
+        "verdictNone": "Ningún estilo encaja con claridad: ninguno cumple más de la mitad de sus comprobaciones por delante de los demás.",
+        "fit": "{percent} % de ajuste",
+        "styles": { "ddd": "Diseño guiado por el dominio", "onion": "Cebolla", "nLayer": "N capas", "nTier": "N niveles", "clientServer": "Cliente-servidor", "microservices": "Microservicios" },
+        "checks": {
+          "domainLayer": "Una capa de dominio contiene una parte real del código",
+          "dddNamed": "Los archivos se nombran como agregados, entidades, objetos de valor o repositorios",
+          "domainIsolated": "El dominio no depende de ninguna otra capa",
+          "inverted": "La infraestructura depende hacia dentro, del dominio o la aplicación",
+          "layered": "El código se divide en varias capas",
+          "downward": "Las dependencias apuntan hacia abajo, nunca a una capa superior",
+          "noSkips": "Ninguna dependencia se salta una capa",
+          "singleUnit": "Las capas se despliegan como una sola unidad",
+          "tierSplit": "La presentación y los datos están en unidades desplegables separadas",
+          "clientSide": "El lado cliente tiene sus propias carpetas",
+          "serverSide": "El lado servidor tiene sus propias carpetas",
+          "routes": "El servidor expone rutas",
+          "manyUnits": "Varias unidades desplegables tienen sus propios puntos de entrada",
+          "independent": "Las unidades apenas se referencian entre sí"
+        },
+        "evidence": "Medido: {count} de {total}",
+        "status": { "met": "Cumplida", "partial": "Cumplida en parte", "missed": "No cumplida" },
+        "examples": "Ejemplos",
+        "empty": "Ningún archivo fuente está en una capa, así que no hay nada que clasificar."
+      },
+      "keyFeatures": {
+        "title": "Funciones clave",
+        "description": "Leído solo del código: las capacidades, la API, los puntos de entrada, los patrones en uso y las partes de las que todo depende.",
+        "groups": { "capabilities": "Capacidades", "endpoints": "Endpoints de la API", "entryPoints": "Puntos de entrada", "patterns": "Patrones en uso", "core": "Lo más utilizado" },
+        "empty": {
+          "capabilities": "No se encontraron áreas ni carpetas.",
+          "endpoints": "Ningún archivo registra una ruta.",
+          "entryPoints": "Ningún archivo está en la capa de entrada.",
+          "patterns": "No se reconoció ningún patrón de diseño.",
+          "core": "Ningún archivo es referenciado por otro."
         }
       },
       "pinpoint": {

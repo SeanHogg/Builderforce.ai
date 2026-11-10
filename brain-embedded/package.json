@@ -48,6 +48,11 @@
       "types": "./dist/pendingWords.d.ts",
       "import": "./dist/pendingWords.mjs",
       "require": "./dist/pendingWords.cjs"
+    },
+    "./runFindings": {
+      "types": "./dist/runFindings.d.ts",
+      "import": "./dist/runFindings.mjs",
+      "require": "./dist/runFindings.cjs"
     }
   },
   "files": [

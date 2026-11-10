@@ -30,8 +30,12 @@ export interface VerifierPort {
 
 /** The git port: the host reads the REAL commits, never the model's claims. */
 export interface GitPort {
-  /** Files in commits not yet on upstream plus the HEAD tree's bytes for each path. */
-  outgoing(repo: string): Promise<{ files: OutgoingFile[]; diffHash: string; baseBranch: boolean }>;
+  /**
+   * Files in commits not yet on upstream plus the HEAD tree's bytes for each path.
+   * `diff` is the text `diffHash` hashes — what the reviewer reads (OD-1); a reviewer
+   * handed no diff hashes the empty string and can never match `diffHash`.
+   */
+  outgoing(repo: string): Promise<{ files: OutgoingFile[]; diffHash: string; baseBranch: boolean; diff?: string }>;
 }
 
 /** The reviewer port: OD-1, one review sub-run by a model that did not author the change. */

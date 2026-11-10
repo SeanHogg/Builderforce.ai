@@ -50,7 +50,8 @@ export interface RunCell {
   error: string;
   /** Actionable verdict for {@link error} — see BrainRunSnapshot.errorAction. */
   errorAction: ChatErrorAction | null;
-  pendingConfirm: { name: string; args: unknown } | null;
+  /** `evidence`: the ship gate's verdict line for a gated publish (PRD 45 §4.5), shown on the prompt. */
+  pendingConfirm: { name: string; args: unknown; evidence?: string } | null;
   confirmResolver: ((ok: boolean) => void) | null;
   appended: BrainMessage[];
   messagesEpoch: number;

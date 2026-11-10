@@ -37384,9 +37384,13 @@
     "panelApi": "API",
     "panelResolve": "Fix queue",
     "panelSimulate": "Simulate",
+    "panelAgentRuns": "Agent runs",
     "viewGraph": "Graph",
     "viewMap": "Mind map",
     "viewTransit": "Map",
+    "viewFourPlusOne": "4+1",
+    "viewStyle": "Style",
+    "viewFeatures": "Features",
     "viewModesLabel": "View",
     "graphHint": "Scroll or pinch to zoom, drag to pan, select a node for its details.",
     "nodeAria": "{label}, {kind}",
@@ -37583,6 +37587,46 @@
       "done": "Done"
     },
     "surface": {
+      "agentRuns": {
+        "loading": "Reading the recorded agent runs…",
+        "failed": "The agent runs could not be read.",
+        "emptyRuns": "No agent runs recorded on this machine yet.",
+        "emptyFindings": "Nothing to flag in this run.",
+        "runsTitle": "Recent runs",
+        "runMeta": "{turns} turns · {models}",
+        "runCounts": "{error} errors · {warn} warnings · {info} notes",
+        "reportLoading": "Reading this run…",
+        "reportMissing": "This run is no longer recorded.",
+        "stripTitle": "Turns",
+        "stripBar": "Turn {index} · {role} · {model} · {kind} · {prompt} prompt tokens · {completion} completion tokens · {tools} tool calls · {seconds} s",
+        "legendTitle": "Turn kinds",
+        "findingsTitle": "Findings",
+        "evidenceRow": "[[Turn {turn} · ]]{label}",
+        "filesTitle": "Files touched",
+        "filesEmpty": "This run wrote no files.",
+        "fileWrites": "{count} writes",
+        "fileChecked": "Checked",
+        "fileUnchecked": "Not checked",
+        "showOnGraph": "Show on graph",
+        "notOnGraph": "Not on this graph",
+        "severity": { "info": "Note", "warn": "Warning", "error": "Error" },
+        "turnKinds": { "read": "Read", "write": "Write", "forced": "Forced hand-off", "text": "Text only", "failed": "Failed" },
+        "findings": {
+          "analysis_overrun": { "title": "Long analysis before the first write", "description": "{readTurns} read-only turns before the first write (turn {firstWriteTurn})." },
+          "unkept_readiness": { "title": "Said it was ready, kept reading", "description": "{claims} readiness claims were followed by {readTurnsAfter} read-only turns." },
+          "serial_single_writes": { "title": "One write per turn", "description": "{turns} turns each made a single write, costing {promptTokens} prompt tokens." },
+          "prompt_bloat": { "title": "Prompt far larger than the output", "description": "The prompt was {ratio}× the completion: {promptTokens} prompt tokens, {perWrite} per write." },
+          "unverified_writes": { "title": "Writes never checked", "description": "{files} files ({writes} writes) had no successful check afterwards." },
+          "bracket_break": { "title": "An edit broke bracket balance", "description": "An edit to {path} changed the bracket balance ({delta})." },
+          "edit_churn": { "title": "The same file rewritten again and again", "description": "{path} was written {writes} times." },
+          "filed_then_inline": { "title": "Filed tickets, then did the work itself", "description": "{tickets} tickets were filed and none dispatched; the session then wrote the code itself." },
+          "same_model_roles": { "title": "Planning and coding on one model", "description": "Planning and coding both ran on {model} although the work was handed off." },
+          "oversized_args": { "title": "Oversized tool arguments", "description": "{calls} {tool} calls carried up to {bytes} bytes of arguments." },
+          "slow_turns": { "title": "Slow turns", "description": "{turns} turns took a minute or more; the slowest took {slowestMs} ms." },
+          "repeated_narration": { "title": "Repeated narration", "description": "{turns} turns repeated the same narration before calling a tool." },
+          "stopped_unverified": { "title": "Stopped with unchecked writes", "description": "The run was stopped with {files} written files never checked." }
+        }
+      },
       "spineLabel": "Where you are",
       "panelsLabel": "Panels",
       "panelToggles": {
@@ -37772,7 +37816,10 @@
         "groupSelectedOne": "{count} group selected", "groupSelectedOther": "{count} groups selected",
         "previewFixOne": "Preview {count} fix", "previewFixOther": "Preview {count} fixes",
         "applyFixesOne": "Apply {count} fix", "applyFixesOther": "Apply {count} fixes",
-        "applyFailedOne": "{count} fix could not be applied", "applyFailedOther": "{count} fixes could not be applied"
+        "applyFailedOne": "{count} fix could not be applied", "applyFailedOther": "{count} fixes could not be applied",
+        "dependentOne": "{count} file depends on it", "dependentOther": "{count} files depend on it",
+        "callerOne": "{count} caller", "callerOther": "{count} callers",
+        "moreFeaturesOne": "+{count} more is not shown.", "moreFeaturesOther": "+{count} more are not shown."
       },
       "heat": {
         "description": "Heat grid: {layers}, {components}. Select a cell for its details.",
@@ -38327,6 +38374,64 @@
           "unusedDependency": "Remove unused dependencies",
           "splitByCommand": "Split by command group",
           "extractClone": "Extract the shared code"
+        }
+      },
+      "fourPlusOne": {
+        "viewsLabel": "4+1 views",
+        "views": { "logical": "Logical", "development": "Development", "process": "Process", "physical": "Physical", "scenarios": "Scenarios" },
+        "hints": {
+          "logical": "What the system is made of: its components, tier by tier.",
+          "development": "How the code is organised: folders and modules.",
+          "process": "What runs when: the calls along the selected line.",
+          "physical": "Where it runs: the deployable units and the stores and services they reach.",
+          "scenarios": "What it is for: the paths that start at each entry point."
+        },
+        "unitsTitle": "Deployable units",
+        "unitApps": "Apps: {apps}",
+        "storesTitle": "Data stores and external services",
+        "storesEmpty": "No line ends in a data store or an external service.",
+        "scenariosTitle": "Scenarios",
+        "scenariosEmpty": "No entry points were found, so there are no scenarios to trace.",
+        "scenarioRoute": "{from} → {to}"
+      },
+      "architectureStyle": {
+        "title": "Architecture style",
+        "description": "Read from the code alone: each style is scored on fixed checks over its layers, dependency directions, file names and deployable units.",
+        "verdict": "Closest match: {style} ({percent}% of its checks met)",
+        "verdictNone": "No style fits clearly: none meets more than half of its checks ahead of the others.",
+        "fit": "{percent}% fit",
+        "styles": { "ddd": "Domain-Driven Design", "onion": "Onion", "nLayer": "N-Layer", "nTier": "N-Tier", "clientServer": "Client-Server", "microservices": "Microservices" },
+        "checks": {
+          "domainLayer": "A domain layer holds a real share of the code",
+          "dddNamed": "Files are named as aggregates, entities, value objects or repositories",
+          "domainIsolated": "The domain depends on no other layer",
+          "inverted": "Infrastructure depends inward, on the domain or application",
+          "layered": "The code is split into several layers",
+          "downward": "Dependencies point down, never to a higher layer",
+          "noSkips": "No dependency skips a layer",
+          "singleUnit": "The layers ship as one deployable unit",
+          "tierSplit": "Presentation and data live in separate deployable units",
+          "clientSide": "A client side has its own folders",
+          "serverSide": "A server side has its own folders",
+          "routes": "The server exposes routes",
+          "manyUnits": "Several deployable units have their own entry points",
+          "independent": "The units barely reference each other"
+        },
+        "evidence": "Measured: {count} of {total}",
+        "status": { "met": "Met", "partial": "Partly met", "missed": "Not met" },
+        "examples": "Examples",
+        "empty": "No source files sit in a layer, so there is nothing to classify."
+      },
+      "keyFeatures": {
+        "title": "Key features",
+        "description": "Read from the code alone: the capabilities, the API, the entry points, the patterns in use and the parts everything depends on.",
+        "groups": { "capabilities": "Capabilities", "endpoints": "API endpoints", "entryPoints": "Entry points", "patterns": "Patterns in use", "core": "Most depended on" },
+        "empty": {
+          "capabilities": "No areas or folders were found.",
+          "endpoints": "No file registers a route.",
+          "entryPoints": "No file is in the entry layer.",
+          "patterns": "No design pattern was recognised.",
+          "core": "No file is referenced by another."
         }
       },
       "pinpoint": {

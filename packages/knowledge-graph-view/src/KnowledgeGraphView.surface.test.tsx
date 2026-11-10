@@ -28,7 +28,7 @@ describe('the surface', () => {
         expect(cameras().getByRole('radio', { name: L.viewTransit }).getAttribute('aria-checked')).toBe('true');
         // Sequence is no longer a camera button: the path strip's Sequence toggle draws it.
         expect([...screen.getByRole('radiogroup', { name: L.viewModesLabel }).querySelectorAll('button')].map((b) => b.textContent))
-            .toEqual([L.viewTransit, L.viewSystem, L.viewGraph, L.viewMap, L.viewTower, L.viewHeat, L.viewList]);
+            .toEqual([L.viewTransit, L.viewSystem, L.viewGraph, L.viewMap, L.viewTower, L.viewHeat, L.viewFourPlusOne, L.viewStyle, L.viewFeatures, L.viewList]);
         expect(screen.getByTestId('kg-path')).toBeTruthy();
         expect(screen.getByTestId('kg-surface-legend')).toBeTruthy();
     });

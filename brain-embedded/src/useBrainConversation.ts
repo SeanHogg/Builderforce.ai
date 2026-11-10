@@ -290,7 +290,7 @@ export interface UseBrainConversation {
    */
   clearError(): void;
   /** A tool call awaiting the user's Approve/Cancel decision (or null). */
-  pendingConfirm: { name: string; args: unknown } | null;
+  pendingConfirm: { name: string; args: unknown; evidence?: string } | null;
   /** Resolve the pending confirmation. */
   resolveConfirm(ok: boolean): void;
   /**

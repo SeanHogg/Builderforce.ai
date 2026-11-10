@@ -228,6 +228,8 @@ export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<boole
       ...(opts.recordAvoidedCall ? { recordAvoidedCall: opts.recordAvoidedCall } : {}),
       runTool,
       needsConfirm: nativeNeedsConfirm(tools, permissionMode, policyGates),
+      // PRD 45 ship-gate ports: post-edit diagnostics, the outgoing gate, the reviewer (PRD 46 §3.6).
+      ...(opts.shipPorts && root ? opts.shipPorts({ root, stream: opts.stream, ...(opts.runSettings ? { settings: opts.runSettings } : {}) }) : {}),
       stream: opts.stream,
       persistence,
       seed: opts.seed,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canCompleteTicket, completionAdvisory, isTicketCompletion, notOnBaseBranchAdvisory, PlaceholderLedger } from './completionGuard';
+import { canCompleteTicket, completionAdvisory, completionBlockedAdvisory, isTicketCompletion, notOnBaseBranchAdvisory, PlaceholderLedger } from './completionGuard';
 
 /**
  * Chat #126 marked #2747 done over `// For now, we'll try without token for public repos`
@@ -70,5 +70,29 @@ describe('canCompleteTicket base-branch guard', () => {
   it('still emits the advisory text for real unshipped work', () => {
     expect(notOnBaseBranchAdvisory()).toContain('CANNOT MARK DONE');
     expect(notOnBaseBranchAdvisory()).toContain('base branch');
+  });
+});
+
+// PRD 45 §4.3 / PRD 46 §3.6: with the host's git port bound, the outgoing gate is one more
+// condition of the ONE done check. Without a port (`outgoing` absent) nothing changes.
+describe('canCompleteTicket outgoing-gate condition', () => {
+  const failing = { ok: false as const, reason: 'git_push refused: src/inbound.ts is new and has no test in this push.' };
+  const passing = { ok: true as const, unavailable: [] };
+
+  it('refuses done when the outgoing changes fail the gate, even on the base branch', () => {
+    expect(canCompleteTicket(true, false, { outgoing: failing })).toBe(false);
+    expect(canCompleteTicket(false, true, { outgoing: failing })).toBe(false);
+  });
+
+  it('a passing verdict changes nothing', () => {
+    expect(canCompleteTicket(true, false, { outgoing: passing })).toBe(true);
+    expect(canCompleteTicket(false, false, { wroteCodeThisRun: true, outgoing: passing })).toBe(false);
+    expect(canCompleteTicket(false, false, { wroteCodeThisRun: false, outgoing: passing })).toBe(true);
+  });
+
+  it('the advisory names the gate reason when that is what failed, else the base branch', () => {
+    expect(completionBlockedAdvisory(failing)).toContain('has no test');
+    expect(completionBlockedAdvisory(passing)).toBe(notOnBaseBranchAdvisory());
+    expect(completionBlockedAdvisory()).toBe(notOnBaseBranchAdvisory());
   });
 });

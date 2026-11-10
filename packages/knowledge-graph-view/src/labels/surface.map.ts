@@ -15,7 +15,8 @@ export type CountedWord =
     | 'moreChecks' | 'fileEndpoints' | 'filesPlotted' | 'applyV8' | 'applyV8Request' | 'entryPointsOmitted' | 'interchange'
     | 'entryPoint' | 'fileServerOnly' | 'fileLocalOnly' | 'pinFindings' | 'moreStations' | 'pipesCapped' | 'commitRow' | 'commitRowAuthor' | 'moreStops' | 'antiTip'
     | 'replicaQueued' | 'replicaAwaitingReview' | 'replicaFailed' | 'runFailure' | 'runRetryAll' | 'runStep' | 'awaitingJudge'
-    | 'link' | 'group' | 'kind' | 'antiPattern' | 'groupSelected' | 'previewFix' | 'applyFixes' | 'applyFailed';
+    | 'link' | 'group' | 'kind' | 'antiPattern' | 'groupSelected' | 'previewFix' | 'applyFixes' | 'applyFailed'
+    | 'dependent' | 'caller' | 'moreFeatures';
 
 export interface MapLabels {
     /** `{files}`, `{layer}`. */
@@ -182,6 +183,9 @@ export const MAP_DEFAULTS: MapLabels = {
         previewFixOne: 'Preview {count} fix', previewFixOther: 'Preview {count} fixes',
         applyFixesOne: 'Apply {count} fix', applyFixesOther: 'Apply {count} fixes',
         applyFailedOne: '{count} fix could not be applied', applyFailedOther: '{count} fixes could not be applied',
+        dependentOne: '{count} file depends on it', dependentOther: '{count} files depend on it',
+        callerOne: '{count} caller', callerOther: '{count} callers',
+        moreFeaturesOne: '+{count} more is not shown.', moreFeaturesOther: '+{count} more are not shown.',
     },
     heat: {
         description: 'Heat grid: {layers}, {components}. Select a cell for its details.',

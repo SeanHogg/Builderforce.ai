@@ -44,10 +44,14 @@ function runnerFromTestScript(testScript: string): "vitest" | "jest" {
   return /\bvitest\b/.test(testScript) ? "vitest" : "jest";
 }
 
-/** The package runner command for ONLY these test files. */
+/**
+ * The package runner command for ONLY these test files. Through `npx --no-install`: the runner
+ * lives in the package's `node_modules/.bin`, which is not on the shell's PATH (a bare
+ * `vitest` / `jest` cannot start), and `--no-install` never downloads one.
+ */
 export function targetedTestCommand(runner: "vitest" | "jest", files: readonly string[]): string {
   const list = files.map((f) => `"${f}"`).join(" ");
-  return runner === "vitest" ? `vitest run ${list}` : `jest ${list}`;
+  return runner === "vitest" ? `npx --no-install vitest run ${list}` : `npx --no-install jest ${list}`;
 }
 
 /**

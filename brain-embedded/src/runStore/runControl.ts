@@ -301,13 +301,13 @@ export function setRunServedBy(chatId: RunKey | null, served: { model: string; a
  */
 export function requestRunConfirm(
   chatId: RunKey,
-  req: { name: string; args: unknown },
+  req: { name: string; args: unknown; evidence?: string },
   opts?: { step?: number },
 ): Promise<boolean> {
   if (driverFor(chatId)) return Promise.resolve(false);
   const c = getCell(chatId);
   return new Promise<boolean>((resolve) => {
-    c.pendingConfirm = { name: req.name, args: req.args };
+    c.pendingConfirm = { name: req.name, args: req.args, ...(req.evidence ? { evidence: req.evidence } : {}) };
     c.confirmResolver = resolve;
     // Waiting on a HUMAN, not on us. The indicator must stop animating as though work
     // is happening — nothing advances until the user answers.

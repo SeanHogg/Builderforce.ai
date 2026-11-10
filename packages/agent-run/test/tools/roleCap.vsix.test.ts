@@ -51,8 +51,13 @@ function selectFor(query: string, required: readonly string[], role = "code"): s
 
 /** What the Brain required before the fix: the prompt-named tools plus the whole vocabulary plus `ask_user`. */
 const BEFORE = [...PROMPT_NAMED, ...LOCAL_WORKSPACE, ...MEMORY_AND_SKILLS, "ask_user"];
-/** What it requires on a capped turn now: what the prompt names, plus `ask_user`. */
+/** What it required on a capped turn after chat #61651: what the prompt names, plus `ask_user`. */
 const AFTER = [...PROMPT_NAMED, "ask_user"];
+/**
+ * What it requires on a capped turn now: the board tools ONLY the system prompt names compete on relevance (and a direct call to one
+ * still runs, `brainPlatformTools.ts`); the vocabulary the prompt names, what the turn names and `ask_user` stay required.
+ */
+const NOW = ["builtin_skills_read", "ask_user"];
 
 describe("the code-turn cap over a VSIX-shaped catalog", () => {
   it("holds ~481 tools", () => {
@@ -66,10 +71,10 @@ describe("the code-turn cap over a VSIX-shaped catalog", () => {
     const roleHeld = roleToolNames("code").filter((n) => held.has(n));
     const required = new Set([...AFTER, ...roleHeld]);
     expect(after.length).toBeLessThan(before.length);
-    // The trimmed role set (22 held here) plus what the prompt names: 15 named builtin tools put a code turn at 37. Under 32 needs a
-    // prompt that names 10 or fewer, which is the prompt's contract, not the cap's.
+    // The trimmed role set (22 held here) plus what the prompt names: 15 named builtin tools put a code turn at 37. With the tools only
+    // the system prompt names competing on relevance, a code turn advertises at most 30 (+3 router tools).
     expect(roleHeld.length).toBeLessThanOrEqual(22);
-    expect(after.length).toBeLessThanOrEqual(roleHeld.length + PROMPT_NAMED.length);
+    expect(selectFor("fix the null check in the parser", NOW).length).toBeLessThanOrEqual(30);
     expect(after.length).toBeLessThanOrEqual(required.size + ROLE_MATCH_ROOM.code);
     for (const off of UNNAMED_OFF_ROLE) expect(after).not.toContain(off);
     expect(after.some((n) => n.startsWith("builtin_platform_"))).toBe(false);

@@ -27,6 +27,8 @@ export interface SurfaceEnv {
     compact: boolean;
     /** The source records its reviews as runs, so the Run drawer has something to show. */
     hasRun?: boolean;
+    /** The source records agent runs (`source.agentRuns`), so the Agent runs drawer has something to show. */
+    hasAgentRuns?: boolean;
 }
 
 /** Everything a camera is handed; a camera takes what it draws from here. */

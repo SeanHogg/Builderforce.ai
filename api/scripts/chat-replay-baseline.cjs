@@ -252,12 +252,21 @@ function identifyChats(byServer) {
 // §8 measures
 // ---------------------------------------------------------------------------
 
-/** Bookkeeping step labels that are NOT tool calls (role 'tool' is used for both). */
-const BOOKKEEPING = new Set([
-  'tools.selected', 'llm.complete', 'loop.progress_check', 'loop.progress_forced',
-  'context.compacted', 'tools.revisit_guard', 'prefetch.decision', 'memory.commit_skipped',
-  'run.pipeline_route', 'gate.decision', 'summarize', 'checkpoint',
-]);
+/**
+ * A persisted step is a TOOL CALL only when its step metadata says `category: 'tool'`
+ * (`persistStep` stores every trace event as a `role:'tool'` row, so the role says nothing).
+ * Classifying by label counted bookkeeping — `agent.message`, `steer.applied`, `run.budget_*`,
+ * `llm.role_handoff`, `model.preflight`, `loop.*` — as tool calls (PRD 46 F9).
+ */
+function isToolCallStep(meta) {
+  return meta.category === 'tool';
+}
+
+/** The model's own visible text for a turn: an assistant row, or the `agent.message` step. */
+function isTurnText(role, meta, label) {
+  if (role === 'assistant') return label === 'agent.message' || !label;
+  return meta.category === 'message' && label === 'agent.message';
+}
 
 const WRITE_TOOLS = /^(edit_file|write_file|delete_file|apply_patch|apply_diff)$/;
 
@@ -284,9 +293,10 @@ function turnStats(messages) {
       flush(); // end of one model step; the next rows belong to the next turn
       continue;
     }
-    if (m.role === 'assistant' && (label === 'agent.message' || !label)) {
-      current.texts.push(String(m.content ?? ''));
-    } else if (m.role === 'tool' && label && !BOOKKEEPING.has(label)) {
+    if (isTurnText(m.role, meta, label)) {
+      // A step row's content is empty; its text rides the step metadata's `result`.
+      current.texts.push(String(m.content || (typeof meta.result === 'string' ? meta.result : '')));
+    } else if (m.role === 'tool' && label && isToolCallStep(meta)) {
       current.toolCalls.push(label);
     }
     // user rows and bookkeeping rows attach to the current turn but carry no signal here
@@ -312,8 +322,44 @@ function turnStats(messages) {
   };
 }
 
-const READINESS =
-  /(have enough to (act|start|proceed|implement)|enough to act|i have (a )?(complete|full) (picture|map|understanding)|i('ve| have) (the full picture|mapped|enough)|ready to (act|implement|start|proceed))/i;
+// ---------------------------------------------------------------------------
+// Readiness claims — a COPY of `claimsReady` from packages/run-guards/src/readinessClaim.ts
+// (READY_PATTERNS, NEGATION, ownWords, sentenceClaims), because this CommonJS script runs
+// with plain `node` and run-guards ships TypeScript source only (no built dist to require).
+// Keep it identical to that file: the baseline must count exactly what the guard counts.
+// ---------------------------------------------------------------------------
+
+const READY_PATTERNS = [
+  /\b(?:i|we)(?:'ve| have)?\s+(?:now\s+)?(?:have|got)\s+(?:got\s+)?(?:everything|all\s+(?:the\s+)?(?:context|information|info|details|i\s+need|we\s+need)|enough)\b/,
+  /\b(?:now\s+)?(?:i|we)(?:'ve|\s+have)?\s+(?:now\s+)?(?:have\s+|got\s+)?(?:a|the)\s+(?:clear|complete|full|good|solid|whole)\s+(?:picture|understanding|view|overview|grasp)\b/,
+  /\bone\s+(?:last|final|more)\s+(?:check|look|read|thing|file)\b[^.!?\n]*\b(?:then|before)\b[^.!?\n]*\b(?:write|implement|edit|make|apply|update|change|fix|code)\b/,
+  /\b(?:now\s+(?:i'll|i\s+will|let\s+me|let's)|(?:i'll|i\s+will|let\s+me|let's)\s+now|time\s+to)\s+(?:write|implement|make(?!\s+(?:sure|certain))|apply|edit|update(?!\s+(?:my|our)\s+(?:understanding|notes|picture))|create|fix|start\s+(?:writing|implementing|coding|the\s+(?:edit|change|implementation)))\b/,
+  /\blet\s+me\s+(?:write|make|apply)\s+the\s+(?:update|change|changes|edit|edits|fix|implementation)\s+now\b/,
+];
+
+const NEGATION = /\b(?:don't|do\s+not|doesn't|haven't|have\s+not|not\s+yet|still\s+need|need\s+(?:more|to\s+(?:read|check|look|see|find|understand))|before\s+(?:i|we)\s+have|until\s+(?:i|we)\s+have|once\s+(?:i|we)\s+have|when\s+(?:i|we)\s+have|if\s+(?:i|we)\s+(?:have|had))\b/;
+
+function ownWords(text) {
+  return text
+    .replace(/```[\s\S]*?(?:```|$)/g, ' ')
+    .replace(/`[^`\n]*`/g, ' ')
+    .replace(/^\s*>.*$/gm, ' ')
+    .replace(/"[^"\n]*"|“[^”\n]*”/g, ' ')
+    .replace(/[’‘]/g, "'");
+}
+
+function sentenceClaims(sentence) {
+  if (sentence.trimEnd().endsWith('?')) return false;
+  return READY_PATTERNS.some((p) => {
+    const m = p.exec(sentence);
+    return !!m && !NEGATION.test(sentence.slice(0, m.index + m[0].length));
+  });
+}
+
+function claimsReady(text) {
+  if (!text) return false;
+  return ownWords(text).toLowerCase().split(/(?<=[.!?])\s+|\n+/).some(sentenceClaims);
+}
 
 /**
  * Readiness episodes: an assistant text claiming enough context, followed — across
@@ -332,7 +378,7 @@ function readinessEpisodes(turnList) {
   };
   for (const turn of turnList) {
     const text = turn.texts.join('\n');
-    const isClaim = turn.texts.length > 0 && READINESS.test(text);
+    const isClaim = turn.texts.length > 0 && claimsReady(text);
     if (isClaim) {
       finishClaim(); // a new claim supersedes an unanswered one
       claims += 1;

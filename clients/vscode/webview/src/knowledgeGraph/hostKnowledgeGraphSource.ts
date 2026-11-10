@@ -31,6 +31,7 @@ import type {
   KnowledgeCall, KnowledgeCheckReply, KnowledgeEvent, KnowledgeFixPreview, KnowledgeFixResult, KnowledgeHistoryResult, KnowledgePlanReply, KnowledgeTargetRow,
 } from '../../../src/knowledge/knowledgeProtocol';
 import { hostReviewRuns } from './hostReviewRuns';
+import { hostAgentRuns } from './hostAgentRuns';
 
 export interface KnowledgeTransport {
   call<T>(call: KnowledgeCall): Promise<T>;
@@ -190,6 +191,7 @@ export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: Host
     },
     review: (req, ctl) => review(req, ctl),
     runs: hostReviewRuns(t),
+    agentRuns: hostAgentRuns(t),
     search: (rootId, q) => t.call<KnowledgeSearchHit[]>({ op: 'search', rootId, q }),
     subscribeLive(rootId, cb) {
       const stream = nextStream('live');

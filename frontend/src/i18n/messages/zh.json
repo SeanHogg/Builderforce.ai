@@ -37384,9 +37384,13 @@
     "panelApi": "API",
     "panelResolve": "待修复队列",
     "panelSimulate": "模拟",
+    "panelAgentRuns": "智能体运行",
     "viewGraph": "图谱",
     "viewMap": "思维导图",
     "viewTransit": "线路图",
+    "viewFourPlusOne": "4+1 视图",
+    "viewStyle": "架构风格",
+    "viewFeatures": "关键功能",
     "viewModesLabel": "视图",
     "graphHint": "滚动或双指缩放，拖动平移，选择节点查看详情。",
     "nodeAria": "{label}，{kind}",
@@ -37583,6 +37587,46 @@
       "done": "完成"
     },
     "surface": {
+      "agentRuns": {
+        "loading": "正在读取已记录的智能体运行…",
+        "failed": "无法读取智能体运行。",
+        "emptyRuns": "此设备上尚未记录任何智能体运行。",
+        "emptyFindings": "此次运行没有需要指出的问题。",
+        "runsTitle": "最近的运行",
+        "runMeta": "{turns} 轮 · {models}",
+        "runCounts": "{error} 个错误 · {warn} 个警告 · {info} 条提示",
+        "reportLoading": "正在读取此次运行…",
+        "reportMissing": "此次运行已不再有记录。",
+        "stripTitle": "轮次",
+        "stripBar": "第 {index} 轮 · {role} · {model} · {kind} · {prompt} 个提示词元 · {completion} 个输出词元 · {tools} 次工具调用 · {seconds} 秒",
+        "legendTitle": "轮次类型",
+        "findingsTitle": "发现",
+        "evidenceRow": "[[第 {turn} 轮 · ]]{label}",
+        "filesTitle": "涉及的文件",
+        "filesEmpty": "此次运行没有写入任何文件。",
+        "fileWrites": "写入 {count} 次",
+        "fileChecked": "已检查",
+        "fileUnchecked": "未检查",
+        "showOnGraph": "在图中显示",
+        "notOnGraph": "不在此图中",
+        "severity": { "info": "提示", "warn": "警告", "error": "错误" },
+        "turnKinds": { "read": "读取", "write": "写入", "forced": "强制移交", "text": "仅文本", "failed": "失败" },
+        "findings": {
+          "analysis_overrun": { "title": "首次写入前分析过久", "description": "首次写入（第 {firstWriteTurn} 轮）之前有 {readTurns} 个只读轮次。" },
+          "unkept_readiness": { "title": "声称已就绪却继续读取", "description": "{claims} 次就绪声明之后又有 {readTurnsAfter} 个只读轮次。" },
+          "serial_single_writes": { "title": "每轮只写一次", "description": "{turns} 个轮次每轮只写入一次，共耗费 {promptTokens} 个提示词元。" },
+          "prompt_bloat": { "title": "提示远大于输出", "description": "提示是输出的 {ratio} 倍：{promptTokens} 个提示词元，每次写入 {perWrite} 个。" },
+          "unverified_writes": { "title": "写入从未检查", "description": "{files} 个文件（{writes} 次写入）之后没有任何成功的检查。" },
+          "bracket_break": { "title": "一次编辑破坏了括号平衡", "description": "对 {path} 的编辑改变了括号平衡（{delta}）。" },
+          "edit_churn": { "title": "同一文件反复重写", "description": "{path} 被写入了 {writes} 次。" },
+          "filed_then_inline": { "title": "创建了工单却自己动手", "description": "创建了 {tickets} 个工单但未分派任何一个；随后会话自己编写了代码。" },
+          "same_model_roles": { "title": "规划与编码使用同一模型", "description": "尽管工作已移交，规划和编码都在 {model} 上运行。" },
+          "oversized_args": { "title": "工具参数过大", "description": "{calls} 次 {tool} 调用携带了多达 {bytes} 字节的参数。" },
+          "slow_turns": { "title": "缓慢的轮次", "description": "{turns} 个轮次耗时一分钟或更久；最慢的一轮耗时 {slowestMs} 毫秒。" },
+          "repeated_narration": { "title": "重复的叙述", "description": "{turns} 个轮次在调用工具前重复了相同的叙述。" },
+          "stopped_unverified": { "title": "在写入未检查时被停止", "description": "运行被停止时有 {files} 个已写入的文件从未检查。" }
+        }
+      },
       "spineLabel": "当前位置",
       "panelsLabel": "面板",
       "panelToggles": {
@@ -37772,7 +37816,10 @@
         "groupSelectedOne": "已选择 {count} 个分组", "groupSelectedOther": "已选择 {count} 个分组",
         "previewFixOne": "预览 {count} 项修复", "previewFixOther": "预览 {count} 项修复",
         "applyFixesOne": "应用 {count} 项修复", "applyFixesOther": "应用 {count} 项修复",
-        "applyFailedOne": "{count} 项修复无法应用", "applyFailedOther": "{count} 项修复无法应用"
+        "applyFailedOne": "{count} 项修复无法应用", "applyFailedOther": "{count} 项修复无法应用",
+        "dependentOne": "{count} 个文件依赖它", "dependentOther": "{count} 个文件依赖它",
+        "callerOne": "{count} 个调用方", "callerOther": "{count} 个调用方",
+        "moreFeaturesOne": "另有 {count} 项未显示。", "moreFeaturesOther": "另有 {count} 项未显示。"
       },
       "heat": {
         "description": "热力网格：{layers}，{components}。选择单元格查看详情。",
@@ -38327,6 +38374,64 @@
           "unusedDependency": "移除未使用的依赖",
           "splitByCommand": "按命令组拆分",
           "extractClone": "提取共享代码"
+        }
+      },
+      "fourPlusOne": {
+        "viewsLabel": "4+1 视图",
+        "views": { "logical": "逻辑", "development": "开发", "process": "进程", "physical": "物理", "scenarios": "场景" },
+        "hints": {
+          "logical": "系统由什么组成：逐层列出的组件。",
+          "development": "代码如何组织：文件夹和模块。",
+          "process": "何时运行什么：沿所选线路的调用。",
+          "physical": "在哪里运行：可部署单元及其访问的存储和服务。",
+          "scenarios": "用途是什么：从每个入口点出发的路径。"
+        },
+        "unitsTitle": "可部署单元",
+        "unitApps": "应用：{apps}",
+        "storesTitle": "数据存储和外部服务",
+        "storesEmpty": "没有线路终止于数据存储或外部服务。",
+        "scenariosTitle": "场景",
+        "scenariosEmpty": "未找到入口点，因此没有可追踪的场景。",
+        "scenarioRoute": "{from} → {to}"
+      },
+      "architectureStyle": {
+        "title": "架构风格",
+        "description": "仅从代码读取：每种风格按固定检查项评分，涵盖分层、依赖方向、文件名和可部署单元。",
+        "verdict": "最接近：{style}（满足其 {percent}% 的检查项）",
+        "verdictNone": "没有明显匹配的风格：没有一种风格能领先其他风格满足一半以上的检查项。",
+        "fit": "匹配度 {percent}%",
+        "styles": { "ddd": "领域驱动设计", "onion": "洋葱架构", "nLayer": "N 层（逻辑）", "nTier": "N 层（物理）", "clientServer": "客户端-服务器", "microservices": "微服务" },
+        "checks": {
+          "domainLayer": "领域层占有相当比例的代码",
+          "dddNamed": "文件按聚合、实体、值对象或仓储命名",
+          "domainIsolated": "领域不依赖任何其他层",
+          "inverted": "基础设施向内依赖领域或应用层",
+          "layered": "代码分为多个层",
+          "downward": "依赖指向下层，从不指向更高层",
+          "noSkips": "没有依赖跨越某一层",
+          "singleUnit": "各层作为一个可部署单元交付",
+          "tierSplit": "表示层和数据位于不同的可部署单元",
+          "clientSide": "客户端有自己的文件夹",
+          "serverSide": "服务器端有自己的文件夹",
+          "routes": "服务器公开路由",
+          "manyUnits": "多个可部署单元拥有各自的入口点",
+          "independent": "各单元之间几乎不互相引用"
+        },
+        "evidence": "测量值：{count} / {total}",
+        "status": { "met": "满足", "partial": "部分满足", "missed": "未满足" },
+        "examples": "示例",
+        "empty": "没有源文件位于任何层中，因此无可分类。"
+      },
+      "keyFeatures": {
+        "title": "关键功能",
+        "description": "仅从代码读取：能力、API、入口点、所用模式，以及所有部分都依赖的组件。",
+        "groups": { "capabilities": "能力", "endpoints": "API 端点", "entryPoints": "入口点", "patterns": "所用模式", "core": "被依赖最多" },
+        "empty": {
+          "capabilities": "未找到区域或文件夹。",
+          "endpoints": "没有文件注册路由。",
+          "entryPoints": "没有文件位于入口层。",
+          "patterns": "未识别出设计模式。",
+          "core": "没有文件被其他文件引用。"
         }
       },
       "pinpoint": {

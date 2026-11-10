@@ -69,24 +69,22 @@ export const gates: Scenario = {
       builtin_reviews_record: () => ({ ok: true, reviewId: 1 }),
       builtin_tasks_update: () => ({ ok: true }),
     });
+    // ONE run, as #214 was: a prose reply ends a run, so the steps are consecutive tool
+    // turns and the only reply is the last.
     h.script([
       calls([call('edit_file', { path: NEW_FILE, old_string: 'a', new_string: 'b' }, 'e1')]),
       // Step 1: the base-branch push is refused — the new file has no test.
       calls([call('git_push', { allowBaseBranch: true }, 'g1')]),
-      reply('The push was refused: the new source file has no test.'),
       // Step 2: the model tries to publish straight from the shell; the hint points at
       // the gated tools (advisory only — the gate catches the shell commit at push).
       calls([call('run_command', { command: 'git commit -am x && git push' }, 'r1')]),
-      reply('The shell command is only an advisory; the real gate is at push.'),
       // Step 3: the next git_push is STILL refused — the bytes are unchanged.
       calls([call('git_push', { allowBaseBranch: true }, 'g2')]),
-      reply('Still refused — nothing has changed.'),
       // Step 4: the author tries to record its own review as complete — refused.
       calls([call('builtin_reviews_record', { taskId: 101, verdict: 'complete', summary: 'looks good' }, 'rv1')]),
-      reply('No independent review exists yet.'),
       // Step 5: the ticket is marked done — refused while the change is unshipped.
       calls([call('builtin_tasks_update', { id: 101, status: 'done' }, 't1')]),
-      reply('I cannot mark it done until the change ships.'),
+      reply('I cannot mark it done until the change ships: the push needs a test and an independent review.'),
     ]);
     await h.start({
       ...PINNED,

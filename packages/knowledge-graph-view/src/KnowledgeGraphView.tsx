@@ -145,7 +145,7 @@ export function KnowledgeGraphView({
     }, [lensInEffect, lensAsked, setQuestion]);
     const layout = useMemo(() => layoutOf(width), [width]);
     const compact = layout.compact;
-    const surfaceEnv: SurfaceEnv = { webgl: env.webgl, reducedMotion: env.reducedMotion, hasLines: surface.lines.lines.length > 0, compact, hasRun: !!source.runs || !!source.review || keepsBaseline };
+    const surfaceEnv: SurfaceEnv = { webgl: env.webgl, reducedMotion: env.reducedMotion, hasLines: surface.lines.lines.length > 0, compact, hasRun: !!source.runs || !!source.review || keepsBaseline, hasAgentRuns: !!source.agentRuns };
     const cameras = CAMERAS.filter((c) => c.available(graph, surfaceEnv));
     const mode: ViewMode = cameras.find((c) => c.id === chosen)?.id ?? cameras.find((c) => c.id === 'transit')?.id ?? 'graph';
     // Selecting a node already inside the drawn set must not change the arrays the cameras key their layouts on.

@@ -5,6 +5,7 @@
  * says "not set up" when the data behind it was never collected.
  */
 
+import { AgentRunsPanel } from './drawers/agentRuns/AgentRunsPanel';
 import { ApiPanel } from './drawers/ApiPanel';
 import { CoveragePanel } from './drawers/CoveragePanel';
 import { PatternsPanel } from './drawers/PatternsPanel';
@@ -13,13 +14,13 @@ import { SimulatePanel } from './drawers/SimulatePanel';
 import type { PanelDef } from './registry';
 import { RunPanel } from './run/RunPanel';
 
-export type PanelId = 'run' | 'coverage' | 'patterns' | 'api' | 'resolve' | 'simulate';
+export type PanelId = 'run' | 'coverage' | 'patterns' | 'api' | 'resolve' | 'simulate' | 'agentRuns';
 
 /**
  * The panels that have a button in the header's "Panels" group, in order. Resolve and Simulate
  * stay in the registry (the Act rail and the path strip open them with `openPanel`).
  */
-export const HEADER_PANELS: readonly PanelId[] = ['coverage', 'patterns', 'api'];
+export const HEADER_PANELS: readonly PanelId[] = ['coverage', 'patterns', 'api', 'agentRuns'];
 
 export const PANELS: readonly (PanelDef & { id: PanelId })[] = [
     // The Reviews panel (start, watch, stop, runs, server, diagnostics): opened by the status chip and its action button; it has no header button.
@@ -29,4 +30,6 @@ export const PANELS: readonly (PanelDef & { id: PanelId })[] = [
     { id: 'api', labelKey: 'panelApi', component: ApiPanel, available: (graph) => graph.nodes.some((n) => n.kind === 'file' && n.pack === 'code') },
     { id: 'resolve', labelKey: 'panelResolve', component: ResolvePanel, available: (graph) => graph.findings.length > 0 },
     { id: 'simulate', labelKey: 'panelSimulate', component: SimulatePanel, available: (_graph, env) => env.hasLines },
+    // Agent runs (PRD 46): what a recorded agent run did wrong, by turn, finding and file. Only when the host records runs.
+    { id: 'agentRuns', labelKey: 'panelAgentRuns', component: AgentRunsPanel, available: (_graph, env) => env.hasAgentRuns === true },
 ];
