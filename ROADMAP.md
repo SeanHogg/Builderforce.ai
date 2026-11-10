@@ -156,11 +156,11 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
     - WS3 background indexer (0df16cbf9).
     - In builderforce-memory 2026.10.74–.80: the WS15 stats module (Wilcoxon exact p, HL bootstrap, `meanAndSd`, the `createRng` shift fix), `FactStorePort` with epoch/generation CAS, the `check_scheduler` model card (engine .64–.65) and the `saveFactGraph` fast path.
     - All 17 package.json files pin memory ^2026.10.80 and engine ^2026.10.65, and all 16 lockfiles are refreshed (frozen installs pass).
-  - **Everything below is uncommitted in the main checkout:** about 480 paths across:
+  - **Everything below went to main in the operator's sweep commit 7674bbd64 ("Improvements", 2026-11-10).** It skipped the planned review gate and the full typecheck of the staged set, so main carries the WS4, WS8, WS9 and L3 code exactly as each agent was stopped. The next step is a Haiku typecheck and targeted tests over the run-delta family on main, then the review rounds below. The code spans:
     - `packages/run-delta`, `packages/agent-tools/src/{delta,knowledge/facts}`;
     - `clients/vscode/src/{runDelta,knowledge}`, `packages/knowledge-graph-view/src/delta`, `frontend/src/components/runDelta`;
     - `api/src/{application,domain}/runDelta`, migrations 1342/1344/1345 and transactional 0032/0033.
-  - **Built and passed review, waiting on the group commit:**
+  - **Built and passed review (now on main):**
     - WS10: web card, history and trend.
     - WS11: SARIF, `run_deltas` persistence, and the mirror importer with its revise path.
     - WS12: the dynamic tier (tmpdir copies, shared `src/process/killTree.ts`, per-kind hold extensions of 60 s for dynamic and 15 s for L3).
@@ -186,11 +186,10 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
     - check the CodeQL flags against the docs;
     - a re-review.
   - **L3 revision contract (agreed with agentic-2c, 2026-11-10):** a superseding revision keeps the same `runId` and `at`, and never sets `blocked`, because hold state comes only from `runHoldState.ts`. L3 codes can block only when they land inside the L3 hold extension, before the verdict. Later findings are advisory.
-  - **Group commit, after WS4, WS8, WS9 and L3 pass review:**
-    - run a full typecheck of exactly what is staged;
+  - **After WS4, WS8, WS9 and L3 pass review:**
+    - run a full typecheck of main's run-delta family;
     - split `packages/run-delta/src/contract.ts` (~490 lines);
     - apply the RunDeltaPanel `PANEL_WIDTH` one-liner (agentic-2c pushed 209c2b835 and 590728fb1, so this is unblocked);
-    - commit by pathspec and push;
     - ship: a `release_notes` row (`new`), the Idea-to-Real post (Measure act), and DONE.md moves.
   - **Not started:**
     - WS5: consolidation; `kind: 'consolidation'` has no producer.
