@@ -15,7 +15,9 @@ export type Vec3 = readonly [number, number, number];
 export const SLOT_NODE = 0;
 export const SLOT_STATION = 1;
 export const SLOT_FOLDER = 2;
-export type SlotKind = typeof SLOT_NODE | typeof SLOT_STATION | typeof SLOT_FOLDER;
+/** A deployable unit (an `entity` node typed `deployable-unit`): a node of the graph the System camera rows by system. */
+export const SLOT_UNIT = 3;
+export type SlotKind = typeof SLOT_NODE | typeof SLOT_STATION | typeof SLOT_FOLDER | typeof SLOT_UNIT;
 
 /** Per-slot paint bits (`MarkPaint.flags`, `LinkBatch.flags`). */
 export const FLAG = {

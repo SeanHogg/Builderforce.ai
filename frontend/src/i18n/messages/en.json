@@ -37420,7 +37420,8 @@
       "typeEntity": "Entity",
       "typeClaim": "Claim or fact",
       "typeExternal": "Missing or external",
-      "typeSystem": "System or package"
+      "typeSystem": "System or package",
+      "typeUnit": "Deployable unit"
     },
     "statsLine": "{nodes} nodes · {edges} edges · {sources} sources",
     "filesLoaded": "{loaded} of {total} loaded",
@@ -37817,6 +37818,7 @@
         "antiBar": "Findings by kind",
         "data": "Data and external services",
         "dataEmpty": "No data store or external service ends a line.",
+        "units": "Deployable units",
         "empty": "There are no components to draw.",
         "metaOwner": "{files} · {owner}",
         "more": "+{count} more",

@@ -18,6 +18,13 @@ describe('ShapeLegend', () => {
         expect(rows[0]!.textContent).toBe(L.legend.typeClass);
     });
 
+    it('names a deployable unit with its capsule', () => {
+        const { container } = render(<ShapeLegend types={['unit', 'system']} labels={L} />);
+        const row = container.querySelector('[data-type="unit"]')!;
+        expect(row.querySelector('[data-shape]')!.getAttribute('data-shape')).toBe('capsule');
+        expect(row.textContent).toBe(L.legend.typeUnit);
+    });
+
     it('draws nothing with no types, and rides under the lens legend when given types', () => {
         expect(render(<ShapeLegend types={[]} labels={L} />).container.innerHTML).toBe('');
         const { getByTestId } = render(<LensLegend lens={LENSES.structure} labels={L} applicable types={['source', 'doc']} />);

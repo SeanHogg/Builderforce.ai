@@ -13,6 +13,7 @@ import { STYLE_IDS, type StyleId } from '../../../surface/style/architectureStyl
 /** The keys a placement reads; `systemMore` is a `{count}` template. */
 export const CAMERA_WORD = {
     systemData: 'camera:system:data',
+    systemUnits: 'camera:system:units',
     systemLoose: 'camera:system:loose',
     more: 'camera:more',
     styleVerdict: 'camera:style:verdict',
@@ -27,6 +28,7 @@ export function cameraStrings(labels: KnowledgeGraphLabels): Record<string, stri
     const s = labels.surface;
     return {
         [CAMERA_WORD.systemData]: s.system.data,
+        [CAMERA_WORD.systemUnits]: s.system.units,
         [CAMERA_WORD.systemLoose]: s.systems.loose,
         [CAMERA_WORD.more]: s.system.more,
         [CAMERA_WORD.styleVerdict]: s.architectureStyle.verdict,

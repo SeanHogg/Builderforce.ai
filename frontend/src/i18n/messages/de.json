@@ -37420,7 +37420,8 @@
       "typeEntity": "Entität",
       "typeClaim": "Behauptung oder Fakt",
       "typeExternal": "Fehlend oder extern",
-      "typeSystem": "System oder Paket"
+      "typeSystem": "System oder Paket",
+      "typeUnit": "Bereitstellbare Einheit"
     },
     "statsLine": "{nodes} Knoten · {edges} Kanten · {sources} Quellen",
     "filesLoaded": "{loaded} von {total} geladen",
@@ -37817,6 +37818,7 @@
         "antiBar": "Befunde nach Art",
         "data": "Daten und externe Dienste",
         "dataEmpty": "Kein Datenspeicher und kein externer Dienst beendet eine Linie.",
+        "units": "Bereitstellbare Einheiten",
         "empty": "Es gibt keine Komponenten zum Zeichnen.",
         "metaOwner": "{files} · {owner}",
         "more": "+{count} weitere",

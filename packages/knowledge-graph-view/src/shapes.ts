@@ -26,20 +26,20 @@ export const KNOWN_NODE_KINDS = ['file', 'section', 'symbol', 'area', 'entity', 
 /** What a node is, as the legend names it. */
 export type MarkType =
     | 'class' | 'function' | 'source' | 'test' | 'doc' | 'config' | 'style' | 'data'
-    | 'section' | 'entity' | 'claim' | 'external' | 'system';
+    | 'section' | 'entity' | 'claim' | 'external' | 'unit' | 'system';
 
 /** The type of a node no rule claims (an unknown kind, an asset, generated output). */
 export const FALLBACK_TYPE: MarkType = 'external';
 
 /** Legend order: code first, then documents and knowledge, the outside and the aggregates last. */
 export const MARK_TYPE_ORDER: readonly MarkType[] = [
-    'class', 'function', 'source', 'test', 'style', 'config', 'data', 'doc', 'section', 'entity', 'claim', 'external', 'system',
+    'class', 'function', 'source', 'test', 'style', 'config', 'data', 'doc', 'section', 'entity', 'claim', 'external', 'unit', 'system',
 ];
 
 /** A silhouette. Each has ONE outline: drawn flat in 2D, extruded in 3D. */
 export type NodeShape =
     | 'square' | 'circle' | 'window' | 'diamond' | 'tile' | 'triangle' | 'funnel'
-    | 'drum' | 'banner' | 'pentagon' | 'smallStar' | 'cross' | 'hexagon';
+    | 'drum' | 'banner' | 'pentagon' | 'smallStar' | 'cross' | 'capsule' | 'hexagon';
 
 /**
  * type → shape: no two types share a silhouette, and every pair stays apart at 8 px (DPR 1) — XOR / union of the
@@ -58,13 +58,17 @@ export type NodeShape =
  *   entity   — a pentagon (a thing with a name);
  *   claim    — a five-point star (an assertion);
  *   external — a dashed cross (outside the folder / not here);
+ *   unit     — a wide, low capsule (a deployable unit: a container, a worker, a function — what ships);
  *   system   — a flat-topped hexagon at the full extent (the aggregate).
  */
 export const TYPE_SHAPE: Readonly<Record<MarkType, NodeShape>> = Object.freeze({
     class: 'square', function: 'circle', source: 'window', test: 'diamond', doc: 'tile', config: 'triangle',
     style: 'funnel', data: 'drum', section: 'banner', entity: 'pentagon', claim: 'smallStar',
-    external: 'cross', system: 'hexagon',
+    external: 'cross', unit: 'capsule', system: 'hexagon',
 });
+
+/** A deployable unit is an `entity` node with this `type` badge (`deployFacts.ts` `DEPLOY_UNIT_TYPE`, the pack's word). */
+const DEPLOY_UNIT = 'deployable-unit';
 
 /** Shapes drawn with a dashed outline (the outside: a missing or external target). */
 export const DASHED_SHAPES: ReadonlySet<NodeShape> = new Set<NodeShape>(['cross']);
@@ -99,7 +103,7 @@ export function markTypeOf(n: Pick<KNode, 'kind' | 'ref' | 'label' | 'badges'>):
         case 'symbol': return symbolSort(n) === 'class' ? 'class' : 'function';
         case 'section': return 'section';
         case 'area': return 'source';
-        case 'entity': return 'entity';
+        case 'entity': return n.badges?.['type'] === DEPLOY_UNIT ? 'unit' : 'entity';
         case 'claim': case 'fact': return 'claim';
         case 'missing': return 'external';
         default: return FALLBACK_TYPE;
@@ -176,6 +180,7 @@ export const SHAPE_OUTLINES: Readonly<Record<NodeShape, readonly Pt[]>> = Object
     pentagon: regular(5, 1.1, -Math.PI / 2),
     smallStar: star(1, 0.42),
     cross: cross(1.25, 0.32),
+    capsule: [...arc(0.8, 0, 0.45, 0.45, -Math.PI / 2, Math.PI / 2, 8), ...arc(-0.8, 0, 0.45, 0.45, Math.PI / 2, (3 * Math.PI) / 2, 8)],
     hexagon: regular(6, 1.25, 0),
 });
 

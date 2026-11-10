@@ -37420,7 +37420,8 @@
       "typeEntity": "Entidad",
       "typeClaim": "Afirmación o hecho",
       "typeExternal": "Ausente o externo",
-      "typeSystem": "Sistema o paquete"
+      "typeSystem": "Sistema o paquete",
+      "typeUnit": "Unidad desplegable"
     },
     "statsLine": "{nodes} nodos · {edges} aristas · {sources} fuentes",
     "filesLoaded": "{loaded} de {total} cargados",
@@ -37817,6 +37818,7 @@
         "antiBar": "Hallazgos por tipo",
         "data": "Datos y servicios externos",
         "dataEmpty": "Ningún almacén de datos ni servicio externo cierra una línea.",
+        "units": "Unidades desplegables",
         "empty": "No hay componentes que dibujar.",
         "metaOwner": "{files} · {owner}",
         "more": "+{count} más",

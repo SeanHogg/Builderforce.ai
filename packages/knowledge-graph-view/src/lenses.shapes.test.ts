@@ -53,7 +53,7 @@ describe('markTypeOf (PRD 43 B1a rule 2)', () => {
         expect(TYPE_SHAPE).toEqual({
             class: 'square', function: 'circle', source: 'window', test: 'diamond', doc: 'tile', config: 'triangle',
             style: 'funnel', data: 'drum', section: 'banner', entity: 'pentagon', claim: 'smallStar',
-            external: 'cross', system: 'hexagon',
+            external: 'cross', unit: 'capsule', system: 'hexagon',
         });
         expect(new Set(Object.values(TYPE_SHAPE)).size).toBe(MARK_TYPE_ORDER.length);
     });

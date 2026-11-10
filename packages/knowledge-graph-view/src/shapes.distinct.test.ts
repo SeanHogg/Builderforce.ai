@@ -55,9 +55,10 @@ function pairwise(diameter: number, dpr: number): { pair: string; d: number }[] 
 }
 
 describe('shape distinguishability (PRD 43 P1a revision 2)', () => {
-    it('regression: every pair of the 13 types differs by XOR/union ≥ 0.15 at 8 px, DPR 1 (was < 0.10 for square/rounded square, triangle/rounded triangle, circle/hexagon, drum/square)', () => {
+    it('regression: every pair of the 14 types differs by XOR/union ≥ 0.15 at 8 px, DPR 1 (was < 0.10 for square/rounded square, triangle/rounded triangle, circle/hexagon, drum/square)', () => {
         const pairs = pairwise(8, 1);
-        expect(pairs).toHaveLength((13 * 12) / 2);
+        // 14 types: the deployable unit's capsule joined the 13 (PRD 43 P5, the System camera's units row).
+        expect(pairs).toHaveLength((14 * 13) / 2);
         // Measured 2026-11-10: worst pair test/entity 0.154.
         expect(pairs[0]!.d, pairs.slice(0, 3).map((p) => `${p.pair}=${p.d.toFixed(3)}`).join(' ')).toBeGreaterThanOrEqual(0.15);
     });

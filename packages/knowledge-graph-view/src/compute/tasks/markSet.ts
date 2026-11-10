@@ -17,7 +17,7 @@ import { importanceOf } from '../../order';
 import { dominantOfCounts, dominantType, markTypeOf, MARK_TYPE_ORDER, type MarkType } from '../../shapes';
 import { fileRefOf, stationOfRef, type StationModel } from '../../surface/stations';
 import { capacityFor } from '../../stage/slots';
-import { SLOT_FOLDER, SLOT_NODE, SLOT_STATION, type MarkSet } from '../../stage/types';
+import { SLOT_FOLDER, SLOT_NODE, SLOT_STATION, SLOT_UNIT, type MarkSet } from '../../stage/types';
 
 const TYPE_INDEX = new Map<MarkType, number>(MARK_TYPE_ORDER.map((t, i) => [t, i]));
 export const typeIndex = (t: MarkType): number => TYPE_INDEX.get(t)!;
@@ -55,8 +55,8 @@ export function buildMarkSet(g: KnowledgeGraph, stations: StationModel, generati
     nodes.forEach((node, i) => {
         nodeAt.set(node.ref, i);
         keys[i] = `node:${node.ref}`; label[i] = node.label; tooltip[i] = pathOf(node.ref) ?? node.label;
-        slotKind[i] = SLOT_NODE; importance[i] = importanceOf(node);
         nodeType[i] = markTypeOf(node);
+        slotKind[i] = nodeType[i] === 'unit' ? SLOT_UNIT : SLOT_NODE; importance[i] = importanceOf(node);
         type[i] = typeIndex(nodeType[i]!);
     });
 
@@ -123,11 +123,11 @@ function folderSlotOf(node: KNode, nodeAt: ReadonlyMap<string, number>, nodes: r
 
 /**
  * The types an append brings (a drilled symbol is a class or a function, `markTypeOf`; a Sequence's call target outside
- * the root is `external`): their batches always exist, empty when
- * the graph holds no symbols, so going inside appends into headroom instead of rebuilding the meshes (B1a rule 1). An
- * empty batch draws nothing (an instanced draw of 0 is skipped).
+ * the root is `external`), plus the deployable `unit` (a graph whose pack had no deploy descriptor yet gains units when it
+ * is reviewed again): their batches always exist, empty when the graph holds none, so an append lands in headroom
+ * instead of rebuilding the meshes (B1a rule 1). An empty batch draws nothing (an instanced draw of 0 is skipped).
  */
-const DRILL_TYPES: readonly number[] = [typeIndex('class'), typeIndex('function'), typeIndex('external')];
+const DRILL_TYPES: readonly number[] = [typeIndex('class'), typeIndex('function'), typeIndex('external'), typeIndex('unit')];
 
 /** One batch per type present (and per drill type), in legend order; each lists its slots ascending. */
 export function batchesOf(type: Uint8Array): MarkSet['batches'] {

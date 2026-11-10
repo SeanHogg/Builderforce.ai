@@ -257,6 +257,7 @@ legend: {
     typeClass: 'Class or type', typeFunction: 'Function or method', typeSource: 'Source file', typeTest: 'Test',
     typeStyle: 'Styles', typeConfig: 'Config', typeData: 'Data or schema', typeDoc: 'Document', typeSection: 'Section',
     typeEntity: 'Entity', typeClaim: 'Claim or fact', typeExternal: 'Missing or external', typeSystem: 'System or package',
+    typeUnit: 'Deployable unit',
 },
 statsLine: '{nodes} nodes · {edges} edges · {sources} sources',
 filesLoaded: '{loaded} of {total} loaded',

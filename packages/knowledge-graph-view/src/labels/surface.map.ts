@@ -35,7 +35,8 @@ export interface MapLabels {
      * The System camera: a component's `{name}`, `{files}`, `{findings}`; a card's meta `{files}` (already pluralised, see
      * `counts`) and `{owner}`; the "+N more" card `{count}`, `{layer}`.
      */
-    system: Record<'componentAria' | 'antiBar' | 'data' | 'dataEmpty' | 'empty' | 'metaOwner' | 'more' | 'moreAria', string>;
+    /** `units`: the row of a system's deployable units (containers, workers, functions…). */
+    system: Record<'componentAria' | 'antiBar' | 'data' | 'dataEmpty' | 'empty' | 'metaOwner' | 'more' | 'moreAria' | 'units', string>;
     /** The sentence between two tiers of the System camera, under the tier it follows. */
     systemArrows: Record<Layer, string>;
     /**
@@ -110,6 +111,7 @@ export const MAP_DEFAULTS: MapLabels = {
         antiBar: 'Findings by kind',
         data: 'Data and external services',
         dataEmpty: 'No data store or external service ends a line.',
+        units: 'Deployable units',
         empty: 'There are no components to draw.',
         metaOwner: '{files} · {owner}',
         more: '+{count} more',

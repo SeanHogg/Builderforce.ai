@@ -37420,7 +37420,8 @@
       "typeEntity": "实体",
       "typeClaim": "主张或事实",
       "typeExternal": "缺失或外部",
-      "typeSystem": "系统或包"
+      "typeSystem": "系统或包",
+      "typeUnit": "可部署单元"
     },
     "statsLine": "{nodes} 个节点 · {edges} 条边 · {sources} 个来源",
     "filesLoaded": "已加载 {loaded} / {total}",
@@ -37817,6 +37818,7 @@
         "antiBar": "按类型统计的发现",
         "data": "数据与外部服务",
         "dataEmpty": "没有数据存储或外部服务作为线路的终点。",
+        "units": "可部署单元",
         "empty": "没有可绘制的组件。",
         "metaOwner": "{files} · {owner}",
         "more": "另外 {count} 个",

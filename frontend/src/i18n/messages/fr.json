@@ -37420,7 +37420,8 @@
       "typeEntity": "Entité",
       "typeClaim": "Affirmation ou fait",
       "typeExternal": "Absent ou externe",
-      "typeSystem": "Système ou paquet"
+      "typeSystem": "Système ou paquet",
+      "typeUnit": "Unité déployable"
     },
     "statsLine": "{nodes} nœuds · {edges} arêtes · {sources} sources",
     "filesLoaded": "{loaded} sur {total} chargés",
@@ -37817,6 +37818,7 @@
         "antiBar": "Constats par type",
         "data": "Données et services externes",
         "dataEmpty": "Aucun stockage de données ni service externe ne termine une ligne.",
+        "units": "Unités déployables",
         "empty": "Aucun composant à dessiner.",
         "metaOwner": "{files} · {owner}",
         "more": "+{count} de plus",
