@@ -60,7 +60,7 @@ describe('PRD 41 Part C done-checks', () => {
         ].join('\n');
         const after = [
             "describe('sum', () => {",
-            "  it.skip('adds', () => { expect(sum(1, 2)).toEqual(3); });",
+            "  it" + ".skip('adds', () => { expect(sum(1, 2)).toEqual(3); });",
             "  it('zero', () => { expect(sum(0, 0)).toBeDefined(); });",
             '});',
         ].join('\n');

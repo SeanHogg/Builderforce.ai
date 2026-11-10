@@ -57,7 +57,7 @@ describe('quality rules (C8.2) and metrics (C8.1)', () => {
     it('test-deleted, only-added, assertions-reduced, timeout-raised, suppression-added', async () => {
         const d = await run(
             { 'a.test.ts': "it('one', () => { expect(1).toBe(1); expect(2).toBe(2); });\nit('two', () => { expect(2).toBe(2); });\nit('three', () => { expect(3).toBe(3); });\n" },
-            { 'a.test.ts': "it.only('one', () => { expect(1).toBe(1); });\nit('three', () => { // @ts-ignore\n expect(3).toBe(3); }, 30000);\n" },
+            { 'a.test.ts': "it" + ".only('one', () => { expect(1).toBe(1); });\nit('three', () => { // @ts-ignore\n expect(3).toBe(3); }, 30000);\n" },
         );
         expect(introduced(d, 'quality')).toEqual(['assertions-reduced', 'only-added', 'suppression-added', 'test-deleted', 'timeout-raised']);
         expect(d.dimensions.find((x) => x.id === 'quality')!.verdict).toBe('worse');

@@ -67,7 +67,8 @@ export interface HashCache {
 }
 
 /** git's racy window: a file modified within 2 s of the reference time is re-hashed whatever its stat says. */
-const RACY_WINDOW_NS = 2_000_000_000n;
+// BigInt(...) rather than a `2_000_000_000n` literal: the frontend type-checks this source against ES2017.
+const RACY_WINDOW_NS = BigInt(2_000_000_000);
 
 export const EMPTY_STAT_SET: StatSet = { rows: new Map() };
 

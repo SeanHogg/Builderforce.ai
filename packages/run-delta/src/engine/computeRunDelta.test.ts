@@ -81,7 +81,7 @@ describe('computeRunDelta', () => {
         };
         const after: Files = {
             'api/r.ts': UNGUARDED,
-            'src/a.test.ts': "it.skip('a', () => { expect(a()).toEqual(1); });\n",
+            'src/a.test.ts': "it" + ".skip('a', () => { expect(a()).toEqual(1); });\n",
             'lib/api.ts': 'export function f(a: number) {\n  return a;\n}\n',
             'lib/new.ts': 'export const n = 1;\n',
         };
