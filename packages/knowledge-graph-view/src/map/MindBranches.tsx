@@ -11,11 +11,11 @@ import { kindLabel } from '../names';
 import { cssVar } from '../scene/themeColors';
 import { labelFitsAt } from './labelBudget';
 import { DASHED_SHAPES, SHAPE_PATHS } from '../shapes';
-import type { MapKind, MindMap as MindMapModel, PlacedBranch } from './mindMapModel';
+import type { MindMap as MindMapModel, PlacedBranch } from './mindMapModel';
+import { BRANCH_RADIUS, clipBranchName as clip } from './mindLayout';
 
-const MAX_LABEL = 24;
-export const RADIUS: Record<MapKind, number> = { root: 1.8, folder: 1.2, file: 0.7, more: 0.7 };
-const clip = (s: string): string => (s.length > MAX_LABEL ? `${s.slice(0, MAX_LABEL - 1)}…` : s);
+/** The branch radii (ONE table in `mindLayout`, read by the stage's Mind map placement too). */
+export const RADIUS = BRANCH_RADIUS;
 
 export interface LayerProps {
     map: MindMapModel;

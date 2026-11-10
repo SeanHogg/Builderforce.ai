@@ -1,6 +1,6 @@
 /** The placement task's request (PRD 43 B1a, `TaskTable.placement`) and the viewport bands it is cached by. Types + data only. */
 
-import type { GraphId } from '../../protocol';
+import type { GraphId, ModelInputs } from '../../protocol';
 import type { PlacementCamera } from '../../../stage/types';
 import type { Bindings } from '../../../surface/overlays';
 import type { DrillFrame } from '../../../surface/transit/drillView';
@@ -40,6 +40,8 @@ export interface PlacementReq {
      * appended slots (`Placement.append`). Append-only, so an appended symbol keeps its slot from request to request.
      */
     symbols?: readonly SymbolRecord[];
+    /** The stage model's inputs (`protocol.ts` `ModelInputs`), copied in by the codec: any realm builds the same model. */
+    model?: ModelInputs;
 }
 
 /** `drill` names the innermost drill frame as `<level>:<ref>` (a ref may hold ':' itself; the first one splits). */
@@ -61,7 +63,15 @@ export const NO_CHANNELS: PlacementChannels = Object.freeze({ size: 'none', widt
 export const channelBindings = (c: PlacementChannels = NO_CHANNELS): Bindings =>
     ({ colour: 'none', ring: 'none', pulse: 'none', outline: 'none', pins: 'off', size: c.size, width: c.width });
 
-export const placementCacheKey = (digest: string, r: PlacementReq): string => {
+/**
+ * The key a placement is cached under (B1a rule 6). `build` names the MarkSet build it was placed for — its generation,
+ * which is unique per (graph, changed, localized strings digest) — so the main thread can name a request it has not
+ * sent yet (`codecs/stage.ts` keeps answers under it) and a locale change misses. Then everything the layout reads.
+ */
+export const placementCacheKey = (build: string, r: PlacementReq): string => {
     const c = r.channels ?? NO_CHANNELS;
-    return [digest, r.camera, r.drill ?? '', r.unfolded ?? '', r.pathId ?? '', r.viewportBand, r.lod, r.depth ?? 0, c.size, c.width, r.drill ? r.symbols?.length ?? 0 : 0].join('|');
+    return [build, r.camera, r.drill ?? '', r.unfolded ?? '', r.pathId ?? '', r.viewportBand, r.lod, r.depth ?? 0, c.size, c.width, r.drill || r.camera === 'sequence' ? r.symbols?.length ?? 0 : 0].join('|');
 };
+
+/** The key a placement builder stamps on its answer: {@link placementCacheKey} under the MarkSet build it placed. */
+export const placementKeyOf = (marks: { generation: number }, r: PlacementReq): string => placementCacheKey(String(marks.generation), r);

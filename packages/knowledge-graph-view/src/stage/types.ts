@@ -7,6 +7,8 @@
  * built by worker tasks (`compute/tasks/markSet.ts`, `markPaint.ts`, `placement/`). Worker-safe: types only.
  */
 
+import type { CallSite } from '@seanhogg/builderforce-memory/knowledge';
+
 export type Vec3 = readonly [number, number, number];
 
 /** What a slot stands for: a graph node, a station aggregate (`st:`) or a mind-map folder (`dir:`). */
@@ -87,6 +89,12 @@ export interface LinkBatch {
     aggregate?: Uint32Array;
     /** Per polyline (indexed by `group`): the line it draws (`Line.id`), so a route pick selects that line. */
     lineIds?: string[];
+    /**
+     * Per polyline (indexed by `group`): the call site a Sequence message draws (memory's `CallSite`: path, 1-based line,
+     * column, `order` among the caller's calls), so picking a message can reveal that line (PRD 43 B1a rule 10); null for
+     * a message without one (a system-band hop, a call the extractor recorded without a site).
+     */
+    callSites?: (CallSite | null)[];
 }
 
 export interface PlaneSpec { kind: 'band' | 'partition' | 'lifeline'; min: Vec3; max: Vec3; tone: number }
@@ -119,7 +127,16 @@ export interface CameraRig {
     frame: 'fill' | 'document';
     home: { position: Vec3; target: Vec3; up: Vec3 };
     depth: { tilt: [min: number, max: number]; orbit: boolean };
+    /**
+     * The free-orbit pose of a perspective camera (the 3D placement, PRD 43 B2): the camera looks at `home.target` from
+     * `distance` world units away, turned `yaw` degrees about world +y (0 = from +z) and raised `pitch` degrees above the
+     * ground plane; `fov` is the vertical field of view in degrees. Its marks are always in depth (the stage holds
+     * `uDepth` at 1 while a placement carries a `view`). Absent = the orthographic ground rig (tilt within `depth.tilt`).
+     */
+    view?: OrbitView;
 }
+
+export interface OrbitView { yaw: number; pitch: number; distance: number; fov: number }
 
 /** All a camera supplies (rule 4): a position, scale and extrude for EVERY slot (hidden = scale 0 at its anchor). */
 export interface Placement {
@@ -158,4 +175,4 @@ export interface SlotAppend {
 }
 
 /** The cameras that have a placement today (P1a: Map and Graph). A new camera is a row in `placement/index.ts`. */
-export type PlacementCamera = 'map' | 'graph';
+export type PlacementCamera = 'map' | 'graph' | '3d' | 'mind' | 'sequence' | 'system' | 'heat' | 'style' | 'features';

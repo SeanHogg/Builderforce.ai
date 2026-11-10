@@ -17,10 +17,14 @@ export const IDENTITY: Readonly<Affine2> = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 
 
 const P0 = [0, 0] as [number, number], PX = [0, 0] as [number, number], PZ = [0, 0] as [number, number];
 
-/** The ground plane's affine map under `project`, from three projected points (origin, +x, +z), into `out`. */
-export function groundAffine(project: ProjectInto, out: Affine2 = { ...IDENTITY }): Affine2 {
-    project(0, 0, 0, P0); project(1, 0, 0, PX); project(0, 0, 1, PZ);
-    out.a = PX[0] - P0[0]; out.b = PX[1] - P0[1]; out.c = PZ[0] - P0[0]; out.d = PZ[1] - P0[1]; out.e = P0[0]; out.f = P0[1];
+/**
+ * The ground plane's affine map under `project`, from three projected points (`at`, +x, +z), into `out`. Exact for an
+ * orthographic view; for a perspective one (the 3D orbit) it is the tangent map at `at` — pass the view's target.
+ */
+export function groundAffine(project: ProjectInto, out: Affine2 = { ...IDENTITY }, ax = 0, az = 0): Affine2 {
+    project(ax, 0, az, P0); project(ax + 1, 0, az, PX); project(ax, 0, az + 1, PZ);
+    out.a = PX[0] - P0[0]; out.b = PX[1] - P0[1]; out.c = PZ[0] - P0[0]; out.d = PZ[1] - P0[1];
+    out.e = P0[0] - out.a * ax - out.c * az; out.f = P0[1] - out.b * ax - out.d * az;
     return out;
 }
 
@@ -45,6 +49,8 @@ const same = (a: Affine2, b: Affine2): boolean => a.a === b.a && a.b === b.b && 
  */
 export function applyCaptionTransform(el: HTMLElement, m: Affine2, last?: Affine2): boolean {
     if (last && same(m, last)) return false;
+    // A point behind a perspective camera projects to nothing: keep the last good transform.
+    if (!Number.isFinite(m.a + m.b + m.c + m.d + m.e + m.f)) return false;
     el.style.transform = cssMatrix(m);
     el.style.setProperty(INVERSE_VAR, cssMatrix(inverseLinear(m)));
     if (last) Object.assign(last, m);

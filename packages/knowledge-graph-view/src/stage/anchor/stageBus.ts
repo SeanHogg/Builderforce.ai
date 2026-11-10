@@ -28,7 +28,7 @@ export interface StageOptions {
     /** The highlighted path's stops, by key, in order (the path strip). */
     path?: readonly string[] | null;
     /** A line was picked (a route): its batch, segment, polyline and slot. */
-    onLink?: ((hit: Extract<StageHit, { kind: 'link' }>) => void) | null;
+    onLink?: ((hit: Extract<StageHit, { kind: 'link' }>, at: { x: number; y: number }) => void) | null;
 }
 
 /**
@@ -50,7 +50,7 @@ export class StageBus {
     /** The renderer, read at settle time (see {@link StageSource}). */
     source: StageSource | null = null;
     /** A focus move waiting for the proxies of the next settle (`StageProxies` performs it). */
-    focusRequest: FocusRequest | null = null;
+    focusRequest: (FocusRequest & { from: Placement | null }) | null = null;
     private stored: readonly string[] = [];
     /** The slot under the pointer (-1 none). */
     hover = -1;
@@ -67,6 +67,7 @@ export class StageBus {
     private readonly revealFns = new Set<Fn<[number]>>();
     private readonly hoverFns = new Set<Fn<[number]>>();
     private readonly tweenFns = new Set<Fn<[boolean]>>();
+    private readonly placementFns = new Set<Fn<[Placement]>>();
 
     /**
      * The depth control's extrude multiplier (the renderer's `depth`, the shader's `uDepth`): picking and the card anchors
@@ -82,8 +83,10 @@ export class StageBus {
 
     /** The live keys changed (`StageRenderer.onKeys`: an append, a new MarkSet): the grid is rebuilt under them. */
     keysChanged(): void {
+        // Scheduled, never immediate: keys change as a placement arrives, before its tween is flagged; settling now would
+        // rebuild the proxies (and drop focus) over the level being left.
         this.dropIndex();
-        if (!this.tweening) this.settle(); else this.schedule();
+        this.schedule();
     }
     /** The a11y proxies' container (focus return reads it). */
     proxyRoot: HTMLElement | null = null;
@@ -105,7 +108,9 @@ export class StageBus {
     /** The placement on show and the MarkSet's keys (the live keys add what the placement appends, {@link keys}). */
     setPlacement(p: Placement, keys: readonly string[]): void {
         if (p === this.placement && keys === this.stored) return;
+        const moved = p !== this.placement;
         this.placement = p; this.stored = keys;
+        if (moved) for (const fn of this.placementFns) fn(p);
         this.dropIndex();
         this.schedule();
     }
@@ -119,8 +124,12 @@ export class StageBus {
         if (!on) this.settle();
     }
 
-    /** Moves keyboard focus once the next settle's proxies exist (after Out: the station drilled out of; after Go inside: the first stop). */
-    requestFocus(request: FocusRequest): void { this.focusRequest = request; }
+    /**
+     * Moves keyboard focus once the proxies of ANOTHER placement exist (after Out: the station drilled out of; after Go
+     * inside: the first stop) — never the stops of the placement on show when it is asked (the level being left), however
+     * many times the camera settles (a wheel, a pan) while the drill's placement is still on its way from the worker.
+     */
+    requestFocus(request: FocusRequest): void { this.focusRequest = { ...request, from: this.placement }; }
 
     /** Rebuilds the pick grid from the current projection and tells the settle listeners (proxies, card visibility). */
     settle(): void {
@@ -168,13 +177,15 @@ export class StageBus {
     onSettle(fn: Fn): () => void { this.settleFns.add(fn); return () => this.settleFns.delete(fn); }
     onReveal(fn: Fn<[number]>): () => void { this.revealFns.add(fn); return () => this.revealFns.delete(fn); }
     onHover(fn: Fn<[number]>): () => void { this.hoverFns.add(fn); return () => this.hoverFns.delete(fn); }
+    /** Another placement is on show (a camera switch, a band crossed, a drill, a new MarkSet): what was about the old one closes. */
+    onPlacement(fn: Fn<[Placement]>): () => void { this.placementFns.add(fn); return () => this.placementFns.delete(fn); }
     /** A tween started (true) or landed (false): cards hide for its length (they would be over where the marks were). */
     onTween(fn: Fn<[boolean]>): () => void { this.tweenFns.add(fn); return () => this.tweenFns.delete(fn); }
 
     dispose(): void {
         if (this.timer !== null) clearTimeout(this.timer);
         this.timer = null;
-        this.frameFns.clear(); this.settleFns.clear(); this.revealFns.clear(); this.hoverFns.clear(); this.optionFns.clear(); this.tweenFns.clear();
+        this.frameFns.clear(); this.settleFns.clear(); this.revealFns.clear(); this.hoverFns.clear(); this.optionFns.clear(); this.tweenFns.clear(); this.placementFns.clear();
     }
 
     /** The grid is stale (camera, placement or tween changed): kept as the next settle's buffers, never queried again. */

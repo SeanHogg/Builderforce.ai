@@ -17,7 +17,7 @@ import { toneIndex } from '../../../stage/tones';
 import type { Caption, Placement, PlaneSpec } from '../../../stage/types';
 import type { StageModel } from '../stageModel';
 import { anchorHidden, draftFor, show } from './anchor';
-import { placementCacheKey, VIEWPORT_BANDS, type PlacementReq } from './request';
+import { placementKeyOf, VIEWPORT_BANDS, type PlacementReq } from './request';
 
 /**
  * Nodes the Graph camera shows per LOD band: band 0 is today's cap (`KnowledgeGraphView`'s MAX_DRAWN_NODES); a higher
@@ -70,7 +70,7 @@ function fromLayout(g: KnowledgeGraph, model: StageModel, req: PlacementReq, lay
     const words = placementWordsOf(model.strings);
     const captions: Caption[] = layout.bands.map((band) => ({ text: placementLabel(band.partition, g, words), position: [MARGIN, 0, z(band.top) + 12], anchor: 'start', tone: toneIndex('muted') }));
     return {
-        generation: marks.generation, cacheKey: placementCacheKey(marks.digest, req), anchor: 'station',
+        generation: marks.generation, cacheKey: placementKeyOf(marks, req), anchor: 'station',
         position: d.position, scale: d.scale, extrude: d.extrude,
         links: [], planes, labels: [], captions, a11y,
         caption: { shown: layout.positions.size, total: model.nodeSlot.size, capped: layout.positions.size < model.nodeSlot.size },

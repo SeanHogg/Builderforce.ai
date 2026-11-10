@@ -77,12 +77,14 @@ describe('drill on the stage (PRD 43 B7: symbol slots appended + a new placement
             stage.setPlacement(inside, 0, 400);
             expect(stage.marks).toBe(marks);                       // no rebuild: the headroom took them
             expect(stage.stats.meshesCreated).toBe(created);
-            if (stage.object) expect(markCount(stage.object)).toBe(base + 2);
+            // Every slot appended to this MarkSet so far (the model's registry: earlier answers' keys keep their slots).
+            const k = inside.append!.keys.length;
+            if (stage.object) expect(markCount(stage.object)).toBe(base + k);
             expect(stage.placement!.scale[base]).toBeGreaterThan(0);
 
             stage.setPlacement(w, 400, 400);                       // Out
             const out = stage.placement!;
-            expect(out.scale.length).toBe(base + 2);               // padded: the world placement covers the appended slots
+            expect(out.scale.length).toBe(base + k);               // padded: the world placement covers the appended slots
             expect([out.scale[base], out.scale[base + 1]]).toEqual([0, 0]);
             expect(at(out, base)).toEqual(at(w, apiSlot));         // collapsed into the station they grew from
             expect(stage.stats.meshesCreated).toBe(created);

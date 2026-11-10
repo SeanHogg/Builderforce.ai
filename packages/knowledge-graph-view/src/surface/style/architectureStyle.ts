@@ -48,6 +48,9 @@ export interface StyleAnalysis {
 
 export const FIT_THRESHOLD = 0.5;
 
+/** A fit as the whole percent every reading shows (the style card, the stage's verdict caption). */
+export const percentOf = (fit: number): number => Math.round(fit * 100);
+
 const clamp01 = (n: number): number => Math.min(1, Math.max(0, n));
 const round4 = (n: number): number => Math.round(n * 1e4) / 1e4;
 /** The share `count / total`, full marks at `full`; nothing measured scores 0. */

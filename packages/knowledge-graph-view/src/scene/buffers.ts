@@ -33,6 +33,10 @@ export interface EdgeBuffer {
 const MIN_SCALE = 0.18;
 const MAX_SCALE = 0.75;
 
+/** A 3D node's scale (layout units) from its importance — the R3F scene's and the stage's 3D placement's ONE reading. */
+export const nodeScale = (n: Pick<KNode, 'importance'>): number =>
+    MIN_SCALE + (MAX_SCALE - MIN_SCALE) * Math.sqrt(Math.max(0, Math.min(1, importanceOf(n))));
+
 export function nodeInstances(nodes: readonly KNode[], layout: Layout3D, lens: LensDef): NodeInstances {
     // A layout may be older than `nodes` (a new node lands before the next layout does): only nodes it placed are drawn.
     const placed = nodes.filter((n) => layout.positions.has(n.ref));
@@ -44,7 +48,7 @@ export function nodeInstances(nodes: readonly KNode[], layout: Layout3D, lens: L
     placed.forEach((n, i) => {
         const [x, y, z] = layout.positions.get(n.ref) ?? [0, 0, 0];
         positions.set([x, y, z], i * 3);
-        scales[i] = MIN_SCALE + (MAX_SCALE - MIN_SCALE) * Math.sqrt(Math.max(0, Math.min(1, importanceOf(n))));
+        scales[i] = nodeScale(n);
         const style = lens.nodeStyle(n);
         tones.push(style.tone);
         shapes.push(style.shape);

@@ -6,10 +6,15 @@
  */
 
 import { round } from '../order';
-import type { MapBranch, MindMap, PlacedBranch } from './mindTypes';
+import type { MapBranch, MapKind, MindMap, PlacedBranch } from './mindTypes';
 
 /** The least distance between two rings. */
 export const RING = 14;
+/** A branch's mark radius by kind, in layout units (the SVG mind map and the stage's Mind map placement read the same). */
+export const BRANCH_RADIUS: Readonly<Record<MapKind, number>> = { root: 1.8, folder: 1.2, file: 0.7, more: 0.7 };
+/** The longest branch name drawn in full; a longer one is clipped with an ellipsis (its full name stays in the tooltip / aria). */
+export const MAX_BRANCH_LABEL = 24;
+export const clipBranchName = (s: string): string => (s.length > MAX_BRANCH_LABEL ? `${s.slice(0, MAX_BRANCH_LABEL - 1)}…` : s);
 /** The least arc a branch owns on its ring, in the same units. */
 export const BRANCH_GAP = 6;
 

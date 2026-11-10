@@ -25,6 +25,7 @@ import { runIdleTask, type IdleTask } from '../useIdleSteps';
 import { CODECS } from './codecs';
 import type { KindInput, KindResult } from './kinds';
 import { streamGraph, type Post } from './loader';
+import { Lru } from './lru';
 import type { GraphId, TaskKind, TaskTable, WorkerOut } from './protocol';
 import { Residency } from './residency';
 import { ComputeStore } from './store';
@@ -76,6 +77,8 @@ export class ComputeClient {
     private readonly loads = new Map<GraphId, Promise<void>>();
     /** Graphs the worker could not take (a clone error while streaming): their requests run in-process, the worker stays. */
     private readonly localOnly = new Set<GraphId>();
+    /** Kept answers by kind (`Codec.cache`: the stage's placements, B1a rule 6). */
+    private readonly answers = new Map<TaskKind, Lru<unknown>>();
 
     /** Observes where each task actually ran (set by a profiler; null costs one check per task). */
     probe: ComputeProbe | null = null;
@@ -117,9 +120,12 @@ export class ComputeClient {
     run<K extends TaskKind>(kind: K, input: KindInput<K>, callbacks: Callbacks<KindResult<K>>): () => void {
         let live = true;
         let stop = noop;
+        let graphId: GraphId = -1;
+        const keep = this.answerCache(kind);
         const hooks: Hooks = {
             deliver: (raw) => {
                 if (!live) return;
+                if (keep) keep.lru.set(keep.keyOfRaw(raw as never, graphId), raw);
                 try { callbacks.done(CODECS[kind].decode(raw as never, input as never) as KindResult<K>); } catch (error) { callbacks.fail(error); }
             },
             fail: (error) => { if (live) callbacks.fail(error); },
@@ -131,6 +137,10 @@ export class ComputeClient {
             attempt = n;
             try {
                 const { graph, req } = this.encode(kind, input);
+                graphId = graph;
+                // A kept answer (a placement returned to) is delivered with no worker call.
+                const kept = keep?.lru.get(keep.keyOf(req as never, graph));
+                if (kept !== undefined) { queueMicrotask(() => hooks.deliver(kept)); return; }
                 stop = this.dispatch(kind, graph, req, hooks, n);
             } catch (error) {
                 hooks.fail(error);
@@ -152,6 +162,15 @@ export class ComputeClient {
         this.stopWorker();
         this.inProcess = true;
         this.drain();
+    }
+
+    /** The answers kept for a kind whose codec asks for it (`Codec.cache`), one LRU per kind; null for the rest. */
+    private answerCache(kind: TaskKind): { lru: Lru<unknown>; keyOf(req: unknown, graph: GraphId): string; keyOfRaw(raw: unknown, graph: GraphId): string } | null {
+        const spec = CODECS[kind].cache as { size: number; keyOf(req: unknown, graph: GraphId): string; keyOfRaw(raw: unknown, graph: GraphId): string } | undefined;
+        if (!spec) return null;
+        let lru = this.answers.get(kind);
+        if (!lru) { lru = new Lru<unknown>(spec.size); this.answers.set(kind, lru); }
+        return { lru, keyOf: spec.keyOf, keyOfRaw: spec.keyOfRaw };
     }
 
     private encode<K extends TaskKind>(kind: K, input: KindInput<K>): { graph: GraphId; req: TaskTable[K]['req'] } {
@@ -223,6 +242,8 @@ export class ComputeClient {
     }
 
     private evict(id: GraphId): void {
+        // Kept answers name the graph first (`Codec.cache` keys): an evicted graph's go with it.
+        for (const lru of this.answers.values()) lru.dropPrefix(`${id}|`);
         this.local.drop(id);
         this.localOnly.delete(id);
         this.loads.delete(id);

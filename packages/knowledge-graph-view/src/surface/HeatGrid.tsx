@@ -13,14 +13,10 @@ import { muted } from '../styles';
 import { TYPE } from './ui/type';
 import { Bar } from './drawers/ui';
 import type { SceneProps } from './registry';
-import { NEUTRAL_SIZE } from './overlays';
+import { cellWidth, HEAT_CELL_CAP } from './heatCells';
 import { buildTiers } from './tiers';
 
-/** The cell's width from the marker radius the overlay gives (5 + 2 x level, or the neutral size). */
-export const cellWidth = (size: number): number => 64 + (size - NEUTRAL_SIZE) * 10;
-
-/** Cells drawn at once; "N more" reveals the next page, so a huge repo never mounts thousands of buttons. */
-export const HEAT_CELL_CAP = 200;
+export { cellWidth, HEAT_CELL_CAP };
 
 export function HeatGrid({ labels, surface }: SceneProps) {
     const s = labels.surface;

@@ -4,6 +4,7 @@
  * worker hands over (`transfer.ts`); the pinned model keeps its own copies.
  */
 
+import type { ModelInputs } from '../protocol';
 import { once, type Handler } from './handler';
 import { paintMarks } from './markPaint';
 import { PLACEMENTS } from './placement';
@@ -13,16 +14,19 @@ import { copyMarkSet, stageModelOf } from './stageModel';
 
 export const markSet: Handler<'markSet'> = (store, { graph, changed, strings }) => once(() => copyMarkSet(stageModelOf(store, graph, changed, strings).marks));
 
-export const markPaint: Handler<'markPaint'> = (store, { graph, lensId, questionId, overlay, lit, roles, family }) => once(() =>
-    paintMarks(store.graph(graph), stageModelOf(store, graph), { lensId, questionId, overlay, lit, roles, family }));
+/** The model a request names: its own inputs when it carries them (any realm builds the same model), else the held one. */
+const modelOf = (store: Parameters<Handler<'placement'>>[0], graph: number, model?: ModelInputs) => stageModelOf(store, graph, model?.changed, model?.strings);
+
+export const markPaint: Handler<'markPaint'> = (store, { graph, lensId, questionId, overlay, lit, roles, family, model }) => once(() =>
+    paintMarks(store.graph(graph), modelOf(store, graph, model), { lensId, questionId, overlay, lit, roles, family }));
 
 export const placement: Handler<'placement'> = (store, req) => {
     // A drilled level is its own placement of the same marks (B7: drill enter / exit), whatever the camera.
-    if (req.drill) return once(() => placeDrill(store.graph(req.graph), stageModelOf(store, req.graph), req));
+    if (req.drill) return once(() => placeDrill(store.graph(req.graph), modelOf(store, req.graph, req.model), req));
     const builder = PLACEMENTS[req.camera];
     if (!builder) return once(() => { throw new Error(`stage: no placement for camera ${String(req.camera)}`); });
-    return builder(store.graph(req.graph), stageModelOf(store, req.graph), req);
+    return builder(store.graph(req.graph), modelOf(store, req.graph, req.model), req);
 };
 
 /** The ranked incident index by slot (B5), once per graph. */
-export const stageIncident: Handler<'stageIncident'> = (store, { graph }) => once(() => buildSlotIncident(store.graph(graph), stageModelOf(store, graph)));
+export const stageIncident: Handler<'stageIncident'> = (store, { graph, model }) => once(() => buildSlotIncident(store.graph(graph), modelOf(store, graph, model)));

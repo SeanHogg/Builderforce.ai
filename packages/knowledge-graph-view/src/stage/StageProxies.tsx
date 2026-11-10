@@ -66,7 +66,8 @@ export function StageProxies({ bus, selected, disabled = false, description, onS
     // A focus move the bus was asked for lands once the stops of the placement now on show are in the DOM.
     useEffect(() => {
         const want = bus.focusRequest;
-        if (!want || disabled || stops.length === 0 || of !== bus.placement) return;
+        // Only stops of the placement now on show, and only once that is not the placement the request was made on.
+        if (!want || disabled || stops.length === 0 || of !== bus.placement || bus.placement === want.from) return;
         bus.focusRequest = null;
         const target = 'key' in want ? stops.find((s) => s.key === want.key) ?? stops[0]! : stops[0]!;
         root.current?.querySelector<HTMLElement>(`[data-slot="${target.slot}"]`)?.focus({ preventScroll: true });

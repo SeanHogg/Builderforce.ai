@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { CallSite } from '@seanhogg/builderforce-memory/knowledge';
 import { useComputed } from '../../compute/useComputed';
 import { COMPACT_WIDTH, nodeIndex } from '../../graphModel';
 import type { SceneProps } from '../../surface/registry';
@@ -14,6 +15,7 @@ import { useStageMap, type StageMap } from '../drill/useStageMap';
 import type { StageRenderer } from '../renderer';
 import type { MarkSet, Placement } from '../types';
 import { SlotIncident } from './incident';
+import { CallSiteCard } from './CallSiteCard';
 import { StageCard } from './StageCard';
 
 export interface StageWiring {
@@ -46,12 +48,20 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     const stops = drill.view ? null : surface.line?.stops ?? null;
     // A route pick selects its line, as the SVG map's hop does (`TransitCamera`: on the world map only); the path
     // highlight then follows the selected line's stops.
+    // A Sequence message pick (its batch names the call site) opens the call-site card instead.
     const selectLine = surface.selectLine;
-    const onLink = useCallback((hit: { line: string | null }) => {
+    const [site, setSite] = useState<{ site: CallSite; at: { x: number; y: number } } | null>(null);
+    const onLink = useCallback((hit: { line: string | null; site: CallSite | null }, at: { x: number; y: number }) => {
+        if (hit.site) { setCardKey(null); setSite({ site: hit.site, at }); return; }
         if (drill.view || !hit.line) return;
         setCardKey(null); setSelected(null);
         selectLine(hit.line);
     }, [drill.view, selectLine]);
+    const closeSite = useCallback(() => setSite(null), []);
+    // The call site belongs to the placement it was picked on: a camera switch, a band crossed, a drill or a new MarkSet
+    // (another placement on the bus) closes it, as does selecting a mark.
+    useEffect(() => bus.onPlacement(() => setSite(null)), [bus]);
+    useEffect(() => { setSite(null); }, [generation]);
     useEffect(() => {
         bus.setOptions({ ...bus.options, incident: incident && incident.generation === generation ? new SlotIncident(incident) : null, path: stops ? stops.map((id) => `st:${id}`) : null, onLink });
     }, [bus, incident, generation, stops, onLink]);
@@ -73,6 +83,7 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
 
     const onSelect = useCallback((key: string) => {
         setSelected(key);
+        setSite(null);
         const station = map.stationOfKey(key);
         setCardKey(station ? key : null);
         if (station) { if (drill.view) drill.select(station.id); else surface.selectStation(station.id); return; }
@@ -94,6 +105,7 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
                 cardKey={cardKey} map={map} drill={drill} graph={graph} labels={p.labels} compact={width > 0 && width < COMPACT_WIDTH}
                 onClose={closeCard} onQuestion={surface.setQuestion} onOpenPanel={surface.openPanel}
             />
+            {site && <CallSiteCard site={site.site} at={site.at} boxWidth={width} labels={p.labels} onOpenSource={p.onOpenSource} onClose={closeSite} />}
         </StageBusContext.Provider>
     );
     return { map, selected, onSelect, onOut: drill.canOut ? drill.out : undefined, patchMap, card };

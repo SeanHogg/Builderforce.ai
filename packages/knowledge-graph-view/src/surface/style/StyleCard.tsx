@@ -8,9 +8,9 @@ import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { cssVar } from '../../scene/themeColors';
 import { card, chip } from '../../styles';
 import { TYPE } from '../ui/type';
-import type { StyleCheck, StyleScore } from './architectureStyle';
+import { percentOf, type StyleCheck, type StyleScore } from './architectureStyle';
 
-export const percentOf = (fit: number): number => Math.round(fit * 100);
+export { percentOf };
 
 const statusOf = (c: StyleCheck): 'met' | 'partial' | 'missed' => (c.met >= 1 ? 'met' : c.met <= 0 ? 'missed' : 'partial');
 const STATUS_TONE = { met: 'accent', partial: 'muted', missed: 'violation' } as const;

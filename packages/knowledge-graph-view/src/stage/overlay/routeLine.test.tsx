@@ -59,12 +59,12 @@ describe('route → line (a route pick selects its line, as the SVG map\'s hop d
         const { rerender } = renderHook((props: SceneProps) => useStageWiring(props, renderer, null, 800), { initialProps: p });
         const bus = stageBus(renderer);
         const line = model.lines.lines[0]!.id;
-        act(() => bus.options.onLink?.({ kind: 'link', batch: 0, segment: 0, group: 0, slot: -1, line }));
+        act(() => bus.options.onLink?.({ kind: 'link', batch: 0, segment: 0, group: 0, slot: -1, line, site: null }, { x: 0, y: 0 }));
         expect(selectLine).toHaveBeenCalledWith(line);
         // Inside a level the map's lines are the level's own: a route pick selects nothing on the surface.
         selectLine.mockClear();
         rerender({ ...p, surface: { ...p.surface, drill: { ...drill, view: { stations: model.stations, leaves: new Set() } } } } as unknown as SceneProps);
-        act(() => bus.options.onLink?.({ kind: 'link', batch: 0, segment: 0, group: 0, slot: -1, line }));
+        act(() => bus.options.onLink?.({ kind: 'link', batch: 0, segment: 0, group: 0, slot: -1, line, site: null }, { x: 0, y: 0 }));
         expect(selectLine).not.toHaveBeenCalled();
     });
 });

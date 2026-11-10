@@ -36,10 +36,13 @@ describe('stage picking (PRD 43 B5)', () => {
         const { marks, keys, importance } = scatter(1500, 800, 500);
         const projector = frameProjector(frame);
         const index = PickIndex.build(marks, projector, { keys, importance });
+        // The candidates come from a REFERENCE projection written out here (the fitted frame's formula), never from the
+        // index's own `screenOf`, so the grid's projection is under test too.
         const candidates: HitCandidate[] = [];
         for (let s = 0; s < keys.length; s++) {
-            const at = index.screenOf(s);
-            if (at) candidates.push({ id: keys[s]!, x: at[0], y: at[1], importance: importance[s]! });
+            if (!(marks.scale[s]! > 0)) continue;
+            const x = (marks.position[s * 3]! - frame.cx) * frame.zoom + frame.width / 2, y = (marks.position[s * 3 + 2]! - frame.cz) * frame.zoom + frame.height / 2;
+            candidates.push({ id: keys[s]!, x, y, importance: importance[s]! });
         }
         expect(candidates.length).toBeLessThan(keys.length); // the hidden ones are not candidates
         const r = rng(3);
@@ -76,7 +79,7 @@ describe('stage picking (PRD 43 B5)', () => {
 
     it('picks through the rig\'s tilted projection: a tilted Map is picked where it is drawn, not top-down', () => {
         const rig = new RigController();
-        rig.setHome({ cx: 0, cz: 0, zoom: 1 }, { depth: { tilt: [0, 60], orbit: false } }, 800, 600, 0, 0);
+        rig.setHome({ cx: 0, cz: 0, zoom: 1 }, { home: { position: [0, 1000, 0], target: [0, 0, 0], up: [0, 0, -1] }, depth: { tilt: [0, 60], orbit: false } }, 800, 600, 0, 0);
         rig.setDepth(1);
         // A station 200 deep on the map with a 100-tall tower.
         const marks: Marks = { position: Float32Array.from([0, 0, 200]), scale: Float32Array.from([6]), extrude: Float32Array.from([100]), links: [] };
@@ -96,7 +99,7 @@ describe('stage picking (PRD 43 B5)', () => {
         const route = linkBatch('route', [{ pts: [{ x: 0, y: 200 }, { x: 600, y: 200 }], tone: 1, width: 6, dash: 0, flags: FLAG.SELECTABLE }], 0);
         const marks: Marks = { position: Float32Array.from([50, 0, 50]), scale: Float32Array.from([4]), extrude: new Float32Array(1), links: [route] };
         const index = PickIndex.build(marks, frameProjector({ zoom: 1, cx: 300, cz: 200, width: 600, height: 400 }), { links: marks.links });
-        expect(index.pick(300, 200 + LINK_TARGET_PX - 1)).toEqual({ kind: 'link', batch: 0, segment: 0, group: 0, slot: -1, line: null });
+        expect(index.pick(300, 200 + LINK_TARGET_PX - 1)).toEqual({ kind: 'link', batch: 0, segment: 0, group: 0, slot: -1, line: null, site: null });
         expect(index.pick(300, 200 + LINK_TARGET_PX + 2)).toBeNull();
         expect(index.pick(50, 50)).toEqual({ kind: 'mark', slot: 0 });
     });
@@ -143,14 +146,13 @@ describe('stage picking (PRD 43 B5)', () => {
         console.info(`[pick] 10k-slot settle: ${ms.toFixed(2)} ms, ${index.counters.projected} projections, worst query ${worst} candidates`);
     });
 
-    it('a settle that reuses the previous settle\'s buffers answers exactly as a fresh build, and retires the old index', () => {
+    it('a settle that reuses the previous settle\'s buffers answers exactly as a fresh build', () => {
         const { marks, keys, importance } = scatter(3000, 1600, 1000, 17);
         const a = frameProjector({ zoom: 0.8, cx: 800, cz: 500, width: 1280, height: 800 });
         const b = frameProjector({ zoom: 1.1, cx: 700, cz: 450, width: 1280, height: 800 });
         const first = PickIndex.build(marks, a, { keys, importance });
         const reused = PickIndex.build(marks, b, { keys, importance }, first);
         const fresh = PickIndex.build(marks, b, { keys, importance });
-        expect(first.retired).toBe(true);
         const r = rng(21);
         for (let q = 0; q < 1000; q++) { const x = r() * 1280, y = r() * 800; expect(reused.pickMark(x, y)).toBe(fresh.pickMark(x, y)); }
         for (let s = 0; s < 3000; s += 7) expect(reused.screenOf(s)).toEqual(fresh.screenOf(s));

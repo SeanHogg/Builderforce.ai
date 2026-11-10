@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import type { OrthographicCamera } from 'three';
+import { PerspectiveCamera, type OrthographicCamera } from 'three';
 import type { ThemeColors } from '../scene/themeColors';
 import { StageFrameTap } from './anchor/StageFrameTap';
 import { StageBusContext, stageBus, type StageBus } from './anchor/stageBus';
@@ -25,8 +25,9 @@ import { bindContextLoss } from './contextLoss';
 import { StageInteraction } from './overlay/StageInteraction';
 import { documentHeight } from './projection';
 import type { StageRenderer, StageView } from './renderer';
+import { aimCamera } from './rig/aim';
 import { DepthControl } from './rig/DepthControl';
-import { touchActionFor } from './rig/gestures';
+import { bindOrbitKeys, touchActionFor } from './rig/gestures';
 import type { RigController } from './rig/rig';
 import { useRig } from './rig/useRig';
 import { useDepth, useLiveKeys, useStageMotion, useTweening } from './stageHooks';
@@ -74,13 +75,32 @@ interface SceneProps { renderer: StageRenderer; rig: RigController; inputs: Inpu
 /** A matrix no real transform equals: the first frame always writes. */
 const unwritten = (): Affine2 => ({ a: NaN, b: NaN, c: NaN, d: NaN, e: NaN, f: NaN });
 
-function StageScene({ renderer, rig, inputs, captions }: SceneProps) {
-    const camera = useThree((s) => s.camera) as OrthographicCamera;
+function StageScene({ renderer, rig, inputs, captions, canvasLabel }: SceneProps & { canvasLabel: string }) {
     const invalidate = useThree((s) => s.invalidate);
     const gl = useThree((s) => s.gl);
+    const set = useThree((s) => s.set);
+    const get = useThree((s) => s.get);
+    const size = useThree((s) => s.size);
+    // The canvas's own orthographic camera for ground views, ONE perspective camera for orbit (and cross-projection
+    // tweens); the rig says which, and the frame loop swaps the store's camera when it changes.
+    const ortho = useRef(get().camera as OrthographicCamera).current;
+    const persp = useMemo(() => new PerspectiveCamera(35, 1, 1, 1e6), []);
     useRendererInputs(renderer, inputs, invalidate);
     useEffect(() => rig.subscribe(invalidate), [rig, invalidate]);
     useEffect(() => bindContextLoss(gl.domElement, renderer, invalidate), [gl, renderer, invalidate]);
+    // Arrow keys orbit only while the canvas itself has focus (never the proxies' roving arrows).
+    // The canvas is a tab stop only while there is something for the keys to do (an orbit view).
+    useEffect(() => {
+        const canvas = gl.domElement;
+        const stop = () => {
+            if (rig.orbiting) { canvas.tabIndex = 0; canvas.setAttribute('aria-label', canvasLabel); }
+            else { canvas.removeAttribute('tabindex'); canvas.removeAttribute('aria-label'); }
+        };
+        stop();
+        const unsubscribe = rig.subscribe(stop);
+        const unbind = bindOrbitKeys(canvas, rig, invalidate);
+        return () => { unsubscribe(); unbind(); };
+    }, [gl, rig, invalidate, canvasLabel]);
     const motionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     useEffect(() => () => { if (motionTimer.current) clearTimeout(motionTimer.current); }, []);
     // Reused every frame: no allocation in the loop.
@@ -89,15 +109,16 @@ function StageScene({ renderer, rig, inputs, captions }: SceneProps) {
         const t = now();
         const rigMoving = rig.tick(t);
         const pose = rig.pose();
-        camera.up.set(pose.up[0], pose.up[1], pose.up[2]);
-        camera.position.set(pose.position[0], pose.position[1], pose.position[2]);
-        camera.lookAt(pose.target[0], pose.target[1], pose.target[2]);
-        camera.zoom = pose.zoom;
-        camera.near = 1; camera.far = 3 * pose.position[1] + 4000;
-        camera.updateProjectionMatrix();
-        scratch.view.pxPerWorld = pose.zoom; scratch.view.dpr = gl.getPixelRatio();
+        const camera = aimCamera(pose, rig.currentOrbit.distance, ortho, persp, size);
+        if (get().camera !== camera) set({ camera });
+        scratch.view.pxPerWorld = rig.pxPerWorld; scratch.view.dpr = gl.getPixelRatio();
         renderer.setView(scratch.view);
-        if (captions.current) applyCaptionTransform(captions.current, groundAffine(rig.projectInto, scratch.affine), scratch.last);
+        // The extrude follows the rig (held at 1 in 3D, blended across a Map ↔ 3D tween); the label pass and overlay
+        // re-place once it stops moving.
+        const depth = rig.depthUniform;
+        if (depth !== renderer.depth) renderer.setDepth(depth, !rigMoving);
+        const at = pose.target;
+        if (captions.current) applyCaptionTransform(captions.current, groundAffine(rig.projectInto, scratch.affine, at[0], at[2]), scratch.last);
         if (renderer.tick(t) || rigMoving) { invalidate(); return; }
         // The label fade (next frame) and decorative motion (the pulse, ≤ 30 fps, only while visible and allowed).
         const delay = renderer.motionDelay(t);
@@ -116,7 +137,8 @@ function NoCanvas({ renderer, rig, inputs, captions, bus }: SceneProps & { bus: 
         const affine = unwritten(), last = unwritten();
         const apply = () => {
             bus.frame(rig.projector(), false);
-            if (captions.current) applyCaptionTransform(captions.current, groundAffine(rig.projectInto, affine), last);
+            const at = rig.pose().target;
+            if (captions.current) applyCaptionTransform(captions.current, groundAffine(rig.projectInto, affine, at[0], at[2]), last);
         };
         apply();
         return rig.subscribe(apply);
@@ -146,7 +168,7 @@ export function Stage(p: StageProps) {
     const rigRef = useRef<RigController | null>(null);
     const settle = useCallback(() => {
         const r = rigRef.current;
-        if (r) renderer.settleView({ pxPerWorld: r.current.zoom, dpr });
+        if (r) renderer.settleView({ pxPerWorld: r.pxPerWorld, dpr });
         bus.settle();
         bus.invalidate();
     }, [renderer, bus, dpr]);
@@ -163,6 +185,8 @@ export function Stage(p: StageProps) {
     }), [bus, renderer]);
     useEffect(() => (placement ? bus.onReveal((slot) => rig.centreOn(placement.position[slot * 3]!, placement.position[slot * 3 + 2]!)) : undefined), [bus, rig, placement]);
     useStageMotion(renderer, box, p.reducedMotion, bus);
+    // An orbit placement (3D) holds the marks' extrude at full; a ground one gives the depth control back.
+    useEffect(() => { if (placement) { renderer.setDepth(rig.depthUniform, true); bus.invalidate(); } }, [renderer, rig, bus, placement]);
 
     const scene: SceneProps = { renderer, rig, inputs: { marks: p.marks, paint: p.paint, placement, colors: p.colors, reducedMotion: p.reducedMotion }, captions };
     const frame = placement?.rig.frame ?? 'fill';
@@ -175,14 +199,14 @@ export function Stage(p: StageProps) {
                 {renderer.kind === 'webgl'
                     ? (
                         <Canvas orthographic frameloop="demand" dpr={[1, 2]} gl={{ antialias: false, alpha: true }} style={{ position: 'absolute', inset: 0 }}>
-                            <StageScene {...scene} />
+                            <StageScene {...scene} canvasLabel={p.description ?? p.depthLabel} />
                             <StageFrameTap bus={bus} />
                         </Canvas>
                     )
                     : <NoCanvas {...scene} bus={bus} />}
                 {placement && <CaptionLayer ref={captions} captions={placement.captions} names={names} hidden={tweening} />}
                 {placement && <StageInteraction bus={bus} renderer={renderer} keys={keys} placement={placement} tweening={tweening} selected={p.selected} description={p.description} onSelect={p.onSelect} onOut={p.onOut} />}
-                {placement && tiltMax > tiltMin && <DepthControl label={p.depthLabel} value={depth} boxHeight={height} onChange={setDepth} />}
+                {placement && !placement.rig.view && tiltMax > tiltMin && <DepthControl label={p.depthLabel} value={depth} boxHeight={height} onChange={setDepth} />}
             </div>
         </StageBusContext.Provider>
     );

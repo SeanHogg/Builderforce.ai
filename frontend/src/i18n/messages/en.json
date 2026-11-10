@@ -37922,7 +37922,9 @@
         "description": "Sequence of {stops} and {messages}.",
         "empty": "A sequence needs two stations; this line has one.",
         "messageAria": "{from} to {to}: {label}",
-        "backToMap": "Back to map"
+        "backToMap": "Back to map",
+        "hop": "references · {count}",
+        "noReference": "no direct reference"
       },
       "pillStates": {
         "synced": "Synced",
@@ -37969,7 +37971,9 @@
           "patterns": "Patterns",
           "noSymbols": "No symbols here: nothing lies further inside.",
           "leaf": "Outside this level",
-          "loading": "Reading symbols…"
+          "loading": "Reading symbols…",
+          "callSite": "Call site",
+          "openAtLine": "Open at line {line}"
         },
         "stats": { "issues": "Anti-patterns", "complexity": "Complexity", "coverage": "Coverage", "reached": "Reached", "usage": "Importance" },
         "statWords": {
@@ -38244,6 +38248,12 @@
         "moreFoldersOther": "+{count} folders",
         "moreFoldersAriaOne": "{count} more folder: show the next ones",
         "moreFoldersAriaOther": "{count} more folders: show the next ones"
+      },
+      "zoom": {
+        "group": "Zoom level",
+        "system": "Systems",
+        "class": "Classes",
+        "method": "Methods"
       },
       "api": {
         "notSetUpTitle": "No endpoints found",

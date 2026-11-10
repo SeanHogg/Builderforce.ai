@@ -6,7 +6,7 @@
  */
 
 import { CORNER, type Point } from '../../../surface/transit/geometry';
-import type { LinkBatch } from '../../../stage/types';
+import type { LinkBatch, Vec3 } from '../../../stage/types';
 
 /** Points per rounded corner. */
 const CORNER_STEPS = 6;
@@ -41,23 +41,38 @@ export interface LinkPath {
 
 /** One batch of polylines at world height `y`: the map's frame (x, y) is the world's (x, z). */
 export function linkBatch(family: LinkBatch['family'], paths: readonly LinkPath[], y: number, casing?: LinkBatch['casing']): LinkBatch {
+    const lifted = paths.map((p) => ({ ...p, pts: roundedPoints(p.pts).map((q): Vec3 => [q.x, y, q.y]) }));
+    return polylineBatch(family, lifted, 'world', casing);
+}
+
+/** A polyline already in world space (x, y, z): straight segments, no corner rounding (the mind map's tree, the sequence). */
+export interface WorldPath {
+    pts: readonly Vec3[];
+    tone: number;
+    width: number;
+    dash: number;
+    flags: number;
+}
+
+/** The ONE packer of polylines into a {@link LinkBatch}: a NaN triple ends each polyline; running length runs per polyline. */
+export function polylineBatch(family: LinkBatch['family'], paths: readonly WorldPath[], widthUnit: LinkBatch['widthUnit'], casing?: LinkBatch['casing']): LinkBatch {
     let points = 0, segments = 0;
-    const rounded = paths.map((p) => roundedPoints(p.pts));
-    for (const pts of rounded) { points += pts.length + 1; segments += Math.max(0, pts.length - 1); }
+    for (const p of paths) { points += p.pts.length + 1; segments += Math.max(0, p.pts.length - 1); }
     const xyz = new Float32Array(points * 3), run = new Float32Array(points);
     const tone = new Uint8Array(segments), width = new Float32Array(segments), dash = new Uint8Array(segments), flags = new Uint8Array(segments), group = new Uint32Array(segments);
     let pi = 0, si = 0;
-    rounded.forEach((pts, g) => {
-        const p = paths[g]!;
+    paths.forEach((p, g) => {
+        const pts = p.pts;
         let length = 0;
         pts.forEach((q, i) => {
             if (i > 0) {
-                length += Math.hypot(q.x - pts[i - 1]!.x, q.y - pts[i - 1]!.y);
+                const o = pts[i - 1]!;
+                length += Math.hypot(q[0] - o[0], q[1] - o[1], q[2] - o[2]);
                 tone[si] = p.tone; width[si] = p.width; dash[si] = p.dash; flags[si] = p.flags; group[si] = g; si++;
             }
-            xyz[pi * 3] = q.x; xyz[pi * 3 + 1] = y; xyz[pi * 3 + 2] = q.y; run[pi] = length; pi++;
+            xyz[pi * 3] = q[0]; xyz[pi * 3 + 1] = q[1]; xyz[pi * 3 + 2] = q[2]; run[pi] = length; pi++;
         });
         xyz[pi * 3] = NaN; xyz[pi * 3 + 1] = NaN; xyz[pi * 3 + 2] = NaN; run[pi] = length; pi++;
     });
-    return { family, points: xyz, runLength: run, tone, width, dash, flags, group, ...(casing ? { casing } : {}), widthUnit: 'world' };
+    return { family, points: xyz, runLength: run, tone, width, dash, flags, group, ...(casing ? { casing } : {}), widthUnit };
 }

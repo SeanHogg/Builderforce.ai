@@ -122,11 +122,12 @@ function folderSlotOf(node: KNode, nodeAt: ReadonlyMap<string, number>, nodes: r
 }
 
 /**
- * The types a drill appends (a symbol is a class or a function, `markTypeOf`): their batches always exist, empty when
+ * The types an append brings (a drilled symbol is a class or a function, `markTypeOf`; a Sequence's call target outside
+ * the root is `external`): their batches always exist, empty when
  * the graph holds no symbols, so going inside appends into headroom instead of rebuilding the meshes (B1a rule 1). An
  * empty batch draws nothing (an instanced draw of 0 is skipped).
  */
-const DRILL_TYPES: readonly number[] = [typeIndex('class'), typeIndex('function')];
+const DRILL_TYPES: readonly number[] = [typeIndex('class'), typeIndex('function'), typeIndex('external')];
 
 /** One batch per type present (and per drill type), in legend order; each lists its slots ascending. */
 export function batchesOf(type: Uint8Array): MarkSet['batches'] {

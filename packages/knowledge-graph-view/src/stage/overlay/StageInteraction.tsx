@@ -91,7 +91,7 @@ export function StageInteraction({ bus, renderer, keys, placement, tweening, sel
             if (!from || Math.hypot(p.x - from.x, p.y - from.y) > CLICK_SLOP_PX) return;
             const hit = bus.pick(p.x, p.y);
             if (hit?.kind === 'mark') { const key = bus.keys[hit.slot]; if (key) select.current(key); }
-            else if (hit?.kind === 'link') bus.options.onLink?.(hit);
+            else if (hit?.kind === 'link') bus.options.onLink?.(hit, p);
         };
         const leave = () => { bus.setHover(-1); box.style.cursor = ''; };
         box.addEventListener('pointermove', move);

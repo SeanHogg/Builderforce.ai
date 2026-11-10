@@ -28,7 +28,7 @@
 
 import type { ReactNode } from 'react';
 import type {
-    Finding, KnowledgeGraph, ReviewPlan, ReviewProgress as MemoryReviewProgress, ReviewReport,
+    CallSite, Finding, KnowledgeGraph, ReviewPlan, ReviewProgress as MemoryReviewProgress, ReviewReport,
 } from '@seanhogg/builderforce-memory/knowledge';
 
 import type { AppliedFix, FixCheckResult, FixCheckUpdate, FixPreview, FixStepRequest, RecordedRun } from './fixPorts';
@@ -240,6 +240,12 @@ export interface SymbolRecord {
     /** 1-based. */
     line: number;
     exported: boolean;
+    /**
+     * The symbol-level edges that START here (PRD 43 P0b; the VS Code host's `KnowledgeSymbolRelation`): `kind` is one of
+     * memory's `SYMBOL_EDGE_KINDS`, `to` a ref (exact, or `<file ref>#<name>` without `@line`, or an external), `sites`
+     * every call site of a `calls` edge. Absent when the host sends none.
+     */
+    relations?: { kind: string; to: string; sites?: CallSite[] }[];
 }
 
 /** One sandbox request. `url` is absolute: the base URL the person typed plus the route. */

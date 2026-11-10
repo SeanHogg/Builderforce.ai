@@ -51,8 +51,11 @@ export interface MapLabels {
     scaleSummary: string;
     /** The name of the one station that holds a repo's top-level non-code files (LICENSE, Dockerfile, dotfiles). */
     repoConfig: string;
-    /** The Sequence camera: `{stops}`, `{messages}`; `{from}`, `{to}`, `{label}`. */
-    sequence: Record<'description' | 'empty' | 'messageAria' | 'backToMap', string>;
+    /**
+     * The Sequence camera: `{stops}`, `{messages}`; `{from}`, `{to}`, `{label}`. `hop` / `noReference` are the stage
+     * Sequence's system-band message words (`{count}` references between two stations, or none).
+     */
+    sequence: Record<'description' | 'empty' | 'messageAria' | 'backToMap' | 'hop' | 'noReference', string>;
     /** The transit map's own words: the station card, the drill levels, docs, termini. `{count}`, `{name}`. */
     map: {
         wall: string;
@@ -70,7 +73,7 @@ export interface MapLabels {
         satelliteAria: string;
         /** The Map's look toggle (the group's name, its two choices and their tips): flat, or towers and pipes. */
         look: Record<'label' | 'flat' | 'towers' | 'flatTip' | 'towersTip', string>;
-        card: Record<'close' | 'issueMore' | 'goInside' | 'unfold' | 'fold' | 'whoCalls' | 'apiContract' | 'patterns' | 'noSymbols' | 'leaf' | 'loading', string>;
+        card: Record<'close' | 'issueMore' | 'goInside' | 'unfold' | 'fold' | 'whoCalls' | 'apiContract' | 'patterns' | 'noSymbols' | 'leaf' | 'loading' | 'callSite' | 'openAtLine', string>;
         /** `reached` replaces `coverage` when the number is a static reach (a heuristic), not a measurement. */
         stats: Record<'issues' | 'complexity' | 'coverage' | 'reached' | 'usage', string>;
         /** The numbers as words: the anti-pattern level (1 to 5), and the importance rank (`{rank}` of `{total}`). */
@@ -204,6 +207,8 @@ export const MAP_DEFAULTS: MapLabels = {
         empty: 'A sequence needs two stations; this line has one.',
         messageAria: '{from} to {to}: {label}',
         backToMap: 'Back to map',
+        hop: 'references · {count}',
+        noReference: 'no direct reference',
     },
     map: {
         wall: 'HTTP boundary',
@@ -223,6 +228,7 @@ export const MAP_DEFAULTS: MapLabels = {
             close: 'Close', issueMore: '+{count} more', goInside: 'Go inside ↓', unfold: 'Unfold {count}', fold: 'Fold',
             whoCalls: 'Who calls this?', apiContract: 'API contract', patterns: 'Patterns',
             noSymbols: 'No symbols here: nothing lies further inside.', leaf: 'Outside this level', loading: 'Reading symbols…',
+            callSite: 'Call site', openAtLine: 'Open at line {line}',
         },
         stats: { issues: 'Anti-patterns', complexity: 'Complexity', coverage: 'Coverage', reached: 'Reached', usage: 'Importance' },
         statWords: {

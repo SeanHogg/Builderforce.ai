@@ -114,14 +114,23 @@ export interface TaskTable {
         req: {
             graph: GraphId; generation: number; lensId: string; questionId: string | null; overlay: Bindings;
             lit: string[] | null; roles: Array<[ref: string, role: TowerRole]> | null; family: string | null;
+            model?: ModelInputs;
         };
         raw: MarkPaint;
     };
     /** One camera's layout of the marks: position / scale / extrude for every slot, plus its links, planes and rig. */
     placement: { req: PlacementReq; raw: Placement };
     /** The ranked incident index by slot, once per graph (B5): select slices it on the main thread. */
-    stageIncident: { req: { graph: GraphId; generation: number }; raw: SlotIncidentRaw };
+    stageIncident: { req: { graph: GraphId; generation: number; model?: ModelInputs }; raw: SlotIncidentRaw };
 }
+
+/**
+ * What a stage model is built from beyond the graph (the markSet request's `changed` and localized `strings`). The paint,
+ * placement and incident requests carry it too (the codec copies it from the graph's last markSet request), so whichever
+ * realm answers — the worker, or the main thread after a fail-over — builds the SAME model, under the SAME deterministic
+ * MarkSet generation, and its answers still match the marks on show.
+ */
+export interface ModelInputs { changed: string[]; strings: Record<string, string> }
 
 export type TaskKind = keyof TaskTable;
 

@@ -13,6 +13,7 @@ import type { ComputeStore } from '../store';
 import type { GraphId } from '../protocol';
 import type { MarkSet } from '../../stage/types';
 import { buildMarkSet, stringsDigest } from './markSet';
+import { emptyRegistry, type AppendedRegistry } from './placement/symbolSlots';
 
 export interface StageModel {
     stations: StationModel;
@@ -26,6 +27,8 @@ export interface StageModel {
     strings: Readonly<Record<string, string>>;
     /** The bands, top to bottom, when this is a drilled level's model (`placement/drill.ts`); absent = the architecture layers. */
     order?: readonly string[];
+    /** The slots appended to this MarkSet so far, by key (`placement/symbolSlots.ts`); dies with the model, as the renderer's live keys reset with a new MarkSet. */
+    appended: AppendedRegistry;
 }
 
 interface Held { changed: string; model: StageModel }
@@ -45,18 +48,26 @@ export function stageModelOf(store: ComputeStore, graph: GraphId, changed?: read
     return held.value.model;
 }
 
-let generation = 0;
+/** A MarkSet's generation: FNV-1a of what it was built from, never 0 (0 = no MarkSet). */
+function generationOf(text: string): number {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+    return (h >>> 0) || 1;
+}
 
 export function buildStageModel(g: KnowledgeGraph, changed: readonly string[], strings: Readonly<Record<string, string>> = {}): StageModel {
     const stations = buildStations(g, { changed: new Set(changed) });
     const lines = buildLines(g, stations);
-    const marks = buildMarkSet(g, stations, ++generation, strings);
+    const marks = buildMarkSet(g, stations, 0, strings);
+    // Deterministic: the same graph, changes and strings make the same generation in any realm (the worker, or the main
+    // thread after a fail-over), so answers built there still match the marks on show.
+    marks.generation = generationOf(`${marks.digest}\n${changedKey(changed)}`);
     const nodeSlot = new Map<string, number>();
     g.nodes.forEach((n, i) => nodeSlot.set(n.ref, i));
     const stationSlot = new Map<string, number>();
     const base = g.nodes.length;
     stations.stations.forEach((s, i) => stationSlot.set(s.id, base + i));
-    return { stations, lines, marks, nodeSlot, stationSlot, strings };
+    return { stations, lines, marks, nodeSlot, stationSlot, strings, appended: emptyRegistry() };
 }
 
 /** A MarkSet whose typed arrays are copies (safe to transfer). */

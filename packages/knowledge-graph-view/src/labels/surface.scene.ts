@@ -8,6 +8,8 @@ export interface SceneLabels {
      * plural form repeats the one. Read through `isOne` (surface/plural.ts), like `counted()`.
      */
     mind: Record<`${'moreFolders' | 'moreFoldersAria'}${'One' | 'Other'}`, string>;
+    /** The semantic-zoom bands (PRD 43 B1a rules 9–10): the control's group name and one word per band. */
+    zoom: Record<'group' | 'system' | 'class' | 'method', string>;
 }
 
 export const SCENE_DEFAULTS: SceneLabels = {
@@ -26,5 +28,11 @@ export const SCENE_DEFAULTS: SceneLabels = {
         moreFoldersOther: '+{count} folders',
         moreFoldersAriaOne: '{count} more folder: show the next ones',
         moreFoldersAriaOther: '{count} more folders: show the next ones',
+    },
+    zoom: {
+        group: 'Zoom level',
+        system: 'Systems',
+        class: 'Classes',
+        method: 'Methods',
     },
 };

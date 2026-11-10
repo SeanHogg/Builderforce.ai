@@ -74,6 +74,25 @@ describe('the rig re-homes only on a camera or bounds change', () => {
     });
 });
 
+describe('the 3D (orbit) placement on the stage', () => {
+    it('holds the marks\' extrude at 1 and hides the depth control; back on Map the control and its depth return', () => {
+        const t3 = PLACEMENTS['3d'](graph, model, { graph: 1, generation: model.marks.generation, camera: '3d', drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 2, lod: 0, depth: 1 });
+        while (!t3.step());
+        const scene = t3.result();
+        expect(scene.rig.view).toBeDefined();
+        const renderer = createNoopStage();
+        const { container, rerender } = render(<Stage {...props({ renderer, placement: map })} />);
+        expect(container.querySelector('[data-stage-depth]')).not.toBeNull();
+        expect(renderer.depth).toBe(0);
+        rerender(<Stage {...props({ renderer, placement: scene })} />);
+        expect(renderer.depth).toBe(1);
+        expect(container.querySelector('[data-stage-depth]')).toBeNull();
+        rerender(<Stage {...props({ renderer, placement: map })} />);
+        expect(renderer.depth).toBe(0);
+        expect(container.querySelector('[data-stage-depth]')).not.toBeNull();
+    });
+});
+
 describe('Strict Mode', () => {
     const textPort = (created: { n: number }) => (): TextPort => ({
         object: null,

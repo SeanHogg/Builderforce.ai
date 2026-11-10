@@ -12,11 +12,29 @@
  */
 
 import type { CameraRig } from '../types';
-import type { RigController } from './rig';
+import { ORBIT_DEG_PER_PX, ORBIT_KEY_DEG, type RigController } from './rig';
 
 const DRAG_SLOP = 4;
 const WHEEL_SETTLE_MS = 150;
 const WHEEL_ZOOM = 0.0015;
+
+/**
+ * Arrow keys orbit an orbit view — only while the CANVAS itself has focus (`e.target === canvas`), so they never
+ * collide with the a11y proxies' roving arrows. Returns the unbind.
+ */
+export function bindOrbitKeys(canvas: HTMLElement, rig: RigController, onSettle: () => void): () => void {
+    const STEP = ORBIT_KEY_DEG / ORBIT_DEG_PER_PX;
+    const keydown = (e: KeyboardEvent) => {
+        if (e.target !== canvas || !rig.orbiting) return;
+        const d = ({ ArrowLeft: [-STEP, 0], ArrowRight: [STEP, 0], ArrowUp: [0, -STEP], ArrowDown: [0, STEP] } as Record<string, [number, number]>)[e.key];
+        if (!d) return;
+        e.preventDefault();
+        rig.orbitBy(d[0], d[1]);
+        onSettle();
+    };
+    canvas.addEventListener('keydown', keydown);
+    return () => canvas.removeEventListener('keydown', keydown);
+}
 
 export const touchActionFor = (frame: CameraRig['frame']): string => (frame === 'fill' ? 'none' : 'pan-x pan-y');
 

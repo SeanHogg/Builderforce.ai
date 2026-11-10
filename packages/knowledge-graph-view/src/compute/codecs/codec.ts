@@ -7,6 +7,15 @@ import type { Residency } from '../residency';
 export interface Codec<K extends TaskKind> {
     encode(input: KindInput<K>, residency: Residency): { graph: GraphId; req: TaskTable[K]['req'] };
     decode(raw: TaskTable[K]['raw'], input: KindInput<K>): KindResult<K>;
+    /**
+     * A kind whose answers the main thread keeps (an LRU of `size` answers): `keyOf` names a request, `keyOfRaw` the answer
+     * it got (they must agree), so asking again is answered from the cache with no worker call.
+     */
+    cache?: {
+        size: number;
+        keyOf(req: TaskTable[K]['req'], graph: GraphId): string;
+        keyOfRaw(raw: TaskTable[K]['raw'], graph: GraphId): string;
+    };
 }
 
 /** The elements at `indices` of the caller's array: its own objects, so identity survives the trip. */

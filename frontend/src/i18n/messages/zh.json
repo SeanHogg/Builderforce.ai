@@ -37922,7 +37922,9 @@
         "description": "包含 {stops}和 {messages}的时序。",
         "empty": "时序至少需要两个站点；这条线路只有一个。",
         "messageAria": "{from} 到 {to}：{label}",
-        "backToMap": "返回地图"
+        "backToMap": "返回地图",
+        "hop": "引用 · {count}",
+        "noReference": "无直接引用"
       },
       "pillStates": {
         "synced": "已同步",
@@ -37969,7 +37971,9 @@
           "patterns": "模式",
           "noSymbols": "这里没有符号：更深处没有内容。",
           "leaf": "不在此层级内",
-          "loading": "正在读取符号…"
+          "loading": "正在读取符号…",
+          "callSite": "调用位置",
+          "openAtLine": "在第 {line} 行打开"
         },
         "stats": { "issues": "反模式", "complexity": "复杂度", "coverage": "覆盖率", "reached": "已触达", "usage": "重要性" },
         "statWords": {
@@ -38244,6 +38248,12 @@
         "moreFoldersOther": "另有 {count} 个文件夹",
         "moreFoldersAriaOne": "另有 {count} 个文件夹：显示后续文件夹",
         "moreFoldersAriaOther": "另有 {count} 个文件夹：显示后续文件夹"
+      },
+      "zoom": {
+        "group": "缩放级别",
+        "system": "系统",
+        "class": "类",
+        "method": "方法"
       },
       "api": {
         "notSetUpTitle": "未找到端点",

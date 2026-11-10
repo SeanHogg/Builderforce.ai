@@ -18,7 +18,7 @@ import { DASH_SOLID, DASH_UNTESTED, FLAG, type Caption, type LabelRun, type Plac
 import type { StageModel } from '../stageModel';
 import { anchorHidden, draftFor, show } from './anchor';
 import { linkBatch, type LinkPath } from './links';
-import { channelBindings, placementCacheKey, VIEWPORT_BANDS, type PlacementReq } from './request';
+import { channelBindings, placementKeyOf, VIEWPORT_BANDS, type PlacementReq } from './request';
 
 const CASING_EXTRA = 4;
 const TEXT = toneIndex('text');
@@ -68,7 +68,7 @@ export function placeMap(model: StageModel, req: PlacementReq): Placement {
     const captions: Caption[] = layout.bands.map((b) => ({ text: bandTitleIn(model.strings, b.layer), position: [8, 0, b.y + 14], anchor: 'start', tone: toneIndex('muted') }));
     const cx = layout.width / 2, cz = layout.height / 2;
     return {
-        generation: marks.generation, cacheKey: placementCacheKey(marks.digest, req), anchor: 'station',
+        generation: marks.generation, cacheKey: placementKeyOf(marks, req), anchor: 'station',
         position: d.position, scale: d.scale, extrude: d.extrude,
         // Each route polyline (`group`) names its line, so a route pick selects the line (as the SVG map's hop does).
         links: [{ ...linkBatch('route', paths, 0, { tone: BG_TONE, extra: CASING_EXTRA }), lineIds: layout.routes.map((r) => r.lineId) }],
