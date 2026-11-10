@@ -9,7 +9,8 @@
 
 import * as vscode from "vscode";
 import { factKeyOf, type Finding, type KnowledgeGraph, type NodeRef } from "@seanhogg/builderforce-memory/knowledge";
-import { factRightsCache, humanFactBatch, readSystems, type FactRightsCache } from "@builderforce/agent-tools/knowledge";
+import { factRightsCache, humanFactBatch, readSystems, reviewPacks, type FactRightsCache } from "@builderforce/agent-tools/knowledge";
+import { knowledgeBaseline } from "./knowledgeBaseline";
 import { openWorkspace } from "../openWorkspace";
 import { SELECTED_TENANT_KEY } from "../projectState";
 import { getHostKnowledgeIndex } from "./index/hostKnowledgeIndex";
@@ -298,14 +299,14 @@ export class KnowledgeBridge implements vscode.Disposable {
     return null;
   }
 
-  /** Compare's "before": the root's previous review on the platform; none for a local root. */
-  private async baseline(rootId: string): Promise<{ graph: unknown } | null> {
+  /** Compare's "before": the root's previous review on the platform, `comparable` by memory's rules (PRD 41 §C9); none for a local root. */
+  private async baseline(rootId: string): Promise<{ graph: unknown; comparable: boolean } | null> {
     const client = linkedKnowledgeClient(this.secrets);
     if (!client) return null;
     const previous = (await client.scopes()).find((s) => s.rootId === rootId)?.previousDigest;
     if (!previous) return null;
     const graph = await client.graph(rootId, { at: previous });
-    return graph ? { graph } : null;
+    return isGraph(graph) ? knowledgeBaseline(graph, { rootId, packs: reviewPacks({}).map((p) => p.id) }) : graph ? { graph, comparable: false } : null;
   }
 
   dispose(): void {

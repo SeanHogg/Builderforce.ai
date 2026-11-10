@@ -18,7 +18,7 @@ export interface ReviewStart {
   source: { rootId: string; title: string };
   hasJudgement: boolean;
   /**
-   * Whether the page source's `list()` hashes are `contentHash` of the text `read()` returns (upload, File System Access and
+   * Whether the page source's `list()` hashes are `textContentHash` of the text `read()` returns (upload, File System Access and
    * the in-memory VFS are; a Cloud Drive's metadata hash never is). The worker's proxy source has no function of its own, so
    * it offers `DirectorySource.hashOf` only when this is true, and the review then checks the text it read against the plan.
    */

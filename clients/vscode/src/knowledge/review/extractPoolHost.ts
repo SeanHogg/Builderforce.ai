@@ -57,9 +57,12 @@ export const extractPoolDown = (): string | undefined => downReason;
 export function withIndexSymbols(pool: ExtractPool, lookup: SymbolLookup | undefined, rootPath?: string): ExtractPool {
   if (!lookup && !rootPath) return pool;
   return (job, signal) => {
-    const symbols: readonly CodeSymbol[] | undefined = job.sectionsOnly || !lookup ? undefined : lookup(job.path);
+    // `job.path` is the file's identity (POSIX, NFC); `readByPool.path` is the spelling the source listed and can open (an
+    // NFD-named file differs). The disk read and the index, which is keyed by the files on disk, take the listed spelling.
+    const listed = job.readByPool?.path ?? job.path;
+    const symbols: readonly CodeSymbol[] | undefined = job.sectionsOnly || !lookup ? undefined : lookup(listed) ?? (listed === job.path ? undefined : lookup(job.path));
     // A job the review left unread (`readByPool`, PRD 41 A10 rule 8) tells the worker where to read its own file.
-    const readFrom = job.readByPool && rootPath ? { rootPath, path: job.path, hash: job.hash } : undefined;
+    const readFrom = job.readByPool && rootPath ? { rootPath, path: job.readByPool.path, hash: job.readByPool.hash } : undefined;
     return pool(symbols || readFrom ? ({ ...job, ...(symbols ? { symbols } : {}), ...(readFrom ? { readFrom } : {}) } as HostExtractJob) : job, signal);
   };
 }

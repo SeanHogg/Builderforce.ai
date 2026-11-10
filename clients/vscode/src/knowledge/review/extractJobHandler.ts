@@ -15,7 +15,8 @@ import { readFile } from "node:fs/promises";
 import * as nodePath from "node:path";
 import type { CodeSymbol } from "@builderforce/agent-tools";
 import { documentDoc, reviewPacks } from "@builderforce/agent-tools/knowledge";
-import { DEFAULT_MAX_FILE_BYTES, ExtractFailed, extractJob, isBinaryText, isDocumentPath, reasonOf, sha256Hex, type ExtractJob, type ExtractJobResult } from "@seanhogg/builderforce-memory/knowledge";
+import { DEFAULT_MAX_FILE_BYTES, ExtractFailed, extractJob, isBinaryText, isDocumentPath, reasonOf, type ExtractJob, type ExtractJobResult } from "@seanhogg/builderforce-memory/knowledge";
+import { nodeContentHash } from "../nodeSha256";
 
 /** PRD 41 A10 rule 2: a worker's read of its file gives up after 5 s (a `timeout` failure, never a stalled run). */
 export const READ_TIMEOUT_MS = 5_000;
@@ -48,10 +49,12 @@ async function readDocument(job: HostExtractJob, from: ReadFrom, timeoutMs: numb
     throw name === "TimeoutError" || name === "AbortError" ? new Error("timeout") : error;
   }
   if (bytes.byteLength > DEFAULT_MAX_FILE_BYTES) throw new Error("too large");
-  // Hash FIRST, over the raw bytes (as `createFsDirectorySource` does): a stale plan must not store an extract under the wrong hash.
-  if ((await sha256Hex(bytes)) !== from.hash) throw new Error("changed since plan");
+  // Hash FIRST, with the listing's ONE content hash (memory's EOL-normalized `contentHash`, as `createFsDirectorySource` lists):
+  // a stale plan must not store an extract under the wrong hash.
+  if (nodeContentHash(bytes) !== from.hash) throw new Error("changed since plan");
   // The shared bytes → document rule (agent-tools `documentDoc`): a pdf/office file is the text of its content, anything else UTF-8.
-  return documentDoc(job.rootId, from.path, bytes, signal);
+  // `from.path` is the spelling read from disk; the document is the file's identity, `job.path`.
+  return documentDoc(job.rootId, job.path, bytes, signal);
 }
 
 export async function handleExtractJob(job: HostExtractJob, readTimeoutMs: number = READ_TIMEOUT_MS, signal?: AbortSignal): Promise<HostExtractResult> {

@@ -19,7 +19,7 @@
  * `.builderforce/ignore` rules are applied by `planReview`. Pure: no `fs`, no `crypto`.
  */
 
-import { mediaTypeOfPath, sha256Hex, type DirectorySource } from '@seanhogg/builderforce-memory/knowledge';
+import { CONTENT_HASH_RULE, contentHash, mediaTypeOfPath, type DirectorySource } from '@seanhogg/builderforce-memory/knowledge';
 import type { SourceDocument } from '@seanhogg/builderforce-memory/ingest';
 import { isSkippedDirName, isVcsMetadataName, skippedDirReason, WORKSPACE_SKIP_DIRS, type SkippedFolder } from '../skipDirs.js';
 import { slashPath } from './rootRelative.js';
@@ -76,9 +76,9 @@ const BUILDERFORCE_INPUTS: ReadonlySet<string> = new Set(['.builderforce/ignore'
 export const MAX_LISTED_FILES = 20_000;
 /** Files of one folder stat'ed and hashed at once. */
 const HASH_CONCURRENCY = 16;
-/** The default content hash and the rule it follows: they change TOGETHER (raw sha256 is `raw`). */
-export const DEFAULT_HASH: (bytes: Uint8Array) => string = sha256Hex;
-export const DEFAULT_HASH_RULE: string = 'raw';
+/** The default content hash and the rule it follows: they change TOGETHER. Memory's ONE `contentHash` (EOL-normalized, PRD 41 §B2); raw sha256 is `raw`. */
+export const DEFAULT_HASH: (bytes: Uint8Array) => string = contentHash;
+export const DEFAULT_HASH_RULE: string = CONTENT_HASH_RULE;
 
 export interface FsDirectorySourceOptions {
     fs: KnowledgeFs;

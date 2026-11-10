@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createUploadDirectorySource } from './uploadDirectorySource';
-import { bytesHash, contentHash, metadataHash, withDocumentText } from './directorySourceKit';
+import { bytesHash, textContentHash as contentHash, metadataHash, withDocumentText } from './directorySourceKit';
 import { docxBytes } from './docx.test-util';
 
 /** The slice of an `<input webkitdirectory>` File the adapter reads. */

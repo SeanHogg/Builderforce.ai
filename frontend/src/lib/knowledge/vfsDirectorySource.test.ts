@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { DirectorySource } from '@seanhogg/builderforce-memory/knowledge';
-import { byteLength, contentHash } from '@builderforce/knowledge-browser';
+import { byteLength, textContentHash as contentHash } from '@builderforce/knowledge-browser';
 import { createVfsDirectorySource, type VfsLike } from './vfsDirectorySource';
 
 /** The slice of the webcontainer VFS the adapter reads, over a plain map. */

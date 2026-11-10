@@ -10,8 +10,8 @@
  */
 
 import { createFsDirectorySource, type FsDirectorySource, type FsDirectorySourceOptions, type HashCache, type KnowledgeFs } from "@builderforce/agent-tools/knowledge";
-import { DEFAULT_MAX_FILE_BYTES } from "@seanhogg/builderforce-memory/knowledge";
-import { nodeSha256Hex } from "./nodeSha256";
+import { CONTENT_HASH_RULE, DEFAULT_MAX_FILE_BYTES } from "@seanhogg/builderforce-memory/knowledge";
+import { nodeContentHash } from "./nodeSha256";
 
 export type { HashCache, KnowledgeFs };
 
@@ -62,7 +62,7 @@ export function createDirectorySource(opts: DirectorySourceOptions): FsDirectory
   const { yieldEvery, yieldDelay, ...rest } = opts;
   return withEventLoopYield(
     // The hash and its rule go together: the stat manifest never reuses a hash made under another rule.
-    createFsDirectorySource({ ...rest, hash: nodeSha256Hex, hashRule: "raw", skipHashAbove: DEFAULT_MAX_FILE_BYTES }),
+    createFsDirectorySource({ ...rest, hash: nodeContentHash, hashRule: CONTENT_HASH_RULE, skipHashAbove: DEFAULT_MAX_FILE_BYTES }),
     yieldEvery ?? EVENT_LOOP_YIELD_EVERY,
     yieldDelay ?? eventLoopYield,
   );

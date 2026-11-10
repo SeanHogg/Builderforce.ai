@@ -103,14 +103,14 @@ describe('code pack in buildGraph', () => {
     const kinds = g.findings.map((f) => f.kind).sort();
     expect(kinds).toEqual([
       'clone-group', 'cycle', 'partition-violation', 'partition-violation', 'unpartitioned',
-      'unused-dependency', 'unused-export', 'unused-file',
+      'unused-dependency', 'unused-export', 'unused-export', 'unused-file',
     ]);
     const find = (kind: string) => g.findings.find((f) => f.kind === kind)!;
     const cloneId = fixtureSnapshot().issues.find((i) => i.kind === 'duplicate')!.id;
     expect(find('cycle').nodes).toEqual([ref('src/a.ts'), ref('src/b.ts')]);
     expect(find('clone-group')).toMatchObject({ nodes: [ref('src/a.ts'), ref('src/b.ts')], params: { group: cloneId, members: 2 }, requestKey: 'knowledgeGraph.fix.cloneGroup' });
     expect(find('unused-file')).toMatchObject({ nodes: [ref('src/dead.ts')], params: { count: 1, files: 1 }, requestKey: 'knowledgeGraph.fix.unusedFile' });
-    expect(find('unused-export')).toMatchObject({ nodes: [ref('src/b.ts')], params: { count: 2, files: 1 }, requestKey: 'knowledgeGraph.fix.unusedExport' });
+    expect(find('unused-export')).toMatchObject({ nodes: [ref('src/b.ts')], params: { count: 1, files: 1, name: 'x' }, requestKey: 'knowledgeGraph.fix.unusedExport' });
     expect(find('unpartitioned').params).toMatchObject({ count: 4, total: 8, share: 50 });
 
     // The parser's node keeps its content hash; root-level output only adds edges and badges.

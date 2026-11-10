@@ -59,6 +59,8 @@ export function repoGraphToExtracted(graph: SerializedRepoGraphShape, rootId: st
 interface FileAcc {
     badges: Record<string, number | string>;
     edges: Map<string, KEdge>;
+    /** Name badge → the item names it lists (joined at {@link AnalysisAcc.result}). */
+    names: Map<string, Set<string>>;
 }
 
 class AnalysisAcc {
@@ -68,7 +70,7 @@ class AnalysisAcc {
 
     file(path: string): FileAcc {
         let acc = this.files.get(path);
-        if (!acc) this.files.set(path, (acc = { badges: {}, edges: new Map() }));
+        if (!acc) this.files.set(path, (acc = { badges: {}, edges: new Map(), names: new Map() }));
         return acc;
     }
 
@@ -91,6 +93,14 @@ class AnalysisAcc {
         badges[badge] = Number(badges[badge] ?? 0) + 1;
     }
 
+    /** Adds a name to the file's name-list badge (an unused export or dependency: one finding per name). */
+    name(path: string, badge: string, name: string | undefined): void {
+        if (!name) return;
+        const names = this.file(path).names;
+        const set = names.get(badge) ?? new Set<string>();
+        names.set(badge, set.add(name));
+    }
+
     /** On a conflict the larger value wins — the same rule memory's badge merge applies. */
     mark(path: string, badge: string, value: string): void {
         const badges = this.file(path).badges;
@@ -99,9 +109,11 @@ class AnalysisAcc {
     }
 
     result(): Extracted[] {
-        return byPath(this.files).map(([path, acc]) =>
-            rootLevelExtracted('code-analysis', codeFileNode(this.rootId, path, { badges: sortedBadges(acc.badges) }),
-                sortEdges([...acc.edges.values()])));
+        return byPath(this.files).map(([path, acc]) => {
+            for (const [badge, set] of acc.names) acc.badges[badge] = [...set].sort(compareStr).join(',');
+            return rootLevelExtracted('code-analysis', codeFileNode(this.rootId, path, { badges: sortedBadges(acc.badges) }),
+                sortEdges([...acc.edges.values()]));
+        });
     }
 }
 
@@ -137,10 +149,10 @@ export function analysisToExtracted(snapshot: CodeAnalysisSnapshot, rootId: stri
                 for (const p of paths) acc.mark(p, CODE_BADGES.unused, 'file');
                 break;
             case 'unused-export':
-                for (const p of paths) acc.count(p, CODE_BADGES.unusedExports);
+                for (const p of paths) { acc.count(p, CODE_BADGES.unusedExports); acc.name(p, CODE_BADGES.unusedExportNames, issue.symbol); }
                 break;
             case 'unused-dependency':
-                for (const p of paths) acc.count(p, CODE_BADGES.unusedDependencies);
+                for (const p of paths) { acc.count(p, CODE_BADGES.unusedDependencies); acc.name(p, CODE_BADGES.unusedDependencyNames, issue.symbol); }
                 break;
         }
     }

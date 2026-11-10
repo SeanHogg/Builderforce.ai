@@ -27,6 +27,10 @@ export const CODE_BADGES = {
     unusedExports: 'unusedExports',
     /** knip: unused dependencies declared by the file (a package manifest). */
     unusedDependencies: 'unusedDependencies',
+    /** knip: the names of the file's unused exports, sorted and comma-joined: one `unused-export` finding each (PRD 41 §C3). */
+    unusedExportNames: 'unusedExportNames',
+    /** knip: the names of the manifest's unused dependencies, sorted and comma-joined: one `unused-dependency` finding each. */
+    unusedDependencyNames: 'unusedDependencyNames',
     /** Lines in the file (deterministic): the god-module finding's size measure. */
     lines: 'lines',
     /** Sum of cyclomatic complexity over the file's functions (deterministic). */

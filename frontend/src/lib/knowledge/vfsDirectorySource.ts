@@ -5,7 +5,7 @@
  */
 
 import { isDocumentPath } from '@seanhogg/builderforce-memory/knowledge';
-import { byteLength, contentHash, isSkippedPath, normalizePath, textDocument, type ContentHashedSource } from '@builderforce/knowledge-browser';
+import { byteLength, textContentHash, isSkippedPath, normalizePath, textDocument, type ContentHashedSource } from '@builderforce/knowledge-browser';
 
 /** The slice of `VirtualFileSystem` this adapter reads (structural, so tests need no runtime). */
 export interface VfsLike {
@@ -35,9 +35,9 @@ export function createVfsDirectorySource({ fs, rootId, title, under = '' }: VfsD
   return {
     rootId,
     title,
-    // list() hashes every file with contentHash(text); the review re-hashes the text read() returns.
+    // list() hashes every file with textContentHash(text); the review re-hashes the text read() returns.
     hashKind: 'content',
-    hashOf: contentHash,
+    hashOf: textContentHash,
     async *list() {
       for (const vfsPath of fs.list()) {
         const path = relative(vfsPath);
@@ -46,7 +46,7 @@ export function createVfsDirectorySource({ fs, rootId, title, under = '' }: VfsD
         const text = fs.readText(vfsPath);
         if (text === undefined) continue;
         real.set(path, vfsPath);
-        yield { path, hash: contentHash(text), size: byteLength(text) };
+        yield { path, hash: textContentHash(text), size: byteLength(text) };
       }
     },
     async read(path) {

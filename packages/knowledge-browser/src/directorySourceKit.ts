@@ -5,17 +5,17 @@
  * Cloud Drive, a folder upload, a File System Access folder) differ only in where bytes
  * come from.
  *
- * The listing hash is the CONTENT hash (SHA-256 of the UTF-8 text) wherever the content is
+ * The listing hash is the CONTENT hash (memory's EOL-normalized `contentHash` of the bytes) wherever the content is
  * local, so the extracted bodies the pack carries (`…/knowledge/sync`, keyed by hash) are
  * shared across hosts. A file the plan skips anyway (binary by extension, over the size cap) is
  * not read for it; its hash is taken from its metadata instead.
  */
 
-import { DEFAULT_MAX_FILE_BYTES, isBinaryPath, isDocumentPath, sha256Hex, type DirectorySource } from '@seanhogg/builderforce-memory/knowledge';
+import { contentHash, DEFAULT_MAX_FILE_BYTES, isBinaryPath, isDocumentPath, sha256Hex, type DirectorySource } from '@seanhogg/builderforce-memory/knowledge';
 import { rootIdFor } from '@builderforce/agent-tools/knowledge';
 
 /**
- * A `DirectorySource` that DECLARES its `list()` hashes are `contentHash` of the text `read()` returns (upload, File System
+ * A `DirectorySource` that DECLARES its `list()` hashes are {@link textContentHash} of the text `read()` returns (upload, File System
  * Access and the in-memory VFS; never a Cloud Drive's metadata hash). A byte-readable one lists a pdf/office file (`hashesByBytes`)
  * by {@link bytesHash} of its bytes instead, which the review's `withDocumentText` re-checks with the same function. `hashOf` alone proves nothing about what `list()` hashed,
  * so the review worker trusts only this declared kind.
@@ -63,8 +63,11 @@ export function hashesByContent(path: string, size: number): boolean {
   return !isBinaryPath(path) && size <= DEFAULT_MAX_FILE_BYTES;
 }
 
-export function contentHash(text: string): string {
-  return sha256Hex(text);
+const utf8 = new TextEncoder();
+
+/** Memory's ONE content hash (`contentHash`, EOL-normalized, PRD 41 §B2) of a text's UTF-8 bytes: what a content-hashed source lists a text file with and its `hashOf` re-checks with. */
+export function textContentHash(text: string): string {
+  return contentHash(utf8.encode(text));
 }
 
 /**
@@ -75,9 +78,9 @@ export function hashesByBytes(path: string, size: number): boolean {
   return isDocumentPath(path) && size <= DEFAULT_MAX_FILE_BYTES;
 }
 
-/** SHA-256 of a file's bytes: THE byte hash a content-hashed source lists documents with and `withDocumentText` re-checks with. */
+/** Memory's `contentHash` of a file's bytes: THE byte hash a content-hashed source lists documents with and `withDocumentText` re-checks with. */
 export function bytesHash(bytes: Uint8Array): string {
-  return sha256Hex(bytes);
+  return contentHash(bytes);
 }
 
 /** SHA-256 through the platform's SubtleCrypto as lowercase hex, or undefined where there is none. */
@@ -88,13 +91,16 @@ async function subtleSha256Hex(bytes: Uint8Array): Promise<string | undefined> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+/** Bytes holding no CR hash identically raw and under memory's EOL rule, so SubtleCrypto may hash them; any other is memory's `contentHash`. */
+const CR = 0x0d;
+
 /**
  * The same content hash through the platform's SubtleCrypto (off the JS thread for large
- * files). Equal to {@link contentHash} for the same text — both hash its UTF-8 bytes — so
- * a host may use either and still share the extracted cache.
+ * files). Equal to {@link textContentHash} for the same text, so a host may use either and
+ * still share the extracted cache. Text holding a CR is hashed by memory itself (no copy of its EOL rule here).
  */
 export async function subtleContentHash(text: string): Promise<string> {
-  return (await subtleSha256Hex(new TextEncoder().encode(text))) ?? contentHash(text);
+  return subtleBytesHash(utf8.encode(text));
 }
 
 /**
@@ -103,7 +109,7 @@ export async function subtleContentHash(text: string): Promise<string> {
  * (`hashOf` must be sync) still matches the listing hash.
  */
 export async function subtleBytesHash(bytes: Uint8Array): Promise<string> {
-  return (await subtleSha256Hex(bytes)) ?? bytesHash(bytes);
+  return (bytes.indexOf(CR) < 0 ? await subtleSha256Hex(bytes) : undefined) ?? bytesHash(bytes);
 }
 
 export function metadataHash(...parts: Array<string | number | undefined>): string {

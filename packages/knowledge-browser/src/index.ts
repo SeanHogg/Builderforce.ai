@@ -18,7 +18,7 @@ export { applyLiveOverlay, LIVE_PAIR_FILES } from './liveOverlay';
 export { watchDirectory, LIVE_DEBOUNCE_MS, type LiveWatchPorts } from './liveWatch';
 export { estimateReview, type CallPricePort } from './reviewEstimate';
 export {
-  hostRootId, rootKindOf, normalizePath, isSkippedPath, hashesByContent, hashesByBytes, bytesHash, subtleBytesHash, contentHash, subtleContentHash,
+  hostRootId, rootKindOf, normalizePath, isSkippedPath, hashesByContent, hashesByBytes, bytesHash, subtleBytesHash, textContentHash, subtleContentHash,
   metadataHash, textDocument, withDocumentText, byteLength, byPath, isContentHashed, isByteReadable, type ByteReadableSource, type ContentHashedSource, type KnowledgeDegradedReporter,
 } from './directorySourceKit';
 export { createUploadDirectorySource, pickFolder, uploadDirectoryProvider } from './uploadDirectorySource';

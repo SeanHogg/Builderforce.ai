@@ -4,7 +4,7 @@ import {
   canPickDirectory, createFsAccessDirectorySource, fsAccessDirectoryProvider, pickDirectoryHandle,
   type FsDirectoryHandleLike, type FsFileHandleLike,
 } from './fsAccessDirectorySource';
-import { contentHash, metadataHash, subtleContentHash } from './directorySourceKit';
+import { textContentHash as contentHash, metadataHash, subtleContentHash } from './directorySourceKit';
 
 type Tree = { [name: string]: string | { bytes: number } | Tree };
 

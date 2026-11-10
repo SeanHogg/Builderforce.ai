@@ -58,7 +58,7 @@ describe('analysisToExtracted', () => {
 
   it('badges knip unused files, exports and dependencies', () => {
     expect(of('src/dead.ts').nodes[0]!.badges).toEqual({ unused: 'file' });
-    expect(of('src/b.ts').nodes[0]!.badges).toEqual({ cloneGroup: cloneId, unusedDependencies: 1, unusedExports: 2 });
+    expect(of('src/b.ts').nodes[0]!.badges).toEqual({ cloneGroup: cloneId, unusedDependencies: 1, unusedDependencyNames: 'left-pad', unusedExportNames: 'x,y', unusedExports: 2 });
     expect(of('src/c.ts').nodes[0]!.badges).toBeUndefined();
   });
 

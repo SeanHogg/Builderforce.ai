@@ -8,7 +8,7 @@
 
 import type { DirectorySource, JudgementPort, KnowledgeStore } from '@seanhogg/builderforce-memory/knowledge';
 import type { IngestManifest } from '@seanhogg/builderforce-memory/ingest';
-import { bytesHash, contentHash, withDocumentText } from './directorySourceKit';
+import { bytesHash, textContentHash, withDocumentText } from './directorySourceKit';
 import { runReviewJob, type ReviewPorts } from './reviewJob';
 import { LIST_ALL, READ_BYTES, type FromReviewWorker, type ReviewPortName, type ToReviewWorker } from './reviewProtocol';
 
@@ -33,8 +33,8 @@ function proxyPorts(start: Extract<ToReviewWorker, { type: 'start' }>): ReviewPo
     async *list() { for (const entry of await call<Array<{ path: string; hash: string; size: number }>>('source', LIST_ALL)) yield entry; },
     read: (path) => call('source', 'read', [path]),
     readBytes: async (path: string) => new Uint8Array(await call<ArrayBuffer>('source', READ_BYTES, [path])),
-    // Only a source whose hashes ARE contentHash of the text (the page said so) can check the text it reads against the plan.
-    ...(start.hashesAreContentHash ? { hashOf: contentHash } : {}),
+    // Only a source whose hashes ARE textContentHash of the text (the page said so) can check the text it reads against the plan.
+    ...(start.hashesAreContentHash ? { hashOf: textContentHash } : {}),
   };
   // `withDocumentText` also maps the extracted text back to the listing hash (`withDocumentHashes`), which stays the file's.
   const source = withDocumentText(proxied, proxied.readBytes, start.hashesAreContentHash ? bytesHash : undefined);

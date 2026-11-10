@@ -20,7 +20,7 @@
  */
 
 import {
-    composePacks, extractFile, filesManifestKey, isBinaryText, knownKeysOfEntities, putNoExtract, sha256Hex, srcRef,
+    composePacks, contentHash, extractFile, filesManifestKey, isBinaryText, knownKeysOfEntities, putNoExtract, srcRef,
     type DirectorySource, type KnowledgePack, type KnowledgeStore, type NodeRef,
 } from '@seanhogg/builderforce-memory/knowledge';
 import type { IngestManifest } from '@seanhogg/builderforce-memory/ingest';
@@ -135,7 +135,8 @@ export async function markFilesEdited(ports: FileEditPorts, rawPaths: readonly s
     for (const path of paths) {
         if (!current.has(path)) { results.push({ path, reviewed: false, staled: false }); continue; }
         const bytes = await ports.fs.readFile(`${root}/${path}`).catch(() => undefined);
-        const hash = bytes ? sha256Hex(bytes) : '';
+        // The listing's ONE content hash (EOL-normalized): a CRLF file the editor saved is not "changed" by its line endings alone.
+        const hash = bytes ? contentHash(bytes) : '';
         const staled = current.get(path) !== hash;
         results.push({ path, reviewed: true, staled });
         if (staled) changed.push({ path, hash, bytes });

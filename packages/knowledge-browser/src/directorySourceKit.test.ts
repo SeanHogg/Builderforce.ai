@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { bytesHash, contentHash, subtleBytesHash, subtleContentHash } from './directorySourceKit';
+import { contentHash as memoryContentHash } from '@seanhogg/builderforce-memory/knowledge';
+import { bytesHash, textContentHash as contentHash, subtleBytesHash, subtleContentHash } from './directorySourceKit';
 
 const sample = (size: number): Uint8Array => Uint8Array.from({ length: size }, (_, i) => (i * 31 + 7) & 0xff);
 
@@ -26,6 +27,18 @@ describe('subtleBytesHash', () => {
     vi.stubGlobal('crypto', undefined);
     const bytes = sample(500);
     expect(await subtleBytesHash(bytes)).toBe(bytesHash(bytes));
+  });
+});
+
+describe('one content hash (PRD 41 §B2)', () => {
+  it('textContentHash and bytesHash are memory contentHash: CRLF, lone CR and LF text agree, binary bytes hash raw', async () => {
+    const enc = (text: string) => new TextEncoder().encode(text);
+    expect(contentHash('one\r\ntwo\rthree\n')).toBe(memoryContentHash(enc('one\ntwo\nthree\n')));
+    expect(contentHash('one\r\ntwo\r\n')).toBe(contentHash('one\ntwo\n'));
+    const binary = new Uint8Array([0x41, 0x0d, 0x0a, 0x00, 0x0d]);
+    expect(bytesHash(binary)).toBe(memoryContentHash(binary));
+    expect(await subtleBytesHash(binary)).toBe(memoryContentHash(binary));
+    expect(await subtleBytesHash(enc('a\r\nb'))).toBe(memoryContentHash(enc('a\nb')));
   });
 });
 
