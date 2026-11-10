@@ -6,15 +6,17 @@
  *
  * ONE read of the history serves both badges: the port returns the root's commits with the
  * files each touched, and churn is counted from that list ({@link churnOf}), never from a
- * second `git log`.
+ * second `git log`. A port that fills its commit cap inside churn's window says so ({@link churnCapWarning}).
  */
+
+import { COCHANGE_MAX_COMMITS } from '@seanhogg/builderforce-memory/knowledge';
 
 /** Days of history the `churn` badge counts. */
 export const CHURN_DAYS = 90;
 /** Days of history a review reads (co-change association needs more than churn's window). */
 export const HISTORY_DAYS = 365;
-/** At most this many (newest) commits a review reads: memory's `COCHANGE_MAX_COMMITS`. */
-export const HISTORY_MAX_COMMITS = 5000;
+/** At most this many (newest) commits a review reads: all co-change counts. */
+export const HISTORY_MAX_COMMITS = COCHANGE_MAX_COMMITS;
 
 const DAY_MS = 86_400_000;
 
@@ -34,6 +36,17 @@ export interface HistoryPort {
      * `maxCommits`. Must not throw: a failure is an empty list.
      */
     commits(sinceDays: number, maxCommits: number): Promise<HistoryCommit[]>;
+}
+
+/**
+ * The warning a capped history earns: when `commits` (newest first) filled `maxCommits` and even the oldest of them is
+ * inside churn's window, older commits in that window were cut, so churn is a lower bound. Undefined otherwise. Pure.
+ */
+export function churnCapWarning(commits: readonly HistoryCommit[], maxCommits: number, sinceDays: number = CHURN_DAYS, now: number = Date.now()): string | undefined {
+    if (commits.length === 0 || commits.length < maxCommits) return undefined;
+    const oldest = Date.parse(commits[commits.length - 1]!.at);
+    if (!Number.isFinite(oldest) || oldest < now - sinceDays * DAY_MS) return undefined;
+    return `git history hit the ${maxCommits}-commit cap inside the last ${sinceDays} days: churn is a lower bound, not the full count.`;
 }
 
 /**

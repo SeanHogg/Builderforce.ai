@@ -90,7 +90,7 @@ export { ModuleAliasCache, type AliasConfigPorts } from './moduleAliasLoader.js'
 export { fileRollup, moduleFileCandidates, moduleFileOf, repointRollupEdges } from './codeRollup.js';
 export { LAYER_IDS, isDefaultLayers, type LayerId, type LayerRule } from './codeLayers.js';
 export { coverageSourceState, type CoverageRoot, type CoverageSkip, type CoverageSourceState } from './codeCoverage.js';
-export { CHURN_DAYS, HISTORY_DAYS, HISTORY_MAX_COMMITS, churnOf, type HistoryCommit, type HistoryPort } from './historyPort.js';
+export { CHURN_DAYS, HISTORY_DAYS, HISTORY_MAX_COMMITS, churnCapWarning, churnOf, type HistoryCommit, type HistoryPort } from './historyPort.js';
 export { isSkippedDirName, isVcsMetadataName, type SkippedFolder, type SkippedFolderReason } from '../skipDirs.js';
 export { CODEOWNERS_LOCATIONS } from './codeOwners.js';
 export { blobDataUrl } from './blobDataUrl.js';

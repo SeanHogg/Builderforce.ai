@@ -6,7 +6,7 @@
  *   - texts: {@link SideTexts} — pre-images and the base commit's blobs before, the working tree after — for every in-run file;
  *   - facts: {@link sideFacts} over the folder's knowledge store, each side built from exactly those texts, the in-run files
  *     swapped (`outside-run` files keep the stored copy on both sides);
- *   - churn: ONE `git log --since=90.days --name-only` per run (agent-tools' `gitHistoryPort`), cached by HEAD;
+ *   - churn: ONE 90-day read of agent-tools' `gitHistoryPort` per run, counted by `churnOf`, cached by HEAD;
  *   - pastScores: the repository's stored deltas.
  *
  * `preparedPorts.ts` serves `DeltaPorts` from that data: pure, so it runs the same in a worker and in this thread.

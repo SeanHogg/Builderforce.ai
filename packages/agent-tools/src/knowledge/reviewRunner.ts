@@ -80,7 +80,7 @@ export interface KnowledgeReviewPorts {
     analyzers?: AnalyzerPort;
     /** The code layers (`.builderforce/partitions.json` or the default). */
     partitions?: PartitionRegistry;
-    /** OPTIONAL version history: with it code files carry a `churn` badge (see `gitHistoryPort`); without it, none. */
+    /** OPTIONAL version history: with it code files carry `churn` and `coChange` badges (see `gitHistoryPort`); without it, neither. */
     history?: HistoryPort;
     /** OPTIONAL reviewed folder on disk: coverage files and CODEOWNERS are read from it for the `coverage` and `owner` badges. */
     rootFiles?: CoverageRoot;
