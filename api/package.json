@@ -78,7 +78,7 @@
     "lib0": "^0.2.119",
     "pdf-lib": "^1.17.1",
     "pptxgenjs": "^3.12.0",
-    "unpdf": "^1.8.1",
+    "unpdf": "^1.9.1",
     "y-protocols": "^1.0.6",
     "yaml": "^2.9.1",
     "yjs": "^13.6.33",
@@ -91,7 +91,7 @@
     "fake-indexeddb": "^6.2.7",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "typescript-7": "npm:typescript@^7.0.2",
-    "vitest": "^4.0.18",
+    "vitest": "^4.1.10",
     "wrangler": "^4.157.0"
   },
   "pnpm": {

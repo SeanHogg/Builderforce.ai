@@ -3,10 +3,10 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { countCommitsPerPath, gitHistoryPort, parseRecentCommits } from "./node-git-history.js";
+import { COMMIT_MARK, countCommitsPerPath, gitHistoryPort, parseRecentCommits } from "./node-git-history.js";
 
 /** The commit-header marker the git log format writes (`%x1e`). */
-const RS = "\u001e";
+const RS = COMMIT_MARK;
 const SHA_A = `${RS}${"a".repeat(40)}`;
 const SHA_B = `${RS}${"b".repeat(40)}`;
 

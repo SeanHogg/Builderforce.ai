@@ -159,12 +159,21 @@ describe("open_pull_request", () => {
     expect(sh.scripts[0]).toContain("ON_BASE_BRANCH");
   });
 
-  it("passes through requested reviewers, rejecting unsafe ones", async () => {
+  it("passes through requested reviewers", async () => {
     const sh = recordingShell();
-    await openPullRequestTool.execute({ title: "t", body: "b", reviewers: ["octocat", "org/team", "bad; rm -rf /"] }, sh as never);
+    await openPullRequestTool.execute({ title: "t", body: "b", reviewers: ["octocat", "org/team"] }, sh as never);
     expect(sh.scripts[0]).toContain('--reviewer "octocat"');
     expect(sh.scripts[0]).toContain('--reviewer "org/team"');
-    expect(sh.scripts[0]).not.toContain("rm -rf");
+  });
+
+  it("refuses a pull request naming an unsafe reviewer, running nothing", async () => {
+    // Dropping the bad reviewer silently would open the PR without the review the caller
+    // asked for — the supplied-but-invalid value must stop the tool instead.
+    const sh = recordingShell();
+    const r = await openPullRequestTool.execute({ title: "t", body: "b", reviewers: ["octocat", "bad; rm -rf /"] }, sh as never);
+    expect(data(r).ok).toBe(false);
+    expect(data(r).error).toMatch(/reviewers 'bad; rm -rf \/' is not a valid name/);
+    expect(sh.scripts).toHaveLength(0);
   });
 
   it("says the branch is safe when gh is missing, rather than losing the work", async () => {

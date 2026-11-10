@@ -3,7 +3,7 @@
  * `git log` (PRD 38, Option B+ Contract 1: the `churn` badge). Node-only
  * (`child_process`): the package root and `./knowledge` never import it.
  *
- * One `git log --name-only --since=<n>.days --format=%x1e%H` per call, run in the reviewed
+ * One `git log --name-only --since=<n>.days --format=${CHURN_FORMAT}` per call, run in the reviewed
  * folder with `--relative` so paths are root-relative, and with `core.quotepath=false` so a
  * non-ASCII path is its real name, not an octal-escaped string. Not a git repository, no
  * git, a failed run: no port / an empty map — never a throw into the review. A run that
@@ -23,7 +23,19 @@ const TIMEOUT_MS = 60_000;
  * `core.quotepath=false` — so a header is never confused with a file. (A bare `%H` was: a file named with 40–64 hex
  * characters read as a commit separator, and `@@@` is a legal file name.)
  */
-const COMMIT_MARK = "\u001e";
+export const COMMIT_MARK = "\u001e";
+
+/** Separates the author name from the subject (a UNIT SEPARATOR, `%x1f`: names and subjects may hold `|`). */
+export const AUTHOR_END = "\u001f";
+
+/** A control character as a git `--format` escape (`%xNN`), so each `--format` below is spelled from the constants the parsers read. */
+const formatEscape = (char: string): string => `%x${char.charCodeAt(0).toString(16).padStart(2, "0")}`;
+
+/** THE `--format` of `recentCommits`, read back by `parseRecentCommits`: `<RS>%H|%cI|%an<US>%s`. */
+export const RECENT_COMMITS_FORMAT = `${formatEscape(COMMIT_MARK)}%H|%cI|%an${formatEscape(AUTHOR_END)}%s`;
+
+/** THE `--format` of the churn count, read back by `countCommitsPerPath`: `<RS>%H`. */
+export const CHURN_FORMAT = `${formatEscape(COMMIT_MARK)}%H`;
 
 /** One line of `git log` output with only its terminator removed — a path may legally begin or end with spaces. */
 const logLines = (log: string): string[] => log.split(/\r?\n/);
@@ -62,10 +74,7 @@ const git = runGit;
 /** One commit of `git log`, with the root-relative paths it touched. */
 export interface RecentCommit { sha: string; at: string; title: string; paths: string[]; /** `%an`; absent when the log did not carry one. */ author?: string }
 
-/** Separates the author name from the subject (a unit separator: names and subjects may hold `|`). */
-const AUTHOR_END = "\u001f";
-
-/** `git log --format=<RS>%H|%cI|%an<US>%s --name-only` output as commits (a line with no author separator is the older `%H|%cI|%s`). Pure. */
+/** `git log --format=${RECENT_COMMITS_FORMAT} --name-only` output as commits (a header with no author separator is the older `%H|%cI|%s`). Pure. */
 export function parseRecentCommits(log: string): RecentCommit[] {
   const commits: RecentCommit[] = [];
   let current: RecentCommit | undefined;
@@ -97,7 +106,7 @@ export function parseRecentCommits(log: string): RecentCommit[] {
  * the reason through `onWarn` for a run that did not finish.
  */
 export async function recentCommits(rootDir: string, count: number, options: GitHistoryOptions = {}): Promise<RecentCommit[]> {
-  const run = await git(rootDir, ["log", `-${Math.max(1, Math.floor(count))}`, "--name-only", "--relative", "--format=%x1e%H|%cI|%an%x1f%s", "--", "."]);
+  const run = await git(rootDir, ["log", `-${Math.max(1, Math.floor(count))}`, "--name-only", "--relative", `--format=${RECENT_COMMITS_FORMAT}`, "--", "."]);
   if (run.stdout === undefined) {
     if (run.failure === "timeout") options.onWarn?.(`git log did not finish within ${TIMEOUT_MS / 1000}s: history is missing.`);
     return [];
@@ -105,7 +114,7 @@ export async function recentCommits(rootDir: string, count: number, options: Git
   return parseRecentCommits(run.stdout);
 }
 
-/** Commits per path from `git log --name-only --format=%x1e%H` output, for the wanted paths only. */
+/** Commits per path from `git log --name-only --format=${CHURN_FORMAT}` output, for the wanted paths only. */
 export function countCommitsPerPath(log: string, wanted: ReadonlySet<string>): Map<string, number> {
   const counts = new Map<string, number>();
   let seen = new Set<string>();
@@ -128,7 +137,7 @@ export async function gitHistoryPort(rootDir: string, options: GitHistoryOptions
     async commitsTouching(paths, sinceDays) {
       if (paths.length === 0) return new Map();
       const days = Math.max(1, Math.floor(sinceDays));
-      const run = await git(rootDir, ["log", "--name-only", "--relative", `--since=${days}.days`, "--format=%x1e%H", "--", "."]);
+      const run = await git(rootDir, ["log", "--name-only", "--relative", `--since=${days}.days`, `--format=${CHURN_FORMAT}`, "--", "."]);
       if (run.stdout === undefined) {
         if (run.failure === "timeout") options.onWarn?.(`git log did not finish within ${TIMEOUT_MS / 1000}s: churn is missing, not zero.`);
         else if (run.failure === "buffer") options.onWarn?.("git log produced too much output: churn is missing, not zero.");

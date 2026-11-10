@@ -21,7 +21,7 @@ importers:
         specifier: ^0.1.11
         version: 0.1.13
       unpdf:
-        specifier: ^1.8.1
+        specifier: ^1.9.1
         version: 1.9.1
       web-tree-sitter:
         specifier: ^0.22.6
