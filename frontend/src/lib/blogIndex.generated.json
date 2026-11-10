@@ -1,5 +1,19 @@
 [
   {
+    "slug": "know-what-an-agent-run-did",
+    "title": "You stopped reading the agent's code. Now you can see what its run did",
+    "date": "2026-11-10",
+    "description": "People no longer read each line an agent writes, but they still need to know what a run changed. A run delta card now ends each agent run in the VS Code chat and answers, from measured facts, whether security, performance, quality and the -ilities got better or worse, including whether the agent weakened its own tests.",
+    "tags": [
+      "agents",
+      "vscode",
+      "security",
+      "quality",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "see-what-went-wrong-in-an-agent-run",
     "title": "The agent run \"worked\". Now you can see what went wrong in it",
     "date": "2026-11-09",

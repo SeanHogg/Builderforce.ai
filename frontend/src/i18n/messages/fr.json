@@ -13042,6 +13042,10 @@
         "title": "L'exécution de l'agent a « fonctionné ». Vous pouvez maintenant voir ce qui a mal tourné",
         "description": "Un agent de l'éditeur dépense trois millions de tokens de prompt, effectue treize modifications et se fait arrêter, et le rapport dit Non concluant. Le tiroir Agent runs du Visualizer de VS Code lit l'exécution enregistrée et nomme les problèmes que trouvent ses détecteurs, avec le tour, l'outil et le fichier comme preuves."
       },
+      "know-what-an-agent-run-did": {
+        "title": "Vous ne lisez plus le code de l'agent. Vous pouvez maintenant voir ce qu'a fait son exécution",
+        "description": "On ne lit plus chaque ligne qu'écrit un agent, mais il faut toujours savoir ce qu'une exécution a changé. Une carte des écarts de l'exécution conclut désormais chaque exécution de l'agent dans le chat VS Code et indique, à partir de faits mesurés, si la sécurité, la performance, la qualité et les caractéristiques qualité se sont améliorées ou dégradées, y compris si l'agent a affaibli ses propres tests."
+      },
       "no-account-no-gpu-you-choose-where-it-runs": {
         "title": "Sans compte, sans GPU, sans réseau — et vous choisissez où vont vos mots",
         "description": "Studio et Rovr s’ouvrent désormais avec un modèle opérationnel, sans compte, sans appel d’inscription et sans GPU. Chaque surface — le web, l’extension VS Code et le panneau latéral Rovr — pose une seule question sur l’endroit où vos mots s’exécutent : Local uniquement, Hybride ou un Modèle spécifique. Et Hybride apprend, sur votre appareil, quels tours garder en local."

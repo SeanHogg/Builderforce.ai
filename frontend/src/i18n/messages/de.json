@@ -13042,6 +13042,10 @@
         "title": "Der Agentenlauf hat „funktioniert“. Jetzt sehen Sie, was darin schiefging",
         "description": "Ein Editor-Agent verbraucht drei Millionen Prompt-Tokens, nimmt dreizehn Änderungen vor und wird gestoppt, und der Bericht sagt Nicht eindeutig. Die Schublade Agent runs im VS-Code-Visualizer liest den aufgezeichneten Lauf und benennt die Probleme, die seine Detektoren finden, mit Turn, Werkzeug und Datei als Beleg."
       },
+      "know-what-an-agent-run-did": {
+        "title": "Sie lesen den Code des Agenten nicht mehr. Jetzt sehen Sie, was sein Lauf getan hat",
+        "description": "Kaum jemand liest noch jede Zeile, die ein Agent schreibt, aber man muss trotzdem wissen, was ein Lauf verändert hat. Eine Lauf-Delta-Karte beendet jetzt jeden Agentenlauf im VS Code-Chat und beantwortet aus gemessenen Fakten, ob Sicherheit, Performance, Qualität und Qualitätsmerkmale besser oder schlechter geworden sind, auch ob der Agent seine eigenen Tests abgeschwächt hat."
+      },
       "no-account-no-gpu-you-choose-where-it-runs": {
         "title": "Kein Konto, keine GPU, kein Netz – und Sie bestimmen, wohin Ihre Worte gehen",
         "description": "Studio und Rovr starten jetzt mit einem funktionierenden Modell – ohne Konto, ohne Registrierungsaufruf und ohne GPU. Jede Oberfläche – das Web, die VS-Code-Erweiterung und der Rovr-Seitenbereich – stellt eine einzige Frage dazu, wo Ihre Worte laufen: Nur lokal, Hybrid oder ein bestimmtes Modell. Und Hybrid lernt auf Ihrem Gerät, welche Züge lokal bleiben."

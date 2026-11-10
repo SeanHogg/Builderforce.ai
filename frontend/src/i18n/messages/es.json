@@ -13042,6 +13042,10 @@
         "title": "La ejecución del agente «funcionó». Ahora puedes ver qué salió mal en ella",
         "description": "Un agente del editor gasta tres millones de tokens de prompt, hace trece cambios y lo detienen, y el informe dice Inconcluso. El panel Agent runs del Visualizer de VS Code lee la ejecución registrada y señala los problemas que encuentran sus detectores, con el turno, la herramienta y el archivo como evidencia."
       },
+      "know-what-an-agent-run-did": {
+        "title": "Ya no lees el código del agente. Ahora puedes ver qué hizo su ejecución",
+        "description": "Ya no se lee cada línea que escribe un agente, pero sigue haciendo falta saber qué cambió una ejecución. Una tarjeta de cambios de la ejecución cierra ahora cada ejecución del agente en el chat de VS Code y responde, con hechos medidos, si la seguridad, el rendimiento, la calidad y las características de calidad mejoraron o empeoraron, incluido si el agente debilitó sus propias pruebas."
+      },
       "no-account-no-gpu-you-choose-where-it-runs": {
         "title": "Sin cuenta, sin GPU, sin red: y tú eliges adónde van tus palabras",
         "description": "Studio y Rovr ahora se abren con un modelo funcionando y sin cuenta, sin llamada de registro y sin necesidad de GPU. Cada superficie —la web, la extensión de VS Code y el panel lateral de Rovr— hace una sola pregunta sobre dónde se ejecutan tus palabras: Solo local, Híbrido o un Modelo específico. Y Híbrido aprende, en tu dispositivo, qué turnos mantener en local."
