@@ -1,3 +1,16 @@
+## ✅ RESOLVED 2026-11-10: PRD 41 WS3, WS10, WS11, WS12, WS15, WS16, WS19 and WS20: the run delta indexes in the background, measures runs dynamically, learns from outcomes and predicts (Run delta · Knowledge · VSIX · API)
+
+- **WS3 background indexer (0df16cbf9).** Watcher, reconcile, priority scheduler, levels L0–L3, preemption, keystroke yield, and L3 gated on power and idle.
+- **WS15 stats in builderforce-memory 2026.10.74–.76.** Exact Wilcoxon p-values with the HL bootstrap (.74). `meanAndSd` by Welford (.75). The `createRng` xoshiro128** fix (.76): `t = s1 << 9`, not a rotate, which had collapsed every stream to 0 and the bootstrap CIs with it. Each change has its `regression:` test.
+- **Memory primitives for the run delta, 2026.10.77–.80.** `FactStorePort` with epoch and generation CAS, `sweepObjects` and `reset` (.77). The `check_scheduler` model card, with engine .64 and .65 on the light subpath `./ml/tasks/check-scheduler` (.78–.79). The `saveFactGraph` fast path and `BuildGraphOptions.findings` (.80). All 17 package.json files pin memory ^2026.10.80 and engine ^2026.10.65, with 16 lockfiles refreshed.
+- **WS10 presentation.** The web card, delta history and trend, plus `RunDeltaOpenPanel`, localized in all 5 catalogs.
+- **WS11 SARIF and persistence.** SARIF export; the `run_deltas`, `run_delta_dimensions` and `run_delta_findings` tables (migration 1344); the mirror importer `importSyncedRunDelta` with its revise path; `runDeltaRoutes`.
+- **WS12 dynamic tier.** Benchmarks, coverage and mutation run in tmpdir copies with `GIT_CEILING_DIRECTORIES`. One shared `src/process/killTree.ts` replaces the copies in `knowledgeShell` and `execRunner`. `runHoldGate` has per-kind extension buckets (dynamic 60 s, L3 15 s).
+- **WS16 labels pipeline.** The run-outcomes owner, with migrations 1342 and 1345 plus transactional 0032 and 0033. SZZ, revert (`--first-parent`), CI and review labellers. A supported schema-version list, where a newer version returns the retryable `dependency_pending`. A rotating label sweep with `candidateWindow` and `coveredBefore`.
+- **WS19 naturalness (§D6).** A project trigram per language with a file-split baseline (`predict/naturalness.ts`, `ngram.ts`), `PredictedLine`, `strideSample` in agent-tools, and the kill switch `builderforce.runDelta.predict.naturalness`.
+- **WS20 scheduling (§D9).** A sign-test SPRT (π₁ 0.85, Wald stopping at even rounds, exact DP error rates; at cap 30, α 0.0075 and β 0.1066). A Thompson Beta-cell check scheduler with leave-one-out credit, a cumulative `expectedMs` budget and the setting `builderforce.runDelta.predict.checkScheduler`.
+- **How it reached main.** Each workstream passed its Opus review and targeted tests. The code went to main in the operator's sweep commit 7674bbd64. That sweep also committed PRD 41 empty; 7a170c1e0 restores it (dee7aa4ff plus this pass's 22 spec edits). WS4, WS8, WS9, the L3 tier and a typecheck of main stay in ROADMAP.md, under "Run delta: the rest of PRD 41".
+
 ## ✅ RESOLVED 2026-11-10: PRD 41 WS2/WS6/WS7: a folder's changes are detected cheaply, and every editor run shows what it did to the codebase (Knowledge · Run delta · VSIX)
 
 The ROADMAP entry "No run delta yet: PRD 41 WS2 (SQLite fact store) is open" is closed. [PRD 41](./docs/specs/41-prd-offline-understanding-and-run-delta.md) §7 lists what is still open.
