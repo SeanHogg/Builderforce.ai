@@ -1,0 +1,19 @@
+// paths: this package imports a sibling workspace package by source. esbuild (wrangler,
+// the recorder and frontend bundles) resolves a bare specifier through the NEAREST
+// tsconfig to the importing file, so the mapping must live here, not only in each host's.
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "lib": ["ES2022", "DOM"],
+    "skipLibCheck": true,
+    "noEmit": true,
+    "paths": {
+      "@builderforce/secret-redaction": ["../secret-redaction/src/index.ts"]
+    }
+  },
+  "include": ["src"]
+}
