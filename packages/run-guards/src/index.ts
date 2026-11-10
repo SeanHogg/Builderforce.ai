@@ -62,6 +62,8 @@ export {
   type ProgressSignal,
   type ProgressSignalKind,
 } from "./progressDetector.js";
+// One trace row for every detector action — trips and the never-a-trip advisories.
+export { advisorySourceOf, progressTraceStep, type ProgressAdvisorySource, type ProgressTraceStep } from "./progressTrace.js";
 // "Now I have everything I need", then another read (PRD 35 WS8p).
 export { UNKEPT_READY_AT, UnkeptClaimTracker, claimsReady, type UnkeptClaimState } from "./readinessClaim.js";
 // B4: the one-off batching nudge after SERIAL_SINGLE_CALLS_AT single-readonly turns
