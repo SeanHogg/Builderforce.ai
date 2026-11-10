@@ -127,6 +127,7 @@ vi.mock("./runDelta/editorRunDelta", () => ({
     onFinalized: () => () => undefined,
     attach: () => () => undefined,
     runDeltas: async () => [],
+    hold: { expect: () => undefined, beforeTerminal: async () => undefined, verdict: async () => undefined },
   }),
 }));
 
