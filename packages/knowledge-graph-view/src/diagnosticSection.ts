@@ -4,7 +4,7 @@
  * (a failed review, failed or missing uploads, a defect flag); the tab opens it and puts it first.
  */
 
-export type DiagnosticSectionId = 'graph' | 'review' | 'coverage' | 'lines' | 'sync' | 'findings';
+export type DiagnosticSectionId = 'graph' | 'review' | 'load' | 'coverage' | 'lines' | 'sync' | 'findings';
 
 
 export interface DiagnosticSection {

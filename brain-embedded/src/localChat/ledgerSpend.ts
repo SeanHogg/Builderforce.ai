@@ -95,11 +95,15 @@ export async function importedUsageIds(
   return ids;
 }
 
-/** Every chat's ledger rows, by chat client id — one read for a whole chat list. */
-export async function usageRowsByChat(tx: LocalFirstTransaction, deviceId: string): Promise<Map<string, RunUsageValue[]>> {
+/**
+ * The ledger rows of the chats `clientIds` names (every chat's when omitted), by chat client
+ * id — one read for a whole page of the chat list. Rows of other chats are skipped uncopied.
+ */
+export async function usageRowsByChat(tx: LocalFirstTransaction, deviceId: string, clientIds?: ReadonlySet<string>): Promise<Map<string, RunUsageValue[]>> {
   const byChat = new Map<string, RunUsageValue[]>();
-  // Scanned, and only each row's payload is copied (the caller owns what it gets back).
+  // Scanned, and only each kept row's payload is copied (the caller owns what it gets back).
   await scanLive<RunUsageValue>(tx, 'usage', deviceId, (row) => {
+    if (clientIds && !clientIds.has(row.payload.clientChatId)) return;
     const list = byChat.get(row.payload.clientChatId) ?? [];
     list.push(structuredClone(row.payload));
     byChat.set(row.payload.clientChatId, list);

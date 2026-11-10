@@ -271,13 +271,21 @@ function VisualizationBody({ init, diff, canvas }: { init: InitData; diff: strin
       knowledgeRequests={knowledge.focusRequests}
       reviewing={knowledge.reviewing}
       knowledge={(
-        <KnowledgeView
-          source={knowledge.source}
-          labels={labels}
-          focus={knowledge.focus?.focus ?? null}
-          focusKey={knowledge.focusRequests}
-          onCompose={knowledge.compose}
-        />
+        // A Knowledge view that throws past its own camera boundary leaves the tabs and the other views working.
+        <CanvasBoundary
+          fallback={null}
+          notice={init.labels['viz.knowledgeFailed'] ?? 'The Knowledge view hit an error. The other views are still here.'}
+          retryLabel={init.labels['canvas.retry'] ?? 'Try again'}
+          report={false}
+        >
+          <KnowledgeView
+            source={knowledge.source}
+            labels={labels}
+            focus={knowledge.focus?.focus ?? null}
+            focusKey={knowledge.focusRequests}
+            onCompose={knowledge.compose}
+          />
+        </CanvasBoundary>
       )}
     >
       {canvas}

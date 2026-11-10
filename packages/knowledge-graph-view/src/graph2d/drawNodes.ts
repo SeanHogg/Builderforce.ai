@@ -8,7 +8,7 @@
  * testable without a real canvas.
  */
 
-import type { NodeShape } from '../lenses';
+import { DASHED_SHAPES, type NodeShape } from '../shapes';
 import type { ThemeColors } from '../scene/themeColors';
 import type { ViewBox } from '../usePanZoom';
 
@@ -101,9 +101,17 @@ export function drawMark(ctx: CanvasRenderingContext2D, mark: NodeMark, path: Pa
     ctx.translate(mark.x, mark.y);
     ctx.scale(mark.r, mark.r);
     ctx.globalAlpha = mark.dim ? 0.35 : 1;
-    ctx.fillStyle = colors[mark.tone];
-    ctx.strokeStyle = bg;
-    ctx.lineWidth = 0.1; // node-local units (radius 1), matching the old strokeWidth on the scaled path
+    if (DASHED_SHAPES.has(mark.shape)) {
+        // The outside (a missing or external target): a hollow, dashed outline in the node's tone.
+        ctx.fillStyle = bg;
+        ctx.strokeStyle = colors[mark.tone];
+        ctx.lineWidth = 0.24;
+        ctx.setLineDash([0.4, 0.28]);
+    } else {
+        ctx.fillStyle = colors[mark.tone];
+        ctx.strokeStyle = bg;
+        ctx.lineWidth = 0.1; // node-local units (radius 1), matching the old strokeWidth on the scaled path
+    }
     ctx.fill(path);
     ctx.stroke(path);
     ctx.restore();

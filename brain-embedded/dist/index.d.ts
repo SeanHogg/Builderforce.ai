@@ -238,6 +238,30 @@ interface SyncConflict {
 }
 
 /**
+ * SECONDARY INDEXES over the committed rows: one entity type's rows grouped by a key
+ * their payload carries (a message's chat), so a read of one group costs that group —
+ * never a walk of every row of the type.
+ *
+ * An index is DECLARED by the module that owns the payload shape (`defineRecordIndex`, a
+ * module-level constant: its object identity is the index) and BUILT lazily by the
+ * committed state the first time a transaction reads through it (`scanIndex`). From then
+ * on `CommittedState.applyDelta` — the one step every state change goes through (a
+ * commit, another window's journal frame, a reload's `reset`) — keeps it current row by
+ * row, so it can never drift from the rows it indexes. Nothing here is persisted: the
+ * on-disk journal is unchanged, an index is rebuilt from the rows after every open.
+ */
+
+/** What a row is grouped by. `undefined` from `keyOf`: the row is in no group. */
+type RecordIndexKey = string | number;
+interface RecordIndex<T = unknown> {
+    readonly entityType: LocalEntityType;
+    /** For diagnostics only — the index is the object, not the name. */
+    readonly name: string;
+    /** The row's group. Must be a pure function of the row: it is re-run on every upsert. */
+    readonly keyOf: (row: Readonly<LocalRecord<T>>) => RecordIndexKey | undefined;
+}
+
+/**
  * The local-first store's CONTRACT: the interfaces a host implements and a caller
  * reads through. No state, no behaviour beyond two tiny pure helpers.
  *
@@ -265,6 +289,15 @@ interface LocalFirstTransaction {
      * row) stops walking instead of visiting the rest.
      */
     scan<T = unknown>(entityType: LocalEntityType | undefined, visit: ScanVisit<T>): Promise<void>;
+    /**
+     * `scan` of ONE group of a secondary index (`defineRecordIndex`): only the rows of
+     * `index.entityType` whose `keyOf` is `key`, without walking the type's other rows —
+     * reading one chat's messages costs that chat. Same view rules and `SCAN_STOP` as
+     * `scan`; rows come in committed order, then the ones this transaction wrote.
+     * Optional so a hand-rolled transaction still fits: callers go through `scanByIndex`,
+     * which falls back to a filtered `scan`.
+     */
+    scanIndex?<T = unknown>(index: RecordIndex<T>, key: RecordIndexKey, visit: ScanVisit<T>): Promise<void>;
     put<T>(record: LocalRecord<T>, expectedVersion?: number): Promise<void>;
     /**
      * Remove one local row. A pull tombstone calls this instead of `put`: writing
@@ -2061,6 +2094,11 @@ interface BrainPersistenceAdapter {
         error: string;
     }>;
     getMessages(chatId: number, limit?: number): Promise<BrainMessage[]>;
+    /**
+     * Several chats' messages in one read, by chat id (an unknown chat maps to `[]`), each
+     * as `getMessages` would return it. Optional: an adapter without it is read chat by chat.
+     */
+    getMessagesForChats?(chatIds: readonly number[]): Promise<ReadonlyMap<number, BrainMessage[]>>;
     /**
      * Bind a LOCAL chat to a server chat now, when signed in (PRD 36) — for a
      * server-addressed action on a chat that has not run yet (linking the ticket the chat

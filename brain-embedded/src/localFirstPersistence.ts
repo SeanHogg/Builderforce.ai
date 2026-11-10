@@ -16,7 +16,16 @@ import { slotKeyedRows } from './keyedRows';
 import type { BrainChat, BrainMessage } from './types';
 import { transcriptSeedOf } from './transcriptSeed';
 import { boundServerId } from './localChat/chatIdentity';
-import { chatRecordById, liveRecords, scanLive, type ChatValue, type MessageValue } from './localChat/records';
+import {
+  chatMessageRecords,
+  chatMessagesInOrder,
+  chatRecordById,
+  liveRecords,
+  scanChatMessages,
+  scanLive,
+  type ChatValue,
+  type MessageValue,
+} from './localChat/records';
 import { importedUsageIds, ledgerSpend, usageRowsByChat } from './localChat/ledgerSpend';
 import type { RunUsageValue } from './localChat/usageLedger';
 
@@ -73,15 +82,9 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
   const newId = options.newId ?? (() => crypto.randomUUID());
   const blobs = new Map<string, string>();
 
-  const chats = (tx: LocalFirstTransaction) => liveRecords<ChatValue>(tx, 'chat', options.deviceId);
-  /** This device's live messages, cloned — only the ones `where` keeps (a chat's, never every chat's). */
-  const messages = (tx: LocalFirstTransaction, where?: (row: Readonly<LocalRecord<MessageValue>>) => boolean) =>
-    liveRecords<MessageValue>(tx, 'message', options.deviceId, where);
-  /** One chat's messages in `seq` order. */
-  const chatMessages = (chatId: number): Promise<BrainMessage[]> => options.store.read(async (tx) =>
-    (await messages(tx, (row) => row.payload.chatId === chatId))
-      .sort((a, b) => a.payload.message.seq - b.payload.message.seq)
-      .map((row) => row.payload.message));
+  /** One chat's messages in `seq` order — read through the chat index, never every chat's rows. */
+  const chatMessages = (chatId: number): Promise<BrainMessage[]> =>
+    options.store.read((tx) => chatMessagesInOrder(tx, options.deviceId, chatId));
   const chatFor = async (tx: LocalFirstTransaction, id: number): Promise<LocalRecord<ChatValue>> => {
     const chat = await chatRecordById(tx, options.deviceId, id);
     if (!chat) throw new Error(`No such local chat: ${id}`);
@@ -112,7 +115,7 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
   /** Read the chats' projection inputs in one pass: bindings and ledger rows. */
   const projectionInputs = async (tx: LocalFirstTransaction, rows: readonly LocalRecord<ChatValue>[]): Promise<ProjectionInput[]> => {
     const account = options.accountDestination?.();
-    const usage = await usageRowsByChat(tx, options.deviceId);
+    const usage = await usageRowsByChat(tx, options.deviceId, new Set(rows.map((record) => record.id)));
     return Promise.all(rows.map(async (record) => {
       const serverId = await boundServerId(tx, record.id, account);
       const chatUsage = usage.get(record.id) ?? [];
@@ -160,36 +163,35 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
     });
   };
 
-  return {
-    async listChats(params) {
-      const inputs = await options.store.read(async (tx) => {
-        const all = (await chats(tx))
-          .filter((row) => !row.payload.chat.isArchived)
-          .filter((row) => params?.projectId == null || String(row.payload.chat.projectId) === params.projectId)
-          .sort((a, b) => b.payload.chat.updatedAt.localeCompare(a.payload.chat.updatedAt) || b.payload.chat.id - a.payload.chat.id);
-        const offset = params?.offset ?? 0;
-        const page = params?.limit != null ? all.slice(offset, offset + params.limit) : all.slice(offset);
-        return projectionInputs(tx, page);
+  /**
+   * One page of the chat list (archived or live), most recently updated first, projected.
+   * The chats are scanned uncloned and only the page is copied — a list of 20 never copies
+   * the whole history's chat rows, nor any other chat's ledger rows.
+   */
+  const listPage = async (archived: boolean, params?: { projectId?: string; limit?: number; offset?: number }): Promise<BrainChat[]> => {
+    const inputs = await options.store.read(async (tx) => {
+      const all: Readonly<LocalRecord<ChatValue>>[] = [];
+      await scanLive<ChatValue>(tx, 'chat', options.deviceId, (row) => {
+        if (archived ? row.payload.chat.isArchived !== true : row.payload.chat.isArchived) return;
+        if (params?.projectId != null && String(row.payload.chat.projectId) !== params.projectId) return;
+        all.push(row);
       });
-      return project(inputs);
-    },
+      all.sort((a, b) => b.payload.chat.updatedAt.localeCompare(a.payload.chat.updatedAt) || b.payload.chat.id - a.payload.chat.id);
+      const offset = params?.offset ?? 0;
+      const page = params?.limit != null ? all.slice(offset, offset + params.limit) : all.slice(offset);
+      return projectionInputs(tx, structuredClone(page) as LocalRecord<ChatValue>[]);
+    });
+    return project(inputs);
+  };
+
+  return {
+    listChats: (params) => listPage(false, params),
     /**
      * The archived chats `listChats` hides — same projection, the rows where
      * `isArchived` is set, most recently updated first. The archive surface reads
      * through this; the live list never widens to include them.
      */
-    async listArchivedChats(params) {
-      const inputs = await options.store.read(async (tx) => {
-        const all = (await chats(tx))
-          .filter((row) => row.payload.chat.isArchived === true)
-          .filter((row) => params?.projectId == null || String(row.payload.chat.projectId) === params.projectId)
-          .sort((a, b) => b.payload.chat.updatedAt.localeCompare(a.payload.chat.updatedAt) || b.payload.chat.id - a.payload.chat.id);
-        const offset = params?.offset ?? 0;
-        const page = params?.limit != null ? all.slice(offset, offset + params.limit) : all.slice(offset);
-        return projectionInputs(tx, page);
-      });
-      return project(inputs);
-    },
+    listArchivedChats: (params) => listPage(true, params),
     async getChat(id) {
       const inputs = await options.store.read(async (tx) => projectionInputs(tx, [await chatFor(tx, id)]));
       return (await project(inputs))[0]!;
@@ -246,7 +248,7 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
         const chatDeleteKey = `chat:${chat.id}:delete:v${deleted.version}`;
         await tx.put(deleted, chat.version);
         await journalWrite(tx, deleted, 'delete', { key: chatDeleteKey });
-        const rows = await messages(tx, (row) => row.payload.chatId === id);
+        const rows = await chatMessageRecords(tx, options.deviceId, id);
         for (const row of rows) {
           const tombstone = { ...row, version: row.version + 1, baseVersion: row.version, deletedAt: stamp, updatedAt: stamp };
           await tx.put(tombstone, row.version);
@@ -292,9 +294,16 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
       return summary ? { summary } : { error: options.summarizeFailed ?? options.summarizeUnavailable };
     },
     ...(options.bindChat ? { bindChat: options.bindChat } : {}),
-    async getMessages(chatId, limit) {
-      const all = await chatMessages(chatId);
-      return limit != null ? all.slice(-limit) : all;
+    getMessages: (chatId, limit) => options.store.read((tx) => chatMessagesInOrder(tx, options.deviceId, chatId, limit)),
+    /** Several chats' messages in ONE store read (one journal refresh), each through the chat index. */
+    async getMessagesForChats(chatIds) {
+      return options.store.read(async (tx) => {
+        const out = new Map<number, BrainMessage[]>();
+        for (const chatId of chatIds) {
+          if (!out.has(chatId)) out.set(chatId, await chatMessagesInOrder(tx, options.deviceId, chatId));
+        }
+        return out;
+      });
     },
     // Only a commit that touched THIS chat's message rows (or whose change is unknown) is
     // worth a reload: a step row in another chat, a usage row, a sync receipt is not.
@@ -317,8 +326,7 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
         // without cloning: only the rows handed back below are copied.
         const known = new Map<string, BrainMessage>();
         let existing = 0;
-        await scanLive<MessageValue>(tx, 'message', options.deviceId, (row) => {
-          if (row.payload.chatId !== chatId) return;
+        await scanChatMessages(tx, options.deviceId, chatId, (row) => {
           existing += 1;
           known.set(row.payload.eventKey, row.payload.message);
         });
@@ -370,7 +378,7 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
     },
     async setMessageFeedback(messageId, feedback, context) {
       return options.store.transact(async (tx) => {
-        const row = (await messages(tx, (candidate) => candidate.payload.message.id === messageId))[0];
+        const row = (await liveRecords<MessageValue>(tx, 'message', options.deviceId, (candidate) => candidate.payload.message.id === messageId))[0];
         if (!row) return {};
         const metadata = JSON.parse(row.payload.message.metadata ?? '{}') as Record<string, unknown>;
         metadata.feedback = feedback;

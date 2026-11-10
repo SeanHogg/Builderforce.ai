@@ -18,6 +18,7 @@ import {
   type KnowledgeTargetRow,
 } from "./knowledgeProtocol";
 import { KnowledgeFixSession } from "./knowledgeFixSession";
+import { createLoadTrace, type TracedCall, type TraceFields } from "./knowledgeLoadTrace";
 import { readLastSeen, workspaceKey, writeLastSeen } from "./knowledgeLastSeen";
 import { vscodeFixPorts } from "./knowledgeFixesHost";
 import { rootHistory } from "./knowledgeHistory";
@@ -41,6 +42,14 @@ import { localBrainApplication } from "../localFirstStore";
 /** Search hits the view shows at most. */
 const SEARCH_HITS = 20;
 
+const isGraph = (answer: unknown): answer is KnowledgeGraph =>
+  !!answer && typeof answer === "object" && Array.isArray((answer as KnowledgeGraph).nodes) && Array.isArray((answer as KnowledgeGraph).edges);
+
+/** A graph's counts for the trace: what was read, never the graph itself. */
+const graphFields = (g: KnowledgeGraph): TraceFields => ({
+  nodes: g.nodes.length, edges: g.edges.length, sources: g.stats.sources, ...(g.stats.truncated ? { truncated: true } : {}),
+});
+
 let pendingFocus: KnowledgeFocusFrame | null = null;
 
 /** `builderforce.openKnowledgeGraph` → the view, whenever it next mounts or listens. */
@@ -62,6 +71,8 @@ export class KnowledgeBridge implements vscode.Disposable {
   private lastRoot: string | undefined;
   /** The scopes the view last listed: written beside the graph the next open paints first. */
   private lastScopes: KnowledgeScopeRow[] | undefined;
+  /** The timings of the calls the view's first paint waits on (the Diagnostics' First load section, `loadTrace`). */
+  private readonly trace = createLoadTrace({ log: (line) => log("timing", line) });
   /** How the view last loaded each root; Live's refresh repeats it. */
   private readonly loadedBy = new Map<string, GraphQuery>();
   /** Delete rights per root, read once per graph version (the facts endpoint's viewer + authors). */
@@ -102,25 +113,10 @@ export class KnowledgeBridge implements vscode.Disposable {
   async handle(call: KnowledgeCall): Promise<unknown> {
     assertWritable(call, this.lastRoot);
     switch (call.op) {
-      case "scopes": return (this.lastScopes = await this.scopes());
-      case "lastSeen": return readLastSeen(this.host.ctx.globalStorageUri.fsPath, this.lastSeenKey());
-      case "load": {
-        this.lastRoot = call.rootId;
-        const query: GraphQuery = { ...(call.focus ? { focus: call.focus } : {}), ...(call.maxNodes ? { maxNodes: call.maxNodes } : {}) };
-        this.loadedBy.set(call.rootId, query);
-        const pack = readOnlyPack(call.rootId);
-        const graph = pack ? await packRootGraph(pack, query) : await loadGraph(this.secrets, call.rootId, query);
-        this.rights.loaded(call.rootId, graph?.scope.digest);
-        // Only a FULL load is what the next open paints first (a focus load is a partial picture).
-        if (graph && !call.focus) void this.rememberLastSeen(call.rootId, graph);
-        // No local review of an open root: the typed "not reviewed on this machine", never the server's cut.
-        if (graph || pack) return graph;
-        // A root listed from the project that no folder here holds (a teammate's, an uploaded pack): no local tree to
-        // draw from, so the server's graph is shown read-only (PRD 41 A7 rule 3). Never for a folder open here.
-        const server = rootById(call.rootId, workspaceFolders()) ? undefined : linkedKnowledgeClient(this.secrets);
-        if (server) return server.graph(call.rootId, query).catch(() => null);
-        return notReviewedHere(this.secrets, call.rootId);
-      }
+      case "scopes": return this.trace.run("scopes", undefined, async () => (this.lastScopes = await this.scopes()), (rows) => ({ count: rows.length }));
+      case "lastSeen": return this.trace.run("lastSeen", undefined, () => readLastSeen(this.host.ctx.globalStorageUri.fsPath, this.lastSeenKey()), (seen) => graphFields(seen.graph));
+      case "load": return this.trace.run("load", call.rootId, (traced) => this.load(call, traced), (answer) => (isGraph(answer) ? graphFields(answer) : {}));
+      case "loadTrace": return this.trace.snapshot();
       case "targets": return this.targets();
       case "plan": this.reviews.planOver(call.req, call.stream); return null;
       case "run": return { started: this.reviews.start(call.reviewId) };
@@ -139,12 +135,12 @@ export class KnowledgeBridge implements vscode.Disposable {
       case "remember": return this.remember(call.rootId, call.ref, call.content);
       case "factActions": return { canDelete: await this.canDelete(call.ref) };
       case "deleteFact": return this.deleteFact(call.ref);
-      case "baseline": return this.baseline(call.rootId);
+      case "baseline": return this.trace.run("baseline", call.rootId, () => this.baseline(call.rootId), (b) => graphFields(b.graph as KnowledgeGraph));
       case "compose": await openWorkspace(this.host.ctx, { kind: "seed", text: call.text }); return null;
       case "takeFocus": { const focus = pendingFocus; pendingFocus = null; return focus; }
       case "pinpoint": return pinpointRoot(this.secrets, this.rootOf(call.rootId), call.image);
       case "history": return rootHistory(this.rootOf(call.rootId).rootPath, call.rootId, { onWarn: (m) => log("history", m) });
-      case "syncStatus": return rootSyncStatus(this.secrets, this.rootOf(call.rootId));
+      case "syncStatus": return this.trace.run("syncStatus", call.rootId, async () => rootSyncStatus(this.secrets, this.rootOf(call.rootId)));
       case "retrySync": await retryRootSync(this.secrets, this.rootOf(call.rootId)); return null;
       case "applyFix": return this.applyFix(call.rootId, call.finding);
       case "runFixCheck": return this.fixes.check(call.rootId, this.rootOf(call.rootId).rootPath, call.check, call.finding);
@@ -179,6 +175,33 @@ export class KnowledgeBridge implements vscode.Disposable {
     }
   }
 
+  /** One root's graph: a pack's, this machine's, the server's (a root no folder here holds), or "not reviewed here"; each branch a timed phase. */
+  private async load(call: Extract<KnowledgeCall, { op: "load" }>, traced: TracedCall): Promise<unknown> {
+    this.lastRoot = call.rootId;
+    const query: GraphQuery = { ...(call.focus ? { focus: call.focus } : {}), ...(call.maxNodes ? { maxNodes: call.maxNodes } : {}) };
+    traced.set({ focus: !!call.focus, ...(call.maxNodes ? { maxNodes: call.maxNodes } : {}) });
+    this.loadedBy.set(call.rootId, query);
+    const pack = readOnlyPack(call.rootId);
+    traced.set({ via: pack ? "pack" : "local" });
+    const graph = pack
+      ? await traced.timer.phase("pack", () => packRootGraph(pack, query))
+      : await loadGraph(this.secrets, call.rootId, query, traced.timer, (pairs) => traced.set({ nearDuplicates: pairs }));
+    this.rights.loaded(call.rootId, graph?.scope.digest);
+    // Only a FULL load is what the next open paints first (a focus load is a partial picture).
+    if (graph && !call.focus) void this.rememberLastSeen(call.rootId, graph);
+    // No local review of an open root: the typed "not reviewed on this machine", never the server's cut.
+    if (graph || pack) return graph;
+    // A root listed from the project that no folder here holds (a teammate's, an uploaded pack): no local tree to
+    // draw from, so the server's graph is shown read-only (PRD 41 A7 rule 3). Never for a folder open here.
+    const server = rootById(call.rootId, workspaceFolders()) ? undefined : linkedKnowledgeClient(this.secrets);
+    if (server) {
+      traced.set({ via: "server" });
+      return traced.timer.phase("server", () => server.graph(call.rootId, query).catch(() => null));
+    }
+    traced.set({ via: "not-here" });
+    return traced.timer.phase("notHere", () => notReviewedHere(this.secrets, call.rootId));
+  }
+
   /** The last-seen file's key: this workspace's folders under the acting tenant + linked project ("local" when unlinked). */
   private lastSeenKey(): string {
     const project = linkedProject();
@@ -189,8 +212,11 @@ export class KnowledgeBridge implements vscode.Disposable {
   /** Writes the last full load beside the scopes the view last listed; never throws (the view waits for nothing). */
   private async rememberLastSeen(rootId: string, graph: KnowledgeGraph): Promise<void> {
     try {
-      const scopes = this.lastScopes ?? await this.scopes();
-      await writeLastSeen(this.host.ctx.globalStorageUri.fsPath, this.lastSeenKey(), { scopes, rootId, graph });
+      await this.trace.run("rememberLastSeen", rootId, async () => {
+        const scopes = this.lastScopes ?? await this.scopes();
+        await writeLastSeen(this.host.ctx.globalStorageUri.fsPath, this.lastSeenKey(), { scopes, rootId, graph });
+        return true;
+      }, () => graphFields(graph));
     } catch (error) {
       log("lastSeen", error instanceof Error ? error.message : String(error));
     }

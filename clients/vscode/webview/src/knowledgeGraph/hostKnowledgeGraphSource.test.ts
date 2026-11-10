@@ -255,6 +255,27 @@ describe('the editor knowledge source — the rest of the port', () => {
     const broken: KnowledgeTransport = { call: () => Promise.reject(new Error('no host')), onEvent: () => () => undefined };
     expect(await createHostKnowledgeGraphSource(broken).lastSeen!()).toBeNull();
   });
+
+  it('maps the Agent runs drawer onto the host ops the bridge answers (`agentRuns`, `agentRunReport`), and passes a host failure on', async () => {
+    const summary = { id: '7', title: 'Run', startedAt: 'a', endedAt: 'b', models: ['m'], turns: 1, counts: { info: 0, warn: 0, error: 0 } };
+    const calls: KnowledgeCall[] = [];
+    const t: KnowledgeTransport = {
+      async call<T>(call: KnowledgeCall): Promise<T> {
+        calls.push(call);
+        if (call.op === 'agentRuns') return [summary] as T;
+        if (call.op === 'agentRunReport') return { summary, turns: [], findings: [], files: [], root: '/repo' } as T;
+        throw new Error(`unhandled op ${call.op}`);
+      },
+      onEvent: () => () => undefined,
+    };
+    const port = createHostKnowledgeGraphSource(t).agentRuns!;
+    expect(await port.list()).toEqual([summary]);
+    expect((await port.report('7', 'ws'))?.root).toBe('/repo');
+    await port.report('8');
+    expect(calls).toEqual([{ op: 'agentRuns' }, { op: 'agentRunReport', id: '7', rootId: 'ws' }, { op: 'agentRunReport', id: '8' }]);
+    const broken: KnowledgeTransport = { call: () => Promise.reject(new Error('Request "knowledge.call" timed out')), onEvent: () => () => undefined };
+    await expect(createHostKnowledgeGraphSource(broken).agentRuns!.list()).rejects.toThrow('timed out');
+  });
 });
 
 describe('the editor knowledge source — the staged fix steps', () => {

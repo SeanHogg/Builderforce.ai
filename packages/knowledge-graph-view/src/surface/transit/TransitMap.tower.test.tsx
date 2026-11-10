@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** The Tower variant is the transit map with towers and pipes: the same stations and lines, painted far to near, pins above the tops. */
+/** The towers look is the transit map with towers and pipes: the same stations and lines, painted far to near, pins above the tops. */
 import { describe, expect, it, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from '../../labels';
@@ -25,11 +25,11 @@ function draw(variant: 'map' | 'tower', over: Partial<TransitMapProps> = {}) {
 const stationIds = (c: HTMLElement) => [...c.querySelectorAll('[data-station]')].map((el) => el.getAttribute('data-station')!).sort();
 const lineIds = (c: HTMLElement) => [...c.querySelectorAll('[data-line]')].map((el) => `${el.getAttribute('data-line')}`);
 
-describe('the Tower camera', () => {
-    it('is listed beside the WebGL 3D camera, and both render', () => {
-        expect(CAMERAS.map((c) => c.id)).toEqual(expect.arrayContaining(['tower', '3d']));
-        expect(CAMERAS.findIndex((c) => c.id === 'tower')).toBeLessThan(CAMERAS.findIndex((c) => c.id === '3d'));
-        expect(L.viewTower).not.toBe(L.view3d);
+describe('the Map\'s towers look', () => {
+    it('is a look of the Map camera, not a camera of its own, beside the WebGL 3D camera', () => {
+        expect(CAMERAS.map((c) => c.id)).toEqual(expect.arrayContaining(['transit', '3d']));
+        expect(CAMERAS.map((c) => c.id)).not.toContain('tower');
+        expect(L.surface.map.look.towers).not.toBe(L.view3d);
         expect(draw('tower').querySelector('[data-tower]')).not.toBeNull();
     });
 

@@ -68,6 +68,8 @@ export interface MapLabels {
         drillReset: string;
         /** A satellite sub-station of an unfolded station: `{name}`, `{parent}`. */
         satelliteAria: string;
+        /** The Map's look toggle (the group's name, its two choices and their tips): flat, or towers and pipes. */
+        look: Record<'label' | 'flat' | 'towers' | 'flatTip' | 'towersTip', string>;
         card: Record<'close' | 'issueMore' | 'goInside' | 'unfold' | 'fold' | 'whoCalls' | 'apiContract' | 'patterns' | 'noSymbols' | 'leaf' | 'loading', string>;
         /** `reached` replaces `coverage` when the number is a static reach (a heuristic), not a measurement. */
         stats: Record<'issues' | 'complexity' | 'coverage' | 'reached' | 'usage', string>;
@@ -213,6 +215,10 @@ export const MAP_DEFAULTS: MapLabels = {
         world: 'the whole map',
         drillReset: 'The map changed, so the view went back out of {name}.',
         satelliteAria: '{name}, inside {parent}',
+        look: {
+            label: 'Map look', flat: 'Flat', towers: 'Towers',
+            flatTip: 'Draw the stations as flat marks', towersTip: 'Draw each station as a tower and each line as a pipe',
+        },
         card: {
             close: 'Close', issueMore: '+{count} more', goInside: 'Go inside ↓', unfold: 'Unfold {count}', fold: 'Fold',
             whoCalls: 'Who calls this?', apiContract: 'API contract', patterns: 'Patterns',

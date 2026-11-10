@@ -33,17 +33,20 @@ import type {
 
 import type { AppliedFix, FixCheckResult, FixCheckUpdate, FixPreview, FixStepRequest, RecordedRun } from './fixPorts';
 import type { AgentRunEvidenceNoteId } from './labels/surface.agentRuns';
+import type { LoadTrace } from './loadTraceTypes';
 
 export type LensId =
     | 'structure' | 'partitions' | 'duplication' | 'claims' | 'links' | 'unused' | 'knowledge' | 'live' | 'compare';
 
 /**
- * How the graph is drawn: the transit map, the 2.5D SVG tower (`tower`, the same map with towers
- * and pipes), the 2D graph, the WebGL 3D view (`3d`, the id the old tower had, so a stored or
- * deep-linked `3d` still opens the WebGL view), the folder mind map, or the accessible list. A new
- * camera is a value here plus a row in `surface/cameras.tsx`.
+ * How the graph is drawn: the transit map (`transit`, flat or as 2.5D towers and pipes: a look
+ * toggle inside the camera, not a camera of its own), the 2D graph, the WebGL 3D view (`3d`, the id
+ * the old tower had, so a stored or deep-linked `3d` still opens the WebGL view), the folder mind
+ * map, or the accessible list. A new camera is a value here plus a row in `surface/cameras.tsx`.
+ * The retired `tower` id (the separate SVG Tower camera) opens `transit` with the towers look
+ * (`surface/useShowInTower.ts` `useLegacyTowerMode`).
  */
-export type ViewMode = 'transit' | 'system' | 'graph' | 'tower' | '3d' | 'map' | 'heat' | '4plus1' | 'style' | 'features' | 'sequence' | 'list';
+export type ViewMode = 'transit' | 'system' | 'graph' | '3d' | 'map' | 'heat' | '4plus1' | 'style' | 'features' | 'sequence' | 'list';
 
 /** What a screenshot pinpointed: the AI read the image, the host matched the strings deterministically. */
 export type PinpointResult = {
@@ -305,6 +308,8 @@ export interface KnowledgeGraphSource {
      * map's levels below a package show files and say so.
      */
     symbolsOf?(rootId: string, fileRefs: string[]): Promise<SymbolRecord[]>;
+    /** The host's timings of the calls the first paint waits on, and the phase a running load is in. Absent ⇒ the view's own timeline only. */
+    loadTrace?(): Promise<LoadTrace>;
 }
 
 /** One definition. `ref` names it (`<file ref>#<name>`); `parent` is its file's ref, or its class's ref for a member. */

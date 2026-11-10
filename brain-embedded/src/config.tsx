@@ -50,6 +50,11 @@ export interface BrainPersistenceAdapter {
   summarizeChat(id: number): Promise<{ summary: string } | { error: string }>;
   getMessages(chatId: number, limit?: number): Promise<BrainMessage[]>;
   /**
+   * Several chats' messages in one read, by chat id (an unknown chat maps to `[]`), each
+   * as `getMessages` would return it. Optional: an adapter without it is read chat by chat.
+   */
+  getMessagesForChats?(chatIds: readonly number[]): Promise<ReadonlyMap<number, BrainMessage[]>>;
+  /**
    * Bind a LOCAL chat to a server chat now, when signed in (PRD 36) — for a
    * server-addressed action on a chat that has not run yet (linking the ticket the chat
    * was opened for). Resolves the server id, or undefined while the chat stays local.

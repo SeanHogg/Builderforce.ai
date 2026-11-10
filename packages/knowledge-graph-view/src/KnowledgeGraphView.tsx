@@ -19,6 +19,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Finding } from '@seanhogg/builderforce-memory/knowledge';
 import { resolveLabels, fillTemplate, type KnowledgeGraphLabels } from './labels';
 import { useKnowledgeGraph } from './useKnowledgeGraph';
+import { currentLoadPhase, useFirstPaint, useHostLoadTrace, useTimedSource } from './useLoadTiming';
 import { graphDiagnostics } from './graphDiagnostics';
 import { lensFindings } from './lenses';
 import { PHONE_FOCUS_NODES, lensGraph, nodeIndex } from './graphModel';
@@ -49,11 +50,13 @@ import { LinesPanel } from './surface/LinesPanel';
 import { foldCopyFindings } from './surface/systems';
 import { PanelDrawer } from './surface/PanelDock';
 import { canApplyKind } from './surface/codemods';
-import { useClearHighlightOutsideTower } from './surface/useShowInTower';
+import { showsTowers, useClearHighlightOutsideTower, useLegacyTowerMode } from './surface/useShowInTower';
 import { TowerLegend } from './surface/TowerLegend';
 import { isResolved } from './surface/fix/fixFlow';
 import { fixQueueCounts } from './surface/fix/fixModes';
 import { docStations } from './surface/transit/docs';
+import { stationTypes } from './surface/transit/stationType';
+import { typesPresent } from './shapes';
 import { groupTermini } from './surface/transit/termini';
 import { PathStrip } from './surface/PathStrip';
 import { hopRouteLabels } from './surface/sequenceText';
@@ -104,9 +107,13 @@ export function KnowledgeGraphView({
     source, labels: partial, onCompose, initialFocus, openReview, initialLens, renderPanel, confirm, lenses: lensSubset, onOpenSource,
 }: KnowledgeGraphViewProps) {
     const labels = useMemo(() => resolveLabels(partial), [partial]);
-    const kg = useKnowledgeGraph(source, {
+    // First-load triage: the graph's calls are timed (one wrapper per source), and the host's trace is read while a load runs.
+    const timing = useTimedSource(source);
+    const kg = useKnowledgeGraph(timing.source, {
         ...(initialLens ? { initialLens } : {}), ...(initialFocus ? { initialFocus } : {}), ...(lensSubset ? { lenses: lensSubset } : {}),
     });
+    useFirstPaint(timing.timeline, kg.status, kg.stale, !!source.snapshot);
+    const hostTrace = useHostLoadTrace(source, kg.status === 'loading' || kg.stale);
     const rootRef = useRef<HTMLElement>(null);
     const width = useContainerWidth(rootRef);
     const env = useRenderEnvironment();
@@ -162,6 +169,7 @@ export function KnowledgeGraphView({
         status: kg.status, rootId: kg.rootId, graph: real, drawn: { nodes: drawn.nodes.length, edges: drawn.edges.length },
         showAll, webgl: env.webgl, reducedMotion: env.reducedMotion, mode, width, compact, lens: lens.id,
         review: kg.review.state, lastPhase: kg.review.lastPhase, run: runRead.live, time: new Date().toISOString(),
+        load: { timeline: timing.timeline.snapshot(), host: source.loadTrace ? hostTrace : undefined },
         // Called on click, after the render below has defined these.
         ...(real ? {
             surface: {
@@ -173,7 +181,8 @@ export function KnowledgeGraphView({
     });
     const titleOf = (rootId: string) => kg.scopes.find((s) => s.rootId === rootId)?.title ?? rootId;
     const { select, show, pickLens, pickQuestion, pinpointed, unpin, showInTower } = useSurfaceActions(kg, surface, () => setTracing(false), { ids: cameras.map((c) => c.id), set: setMode });
-    useClearHighlightOutsideTower(mode, surface.setHighlight);
+    useClearHighlightOutsideTower(mode, surface.towers, surface.setHighlight);
+    useLegacyTowerMode(chosen, setMode, surface.setTowers);
     // The open drawer is the surface's, so the header, the Act rail and the path strip all open one the same way.
     const panel = surface.panel;
     const reviewStatus = kg.review.state.status;
@@ -206,6 +215,7 @@ export function KnowledgeGraphView({
     const legendExtras = useMemo(() => ({
         deadEnd: groupTermini(surface.lines.lines, surface.stations.byId, graph).some((t) => t.deadEnd),
         docs: docStations(graph, surface.stations).size > 0,
+        types: typesPresent(stationTypes(graph, surface.stations).values()),
     }), [surface.lines, surface.stations, graph]);
     const noHits = kg.hits && kg.hits.length === 0 ? kg.query : null;
     const linesPanel = (rail: boolean) => (
@@ -258,12 +268,13 @@ export function KnowledgeGraphView({
                                     </ZoomProvider>
                                 ) : (
                                     <SceneState status={kg.status} labels={labels} source={source} targets={targets} review={null} reviewStatus={kg.review.state.status} start={kg.review.start} openReview={openReview} onRetry={kg.reload}
+                                        loading={{ phase: currentLoadPhase(hostTrace, kg.rootId), diagnostics: () => diagnostics().text }}
                                         onSeed={kg.notHere?.canSeed && kg.rootId ? () => kg.review.start({ rootId: kg.rootId!, seed: true }) : undefined} />
                                 )}
                                 <SceneStatus stale={kg.stale} refreshFailed={kg.refreshFailed} labels={labels} onRetry={kg.reload} />
                             </div>
                             {!layout.phone && overlay}
-                            {surface.highlight && (mode === '3d' || mode === 'tower') && <TowerLegend highlight={surface.highlight} labels={labels} compact={layout.compact} onClose={() => surface.setHighlight(null)} />}
+                            {surface.highlight && showsTowers(mode, surface.towers) && <TowerLegend highlight={surface.highlight} labels={labels} compact={layout.compact} onClose={() => surface.setHighlight(null)} />}
                         </div>
                         {stackLines && <div style={{ padding: 12, maxHeight: 260, overflow: 'auto', borderTop: `1px solid ${cssVar('border')}`, background: cssVar('panel') }}>{linesPanel(false)}</div>}
                         {hasLines && panels.visibility.bottom && (

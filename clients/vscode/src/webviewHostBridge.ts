@@ -12,6 +12,7 @@ import { callLocalPersistence } from "./localPersistenceDispatch";
 import { createLocalWorkRepository } from "./localWorkRepository";
 import { handleChatRailRequest } from "./chatRail/chatRailHost";
 import { signInToAccountProvider } from "./providerConnect";
+import { withFreshNonce } from "./webviewBundleShell";
 
 /**
  * The host half of the webview bridge — the three things EVERY bundled-React
@@ -161,6 +162,23 @@ export function apiFailureLine(m: ApiFailureMessage): string {
   return `[webview api] ${m.method ?? "GET"} ${m.path ?? "?"} → ${m.status ?? "?"}${ref}${said}`;
 }
 
+/** Something the webview threw, relayed by `RootBoundary` / `uncaughtErrorRelay.ts`. */
+interface WebviewErrorMessage extends WebviewInbound {
+  source?: unknown;
+  message?: unknown;
+  stack?: unknown;
+  componentStack?: unknown;
+}
+
+/** The output-channel block for one webview error: a headline, then each stack that came with it. */
+export function webviewErrorLines(m: WebviewErrorMessage): string {
+  const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+  const lines = [`[webview error] ${text(m.source) || "render"}: ${text(m.message) || "unknown error"}`];
+  if (text(m.stack)) lines.push(text(m.stack));
+  if (text(m.componentStack)) lines.push(`component stack:\n${text(m.componentStack)}`);
+  return lines.join("\n");
+}
+
 /** A PreFetch answer chip may run only the extension's own commands. */
 export function isPrefetchChipCommand(command: unknown): command is string {
   return typeof command === "string" && /^builderforce\.[\w.-]+$/.test(command);
@@ -260,6 +278,22 @@ export async function handleSharedHostMessage(
     case "api.failure":
       logLine(apiFailureLine(msg as ApiFailureMessage));
       return true;
+    // Logged only: the root fallback already tells the reader, and an uncaught error
+    // the tree survived needs no toast — the output channel is the record.
+    case "webview.error":
+      logLine(webviewErrorLines(msg as WebviewErrorMessage));
+      return true;
+    // A fresh nonce makes it a different document, which VS Code re-renders from scratch.
+    case "webview.reload":
+      if (webview) webview.html = withFreshNonce(webview.html);
+      return true;
+    case "webview.copy": {
+      const text = (msg as WebviewInbound & { text?: unknown }).text;
+      if (typeof text !== "string" || !text) return true;
+      await vscode.env.clipboard.writeText(text);
+      void vscode.window.showInformationMessage(vscode.l10n.t("Error details copied to clipboard."));
+      return true;
+    }
     // A chip under a PreFetch answer (e.g. Open in graph): runs ITS command — only one of
     // ours, since the webview names it.
     case "prefetch.chip": {

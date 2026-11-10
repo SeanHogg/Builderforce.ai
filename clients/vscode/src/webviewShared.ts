@@ -37,6 +37,13 @@ export function renderWebviewHtml(
     assetUrl: (f) => webview.asWebviewUri(vscode.Uri.joinPath(ctx.extensionUri, "media", "webview", f)).toString(),
     title: opts.title,
     bootLabel: vscode.l10n.t("Connecting…"),
+    // The root error fallback's copy: a crash can come before (or take down) the label bundle.
+    bootStrings: {
+      title: vscode.l10n.t("BuilderForce hit an error"),
+      body: vscode.l10n.t("This panel stopped drawing. The error was sent to the BuilderForce output log."),
+      reload: vscode.l10n.t("Reload panel"),
+      copy: vscode.l10n.t("Copy details"),
+    },
   });
 }
 

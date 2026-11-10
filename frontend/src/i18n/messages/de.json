@@ -37316,6 +37316,18 @@
     "title": "Wissen",
     "regionLabel": "Wissensgraph",
     "loading": "Wissensgraph wird geladen…",
+    "loadingElapsed": "Wissensgraph wird geladen… {elapsed}",
+    "loadingPhase": "Gerade: {phase}",
+    "loadingSlow": "Das dauert länger als üblich. Kopieren Sie die Diagnose, um es zu melden.",
+    "loadPhases": {
+      "partitions": "Projektstruktur wird gelesen",
+      "index": "Suchindex wird geöffnet",
+      "nearDuplicates": "Beinahe-Duplikate werden gesucht",
+      "build": "Graph wird erstellt",
+      "pack": "Wissenspaket wird gelesen",
+      "server": "Graph des Servers wird abgerufen",
+      "notHere": "Prüfung auf ein Review auf diesem Rechner"
+    },
     "refreshing": "Wird aktualisiert…",
     "refreshFailed": "Aktualisierung fehlgeschlagen – der letzte Graph wird angezeigt. Erneut versuchen",
     "errorTitle": "Der Wissensgraph konnte nicht geladen werden",
@@ -37390,13 +37402,26 @@
       "catConfig": "Konfiguration",
       "catStyle": "Styles",
       "catData": "Daten",
-      "catOther": "Sonstiges"
+      "catOther": "Sonstiges",
+      "shapesTitle": "Formen",
+      "typeClass": "Klasse oder Typ",
+      "typeFunction": "Funktion oder Methode",
+      "typeSource": "Quelldatei",
+      "typeTest": "Test",
+      "typeStyle": "Styles",
+      "typeConfig": "Konfiguration",
+      "typeData": "Daten oder Schema",
+      "typeDoc": "Dokument",
+      "typeSection": "Abschnitt",
+      "typeEntity": "Entität",
+      "typeClaim": "Behauptung oder Fakt",
+      "typeExternal": "Fehlend oder extern",
+      "typeSystem": "System oder Paket"
     },
     "statsLine": "{nodes} Knoten · {edges} Kanten · {sources} Quellen",
     "filesLoaded": "{loaded} von {total} geladen",
     "showAll": "Alle anzeigen",
     "view3d": "3D",
-    "viewTower": "Turm",
     "viewList": "Liste",
     "viewSystem": "System",
     "viewHeat": "Hitze",
@@ -37902,6 +37927,13 @@
         "world": "die ganze Karte",
         "drillReset": "Die Karte hat sich geändert, deshalb ist die Ansicht aus {name} herausgegangen.",
         "satelliteAria": "{name}, in {parent}",
+        "look": {
+          "label": "Kartenansicht",
+          "flat": "Flach",
+          "towers": "Türme",
+          "flatTip": "Stationen als flache Markierungen zeichnen",
+          "towersTip": "Jede Station als Turm und jede Linie als Rohr zeichnen"
+        },
         "card": {
           "close": "Schließen",
           "issueMore": "+{count} weitere",
@@ -38177,7 +38209,10 @@
       },
       "scene": {
         "edgesCapped": "{shown} von {total} Verbindungen angezeigt",
-        "layingOut": "Wird angeordnet…"
+        "layingOut": "Wird angeordnet…",
+        "errorTitle": "In dieser Ansicht ist ein Fehler aufgetreten",
+        "errorRetry": "Erneut versuchen",
+        "errorBack": "Zurück"
       },
       "mind": {
         "moreFoldersOne": "+{count} Ordner",
@@ -38667,6 +38702,7 @@
           "diagRefresh": "Aktualisieren",
           "diagGraph": "Graph",
           "diagReview": "Prüfung und letzter Lauf",
+          "diagLoad": "Erstes Laden",
           "diagCoverage": "Datenabdeckung",
           "diagLines": "Linien",
           "diagSync": "Sync und Replikat",

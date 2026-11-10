@@ -18,6 +18,8 @@ import { cssVar } from '../scene/themeColors';
 import { list, muted, swatch } from '../styles';
 import { TYPE } from './ui/type';
 import { LegendGlyph } from './LegendGlyph';
+import { ShapeLegend } from './ShapeLegend';
+import type { MarkType } from '../shapes';
 import { LineGroupList } from './rail/LineGroupList';
 import { LineRow } from './rail/LineRow';
 import { StopRow } from './rail/StopRow';
@@ -45,7 +47,7 @@ export interface LinesPanelProps {
     /** What the graph carries (`dataCoverage`): the reason an unset channel gives. Absent ⇒ "Not set up" alone. */
     coverage?: DataCoverage | null | undefined;
     /** Which extra marks the map draws, so the legend explains them: a ✕ dead end, a square document. */
-    extras?: { deadEnd: boolean; docs: boolean } | undefined;
+    extras?: { deadEnd: boolean; docs: boolean; types?: readonly MarkType[] | undefined } | undefined;
     /** The findings the Act rail lists, in its order: a stop's tag names its first one by place in this list. Absent ⇒ no finding tags. */
     findings?: readonly Finding[] | undefined;
     /** The finding kinds of the graph, given only while the System camera is on: the legend names the colour of each bar segment. */
@@ -160,6 +162,7 @@ export function LinesPanel({ lines, stations, overlay, labels, lineId, selectedS
                             {s.map.doc}
                         </li>
                     )}
+                    {extras?.types && extras.types.length > 0 && <li><ShapeLegend types={extras.types} labels={labels} /></li>}
                     {legend.length === 0 && !pins && <li style={muted}>{s.rail.legendEmpty}</li>}
                 </ul>
             </section>

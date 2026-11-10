@@ -10,6 +10,8 @@ import { DescribeLinks, Satellites } from './DocLinks';
 import { HopPath } from './HopPath';
 import type { PlacedLabel } from './labelPlacement';
 import { StationMark } from './StationMark';
+import { SHAPE_PATHS } from '../../shapes';
+import { cssVar } from '../../scene/themeColors';
 import { TerminusMark } from './TerminusMark';
 import { TransitBands } from './TransitBands';
 
@@ -40,6 +42,16 @@ describe('StationMark', () => {
     it('draws a square for a document and a disc otherwise', () => {
         expect(mark({ doc: true }).container.querySelector('rect')).not.toBeNull();
         expect(mark().container.querySelector('rect')).toBeNull();
+    });
+
+    it('draws the station\'s mark-type silhouette in its tone when it has one (dashed and hollow for the outside)', () => {
+        const drum = mark({ shape: 'drum' }).container.querySelector('[data-shape="drum"]')!;
+        expect(drum.getAttribute('d')).toBe(SHAPE_PATHS.drum);
+        expect(drum.getAttribute('fill')).toBe(cssVar('sev3'));
+        expect(mark({ shape: 'drum' }).container.querySelector('circle[r="10"]')).toBeNull();
+        const outside = mark({ shape: 'octagon' }).container.querySelector('[data-shape="octagon"]')!;
+        expect(outside.getAttribute('stroke-dasharray')).toBe('3 2');
+        expect(outside.getAttribute('stroke')).toBe(cssVar('sev3'));
     });
 
     it('draws the interchange backing and its title only on an interchange', () => {

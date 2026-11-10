@@ -89,6 +89,12 @@ describe('graphDiagnostics (the one source of the text and of the Diagnostics ta
         expect(d.text).toBe(graphDiagnosticsText(base()));
     });
 
+    it('adds the First load group after the review when the load timings are given', () => {
+        const d = graphDiagnostics(base({ load: { timeline: { nowMs: 900, marks: [], firstPaint: { ms: 800, from: 'fresh' }, freshMs: 800 } } }));
+        expect(d.sections.map((s) => s.id)).toEqual(['graph', 'review', 'load']);
+        expect(d.text).toContain('first paint: 800ms from fresh');
+    });
+
     it('sorts the lines into groups by what they are, not by an English prefix', () => {
         const d = graphDiagnostics(base({ review: { status: 'done', rootId: 'docs', report: FIXTURE_REPORT } }));
         const graph = d.sections.find((s) => s.id === 'graph')!.lines;

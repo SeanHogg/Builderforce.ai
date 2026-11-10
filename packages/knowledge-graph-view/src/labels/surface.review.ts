@@ -126,6 +126,7 @@ export const REVIEW_WORDS = {
     diagRefresh: 'Refresh',
     diagGraph: 'Graph',
     diagReview: 'Review and last run',
+    diagLoad: 'First load',
     diagCoverage: 'Data coverage',
     diagLines: 'Lines',
     diagSync: 'Sync and replica',

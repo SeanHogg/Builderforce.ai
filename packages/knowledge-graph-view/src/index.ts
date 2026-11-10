@@ -32,3 +32,4 @@ export type {
     AgentRunReport, AgentRunsPort,
 } from './types';
 export { isNotReviewedHere } from './types';
+export type { LoadTrace, LoadTraceEntry, LoadTraceInFlight } from './loadTraceTypes';

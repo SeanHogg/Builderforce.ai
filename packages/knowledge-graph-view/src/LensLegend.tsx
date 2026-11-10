@@ -9,17 +9,21 @@ import type { KnowledgeGraphLabels } from './labels';
 import type { LensDef } from './lenses';
 import { kindLabel } from './names';
 import { cssVar } from './scene/themeColors';
-import { SHAPE_PATHS } from './shapes';
+import type { MarkType } from './shapes';
 import { list, muted, swatch } from './styles';
+import { ShapeGlyph } from './surface/LegendGlyph';
+import { ShapeLegend } from './surface/ShapeLegend';
 
 export interface LensLegendProps {
     lens: LensDef;
     labels: KnowledgeGraphLabels;
     /** False ⇒ the requested lens' packs are not in this graph. */
     applicable: boolean;
+    /** The mark types the graph draws (`typesPresent`): the shape key under the tones. Absent ⇒ no shape key. */
+    types?: readonly MarkType[] | undefined;
 }
 
-export function LensLegend({ lens, labels, applicable }: LensLegendProps) {
+export function LensLegend({ lens, labels, applicable, types }: LensLegendProps) {
     return (
         <div style={{ display: 'grid', gap: 6 }}>
             {!applicable && <p role="note" data-testid="kg-lens-not-applicable" style={{ ...muted, margin: 0 }}>{labels.lensNotApplicable}</p>}
@@ -29,9 +33,7 @@ export function LensLegend({ lens, labels, applicable }: LensLegendProps) {
                         {lens.legend.map((row) => (
                             <li key={`${row.tone}:${row.key}`} data-legend={row.key} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, minHeight: 20 }}>
                                 {row.shape ? (
-                                    <svg width={12} height={12} viewBox="-1.4 -1.4 2.8 2.8" aria-hidden="true" style={{ flex: 'none' }}>
-                                        <path d={SHAPE_PATHS[row.shape]} transform="scale(0.9)" fill={cssVar(row.tone)} stroke={cssVar('bg')} strokeWidth={0.1} />
-                                    </svg>
+                                    <ShapeGlyph shape={row.shape} tone={row.tone} size={12} />
                                 ) : (
                                     <span style={{ ...swatch(cssVar(row.tone)), borderRadius: 999 }} aria-hidden="true" />
                                 )}
@@ -41,6 +43,7 @@ export function LensLegend({ lens, labels, applicable }: LensLegendProps) {
                     </ul>
                 </section>
             )}
+            {types && <ShapeLegend types={types} labels={labels} />}
         </div>
     );
 }

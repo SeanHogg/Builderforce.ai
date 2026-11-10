@@ -26,8 +26,11 @@ const EXT_CATEGORY: Record<string, FileCategory> = {
     // data / config-by-extension
     json: 'data', jsonc: 'data', jsonl: 'data', yaml: 'data', yml: 'data', toml: 'data', xml: 'data',
     csv: 'data', tsv: 'data', ini: 'data', env: 'data', lock: 'data', graphql: 'data', gql: 'data', proto: 'data',
-    sqlite: 'data', db: 'data', dump: 'data',
+    sqlite: 'data', db: 'data', dump: 'data', sql: 'data', prisma: 'data',
 };
+
+/** A migrations folder holds schema changes: data, whatever the files' extension (PRD 43 B1a rule 2). */
+const MIGRATIONS_DIR = /(^|\/)migrations?(\/)/;
 
 /** Filenames (no extension) that are config regardless of directory. */
 const CONFIG_NAMES = new Set([
@@ -82,6 +85,7 @@ export function fileCategory(n: Pick<KNode, 'ref'>): FileCategory {
         return 'config';
     }
 
+    if (MIGRATIONS_DIR.test(path)) return 'data';
     const ext = extOf(path);
     const byExt = EXT_CATEGORY[ext];
     if (byExt === 'data' && /(^|\/)(tsconfig|jsconfig|package|tsup|vitest|jest)\.json$/.test(base)) return 'config';

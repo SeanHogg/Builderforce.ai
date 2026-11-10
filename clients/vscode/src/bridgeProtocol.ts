@@ -69,6 +69,14 @@ export const SHARED_HOST_MESSAGES = [
   /** Run a PreFetch answer chip's command (`command`, `args`; e.g. Open in graph) — one of
    *  the extension's own commands only. Fire-and-forget. */
   'prefetch.chip',
+  /** Something in the webview threw — a render (`RootBoundary`), an uncaught error or an
+   *  unhandled rejection (`uncaughtErrorRelay.ts`). `source`, `message`, `stack`,
+   *  `componentStack`; written to the output channel. Fire-and-forget. */
+  'webview.error',
+  /** Re-render this webview's document from scratch (the root fallback's "Reload panel"). */
+  'webview.reload',
+  /** Put `text` on the system clipboard (the root fallback's "Copy details"). Fire-and-forget. */
+  'webview.copy',
 ] as const;
 
 /**

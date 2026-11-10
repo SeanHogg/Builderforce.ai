@@ -1,6 +1,6 @@
 # PRD 43 — One 3D stage for every knowledge camera
 
-Status: design, revised after Opus review (2026-11-08, approved with changes). Owner: the knowledge-graph view (`packages/knowledge-graph-view`).
+Status: design, revised after Opus review (2026-11-08, approved with changes); amended 2026-11-10 by the operator (B1a: render the data once, a camera is only a layout; Map = Transit + Tower), Opus-reviewed the same day (approved with changes, folded in). Owner: the knowledge-graph view (`packages/knowledge-graph-view`).
 
 ## Why
 
@@ -121,21 +121,66 @@ interface CameraRig {
 
 A camera's `CameraDef` (`surface/cameras.tsx`) gains `spec` and `rig`. A new camera is registry data, never a branch inside the stage.
 
+### B1a. Amendment 2026-11-10 (operator): render the data ONCE, a camera is only a layout
+
+Operator: "you're rendering the same data using different surfaces — render the data 1 time with the shapes on 1 surface, then lay out the shapes based upon the selection (Map/Tower/3D, etc.)". Opus design review 2026-11-10: approved with changes (folded in below). **B1a supersedes B1's `SpecInput`/`SceneSpec`/`MarkBatch`, B2's Tower bullet, B3's `disc` and capacity rules, B5's worker pick grid, and the deferral of camera-switch tweens.**
+
+1. **`MarkSet` — built once per GRAPH, never per camera, drill or lens.** A drill APPENDS symbol slots (ranged upload into preallocated headroom); a lens, question or overlay change is a `MarkPaint` patch (tone/flags only). Switching camera never rebuilds it, re-uploads it, or creates a mesh.
+2. **Shape = node type, the same in every camera.** `markTypeOf(node)` in `src/shapes.ts` over (`kind` ∈ memory `NODE_KINDS` = file/section/symbol/area/entity/claim/fact, plus `missing`; `fileCategory`; `symbolSort`), computed in the worker once per resident graph as `type: Uint8Array`, with a fallback type. Vocabulary: class/type → square, function/method → circle, file(source) → rounded square, test → diamond, doc → tile, config → triangle, style → rounded triangle, data (`fileCategory` gains `.sql`/`.prisma`/migrations → `data`) → drum, section → bookmark, entity → pentagon, claim/fact → small star, missing/external → dashed octagon, aggregates: system/package (aggregate-only, never a node) → hexagon, area/folder → its members' dominant type. **Every 3D shape is its 2D silhouette extruded; flat = extrude 0**, so a node reads the same from above and in depth. The three existing tables (`lenses.ts` `KIND_SHAPE`, mind-map `MapBranch.shape`, `scene/shapeMeshes.tsx`) fold into this one. One legend for every camera. Below ~10 px tone stays the primary cue.
+3. **Slot universe and parents.** One slot table per graph: `node:<ref>` for every node of the whole graph (not the 2,000-node focus cap), `st:<id>` per station aggregate, `dir:<path>` per mind-map folder; forest arrays `parentStation: Int32Array` and `parentFolder: Int32Array`. Satellites and drilled symbols are member slots; Sequence lifelines reuse `st:` slots. Decorations (pins, termini, cycle, satellites' badges, arrowheads) are ONE SDF `glyph` batch with a glyph-id attribute.
+4. **`Placement` — all a camera supplies.** A pure worker task writes position, scale and extrude for EVERY slot, plus the camera's links, planes, captions, slot-relative labels, a11y order, caption counts, bounds and rig. A hidden slot is anchored at its nearest visible ancestor (scheme `station` | `folder`, named by the placement) at scale 0; a hidden aggregate sits at its members' centroid at scale 0 — visibility is scale. The vertex shader culls scale 0.
+5. **Tween.** Two attribute pairs `(posA, scaleA, extrudeA) → (posB, scaleB, extrudeB)` mixed by a uniform `t` over ≤ 400 ms; reduced motion jumps. Map → Graph: members grow out of their station while it shrinks into the centroid; the reverse collapses them. LOD band changes, unfold and drill use the same mechanism. Labels fade during a tween and are placed after; picking is off during a tween.
+6. **Cache.** Placements are an LRU keyed by graph digest + camera + drill + unfolded + pathId + viewport band + lod band — never selection. Returning to a camera is a buffer swap with no worker trip. Layout never re-runs on a re-render or a scrollbar wobble; the rig re-fits, re-placement happens only when the width crosses a band.
+7. **Map = Transit + Tower, ONE camera (operator: "Combine the Tower / Map — they are the same thing").** Flat home view; the depth control tilts it and extrudes each station into its tower (height = size channel). A tower is the station's silhouette extruded; the coverage ring follows the outline (operator supersedes the mockup's disc). Graph, Mind map, 3D and Sequence are other placements of the SAME marks.
+8. **Every representation is a 3D modelling surface (operator, 2026-11-10: "Even use the 3D graph visuals for sequencing diagrams; every representation is a 3D modeling surface; the sequencing diagram should be composed of the same artifacts that were drawn on the surface").** Sequence is a placement, not a diagram type: its participants ARE the type-shaped marks already on the stage (the stations/nodes on the path), which tween from where they stood into a row; each lifeline is a decoration hanging from that mark; each message is a link between those same slots, ordered along the time axis, with layer climb as depth. Selecting a participant selects the same slot in every camera. The path strip ("where does it go") shows the same marks. System, Heat, 4+1, Style and Features are placements of the same marks too (System = systems as hexagon aggregates on planes; Heat = the marks on a grid, height/tone = heat; 4+1/Style/Features = the marks grouped into their view's planes). **Only List stays DOM** — the accessible list and the no-WebGL fallback.
+
+9. **Semantic zoom is the navigation (operator, 2026-11-10: "at a macro level you see a system (logical grouping — a directory, or DDD/layer associations); then the user zooms in like on a map: the detail reveals composition and associations with Classes; zoom further: Methods; zoom in to reveal the Code").** One continuous zoom on one surface replaces "Go inside" as the primary way down (the card's Go inside becomes a shortcut that animates the same zoom). Four abstraction bands, each a level of the SAME slot forest, entered by screen size of the parent mark, not by a click:
+   - **System** — systems/apps (hexagon aggregates) grouped by directory or by DDD context / layer (the grouping scheme is a choice; layers are the planes). Links = system-to-system dependencies, bundled.
+   - **Module / class** — as a system's mark grows past the threshold, its members fade in around it (the parent tweens into a translucent hull): files/modules and the classes/types they declare, with **composition and association links** between classes (owns/contains, extends/implements, uses/calls, imports) — distinct link families with their own dash/tone.
+   - **Method** — as a class grows, its methods/functions appear as circle members inside it; call links between methods; the class's fields/data as drum members.
+   - **Code** — as a method grows past the last threshold, its source is revealed in place: a DOM code layer (syntax-highlighted, read-only in this PRD, editable in the editing PRD) anchored to the method's slot with `useSlotAnchor`, scaling with the zoom until it hands off to the editor (VS Code: "open at line" reveals the real editor; web: the code drawer).
+   Rules: every band is ONE placement family (members placed relative to their parent so a zoom is a continuous tween, not a camera switch); the band thresholds live in `lod.ts` as data; zoom out collapses members back into the parent; labels at each band are the band's names (system names, class names, method signatures). **Data:** classes/methods come from symbol records (`withSymbolRecords`, the drill's `symbols` op) — loaded lazily for the systems/classes entering the viewport at the module band, prefetched one band ahead, appended as slots (rule 1); class↔class composition/association edges and method↔method call edges must be carried by the knowledge graph's symbol extraction — the memory package does NOT emit them today (checked 2026-11-10: `EDGE_KINDS` = references, links, contains, mentions, duplicate, near-duplicate, contradicts, agrees, supersedes, about, co-changed — no extends/implements/composes/uses/calls), so phase **P0b** adds them in builderforce-memory's code extractor (`extends`, `implements`, `composes` (field of a class type), `uses` (type reference), `calls` (method → method, resolved within the root, unresolved calls to externals as terminus edges)), with the pack format change, contract snapshot and one regression test per kind, published before the module band ships. They are never invented in the view. Code text comes from the host (`readSource(rootId, path, range)`, local file in the editor, server copy on the web), never shipped in the graph.
+10. **Sequence follows the same zoom (operator, 2026-11-10: "the sequence diagrams need this association too").** A sequence is drawn at the band the user is zoomed to, from the same slots and the same symbol-level edges:
+   - **System band** — participants are systems; messages are the bundled system→system dependencies along the path.
+   - **Class band** — participants are the classes on the path; messages are the `calls` between their methods (labelled with the method), with `extends`/`implements`/`composes` shown as the participant's association stubs so the reader sees why one class can reach another.
+   - **Method band** — participants are the methods; each message is one call, ordered by **call-site order** (the order the calls appear in the caller's body), with activation bars for nested calls and a return marker; an unresolved/external call ends at an external terminus.
+   - **Code band** — selecting a message reveals the call-site line in the code layer.
+   Zooming the sequence moves between bands exactly like the map: a system participant splits into its classes, a class into its methods (member tweens, rule 5). The path strip follows the same band. **Data:** `calls` edges carry the call site (`path`, `line`, `column`) and an `order` index within the caller so a sequence is the real call order, not an inference from file hops (P0b).
+
+**Contract (replaces B1's types):**
+
+```ts
+interface MarkSet { generation: number; digest: string; keys: string[]; slotKind: Uint8Array; type: Uint8Array;
+  parentStation: Int32Array; parentFolder: Int32Array; label: string[]; tooltip: string[];
+  batches: { type: number; slots: Uint32Array }[]; capacity: number }
+interface MarkPaint { generation: number; tone: Uint8Array; tone2: Uint8Array; fill: Float32Array; flags: Uint8Array }
+interface Placement { generation: number; cacheKey: string; anchor: 'station' | 'folder';
+  position: Float32Array /*3N*/; scale: Float32Array; extrude: Float32Array;
+  links: LinkBatch[]; planes: PlaneSpec[]; labels: LabelRun[] /*slot-relative*/; captions: Caption[];
+  a11y: A11yItem[]; caption: { shown: number; total: number; capped: boolean }; bounds: { min: Vec3; max: Vec3 }; rig: CameraRig }
+```
+
+Worker tasks in `protocol.ts` `TaskTable`: `markSet {graph, changed, strings}`, `markPaint {graph, generation, lensId, questionId, overlay, lit, roles, family}` (ranged), `placement {graph, generation, camera, drill, unfolded, pins, pathId, viewportBand, lod}`. Selection stays out of all three. Typed arrays go through `transfer.ts`. `LinkBatch`, `PlaneSpec`, `LabelRun`, `Caption`, `A11yItem`, `CameraRig` keep B1's shapes.
+
+**Done checks added:** a camera switch creates 0 `InstancedMesh` and makes ≤ 3 attribute uploads per batch (renderer spy; capacity overflow is the only rebuild path); a node keeps its type shape and colour in every camera (test over the harness graph); draw calls ≤ ~9 type batches + 1 glyph + 1 plane + ~4 link families + 1 text + ~3 overlay.
+
+**Interim fixes (2026-11-10)** — Map flicker, Tower tab folded into Map, Graph2D layout, per-renderer type shapes, the Go-inside crash, the error boundary — keep the current cameras usable until their placements land; the renderers they touch retire per B8, and the `shapes.ts` registry becomes rule 2's single source.
+
 ### B2. The six cameras
 
 | Camera | Home view | Depth axis | Frame |
 |---|---|---|---|
-| Transit | the mockup's flat map (bands, routed lines, stations) | layer tier | document |
-| Tower | the mockup's 2.5D map (see below) | tower height = size channel | document |
+| Map (Transit + Tower) | the mockup's flat map (bands, routed lines, stations); tilted = towers | layer tier; tilt extrudes stations (height = size channel) | document |
 | Graph | partitions as bands, nodes by importance (looks like today's 2D) | partition, so the bands become stacked planes | fill |
-| Map | radial folder tree | folder depth, so the tree becomes a cone | fill |
+| Mind map | radial folder tree | folder depth, so the tree becomes a cone | fill |
 | 3D | today's scene | free orbit | fill |
-| Sequence | lifelines left to right, time top to bottom | each stop's layer, so a hop that skips or climbs a layer moves in depth | document |
+| Sequence | the path's own marks in a row (tweened from the previous camera), lifelines hanging from them, messages as links top to bottom | each stop's layer, so a hop that skips or climbs a layer moves in depth | document |
+| System · Heat · 4+1 · Style · Features | the same marks placed on that view's planes / grid (B1a rule 8) | plane stack; Heat: height = heat | fill |
 
 - **Every mark is unlit, in flat token colours.** The 3D camera's lit spheres are the only exception.
-- **Tower.** The mockup's tower is not a projection of anything: top ellipse 0.44, shadow 0.42, a 6 px right side face in `towerSide`, a brightened top, and an unforeshortened map plane. So the home view draws each tower as an **unlit, screen-facing SDF quad (`towerSprite`)** that reproduces `TowerMark`'s 2D drawing exactly: body, side face, top, shadow, coverage tint, the 2 px fill line, and the dashed shell. When the user tilts into depth, `towerSprite` swaps to the real-geometry `tower` (the 3D camera's cylinders), with height = size channel and the fill band from `fill`/`tone2`.
-- **Camera switch.** No tweens in this PRD. The rig jumps to the new home view with a 150 ms fade, or with no fade when reduced motion is on.
-- **System, Heat and List stay DOM.** List is also the no-WebGL fallback (B7).
+- **Tower.** SUPERSEDED by B1a rule 7 (a tower is the station's silhouette extruded). Historical note: the mockup's tower is not a projection of anything: top ellipse 0.44, shadow 0.42, a 6 px right side face in `towerSide`, a brightened top, and an unforeshortened map plane. So the home view draws each tower as an **unlit, screen-facing SDF quad (`towerSprite`)** that reproduces `TowerMark`'s 2D drawing exactly: body, side face, top, shadow, coverage tint, the 2 px fill line, and the dashed shell. When the user tilts into depth, `towerSprite` swaps to the real-geometry `tower` (the 3D camera's cylinders), with height = size channel and the fill band from `fill`/`tone2`.
+- **Camera switch.** Superseded by B1a rule 3: the same marks tween to the new placement (≤ 400 ms), or jump when reduced motion is on.
+- **Only List stays DOM** (B1a rule 8). List is also the no-WebGL fallback (B7).
 - **Gestures:**
   - On `fill` frames, wheel zooms.
   - On `document` frames, wheel scrolls the page (as today) and zoom uses the overlay's +/− and Fit buttons. Tilt comes only from the depth control.
@@ -152,8 +197,8 @@ A camera's `CameraDef` (`surface/cameras.tsx`) gains `spec` and `rig`. A new cam
 - **`StageRenderer` port.** The WebGL implementation, plus a no-op implementation for jsdom. With the no-op, the a11y list, the DOM overlays, the cards and picking still mount and work.
 - **Marks:**
   - Each batch is ONE `InstancedMesh`.
-  - `disc` is one SDF quad shader that draws every station ring: backing, interchange backing, back-disc, the coverage arc from `fill`/`tone2`, the dashed outline, the pulse (a time uniform) and selection.
-  - Capacity grows by doubling, with a rebuild.
+  - One silhouette SDF cap shader with a shape-id attribute draws every type mark's top face (anti-aliased outline, no MSAA): backing, interchange backing, the coverage arc following the outline from `fill`/`tone2`, the dashed outline, the pulse (a time uniform) and selection; extrusion adds the side walls.
+  - Capacity is sized at MarkSet build plus drill headroom; a rebuild happens only on overflow.
   - Removed slots become zero-scale holes, compacted only on a full rebuild, so key → slot stays stable.
   - Uploads are ranged (`addUpdateRange`).
 - **Links: one instanced-quad line shader of our own (about 150 lines), the same shader for every family.** It does:
@@ -188,7 +233,7 @@ A camera's `CameraDef` (`surface/cameras.tsx`) gains `spec` and `rig`. A new cam
 
 ### B5. Picking and accessibility
 
-- **The grid lives on the main thread.** The worker sends `pick` as typed arrays: a grid over each pickable's projected screen box, including the extruded tower body, line segments, pins, satellites and lifelines. The main thread queries it directly, so select and hover never wait behind a worker task.
+- **Picking is a main-thread pass over the slots' world positions**, re-projected into a screen grid when the camera settles (≈0.3 ms at 10k slots; a worker-built grid would go stale on tilt and orbit), covering the extruded body, line segments, glyphs and lifelines. Off during a tween. Select and hover never wait behind a worker task. Proxies are rebuilt on settle for visible on-screen slots only (≤ ~200), with roving focus.
 - **The exact phase** is today's `hitTest.nearestHit`: nearest centre in screen pixels, ties broken by importance then id, a 40 px target.
 - **The ranked incident index** is sent once as typed arrays, so select slices incident edges on the main thread.
 - **Accessibility uses positioned proxies, not an off-screen list.** Transparent focusable buttons sit over the projected Tab-stop marks, repositioned when the camera settles, so magnifiers and touch screen readers find them by position.
@@ -210,8 +255,9 @@ Worker tasks are chunked. The protocol carries **priority and cancel**, so an in
 | Overlay binding | tone, tone2, fill and width attributes only |
 | Tower roles / Show in Tower | flags + tone only |
 | Path strip highlight | link flags only |
-| Unfold | satellite marks + re-placed labels (worker) |
-| Drill enter / exit | a new spec |
+| Camera switch | cached placement swap + tween (worker only on a cache miss) |
+| Unfold | placement patch (satellites are member slots) + re-placed labels |
+| Drill enter / exit | symbol slots appended (ranged) + a new placement, tweened |
 | Zoom settles in a new LOD band | a spec refinement (worker) → slot patch |
 | Resize | rig + label pass for `screen` labels |
 | Theme | tone colours |
@@ -233,7 +279,7 @@ Worker tasks are chunked. The protocol carries **priority and cancel**, so an in
 
 **Rewires:** `cameras.tsx`'s Suspense fallback for 3D (currently `Graph2D`) becomes the stage's loading state.
 
-**Sequence and the path strip.** `PathStrip.tsx` draws `SequenceView` inline. When Sequence moves onto the stage (P5), the strip keeps a compact DOM rendering of the stops, and the SVG sequence body is deleted.
+**Sequence and the path strip.** `PathStrip.tsx` draws `SequenceView` inline. When Sequence becomes a placement (P2), the strip shows the path's own stage marks (B1a rule 8) and the SVG sequence body is deleted.
 
 **Keep:** the pure models (layouts, stations, lines, `labelPlacement`, `cardPlacement`, `sequenceModel`). They feed the spec builders.
 
@@ -258,7 +304,8 @@ Worker tasks are chunked. The protocol carries **priority and cancel**, so an in
   - frame timing over a scripted pan, zoom, tilt and orbit holds **60 fps**;
   - first frame **≤ 1 s** after the graph arrives;
   - camera switch **≤ 300 ms**.
-- **Draw calls at overview: at most 17.** That is 1 plane batch, about 6 mark batches, about 4 link families, 1 `BatchedText`, about 3 overlay meshes, plus 2 headroom.
+- **Draw calls at overview:** ≤ ~9 type batches + 1 glyph batch + 1 plane batch + ~4 link families + 1 `BatchedText` + ~3 overlay meshes (B1a).
+- **Camera switch:** 0 `InstancedMesh` created, ≤ 3 attribute uploads per batch (renderer spy).
 - **The design-match audit** is a fresh Opus audit with screenshots at DPR 1 and 2, in both themes and at 360 px wide, diffed region by region against today's SVG and the mockup. It checks:
   - the colour, width and casing of every line;
   - round joins and corners at radius 14, with no cap blobs on dimmed lines;
@@ -275,23 +322,26 @@ Worker tasks are chunked. The protocol carries **priority and cancel**, so an in
 ## Phases (each one ships)
 
 - **P0:** Part A (in flight).
-- **P1a:** a fidelity spike. The Transit home view drawn from today's model output with the new line shader, `disc` shader and `BatchedText`, screenshot-diffed against the SVG at DPR 1 and 2. If it fails, the contract is revised before P1.
-- **P1:** the stage core, the `StageRenderer` port, `SpecInput`/`SceneSpec`, slots, picking, proxies, card anchoring and the caption layer, with **Transit** on it, behind a flag, then the default. Delete the SVG transit marks.
-- **P2:** **Tower** (`towerSprite` home view, `tower` when tilted). Update the design-match memory.
-- **P3:** **Graph and Map**, with bundling, LOD and the `labelPlacement` grid. Delete `Graph2D` and `MindMap`.
+- **P0b:** builderforce-memory: symbol-level edge kinds (`extends`, `implements`, `composes`, `uses`, `calls`) in the code extractor + pack format + contract snapshot + regression tests; publish; bump memory in every consumer lockfile. Prerequisite for the module and method bands (B1a rule 9).
+- **P1a:** spike on the harness graph and a 10k synthetic graph, one canvas: a `markSet` with real types and two placements built from the existing `transitLayout` and `layout2d` outputs; extruded shapes with the SDF cap; the tween. Measured: tween frame time, bytes uploaded per switch, zero mesh creations, shapes distinguishable at 6/8/12 px at DPR 1 and 2, the line shader and stations diffed against the SVG. If it fails, B1a is revised before P1.
+- **P1:** the `markTypeOf` registry and the three tasks (`markSet`, `markPaint`, `placement`); slots with A/B attributes; the stage core, `StageRenderer` port, picking, proxies, card anchoring, captions and labels; the **Map (Transit + Tower)** placement (flat home view, tilt = extrude) and a minimal **Graph** placement so the switch check is real — behind a flag, then the default. Delete the SVG transit and tower marks.
+- **P1b:** **semantic zoom** (B1a rule 9): system → module/class → method bands as continuous member tweens, lazy symbol slots, the code layer anchored to the method slot, host `readSource`; Go inside becomes the zoom shortcut.
+- **P2:** **Mind map** and **Sequence** placements. Update the design-match memory.
+- **P3:** **Graph** to full parity, with bundling, LOD and the `labelPlacement` grid. Delete `Graph2D` and `MindMap`.
 - **P4:** the **3D** camera port. Delete `GraphScene` and `Towers`.
-- **P5:** **Sequence** on the stage (the depth axis is layer climb), with the path strip as DOM. Delete the SVG sequence body.
+- **P5:** **System, Heat, 4+1, Style and Features** placements (B1a rule 8). Delete their DOM/SVG scene bodies; List stays DOM.
 
 ## Deferred to the editing PRD (not built here)
 
-Camera-switch slot tweens, the `stage/store.ts` edit model, delta-driven incremental layout, and the gesture → edit → reconcile pipeline. The slot-patch API (B3, B7) is what that PRD builds on.
+The `stage/store.ts` edit model, delta-driven incremental layout, and the gesture → edit → reconcile pipeline. The slot-patch API (B3, B7) is what that PRD builds on.
 
 ## Code map
 
 ```
 src/compute/                 (A2) worker, protocol (+ priority/cancel), client, useComputed
-src/compute/tasks/spec/      transit.ts · tower.ts · graph.ts · map.ts · scene3d.ts · sequence.ts
-                             bundle.ts · lod.ts · pickGrid.ts · a11y.ts · input.ts (SpecInput guards)
+src/compute/tasks/           markSet.ts · markPaint.ts · bundle.ts · lod.ts · a11y.ts · input.ts (guards)
+src/compute/tasks/placement/ map.ts (Transit+Tower) · graph.ts · mind.ts · scene3d.ts · sequence.ts
+src/shapes.ts                markTypeOf + the ONE type → silhouette registry
 src/stage/
   Stage.tsx                  the ONE canvas; lazy; StageRenderer port selection
   renderer.ts                StageRenderer port + WebGL + no-op implementations

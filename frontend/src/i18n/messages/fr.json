@@ -37316,6 +37316,18 @@
     "title": "Connaissances",
     "regionLabel": "Graphe de connaissances",
     "loading": "Chargement du graphe de connaissances…",
+    "loadingElapsed": "Chargement du graphe de connaissances… {elapsed}",
+    "loadingPhase": "En cours : {phase}",
+    "loadingSlow": "Cela prend plus de temps que d’habitude. Copiez le diagnostic pour le signaler.",
+    "loadPhases": {
+      "partitions": "lecture de la structure du projet",
+      "index": "ouverture de l’index de recherche",
+      "nearDuplicates": "recherche des quasi-doublons",
+      "build": "construction du graphe",
+      "pack": "lecture du pack de connaissances",
+      "server": "récupération du graphe du serveur",
+      "notHere": "recherche d’une revue sur cette machine"
+    },
     "refreshing": "Mise à jour…",
     "refreshFailed": "Échec de la mise à jour : dernier graphe affiché. Réessayer",
     "errorTitle": "Le graphe de connaissances n’a pas pu se charger",
@@ -37390,13 +37402,26 @@
       "catConfig": "Config",
       "catStyle": "Styles",
       "catData": "Données",
-      "catOther": "Autre"
+      "catOther": "Autre",
+      "shapesTitle": "Formes",
+      "typeClass": "Classe ou type",
+      "typeFunction": "Fonction ou méthode",
+      "typeSource": "Fichier source",
+      "typeTest": "Test",
+      "typeStyle": "Styles",
+      "typeConfig": "Configuration",
+      "typeData": "Données ou schéma",
+      "typeDoc": "Document",
+      "typeSection": "Section",
+      "typeEntity": "Entité",
+      "typeClaim": "Affirmation ou fait",
+      "typeExternal": "Absent ou externe",
+      "typeSystem": "Système ou paquet"
     },
     "statsLine": "{nodes} nœuds · {edges} arêtes · {sources} sources",
     "filesLoaded": "{loaded} sur {total} chargés",
     "showAll": "Tout afficher",
     "view3d": "3D",
-    "viewTower": "Tour",
     "viewList": "Liste",
     "viewSystem": "Système",
     "viewHeat": "Chaleur",
@@ -37902,6 +37927,13 @@
         "world": "toute la carte",
         "drillReset": "La carte a changé, la vue est donc sortie de {name}.",
         "satelliteAria": "{name}, dans {parent}",
+        "look": {
+          "label": "Style de la carte",
+          "flat": "À plat",
+          "towers": "Tours",
+          "flatTip": "Dessiner les stations comme des repères à plat",
+          "towersTip": "Dessiner chaque station comme une tour et chaque ligne comme un tuyau"
+        },
         "card": {
           "close": "Fermer",
           "issueMore": "+{count} de plus",
@@ -38177,7 +38209,10 @@
       },
       "scene": {
         "edgesCapped": "{shown} liens affichés sur {total}",
-        "layingOut": "Mise en page en cours…"
+        "layingOut": "Mise en page en cours…",
+        "errorTitle": "Cette vue a rencontré une erreur",
+        "errorRetry": "Réessayer",
+        "errorBack": "Retour"
       },
       "mind": {
         "moreFoldersOne": "+{count} dossier",
@@ -38667,6 +38702,7 @@
           "diagRefresh": "Actualiser",
           "diagGraph": "Graphe",
           "diagReview": "Examen et dernière exécution",
+          "diagLoad": "Premier chargement",
           "diagCoverage": "Couverture des données",
           "diagLines": "Lignes",
           "diagSync": "Synchronisation et réplique",

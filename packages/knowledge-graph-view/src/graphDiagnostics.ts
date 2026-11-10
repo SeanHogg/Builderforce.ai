@@ -14,6 +14,7 @@ import type { DiagnosticSection, Diagnostics } from './diagnosticSection';
 import type { LensId, StoredReviewRun, ViewMode } from './types';
 import { runDiagnosticLines } from './surface/run/runDiagnostics';
 import { failureCountOf } from './surface/run/runModel';
+import { loadDiagnosticSection, type LoadDiagnosticsInput } from './loadDiagnostics';
 
 export interface GraphDiagnosticsInput {
     status: string;
@@ -35,6 +36,8 @@ export interface GraphDiagnosticsInput {
     surface?: SurfaceDiagnosticsInput | undefined;
     /** The latest review run the host reported (PRD 41 A8); absent ⇒ no run line. */
     run?: StoredReviewRun | null | undefined;
+    /** The first load's timings (the view's timeline and the host's trace); absent ⇒ no First load section. */
+    load?: LoadDiagnosticsInput | undefined;
     /** ISO time. */
     time: string;
 }
@@ -58,7 +61,7 @@ export function truncationReasons(graph: KnowledgeGraph, drawnNodes: number, com
 
 const TITLE = 'Knowledge graph diagnostics';
 
-/** The diagnostics as labelled groups: graph, review and last run, then the surface's (coverage, lines, sync, findings). */
+/** The diagnostics as labelled groups: graph, review and last run, first load, then the surface's (coverage, lines, sync, findings). */
 export function graphDiagnosticSections(i: GraphDiagnosticsInput): DiagnosticSection[] {
     const g = i.graph;
     const s = i.review;
@@ -95,6 +98,7 @@ export function graphDiagnosticSections(i: GraphDiagnosticsInput): DiagnosticSec
     return [
         { id: 'graph', lines: graph, attention: false },
         { id: 'review', lines: review, attention: failed },
+        ...(i.load ? [loadDiagnosticSection(i.load)] : []),
         ...(i.surface ? surfaceDiagnosticSections(i.surface) : []),
     ];
 }

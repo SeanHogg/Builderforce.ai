@@ -10,6 +10,7 @@
  */
 
 import { cssVar, type ThemeTone } from '../../scene/themeColors';
+import { ShapePath } from '../LegendGlyph';
 import { FONT_MONO, TYPE } from '../ui/type';
 import type { StationStyle } from '../overlays';
 import type { Point } from './geometry';
@@ -107,6 +108,12 @@ export function TowerMark(p: StationMarkProps) {
                     ? { stroke: tone('accent'), strokeWidth: 2 }
                     : g.shell ? { stroke: colour, strokeDasharray: '3 3' } : {})}
             />
+            {p.shape && (
+                // The station's mark type (`shapes.ts`), cut into the body's face so a tower reads its type like a station does.
+                <g data-tower-part="type">
+                    <ShapePath shape={p.shape} x={at.x - 3} y={g.top + Math.min(g.height / 2, 14)} r={5.5} fill={g.shell ? colour : cssVar('bg')} strokeWidth={0.5} opacity={o} />
+                </g>
+            )}
             <text x={at.x} y={labelY} textAnchor="middle" fontFamily={FONT_MONO} fontSize={TYPE.monoName.fontSize} fontWeight={p.dim ? 500 : TYPE.monoName.fontWeight} fill={p.dim ? cssVar('muted') : cssVar('text')} {...halo}>{label.text}</text>
             {label.note && !p.dim && (
                 <text x={at.x} y={labelY + 13} textAnchor="middle" fontFamily={FONT_MONO} fontSize={TYPE.monoMeta.fontSize} fill={p.accentNote ? cssVar('accent') : cssVar('muted')} {...halo}>{label.note}</text>

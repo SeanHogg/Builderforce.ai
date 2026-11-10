@@ -28,7 +28,7 @@ import type {
   ReviewControl, ReviewRequest, ReviewTarget, SymbolRecord, SyncStatus, TryRequest, TryResponse,
 } from '@builderforce/knowledge-graph-view';
 import type {
-  KnowledgeCall, KnowledgeCheckReply, KnowledgeEvent, KnowledgeFixPreview, KnowledgeFixResult, KnowledgeHistoryResult, KnowledgePlanReply, KnowledgeTargetRow,
+  KnowledgeCall, KnowledgeCheckReply, KnowledgeEvent, KnowledgeFixPreview, KnowledgeFixResult, KnowledgeHistoryResult, KnowledgeLoadTrace, KnowledgePlanReply, KnowledgeTargetRow,
 } from '../../../src/knowledge/knowledgeProtocol';
 import { hostReviewRuns } from './hostReviewRuns';
 import { hostAgentRuns } from './hostAgentRuns';
@@ -213,6 +213,8 @@ export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: Host
       return canDelete ? { delete: async () => { await t.call({ op: 'deleteFact', ref }); } } : undefined;
     },
     baseline: (rootId) => t.call<KnowledgeBaseline | null>({ op: 'baseline', rootId }),
+    // First-load triage: the extension's timings of the calls above and the phase a running load is in.
+    loadTrace: () => t.call<KnowledgeLoadTrace>({ op: 'loadTrace' }),
     async pinpoint(image: Blob, rootId: string): Promise<PinpointResult> {
       checkPinpointImage(image);
       return t.call<PinpointResult>({ op: 'pinpoint', rootId, image: await blobDataUrl(image) });

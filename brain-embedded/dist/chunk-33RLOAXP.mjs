@@ -130,6 +130,18 @@ function parseEntityRef(v) {
 // ../packages/local-first/src/records.ts
 var UNBOUND_DESTINATION = { kind: "unbound" };
 
+// ../packages/local-first/src/recordIndex.ts
+function defineRecordIndex(entityType, name, keyOf) {
+  return Object.freeze({ entityType, name, keyOf });
+}
+function indexKeyOf(index, row) {
+  try {
+    return index.keyOf(row);
+  } catch {
+    return void 0;
+  }
+}
+
 // ../packages/local-first/src/storeContract.ts
 var SCAN_STOP = /* @__PURE__ */ Symbol.for("builderforce.local-first.scan-stop");
 
@@ -159,6 +171,10 @@ async function selectRecords(tx, type, where) {
     if (!where || where(row)) matches.push(row);
   });
   return clone(matches);
+}
+async function scanByIndex(tx, index, key, visit) {
+  if (tx.scanIndex) return tx.scanIndex(index, key, visit);
+  return tx.scan(index.entityType, (row) => indexKeyOf(index, row) === key ? visit(row) : void 0);
 }
 async function selectPending(tx, where, destination) {
   const matches = [];
@@ -9946,8 +9962,10 @@ export {
   parseSyncId,
   syncIdText,
   UNBOUND_DESTINATION,
+  defineRecordIndex,
   SCAN_STOP,
   selectRecords,
+  scanByIndex,
   newLocalRecord,
   BOUND_ONLY_VERSION,
   isOwnRecord,
@@ -10187,4 +10205,4 @@ export {
   toolCallArgBytes,
   createComposingActivity
 };
-//# sourceMappingURL=chunk-4EX4OH2B.mjs.map
+//# sourceMappingURL=chunk-33RLOAXP.mjs.map

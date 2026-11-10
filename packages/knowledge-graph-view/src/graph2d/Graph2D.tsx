@@ -20,12 +20,13 @@ import { useRankedEdges } from '../scene/useRankedEdges';
 import { LayingOut } from '../surface/LayingOut';
 import { usePanZoom } from '../usePanZoom';
 import { useRoving } from '../useRoving';
-import { HIT_PX, useSvgScale } from '../useSvgScale';
+import { FONT_PX, HIT_PX, useSvgScale } from '../useSvgScale';
 import { nearestHit } from '../hitTest';
 import { usePanZoomRegistration } from '../surface/zoom';
 import { cssVar } from '../scene/themeColors';
 import { groupEdges } from '../scene/buffers';
 import { pathsOf } from './edgePaths';
+import { bandCaption, placeCaptions, type CaptionCandidate } from './captionPlacement';
 import { NodeCanvas } from './NodeCanvas';
 import { EMPTY_LAYOUT_2D, fitView, nodeRadius, type Layout2D } from './layout2d';
 
@@ -49,12 +50,16 @@ export interface Graph2DProps {
 const Bands = memo(function Bands({ layout, font, planeLabel }: { layout: Layout2D; font: number; planeLabel(p: string): string }) {
     return (
         <>
-            {layout.bands.map((b) => (
-                <g key={b.partition} data-band={b.partition}>
-                    <rect x={layout.bounds.minX} y={b.top} width={layout.bounds.maxX - layout.bounds.minX} height={b.height} fill={cssVar('plane')} opacity={0.35} rx={font * 0.5} />
-                    <text x={layout.bounds.minX + font} y={b.top + font * 1.6} fontSize={font} fontWeight={700} fill={cssVar('muted')} aria-hidden="true">{planeLabel(b.partition)}</text>
-                </g>
-            ))}
+            {layout.bands.map((b) => {
+                const text = planeLabel(b.partition);
+                const at = bandCaption(b, layout.bounds, font, text);
+                return (
+                    <g key={b.partition} data-band={b.partition}>
+                        <rect x={layout.bounds.minX} y={b.top} width={layout.bounds.maxX - layout.bounds.minX} height={b.height} fill={cssVar('plane')} opacity={0.35} rx={font * 0.5} />
+                        <text x={at.x} y={at.y} fontSize={font} fontWeight={700} fill={cssVar('muted')} aria-hidden="true">{text}</text>
+                    </g>
+                );
+            })}
         </>
     );
 });
@@ -80,19 +85,31 @@ const Edges = memo(function Edges({ edges, nodes, layout, selected }: { edges: r
     );
 });
 
-const Captions = memo(function Captions({ ordered, layout, named, selected, font }: { ordered: readonly KNode[]; layout: Layout2D; named: ReadonlySet<string>; selected: string | null; font: number }) {
-    const shown = useMemo(() => ordered.filter((n) => named.has(n.ref) && layout.positions.has(n.ref)), [ordered, layout, named]);
+/** The drawn mark's radius: the canvas never paints a node smaller than 3 CSS pixels (font is 11 of them). */
+const markRadius = (importance: number, font: number): number => Math.max(nodeRadius(importance), (font * 3) / FONT_PX);
+
+const Captions = memo(function Captions({ ordered, layout, named, selected, font, planeLabel }: { ordered: readonly KNode[]; layout: Layout2D; named: ReadonlySet<string>; selected: string | null; font: number; planeLabel(p: string): string }) {
+    // Collision-avoided: the selection first, then importance order; a caption with no free side is dropped.
+    const placed = useMemo(() => {
+        const candidates: CaptionCandidate[] = [];
+        const push = (n: KNode): void => {
+            const p = layout.positions.get(n.ref);
+            if (p) candidates.push({ ref: n.ref, x: p[0], y: p[1], r: markRadius(n.importance, font), text: n.label, always: n.ref === selected });
+        };
+        const sel = selected ? ordered.find((n) => n.ref === selected) : undefined;
+        if (sel) push(sel);
+        for (const n of ordered) if (n !== sel && named.has(n.ref)) push(n);
+        const bandBoxes = layout.bands.map((b) => bandCaption(b, layout.bounds, font, planeLabel(b.partition)).box);
+        const labelOf = new Map(candidates.map((c) => [c.ref, c.text] as const));
+        return placeCaptions(candidates, font, bandBoxes).map((c) => ({ ...c, text: labelOf.get(c.ref)! }));
+    }, [ordered, layout, named, selected, font, planeLabel]);
     return (
         <g aria-hidden="true" pointerEvents="none" fontSize={font} fill={cssVar('text')}>
-            {shown.map((n) => {
-                const p = layout.positions.get(n.ref);
-                if (!p) return null;
-                return (
-                    <text key={n.ref} x={p[0] + nodeRadius(n.importance) + font * 0.4} y={p[1] + font * 0.35} fontWeight={n.ref === selected ? 700 : 400} stroke={cssVar('bg')} strokeWidth={font * 0.3} paintOrder="stroke">
-                        {n.label}
-                    </text>
-                );
-            })}
+            {placed.map((c) => (
+                <text key={c.ref} data-caption={c.ref} x={c.x} y={c.y} textAnchor={c.anchor} fontWeight={c.ref === selected ? 700 : 400} stroke={cssVar('bg')} strokeWidth={font * 0.3} paintOrder="stroke">
+                    {c.text}
+                </text>
+            ))}
         </g>
     );
 });
@@ -165,7 +182,7 @@ export function Graph2D({ rootId, nodes, edges, lens, selected, onSelect, planeL
                             <circle data-selected="true" cx={at[0]} cy={at[1]} r={nodeRadius(1) + 4 * perPx} fill="none" stroke={cssVar('accent')} strokeWidth={3 * perPx} pointerEvents="none" />
                         )}
                         {ringAt && <circle data-focus="true" cx={ringAt[0]} cy={ringAt[1]} r={nodeRadius(1) + 8 * perPx} fill="none" stroke={cssVar('accent')} strokeWidth={2} vectorEffect="non-scaling-stroke" strokeDasharray="4 3" pointerEvents="none" />}
-                        <Captions ordered={ordered} layout={layout} named={named} selected={selected} font={font} />
+                        <Captions ordered={ordered} layout={layout} named={named} selected={selected} font={font} planeLabel={planeLabel} />
                     </svg>
                 </>
             )}

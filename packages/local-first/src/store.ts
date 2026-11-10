@@ -31,8 +31,11 @@ import type {
   LocalFirstTransaction,
 } from './storeContract.js';
 import { clone } from './clone.js';
+import { indexKeyOf, type RecordIndex, type RecordIndexKey } from './recordIndex.js';
+import type { ScanVisit } from './storeContract.js';
 
 export * from './storeContract.js';
+export { defineRecordIndex, type RecordIndex, type RecordIndexKey } from './recordIndex.js';
 export { changeTouches, isEmptyDelta, resetDeltaOf, type LocalFirstChange, type LocalFirstDelta } from './localFirstDelta.js';
 
 /**
@@ -47,6 +50,35 @@ export async function selectRecords<T = unknown>(
 ): Promise<LocalRecord<T>[]> {
   const matches: LocalRecord<T>[] = [];
   await tx.scan<T>(type, (row) => {
+    if (!where || where(row)) matches.push(row as LocalRecord<T>);
+  });
+  return clone(matches);
+}
+
+/**
+ * Visit one group of a secondary index WITHOUT cloning (`LocalFirstTransaction.scanIndex`):
+ * the group's rows only. A transaction without `scanIndex` (a hand-rolled fake) is read by
+ * a filtered `scan` — same rows, same order, just not indexed.
+ */
+export async function scanByIndex<T = unknown>(
+  tx: LocalFirstTransaction,
+  index: RecordIndex<T>,
+  key: RecordIndexKey,
+  visit: ScanVisit<T>,
+): Promise<void> {
+  if (tx.scanIndex) return tx.scanIndex(index, key, visit);
+  return tx.scan<T>(index.entityType, (row) => (indexKeyOf(index as RecordIndex, row as LocalRecord) === key ? visit(row) : undefined));
+}
+
+/** `scanByIndex`, cloned — the group's rows for which `where` holds, and only those. */
+export async function selectByIndex<T = unknown>(
+  tx: LocalFirstTransaction,
+  index: RecordIndex<T>,
+  key: RecordIndexKey,
+  where?: (row: Readonly<LocalRecord<T>>) => boolean,
+): Promise<LocalRecord<T>[]> {
+  const matches: LocalRecord<T>[] = [];
+  await scanByIndex<T>(tx, index, key, (row) => {
     if (!where || where(row)) matches.push(row as LocalRecord<T>);
   });
   return clone(matches);

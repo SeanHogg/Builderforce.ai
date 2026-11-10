@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { layout3d } from '../scene/layout3d';
 import { codeFixture, mixedFixture } from '../testing';
 import { fitView, layout2d, layout2dTask, nodeRadius } from './layout2d';
+import { PARTITIONS, partitionedFixture } from './testFixtures';
 
 const entries = (l: ReturnType<typeof layout2d>) => [...l.positions.entries()];
 
@@ -67,6 +68,41 @@ describe('fitView', () => {
         const v = fitView(l, 0, 0);
         expect(v.w).toBeGreaterThan(0);
         expect(v.h).toBeGreaterThan(0);
+    });
+});
+
+describe('layout2d with many partitions (the monorepo screen)', () => {
+    const f = partitionedFixture();
+    const l = layout2d('mono', f.nodes, f.edges);
+
+    it('draws a band for every partition, and every node — with its radius — inside its own band box', () => {
+        expect(new Set(l.bands.map((b) => b.partition))).toEqual(new Set(PARTITIONS));
+        for (const n of f.nodes) {
+            const [x, y] = l.positions.get(n.ref)!;
+            const r = nodeRadius(n.importance);
+            const band = l.bands.find((b) => b.partition === (n.partition ?? ''))!;
+            expect(y - r).toBeGreaterThanOrEqual(band.top);
+            expect(y + r).toBeLessThanOrEqual(band.top + band.height);
+            expect(x - r).toBeGreaterThanOrEqual(l.bounds.minX);
+            expect(x + r).toBeLessThanOrEqual(l.bounds.maxX);
+        }
+    });
+
+    it('spreads each band\'s nodes out instead of stacking them on one point', () => {
+        for (const b of l.bands) {
+            const ys = f.nodes.filter((n) => (n.partition ?? '') === b.partition).map((n) => l.positions.get(n.ref)!);
+            expect(new Set(ys.map((p) => `${p[0]},${p[1]}`)).size).toBeGreaterThan(ys.length / 2);
+        }
+    });
+
+    it('fits every band inside the fitted view', () => {
+        const v = fitView(l, 1200, 700);
+        for (const b of l.bands) {
+            expect(b.top).toBeGreaterThanOrEqual(v.y);
+            expect(b.top + b.height).toBeLessThanOrEqual(v.y + v.h);
+        }
+        expect(l.bounds.minX).toBeGreaterThanOrEqual(v.x);
+        expect(l.bounds.maxX).toBeLessThanOrEqual(v.x + v.w);
     });
 });
 

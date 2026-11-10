@@ -56,6 +56,9 @@ export interface SurfaceModel {
     /** The anti-pattern lit in the Tower (offenders, partners, the rest dimmed); null = none. */
     highlight: TowerHighlight | null;
     setHighlight(h: TowerHighlight | null): void;
+    /** The Map camera's look: false = the flat map, true = towers and pipes (2.5D). One layout serves both. */
+    towers: boolean;
+    setTowers(on: boolean): void;
     /** The staged fix flow of every finding worked on, by finding id: closing the drawer keeps an applied fix's Undo. */
     fixFlows: Readonly<Record<string, FixFlowState>>;
     dispatchFix(findingId: string, action: FixFlowAction): void;
@@ -107,6 +110,7 @@ export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGrap
     const [panel, setPanel] = useState<string | null>(null);
     const [resolving, setResolving] = useState<Finding | null>(null);
     const [highlight, setHighlight] = useState<TowerHighlight | null>(null);
+    const [towers, setTowers] = useState(false);
     const [fixFlows, dispatchFlows] = useReducer((m: Record<string, FixFlowState>, a: { id: string; action: FixFlowAction }) => ({ ...m, [a.id]: fixFlowReducer(m[a.id] ?? initialFlow(a.id), a.action) }), {});
     const dispatchFix = useCallback((id: string, action: FixFlowAction) => dispatchFlows({ id, action }), []);
     const historyChanged = opts.changed;
@@ -170,7 +174,7 @@ export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGrap
 
     return {
         stations, lines, coverage, overlay, drill, preset: presetOf(bindings), question, family, line, lineChosen: chosen !== null, station, step, path, lit,
-        context, pins, scope, pinned, panel, resolving, highlight, setHighlight, fixFlows, dispatchFix,
+        context, pins, scope, pinned, panel, resolving, highlight, setHighlight, towers, setTowers, fixFlows, dispatchFix,
         setPreset: (id) => setBindings(PRESETS[id]),
         setChannel: (channel, metric) => setBindings((b) => setChannel(b, channel, metric)),
         setPins: (on) => setBindings((b) => ({ ...b, pins: on ? 'on' : 'off' })),

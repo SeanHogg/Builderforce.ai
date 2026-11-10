@@ -8,6 +8,13 @@ export interface CoreLabels {
     title: string;
     regionLabel: string;
     loading: string;
+    /** The loading line once it has run a second: `{elapsed}` is a span ("1 min 12 s"). */
+    loadingElapsed: string;
+    /** The host's step the load is in now: `{phase}` is one of `loadPhases`. */
+    loadingPhase: string;
+    /** Under a load that has run past ten seconds, beside Copy diagnostics. */
+    loadingSlow: string;
+    loadPhases: Record<'partitions' | 'index' | 'nearDuplicates' | 'build' | 'pack' | 'server' | 'notHere', string>;
     /** Shown in the scene's corner while a fresh read replaces the graph on screen. */
     refreshing: string;
     /** The fresh read failed; the last graph stays drawn and this offers Retry. */
@@ -44,7 +51,6 @@ export interface CoreLabels {
     filesLoaded: string;
     showAll: string;
     view3d: string;
-    viewTower: string;
     viewList: string;
     /** The camera and drawer names (the switcher's and the header's buttons). */
     viewSystem: string;
@@ -205,6 +211,18 @@ export const CORE_DEFAULTS: CoreLabels = {
 title: 'Knowledge',
 regionLabel: 'Knowledge graph',
 loading: 'Loading the knowledge graph…',
+loadingElapsed: 'Loading the knowledge graph… {elapsed}',
+loadingPhase: 'Now: {phase}',
+loadingSlow: 'This is taking longer than usual. Copy the diagnostics to report it.',
+loadPhases: {
+    partitions: 'reading the project layout',
+    index: 'opening the search index',
+    nearDuplicates: 'finding near-duplicates',
+    build: 'building the graph',
+    pack: 'reading the knowledge pack',
+    server: 'fetching the server’s graph',
+    notHere: 'checking for a review on this machine',
+},
 refreshing: 'Updating…',
 refreshFailed: 'Couldn’t update — showing the last graph. Retry',
 errorTitle: 'The knowledge graph could not load',
@@ -250,12 +268,15 @@ legend: {
     area: 'Area',
     catSource: 'Source', catTest: 'Tests', catDoc: 'Docs', catConfig: 'Config', catStyle: 'Styles',
     catData: 'Data', catOther: 'Other',
+    shapesTitle: 'Shapes',
+    typeClass: 'Class or type', typeFunction: 'Function or method', typeSource: 'Source file', typeTest: 'Test',
+    typeStyle: 'Styles', typeConfig: 'Config', typeData: 'Data or schema', typeDoc: 'Document', typeSection: 'Section',
+    typeEntity: 'Entity', typeClaim: 'Claim or fact', typeExternal: 'Missing or external', typeSystem: 'System or package',
 },
 statsLine: '{nodes} nodes · {edges} edges · {sources} sources',
 filesLoaded: '{loaded} of {total} loaded',
 showAll: 'Show all',
 view3d: '3D',
-viewTower: 'Tower',
 viewList: 'List',
 viewSystem: 'System',
 viewHeat: 'Heat',

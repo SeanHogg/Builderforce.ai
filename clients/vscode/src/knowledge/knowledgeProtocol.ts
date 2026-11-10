@@ -90,7 +90,50 @@ export type KnowledgeCall =
   | { op: "excludeFromReview"; rootId: string; path: string }
   // Agent-run findings (PRD 46 §3.4): the recent local chats that ran tools, and one run's report.
   | { op: "agentRuns" }
-  | { op: "agentRunReport"; id: string; rootId?: string };
+  | { op: "agentRunReport"; id: string; rootId?: string }
+  // First-load triage: the timings of the recent scopes / lastSeen / load / baseline / syncStatus calls and the phase a load is in now.
+  | { op: "loadTrace" };
+
+/** One phase of a traced call (`partitions`, `index`, `nearDuplicates`, `build`, `pack`, `server`, `notHere`) and how long it took. */
+export interface KnowledgeLoadPhase { phase: string; ms: number }
+
+/** One finished call the host timed (`knowledgeLoadTrace.ts`). The view restates this as `LoadTraceEntry`. */
+export interface KnowledgeLoadTraceEntry {
+  op: string;
+  rootId?: string;
+  /** Epoch ms. */
+  startedAt: number;
+  durationMs: number;
+  /** `null`: the call answered nothing (a miss, no review). */
+  outcome: "ok" | "null" | "error";
+  error?: string;
+  phases: KnowledgeLoadPhase[];
+  /** What answered a `load` (`local`, `pack`, `server`, `not-here`). */
+  via?: string;
+  nodes?: number;
+  edges?: number;
+  sources?: number;
+  truncated?: boolean;
+  focus?: boolean;
+  maxNodes?: number;
+  /** Rows answered (scopes). */
+  count?: number;
+  /** Near-duplicate pairs the index handed the build. */
+  nearDuplicates?: number;
+  hostLag?: KnowledgeHostLag;
+}
+
+/** A call still running: the phases it is in now (a load reads partitions and the index at once). */
+export interface KnowledgeLoadInFlight {
+  op: string;
+  rootId?: string;
+  startedAt: number;
+  phases: { phase: string; startedAt: number }[];
+  hostLag?: KnowledgeHostLag;
+}
+
+/** `loadTrace`'s answer: the latest finished calls (oldest first), the running ones, and the host's clock. The view restates this as `LoadTrace`. */
+export interface KnowledgeLoadTrace { now: number; entries: KnowledgeLoadTraceEntry[]; inFlight: KnowledgeLoadInFlight[] }
 
 /** How a run ended; `interrupted` is the host's own word for a record left `running` by a window that closed. */
 export type KnowledgeRunOutcome = NonNullable<ReviewRun["outcome"]> | "interrupted";

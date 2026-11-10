@@ -4,6 +4,7 @@
  */
 
 import type { PanelProps } from '../../registry';
+import { QuietButton } from '../../ui';
 import { TYPE } from '../../ui/type';
 import { Section } from '../ui';
 import { AgentRunList } from './AgentRunList';
@@ -14,11 +15,18 @@ import { useAgentRuns } from './useAgentRuns';
 
 export function AgentRunsPanel({ graph, source, labels, onShow }: PanelProps) {
     const t = labels.surface.agentRuns;
-    const { list, selected, detail, select } = useAgentRuns(source?.agentRuns, graph.scope.rootId);
+    const { list, selected, detail, select, retry } = useAgentRuns(source?.agentRuns, graph.scope.rootId);
     const note = (text: string, testId: string) => <p data-testid={testId} role="status" style={{ ...TYPE.bodyMuted, margin: 0 }}>{text}</p>;
 
     if (list.state === 'loading') return note(t.loading, 'kg-agent-runs-loading');
-    if (list.state === 'failed') return note(t.failed, 'kg-agent-runs-failed');
+    if (list.state === 'failed') {
+        return (
+            <div style={{ display: 'grid', gap: 8, justifyItems: 'start' }}>
+                {note(t.failed, 'kg-agent-runs-failed')}
+                <QuietButton data-testid="kg-agent-runs-retry" onClick={retry}>{labels.retry}</QuietButton>
+            </div>
+        );
+    }
     if (list.runs.length === 0) return note(t.emptyRuns, 'kg-agent-runs-empty');
 
     return (

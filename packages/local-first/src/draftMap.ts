@@ -20,6 +20,11 @@ export class DraftMap<V> {
 
   constructor(private readonly base: ReadonlyMap<string, V>) {}
 
+  /** The draft wrote nothing to this map: a read can walk the committed one directly. */
+  get untouched(): boolean {
+    return this.changes.size === 0;
+  }
+
   get(key: string): V | undefined {
     const change = this.changes.get(key);
     if (!change) return this.base.get(key);

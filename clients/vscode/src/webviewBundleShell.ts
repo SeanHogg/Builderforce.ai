@@ -33,6 +33,46 @@ export interface BundleShellInput {
    * screen drawn before it could not otherwise be translated.
    */
   bootLabel?: string;
+  /**
+   * The localized copy of the ROOT error fallback (`webview/src/RootBoundary.tsx`). A
+   * crash can happen before `init` delivers the label bundle — or take down the very
+   * tree that holds it — so these ride the document itself, as a JSON data block.
+   */
+  bootStrings?: RootFallbackStrings;
+}
+
+/** The root error fallback's copy, localized by the host and embedded at boot. */
+export interface RootFallbackStrings {
+  title: string;
+  body: string;
+  reload: string;
+  copy: string;
+}
+
+/** The `id` of the `<script type="application/json">` block that carries {@link RootFallbackStrings}. */
+export const BOOT_STRINGS_ELEMENT_ID = "bf-boot-strings";
+
+/**
+ * JSON for an inline `<script>` data block. Every `<` is escaped, so no string can
+ * close the element (`</script>`) or open a comment (`<!--`). A data block is never
+ * parsed as script, so nothing else needs escaping, and the result is still valid
+ * JSON: the escape sequence parses back to `<`.
+ */
+export function inlineJson(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, "\\u003c");
+}
+
+/**
+ * The same document with a NEW nonce — what "Reload panel" assigns back to
+ * `webview.html`. VS Code ignores an assignment of an identical string, so a reload
+ * needs a different document; swapping the nonce (CSP and every script tag together)
+ * gives one that is otherwise byte-for-byte what the panel booted with. A shell with
+ * no nonce gets a reload marker instead.
+ */
+export function withFreshNonce(html: string, nonce: string = makeNonce()): string {
+  const current = /'nonce-([A-Za-z0-9+/=]+)'/.exec(html)?.[1];
+  if (current) return html.split(current).join(nonce);
+  return `${html.replace(/<!-- bf-reload [A-Za-z0-9]+ -->$/, "")}<!-- bf-reload ${nonce} -->`;
 }
 
 /** Escape a value for a double-quoted HTML attribute. */
@@ -74,9 +114,13 @@ export function bundleCsp({ cspSource, nonce, apiOrigin }: Pick<BundleShellInput
 }
 
 export function renderBundleShell(input: BundleShellInput): string {
-  const { nonce, assetUrl, title, preludeScript, bootLabel } = input;
+  const { nonce, assetUrl, title, preludeScript, bootLabel, bootStrings } = input;
   const prelude = preludeScript ? `\n<script nonce="${nonce}">${preludeScript}</script>` : "";
   const bootAttr = bootLabel ? ` data-boot-label="${escapeAttr(bootLabel)}"` : "";
+  // A data block never executes, so the CSP does not gate it; the nonce is carried anyway.
+  const strings = bootStrings
+    ? `\n<script type="application/json" id="${BOOT_STRINGS_ELEMENT_ID}" nonce="${nonce}">${inlineJson(bootStrings)}</script>`
+    : "";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -87,7 +131,7 @@ export function renderBundleShell(input: BundleShellInput): string {
 <title>${title}</title>${prelude}
 </head>
 <body>
-<div id="root"${bootAttr}></div>
+<div id="root"${bootAttr}></div>${strings}
 <script type="module" nonce="${nonce}" src="${assetUrl("index.js")}"></script>
 </body>
 </html>`;

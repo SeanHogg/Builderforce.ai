@@ -27,7 +27,7 @@ export const attentionFirst = (sections: readonly DiagnosticSection[]): Diagnost
 export function DiagnosticsTab({ labels, diagnostics }: DiagnosticsTabProps) {
     const r = labels.surface.run.review;
     const [stamp, setStamp] = useState(0);
-    const titles: Record<DiagnosticSectionId, string> = { graph: r.diagGraph, review: r.diagReview, coverage: r.diagCoverage, lines: r.diagLines, sync: r.diagSync, findings: r.diagFindings };
+    const titles: Record<DiagnosticSectionId, string> = { graph: r.diagGraph, review: r.diagReview, load: r.diagLoad, coverage: r.diagCoverage, lines: r.diagLines, sync: r.diagSync, findings: r.diagFindings };
     // A snapshot of the moment the tab opened or Refresh was pressed; a failure to build it leaves the tab empty rather than breaking the panel.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const taken = useMemo((): Diagnostics | null => { try { return diagnostics?.() ?? null; } catch { return null; } }, [diagnostics, stamp]);

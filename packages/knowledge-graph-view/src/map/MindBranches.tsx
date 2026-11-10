@@ -10,7 +10,7 @@ import { counted, isOne } from '../surface/plural';
 import { kindLabel } from '../names';
 import { cssVar } from '../scene/themeColors';
 import { labelFitsAt } from './labelBudget';
-import { SHAPE_PATHS } from '../shapes';
+import { DASHED_SHAPES, SHAPE_PATHS } from '../shapes';
 import type { MapKind, MindMap as MindMapModel, PlacedBranch } from './mindMapModel';
 
 const MAX_LABEL = 24;
@@ -88,8 +88,9 @@ export const Branches = memo(function Branches(p: LayerProps) {
                             the branch plus a uniform scale by its radius draws it exactly where the dot was. */}
                         <path
                             data-shape={b.shape} transform={`translate(${b.x} ${b.y}) scale(${r})`} pointerEvents="none"
-                            d={SHAPE_PATHS[b.shape]} fill={b.kind === 'more' ? cssVar('bg') : cssVar(b.tone)}
+                            d={SHAPE_PATHS[b.shape]} fill={b.kind === 'more' || DASHED_SHAPES.has(b.shape) ? cssVar('bg') : cssVar(b.tone)}
                             stroke={cssVar(b.tone)} strokeWidth={1.5 / r} vectorEffect="non-scaling-stroke"
+                            {...(DASHED_SHAPES.has(b.shape) ? { strokeDasharray: '3 2' } : {})}
                         />
                         {active && <circle data-selected="true" cx={b.x} cy={b.y} r={r + 4 * perPx} fill="none" stroke={cssVar('accent')} strokeWidth={3 * perPx} pointerEvents="none" />}
                         {labelled && !onTop(b) && <BranchLabel b={b} text={w.text} r={r} font={font} bold={root || b.kind === 'folder'} />}

@@ -18,6 +18,7 @@ import { litStations, questionDef } from './questions';
 import type { CameraDef, SceneProps } from './registry';
 import { stationRolesOf } from './towerHighlight';
 import type { Station } from './stations';
+import { Segmented } from './ui';
 import { TYPE } from './ui/type';
 import { ArchitectureStyleCamera } from './ArchitectureStyleCamera';
 import { FourPlusOneCamera } from './FourPlusOneCamera';
@@ -32,7 +33,7 @@ import { ScaleZoom } from './zoom';
 
 /**
  * The cameras made of HTML (System, Heat, Sequence, List) register their zoom through CSS scale;
- * the SVG ones (Map, Tower, Graph, Mind map) register their viewBox pan/zoom themselves. The WebGL
+ * the SVG ones (Map, flat or towers; Graph; Mind map) register their viewBox pan/zoom themselves. The WebGL
  * 3D view registers none (its orbit controls own the wheel), so the overlay disables +, − and Fit there.
  * Wrapped once at module level, so a camera keeps its identity (and its state) across renders.
  */
@@ -82,7 +83,7 @@ function GraphCamera(p: SceneProps) {
     );
 }
 
-/** The WebGL 3D view: towers on planes, orbit controls. Its own camera beside the SVG Tower. */
+/** The WebGL 3D view: towers on planes, orbit controls. Its own camera beside the Map's 2.5D towers look. */
 function Scene3DCamera(p: SceneProps) {
     const { graph, drawn, lens, labels, selected, surface } = p;
     // The overlay channels: height = size, fill band = ring, wireframe = untested, pipe width = width.
@@ -131,8 +132,25 @@ function ListCamera(p: SceneProps) {
 const NO_PINS: readonly never[] = [];
 const noop = (): void => undefined;
 
-/** The transit scene; `tower` draws the same stations, lines and ends with towers for stations and pipes for lines. */
-function TransitScene({ surface, labels, reducedMotion, graph, variant }: SceneProps & { variant: 'map' | 'tower' }) {
+/**
+ * The Map's look: flat, or the same stations, lines and ends as towers and pipes (2.5D). One camera, one layout:
+ * the toggle only changes how the marks are drawn, so switching never lays the map out again.
+ */
+function MapLook({ towers, labels, onChange }: { towers: boolean; labels: SceneProps['labels']; onChange(on: boolean): void }) {
+    const look = labels.surface.map.look;
+    return (
+        <div data-testid="kg-map-look" style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 12px 0', minWidth: 0 }}>
+            <Segmented
+                label={look.label} value={towers ? 'towers' : 'flat'} onChange={(id) => onChange(id === 'towers')}
+                items={[{ id: 'flat', label: look.flat, title: look.flatTip }, { id: 'towers', label: look.towers, title: look.towersTip }]}
+            />
+        </div>
+    );
+}
+
+/** The Map camera: the transit scene, flat or (the look toggle) with towers for stations and pipes for lines. */
+function TransitCamera({ surface, labels, reducedMotion, graph }: SceneProps) {
+    const variant = surface.towers ? 'tower' : 'map';
     const q = questionDef(surface.question);
     // Inside a drilled level the map draws that level's own stations and lines, with the bindings unchanged,
     // and the active question and lens are asked of THAT level's stations and lines.
@@ -158,6 +176,7 @@ function TransitScene({ surface, labels, reducedMotion, graph, variant }: SceneP
     const roles = useMemo(() => (highlight ? stationRolesOf(highlight.roles, stationModel) : undefined), [highlight, stationModel]);
     return (
         <>
+        <MapLook towers={surface.towers} labels={labels} onChange={surface.setTowers} />
         <TransitMap
             roles={roles}
             stations={view?.stations ?? surface.stations} lines={view?.lines ?? surface.lines} overlay={overlay} labels={labels} lit={lit}
@@ -170,9 +189,6 @@ function TransitScene({ surface, labels, reducedMotion, graph, variant }: SceneP
         </>
     );
 }
-
-function TransitCamera(p: SceneProps) { return <TransitScene {...p} variant="map" />; }
-function TowerCamera(p: SceneProps) { return <TransitScene {...p} variant="tower" />; }
 
 const SystemCamera = scaled(SystemTiers);
 const HeatCamera = scaled(HeatGrid);
@@ -190,7 +206,6 @@ export const CAMERAS: readonly CameraDef[] = [
     { id: 'system', labelKey: 'viewSystem', component: SystemCamera, available: () => true },
     { id: 'graph', labelKey: 'viewGraph', component: GraphCamera, available: () => true },
     { id: 'map', labelKey: 'viewMap', component: MindCamera, available: () => true },
-    { id: 'tower', labelKey: 'viewTower', component: TowerCamera, available: (_graph, env) => env.hasLines },
     { id: '3d', labelKey: 'view3d', component: Scene3DCamera, available: (_graph, env) => env.webgl },
     { id: 'heat', labelKey: 'viewHeat', component: HeatCamera, available: () => true },
     // The architecture cameras read the source files only: a graph with none (docs, nothing reviewed) hides them.

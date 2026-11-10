@@ -34,6 +34,9 @@ export class CanvasBoundary extends Component<
     /** Changes when the board behind the boundary changes (another session) — a new
      *  board gets a fresh attempt instead of inheriting the last one's failure. */
     resetKey?: string | number;
+    /** False for a surface that is not the board (the Knowledge view): the host's
+     *  `canvas.error` toast names the BOARD, so the error is logged here instead. */
+    report?: boolean;
   },
   { failed: boolean }
 > {
@@ -47,6 +50,10 @@ export class CanvasBoundary extends Component<
     // The HOST reports it: a webview's console is not somewhere anyone looks, and a
     // board that failed to draw is exactly the class of bug that gets described as
     // "it just doesn't load" with nothing to go on.
+    if (this.props.report === false) {
+      console.error('[builderforce] view failed to render', error, info.componentStack);
+      return;
+    }
     post('canvas.error', {
       message: error.message,
       stack: error.stack?.slice(0, 4_000),

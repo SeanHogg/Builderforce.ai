@@ -7,7 +7,7 @@ vi.mock("@seanhogg/builderforce-brain-embedded/runFindings", async (importOrigin
 });
 
 import { detectRunFindings } from "@seanhogg/builderforce-brain-embedded/runFindings";
-import { createAgentRuns, MEMO_SIZE, type AgentRunsStore } from "./agentRuns";
+import { CHATS_SCANNED, createAgentRuns, MEMO_SIZE, type AgentRunsStore } from "./agentRuns";
 
 const detect = vi.mocked(detectRunFindings);
 
@@ -105,6 +105,55 @@ describe("createAgentRuns", () => {
     expect(store.listChats).not.toHaveBeenCalled();
     expect((await createAgentRuns(store, () => 2).report("3"))?.summary.id).toBe("3");
     expect(store.listChats).not.toHaveBeenCalled();
+  });
+
+  it("answers an empty list (never undefined) when nothing ran or no chat is recorded", async () => {
+    expect(await createAgentRuns(fakeStore([], new Map()), () => 1).list()).toEqual([]);
+    expect(await createAgentRuns(fakeStore([chat(1, "No tools")], new Map([[1, [msg("user", "hi")]]])), () => undefined).list()).toEqual([]);
+  });
+
+  it("looks through the most recent CHATS_SCANNED chats only", async () => {
+    const chats = Array.from({ length: CHATS_SCANNED + 10 }, (_, i) => chat(i + 1, `Chat ${i + 1}`));
+    const store = fakeStore(chats, new Map(chats.map((c) => [c.id, [msg("user", "hi")]])));
+    await createAgentRuns(store, () => undefined).list();
+    expect(store.listChats).toHaveBeenCalledWith({ limit: CHATS_SCANNED });
+    expect(store.getMessages).toHaveBeenCalledTimes(CHATS_SCANNED);
+  });
+
+  // regression: the drawer sat on "Reading the recorded agent runs…" — one full store read per chat, unbounded.
+  it("stops fresh reads once the budget is spent, still answering memo hits, and the next list picks up the rest", async () => {
+    const chats = [chat(1, "One"), chat(2, "Two"), chat(3, "Three")];
+    const messages = new Map<number, BrainMessage[]>(chats.map((c) => [c.id, [msg("user", "go"), step("read_file")]]));
+    const store = fakeStore(chats, messages);
+    let clock = 0;
+    // Each message read costs 10 ms on this clock; the budget allows the first read only.
+    store.getMessages.mockImplementation(async (chatId: number) => { clock += 10; return messages.get(chatId) ?? []; });
+    const runs = createAgentRuns(store, () => undefined, { budgetMs: 5, now: () => clock });
+    expect((await runs.list()).map((s) => s.id)).toEqual(["1"]);
+    expect(store.getMessages).toHaveBeenCalledTimes(1);
+    expect((await runs.list()).map((s) => s.id)).toEqual(["1", "2"]);
+    expect((await runs.list()).map((s) => s.id)).toEqual(["1", "2", "3"]);
+    expect(store.getMessages).toHaveBeenCalledTimes(3);
+  });
+
+  it("leaves out a chat whose messages cannot be read instead of failing the list", async () => {
+    const messages = new Map<number, BrainMessage[]>([[1, [msg("user", "go"), step("read_file")]], [2, [msg("user", "go"), step("read_file")]]]);
+    const store = fakeStore([chat(1, "One"), chat(2, "Broken")], messages);
+    store.getMessages.mockImplementation(async (chatId: number) => {
+      if (chatId === 2) throw new Error("No such local chat: 2");
+      return messages.get(chatId) ?? [];
+    });
+    expect((await createAgentRuns(store, () => undefined).list()).map((s) => s.id)).toEqual(["1"]);
+  });
+
+  it("shares one read between overlapping list calls", async () => {
+    const store = fakeStore([chat(1, "One")], new Map([[1, [msg("user", "go"), step("read_file")]]]));
+    const runs = createAgentRuns(store, () => undefined);
+    const [a, b] = await Promise.all([runs.list(), runs.list()]);
+    expect(a).toBe(b);
+    expect(store.listChats).toHaveBeenCalledTimes(1);
+    await runs.list();
+    expect(store.listChats).toHaveBeenCalledTimes(2);
   });
 
   it("answers null for an unknown or non-run chat", async () => {

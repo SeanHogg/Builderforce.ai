@@ -17,7 +17,7 @@ export interface TowerHighlight {
     roles: ReadonlyMap<string, TowerRole>;
 }
 
-/** The SVG Tower draws stations, not files: a station takes its strongest role (an offender over a partner). */
+/** The Map's towers look draws stations, not files: a station takes its strongest role (an offender over a partner). */
 export function stationRolesOf(roles: ReadonlyMap<string, TowerRole>, model: Pick<StationModel, 'stationOf'>): Map<string, TowerRole> {
     const out = new Map<string, TowerRole>();
     for (const [ref, role] of roles) {
@@ -27,9 +27,12 @@ export function stationRolesOf(roles: ReadonlyMap<string, TowerRole>, model: Pic
     return out;
 }
 
-/** Where Show in Tower goes: the WebGL 3D view when there is one, else the SVG Tower; null when neither camera exists. */
-export function towerCameraOf(cameras: readonly string[] | undefined): '3d' | 'tower' | null {
-    return cameras?.includes('3d') ? '3d' : cameras?.includes('tower') ? 'tower' : null;
+/**
+ * Where Show in Tower goes: the WebGL 3D view when there is one, else the Map (`transit`) with its towers look on;
+ * null when neither camera exists.
+ */
+export function towerCameraOf(cameras: readonly string[] | undefined): '3d' | 'transit' | null {
+    return cameras?.includes('3d') ? '3d' : cameras?.includes('transit') ? 'transit' : null;
 }
 
 /** One file lit as the offender of a kind, with no finding behind it (a god module read from its badge on a graph reviewed before the finding existed). */

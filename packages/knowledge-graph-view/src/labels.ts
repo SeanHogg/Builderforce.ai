@@ -86,6 +86,7 @@ export function resolveLabels(partial?: Partial<KnowledgeGraphLabels>): Knowledg
         fix: { ...d.fix, ...partial.fix },
         origins: { ...d.origins, ...partial.origins },
         phases: { ...d.phases, ...partial.phases },
+        loadPhases: { ...d.loadPhases, ...partial.loadPhases },
         surface: mergeSurface(d.surface, partial.surface),
     };
 }

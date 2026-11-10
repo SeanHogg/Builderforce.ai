@@ -69,6 +69,12 @@ describe('tower geometry', () => {
 });
 
 describe('TowerMark', () => {
+    it('cuts the station\'s mark-type silhouette into the body face, and none without a type', () => {
+        const { container } = mark({ shape: 'diamond' });
+        expect(part(container, 'type')!.querySelector('[data-shape="diamond"]')).not.toBeNull();
+        expect(part(mark().container, 'type')).toBeNull();
+    });
+
     it('draws a 18px body of the computed height, a side face and a top ellipse, and activates like a button', () => {
         const onActivate = vi.fn();
         const { container, getByRole } = mark({ onActivate });

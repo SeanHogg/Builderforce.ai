@@ -7,6 +7,7 @@
  */
 
 import { cssVar, type ThemeTone } from '../scene/themeColors';
+import { DASHED_SHAPES, SHAPE_PATHS, type NodeShape } from '../shapes';
 import type { ChannelId, ChannelStatus, MetricId } from './overlays';
 import { LINE_TONES, SEVERITY_TONES } from './overlays';
 import { FONT_UI, TYPE } from './ui/type';
@@ -73,4 +74,44 @@ export function LegendGlyph({ channel, metric, status }: LegendGlyphProps) {
             );
     }
     return <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden="true" data-glyph={channel} style={{ flex: 'none' }}>{body}</svg>;
+}
+
+export interface ShapePathProps {
+    shape: NodeShape;
+    x: number;
+    y: number;
+    /** Radius in the parent's units. */
+    r: number;
+    /** A CSS colour (a `cssVar` token). */
+    fill: string;
+    /** Outline width in screen px. */
+    strokeWidth?: number;
+    /** Vertical squash (a tower top seen at an angle); 1 = flat on. */
+    squash?: number;
+    opacity?: number;
+}
+
+/**
+ * ONE node mark in SVG: the `shapes.ts` outline at (x, y), filled in its tone with a background
+ * outline — or, for the outside (missing / external), hollow with a dashed outline in its tone.
+ * Every SVG surface (Map stations and towers, Mind map, legends) draws a node's shape with this.
+ */
+export function ShapePath({ shape, x, y, r, fill, strokeWidth = 1.5, squash = 1, opacity }: ShapePathProps) {
+    const dashed = DASHED_SHAPES.has(shape);
+    return (
+        <path
+            data-shape={shape} d={SHAPE_PATHS[shape]} transform={`translate(${x} ${y}) scale(${r} ${r * squash})`} vectorEffect="non-scaling-stroke"
+            fill={dashed ? cssVar('bg') : fill} stroke={dashed ? fill : cssVar('bg')} strokeWidth={dashed ? Math.max(1.5, strokeWidth) : strokeWidth}
+            {...(dashed ? { strokeDasharray: '3 2' } : {})} {...(opacity !== undefined ? { opacity } : {})} pointerEvents="none"
+        />
+    );
+}
+
+/** A shape's legend glyph: a 14px square holding the mark. Decorative: the row's text names the type. */
+export function ShapeGlyph({ shape, tone = 'text', size = 14 }: { shape: NodeShape; tone?: ThemeTone; size?: number }) {
+    return (
+        <svg width={size} height={size} viewBox="-1.4 -1.4 2.8 2.8" aria-hidden="true" data-glyph-shape={shape} style={{ flex: 'none' }}>
+            <ShapePath shape={shape} x={0} y={0} r={1} fill={cssVar(tone)} strokeWidth={1} />
+        </svg>
+    );
 }

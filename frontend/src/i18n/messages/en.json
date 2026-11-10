@@ -37316,6 +37316,18 @@
     "title": "Knowledge",
     "regionLabel": "Knowledge graph",
     "loading": "Loading the knowledge graph…",
+    "loadingElapsed": "Loading the knowledge graph… {elapsed}",
+    "loadingPhase": "Now: {phase}",
+    "loadingSlow": "This is taking longer than usual. Copy the diagnostics to report it.",
+    "loadPhases": {
+      "partitions": "reading the project layout",
+      "index": "opening the search index",
+      "nearDuplicates": "finding near-duplicates",
+      "build": "building the graph",
+      "pack": "reading the knowledge pack",
+      "server": "fetching the server’s graph",
+      "notHere": "checking for a review on this machine"
+    },
     "refreshing": "Updating…",
     "refreshFailed": "Couldn’t update — showing the last graph. Retry",
     "errorTitle": "The knowledge graph could not load",
@@ -37390,13 +37402,26 @@
       "catConfig": "Config",
       "catStyle": "Styles",
       "catData": "Data",
-      "catOther": "Other"
+      "catOther": "Other",
+      "shapesTitle": "Shapes",
+      "typeClass": "Class or type",
+      "typeFunction": "Function or method",
+      "typeSource": "Source file",
+      "typeTest": "Test",
+      "typeStyle": "Styles",
+      "typeConfig": "Config",
+      "typeData": "Data or schema",
+      "typeDoc": "Document",
+      "typeSection": "Section",
+      "typeEntity": "Entity",
+      "typeClaim": "Claim or fact",
+      "typeExternal": "Missing or external",
+      "typeSystem": "System or package"
     },
     "statsLine": "{nodes} nodes · {edges} edges · {sources} sources",
     "filesLoaded": "{loaded} of {total} loaded",
     "showAll": "Show all",
     "view3d": "3D",
-    "viewTower": "Tower",
     "viewList": "List",
     "viewSystem": "System",
     "viewHeat": "Heat",
@@ -37902,6 +37927,13 @@
         "world": "the whole map",
         "drillReset": "The map changed, so the view went back out of {name}.",
         "satelliteAria": "{name}, inside {parent}",
+        "look": {
+          "label": "Map look",
+          "flat": "Flat",
+          "towers": "Towers",
+          "flatTip": "Draw the stations as flat marks",
+          "towersTip": "Draw each station as a tower and each line as a pipe"
+        },
         "card": {
           "close": "Close",
           "issueMore": "+{count} more",
@@ -38177,7 +38209,10 @@
       },
       "scene": {
         "edgesCapped": "Showing {shown} of {total} links",
-        "layingOut": "Laying out…"
+        "layingOut": "Laying out…",
+        "errorTitle": "This view hit an error",
+        "errorRetry": "Try again",
+        "errorBack": "Back"
       },
       "mind": {
         "moreFoldersOne": "+{count} folder",
@@ -38667,6 +38702,7 @@
           "diagRefresh": "Refresh",
           "diagGraph": "Graph",
           "diagReview": "Review and last run",
+          "diagLoad": "First load",
           "diagCoverage": "Data coverage",
           "diagLines": "Lines",
           "diagSync": "Sync and replica",

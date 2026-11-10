@@ -46,6 +46,7 @@ import { persistentHashCache } from "./hashCacheFile";
 import { reviewPortsFor } from "./reviewPortsFor";
 import { reviewRecords, useRecordMemento } from "./knowledgeSyncStatus";
 import { reviewParallelism } from "./review/extractPoolHost";
+import { UNTIMED, type LoadTimer } from "./knowledgeLoadTrace";
 
 /** Hashes remembered across reviews, so a re-review re-hashes only what changed on disk. */
 const hashCache: HashCache = new Map();
@@ -217,24 +218,31 @@ export interface GraphQuery { focus?: string[]; maxNodes?: number }
  * A root's graph, ALWAYS built here from the local store (PRD 41 A7) — linked or not, online or
  * not: the cut, the outline and every badge are computed from the local projection, so the map
  * never depends on the server. Null when this machine holds no review of the root.
+ *
+ * `timer` times its phases for the view's first-load diagnostics (`knowledgeLoadTrace.ts`); `onNearDuplicates`
+ * hears how many near-duplicate pairs the build got. Neither changes what is read or built.
  */
 export async function loadGraph(
   secrets: vscode.SecretStorage,
   rootId: string,
   q: GraphQuery = {},
+  timer: LoadTimer = UNTIMED,
+  onNearDuplicates?: (pairs: number) => void,
 ): Promise<KnowledgeGraph | null> {
   const root = rootById(rootId, workspaceFolders());
   if (!root) return null;
   const open = openRoot(secrets, root);
   // Read in parallel: the partitions and the index are independent inputs to the build.
   const [partitions, index] = await Promise.all([
-    readPartitions({ caps: buildLocalCapabilityProvider(root.folderPath) }),
-    getHostKnowledgeIndex(rootId).catch(() => undefined),
+    timer.phase("partitions", () => readPartitions({ caps: buildLocalCapabilityProvider(root.folderPath) })),
+    timer.phase("index", () => getHostKnowledgeIndex(rootId).catch(() => undefined)),
   ]);
-  return buildStoredGraph({
+  const nearDuplicates = index ? timer.phase("nearDuplicates", () => index.nearDuplicates()) : undefined;
+  if (nearDuplicates) onNearDuplicates?.(nearDuplicates.length);
+  return timer.phase("build", () => buildStoredGraph({
     rootId, store: open.store, manifest: open.manifest, packs: reviewPacks({ partitions }),
-    ...(index ? { nearDuplicates: index.nearDuplicates() } : {}),
+    ...(nearDuplicates ? { nearDuplicates } : {}),
     ...(q.focus ? { focus: q.focus } : {}),
     ...(q.maxNodes ? { maxNodes: q.maxNodes } : {}),
-  });
+  }));
 }

@@ -9,8 +9,6 @@ import type { KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowle
 import type { SymbolRecord } from '../../types';
 import { fileRefOf } from '../stations';
 
-export type SymbolSort = 'class' | 'function' | 'method';
-
 /**
  * How many of a package's files the view names in one request: advisory, so the request stays small. The HOST's
  * cap is the only one that binds (it validates, dedupes and truncates whatever it is sent).
@@ -32,8 +30,8 @@ export function withSymbolRecords(graph: KnowledgeGraph, records: readonly Symbo
     return { ...graph, nodes: [...graph.nodes, ...nodes] };
 }
 
-const CLASSY = /^(class|interface|type|enum|struct|trait|object)$/;
-const METHODY = /^(method|member|constructor)$/;
+/** The ONE symbol classifier lives with the mark-type registry (a symbol's sort picks its shape). */
+export { symbolSort, type SymbolSort } from '../../shapes';
 
 export const isSymbol = (n: KNode): boolean => n.kind === 'symbol';
 
@@ -42,16 +40,6 @@ export const shortName = (n: Pick<KNode, 'label'>): string => {
     const bare = n.label.replace(/\(.*$/, '');
     return bare.slice(bare.lastIndexOf('.') + 1) || bare;
 };
-
-export function symbolSort(n: KNode): SymbolSort {
-    const declared = String(n.badges?.symbolKind ?? n.badges?.kind ?? n.badges?.type ?? '').toLowerCase();
-    if (CLASSY.test(declared)) return 'class';
-    if (METHODY.test(declared)) return 'method';
-    if (declared !== '') return 'function';
-    const name = n.label.replace(/\(.*$/, '');
-    if (name.includes('.')) return 'method';
-    return /^[A-Z]/.test(name) ? 'class' : 'function';
-}
 
 /** The class a method belongs to, by name or ref; null for a free function or a class. */
 export function parentName(n: KNode): string | null {

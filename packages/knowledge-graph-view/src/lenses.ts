@@ -8,16 +8,16 @@
 import type { KEdge, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { fileCategory, FILE_CATEGORY_ORDER, type FileCategory } from './fileCategory';
 import type { ThemeTone } from './scene/themeColors';
+import { nodeShape, typeShape, type NodeShape } from './shapes';
 import type { LensId } from './types';
 
 export type NodeEmphasis = 'strong' | 'normal' | 'dim';
 
 /**
- * A node's SHAPE, read beside its colour so two kinds are never told apart by hue alone.
- * Every renderer maps these to its own primitive (SVG, instanced mesh, branch glyph), so a
- * kind keeps one recognisable silhouette across the Graph, Map, Tower and 3D views.
+ * A node's SHAPE, read beside its colour so two kinds are never told apart by hue alone. The ONE
+ * vocabulary (kind → role → shape) is `shapes.ts`; every renderer maps a shape to its own primitive.
  */
-export type NodeShape = 'circle' | 'square' | 'diamond' | 'triangle' | 'hexagon' | 'octagon' | 'pentagon' | 'star';
+export type { NodeShape } from './shapes';
 
 export interface NodeStyle {
     tone: ThemeTone;
@@ -61,26 +61,15 @@ const KIND_TONE: Record<string, ThemeTone> = {
     fact: 'nodeFact', missing: 'nodeMissing', area: 'nodeArea',
 };
 
-/** A distinct silhouette per concept, so colour is never the only cue (redundant encoding). Base kinds first. */
-const KIND_SHAPE: Record<string, NodeShape> = {
-    file: 'circle', section: 'square', symbol: 'diamond', entity: 'hexagon', claim: 'triangle',
-    fact: 'octagon', missing: 'star', area: 'pentagon',
-    // Finer code-symbol kinds a pack may emit: give each its own silhouette so a class, method,
-    // function, interface, type, enum, constant and module never collapse to the neutral dot.
-    class: 'hexagon', method: 'triangle', function: 'triangle', interface: 'square', type: 'square',
-    enum: 'octagon', constant: 'square', module: 'pentagon', struct: 'square', trait: 'diamond',
-    property: 'diamond', field: 'diamond', variable: 'circle', parameter: 'circle', macro: 'star',
-};
-
 export function kindTone(n: KNode): ThemeTone {
     if (n.stale) return 'stale';
     if (n.kind === 'file') return CATEGORY_TONE[fileCategory(n)];
     return KIND_TONE[n.kind] ?? 'catSource';
 }
 
-/** The shape a kind draws; unrecognised kinds keep the neutral dot. */
+/** The shape a node draws: its role's silhouette (`shapes.ts`); a file's role is what it holds. */
 export function kindShape(n: KNode): NodeShape {
-    return KIND_SHAPE[n.kind] ?? 'circle';
+    return nodeShape(n);
 }
 
 const base = (n: KNode, strong = false): NodeStyle =>
@@ -92,16 +81,16 @@ const isChanged = (n: KNode): boolean => n.badges?.added !== undefined || n.badg
 const isUnused = (n: KNode): boolean =>
     n.badges?.unused !== undefined || Number(n.badges?.unusedExports ?? 0) > 0 || Number(n.badges?.unusedDependencies ?? 0) > 0;
 
-/** The category legend rows, in display order (`FILE_CATEGORY_ORDER`), so the Legend names each file hue. */
-const CATEGORY_LEGEND = FILE_CATEGORY_ORDER.map((cat) => ({
-    tone: CATEGORY_TONE[cat], key: `cat${cat.charAt(0).toUpperCase()}${cat.slice(1)}`, shape: 'circle',
-})) as unknown as ReadonlyArray<{ tone: ThemeTone; key: string; shape?: NodeShape }>;
+/** The category legend rows, in display order (`FILE_CATEGORY_ORDER`), so the Legend names each file hue. A swatch: the shape key names the shapes. */
+const CATEGORY_LEGEND: ReadonlyArray<{ tone: ThemeTone; key: string; shape?: NodeShape }> = FILE_CATEGORY_ORDER.map((cat) => ({
+    tone: CATEGORY_TONE[cat], key: `cat${cat.charAt(0).toUpperCase()}${cat.slice(1)}`,
+}));
 
-const KIND_LEGEND = [
-    { tone: 'nodeSection', key: 'section', shape: 'square' }, { tone: 'nodeEntity', key: 'entity', shape: 'hexagon' },
-    { tone: 'nodeClaim', key: 'claim', shape: 'triangle' }, { tone: 'nodeFact', key: 'fact', shape: 'octagon' },
-    { tone: 'nodeArea', key: 'area', shape: 'pentagon' }, { tone: 'stale', key: 'stale' },
-] as const satisfies ReadonlyArray<{ tone: ThemeTone; key: string; shape?: NodeShape }>;
+const KIND_LEGEND: ReadonlyArray<{ tone: ThemeTone; key: string; shape?: NodeShape }> = [
+    { tone: 'nodeSection', key: 'section', shape: typeShape('section') }, { tone: 'nodeEntity', key: 'entity', shape: typeShape('entity') },
+    { tone: 'nodeClaim', key: 'claim', shape: typeShape('claim') }, { tone: 'nodeFact', key: 'fact', shape: typeShape('claim') },
+    { tone: 'nodeArea', key: 'area', shape: typeShape('source') }, { tone: 'stale', key: 'stale' },
+];
 
 export const LENSES: Record<LensId, LensDef> = {
     structure: {

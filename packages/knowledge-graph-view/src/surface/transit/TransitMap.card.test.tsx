@@ -8,6 +8,7 @@ import { buildLines } from '../lines';
 import { makeOverlay, PRESETS } from '../overlays';
 import { buildStations } from '../stations';
 import { TransitMap, type TransitMapProps } from '../TransitMap';
+import { TYPE_SHAPE } from '../../shapes';
 import { withDocs } from './testFixtures';
 
 const graph = withDocs();
@@ -117,12 +118,13 @@ describe('the station card on the map', () => {
 });
 
 describe('the map\'s drawing', () => {
-    it('draws a document station square and a dashed describes link, strong under Claims', () => {
+    it('draws a document station as the doc-type silhouette and a dashed describes link, strong under Claims', () => {
         const { container, rerender, props } = map();
         const doc = container.querySelector(`[data-station="${idOf('docs')}"]`)!;
         expect(doc.hasAttribute('data-doc')).toBe(true);
-        expect(doc.querySelector('rect')).not.toBeNull();
-        expect(container.querySelector(`[data-station="${idOf('API')}"] rect`)).toBeNull();
+        // A station draws its members' dominant mark type (shapes.ts): documents are the doc tile, code is not.
+        expect(doc.querySelector(`[data-shape="${TYPE_SHAPE.doc}"]`)).not.toBeNull();
+        expect(container.querySelector(`[data-station="${idOf('API')}"] [data-shape="${TYPE_SHAPE.doc}"]`)).toBeNull();
         const link = container.querySelector('[data-describes-link]')!;
         expect(link.getAttribute('opacity')).toBe('0.4');
         rerender(<TransitMap {...props} question="claims" />);

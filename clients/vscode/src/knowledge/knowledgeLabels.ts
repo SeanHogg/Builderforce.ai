@@ -17,5 +17,6 @@ export function knowledgeViewLabels(): Record<string, string> {
     "viz.showKnowledge": t("Show what this workspace knows: its knowledge graph"),
     "viz.showCanvas": t("Back to the Creation Canvas"),
     "viz.showChanges": t("Show the code changes this run made"),
+    "viz.knowledgeFailed": t("The Knowledge view hit an error. The other views are still here."),
   };
 }

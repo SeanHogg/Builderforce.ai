@@ -31,6 +31,8 @@ import { DescribeLinks, Satellites } from './transit/DocLinks';
 import { HopPath } from './transit/HopPath';
 import { StationCard } from './transit/StationCard';
 import { StationMark } from './transit/StationMark';
+import { stationTypes } from './transit/stationType';
+import { typeShape } from '../shapes';
 import { terminusText } from './transit/termini';
 import { byDepth, TowerMark, towerPinY } from './transit/TowerMark';
 import { TerminusMark } from './transit/TerminusMark';
@@ -41,6 +43,7 @@ import { useCardAnchor } from './transit/useCardAnchor';
 import { useTransitLabels } from './transit/useTransitLabels';
 import { LayingOut } from './LayingOut';
 import { useTransitModel } from './transit/useTransitModel';
+import { useSteadyWidth } from './transit/steadyWidth';
 import { FONT_UI, TYPE } from './ui/type';
 import type { Pin } from './useSurface';
 
@@ -95,8 +98,10 @@ export function TransitMap(p: TransitMapProps) {
     const cardRef = useRef<HTMLDivElement>(null);
     const width = useContainerWidth(hostRef);
     const compact = width > 0 && width < COMPACT_WIDTH;
-    const model = useTransitModel({ graph: p.graph ?? null, stations, lines, overlay, width, order: p.order });
-    const { layout, layoutPending } = model;
+    // Laid out for a width a page scrollbar toggling cannot move (`transit/steadyWidth.ts`: that loop was the flicker).
+    const layoutWidth = useSteadyWidth(width);
+    const model = useTransitModel({ graph: p.graph ?? null, stations, lines, overlay, width: layoutWidth, order: p.order });
+    const { layout, layoutPending, refreshing } = model;
     // Zoom is the viewBox only (the scene overlay's +, − and Fit): no wheel or drag hook, so the page still scrolls over the map.
     const fitted = useMemo(() => ({ x: 0, y: 0, w: layout.width, h: layout.height }), [layout.width, layout.height]);
     const zoom = usePanZoom(fitted, layout);
@@ -143,6 +148,8 @@ export function TransitMap(p: TransitMapProps) {
     const claims = p.question === 'claims';
     const tower = p.variant === 'tower';
     const Mark = tower ? TowerMark : StationMark;
+    // Each station's mark type (its members' dominant type), so a station keeps the shape its files have in every view.
+    const types = useMemo(() => stationTypes(p.graph ?? null, stations), [p.graph, stations]);
     const marked = useMemo(() => (tower ? byDepth(model.drawn, layout.positions) : model.drawn), [tower, model.drawn, layout.positions]);
 
     // Unfold: the satellites of the unfolded station, which labels and the card keep clear of.
@@ -190,14 +197,17 @@ export function TransitMap(p: TransitMapProps) {
                 <svg
                     role="group" aria-label={p.label} width={layout.width} height={layout.height} viewBox={zoom.viewBox ?? `0 0 ${layout.width} ${layout.height}`}
                     // Wider than the container: scroll sideways at full size rather than shrink the labels to a few pixels.
-                    style={{ display: 'block', maxWidth: width > 0 && layout.width > width ? 'none' : '100%', color: cssVar('text') }}
+                    // Within the scrollbar slack it scales to its box instead: only a layout wider than both is a real overflow.
+                    style={{ display: 'block', maxWidth: width > 0 && layout.width > Math.max(width, layoutWidth) ? 'none' : '100%', color: cssVar('text') }}
                 >
                     <desc>{fillTemplate(s.mapDescription, { lines: counted(labels, 'line', lines.lines.length), stations: counted(labels, 'station', layout.drawn.length) })}</desc>
                     <TransitBands bands={layout.bands} width={layout.width} walls={model.walls} labels={labels} />
                     <DescribeLinks routes={model.describes} emphasised={claims} label={s.map.describes} />
 
                     {layout.routes.map((r) => {
-                        const line = lineById.get(r.lineId)!;
+                        // A route of a layout laid out for other lines (the level before a drill) has no line here: skip it, never throw.
+                        const line = lineById.get(r.lineId);
+                        if (!line) return null;
                         const from = stations.byId.get(r.from), to = stations.byId.get(r.to);
                         const untested = from && to ? segmentUntested(from, to) === true : false;
                         const off = dim(r.from, r.to);
@@ -236,6 +246,7 @@ export function TransitMap(p: TransitMapProps) {
                                 doc={model.docs.has(station.id)} interchange={inter ? counted(labels, 'interchange', inter.length) : null} label={label}
                                 aria={fillTemplate(s.stationAria, { name: station.name, layer: layerName(station.layer ?? OTHER_LAYER), files: counted(labels, 'file', station.files) })}
                                 accentNote={notes.get(station.id)?.accent === true} reducedMotion={reducedMotion} complexity={station.cx} onActivate={() => pick(station.id)}
+                                shape={types.has(station.id) ? typeShape(types.get(station.id)!) : undefined}
                             />
                         );
                     })}
@@ -259,6 +270,8 @@ export function TransitMap(p: TransitMapProps) {
                     })}
                 </svg>
                 )}
+                {/* A newer layout of the same picture is on its way: the map stays, a quiet note in its corner says so. */}
+                {refreshing && <LayingOut labels={labels} corner />}
                 {p.levelNote && <p data-level-note style={{ margin: 0, padding: '4px 12px', ...TYPE.bodyMuted }}>{p.levelNote}</p>}
                 {undrawn > 0 && <p style={{ margin: 0, padding: '4px 12px', ...TYPE.bodyMuted }}>{counted(labels, 'moreStations', undrawn)}</p>}
                 {layout.hiddenOnLine > 0 && <p data-more-stops style={{ margin: 0, padding: '4px 12px', ...TYPE.bodyMuted }}>{counted(labels, 'moreStops', layout.hiddenOnLine)}</p>}

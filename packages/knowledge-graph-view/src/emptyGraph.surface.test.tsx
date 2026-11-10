@@ -38,6 +38,8 @@ describe('the surface over no graph', () => {
             );
         }
         expect(() => render(<Harness />)).not.toThrow();
+        // The cameras sit inside an error boundary: a crash shows it instead of throwing, so assert it did not.
+        expect(screen.queryByTestId('kg-camera-error')).toBeNull();
     });
 
     it('opens every panel of the dock over an empty graph', () => {

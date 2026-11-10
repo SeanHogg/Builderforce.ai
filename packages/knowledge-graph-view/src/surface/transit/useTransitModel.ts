@@ -7,7 +7,7 @@
  * bundle, so the map component only draws.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import type { Finding, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { nodeIndex } from '../../graphModel';
 import { useComputed } from '../../compute/useComputed';
@@ -36,6 +36,8 @@ export interface TransitModel {
     layout: TransitLayout;
     /** True while the worker's layout is still on its way (the view shows its laying-out state). */
     layoutPending: boolean;
+    /** A newer layout of the SAME stations and lines (a new width) is on its way; the current one keeps drawing meanwhile. */
+    refreshing: boolean;
     index: ReadonlyMap<string, KNode>;
     findings: ReadonlyMap<string, Finding>;
     /** The drawn stations, in draw order. */
@@ -71,8 +73,17 @@ export function useTransitModel({ graph, stations, lines, overlay, width, order 
         { inline: !graph || isSmall(graph) },
     );
     const layout = computed?.layout ?? EMPTY_LAYOUT;
-    // The worker's answer is in flight until the first non-null value lands (the view shows LayingOut).
-    const layoutPending = computed === null || pending;
+    // Which stations, lines and order the shown layout was laid out for. A recompute for a new WIDTH alone keeps drawing
+    // it (same stations, same lines: only the spacing is stale), so a resize never blanks the map to "Laying out…" —
+    // blanking collapsed the page height, toggled the page scrollbar, changed the width again and looped (the flicker).
+    // New stations or lines (a drill, a new graph) are another picture: the old one is not theirs, so the view waits.
+    const drawnFor = useRef<{ layout: TransitLayout; stations: StationModel; lines: LinesModel; order: readonly string[] | undefined } | null>(null);
+    if (computed !== null && !pending) drawnFor.current = { layout: computed.layout, stations, lines, order };
+    const at = drawnFor.current;
+    const samePicture = at !== null && computed !== null && at.layout === computed.layout && at.stations === stations && at.lines === lines && at.order === order;
+    // LayingOut only when there is nothing of THIS picture to draw yet.
+    const layoutPending = computed === null || (pending && !samePicture);
+    const refreshing = pending && !layoutPending;
     const index = useMemo(() => (graph ? nodeIndex(graph) : new Map<string, KNode>()), [graph]);
     const findings = useMemo(() => new Map((graph?.findings ?? []).map((f) => [f.id, f] as const)), [graph]);
     const drawn = useMemo(() => layout.drawn.flatMap((id) => stations.byId.get(id) ?? []), [layout, stations.byId]);
@@ -109,5 +120,5 @@ export function useTransitModel({ graph, stations, lines, overlay, width, order 
         });
     }, [lines.lines, stations.byId, graph, layout, drawn, styles]);
     const obstacles = useMemo(() => termini.map((t) => terminusBox(t.at)), [termini]);
-    return { layout, layoutPending, index, findings, drawn, styles, widths, docs, describes, termini, obstacles, walls };
+    return { layout, layoutPending, refreshing, index, findings, drawn, styles, widths, docs, describes, termini, obstacles, walls };
 }

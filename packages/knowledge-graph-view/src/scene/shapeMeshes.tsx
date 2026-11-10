@@ -1,17 +1,16 @@
 /**
  * The shape instanced-mesh helpers shared by the Tower view (Towers.tsx) and the plain 3D
- * graph (GraphScene.tsx). Each kind is ONE instanced mesh, so a graph of a thousand nodes
- * stays a handful of draw calls; the geometries are normalised so every silhouette covers
- * about the same volume (the box was a 1.7-wide outlier; cone and octahedron are tuned to
- * comparable bounding volume). Visualizer §2: shape in all four views — the picking +
+ * graph (GraphScene.tsx). Each mark type is ONE instanced mesh, so a graph of a thousand nodes
+ * stays a handful of draw calls; every geometry is its `shapes.ts` outline extruded (radius ≈ 1,
+ * height 1), the ONE registry the 2D views draw too. Visualizer §2: shape in all views — the picking +
  * selection behaviour is preserved per bucket (selOf), so a kind keeps its silhouette
  * without losing click-to-focus or the grown selection ring.
  */
 
 import { useThree, type ThreeEvent } from '@react-three/fiber';
 import { useEffect, useRef } from 'react';
-import { Color, InstancedMesh, Matrix4, Quaternion, Vector3 } from 'three';
-import type { NodeShape } from '../lenses';
+import { type BufferGeometry, Color, ExtrudeGeometry, InstancedMesh, Matrix4, Quaternion, Shape, Vector3 } from 'three';
+import { SHAPE_OUTLINES, type NodeShape } from '../shapes';
 import type { ThemeColors, ThemeTone } from './themeColors';
 
 export interface Item {
@@ -37,19 +36,33 @@ export function place(m: InstancedMesh, i: number, it: Item, highlighted: boolea
     m.setMatrixAt(i, MATRIX);
 }
 
-/** The geometry a shape instanced-mesh draws: a cylinder stays the default; the others swap the primitive. */
-export function ShapeGeometry({ shape }: { shape: NodeShape }) {
-    switch (shape) {
-        case 'square': return <boxGeometry args={[2, 1, 2]} />;
-        case 'diamond': return <octahedronGeometry args={[1, 0]} />;
-        case 'triangle': return <coneGeometry args={[1, 1, 4]} />;
-        case 'hexagon': return <cylinderGeometry args={[1, 1, 1, 6]} />;
-        case 'octagon': return <cylinderGeometry args={[1, 1, 1, 8]} />;
-        case 'pentagon': return <cylinderGeometry args={[1, 1, 1, 5]} />;
-        // The star silhouette is a 5-pointed cone in 3D (its 2D counterpart is the SVG path).
-        case 'star': return <cylinderGeometry args={[1, 1, 1, 10]} />;
-        default: return <cylinderGeometry args={[1, 1, 1, 14]} />;
+// One geometry per shape for the page's lifetime, shared by every instanced mesh that draws it.
+const GEOMETRIES = new Map<NodeShape, BufferGeometry>();
+
+/**
+ * A shape's 3D primitive: its 2D outline (`SHAPE_OUTLINES`, the same points the canvas and SVG draw)
+ * extruded to height 1 along +Y and centred, radius about 1 — so a node reads the same from above
+ * and in depth (PRD 43 B1a rule 2), and the Tower's height scale stretches it like the old cylinder.
+ */
+export function shapeGeometry(shape: NodeShape): BufferGeometry {
+    let g = GEOMETRIES.get(shape);
+    if (!g) {
+        const outline = SHAPE_OUTLINES[shape];
+        const s = new Shape();
+        outline.forEach(([x, y], i) => (i ? s.lineTo(x, y) : s.moveTo(x, y)));
+        s.closePath();
+        g = new ExtrudeGeometry(s, { depth: 1, bevelEnabled: false, curveSegments: 1 });
+        // Outline y → world z (seen from above), extrusion z → world y, centred on the origin.
+        g.rotateX(Math.PI / 2).translate(0, 0.5, 0);
+        g.computeVertexNormals();
+        GEOMETRIES.set(shape, g);
     }
+    return g;
+}
+
+/** The geometry a shape instanced-mesh draws (shared, never disposed with the mesh). */
+export function ShapeGeometry({ shape }: { shape: NodeShape }) {
+    return <primitive object={shapeGeometry(shape)} attach="geometry" dispose={null} />;
 }
 
 /** ONE instanced unit primitive (radius 1, height 1) placed, scaled and coloured per item. */

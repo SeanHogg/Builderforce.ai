@@ -16,6 +16,7 @@ import { CommittedState, PendingKeyIndex, mappingKey, recordKey } from './storeS
 import { isJournalEventId, SCAN_STOP, type AppendJournalEvent, type LocalFirstTransaction, type ScanPendingVisit, type ScanVisit } from './storeContract.js';
 import { clone } from './clone.js';
 import { hashPayload } from './payloadHash.js';
+import { indexKeyOf, type RecordIndex, type RecordIndexKey } from './recordIndex.js';
 
 /**
  * The last-pull instant is stored beside the cursor, in the same map, under a key no
@@ -74,16 +75,52 @@ export class Transaction implements LocalFirstTransaction {
     // so a typed scan yields in `list` order, same as the old walk-everything loop.
     // The tail below reads ONLY the draft's tail upserts (isTailKey): iterating
     // `values()` here would re-yield the base rows the indexed pass already visited.
-    const ids = this.base.typeIds(entityType);
-    if (ids) {
-      for (const id of ids) {
-        if (this.records.isTailKey(recordKey(entityType, id))) continue;
-        const record = this.records.get(recordKey(entityType, id));
+    const rows = this.base.typeRows(entityType);
+    if (this.records.untouched) {
+      // A read (or a transaction that wrote no row): the committed rows ARE the answer.
+      for (const record of rows?.values() ?? []) {
+        if (visit(record as LocalRecord<T>) === SCAN_STOP) return;
+      }
+      return;
+    }
+    if (rows) {
+      for (const id of rows.keys()) {
+        const key = recordKey(entityType, id);
+        if (this.records.isTailKey(key)) continue;
+        const record = this.records.get(key);
         if (record && visit(record as LocalRecord<T>) === SCAN_STOP) return;
       }
     }
     for (const [key, record] of this.records.upserts()) {
       if (this.records.isTailKey(key) && record.entityType === entityType && visit(record as LocalRecord<T>) === SCAN_STOP) return;
+    }
+  }
+
+  async scanIndex<T>(index: RecordIndex<T>, key: RecordIndexKey, visit: ScanVisit<T>): Promise<void> {
+    const group = this.base.indexGroup(index as RecordIndex, key);
+    if (this.records.untouched) {
+      for (const record of group?.values() ?? []) {
+        if (visit(record as LocalRecord<T>) === SCAN_STOP) return;
+      }
+      return;
+    }
+    // The committed group as this draft sees it: rows it deleted, re-filed elsewhere or moved
+    // to its tail are skipped here; rows it ADDED to the group (new, relocated, or updated
+    // into it) follow, in the order the draft wrote them.
+    const matches = (record: LocalRecord): boolean => indexKeyOf(index as RecordIndex, record) === key;
+    if (group) {
+      for (const [id, committed] of group) {
+        const recordId = recordKey(index.entityType, id);
+        if (this.records.isTailKey(recordId)) continue;
+        const record = this.records.get(recordId);
+        if (!record || (record !== committed && !matches(record))) continue;
+        if (visit(record as LocalRecord<T>) === SCAN_STOP) return;
+      }
+    }
+    for (const [recordId, record] of this.records.upserts()) {
+      if (record.entityType !== index.entityType || !matches(record)) continue;
+      if (!this.records.isTailKey(recordId) && group?.has(record.id)) continue; // visited above, in place
+      if (visit(record as LocalRecord<T>) === SCAN_STOP) return;
     }
   }
 

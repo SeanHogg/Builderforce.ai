@@ -26,9 +26,15 @@ import './canvas/theme.css';
 import { WorkspaceApp } from './WorkspaceApp';
 import { installPageEngineHost } from './pageEngines';
 import { installWebviewPlatformPolicy } from './platformPolicy';
+import { RootBoundary } from './RootBoundary';
+import { installUncaughtErrorRelay } from './uncaughtErrorRelay';
+import { post } from './vscodeBridge';
 
+// Before the installers below, so anything they throw later (a handler, a timer) is on the record too.
+installUncaughtErrorRelay((report) => post('webview.error', { ...report }));
 installWebviewPlatformPolicy();
 installPageEngineHost();
 
+// The ROOT boundary: no render crash anywhere in the app can leave the panel blank.
 const el = document.getElementById('root');
-if (el) createRoot(el).render(<WorkspaceApp />);
+if (el) createRoot(el).render(<RootBoundary><WorkspaceApp /></RootBoundary>);

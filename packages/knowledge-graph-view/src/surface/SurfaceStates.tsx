@@ -12,6 +12,7 @@ import type { KnowledgeGraphSource } from '../types';
 import type { GraphStatus } from '../useKnowledgeGraph';
 import { TYPE, TYPE_VARS } from './ui/type';
 import type { ReviewState } from '../useReviewRun';
+import { LoadingStatus, type LoadingProgress } from './LoadingStatus';
 
 export function SurfaceFrame({ ref, label, children }: { ref: Ref<HTMLElement>; label: string; children: ReactNode }) {
     return (
@@ -38,11 +39,13 @@ export interface SurfaceStateProps {
     openReview?: boolean | undefined;
     /** "Use the server's copy": a local review that reads the project's extracted output first. Absent ⇒ not offered (not linked, or offline). */
     onSeed?: (() => void) | undefined;
+    /** While loading: the host's phase and the diagnostics a slow load offers to copy. */
+    loading?: LoadingProgress | undefined;
     onRetry(): void;
 }
 
 /** The screen for a status that has no graph yet, or null when there is one to draw. */
-export function SurfaceState({ status, labels, source, review, reviewStatus, start, targets, openReview, onSeed, onRetry }: SurfaceStateProps): ReactNode {
+export function SurfaceState({ status, labels, source, review, reviewStatus, start, targets, openReview, onSeed, loading, onRetry }: SurfaceStateProps): ReactNode {
     if (status === 'not-here') {
         // This machine holds no review of the root: never the server's cut, never a fault — Review, or the server's copy.
         return (
@@ -84,7 +87,7 @@ export function SurfaceState({ status, labels, source, review, reviewStatus, sta
                     <p style={{ ...muted, margin: 0, fontSize: TYPE.bodyLarge.fontSize }}>{labels.emptyBody}</p>
                     <ReviewLauncher source={source} labels={labels} targets={targets} start={start} defaultOpen={!!openReview} status={reviewStatus} />
                 </>
-            ) : <p role="status" style={muted}>{labels.loading}</p>}
+            ) : <LoadingStatus labels={labels} progress={loading} />}
             {review}
         </div>
     );

@@ -17,7 +17,8 @@ import { SHAPE_PATHS } from '../shapes';
 import { useThemeColors } from '../scene/themeColors';
 import type { ViewBox } from '../usePanZoom';
 import type { ContainerSize } from '../environment';
-import { bucketByShape, canvasMapping, drawMark, markVisible, paintQueue, DRAW_BATCH, type NodeMark } from './drawNodes';
+import { bucketByShape, drawMark, markVisible, paintQueue, DRAW_BATCH, type NodeMark } from './drawNodes';
+import { layoutToCanvas, visibleRect } from './canvasView';
 import { nodeRadius, type Layout2D } from './layout2d';
 
 interface NodeCanvasProps {
@@ -109,8 +110,11 @@ export const NodeCanvas = memo(function NodeCanvas({ ordered, layout, lens, sele
         return out;
     }, []);
 
+    /** The region the SVG shows (viewBox + letterbox): the canvas covers exactly this, in the SVG's own units. */
+    const rect = useMemo(() => (view ? visibleRect(view, size.width, size.height) ?? view : null), [view, size.width, size.height]);
+
     /** The painted marks, culling off-screen ones once per pass instead of per draw call. */
-    const paintSet = useMemo(() => (view ? marks.filter((m) => markVisible(m, view)) : []), [marks, view]);
+    const paintSet = useMemo(() => (rect ? marks.filter((m) => markVisible(m, rect)) : []), [marks, rect]);
 
     // The incremental paint pass: re-fit the backing store, then draw a batch of marks per frame
     // until done, clearing the canvas to a pristine reset on the FIRST batch of a pass (a bare
@@ -123,12 +127,11 @@ export const NodeCanvas = memo(function NodeCanvas({ ordered, layout, lens, sele
         // Not ready until this pass finishes — set before ANY early return, so a pass that cannot
         // paint (no mapping) never leaves the last pass's `data-ready` standing.
         setReady(false);
-        if (!canvas || !ctx || !view || !size.width || !size.height || !colors || !shapePaths) return undefined;
+        if (!canvas || !ctx || !rect || !size.width || !size.height || !colors || !shapePaths) return undefined;
         const dpr = window.devicePixelRatio || 1;
         canvas.width = Math.round(size.width * dpr);
         canvas.height = Math.round(size.height * dpr);
-        const mapping = canvasMapping(view, size.width, size.height);
-        if (!mapping) return undefined;
+        const transform = layoutToCanvas(rect, canvas.width, canvas.height);
         const queue = paintQueue(bucketByShape(paintSet));
         let raf = 0;
         let first = true;
@@ -139,14 +142,14 @@ export const NodeCanvas = memo(function NodeCanvas({ ordered, layout, lens, sele
                 ctx.setTransform(1, 0, 0, 1, 0, 0);
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
             }
-            ctx.setTransform(dpr * mapping.scale, 0, 0, dpr * mapping.scale, dpr * mapping.ox, dpr * mapping.oy);
+            ctx.setTransform(...transform);
             const done = queue.next(DRAW_BATCH, (mark, shape) => drawMark(ctx, mark, shapePaths[shape], colors, colors.bg));
             if (done) setReady(true);
             else raf = requestAnimationFrame(paint);
         };
         raf = requestAnimationFrame(paint);
         return () => cancelAnimationFrame(raf);
-    }, [paintSet, view, size, colors, shapePaths]);
+    }, [paintSet, rect, size, colors, shapePaths]);
 
     // The ≤25 tab stops (top-importance plus the selection): invisible focusable `<g>` so the
     // roving keyboard walk, Enter/Space activation and the button accessible names survive the
@@ -167,10 +170,10 @@ export const NodeCanvas = memo(function NodeCanvas({ ordered, layout, lens, sele
         if (id) onActivate(id);
     };
 
-    if (!view) return null;
+    if (!rect) return null;
     return (
         <g data-layer="canvas-nodes">
-            <foreignObject x={view.x} y={view.y} width={view.w} height={view.h} style={{ overflow: 'visible' }} aria-hidden="true">
+            <foreignObject data-canvas-rect="true" x={rect.x} y={rect.y} width={rect.w} height={rect.h} style={{ overflow: 'visible' }} aria-hidden="true">
                 <canvas
                     ref={canvasRef}
                     data-canvas="nodes"

@@ -71,17 +71,18 @@ describe('PatternsPanel', () => {
         expect(seen.surface!.highlight).not.toBeNull();
     });
 
-    it('shows in the SVG Tower where there is no WebGL, and disables Show in Tower only where neither camera exists', () => {
-        const props = mount(PatternsPanel, { cameras: ['transit', 'tower'] });
+    it('shows in the Map with its towers look on where there is no WebGL', () => {
+        const props = mount(PatternsPanel, { cameras: ['transit', 'system'] });
         const row = document.querySelector('[data-anti]') as HTMLElement;
         const button = within(row).getByRole('button', { name: L.surface.patterns.showInTower }) as HTMLButtonElement;
         expect(button.disabled).toBe(false);
         fireEvent.click(button);
-        expect(props.onCamera).toHaveBeenCalledWith('tower');
+        expect(props.onCamera).toHaveBeenCalledWith('transit');
+        expect(seen.surface!.towers).toBe(true);
     });
 
-    it('disables Show in Tower with neither the 3D nor the Tower camera', () => {
-        mount(PatternsPanel, { cameras: ['transit'] });
+    it('disables Show in Tower with neither the 3D nor the Map camera', () => {
+        mount(PatternsPanel, { cameras: ['system'] });
         const row = document.querySelector('[data-anti]') as HTMLElement;
         expect((within(row).getByRole('button', { name: L.surface.patterns.showInTower }) as HTMLButtonElement).disabled).toBe(true);
     });

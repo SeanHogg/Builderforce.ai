@@ -37316,6 +37316,18 @@
     "title": "知识",
     "regionLabel": "知识图谱",
     "loading": "正在加载知识图谱…",
+    "loadingElapsed": "正在加载知识图谱… {elapsed}",
+    "loadingPhase": "当前：{phase}",
+    "loadingSlow": "这比平时要久。请复制诊断信息以便报告。",
+    "loadPhases": {
+      "partitions": "正在读取项目结构",
+      "index": "正在打开搜索索引",
+      "nearDuplicates": "正在查找近似重复",
+      "build": "正在构建图谱",
+      "pack": "正在读取知识包",
+      "server": "正在获取服务器上的图谱",
+      "notHere": "正在检查本机上的评审"
+    },
     "refreshing": "正在更新…",
     "refreshFailed": "无法更新，正在显示上一次的图谱。重试",
     "errorTitle": "知识图谱无法加载",
@@ -37390,13 +37402,26 @@
       "catConfig": "配置",
       "catStyle": "样式",
       "catData": "数据",
-      "catOther": "其他"
+      "catOther": "其他",
+      "shapesTitle": "形状",
+      "typeClass": "类或类型",
+      "typeFunction": "函数或方法",
+      "typeSource": "源文件",
+      "typeTest": "测试",
+      "typeStyle": "样式",
+      "typeConfig": "配置",
+      "typeData": "数据或模式",
+      "typeDoc": "文档",
+      "typeSection": "章节",
+      "typeEntity": "实体",
+      "typeClaim": "主张或事实",
+      "typeExternal": "缺失或外部",
+      "typeSystem": "系统或包"
     },
     "statsLine": "{nodes} 个节点 · {edges} 条边 · {sources} 个来源",
     "filesLoaded": "已加载 {loaded} / {total}",
     "showAll": "显示全部",
     "view3d": "3D",
-    "viewTower": "塔楼",
     "viewList": "列表",
     "viewSystem": "系统",
     "viewHeat": "热力",
@@ -37902,6 +37927,13 @@
         "world": "整张地图",
         "drillReset": "地图已更改，因此视图已退出“{name}”。",
         "satelliteAria": "{name}，位于 {parent} 内",
+        "look": {
+          "label": "地图样式",
+          "flat": "平面",
+          "towers": "塔楼",
+          "flatTip": "将站点绘制为平面标记",
+          "towersTip": "将每个站点绘制为塔楼，每条线路绘制为管道"
+        },
         "card": {
           "close": "关闭",
           "issueMore": "还有 {count} 项",
@@ -38177,7 +38209,10 @@
       },
       "scene": {
         "edgesCapped": "显示 {total} 条连接中的 {shown} 条",
-        "layingOut": "正在布局…"
+        "layingOut": "正在布局…",
+        "errorTitle": "此视图出错了",
+        "errorRetry": "重试",
+        "errorBack": "返回"
       },
       "mind": {
         "moreFoldersOne": "另有 {count} 个文件夹",
@@ -38667,6 +38702,7 @@
           "diagRefresh": "刷新",
           "diagGraph": "图谱",
           "diagReview": "审阅与上次运行",
+          "diagLoad": "首次加载",
           "diagCoverage": "数据覆盖",
           "diagLines": "线路",
           "diagSync": "同步与副本",

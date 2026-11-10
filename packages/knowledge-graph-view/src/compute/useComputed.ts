@@ -31,7 +31,8 @@ export interface ComputeOptions<R> {
 
 export interface Computed<R> { value: R | null; pending: boolean }
 
-interface Answer<R> { value: R | null; settled: boolean; scope: readonly unknown[] }
+/** `deps` are those of the request that answered: an answer for other deps is the previous one, still on show. */
+interface Answer<R> { value: R | null; settled: boolean; scope: readonly unknown[]; deps: readonly unknown[] }
 
 const NO_SCOPE: readonly unknown[] = [];
 const same = (a: readonly unknown[], b: readonly unknown[]): boolean => a === b || (a.length === b.length && a.every((x, i) => Object.is(x, b[i])));
@@ -46,19 +47,21 @@ export function useComputed<K extends TaskKind>(
     // `input` is built from `deps` by the caller; both the memo and the effect list exactly them.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const now = useMemo(() => (sync ? client.runSync(kind, input) : null), [client, kind, sync, ...deps]);
-    const [answer, setAnswer] = useState<Answer<KindResult<K>>>({ value: initial, settled: false, scope });
+    const [answer, setAnswer] = useState<Answer<KindResult<K>>>({ value: initial, settled: false, scope, deps });
     useEffect(() => {
         if (!enabled || inline) return undefined;
         client.retain();
-        setAnswer((a) => (same(a.scope, scope) ? (a.settled ? { ...a, settled: false } : a) : { value: initial, settled: false, scope }));
+        setAnswer((a) => (same(a.scope, scope) ? (a.settled ? { ...a, settled: false } : a) : { value: initial, settled: false, scope, deps }));
         const cancel = client.run(kind, input, {
-            done: (value) => setAnswer({ value, settled: true, scope }),
-            fail: (error) => { console.error(`useComputed: ${kind} failed`, error); setAnswer({ value: failed, settled: true, scope }); },
+            done: (value) => setAnswer({ value, settled: true, scope, deps }),
+            fail: (error) => { console.error(`useComputed: ${kind} failed`, error); setAnswer({ value: failed, settled: true, scope, deps }); },
         });
         return () => { cancel(); client.release(); };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [client, kind, enabled, inline, ...deps]);
     const current = same(answer.scope, scope);
     const value = sync ? now : enabled && current ? answer.value : initial;
-    return { value: value ?? initial, pending: enabled && !inline && !(answer.settled && current) };
+    // Pending from the render the deps change in, not from the effect after it: the previous answer still shows, but a caller
+    // that pairs it with the NEW inputs (the transit map: old routes, new lines) must know it is not theirs.
+    return { value: value ?? initial, pending: enabled && !inline && !(answer.settled && current && same(answer.deps, deps)) };
 }

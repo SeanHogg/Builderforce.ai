@@ -5,7 +5,16 @@ const policyState = vi.hoisted(() => ({
   listeners: new Set<() => void>(),
 }));
 
-vi.mock("vscode", () => ({ commands: { executeCommand: vi.fn() } }));
+const editor = vi.hoisted(() => ({
+  writeText: vi.fn(async () => undefined),
+  showInformationMessage: vi.fn(),
+}));
+vi.mock("vscode", () => ({
+  commands: { executeCommand: vi.fn() },
+  env: { clipboard: { writeText: editor.writeText } },
+  window: { showInformationMessage: editor.showInformationMessage },
+  l10n: { t: (message: string) => message },
+}));
 const jwt = vi.hoisted(() => ({
   refreshTenantJwt: vi.fn(async () => "fresh"),
   getTenantJwt: vi.fn(async () => "cached"),
@@ -38,7 +47,8 @@ vi.mock("./platformCallGate", () => ({
   }),
 }));
 
-import { handleSharedHostMessage, watchedWebviewCount } from "./webviewHostBridge";
+import { handleSharedHostMessage, watchedWebviewCount, webviewErrorLines } from "./webviewHostBridge";
+import { logLine } from "./errorReporter";
 import { UNKNOWN_PERSISTENCE_METHOD } from "./localPersistenceDispatch";
 
 type Ctx = Parameters<typeof handleSharedHostMessage>[0];
@@ -169,6 +179,45 @@ describe("local.tickets dispatch", () => {
     const view = surface();
     await handleSharedHostMessage(ctx, view.webview, { type: "local.tickets", id: "lt2" } as never, view.owner);
     expect(view.posted).toContainEqual({ type: "response", id: "lt2", ok: true, result: [] });
+    view.dispose();
+  });
+});
+
+describe("the root error fallback's host messages", () => {
+  it("writes a webview error, with every stack, to the output channel", async () => {
+    const view = surface();
+    const handled = await handleSharedHostMessage(
+      ctx,
+      view.webview,
+      { type: "webview.error", source: "render", message: "boom", stack: "Error: boom\n    at A", componentStack: "\n    in Chat" } as never,
+      view.owner,
+    );
+    expect(handled).toBe(true);
+    expect(logLine).toHaveBeenCalledWith("[webview error] render: boom\nError: boom\n    at A\ncomponent stack:\nin Chat");
+    expect(editor.showInformationMessage).not.toHaveBeenCalled();
+    view.dispose();
+  });
+
+  it("formats a report with no stacks or message", () => {
+    expect(webviewErrorLines({ type: "webview.error", source: "unhandledrejection" } as never)).toBe("[webview error] unhandledrejection: unknown error");
+  });
+
+  it("reloads by assigning the document back with a fresh nonce", async () => {
+    const view = surface();
+    const html = "<meta content=\"script-src 'nonce-abc123'\"><script nonce=\"abc123\"></script>";
+    (view.webview as { html: string }).html = html;
+    await handleSharedHostMessage(ctx, view.webview, { type: "webview.reload" }, view.owner);
+    const next = (view.webview as { html: string }).html;
+    expect(next).not.toBe(html);
+    expect(next).not.toContain("abc123");
+    view.dispose();
+  });
+
+  it("copies the details to the clipboard and confirms it", async () => {
+    const view = surface();
+    await handleSharedHostMessage(ctx, view.webview, { type: "webview.copy", text: "boom\n\nError: boom" } as never, view.owner);
+    expect(editor.writeText).toHaveBeenCalledWith("boom\n\nError: boom");
+    expect(editor.showInformationMessage).toHaveBeenCalledWith("Error details copied to clipboard.");
     view.dispose();
   });
 });

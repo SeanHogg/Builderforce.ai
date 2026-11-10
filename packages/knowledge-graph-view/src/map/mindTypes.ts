@@ -2,7 +2,7 @@
 
 import type { Finding } from '@seanhogg/builderforce-memory/knowledge';
 import type { Bounds } from '../graph2d/layout2d';
-import type { NodeShape } from '../lenses';
+import type { NodeShape } from '../shapes';
 import type { ThemeTone } from '../scene/themeColors';
 
 export type Severity = Finding['severity'];

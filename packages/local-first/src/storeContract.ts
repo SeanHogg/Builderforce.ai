@@ -22,6 +22,7 @@ import type {
 } from './records.js';
 import { isLocalId } from './entityId.js';
 import type { LocalFirstChange } from './localFirstDelta.js';
+import type { RecordIndex, RecordIndexKey } from './recordIndex.js';
 
 export interface LocalFirstTransaction {
   get<T = unknown>(entityType: LocalEntityType, id: string): Promise<LocalRecord<T> | undefined>;
@@ -40,6 +41,15 @@ export interface LocalFirstTransaction {
    * row) stops walking instead of visiting the rest.
    */
   scan<T = unknown>(entityType: LocalEntityType | undefined, visit: ScanVisit<T>): Promise<void>;
+  /**
+   * `scan` of ONE group of a secondary index (`defineRecordIndex`): only the rows of
+   * `index.entityType` whose `keyOf` is `key`, without walking the type's other rows —
+   * reading one chat's messages costs that chat. Same view rules and `SCAN_STOP` as
+   * `scan`; rows come in committed order, then the ones this transaction wrote.
+   * Optional so a hand-rolled transaction still fits: callers go through `scanByIndex`,
+   * which falls back to a filtered `scan`.
+   */
+  scanIndex?<T = unknown>(index: RecordIndex<T>, key: RecordIndexKey, visit: ScanVisit<T>): Promise<void>;
   put<T>(record: LocalRecord<T>, expectedVersion?: number): Promise<void>;
   /**
    * Remove one local row. A pull tombstone calls this instead of `put`: writing

@@ -37316,6 +37316,18 @@
     "title": "Conocimiento",
     "regionLabel": "Grafo de conocimiento",
     "loading": "Cargando el grafo de conocimiento…",
+    "loadingElapsed": "Cargando el grafo de conocimiento… {elapsed}",
+    "loadingPhase": "Ahora: {phase}",
+    "loadingSlow": "Está tardando más de lo habitual. Copia el diagnóstico para informar del problema.",
+    "loadPhases": {
+      "partitions": "leyendo la estructura del proyecto",
+      "index": "abriendo el índice de búsqueda",
+      "nearDuplicates": "buscando casi duplicados",
+      "build": "construyendo el grafo",
+      "pack": "leyendo el paquete de conocimiento",
+      "server": "obteniendo el grafo del servidor",
+      "notHere": "comprobando si hay una revisión en este equipo"
+    },
     "refreshing": "Actualizando…",
     "refreshFailed": "No se pudo actualizar: se muestra el último grafo. Reintentar",
     "errorTitle": "No se pudo cargar el grafo de conocimiento",
@@ -37390,13 +37402,26 @@
       "catConfig": "Configuración",
       "catStyle": "Estilos",
       "catData": "Datos",
-      "catOther": "Otros"
+      "catOther": "Otros",
+      "shapesTitle": "Formas",
+      "typeClass": "Clase o tipo",
+      "typeFunction": "Función o método",
+      "typeSource": "Archivo fuente",
+      "typeTest": "Prueba",
+      "typeStyle": "Estilos",
+      "typeConfig": "Configuración",
+      "typeData": "Datos o esquema",
+      "typeDoc": "Documento",
+      "typeSection": "Sección",
+      "typeEntity": "Entidad",
+      "typeClaim": "Afirmación o hecho",
+      "typeExternal": "Ausente o externo",
+      "typeSystem": "Sistema o paquete"
     },
     "statsLine": "{nodes} nodos · {edges} aristas · {sources} fuentes",
     "filesLoaded": "{loaded} de {total} cargados",
     "showAll": "Mostrar todo",
     "view3d": "3D",
-    "viewTower": "Torre",
     "viewList": "Lista",
     "viewSystem": "Sistema",
     "viewHeat": "Calor",
@@ -37902,6 +37927,13 @@
         "world": "todo el mapa",
         "drillReset": "El mapa cambió, así que la vista salió de {name}.",
         "satelliteAria": "{name}, dentro de {parent}",
+        "look": {
+          "label": "Estilo del mapa",
+          "flat": "Plano",
+          "towers": "Torres",
+          "flatTip": "Dibujar las estaciones como marcas planas",
+          "towersTip": "Dibujar cada estación como una torre y cada línea como una tubería"
+        },
         "card": {
           "close": "Cerrar",
           "issueMore": "+{count} más",
@@ -38177,7 +38209,10 @@
       },
       "scene": {
         "edgesCapped": "Se muestran {shown} de {total} enlaces",
-        "layingOut": "Distribuyendo…"
+        "layingOut": "Distribuyendo…",
+        "errorTitle": "Esta vista ha tenido un error",
+        "errorRetry": "Reintentar",
+        "errorBack": "Volver"
       },
       "mind": {
         "moreFoldersOne": "+{count} carpeta",
@@ -38667,6 +38702,7 @@
           "diagRefresh": "Actualizar",
           "diagGraph": "Grafo",
           "diagReview": "Revisión y última ejecución",
+          "diagLoad": "Primera carga",
           "diagCoverage": "Cobertura de datos",
           "diagLines": "Líneas",
           "diagSync": "Sincronización y réplica",

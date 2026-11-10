@@ -233,12 +233,12 @@ describe('OverlayMenu', () => {
 
 describe('registries', () => {
     it('orders the cameras and gates them on the environment', () => {
-        expect(CAMERAS.map((c) => c.id)).toEqual(['transit', 'system', 'graph', 'map', 'tower', '3d', 'heat', '4plus1', 'style', 'features', 'sequence', 'list']);
+        expect(CAMERAS.map((c) => c.id)).toEqual(['transit', 'system', 'graph', 'map', '3d', 'heat', '4plus1', 'style', 'features', 'sequence', 'list']);
         const ids = (e: Partial<SurfaceEnv>) => CAMERAS.filter((c) => c.available(graph, { ...env, ...e })).map((c) => c.id);
-        expect(ids({})).toEqual(['transit', 'system', 'graph', 'map', 'tower', 'heat', '4plus1', 'style', 'features', 'sequence', 'list']);
+        expect(ids({})).toEqual(['transit', 'system', 'graph', 'map', 'heat', '4plus1', 'style', 'features', 'sequence', 'list']);
         expect(ids({ hasLines: false })).toEqual(['system', 'graph', 'map', 'heat', '4plus1', 'style', 'features', 'list']);
         // Tower is the SVG map (needs lines); 3D is the WebGL view (needs WebGL): both are listed when both are available.
-        expect(ids({ webgl: true })).toEqual(['transit', 'system', 'graph', 'map', 'tower', '3d', 'heat', '4plus1', 'style', 'features', 'sequence', 'list']);
+        expect(ids({ webgl: true })).toEqual(['transit', 'system', 'graph', 'map', '3d', 'heat', '4plus1', 'style', 'features', 'sequence', 'list']);
     });
 
     it('holds the seven drawers (the Reviews drawer comes first, with no header button), and a toggle with no panel available draws nothing', () => {

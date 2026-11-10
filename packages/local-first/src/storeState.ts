@@ -11,6 +11,7 @@
 import { destinationKey, normalizeServerMapping, type JournalEvent, type LocalEntityType, type LocalRecord, type ServerMapping, type SyncConflict, type SyncReceipt } from './records.js';
 import { ChangeBuilder, type LocalFirstChange, type LocalFirstDelta } from './localFirstDelta.js';
 import type { LocalFirstSnapshot } from './storeContract.js';
+import { RecordGroups, type RecordIndex, type RecordIndexKey } from './recordIndex.js';
 
 export const recordKey = (type: LocalEntityType, id: string): string => `${type}:${id}`;
 export const mappingKey = (mapping: Pick<ServerMapping, 'entityType' | 'clientEntityId' | 'destination'>): string =>
@@ -66,13 +67,14 @@ export class CommittedState {
   readonly cursors = new Map<string, string>();
   readonly pendingKeys = new PendingKeyIndex();
   /**
-   * The per-type scan index: record ids by entity type, in committed insertion order.
-   * A `scan(type)` reads ONLY these ids instead of walking every type's rows — reading
-   * one chat's messages out of a whole history costs that type's rows, not the store's.
-   * A row's position follows the records Map exactly: an update keeps its place, a
-   * delete-and-re-add lands at the end (the Set loses the id on delete, re-gains it last).
+   * The per-type scan index: the committed rows by entity type, by id, in committed
+   * insertion order. A `scan(type)` walks ONLY this type's rows — and walks the rows
+   * themselves, with no key to build or look up per row. A row's position follows the
+   * records Map exactly: an update keeps its place, a delete-and-re-add lands at the end.
    */
-  readonly recordTypes = new Map<string, Set<string>>();
+  readonly recordTypes = new Map<string, Map<string, LocalRecord>>();
+  /** The secondary indexes built so far (`recordIndex.ts`), by the entity type they group. */
+  private readonly indexes = new Map<string, RecordGroups[]>();
   nextSequence = 1;
   /** The highest `mappedSeq` any committed mapping carries: a new mapping takes the next one. */
   maxMappedSeq = 0;
@@ -95,25 +97,50 @@ export class CommittedState {
     this.mappings.set(key, row);
   }
 
-  /** Add a row's id to the per-type index. Idempotent: an update keeps its position. */
-  private indexRecord(entityType: string, id: string): void {
-    let ids = this.recordTypes.get(entityType);
-    if (!ids) this.recordTypes.set(entityType, (ids = new Set()));
-    ids.add(id);
+  /** Commit one row: the records Map, the per-type rows and every built index of its type. */
+  private putRecord(record: LocalRecord): void {
+    this.records.set(recordKey(record.entityType, record.id), record);
+    let rows = this.recordTypes.get(record.entityType);
+    if (!rows) this.recordTypes.set(record.entityType, (rows = new Map()));
+    rows.set(record.id, record); // an update keeps its position
+    for (const groups of this.indexes.get(record.entityType) ?? []) groups.put(record);
   }
 
-  /** The committed ids of `entityType` in committed order — what a typed scan walks. */
-  typeIds(entityType: LocalEntityType): ReadonlySet<string> | undefined {
+  private removeRecord(entityType: LocalEntityType, id: string): void {
+    this.records.delete(recordKey(entityType, id));
+    this.recordTypes.get(entityType)?.delete(id);
+    for (const groups of this.indexes.get(entityType) ?? []) groups.remove(id);
+  }
+
+  /** The committed rows of `entityType` by id, in committed order — what a typed scan walks. */
+  typeRows(entityType: LocalEntityType): ReadonlyMap<string, LocalRecord> | undefined {
     return this.recordTypes.get(entityType);
+  }
+
+  /**
+   * The committed rows of one group of `index`, in committed order. The first read through
+   * an index builds it from the type's rows (once, O(rows of the type)); every later
+   * `applyDelta` keeps it current, so a read costs the group, never the type.
+   */
+  indexGroup(index: RecordIndex, key: RecordIndexKey): ReadonlyMap<string, LocalRecord> | undefined {
+    return this.groupsOf(index).group(key);
+  }
+
+  private groupsOf(index: RecordIndex): RecordGroups {
+    const built = this.indexes.get(index.entityType);
+    const found = built?.find((groups) => groups.index === index);
+    if (found) return found;
+    const groups = new RecordGroups(index);
+    for (const record of this.recordTypes.get(index.entityType)?.values() ?? []) groups.put(record);
+    if (built) built.push(groups);
+    else this.indexes.set(index.entityType, [groups]);
+    return groups;
   }
 
   /** Index a snapshot. The rows are adopted, not cloned: nothing mutates a committed row. */
   static from(initial?: Partial<LocalFirstSnapshot>): CommittedState {
     const state = new CommittedState();
-    for (const record of initial?.records ?? []) {
-      state.records.set(recordKey(record.entityType, record.id), record);
-      state.indexRecord(record.entityType, record.id);
-    }
+    for (const record of initial?.records ?? []) state.putRecord(record);
     for (const event of initial?.events ?? []) state.events.set(event.eventId, event);
     // Legacy rows (no `syncId`, `kind:ref` in `serverId`) are read through the ONE normaliser; nothing is dropped.
     // A legacy row without a `mappedSeq` gets the next one AFTER every persisted one, in load order.
@@ -137,8 +164,7 @@ export class CommittedState {
     const change = new ChangeBuilder();
     if (delta.reset) this.clear();
     for (const gone of delta.deletedRecords ?? []) {
-      this.records.delete(recordKey(gone.entityType, gone.id));
-      this.recordTypes.get(gone.entityType)?.delete(gone.id);
+      this.removeRecord(gone.entityType, gone.id);
       change.record(gone.entityType, gone.id);
     }
     for (const id of delta.acknowledgedEvents ?? []) {
@@ -153,8 +179,7 @@ export class CommittedState {
       change.sync();
     }
     for (const record of delta.records ?? []) {
-      this.records.set(recordKey(record.entityType, record.id), record);
-      this.indexRecord(record.entityType, record.id);
+      this.putRecord(record);
       change.record(record.entityType, record.id);
     }
     for (const event of delta.events ?? []) {
@@ -200,6 +225,8 @@ export class CommittedState {
   private clear(): void {
     this.records.clear();
     this.recordTypes.clear();
+    // A reset keeps the indexes DECLARED and empties them: the reset's own rows refill them.
+    for (const built of this.indexes.values()) for (const groups of built) groups.clear();
     this.events.clear();
     this.mappings.clear();
     this.receipts.clear();

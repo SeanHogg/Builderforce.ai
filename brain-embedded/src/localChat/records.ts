@@ -10,7 +10,14 @@
  * left out of every read here.
  */
 
-import { isOwnRecord, selectRecords, type LocalFirstTransaction, type LocalRecord } from '@builderforce/local-first';
+import {
+  defineRecordIndex,
+  isOwnRecord,
+  scanByIndex,
+  selectRecords,
+  type LocalFirstTransaction,
+  type LocalRecord,
+} from '@builderforce/local-first';
 import type { BrainChat, BrainMessage } from '../types';
 
 export interface ChatValue {
@@ -57,6 +64,45 @@ export function liveRecords<T>(
   where?: (row: Readonly<LocalRecord<T>>) => boolean,
 ): Promise<LocalRecord<T>[]> {
   return selectRecords<T>(tx, type, (row) => isLiveOwn(row, deviceId) && (!where || where(row)));
+}
+
+/**
+ * THE index of message rows by their chat's view key (`MessageValue.chatId`). Reading one
+ * chat's messages through it costs that chat's rows; without it every read walked every
+ * message of every chat (75k rows on a real store, 0.2–0.8 s a read). Declared once here,
+ * so every module of the local chat shares one built index per store.
+ */
+export const MESSAGES_BY_CHAT = defineRecordIndex<MessageValue>('message', 'brain.message.chatId', (row) => row.payload.chatId);
+
+/** Visit this device's live messages of ONE chat without cloning them (see `scanLive`). */
+export function scanChatMessages(
+  tx: LocalFirstTransaction,
+  deviceId: string,
+  chatId: number,
+  visit: (row: Readonly<LocalRecord<MessageValue>>) => void,
+): Promise<void> {
+  return scanByIndex<MessageValue>(tx, MESSAGES_BY_CHAT, chatId, (row) => {
+    if (isLiveOwn(row, deviceId)) visit(row);
+  });
+}
+
+/** This device's live messages of ONE chat, cloned, in committed order — through the index. */
+export async function chatMessageRecords(tx: LocalFirstTransaction, deviceId: string, chatId: number): Promise<LocalRecord<MessageValue>[]> {
+  const rows: Readonly<LocalRecord<MessageValue>>[] = [];
+  await scanChatMessages(tx, deviceId, chatId, (row) => { rows.push(row); });
+  return structuredClone(rows) as LocalRecord<MessageValue>[];
+}
+
+/**
+ * One chat's messages in `seq` order, cloned — the MESSAGES only, not their row envelopes
+ * (a chat of 14k turns is ~27 MB; cloning the envelopes too is wasted work). `limit`: the
+ * last `limit` of them, and only those are cloned.
+ */
+export async function chatMessagesInOrder(tx: LocalFirstTransaction, deviceId: string, chatId: number, limit?: number): Promise<BrainMessage[]> {
+  const messages: BrainMessage[] = [];
+  await scanChatMessages(tx, deviceId, chatId, (row) => { messages.push(row.payload.message); });
+  messages.sort((a, b) => a.seq - b.seq);
+  return structuredClone(limit != null ? messages.slice(-limit) : messages);
 }
 
 /** A chat's record by its local view key, or undefined. */
