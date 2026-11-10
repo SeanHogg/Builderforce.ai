@@ -80,7 +80,8 @@
       // tsconfig.canvas.json): they resolve to this package's one install.
       "@seanhogg/builderforce-memory/knowledge": ["../node_modules/@seanhogg/builderforce-memory/dist/knowledge/index.d.ts"],
       "@seanhogg/builderforce-memory/knowledge/pack": ["../node_modules/@seanhogg/builderforce-memory/dist/knowledge/pack/index.d.ts"],
-      "@seanhogg/builderforce-memory/ingest": ["../node_modules/@seanhogg/builderforce-memory/dist/ingest/index.d.ts"]
+      "@seanhogg/builderforce-memory/ingest": ["../node_modules/@seanhogg/builderforce-memory/dist/ingest/index.d.ts"],
+      "@seanhogg/builderforce-memory/retrieval": ["../node_modules/@seanhogg/builderforce-memory/dist/retrieval/index.d.ts"]
     }
   },
   // The editor's OWN code, checked strictly. Everything that compiles FRONTEND

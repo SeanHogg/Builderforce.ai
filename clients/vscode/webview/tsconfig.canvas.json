@@ -107,6 +107,7 @@
       "@seanhogg/builderforce-memory/knowledge": ["../node_modules/@seanhogg/builderforce-memory/dist/knowledge/index.d.ts"],
       "@seanhogg/builderforce-memory/knowledge/pack": ["../node_modules/@seanhogg/builderforce-memory/dist/knowledge/pack/index.d.ts"],
       "@seanhogg/builderforce-memory/ingest": ["../node_modules/@seanhogg/builderforce-memory/dist/ingest/index.d.ts"],
+      "@seanhogg/builderforce-memory/retrieval": ["../node_modules/@seanhogg/builderforce-memory/dist/retrieval/index.d.ts"],
       "@seanhogg/builderforce-memory/handoff": ["../node_modules/@seanhogg/builderforce-memory/dist/handoff/index.d.ts"],
       "@seanhogg/builderforce-memory/working": ["../node_modules/@seanhogg/builderforce-memory/dist/working/index.d.ts"],
       "@builderforce/model-catalog": ["../../../packages/model-catalog/src/index.ts"],
