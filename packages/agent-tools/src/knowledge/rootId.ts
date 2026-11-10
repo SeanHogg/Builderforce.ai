@@ -95,6 +95,15 @@ export function splitSourceRef(ref: string, knownRootIds: readonly string[] = []
     return { rootId: ref.slice(4, end), path: ref.slice(end + 2) };
 }
 
+/**
+ * THE root-relative path of `ref` for the replica (file leaf keys, pack paths, stat-cache lookups): exact for a ref of
+ * `rootId` ({@link sourcePathOf}), else the path of whatever source ref it is ({@link splitSourceRef}, root ids ending in ':'
+ * included), else `ref` itself. Never a first-`::` cut, which reads `src:cloud:5:::docs/a.md` as `:docs/a.md`.
+ */
+export function sourcePathIn(ref: string, rootId: string): string {
+    return sourcePathOf(ref, rootId) ?? splitSourceRef(ref, rootId ? [rootId] : [])?.path ?? ref;
+}
+
 /** The root id of a source ref (`src:<rootId>::<path>`), including a root id that ends in ':' (see {@link splitSourceRef}). */
 export function rootIdOfSourceRef(ref: string): string | undefined {
     return splitSourceRef(ref)?.rootId;

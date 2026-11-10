@@ -28,7 +28,7 @@
 import type { BrainToolSpec } from './streamChatCompletion';
 import { BACKGROUND_NEXT, INLINE_NEXT, MIXED_BACKGROUND_NEXT, MIXED_PARALLEL_NEXT, PARALLEL_NEXT } from './handOffNext';
 import { ticketStatusMove, ticketToolVocabulary } from './ticketToolVocabulary';
-import { toolResultRecord } from './toolResultRecord';
+import { entityIdsOf, toolResultRecord } from './toolResultRecord';
 import { FAN_OUT_TOOL, fanOut, inlineTaskList } from './handOffFanOut';
 import { modeOf, splitForParallel, splitLayoutLine, type HandOffDecision, type HandOffMode, type ParallelSplit, type ScopeClash } from './handOffParallelism';
 
@@ -261,6 +261,21 @@ async function call(ports: HandOffPorts, name: string, args: Record<string, unkn
   return out;
 }
 
+/**
+ * The ref of a ticket a create tool filed, read through {@link entityIdsOf}: the account's
+ * create answers its SyncId; the editor's `ticket-create` answers its LocalId (or, once synced,
+ * its SyncId). An editor id that is neither stays the editor's own opaque reference — its
+ * `ticket-move` resolves it — and is never parsed as a number.
+ */
+function filedTicketRef(record: Record<string, unknown> | null, local: boolean): TicketRef | undefined {
+  const { localId, syncId } = entityIdsOf(record);
+  if (!local) return syncId ?? undefined;
+  if (localId) return localId;
+  if (syncId != null) return syncId;
+  const opaque = record?.id;
+  return typeof opaque === 'string' && opaque.trim() ? opaque : undefined;
+}
+
 /** File one ticket per task. A task whose ticket fails still runs — the work matters more
  *  than its card, and the run's own delta backstop will still record what changed. */
 async function fileTickets(plan: HandOffPlan, ports: HandOffPorts): Promise<Array<TicketRef | undefined>> {
@@ -281,8 +296,7 @@ async function fileTickets(plan: HandOffPlan, ports: HandOffPorts): Promise<Arra
     // A host may hand the result back as JSON text.
     const record = toolResultRecord(out);
     const failed = isFailed(record ?? out);
-    const id = !failed ? record?.id : undefined;
-    ids.push(typeof id === 'number' || (vocabulary.local && typeof id === 'string' && id) ? id : undefined);
+    ids.push(failed ? undefined : filedTicketRef(record, vocabulary.local));
     if (!failed) await ports.afterCreate?.(createTool, out).catch(() => undefined);
   }
   return ids;

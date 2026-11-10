@@ -40,6 +40,7 @@ import {
 } from '@builderforce/run-guards';
 import { completionBlockedAdvisory, isTicketCompletion } from '../completionGuard';
 import type { BrainRunContext } from './brainRunContext';
+import { nowIso, pushTrace } from './runCells';
 
 /** What a refusal call returns to the model (ordinary tool result, `ok:false`). */
 export interface Refusal {
@@ -128,15 +129,17 @@ async function verifyPaths(
  * A pull request is compared against the merge-base with ITS base branch (`args.base`,
  * else origin's default) — after the branch was pushed, `@{u}` is the branch itself and
  * the set would be empty. When the host cannot compute the outgoing change at all (no
- * upstream, no outgoing commits), the verdict passes but reports why (`unchecked`, OD-3):
- * never "checks passed", and no review is spent on an empty diff.
+ * upstream, no PR base, no outgoing commits), the gate REFUSES naming why — the port's
+ * contract (`runTypes` `GitPort.outgoing.unavailable`) is "never a pass", and a publish
+ * with nothing verifiable has nothing to publish. No review is spent on an empty diff.
+ * (A single CHECK that could not run is different: OD-3 passes it and reports it.)
  */
 export async function runOutgoingGate(
   run: BrainRunContext,
   repo: string,
   tool = 'git_push',
   args?: unknown,
-): Promise<{ verdict: GateVerdict; diffHash: string | null; gated: boolean; unchecked?: string }> {
+): Promise<{ verdict: GateVerdict; diffHash: string | null; gated: boolean }> {
   const git = run.req.git;
   if (!git) return { verdict: { ok: true, unavailable: [] }, diffHash: null, gated: false };
   const pullRequest = tool === 'open_pull_request';
@@ -148,7 +151,9 @@ export async function runOutgoingGate(
   if (!baseBranch && !pullRequest) return { verdict: { ok: true, unavailable: [] }, diffHash, gated: false };
   // Nothing to check (no upstream / no PR base / no outgoing commits): "unavailable", never a pass, never reviewed.
   const unchecked = out.unavailable ?? (files.length === 0 || (diff !== undefined && !diff.trim()) ? 'no outgoing change to check' : undefined);
-  if (unchecked) return { verdict: { ok: true, unavailable: [unchecked] }, diffHash, gated: true, unchecked };
+  if (unchecked) {
+    return { verdict: { ok: false, reason: `${tool} refused: not verified — ${unchecked}. Commit the change on a branch with an upstream (or name the pull request base) and retry.` }, diffHash, gated: true };
+  }
   // Full tier for exactly the files whose bytes changed under it since the last check.
   await verifyPaths(run, files);
   const verdict = outgoingGate(files, run.evidence, policyOf(run));
@@ -237,9 +242,9 @@ export async function shipGatePreflight(run: BrainRunContext, name: string, args
   try {
     if (publish) {
       // git_push (base branch) and open_pull_request: the outgoing + review gates hold.
-      const { verdict, diffHash, gated, unchecked } = await runOutgoingGate(run, repoArgOf(args), name, args);
+      const { verdict, diffHash, gated } = await runOutgoingGate(run, repoArgOf(args), name, args);
       if (!verdict.ok) return { refusal: { ok: false, error: verdict.reason } };
-      return gated ? { evidence: approvalEvidence(run, verdict.unavailable, diffHash, unchecked) } : {};
+      return gated ? { evidence: approvalEvidence(run, verdict.unavailable, diffHash) } : {};
     }
     // builtin_reviews_record complete: refused unless a reviewGate-approved review exists
     // for the CURRENT diff. The approving reviewer is attached so the record names it.
@@ -285,40 +290,69 @@ function wroteThisRun(absPath: string, touched: readonly string[]): boolean {
  * ticket is not yet done when the model reads the refusal. Applies only when this run
  * changed code, and only to the outgoing files THIS run wrote — a shared working tree's
  * other commits never block it. The evidence ledger is read first; any check still missing
- * runs under {@link COMPLETION_GATE_BUDGET_MS} total, and what cannot finish is
- * "unavailable" (a pass that is reported), never waited on. Null ⇒ the update proceeds.
+ * runs under {@link COMPLETION_GATE_BUDGET_MS} total, never waited on beyond it.
+ *
+ * FAILS CLOSED, like {@link shipGatePreflight}: a git / verifier error, the budget running
+ * out, or an outgoing change the host could not compute each REFUSE the update, naming
+ * why. The one exception is an uncomputable change on the BASE branch: the port tracks an
+ * upstream there, so the only thing it cannot compute is an empty set — the run's work has
+ * already landed, which is exactly what done means. Every non-pass outcome is traced
+ * (`tools.completion_gate`). Null ⇒ the update proceeds.
  */
 async function completionGateRefusal(run: BrainRunContext): Promise<Refusal | null> {
   const git = run.req.git;
   if (!git || !run.c.codeChanged || !run.c.touchedFiles?.length) return null;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const budget = new Promise<'timeout'>((resolve) => {
-    timer = setTimeout(() => resolve('timeout'), COMPLETION_GATE_BUDGET_MS);
+  const budget = new Promise<{ kind: 'timeout' }>((resolve) => {
+    timer = setTimeout(() => resolve({ kind: 'timeout' }), COMPLETION_GATE_BUDGET_MS);
   });
-  const check = (async (): Promise<GateVerdict | null> => {
-    const out = await git.outgoing('');
-    if (out.unavailable) return null; // nothing computable to check: never a refusal
-    const mine = out.files.filter((f) => wroteThisRun(f.absPath, run.c.touchedFiles));
-    if (!mine.length) return null;
-    await verifyPaths(run, mine, { budgetMs: COMPLETION_GATE_BUDGET_MS - 2_000 });
-    return outgoingGate(mine, run.evidence, policyOf(run));
-  })().catch(() => null); // a git / verifier hiccup never blocks a completion
+  type Outcome = { kind: 'verdict'; verdict: GateVerdict } | { kind: 'clear'; why: string } | { kind: 'unavailable'; why: string } | { kind: 'error'; why: string };
+  const check = async (): Promise<Outcome> => {
+    try {
+      const out = await git.outgoing('');
+      if (out.unavailable) return out.baseBranch ? { kind: 'clear', why: out.unavailable } : { kind: 'unavailable', why: out.unavailable };
+      const mine = out.files.filter((f) => wroteThisRun(f.absPath, run.c.touchedFiles));
+      if (!mine.length) return { kind: 'clear', why: 'none of the outgoing files were written by this run' };
+      await verifyPaths(run, mine, { budgetMs: COMPLETION_GATE_BUDGET_MS - 2_000 });
+      return { kind: 'verdict', verdict: outgoingGate(mine, run.evidence, policyOf(run)) };
+    } catch (e) {
+      return { kind: 'error', why: e instanceof Error ? e.message : String(e) };
+    }
+  };
+  let outcome: Outcome | { kind: 'timeout' };
   try {
-    const verdict = await Promise.race([check, budget]);
-    if (verdict === 'timeout' || !verdict || verdict.ok) return null;
-    return { ok: false, error: completionBlockedAdvisory(verdict) };
+    outcome = await Promise.race([check(), budget]);
   } finally {
     if (timer) clearTimeout(timer);
   }
+  if (outcome.kind === 'verdict' && outcome.verdict.ok) return null;
+  const refusal: Refusal | null =
+    outcome.kind === 'verdict' ? { ok: false, error: completionBlockedAdvisory(outcome.verdict) }
+    : outcome.kind === 'clear' ? null
+    : { ok: false, error: completionBlockedAdvisory({ ok: false, reason: completionUncheckedReason(outcome) }) };
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: 'message',
+    label: 'tools.completion_gate',
+    args: { outcome: outcome.kind, ...('why' in outcome ? { why: outcome.why } : {}) },
+    result: refusal ? refusal.error : 'allowed',
+  });
+  return refusal;
+}
+
+/** Why the completion check could not verify the run's outgoing change. */
+function completionUncheckedReason(outcome: { kind: 'timeout' } | { kind: 'unavailable' | 'error'; why: string }): string {
+  if (outcome.kind === 'timeout') return `the check did not finish within ${COMPLETION_GATE_BUDGET_MS / 1000}s, so the change is not verified.`;
+  if (outcome.kind === 'unavailable') return `the outgoing change could not be computed (${outcome.why}), so it is not verified.`;
+  return `the ship gate could not read or verify the outgoing change (${outcome.why}). Fix the repository state and retry.`;
 }
 
 /**
  * The line the approval prompt shows for a gated publish that passed (PRD §4.5, OD-3):
  * what the checks proved, what could not run (never reported as verified), and who reviewed.
- * When nothing could be checked at all (`unchecked`), it says so — never "checks passed".
+ * (A change nothing could be checked on never reaches here: {@link runOutgoingGate} refuses it.)
  */
-function approvalEvidence(run: BrainRunContext, unavailable: readonly string[], diffHash: string | null, unchecked?: string): string {
-  if (unchecked) return `not verified: ${unchecked}`;
+function approvalEvidence(run: BrainRunContext, unavailable: readonly string[], diffHash: string | null): string {
   const checks = unavailable.length
     ? `checks passed · ${unavailable.length} check${unavailable.length === 1 ? '' : 's'} could not run here (not verified)`
     : 'checks passed';

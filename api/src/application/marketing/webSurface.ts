@@ -62,7 +62,6 @@
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { inTransaction, type Db } from '../../infrastructure/database/connection';
 import { bulkUpdateById } from '../../infrastructure/database/bulkUpdate';
-import { applyHitDeltas, recordHit, scopedHitKey } from '../counters/hitCounters';
 import type { Env } from '../../env';
 import {
   landingPageBlocks,
@@ -73,7 +72,8 @@ import {
 import { scopedToNullableTenant, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
 import { registerObject } from '../kernel/ObjectRegistry';
-import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
+import { WebSurfaceError, requirePath, requireSlug, requireTitle } from './webSurfaceValidation';
 
 /**
  * Version token over every PUBLIC website-page read of one owner. The three page
@@ -127,42 +127,9 @@ export type SeoPageInput = {
   structuredData?: unknown;
 };
 
-/** A slug/path the URL layer can actually carry. Rejected rather than coerced:
- *  silently rewriting a slug means the page the author saved is not the page at
- *  the address they were shown. */
-const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const PATH = /^\/(?:[A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~-]+)*)?$/;
-
-export class WebSurfaceError extends Error {
-  constructor(message: string, readonly status: 400 | 404 | 409 = 400) {
-    super(message);
-    this.name = 'WebSurfaceError';
-  }
-}
-
-const requireSlug = (slug: string): string => {
-  const s = slug.trim().toLowerCase();
-  if (!SLUG.test(s) || s.length > 200) {
-    throw new WebSurfaceError('slug must be lowercase alphanumeric words separated by single hyphens');
-  }
-  return s;
-};
-
-const requirePath = (path: string): string => {
-  const p = path.trim();
-  if (!PATH.test(p) || p.length > 500) {
-    throw new WebSurfaceError('path must be an absolute URL path with no query or fragment');
-  }
-  // '/a/' and '/a' are the same page; storing both is how two rows end up
-  // fighting over one canonical URL.
-  return p.length > 1 && p.endsWith('/') ? p.slice(0, -1) : p;
-};
-
-const requireTitle = (title: string): string => {
-  const t = title.trim();
-  if (!t) throw new WebSurfaceError('title is required');
-  return t.slice(0, 300);
-};
+// Slug/path/title validators and the error type live in webSurfaceValidation.ts;
+// WebSurfaceError is re-exported so callers keep one import site for the service.
+export { WebSurfaceError };
 
 // ── Landing pages ───────────────────────────────────────────────────────────
 
@@ -924,66 +891,8 @@ export async function publicWebsitePage(db: Db, tenantId: number | null, path: s
   return row ?? null;
 }
 
-/**
- * The public read, served through the shared cache under the owner's version
- * token: a published page is read far more often than it is edited, and the
- * writers above are the only things that change the answer.
- */
-export async function publicWebsitePageCached(db: Db, env: Env, tenantId: number | null, path: string) {
-  const version = await getCacheVersion(env, websitePagesVersionKey(tenantId));
-  // A sentinel, not null, so an unpublished/unknown path is cached as a miss too (probes
-  // would otherwise hit Postgres every time); publish/unpublish bumps the version token.
-  const hit = await getOrSetCached(
-    env,
-    `web:page:v:${version}:${tenantId ?? 'platform'}:${requirePath(path)}`,
-    async () => (await publicWebsitePage(db, tenantId, path)) ?? ({ missing: true } as const),
-    { kvTtlSeconds: 3600, l1TtlMs: 60_000 },
-  );
-  return 'missing' in hit ? null : hit;
-}
-
-/**
- * The public landing read, through the shared cache under the owner's version token
- * (the same token and layers as {@link publicWebsitePageCached}). Anonymous traffic to
- * a campaign page no longer reaches Postgres per visit. Every landing writer bumps it
- * (`bumpLandingVersion`). `ends_at` expiry has no
- * write to hang a bump on, so it rests on the SHORT TTL (KV 120s, L1 30s).
- */
-export async function publicLandingPageCached(db: Db, env: Env, tenantId: number, slug: string) {
-  const version = await getCacheVersion(env, websitePagesVersionKey(tenantId));
-  // A sentinel, not null, so an unknown/unpublished slug is cached as a miss too (null
-  // would re-query Postgres on every probe). Mapped back to null for callers.
-  const hit = await getOrSetCached(
-    env,
-    `web:landing:v:${version}:${tenantId}:${slug.toLowerCase()}`,
-    async () => (await publicLandingPage(db, tenantId, slug)) ?? ({ missing: true } as const),
-    { kvTtlSeconds: 120, l1TtlMs: 30_000 },
-  );
-  return 'missing' in hit ? null : hit;
-}
-
-/** A landing page view. Counter-only and deliberately not an `activity_log` row:
- *  anonymous page views are high-volume and belong in the counter the campaign
- *  report reads, not in the audit trail a person is expected to scroll. Buffered in
- *  KV and applied by the `hit-counters` sweep — an anonymous view no longer writes. */
-export async function recordLandingPageView(env: Env, db: Db, tenantId: number, id: number) {
-  await recordHit(env, db, 'landing.view', scopedHitKey(tenantId, id));
-}
-
-/** A conversion against the page's `goal_metric`. Separate from the view counter
- *  because the ratio between them IS the campaign result. */
-export async function recordLandingPageConversion(env: Env, db: Db, tenantId: number, id: number) {
-  // Direct write, NOT the KV buffer: a conversion is a campaign result and must not be lost with an evicted isolate.
-  await applyHitDeltas(db, 'landing.convert', [{ kind: 'landing.convert', key: scopedHitKey(tenantId, id), n: 1, t: Date.now() }]);
-}
-
-/** A programmatic SEO page impression (`marketing_seo_pages`), by path. Buffered in KV and
- *  applied by the `hit-counters` sweep. The sweep update is filtered to
- *  `status = 'published'` (see HIT_COUNTERS), so a retired page is not counted. No renderer
- *  beacons yet; the endpoint is ready for one. */
-export async function recordSeoImpression(env: Env, db: Db, tenantId: number | null, path: string) {
-  await recordHit(env, db, 'seo.impression', scopedHitKey(tenantId, requirePath(path)));
-}
+// The cached public reads and the view / conversion / impression counters are in
+// webSurfacePublicDelivery.ts.
 
 /** Everything the sitemap needs, in one read: published website pages and live
  *  landing pages, plus published SEO pages. Landing pages are included ONLY when

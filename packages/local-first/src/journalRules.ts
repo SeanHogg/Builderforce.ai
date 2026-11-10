@@ -33,6 +33,7 @@
 import { selectPending, type LocalFirstTransaction } from './store.js';
 import { hashPayload } from './payloadHash.js';
 import type { EntityDestination, JournalOperation, LocalEntityType, LocalRecord, ServerMapping } from './records.js';
+import { parseSyncId } from './entityId.js';
 
 /** The version a sign-in binding records: a server chat exists, nothing was imported. */
 export const BOUND_ONLY_VERSION = 0;
@@ -63,7 +64,7 @@ export function isOwnRecord(row: LocalRecord, deviceId: string): boolean {
 }
 
 /** Whether the server has imported this row (a sync receipt mapped it). */
-export function isImported(mapping: ServerMapping | undefined): boolean {
+export function isImported(mapping: Pick<ServerMapping, 'serverVersion'> | undefined): boolean {
   return mapping !== undefined && mapping.serverVersion > BOUND_ONLY_VERSION;
 }
 
@@ -181,8 +182,8 @@ export async function rebaseNewerWrites(
 /** The payload a row is imported with: a sign-in-bound chat names its server chat. */
 function importPayload(record: LocalRecord, mapping: ServerMapping | undefined): unknown {
   if (record.entityType !== 'chat' || mapping?.serverVersion !== BOUND_ONLY_VERSION) return record.payload;
-  const serverId = Number(mapping.serverId);
-  return Number.isSafeInteger(serverId) && serverId > 0 ? { ...(record.payload as object), serverId } : record.payload;
+  const serverId = parseSyncId(mapping.syncId);
+  return serverId !== null ? { ...(record.payload as object), serverId } : record.payload;
 }
 
 /**

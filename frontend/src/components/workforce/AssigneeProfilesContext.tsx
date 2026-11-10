@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import type { AssigneeProfileMap, AssigneeProfileDto } from '@/lib/builderforceApi';
 import { useOptionalAuth } from '@/lib/AuthContext';
 import { loadAssigneeProfileMap } from '@/lib/assigneeProfilesCache';
+import { recordedFailure } from '@/lib/reportError';
 
 /**
  * One shared fetch of the tenant's assignee → personality map, exposed as a lookup
@@ -18,16 +19,23 @@ import { loadAssigneeProfileMap } from '@/lib/assigneeProfilesCache';
 
 const Ctx = createContext<AssigneeProfileMap | null>(null);
 
+const EMPTY: AssigneeProfileMap = {};
+
 export function AssigneeProfilesProvider({ children }: { children: ReactNode }) {
-  const [profiles, setProfiles] = useState<AssigneeProfileMap>({});
+  // The map is held WITH the tenant it was loaded for, so a tenant switch never shows the
+  // previous tenant's personalities - not while the new load runs, and not after it fails.
+  const [loaded, setLoaded] = useState<{ tenantKey: string; profiles: AssigneeProfileMap } | null>(null);
   const tenantKey = String(useOptionalAuth()?.tenant?.id ?? 'none');
   useEffect(() => {
     let cancelled = false;
-    // Best-effort: a failure just means hovercards render their trigger with no
-    // personality popover, never a thrown error in the board.
-    loadAssigneeProfileMap(tenantKey).then((m) => { if (!cancelled) setProfiles(m); }).catch(() => {});
+    // Best-effort: a failure means hovercards render their trigger with no personality
+    // popover, never a thrown error in the board. The failure itself is reported.
+    loadAssigneeProfileMap(tenantKey)
+      .catch(recordedFailure('Loading assignee profiles', EMPTY))
+      .then((profiles) => { if (!cancelled) setLoaded({ tenantKey, profiles }); });
     return () => { cancelled = true; };
   }, [tenantKey]);
+  const profiles = loaded?.tenantKey === tenantKey ? loaded.profiles : EMPTY;
   return <Ctx.Provider value={profiles}>{children}</Ctx.Provider>;
 }
 

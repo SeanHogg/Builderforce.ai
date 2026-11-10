@@ -21,10 +21,10 @@
  * args name the ticket when the call changes it.
  */
 
-import { TASK_TABLE_KINDS } from "@builderforce/local-first";
+import { TASK_TABLE_KINDS, isLocalId } from "@builderforce/local-first";
 import type { ToolDef } from "./fileTools";
 import type { TicketServerIdLookup } from "./localTicketIdBridge";
-import { LOCAL_TICKET_ID, type ChatTicketScope, type RunChat } from "./localTicketScope";
+import type { ChatTicketScope, RunChat } from "./localTicketScope";
 
 type Args = Record<string, unknown>;
 
@@ -107,7 +107,8 @@ export function guardChatTicketWrites(
   };
   const linked = async (ticketId: string): Promise<boolean> => {
     if (await scope.linkedLocally(ticketId)) return true;
-    const serverId = LOCAL_TICKET_ID.test(ticketId) ? await ticketServerId?.(ticketId) : ticketId;
+    // A LocalId reaches the account only through its SyncId (the resolver-backed lookup); any other id is the account's already.
+    const serverId = isLocalId(ticketId) ? await ticketServerId?.(ticketId) : ticketId;
     // A local ticket the account has not seen, and this chat does not carry: another chat's.
     if (!serverId) return false;
     return linkedOnServer(serverId);

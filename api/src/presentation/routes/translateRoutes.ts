@@ -12,7 +12,7 @@ import { Hono } from 'hono';
 import type { HonoEnv, Env } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { z, parseBody } from './requestBody';
-import { checkSlidingWindow } from '../../application/ratelimit/slidingWindow';
+import { rateLimitedResponse, slidingWindowLimited } from '../middleware/rateLimitResponse';
 import { spendTranslateBudget } from '../../application/translate/translateBudget';
 import { createDefaultTranslateText } from '../../application/translate/defaultTranslateText';
 import {
@@ -43,21 +43,15 @@ export function createTranslateRoutes(makeTranslate: TranslateFactory = createDe
     const body = await parseBody(c, Body);
 
     const env = c.env as Env;
-    const verdict = await checkSlidingWindow(env, `translate:${c.get('tenantId')}:${c.get('userId')}`, TRANSLATE_RPM);
-    if (verdict && !verdict.allowed) {
-      c.header('Retry-After', String(verdict.retryAfterSeconds));
-      return c.json({ error: 'Rate limit exceeded. Please slow down.', resetAt: verdict.resetAt }, 429);
-    }
+    const limited = await slidingWindowLimited(c, `translate:${c.get('tenantId')}:${c.get('userId')}`, TRANSLATE_RPM);
+    if (limited) return limited;
 
     // Nothing to translate: echo the texts, spend no budget, make no model call.
     if (isSameLanguage(body.from, body.to)) return c.json({ translations: body.texts });
 
     const chars = body.texts.reduce((n, t) => n + t.length, 0);
     const budget = await spendTranslateBudget(env, c.get('tenantId') as number, chars);
-    if (budget) {
-      c.header('Retry-After', String(budget.retryAfterSeconds));
-      return c.json({ error: 'Daily translation budget exceeded.', resetAt: budget.resetAt }, 429);
-    }
+    if (budget) return rateLimitedResponse(c, budget, 'Daily translation budget exceeded.');
 
     try {
       const translations = await makeTranslate(env)(body);

@@ -67,7 +67,8 @@ import {
   type LocalRuntimeProbe,
 } from '@builderforce/local-inference';
 import type { InferenceMode } from '@builderforce/local-first';
-import { BrainRequestError, NO_LOCAL_MODEL, NO_SPECIFIC_MODEL, NOT_SIGNED_IN } from './chatError';
+import { NO_LOCAL_MODEL, NO_SPECIFIC_MODEL, NOT_SIGNED_IN } from './chatError';
+import { pickThenAuto, type ModelFallbackEvent } from './hostPickFallback';
 import { createHandoffFit } from './windowFit/packForModel';
 import {
   createLocalFirstStream,
@@ -81,7 +82,9 @@ import { pageRuntimePin, remapBuiltInPin } from './pageEngines/pageRuntimePin';
 import { hybridLocalSuccessTurn } from './localSuccess/hybridLocalSuccess';
 import { localSuccessRouterFor, scopedLocalSuccessRouter, type LocalSuccessStore, type LocalSuccessTuning } from './localSuccess/localSuccessRouter';
 import { localSuccessScope, type LocalSuccessFederation } from './localSuccess/localSuccessFederation';
-import { StreamInterruptedError, TransportError, type StreamChatOptions, type StreamChatResult, type StreamHandlers } from './streamChatCompletion';
+import type { StreamChatOptions, StreamChatResult, StreamHandlers } from './streamChatCompletion';
+
+export { isFallbackFailure, type ModelFallbackEvent } from './hostPickFallback';
 
 /** A Brain streaming fn — structurally `BrainStreamFn`, restated to keep this module off
  *  the run store's import graph (as `localFirstTransport` does). */
@@ -158,21 +161,6 @@ export interface HostModelStreamInput {
    * stays on this device. Used only with `localSuccess`, on a signed-in Hybrid turn.
    */
   localSuccessFederation?: LocalSuccessFederation;
-}
-
-/** What {@link HostModelStreamInput.onFallback} is told: the pick that failed, and why. */
-export interface ModelFallbackEvent {
-  /** The picked model ref (`local/…` or a gateway id). */
-  from: string;
-  /** The failure's message — for a log line; the notice names only the model. */
-  reason: string;
-  /**
-   * Set when this is NOT a failure: `PIN_REMAPPED` — a built-in-model pin named another
-   * vendor's model and runs on this browser's (`to`). Absent = a failed pick (above).
-   */
-  code?: 'PIN_REMAPPED';
-  /** The model that answers instead, for `PIN_REMAPPED`. */
-  to?: string;
 }
 
 /**
@@ -329,62 +317,6 @@ export function createHostModelStream(input: HostModelStreamInput): StreamFn {
       ...(input.onFallback ? { onFallback: input.onFallback } : {}),
     });
   };
-}
-
-/**
- * Whether a failed pick may fall back to Auto: TRANSPORT-CLASS failures only — nothing the
- * person could fix by acting on the error.
- *
- *  - a local pick's engine failing (any error from this device's runtime);
- *  - the gateway unreachable (`TransportError` — the connection never opened);
- *  - a timeout before any output (`StreamInterruptedError`, which `pickThenAuto` only
- *    sees uncommitted);
- *  - a 5xx from the gateway.
- *
- * Everything else is TERMINAL — a 401 (sign in again), 402 / plan limit (upgrade), 403, a
- * BYO-key error, any other 4xx — so the shared remedy banner offers the fix instead of a
- * different model quietly answering.
- */
-export function isFallbackFailure(err: unknown, local: boolean): boolean {
-  // This device's engine failing is never something a remedy fixes — the shim may answer
-  // it as a 4xx (a model not downloaded, an oversized prompt), so `local` decides first.
-  if (local) return true;
-  if (err instanceof BrainRequestError) return err.status >= 500;
-  return err instanceof TransportError || err instanceof StreamInterruptedError;
-}
-
-/**
- * Hybrid's pick-first rule: run the pick; if it fails before the person saw anything (no
- * text, no tool call), the turn was not stopped and the failure is transport-class
- * ({@link isFallbackFailure}), fall back to Auto and tell the host. Once it streamed, the
- * pick owns the turn — a fallback would answer twice.
- */
-async function pickThenAuto(
-  pinned: (handlers: StreamHandlers) => Promise<StreamChatResult>,
-  fallback: () => Promise<StreamChatResult>,
-  handlers: StreamHandlers,
-  signal: AbortSignal | undefined,
-  pick: { from: string; local: boolean; onFallback?: (event: ModelFallbackEvent) => void },
-): Promise<StreamChatResult> {
-  let committed = false;
-  const watched: StreamHandlers = {
-    ...handlers,
-    onTextDelta: (delta) => {
-      committed = true;
-      handlers.onTextDelta?.(delta);
-    },
-    onToolCallDelta: (index, partial) => {
-      committed = true;
-      handlers.onToolCallDelta?.(index, partial);
-    },
-  };
-  try {
-    return await pinned(watched);
-  } catch (err) {
-    if (committed || signal?.aborted || !isFallbackFailure(err, pick.local)) throw err;
-    pick.onFallback?.({ from: pick.from, reason: err instanceof Error ? err.message : String(err) });
-    return fallback();
-  }
 }
 
 /**

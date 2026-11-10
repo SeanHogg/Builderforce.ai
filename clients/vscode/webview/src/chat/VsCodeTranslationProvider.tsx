@@ -13,6 +13,8 @@ import { TranslationProvider, createCloudTranslate, translationLabelsFrom, bundl
 import { authedFetch } from '../authedFetch';
 import { webviewOnDeviceTasks } from '../webviewOnDeviceTasks';
 import { getToken, post, refreshToken, type InitData } from '../vscodeBridge';
+import { useViewerId } from './useViewerId';
+import { translationIdentityOf } from './translationIdentity';
 
 /** Module-level so the provider's value stays referentially stable across renders. */
 const openModelPicker = () => post('downloadLocalModel');
@@ -27,6 +29,7 @@ export function VsCodeTranslationProvider({ init, children }: { init: InitData; 
       body: JSON.stringify(body),
     }));
   }, [mayUseCloud, init.baseUrl]);
+  const viewerId = useViewerId();
   const tasks = useMemo(() => webviewOnDeviceTasks(), []);
   const labels = useMemo(() => translationLabelsFrom(bundleLookup(init.labels, (key) => key)), [init.labels]);
   return (
@@ -35,7 +38,7 @@ export function VsCodeTranslationProvider({ init, children }: { init: InitData; 
       cloud={cloud}
       locale={init.locale ?? navigator.language}
       labels={labels}
-      identity={init.signedIn ? 'signed-in' : null}
+      identity={translationIdentityOf(init.signedIn, viewerId)}
       openModelPicker={openModelPicker}
     >
       {children}

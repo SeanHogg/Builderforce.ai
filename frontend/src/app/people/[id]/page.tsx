@@ -6,9 +6,11 @@ import PersonProfileClient from '@/components/people/PersonProfileClient';
 
 export const runtime = 'edge';
 
-export async function generateMetadata(): Promise<Metadata> {
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
   const t = await getTranslations('personProfile');
-  return pageMetadata({ title: t('seoTitle'), description: t('seoDescription'), path: '/people' });
+  // The canonical is the profile's own URL: there is no `/people` index page.
+  return pageMetadata({ title: t('seoTitle'), description: t('seoDescription'), path: `/people/${encodeURIComponent(id)}` });
 }
 
 export default async function PersonPage({ params }: { params: Promise<{ id: string }> }) {

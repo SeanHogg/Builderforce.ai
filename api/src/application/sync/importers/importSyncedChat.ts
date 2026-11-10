@@ -39,9 +39,9 @@ import {
   preludeRejection,
   rejected,
   sameCanonical,
-  serverNumericId,
   type BoundedImportOutcome,
 } from './index';
+import { mappedServerKey } from '../syncIds';
 
 /** The fields of the client's chat the server keeps. */
 interface ChatFields {
@@ -155,7 +155,7 @@ async function updateChat(
   const gate = mutateGate(event, ctx, mapping);
   if (gate) return gate;
   const current = mapping as SyncEntityMappingRow;
-  const id = serverNumericId(current.serverId);
+  const id = mappedServerKey(current);
   if (id === null) return rejected('server_id_invalid');
   const parsed = readChat(event.payload);
   if (!parsed.ok) return rejected(parsed.detail);
@@ -186,7 +186,7 @@ async function deleteChat(
   const gate = mutateGate(event, ctx, mapping, tombstone);
   if (gate) return gate;
   const current = mapping as SyncEntityMappingRow;
-  const id = serverNumericId(current.serverId);
+  const id = mappedServerKey(current);
   if (id === null) return rejected('server_id_invalid');
   try {
     // A deleted local chat is ARCHIVED here, never destroyed: its usage and ticket

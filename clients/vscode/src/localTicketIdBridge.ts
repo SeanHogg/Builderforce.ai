@@ -11,11 +11,16 @@
  * Pure of `vscode`; the id lookup is a port so it is testable headlessly.
  */
 
-import type { LocalFirstStore } from "@builderforce/local-first";
+import { entityIdResolver, isLocalId, parseSyncId, syncIdText, type LocalFirstStore, type SyncId } from "@builderforce/local-first";
 import type { ToolDef } from "./fileTools";
-import { LOCAL_TICKET_ID as LOCAL_ID } from "./localTicketScope";
 
-/** Server tool → the arguments that carry a TICKET id (a task id on the account). Data, not branches. */
+/**
+ * The ticket-id arguments the catalog's schema cannot name on its own. Every other one is
+ * DERIVED from the tool's schema ({@link ticketIdArgsOf}): an argument named `taskId` /
+ * `ticketId` / `<x>TaskId` / `<x>TicketId` typed as a number. What is listed here is the floor:
+ * `builtin_tasks_*` take the ticket as a bare `id` (not derivable by name), and the rest keep
+ * the bridge on when a catalog arrives without typed properties.
+ */
 export const SERVER_TICKET_ID_ARGS: Readonly<Record<string, readonly string[]>> = {
   builtin_tasks_get: ["id"],
   builtin_tasks_update: ["id", "parentTaskId"],
@@ -48,17 +53,42 @@ export const SERVER_TICKET_ID_ARGS: Readonly<Record<string, readonly string[]>> 
   builtin_marketplace_unpublish_ticket: ["ticketId"],
 };
 
-/** The account's id for a local ticket, or undefined while it has not synced. */
+/** The ticket-id naming contract of the account's tools. */
+const TICKET_ID_NAME = /^(?:task|ticket)Id$|[a-z0-9](?:Task|Ticket)Id$/;
+
+const isNumericType = (type: unknown): boolean =>
+  type === "number" || type === "integer" || (Array.isArray(type) && (type.includes("number") || type.includes("integer")));
+
+/**
+ * The arguments of one tool that carry a TICKET id: its schema's numeric properties named by
+ * the ticket-id contract, plus the {@link SERVER_TICKET_ID_ARGS} floor. A new account tool that
+ * takes a `taskId` is bridged without anyone editing a list.
+ */
+export function ticketIdArgsOf(tool: Pick<ToolDef, "name" | "parameters" | "remote">): readonly string[] {
+  // Only the ACCOUNT's tools take server ids; a local tool's ids are already local.
+  const properties = (tool.remote ? tool.parameters?.properties ?? {} : {}) as Record<string, { type?: unknown } | undefined>;
+  const derived = Object.entries(properties)
+    .filter(([name, prop]) => TICKET_ID_NAME.test(name) && isNumericType(prop?.type))
+    .map(([name]) => name);
+  const floor = SERVER_TICKET_ID_ARGS[tool.name] ?? [];
+  return [...new Set([...floor, ...derived])];
+}
+
+/** The account's id (SyncId as text, `syncIdText`) for a local ticket, or undefined while it has not synced. */
 export type TicketServerIdLookup = (localId: string) => Promise<string | undefined>;
 
+/** The lookup over the store: the ONE resolver's `syncIdOf`. No mapping, or a mapping with no SyncId, is "not synced". */
 export function ticketServerIdLookup(store: LocalFirstStore): TicketServerIdLookup {
-  return (localId) =>
-    store.read(async (tx) => {
-      const record = await tx.get("ticket", localId);
-      if (!record) return undefined;
-      return (await tx.mapping("ticket", localId, record.destination))?.serverId;
-    });
+  const resolver = entityIdResolver(store);
+  return async (localId) => {
+    if (!isLocalId(localId)) return undefined;
+    const sync = await resolver.syncIdOf("ticket", localId);
+    return sync === null ? undefined : syncIdText(sync);
+  };
 }
+
+/** The SyncId a lookup answers, re-checked: anything that is not one is "not synced yet", never `Number()`-guessed. */
+const syncIdVia = async (lookup: TicketServerIdLookup, localId: string): Promise<SyncId | null> => parseSyncId(await lookup(localId));
 
 const unsynced = (id: string): string =>
   JSON.stringify({
@@ -125,16 +155,16 @@ export interface BridgeOptions {
 }
 
 /** Poll the lookup until the mapping appears, the wait runs out, or the run is stopped. */
-async function awaitMapping(lookup: TicketServerIdLookup, localId: string, wait: UnsyncedWait, signal?: AbortSignal): Promise<string | "stopped" | undefined> {
+async function awaitMapping(lookup: TicketServerIdLookup, localId: string, wait: UnsyncedWait, signal?: AbortSignal): Promise<SyncId | "stopped" | null> {
   const rounds = Math.max(1, Math.ceil(wait.timeoutMs / Math.max(1, wait.intervalMs)));
   for (let round = 0; round < rounds; round += 1) {
     if (signal?.aborted) return "stopped";
     await wait.sleep(wait.intervalMs, signal);
     if (signal?.aborted) return "stopped";
-    const serverId = await lookup(localId);
-    if (serverId) return serverId;
+    const sync = await syncIdVia(lookup, localId);
+    if (sync !== null) return sync;
   }
-  return undefined;
+  return null;
 }
 
 /** Let a ticket-id argument also be given as a local id (the schema says number; the model may hold a UUID). */
@@ -158,22 +188,22 @@ export function bridgeLocalTicketIds(tools: readonly ToolDef[], lookup: TicketSe
   const wait: UnsyncedWait = { ...DEFAULT_UNSYNCED_WAIT, ...options.wait };
   // Sync off: the ticket stays on this device — say so. Sync on: the receipt is usually seconds away — wait for it.
   // Unknown (no predicate): the plain "not synced yet".
-  const resolve = async (localId: string, toolName: string, signal?: AbortSignal): Promise<string | { refused: string }> => {
-    const serverId = await lookup(localId);
-    if (serverId) return serverId;
+  const resolve = async (localId: string, toolName: string, signal?: AbortSignal): Promise<SyncId | { refused: string }> => {
+    const sync = await syncIdVia(lookup, localId);
+    if (sync !== null) return sync;
     const syncOn = options.syncOn?.();
     if (syncOn === false) return { refused: localOnly(localId, toolName) };
     if (syncOn === true) {
       const later = await awaitMapping(lookup, localId, wait, signal);
       if (later === "stopped") return { refused: STOPPED };
-      if (later) return later;
+      if (later !== null) return later;
       return { refused: waitedOut(localId, toolName, wait.timeoutMs) };
     }
     return { refused: unsynced(localId) };
   };
   return tools.map((tool) => {
-    const argNames = SERVER_TICKET_ID_ARGS[tool.name];
-    if (!argNames) return tool;
+    const argNames = ticketIdArgsOf(tool);
+    if (argNames.length === 0) return tool;
     return {
       ...tool,
       parameters: widened(tool.parameters, argNames),
@@ -181,10 +211,10 @@ export function bridgeLocalTicketIds(tools: readonly ToolDef[], lookup: TicketSe
         const next = { ...args };
         for (const name of argNames) {
           const value = next[name];
-          if (typeof value !== "string" || !LOCAL_ID.test(value.trim())) continue;
-          const serverId = await resolve(value.trim(), tool.name, run?.signal);
-          if (typeof serverId !== "string") return serverId.refused;
-          next[name] = Number(serverId);
+          if (typeof value !== "string" || !isLocalId(value.trim())) continue;
+          const sync = await resolve(value.trim(), tool.name, run?.signal);
+          if (typeof sync !== "number") return sync.refused;
+          next[name] = sync;
         }
         return tool.execute(next, root, run);
       },

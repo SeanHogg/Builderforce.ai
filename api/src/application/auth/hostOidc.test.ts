@@ -10,7 +10,7 @@ vi.mock('../../infrastructure/auth/segmentResolver', () => ({
   resolveSegment: vi.fn(async () => 'seg-acct-1|co-1'),
 }));
 
-import { verifyHostOidcToken, resolveSegmentFromHostToken } from './hostOidc';
+import { verifyHostOidcToken, resolveSegmentFromHostToken, hostTokenGrantsScope } from './hostOidc';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -43,7 +43,7 @@ const KID = 'host-key-1';
 
 /** Minimal fake DB: answers the tenants.idpIssuer read; the segment table is
  *  stubbed so resolveSegment can lazy-create/read through it. */
-function makeDb(opts: { idpIssuer?: string | null } = {}): { db: Db; segmentRows: Map<string, unknown> } {
+function makeDb(opts: { idpIssuer?: string | null; settings?: string | null } = {}): { db: Db; segmentRows: Map<string, unknown> } {
   const segmentRows = new Map<string, unknown>();
   const db = {
     select: (fields?: unknown) => ({
@@ -53,7 +53,7 @@ function makeDb(opts: { idpIssuer?: string | null } = {}): { db: Db; segmentRows
             // Distinguish the tenants read from the segments read by which
             // columns were projected: the idpIssuer read names `idpIssuer`.
             if (fields && typeof fields === 'object' && 'idpIssuer' in (fields as object)) {
-              return opts.idpIssuer ? [{ idpIssuer: opts.idpIssuer }] : [];
+              return opts.idpIssuer ? [{ idpIssuer: opts.idpIssuer, settings: opts.settings ?? null }] : [];
             }
             // A segment read (findFederated re-read): the resolver only looks up
             // by (externalAccountId, externalCompanyId), which our where-cond
@@ -199,7 +199,7 @@ describe('resolveSegmentFromHostToken', () => {
 
   it('feeds VERIFIED claims into resolveSegment and returns the segment id', async () => {
     const { db } = makeDb({ idpIssuer: ISSUER });
-    const result = await resolveSegmentFromHostToken(env, db, TENANT_ID, await mintToken());
+    const result = await resolveSegmentFromHostToken(env, db, TENANT_ID, await mintToken(), 'ingest:feedback');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.segmentId).toBe('seg-acct-1|co-1');
@@ -214,8 +214,89 @@ describe('resolveSegmentFromHostToken', () => {
     const { db } = makeDb({ idpIssuer: ISSUER });
     // Well past the verifier's 60s clock-skew leeway so it is unambiguously expired.
     const now = Math.floor(Date.now() / 1000);
-    const result = await resolveSegmentFromHostToken(env, db, TENANT_ID, await mintToken({ exp: now - 120 }));
+    const result = await resolveSegmentFromHostToken(env, db, TENANT_ID, await mintToken({ exp: now - 120 }), 'ingest:feedback');
     expect(result.ok).toBe(false);
     expect(resolveSegmentMock).not.toHaveBeenCalled();
+  });
+
+  it('regression: a host token with no scope claim is refused segments:manage (403) and resolves nothing', async () => {
+    const { db } = makeDb({ idpIssuer: ISSUER });
+    const result = await resolveSegmentFromHostToken(env, db, TENANT_ID, await mintToken(), 'segments:manage');
+    expect(result).toEqual({
+      ok: false,
+      status: 403,
+      error: "This identity token is not authorized for the 'segments:manage' scope.",
+    });
+    expect(resolveSegmentMock).not.toHaveBeenCalled();
+  });
+
+  it('regression: a host token with no scope claim is refused webhooks:manage (403)', async () => {
+    const { db } = makeDb({ idpIssuer: ISSUER });
+    const result = await resolveSegmentFromHostToken(env, db, TENANT_ID, await mintToken(), 'webhooks:manage');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.status).toBe(403);
+  });
+
+  it('grants segments:manage only when the verified scope claim names it explicitly', async () => {
+    const { db } = makeDb({ idpIssuer: ISSUER });
+    const result = await resolveSegmentFromHostToken(
+      env, db, TENANT_ID, await mintToken({ scope: 'openid segments:manage' }), 'segments:manage',
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it('a verification failure answers 401, not 403', async () => {
+    const { db } = makeDb({ idpIssuer: ISSUER });
+    const result = await resolveSegmentFromHostToken(env, db, TENANT_ID, 'not-a-jwt', 'ingest:feedback');
+    expect(result).toEqual({ ok: false, status: 401, error: 'Malformed token.' });
+  });
+});
+
+describe('hostTokenGrantsScope', () => {
+  it('grants ingest:feedback by default and nothing else', () => {
+    expect(hostTokenGrantsScope({ scopes: [] }, 'ingest:feedback')).toBe(true);
+    expect(hostTokenGrantsScope({ scopes: [] }, 'segments:manage')).toBe(false);
+    expect(hostTokenGrantsScope({ scopes: [] }, 'webhooks:manage')).toBe(false);
+  });
+
+  it('ignores claimed scopes outside the seam set (scp cannot grant write:packages)', async () => {
+    const { db } = makeDb({ idpIssuer: ISSUER });
+    const result = await verifyHostOidcToken(env, db, TENANT_ID, await mintToken({ scp: ['write:packages', 'webhooks:manage'] }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.claims.scopes).toEqual(['webhooks:manage']);
+  });
+});
+
+describe('verifyHostOidcToken — expiry and audience', () => {
+  it('regression: rejects a token with no exp claim', async () => {
+    const { db } = makeDb({ idpIssuer: ISSUER });
+    const result = await verifyHostOidcToken(env, db, TENANT_ID, await mintToken({ exp: undefined }));
+    expect(result).toEqual({ ok: false, error: 'Token has no expiry.' });
+  });
+
+  it('regression: rejects a token whose aud is not the configured idpAudience', async () => {
+    const { db } = makeDb({ idpIssuer: ISSUER, settings: JSON.stringify({ idpAudience: 'https://builderforce.ai' }) });
+    const result = await verifyHostOidcToken(env, db, TENANT_ID, await mintToken({ aud: 'https://other-rp.example.com' }));
+    expect(result).toEqual({ ok: false, error: 'Token was not issued for this audience.' });
+  });
+
+  it('rejects a token with no aud when an audience is configured', async () => {
+    const { db } = makeDb({ idpIssuer: ISSUER, settings: JSON.stringify({ idpAudience: 'https://builderforce.ai' }) });
+    const result = await verifyHostOidcToken(env, db, TENANT_ID, await mintToken());
+    expect(result).toEqual({ ok: false, error: 'Token was not issued for this audience.' });
+  });
+
+  it('accepts a matching aud (string or array) when an audience is configured', async () => {
+    const { db } = makeDb({ idpIssuer: ISSUER, settings: JSON.stringify({ idpAudience: 'https://builderforce.ai' }) });
+    expect((await verifyHostOidcToken(env, db, TENANT_ID, await mintToken({ aud: 'https://builderforce.ai' }))).ok).toBe(true);
+    expect((await verifyHostOidcToken(env, db, TENANT_ID, await mintToken({ aud: ['x', 'https://builderforce.ai'] }))).ok).toBe(true);
+  });
+
+  it('fails closed when the tenant settings JSON is unreadable', async () => {
+    const { db } = makeDb({ idpIssuer: ISSUER, settings: '{not json' });
+    const result = await verifyHostOidcToken(env, db, TENANT_ID, await mintToken());
+    expect(result.ok).toBe(false);
   });
 });

@@ -24,6 +24,7 @@ import { fnv1a32 } from './payloadHash.js';
 import type { ChatTicketLinkType, ChatTicketLinkValue, LocalRecord } from './records.js';
 import { newLocalRecord, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
 import { tombstoneRecord } from './tombstone.js';
+import { parseSyncId, syncIdText } from './entityId.js';
 
 /**
  * The ticket kinds that live in the server's task table (one id space). A link to one resolves
@@ -96,8 +97,9 @@ export async function linkServerIds(
     if (!row) return undefined;
     const mapping = await tx.mapping(type, id, row.destination);
     if (!isImported(mapping)) return undefined;
-    // Only a numeric server id names a task/chat: another tier's id (`spec:5`) rides as kind + ref.
-    return /^\d+$/.test(mapping!.serverId) ? mapping!.serverId : undefined;
+    // Only a SyncId names a task/chat: another tier's id (`spec:5`) rides as kind + ref.
+    const syncId = parseSyncId(mapping!.syncId);
+    return syncId === null ? undefined : syncIdText(syncId);
   };
   const chatServerId = await idOf('chat', chatClientId);
   const ticketServerId = await idOf('ticket', ticketClientId);

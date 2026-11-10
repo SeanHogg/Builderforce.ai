@@ -14,6 +14,7 @@ import {
   MAX_SUPPORTED_SCHEMA_VERSION,
   destinationKey,
   hashSyncPayload,
+  parseSyncId,
 } from '../../../domain/sync/syncProtocol';
 import type {
   BoundedImportOutcome,
@@ -23,6 +24,7 @@ import type {
   SyncStoreSet,
 } from '../syncPorts';
 import { MIRROR_ENTITY_TYPES } from './importMirrorRecord';
+import { mappedServerKey } from '../syncIds';
 
 export { importMirrorRecord, MIRROR_ENTITY_TYPES } from './importMirrorRecord';
 export { importSyncedProject } from './importSyncedProject';
@@ -99,7 +101,7 @@ export async function mappedChat(
   const mapping = await stores.findMapping(ctx.auth.tenantId, 'chat', chatClientId);
   if (!mapping) return { kind: 'unmapped' };
   if (mapping.destinationKey !== ctx.destinationKey) return { kind: 'foreign' };
-  const serverChatId = serverNumericId(mapping.serverId);
+  const serverChatId = mappedServerKey(mapping);
   const chatId = serverChatId === null ? null : await ctx.resolveOwnChatId(serverChatId);
   return chatId === null ? { kind: 'foreign' } : { kind: 'own', chatId };
 }
@@ -208,17 +210,11 @@ export function mutateGate(
   return conflict(mapping, 'base_version_conflict');
 }
 
-export function serverNumericId(serverId: string): number | null {
-  if (!/^[1-9]\d*$/.test(serverId)) return null;
-  const id = Number(serverId);
-  return Number.isSafeInteger(id) ? id : null;
-}
-
 export function insertedId(rows: unknown): number | null {
   if (!Array.isArray(rows) || rows.length === 0) return null;
   const row = rows[0];
   if (!row || typeof row !== 'object' || !('id' in row)) return null;
   const id = (row as { id: unknown }).id;
-  return typeof id === 'number' && Number.isInteger(id) && id > 0 ? id : null;
+  return typeof id === 'number' ? parseSyncId(id) : null;
 }
 

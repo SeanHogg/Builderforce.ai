@@ -13,8 +13,9 @@
  * from the host, so a chat bound in workspace A is not named in workspace B.
  */
 
-import { BOUND_ONLY_VERSION, SCAN_STOP, queueImport, type EntityDestination, type LocalFirstStore, type LocalFirstTransaction } from '@builderforce/local-first';
+import { BOUND_ONLY_VERSION, SCAN_STOP, parseSyncId, queueImport, syncIdText, type EntityDestination, type LocalFirstStore, type LocalFirstTransaction } from '@builderforce/local-first';
 import { chatRecordById, liveRecords, scanLive, type ChatValue } from './records';
+import type { ViewKey } from '../types';
 
 /** What a host supplies so a local chat can be bound. */
 export interface ChatBindingPort {
@@ -28,30 +29,30 @@ export interface ChatBindingPort {
 
 export interface LocalChatIdentity {
   /** The bound server chat of a local chat, in the current account; undefined when unbound. */
-  serverIdFor(localId: number): Promise<number | undefined>;
+  serverIdFor(localId: ViewKey): Promise<number | undefined>;
   /** The local chat's stable client id, or undefined when the store does not hold it. */
-  clientIdFor(localId: number): Promise<string | undefined>;
+  clientIdFor(localId: ViewKey): Promise<string | undefined>;
   /** The local chat bound to a server chat in the current account, or undefined. */
-  localIdFor(serverId: number): Promise<number | undefined>;
+  localIdFor(serverId: number): Promise<ViewKey | undefined>;
   /**
    * Bind a local chat when signed in and allowed: an existing binding wins, else the
    * server chat is created and mapped. Concurrent calls for one chat share one request.
    * Undefined when the chat stays unbound.
    */
-  bind(localId: number): Promise<number | undefined>;
+  bind(localId: ViewKey): Promise<number | undefined>;
   /**
    * Record that a local chat IS an existing server chat (the host created it first).
    * False when it could not be: signed out, or the local chat is gone.
    */
-  adopt(localId: number, serverId: number): Promise<boolean>;
+  adopt(localId: ViewKey, serverId: number): Promise<boolean>;
 }
 
 /** The server chat a chat's mapping names in `destination`, read inside a transaction. */
 export async function boundServerId(tx: LocalFirstTransaction, clientId: string, destination: EntityDestination | undefined): Promise<number | undefined> {
   if (!destination || destination.kind !== 'bound') return undefined;
   const mapping = await tx.mapping('chat', clientId, destination);
-  const id = mapping ? Number(mapping.serverId) : NaN;
-  return Number.isSafeInteger(id) && id > 0 ? id : undefined;
+  // Brands do not survive the store: the row is re-read (`syncId`, else the legacy `serverId` text).
+  return (mapping ? parseSyncId(mapping.syncId ?? mapping.serverId) : null) ?? undefined;
 }
 
 export function createLocalChatIdentity(options: { store: LocalFirstStore; deviceId: string; port: ChatBindingPort }): LocalChatIdentity {
@@ -64,10 +65,13 @@ export function createLocalChatIdentity(options: { store: LocalFirstStore; devic
   });
 
   const map = async (clientId: string, destination: EntityDestination, serverId: number): Promise<void> => {
+    const syncId = parseSyncId(serverId);
+    if (syncId == null) return; // not a server chat id — nothing to bind to
     await store.transact(async (tx) => {
       // An existing binding wins — a sync receipt may have mapped it meanwhile.
       if (await tx.mapping('chat', clientId, destination)) return;
-      await tx.putMapping({ destination, entityType: 'chat', clientEntityId: clientId, serverId: String(serverId), serverVersion: BOUND_ONLY_VERSION });
+      // Both fields for one release: older windows sharing the journal read `serverId` text.
+      await tx.putMapping({ destination, entityType: 'chat', clientEntityId: clientId, syncId, serverId: syncIdText(syncId), serverVersion: BOUND_ONLY_VERSION });
       // A sync pass may have queued the chat's import before this binding existed: re-queue
       // it so it names the server chat (and the server adopts it, not mints a second one).
       let queued = false;

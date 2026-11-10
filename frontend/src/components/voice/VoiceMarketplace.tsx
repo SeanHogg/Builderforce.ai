@@ -62,7 +62,9 @@ export function VoiceMarketplace() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const checkout = params.get('checkout');
-    const voiceId = Number(params.get('voice'));
+    // An absent `voice` param is `Number(null) === 0`, which is an integer: require it present and positive.
+    const voiceParam = params.get('voice');
+    const voiceId = voiceParam ? Number(voiceParam) : NaN;
     let outcome: Promise<string | null> = Promise.resolve(null);
     if (checkout) {
       // Clear first so a refresh cannot re-run a completed purchase.
@@ -70,7 +72,7 @@ export function VoiceMarketplace() {
       clean.searchParams.delete('checkout');
       clean.searchParams.delete('voice');
       window.history.replaceState({}, '', clean.toString());
-      outcome = checkout === 'cancelled' || !Number.isInteger(voiceId)
+      outcome = checkout === 'cancelled' || !Number.isInteger(voiceId) || voiceId <= 0
         ? Promise.resolve(t('checkoutCancelled'))
         : completeMarketplaceVoiceCheckout(voiceId, checkout).then(
           (out) => t(out.status === 'revoked' ? 'licenseRevoked' : 'checkoutDone'),

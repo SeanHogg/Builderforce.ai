@@ -24,7 +24,7 @@ describe("readinessAdvisory (B1 — earlier readiness steer)", () => {
     expect(UNKEPT_STEER_AT).toBeLessThan(UNKEPT_READY_AT);
     // The trip count never moved — this is not a ladder trip.
     expect(d.tripCount).toBe(0);
-    expect(d.readinessNote()).toBe(READINESS_ADVISORY_NOTE);
+    expect(d.snapshot().advisory?.note).toBe(READINESS_ADVISORY_NOTE);
   });
 
   it("keeps the existing trip at UNKEPT_READY_AT after the advisory", () => {
@@ -46,7 +46,7 @@ describe("readinessAdvisory (B1 — earlier readiness steer)", () => {
     // The advisory has now been shown for one turn — the next turn opens clean.
     d.observe("read_file", { path: "g.ts" }, okData);
     expect(d.endTurn()).toBeNull();
-    expect(d.readinessNote()).toBe("");
+    expect(d.snapshot().advisory?.note ?? "").toBe("");
     // The claim streak carried through the clean turn (it neither claimed nor acted),
     // so the next unkept turn completes streak 2 → trip 1, resetting the windows. The
     // advisory stays spent — a FRESH streak afterwards does not re-trigger it.
@@ -84,7 +84,21 @@ describe("readinessAdvisory (B1 — earlier readiness steer)", () => {
     unkeptTurn(d, 0);
     expect(d.endTurn()?.kind).toBe("advisory");
     const resumed = new ProgressDetector(JSON.parse(JSON.stringify(d.snapshot())), ports);
-    expect(resumed.readinessNote()).toBe(READINESS_ADVISORY_NOTE);
+    expect(resumed.snapshot().advisory?.note).toBe(READINESS_ADVISORY_NOTE);
+    resumed.observe("read_file", { path: "h.ts" }, okData);
+    expect(resumed.endTurn()).toBeNull();
+  });
+
+  it("regression: a consumed advisory does not re-fire after a durable resume", () => {
+    const d = new ProgressDetector({}, ports);
+    unkeptTurn(d, 0);
+    expect(d.endTurn()?.kind).toBe("advisory");
+    // The note rides one turn and is consumed; the run's unkept total is still ≥ the threshold.
+    d.observe("read_file", { path: "g.ts" }, okData);
+    expect(d.endTurn()).toBeNull();
+    const snap = JSON.parse(JSON.stringify(d.snapshot()));
+    expect(snap.advisory).toEqual({ note: "", fired: true });
+    const resumed = new ProgressDetector(snap, ports);
     resumed.observe("read_file", { path: "h.ts" }, okData);
     expect(resumed.endTurn()).toBeNull();
   });

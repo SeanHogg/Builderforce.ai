@@ -63,6 +63,12 @@ export interface ChildLedgerPorts {
 /** How many times one persist is tried before it is logged as lost. */
 export const PERSIST_ATTEMPTS = 3;
 
+/**
+ * How many SETTLED children the ledger keeps for the session. Beyond it the oldest settled
+ * child is dropped (its journal record already carries it); a running child is never dropped.
+ */
+export const MAX_SETTLED_CHILDREN = 256;
+
 export interface ChildLedger {
   spawned(child: LedgerSpawn): void;
   /** The child settled; `deliveredBy` is how its report reached the owner. */
@@ -116,6 +122,18 @@ export function createChildLedger(ports: ChildLedgerPorts = {}): ChildLedger {
     });
   };
 
+  /** Keep at most {@link MAX_SETTLED_CHILDREN} settled entries, oldest dropped first (Map order = spawn order). */
+  const pruneSettled = (): void => {
+    let settled = 0;
+    for (const e of entries.values()) if (e.child.state !== "running") settled += 1;
+    for (const [key, e] of entries) {
+      if (settled <= MAX_SETTLED_CHILDREN) break;
+      if (e.child.state === "running") continue;
+      entries.delete(key);
+      settled -= 1;
+    }
+  };
+
   return {
     spawned(s) {
       entries.set(s.key, {
@@ -140,7 +158,10 @@ export function createChildLedger(ports: ChildLedgerPorts = {}): ChildLedger {
       const entry = entries.get(key);
       if (!entry || entry.child.state !== "running") return;
       entry.child = { ...entry.child, state: report.state, deliveredBy, report };
+      // Only a running child's whole brief is read (the duplicate rule): keep the clipped copy.
+      entry.brief = entry.child.brief;
       persist(entry.rootChatId);
+      pruneSettled();
     },
 
     liveWork(ownerKey) {

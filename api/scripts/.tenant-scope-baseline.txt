@@ -86,7 +86,6 @@ presentation/routes/personaRoutes.ts:4
 presentation/routes/projectRoutes.ts:1
 presentation/routes/promptLibraryRoutes.ts:5
 presentation/routes/qualityRoutes.ts:1
-presentation/routes/studioVoiceCloneRoutes.ts:1
 presentation/routes/taskRoutes.ts:1
 presentation/routes/workflowRoutes.ts:4
 presentation/routes/workflowTriggerRoutes.ts:1

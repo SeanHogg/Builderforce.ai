@@ -26,13 +26,13 @@
  * Idempotent: running it twice adds no second suppression entry. Every execution is written to the
  * governance mutation-audit envelope (digests, never the subject's email).
  */
-import { and, eq, like, lt, ne, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { deletePrivateObject } from '../assets/tenantAssetStore';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { dataSubjectRequests, dataSuppressionList } from '../../infrastructure/database/schema';
 import { sha256Hex } from '../../domain/shared/hash';
-import { scopedToSegment, scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { scopedToSegment } from '../../infrastructure/database/tenantScope';
 import type { ActorIdentity } from '../activity/activityLog';
 import type { SegmentScope } from '../shared/segmentScope';
 import { recordGovernanceMutation } from './mutationAudit';
@@ -112,6 +112,8 @@ export interface DsrExecutionResult {
   /** Set by `markDsrDelivered`. */
   deliveredAt: string | null;
   note: string | null;
+  /** Set by the stale-export purge when deleting the export failed (see `dsrExportPurge.ts`). Internal. */
+  exportPurge?: { failures: number; nextAttemptAt: string } | null;
 }
 
 /** What a client sees of an execution: the storage key is internal and never leaves the server. */
@@ -121,7 +123,7 @@ export const dsrExportUrl = (dsrId: string): string => `/api/governance/dsr/${ds
 
 /** Strip the internal storage key; expose only the authenticated, manager-gated download URL. PURE. */
 export function toPublicDsrResult(result: DsrExecutionResult, dsrId: string): PublicDsrResult {
-  const { exportKey, ...rest } = result;
+  const { exportKey, exportPurge: _purgeState, ...rest } = result;
   return { ...rest, exportUrl: exportKey ? dsrExportUrl(dsrId) : null };
 }
 
@@ -240,7 +242,7 @@ export async function executeDataSubjectRequest(
   return { ok: true, result };
 }
 
-const parseResult = (raw: string | null): DsrExecutionResult | null => {
+export const parseDsrExecutionResult = (raw: string | null): DsrExecutionResult | null => {
   if (!raw) return null;
   try { return JSON.parse(raw) as DsrExecutionResult; } catch { return null; }
 };
@@ -256,7 +258,7 @@ export async function markDsrDelivered(
   const [dsr] = await db.select().from(dataSubjectRequests)
     .where(scopedToSegment(dataSubjectRequests, scope.tenantId, scope.segmentId, eq(dataSubjectRequests.id, dsrId))).limit(1);
   if (!dsr) return { ok: false, status: 404, error: 'request not found' };
-  const prior = parseResult(dsr.executionResult);
+  const prior = parseDsrExecutionResult(dsr.executionResult);
   if (!prior) return { ok: false, status: 409, error: 'the request has not been executed yet' };
   if (dsr.status === 'completed') return { ok: false, status: 409, error: 'request is already completed' };
 
@@ -273,36 +275,6 @@ export async function markDsrDelivered(
     before: dsr, after: updated ?? null,
   });
   return { ok: true, result };
-}
-
-/** An export nobody marked delivered is deleted after this long: personal data is not kept indefinitely. */
-export const UNDELIVERED_EXPORT_RETENTION_DAYS = 30;
-
-/**
- * Delete the persisted exports of requests that were never marked delivered and are older than the
- * retention window (run by the governance-auditor sweep). Capped per sweep; returns how many were deleted.
- */
-export async function purgeStaleDsrExports(db: Db, bucket: R2Bucket | undefined, now: Date = new Date()): Promise<number> {
-  if (!bucket) return 0;
-  const cutoff = new Date(now.getTime() - UNDELIVERED_EXPORT_RETENTION_DAYS * 24 * 3_600_000);
-  const rows = await db.select({
-    id: dataSubjectRequests.id, tenantId: dataSubjectRequests.tenantId, executionResult: dataSubjectRequests.executionResult,
-  }).from(dataSubjectRequests).where(and(
-    ne(dataSubjectRequests.status, 'completed'),
-    lt(dataSubjectRequests.updatedAt, cutoff),
-    like(dataSubjectRequests.executionResult, '%"exportKey":"%'),
-  )).limit(100);
-  let purged = 0;
-  for (const row of rows) {
-    const result = parseResult(row.executionResult);
-    if (!result?.exportKey) continue;
-    if (!(await deletePrivateObject(bucket, result.exportKey, row.tenantId))) continue;
-    await db.update(dataSubjectRequests)
-      .set({ executionResult: JSON.stringify({ ...result, exportKey: null, note: 'The undelivered export expired and was deleted.' }) })
-      .where(scopedToTenant(dataSubjectRequests, row.tenantId, eq(dataSubjectRequests.id, row.id)));
-    purged += 1;
-  }
-  return purged;
 }
 
 /**
@@ -351,5 +323,5 @@ export function guardDsrTrackerWrite(
 export async function dsrExportKey(db: Db, scope: SegmentScope, dsrId: string): Promise<string | null> {
   const [dsr] = await db.select({ executionResult: dataSubjectRequests.executionResult }).from(dataSubjectRequests)
     .where(scopedToSegment(dataSubjectRequests, scope.tenantId, scope.segmentId, eq(dataSubjectRequests.id, dsrId))).limit(1);
-  return parseResult(dsr?.executionResult ?? null)?.exportKey ?? null;
+  return parseDsrExecutionResult(dsr?.executionResult ?? null)?.exportKey ?? null;
 }

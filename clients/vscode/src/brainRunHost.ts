@@ -449,6 +449,9 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       return detach;
     },
     isBusy,
+    flush: async () => {
+      await ports.childLedger?.flush();
+    },
     dispose() {
       disposed = true;
       turnQueue.dispose();

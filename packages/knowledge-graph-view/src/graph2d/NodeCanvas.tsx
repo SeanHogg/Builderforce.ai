@@ -13,12 +13,11 @@ import type { KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { kindLabel } from '../names';
 import type { LensDef } from '../lenses';
-import { byImportance } from '../graphModel';
 import { SHAPE_PATHS } from '../shapes';
 import { useThemeColors } from '../scene/themeColors';
 import type { ViewBox } from '../usePanZoom';
 import type { ContainerSize } from '../environment';
-import { bucketByShape, canvasMapping, drawMark, markVisible, DRAW_BATCH, type NodeMark } from './drawNodes';
+import { bucketByShape, canvasMapping, drawMark, markVisible, paintQueue, DRAW_BATCH, type NodeMark } from './drawNodes';
 import { nodeRadius, type Layout2D } from './layout2d';
 
 interface NodeCanvasProps {
@@ -121,19 +120,18 @@ export const NodeCanvas = memo(function NodeCanvas({ ordered, layout, lens, sele
     useEffect(() => {
         const canvas = canvasRef.current;
         const ctx = canvas?.getContext('2d');
-        if (!canvas || !ctx || !view || !size.width || !size.height || !colors || !shapePaths) {
-            setReady(false);
-            return undefined;
-        }
+        // Not ready until this pass finishes — set before ANY early return, so a pass that cannot
+        // paint (no mapping) never leaves the last pass's `data-ready` standing.
+        setReady(false);
+        if (!canvas || !ctx || !view || !size.width || !size.height || !colors || !shapePaths) return undefined;
         const dpr = window.devicePixelRatio || 1;
         canvas.width = Math.round(size.width * dpr);
         canvas.height = Math.round(size.height * dpr);
         const mapping = canvasMapping(view, size.width, size.height);
         if (!mapping) return undefined;
-        const buckets = bucketByShape(paintSet);
+        const queue = paintQueue(bucketByShape(paintSet));
         let raf = 0;
         let first = true;
-        setReady(false);
         const paint = (): void => {
             // The first batch owns the canvas: reset any previous pass, re-fit the transform, draw its marks.
             if (first) {
@@ -142,15 +140,7 @@ export const NodeCanvas = memo(function NodeCanvas({ ordered, layout, lens, sele
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
             }
             ctx.setTransform(dpr * mapping.scale, 0, 0, dpr * mapping.scale, dpr * mapping.ox, dpr * mapping.oy);
-            let drawn = 0;
-            for (const bucket of buckets) {
-                const path = shapePaths[bucket.shape];
-                while (bucket.marks.length > 0 && drawn < DRAW_BATCH) {
-                    drawMark(ctx, bucket.marks.shift()!, path, colors, colors.bg);
-                    drawn++;
-                }
-            }
-            const done = buckets.every((b) => b.marks.length === 0);
+            const done = queue.next(DRAW_BATCH, (mark, shape) => drawMark(ctx, mark, shapePaths[shape], colors, colors.bg));
             if (done) setReady(true);
             else raf = requestAnimationFrame(paint);
         };

@@ -11,18 +11,23 @@
  * never disagree about what names a ticket.
  */
 
-import { TASK_TABLE_KINDS, type TicketValue } from "@builderforce/local-first";
+import { TASK_TABLE_KINDS, tierRefText, type LocalFirstTransaction, type ServerMapping, type TicketValue } from "@builderforce/local-first";
 import type { RailRun, RailTicketParent } from "./railProtocol";
 
-/** The server id a ticket of `(kind, ref)` is mapped under. */
+/**
+ * The server key a ticket of `(kind, ref)` is ingested under: a task-table kind's bare `ref` (its
+ * SyncId), any other tier's `kind:ref` (`tierRefText`, which the store keeps as the mapping's
+ * `externalRef`, with `syncId` null).
+ */
 export function ticketServerId(kind: string, ref: string): string {
-  return TASK_TABLE_KINDS.has(kind) ? ref : `${kind}:${ref}`;
+  return TASK_TABLE_KINDS.has(kind) ? ref : tierRefText({ kind, ref });
 }
 
-/** The `(kind, ref)` a server id names; `kind` is `task` for a bare id (its tier rides the payload). */
-export function ticketRefOfServerId(serverId: string): { kind: string; ref: string } {
-  const at = serverId.indexOf(":");
-  return at < 0 ? { kind: "task", ref: serverId } : { kind: serverId.slice(0, at), ref: serverId.slice(at + 1) };
+/** The mapping of the ticket `(kind, ref)` names: a task-table kind by its server id, any other tier by its `externalRef`. */
+export function ticketMappingOf(tx: LocalFirstTransaction, kind: string, ref: string): Promise<ServerMapping | undefined> {
+  return TASK_TABLE_KINDS.has(kind)
+    ? tx.mappingByServerId("ticket", ref)
+    : tx.mappingByExternalRef("ticket", tierRefText({ kind, ref }));
 }
 
 /** A ticket the platform listed for a chat: a `TicketValue` plus what the rail draws. */

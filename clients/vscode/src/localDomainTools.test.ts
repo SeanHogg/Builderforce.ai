@@ -417,4 +417,23 @@ describe("ticket-* tools and numeric ids", () => {
     expect(created.note).toMatch(/LOCAL id/);
     expect(created.serverId).toBeUndefined();
   });
+
+  it("regression: ticket-create / project-create results carry localId (= id), and syncId once mapped", async () => {
+    const { store, tools } = harness();
+    const project = await tools.execute("project-create", { name: "P" });
+    expect(project.localId).toBe(project.id);
+    expect(project.syncId).toBeUndefined();
+    const created = await tools.execute("ticket-create", { projectId: project.id, title: "T" });
+    expect(created.localId).toBe(created.id);
+    expect(created.syncId).toBeUndefined();
+
+    await store.transact(async (tx) => {
+      await tx.putMapping({ destination: ACCOUNT, entityType: "project", clientEntityId: project.id, serverId: "12", serverVersion: 1 });
+    });
+    const again = await tools.execute("ticket-create", { projectId: "12", title: "On the mapped project" });
+    expect(again.record?.payload).toMatchObject({ projectId: project.id });
+    // A non-create result keeps its legacy text id only.
+    const moved = await tools.execute("ticket-move", { id: created.id, status: "done" });
+    expect(moved.localId).toBeUndefined();
+  });
 });

@@ -239,7 +239,10 @@ export class RunGuards {
     let outcome: string = action.kind;
     if (action.kind === "advisory") {
       // B1 readiness / B4 batching: a one-off steer, never a ladder trip — no pause, no
-      // escalation. Still a row on the timeline (the one mapping every host traces through).
+      // escalation. The note rides the next turn's tail (the detector's steer, shown for
+      // one turn and persisted across a durable tick), as the editor host does. Still a
+      // row on the timeline (the one mapping every host traces through).
+      this.progress?.setSteer(action.note);
       const s = progressTraceStep(action);
       await ports.onEvent?.({ tool: s.label, detail: s.args, result: s.result });
       return;

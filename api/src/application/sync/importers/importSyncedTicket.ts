@@ -34,9 +34,9 @@ import {
   preludeRejection,
   rejected,
   sameCanonical,
-  serverNumericId,
   type BoundedImportOutcome,
 } from './index';
+import { mappedServerKey } from '../syncIds';
 
 const PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const;
 type TicketPriority = (typeof PRIORITIES)[number];
@@ -286,7 +286,7 @@ async function completeMissingLink(
   payload: TicketPayload,
   stored: Record<string, unknown>,
 ): Promise<BoundedImportOutcome> {
-  const ticketId = serverNumericId(mapping.serverId);
+  const ticketId = mappedServerKey(mapping);
   if (ticketId === null || payload.chatClientId === undefined) return appliedExisting(mapping, stored);
   const link = await decideChatLink(event, payload, ctx, stores, false);
   if (link.kind !== 'link') return appliedExisting(mapping, stored);
@@ -399,7 +399,7 @@ async function updateTicket(
   const gate = mutateGate(event, ctx, mapping);
   if (gate) return gate;
   const current = mapping as SyncEntityMappingRow;
-  const id = serverNumericId(current.serverId);
+  const id = mappedServerKey(current);
   if (id === null) return rejected('server_id_invalid');
   const parsed = readTicket(event.payload, null);
   if (!parsed.ok) return rejected(parsed.detail);
@@ -429,7 +429,7 @@ async function deleteTicket(
   const gate = mutateGate(event, ctx, mapping, tombstone);
   if (gate) return gate;
   const current = mapping as SyncEntityMappingRow;
-  const id = serverNumericId(current.serverId);
+  const id = mappedServerKey(current);
   if (id === null) return rejected('server_id_invalid');
   try {
     const rows = await tx.transaction((savepoint) => savepoint.update(tasks).set({

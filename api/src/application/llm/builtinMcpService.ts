@@ -174,6 +174,7 @@ export { replayRoute, resolveReplayAuth, ReplayRouteError } from './builtinToolC
 import { getTenantTask, resolveTenantTask, replayRoute, requireEnv, type BuiltinCtx, type BuiltinTool } from './builtinToolContext';
 import { assertMayRunBuiltinTool } from './builtinToolAuthority';
 import { maskSecurityTasks } from './builtinTaskVisibility';
+import { idArg, syncIdField, withTicketSyncIds } from './builtinToolIds';
 import { taskCreatedHook } from '../task/taskCreationHook';
 import { publishProjectStaffingChanged } from '../swimlane/boardChangePublisher';
 import { deleteLaneAssignments, forLane, insertLaneAssignment, laneAgentAssignments } from '../swimlane/laneAgentAssignments';
@@ -228,7 +229,7 @@ function errorLogFilters(a: Json): ErrorLogFilters {
     operation: a.operation != null ? str(a.operation) : undefined,
     path: a.path != null ? str(a.path) : undefined,
     handled: typeof a.handled === 'boolean' ? a.handled : undefined,
-    tenantId: a.tenantId != null ? num(a.tenantId) : undefined,
+    tenantId: a.tenantId != null ? idArg(a.tenantId, 'tenantId') : undefined,
     sinceHours: a.sinceHours != null ? num(a.sinceHours) : undefined,
     limit: clampErrorLogLimit(a.limit),
   };
@@ -585,7 +586,7 @@ const CATALOG: BuiltinTool[] = [
       ctx,
       'POST',
       '/api/tools/audits/privacy-compliance-audit/run',
-      { projectId: num(a.projectId) },
+      { projectId: idArg(a.projectId, 'projectId') },
     ),
   },
   {
@@ -598,13 +599,13 @@ const CATALOG: BuiltinTool[] = [
     tool: 'audits.run', mutates: true,
     description: 'Start a cloud diagnostic audit of a connected project repository. Select auditId from audits.list. Returns the tracked run, report briefing and cloud dispatch status. Remediation tickets are saved from the findings.',
     parameters: obj({ projectId: N, auditId: S }, ['projectId', 'auditId']),
-    run: async (ctx, a) => replayRoute(ctx, 'POST', `/api/tools/audits/${encodeURIComponent(str(a.auditId))}/run`, { projectId: num(a.projectId), executor: 'cloud' }),
+    run: async (ctx, a) => replayRoute(ctx, 'POST', `/api/tools/audits/${encodeURIComponent(str(a.auditId))}/run`, { projectId: idArg(a.projectId, 'projectId'), executor: 'cloud' }),
   },
   {
     tool: 'audits.get_run', mutates: false,
     description: 'Read the status, source context, findings and saved report id of an audit run.',
     parameters: obj({ projectId: N, auditId: S, runId: S }, ['projectId', 'auditId', 'runId']),
-    run: async (ctx, a) => replayRoute(ctx, 'GET', `/api/tools/audits/${encodeURIComponent(str(a.auditId))}/runs/${encodeURIComponent(str(a.runId))}?projectId=${num(a.projectId)}`),
+    run: async (ctx, a) => replayRoute(ctx, 'GET', `/api/tools/audits/${encodeURIComponent(str(a.auditId))}/runs/${encodeURIComponent(str(a.runId))}?projectId=${idArg(a.projectId, 'projectId')}`),
   },
   {
     tool: 'audits.report_findings',
@@ -634,7 +635,7 @@ const CATALOG: BuiltinTool[] = [
     }, ['projectId', 'auditId', 'findings']),
     run: async (ctx, a) => {
       return replayRoute(ctx, 'POST', `/api/tools/audits/${encodeURIComponent(str(a.auditId))}/findings`, {
-        projectId: num(a.projectId), ...(a.runId ? { runId: str(a.runId) } : {}), findings: a.findings, ...(a.analysis ? { analysis: a.analysis } : {}),
+        projectId: idArg(a.projectId, 'projectId'), ...(a.runId ? { runId: str(a.runId) } : {}), findings: a.findings, ...(a.analysis ? { analysis: a.analysis } : {}),
       });
     },
   },
@@ -806,7 +807,7 @@ const CATALOG: BuiltinTool[] = [
       return listEnvelope('projects', rows, clampLimit(a.limit));
     },
   },
-  { tool: 'projects.get', mutates: false, description: 'Get one project by id.', parameters: obj({ id: N }, ['id']), run: (ctx, a) => ctx.projects.getProject(num(a.id), ctx.tenantId).then((p) => p.toPlain()) },
+  { tool: 'projects.get', mutates: false, description: 'Get one project by id.', parameters: obj({ id: N }, ['id']), run: (ctx, a) => ctx.projects.getProject(idArg(a.id, 'id'), ctx.tenantId).then((p) => p.toPlain()) },
   {
     tool: 'projects.create', mutates: true,
     description: 'Create a new project. modality: designer (app builder) | mobile (phone app) | video | llm.',
@@ -842,18 +843,18 @@ const CATALOG: BuiltinTool[] = [
     tool: 'projects.update', mutates: true,
     description: "Update a project's name/description/status/modality.",
     parameters: obj({ id: N, name: S, description: S, status: S, modality: S }, ['id']),
-    run: (ctx, a) => ctx.projects.updateProject(num(a.id), {
+    run: (ctx, a) => ctx.projects.updateProject(idArg(a.id, 'id'), {
       name: a.name != null ? str(a.name) : undefined,
       description: a.description != null ? str(a.description) : undefined,
       status: a.status != null ? (str(a.status) as ProjectStatus) : undefined,
       modality: a.modality != null ? str(a.modality) : undefined,
     }, ctx.tenantId).then((p) => p.toPlain()),
   },
-  { tool: 'projects.delete', mutates: true, description: 'Delete a project permanently.', parameters: obj({ id: N }, ['id']), run: (ctx, a) => ctx.projects.deleteProject(num(a.id), ctx.tenantId).then(() => ({ deleted: num(a.id) })) },
+  { tool: 'projects.delete', mutates: true, description: 'Delete a project permanently.', parameters: obj({ id: N }, ['id']), run: (ctx, a) => ctx.projects.deleteProject(idArg(a.id, 'id'), ctx.tenantId).then(() => ({ deleted: idArg(a.id, 'id') })) },
 
   // ---- Companies (investor pack) — consolidate projects under a company ----
   { tool: 'companies.list', mutates: false, description: 'List companies in this tenant.', parameters: obj({}), run: (ctx) => listCompanies(ctx.db, ctx.tenantId) },
-  { tool: 'companies.get', mutates: false, description: 'Get a company and its attached projects.', parameters: obj({ id: N }, ['id']), run: (ctx, a) => companyDetail(ctx.db, ctx.tenantId, num(a.id)) },
+  { tool: 'companies.get', mutates: false, description: 'Get a company and its attached projects.', parameters: obj({ id: N }, ['id']), run: (ctx, a) => companyDetail(ctx.db, ctx.tenantId, idArg(a.id, 'id')) },
   { tool: 'companies.unassigned_projects', mutates: false, description: 'Projects not yet assigned to any company.', parameters: obj({}), run: (ctx) => unassignedProjects(ctx.db, ctx.tenantId) },
   {
     tool: 'companies.create', mutates: true,
@@ -865,13 +866,13 @@ const CATALOG: BuiltinTool[] = [
     tool: 'projects.assign_company', mutates: true,
     description: 'Assign (consolidate) a project under a company.',
     parameters: obj({ projectId: N, companyId: N }, ['projectId', 'companyId']),
-    run: (ctx, a) => replayRoute(ctx, 'POST', `/api/investor/companies/${num(a.companyId)}/projects`, { projectId: num(a.projectId) }),
+    run: (ctx, a) => replayRoute(ctx, 'POST', `/api/investor/companies/${idArg(a.companyId, 'companyId')}/projects`, { projectId: idArg(a.projectId, 'projectId') }),
   },
   {
     tool: 'projects.unassign_company', mutates: true,
     description: "Remove a project's company assignment.",
     parameters: obj({ projectId: N, companyId: N }, ['projectId', 'companyId']),
-    run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/investor/companies/${num(a.companyId)}/projects/${num(a.projectId)}`),
+    run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/investor/companies/${idArg(a.companyId, 'companyId')}/projects/${idArg(a.projectId, 'projectId')}`),
   },
 
   // ---- Project memory (shared write-through facts, migration 0276) ----
@@ -883,7 +884,7 @@ const CATALOG: BuiltinTool[] = [
     parameters: obj({ projectId: N, query: S, limit: N }, ['projectId']),
     run: async (ctx, a) => {
       if (!ctx.env) throw new Error('project memory unavailable');
-      const facts = await recallProjectFacts(ctx.env, ctx.db, ctx.tenantId, num(a.projectId), {
+      const facts = await recallProjectFacts(ctx.env, ctx.db, ctx.tenantId, idArg(a.projectId, 'projectId'), {
         ...(a.query != null ? { query: str(a.query) } : {}),
         ...(a.limit != null ? { limit: num(a.limit) } : {}),
         readFileHash: hostDirectoryHashReader(ctx.db, ctx.tenantId),
@@ -907,7 +908,7 @@ const CATALOG: BuiltinTool[] = [
       // the existing origin-cost triple — there is no standalone origin-model column,
       // and a half-known cost is stored as none (see originCostColumns).
       const fileAnchors = parseFactFileAnchors(a.fileAnchors);
-      const ok = await writeProjectFact({ env: ctx.env, db: ctx.db, tenantId: ctx.tenantId, projectId: num(a.projectId) }, {
+      const ok = await writeProjectFact({ env: ctx.env, db: ctx.db, tenantId: ctx.tenantId, projectId: idArg(a.projectId, 'projectId') }, {
         key: str(a.key), content: str(a.content), source: 'brain',
         // A fact the caller anchors is a belief about those files: it corrects an older one (single-subject sweep).
         retireByAnchor: true,
@@ -934,7 +935,7 @@ const CATALOG: BuiltinTool[] = [
       const svc = new BrainService(ctx.db);
       const res = await svc.readTeamChat(
         ctx.tenantId,
-        { projectId: a.projectId != null ? num(a.projectId) : null, teamId: a.teamId != null ? num(a.teamId) : null },
+        { projectId: a.projectId != null ? idArg(a.projectId, 'projectId') : null, teamId: a.teamId != null ? idArg(a.teamId, 'teamId') : null },
         a.limit != null ? num(a.limit) : 30,
       );
       if ('error' in res) throw new Error(res.error);
@@ -949,7 +950,7 @@ const CATALOG: BuiltinTool[] = [
       const svc = new BrainService(ctx.db);
       const res = await svc.postToTeamChat(
         ctx.tenantId,
-        { projectId: a.projectId != null ? num(a.projectId) : null, teamId: a.teamId != null ? num(a.teamId) : null },
+        { projectId: a.projectId != null ? idArg(a.projectId, 'projectId') : null, teamId: a.teamId != null ? idArg(a.teamId, 'teamId') : null },
         str(a.message),
         { fromName: a.fromName != null ? str(a.fromName) : undefined, fromRef: ctx.userId ?? undefined },
       );
@@ -1012,7 +1013,7 @@ const CATALOG: BuiltinTool[] = [
       const status = a.status != null ? str(a.status) : undefined;
       // An explicit status ("done") is its own scope — defaulting to open would empty it.
       const scope = parseTaskListScope(a.scope, status ? 'all' : 'open');
-      const all = await ctx.tasks.listTasks(ctx.tenantId, a.projectId != null ? num(a.projectId) : undefined, scopeNeedsArchived(scope));
+      const all = await ctx.tasks.listTasks(ctx.tenantId, a.projectId != null ? idArg(a.projectId, 'projectId') : undefined, scopeNeedsArchived(scope));
       let rows = all
         .map((t) => t.toPlain() as unknown as Record<string, unknown>)
         .filter((r) => taskInScope({ status: r.status as string | undefined, archived: r.archived as boolean | undefined }, scope));
@@ -1028,7 +1029,7 @@ const CATALOG: BuiltinTool[] = [
     },
   },
   { tool: 'tasks.get', mutates: false, description: 'Get a task by id, including implementer activity and stale-delivery evidence. If the numeric id is missing, a ticket whose title starts with `#<id>:` (or `#<id> `) in this workspace is returned instead.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => {
-    const resolved = await resolveTenantTask(ctx, num(a.id));
+    const resolved = await resolveTenantTask(ctx, idArg(a.id, 'id'));
     const plain = resolved.toPlain() as unknown as Record<string, unknown>;
     const id = Number(plain.id);
     // A SECURITY ticket is returned MASKED (restricted: true) for a caller without
@@ -1128,7 +1129,7 @@ const CATALOG: BuiltinTool[] = [
     parameters: obj({ projectId: N, title: S, description: S, priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] }, startDate: S, dueDate: S, taskType: { type: 'string', enum: ['task', 'epic', 'gap', 'bug'] }, parentTaskId: N, assignedUserId: S, assignedAgentRef: S, assignedAgentHostId: N }, ['projectId', 'title']),
     run: async (ctx, a) => {
       const title = str(a.title).trim(); if (!title) throw new Error('title is required');
-      const projectId = num(a.projectId);
+      const projectId = idArg(a.projectId, 'projectId');
       // Idempotent create: a task with this title already on the board is returned
       // (flagged `deduped`) rather than duplicated — the caller (e.g. the Brain
       // reconciling a roadmap, often across retries) gets the existing id back.
@@ -1137,7 +1138,7 @@ const CATALOG: BuiltinTool[] = [
       const explicitAssignee = {
         assignedUserId: a.assignedUserId != null ? str(a.assignedUserId) : null,
         assignedAgentRef: a.assignedAgentRef != null ? str(a.assignedAgentRef) : null,
-        assignedAgentHostId: a.assignedAgentHostId != null ? num(a.assignedAgentHostId) : null,
+        assignedAgentHostId: a.assignedAgentHostId != null ? idArg(a.assignedAgentHostId, 'assignedAgentHostId') : null,
       };
       if ([explicitAssignee.assignedUserId, explicitAssignee.assignedAgentRef, explicitAssignee.assignedAgentHostId].filter((v) => v != null).length > 1) {
         throw new Error('A ticket must have exactly one Coordinator; pass only one assignee field.');
@@ -1167,6 +1168,7 @@ const CATALOG: BuiltinTool[] = [
         // and the lane so the next move is obviously "advance this", not "file again".
         return {
           ...(reconciled.toPlain() as object),
+          ...syncIdField(plain.id),
           deduped: true,
           dedupedOn: String(plain.title ?? ''),
           note: `This work is already tracked as ticket ${plain.id} ("${String(plain.title ?? '')}", status ${String(plain.status ?? 'unknown')}). Nothing was created. Do NOT re-analyse or re-file it — work THIS ticket (tasks.update to move its lane, tasks.add_comment to record findings).`,
@@ -1180,14 +1182,16 @@ const CATALOG: BuiltinTool[] = [
         startDate: a.startDate != null ? str(a.startDate) : null,
         dueDate: a.dueDate != null ? str(a.dueDate) : null,
         taskType: a.taskType != null ? (str(a.taskType) as TaskType) : undefined,
-        parentTaskId: a.parentTaskId != null ? num(a.parentTaskId) : undefined,
+        parentTaskId: a.parentTaskId != null ? idArg(a.parentTaskId, 'parentTaskId') : undefined,
         ...coordinator,
       }, ctx.tenantId);
       if (ctx.env) await new TicketParticipantsService(ctx.db).deriveManifest(ctx.env, ctx.tenantId, Number(created.id));
       // A ticket created straight into a staffed lane auto-runs, same as the board's
       // POST path (a create lands in the Backlog lane — fires only if that lane is staffed).
       const autoRun = await fireLaneAutoRun(ctx, created);
-      return { ...(created.toPlain() as object), ...(autoRun ? { autoRun } : {}) };
+      // `syncId`: the ONE id field a caller reads (typed-entity-ids §5); `id` stays.
+      const createdPlain = created.toPlain() as { id?: unknown };
+      return { ...createdPlain, ...syncIdField(createdPlain.id), ...(autoRun ? { autoRun } : {}) };
     },
   },
   {
@@ -1198,10 +1202,10 @@ const CATALOG: BuiltinTool[] = [
       // tenant-scope guard (service.updateTask doesn't check) + capture the prior
       // lane AND owner so the autonomous triggers fire only on a genuine lane change /
       // a genuine reassignment.
-      const before = await getTenantTask(ctx, num(a.id));
+      const before = await getTenantTask(ctx, idArg(a.id, 'id'));
       const beforePlain = before.toPlain();
       const previousAgentRef = beforePlain.assignedAgentRef ?? null;
-      const updated = await ctx.tasks.updateTask(num(a.id), {
+      const updated = await ctx.tasks.updateTask(idArg(a.id, 'id'), {
         title: a.title != null ? str(a.title) : undefined,
         description: a.description != null ? str(a.description) : undefined,
         status: a.status != null ? str(a.status) : undefined,
@@ -1211,10 +1215,10 @@ const CATALOG: BuiltinTool[] = [
         dueDate: a.dueDate !== undefined ? (a.dueDate === null ? null : str(a.dueDate)) : undefined,
         archived: typeof a.archived === 'boolean' ? a.archived : undefined,
         taskType: a.taskType != null ? (str(a.taskType) as TaskType) : undefined,
-        parentTaskId: a.parentTaskId !== undefined ? (a.parentTaskId === null ? null : num(a.parentTaskId)) : undefined,
+        parentTaskId: a.parentTaskId !== undefined ? (a.parentTaskId === null ? null : idArg(a.parentTaskId, 'parentTaskId')) : undefined,
         assignedUserId: a.assignedUserId !== undefined ? (a.assignedUserId === null ? null : str(a.assignedUserId)) : undefined,
         assignedAgentRef: a.assignedAgentRef !== undefined ? (a.assignedAgentRef === null ? null : str(a.assignedAgentRef)) : undefined,
-        assignedAgentHostId: a.assignedAgentHostId !== undefined ? (a.assignedAgentHostId === null ? null : num(a.assignedAgentHostId)) : undefined,
+        assignedAgentHostId: a.assignedAgentHostId !== undefined ? (a.assignedAgentHostId === null ? null : idArg(a.assignedAgentHostId, 'assignedAgentHostId')) : undefined,
       });
       // An owner change must reach the board's live room (the REST route publishes; this
       // path did not), so the agent chips and ticket cards refetch.
@@ -1236,8 +1240,8 @@ const CATALOG: BuiltinTool[] = [
       return { ...(updated.toPlain() as object), ...(autoRun ? { autoRun } : {}) };
     },
   },
-  { tool: 'tasks.delete', mutates: true, description: 'Permanently delete a task — it cannot be recovered. Only when the user explicitly asked to delete; otherwise archive it with tasks.update { archived: true }.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { await getTenantTask(ctx, num(a.id)); await ctx.tasks.deleteTask(num(a.id)); return { deleted: num(a.id) }; } },
-  { tool: 'tasks.move', mutates: true, description: 'Move a task to another project board (re-keys it).', parameters: obj({ id: N, projectId: N }, ['id', 'projectId']), run: (ctx, a) => ctx.tasks.moveTask(num(a.id), num(a.projectId), ctx.tenantId).then((t) => t.toPlain()) },
+  { tool: 'tasks.delete', mutates: true, description: 'Permanently delete a task — it cannot be recovered. Only when the user explicitly asked to delete; otherwise archive it with tasks.update { archived: true }.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { await getTenantTask(ctx, idArg(a.id, 'id')); await ctx.tasks.deleteTask(idArg(a.id, 'id')); return { deleted: idArg(a.id, 'id') }; } },
+  { tool: 'tasks.move', mutates: true, description: 'Move a task to another project board (re-keys it).', parameters: obj({ id: N, projectId: N }, ['id', 'projectId']), run: (ctx, a) => ctx.tasks.moveTask(idArg(a.id, 'id'), idArg(a.projectId, 'projectId'), ctx.tenantId).then((t) => t.toPlain()) },
 
   // ---- Work-delta capture + Validator review (0270) ----
   {
@@ -1252,21 +1256,23 @@ const CATALOG: BuiltinTool[] = [
     run: async (ctx, a) => {
       if (!ctx.env) throw new Error('work-delta recording requires the worker env');
       const files = Array.isArray(a.files) ? (a.files as unknown[]).map(str) : undefined;
-      const deltaChatId = a.chatId != null ? num(a.chatId) : null;
-      return new WorkDeltaService(ctx.db, ctx.env).record(ctx.tenantId, ctx.userId ?? null, {
+      const deltaChatId = a.chatId != null ? idArg(a.chatId, 'chatId') : null;
+      const recorded = await new WorkDeltaService(ctx.db, ctx.env).record(ctx.tenantId, ctx.userId ?? null, {
         // The chat-access identity, decided from the trusted caller (a cloud agent reaches its own host chat).
         ...(deltaChatId != null ? { chatAccessUserId: chatAccessUserFor(ctx, deltaChatId) } : {}),
-        projectId: num(a.projectId),
+        projectId: idArg(a.projectId, 'projectId'),
         summary: str(a.summary),
         detail: a.detail != null ? str(a.detail) : null,
         kind: a.kind != null ? (str(a.kind) as DeltaKind) : undefined,
         files,
         modality: a.modality != null ? str(a.modality) : 'mcp',
         chatId: deltaChatId,
-        taskId: a.taskId != null ? num(a.taskId) : null,
+        taskId: a.taskId != null ? idArg(a.taskId, 'taskId') : null,
         createdBy: ctx.userId ?? null,
         createTicket: typeof a.createTicket === 'boolean' ? a.createTicket : true,
       });
+      // `syncId`: the ticket the delta landed on, as the ONE id field (typed-entity-ids §5).
+      return { ...recorded, ...syncIdField(recorded.taskId) };
     },
   },
   {
@@ -1298,7 +1304,7 @@ const CATALOG: BuiltinTool[] = [
             line: g.line != null ? num(g.line) : null,
           }))
         : [];
-      const taskId = num(a.taskId);
+      const taskId = idArg(a.taskId, 'taskId');
       const summary = a.summary != null ? str(a.summary) : null;
       // PRD 23 §5.2: the review records the PR head it was made against (best-effort —
       // a task with no open PR simply has none) and the execution that produced it.
@@ -1350,7 +1356,7 @@ const CATALOG: BuiltinTool[] = [
       auditId: N,
     }, ['title']),
     run: (ctx, a) => new SecurityAuditService(ctx.db).recordFinding(ctx.tenantId, {
-      auditId: a.auditId != null ? num(a.auditId) : null,
+      auditId: a.auditId != null ? idArg(a.auditId, 'auditId') : null,
       title: str(a.title),
       detail: a.detail != null ? str(a.detail) : null,
       severity: a.severity != null ? (str(a.severity) as FindingSeverity) : undefined,
@@ -1505,11 +1511,11 @@ const CATALOG: BuiltinTool[] = [
       // it back-links the incident and files the action items.
       const allowed = ['sop', 'process', 'doc', 'known_error'];
       const docType = a.docType != null && allowed.includes(str(a.docType)) ? str(a.docType) : 'doc';
-      if (a.projectId != null) await ctx.projects.getProject(num(a.projectId), ctx.tenantId); // tenant-ownership guard
+      if (a.projectId != null) await ctx.projects.getProject(idArg(a.projectId, 'projectId'), ctx.tenantId); // tenant-ownership guard
       const segmentId = await resolveSegment(ctx.db, ctx.tenantId).catch(() => null);
       const tags = Array.isArray(a.tags) ? (a.tags as unknown[]).map((t) => str(t)).filter(Boolean) : undefined;
       const { id } = await publishKnowledgeDoc(ctx.db, ctx.env, {
-        tenantId: ctx.tenantId, segmentId, projectId: a.projectId != null ? num(a.projectId) : null,
+        tenantId: ctx.tenantId, segmentId, projectId: a.projectId != null ? idArg(a.projectId, 'projectId') : null,
         docType, title, content, summary: a.summary != null ? str(a.summary) : null, tags, createdBy: ctx.userId ?? null,
       });
       return { id, docType, title };
@@ -1521,7 +1527,7 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'workflows.get', mutates: false, description: 'Get one workflow by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => (await ctx.db.select().from(workflows).where(and(eq(workflows.id, str(a.id)), eq(workflows.tenantId, ctx.tenantId))).limit(1))[0] ?? null },
 
   // ---- Specs / PRDs (read) ----
-  { tool: 'specs.list', mutates: false, description: 'List specs / PRDs (compact: id/projectId/goal/status/kind + a short PRD snippet), optionally filtered by project, capped by limit (default 50, max 200). Use specs.get for one spec\'s full PRD / arch-spec / task-list body.', parameters: obj({ projectId: N, limit: N }), run: async (ctx, a) => { const rows = await listSpecs(ctx.db, ctx.tenantId, { projectId: a.projectId != null ? num(a.projectId) : null, limit: LIST_MAX_LIMIT }); return listEnvelope('specs', rows.map((r) => compactSpec(r as unknown as Record<string, unknown>)), clampLimit(a.limit)); } },
+  { tool: 'specs.list', mutates: false, description: 'List specs / PRDs (compact: id/projectId/goal/status/kind + a short PRD snippet), optionally filtered by project, capped by limit (default 50, max 200). Use specs.get for one spec\'s full PRD / arch-spec / task-list body.', parameters: obj({ projectId: N, limit: N }), run: async (ctx, a) => { const rows = await listSpecs(ctx.db, ctx.tenantId, { projectId: a.projectId != null ? idArg(a.projectId, 'projectId') : null, limit: LIST_MAX_LIMIT }); return listEnvelope('specs', rows.map((r) => compactSpec(r as unknown as Record<string, unknown>)), clampLimit(a.limit)); } },
   { tool: 'specs.get', mutates: false, description: 'Get one spec / PRD by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => getSpec(ctx.db, ctx.tenantId, str(a.id)) },
   {
     tool: 'specs.create', mutates: true,
@@ -1530,12 +1536,12 @@ const CATALOG: BuiltinTool[] = [
     run: async (ctx, a) => {
       const goal = str(a.goal).trim();
       if (!goal) throw new Error('goal is required');
-      if (a.projectId != null) await ctx.projects.getProject(num(a.projectId), ctx.tenantId); // tenant-ownership guard (no cross-tenant attach)
+      if (a.projectId != null) await ctx.projects.getProject(idArg(a.projectId, 'projectId'), ctx.tenantId); // tenant-ownership guard (no cross-tenant attach)
       const [row] = await ctx.db.insert(specs).values({
         id: crypto.randomUUID(),
         tenantId: ctx.tenantId,
         goal,
-        projectId: a.projectId != null ? num(a.projectId) : null,
+        projectId: a.projectId != null ? idArg(a.projectId, 'projectId') : null,
         prd: a.prd != null ? str(a.prd) : null,
       }).returning();
       return row;
@@ -1550,11 +1556,11 @@ const CATALOG: BuiltinTool[] = [
       try {
         const result = await importSpec(ctx.db, ctx.env, {
           tenantId: ctx.tenantId,
-          projectId: num(a.projectId),
+          projectId: idArg(a.projectId, 'projectId'),
           externalId: str(a.externalId),
           provider: a.provider != null ? str(a.provider) : null,
           connectionId: a.connectionId != null ? str(a.connectionId) : null,
-          taskId: a.taskId != null ? num(a.taskId) : null,
+          taskId: a.taskId != null ? idArg(a.taskId, 'taskId') : null,
         });
         return publicSpecImportResult(result.spec, { created: result.created, linkedTaskId: result.linkedTaskId });
       } catch (err) {
@@ -1573,7 +1579,7 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'roadmap.list', mutates: false, description: 'List product roadmap items, optionally for one project (pass projectId). The UI groups them by horizon (now / next / later).', parameters: obj({ projectId: N }), run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       const conds = [eq(roadmapItems.tenantId, ctx.tenantId), eq(roadmapItems.segmentId, seg)];
-      if (a.projectId != null) conds.push(eq(roadmapItems.projectId, num(a.projectId)));
+      if (a.projectId != null) conds.push(eq(roadmapItems.projectId, idArg(a.projectId, 'projectId')));
       return ctx.db.select().from(roadmapItems).where(and(...conds)).orderBy(desc(roadmapItems.updatedAt)).limit(200);
     } },
   { tool: 'roadmap.get', mutates: false, description: 'Get one roadmap item by id (uuid).', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => (await ctx.db.select().from(roadmapItems).where(and(eq(roadmapItems.id, str(a.id)), eq(roadmapItems.tenantId, ctx.tenantId))).limit(1))[0] ?? null },
@@ -1584,7 +1590,7 @@ const CATALOG: BuiltinTool[] = [
     run: async (ctx, a) => {
       const title = str(a.title).trim(); if (!title) throw new Error('title is required');
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      const projectId = a.projectId != null ? num(a.projectId) : null;
+      const projectId = a.projectId != null ? idArg(a.projectId, 'projectId') : null;
       if (projectId != null) await ctx.projects.getProject(projectId, ctx.tenantId); // tenant-ownership guard (no cross-tenant attach)
       const [row] = await ctx.db.insert(roadmapItems).values({
         tenantId: ctx.tenantId, segmentId: seg, projectId, title,
@@ -1613,7 +1619,7 @@ const CATALOG: BuiltinTool[] = [
       if (a.priority != null) patch.priority = str(a.priority);
       if (a.targetDate != null) patch.targetDate = dt(a.targetDate) ?? null;
       if (a.notes != null) patch.notes = str(a.notes);
-      if (a.projectId != null) patch.projectId = num(a.projectId);
+      if (a.projectId != null) patch.projectId = idArg(a.projectId, 'projectId');
       const [row] = await ctx.db.update(roadmapItems).set(patch).where(and(eq(roadmapItems.id, str(a.id)), eq(roadmapItems.tenantId, ctx.tenantId), eq(roadmapItems.segmentId, seg))).returning();
       if (!row) throw new Error('roadmap item not found');
       await invalidateRoadmap(ctx, seg, (row as { projectId?: number | null }).projectId ?? null);
@@ -1773,7 +1779,7 @@ const CATALOG: BuiltinTool[] = [
         description: a.description != null ? str(a.description) : null,
         period: a.period != null ? str(a.period) : null,
         ...(a.status != null ? { status: str(a.status) } : {}),
-        projectId: a.projectId != null ? num(a.projectId) : null,
+        projectId: a.projectId != null ? idArg(a.projectId, 'projectId') : null,
         portfolioId: a.portfolioId != null ? str(a.portfolioId) : null,
         initiativeId: a.initiativeId != null ? str(a.initiativeId) : null,
         startDate: objStart, endDate: objEnd,
@@ -1793,7 +1799,7 @@ const CATALOG: BuiltinTool[] = [
       if (a.description != null) patch.description = str(a.description);
       if (a.period != null) patch.period = str(a.period);
       if (a.status != null) patch.status = str(a.status);
-      if ('projectId' in a) patch.projectId = a.projectId != null ? num(a.projectId) : null;
+      if ('projectId' in a) patch.projectId = a.projectId != null ? idArg(a.projectId, 'projectId') : null;
       if ('portfolioId' in a) patch.portfolioId = a.portfolioId != null ? str(a.portfolioId) : null;
       if ('initiativeId' in a) patch.initiativeId = a.initiativeId != null ? str(a.initiativeId) : null;
       if (a.startDate != null) patch.startDate = dt(a.startDate);
@@ -1817,7 +1823,7 @@ const CATALOG: BuiltinTool[] = [
       const [row] = await ctx.db.insert(objectiveLinks).values({
         tenantId: ctx.tenantId, segmentId: seg, objectiveId: str(a.objectiveId), linkKind,
         initiativeId: linkKind === 'initiative' && a.initiativeId != null ? str(a.initiativeId) : null,
-        taskId: (linkKind === 'epic' || linkKind === 'task') && a.taskId != null ? num(a.taskId) : null,
+        taskId: (linkKind === 'epic' || linkKind === 'task') && a.taskId != null ? idArg(a.taskId, 'taskId') : null,
       }).returning();
       await bumpPmo(ctx);
       return row;
@@ -1839,7 +1845,7 @@ const CATALOG: BuiltinTool[] = [
             sourceKind: str(a.fromKind) as WorkItemKind,
             sourceId: str(a.id),
             target: str(a.toKind) as WorkItemKind,
-            projectId: a.projectId != null ? num(a.projectId) : undefined,
+            projectId: a.projectId != null ? idArg(a.projectId, 'projectId') : undefined,
           },
         );
       } catch (e) {
@@ -1855,7 +1861,7 @@ const CATALOG: BuiltinTool[] = [
     run: async (ctx, a) => {
       const res = await promoteOrphanOkrEpics(
         { db: ctx.db, tasks: ctx.tasks, env: ctx.env },
-        { tenantId: ctx.tenantId, projectId: a.projectId != null ? num(a.projectId) : undefined },
+        { tenantId: ctx.tenantId, projectId: a.projectId != null ? idArg(a.projectId, 'projectId') : undefined },
       );
       await bumpPmo(ctx);
       return res;
@@ -2077,15 +2083,15 @@ const CATALOG: BuiltinTool[] = [
   // the old orphaned Brain-only table, dropped in 0272). Scoped by tenant +
   // origin, and by user when the caller is a real user (gateway keys are
   // tenant-wide). summarize SKIPPED (needs an LLM call, not a table op). ----
-  { tool: 'brain.list', mutates: false, description: 'List Brain chats, optionally filtered by project.', parameters: obj({ projectId: N, limit: N }), run: async (ctx, a) => { const conds = [eq(brainChats.tenantId, ctx.tenantId), eq(brainChats.origin, 'brainstorm'), eq(brainChats.isArchived, false)]; if (ctx.userId) conds.push(eq(brainChats.userId, ctx.userId)); if (a.projectId != null) conds.push(eq(brainChats.projectId, num(a.projectId))); return ctx.db.select().from(brainChats).where(and(...conds)).orderBy(desc(brainChats.updatedAt)).limit(a.limit != null ? num(a.limit) : 100); } },
-  { tool: 'brain.get', mutates: false, description: 'Get a Brain chat by id.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { const conds = [eq(brainChats.id, num(a.id)), eq(brainChats.tenantId, ctx.tenantId), eq(brainChats.origin, 'brainstorm')]; if (ctx.userId) conds.push(eq(brainChats.userId, ctx.userId)); return (await ctx.db.select().from(brainChats).where(and(...conds)).limit(1))[0] ?? null; } },
+  { tool: 'brain.list', mutates: false, description: 'List Brain chats, optionally filtered by project.', parameters: obj({ projectId: N, limit: N }), run: async (ctx, a) => { const conds = [eq(brainChats.tenantId, ctx.tenantId), eq(brainChats.origin, 'brainstorm'), eq(brainChats.isArchived, false)]; if (ctx.userId) conds.push(eq(brainChats.userId, ctx.userId)); if (a.projectId != null) conds.push(eq(brainChats.projectId, idArg(a.projectId, 'projectId'))); return ctx.db.select().from(brainChats).where(and(...conds)).orderBy(desc(brainChats.updatedAt)).limit(a.limit != null ? num(a.limit) : 100); } },
+  { tool: 'brain.get', mutates: false, description: 'Get a Brain chat by id.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { const conds = [eq(brainChats.id, idArg(a.id, 'id')), eq(brainChats.tenantId, ctx.tenantId), eq(brainChats.origin, 'brainstorm')]; if (ctx.userId) conds.push(eq(brainChats.userId, ctx.userId)); return (await ctx.db.select().from(brainChats).where(and(...conds)).limit(1))[0] ?? null; } },
   {
     tool: 'brain.create', mutates: true,
     description: 'Create a new Brain chat.',
     parameters: obj({ title: S, projectId: N }),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      const [row] = await ctx.db.insert(brainChats).values({ tenantId: ctx.tenantId, segmentId: seg, userId: ctx.userId ?? 'system', origin: 'brainstorm', ...(a.title != null ? { title: normalizeChatTitle(str(a.title)) } : {}), projectId: a.projectId != null ? num(a.projectId) : null }).returning();
+      const [row] = await ctx.db.insert(brainChats).values({ tenantId: ctx.tenantId, segmentId: seg, userId: ctx.userId ?? 'system', origin: 'brainstorm', ...(a.title != null ? { title: normalizeChatTitle(str(a.title)) } : {}), projectId: a.projectId != null ? idArg(a.projectId, 'projectId') : null }).returning();
       return row;
     },
   },
@@ -2096,8 +2102,8 @@ const CATALOG: BuiltinTool[] = [
     run: async (ctx, a) => {
       const patch: Json = { updatedAt: new Date() };
       if (a.title != null) patch.title = normalizeChatTitle(str(a.title));
-      if (a.projectId !== undefined) patch.projectId = a.projectId === null ? null : num(a.projectId);
-      const conds = [eq(brainChats.id, num(a.id)), eq(brainChats.tenantId, ctx.tenantId), eq(brainChats.origin, 'brainstorm')];
+      if (a.projectId !== undefined) patch.projectId = a.projectId === null ? null : idArg(a.projectId, 'projectId');
+      const conds = [eq(brainChats.id, idArg(a.id, 'id')), eq(brainChats.tenantId, ctx.tenantId), eq(brainChats.origin, 'brainstorm')];
       if (ctx.userId) conds.push(eq(brainChats.userId, ctx.userId));
       const [row] = await ctx.db.update(brainChats).set(patch).where(and(...conds)).returning();
       if (!row) throw new Error('chat not found');
@@ -2105,22 +2111,22 @@ const CATALOG: BuiltinTool[] = [
       return row;
     },
   },
-  { tool: 'brain.delete', mutates: true, description: 'Archive a Brain chat.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { const conds = [eq(brainChats.id, num(a.id)), eq(brainChats.tenantId, ctx.tenantId), eq(brainChats.origin, 'brainstorm')]; if (ctx.userId) conds.push(eq(brainChats.userId, ctx.userId)); const [row] = await ctx.db.update(brainChats).set({ isArchived: true, updatedAt: new Date() }).where(and(...conds)).returning({ id: brainChats.id }); if (row) await bumpChatStructure(row.id, ctx.env); return { archived: row != null }; } },
+  { tool: 'brain.delete', mutates: true, description: 'Archive a Brain chat.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { const conds = [eq(brainChats.id, idArg(a.id, 'id')), eq(brainChats.tenantId, ctx.tenantId), eq(brainChats.origin, 'brainstorm')]; if (ctx.userId) conds.push(eq(brainChats.userId, ctx.userId)); const [row] = await ctx.db.update(brainChats).set({ isArchived: true, updatedAt: new Date() }).where(and(...conds)).returning({ id: brainChats.id }); if (row) await bumpChatStructure(row.id, ctx.env); return { archived: row != null }; } },
 
   // ---- Chat ↔ ticket links, lineage, consolidation, agent invites ----
   // Tie a Brain chat to work items of ANY tier (portfolio | objective/OKR |
   // initiative | epic | task), MANY-to-MANY, with a health (% done) summary and
   // chat↔ticket lineage; merge chats into one; invite/tag agents to execute.
   // All logic lives in ChatTicketService (shared with the HTTP routes).
-  { tool: 'chats.get_messages', mutates: false, description: "Read a Brain chat's message transcript (role + content, in order). Use to REVIEW a conversation's history — e.g. before deciding which chats to merge/consolidate, or to see what a chat produced.", parameters: obj({ chatId: N, limit: N }, ['chatId']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.listMessages(ctx.tenantId, num(a.chatId), ctx.userId ?? null, a.limit != null ? num(a.limit) : 200); if (!Array.isArray(r)) throw new Error(r.error); return r; } },
-  { tool: 'chats.list_tickets', mutates: false, description: "List the work items (portfolio/objective/initiative/roadmap/spec/epic/gap/task) a Brain chat is tied to, each with a health summary (% done). Use to show a chat's ticket status. A chat can carry 100+ links, so pass `openOnly` to get just the work still owed — that is the right call for \"what is left?\", rather than reading the full list and classifying it yourself. `openOnly` keeps anything not in the closed class (done/cancelled/archived), and KEEPS links whose ticket no longer exists, since deleted work is unresolved rather than finished. The result is always { tickets, total, matched, hasMore } (every link when no `limit` is given) — check `hasMore` before treating the page as the whole set.", parameters: obj({ chatId: N, status: S, kind: S, openOnly: { type: 'boolean' }, limit: N, offset: N }, ['chatId']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.listTicketPageForChat(ctx.tenantId, num(a.chatId), ctx.userId ?? null, { status: a.status != null ? str(a.status) : undefined, kind: a.kind != null ? str(a.kind) : undefined, openOnly: a.openOnly === true, limit: a.limit != null ? num(a.limit) : undefined, offset: a.offset != null ? num(a.offset) : undefined }); if ('error' in r) throw new Error(r.error); return r; } },
+  { tool: 'chats.get_messages', mutates: false, description: "Read a Brain chat's message transcript (role + content, in order). Use to REVIEW a conversation's history — e.g. before deciding which chats to merge/consolidate, or to see what a chat produced.", parameters: obj({ chatId: N, limit: N }, ['chatId']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.listMessages(ctx.tenantId, idArg(a.chatId, 'chatId'), ctx.userId ?? null, a.limit != null ? num(a.limit) : 200); if (!Array.isArray(r)) throw new Error(r.error); return r; } },
+  { tool: 'chats.list_tickets', mutates: false, description: "List the work items (portfolio/objective/initiative/roadmap/spec/epic/gap/task) a Brain chat is tied to, each with a health summary (% done). Use to show a chat's ticket status. A chat can carry 100+ links, so pass `openOnly` to get just the work still owed — that is the right call for \"what is left?\", rather than reading the full list and classifying it yourself. `openOnly` keeps anything not in the closed class (done/cancelled/archived), and KEEPS links whose ticket no longer exists, since deleted work is unresolved rather than finished. The result is always { tickets, total, matched, hasMore } (every link when no `limit` is given) — check `hasMore` before treating the page as the whole set.", parameters: obj({ chatId: N, status: S, kind: S, openOnly: { type: 'boolean' }, limit: N, offset: N }, ['chatId']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.listTicketPageForChat(ctx.tenantId, idArg(a.chatId, 'chatId'), ctx.userId ?? null, { status: a.status != null ? str(a.status) : undefined, kind: a.kind != null ? str(a.kind) : undefined, openOnly: a.openOnly === true, limit: a.limit != null ? num(a.limit) : undefined, offset: a.offset != null ? num(a.offset) : undefined }); if ('error' in r) throw new Error(r.error); return { ...r, tickets: withTicketSyncIds(r.tickets) }; } },
   // The kind list is TICKET_KINDS itself, so a kind the link use case accepts (retro, poker) is never refused by the schema.
-  { tool: 'chats.link_ticket', mutates: true, description: `Tie a Brain chat to an EXISTING work item (an item you create is linked to your chat automatically). kind = ${TICKET_KINDS.join('|')}; ref = the task/epic/gap id (number) or the other tiers' UUID. linkType='created' records that this chat SPAWNED the ticket (lineage); 'linked' (default) attaches an existing one.`, parameters: obj({ chatId: N, kind: { type: 'string', enum: [...TICKET_KINDS] }, ref: S, linkType: { type: 'string', enum: ['linked', 'created'] } }, ['chatId', 'kind', 'ref']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const chatId = num(a.chatId); const r = await svc.linkTicket(ctx.tenantId, chatId, chatAccessUserFor(ctx, chatId), { kind: str(a.kind), ref: str(a.ref), linkType: a.linkType === 'created' ? 'created' : 'linked', createdBy: ctx.agentRef ?? ctx.userId ?? null }); if ('error' in r) throw new Error(r.error); return r; } },
-  { tool: 'chats.unlink_ticket', mutates: true, description: 'Remove a chat ↔ ticket link.', parameters: obj({ chatId: N, kind: S, ref: S }, ['chatId', 'kind', 'ref']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const chatId = num(a.chatId); const r = await svc.unlinkTicket(ctx.tenantId, chatId, chatAccessUserFor(ctx, chatId), str(a.kind), str(a.ref)); if ('error' in r) throw new Error(r.error); return r; } },
+  { tool: 'chats.link_ticket', mutates: true, description: `Tie a Brain chat to an EXISTING work item (an item you create is linked to your chat automatically). kind = ${TICKET_KINDS.join('|')}; ref = the task/epic/gap id (number) or the other tiers' UUID. linkType='created' records that this chat SPAWNED the ticket (lineage); 'linked' (default) attaches an existing one.`, parameters: obj({ chatId: N, kind: { type: 'string', enum: [...TICKET_KINDS] }, ref: S, linkType: { type: 'string', enum: ['linked', 'created'] } }, ['chatId', 'kind', 'ref']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const chatId = idArg(a.chatId, 'chatId'); const r = await svc.linkTicket(ctx.tenantId, chatId, chatAccessUserFor(ctx, chatId), { kind: str(a.kind), ref: str(a.ref), linkType: a.linkType === 'created' ? 'created' : 'linked', createdBy: ctx.agentRef ?? ctx.userId ?? null }); if ('error' in r) throw new Error(r.error); return r; } },
+  { tool: 'chats.unlink_ticket', mutates: true, description: 'Remove a chat ↔ ticket link.', parameters: obj({ chatId: N, kind: S, ref: S }, ['chatId', 'kind', 'ref']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const chatId = idArg(a.chatId, 'chatId'); const r = await svc.unlinkTicket(ctx.tenantId, chatId, chatAccessUserFor(ctx, chatId), str(a.kind), str(a.ref)); if ('error' in r) throw new Error(r.error); return r; } },
   { tool: 'chats.ticket_lineage', mutates: false, description: 'List every Brain chat that references a work item — the lineage (which conversations shaped it, and which SPAWNED it). kind/ref identify the ticket.', parameters: obj({ kind: S, ref: S }, ['kind', 'ref']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); return svc.listChatsForTicket(ctx.tenantId, str(a.kind), str(a.ref)); } },
-  { tool: 'chats.consolidate', mutates: true, description: 'Merge one or more source Brain chats INTO a target chat: source messages are appended in time order, their ticket links + agent invites move to the target, and each source is archived and redirected to the target (so any ticket still resolves to the one surviving chat). Use to de-duplicate scattered conversations about the same work.', parameters: obj({ targetChatId: N, sourceChatIds: { type: 'array', items: N } }, ['targetChatId', 'sourceChatIds']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const ids = Array.isArray(a.sourceChatIds) ? (a.sourceChatIds as unknown[]).map((x) => num(x)) : []; const r = await svc.consolidate(ctx.tenantId, ctx.userId ?? null, { targetChatId: num(a.targetChatId), sourceChatIds: ids }); if ('error' in r) throw new Error(r.error); return r; } },
-  { tool: 'chats.list_agents', mutates: false, description: 'List the agents invited into a Brain chat, each with the name a human would recognise. These are the people this chat\'s work belongs to — dispatch to them by their agentRef rather than doing their work yourself.', parameters: obj({ chatId: N }, ['chatId']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.listAgents(ctx.tenantId, num(a.chatId), ctx.userId ?? null); if ('error' in r) throw new Error(r.error); return r; } },
-  { tool: 'chats.runs', mutates: false, description: "Every execution started against a ticket this chat links, newest first — the agent that actually RAN it, the run status, whether it produced anything, and `submittedBy`: WHICH pathway started it (`user:<id>` = a human pressed Run, `system:lane-auto` = board autonomy, `system:coordinator` = the manager's pass). Use it to tell 'the work is running' from 'the work was filed and nobody started it' — an empty result on a chat that has agents and linked tickets means nothing was ever dispatched, not that the runtime failed. Each run also names WHERE it executed — `executor` is 'durable' (the one cloud runtime) or 'github_actions', and `sandbox` says what served its shell: 'container' or 'actions' (a real shell and working tree, so the run could build/type-check/test) or 'none' (it edited over the git API and provably could NOT build); `hostName` names an on-prem machine instead. A chat whose runs all had sandbox 'none' produced code nothing compiled.", parameters: obj({ chatId: N, limit: N }, ['chatId']), run: async (ctx, a) => { const r = await readChatRunHistoryForCaller(ctx.db, ctx.tenantId, num(a.chatId), ctx.userId ?? null, a.limit != null ? num(a.limit) : undefined); if (!r) throw new Error('Chat not found'); return r; } },
+  { tool: 'chats.consolidate', mutates: true, description: 'Merge one or more source Brain chats INTO a target chat: source messages are appended in time order, their ticket links + agent invites move to the target, and each source is archived and redirected to the target (so any ticket still resolves to the one surviving chat). Use to de-duplicate scattered conversations about the same work.', parameters: obj({ targetChatId: N, sourceChatIds: { type: 'array', items: N } }, ['targetChatId', 'sourceChatIds']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const ids = Array.isArray(a.sourceChatIds) ? (a.sourceChatIds as unknown[]).map((x) => idArg(x, 'sourceChatIds')) : []; const r = await svc.consolidate(ctx.tenantId, ctx.userId ?? null, { targetChatId: idArg(a.targetChatId, 'targetChatId'), sourceChatIds: ids }); if ('error' in r) throw new Error(r.error); return r; } },
+  { tool: 'chats.list_agents', mutates: false, description: 'List the agents invited into a Brain chat, each with the name a human would recognise. These are the people this chat\'s work belongs to — dispatch to them by their agentRef rather than doing their work yourself.', parameters: obj({ chatId: N }, ['chatId']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.listAgents(ctx.tenantId, idArg(a.chatId, 'chatId'), ctx.userId ?? null); if ('error' in r) throw new Error(r.error); return r; } },
+  { tool: 'chats.runs', mutates: false, description: "Every execution started against a ticket this chat links, newest first — the agent that actually RAN it, the run status, whether it produced anything, and `submittedBy`: WHICH pathway started it (`user:<id>` = a human pressed Run, `system:lane-auto` = board autonomy, `system:coordinator` = the manager's pass). Use it to tell 'the work is running' from 'the work was filed and nobody started it' — an empty result on a chat that has agents and linked tickets means nothing was ever dispatched, not that the runtime failed. Each run also names WHERE it executed — `executor` is 'durable' (the one cloud runtime) or 'github_actions', and `sandbox` says what served its shell: 'container' or 'actions' (a real shell and working tree, so the run could build/type-check/test) or 'none' (it edited over the git API and provably could NOT build); `hostName` names an on-prem machine instead. A chat whose runs all had sandbox 'none' produced code nothing compiled.", parameters: obj({ chatId: N, limit: N }, ['chatId']), run: async (ctx, a) => { const r = await readChatRunHistoryForCaller(ctx.db, ctx.tenantId, idArg(a.chatId, 'chatId'), ctx.userId ?? null, a.limit != null ? num(a.limit) : undefined); if (!r) throw new Error('Chat not found'); return r; } },
   {
     tool: 'chats.post_to_brain', mutates: true,
     description: 'Post a concise progress update, blocker, or final result back into the Brain chat that launched this cloud run. The originating chat is supplied by the runtime and cannot be changed by the agent.',
@@ -2130,7 +2136,7 @@ const CATALOG: BuiltinTool[] = [
     run: async (ctx, a) => {
       if (!ctx.agentRef) throw new Error('Only an attributed cloud agent may post an execution update.');
       const svc = new BrainService(ctx.db);
-      const result = await svc.postExecutionUpdate(num(a.chatId), ctx.tenantId, {
+      const result = await svc.postExecutionUpdate(idArg(a.chatId, 'chatId'), ctx.tenantId, {
         agentRef: ctx.agentRef,
         content: str(a.content),
       });
@@ -2138,7 +2144,7 @@ const CATALOG: BuiltinTool[] = [
       return result;
     },
   },
-  { tool: 'chats.invite_agent', mutates: true, description: 'Invite an agent into a Brain chat as a participant (agentRef = cloud agent id / workforce ref). Once invited it can be tagged to take action; use chats.dispatch_agent to have it execute a linked ticket.', parameters: obj({ chatId: N, agentRef: S, agentKind: S, role: S }, ['chatId', 'agentRef']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.inviteAgent(ctx.tenantId, num(a.chatId), ctx.userId ?? null, { agentRef: str(a.agentRef), agentKind: a.agentKind != null ? str(a.agentKind) : undefined, role: a.role != null ? str(a.role) : undefined }); if ('error' in r) throw new Error(r.error); return r; } },
+  { tool: 'chats.invite_agent', mutates: true, description: 'Invite an agent into a Brain chat as a participant (agentRef = cloud agent id / workforce ref). Once invited it can be tagged to take action; use chats.dispatch_agent to have it execute a linked ticket.', parameters: obj({ chatId: N, agentRef: S, agentKind: S, role: S }, ['chatId', 'agentRef']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.inviteAgent(ctx.tenantId, idArg(a.chatId, 'chatId'), ctx.userId ?? null, { agentRef: str(a.agentRef), agentKind: a.agentKind != null ? str(a.agentKind) : undefined, role: a.role != null ? str(a.role) : undefined }); if ('error' in r) throw new Error(r.error); return r; } },
   {
     tool: 'chats.dispatch_agent', mutates: true,
     description: "Tag an invited agent to EXECUTE: assign it to a task/epic (typically one linked to the chat — see chats.list_tickets) and start a run immediately, joining it to this chat so it narrates here and can be steered mid-run with executions.post_message. Returns the started execution. Only task/epic tickets are runnable. Use this for work the CURRENT session cannot do itself — a long or repetitive job, or work that must run elsewhere; if you have the workspace file tools and could make the change in a few calls, make it instead of hiring an agent to make it. On a lifecycle-managed board the stage's authorized role decides who executes, so the agent that actually runs may differ from `agentRef` — the response says which one it is. The PERSON in this chat directing the dispatch is the authority: their dispatch overrides every governance gate (an unstaffed lane, a managed stage with no bound role, a human gate, a tripped failure breaker) — the run is recorded under their name (`overrode` names the gate) and cannot advance the lane on its own. Only a billing entitlement refusal (cloud-run or token allowance) stands: read it and report it, do not retry the identical dispatch.",
@@ -2146,10 +2152,10 @@ const CATALOG: BuiltinTool[] = [
     run: async (ctx, a) => {
       if (!ctx.env) throw new Error('dispatch unavailable in this context');
       const svc = new ChatTicketService(ctx.db, ctx.env);
-      const taskId = num(a.taskId);
+      const taskId = idArg(a.taskId, 'taskId');
       // Record the agent as a chat participant (idempotent) — this is what lets the run
       // narrate here and be steered with `executions.post_message`.
-      const invited = await svc.inviteAgent(ctx.tenantId, num(a.chatId), ctx.userId ?? null, { agentRef: str(a.agentRef) });
+      const invited = await svc.inviteAgent(ctx.tenantId, idArg(a.chatId, 'chatId'), ctx.userId ?? null, { agentRef: str(a.agentRef) });
       if ('error' in invited) throw new Error(invited.error);
       // Assign the agent to the ticket, then start a run — reuses the real routes'
       // authz + the single cloud-run dispatcher (no duplicated dispatch logic).
@@ -2161,7 +2167,7 @@ const CATALOG: BuiltinTool[] = [
       // evidence recorded against the previous owner. Dispatch, do not reassign.
       const managed = await isLifecycleManagedTask(ctx.db, ctx.tenantId, taskId).catch(() => false);
       if (!managed) await replayRoute(ctx, 'PATCH', `/api/tasks/${taskId}`, { assignedAgentRef: str(a.agentRef) });
-      const started = await replayRoute(ctx, 'POST', `/api/tasks/${taskId}/run-now`, { chatId: num(a.chatId) });
+      const started = await replayRoute(ctx, 'POST', `/api/tasks/${taskId}/run-now`, { chatId: idArg(a.chatId, 'chatId') });
       // `agentRef` in the result is whoever ACTUALLY runs, which on a managed board is the
       // stage's authorized role holder rather than the agent named in the call. Say so,
       // so a caller never reports the wrong agent as having picked the work up.
@@ -2173,7 +2179,7 @@ const CATALOG: BuiltinTool[] = [
     tool: 'chats.execute_as_agent', mutates: true,
     description: "Carry out the user's instruction in YOUR OWN RUNTIME — your clone of the repository, your shell and your git — rather than in this reply, which has none of them. Steers your live run on one of this chat's tickets, resumes a paused one, or starts a follow-up run on the SAME ticket branch your previous run left its changes on (so 'merge and push', 'run the tests', 'fix the failing build' act on your actual work); with no prior run it starts the linked ticket on you with the instruction as its first step. Pass the instruction VERBATIM. Returns what happened (steered / resumed / rerun / started, with the execution id) or awaiting_approval — report that to the user; never answer that you lack a git or file tool.",
     parameters: obj({ chatId: N, directive: S, taskId: N }, ['chatId', 'directive']),
-    run: (ctx, a) => executeAsAddressedAgent(ctx, { chatId: num(a.chatId), directive: str(a.directive), ...(a.taskId != null ? { taskId: num(a.taskId) } : {}) }),
+    run: (ctx, a) => executeAsAddressedAgent(ctx, { chatId: idArg(a.chatId, 'chatId'), directive: str(a.directive), ...(a.taskId != null ? { taskId: idArg(a.taskId, 'taskId') } : {}) }),
   },
 
   // ---- #hashtag resolution: tag chat-linked tickets so participants can be directed ----
@@ -2189,7 +2195,7 @@ const CATALOG: BuiltinTool[] = [
       + 'With no hashtag text, returns ALL tickets linked to the chat (same as chats.list_tickets) — the picker surface for "what can I tag?".',
     parameters: obj({ chatId: N, text: S, projectId: N }, ['chatId']),
     run: async (ctx, a) => {
-      const chatId = num(a.chatId);
+      const chatId = idArg(a.chatId, 'chatId');
       const svc = new ChatTicketService(ctx.db, ctx.env as Env);
       const linked = await svc.listTicketsForChat(ctx.tenantId, chatId, ctx.userId ?? null);
       if (!Array.isArray(linked)) throw new Error(linked.error);
@@ -2228,7 +2234,7 @@ const CATALOG: BuiltinTool[] = [
       // Unlinked ids: tenant-scoped lookup (optionally narrowed to projectId), the shared
       // security mask (a restricted ticket is surfaced, never leaked), then ONE batched
       // health read so progress is derived exactly as it is for the linked chips.
-      const scopeProjectId = a.projectId != null ? num(a.projectId) : null;
+      const scopeProjectId = a.projectId != null ? idArg(a.projectId, 'projectId') : null;
       const lookups = await Promise.all(
         ids.filter((id) => !byRef.has(String(id))).map((id) => getTenantTask(ctx, id).catch(() => null)),
       );
@@ -2308,7 +2314,7 @@ const CATALOG: BuiltinTool[] = [
     description: "Coach the AI Manager. mode='directive' (default) gives STANDING direction it honors on every backlog pass — e.g. 'focus the payments epic', 'hold merges on release/* until QA signs off' (scope='tenant' applies to EVERY project the manager runs; default 'project' applies to the given projectId only). mode='task' instead hands the manager ONE discrete task to execute once (owned by the designated manager, e.g. 'reorganize the payments epic and rank its backlog'). Use directive for how-to-manage guidance, task for a concrete one-off job.",
     parameters: obj({ projectId: N, directive: S, scope: { type: 'string', enum: ['project', 'tenant'] }, mode: { type: 'string', enum: ['directive', 'task'] } }, ['projectId', 'directive']),
     run: async (ctx, a) => {
-      const projectId = num(a.projectId);
+      const projectId = idArg(a.projectId, 'projectId');
       if (a.mode === 'task') {
         if (!ctx.env) throw new Error('task mode requires the worker runtime');
         const taskId = await createManagerCoachingTask(ctx.env, ctx.db, buildRuntimeService(ctx.env, ctx.db), {
@@ -2357,7 +2363,7 @@ const CATALOG: BuiltinTool[] = [
     parameters: obj({ id: N, name: S, isDefault: B }, ['id']),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      const row = await updateSavedDashboard(ctx.db, ctx.tenantId, seg, num(a.id), {
+      const row = await updateSavedDashboard(ctx.db, ctx.tenantId, seg, idArg(a.id, 'id'), {
         name: a.name != null ? str(a.name) : null,
         isDefault: typeof a.isDefault === 'boolean' ? a.isDefault : null,
       });
@@ -2365,13 +2371,13 @@ const CATALOG: BuiltinTool[] = [
       return row;
     },
   },
-  { tool: 'dashboards.delete', mutates: true, description: 'Delete a saved dashboard (and its widgets).', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => ({ deleted: await deleteSavedDashboard(ctx.db, ctx.tenantId, await resolveSegment(ctx.db, ctx.tenantId), num(a.id)) }) },
+  { tool: 'dashboards.delete', mutates: true, description: 'Delete a saved dashboard (and its widgets).', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => ({ deleted: await deleteSavedDashboard(ctx.db, ctx.tenantId, await resolveSegment(ctx.db, ctx.tenantId), idArg(a.id, 'id')) }) },
   {
     tool: 'dashboards.add_widget', mutates: true,
     description: 'Add a widget charting a whitelisted metric to a dashboard. viz: stat|bar|line|gauge.',
     parameters: obj({ dashboardId: N, metricKey: S, viz: { type: 'string', enum: ['stat', 'bar', 'line', 'gauge'] }, title: S, position: N }, ['dashboardId', 'metricKey']),
     run: async (ctx, a) => {
-      const result = await addDashboardWidget(ctx.db, ctx.tenantId, num(a.dashboardId), {
+      const result = await addDashboardWidget(ctx.db, ctx.tenantId, idArg(a.dashboardId, 'dashboardId'), {
         metricKey: a.metricKey,
         viz: a.viz,
         title: a.title != null ? str(a.title) : undefined,
@@ -2386,7 +2392,7 @@ const CATALOG: BuiltinTool[] = [
     description: 'Update a dashboard widget (metric, viz, title or position).',
     parameters: obj({ dashboardId: N, widgetId: N, metricKey: S, viz: { type: 'string', enum: ['stat', 'bar', 'line', 'gauge'] }, title: S, position: N }, ['dashboardId', 'widgetId']),
     run: async (ctx, a) => {
-      const result = await updateDashboardWidget(ctx.db, ctx.tenantId, num(a.dashboardId), num(a.widgetId), {
+      const result = await updateDashboardWidget(ctx.db, ctx.tenantId, idArg(a.dashboardId, 'dashboardId'), idArg(a.widgetId, 'widgetId'), {
         ...(a.metricKey != null ? { metricKey: str(a.metricKey) } : {}),
         ...(a.viz != null ? { viz: str(a.viz) } : {}),
         ...(a.title != null ? { title: str(a.title) } : {}),
@@ -2396,7 +2402,7 @@ const CATALOG: BuiltinTool[] = [
       return result.row;
     },
   },
-  { tool: 'dashboards.remove_widget', mutates: true, description: 'Remove a widget from a dashboard.', parameters: obj({ dashboardId: N, widgetId: N }, ['dashboardId', 'widgetId']), run: async (ctx, a) => ({ deleted: await removeDashboardWidget(ctx.db, ctx.tenantId, num(a.dashboardId), num(a.widgetId)) }) },
+  { tool: 'dashboards.remove_widget', mutates: true, description: 'Remove a widget from a dashboard.', parameters: obj({ dashboardId: N, widgetId: N }, ['dashboardId', 'widgetId']), run: async (ctx, a) => ({ deleted: await removeDashboardWidget(ctx.db, ctx.tenantId, idArg(a.dashboardId, 'dashboardId'), idArg(a.widgetId, 'widgetId')) }) },
 
   // ---- Alerts (segment-scoped rules) + alert events (tenant-scoped) ----
   { tool: 'alerts.list', mutates: false, description: 'List threshold alert rules defined on platform metrics.', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(alerts).where(and(eq(alerts.tenantId, ctx.tenantId), eq(alerts.segmentId, seg))).orderBy(desc(alerts.createdAt)).limit(200); } },
@@ -2458,8 +2464,8 @@ const CATALOG: BuiltinTool[] = [
     run: async (ctx, a) => {
       const name = str(a.name).trim(); if (!name) throw new Error('name is required');
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      if (a.projectId != null) await ctx.projects.getProject(num(a.projectId), ctx.tenantId); // tenant-ownership guard
-      const [row] = await ctx.db.insert(workflowDefinitions).values({ id: crypto.randomUUID(), tenantId: ctx.tenantId, segmentId: seg, name, description: a.description != null ? str(a.description) : null, projectId: a.projectId != null ? num(a.projectId) : null }).returning();
+      if (a.projectId != null) await ctx.projects.getProject(idArg(a.projectId, 'projectId'), ctx.tenantId); // tenant-ownership guard
+      const [row] = await ctx.db.insert(workflowDefinitions).values({ id: crypto.randomUUID(), tenantId: ctx.tenantId, segmentId: seg, name, description: a.description != null ? str(a.description) : null, projectId: a.projectId != null ? idArg(a.projectId, 'projectId') : null }).returning();
       return row;
     },
   },
@@ -2472,7 +2478,7 @@ const CATALOG: BuiltinTool[] = [
       const patch: Json = { updatedAt: new Date() };
       if (a.name != null) patch.name = str(a.name);
       if (a.description != null) patch.description = str(a.description);
-      if (a.projectId != null) patch.projectId = num(a.projectId);
+      if (a.projectId != null) patch.projectId = idArg(a.projectId, 'projectId');
       const [row] = await ctx.db.update(workflowDefinitions).set(patch).where(and(eq(workflowDefinitions.id, str(a.id)), eq(workflowDefinitions.tenantId, ctx.tenantId), eq(workflowDefinitions.segmentId, seg))).returning();
       if (!row) throw new Error('workflow definition not found');
       return row;
@@ -2481,7 +2487,7 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'workflow_definitions.remove', mutates: true, description: 'Delete a workflow definition.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(workflowDefinitions).where(and(eq(workflowDefinitions.id, str(a.id)), eq(workflowDefinitions.tenantId, ctx.tenantId), eq(workflowDefinitions.segmentId, seg))).returning({ id: workflowDefinitions.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
 
   // ---- Workflow RUNS (executions) — extends the existing workflows.list/get (the `workflows` table). ----
-  { tool: 'workflow_runs.list', mutates: false, description: 'List workflow runs (executions), optionally filtered by status / project.', parameters: obj({ status: S, projectId: N }), run: (ctx, a) => { const conds: SQL[] = [eq(workflows.tenantId, ctx.tenantId)]; if (a.status != null) conds.push(eq(workflows.status, str(a.status) as never)); if (a.projectId != null) conds.push(eq(workflows.projectId, num(a.projectId))); return ctx.db.select().from(workflows).where(and(...conds)).orderBy(desc(workflows.createdAt)).limit(200); } },
+  { tool: 'workflow_runs.list', mutates: false, description: 'List workflow runs (executions), optionally filtered by status / project.', parameters: obj({ status: S, projectId: N }), run: (ctx, a) => { const conds: SQL[] = [eq(workflows.tenantId, ctx.tenantId)]; if (a.status != null) conds.push(eq(workflows.status, str(a.status) as never)); if (a.projectId != null) conds.push(eq(workflows.projectId, idArg(a.projectId, 'projectId'))); return ctx.db.select().from(workflows).where(and(...conds)).orderBy(desc(workflows.createdAt)).limit(200); } },
   { tool: 'workflow_runs.get', mutates: false, description: 'Get a workflow run by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => (await ctx.db.select().from(workflows).where(and(eq(workflows.id, str(a.id)), eq(workflows.tenantId, ctx.tenantId))).limit(1))[0] ?? null },
 
   // ---- Cron jobs (write) — agentHost-owned schedules. The host association + sync live in the
@@ -2495,9 +2501,9 @@ const CATALOG: BuiltinTool[] = [
       const name = str(a.name).trim(); if (!name) throw new Error('name is required');
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       const [row] = await ctx.db.insert(cronJobs).values({
-        tenantId: ctx.tenantId, segmentId: seg, agentHostId: num(a.agentHostId), name, schedule: str(a.schedule),
-        taskId: a.taskId != null ? num(a.taskId) : null,
-        projectId: a.projectId != null ? num(a.projectId) : null,
+        tenantId: ctx.tenantId, segmentId: seg, agentHostId: idArg(a.agentHostId, 'agentHostId'), name, schedule: str(a.schedule),
+        taskId: a.taskId != null ? idArg(a.taskId, 'taskId') : null,
+        projectId: a.projectId != null ? idArg(a.projectId, 'projectId') : null,
         ...(typeof a.enabled === 'boolean' ? { enabled: a.enabled } : {}),
       }).returning();
       if (ctx.env && row) await invalidateHostCronJobs(ctx.env, row.agentHostId);
@@ -2581,7 +2587,7 @@ const CATALOG: BuiltinTool[] = [
 
   // ---- Artifact assignments (skill/persona → scope; 'content' retired in 0982). Tenant-scoped (NO segment_id);
   //       composite PK (tenantId, artifactType, artifactSlug, scope, scopeId). ----
-  { tool: 'artifact_assignments.list', mutates: false, description: 'List artifacts (skill/persona) assigned to a scope.', parameters: obj({ scope: S, scopeId: N, artifactType: { type: 'string', enum: ['skill', 'persona', 'agent'] } }, ['scope', 'scopeId']), run: (ctx, a) => { const conds: SQL[] = [eq(artifactAssignments.tenantId, ctx.tenantId), eq(artifactAssignments.scope, str(a.scope) as never), eq(artifactAssignments.scopeId, num(a.scopeId))]; if (a.artifactType != null) conds.push(eq(artifactAssignments.artifactType, str(a.artifactType) as never)); return ctx.db.select().from(artifactAssignments).where(and(...conds)).limit(200); } },
+  { tool: 'artifact_assignments.list', mutates: false, description: 'List artifacts (skill/persona) assigned to a scope.', parameters: obj({ scope: S, scopeId: N, artifactType: { type: 'string', enum: ['skill', 'persona', 'agent'] } }, ['scope', 'scopeId']), run: (ctx, a) => { const conds: SQL[] = [eq(artifactAssignments.tenantId, ctx.tenantId), eq(artifactAssignments.scope, str(a.scope) as never), eq(artifactAssignments.scopeId, idArg(a.scopeId, 'scopeId'))]; if (a.artifactType != null) conds.push(eq(artifactAssignments.artifactType, str(a.artifactType) as never)); return ctx.db.select().from(artifactAssignments).where(and(...conds)).limit(200); } },
   {
     tool: 'artifact_assignments.assign', mutates: true,
     description: 'Attach a skill or persona artifact to a scope.',
@@ -2589,12 +2595,12 @@ const CATALOG: BuiltinTool[] = [
     run: async (ctx, a) => {
       // A paid skill needs a purchase, not just an assignment — throws a 402 the gateway relays.
       await assertSkillAssignable(ctx.db, ctx.tenantId, str(a.artifactType), str(a.artifactSlug));
-      const [row] = await ctx.db.insert(artifactAssignments).values({ tenantId: ctx.tenantId, artifactType: str(a.artifactType) as never, artifactSlug: str(a.artifactSlug), scope: str(a.scope) as never, scopeId: num(a.scopeId), config: a.config != null ? str(a.config) : null }).onConflictDoUpdate({ target: [artifactAssignments.tenantId, artifactAssignments.artifactType, artifactAssignments.artifactSlug, artifactAssignments.scope, artifactAssignments.scopeId], set: { config: a.config != null ? str(a.config) : null } }).returning();
+      const [row] = await ctx.db.insert(artifactAssignments).values({ tenantId: ctx.tenantId, artifactType: str(a.artifactType) as never, artifactSlug: str(a.artifactSlug), scope: str(a.scope) as never, scopeId: idArg(a.scopeId, 'scopeId'), config: a.config != null ? str(a.config) : null }).onConflictDoUpdate({ target: [artifactAssignments.tenantId, artifactAssignments.artifactType, artifactAssignments.artifactSlug, artifactAssignments.scope, artifactAssignments.scopeId], set: { config: a.config != null ? str(a.config) : null } }).returning();
       if (str(a.artifactType) === 'skill') await invalidateSkillAssignmentCaches(ctx.env, ctx.tenantId);
       return row;
     },
   },
-  { tool: 'artifact_assignments.unassign', mutates: true, description: 'Detach an artifact from a scope.', parameters: obj({ artifactType: { type: 'string', enum: ['skill', 'persona', 'agent'] }, artifactSlug: S, scope: S, scopeId: N }, ['artifactType', 'artifactSlug', 'scope', 'scopeId']), run: async (ctx, a) => { const rows = await ctx.db.delete(artifactAssignments).where(and(eq(artifactAssignments.tenantId, ctx.tenantId), eq(artifactAssignments.artifactType, str(a.artifactType) as never), eq(artifactAssignments.artifactSlug, str(a.artifactSlug)), eq(artifactAssignments.scope, str(a.scope) as never), eq(artifactAssignments.scopeId, num(a.scopeId)))).returning({ slug: artifactAssignments.artifactSlug }); if (str(a.artifactType) === 'skill') await invalidateSkillAssignmentCaches(ctx.env, ctx.tenantId); return { deleted: rows.length > 0 ? str(a.artifactSlug) : null }; } },
+  { tool: 'artifact_assignments.unassign', mutates: true, description: 'Detach an artifact from a scope.', parameters: obj({ artifactType: { type: 'string', enum: ['skill', 'persona', 'agent'] }, artifactSlug: S, scope: S, scopeId: N }, ['artifactType', 'artifactSlug', 'scope', 'scopeId']), run: async (ctx, a) => { const rows = await ctx.db.delete(artifactAssignments).where(and(eq(artifactAssignments.tenantId, ctx.tenantId), eq(artifactAssignments.artifactType, str(a.artifactType) as never), eq(artifactAssignments.artifactSlug, str(a.artifactSlug)), eq(artifactAssignments.scope, str(a.scope) as never), eq(artifactAssignments.scopeId, idArg(a.scopeId, 'scopeId')))).returning({ slug: artifactAssignments.artifactSlug }); if (str(a.artifactType) === 'skill') await invalidateSkillAssignmentCaches(ctx.env, ctx.tenantId); return { deleted: rows.length > 0 ? str(a.artifactSlug) : null }; } },
 
   // ---- Governance (SOC 2) — soc_controls + soc_evidence. Both segment-scoped. The
   //       finops collision table was renamed to finops_soc_controls (mig 0254); these
@@ -2711,15 +2717,15 @@ const CATALOG: BuiltinTool[] = [
 
   // ---- External board connections (Jira/GitHub PM sync). Segment-scoped. sync SKIPPED
   //       (triggers an external provider sync, a side-effect; not a table op). ----
-  { tool: 'board_connections.list', mutates: false, description: 'List external board connections (Jira/GitHub PM sync), optionally by project.', parameters: obj({ projectId: N }), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const conds: SQL[] = [eq(boardConnections.tenantId, ctx.tenantId), eq(boardConnections.segmentId, seg)]; if (a.projectId != null) conds.push(eq(boardConnections.projectId, num(a.projectId))); return ctx.db.select().from(boardConnections).where(and(...conds)).orderBy(desc(boardConnections.createdAt)).limit(200); } },
+  { tool: 'board_connections.list', mutates: false, description: 'List external board connections (Jira/GitHub PM sync), optionally by project.', parameters: obj({ projectId: N }), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const conds: SQL[] = [eq(boardConnections.tenantId, ctx.tenantId), eq(boardConnections.segmentId, seg)]; if (a.projectId != null) conds.push(eq(boardConnections.projectId, idArg(a.projectId, 'projectId'))); return ctx.db.select().from(boardConnections).where(and(...conds)).orderBy(desc(boardConnections.createdAt)).limit(200); } },
   {
     tool: 'board_connections.create', mutates: true,
     description: 'Create an external board connection on a project.',
     parameters: obj({ projectId: N, provider: S, credentialId: S, externalBoardId: S }, ['projectId', 'provider']),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      await ctx.projects.getProject(num(a.projectId), ctx.tenantId); // tenant-ownership guard
-      const [row] = await ctx.db.insert(boardConnections).values({ tenantId: ctx.tenantId, segmentId: seg, projectId: num(a.projectId), provider: str(a.provider), credentialId: a.credentialId != null ? str(a.credentialId) : null, externalBoardId: a.externalBoardId != null ? str(a.externalBoardId) : null }).returning();
+      await ctx.projects.getProject(idArg(a.projectId, 'projectId'), ctx.tenantId); // tenant-ownership guard
+      const [row] = await ctx.db.insert(boardConnections).values({ tenantId: ctx.tenantId, segmentId: seg, projectId: idArg(a.projectId, 'projectId'), provider: str(a.provider), credentialId: a.credentialId != null ? str(a.credentialId) : null, externalBoardId: a.externalBoardId != null ? str(a.externalBoardId) : null }).returning();
       return row;
     },
   },
@@ -2741,8 +2747,8 @@ const CATALOG: BuiltinTool[] = [
 
   // ---- Repos (project_repositories) + pull_requests. Both segment-scoped. These are plain
   //       table rows (the git/provider calls happen on separate routes). ----
-  { tool: 'repos.list', mutates: false, description: 'List git repositories linked to a project.', parameters: obj({ projectId: N }, ['projectId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(projectRepositories).where(and(eq(projectRepositories.tenantId, ctx.tenantId), eq(projectRepositories.segmentId, seg), eq(projectRepositories.projectId, num(a.projectId)))).orderBy(desc(projectRepositories.createdAt)).limit(200); } },
-  { tool: 'repos.list_pull_requests', mutates: false, description: 'List pull requests for a project.', parameters: obj({ projectId: N }, ['projectId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(pullRequests).where(and(eq(pullRequests.tenantId, ctx.tenantId), eq(pullRequests.segmentId, seg), eq(pullRequests.projectId, num(a.projectId)))).orderBy(desc(pullRequests.createdAt)).limit(200); } },
+  { tool: 'repos.list', mutates: false, description: 'List git repositories linked to a project.', parameters: obj({ projectId: N }, ['projectId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(projectRepositories).where(and(eq(projectRepositories.tenantId, ctx.tenantId), eq(projectRepositories.segmentId, seg), eq(projectRepositories.projectId, idArg(a.projectId, 'projectId')))).orderBy(desc(projectRepositories.createdAt)).limit(200); } },
+  { tool: 'repos.list_pull_requests', mutates: false, description: 'List pull requests for a project.', parameters: obj({ projectId: N }, ['projectId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(pullRequests).where(and(eq(pullRequests.tenantId, ctx.tenantId), eq(pullRequests.segmentId, seg), eq(pullRequests.projectId, idArg(a.projectId, 'projectId')))).orderBy(desc(pullRequests.createdAt)).limit(200); } },
   {
     tool: 'repos.pull_request_diff_summary', mutates: false,
     description: 'Summarize a task or pull request diff by file category (code, test, docs, config, migration, asset, other), including per-file additions/deletions, category totals, and docsOnly/codeChanged flags. Prefer taskId; the platform resolves its recorded PR or branch changes.',
@@ -2751,9 +2757,9 @@ const CATALOG: BuiltinTool[] = [
       if (!ctx.env) throw new Error('pull-request diff summary needs the platform environment');
       return getPullRequestDiffSummary(ctx.db, ctx.env, {
         tenantId: ctx.tenantId,
-        ...(a.taskId != null ? { taskId: num(a.taskId) } : {}),
+        ...(a.taskId != null ? { taskId: idArg(a.taskId, 'taskId') } : {}),
         ...(a.prNumber != null ? { prNumber: num(a.prNumber) } : {}),
-        ...(a.projectId != null ? { projectId: num(a.projectId) } : {}),
+        ...(a.projectId != null ? { projectId: idArg(a.projectId, 'projectId') } : {}),
       });
     },
   },
@@ -2763,8 +2769,8 @@ const CATALOG: BuiltinTool[] = [
     parameters: obj({ projectId: N, provider: S, owner: S, repo: S, defaultBranch: S, isDefault: B, credentialId: S }, ['projectId', 'provider', 'owner', 'repo']),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      await ctx.projects.getProject(num(a.projectId), ctx.tenantId); // tenant-ownership guard
-      const [row] = await ctx.db.insert(projectRepositories).values({ tenantId: ctx.tenantId, segmentId: seg, projectId: num(a.projectId), provider: str(a.provider), owner: str(a.owner), repo: str(a.repo), defaultBranch: a.defaultBranch != null ? str(a.defaultBranch) : null, ...(typeof a.isDefault === 'boolean' ? { isDefault: a.isDefault } : {}), credentialId: a.credentialId != null ? str(a.credentialId) : null }).returning();
+      await ctx.projects.getProject(idArg(a.projectId, 'projectId'), ctx.tenantId); // tenant-ownership guard
+      const [row] = await ctx.db.insert(projectRepositories).values({ tenantId: ctx.tenantId, segmentId: seg, projectId: idArg(a.projectId, 'projectId'), provider: str(a.provider), owner: str(a.owner), repo: str(a.repo), defaultBranch: a.defaultBranch != null ? str(a.defaultBranch) : null, ...(typeof a.isDefault === 'boolean' ? { isDefault: a.isDefault } : {}), credentialId: a.credentialId != null ? str(a.credentialId) : null }).returning();
       return row;
     },
   },
@@ -2800,9 +2806,9 @@ const CATALOG: BuiltinTool[] = [
 
   // ---- Chat sessions (agent-host messaging) — chat_sessions + chat_messages. Segment-scoped.
   //       provider_keys.list / my_sessions / channels / embed are handled below or SKIPPED. ----
-  { tool: 'chat_sessions.list', mutates: false, description: 'List chat sessions on an agent host.', parameters: obj({ agentHostId: N }, ['agentHostId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(chatSessions).where(and(eq(chatSessions.tenantId, ctx.tenantId), eq(chatSessions.segmentId, seg), eq(chatSessions.agentHostId, num(a.agentHostId)))).orderBy(desc(chatSessions.startedAt)).limit(200); } },
+  { tool: 'chat_sessions.list', mutates: false, description: 'List chat sessions on an agent host.', parameters: obj({ agentHostId: N }, ['agentHostId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(chatSessions).where(and(eq(chatSessions.tenantId, ctx.tenantId), eq(chatSessions.segmentId, seg), eq(chatSessions.agentHostId, idArg(a.agentHostId, 'agentHostId')))).orderBy(desc(chatSessions.startedAt)).limit(200); } },
   { tool: 'chat_sessions.list_all', mutates: false, description: 'Recent chat sessions across the workspace.', parameters: obj({ limit: N }), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(chatSessions).where(and(eq(chatSessions.tenantId, ctx.tenantId), eq(chatSessions.segmentId, seg))).orderBy(desc(chatSessions.startedAt)).limit(clampLimit(a.limit)); } },
-  { tool: 'chat_sessions.get_messages', mutates: false, description: 'Messages in a chat session (verified via the tenant+segment-scoped parent session).', parameters: obj({ sessionId: N, limit: N }, ['sessionId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const [session] = await ctx.db.select({ id: chatSessions.id }).from(chatSessions).where(and(eq(chatSessions.id, num(a.sessionId)), eq(chatSessions.tenantId, ctx.tenantId), eq(chatSessions.segmentId, seg))).limit(1); if (!session) return []; return ctx.db.select().from(chatMessages).where(and(eq(chatMessages.sessionId, session.id), eq(chatMessages.tenantId, ctx.tenantId), eq(chatMessages.segmentId, seg))).orderBy(chatMessages.seq).limit(clampLimit(a.limit)); } },
+  { tool: 'chat_sessions.get_messages', mutates: false, description: 'Messages in a chat session (verified via the tenant+segment-scoped parent session).', parameters: obj({ sessionId: N, limit: N }, ['sessionId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const [session] = await ctx.db.select({ id: chatSessions.id }).from(chatSessions).where(and(eq(chatSessions.id, idArg(a.sessionId, 'sessionId')), eq(chatSessions.tenantId, ctx.tenantId), eq(chatSessions.segmentId, seg))).limit(1); if (!session) return []; return ctx.db.select().from(chatMessages).where(and(eq(chatMessages.sessionId, session.id), eq(chatMessages.tenantId, ctx.tenantId), eq(chatMessages.segmentId, seg))).orderBy(chatMessages.seq).limit(clampLimit(a.limit)); } },
 
   // ---- Provider keys (read only — which LLM providers are configured; NEVER returns the
   //       secret key material). Backed by the raw-SQL tenant_llm_provider_keys table. ----
@@ -2837,10 +2843,10 @@ const CATALOG: BuiltinTool[] = [
     parameters: obj({ projectId: N, name: S, maxConcurrentTickets: N }, ['projectId', 'name']),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      await ctx.projects.getProject(num(a.projectId), ctx.tenantId); // tenant-ownership guard
-      const [existing] = await ctx.db.select().from(boards).where(and(eq(boards.projectId, num(a.projectId)), eq(boards.tenantId, ctx.tenantId), eq(boards.segmentId, seg))).limit(1);
+      await ctx.projects.getProject(idArg(a.projectId, 'projectId'), ctx.tenantId); // tenant-ownership guard
+      const [existing] = await ctx.db.select().from(boards).where(and(eq(boards.projectId, idArg(a.projectId, 'projectId')), eq(boards.tenantId, ctx.tenantId), eq(boards.segmentId, seg))).limit(1);
       if (existing) return existing;
-      const [row] = await ctx.db.insert(boards).values({ tenantId: ctx.tenantId, segmentId: seg, projectId: num(a.projectId), name: str(a.name), ...(a.maxConcurrentTickets != null ? { maxConcurrentTickets: num(a.maxConcurrentTickets) } : {}) }).returning();
+      const [row] = await ctx.db.insert(boards).values({ tenantId: ctx.tenantId, segmentId: seg, projectId: idArg(a.projectId, 'projectId'), name: str(a.name), ...(a.maxConcurrentTickets != null ? { maxConcurrentTickets: num(a.maxConcurrentTickets) } : {}) }).returning();
       return row;
     },
   },
@@ -2934,7 +2940,7 @@ const CATALOG: BuiltinTool[] = [
       if (!ctx.env) throw new Error('reading a mailbox needs the platform environment');
       const { resolveMailbox, readMailbox, toTriageMessages } = await import('../mailbox/mailboxService');
       const resolved = await resolveMailbox(ctx.db, ctx.tenantId, {
-        connectionId: a.connectionId != null ? num(a.connectionId) : null,
+        connectionId: a.connectionId != null ? idArg(a.connectionId, 'connectionId') : null,
         accountEmail: a.accountEmail != null ? str(a.accountEmail) : null,
       });
       if (!resolved.ok) throw new Error(resolved.error);
@@ -2965,7 +2971,7 @@ const CATALOG: BuiltinTool[] = [
       if (!ctx.env) throw new Error('reading a mailbox needs the platform environment');
       const { resolveMailbox, readMailboxMessage } = await import('../mailbox/mailboxService');
       const resolved = await resolveMailbox(ctx.db, ctx.tenantId, {
-        connectionId: a.connectionId != null ? num(a.connectionId) : null,
+        connectionId: a.connectionId != null ? idArg(a.connectionId, 'connectionId') : null,
         accountEmail: a.accountEmail != null ? str(a.accountEmail) : null,
       });
       if (!resolved.ok) throw new Error(resolved.error);
@@ -2993,7 +2999,7 @@ const CATALOG: BuiltinTool[] = [
       if (!ctx.env) throw new Error('reading a mailbox needs the platform environment');
       const { resolveMailbox, listMailboxAttachments } = await import('../mailbox/mailboxService');
       const resolved = await resolveMailbox(ctx.db, ctx.tenantId, {
-        connectionId: a.connectionId != null ? num(a.connectionId) : null,
+        connectionId: a.connectionId != null ? idArg(a.connectionId, 'connectionId') : null,
         accountEmail: a.accountEmail != null ? str(a.accountEmail) : null,
       });
       if (!resolved.ok) throw new Error(resolved.error);
@@ -3023,7 +3029,7 @@ const CATALOG: BuiltinTool[] = [
       if (!ctx.env) throw new Error('sending from a mailbox needs the platform environment');
       const { resolveMailbox, sendFromMailbox } = await import('../mailbox/mailboxService');
       const resolved = await resolveMailbox(ctx.db, ctx.tenantId, {
-        connectionId: a.connectionId != null ? num(a.connectionId) : null,
+        connectionId: a.connectionId != null ? idArg(a.connectionId, 'connectionId') : null,
         accountEmail: a.accountEmail != null ? str(a.accountEmail) : null,
       }, { forSending: true });
       if (!resolved.ok) throw new Error(resolved.error);
@@ -3110,27 +3116,27 @@ const CATALOG: BuiltinTool[] = [
     }, ['name', 'audienceId']),
     run: (ctx, a) => replayRoute(ctx, 'POST', '/api/growth/campaigns', {
       name: str(a.name),
-      audienceId: num(a.audienceId),
+      audienceId: idArg(a.audienceId, 'audienceId'),
       ...(a.subject != null ? { subject: str(a.subject) } : {}),
       ...(a.bodyHtml != null ? { bodyHtml: str(a.bodyHtml) } : {}),
       ...(a.bodyText != null ? { bodyText: str(a.bodyText) } : {}),
-      ...(a.templateId != null ? { templateId: num(a.templateId) } : {}),
+      ...(a.templateId != null ? { templateId: idArg(a.templateId, 'templateId') } : {}),
       ...(a.channel != null ? { channel: str(a.channel) } : {}),
       ...(a.transport != null ? { transport: str(a.transport) } : {}),
-      ...(a.senderIdentityId != null ? { senderIdentityId: num(a.senderIdentityId) } : {}),
-      ...(a.mailboxConnectionId != null ? { mailboxConnectionId: num(a.mailboxConnectionId) } : {}),
+      ...(a.senderIdentityId != null ? { senderIdentityId: idArg(a.senderIdentityId, 'senderIdentityId') } : {}),
+      ...(a.mailboxConnectionId != null ? { mailboxConnectionId: idArg(a.mailboxConnectionId, 'mailboxConnectionId') } : {}),
       ...(a.connectorConnectionId != null ? { connectorConnectionId: str(a.connectorConnectionId) } : {}),
       ...(a.fromName != null ? { fromName: str(a.fromName) } : {}),
       ...(a.fromNumber != null ? { fromNumber: str(a.fromNumber) } : {}),
       ...(a.scheduledAt != null ? { scheduledAt: str(a.scheduledAt) } : {}),
-      ...(a.projectId != null ? { projectId: num(a.projectId) } : {}),
+      ...(a.projectId != null ? { projectId: idArg(a.projectId, 'projectId') } : {}),
     }),
   },
   {
     tool: 'campaign.schedule', mutates: true,
     description: 'Schedule a DRAFT campaign to send itself at a given time, or clear its schedule by passing `scheduledAt: null`. Scheduling is not sending: every precondition — a resolvable sender, a body, a non-empty audience, suppression — is re-checked at the moment it actually starts, so a campaign scheduled for Tuesday that loses its mailbox connection on Monday refuses to send rather than failing halfway through the audience. Prefer this to calling campaign.send at a chosen time; nothing has to stay awake for it.',
     parameters: obj({ campaignId: N, scheduledAt: S }, ['campaignId']),
-    run: (ctx, a) => replayRoute(ctx, 'PATCH', `/api/growth/campaigns/${num(a.campaignId)}`, {
+    run: (ctx, a) => replayRoute(ctx, 'PATCH', `/api/growth/campaigns/${idArg(a.campaignId, 'campaignId')}`, {
       // Explicit null clears the schedule — `str()` would turn it into "", which
       // the route also reads as "clear", but passing the null through keeps the
       // tool's contract and the route's the same shape.
@@ -3141,7 +3147,7 @@ const CATALOG: BuiltinTool[] = [
     tool: 'campaign.send', mutates: true,
     description: 'SEND a draft campaign to its whole audience NOW. THIS REACHES REAL PEOPLE AND CANNOT BE UNDONE — confirm with the user before calling it, and never call it speculatively or to "test" a campaign. Suppressed addresses are excluded; an email carries a working one-click unsubscribe and an SMS carries the STOP notice. Returns what was queued, what was suppressed, how many the channel could not reach (`unreachable` — members with no mobile number, or who replied STOP), and the first batch\'s result; a large audience finishes on the background sweep.',
     parameters: obj({ campaignId: N }, ['campaignId']),
-    run: (ctx, a) => replayRoute(ctx, 'POST', `/api/growth/campaigns/${num(a.campaignId)}/send`),
+    run: (ctx, a) => replayRoute(ctx, 'POST', `/api/growth/campaigns/${idArg(a.campaignId, 'campaignId')}/send`),
   },
   {
     tool: 'campaign.list', mutates: false,
@@ -3218,20 +3224,20 @@ const CATALOG: BuiltinTool[] = [
       ...(Array.isArray(a.connectionIds) ? { connectionIds: a.connectionIds.map(String) } : {}),
       ...(a.variants != null ? { variants: a.variants } : {}),
       ...(a.scheduledAt != null ? { scheduledAt: str(a.scheduledAt) } : {}),
-      ...(a.projectId != null ? { projectId: num(a.projectId) } : {}),
+      ...(a.projectId != null ? { projectId: idArg(a.projectId, 'projectId') } : {}),
     }),
   },
   {
     tool: 'social_campaign.publish', mutates: true,
     description: 'PUBLISH a social campaign to every account it targets. THIS IS PUBLIC AND CANNOT BE UNDONE — confirm with the user first. Each account is published at most once, so a retry is safe; a campaign with more targets than one batch finishes on the background sweep. Networks that need media and have none are SKIPPED rather than failed. Returns what published, what failed, and each post\'s permalink.',
     parameters: obj({ campaignId: N }, ['campaignId']),
-    run: (ctx, a) => replayRoute(ctx, 'POST', `/api/social/campaigns/${num(a.campaignId)}/publish`),
+    run: (ctx, a) => replayRoute(ctx, 'POST', `/api/social/campaigns/${idArg(a.campaignId, 'campaignId')}/publish`),
   },
   {
     tool: 'social_campaign.list', mutates: false,
     description: 'List this workspace\'s social campaigns with their status, per-account posts and permalinks. The counters are maintained by the publisher, so they are what actually went out rather than what was intended.',
     parameters: obj({ projectId: N }, []),
-    run: (ctx, a) => replayRoute(ctx, 'GET', a.projectId != null ? `/api/social/campaigns?projectId=${num(a.projectId)}` : '/api/social/campaigns'),
+    run: (ctx, a) => replayRoute(ctx, 'GET', a.projectId != null ? `/api/social/campaigns?projectId=${idArg(a.projectId, 'projectId')}` : '/api/social/campaigns'),
   },
 
   // ---- PAID ADVERTISING -----------------------------------------------------
@@ -3665,15 +3671,15 @@ const CATALOG: BuiltinTool[] = [
   //       model), tenant-scoped by task_id + tenant_id. ----
   { tool: 'executions.list_recent', mutates: false, description: 'Recent executions across the workspace.', parameters: obj({ limit: N }), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(executions).where(and(eq(executions.tenantId, ctx.tenantId), eq(executions.segmentId, seg))).orderBy(desc(executions.createdAt)).limit(clampLimit(a.limit)); } },
   { tool: 'executions.list_active', mutates: false, description: "What's running right now across the fleet (pending / running executions).", parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(executions).where(and(eq(executions.tenantId, ctx.tenantId), eq(executions.segmentId, seg), sql`${executions.status} IN ('pending','running')`)).orderBy(desc(executions.createdAt)).limit(200); } },
-  { tool: 'executions.get', mutates: false, description: 'Get one execution by id.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return (await ctx.db.select().from(executions).where(and(eq(executions.id, num(a.id)), eq(executions.tenantId, ctx.tenantId), eq(executions.segmentId, seg))).limit(1))[0] ?? null; } },
-  { tool: 'executions.list_for_task', mutates: false, description: 'Execution history for a task.', parameters: obj({ taskId: N }, ['taskId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(executions).where(and(eq(executions.taskId, num(a.taskId)), eq(executions.tenantId, ctx.tenantId), eq(executions.segmentId, seg))).orderBy(desc(executions.createdAt)).limit(200); } },
+  { tool: 'executions.get', mutates: false, description: 'Get one execution by id.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return (await ctx.db.select().from(executions).where(and(eq(executions.id, idArg(a.id, 'id')), eq(executions.tenantId, ctx.tenantId), eq(executions.segmentId, seg))).limit(1))[0] ?? null; } },
+  { tool: 'executions.list_for_task', mutates: false, description: 'Execution history for a task.', parameters: obj({ taskId: N }, ['taskId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(executions).where(and(eq(executions.taskId, idArg(a.taskId, 'taskId')), eq(executions.tenantId, ctx.tenantId), eq(executions.segmentId, seg))).orderBy(desc(executions.createdAt)).limit(200); } },
   {
     tool: 'executions.trace', mutates: false,
     description: 'Execution trace: usage snapshots + tool-call audit (+ the durable steering thread).',
     parameters: obj({ id: N }, ['id']),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      const id = num(a.id);
+      const id = idArg(a.id, 'id');
       const [execution] = await ctx.db.select().from(executions).where(and(eq(executions.id, id), eq(executions.tenantId, ctx.tenantId), eq(executions.segmentId, seg))).limit(1);
       if (!execution) return null;
       // Cloud runs are keyed by execution_id; host runs by (agent_host_id, session_key).
@@ -3693,19 +3699,19 @@ const CATALOG: BuiltinTool[] = [
       return { execution, trace: { source: isCloudRun ? 'cloud-telemetry' : 'runtime-fallback', usageSnapshots: usage, toolEvents, messages } };
     },
   },
-  { tool: 'executions.task_file_changes', mutates: false, description: 'Files an agent created/modified/deleted for a task.', parameters: obj({ taskId: N }, ['taskId']), run: async (ctx, a) => (await ctx.db.execute(sql`SELECT path, change, agent, execution_id AS "executionId", created_at AS "createdAt" FROM task_file_changes WHERE task_id = ${num(a.taskId)} AND tenant_id = ${ctx.tenantId} ORDER BY created_at DESC LIMIT 500`)).rows },
+  { tool: 'executions.task_file_changes', mutates: false, description: 'Files an agent created/modified/deleted for a task.', parameters: obj({ taskId: N }, ['taskId']), run: async (ctx, a) => (await ctx.db.execute(sql`SELECT path, change, agent, execution_id AS "executionId", created_at AS "createdAt" FROM task_file_changes WHERE task_id = ${idArg(a.taskId, 'taskId')} AND tenant_id = ${ctx.tenantId} ORDER BY created_at DESC LIMIT 500`)).rows },
   // ---- Executions (writes) — dispatch/steer live runs via route replay (reuses the
   //       runtime route's gating + dispatch logic; not a simple table op). ----
-  { tool: 'executions.submit', mutates: true, description: 'Submit a task for agent execution (dispatches to an agent host or the cloud).', parameters: obj({ taskId: N, agentHostId: N, sessionId: S, payload: S }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/runtime/executions', { taskId: num(a.taskId), ...(a.agentHostId != null ? { agentHostId: num(a.agentHostId) } : {}), ...(a.sessionId != null ? { sessionId: str(a.sessionId) } : {}), ...(a.payload != null ? { payload: str(a.payload) } : {}) }) },
-  { tool: 'executions.cancel', mutates: true, description: 'Cancel a running/queued execution.', parameters: obj({ id: N }, ['id']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/runtime/executions/${num(a.id)}/cancel`) },
-  { tool: 'executions.post_message', mutates: true, description: 'Send a follow-up direction to a running execution (steer it mid-run).', parameters: obj({ id: N, text: S }, ['id', 'text']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/runtime/executions/${num(a.id)}/messages`, { text: str(a.text) }) },
+  { tool: 'executions.submit', mutates: true, description: 'Submit a task for agent execution (dispatches to an agent host or the cloud).', parameters: obj({ taskId: N, agentHostId: N, sessionId: S, payload: S }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/runtime/executions', { taskId: idArg(a.taskId, 'taskId'), ...(a.agentHostId != null ? { agentHostId: idArg(a.agentHostId, 'agentHostId') } : {}), ...(a.sessionId != null ? { sessionId: str(a.sessionId) } : {}), ...(a.payload != null ? { payload: str(a.payload) } : {}) }) },
+  { tool: 'executions.cancel', mutates: true, description: 'Cancel a running/queued execution.', parameters: obj({ id: N }, ['id']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/runtime/executions/${idArg(a.id, 'id')}/cancel`) },
+  { tool: 'executions.post_message', mutates: true, description: 'Send a follow-up direction to a running execution (steer it mid-run).', parameters: obj({ id: N, text: S }, ['id', 'text']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/runtime/executions/${idArg(a.id, 'id')}/messages`, { text: str(a.text) }) },
 
   // ---- Quality / error observability (read): production errors the Quality pillar
   //       fingerprint-groups, so the Brain (web AND editor) can see what is breaking
   //       and fix it — the "error → fix" loop, callable from either surface. ----
   { tool: 'quality.list_error_groups', mutates: false, description: 'List production error groups (fingerprint-grouped runtime errors), newest first. Optionally filter by project, status (unresolved/resolved/ignored/fixing), or level (fatal/error/warning/info). Use this to see what is breaking, then search_code/read_file the referenced code and fix it.', parameters: obj({ projectId: N, status: S, level: S, limit: N }), run: (ctx, a) => {
     const conds: SQL[] = [eq(errorGroups.tenantId, ctx.tenantId)];
-    if (a.projectId != null) conds.push(eq(errorGroups.projectId, num(a.projectId)));
+    if (a.projectId != null) conds.push(eq(errorGroups.projectId, idArg(a.projectId, 'projectId')));
     if (a.status != null) conds.push(eq(errorGroups.status, str(a.status)));
     if (a.level != null) conds.push(eq(errorGroups.level, str(a.level)));
     return ctx.db.select().from(errorGroups).where(and(...conds)).orderBy(desc(errorGroups.lastSeen)).limit(a.limit != null ? Math.min(num(a.limit), 100) : 50);
@@ -3719,10 +3725,10 @@ const CATALOG: BuiltinTool[] = [
   //       deregister SKIPPED (mint/revoke API keys). ----
   { tool: 'agent_hosts.list', mutates: false, description: 'List registered self-hosted agent hosts.', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(agentHosts).where(and(eq(agentHosts.tenantId, ctx.tenantId), eq(agentHosts.segmentId, seg))).orderBy(desc(agentHosts.createdAt)).limit(200); } },
   // agent_host_projects is tenant- AND segment-scoped (composite PK tenantId+agentHostId+projectId).
-  { tool: 'agent_host_projects.list', mutates: false, description: 'Projects associated with an agent host.', parameters: obj({ agentHostId: N }, ['agentHostId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(agentHostProjects).where(and(eq(agentHostProjects.tenantId, ctx.tenantId), eq(agentHostProjects.segmentId, seg), eq(agentHostProjects.agentHostId, num(a.agentHostId)))).limit(200); } },
+  { tool: 'agent_host_projects.list', mutates: false, description: 'Projects associated with an agent host.', parameters: obj({ agentHostId: N }, ['agentHostId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(agentHostProjects).where(and(eq(agentHostProjects.tenantId, ctx.tenantId), eq(agentHostProjects.segmentId, seg), eq(agentHostProjects.agentHostId, idArg(a.agentHostId, 'agentHostId')))).limit(200); } },
   // usage_snapshots is tenant-level run telemetry on its own database; the segment boundary
   // is the host, which is checked against the caller's segment on core first.
-  { tool: 'usage_snapshots.list', mutates: false, description: 'Token usage snapshots for an agent host.', parameters: obj({ agentHostId: N, limit: N }, ['agentHostId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const hostId = num(a.agentHostId); const [host] = await ctx.db.select({ id: agentHosts.id }).from(agentHosts).where(and(eq(agentHosts.id, hostId), eq(agentHosts.tenantId, ctx.tenantId), eq(agentHosts.segmentId, seg))).limit(1); if (!host) return []; return listAgentHostUsageSnapshots(ctx.db, ctx.tenantId, hostId, clampLimit(a.limit)); } },
+  { tool: 'usage_snapshots.list', mutates: false, description: 'Token usage snapshots for an agent host.', parameters: obj({ agentHostId: N, limit: N }, ['agentHostId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const hostId = idArg(a.agentHostId, 'agentHostId'); const [host] = await ctx.db.select({ id: agentHosts.id }).from(agentHosts).where(and(eq(agentHosts.id, hostId), eq(agentHosts.tenantId, ctx.tenantId), eq(agentHosts.segmentId, seg))).limit(1); if (!host) return []; return listAgentHostUsageSnapshots(ctx.db, ctx.tenantId, hostId, clampLimit(a.limit)); } },
 
   // =====================================================================
   // Web-Brain parity tail — every remaining web platformActions capability,
@@ -3735,37 +3741,37 @@ const CATALOG: BuiltinTool[] = [
 
   // ---- Agent hosts (register / deregister / tool audit) ----
   { tool: 'agent_hosts.register', mutates: true, description: 'Register a new agent host (returns a one-time API key).', parameters: obj({ name: S }, ['name']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/agent-hosts', { name: str(a.name).trim() }) },
-  { tool: 'agent_hosts.deregister', mutates: true, description: 'Deregister an agent host (revokes its key).', parameters: obj({ agentHostId: N }, ['agentHostId']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/agent-hosts/${num(a.agentHostId)}`) },
-  { tool: 'agent_hosts.tool_audit', mutates: false, description: 'Tool-call audit events for an agent host.', parameters: obj({ agentHostId: N, runId: S, limit: N }, ['agentHostId']), run: (ctx, a) => { const q = new URLSearchParams(); if (a.runId != null) q.set('runId', str(a.runId)); if (a.limit != null) q.set('limit', String(num(a.limit))); const qs = q.toString(); return replayRoute(ctx, 'GET', `/api/agent-hosts/${num(a.agentHostId)}/tool-audit${qs ? `?${qs}` : ''}`); } },
+  { tool: 'agent_hosts.deregister', mutates: true, description: 'Deregister an agent host (revokes its key).', parameters: obj({ agentHostId: N }, ['agentHostId']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/agent-hosts/${idArg(a.agentHostId, 'agentHostId')}`) },
+  { tool: 'agent_hosts.tool_audit', mutates: false, description: 'Tool-call audit events for an agent host.', parameters: obj({ agentHostId: N, runId: S, limit: N }, ['agentHostId']), run: (ctx, a) => { const q = new URLSearchParams(); if (a.runId != null) q.set('runId', str(a.runId)); if (a.limit != null) q.set('limit', String(num(a.limit))); const qs = q.toString(); return replayRoute(ctx, 'GET', `/api/agent-hosts/${idArg(a.agentHostId, 'agentHostId')}/tool-audit${qs ? `?${qs}` : ''}`); } },
 
   // ---- Agent host config (runtime config JSON) ----
-  { tool: 'agent_host_config.get', mutates: false, description: 'Get an agent host’s runtime config JSON.', parameters: obj({ agentHostId: N }, ['agentHostId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/agent-hosts/${num(a.agentHostId)}/config`) },
-  { tool: 'agent_host_config.update', mutates: true, description: 'Replace an agent host’s runtime config JSON.', parameters: obj({ agentHostId: N, config: obj({}) }, ['agentHostId', 'config']), run: (ctx, a) => replayRoute(ctx, 'PUT', `/api/agent-hosts/${num(a.agentHostId)}/config`, { config: (a.config ?? {}) as Json }) },
+  { tool: 'agent_host_config.get', mutates: false, description: 'Get an agent host’s runtime config JSON.', parameters: obj({ agentHostId: N }, ['agentHostId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/agent-hosts/${idArg(a.agentHostId, 'agentHostId')}/config`) },
+  { tool: 'agent_host_config.update', mutates: true, description: 'Replace an agent host’s runtime config JSON.', parameters: obj({ agentHostId: N, config: obj({}) }, ['agentHostId', 'config']), run: (ctx, a) => replayRoute(ctx, 'PUT', `/api/agent-hosts/${idArg(a.agentHostId, 'agentHostId')}/config`, { config: (a.config ?? {}) as Json }) },
 
   // ---- Agent host ↔ project associations ----
-  { tool: 'agent_host_projects.assign', mutates: true, description: 'Associate a project with an agent host.', parameters: obj({ agentHostId: N, projectId: N, role: S }, ['agentHostId', 'projectId']), run: (ctx, a) => replayRoute(ctx, 'PUT', `/api/agent-hosts/${num(a.agentHostId)}/projects/${num(a.projectId)}`, { role: a.role != null ? str(a.role) : undefined }) },
-  { tool: 'agent_host_projects.unassign', mutates: true, description: 'Remove a project↔agent-host association.', parameters: obj({ agentHostId: N, projectId: N }, ['agentHostId', 'projectId']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/agent-hosts/${num(a.agentHostId)}/projects/${num(a.projectId)}`) },
+  { tool: 'agent_host_projects.assign', mutates: true, description: 'Associate a project with an agent host.', parameters: obj({ agentHostId: N, projectId: N, role: S }, ['agentHostId', 'projectId']), run: (ctx, a) => replayRoute(ctx, 'PUT', `/api/agent-hosts/${idArg(a.agentHostId, 'agentHostId')}/projects/${idArg(a.projectId, 'projectId')}`, { role: a.role != null ? str(a.role) : undefined }) },
+  { tool: 'agent_host_projects.unassign', mutates: true, description: 'Remove a project↔agent-host association.', parameters: obj({ agentHostId: N, projectId: N }, ['agentHostId', 'projectId']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/agent-hosts/${idArg(a.agentHostId, 'agentHostId')}/projects/${idArg(a.projectId, 'projectId')}`) },
 
   // ---- Agent host skills ----
   // The canonical kebab `/api/skill-assignments/agent-hosts/:id` routes. (These replaced
   // `?agentHostId=`, `/agentHost/:id` and `/:assignmentId`, which the API never served.)
-  { tool: 'agent_host_skills.list', mutates: false, description: 'Skills assigned directly to an agent host (host scope; tenant-wide grants are not included).', parameters: obj({ agentHostId: N }, ['agentHostId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/skill-assignments/agent-hosts/${num(a.agentHostId)}`) },
-  { tool: 'agent_host_skills.assign', mutates: true, description: 'Assign a skill to an agent host.', parameters: obj({ agentHostId: N, skillSlug: S }, ['agentHostId', 'skillSlug']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/skill-assignments/agent-hosts/${num(a.agentHostId)}`, { skillSlug: str(a.skillSlug) }) },
-  { tool: 'agent_host_skills.revoke', mutates: true, description: "Revoke a skill from an agent host (by the host id and the skill's slug).", parameters: obj({ agentHostId: N, skillSlug: S }, ['agentHostId', 'skillSlug']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/skill-assignments/agent-hosts/${num(a.agentHostId)}/${encodeURIComponent(str(a.skillSlug))}`) },
+  { tool: 'agent_host_skills.list', mutates: false, description: 'Skills assigned directly to an agent host (host scope; tenant-wide grants are not included).', parameters: obj({ agentHostId: N }, ['agentHostId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/skill-assignments/agent-hosts/${idArg(a.agentHostId, 'agentHostId')}`) },
+  { tool: 'agent_host_skills.assign', mutates: true, description: 'Assign a skill to an agent host.', parameters: obj({ agentHostId: N, skillSlug: S }, ['agentHostId', 'skillSlug']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/skill-assignments/agent-hosts/${idArg(a.agentHostId, 'agentHostId')}`, { skillSlug: str(a.skillSlug) }) },
+  { tool: 'agent_host_skills.revoke', mutates: true, description: "Revoke a skill from an agent host (by the host id and the skill's slug).", parameters: obj({ agentHostId: N, skillSlug: S }, ['agentHostId', 'skillSlug']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/skill-assignments/agent-hosts/${idArg(a.agentHostId, 'agentHostId')}/${encodeURIComponent(str(a.skillSlug))}`) },
 
   // ---- Agent host channels (multi-channel messaging) ----
-  { tool: 'channels.list', mutates: false, description: 'List messaging channels on an agent host.', parameters: obj({ agentHostId: N }, ['agentHostId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/agent-hosts/${num(a.agentHostId)}/channels`) },
-  { tool: 'channels.create', mutates: true, description: 'Create a messaging channel (whatsapp/telegram/slack/discord/teams/webhook…).', parameters: obj({ agentHostId: N, platform: S, name: S, config: S, enabled: B }, ['agentHostId', 'platform', 'name']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/agent-hosts/${num(a.agentHostId)}/channels`, { platform: str(a.platform), name: str(a.name), config: a.config != null ? str(a.config) : undefined, ...(typeof a.enabled === 'boolean' ? { enabled: a.enabled } : {}) }) },
-  { tool: 'channels.update', mutates: true, description: 'Update a messaging channel.', parameters: obj({ agentHostId: N, channelId: S, name: S, config: S, enabled: B }, ['agentHostId', 'channelId']), run: (ctx, a) => { const body: Json = {}; if (a.name != null) body.name = str(a.name); if (a.config != null) body.config = str(a.config); if (typeof a.enabled === 'boolean') body.enabled = a.enabled; return replayRoute(ctx, 'PATCH', `/api/agent-hosts/${num(a.agentHostId)}/channels/${encodeURIComponent(str(a.channelId))}`, body); } },
-  { tool: 'channels.delete', mutates: true, description: 'Delete a messaging channel.', parameters: obj({ agentHostId: N, channelId: S }, ['agentHostId', 'channelId']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/agent-hosts/${num(a.agentHostId)}/channels/${encodeURIComponent(str(a.channelId))}`) },
+  { tool: 'channels.list', mutates: false, description: 'List messaging channels on an agent host.', parameters: obj({ agentHostId: N }, ['agentHostId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/agent-hosts/${idArg(a.agentHostId, 'agentHostId')}/channels`) },
+  { tool: 'channels.create', mutates: true, description: 'Create a messaging channel (whatsapp/telegram/slack/discord/teams/webhook…).', parameters: obj({ agentHostId: N, platform: S, name: S, config: S, enabled: B }, ['agentHostId', 'platform', 'name']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/agent-hosts/${idArg(a.agentHostId, 'agentHostId')}/channels`, { platform: str(a.platform), name: str(a.name), config: a.config != null ? str(a.config) : undefined, ...(typeof a.enabled === 'boolean' ? { enabled: a.enabled } : {}) }) },
+  { tool: 'channels.update', mutates: true, description: 'Update a messaging channel.', parameters: obj({ agentHostId: N, channelId: S, name: S, config: S, enabled: B }, ['agentHostId', 'channelId']), run: (ctx, a) => { const body: Json = {}; if (a.name != null) body.name = str(a.name); if (a.config != null) body.config = str(a.config); if (typeof a.enabled === 'boolean') body.enabled = a.enabled; return replayRoute(ctx, 'PATCH', `/api/agent-hosts/${idArg(a.agentHostId, 'agentHostId')}/channels/${encodeURIComponent(str(a.channelId))}`, body); } },
+  { tool: 'channels.delete', mutates: true, description: 'Delete a messaging channel.', parameters: obj({ agentHostId: N, channelId: S }, ['agentHostId', 'channelId']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/agent-hosts/${idArg(a.agentHostId, 'agentHostId')}/channels/${encodeURIComponent(str(a.channelId))}`) },
 
   // ---- Agent host workspace (synced directories + files) ----
-  { tool: 'workspace.list_directories', mutates: false, description: 'List synced directories on an agent host.', parameters: obj({ agentHostId: N }, ['agentHostId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/agent-hosts/${num(a.agentHostId)}/directories`) },
-  { tool: 'workspace.list_files', mutates: false, description: 'List files in a synced directory.', parameters: obj({ agentHostId: N, directoryId: N }, ['agentHostId', 'directoryId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/agent-hosts/${num(a.agentHostId)}/directories/${num(a.directoryId)}/files`) },
-  { tool: 'workspace.trigger_sync', mutates: true, description: 'Trigger a directory re-sync on an agent host.', parameters: obj({ agentHostId: N, directoryId: N }, ['agentHostId', 'directoryId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/agent-hosts/${num(a.agentHostId)}/directories/${num(a.directoryId)}/sync`) },
+  { tool: 'workspace.list_directories', mutates: false, description: 'List synced directories on an agent host.', parameters: obj({ agentHostId: N }, ['agentHostId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/agent-hosts/${idArg(a.agentHostId, 'agentHostId')}/directories`) },
+  { tool: 'workspace.list_files', mutates: false, description: 'List files in a synced directory.', parameters: obj({ agentHostId: N, directoryId: N }, ['agentHostId', 'directoryId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/agent-hosts/${idArg(a.agentHostId, 'agentHostId')}/directories/${idArg(a.directoryId, 'directoryId')}/files`) },
+  { tool: 'workspace.trigger_sync', mutates: true, description: 'Trigger a directory re-sync on an agent host.', parameters: obj({ agentHostId: N, directoryId: N }, ['agentHostId', 'directoryId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/agent-hosts/${idArg(a.agentHostId, 'agentHostId')}/directories/${idArg(a.directoryId, 'directoryId')}/sync`) },
 
   // ---- Dispatch (send a command payload to an agent host via the relay) ----
-  { tool: 'dispatch.send', mutates: true, description: 'Send a command payload to an agent host via the relay.', parameters: obj({ agentHostId: N, payload: obj({}) }, ['agentHostId', 'payload']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/agent-hosts/${num(a.agentHostId)}/dispatch`, (a.payload ?? {}) as Json) },
+  { tool: 'dispatch.send', mutates: true, description: 'Send a command payload to an agent host via the relay.', parameters: obj({ agentHostId: N, payload: obj({}) }, ['agentHostId', 'payload']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/agent-hosts/${idArg(a.agentHostId, 'agentHostId')}/dispatch`, (a.payload ?? {}) as Json) },
 
   // ---- Autonomous boards (live dispatch status) ----
   { tool: 'boards.dispatches', mutates: false, description: 'Live per-agent dispatch status across a board.', parameters: obj({ boardId: S }, ['boardId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/boards/${encodeURIComponent(str(a.boardId))}/dispatches`) },
@@ -3780,7 +3786,7 @@ const CATALOG: BuiltinTool[] = [
   // ---- Integrations (write twins of the existing integrations.create_credential) ----
   // Web cap names are integrations.create/update/remove; ported under those exact names
   // so the web exclude matches (replays the same /api/integrations routes).
-  { tool: 'integrations.create', mutates: true, description: 'Store an integration credential (GitHub/GitLab/Jira/etc).', parameters: obj({ provider: { type: 'string', enum: ['github', 'gitlab', 'bitbucket', 'jira', 'confluence', 'freshservice'] }, name: S, baseUrl: S, projectId: N, credentials: obj({}) }, ['provider', 'name', 'credentials']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/integrations', { provider: str(a.provider), name: str(a.name), baseUrl: a.baseUrl != null ? str(a.baseUrl) : undefined, projectId: a.projectId != null ? num(a.projectId) : undefined, credentials: (a.credentials ?? {}) as Json }) },
+  { tool: 'integrations.create', mutates: true, description: 'Store an integration credential (GitHub/GitLab/Jira/etc).', parameters: obj({ provider: { type: 'string', enum: ['github', 'gitlab', 'bitbucket', 'jira', 'confluence', 'freshservice'] }, name: S, baseUrl: S, projectId: N, credentials: obj({}) }, ['provider', 'name', 'credentials']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/integrations', { provider: str(a.provider), name: str(a.name), baseUrl: a.baseUrl != null ? str(a.baseUrl) : undefined, projectId: a.projectId != null ? idArg(a.projectId, 'projectId') : undefined, credentials: (a.credentials ?? {}) as Json }) },
   { tool: 'integrations.update', mutates: true, description: 'Update an integration credential.', parameters: obj({ id: S, name: S, baseUrl: S, isEnabled: B }, ['id']), run: (ctx, a) => { const body: Json = {}; if (a.name != null) body.name = str(a.name); if (a.baseUrl != null) body.baseUrl = str(a.baseUrl); if (typeof a.isEnabled === 'boolean') body.isEnabled = a.isEnabled; return replayRoute(ctx, 'PATCH', `/api/integrations/${encodeURIComponent(str(a.id))}`, body); } },
   { tool: 'integrations.remove', mutates: true, description: 'Delete an integration credential.', parameters: obj({ id: S }, ['id']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/integrations/${encodeURIComponent(str(a.id))}`) },
 
@@ -3791,19 +3797,19 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'board_connections.sync', mutates: true, description: 'Trigger a sync for an external board connection.', parameters: obj({ id: S }, ['id']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/board-connections/${encodeURIComponent(str(a.id))}/sync`) },
 
   // ---- Project files (R2-backed; save uses a raw text/plain body) ----
-  { tool: 'project_files.list', mutates: false, description: 'List files in a project.', parameters: obj({ projectId: N }, ['projectId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/projects/${num(a.projectId)}/files`) },
-  { tool: 'project_files.read', mutates: false, description: 'Read a project file’s content.', parameters: obj({ projectId: N, path: S }, ['projectId', 'path']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/projects/${num(a.projectId)}/files/${str(a.path).split('/').map(encodeURIComponent).join('/')}`) },
-  { tool: 'project_files.save', mutates: true, description: 'Create or overwrite a project file.', parameters: obj({ projectId: N, path: S, content: S }, ['projectId', 'path', 'content']), run: (ctx, a) => replayRoute(ctx, 'PUT', `/api/projects/${num(a.projectId)}/files/${str(a.path).split('/').map(encodeURIComponent).join('/')}`, undefined, { rawText: str(a.content) }) },
-  { tool: 'project_files.delete', mutates: true, description: 'Delete a project file.', parameters: obj({ projectId: N, path: S }, ['projectId', 'path']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/projects/${num(a.projectId)}/files/${str(a.path).split('/').map(encodeURIComponent).join('/')}`) },
+  { tool: 'project_files.list', mutates: false, description: 'List files in a project.', parameters: obj({ projectId: N }, ['projectId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/projects/${idArg(a.projectId, 'projectId')}/files`) },
+  { tool: 'project_files.read', mutates: false, description: 'Read a project file’s content.', parameters: obj({ projectId: N, path: S }, ['projectId', 'path']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/projects/${idArg(a.projectId, 'projectId')}/files/${str(a.path).split('/').map(encodeURIComponent).join('/')}`) },
+  { tool: 'project_files.save', mutates: true, description: 'Create or overwrite a project file.', parameters: obj({ projectId: N, path: S, content: S }, ['projectId', 'path', 'content']), run: (ctx, a) => replayRoute(ctx, 'PUT', `/api/projects/${idArg(a.projectId, 'projectId')}/files/${str(a.path).split('/').map(encodeURIComponent).join('/')}`, undefined, { rawText: str(a.content) }) },
+  { tool: 'project_files.delete', mutates: true, description: 'Delete a project file.', parameters: obj({ projectId: N, path: S }, ['projectId', 'path']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/projects/${idArg(a.projectId, 'projectId')}/files/${str(a.path).split('/').map(encodeURIComponent).join('/')}`) },
 
   // ---- Projects: key availability check ----
   { tool: 'projects.check_key', mutates: false, description: 'Check whether a project key (prefix) is available.', parameters: obj({ key: S }, ['key']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/projects/check-key?key=${encodeURIComponent(str(a.key).trim().toUpperCase())}`) },
 
   // ---- Repo analysis (run the Architect on a project; writes a PRD) ----
-  { tool: 'repo_analysis.start', mutates: true, description: 'Run the Architect: create an architecture-analysis task on a project and start it. The result is written back as a PRD. Requires a repo mapped to the project.', parameters: obj({ projectId: N }, ['projectId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/repo-analysis/projects/${num(a.projectId)}/architect`, {}) },
+  { tool: 'repo_analysis.start', mutates: true, description: 'Run the Architect: create an architecture-analysis task on a project and start it. The result is written back as a PRD. Requires a repo mapped to the project.', parameters: obj({ projectId: N }, ['projectId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/repo-analysis/projects/${idArg(a.projectId, 'projectId')}/architect`, {}) },
 
   // ---- Analytics ----
-  { tool: 'analytics.activity_calendar', mutates: false, description: 'Contributor activity calendar (humans + AI agents).', parameters: obj({ from: S, to: S, contributorId: N }), run: (ctx, a) => { const q = new URLSearchParams(); if (a.from != null) q.set('from', str(a.from)); if (a.to != null) q.set('to', str(a.to)); if (a.contributorId != null) q.set('contributorId', String(num(a.contributorId))); const qs = q.toString(); return replayRoute(ctx, 'GET', `/api/analytics/activity-calendar${qs ? `?${qs}` : ''}`); } },
+  { tool: 'analytics.activity_calendar', mutates: false, description: 'Contributor activity calendar (humans + AI agents).', parameters: obj({ from: S, to: S, contributorId: N }), run: (ctx, a) => { const q = new URLSearchParams(); if (a.from != null) q.set('from', str(a.from)); if (a.to != null) q.set('to', str(a.to)); if (a.contributorId != null) q.set('contributorId', String(idArg(a.contributorId, 'contributorId'))); const qs = q.toString(); return replayRoute(ctx, 'GET', `/api/analytics/activity-calendar${qs ? `?${qs}` : ''}`); } },
   { tool: 'analytics.sync_agents', mutates: true, description: 'Refresh AI-agent contributor data.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'POST', '/api/analytics/sync-agents', {}) },
 
   // ---- Tasks: the assignable team roster (humans + cloud agents) ----
@@ -3823,14 +3829,14 @@ const CATALOG: BuiltinTool[] = [
     tool: 'tasks.dependencies', mutates: false,
     description: 'List every precedence edge in a project as { dependencies:[{id,predecessorTaskId,successorTaskId,depType}] }. An edge means predecessor MUST FINISH before successor starts — this is what the planning spine and Gantt draw as sequence. Read it before adding edges so you do not duplicate one.',
     parameters: obj({ projectId: N }, ['projectId']),
-    run: (ctx, a) => replayRoute(ctx, 'GET', `/api/tasks/dependencies?project=${num(a.projectId)}`),
+    run: (ctx, a) => replayRoute(ctx, 'GET', `/api/tasks/dependencies?project=${idArg(a.projectId, 'projectId')}`),
   },
   {
     tool: 'tasks.add_dependency', mutates: true,
     description: 'Record that one ticket must finish before another can start: predecessorTaskId BLOCKS taskId. This is how a plan\'s ORDER becomes data — without an edge, "do B after A" exists only in prose and no surface can show or enforce it. Both tickets must be in the SAME project. Rejected (400) if it would create a cycle, so the graph stays a DAG. depType defaults to finish_to_start; the others mirror standard PM scheduling relations.',
     parameters: obj({ taskId: N, predecessorTaskId: N, depType: { type: 'string', enum: [...DEP_TYPES] } }, ['taskId', 'predecessorTaskId']),
-    run: (ctx, a) => replayRoute(ctx, 'POST', `/api/tasks/${num(a.taskId)}/dependencies`, {
-      predecessorTaskId: num(a.predecessorTaskId),
+    run: (ctx, a) => replayRoute(ctx, 'POST', `/api/tasks/${idArg(a.taskId, 'taskId')}/dependencies`, {
+      predecessorTaskId: idArg(a.predecessorTaskId, 'predecessorTaskId'),
       ...(a.depType != null ? { depType: str(a.depType) } : {}),
     }),
   },
@@ -3838,14 +3844,14 @@ const CATALOG: BuiltinTool[] = [
     tool: 'tasks.remove_dependency', mutates: true,
     description: 'Remove one precedence edge by its id (from tasks.dependencies). Use when the sequence was wrong or the work was re-planned — never to work around a cycle rejection, which means the intended order is contradictory.',
     parameters: obj({ id: N }, ['id']),
-    run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/tasks/dependencies/${num(a.id)}`),
+    run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/tasks/dependencies/${idArg(a.id, 'id')}`),
   },
   {
     tool: 'tasks.assignees', mutates: false,
     description: 'List the FULL team a task can be assigned to — humans AND cloud agents in ONE roster. Returns { humans:[{ref,name}], agents:[{ref,name,role,builtinKind,status,scope,assignedToProject}] }. An agent "ref" is its ide_agents id: set it as `assignedAgentRef` on tasks.create/tasks.update to hand work to that agent (use a human ref as the task\'s assigneeId for a person). Pass projectId to mark which agents are staffed to that project (assignedToProject=true) and prefer those. NEVER invent an assignee/agent ref — only use refs returned by this tool.',
     parameters: obj({ projectId: N }),
     run: async (ctx, a) => {
-      const projectId = a.projectId != null ? num(a.projectId) : null;
+      const projectId = a.projectId != null ? idArg(a.projectId, 'projectId') : null;
       const humansRes = (await replayRoute(ctx, 'GET', '/api/tasks/assignees')) as { members?: { id: string; name: string }[] };
       const agentRows = await ctx.db
         .select({ id: ideAgents.id, name: ideAgents.name, title: ideAgents.title, builtinKind: ideAgents.builtinKind, status: ideAgents.status, projectId: ideAgents.projectId })
@@ -3876,15 +3882,15 @@ const CATALOG: BuiltinTool[] = [
   },
 
   // ---- Kanban: role sign-off (the reviewer round-trip, first-class for agents) ----
-  { tool: 'kanban.signoff', mutates: true, description: 'Record a role SIGN-OFF on a ticket as a reviewer acting AS a role (satisfies a lane\'s role/review requirement so the audit clears and the swimlane can advance). verdict "approved" (default), "changes_requested", "waived", or "delegated" (waive/delegate need a reason). ALWAYS pass `contribution` linking the actual work (executionId, prUrl, diffFiles, prdRevision, toolRunId) — an approval with no linked contribution is itself an audit finding. memberKind defaults to "agent" (you), memberRef to your agent id.', parameters: obj({ taskId: N, roleKey: S, laneKey: S, verdict: { type: 'string', enum: ['approved', 'changes_requested', 'waived', 'delegated'] }, summary: S, memberRef: S, waiveReason: S, contribution: { type: 'object' } }, ['taskId', 'roleKey']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${num(a.taskId)}/signoff`, { roleKey: str(a.roleKey), laneKey: a.laneKey != null ? str(a.laneKey) : undefined, verdict: ['approved', 'changes_requested', 'waived', 'delegated'].includes(String(a.verdict)) ? str(a.verdict) : 'approved', summary: a.summary != null ? str(a.summary) : undefined, waiveReason: a.waiveReason != null ? str(a.waiveReason) : undefined, contribution: a.contribution != null && typeof a.contribution === 'object' ? a.contribution : undefined, memberKind: 'agent', memberRef: a.memberRef != null ? str(a.memberRef) : (ctx.userId ?? undefined) }) },
-  { tool: 'kanban.audit', mutates: false, description: 'Get a ticket\'s role/diagnostic coverage audit (which required lane checks are satisfied vs missing).', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/kanban/tasks/${num(a.taskId)}/audit`) },
-  { tool: 'kanban.participants', mutates: false, description: 'Get a ticket\'s Participation Manifest — every required role, its resolved assignee, and its state (pending/assigned/in_progress/completed/changes_requested/waived/unstaffed). An `unstaffed` row is a RESOURCE GAP (no capable resource available).', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/kanban/tasks/${num(a.taskId)}/participants`) },
-  { tool: 'kanban.accountability', mutates: false, description: 'Get a ticket\'s Accountability Report — per required role: Who signed, When, Verdict, Comments, and the linked Contribution — plus gaps (unstaffed/unsigned roles, sign-offs with no contribution, waivers) and %-complete.', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/kanban/tasks/${num(a.taskId)}/accountability`) },
-  { tool: 'kanban.assess_resource', mutates: true, description: 'RESOURCE ASSESSMENT — add a role the ticket needs beyond the template (e.g. designer, security). It becomes a required manifest participant that must execute + sign off; if no capable resource is available it is flagged as a resource gap. responsibility defaults to "owner".', parameters: obj({ taskId: N, roleKey: S, responsibility: { type: 'string', enum: ['owner', 'reviewer', 'contributor'] }, stageKey: S, note: S }, ['taskId', 'roleKey']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${num(a.taskId)}/participants`, { roleKey: str(a.roleKey), responsibility: a.responsibility != null ? str(a.responsibility) : undefined, stageKey: a.stageKey != null ? str(a.stageKey) : undefined, note: a.note != null ? str(a.note) : undefined }) },
-  { tool: 'kanban.assign_participant', mutates: true, description: 'Assign or reassign an agent/user to an EXISTING ticket Participation Manifest role. Replaces the current assignee rather than creating a duplicate participant, and resets the role to assigned so the new assignee must provide fresh evidence.', parameters: obj({ taskId: N, roleKey: S, assigneeRef: S, assigneeKind: { type: 'string', enum: ['agent', 'user'] } }, ['taskId', 'roleKey', 'assigneeRef', 'assigneeKind']), run: (ctx, a) => replayRoute(ctx, 'PATCH', `/api/kanban/tasks/${num(a.taskId)}/participants/assign`, { roleKey: str(a.roleKey), assigneeRef: str(a.assigneeRef), assigneeKind: str(a.assigneeKind) }) },
-  { tool: 'kanban.remove_participant', mutates: true, description: 'Remove one specific Participation Manifest slot by participant id. Required-role safeguards reject removal when it would leave the ticket without its sole required responsibility.', parameters: obj({ taskId: N, participantId: S }, ['taskId', 'participantId']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/kanban/tasks/${num(a.taskId)}/participants/${encodeURIComponent(str(a.participantId))}`) },
-  { tool: 'kanban.coordinate', mutates: true, description: 'Run the ticket Coordinator now: ensure its template manifest exists and dispatch the next required role-capable participant. The ticket assignee coordinates; producers do the scoped work.', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${num(a.taskId)}/coordinate`, {}) },
-  { tool: 'kanban.materialize_work_items', mutates: true, description: 'Create one assigned child task per required participant in the ticket manifest. Call after resource assessment so delivery scope rolls up to the parent ticket and every required resource has explicit work.', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${num(a.taskId)}/participants/materialize`, {}) },
+  { tool: 'kanban.signoff', mutates: true, description: 'Record a role SIGN-OFF on a ticket as a reviewer acting AS a role (satisfies a lane\'s role/review requirement so the audit clears and the swimlane can advance). verdict "approved" (default), "changes_requested", "waived", or "delegated" (waive/delegate need a reason). ALWAYS pass `contribution` linking the actual work (executionId, prUrl, diffFiles, prdRevision, toolRunId) — an approval with no linked contribution is itself an audit finding. memberKind defaults to "agent" (you), memberRef to your agent id.', parameters: obj({ taskId: N, roleKey: S, laneKey: S, verdict: { type: 'string', enum: ['approved', 'changes_requested', 'waived', 'delegated'] }, summary: S, memberRef: S, waiveReason: S, contribution: { type: 'object' } }, ['taskId', 'roleKey']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${idArg(a.taskId, 'taskId')}/signoff`, { roleKey: str(a.roleKey), laneKey: a.laneKey != null ? str(a.laneKey) : undefined, verdict: ['approved', 'changes_requested', 'waived', 'delegated'].includes(String(a.verdict)) ? str(a.verdict) : 'approved', summary: a.summary != null ? str(a.summary) : undefined, waiveReason: a.waiveReason != null ? str(a.waiveReason) : undefined, contribution: a.contribution != null && typeof a.contribution === 'object' ? a.contribution : undefined, memberKind: 'agent', memberRef: a.memberRef != null ? str(a.memberRef) : (ctx.userId ?? undefined) }) },
+  { tool: 'kanban.audit', mutates: false, description: 'Get a ticket\'s role/diagnostic coverage audit (which required lane checks are satisfied vs missing).', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/kanban/tasks/${idArg(a.taskId, 'taskId')}/audit`) },
+  { tool: 'kanban.participants', mutates: false, description: 'Get a ticket\'s Participation Manifest — every required role, its resolved assignee, and its state (pending/assigned/in_progress/completed/changes_requested/waived/unstaffed). An `unstaffed` row is a RESOURCE GAP (no capable resource available).', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/kanban/tasks/${idArg(a.taskId, 'taskId')}/participants`) },
+  { tool: 'kanban.accountability', mutates: false, description: 'Get a ticket\'s Accountability Report — per required role: Who signed, When, Verdict, Comments, and the linked Contribution — plus gaps (unstaffed/unsigned roles, sign-offs with no contribution, waivers) and %-complete.', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/kanban/tasks/${idArg(a.taskId, 'taskId')}/accountability`) },
+  { tool: 'kanban.assess_resource', mutates: true, description: 'RESOURCE ASSESSMENT — add a role the ticket needs beyond the template (e.g. designer, security). It becomes a required manifest participant that must execute + sign off; if no capable resource is available it is flagged as a resource gap. responsibility defaults to "owner".', parameters: obj({ taskId: N, roleKey: S, responsibility: { type: 'string', enum: ['owner', 'reviewer', 'contributor'] }, stageKey: S, note: S }, ['taskId', 'roleKey']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${idArg(a.taskId, 'taskId')}/participants`, { roleKey: str(a.roleKey), responsibility: a.responsibility != null ? str(a.responsibility) : undefined, stageKey: a.stageKey != null ? str(a.stageKey) : undefined, note: a.note != null ? str(a.note) : undefined }) },
+  { tool: 'kanban.assign_participant', mutates: true, description: 'Assign or reassign an agent/user to an EXISTING ticket Participation Manifest role. Replaces the current assignee rather than creating a duplicate participant, and resets the role to assigned so the new assignee must provide fresh evidence.', parameters: obj({ taskId: N, roleKey: S, assigneeRef: S, assigneeKind: { type: 'string', enum: ['agent', 'user'] } }, ['taskId', 'roleKey', 'assigneeRef', 'assigneeKind']), run: (ctx, a) => replayRoute(ctx, 'PATCH', `/api/kanban/tasks/${idArg(a.taskId, 'taskId')}/participants/assign`, { roleKey: str(a.roleKey), assigneeRef: str(a.assigneeRef), assigneeKind: str(a.assigneeKind) }) },
+  { tool: 'kanban.remove_participant', mutates: true, description: 'Remove one specific Participation Manifest slot by participant id. Required-role safeguards reject removal when it would leave the ticket without its sole required responsibility.', parameters: obj({ taskId: N, participantId: S }, ['taskId', 'participantId']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/kanban/tasks/${idArg(a.taskId, 'taskId')}/participants/${encodeURIComponent(str(a.participantId))}`) },
+  { tool: 'kanban.coordinate', mutates: true, description: 'Run the ticket Coordinator now: ensure its template manifest exists and dispatch the next required role-capable participant. The ticket assignee coordinates; producers do the scoped work.', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${idArg(a.taskId, 'taskId')}/coordinate`, {}) },
+  { tool: 'kanban.materialize_work_items', mutates: true, description: 'Create one assigned child task per required participant in the ticket manifest. Call after resource assessment so delivery scope rolls up to the parent ticket and every required resource has explicit work.', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${idArg(a.taskId, 'taskId')}/participants/materialize`, {}) },
 
   // ---- AUTONOMY DIAGNOSTICS (read-only) ----
   //
@@ -3924,7 +3930,7 @@ const CATALOG: BuiltinTool[] = [
       const { getAutonomySummary } = await import('../activity/ticketLifecycleLedger');
       return getAutonomySummary(ctx.env, ctx.db, {
         tenantId: ctx.tenantId,
-        projectId: a.projectId != null ? num(a.projectId) : null,
+        projectId: a.projectId != null ? idArg(a.projectId, 'projectId') : null,
         windowDays: a.days != null ? num(a.days) : undefined,
       });
     },
@@ -3938,7 +3944,7 @@ const CATALOG: BuiltinTool[] = [
       const { getStallRegister } = await import('../manager/stallWatch');
       return getStallRegister(ctx.env, ctx.db, {
         tenantId: ctx.tenantId,
-        projectId: a.projectId != null ? num(a.projectId) : null,
+        projectId: a.projectId != null ? idArg(a.projectId, 'projectId') : null,
       });
     },
   },
@@ -3970,7 +3976,7 @@ const CATALOG: BuiltinTool[] = [
     parameters: obj({ projectId: N, tzOffsetMinutes: N }, ['projectId']),
     run: async (ctx, a) => {
       if (!ctx.env) throw new Error('the digest needs the platform environment');
-      const projectId = num(a.projectId);
+      const projectId = idArg(a.projectId, 'projectId');
       await assertProjectInTenant(ctx, projectId);
       const { getDailyDigest } = await import('../manager/dailyDigest');
       const { getManagerConfigRow } = await import('../manager/ManagerService');
@@ -3988,7 +3994,7 @@ const CATALOG: BuiltinTool[] = [
     parameters: obj({ projectId: N }, ['projectId']),
     run: async (ctx, a) => {
       if (!ctx.env) throw new Error('the stall census needs the platform environment');
-      const projectId = num(a.projectId);
+      const projectId = idArg(a.projectId, 'projectId');
       await assertProjectInTenant(ctx, projectId);
       const { getStallCensus } = await import('../manager/stallCensus');
       const { listSystemicFindings } = await import('../manager/systemicDiagnosis');
@@ -4004,7 +4010,7 @@ const CATALOG: BuiltinTool[] = [
     description: 'THE MANAGER\'S OWN DECISION FEED for one project, newest first — every action it journalled (prioritize, schedule, assign, score_value, dispatch, sync_pr, merge_pr, merge_failed, pr_conflict, merge_blocked, flag, coordinate, triage, escalate, systemic) with the ticket it was about and the reason it recorded. This is the manager\'s work log: cite it when accounting for what you did, and read it before claiming a decision you cannot point at. An EMPTY feed for a period is itself the answer — it means no pass ran or every pass was a no-op.',
     parameters: obj({ projectId: N, limit: N }, ['projectId']),
     run: async (ctx, a) => {
-      const projectId = num(a.projectId);
+      const projectId = idArg(a.projectId, 'projectId');
       await assertProjectInTenant(ctx, projectId);
       const { listManagerActions } = await import('../manager/ManagerService');
       const limit = a.limit != null ? Math.min(200, Math.max(1, num(a.limit))) : 50;
@@ -4017,7 +4023,7 @@ const CATALOG: BuiltinTool[] = [
     parameters: obj({ projectId: N }, ['projectId']),
     run: async (ctx, a) => {
       if (!ctx.env) throw new Error('the manager policy needs the platform environment');
-      const projectId = num(a.projectId);
+      const projectId = idArg(a.projectId, 'projectId');
       await assertProjectInTenant(ctx, projectId);
       const { getEffectiveManagerPolicy: effective, getManagerConfigRow } = await import('../manager/ManagerService');
       const { listManagerDirectives } = await import('../manager/managerDirectives');
@@ -4096,7 +4102,7 @@ const CATALOG: BuiltinTool[] = [
     tool: 'tickets.lifecycle', mutates: false,
     description: 'THE CHAIN OF CUSTODY for ONE ticket: every lifecycle event in order — created, auto-run decision (dispatched or the exact gate that declined it), run started/completed/failed, each lane move with who moved it — where every event names the source table it was read from, so it is evidence rather than narration. Plus a verdict: autonomous vs human lane hops, runs dispatched/completed/failed, whether it reached a terminal lane, whether it is stalled and the LIVE gate holding it right now. Use this to answer "why is THIS ticket stuck?" and to tell an agent-driven ticket from a human-driven one.',
     parameters: obj({ taskId: N }, ['taskId']),
-    run: (ctx, a) => replayRoute(ctx, 'GET', `/api/tasks/${num(a.taskId)}/lifecycle`),
+    run: (ctx, a) => replayRoute(ctx, 'GET', `/api/tasks/${idArg(a.taskId, 'taskId')}/lifecycle`),
   },
 
   // ---- Connector catalog: what an integration step can actually CALL ----
@@ -4106,10 +4112,10 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'connectors.actions', mutates: false, description: 'Every connected integration this tenant can call, with each action key and its parameters — the connector/action keys a workflow integration step must use (e.g. connector "twilio", action "send_sms").', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/api/connectors/actions') },
 
   // ---- Workflow DEFINITIONS: write/run/import + computed reads not backed by a plain table op ----
-  { tool: 'workflows.create', mutates: true, description: 'Create a workflow definition.', parameters: obj({ name: S, description: S, projectId: N }, ['name']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/workflow-definitions', { name: str(a.name), description: a.description != null ? str(a.description) : undefined, projectId: a.projectId != null ? num(a.projectId) : undefined }) },
-  { tool: 'workflows.update', mutates: true, description: 'Update a workflow definition (name/description/project).', parameters: obj({ id: S, name: S, description: S, projectId: N }, ['id']), run: (ctx, a) => { const body: Json = {}; if (a.name != null) body.name = str(a.name); if (a.description != null) body.description = str(a.description); if (a.projectId != null) body.projectId = num(a.projectId); return replayRoute(ctx, 'PATCH', `/api/workflow-definitions/${encodeURIComponent(str(a.id))}`, body); } },
+  { tool: 'workflows.create', mutates: true, description: 'Create a workflow definition.', parameters: obj({ name: S, description: S, projectId: N }, ['name']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/workflow-definitions', { name: str(a.name), description: a.description != null ? str(a.description) : undefined, projectId: a.projectId != null ? idArg(a.projectId, 'projectId') : undefined }) },
+  { tool: 'workflows.update', mutates: true, description: 'Update a workflow definition (name/description/project).', parameters: obj({ id: S, name: S, description: S, projectId: N }, ['id']), run: (ctx, a) => { const body: Json = {}; if (a.name != null) body.name = str(a.name); if (a.description != null) body.description = str(a.description); if (a.projectId != null) body.projectId = idArg(a.projectId, 'projectId'); return replayRoute(ctx, 'PATCH', `/api/workflow-definitions/${encodeURIComponent(str(a.id))}`, body); } },
   { tool: 'workflows.remove', mutates: true, description: 'Delete a workflow definition.', parameters: obj({ id: S }, ['id']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/workflow-definitions/${encodeURIComponent(str(a.id))}`) },
-  { tool: 'workflows.run', mutates: true, description: 'Run a workflow on a target. runtime is "host" (pass agentHostId) or "cloud" (pass cloudAgentRef).', parameters: obj({ id: S, runtime: { type: 'string', enum: ['host', 'cloud'] }, agentHostId: N, cloudAgentRef: S }, ['id', 'runtime']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/workflow-definitions/${encodeURIComponent(str(a.id))}/run`, { runtime: str(a.runtime), agentHostId: a.agentHostId != null ? num(a.agentHostId) : null, cloudAgentRef: a.cloudAgentRef != null ? str(a.cloudAgentRef) : null }) },
+  { tool: 'workflows.run', mutates: true, description: 'Run a workflow on a target. runtime is "host" (pass agentHostId) or "cloud" (pass cloudAgentRef).', parameters: obj({ id: S, runtime: { type: 'string', enum: ['host', 'cloud'] }, agentHostId: N, cloudAgentRef: S }, ['id', 'runtime']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/workflow-definitions/${encodeURIComponent(str(a.id))}/run`, { runtime: str(a.runtime), agentHostId: a.agentHostId != null ? idArg(a.agentHostId, 'agentHostId') : null, cloudAgentRef: a.cloudAgentRef != null ? str(a.cloudAgentRef) : null }) },
   { tool: 'workflows.import_yaml', mutates: true, description: 'Create a workflow from a YAML/JSON document.', parameters: obj({ name: S, yaml: S }, ['name', 'yaml']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/workflow-definitions/import', { name: str(a.name), yaml: str(a.yaml) }) },
   { tool: 'workflows.runs', mutates: false, description: 'Run history for a workflow definition.', parameters: obj({ id: S }, ['id']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/workflow-definitions/${encodeURIComponent(str(a.id))}/runs`) },
   { tool: 'workflows.run_targets', mutates: false, description: 'Available run targets (agent hosts + cloud agents).', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/api/workflow-definitions/run-targets') },
@@ -4119,7 +4125,7 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'workflow_runs.graph', mutates: false, description: 'Get a workflow run’s node/edge graph for visualization.', parameters: obj({ id: S }, ['id']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/workflows/${encodeURIComponent(str(a.id))}/graph`) },
 
   // ---- Brain chat summarize (LLM call, not a table op) ----
-  { tool: 'brain.summarize', mutates: true, description: 'Summarize a Brain chat and store the summary.', parameters: obj({ chatId: N }, ['chatId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/brain/chats/${num(a.chatId)}/summarize`, {}) },
+  { tool: 'brain.summarize', mutates: true, description: 'Summarize a Brain chat and store the summary.', parameters: obj({ chatId: N }, ['chatId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/brain/chats/${idArg(a.chatId, 'chatId')}/summarize`, {}) },
 
   // ---- LLM proxy: usage / health / models ----
   { tool: 'llm.usage', mutates: false, description: 'Token usage stats for the workspace.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/llm/v1/usage') },
@@ -4131,7 +4137,7 @@ const CATALOG: BuiltinTool[] = [
 
   // ---- Saved dashboards: computed reads (metrics catalogue, resolved data, NL query) ----
   { tool: 'dashboards.metrics', mutates: false, description: 'List the whitelisted metric keys a dashboard widget can chart.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/api/dashboards/metrics') },
-  { tool: 'dashboards.data', mutates: false, description: 'Resolve every widget on a dashboard to its current value.', parameters: obj({ dashboardId: N }, ['dashboardId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/dashboards/${num(a.dashboardId)}/data`) },
+  { tool: 'dashboards.data', mutates: false, description: 'Resolve every widget on a dashboard to its current value.', parameters: obj({ dashboardId: N }, ['dashboardId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/dashboards/${idArg(a.dashboardId, 'dashboardId')}/data`) },
   { tool: 'dashboards.query', mutates: false, description: 'Ask a natural-language question; it is mapped deterministically to one whitelisted metric and answered.', parameters: obj({ question: S }, ['question']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/dashboards/query', { question: str(a.question) }) },
 
   // ---- Provider keys (remove a stored key; list already exists above) ----
@@ -4142,7 +4148,7 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'pmo.rollup', mutates: false, description: 'Composed rollup (delivery + cost + DORA + OKR progress + per-portfolio / per-initiative breakdown) for one scope. kind="workspace" is the whole org (ignores id, returns byPortfolio + byInitiative); kind="portfolio"|"initiative"|"project" needs that id.', parameters: obj({ kind: { type: 'string', enum: ['workspace', 'portfolio', 'initiative', 'project'] }, id: S }, ['kind']), run: (ctx, a) => { const kind = str(a.kind); const idPart = kind !== 'workspace' && a.id != null ? `&id=${encodeURIComponent(str(a.id))}` : ''; return replayRoute(ctx, 'GET', `/api/pmo/rollup?kind=${encodeURIComponent(kind)}${idPart}`); } },
   // ---- PMO: structure writes (Structure tab) — replay the real routes so the
   //       cycle check + cache-version bump + manager gate are the single source. ----
-  { tool: 'pmo.link_project', mutates: true, description: 'Link a project to a PMO initiative so its cost + delivery roll up under that initiative (pass initiativeId=null to UNLINK). This is the Structure-tab "link a project" action.', parameters: obj({ projectId: N, initiativeId: { type: ['string', 'null'] } }, ['projectId']), run: (ctx, a) => replayRoute(ctx, 'PATCH', `/api/pmo/projects/${num(a.projectId)}/link`, { initiativeId: a.initiativeId != null ? str(a.initiativeId) : null }) },
+  { tool: 'pmo.link_project', mutates: true, description: 'Link a project to a PMO initiative so its cost + delivery roll up under that initiative (pass initiativeId=null to UNLINK). This is the Structure-tab "link a project" action.', parameters: obj({ projectId: N, initiativeId: { type: ['string', 'null'] } }, ['projectId']), run: (ctx, a) => replayRoute(ctx, 'PATCH', `/api/pmo/projects/${idArg(a.projectId, 'projectId')}/link`, { initiativeId: a.initiativeId != null ? str(a.initiativeId) : null }) },
   { tool: 'pmo.add_dependency', mutates: true, description: 'Add an initiative dependency edge: fromInitiativeId BLOCKS toInitiativeId (feeds the critical path). Rejected if it would create a cycle.', parameters: obj({ fromInitiativeId: S, toInitiativeId: S }, ['fromInitiativeId', 'toInitiativeId']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/pmo/dependencies', { fromInitiativeId: str(a.fromInitiativeId), toInitiativeId: str(a.toInitiativeId) }) },
   { tool: 'pmo.remove_dependency', mutates: true, description: 'Remove an initiative dependency edge by its id.', parameters: obj({ id: S }, ['id']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/pmo/dependencies/${encodeURIComponent(str(a.id))}`) },
 
@@ -4179,15 +4185,15 @@ const CATALOG: BuiltinTool[] = [
   //      Job-Posting flow. The Brain IDEATES in a chat, then publishes; it composes a
   //      "project grounded in OKRs" from projects.create + objectives.create +
   //      key_results.create (no dedicated tool needed for those). ----
-  { tool: 'marketplace.publish_ticket', mutates: true, description: 'Publish a work item (a board ticket — e.g. a Product brief or a Design gig authored by the Product Manager / Designer agent) to the Gig Marketplace so freelancers can estimate, bid, and be hired. The scope (title/description → requirements) is derived from the ticket, so you can publish with just a ticketId. Optional: postingType (project_bid|design|fte), engagementType (fixed_bid|hourly|fte), a requirements override, discipline + specialty, experienceLevel (entry|intermediate|expert), projectLength (lt_1_month|1_3_months|3_6_months|gt_6_months|ongoing), visibility (public|private), and the money — rateMinCents/rateMaxCents for hourly work (a per-hour band) or budgetTotalCents for fixed-price work (a whole-job total); a total on hourly work is refused. Returns { jobId }.', parameters: obj({ ticketId: N, postingType: S, engagementType: S, requirements: S, discipline: S, specialty: S, experienceLevel: S, projectLength: S, rateMinCents: N, rateMaxCents: N, budgetTotalCents: N, visibility: S }, ['ticketId']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/marketplace/publish', { ticketId: num(a.ticketId), postingType: a.postingType != null ? str(a.postingType) : undefined, engagementType: a.engagementType != null ? str(a.engagementType) : undefined, requirements: a.requirements != null ? str(a.requirements) : undefined, discipline: a.discipline != null ? str(a.discipline) : undefined, specialty: a.specialty != null ? str(a.specialty) : undefined, experienceLevel: a.experienceLevel != null ? str(a.experienceLevel) : undefined, projectLength: a.projectLength != null ? str(a.projectLength) : undefined, rateMinCents: a.rateMinCents != null ? num(a.rateMinCents) : undefined, rateMaxCents: a.rateMaxCents != null ? num(a.rateMaxCents) : undefined, budgetTotalCents: a.budgetTotalCents != null ? num(a.budgetTotalCents) : undefined, visibility: a.visibility != null ? str(a.visibility) : undefined }) },
-  { tool: 'marketplace.unpublish_ticket', mutates: true, description: 'Remove a ticket’s gig from the Marketplace (closes its open posting and clears the hireable flag).', parameters: obj({ ticketId: N }, ['ticketId']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/marketplace/unpublish', { ticketId: num(a.ticketId) }) },
-  { tool: 'jobs.create', mutates: true, description: 'Create a Marketplace job posting directly (not tied to a board ticket) — e.g. an FTE Job Posting (postingType:"fte") candidates interview for, or a standalone gig. For a gig derived from an existing work item, prefer marketplace.publish_ticket. requirements = the acceptance criteria a proposal is AI-evaluated against. Money follows the SHAPE: hourly work takes rateMinCents/rateMaxCents (a per-hour band), fixed-price work takes budgetTotalCents (a whole-job total) — sending a total on hourly work is refused. specialty is a sub-category of discipline. Passing sourceTicketId creates or REOPENS that ticket\u2019s one posting rather than minting a second (same service as marketplace.publish_ticket).', parameters: obj({ title: S, description: S, requirements: S, discipline: S, specialty: S, skills: { type: 'array', items: S }, postingType: S, engagementType: S, experienceLevel: S, projectLength: S, projectId: N, rateMinCents: N, rateMaxCents: N, budgetTotalCents: N, sourceTicketId: N, visibility: S }, ['title']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/jobs', { title: str(a.title), description: a.description != null ? str(a.description) : undefined, requirements: a.requirements != null ? str(a.requirements) : undefined, discipline: a.discipline != null ? str(a.discipline) : undefined, specialty: a.specialty != null ? str(a.specialty) : undefined, skills: Array.isArray(a.skills) ? a.skills.map(str) : undefined, postingType: a.postingType != null ? str(a.postingType) : undefined, engagementType: a.engagementType != null ? str(a.engagementType) : undefined, experienceLevel: a.experienceLevel != null ? str(a.experienceLevel) : undefined, projectLength: a.projectLength != null ? str(a.projectLength) : undefined, projectId: a.projectId != null ? num(a.projectId) : undefined, rateMinCents: a.rateMinCents != null ? num(a.rateMinCents) : undefined, rateMaxCents: a.rateMaxCents != null ? num(a.rateMaxCents) : undefined, budgetTotalCents: a.budgetTotalCents != null ? num(a.budgetTotalCents) : undefined, sourceTicketId: a.sourceTicketId != null ? num(a.sourceTicketId) : undefined, visibility: a.visibility != null ? str(a.visibility) : undefined }) },
+  { tool: 'marketplace.publish_ticket', mutates: true, description: 'Publish a work item (a board ticket — e.g. a Product brief or a Design gig authored by the Product Manager / Designer agent) to the Gig Marketplace so freelancers can estimate, bid, and be hired. The scope (title/description → requirements) is derived from the ticket, so you can publish with just a ticketId. Optional: postingType (project_bid|design|fte), engagementType (fixed_bid|hourly|fte), a requirements override, discipline + specialty, experienceLevel (entry|intermediate|expert), projectLength (lt_1_month|1_3_months|3_6_months|gt_6_months|ongoing), visibility (public|private), and the money — rateMinCents/rateMaxCents for hourly work (a per-hour band) or budgetTotalCents for fixed-price work (a whole-job total); a total on hourly work is refused. Returns { jobId }.', parameters: obj({ ticketId: N, postingType: S, engagementType: S, requirements: S, discipline: S, specialty: S, experienceLevel: S, projectLength: S, rateMinCents: N, rateMaxCents: N, budgetTotalCents: N, visibility: S }, ['ticketId']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/marketplace/publish', { ticketId: idArg(a.ticketId, 'ticketId'), postingType: a.postingType != null ? str(a.postingType) : undefined, engagementType: a.engagementType != null ? str(a.engagementType) : undefined, requirements: a.requirements != null ? str(a.requirements) : undefined, discipline: a.discipline != null ? str(a.discipline) : undefined, specialty: a.specialty != null ? str(a.specialty) : undefined, experienceLevel: a.experienceLevel != null ? str(a.experienceLevel) : undefined, projectLength: a.projectLength != null ? str(a.projectLength) : undefined, rateMinCents: a.rateMinCents != null ? num(a.rateMinCents) : undefined, rateMaxCents: a.rateMaxCents != null ? num(a.rateMaxCents) : undefined, budgetTotalCents: a.budgetTotalCents != null ? num(a.budgetTotalCents) : undefined, visibility: a.visibility != null ? str(a.visibility) : undefined }) },
+  { tool: 'marketplace.unpublish_ticket', mutates: true, description: 'Remove a ticket’s gig from the Marketplace (closes its open posting and clears the hireable flag).', parameters: obj({ ticketId: N }, ['ticketId']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/marketplace/unpublish', { ticketId: idArg(a.ticketId, 'ticketId') }) },
+  { tool: 'jobs.create', mutates: true, description: 'Create a Marketplace job posting directly (not tied to a board ticket) — e.g. an FTE Job Posting (postingType:"fte") candidates interview for, or a standalone gig. For a gig derived from an existing work item, prefer marketplace.publish_ticket. requirements = the acceptance criteria a proposal is AI-evaluated against. Money follows the SHAPE: hourly work takes rateMinCents/rateMaxCents (a per-hour band), fixed-price work takes budgetTotalCents (a whole-job total) — sending a total on hourly work is refused. specialty is a sub-category of discipline. Passing sourceTicketId creates or REOPENS that ticket\u2019s one posting rather than minting a second (same service as marketplace.publish_ticket).', parameters: obj({ title: S, description: S, requirements: S, discipline: S, specialty: S, skills: { type: 'array', items: S }, postingType: S, engagementType: S, experienceLevel: S, projectLength: S, projectId: N, rateMinCents: N, rateMaxCents: N, budgetTotalCents: N, sourceTicketId: N, visibility: S }, ['title']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/jobs', { title: str(a.title), description: a.description != null ? str(a.description) : undefined, requirements: a.requirements != null ? str(a.requirements) : undefined, discipline: a.discipline != null ? str(a.discipline) : undefined, specialty: a.specialty != null ? str(a.specialty) : undefined, skills: Array.isArray(a.skills) ? a.skills.map(str) : undefined, postingType: a.postingType != null ? str(a.postingType) : undefined, engagementType: a.engagementType != null ? str(a.engagementType) : undefined, experienceLevel: a.experienceLevel != null ? str(a.experienceLevel) : undefined, projectLength: a.projectLength != null ? str(a.projectLength) : undefined, projectId: a.projectId != null ? idArg(a.projectId, 'projectId') : undefined, rateMinCents: a.rateMinCents != null ? num(a.rateMinCents) : undefined, rateMaxCents: a.rateMaxCents != null ? num(a.rateMaxCents) : undefined, budgetTotalCents: a.budgetTotalCents != null ? num(a.budgetTotalCents) : undefined, sourceTicketId: a.sourceTicketId != null ? idArg(a.sourceTicketId, 'sourceTicketId') : undefined, visibility: a.visibility != null ? str(a.visibility) : undefined }) },
   { tool: 'jobs.list_mine', mutates: false, description: 'List the Marketplace job postings this workspace created (with proposal counts).', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/api/jobs/mine') },
   { tool: 'jobs.proposals', mutates: false, description: 'List the bids/proposals submitted on one of this workspace’s job postings.', parameters: obj({ jobId: S }, ['jobId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/jobs/${encodeURIComponent(str(a.jobId))}/proposals`) },
   { tool: 'proposals.evaluate', mutates: true, description: 'Use AI to evaluate a submitted bid against the posting’s requirements (LLM-as-judge — grounded/faithfulness + relevance scoring), so you can compare bids objectively before shortlisting or hiring. Caches a 0..100 overall on the proposal and returns the full scores.', parameters: obj({ proposalId: S }, ['proposalId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/jobs/proposals/${encodeURIComponent(str(a.proposalId))}/evaluate`, {}) },
   { tool: 'proposals.shortlist', mutates: true, description: 'Shortlist a candidate’s bid (moves it to the shortlisted stage and notifies them).', parameters: obj({ proposalId: S }, ['proposalId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/jobs/proposals/${encodeURIComponent(str(a.proposalId))}/shortlist`, {}) },
   { tool: 'proposals.decline', mutates: true, description: 'Decline a bid/candidate with an optional courteous message (e.g. "we appreciate your time, but you weren’t selected this time"). The reason is sent to the candidate.', parameters: obj({ proposalId: S, reason: S }, ['proposalId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/jobs/proposals/${encodeURIComponent(str(a.proposalId))}/decline`, { reason: a.reason != null ? str(a.reason) : undefined }) },
-  { tool: 'meetings.schedule', mutates: true, description: 'Schedule a meeting — including a REVIEW (go over a gig worker’s effort/estimate/understanding before accepting a bid) or an INTERVIEW (for an FTE Job Posting candidate) — tracked against the exact work item, posting, or engagement. kind: standup|planning|retrospective|adhoc|direct|interview|review. Pass scheduledAt (ISO) for a future meeting and ONE of ticketId / jobId / engagementId to link it.', parameters: obj({ title: S, kind: S, scheduledAt: S, durationMinutes: N, ticketId: N, jobId: S, engagementId: S, projectId: N }, ['title']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/meetings', { title: str(a.title), kind: a.kind != null ? str(a.kind) : undefined, scheduledAt: a.scheduledAt != null ? str(a.scheduledAt) : undefined, durationMinutes: a.durationMinutes != null ? num(a.durationMinutes) : undefined, ticketId: a.ticketId != null ? num(a.ticketId) : undefined, jobId: a.jobId != null ? str(a.jobId) : undefined, engagementId: a.engagementId != null ? str(a.engagementId) : undefined, projectId: a.projectId != null ? num(a.projectId) : undefined }) },
+  { tool: 'meetings.schedule', mutates: true, description: 'Schedule a meeting — including a REVIEW (go over a gig worker’s effort/estimate/understanding before accepting a bid) or an INTERVIEW (for an FTE Job Posting candidate) — tracked against the exact work item, posting, or engagement. kind: standup|planning|retrospective|adhoc|direct|interview|review. Pass scheduledAt (ISO) for a future meeting and ONE of ticketId / jobId / engagementId to link it.', parameters: obj({ title: S, kind: S, scheduledAt: S, durationMinutes: N, ticketId: N, jobId: S, engagementId: S, projectId: N }, ['title']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/meetings', { title: str(a.title), kind: a.kind != null ? str(a.kind) : undefined, scheduledAt: a.scheduledAt != null ? str(a.scheduledAt) : undefined, durationMinutes: a.durationMinutes != null ? num(a.durationMinutes) : undefined, ticketId: a.ticketId != null ? idArg(a.ticketId, 'ticketId') : undefined, jobId: a.jobId != null ? str(a.jobId) : undefined, engagementId: a.engagementId != null ? str(a.engagementId) : undefined, projectId: a.projectId != null ? idArg(a.projectId, 'projectId') : undefined }) },
   { tool: 'deliverables.evaluate', mutates: true, description: 'Use AI to evaluate a hired worker’s presented proposal/deliverable against the published requirements (same LLM-as-judge as proposals.evaluate). Caches a 0..100 overall and returns the scores.', parameters: obj({ deliverableId: S }, ['deliverableId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/deliverables/${encodeURIComponent(str(a.deliverableId))}/evaluate`, {}) },
   { tool: 'deliverables.set_status', mutates: true, description: 'Accept or request changes on a hired worker’s deliverable proposal. status: accepted|changes_requested.', parameters: obj({ deliverableId: S, status: S }, ['deliverableId', 'status']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/deliverables/${encodeURIComponent(str(a.deliverableId))}/status`, { status: str(a.status) }) },
 
@@ -4224,7 +4230,7 @@ const CATALOG: BuiltinTool[] = [
     tool: 'errors.get', mutates: false,
     description: 'Get ONE platform error-log entry by id with its full stack trace and sanitized context — the drill-down after errors.summary/errors.list identifies the fault worth fixing. Superadmin only.',
     parameters: obj({ id: N }, ['id']),
-    run: async (ctx, a) => getErrorLogEntry(await errorLogDb(ctx), num(a.id)),
+    run: async (ctx, a) => getErrorLogEntry(await errorLogDb(ctx), idArg(a.id, 'id')),
   },
   {
     tool: 'errors.sources', mutates: false,
@@ -4296,7 +4302,7 @@ async function assertProjectInTenant(ctx: BuiltinCtx, projectId: number): Promis
  * invalidation. Writing the row directly would skip every one of them.
  */
 function putManagerConfig(ctx: BuiltinCtx, projectId: unknown, patch: Json): Promise<unknown> {
-  return replayRoute(ctx, 'PUT', `/api/manager/${num(projectId)}`, patch);
+  return replayRoute(ctx, 'PUT', `/api/manager/${idArg(projectId, 'projectId')}`, patch);
 }
 
 /**

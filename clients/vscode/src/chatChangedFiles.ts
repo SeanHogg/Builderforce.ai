@@ -22,7 +22,7 @@
  * a local read always settles. Pure read — no fetch, no mutation, no journal append.
  */
 
-import type { LocalFirstStore, LocalFirstTransaction } from "@builderforce/local-first";
+import { isIntegerIdText, type LocalFirstStore, type LocalFirstTransaction } from "@builderforce/local-first";
 import type { ChatRef } from "./chatRail/railProtocol";
 import { resolveChat } from "./chatRail/resolveChat";
 import type { LocalChangeSetValue } from "./runChangeSets";
@@ -31,12 +31,22 @@ export type ChatChangedFilesResult =
   | { found: true; files: string[] }
   | { found: false };
 
+/**
+ * A chat's local numeric VIEW KEY from its id text (not a LocalId, not a SyncId: the brain's own
+ * positive chat number). Integer text goes through the one `isIntegerIdText` check.
+ */
+function viewKeyOf(text: string): number | undefined {
+  if (!isIntegerIdText(text)) return undefined;
+  const key = Number(text);
+  return Number.isSafeInteger(key) && key > 0 ? key : undefined;
+}
+
 /** The local numeric chat id a chat record carries, when it holds one. */
 function localChatNumberOf(record: { id: string; payload?: unknown } | undefined): number | undefined {
   if (!record) return undefined;
   const fromPayload = Number((record.payload as { rootChatId?: unknown } | undefined)?.rootChatId);
   if (Number.isSafeInteger(fromPayload) && fromPayload > 0) return fromPayload;
-  return /^\d+$/.test(record.id) ? Number(record.id) : undefined;
+  return viewKeyOf(record.id);
 }
 
 /** Resolve a ref to its local numeric chat id (what a host-run change-set id embeds). */
@@ -44,7 +54,7 @@ async function resolveLocalChatNumber(tx: LocalFirstTransaction, ref: ChatRef): 
   const chat = await resolveChat(tx, ref);
   if (!chat) return undefined;
   const record = await tx.get("chat", chat.clientId);
-  return localChatNumberOf(record) ?? (/^\d+$/.test(chat.clientId) ? Number(chat.clientId) : undefined);
+  return localChatNumberOf(record) ?? viewKeyOf(chat.clientId);
 }
 
 /**

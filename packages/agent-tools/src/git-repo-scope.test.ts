@@ -11,6 +11,7 @@ import {
   gitUndoTool,
   inferRepoFromPath,
 } from "./git-tools.js";
+import { safeGitArg } from "./git-repo-scope.js";
 import type { ToolResult } from "./tool.js";
 
 const NOT_A_REPO = "fatal: not a git repository (or any of the parent directories): .git";
@@ -158,6 +159,24 @@ describe("buildGitCommand repo scoping", () => {
       expect(out.ok).toBe(false);
       expect(out.error).toMatch(/does not exist/);
     });
+  });
+});
+
+describe("safeGitArg", () => {
+  it("keeps ordinary ref and path tokens", () => {
+    expect(safeGitArg("ticket/2394-mobile-board")).toBe("ticket/2394-mobile-board");
+    expect(safeGitArg("org/team-a")).toBe("org/team-a");
+  });
+
+  it("regression: refuses a leading '-', which git or gh would read as an option", () => {
+    expect(safeGitArg("-D")).toBeNull();
+    expect(safeGitArg("--upload-pack=x")).toBeNull();
+    expect(safeGitArg("--web")).toBeNull();
+  });
+
+  it("refuses shell metacharacters", () => {
+    expect(safeGitArg("a;b")).toBeNull();
+    expect(safeGitArg("$(id)")).toBeNull();
   });
 });
 

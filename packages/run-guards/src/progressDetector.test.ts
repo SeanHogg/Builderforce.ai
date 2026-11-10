@@ -116,6 +116,27 @@ describe("ProgressDetector", () => {
     expect(d.endTurn()).toMatchObject({ kind: "steer", signal: { kind: "reverifying" } });
   });
 
+  it("regression: reverifying survives a durable resume (written + read-back paths persist)", () => {
+    const d = new ProgressDetector({}, ports);
+    d.observe("edit_file", { path: "src/a.ts", old_string: "x", new_string: "y" }, okData);
+    d.observe("read_file", { path: "src/a.ts" }, okData);
+    expect(d.endTurn()).toBeNull();
+    // The cloud durable loop rebuilds the detector from JSON every tick.
+    const resumed = new ProgressDetector(JSON.parse(JSON.stringify(d.snapshot())), ports);
+    resumed.observe("read_file", { path: "src/a.ts" }, okData);
+    expect(resumed.endTurn()).toMatchObject({ kind: "steer", signal: { kind: "reverifying" } });
+  });
+
+  it("bounds the persisted reverifying paths, keeping the most recent", () => {
+    const d = new ProgressDetector({}, ports);
+    for (let i = 0; i < 600; i++) d.observe("edit_file", { path: `src/f${i}.ts`, old_string: "x", new_string: "y" }, okData);
+    d.endTurn();
+    const written = d.snapshot().writtenPaths ?? [];
+    expect(written.length).toBe(500);
+    expect(written[written.length - 1]).toBe("src/f599.ts");
+    expect(written).not.toContain("src/f0.ts");
+  });
+
   it("a new write restarts the read-back: write, read, write again, read is silent", () => {
     const d = new ProgressDetector({}, ports);
     d.observe("edit_file", { path: "src/a.ts", old_string: "x", new_string: "y" }, okData);

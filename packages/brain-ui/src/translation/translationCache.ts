@@ -52,6 +52,41 @@ export function memoryTranslationCache(): TranslationCache {
   };
 }
 
+/** A cache view whose writes can be switched off — see {@link retirableTranslationCache}. */
+export interface RetirableTranslationCache extends TranslationCache {
+  /** Drop every later write through this view (reads and clear still pass through). */
+  retire(): void;
+}
+
+/**
+ * One identity's view of the shared cache. When the signed-in identity changes the provider
+ * retires the old view, so a translation still in flight for the previous person can never
+ * land in the cache that was just cleared for the next one.
+ */
+export function retirableTranslationCache(inner: TranslationCache): RetirableTranslationCache {
+  let retired = false;
+  return {
+    get: (key) => inner.get(key),
+    set: async (key, entry) => { if (!retired) await inner.set(key, entry); },
+    clear: () => inner.clear(),
+    retire: () => { retired = true; },
+  };
+}
+
+/** A stored row as prune sees it: its key and when it was last written or read. */
+export interface CacheRow { key: IDBValidKey; at: number }
+
+/**
+ * Which rows prune evicts: every expired one, then the least recently used live ones beyond
+ * {@link TRANSLATION_CACHE_MAX_ENTRIES}. Pure — the rows must come from ONE snapshot.
+ */
+export function selectEvictions(rows: readonly CacheRow[], now: number, max = TRANSLATION_CACHE_MAX_ENTRIES): IDBValidKey[] {
+  const live = rows.filter((row) => now - row.at <= TRANSLATION_CACHE_TTL_MS);
+  const expired = rows.filter((row) => now - row.at > TRANSLATION_CACHE_TTL_MS);
+  const overflow = [...live].sort((a, b) => a.at - b.at).slice(0, Math.max(0, live.length - max));
+  return [...expired, ...overflow].map((row) => row.key);
+}
+
 const DB_NAME = 'bf-translation-cache';
 const STORE = 'kv';
 
@@ -72,15 +107,30 @@ function request<T>(db: IDBDatabase, mode: IDBTransactionMode, run: (s: IDBObjec
   });
 }
 
-/** Drops expired entries, then the least recently used beyond the bound. */
-async function prune(db: IDBDatabase, now: number): Promise<void> {
-  const keys = await request<IDBValidKey[]>(db, 'readonly', (s) => s.getAllKeys());
-  const values = await request<StoredEntry[]>(db, 'readonly', (s) => s.getAll());
-  const rows = keys.map((key, i) => ({ key, at: values[i]?.at ?? 0 }));
-  const live = rows.filter((row) => now - row.at <= TRANSLATION_CACHE_TTL_MS);
-  const expired = rows.filter((row) => now - row.at > TRANSLATION_CACHE_TTL_MS);
-  const overflow = live.sort((a, b) => a.at - b.at).slice(0, Math.max(0, live.length - TRANSLATION_CACHE_MAX_ENTRIES));
-  for (const row of [...expired, ...overflow]) await request(db, 'readwrite', (s) => s.delete(row.key));
+/**
+ * Drops expired entries, then the least recently used beyond the bound. ONE readwrite
+ * transaction: a cursor reads each key WITH its value (no separate key/value lists a
+ * concurrent write could misalign), and the deletes run in the same transaction.
+ */
+function prune(db: IDBDatabase, now: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    const store = tx.objectStore(STORE);
+    const rows: CacheRow[] = [];
+    const cursor = store.openCursor();
+    cursor.onsuccess = () => {
+      const at = cursor.result;
+      if (at) {
+        rows.push({ key: at.key, at: (at.value as StoredEntry | undefined)?.at ?? 0 });
+        at.continue();
+        return;
+      }
+      for (const key of selectEvictions(rows, now)) store.delete(key);
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
 }
 
 /** IndexedDB-backed, memory in front, memory alone when IndexedDB is unusable. Entries expire (30 days) and are bounded (2,000, least recently used first). */

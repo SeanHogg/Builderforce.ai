@@ -180,10 +180,12 @@ export function receipt(
   eventId: string,
   status: SyncReceipt['status'],
   receivedAt: string,
-  extra?: { serverId?: string | null; serverVersion?: number | null; detail?: string | null },
+  extra?: { serverId?: string | null; syncId?: number | null; serverVersion?: number | null; detail?: string | null },
 ): SyncReceipt {
   const row: SyncReceipt = { eventId, status, receivedAt };
   if (extra?.serverId) row.serverId = extra.serverId;
+  // The integer server key (`syncIdOf`), beside the text id older devices read.
+  if (typeof extra?.syncId === 'number') row.syncId = extra.syncId;
   if (typeof extra?.serverVersion === 'number') row.serverVersion = extra.serverVersion;
   if (extra?.detail) row.detail = extra.detail;
   return row;

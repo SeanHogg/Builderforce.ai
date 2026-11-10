@@ -31,6 +31,8 @@ export type SyncEventInput = JournalEvent<unknown>;
 
 /** What the event journal answers for a replayed (tenant, device, eventId). */
 export interface StoredSyncEvent {
+  /** The event's entity type, so a replayed receipt answers the same `syncId` the first did. */
+  entityType?: string;
   batchId: string;
   status: SyncReceiptStatus;
   serverId: string | null;
@@ -44,6 +46,11 @@ export interface StoredSyncEvent {
 /** The client↔server identity mapping plus its optimistic-concurrency counter. */
 export interface SyncEntityMappingRow {
   serverId: string;
+  /**
+   * The stored `sync_id` (migration 1339): null when the entity has no integer key, or on a row
+   * written before the column existed. Read through `mappedServerKey` (`syncIds.ts`), never alone.
+   */
+  syncId?: number | null;
   serverVersion: number;
   payloadHash: string;
   destinationKey: string;
@@ -123,7 +130,10 @@ export interface SyncStoreSet {
     tenantId: number;
     entityType: LocalEntityType;
     clientEntityId: string;
+    /** Text id, kept for older devices until the contract push drops it. */
     serverId: string;
+    /** `sync_id`: the server row's integer key (`syncIdOf`); null or absent when it has none. */
+    syncId?: number | null;
     serverVersion: number;
     destinationKey: string;
     payloadHash: string;

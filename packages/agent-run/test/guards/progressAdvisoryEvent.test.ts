@@ -3,7 +3,8 @@
  * the run's timeline at all: `onTrip` returned early. Now they emit the one shared trace step.
  */
 import { describe, expect, it } from "vitest";
-import { createGuardsHook } from "../../src/policy/guards/index.js";
+import { READINESS_ADVISORY_NOTE } from "@builderforce/run-guards";
+import { createGuardsHook, guardsTurnNote } from "../../src/policy/guards/index.js";
 import { policyCtx } from "../support/policyContext.js";
 
 describe("guards hook — progress advisory", () => {
@@ -18,5 +19,21 @@ describe("guards hook — progress advisory", () => {
       detail: { advisory: "readiness" },
       result: "progress advisory (readiness): a one-off note on the next turn, not a trip",
     }]);
+  });
+
+  it("regression: the advisory note reaches the model on the next turn's tail, across a durable tick, for one turn", async () => {
+    const hook = createGuardsHook();
+    const ctx = policyCtx({ policy: { levers: ["a3_progress_detector"] } });
+    await hook.observe(ctx, { id: "r1", name: "read_file", args: { path: "f0.ts" } }, { ok: true });
+    await hook.endTurn!(ctx, "Now I have everything I need.");
+    expect(guardsTurnNote(ctx)).toContain(READINESS_ADVISORY_NOTE);
+    // The cloud durable loop rebuilds the run's guards from the persisted state each tick.
+    const resumed = policyCtx({ policy: { levers: ["a3_progress_detector"] } });
+    resumed.state.guards = JSON.parse(JSON.stringify(ctx.state.guards));
+    expect(guardsTurnNote(resumed)).toContain(READINESS_ADVISORY_NOTE);
+    // Shown for exactly one turn.
+    await hook.observe(resumed, { id: "r2", name: "read_file", args: { path: "f1.ts" } }, { ok: true });
+    await hook.endTurn!(resumed, "");
+    expect(guardsTurnNote(resumed)).not.toContain(READINESS_ADVISORY_NOTE);
   });
 });

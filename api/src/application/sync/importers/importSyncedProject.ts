@@ -23,9 +23,9 @@ import {
   preludeRejection,
   rejected,
   sameCanonical,
-  serverNumericId,
   type BoundedImportOutcome,
 } from './index';
+import { mappedServerKey } from '../syncIds';
 
 const PROJECT_STATUSES = ['active', 'completed', 'archived', 'on_hold'] as const;
 type ProjectStatus = (typeof PROJECT_STATUSES)[number];
@@ -125,7 +125,7 @@ async function updateProject(
   const gate = mutateGate(event, ctx, mapping);
   if (gate) return gate;
   const current = mapping as SyncEntityMappingRow;
-  const id = serverNumericId(current.serverId);
+  const id = mappedServerKey(current);
   if (id === null) return rejected('server_id_invalid');
   const parsed = readProject(event.payload);
   if (!parsed.ok) return rejected(parsed.detail);
@@ -157,7 +157,7 @@ async function deleteProject(
   const gate = mutateGate(event, ctx, mapping, tombstone);
   if (gate) return gate;
   const current = mapping as SyncEntityMappingRow;
-  const id = serverNumericId(current.serverId);
+  const id = mappedServerKey(current);
   if (id === null) return rejected('server_id_invalid');
   try {
     const rows = await tx.transaction((savepoint) => savepoint.update(projects).set({

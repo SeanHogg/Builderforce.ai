@@ -70,7 +70,9 @@ function storeSetFor(tx: Tx): SyncStoreSet {
         tenantId: row.tenantId,
         entityType: row.entityType,
         clientEntityId: row.clientEntityId,
+        // Dual write (1339, expand): the text id older devices read, and the integer key.
         serverId: row.serverId,
+        syncId: row.syncId ?? null,
         serverVersion: row.serverVersion,
         destinationKey: row.destinationKey,
         payloadHash: row.payloadHash,
@@ -81,6 +83,7 @@ function storeSetFor(tx: Tx): SyncStoreSet {
         target: [syncEntityMappings.tenantId, syncEntityMappings.entityType, syncEntityMappings.clientEntityId],
         set: {
           serverId: row.serverId,
+          syncId: row.syncId ?? null,
           serverVersion: row.serverVersion,
           destinationKey: row.destinationKey,
           payloadHash: row.payloadHash,
@@ -137,6 +140,7 @@ type Reader = Pick<Tx, 'select'>;
 async function findEvent(db: Reader, tenantId: number, deviceId: string, eventId: string): Promise<StoredSyncEvent | null> {
   const [row] = await db
     .select({
+      entityType: syncEvents.entityType,
       batchId: syncEvents.batchId,
       status: syncEvents.status,
       serverId: syncEvents.serverId,
@@ -175,6 +179,7 @@ async function findMapping(
   const [row] = await db
     .select({
       serverId: syncEntityMappings.serverId,
+      syncId: syncEntityMappings.syncId,
       serverVersion: syncEntityMappings.serverVersion,
       payloadHash: syncEntityMappings.payloadHash,
       destinationKey: syncEntityMappings.destinationKey,

@@ -9,7 +9,7 @@
  * is not set up shows that state. It never shows invented numbers").
  */
 
-import type { Finding, KnowledgeGraph, KNode } from '@seanhogg/builderforce-memory/knowledge';
+import { fileRefOf as memoryFileRefOf, type Finding, type KnowledgeGraph, type KNode, type NodeRef } from '@seanhogg/builderforce-memory/knowledge';
 import { nodeIndex, pathOf } from '../graphModel';
 import { cmp } from '../order';
 import { dataCoverage, hasMeasuredCoverage } from './dataCoverage';
@@ -110,11 +110,11 @@ export function antiLevel(score: number): number {
     return score <= 0 ? 1 : score <= 1 ? 2 : score <= 3 ? 3 : score <= 7 ? 4 : 5;
 }
 
-/** The file ref a section or symbol ref belongs to. */
-export function fileRefOf(ref: string): string {
-    const hash = ref.indexOf('#');
-    return hash >= 0 ? ref.slice(0, hash) : ref;
-}
+/**
+ * The file ref a section or symbol ref belongs to — memory's rule (only a `src:` ref is cut, and only
+ * after its `::`; a `fact:`/`ent:` ref is itself), typed for the surface's plain-string refs.
+ */
+export const fileRefOf = (ref: string): string => memoryFileRefOf(ref as NodeRef);
 
 export function stationOfRef(model: Pick<StationModel, 'stationOf'>, ref: string): string | undefined {
     return model.stationOf.get(ref) ?? model.stationOf.get(fileRefOf(ref));

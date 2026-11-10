@@ -22,7 +22,7 @@
  */
 
 import { and, eq } from 'drizzle-orm';
-import { TASK_TABLE_KINDS, isJournalEventId } from '../../../domain/sync/syncProtocol';
+import { TASK_TABLE_KINDS, isJournalEventId, parseSyncId } from '../../../domain/sync/syncProtocol';
 import { bumpChatTicketLinkCaches, deleteChatTicketLink, upsertChatTicketLink } from '../../brain/chatTicketLinkWrite';
 import { isTicketKind, ticketKindForTaskType } from '../../brain/chatTicketTypes';
 import { resolveTicket } from '../../brain/ticketLookup';
@@ -43,9 +43,9 @@ import {
   preludeRejection,
   rejected,
   sameCanonical,
-  serverNumericId,
   type BoundedImportOutcome,
 } from './index';
+import { mappedServerKey } from '../syncIds';
 
 interface LinkPayload {
   chatClientId: string;
@@ -68,7 +68,7 @@ function readLink(payload: unknown): Parsed {
   if (typeof raw.ticketClientId !== 'string' || raw.ticketClientId.trim() === '') return { ok: false, detail: 'link_ticket_invalid' };
   if (raw.linkType !== 'linked' && raw.linkType !== 'created') return { ok: false, detail: 'link_type_invalid' };
   for (const key of ['chatServerId', 'ticketServerId'] as const) {
-    if (raw[key] !== undefined && (typeof raw[key] !== 'string' || serverNumericId(raw[key] as string) === null)) {
+    if (raw[key] !== undefined && (typeof raw[key] !== 'string' || parseSyncId(raw[key]) === null)) {
       return { ok: false, detail: key === 'chatServerId' ? 'link_chat_invalid' : 'link_ticket_invalid' };
     }
   }
@@ -106,7 +106,7 @@ async function resolveParents(
   // The server id wins (a server-origin chat / ticket the device only ingested); the client-id
   // mapping is the fallback (a chat / ticket the device created).
   let chatId: number;
-  const chatServerId = payload.chatServerId === undefined ? null : serverNumericId(payload.chatServerId);
+  const chatServerId = payload.chatServerId === undefined ? null : parseSyncId(payload.chatServerId);
   if (chatServerId !== null) {
     const own = await ctx.resolveOwnChatId(chatServerId);
     if (own === null) return rejected('link_chat_not_owned');
@@ -239,7 +239,7 @@ async function removeLink(
   const tombstone = { removed: true };
   const gate = mutateGate(event, ctx, mapping, tombstone);
   if (gate) return gate;
-  const linkId = serverNumericId(mapping.serverId);
+  const linkId = mappedServerKey(mapping);
   if (linkId === null) return rejected('server_id_invalid');
   try {
     await tx.transaction((savepoint) => deleteLinkRow(savepoint, ctx, linkId));
@@ -297,7 +297,7 @@ async function updateLink(
   if ('status' in resolved) return resolved;
   // `mutateGate` let a tombstoned link through (revivable): the link row is new, so is its id.
   if (mapping.deletedAt) return writeLink(ctx, tx, resolved, parsed.value.linkType, mapping.serverVersion + 1);
-  const linkId = serverNumericId(mapping.serverId);
+  const linkId = mappedServerKey(mapping);
   // The pair is the link's identity: an update that names another pair would corrupt the mapping.
   if (linkId !== null && (await pairDiffers(tx, ctx, linkId, resolved))) return rejected('link_pair_immutable');
   const stored = canonical(resolved.chatId, resolved.ref, parsed.value.linkType);

@@ -67,6 +67,14 @@ export interface AdapterDownloadOptions {
   signal?: AbortSignal;
   /** The viewer's locale (BCP-47), for the Translator's language pair. */
   locale?: string;
+  /** Translator language pairs a host knows it needs (source → target), fetched as well. */
+  translatorPairs?: readonly TranslatorPair[];
+}
+
+/** One Translator language pack: the pair a translation actually runs (`detected → locale`). */
+export interface TranslatorPair {
+  from: string;
+  to: string;
 }
 
 /** A `downloadprogress` event as a 0..1 fraction. Current builds report `loaded` already

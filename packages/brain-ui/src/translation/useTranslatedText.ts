@@ -12,8 +12,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslationContext } from './context';
 import { detectForeignLanguage, translateWithEngines } from './engine';
 import { translationCacheKey, type TranslationEntry } from './translationCache';
+import { recentOutcome, rememberOutcome, type Outcome } from './recentOutcomes';
 
 export { MIN_DETECT_CONFIDENCE } from './engine';
+export { FAILED_OUTCOME_TTL_MS, clearRecentOutcomes } from './recentOutcomes';
 
 export type TranslatedTextState =
   | { status: 'plain' }
@@ -21,27 +23,6 @@ export type TranslatedTextState =
   | { status: 'translated'; text: string; from: string }
   | { status: 'needs-device'; from: string }
   | { status: 'failed' };
-
-/** How long a failed / needs-a-translator outcome is remembered in memory, so scrolling back does not re-ask. */
-export const FAILED_OUTCOME_TTL_MS = 60_000;
-
-type Outcome = Extract<TranslatedTextState, { status: 'needs-device' | 'failed' }>;
-const recentOutcomes = new Map<string, { until: number; outcome: Outcome }>();
-
-const recentOutcome = (key: string): Outcome | undefined => {
-  const hit = recentOutcomes.get(key);
-  if (!hit) return undefined;
-  if (hit.until < Date.now()) { recentOutcomes.delete(key); return undefined; }
-  return hit.outcome;
-};
-
-/** Forget the remembered failures (a test seam, and what a sign-out should do). */
-export const clearRecentOutcomes = (): void => recentOutcomes.clear();
-
-const rememberOutcome = (key: string, outcome: Outcome): void => {
-  if (recentOutcomes.size > 500) recentOutcomes.clear();
-  recentOutcomes.set(key, { until: Date.now() + FAILED_OUTCOME_TTL_MS, outcome });
-};
 
 export function useTranslatedText(text: string, contentId: string, enabled: boolean): TranslatedTextState {
   const ctx = useTranslationContext();

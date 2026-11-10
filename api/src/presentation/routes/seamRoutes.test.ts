@@ -1,9 +1,15 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // Stub the S2S auth + access-error renderer so we exercise the handler logic
 // (validation, idempotency, scoping) without the full requireTenantAccess stack.
+// `svcState.current` is the principal the stubbed auth returns: a bfk_* key by
+// default; the segment-bound tests swap in a host-OIDC principal.
+const svcState = vi.hoisted(() => ({
+  bfkKey: { tenantId: 1, segmentId: 'seg-1', tenantApiKeyId: 'k1' as string | null, boundToSegment: false },
+  current: null as null | { tenantId: number; segmentId: string; tenantApiKeyId: string | null; boundToSegment: boolean },
+}));
 vi.mock('../middleware/serviceTokenAuth', () => ({
-  authenticateServiceToken: async () => ({ tenantId: 1, segmentId: 'seg-1', tenantApiKeyId: 'k1' }),
+  authenticateServiceToken: async () => svcState.current ?? svcState.bfkKey,
 }));
 vi.mock('./llmRoutes', () => ({
   respondToAccessError: (c: any, e: unknown) => c.json({ error: String(e) }, 401),
@@ -129,5 +135,57 @@ describe('seamRoutes /webhooks', () => {
     const { db } = makeDb({ deleteReturns: [] });
     const res = await createSeamRoutes(db).request('/webhooks/sub-x', { method: 'DELETE' });
     expect(res.status).toBe(404);
+  });
+});
+
+describe('seamRoutes /admin/segments — segment-bound (host OIDC) callers', () => {
+  const oidc = { tenantId: 1, segmentId: 'seg-own', tenantApiKeyId: null, boundToSegment: true };
+  afterEach(() => { svcState.current = null; });
+
+  it('regression: an OIDC token cannot DELETE another segment (403, nothing erased)', async () => {
+    svcState.current = oidc;
+    const db = { delete: vi.fn(), select: vi.fn() } as any;
+    const res = await createSeamRoutes(db).request('/admin/segments/seg-other', { method: 'DELETE' });
+    expect(res.status).toBe(403);
+    expect(db.delete).not.toHaveBeenCalled();
+    expect(db.select).not.toHaveBeenCalled();
+  });
+
+  it('regression: an OIDC token cannot PUT another segment (403, nothing updated)', async () => {
+    svcState.current = oidc;
+    const db = { update: vi.fn() } as any;
+    const res = await createSeamRoutes(db).request('/admin/segments/seg-other', {
+      method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ plan: 'pro' }),
+    });
+    expect(res.status).toBe(403);
+    expect(db.update).not.toHaveBeenCalled();
+  });
+
+  it('an OIDC token may PUT its own segment', async () => {
+    svcState.current = oidc;
+    const db = {
+      update: () => ({ set: () => ({ where: () => ({ returning: async () => [{ id: 'seg-own', plan: 'pro' }] }) }) }),
+    } as any;
+    const res = await createSeamRoutes(db).request('/admin/segments/seg-own', {
+      method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ plan: 'pro' }),
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('an OIDC token cannot eagerly provision a segment other than its own (403, no insert)', async () => {
+    svcState.current = oidc;
+    const { db, captured } = makeDb({ selectReturns: [] });
+    const res = await createSeamRoutes(db).request('/admin/segments', post({ accountId: 'a2', companyId: 'c2' }));
+    expect(res.status).toBe(403);
+    expect(captured.insertValues).toBeUndefined();
+  });
+
+  it('a bfk_* key keeps tenant-wide management: PUT of any tenant segment reaches the update', async () => {
+    const update = vi.fn(() => ({ set: () => ({ where: () => ({ returning: async () => [{ id: 'seg-other', plan: 'pro' }] }) }) }));
+    const res = await createSeamRoutes({ update } as any).request('/admin/segments/seg-other', {
+      method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ plan: 'pro' }),
+    });
+    expect(res.status).toBe(200);
+    expect(update).toHaveBeenCalled();
   });
 });

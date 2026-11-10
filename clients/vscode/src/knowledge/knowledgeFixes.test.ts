@@ -196,6 +196,38 @@ describe("applyKnipFix - apply to branch", () => {
     expect(t.log.some((l) => l.startsWith("delete"))).toBe(false);
   });
 
+  const withDelete = (t: ReturnType<typeof fake>): FixPorts => ({
+    ...t.ports,
+    deleteBranch: async (n: string) => { t.log.push(`delete:${n}`); return { ok: true as const }; },
+  });
+
+  it("regression: knip changing nothing returns the person to their branch and deletes the empty fix branch", async () => {
+    const t = fake({ knip: () => [], branch: true, on: "develop" });
+    const out = await applyKnipFix(withDelete(t), "r", finding("unused-file", "a.ts"), () => "id");
+    expect(out.changed).toEqual([]);
+    expect(out.branch).toBeUndefined();
+    expect(out.fixId).toBeUndefined();
+    expect(t.log).toContain("switch:develop");
+    expect(t.log.some((l) => l.startsWith("delete:fix/"))).toBe(true);
+  });
+
+  it("regression: a snapshot that throws reverts the fix, returns to the original branch and deletes the fix branch", async () => {
+    const t = fake({ knip: knipEdits, branch: true, on: "develop" });
+    const ports: FixPorts = { ...withDelete(t), hashObjects: async () => { throw new Error("hash-object failed"); } };
+    await expect(applyKnipFix(ports, "r", finding("unused-export", "a.ts"), () => "id")).rejects.toThrow(/recorded for undo.*hash-object failed/);
+    expect(t.log).toContain("restore:a.ts");
+    expect(t.log).toContain("switch:develop");
+    expect(t.log.some((l) => l.startsWith("delete:fix/"))).toBe(true);
+    expect(t.tree()).toEqual([]);
+  });
+
+  it("regression: an unreadable HEAD (no snapshot) is treated as no undo record, not a silent success", async () => {
+    const t = fake({ knip: knipEdits, branch: true, on: "develop" });
+    const ports: FixPorts = { ...withDelete(t), headSha: async () => undefined };
+    await expect(applyKnipFix(ports, "r", finding("unused-export", "a.ts"), () => "id")).rejects.toThrow(/recorded for undo/);
+    expect(t.log).toContain("switch:develop");
+  });
+
   it("names branches safely, apart per finding and per moment", () => {
     const now = new Date("2026-11-06T10:20:30Z");
     const f1 = { id: "one", kind: "unused-file" }, f2 = { id: "two", kind: "unused-file" };

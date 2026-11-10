@@ -109,9 +109,21 @@ export function boundToken(token: string | undefined): { token: string; tenantId
   return tenantId !== undefined && tenantId === workspaceTenantId() ? { token: token!, tenantId } : null;
 }
 
+/**
+ * The tenant durable writes may replay into: one we HOLD a token for. The key's own tenant
+ * once its base token is minted; a selected other workspace only once its re-scoped token
+ * is. Until then (and after any refused re-scope) writes stay parked, so a write queued for
+ * workspace B can never ride the key tenant's token into tenant A.
+ */
+function outboxTenantId(): number | undefined {
+  if (!baseJwt) return undefined;
+  if (selectedTenantId === undefined || selectedTenantId === baseJwt.tenantId) return baseJwt.tenantId;
+  return scopedJwt?.tenantId === selectedTenantId ? selectedTenantId : undefined;
+}
+
 /** Tell the durable outboxes which tenants writes now go to (see `outboxStorage.ts`). */
 function syncOutboxScope(): void {
-  setOutboxScope({ workspace: effectiveTenantId() });
+  setOutboxScope({ workspace: outboxTenantId() });
   // The gateway names this workspace on its calls (`gatewayAuth.ts` reads the leaf).
   setCurrentWorkspace(effectiveTenantId());
 }
@@ -119,9 +131,12 @@ function syncOutboxScope(): void {
 /**
  * Re-scoping to the selected workspace failed in a way that falls back to the key's own
  * token: workspace writes PARK (they were queued for the selected tenant and must not
- * land in the key's) until a re-scope succeeds.
+ * land in the key's) until a re-scope succeeds. The re-scoped token is dropped too, so a
+ * later base re-mint ({@link syncOutboxScope}) cannot un-park them on a token we no longer
+ * hand out.
  */
 function parkWorkspaceWrites(): void {
+  scopedJwt = undefined;
   setOutboxScope({ workspace: undefined });
 }
 
@@ -275,6 +290,9 @@ async function mintJwt(secrets: vscode.SecretStorage, force: boolean): Promise<s
         // as the gateway's (sign in again). Otherwise the person left the workspace: drop it.
         const refusal = classifyWorkspaceRefusal(403, errorBody);
         if (refusal === "editor_key_required") {
+          // Park FIRST, synchronously: the sign-out that follows is async (and fires once
+          // per key), and until it lands the base token must not carry workspace writes.
+          parkWorkspaceWrites();
           const key = await getApiKey(secrets);
           if (key) reportWorkspaceRefusal(refusal, key, target);
         } else {

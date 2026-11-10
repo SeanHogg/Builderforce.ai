@@ -33,6 +33,7 @@ import type { MiddlewareHandler } from 'hono';
 import type { HonoEnv } from '../../env';
 import { TenantPlan } from '../../domain/shared/types';
 import { checkSlidingWindow } from '../../application/ratelimit/slidingWindow';
+import { rateLimitedResponse } from './rateLimitResponse';
 import {
   BOARD_RPM_MULTIPLIER, RPM_LIMITS, boardBucketKey, resolvePlanRpm, tenantBucketKey,
 } from '../../application/ratelimit/tenantBuckets';
@@ -241,13 +242,7 @@ export const rateLimitMiddleware: MiddlewareHandler<RateLimitHonoEnv> = async (c
     c.header('X-RateLimit-Remaining', String(Math.max(0, data.limit - data.current)));
     c.header('X-RateLimit-Reset',     data.resetAt);
 
-    if (!data.allowed) {
-      c.header('Retry-After', String(data.retryAfterSeconds));
-      return c.json(
-        { error: 'Rate limit exceeded. Please slow down.', resetAt: data.resetAt },
-        429,
-      );
-    }
+    if (!data.allowed) return rateLimitedResponse(c, data);
   } catch (error) {
     // DO unavailable — allow request through
   

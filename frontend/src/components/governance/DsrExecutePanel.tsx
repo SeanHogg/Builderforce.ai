@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { RoleGate } from '@/components/RoleGate';
@@ -6,8 +6,9 @@ import { faultMessage } from '@/lib/apiClient';
 import { downloadBlob } from '@/lib/download';
 import {
   executeDsr, fetchDsrExport, markDsrDelivered, planDsr, verifyDsrIdentity,
-  type DsrExecutionResult, type DsrPlan,
+  type DsrDisposition, type DsrExecutionResult, type DsrPlan,
 } from '@/lib/governanceDevsecopsApi';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 /**
  * Execute a data subject request for THIS segment (PRD 08 §10). What execution will do is the API's
@@ -18,6 +19,8 @@ import {
  */
 export interface DsrExecutePanelProps {
   requestId: string;
+  /** Who the request is about (e.g. their email), named in the irreversible-erase confirmation. */
+  subject?: string;
   open: boolean;
   onClose: () => void;
   onDone: () => void;
@@ -25,41 +28,72 @@ export interface DsrExecutePanelProps {
 
 const GOVERNANCE_WRITE_CAP = 'policies.manage' as const;
 
+/** Dispositions that destroy data and cannot be undone: executing one is confirmed first. */
+const IRREVERSIBLE: ReadonlySet<DsrDisposition> = new Set<DsrDisposition>(['suppress_and_erase']);
+
 const counts = (m: Record<string, number>): string =>
   Object.entries(m).map(([store, n]) => `${store}: ${n}`).join(', ');
 
-export function DsrExecutePanel({ requestId, open, onClose, onDone }: DsrExecutePanelProps) {
+export function DsrExecutePanel({ requestId, subject, open, onClose, onDone }: DsrExecutePanelProps) {
   const t = useTranslations('governance.dsrExecute');
+  const confirm = useConfirm();
   const [plan, setPlan] = useState<DsrPlan | null>(null);
   const [busy, setBusy] = useState<'run' | 'deliver' | 'download' | 'verify' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<DsrExecutionResult | null>(null);
+  // The request on screen now: an answer for any other request arrived too late and is dropped.
+  const shown = useRef(requestId);
+  const acting = useRef(false);
 
   useEffect(() => {
+    shown.current = requestId;
     if (!open) return;
+    // A different request starts from nothing: the previous one's plan (e.g. `verified`) must
+    // never enable Run for this one while its own plan loads.
+    setPlan(null);
     setResult(null);
     setError(null);
-    planDsr(requestId).then(setPlan).catch((e) => setError(faultMessage(e, t('error')) ?? t('error')));
+    let current = true;
+    planDsr(requestId).then(
+      (next) => { if (current) setPlan(next); },
+      (e: unknown) => { if (current) setError(faultMessage(e, t('error')) ?? t('error')); },
+    );
+    return () => { current = false; };
   }, [open, requestId, t]);
 
   const act = async (kind: 'run' | 'deliver' | 'download' | 'verify') => {
+    // One action at a time, claimed BEFORE the confirmation is awaited: a double-click must not
+    // open two confirmations (and so execute twice).
+    if (acting.current) return;
+    acting.current = true;
+    const id = requestId;
     setBusy(kind);
     setError(null);
     try {
+      if (kind === 'run' && plan && IRREVERSIBLE.has(plan.disposition)) {
+        const ok = await confirm({
+          title: t('confirmErase.title'),
+          message: t('confirmErase.message', { subject: subject?.trim() || t('confirmErase.subjectFallback') }),
+          confirmLabel: t('confirmErase.confirmLabel'),
+        });
+        if (!ok || shown.current !== id) return;
+      }
       if (kind === 'verify') {
-        await verifyDsrIdentity(requestId);
-        setPlan(await planDsr(requestId));
+        await verifyDsrIdentity(id);
+        const next = await planDsr(id);
+        if (shown.current === id) setPlan(next);
       } else if (kind === 'download') {
-        const file = await fetchDsrExport(requestId);
+        const file = await fetchDsrExport(id);
         downloadBlob(file.blob, file.filename);
       } else {
-        const out = await (kind === 'run' ? executeDsr(requestId) : markDsrDelivered(requestId));
-        setResult(out.result);
+        const out = await (kind === 'run' ? executeDsr(id) : markDsrDelivered(id));
+        if (shown.current === id) setResult(out.result);
         onDone();
       }
     } catch (e) {
-      setError(faultMessage(e, t('error')) ?? t('error'));
+      if (shown.current === id) setError(faultMessage(e, t('error')) ?? t('error'));
     } finally {
+      acting.current = false;
       setBusy(null);
     }
   };

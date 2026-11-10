@@ -57,6 +57,8 @@ export interface FixPorts {
   currentBranch?(): Promise<string | undefined>;
   /** `git switch branch`: back to a branch (undo returns the person to where they started). */
   switchTo?(branch: string): Promise<GitResult>;
+  /** `git branch -d name`: drops a fix branch that carries no commit (an abandoned fix). */
+  deleteBranch?(name: string): Promise<GitResult>;
   /** Root-relative files with unsaved changes in an editor. */
   dirtyBuffers(): string[];
   /** Starts recording the person's saves under the root; `stop()` ends it and returns the root-relative paths saved. */
@@ -185,9 +187,46 @@ async function fix(ports: FixPorts, wanted: ReadonlySet<string>, fixTypes: reado
     await leaveBranch().catch(() => undefined);
     throw runError;
   }
-  const snapshot = record ? await snapshotFix(ports, outcome!.changed, branch ? origin : undefined) : undefined;
-  const fixId = snapshot && record ? record(snapshot) : undefined;
-  return { ...(branch ? { branch } : {}), ...(branchError ? { branchError } : {}), ...(fixId ? { fixId } : {}), changed: outcome!.changed, ...(outcome!.conflicts.length > 0 ? { conflicts: outcome!.conflicts } : {}), note: fixText.fixNote() };
+  const { changed, conflicts } = outcome!;
+  /** Back to where the person started, and the fix branch (no commits: it IS the origin) deleted. True when both held. */
+  const abandonBranch = async (): Promise<boolean> => {
+    if (!branch || !origin || !ports.switchTo) return false;
+    const back = await ports.switchTo(origin).catch(() => undefined);
+    if (!back?.ok) return false;
+    await ports.deleteBranch?.(branch).catch(() => undefined);
+    return true;
+  };
+  // knip changed nothing the finding names: an undo-capable host would hold no record, so no
+  // empty fix branch is left behind.
+  if (record && changed.length === 0) {
+    const kept = branch && !(await abandonBranch());
+    return { ...(kept ? { branch } : {}), ...(branchError ? { branchError } : {}), changed, ...(conflicts.length > 0 ? { conflicts } : {}), note: fixText.fixNote() };
+  }
+  let fixId: string | undefined;
+  if (record) {
+    try {
+      const snapshot = await snapshotFix(ports, changed, branch ? origin : undefined);
+      // A host that CAN snapshot (headSha + hashObjects) but got none: git failed, so there is no undo.
+      if (!snapshot && ports.headSha && ports.hashObjects) throw new Error(fixText.headUnreadable());
+      fixId = snapshot ? record(snapshot) : undefined;
+    } catch (error) {
+      // No undo record: never leave the fix applied on its branch. Revert it, go back, drop the branch.
+      await revertPaths(ports, changed);
+      await abandonBranch();
+      throw new Error(fixText.notRecorded(error instanceof Error ? error.message : String(error)));
+    }
+  }
+  return { ...(branch ? { branch } : {}), ...(branchError ? { branchError } : {}), ...(fixId ? { fixId } : {}), changed, ...(conflicts.length > 0 ? { conflicts } : {}), note: fixText.fixNote() };
+}
+
+/** Puts these root-relative paths back to HEAD (a file knip created is deleted). */
+async function revertPaths(ports: FixPorts, paths: readonly string[]): Promise<void> {
+  const want = new Set(paths);
+  const entries = ((await ports.status()) ?? []).filter((e) => want.has(e.path));
+  const restore = entries.filter((e) => e.code !== "??").map((e) => e.path);
+  const remove = entries.filter((e) => e.code === "??").map((e) => e.path);
+  if (restore.length > 0) await ports.restore(restore);
+  if (remove.length > 0) await ports.remove(remove);
 }
 
 /** After knip: put every stray change back (except what the person saved) and report what stayed. */
@@ -209,7 +248,7 @@ async function settle(ports: FixPorts, wanted: ReadonlySet<string>, saved: Reado
 }
 
 /** The git, file and shell ports of a folder; the editor-bound ones (`dirtyBuffers`, `watchSaves`) come from the caller. */
-export function nodeFixPorts(rootPath: string): Required<Pick<FixPorts, "status" | "hasHead" | "createBranch" | "currentBranch" | "switchTo" | "run" | "restore" | "remove" | "headSha" | "hashObjects" | "inHead" | "unstage">> {
+export function nodeFixPorts(rootPath: string): Required<Pick<FixPorts, "status" | "hasHead" | "createBranch" | "currentBranch" | "switchTo" | "deleteBranch" | "run" | "restore" | "remove" | "headSha" | "hashObjects" | "inHead" | "unstage">> {
   const orThrow = async (args: string[]): Promise<string> => {
     const run = await runGit(rootPath, args);
     if (run.stdout === undefined) throw new Error(fixText.gitFailed(args[0] ?? "", run.stderr ? `: ${run.stderr.trim().slice(0, 300)}` : ""));
@@ -229,6 +268,11 @@ export function nodeFixPorts(rootPath: string): Required<Pick<FixPorts, "status"
     },
     async switchTo(branch) {
       const run = await runGit(rootPath, ["switch", branch]);
+      return run.stdout !== undefined ? { ok: true } : { ok: false, reason: (run.stderr ?? "").trim().slice(0, 300) };
+    },
+    async deleteBranch(name) {
+      // `-d` (not `-D`): git refuses a branch with commits not on HEAD, so only an empty fix branch goes.
+      const run = await runGit(rootPath, ["branch", "-d", name]);
       return run.stdout !== undefined ? { ok: true } : { ok: false, reason: (run.stderr ?? "").trim().slice(0, 300) };
     },
     async status() {

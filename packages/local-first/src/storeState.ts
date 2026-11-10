@@ -8,7 +8,7 @@
  * it anywhere, and why the state never has to be re-indexed per transaction.
  */
 
-import { destinationKey, type JournalEvent, type LocalEntityType, type LocalRecord, type ServerMapping, type SyncConflict, type SyncReceipt } from './records.js';
+import { destinationKey, normalizeServerMapping, type JournalEvent, type LocalEntityType, type LocalRecord, type ServerMapping, type SyncConflict, type SyncReceipt } from './records.js';
 import { ChangeBuilder, type LocalFirstChange, type LocalFirstDelta } from './localFirstDelta.js';
 import type { LocalFirstSnapshot } from './storeContract.js';
 
@@ -95,7 +95,11 @@ export class CommittedState {
       state.indexRecord(record.entityType, record.id);
     }
     for (const event of initial?.events ?? []) state.events.set(event.eventId, event);
-    for (const mapping of initial?.mappings ?? []) state.mappings.set(mappingKey(mapping), mapping);
+    // Legacy rows (no `syncId`, `kind:ref` in `serverId`) are read through the ONE normaliser; nothing is dropped.
+    for (const raw of initial?.mappings ?? []) {
+      const mapping = normalizeServerMapping(raw);
+      state.mappings.set(mappingKey(mapping), mapping);
+    }
     for (const receipt of initial?.receipts ?? []) state.receipts.set(receipt.eventId, receipt);
     for (const conflict of initial?.conflicts ?? []) state.conflicts.set(conflict.id, conflict);
     for (const [key, cursor] of Object.entries(initial?.cursors ?? {})) state.cursors.set(key, cursor);
@@ -140,7 +144,8 @@ export class CommittedState {
       this.pendingKeys.add(event);
       change.event();
     }
-    for (const mapping of delta.mappings ?? []) {
+    for (const raw of delta.mappings ?? []) {
+      const mapping = normalizeServerMapping(raw);
       this.mappings.set(mappingKey(mapping), mapping);
       change.sync();
     }

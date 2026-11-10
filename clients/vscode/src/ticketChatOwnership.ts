@@ -13,8 +13,8 @@
  * after a ticket word. Pure apart from its ports, so it tests headlessly.
  */
 
+import { isLocalId, parseSyncId, syncIdText } from "@builderforce/local-first";
 import type { TicketServerIdLookup } from "./localTicketIdBridge";
-import { LOCAL_TICKET_ID } from "./localTicketScope";
 
 /** The text of the person's latest message in the run's chat, or undefined when there is none / it cannot be read. */
 export type LatestUserText = () => Promise<string | undefined>;
@@ -26,10 +26,13 @@ const TICKET_WORDS = "ticket|task|issue|bug|epic|gap";
 export function textNamesTicket(text: string, ids: readonly string[]): boolean {
   const lower = text.toLowerCase();
   for (const id of ids) {
-    if (LOCAL_TICKET_ID.test(id)) {
+    if (isLocalId(id)) {
       if (lower.includes(id.toLowerCase())) return true;
-    } else if (/^\d+$/.test(id)) {
-      const named = new RegExp(`(?:#|\\b(?:${TICKET_WORDS})s?\\s*#?\\s*)${id}(?!\\d)`, "i");
+      continue;
+    }
+    const sync = parseSyncId(id);
+    if (sync !== null) {
+      const named = new RegExp(`(?:#|\\b(?:${TICKET_WORDS})s?\\s*#?\\s*)${syncIdText(sync)}(?!\\d)`, "i");
       if (named.test(text)) return true;
     }
   }
@@ -43,7 +46,7 @@ export function personNamedTicket(latestUserText: LatestUserText, ticketServerId
     if (!text) return false;
     const ids = [ticketId];
     // The person names the account's number; the model may hold the local id of the same ticket.
-    if (LOCAL_TICKET_ID.test(ticketId)) {
+    if (isLocalId(ticketId)) {
       const serverId = await ticketServerId?.(ticketId).catch(() => undefined);
       if (serverId) ids.push(serverId);
     }

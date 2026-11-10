@@ -259,5 +259,7 @@ export interface BrainRunHost {
   attach(sink: RunSink): () => void;
   /** The run list's interrupted rows (`interruptedRunsView.ts`): journal one as acknowledged (dismissed, or resumed by the webview through the composer). Idempotent. Absent on a host without a run journal. */
   acknowledgeInterrupted?(runId: string): Promise<void>;
+  /** Resolves once the durable writes this host queued (its sub-agent journal) have landed or been given up — awaited on deactivate so a child settling during close is not left `running`. */
+  flush?(): Promise<void>;
   dispose(): void;
 }

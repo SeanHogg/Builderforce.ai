@@ -13032,7 +13032,7 @@
       },
       "one-agent-one-kernel": {
         "title": "Ein Agent, ein Kern – jede Builderforce-Oberfläche nutzt jetzt dieselbe Engine",
-        "description": "Ihr Chat in VS Code, die Web-App, Rovr und die On-Prem-Kanäle waren früher vier Laufzeitumgebungen, die sich widersprechen konnten. Jetzt sind sie ein einziger Ausführungskern – eine Schleife, eine Werkzeugrichtlinie, eine Antwort, wo immer Sie arbeiten."
+        "description": "Ihr Chat in VS Code, die Web-App, Rovr und die On-Prem-Kanäle waren früher vier Laufzeitumgebungen, die sich widersprechen konnten. Jetzt sind sie ein einziger Ausführungskern – eine Schleife, eine Werkzeugrichtlinie, dieselben Regeln, Schutzmechanismen und Prüfungen, wo immer Sie arbeiten."
       },
       "portable-knowledge-packs": {
         "title": "Packen Sie das Wissen, das Ihr Review belegt hat – und lassen Sie jeden Agenten es nutzen",

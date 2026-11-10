@@ -35,9 +35,28 @@ export interface FixSessionHost {
   declinedError(): Error;
   /** The editor-bound ports of a folder (unsaved buffers, saves) over the node ones. */
   fixPorts(rootPath: string): FixPorts & ReturnType<typeof nodeFixPorts>;
+  /** Where a failure nobody else reports (a knip preview) is logged; default `console.warn`. */
+  log?(line: string): void;
 }
 
 interface Recorded { rootId: string; snapshot: FixSnapshot }
+
+/** Past this many changed paths the tree is not hashed (one git call each): the preview is not cached. */
+const MAX_KEYED_CHANGES = 200;
+
+const previewSlot = (rootId: string, findingId: string): string => `${rootId}\0${findingId}`;
+
+/**
+ * The state of the work tree a preview was computed on: HEAD, `git status`, and the bytes of every
+ * changed path. Null when it cannot be read (or is too large to hash) — such a preview is never cached.
+ */
+export async function treeKey(ports: Pick<FixPorts, "status" | "headSha" | "hashObjects">): Promise<string | null> {
+  if (!ports.headSha || !ports.hashObjects) return null;
+  const [head, status] = await Promise.all([ports.headSha(), ports.status()]);
+  if (!head || !status || status.length > MAX_KEYED_CHANGES) return null;
+  const blobs = status.length > 0 ? await ports.hashObjects(status.map((e) => e.path)) : {};
+  return JSON.stringify([head, status, blobs]);
+}
 
 /** A refused path in the person's words; anything else is passed on as it is. */
 function worded(error: unknown): unknown {
@@ -54,7 +73,8 @@ export class KnowledgeFixSession {
   /** One question per root at a time: concurrent first runs await the same answer. */
   private readonly asking = new Map<string, Promise<void>>();
   private readonly checking = new Map<string, AbortController>();
-  private readonly previews = new Map<string, KnowledgeFixPreview | null>();
+  /** `rootId\0findingId` → the preview and the {@link treeKey} it was computed on. */
+  private readonly previews = new Map<string, { tree: string; preview: KnowledgeFixPreview }>();
 
   constructor(private readonly host: FixSessionHost) {}
 
@@ -78,7 +98,7 @@ export class KnowledgeFixSession {
   async apply(rootId: string, rootPath: string, finding: Finding): Promise<KnowledgeFixResult> {
     this.gate();
     await this.allowScripts(rootId);
-    this.previews.delete(finding.id);
+    this.forgetPreviews(rootId);
     return applyKnipFix(this.host.fixPorts(rootPath), rootId, finding, (snapshot) => {
       const fixId = randomUUID();
       this.records.set(fixId, { rootId, snapshot });
@@ -93,6 +113,8 @@ export class KnowledgeFixSession {
     if (!record || record.rootId !== rootId) throw new Error(fixText.unknownFix());
     await serialized(rootId, async () => {
       if (this.records.get(fixId!) !== record) throw new Error(fixText.unknownFix());
+      // Whatever the undo manages to revert, the previews were computed on the tree before it.
+      this.forgetPreviews(rootId);
       try {
         await undoSnapshot(this.host.fixPorts(rootPath), record.snapshot);
       } catch (error) {
@@ -108,18 +130,33 @@ export class KnowledgeFixSession {
    * What the fix would remove, from knip's own report. Reported only when the person has already
    * allowed scripts for the root (a preview must not raise a modal on its own); otherwise null and
    * the view lists the finding's files.
+   *
+   * Cached per root and finding AGAINST THE TREE it was computed on ({@link treeKey}): any edit,
+   * apply or undo moves the key, so a stale removal list is never shown. A tree that cannot be
+   * keyed is never cached. A knip failure is logged and answers null (the view lists the files).
    */
   async preview(rootId: string, rootPath: string, finding: Finding): Promise<KnowledgeFixPreview | null> {
     if (!this.host.trusted() || !this.confirmed.has(rootId)) return null;
-    if (this.previews.has(finding.id)) return this.previews.get(finding.id) ?? null;
+    const slot = previewSlot(rootId, finding.id);
+    const tree = await treeKey(this.host.fixPorts(rootPath)).catch(() => null);
+    const cached = this.previews.get(slot);
+    if (tree !== null && cached?.tree === tree) return cached.preview;
     try {
       const report = await runKnipReport(rootPath);
       const preview = { files: previewOf(report, finding.kind, filesOf(rootId, finding)) };
-      this.previews.set(finding.id, preview);
+      if (tree !== null) this.previews.set(slot, { tree, preview });
+      else this.previews.delete(slot);
       return preview;
-    } catch {
+    } catch (error) {
+      this.previews.delete(slot);
+      (this.host.log ?? console.warn)(`[knowledge fix] knip preview failed for ${rootPath}: ${error instanceof Error ? error.message : String(error)}`);
       return null;
     }
+  }
+
+  /** Drops every cached preview of a root (its tree just moved under them). */
+  private forgetPreviews(rootId: string): void {
+    for (const slot of [...this.previews.keys()]) if (slot.startsWith(`${rootId}\0`)) this.previews.delete(slot);
   }
 
   /** Runs one check. A second check for the same root while one is running or waiting is refused. */

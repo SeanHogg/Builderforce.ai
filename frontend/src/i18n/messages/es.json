@@ -13032,7 +13032,7 @@
       },
       "one-agent-one-kernel": {
         "title": "Un agente, un núcleo: todas las superficies de Builderforce usan ahora el mismo motor",
-        "description": "Tu chat en VS Code, la aplicación web, Rovr y los canales on-prem eran cuatro entornos de ejecución que podían no coincidir. Ahora son un único núcleo de ejecución: un bucle, una política de herramientas, una respuesta, trabajes donde trabajes."
+        "description": "Tu chat en VS Code, la aplicación web, Rovr y los canales on-prem eran cuatro entornos de ejecución que podían no coincidir. Ahora son un único núcleo de ejecución: un bucle, una política de herramientas, las mismas reglas, salvaguardas y verificación, trabajes donde trabajes."
       },
       "portable-knowledge-packs": {
         "title": "Empaqueta el conocimiento que tu revisión demostró y deja que cualquier agente lo use",

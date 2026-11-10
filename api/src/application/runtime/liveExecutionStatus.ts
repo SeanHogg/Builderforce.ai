@@ -7,7 +7,12 @@
  * dispatch admission (a second POST /executions for the same task is refused with the
  * live run's id). They share this module so the two can never disagree.
  */
+import { asc, eq, inArray, type SQL } from 'drizzle-orm';
 import { ExecutionStatus } from '../../domain/shared/types';
+import type { Db, Tx } from '../../infrastructure/database/connection';
+import { executions } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { liveExecution } from '../rehearsal/executionMode';
 
 export const LIVE_EXECUTION_STATUSES: readonly ExecutionStatus[] = [
   ExecutionStatus.PENDING,
@@ -29,15 +34,34 @@ export function findLiveExecution(rows: ReadonlyArray<{ id: number; status: stri
 }
 
 // ── "does this TASK have a live run?" — the database form of the predicate above ──────────────────────
-import { eq as eqLive, inArray as inArrayLive } from 'drizzle-orm';
-import type { Db as LiveDb } from '../../infrastructure/database/connection';
-import { executions as liveExecutions } from '../../infrastructure/database/schema';
-import { scopedToTenant as scopedLive } from '../../infrastructure/database/tenantScope';
+
+/**
+ * THE predicate for "a live run of this task": a live status, and a run that COUNTS
+ * (`liveExecution()`: not a rehearsal, not a sub-agent child, which is a slice of its parent's
+ * run). Every task-scoped live-run read composes this one, so dedupe, merge and sweeps agree.
+ */
+export function liveRunOfTask(tenantId: number, taskId: number): SQL {
+  return scopedToTenant(
+    executions, tenantId,
+    eq(executions.taskId, taskId),
+    inArray(executions.status, [...LIVE_EXECUTION_STATUSES]),
+    liveExecution(),
+  );
+}
+
+/** The live runs of one ticket, oldest first. */
+export async function liveRunsForTask(
+  db: Db | Tx, tenantId: number, taskId: number,
+): Promise<Array<{ id: number; status: string }>> {
+  return db.select({ id: executions.id, status: executions.status }).from(executions)
+    .where(liveRunOfTask(tenantId, taskId))
+    .orderBy(asc(executions.id));
+}
 
 /** Whether the task has an execution that is still live. Merge decisions and the orphan-draft sweep ask this. */
-export async function taskHasLiveRun(db: LiveDb, tenantId: number, taskId: number): Promise<boolean> {
-  const rows = await db.select({ id: liveExecutions.id }).from(liveExecutions)
-    .where(scopedLive(liveExecutions, tenantId, eqLive(liveExecutions.taskId, taskId), inArrayLive(liveExecutions.status, [...LIVE_EXECUTION_STATUSES])))
+export async function taskHasLiveRun(db: Db | Tx, tenantId: number, taskId: number): Promise<boolean> {
+  const rows = await db.select({ id: executions.id }).from(executions)
+    .where(liveRunOfTask(tenantId, taskId))
     .limit(1);
   return rows.length > 0;
 }

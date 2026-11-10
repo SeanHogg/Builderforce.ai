@@ -44,6 +44,33 @@ export function bucketByShape(marks: readonly NodeMark[]): ShapeBucket[] {
     return [...by].map(([shape, list]) => ({ shape, marks: list }));
 }
 
+export interface PaintQueue {
+    /** Hands up to `limit` marks to `draw`, bucket by bucket in order; true once every mark has been handed out. */
+    next(limit: number, draw: (mark: NodeMark, shape: NodeShape) => void): boolean;
+}
+
+/**
+ * The incremental pass's cursor over the buckets: an index per pass, never `shift()` (O(n) per
+ * mark over up to ~15k marks per frame). The buckets are read, not mutated.
+ */
+export function paintQueue(buckets: readonly ShapeBucket[]): PaintQueue {
+    let b = 0;
+    let i = 0;
+    return {
+        next(limit, draw) {
+            let drawn = 0;
+            while (b < buckets.length && drawn < limit) {
+                const bucket = buckets[b]!;
+                if (i >= bucket.marks.length) { b++; i = 0; continue; }
+                draw(bucket.marks[i++]!, bucket.shape);
+                drawn++;
+            }
+            while (b < buckets.length && i >= buckets[b]!.marks.length) { b++; i = 0; }
+            return b >= buckets.length;
+        },
+    };
+}
+
 /** A mark draws only when its (radius-padded) bounds intersect the viewBox. */
 export function markVisible(m: NodeMark, view: ViewBox): boolean {
     return m.x + m.r >= view.x && m.x - m.r <= view.x + view.w && m.y + m.r >= view.y && m.y - m.r <= view.y + view.h;

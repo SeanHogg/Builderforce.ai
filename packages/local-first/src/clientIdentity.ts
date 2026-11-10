@@ -19,6 +19,7 @@
  */
 
 import { mintDeviceId, resolveDeviceId } from './deviceIdentity.js';
+import { isIntegerIdText } from './entityId.js';
 
 /** Thrown when a record carries no client id at all. */
 export const MISSING_CLIENT_ID = 'missing_client_id';
@@ -67,8 +68,6 @@ export interface DurableIdentityStore {
   set(key: string, value: string): void | Promise<void>;
 }
 
-const INTEGER_ID_RE = /^-?\d+$/;
-
 const flights = new WeakMap<object, Map<string, Promise<string>>>();
 
 function identityError(code: string): never {
@@ -88,7 +87,7 @@ function nonBlank(value: unknown): string | undefined {
 }
 
 function acceptClientId(stored: string): string {
-  if (stored.startsWith(SERVER_ID_PREFIX) || INTEGER_ID_RE.test(stored.trim())) {
+  if (stored.startsWith(SERVER_ID_PREFIX) || isIntegerIdText(stored.trim())) {
     identityError(SERVER_ASSIGNED_ID);
   }
   return stored;

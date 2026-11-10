@@ -14,7 +14,7 @@
  *   it from its kind and ref in the reader's language.
  */
 
-import type { ChatTicketLinkValue, LocalRecord } from "@builderforce/local-first";
+import { parseSyncId, syncIdText, type ChatTicketLinkValue, type LocalRecord, type SyncId } from "@builderforce/local-first";
 import type { LocalFirstView } from "../localFirstView";
 import { presentRecordSyncStatus } from "../syncStatusPresenter";
 import { railTicketProgress, type RailRunPayload, type RailTicketPayload } from "./railPayloads";
@@ -45,15 +45,12 @@ export function chatClientIdOf(facts: Pick<RailFacts, "records" | "mappings">, r
   if (typeof ref === "string") {
     return facts.records.some((row) => row.entityType === "chat" && row.id === ref && !row.deletedAt) ? ref : undefined;
   }
-  const mapping = facts.mappings.find((row) => row.entityType === "chat" && row.serverId === String(ref));
+  const sync = parseSyncId(ref);
+  if (sync === null) return undefined;
+  const mapping = facts.mappings.find((row) => row.entityType === "chat" && parseSyncId(row.syncId) === sync);
   if (!mapping) return undefined;
   const live = facts.records.some((row) => row.entityType === "chat" && row.id === mapping.clientEntityId && !row.deletedAt);
   return live ? mapping.clientEntityId : undefined;
-}
-
-function numeric(value: string | undefined): number | undefined {
-  const parsed = value === undefined ? NaN : Number(value);
-  return Number.isSafeInteger(parsed) ? parsed : undefined;
 }
 
 const newest = (values: ReadonlyArray<string | undefined>): string | undefined =>
@@ -65,9 +62,14 @@ export function readRailFromFacts(facts: RailFacts, ref: ChatRef, lastRefreshAt?
     return { found: false, tickets: [], links: [], runHistory: EMPTY_HISTORY, freshness: { source: "device" }, runClientIds: [] };
   }
 
-  const serverIds = new Map<string, string>();
-  for (const mapping of facts.mappings) serverIds.set(`${mapping.entityType}\u0000${mapping.clientEntityId}`, mapping.serverId);
-  const serverIdOf = (type: string, id: string) => serverIds.get(`${type}\u0000${id}`);
+  // Each record's SyncId (re-checked: a snapshot row has lost its brand). A mapping with no integer
+  // key (a tier ticket, a mirror record) has none.
+  const syncIds = new Map<string, SyncId>();
+  for (const mapping of facts.mappings) {
+    const sync = parseSyncId(mapping.syncId);
+    if (sync !== null) syncIds.set(`${mapping.entityType}\u0000${mapping.clientEntityId}`, sync);
+  }
+  const syncIdOf = (type: string, id: string) => syncIds.get(`${type}\u0000${id}`);
 
   const tickets = new Map<string, Readonly<LocalRecord<RailTicketPayload>>>();
   const linkRecords: Readonly<LocalRecord<ChatTicketLinkValue>>[] = [];
@@ -93,8 +95,8 @@ export function readRailFromFacts(facts: RailFacts, ref: ChatRef, lastRefreshAt?
   const chatTickets = ticketsOfChats(linkRecords, (id) => tickets.get(id), new Set([chatClientId])).get(chatClientId) ?? [];
   for (const { link, ticket, index } of chatTickets) {
     const payload = ticket.payload;
-    const ticketServerId = serverIdOf("ticket", ticket.id);
-    const linkId = numeric(serverIdOf("chat-ticket-link", link.id)) ?? -(index + 1);
+    const ticketSyncId = syncIdOf("ticket", ticket.id);
+    const linkId = syncIdOf("chat-ticket-link", link.id) ?? -(index + 1);
     links.push({
       clientId: link.id,
       ticketClientId: ticket.id,
@@ -105,7 +107,7 @@ export function readRailFromFacts(facts: RailFacts, ref: ChatRef, lastRefreshAt?
       clientId: ticket.id,
       linkId,
       kind: payload.railKind ?? payload.taskType ?? "task",
-      ref: payload.railRef ?? ticketServerId ?? ticket.id,
+      ref: payload.railRef ?? (ticketSyncId !== undefined ? syncIdText(ticketSyncId) : ticket.id),
       label: payload.title,
       ...railTicketProgress(payload),
       exists: payload.exists ?? true,
@@ -127,7 +129,7 @@ export function readRailFromFacts(facts: RailFacts, ref: ChatRef, lastRefreshAt?
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : b.executionId - a.executionId));
 
   const lastIngestedAt = newest([newest(observed), lastRefreshAt]);
-  const bound = serverIdOf("chat", chatClientId) !== undefined;
+  const bound = syncIdOf("chat", chatClientId) !== undefined;
 
   return {
     found: true,

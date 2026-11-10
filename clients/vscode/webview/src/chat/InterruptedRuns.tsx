@@ -3,8 +3,8 @@
  * mid-flight. Each row is titled by its chat (the title the history list uses), says when
  * it was interrupted (in the editor's locale), links the chat, and offers Resume and
  * Dismiss. Resume sends a continuation through the composer (`useInterruptedResume`):
- * it is disabled while the chat is running (with a title saying so) and, with Dismiss,
- * while a resume is pending; a resume that was never claimed leaves a note on the row.
+ * it is disabled while the chat is running or another run's resume is pending in it (each
+ * with a title saying so) and, with Dismiss, while its own resume is pending; a resume that was never claimed leaves a note on the row.
  * Renders nothing when there are none. Rows leave as the host re-sends the list.
  */
 
@@ -29,6 +29,8 @@ export function InterruptedRuns({ bundle, locale, titleOf, onOpenChat, resume }:
   const runs = useInterruptedRuns();
   const t = makeT(bundle);
   if (runs.length === 0) return null;
+  // One resume per chat at a time (`interruptedResume.ts`): another run's pending resume blocks this chat's Resume.
+  const pendingChats = new Set(runs.filter((r) => resume.pending.has(r.runId)).map((r) => Number(r.chatId)));
   return (
     <section className="bf-interrupted" aria-label={t('ir.title', 'Interrupted runs')}>
       <h3 className="bf-interrupted__title">{t('ir.title', 'Interrupted runs')} ({runs.length})</h3>
@@ -38,6 +40,7 @@ export function InterruptedRuns({ bundle, locale, titleOf, onOpenChat, resume }:
           const hasChat = Number.isInteger(chatId);
           const pending = resume.pending.has(run.runId);
           const running = hasChat && resume.isRunning(chatId);
+          const chatPending = hasChat && !pending && pendingChats.has(chatId);
           return (
             <li key={run.runId} className="bf-interrupted__row">
               <div className="bf-interrupted__who">
@@ -55,8 +58,9 @@ export function InterruptedRuns({ bundle, locale, titleOf, onOpenChat, resume }:
                   <button
                     type="button"
                     className="bf-btn"
-                    disabled={pending || running}
-                    title={running ? t('ir.busy', 'This chat is running') : undefined}
+                    disabled={pending || running || chatPending}
+                    title={running ? t('ir.busy', 'This chat is running')
+                      : chatPending ? t('ir.chatPending', 'Another run is resuming in this chat') : undefined}
                     onClick={() => resume.resume({ runId: run.runId, chatId })}
                   >
                     {t('ir.resume', 'Resume')}

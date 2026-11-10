@@ -63,5 +63,5 @@ export function replaceProjectFiles(runtime: PreviewRuntime, files: Record<strin
   timeWrite('rm', { fileCount: stale.length, totalBytes: 0 }, () => {
     for (const path of stale) runtime.fs.rm(path);
   });
-  timeWrite('writeTree', measureFiles(files), () => runtime.writeTree(files));
+  timeWrite('writeTree', () => measureFiles(files), () => runtime.writeTree(files));
 }

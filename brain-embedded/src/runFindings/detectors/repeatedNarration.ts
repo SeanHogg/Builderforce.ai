@@ -17,15 +17,18 @@ function asNarration(t: ViewTurn): TranscriptMessage {
   return { role: 'assistant', content: t.text, tool_calls: t.calls.map(() => ({})) } as TranscriptMessage;
 }
 
+/** A turn the fold judges at all: one with tool calls AND pre-call text (memory's `narrationOf` rule). */
+const isCandidate = (t: ViewTurn): boolean => t.calls.length > 0 && t.text.trim().length > 0;
+
 export function repeatedNarration(view: RunView): RunFinding[] {
-  // Pre-call text: what a turn said before the calls it made.
-  const narrated = view.turns.filter((t) => t.calls.length > 0 && t.text.trim());
-  const msgs = narrated.map(asNarration);
+  // Every turn goes to the fold; only a candidate it KEPT becomes the original a later repeat names.
+  const msgs = view.turns.map(asNarration);
   const folded = foldRepeatedNarration(msgs, RUN_FINDING_POLICY.narrationOverlap);
   const repeats = new Set<ViewTurn>();
   let lastKept: ViewTurn | null = null;
-  for (let i = 0; i < narrated.length; i++) {
-    const t = narrated[i]!;
+  for (let i = 0; i < view.turns.length; i++) {
+    const t = view.turns[i]!;
+    if (!isCandidate(t)) continue;
     if (folded[i] === msgs[i]) { lastKept = t; continue; }
     if (lastKept) repeats.add(lastKept);
     repeats.add(t);

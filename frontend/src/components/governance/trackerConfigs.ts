@@ -120,6 +120,7 @@ export const TRACKER_CONFIGS: Record<string, TrackerSurfaceProps> = {
       labelKey: 'governance.dsrExecute.openAction',
       render: (row, close, reload) => createElement(DsrExecutePanel, {
         requestId: row.id,
+        subject: typeof row.subjectEmail === 'string' ? row.subjectEmail : undefined,
         open: true,
         onClose: close,
         onDone: reload,

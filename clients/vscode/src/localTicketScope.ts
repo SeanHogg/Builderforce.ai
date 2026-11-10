@@ -12,7 +12,17 @@
  * and the chat identity are ports.
  */
 
-import { chatTicketLinkId, type EntityDestination, type LocalFirstStore, type LocalFirstTransaction, type TicketValue } from "@builderforce/local-first";
+import {
+  chatTicketLinkId,
+  entityIdResolver,
+  parseEntityRef,
+  parseSyncId,
+  type EntityDestination,
+  type EntityIdResolver,
+  type LocalFirstStore,
+  type LocalFirstTransaction,
+  type TicketValue,
+} from "@builderforce/local-first";
 import type { LocalChatIdentity } from "@seanhogg/builderforce-brain-embedded";
 
 /** A local ticket record the server has not seen (no sync mapping). */
@@ -42,8 +52,6 @@ export interface ChatTicketScope {
   linkedLocally(ticketId: string): Promise<boolean>;
 }
 
-export const LOCAL_TICKET_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /**
  * The live, unmapped tickets of the named chats — ONE scan of the ticket partition, then a
  * mapping lookup per candidate. Shared by the chat-row summary (`chatRail/localTicketSummary.ts`).
@@ -68,18 +76,20 @@ export async function scanUnsyncedTickets(
   return out;
 }
 
-/** The local client id behind a ticket id: a local UUID as given, a server id through its mapping. */
-async function ticketClientId(tx: LocalFirstTransaction, ticketId: string): Promise<string | undefined> {
-  const id = ticketId.trim().replace(/^#/, "");
-  if (LOCAL_TICKET_ID.test(id)) return id;
-  return (await tx.mappingByServerId("ticket", id))?.clientEntityId;
+/** The local client id behind a ticket id: a LocalId as given; a SyncId or tier `kind:ref` through the resolver. */
+async function ticketClientId(resolver: EntityIdResolver, ticketId: string): Promise<string | undefined> {
+  const ref = parseEntityRef(ticketId.trim().replace(/^#/, ""));
+  if (!ref) return undefined;
+  if ("local" in ref) return ref.local;
+  return (await resolver.resolve("ticket", ref)).localId ?? undefined;
 }
 
 export function localChatTicketScope(
-  store: Pick<LocalFirstStore, "read">,
+  store: LocalFirstStore,
   identity: Pick<LocalChatIdentity, "localIdFor" | "clientIdFor">,
   current?: RunChat,
 ): ChatTicketScope {
+  const resolver = entityIdResolver(store);
   return {
     current,
     async clientChatIdFor(chatId) {
@@ -90,8 +100,8 @@ export function localChatTicketScope(
         if (sameLocal || sameServer) return current.clientChatId;
       }
       // Another chat: the model names chats by their SERVER id (the account's tools list those).
-      const serverId = Number(chatId);
-      if (!Number.isInteger(serverId) || serverId <= 0) return undefined;
+      const serverId = parseSyncId(typeof chatId === "string" ? chatId.trim() : chatId);
+      if (serverId === null) return undefined;
       const localId = await identity.localIdFor(serverId);
       return localId === undefined ? undefined : identity.clientIdFor(localId);
     },
@@ -103,16 +113,17 @@ export function localChatTicketScope(
         if (await tx.mapping("ticket", row.id, row.destination)) return undefined;
         return { id: row.id, ...(row.payload.chatClientId ? { chatClientId: row.payload.chatClientId } : {}), payload: row.payload };
       }),
-    linkedLocally: (ticketId) =>
-      store.read(async (tx) => {
-        const chat = current?.clientChatId;
-        if (!chat) return false;
-        const clientId = await ticketClientId(tx, ticketId);
-        if (!clientId) return false;
+    linkedLocally: async (ticketId) => {
+      const chat = current?.clientChatId;
+      if (!chat) return false;
+      const clientId = await ticketClientId(resolver, ticketId);
+      if (!clientId) return false;
+      return store.read(async (tx) => {
         const ticket = await tx.get<TicketValue>("ticket", clientId);
         if (ticket && !ticket.deletedAt && ticket.payload.chatClientId === chat) return true;
         const link = await tx.get("chat-ticket-link", chatTicketLinkId(chat, clientId));
         return !!link && !link.deletedAt;
-      }),
+      });
+    },
   };
 }

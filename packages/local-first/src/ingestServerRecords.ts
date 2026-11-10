@@ -24,7 +24,7 @@
 import { materialize } from './applyServerCursor.js';
 import { chatTicketLinkId, linkServerIds } from './chatTicketLink.js';
 import { clone } from './clone.js';
-import { mintClientEntityId } from './clientEntityIdentity.js';
+import { mintLocalId, parseEntityRef, tierRefText } from './entityId.js';
 import { canonicalPayloadHash } from './payloadHash.js';
 import type { ChatTicketLinkValue, EntityDestination, LocalEntityType, LocalRecord } from './records.js';
 import type { LocalFirstTransaction } from './storeContract.js';
@@ -84,7 +84,7 @@ function newClientId(row: ServerRecordRow): string {
       return chatTicketLinkId(link.chatClientId, link.ticketClientId);
     }
   }
-  return mintClientEntityId();
+  return mintLocalId();
 }
 
 /**
@@ -100,6 +100,17 @@ async function withServerIds(tx: LocalFirstTransaction, row: ServerRecordRow): P
 }
 
 const pendingKey = (entityType: string, id: string): string => `${entityType}\u0000${id}`;
+
+/**
+ * The mapping a server row already has, in any destination (earliest wins): a tier ticket's
+ * `kind:ref` is its `externalRef`; anything else is its server key (`syncId`, or legacy text).
+ */
+function mappingOfRow(tx: LocalFirstTransaction, row: ServerRecordRow): ReturnType<LocalFirstTransaction['mappingByServerId']> {
+  const ref = parseEntityRef(row.serverId);
+  return ref && 'tier' in ref
+    ? tx.mappingByExternalRef(row.entityType, tierRefText(ref.tier))
+    : tx.mappingByServerId(row.entityType, row.serverId);
+}
 
 export async function ingestServerRecords(
   store: LocalFirstStore,
@@ -125,7 +136,7 @@ export async function ingestServerRecords(
         continue;
       }
       const row: ServerRecordRow & { payload: unknown } = { ...source, payload };
-      const mapping = await tx.mappingByServerId(row.entityType, row.serverId);
+      const mapping = await mappingOfRow(tx, row);
       const clientId = mapping?.clientEntityId ?? newClientId(row);
       resolvedIds.push(clientId);
       if (row.entityType === 'ticket') incomingTickets.add(clientId);

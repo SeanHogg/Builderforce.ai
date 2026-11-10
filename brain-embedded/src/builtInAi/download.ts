@@ -15,7 +15,7 @@
 import { languageDetectorAdapter } from './languageDetectorApi';
 import { promptApiFactory } from './promptApi';
 import { summarizerAdapter } from './summarizerApi';
-import { progressFraction, type BuiltInAdapter } from './taskSession';
+import { progressFraction, type BuiltInAdapter, type TranslatorPair } from './taskSession';
 import { translatorAdapter } from './translatorApi';
 
 /**
@@ -32,6 +32,9 @@ export interface BuiltInDownloadOptions {
   signal?: AbortSignal;
   /** The viewer's locale for the Translator pair; defaults to `navigator.language`. */
   locale?: string;
+  /** Translator pairs (source → target) the host knows a message needs; the Translator also
+   *  fetches every pair a translation already found missing on this device. */
+  translatorPairs?: readonly TranslatorPair[];
 }
 
 /** The task-API models fetched on the same click as the chat model (PRD 42 · A2). */
@@ -83,6 +86,7 @@ export async function downloadBuiltInModel(options: BuiltInDownloadOptions = {})
       onProgress: (f) => report(i + 1, f),
       ...(signal ? { signal } : {}),
       ...(locale ? { locale } : {}),
+      ...(options.translatorPairs ? { translatorPairs: options.translatorPairs } : {}),
     }).then(() => report(i + 1, 1)),
   );
 

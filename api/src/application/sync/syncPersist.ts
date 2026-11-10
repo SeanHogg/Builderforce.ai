@@ -15,6 +15,7 @@
 import { CLIENT_REPORTED_EVIDENCE } from '../../domain/sync/occurredAtGate';
 import type { EntityDestination, LocalEntityType, LocalRecord, SyncReceipt } from '../../domain/sync/syncProtocol';
 import { receipt, type ParsedEvent } from './syncEnvelope';
+import { syncIdOf } from './syncIds';
 import type {
   StoredSyncEvent,
   SyncAuthContext,
@@ -42,7 +43,9 @@ function provenance(scope: ApplyScope): NonNullable<LocalRecord['provenance']> {
   };
 }
 
-function changeRecord(event: ParsedEvent, scope: ApplyScope, serverVersion: number, payload: unknown): LocalRecord {
+/** The delta-log snapshot other devices pull, carrying the entity's `syncId` / `serverId` when it has one. */
+function changeRecord(event: ParsedEvent, scope: ApplyScope, outcome: SyncImportMapping & { payload: unknown }): PulledRecord {
+  const { serverVersion, payload } = outcome;
   const record: LocalRecord = {
     id: event.clientEntityId,
     entityType: event.entityType as LocalEntityType,
@@ -55,7 +58,7 @@ function changeRecord(event: ParsedEvent, scope: ApplyScope, serverVersion: numb
     provenance: provenance(scope),
   };
   if (event.operation === 'delete') record.deletedAt = scope.now.toISOString();
-  return record;
+  return withServerIds(record, outcome.serverId);
 }
 
 function journalRow(
@@ -102,6 +105,7 @@ export async function persistAccepted(
     entityType,
     clientEntityId: event.clientEntityId,
     serverId: outcome.serverId,
+    syncId: syncIdOf(entityType, outcome.serverId),
     serverVersion: outcome.serverVersion,
     destinationKey: outcome.destinationKey,
     payloadHash: outcome.payloadHash,
@@ -132,7 +136,7 @@ export async function persistAccepted(
     operation: event.operation,
     version: outcome.serverVersion,
     destinationKey: outcome.destinationKey,
-    record: changeRecord(event, scope, outcome.serverVersion, outcome.payload),
+    record: changeRecord(event, scope, outcome),
     occurredAt,
     deviceId: scope.deviceId,
     eventId: event.eventId,
@@ -170,7 +174,21 @@ export function replayReceipt(eventId: string, replayPayloadHash: string, existi
     return receipt(eventId, 'rejected', existing.receivedAt.toISOString(), { detail: 'event_payload_mismatch' });
   }
   const status = existing.status === 'accepted' ? 'duplicate' : existing.status;
-  return receipt(eventId, status, existing.receivedAt.toISOString(), existing);
+  return receipt(eventId, status, existing.receivedAt.toISOString(), {
+    ...existing,
+    syncId: syncIdOf(existing.entityType, existing.serverId),
+  });
+}
+
+/**
+ * A record as pull serves it: the `LocalRecord` plus, when the entity has an integer server
+ * key, its `syncId` and the `serverId` text (pull never sent the id before 1339).
+ */
+export type PulledRecord = LocalRecord & { syncId?: number; serverId?: string };
+
+function withServerIds(record: LocalRecord, serverId: string | null | undefined): PulledRecord {
+  const syncId = syncIdOf(record.entityType, serverId);
+  return syncId === null ? record : { ...record, serverId: serverId as string, syncId };
 }
 
 function copyPayload<T>(value: T): T {
@@ -179,8 +197,11 @@ function copyPayload<T>(value: T): T {
   return { ...(value as object) } as T;
 }
 
-/** A change-log record served as-is (a copy, so callers cannot mutate the store's row). */
-export function copyRecord(record: LocalRecord): LocalRecord {
+/**
+ * A change-log record served as-is (a copy, so callers cannot mutate the store's row). It carries
+ * the `syncId` / `serverId` `changeRecord` stamped on it; a row written before 1339 has none.
+ */
+export function copyRecord(record: LocalRecord): PulledRecord {
   return {
     ...record,
     destination: { ...record.destination },
@@ -190,7 +211,7 @@ export function copyRecord(record: LocalRecord): LocalRecord {
 }
 
 /** A projection row served as a snapshot record. A tombstone keeps its `deletedAt`. */
-export function rowToRecord(row: SyncRecordRow, destination: EntityDestination): LocalRecord {
+export function rowToRecord(row: SyncRecordRow, destination: EntityDestination): PulledRecord {
   const record: LocalRecord = {
     id: row.clientEntityId,
     entityType: row.entityType,
@@ -205,5 +226,5 @@ export function rowToRecord(row: SyncRecordRow, destination: EntityDestination):
   if (row.provenance && typeof row.provenance === 'object') {
     record.provenance = { ...row.provenance } as LocalRecord['provenance'];
   }
-  return record;
+  return withServerIds(record, row.serverId);
 }

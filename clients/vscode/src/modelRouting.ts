@@ -18,7 +18,9 @@
  *
  * So the decision lives here, once, and every surface asks for a {@link ModelRoute}
  * rather than deriving one. `modelState` still owns the model POLICY (what the user
- * picked, what the project pins); this module owns the consequence.
+ * picked, what the project pins); this module owns the consequence. The route CONTRACT is
+ * `modelRoute.ts`, the OnDeviceTasks port's shape `onDeviceTasks.ts`; every transport stays
+ * here (`modelRouting.test.ts`: only this module reaches for one).
  *
  * What deliberately does NOT route through here: the gateway's server-side services —
  * the personality block, builder insights, platform MCP tools, the model catalog.
@@ -31,7 +33,6 @@ import type * as vscode from "vscode";
 import {
   completeLocal,
   completeLocalFirst,
-  completionOnDeviceTasks,
   type OnDeviceObserver,
   createHostModelStream,
   localFirstApplies,
@@ -47,10 +48,8 @@ import {
   isServableLocalModel,
   localRuntime,
   formatLocalModelRef,
-  type LocalEndpoint,
   type LocalFirstAccount,
   type LocalFirstAttemptRecord,
-  type LocalRuntimeId,
   type LocalRuntimeProbe,
 } from "@builderforce/local-inference";
 import {
@@ -74,70 +73,11 @@ import { hostPageEngines } from "./pageEngineBridge";
 import { localSuccessFederation, localSuccessStore, localSuccessTuning } from "./localSuccessStorage";
 import { assertPlatformCapability, platformPolicy } from "./platformPolicy";
 import { currentInferenceMode } from "./inferenceModeSetting";
-import type { InferenceMode } from "@builderforce/local-first";
+import { unauthorizedError, type ModelRoute, type RouteRequest } from "./modelRoute";
+import { createOnDeviceTasks } from "./onDeviceTasks";
 
-/** Where one turn will run, and with which model. */
-export interface ModelRoute {
-  /** The ref to send. Undefined means "let the gateway route". */
-  model?: string;
-  modelStrict?: boolean;
-  /** Absent = let the gateway route by the account's `cloudOrder` (see `modelState`). */
-  routingMode?: "auto" | "byo_pool";
-  /**
-   * Present when this turn is served by a runtime on THIS machine. Carrying the resolved
-   * endpoint and bare model id (rather than re-parsing the ref downstream) is what keeps
-   * the `local/<provider>/<model>` grammar knowledge in one module.
-   */
-  local?: { provider: LocalRuntimeId; model: string; endpoint: LocalEndpoint };
-  /**
-   * Present when an UNPINNED turn runs local-first: the on-device runtimes as probed for
-   * this turn. Each call then tries a capable local model and falls over to the gateway
-   * (see `createLocalFirstStream`). Mutually exclusive with `local` — a pin is a pin.
-   */
-  localFirst?: { probes: readonly LocalRuntimeProbe[] };
-  /**
-   * The person's inference mode for this turn (`inferenceModeSetting`). `local-only`
-   * never reaches the gateway: the turn is served on this machine or fails
-   * `no_local_model`, and it never needs an account.
-   */
-  inferenceMode?: InferenceMode;
-  /**
-   * Specific, on a provider only this machine can reach (registry `gatewayVendor` — Kimi
-   * Code), whose credential could not be resolved. The gateway cannot serve that pick
-   * either, so the turn fails with WHY ({@link routeStream}) instead of reaching a server
-   * that answers `local_egress_required`.
-   */
-  unauthorized?: { provider: LocalRuntimeId; detail: string };
-  /**
-   * Hybrid, a real turn: the pick could not be authorized on this machine, so the turn is
-   * answered with Auto. Carried so {@link routeStream} tells the person through the same
-   * fallback notice a failed pick gets, instead of free models answering unexplained.
-   */
-  pickUnavailable?: { model: string; detail: string };
-  /**
-   * The connected accounts this editor calls itself (Kimi), read per call: in Hybrid Auto,
-   * tried after this device and before the gateway; for "use my connected accounts"
-   * (`byo_pool`, Hybrid or Specific), tried first, then the gateway's BYO pool
-   * (`createHostModelStream`). Never set for Local only.
-   */
-  accounts?: () => Promise<readonly LocalFirstAccount[]>;
-}
-
-/** The error a turn on an {@link ModelRoute.unauthorized} route fails with. */
-function unauthorizedError(unauthorized: NonNullable<ModelRoute["unauthorized"]>): Error {
-  const label = localRuntime(unauthorized.provider).label;
-  return new Error(
-    `${label} could not be authorized on this machine, so this turn was not sent. ${unauthorized.detail} `
-      + `Sign in again in ${label}, or connect it with "BuilderForce: Manage Model Provider Connections".`,
-  );
-}
-
-/** Who is asking for a route. */
-export interface RouteRequest {
-  /** A chat turn is about to run on the answer — the one caller that may start
-   *  provisioning a local model (a panel opening or a workspace scan never does). */
-  turn?: boolean;
-}
+export type { ModelRoute, RouteRequest } from "./modelRoute";
+export { onDeviceModelAvailable } from "./onDeviceTasks";
 
 /**
  * Resolve the route for a turn. Safe to call signed out — every lookup underneath is
@@ -395,7 +335,8 @@ export async function routeComplete(
  * work that is local by definition (`local_research`: free tokens or nothing). The SAME
  * on-device path a local-first turn takes (the memoized probe, the shared plan's ranking,
  * the shared non-streaming completion) with no cloud to fall over to. Gated on local
- * models being enabled, not on local-first (a routing choice for unpinned turns).
+ * models being enabled, not on local-first (a routing choice for unpinned turns). Private:
+ * every caller goes through the OnDeviceTasks port below.
  */
 async function completeOnDevice(
   messages: readonly ChatMessage[],
@@ -417,35 +358,9 @@ async function completeOnDevice(
   });
 }
 
-/** Whether anything on this machine could serve {@link completeOnDevice} right now. */
-export async function onDeviceModelAvailable(): Promise<boolean> {
-  return (await probeOnDeviceRuntimes(getLocalModelsConfig())).some((p) => p.models.some(isServableLocalModel));
-}
-
-/**
- * The input window a summary chunk must fit: the smallest probed window among the models
- * that can serve now (the plan may pick any of them), undefined when none reports one.
- */
-async function onDeviceWindow(): Promise<number | undefined> {
-  const windows = (await probeOnDeviceRuntimes(getLocalModelsConfig()))
-    .flatMap((p) => p.models.filter(isServableLocalModel))
-    .flatMap((m) => (m.contextTokens ? [m.contextTokens] : []));
-  return windows.length > 0 ? Math.min(...windows) : undefined;
-}
-
-/**
- * The editor's ONE `OnDeviceTasks` port (PRD 42 · B2): Synapse and the other local engines
- * behind the single on-device completion above. `completeOnDevice` is private to this
- * module — every caller (knowledge judgement, local research) goes through this port's
- * `json` / `summarize` / `complete`. `translate` is `null` here; `detectLanguage` is the deterministic heuristic.
- */
+/** The editor's ONE `OnDeviceTasks` port (`onDeviceTasks.ts`) over {@link completeOnDevice}. */
 export function onDeviceTasksObserving(observe?: OnDeviceObserver) {
-  return completionOnDeviceTasks({
-    complete: completeOnDevice,
-    available: onDeviceModelAvailable,
-    contextTokens: onDeviceWindow,
-    ...(observe ? { observe } : {}),
-  });
+  return createOnDeviceTasks(completeOnDevice, observe);
 }
 
 /** The port with no observer: the callers that have no chat (knowledge judgement, local research) record no row. */

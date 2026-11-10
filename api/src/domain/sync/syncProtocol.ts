@@ -31,6 +31,9 @@ export {
   destinationKey,
   /** The ONE event-id shape check — the client store mints exactly this. */
   isJournalEventId,
+  /** THE server-id parse (`entityId.ts`): a positive safe integer, or its decimal text; else null. */
+  parseSyncId,
+  type SyncId,
   type EntityDestination,
   type JournalEvent,
   type LocalEntityType,

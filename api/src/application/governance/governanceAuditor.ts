@@ -23,7 +23,7 @@ import { sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { resultRows } from '../kernel/metricRollup';
 import { DAY_MS } from '../../domain/shared/time';
-import { purgeStaleDsrExports } from './dsrExecution';
+import { purgeStaleDsrExports } from './dsrExportPurge';
 
 export const AUDITOR_WINDOW_DAYS = 90;
 /** Per-statement cap — a backlog drains over successive sweeps instead of one unbounded write. */

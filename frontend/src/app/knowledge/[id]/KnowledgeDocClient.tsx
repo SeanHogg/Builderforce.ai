@@ -258,7 +258,6 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
       {canEdit && blockDoc.markdown.trim() && (
         <AnalyzePanel
           docId={docId}
-          t={t}
           getBlocks={() => editorDoc.blocks}
           onApplyFlow={(flow, snapshot) => {
             // The model saw each drawing as `[[bf-drawing:N]]`, numbered from `snapshot` (what was sent).

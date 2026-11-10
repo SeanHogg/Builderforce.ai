@@ -24,8 +24,8 @@ export {
   windowToolResultCap,
   windowedCap,
 } from './caps.js';
-export { DEFAULT_TRUNCATION_SUFFIX, cutHead, cutHeadTail, keepTail } from './textCut.js';
-export type { CutHeadOptions, CutHeadTailOptions } from './textCut.js';
+export { DEFAULT_TRUNCATION_SUFFIX, cutHead, cutHeadTail, keepTail, truncateMiddle } from './textCut.js';
+export type { CutHeadOptions, CutHeadTailOptions, TruncateMiddleOptions } from './textCut.js';
 export { DEFAULT_TAIL_LINES, detectRunner, stripAnsi, summarizeShellOutput } from './shellSummary.js';
 export type { OutputRunner, ShellSummary, ShellSummaryOptions } from './shellSummary.js';
 export { projectJson } from './jsonProjection.js';

@@ -1,16 +1,18 @@
 ---
 title: One agent, one kernel — every Builderforce surface now runs the same engine
 date: 2026-11-08
-description: Your chat in VS Code, the web app, Rovr and the on-prem channels used to be four runtimes that could disagree. They are now one execution core — one loop, one tool policy, one answer, wherever you work.
+description: Your chat in VS Code, the web app, Rovr and the on-prem channels used to be four runtimes that could disagree. They are now one execution core — one loop, one tool policy, the same rules, guards and verification, wherever you work.
 tags: [agents, architecture, vscode, web, product]
 author: Sean Hogg
 ---
 
 # One agent, one kernel — every Builderforce surface now runs the same engine
 
-You can start a chat in VS Code, pick it up in the browser, and finish it from your phone. That only feels seamless if the thing answering you is the same thing everywhere. For a long time it wasn't: the editor, the web app, Rovr and the on-prem channels each had their own run loop, their own tool wiring, and — on a bad day — four different answers to the same question.
+Start a chat with an agent in VS Code, then pick it up in the browser mid-thread, and the agent that answers you there has the same tools, follows the same rules and guards, and has its work checked by the same verification. A fix you get in one place is a fix in every place.
 
-That is the gap this closed: **the surface changed, but the agent didn't.** One execution core now runs every chat, on every host.
+That only works if the thing answering you is the same thing everywhere. For a long time it wasn't: the editor, the web app, Rovr and the on-prem channels each had their own run loop, their own tool wiring, and — on a bad day — four different answers to the same question.
+
+Now **the surface changes, but the agent doesn't.** One execution core runs every chat, on every host.
 
 ## One loop, not four
 
@@ -23,7 +25,7 @@ There is now a single agent loop. The old per-surface run loops are gone — del
   "steps": [
     { "label": "Your chat", "note": "VS Code, web, Rovr, or a channel — the surface is a view, not an engine.", "hue": "make" },
     { "label": "The one kernel", "note": "A single run loop and tool policy executes every turn.", "hue": "run" },
-    { "label": "One answer", "note": "Same tools, same guards, same result — whichever surface you used.", "hue": "measure" }
+    { "label": "Same checks", "note": "Same tools, same guards, same verification — whichever surface you used.", "hue": "measure" }
   ],
   "caption": "The surface renders the conversation; the kernel has it."
 }

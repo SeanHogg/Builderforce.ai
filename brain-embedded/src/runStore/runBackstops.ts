@@ -10,10 +10,11 @@
 import { isFailedToolResult } from '../brainTriage';
 import { NOT_STARTED_TASK_STATUSES, type LinkedTicketToAdvance } from '../chatWorkLinking';
 import {
-  LOCAL_TICKET_CREATE_TOOL, SERVER_TICKET_TOOLS, isLocalTicketCreateLabel, serverTicketId, ticketStatusMove, ticketToolVocabulary,
+  LOCAL_TICKET_CREATE_TOOL, SERVER_TICKET_TOOLS, isLocalTicketCreateLabel, ticketStatusMove, ticketToolVocabulary,
   type TicketStatusMove,
 } from '../ticketToolVocabulary';
-import { toolResultRecord } from '../toolResultRecord';
+import { syncIdText } from '@builderforce/local-first';
+import { entityIdsOf } from '../toolResultRecord';
 import type { BrainTraceEvent } from '../brainTriage';
 import type { RunCell } from './runCell';
 import { nowIso, nowMs, pushTrace } from './runCells';
@@ -150,8 +151,7 @@ export async function recordCodeChangeTicket(
     // `from_delta` answers `{ deltaId, kind, taskId, deduped }` — the TICKET is `taskId` (`id` on older
     // relays), possibly as JSON text or a numeric string. Reading only `id` left this unset, so every
     // capture minted again (chat #61651: 17 identical "Code change (1 file)" tickets).
-    const record = toolResultRecord(out);
-    const id = serverTicketId(record?.taskId ?? record?.id);
+    const id = entityIdsOf(out).syncId;
     if (c.deltaTicketId == null && id != null) c.deltaTicketId = id;
     // The model's own from_delta/link call is what `ticketRecorded` tracks; a mint we
     // performed satisfies the same guarantee, so the settle pass must not mint again.
@@ -275,8 +275,8 @@ export function localTicketsFiledInRun(trace: readonly BrainTraceEvent[]): strin
   for (const ev of trace) {
     if (!succeeded(ev) || !isLocalTicketCreateLabel(ev.label)) continue;
     if ((ev.args as { reason?: unknown } | undefined)?.reason !== 'hand_off') continue;
-    const id = toolResultRecord(ev.result)?.id;
-    const ref = typeof id === 'string' ? id.trim() : typeof id === 'number' ? String(id) : '';
+    const { localId, syncId } = entityIdsOf(ev.result);
+    const ref = localId ?? (syncId != null ? syncIdText(syncId) : null);
     if (ref && !ids.includes(ref)) ids.push(ref);
   }
   return ids;

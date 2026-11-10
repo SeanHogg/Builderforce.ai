@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { KnowledgeGraphSource, SyncStatus } from '../types';
-import { SYNC_POLL_MS, useSyncStatus } from './useSyncStatus';
+import { SYNC_POLL_MAX_MS, SYNC_POLL_MS, syncPollDelay, useSyncStatus } from './useSyncStatus';
 
 const status = (files: number): SyncStatus => ({ local: { files, docs: 0 }, sources: [] });
 const sourceOf = (read: KnowledgeGraphSource['syncStatus']): KnowledgeGraphSource => ({ scopes: async () => [], load: async () => null, ...(read ? { syncStatus: read } : {}) });
@@ -121,5 +121,80 @@ describe('useSyncStatus while an upload is under way', () => {
         const calls = busy.mock.calls.length;
         await act(async () => { await vi.advanceTimersByTimeAsync(SYNC_POLL_MS * 4); });
         expect(busy).toHaveBeenCalledTimes(calls);
+    });
+
+    it('regression: a failed read clears the uploading status and backs off instead of polling every 2 s', async () => {
+        vi.useFakeTimers();
+        let fail = false;
+        const read = vi.fn(async () => { if (fail) throw new Error('offline'); return replica(3, true); });
+        const source = sourceOf(read);
+        const { result } = renderHook(() => useSyncStatus(source, 'a', 'g'));
+        await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+        expect(result.current.status?.replica?.sending).toBe(true);
+
+        fail = true;
+        await act(async () => { await vi.advanceTimersByTimeAsync(SYNC_POLL_MS); });
+        expect(result.current.failed).toBe(true);
+        expect(result.current.status).toBeNull(); // stale, not the last good "uploading"
+        const afterFail = read.mock.calls.length;
+        // The next poll waits syncPollDelay(1) = 4 s, not 2 s.
+        await act(async () => { await vi.advanceTimersByTimeAsync(SYNC_POLL_MS); });
+        expect(read).toHaveBeenCalledTimes(afterFail);
+        await act(async () => { await vi.advanceTimersByTimeAsync(SYNC_POLL_MS); });
+        expect(read).toHaveBeenCalledTimes(afterFail + 1);
+
+        // A minute offline costs a handful of reads, not thirty.
+        const before = read.mock.calls.length;
+        await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+        expect(read.mock.calls.length - before).toBeLessThanOrEqual(4);
+
+        fail = false;
+        await act(async () => { await vi.advanceTimersByTimeAsync(SYNC_POLL_MAX_MS); });
+        expect(result.current.failed).toBe(false);
+        expect(result.current.status?.replica?.sending).toBe(true);
+        // Back on the short interval once it is sending again.
+        const resumed = read.mock.calls.length;
+        await act(async () => { await vi.advanceTimersByTimeAsync(SYNC_POLL_MS); });
+        expect(read).toHaveBeenCalledTimes(resumed + 1);
+    });
+
+    it('regression: a dirty queue that never sends is read with backoff, not every 2 s forever', async () => {
+        vi.useFakeTimers();
+        const read = vi.fn(async () => replica(5, false));
+        const source = sourceOf(read);
+        renderHook(() => useSyncStatus(source, 'a', 'g'));
+        await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+        const start = read.mock.calls.length;
+        await act(async () => { await vi.advanceTimersByTimeAsync(5 * 60_000); });
+        // 2+4+8+16+32 s, then once a minute: well under the 150 reads a fixed 2 s poll would make.
+        expect(read.mock.calls.length - start).toBeLessThanOrEqual(10);
+        expect(read.mock.calls.length - start).toBeGreaterThan(0);
+    });
+
+    it('pauses while the page is hidden and resumes when it is shown', async () => {
+        vi.useFakeTimers();
+        const read = vi.fn(async () => replica(3, true));
+        const source = sourceOf(read);
+        const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+        try {
+            renderHook(() => useSyncStatus(source, 'a', 'g'));
+            await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+            await act(async () => { await vi.advanceTimersByTimeAsync(SYNC_POLL_MS * 5); });
+            expect(read).toHaveBeenCalledTimes(1);
+            hidden.mockReturnValue(false);
+            await act(async () => { document.dispatchEvent(new Event('visibilitychange')); await vi.advanceTimersByTimeAsync(0); });
+            expect(read).toHaveBeenCalledTimes(2);
+        } finally {
+            hidden.mockRestore();
+        }
+    });
+});
+
+describe('syncPollDelay', () => {
+    it('doubles from SYNC_POLL_MS and caps at SYNC_POLL_MAX_MS', () => {
+        expect(syncPollDelay(0)).toBe(SYNC_POLL_MS);
+        expect(syncPollDelay(1)).toBe(SYNC_POLL_MS * 2);
+        expect(syncPollDelay(3)).toBe(SYNC_POLL_MS * 8);
+        expect(syncPollDelay(50)).toBe(SYNC_POLL_MAX_MS);
     });
 });

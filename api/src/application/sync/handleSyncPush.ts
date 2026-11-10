@@ -39,10 +39,11 @@
  * Receipts come back in INPUT order, one per event.
  */
 
-import { hashSyncPayload, isJournalEventId, type SyncReceipt } from '../../domain/sync/syncProtocol';
+import { hashSyncPayload, isJournalEventId, parseSyncId, type SyncReceipt } from '../../domain/sync/syncProtocol';
 import { reportedFallback } from '../observability/caughtErrorReporter';
 import { isUniqueViolation } from '../../infrastructure/database/uniqueViolation';
-import { serverNumericId, syncImporterFor } from './importers';
+import { syncImporterFor } from './importers';
+import { mappedServerKey, syncIdOf } from './syncIds';
 import {
   asSyncEvent,
   readPushBatch,
@@ -86,7 +87,7 @@ async function resolveReference(
 ): Promise<number | null> {
   const ref = reference.trim();
   if (ref === '') return null;
-  const id = serverNumericId(ref);
+  const id = parseSyncId(ref);
   if (id !== null) {
     const owned = entityType === 'project'
       ? await stores.references.projectInTenant(tenantId, id)
@@ -96,7 +97,7 @@ async function resolveReference(
   // Only a client UUID can be a mapped reference (the column is a uuid).
   if (!isJournalEventId(ref)) return null;
   const mapping = await tx.findMapping(tenantId, entityType, ref);
-  return mapping ? serverNumericId(mapping.serverId) : null;
+  return mapping ? mappedServerKey(mapping) : null;
 }
 
 /**
@@ -187,11 +188,11 @@ async function applyEvent(
     const outcome = await importer(asSyncEvent(event, bound.destination), importContext(tx, deps, batch, scope, bound, (effect) => { effects.push(effect); }), tx);
     if (outcome.status === 'applied') {
       await persistAccepted(tx, event, scope, outcome);
-      return receipt(event.eventId, 'accepted', receivedAt, outcome);
+      return receipt(event.eventId, 'accepted', receivedAt, { ...outcome, syncId: syncIdOf(event.entityType, outcome.serverId) });
     }
     if (outcome.status === 'conflict') {
       await persistConflict(tx, event, scope, outcome);
-      return receipt(event.eventId, 'conflict', receivedAt, outcome);
+      return receipt(event.eventId, 'conflict', receivedAt, { ...outcome, syncId: syncIdOf(event.entityType, outcome.serverId) });
     }
     // A parent the importer could not resolve yet: held, nothing written (step c's twin).
     if (outcome.status === 'pending') return receipt(event.eventId, 'dependency_pending', receivedAt, { detail: outcome.detail });

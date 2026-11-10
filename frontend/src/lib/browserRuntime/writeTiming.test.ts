@@ -108,6 +108,23 @@ describe('timeWrite', () => {
     await expect(timeWrite('perFile', { fileCount: 1, totalBytes: 1 }, () => Promise.reject(new Error('boom')))).rejects.toThrow('boom');
     expect(console.warn).toHaveBeenCalledOnce();
   });
+
+  it('regression: a lazy size is never computed for a write that is not reported', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.9);
+    const measure = vi.fn(() => ({ fileCount: 2, totalBytes: 9 }));
+    takes(5);
+    timeWrite('writeTree', measure, () => undefined);
+    expect(measure).not.toHaveBeenCalled();
+  });
+
+  it('computes a lazy size once for a reported write and reports it', () => {
+    const measure = vi.fn(() => ({ fileCount: 2, totalBytes: 9 }));
+    takes(SLOW_WRITE_MS + 1);
+    timeWrite('writeTree', measure, () => undefined);
+    expect(measure).toHaveBeenCalledOnce();
+    flushWriteReports();
+    expect(JSON.parse(sent[0]![0]!.description as string)).toMatchObject({ fileCount: 2, totalBytes: 9 });
+  });
 });
 
 describe('buffer', () => {
@@ -164,6 +181,12 @@ describe('createApiReporter', () => {
     expect(JSON.parse(opts.body)).toHaveLength(2);
     expect(opts.expectedErrors).toContain(0);
     expect(opts.expectedErrors).toContain(401);
+  });
+
+  it('regression: sends with keepalive so the pagehide flush survives unload', () => {
+    createApiReporter()([{ kind: WRITE_SPAN_KIND }]);
+    const [, opts] = apiRequest.mock.calls[0] as [string, { keepalive?: boolean }];
+    expect(opts.keepalive).toBe(true);
   });
 
   it('sends nothing when signed out', () => {

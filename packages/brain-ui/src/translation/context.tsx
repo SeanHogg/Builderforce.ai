@@ -9,9 +9,10 @@
  *
  * Without a provider every `<TranslatableText>` renders its text as-is.
  */
-import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react';
 import type { OnDeviceTasks } from '@seanhogg/builderforce-brain-embedded';
-import { defaultTranslationCache, type TranslationCache } from './translationCache';
+import { defaultTranslationCache, retirableTranslationCache, type TranslationCache } from './translationCache';
+import { clearRecentOutcomes } from './recentOutcomes';
 import { DEFAULT_TRANSLATION_LABELS, type TranslationLabels } from './labels';
 
 export type CloudTranslate = (texts: string[], to: string, from?: string) => Promise<string[]>;
@@ -47,20 +48,30 @@ export interface TranslationProviderProps {
 
 export function TranslationProvider({ tasks, cloud, locale, cache, labels, openModelPicker, identity, children }: TranslationProviderProps) {
   const resolvedCache = cache === undefined ? defaultTranslationCache() : cache;
+  // One write-scoped view per identity: a new identity gets a fresh view (so every consumer's
+  // effect re-runs and aborts its in-flight work) and the old view is retired, so a stale
+  // translation can never be written into the cache cleared below.
+  const scopedCache = useMemo(() => (resolvedCache ? retirableTranslationCache(resolvedCache) : null), [resolvedCache, identity]);
   const lastIdentity = useRef(identity);
-  useEffect(() => {
+  const lastScoped = useRef(scopedCache);
+  useLayoutEffect(() => {
+    if (lastScoped.current !== scopedCache) lastScoped.current?.retire();
+    lastScoped.current = scopedCache;
     if (identity === undefined) return;
-    if (lastIdentity.current !== identity && lastIdentity.current) void resolvedCache?.clear().catch(() => undefined);
+    if (lastIdentity.current !== identity && lastIdentity.current) {
+      clearRecentOutcomes();
+      void resolvedCache?.clear().catch(() => undefined);
+    }
     lastIdentity.current = identity;
-  }, [identity, resolvedCache]);
+  }, [identity, resolvedCache, scopedCache]);
   const value = useMemo<TranslationContextValue>(() => ({
     tasks,
     cloud,
     locale,
-    cache: resolvedCache,
+    cache: scopedCache,
     labels: { ...DEFAULT_TRANSLATION_LABELS, ...labels },
     ...(openModelPicker ? { openModelPicker } : {}),
-  }), [tasks, cloud, locale, resolvedCache, labels, openModelPicker]);
+  }), [tasks, cloud, locale, scopedCache, labels, openModelPicker]);
   return <TranslationContext.Provider value={value}>{children}</TranslationContext.Provider>;
 }
 

@@ -19,6 +19,8 @@
  * SERVER vocabulary, which is what every surface used before the editor filed locally.
  */
 
+import { parseEntityRef, parseSyncId, syncIdText, type EntityRef, type SyncId } from '@builderforce/local-first';
+
 export const SERVER_TICKET_CREATE_TOOL = 'builtin_tasks_create';
 export const SERVER_TICKET_LINK_TOOL = 'builtin_chats_link_ticket';
 export const LOCAL_TICKET_CREATE_TOOL = 'ticket-create';
@@ -73,12 +75,12 @@ const SERVER_TICKET_MOVE_TOOL = 'builtin_tasks_update';
 const LOCAL_TICKET_MOVE_TOOL = 'ticket-move';
 
 /**
- * THE parse of an account ticket id: a positive integer, or its decimal text (a relay may answer
- * with JSON text, so an id can arrive as `"41"`). Null for anything else — nothing can address it.
+ * An account ticket id handed in as an ARGUMENT (a number or its decimal text, surrounding
+ * whitespace allowed): `parseSyncId` of it. Not a tool-result reader — results are read by
+ * `entityIdsOf` (toolResultRecord.ts). No production caller; kept for its contract test.
  */
-export function serverTicketId(raw: unknown): number | null {
-  const id = typeof raw === 'number' ? raw : typeof raw === 'string' && /^\d+$/.test(raw.trim()) ? Number(raw.trim()) : NaN;
-  return Number.isInteger(id) && id > 0 ? id : null;
+export function serverTicketId(raw: unknown): SyncId | null {
+  return parseSyncId(typeof raw === 'string' ? raw.trim() : raw);
 }
 
 /** The call that moves one ticket to a status. */
@@ -88,15 +90,25 @@ export interface TicketStatusMove {
 }
 
 /**
- * The tool and arguments that move ticket `ref` to `status`, by the vocabulary that filed it
- * (`ticket-move` takes a local id and a synced numeric one alike). Null for a server ref that is
- * not an account id — nothing can move it.
+ * The tool and arguments that move ticket `ref` to `status`, chosen from the {@link EntityRef}
+ * (docs/design/typed-entity-ids.md §6.4), never from a string's shape beyond `parseEntityRef`:
+ *
+ * - a LocalId → `ticket-move` (only the editor's tool can address a ticket that has not synced);
+ * - a SyncId → the filing vocabulary's tool: `ticket-move` in the editor (it takes a synced id
+ *   too), `builtin_tasks_update` on the account;
+ * - a planning-tier ref → null (its status does not live on the tasks table);
+ * - text that is no EntityRef → `ticket-move` in the editor (its tool resolves its own
+ *   references), null on the account — nothing there can address it.
  */
-export function ticketStatusMove(ref: number | string, status: string, vocabulary: TicketToolVocabulary): TicketStatusMove | null {
-  if (vocabulary.local) {
-    const id = String(ref).trim();
-    return id ? { tool: LOCAL_TICKET_MOVE_TOOL, args: { id, status } } : null;
+export function ticketStatusMove(ref: EntityRef | number | string, status: string, vocabulary: TicketToolVocabulary): TicketStatusMove | null {
+  const text = typeof ref === 'string' ? ref.trim() : null;
+  const parsed = parseEntityRef(text ?? ref);
+  if (parsed && 'local' in parsed) return { tool: LOCAL_TICKET_MOVE_TOOL, args: { id: parsed.local, status } };
+  if (parsed && 'sync' in parsed) {
+    return vocabulary.local
+      ? { tool: LOCAL_TICKET_MOVE_TOOL, args: { id: syncIdText(parsed.sync), status } }
+      : { tool: SERVER_TICKET_MOVE_TOOL, args: { id: parsed.sync, status } };
   }
-  const id = serverTicketId(ref);
-  return id != null ? { tool: SERVER_TICKET_MOVE_TOOL, args: { id, status } } : null;
+  if (parsed) return null;
+  return vocabulary.local && text ? { tool: LOCAL_TICKET_MOVE_TOOL, args: { id: text, status } } : null;
 }

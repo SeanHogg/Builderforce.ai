@@ -24,6 +24,7 @@ import { createCanvasTool } from "./tools/canvas-tool.js";
 import type { AnyAgentTool } from "./tools/common.js";
 import { createCronTool } from "./tools/cron-tool.js";
 import { createGatewayTool } from "./tools/gateway-tool.js";
+import { createGovernanceAuditTool } from "./tools/governance-audit-tool.js";
 import { createImageTool } from "./tools/image-tool.js";
 import { createMessageTool } from "./tools/message-tool.js";
 import { createNodesTool } from "./tools/nodes-tool.js";
@@ -120,6 +121,8 @@ export function createBuilderForceAgentsTools(options?: BuilderForceAgentsToolsO
     config: options?.config,
     sandboxed: options?.sandboxed,
   });
+  // PRD 08 §4.2 — null (omitted) unless the runtime holds a BUILDERFORCE_API_KEY.
+  const governanceAuditTool = createGovernanceAuditTool({ workspaceDir });
   const messageTool = options?.disableMessageTool
     ? null
     : createMessageTool({
@@ -231,6 +234,7 @@ export function createBuilderForceAgentsTools(options?: BuilderForceAgentsToolsO
     }),
     workflowStatusTool,
     gitHistoryTool,
+    ...(governanceAuditTool ? [governanceAuditTool] : []),
   ];
 
   const pluginTools = resolvePluginTools({

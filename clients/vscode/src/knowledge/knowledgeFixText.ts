@@ -39,6 +39,8 @@ export const fixText = {
   saveFirst: (files: string): string => t("Save or close the editors with unsaved changes first: {0}.", files),
   notUndoneCleanly: (why: string): string => t("The fix could not be undone cleanly: {0} Check the work tree with git status.", why),
   statusUnreadableAfter: (): string => t("Git status could not be read after the fix."),
+  headUnreadable: (): string => t("The current commit could not be read."),
+  notRecorded: (why: string): string => t("The fix could not be recorded for undo, so it was reverted and you are back on your branch: {0}", why),
   gitFailed: (command: string, why: string): string => t("git {0} failed{1}", command, why),
   fixNote: (): string => t("knip removes every unused export in each of these files, not only the one the finding names."),
 } as const;

@@ -45,11 +45,14 @@ import {
   type LocalDomainToolName,
   type LocalEntityType,
   type LocalFirstStore,
+  type LocalId,
   type LocalRecord,
   type ProjectValue,
+  type SyncId,
   type TicketTaskType,
   type TicketValue,
 } from "@builderforce/local-first";
+import { namesServerOnlyRecord, resolveLocalReference, writtenEntityIds } from "./localEntityRefs";
 import { createLocalWorkRepository, type LocalWorkRepositoryOptions } from "./localWorkRepository";
 import { DEFAULT_TICKET_STATUS, LOCAL_TICKET_STATUSES } from "./localWorkShared";
 
@@ -178,8 +181,12 @@ export interface LocalDomainToolResult {
   record?: LocalRecord;
   /** The journal event this write produced and queued for sync. Absent when a tombstone of a never-imported row left nothing to send. */
   syncEvent?: QueuedLocalSyncEvent;
-  /** The account's numeric id for this record, once a sync receipt mapped it (normally absent at creation). */
+  /** LEGACY (one release): `syncId` as text, once a sync receipt mapped it (normally absent at creation). */
   serverId?: string;
+  /** `ticket-create` / `project-create`: the record's LocalId (the same value as `id`). */
+  localId?: LocalId;
+  /** `ticket-create` / `project-create`: the account's SyncId, once a sync receipt mapped it (normally absent at creation). */
+  syncId?: SyncId;
   /** What the id is and when builtin_* tools accept it. */
   note?: string;
 }
@@ -253,41 +260,15 @@ function taskTypeOf(args: Readonly<Record<string, unknown>>): { taskType?: Ticke
 
 type LocalWrite = { entityType: "project" | "ticket"; id: string; record?: LocalRecord };
 
-const SERVER_ID_NUMERIC = /^\d+$/;
-
-/**
- * The panel's selected project (and any ticket the model read from the platform) is
- * surfaced as a NUMERIC server id (see `activeProjectDirective`), but the local store
- * keys records by client UUID. A numeric id resolves to the live client UUID of its
- * mirror when this device has one (the server-id mapping row). With no mirror it passes
- * through VERBATIM: the repository treats a decimal id as a server reference (not looked
- * up locally) and the sync importer resolves it as the tenant's own. An exact local id
- * always wins. Nothing here guesses — a UUID is validated by the repository.
- */
-async function resolveLocalReference(
-  store: LocalFirstStore,
-  entityType: "project" | "ticket",
-  reference: string,
-): Promise<string> {
-  const raw = typeof reference === "string" ? reference.trim() : "";
-  if (!SERVER_ID_NUMERIC.test(raw)) return reference;
-  const mapped = await store.read((tx) => tx.mappingByServerId(entityType, raw));
-  if (mapped) {
-    const target = await store.read((tx) => tx.get(entityType, mapped.clientEntityId));
-    if (target && !target.deletedAt) return mapped.clientEntityId;
-  }
-  return raw;
-}
-
 /**
  * The local id a `ticket-*` write targets. A numeric id is mapped to its local mirror by
- * the same rule as `resolveLocalReference`; with no mirror the ticket exists only on the
+ * `resolveLocalReference` (`localEntityRefs.ts`); with no mirror the ticket exists only on the
  * account, which these tools cannot edit — the model is told the tool that can.
  */
 async function localTicketId(store: LocalFirstStore, args: Readonly<Record<string, unknown>>): Promise<string> {
   const given = requireString(args, "id");
   const id = await resolveLocalReference(store, "ticket", given);
-  if (SERVER_ID_NUMERIC.test(id.trim())) {
+  if (namesServerOnlyRecord(id)) {
     fail(
       "server_only_ticket",
       `Ticket ${given} exists only on the account (no local copy on this device). Use builtin_tasks_update for it; ticket-* tools edit tickets created on this device.`,
@@ -434,13 +415,6 @@ async function queuedEventFor(
 
 // ── The factory ──────────────────────────────────────────────────────────────
 
-/** The account id a sync receipt gave a record, when it has one yet. */
-async function serverIdOf(store: LocalFirstStore, record: LocalRecord | undefined): Promise<string | undefined> {
-  if (!record) return undefined;
-  const mapping = await store.read((tx) => tx.mapping(record.entityType, record.id, record.destination));
-  return mapping?.serverId;
-}
-
 const CREATE_NOTE =
   "This is a LOCAL id (a UUID): use it with the ticket-* / project-* tools and as parentTicketId. It syncs to the account in the background; builtin_* tools accept it once synced.";
 
@@ -466,7 +440,8 @@ export function createLocalDomainTools(options: LocalDomainToolsOptions) {
     const write = await writeLocally(name, options.repository, options.store, args);
     const syncEvent = await queuedEventFor(options.store, write.entityType, write.id, write.record === undefined);
     if (syncEvent) options.syncQueue.enqueue([syncEvent]);
-    const serverId = await serverIdOf(options.store, write.record);
+    const { localId, syncId, serverId } = await writtenEntityIds(options.store, write.record);
+    const creates = name === "ticket-create" || name === "project-create";
     return Object.freeze({
       kind: "local",
       tool: name,
@@ -475,7 +450,9 @@ export function createLocalDomainTools(options: LocalDomainToolsOptions) {
       ...(write.record ? { record: write.record } : {}),
       ...(syncEvent ? { syncEvent } : { note: "nothing to sync — never left this device" }),
       ...(serverId ? { serverId } : {}),
-      ...(name === "ticket-create" || name === "project-create" ? { note: CREATE_NOTE } : {}),
+      ...(creates && localId ? { localId } : {}),
+      ...(creates && syncId !== undefined ? { syncId } : {}),
+      ...(creates ? { note: CREATE_NOTE } : {}),
     } as LocalDomainToolResult);
   }
 

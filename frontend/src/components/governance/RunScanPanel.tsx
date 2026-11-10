@@ -25,6 +25,12 @@ export interface RunScanPanelProps {
 
 const GOVERNANCE_WRITE_CAP = 'policies.manage' as const;
 
+/** A scan status is a server enum; one this client does not know is worded "Unknown", never a raw key. */
+const KNOWN_SCAN_STATUSES: ReadonlySet<string> = new Set<BranchScanResult['scans'][number]['status']>(['completed', 'skipped', 'failed']);
+export function scanStatusKey(status: unknown): string {
+  return typeof status === 'string' && KNOWN_SCAN_STATUSES.has(status) ? `status.${status}` : 'statusUnknown';
+}
+
 export function RunScanPanel({ open, onClose, onDone }: RunScanPanelProps) {
   const t = useTranslations('governance.runScan');
   const [repos, setRepos] = useState<ScannableRepo[] | null>(null);
@@ -109,7 +115,7 @@ export function RunScanPanel({ open, onClose, onDone }: RunScanPanelProps) {
                   {result.scans.map((s) => (
                     <tr key={s.scanId}>
                       <td style={td}>{s.scanType}</td>
-                      <td style={td}>{t(`status.${s.status}`)}</td>
+                      <td style={td}>{t(scanStatusKey(s.status))}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -136,14 +142,24 @@ function AcceptRiskSection({ open }: { open: boolean }) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [gate, setGate] = useState<PrGateState | null>(null);
+  // The gate is held WITH the PR it was read for, so it is shown - and accepted - only for that PR.
+  const [loadedGate, setLoadedGate] = useState<{ prId: string; state: PrGateState } | null>(null);
+  const gate = loadedGate && loadedGate.prId === prId ? loadedGate.state : null;
 
   // What the manager is shown for the chosen PR: its head commit and why the gate holds it. The commit
-  // shown is the commit sent back as `expectedHeadSha`.
+  // shown is the commit sent back as `expectedHeadSha`. An answer for a PR no longer selected (a quick
+  // A -> B switch where A answers last) is dropped.
   useEffect(() => {
-    setGate(null);
     if (!open || !prId) return;
-    getPrGate(prId).then(setGate).catch(() => setError(t('loadPrsError')));
+    // A message about the previous PR (its gate failed to load, its risk was accepted) is not about this one.
+    setError(null);
+    setNotice(null);
+    let current = true;
+    getPrGate(prId).then(
+      (state) => { if (current) setLoadedGate({ prId, state }); },
+      () => { if (current) setError(t('loadGateError')); },
+    );
+    return () => { current = false; };
   }, [open, prId, t]);
 
   useEffect(() => {
@@ -154,12 +170,14 @@ function AcceptRiskSection({ open }: { open: boolean }) {
   }, [open, t]);
 
   const accept = async () => {
+    // The PR and the commit come from the SAME gate read: never one PR's SHA sent for another.
+    if (!loadedGate || loadedGate.prId !== prId || !loadedGate.state.headSha) return;
+    const { prId: gatePrId, state: { headSha } } = loadedGate;
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
-      if (!gate?.headSha) return;
-      const out = await acceptPrRisk(prId, reason, gate.headSha);
+      const out = await acceptPrRisk(gatePrId, reason, headSha);
       setNotice(t(out.alreadyAccepted ? 'acceptedAlready' : 'accepted', { sha: out.headSha.slice(0, 12) }));
       setReason('');
     } catch (e) {

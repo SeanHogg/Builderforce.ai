@@ -10,6 +10,11 @@
  *   GET    /v1/webhooks          (scope webhooks:manage)  — list subscriptions
  *   POST   /v1/webhooks          (scope webhooks:manage)  — subscribe to events
  *   DELETE /v1/webhooks/:id      (scope webhooks:manage)  — unsubscribe
+ *   POST/PUT/DELETE /v1/admin/segments[/:id] (scope segments:manage)
+ *
+ * A host OIDC token (X-IdP-Token) is segment-bound: on the admin/segments routes
+ * it may act only on its own resolved segment (authorizeSegmentTarget → 403);
+ * a bfk_* key keeps tenant-wide segment management.
  */
 
 import { Hono } from 'hono';
@@ -26,6 +31,7 @@ import {
 } from '../../application/publicApi/publicWebhookSubscriptionService';
 import { parseOptionalBody, z } from './requestBody';
 import {
+  authorizeSegmentTarget,
   eraseSegment,
   findSegmentByExternalIds,
   isSegmentStatus,
@@ -185,6 +191,10 @@ export function createSeamRoutes(db: Db): Hono<HonoEnv> {
     // Eager provisioning is idempotent on the (tenant, account, company) unique
     // key — a host that re-POSTs on every company-enable converges to one row.
     const existing = await findSegmentByExternalIds(db, svc.tenantId, accountId, companyId);
+    // A segment-bound (host OIDC) caller may only "provision" its own, already
+    // resolved segment — never create or read another end-client's.
+    const target = authorizeSegmentTarget(svc, existing?.id ?? null);
+    if (!target.ok) return c.json({ error: target.error }, target.status);
     if (existing) return c.json(existing, 200);
 
     const seg = await provisionSegment(db, svc.tenantId, {
@@ -225,6 +235,9 @@ export function createSeamRoutes(db: Db): Hono<HonoEnv> {
     if (body.displayName?.trim()) patch.displayName = body.displayName.trim();
     if (Object.keys(patch).length === 0) return c.json({ error: 'nothing to update' }, 400);
 
+    const target = authorizeSegmentTarget(svc, c.req.param('id'));
+    if (!target.ok) return c.json({ error: target.error }, target.status);
+
     const updated = await updateSegment(db, c.env, svc.tenantId, c.req.param('id'), patch);
     if (!updated) return c.json({ error: 'segment not found, not yours, or is the default segment' }, 404);
     return c.json(updated);
@@ -242,6 +255,9 @@ export function createSeamRoutes(db: Db): Hono<HonoEnv> {
     } catch (err) {
       return respondToAccessError(c, err);
     }
+
+    const target = authorizeSegmentTarget(svc, c.req.param('id'));
+    if (!target.ok) return c.json({ error: target.error }, target.status);
 
     const erased = await eraseSegment(db, c.env, svc.tenantId, c.req.param('id'));
     if (!erased) return c.json({ error: 'segment not found, not yours, or is the default segment' }, 404);

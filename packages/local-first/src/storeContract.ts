@@ -15,9 +15,11 @@ import type {
   LocalEntityType,
   LocalRecord,
   ServerMapping,
+  ServerMappingInput,
   SyncConflict,
   SyncReceipt,
 } from './records.js';
+import { isLocalId } from './entityId.js';
 import type { LocalFirstChange } from './localFirstDelta.js';
 
 export interface LocalFirstTransaction {
@@ -71,16 +73,25 @@ export interface LocalFirstTransaction {
    * held and the instant before which it must not be re-sent (backoff). A no-op for an unknown id.
    */
   hold(eventId: string, hold: { holdKind?: string; holdAttempts: number; heldSince: string; nextAttemptAt: string }): Promise<void>;
-  putMapping(mapping: ServerMapping): Promise<void>;
+  /**
+   * Write a mapping. The row goes through `normalizeServerMapping`, so it carries BOTH
+   * `syncId` and `serverId` text (an older window sharing the journal reads `serverId`).
+   */
+  putMapping(mapping: ServerMappingInput): Promise<void>;
   mapping(entityType: LocalEntityType, clientEntityId: string, destination: EntityDestination): Promise<ServerMapping | undefined>;
   /**
-   * The reverse of `mapping`: the row whose `serverId` is `serverId` for
-   * `entityType`, regardless of destination. Mappings are keyed by client id,
-   * so this scans the type's rows — bounded by the entity count, not the whole
-   * store. What hands a caller a numeric server id (a prompt directive, a
-   * platform receipt) resolves it back to the live client id through this.
+   * The reverse of `mapping`: the EARLIEST row (insertion order) of `entityType` whose server
+   * key is `serverId` — a SyncId (number or decimal text) matches `syncId`; any other text
+   * matches the legacy `serverId` text (a mirror row's UUID) or, for `kind:ref`, `externalRef`.
+   * `destination` given ⇒ only that destination's rows; omitted ⇒ any destination. Scans the
+   * mapping rows — bounded by the entity count.
    */
-  mappingByServerId(entityType: LocalEntityType, serverId: string): Promise<ServerMapping | undefined>;
+  mappingByServerId(entityType: LocalEntityType, serverId: string | number, destination?: EntityDestination): Promise<ServerMapping | undefined>;
+  /**
+   * The EARLIEST row of `entityType` whose `externalRef` is `externalRef` (a tier ticket's
+   * `kind:ref`). `destination` omitted ⇒ any destination.
+   */
+  mappingByExternalRef(entityType: LocalEntityType, externalRef: string, destination?: EntityDestination): Promise<ServerMapping | undefined>;
   putReceipt(receipt: SyncReceipt): Promise<void>;
   putConflict(conflict: SyncConflict): Promise<void>;
   conflicts(): Promise<SyncConflict[]>;
@@ -115,11 +126,8 @@ export type AppendJournalEvent<T = unknown> =
     payloadHash?: string;
   };
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export function isJournalEventId(value: unknown): value is string {
-  return typeof value === 'string' && UUID.test(value);
-}
+/** A wire event id is a LocalId-shaped UUID (case-insensitive): an alias of `isLocalId`. */
+export const isJournalEventId: (value: unknown) => value is string = isLocalId;
 
 /**
  * The early-exit sentinel a scan visitor returns to STOP the scan at that row.

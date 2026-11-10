@@ -3,7 +3,7 @@ import { createMemoryLocalFirstStore } from "@builderforce/local-first";
 import type { ToolDef } from "./fileTools";
 import { installLocalDomainTools } from "./installLocalDomainTools";
 import { routeToLocalDomainTools } from "./localDomainToolRouting";
-import { SERVER_TICKET_ID_ARGS, bridgeLocalTicketIds, ticketServerIdLookup } from "./localTicketIdBridge";
+import { SERVER_TICKET_ID_ARGS, bridgeLocalTicketIds, ticketIdArgsOf, ticketServerIdLookup } from "./localTicketIdBridge";
 
 const LOCAL = "00000000-0000-4000-8000-0000000000aa";
 
@@ -151,5 +151,70 @@ describe("routeToLocalDomainTools — only implemented names are repointed", () 
     const memoryRecall = serverTool("memory-recall", async () => "server");
     const routed = routeToLocalDomainTools([memoryRecall], async () => ({}));
     expect(routed.find((tool) => tool.name === "memory-recall")).toBe(memoryRecall);
+  });
+});
+
+describe("ticketIdArgsOf — derived from the catalog's schema, not a hand-kept list", () => {
+  it("regression: a new account tool with a numeric taskId (absent from the old map) is translated", async () => {
+    const seen = vi.fn(async () => "ok");
+    const fresh: ToolDef = {
+      name: "builtin_brand_new_tool",
+      description: "",
+      parameters: { type: "object", properties: { taskId: { type: "integer" }, sourceTicketId: { type: ["number", "null"] }, chatId: { type: "number" } } },
+      mutating: true,
+      remote: true,
+      execute: seen,
+    };
+    expect(ticketIdArgsOf(fresh)).toEqual(["taskId", "sourceTicketId"]);
+    const [tool] = bridgeLocalTicketIds([fresh], async (id) => (id === LOCAL ? "42" : undefined));
+    await tool!.execute({ taskId: LOCAL, chatId: 3 }, "");
+    expect(seen).toHaveBeenCalledWith({ taskId: 42, chatId: 3 }, "", undefined);
+  });
+
+  it("leaves a local tool's ids alone, and a string-typed id is not a server ticket id", () => {
+    const base = { description: "", mutating: false, execute: async () => "" };
+    expect(ticketIdArgsOf({ ...base, name: "ticket-update", remote: false, parameters: { properties: { taskId: { type: "number" } } } })).toEqual([]);
+    expect(ticketIdArgsOf({ ...base, name: "builtin_x", remote: true, parameters: { properties: { taskId: { type: "string" } } } })).toEqual([]);
+  });
+
+  it("keeps the bare `id` of the tasks tools (not derivable by name)", () => {
+    expect(ticketIdArgsOf({ name: "builtin_tasks_update", remote: true, parameters: {} })).toEqual(["id", "parentTaskId"]);
+  });
+});
+
+describe("ticketServerIdLookup — the entity id resolver, never a guess", () => {
+  it("regression: an unmapped LocalId answers 'not synced yet' through the real store, and never reaches the server", async () => {
+    const store = createMemoryLocalFirstStore();
+    const installed = installLocalDomainTools({ id: `bridge-${Math.random()}` }, { localDeviceId: "d", localFirstStore: store });
+    const project = await installed.execute("project-create", { name: "P" });
+    const ticket = await installed.execute("ticket-create", { projectId: project.id, title: "T" });
+    const seen = vi.fn(async () => "ok");
+    const [tool] = bridgeLocalTicketIds([serverTool("builtin_kanban_coordinate", seen)], ticketServerIdLookup(store));
+    const out = JSON.parse(await tool!.execute({ taskId: ticket.id }, "")) as { ok: boolean; error: string };
+    expect(out.ok).toBe(false);
+    expect(out.error).toContain("has not synced to the account yet");
+    expect(seen).not.toHaveBeenCalled();
+  });
+
+  it("regression: a mapping with no SyncId (a tier ref) is 'not synced', never Number()-ed into NaN", async () => {
+    const store = createMemoryLocalFirstStore();
+    const installed = installLocalDomainTools({ id: `bridge-${Math.random()}` }, { localDeviceId: "d", localFirstStore: store });
+    const project = await installed.execute("project-create", { name: "P" });
+    const ticket = await installed.execute("ticket-create", { projectId: project.id, title: "T" });
+    await store.transact(async (tx) => {
+      await tx.putMapping({ destination: ticket.record!.destination, entityType: "ticket", clientEntityId: ticket.id, serverId: "spec:5", serverVersion: 1 });
+    });
+    expect(await ticketServerIdLookup(store)(ticket.id)).toBeUndefined();
+    const seen = vi.fn(async () => "ok");
+    const [tool] = bridgeLocalTicketIds([serverTool("builtin_tasks_update", seen)], ticketServerIdLookup(store));
+    expect(JSON.parse(await tool!.execute({ id: ticket.id }, "")).ok).toBe(false);
+    expect(seen).not.toHaveBeenCalled();
+  });
+
+  it("a lookup answering non-SyncId text is treated as unsynced", async () => {
+    const seen = vi.fn(async () => "ok");
+    const [tool] = bridgeLocalTicketIds([serverTool("builtin_tasks_update", seen)], async () => "not-a-number");
+    expect(JSON.parse(await tool!.execute({ id: LOCAL }, "")).ok).toBe(false);
+    expect(seen).not.toHaveBeenCalled();
   });
 });

@@ -24,6 +24,10 @@ describe("agent-roles", () => {
     expect(role).toBe(CODE_CREATOR_ROLE);
   });
 
+  it("gives the governance-auditor role the governance_audit tool (PRD 08 §4.2)", () => {
+    expect(findAgentRole("governance-auditor")?.tools).toContain("governance_audit");
+  });
+
   it("returns null for unknown role when no custom roles registered", () => {
     const role = findAgentRole("unknown-role");
     expect(role).toBeNull();

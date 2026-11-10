@@ -1,3 +1,5 @@
+import { parseEntityRef, parseSyncId, syncIdText, tierRefText, type SyncId } from './entityId.js';
+
 export type ClientEntityId = string;
 
 export type LocalEntityType =
@@ -110,12 +112,69 @@ export interface JournalEvent<T = unknown> {
   nextAttemptAt?: string;
 }
 
+/**
+ * One entity's server mapping in one destination (typed-entity-ids §4). It exists for every
+ * entity the server imported; `syncId` is null when the server row has no integer key (mirror
+ * records, usage, tier tickets). Never guess a SyncId from an id's shape — read `syncId`.
+ */
 export interface ServerMapping {
   destination: EntityDestination;
   entityType: LocalEntityType;
   clientEntityId: ClientEntityId;
-  serverId: string;
+  syncId: SyncId | null;
   serverVersion: number;
+  /** A planning tier's `kind:ref` (portfolio, objective, initiative, roadmap, spec). */
+  externalRef?: string;
+  /**
+   * LEGACY text form, written beside `syncId` for one release so an older extension window that
+   * shares the journal still reads the row. Also carries a non-integer server key (a mirror
+   * record's UUID). New code reads `syncId`.
+   */
+  serverId?: string;
+}
+
+/** What `putMapping` takes: `syncId` may be left out (derived from `serverId`, like a stored legacy row). */
+export type ServerMappingInput = Omit<ServerMapping, 'syncId'> & { syncId?: SyncId | number | string | null };
+
+/**
+ * THE tolerant reader of a mapping row — stored (journal / snapshot / IndexedDB), arriving in a
+ * delta, or handed to `putMapping`. No row is ever dropped and nothing is upgraded on disk:
+ * - `syncId = parseSyncId(raw.syncId) ?? parseSyncId(raw.serverId) ?? null`; an EXPLICIT
+ *   `syncId: null` is kept (a step mapping's server id is not a message id, design §1);
+ * - a `kind:ref` `serverId` is copied to `externalRef` (the legacy text stays for older readers);
+ * - `serverId` text is filled from `syncId` when absent, so writes carry BOTH fields.
+ * Returns the row itself when it is already normal.
+ */
+export function normalizeServerMapping(raw: ServerMappingInput | ServerMapping): ServerMapping {
+  const loose = raw as ServerMappingInput & { serverId?: unknown; externalRef?: unknown };
+  const serverIdText = typeof loose.serverId === 'number' ? String(loose.serverId) : loose.serverId;
+  const syncId = loose.syncId === null
+    ? null
+    : parseSyncId(loose.syncId) ?? parseSyncId(serverIdText) ?? null;
+  let externalRef = typeof loose.externalRef === 'string' && loose.externalRef !== '' ? loose.externalRef : undefined;
+  if (externalRef === undefined && typeof serverIdText === 'string') {
+    const ref = parseEntityRef(serverIdText);
+    if (ref && 'tier' in ref) externalRef = tierRefText(ref.tier);
+  }
+  const serverId = typeof serverIdText === 'string' && serverIdText !== ''
+    ? serverIdText
+    : syncId !== null ? syncIdText(syncId) : undefined;
+  if (
+    raw.syncId === syncId
+    && loose.serverId === serverId
+    && (loose.externalRef === externalRef || (externalRef === undefined && !('externalRef' in raw)))
+  ) {
+    return raw as ServerMapping;
+  }
+  return {
+    destination: raw.destination,
+    entityType: raw.entityType,
+    clientEntityId: raw.clientEntityId,
+    serverVersion: raw.serverVersion,
+    syncId,
+    ...(externalRef !== undefined ? { externalRef } : {}),
+    ...(serverId !== undefined ? { serverId } : {}),
+  };
 }
 
 export interface SyncReceipt {
@@ -130,6 +189,9 @@ export interface SyncReceipt {
   clientEntityId?: ClientEntityId;
   status: 'accepted' | 'duplicate' | 'conflict' | 'rejected' | 'dependency_pending';
   receivedAt: string;
+  /** The server's integer key for the entity, when it has one. */
+  syncId?: number;
+  /** The server's key as text (legacy, and the only key of a mirror/usage row: a UUID). */
   serverId?: string;
   serverVersion?: number;
   detail?: string;

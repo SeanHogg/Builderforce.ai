@@ -42,11 +42,11 @@ import type {
   CardValidationSessionResult,
   WebhookEvent,
 } from './PaymentProvider';
-import { PaymentNotConfiguredError, WebhookUpstreamError } from './PaymentProvider';
+import { PaymentNotConfiguredError } from './PaymentProvider';
 import { checkoutSessionParams, type CheckoutLineItem, type HostedCheckoutDescriptor } from './stripeCheckoutSession';
+import { stripePurchaseReversal } from './stripePurchaseReversal';
+import { verifyStripeSignature } from './stripeWebhookSignature';
 import { TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
-import { timingSafeEqual } from '../crypto/constantTime';
-import { hmacHex } from '../crypto/hmac';
 
 /** Stripe line quantity. Integer 1–99; anything else is 1. */
 function billingQuantity(raw: unknown): number {
@@ -929,59 +929,14 @@ export class StripeProvider implements PaymentProvider {
         };
       }
 
-      /**
-       * Money went back to the buyer of a pay-once purchase: a FULL refund, or a dispute
-       * that was LOST. The charge and dispute carry no session, so the purchase's signed
-       * metadata (mirrored onto the payment intent at checkout) is read back from the
-       * intent. A charge that is not ours (no `purchaseKind`) is acknowledged and ignored.
-       *
-       * Disputes reverse on exactly ONE event, `charge.dispute.closed` with status `lost`:
-       * `created` only opens a dispute the merchant may still win (so reversing there would
-       * have to be un-done), and `funds_withdrawn` also fires for disputes later won back
-       * (`funds_reinstated`). A won dispute therefore needs no restore at all.
-       */
+      // A FULL refund or a LOST dispute of a pay-once purchase — see stripePurchaseReversal.ts.
       case 'charge.refunded':
-      case 'charge.dispute.closed': {
-        if (event.type === 'charge.refunded' && obj['refunded'] !== true) return null; // partial refund
-        if (event.type === 'charge.dispute.closed' && obj['status'] !== 'lost') return null;
-        const intentId = obj['payment_intent'];
-        if (typeof intentId !== 'string' || !intentId) return null;
-        const meta = await this.fetchPaymentIntentMetadata(intentId);
-        const kind = meta?.['purchaseKind'];
-        if (!meta || !kind) return null;
-        const rawTenantId = Number(meta['buyerTenantId'] ?? meta['tenantId']);
-        return {
-          type: 'purchase.reversed',
-          purchaseKind: kind,
-          metadata: meta,
-          ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}),
-          externalCustomerId: typeof obj['customer'] === 'string' ? obj['customer'] : '',
-          externalSubscriptionId: '',
-          raw: event,
-        };
-      }
+      case 'charge.dispute.closed':
+        return stripePurchaseReversal(event, this.config.secretKey);
 
       default:
         return null; // unhandled event type — not an error
     }
-  }
-
-  /** The signed metadata stamped on a payment intent at checkout, or null when unreadable. */
-  private async fetchPaymentIntentMetadata(intentId: string): Promise<Record<string, string> | null> {
-    let res: Response;
-    try {
-      res = await fetch(`https://api.stripe.com/v1/payment_intents/${encodeURIComponent(intentId)}`, {
-        headers: { Authorization: `Bearer ${this.config.secretKey}` },
-      });
-    } catch (cause) {
-      throw new WebhookUpstreamError('Stripe payment_intent lookup failed (network)', { cause });
-    }
-    if (res.status === 404) return null; // not an intent of ours
-    // Any other failure THROWS (a distinct type, so the route answers 500, not "Invalid signature")
-    // and Stripe redelivers: a reversal swallowed here would leave a refunded purchase usable.
-    if (!res.ok) throw new WebhookUpstreamError(`Stripe payment_intent lookup failed: ${res.status}`);
-    const body = await res.json() as { metadata?: Record<string, string> };
-    return body.metadata ?? null;
   }
 
   /**
@@ -1073,45 +1028,6 @@ function addonStateOf(status: string): 'addon.activated' | 'addon.past_due' | 'a
       return 'addon.cancelled';
     default:
       return null;
-  }
-}
-
-/** Stripe's documented replay window for webhook signatures. */
-const SIGNATURE_TOLERANCE_SECONDS = 300;
-
-/**
- * Verify Stripe webhook signature using Web Crypto API (no Node.js required).
- * See: https://stripe.com/docs/webhooks/signatures
- */
-async function verifyStripeSignature(
-  payload: string,
-  signatureHeader: string,
-  secret: string,
-): Promise<boolean> {
-  try {
-    // Header form: `t=<ts>,v1=<sig>[,v1=<sig>]`. Multiple v1 entries appear while a
-    // signing secret is being rotated, so every one is a candidate.
-    let timestamp = '';
-    const signatures: string[] = [];
-    for (const part of signatureHeader.split(',')) {
-      const eq = part.indexOf('=');
-      if (eq === -1) continue;
-      const key = part.slice(0, eq).trim();
-      const value = part.slice(eq + 1).trim();
-      if (key === 't') timestamp = value;
-      else if (key === 'v1') signatures.push(value);
-    }
-    if (!timestamp || signatures.length === 0) return false;
-
-    // Without this, a captured payload stays replayable forever.
-    const sentAt = Number(timestamp);
-    if (!Number.isFinite(sentAt)) return false;
-    if (Math.abs(Date.now() / 1000 - sentAt) > SIGNATURE_TOLERANCE_SECONDS) return false;
-
-    const hex = await hmacHex(secret, `${timestamp}.${payload}`);
-    return signatures.some((candidate) => timingSafeEqual(hex, candidate));
-  } catch {
-    return false;
   }
 }
 

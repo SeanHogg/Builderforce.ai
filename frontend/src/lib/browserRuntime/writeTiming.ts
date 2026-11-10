@@ -126,6 +126,10 @@ export function createApiReporter(): WriteReporter {
       method: 'POST',
       body: JSON.stringify(spans),
       expectedErrors: QUIET_STATUSES,
+      // A flush runs on `pagehide` too: without `keepalive` the browser cancels the POST as the
+      // page unloads, losing exactly the reports collected last. The batch is capped at
+      // MAX_SPANS_PER_FLUSH small spans, well inside the 64 KiB keepalive body quota.
+      keepalive: true,
     });
   };
 }
@@ -194,13 +198,21 @@ function emit(report: 'slow' | 'baseline', sample: WriteSample, target: WriteSiz
   enqueue({ report, sample, target });
 }
 
+/**
+ * What a write touched, given either up front or as a thunk. A thunk is only called when the
+ * write is reported (an outlier or the ~2% baseline), so a caller whose size is costly to
+ * compute (`measureFiles` UTF-8-encodes every file) pays for it only on the writes that need it.
+ */
+export type WriteTarget = WriteSize | (() => WriteSize);
+
 /** Time `run` (sync or async) as one write phase and report it when it is an outlier or sampled. */
-export function timeWrite<T>(phase: WritePhase, target: WriteSize, run: () => T): T {
+export function timeWrite<T>(phase: WritePhase, targetOrThunk: WriteTarget, run: () => T): T {
   const started = performance.now();
   const finish = (): void => {
     const durationMs = Math.round(performance.now() - started);
     const report = shouldReportWrite(durationMs);
     if (!report) return;
+    const target = typeof targetOrThunk === 'function' ? targetOrThunk() : targetOrThunk;
     const sample: WriteSample = {
       phase,
       fileCount: target.fileCount,

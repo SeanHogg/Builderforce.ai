@@ -3,7 +3,21 @@ export * from './inferenceMode.js';
 export * from './platformRoutes.js';
 export * from './platformRequestGate.js';
 export * from './store.js';
-export { TERMINAL_EXECUTION_STATUSES, UNBOUND_DESTINATION, destinationKey, isTerminalExecutionStatus } from './records.js';
+export {
+  CLIENT_ID_NOT_UUID,
+  isIntegerIdText,
+  isLocalId,
+  mintLocalId,
+  parseEntityRef,
+  parseSyncId,
+  syncIdText,
+  tierRefText,
+  type EntityRef,
+  type LocalId,
+  type SyncId,
+} from './entityId.js';
+export { entityIdResolver, type EntityIdResolver, type SyncEntityType } from './entityIdResolver.js';
+export { TERMINAL_EXECUTION_STATUSES, UNBOUND_DESTINATION, destinationKey, isTerminalExecutionStatus, normalizeServerMapping } from './records.js';
 export type {
   AuditFindingValue,
   ChatTicketLinkType,
@@ -19,6 +33,7 @@ export type {
   LocalRecord,
   ProjectValue,
   ServerMapping,
+  ServerMappingInput,
   SyncConflict,
   SyncReceipt,
   TerminalExecutionStatus,

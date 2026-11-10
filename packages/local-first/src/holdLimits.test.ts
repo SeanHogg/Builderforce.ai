@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { DEPENDENCY_UNRESOLVABLE, SYNC_EVENT_RETENTION_DAYS, holdGiveUpReason } from './holdLimits.js';
+import {
+  DEPENDENCY_UNRESOLVABLE, HOLD_BACKOFF_BASE_MS, HOLD_BACKOFF_CAP_MS, SYNC_EVENT_RETENTION_DAYS,
+  holdBackoffMs, holdGiveUpReason, nextHoldTransition,
+} from './holdLimits.js';
 import { createPlatformPolicy } from './policy.js';
 import type { JournalEvent, SyncReceipt } from './records.js';
 import { countPending, createMemoryLocalFirstStore, type LocalFirstStore } from './store.js';
@@ -25,6 +28,48 @@ describe('holdGiveUpReason', () => {
     expect(holdGiveUpReason('conflict', 'base_version_conflict', 6 * DAY)).toBeUndefined();
     expect(holdGiveUpReason('conflict', 'base_version_conflict', 7 * DAY)).toBe('gave_up:base_version_conflict');
     expect(holdGiveUpReason('rejected', undefined, 7 * DAY)).toBe('gave_up:rejected');
+  });
+});
+
+describe('holdBackoffMs', () => {
+  it('waits 30s · 2^(n-1), capped at an hour', () => {
+    expect(holdBackoffMs(1)).toBe(HOLD_BACKOFF_BASE_MS);
+    expect(holdBackoffMs(2)).toBe(60_000);
+    expect(holdBackoffMs(4)).toBe(240_000);
+    expect(holdBackoffMs(30)).toBe(HOLD_BACKOFF_CAP_MS);
+    expect(HOLD_BACKOFF_CAP_MS).toBe(60 * 60 * 1000);
+  });
+});
+
+describe('nextHoldTransition', () => {
+  const at = new Date(AT);
+
+  it('holds a fresh event: first attempt, clock starts now, re-sent after the base backoff', () => {
+    expect(nextHoldTransition({}, 'conflict', 'base_version_conflict', at)).toEqual({
+      kind: 'hold',
+      hold: { holdKind: 'conflict', holdAttempts: 1, heldSince: AT, nextAttemptAt: new Date(Date.parse(AT) + 30_000).toISOString() },
+    });
+  });
+
+  it('counts attempts and keeps the clock under the same kind of hold', () => {
+    const since = new Date(Date.parse(AT) - DAY).toISOString();
+    const next = nextHoldTransition({ holdKind: 'rejected', holdAttempts: 2, heldSince: since }, 'rejected', 'x', at);
+    expect(next).toEqual({ kind: 'hold', hold: { holdKind: 'rejected', holdAttempts: 3, heldSince: since, nextAttemptAt: new Date(Date.parse(AT) + 120_000).toISOString() } });
+  });
+
+  it('regression: a new KIND of hold restarts the clock and the count, so a long dependency wait does not give up a conflict at once', () => {
+    const longAgo = new Date(Date.parse(AT) - 30 * DAY).toISOString();
+    const next = nextHoldTransition({ holdKind: 'dependency_pending', holdAttempts: 9, heldSince: longAgo }, 'conflict', 'base_version_conflict', at);
+    expect(next).toEqual({ kind: 'hold', hold: { holdKind: 'conflict', holdAttempts: 1, heldSince: AT, nextAttemptAt: new Date(Date.parse(AT) + 30_000).toISOString() } });
+  });
+
+  it('dead-letters once the hold is out of patience, at the receipt time', () => {
+    const since = new Date(Date.parse(AT) - 7 * DAY).toISOString();
+    expect(nextHoldTransition({ holdKind: 'conflict', holdAttempts: 40, heldSince: since }, 'conflict', 'base_version_conflict', at))
+      .toEqual({ kind: 'dead_letter', reason: 'gave_up:base_version_conflict', at: AT });
+    const parentSince = new Date(Date.parse(AT) - 90 * DAY).toISOString();
+    expect(nextHoldTransition({ holdKind: 'dependency_pending', heldSince: parentSince }, 'dependency_pending', undefined, at))
+      .toEqual({ kind: 'dead_letter', reason: DEPENDENCY_UNRESOLVABLE, at: AT });
   });
 });
 

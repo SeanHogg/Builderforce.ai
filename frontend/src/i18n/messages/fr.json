@@ -13032,7 +13032,7 @@
       },
       "one-agent-one-kernel": {
         "title": "Un agent, un noyau : chaque surface de Builderforce utilise désormais le même moteur",
-        "description": "Votre chat dans VS Code, l'application web, Rovr et les canaux on-prem étaient quatre environnements d'exécution susceptibles de se contredire. Ils forment désormais un seul cœur d'exécution : une boucle, une politique d'outils, une réponse, où que vous travailliez."
+        "description": "Votre chat dans VS Code, l'application web, Rovr et les canaux on-prem étaient quatre environnements d'exécution susceptibles de se contredire. Ils forment désormais un seul cœur d'exécution : une boucle, une politique d'outils, les mêmes règles, garde-fous et vérifications, où que vous travailliez."
       },
       "portable-knowledge-packs": {
         "title": "Mettez en paquet les connaissances prouvées par votre revue, et laissez n'importe quel agent s'en servir",

@@ -27,6 +27,7 @@ import { fileReplicaLock, type ReplicaLockPort } from './replicaLock.js';
 import { GENERATION_CHECK_INTERVAL_MS, emptyReplicaState, pumpReplica, type ReplicaState } from './replicaPump.js';
 import { createReplicaQueue, type ReplicaQueue } from './replicaQueue.js';
 import { replicatedKnowledgeStore } from './replicatedStore.js';
+import { sourcePathIn } from './rootId.js';
 
 /** A live edit's mark waits this long for more (never during a review). */
 const KICK_DEBOUNCE_MS = 1500;
@@ -250,6 +251,13 @@ export function createReplicaHost(opts: ReplicaHostOptions = {}): ReplicaHost {
                 const held2 = await lock.acquire(source.files, source.rootId).catch(() => undefined);
                 held.lockMissed = !held2;
                 if (!held2) return;
+                // Lost to another host after a stall (its refresh found another owner's stamp): stop pumping its queue at once.
+                const onLost = (): void => {
+                    held.lockMissed = true;
+                    report('replica lock', new Error(`the replica lock of ${source.rootId} was taken by another host; this host stopped pumping`));
+                    abort.abort();
+                };
+                held2.lost?.addEventListener('abort', onLost, { once: true });
                 try {
                     // Another tab sharing the queue file may have advanced its ack since this one loaded: start from the file, never a stale view.
                     await held.queue.reload().catch((error) => report('replica queue reload', error));
@@ -257,7 +265,7 @@ export function createReplicaHost(opts: ReplicaHostOptions = {}): ReplicaHost {
                         queue: held.queue, local: source.local, client: source.client, signal: abort.signal, initial: held.state,
                         projectId: source.projectId, rootId: source.rootId, maxTransientStreak: BACKGROUND_TRANSIENT_STREAK,
                         sources: async () => (await currentSourcesOf(source.manifest, source.rootId)).map((s) => {
-                            const bytes = source.sizeOf?.(s.ref.slice(s.ref.indexOf('::') + 2));
+                            const bytes = source.sizeOf?.(sourcePathIn(s.ref, source.rootId));
                             return bytes === undefined ? s : { ...s, bytes };
                         }),
                         idle: (signal) => waitNotReviewing(held, signal),
@@ -271,6 +279,7 @@ export function createReplicaHost(opts: ReplicaHostOptions = {}): ReplicaHost {
                 } catch (error) {
                     report('replica pump', error);
                 } finally {
+                    held2.lost?.removeEventListener('abort', onLost);
                     await held2.release();
                 }
             })().finally(() => {

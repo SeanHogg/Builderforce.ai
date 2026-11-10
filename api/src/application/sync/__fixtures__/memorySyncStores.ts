@@ -104,6 +104,7 @@ function uniqueViolation(): Error {
 
 function storedEvent(row: SyncEventRow): StoredSyncEvent {
   return {
+    entityType: row.entityType,
     batchId: row.batchId,
     status: row.status,
     serverId: row.serverId,
@@ -140,6 +141,7 @@ function storeSet(target: MemorySyncState, now: () => Date, txid: string): SyncS
       const record = target.records.find((r) => r.tenantId === tenantId && r.entityType === entityType && r.clientEntityId === clientEntityId);
       return {
         serverId: row.serverId,
+        syncId: row.syncId ?? null,
         serverVersion: row.serverVersion,
         payloadHash: row.payloadHash,
         destinationKey: row.destinationKey,
@@ -152,6 +154,7 @@ function storeSet(target: MemorySyncState, now: () => Date, txid: string): SyncS
         entityType: row.entityType,
         clientEntityId: row.clientEntityId,
         serverId: row.serverId,
+        syncId: row.syncId ?? null,
         serverVersion: row.serverVersion,
         destinationKey: row.destinationKey,
         payloadHash: row.payloadHash,

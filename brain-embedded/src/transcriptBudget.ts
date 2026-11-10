@@ -172,17 +172,10 @@ function safeSuffix(s: string, n: number): string {
 /**
  * Bound one block of text to `max` characters by cutting its MIDDLE (head and tail kept,
  * one marker between). Used for unbounded free text — a conversation error, a chat title.
+ * The ONE implementation lives in `@builderforce/tool-output-policy`; its default marker is
+ * this report's `…(N chars omitted from the middle)…` line.
  */
-export function truncateMiddle(text: string, max: number): string {
-  if (text.length <= max) return text;
-  const marker = `\n…(${formatCount(text.length)} chars omitted from the middle)…\n`;
-  const room = Math.max(0, max - marker.length);
-  if (room === 0) return safePrefix(text, max);
-  const head = safePrefix(text, Math.ceil(room / 2));
-  const tail = safeSuffix(text, Math.floor(room / 2));
-  const omitted = text.length - head.length - tail.length;
-  return `${head}\n…(${formatCount(omitted)} chars omitted from the middle)…\n${tail}`;
-}
+export { truncateMiddle } from '@builderforce/tool-output-policy';
 
 /**
  * Last-resort guarantee behind the budget: join `head` + `timeline` + `tail` so that the

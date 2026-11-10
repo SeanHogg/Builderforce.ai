@@ -84,7 +84,6 @@ presentation/routes/roiRoutes.ts
 presentation/routes/runtimeRoutes.ts
 presentation/routes/segmentRoutes.ts
 presentation/routes/segmentTrackerRoutes.ts
-presentation/routes/studioVoiceCloneRoutes.ts
 presentation/routes/taskRoutes.ts
 presentation/routes/teamMemoryRoutes.ts
 presentation/routes/teamRoutes.ts

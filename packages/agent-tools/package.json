@@ -11,6 +11,7 @@
     "./documents": "./src/documents.ts",
     "./knowledge-index": "./src/knowledge-index.ts",
     "./prefetch": "./src/prefetch/index.ts",
+    "./a2a": "./src/a2a.ts",
     "./node-path": "./src/node-path.ts",
     "./node-posix-shell": "./src/node-posix-shell.ts",
     "./node-symbols": "./src/node-symbols.ts",

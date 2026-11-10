@@ -57,25 +57,20 @@ import {
   serverChatIdOf,
   type ChatRosterAgent,
 } from '@seanhogg/builderforce-brain-embedded';
-import {
-  AiSurface, BrainTimeline, PendingQuestionBanner, SurfaceFooter, ToolConfirmBar,
-  selectPendingAskUser, ownMessageOf,
-} from '@seanhogg/builderforce-brain-ui';
-import { useViewerId } from './useViewerId';
+import { AiSurface, PendingQuestionBanner, SurfaceFooter, ToolConfirmBar } from '@seanhogg/builderforce-brain-ui';
+import { usePendingQuestion } from './usePendingQuestion';
+import { usePrefetchChips } from './usePrefetchChips';
 import { authedFetch } from '../authedFetch';
-import { VsCodeTranslationProvider } from './VsCodeTranslationProvider';
 import { getToken, post, refreshToken, type InitData } from '../vscodeBridge';
 import { setHostRunContext } from '../hostRunDriver';
 import { autoApprovePersistence } from '../autoApprove';
-import { askUserLabels, makeT, prefetchChipLabels, prefetchLabelOf, promptMenuLabels, timelineLabels, toolConfirmLabels } from './chatLabels';
+import { makeT, promptMenuLabels, timelineLabels, toolConfirmLabels } from './chatLabels';
 import { EditorEmptyState } from './editorStarters';
 import { SubagentStrip } from './SubagentStrip';
 import { useChatAudience } from './useChatAudience';
 import { useChatMemory } from './useChatMemory';
 import { useChatSend } from './useChatSend';
-import { useInterruptedResume } from './useInterruptedResume';
-import { useInterruptedRuns } from './interruptedRunsStore';
-import { interruptedResumeTurn } from '../../../src/interruptedResumeTurn';
+import { useChatInterruptedResume } from './useChatInterruptedResume';
 import { useAssociatedProject, useChatSystemPrompt } from './useChatSystemPrompt';
 import { useComposerModels } from './useComposerModels';
 import { useCopyDiagnostics } from './useCopyDiagnostics';
@@ -89,6 +84,7 @@ import { VsCodeChatHeader } from './VsCodeChatHeader';
 import { VsCodeChatHistory } from './VsCodeChatHistory';
 import { VsCodeChatNotices } from './VsCodeChatNotices';
 import { railHasContent, VsCodeChatRail } from './VsCodeChatRail';
+import { VsCodeChatThread } from './VsCodeChatThread';
 import { VsCodeComposer } from './VsCodeComposer';
 
 const HISTORY_ID = 'bf-chat-history';
@@ -125,17 +121,9 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // Stable reference so a keystroke does not hand <BrainTimeline> a fresh `labels` object
   // and defeat its React.memo (every message's markdown re-parsing per character).
   const tlLabels = useMemo(() => timelineLabels(init.labels), [init.labels]);
-  // The signed-in user (the token's subject) is the viewer: a teammate's message is offered for translation, the viewer's own never.
-  const viewerId = useViewerId();
-  const isOwnMessage = useMemo(() => ownMessageOf(viewerId), [viewerId]);
   const confirmLabels = useMemo(() => toolConfirmLabels(init.labels), [init.labels]);
-  // The PreFetch chips: a write action's confirm chip (in the confirm slot) and the
-  // next-step chips under a tool's answer, whose command the HOST runs.
-  const prefetchChips = useMemo(() => ({
-    labels: prefetchChipLabels(init.labels),
-    labelOf: prefetchLabelOf(init.labels),
-    onChip: (chip: { command: string; args?: Record<string, unknown> }) => post('prefetch.chip', { command: chip.command, args: chip.args ?? {} }),
-  }), [init.labels]);
+  // The PreFetch chips (confirm chip + next-step chips; the HOST runs their commands).
+  const prefetchChips = usePrefetchChips(init.labels);
   // Composer run-shaping toggles (Effort / Thinking / Browse the web) — REAL request params.
   const shaping = useRunShaping();
   const { effort, thinking, webBrowsing } = shaping;
@@ -227,27 +215,13 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   const { queued, submit, queueAfter, stop, answerQuestion, continueChat, replayMessage, sendSteers } = useChatSend({
     conv, chatId, drafts, draftStore, recipient, chooseRecipient, liveChildren, setTurnLimbic, reloadChats,
   });
-  const interruptedRuns = useInterruptedRuns();
-  // An interrupted run's Resume: open its chat, send the continuation through THIS door (it builds the seed, model, project and spec), ack the run once the host claims it.
-  const interruptedResume = useInterruptedResume({
-    chatId, openChat, send: continueChat, isRunning: (id) => runStatus(id) != null,
-    // Built from the run's JOURNALED record (ask verbatim, plan, files, last steps, sub-agents), never the bare headline.
-    continuation: (runId) => interruptedResumeTurn(t, interruptedRuns.find((run) => run.runId === runId)?.resume),
-  });
+  // An interrupted run's Resume: open its chat, send the continuation through THIS door, ack the run once the host claims it.
+  const interruptedResume = useChatInterruptedResume({ t, chatId, openChat, continueChat, runStatus });
 
-  // The question this chat is BLOCKED on, restated at the composer — one shared predicate,
-  // so banner and card never disagree.
-  const pendingQuestion = useMemo(() => selectPendingAskUser(conv.messages), [conv.messages]);
+  // The question this chat is BLOCKED on (banner + its "show me" reveal into the transcript).
+  const { pendingQuestion, askLabels, reveal, revealQuestion } = usePendingQuestion(conv.messages, init.labels);
   // What actually answered, not what was requested (under auto `init.model` is the plan default).
   const servedModel = useMemo(() => lastServedModel(conv.messages), [conv.messages]);
-  const askLabels = useMemo(() => askUserLabels(init.labels), [init.labels]);
-  // The banner's "show me" goes through the transcript's own reveal: the question's
-  // message is paged into the render window and the stick-to-bottom scroll lets go.
-  const [reveal, setReveal] = useState<{ id: number; nonce: number } | null>(null);
-  const revealQuestion = useCallback(() => {
-    if (!pendingQuestion) return;
-    setReveal((r) => ({ id: pendingQuestion.messageId, nonce: (r?.nonce ?? 0) + 1 }));
-  }, [pendingQuestion]);
 
   const { copyState, canCopy, copyTranscript } = useCopyDiagnostics({
     init, conv, chatId, activeChat, chatVisibility, chatMode, associatedProject, associatedProjectId,
@@ -333,32 +307,17 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
         />
       ) : chatId == null && !conv.pendingTurn ? <EditorEmptyState t={t} onPick={pickStarter} /> : undefined}
       thread={(
-        <VsCodeTranslationProvider init={init}>
-        <BrainTimeline
-          messages={conv.messages}
-          trace={conv.trace}
-          streamingText={conv.sending ? conv.streamingText : ''}
-          isRunning={conv.sending}
-          activity={conv.activity}
-          // Sent, not saved yet: the turn shows now - and a draft chat shows the thread, not its empty state.
-          pendingUserText={conv.pendingTurn?.text}
-          // The model doing the work, once its route is known.
-          liveModel={conv.servedBy?.model}
-          liveAccount={conv.servedBy?.account}
-          loading={conv.loadingMessages}
-          assistantName="BuilderForce"
+        <VsCodeChatThread
+          init={init}
+          conv={conv}
+          chatId={chatId}
           labels={tlLabels}
-          isOwnMessage={isOwnMessage}
           modelIdentity={composerModels?.identity}
           onAnswerQuestion={answerQuestion}
           onReplayMessage={replayMessage}
-          onRateMessage={conv.rateMessage}
-          ratings={conv.ratings}
           revealMessage={reveal}
-          conversationKey={chatId}
           prefetch={prefetchChips}
         />
-        </VsCodeTranslationProvider>
       )}
       notices={<VsCodeChatNotices conv={conv} chatsError={vsChats.error} onDismissChatsError={vsChats.clearError} bundle={init.labels} init={init} composerId={composerId} />}
       footer={(

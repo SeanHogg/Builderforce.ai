@@ -8,7 +8,8 @@
  * told to acknowledge the interrupted run (`ack`) only once the new run is really claimed:
  * the first run event seen for that chat after the continuation was sent.
  *
- *   begin(run)        refuses when the chat is running or the run is already pending
+ *   begin(run)        refuses when the chat is running, the run is already pending, or
+ *                     another resume is pending in the same chat (one per chat at a time)
  *   activeChat(id)    the surface's chat changed: send for a pending run waiting on it
  *   runEvent(...)     `claimed` (a run started or settled in the chat) acks the run;
  *                     `failed` marks it failed
@@ -78,10 +79,13 @@ export function createResumeTracker(deps: ResumeDeps): ResumeTracker {
     settle(entry);
     failed = new Set(failed).add(entry.runId);
   };
+  const pendingIn = (chatId: number): boolean => [...entries.values()].some((entry) => entry.chatId === chatId);
 
   return {
     begin(run) {
-      if (entries.has(run.runId) || deps.isRunning(run.chatId)) return false;
+      // ONE resume per chat at a time: the run frames carry no turn identity, so two
+      // continuations in one chat could not be told apart — the first claim would ack both.
+      if (entries.has(run.runId) || deps.isRunning(run.chatId) || pendingIn(run.chatId)) return false;
       const entry: Entry = { runId: run.runId, chatId: run.chatId, sent: false, timer: undefined };
       entry.timer = setTimer(() => {
         if (entries.get(run.runId) !== entry) return;
@@ -90,7 +94,9 @@ export function createResumeTracker(deps: ResumeDeps): ResumeTracker {
         publish();
       }, deps.timeoutMs ?? RESUME_TIMEOUT_MS);
       entries.set(run.runId, entry);
-      late.delete(run.runId);
+      // A new resume in this chat supersedes a timed-out one waiting there for a late start:
+      // the next claim in the chat is THIS run's, never both.
+      for (const [runId, chatId] of [...late]) if (runId === run.runId || chatId === run.chatId) late.delete(runId);
       if (failed.has(run.runId)) {
         failed = new Set(failed);
         failed.delete(run.runId);
@@ -118,9 +124,10 @@ export function createResumeTracker(deps: ResumeDeps): ResumeTracker {
     },
     runEvent(event) {
       let changed = false;
-      for (const entry of [...entries.values()]) {
-        // Only a run event AFTER the continuation went out can be the resumed run's.
-        if (!entry.sent || entry.chatId !== event.chatId) continue;
+      // Only a run event AFTER the continuation went out can be the resumed run's; `begin`
+      // keeps at most one resume per chat, so this is THE claimed run (or none).
+      const entry = [...entries.values()].find((e) => e.sent && e.chatId === event.chatId);
+      if (entry) {
         changed = true;
         if (event.type === 'claimed') {
           settle(entry);
@@ -128,15 +135,14 @@ export function createResumeTracker(deps: ResumeDeps): ResumeTracker {
         } else {
           fail(entry);
         }
-      }
-      // A run that starts after the timeout still claims the row that timed out: acknowledged, it leaves the list.
-      if (event.type === 'claimed') {
-        for (const [runId, chatId] of [...late]) {
-          if (chatId !== event.chatId) continue;
-          late.delete(runId);
+      } else if (event.type === 'claimed') {
+        // A run that starts after the timeout still claims the row that timed out: acknowledged, it leaves the list.
+        const lateRun = [...late].find(([, chatId]) => chatId === event.chatId)?.[0];
+        if (lateRun !== undefined) {
+          late.delete(lateRun);
           failed = new Set(failed);
-          failed.delete(runId);
-          deps.ack(runId);
+          failed.delete(lateRun);
+          deps.ack(lateRun);
           changed = true;
         }
       }

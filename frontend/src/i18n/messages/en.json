@@ -13032,7 +13032,7 @@
       },
       "one-agent-one-kernel": {
         "title": "One agent, one kernel — every Builderforce surface now runs the same engine",
-        "description": "Your chat in VS Code, the web app, Rovr and the on-prem channels used to be four runtimes that could disagree. They are now one execution core — one loop, one tool policy, one answer, wherever you work."
+        "description": "Your chat in VS Code, the web app, Rovr and the on-prem channels used to be four runtimes that could disagree. They are now one execution core — one loop, one tool policy, the same rules, guards and verification, wherever you work."
       },
       "portable-knowledge-packs": {
         "title": "Pack the knowledge your review proved — and let any agent use it",

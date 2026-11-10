@@ -1,15 +1,13 @@
 import { Hono } from 'hono';
-import { and, desc, eq, isNull } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
-import { projects, tasks, users } from '../../infrastructure/database/schema';
 import { listVscodeConnections, upsertVscodeConnection } from '../../application/vscode/vscodeConnections';
-import { notSystemTask } from '../../application/task/taskScope';
+import { resolveEditorIdentity } from '../../application/vscode/editorIdentity';
+import { listOpenTasksAssignedTo } from '../../application/vscode/assignedTasks';
 import type { TenantService } from '../../application/tenant/TenantService';
 import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
 import { resolveEditorKeySession } from '../../application/llm/gatewayAccess';
-import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { parseOptionalBody, z } from './requestBody';
 import { legacyAliasNotice } from '../middleware/legacyAlias';
 import { WORKSPACES_PATH, workspaceHandlers } from './workspaceHandlers';
@@ -36,19 +34,7 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
   // tree to "assigned to me" (compared against tasks.assignedUserId). The editor's key
   // is bound to a tenant but the exchanged JWT still carries the human's userId.
   // `displayName` rides along (additive) so the editor can name who reviewed a knowledge pack. Never the email.
-  router.get('/me', async (c) => {
-    const userId = c.get('userId') as string;
-    const [who] = await db
-      .select({ displayName: users.displayName })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1)
-      .catch((error: unknown) => {
-        reportCaughtError(error, { source: 'presentation/routes/vscodeRoutes.ts', operation: 'GET /me displayName lookup' });
-        return [];
-      });
-    return c.json({ userId, ...(who?.displayName ? { displayName: who.displayName } : {}) });
-  });
+  router.get('/me', async (c) => c.json(await resolveEditorIdentity(db, c.get('userId') as string)));
 
   // GET/POST /api/vscode/tenants — legacy aliases of GET/POST /api/tenants (the
   // canonical path accepts this editor's workspace token too). Kept for shipped
@@ -131,33 +117,7 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
   // poll that MUST reflect a just-assigned task immediately — same posture as
   // /api/tenants and /connections.
   router.get('/tasks', async (c) => {
-    const userId = c.get('userId') as string;
-    const tenantId = c.get('tenantId') as number;
-    const rows = await db
-      .select({
-        id: tasks.id,
-        key: tasks.key,
-        title: tasks.title,
-        status: tasks.status,
-        priority: tasks.priority,
-        projectId: tasks.projectId,
-        projectPublicId: projects.publicId,
-        projectName: projects.name,
-        githubPrUrl: tasks.githubPrUrl,
-        updatedAt: tasks.updatedAt,
-      })
-      .from(tasks)
-      .innerJoin(projects, eq(projects.id, tasks.projectId))
-      .where(
-        and(
-          eq(projects.tenantId, tenantId),
-          eq(tasks.assignedUserId, userId),
-          isNull(tasks.completedAt),
-          notSystemTask,
-        ),
-      )
-      .orderBy(desc(tasks.updatedAt))
-      .limit(50);
+    const rows = await listOpenTasksAssignedTo(db, c.get('tenantId') as number, c.get('userId') as string);
     return c.json({ tasks: rows });
   });
 

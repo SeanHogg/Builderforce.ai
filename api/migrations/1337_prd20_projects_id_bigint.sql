@@ -3,90 +3,91 @@
 -- projects is the most-referenced table in the model (60+ inbound FKs plus a
 -- set of bare project_id columns that keep the value without a Drizzle-level
 -- FK to avoid a schema-module edge). The assignable int4 pool is the ceiling
--- none of them can outgrow. projects.id becomes BIGSERIAL (application types
--- are unchanged — drizzle `bigint(mode:'number')` is still a TS number).
+-- none of them can outgrow. projects.id becomes BIGINT and its serial sequence
+-- `AS bigint` (ALTER COLUMN TYPE does NOT widen an owned sequence — it would
+-- stay capped at 2147483647). Application types are unchanged — drizzle
+-- `bigint(mode:'number')` is still a TS number.
 --
--- THIS WHOLE MIGRATION IS ONE DO BLOCK so it runs in a single transaction —
--- Postgres refuses to ALTER the TYPE of projects.id while any FK references it,
--- so the drop, the widen, and the re-add must be atomic or the migration cannot
--- apply at all.
+-- Corrected in place before it ever applied: the first version could not run on
+-- any Postgres (`unnest` flattens a 2-D array, so `pair[1]` subscripted text) and
+-- its FK snapshot resolved the PARENT column name on the CHILD side, matching no
+-- FK. 1340 (+ operational 0031, apps 0002) are idempotent completers on top.
 --
--- It is SELF-CORRECTING: rather than hand-listing every FK, it reads the catalog
--- for every foreign key that points at projects(id) — including FKs declared
--- only in raw migration SQL (e.g. discovery.ts's customer_interviews /
--- research_notes keep their FK out of the Drizzle schema to avoid a
--- discovery->delivery module edge) — drops each, widens the child column, then
--- re-creates the FK with its original name and ON DELETE action. Widening the
--- CHILD before the PARENT keeps the relationship always typeable: an int8 child
--- can reference an int4 parent (the value always fits), never the reverse.
+-- No FK is dropped: Postgres rebuilds and revalidates the constraints and indexes
+-- that depend on a column whose type changes, on either side of the FK.
 --
--- Bare project_id columns (no FK) are widened explicitly — grep the schema for
--- `integer('project_id')` / `integer('*_project_id')` to see them.
+-- SELF-CORRECTING: rather than hand-listing every FK, it reads the catalog for
+-- every foreign key whose referenced column is projects.id — including FKs
+-- declared only in raw migration SQL (e.g. discovery.ts's customer_interviews /
+-- research_notes) — and widens each child column (resolved per key pair through
+-- unnest(conkey, confkey), so composite FKs are covered). Bare project_id columns
+-- (no FK) are widened from an explicit list. Only int4 columns are touched, and a
+-- table's columns are altered in ONE statement so it is rewritten once.
+--
+-- Each ALTER rewrites its table under ACCESS EXCLUSIVE. migrate.mjs runs this file
+-- as one transaction, so `SET LOCAL lock_timeout` makes it fail fast instead of
+-- queueing behind (and in front of) production traffic; a timeout rolls the whole
+-- file back — re-run it.
+SET LOCAL lock_timeout = '5s';
+-- The whole DO block is ONE statement, so no statement cap: the rewrites take as long
+-- as they take. lock_timeout is what protects traffic.
+SET LOCAL statement_timeout = 0;
 
 DO $$
 DECLARE
-  fk RECORD;
-  tables_with_fk TEXT[];
-  bare RECORD;
+  seq TEXT;
+  r   RECORD;
 BEGIN
-  -- Snapshot every FK that points at projects(id), in dependency-safe order.
-  CREATE TEMP TABLE prd20_fks ON COMMIT DROP AS
-  SELECT con.conname AS name,
-         con.conrelid::regclass::text AS tbl,
-         att.attname AS col,
-         CASE con.confdeltype WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL'
-              WHEN 'd' THEN 'SET DEFAULT' WHEN 'r' THEN 'RESTRICT' ELSE 'NO ACTION' END AS del
-  FROM pg_constraint con
-  JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = con.conkey[1]
-  WHERE con.contype = 'f'
-    AND con.confrelid = 'public.projects'::regclass
-    AND att.attname = 'id';
-
-  -- ── 1 · Drop every FK that points at projects(id) ──────────────────────
-  FOR fk IN SELECT * FROM prd20_fks LOOP
-    EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', fk.tbl, fk.name);
-  END LOOP;
-
-  -- ── 2 · projects.id → BIGINT (sequence backing the serial follows) ─────
+  -- ── 1 · projects.id → BIGINT, and its sequence with it ─────────────────
   ALTER TABLE projects ALTER COLUMN id TYPE BIGINT;
+  seq := pg_get_serial_sequence('public.projects', 'id');
+  IF seq IS NOT NULL THEN
+    EXECUTE format('ALTER SEQUENCE %s AS BIGINT', seq);
+  END IF;
 
-  -- ── 3a · Every FK-bearing referencing column → BIGINT ─────────────────
-  SELECT ARRAY(SELECT DISTINCT tbl FROM prd20_fks) INTO tables_with_fk;
-  FOR fk IN SELECT DISTINCT tbl, col FROM prd20_fks LOOP
-    EXECUTE format('ALTER TABLE %s ALTER COLUMN %I TYPE BIGINT', fk.tbl, fk.col);
-  END LOOP;
-
-  -- ── 3b · Bare project_id columns (no FK — declared without .references()
-  --        in the Drizzle schema; where an FK exists it lives in raw migration
-  --        SQL only) ─────────────────────────────────────────────────────
-  FOR bare IN
-    SELECT unnest(ARRAY[
-      ['activity_log',                 'project_id'],
-      ['agent_benchmark_cases',        'project_id'],
-      ['feedback_collectors',          'project_id'],
-      ['feedback_submissions',         'project_id'],
-      ['job_postings',                 'project_id'],
-      ['llm_batch_jobs',               'project_id'],
-      ['llm_usage_log',                'project_id'],
-      ['research_notes',               'project_id'],
-      ['run_model_outcomes',           'project_id'],
-      ['tenant_skills',                'project_id']
-    ]) AS pair
+  -- ── 2 · Every FK child column + every bare project_id column → BIGINT ──
+  FOR r IN
+    WITH targets AS (
+      SELECT con.conrelid AS rel, child.attname AS col
+      FROM pg_constraint con
+      CROSS JOIN LATERAL unnest(con.conkey, con.confkey) AS k(child_attnum, parent_attnum)
+      JOIN pg_attribute parent ON parent.attrelid = con.confrelid
+                              AND parent.attnum   = k.parent_attnum
+                              AND parent.attname  = 'id'
+      JOIN pg_attribute child  ON child.attrelid  = con.conrelid
+                              AND child.attnum    = k.child_attnum
+      WHERE con.contype = 'f'
+        AND con.confrelid = 'public.projects'::regclass
+      UNION
+      SELECT to_regclass('public.' || v.tbl), v.col
+      FROM (VALUES
+        ('activity_log',          'project_id'),
+        ('agent_benchmark_cases', 'project_id'),
+        ('feedback_collectors',   'project_id'),
+        ('feedback_submissions',  'project_id'),
+        ('job_postings',          'project_id'),
+        ('llm_batch_jobs',        'project_id'),
+        ('llm_usage_log',         'project_id'),
+        ('research_notes',        'project_id'),
+        ('run_model_outcomes',    'project_id'),
+        ('tenant_skills',         'project_id')
+      ) AS v(tbl, col)
+      WHERE to_regclass('public.' || v.tbl) IS NOT NULL
+    )
+    SELECT t.rel::regclass::text AS tbl,
+           string_agg(format('ALTER COLUMN %I TYPE BIGINT', t.col), ', ' ORDER BY t.col) AS clauses
+    FROM (SELECT DISTINCT rel, col FROM targets) t
+    JOIN pg_attribute a ON a.attrelid = t.rel
+                       AND a.attname  = t.col
+                       AND NOT a.attisdropped
+    WHERE a.atttypid = 'int4'::regtype
+    GROUP BY t.rel
+    ORDER BY 1
   LOOP
-    -- Skip any bare column that already went through 3a (was FK-bearing).
-    IF NOT (bare.pair[1] = ANY(tables_with_fk)) THEN
-      EXECUTE format('ALTER TABLE %I ALTER COLUMN %I TYPE BIGINT',
-                     bare.pair[1], bare.pair[2]);
-    END IF;
+    EXECUTE format('ALTER TABLE %s %s', r.tbl, r.clauses);
   END LOOP;
 
-  -- ── 4 · Re-create each FK with its original name + ON DELETE action ────
-  FOR fk IN SELECT * FROM prd20_fks LOOP
-    EXECUTE format('ALTER TABLE %s ADD CONSTRAINT %I FOREIGN KEY (%I) REFERENCES projects(id) ON DELETE %s',
-                   fk.tbl, fk.name, fk.col, fk.del);
-  END LOOP;
-
-  -- ── 5 · Unblock migration 1336's deferred governance FKs ───────────────
+  -- ── 3 · Unblock migration 1336's deferred governance FKs ───────────────
   -- governance_policy_packs.project_id and governance_audit_runs.project_id are
   -- already BIGINT (1336) with the FK intentionally omitted until projects.id
   -- was BIGINT. It is now — add them.

@@ -23,6 +23,7 @@
  */
 
 import { factLeafKey, fileLeafKey, relationLeafKey } from '@seanhogg/builderforce-memory/knowledge/pack';
+import { splitSourceRef } from './rootId.js';
 
 /** The server's last acknowledged state for the root. */
 export interface ReplicaAck { generation: number; digest: string }
@@ -142,8 +143,8 @@ function keysOfLegacyOps(ops: unknown[]): string[] {
             for (const k of op.facts ?? []) keys.push(factKey(k));
             for (const k of op.relations ?? []) keys.push(`r:${k}`);
         } else if (op?.op === 'markStale' && typeof op.sourceRef === 'string') {
-            const at = op.sourceRef.indexOf('::');
-            if (at > 0) keys.push(fileKey(op.sourceRef.slice(at + 2), ''));
+            const path = splitSourceRef(op.sourceRef)?.path;
+            if (path !== undefined) keys.push(fileKey(path, ''));
         }
     }
     return keys;

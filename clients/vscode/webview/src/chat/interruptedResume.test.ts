@@ -198,4 +198,31 @@ describe('createResumeTracker: door answer, claims and dispose', () => {
     expect(calls.some((c) => c.startsWith('ack'))).toBe(false);
     expect(tracker.snapshot().failed.has('r1')).toBe(true);
   });
+
+  it('regression: a second interrupted run in the same chat is refused while one is pending, so one claim acks one run', () => {
+    const { tracker, calls } = setup();
+    expect(tracker.begin({ runId: 'r1', chatId: 7 })).toBe(true);
+    expect(tracker.begin({ runId: 'r2', chatId: 7 })).toBe(false);
+    expect(tracker.begin({ runId: 'r3', chatId: 8 })).toBe(true);
+    tracker.activeChat(7);
+    expect(calls.filter((c) => c.startsWith('send'))).toHaveLength(1);
+    tracker.runEvent({ type: 'claimed', chatId: 7 });
+    expect(calls.filter((c) => c.startsWith('ack'))).toEqual(['ack:r1']);
+    expect([...tracker.snapshot().pending]).toEqual(['r3']);
+    // Settled, the chat takes the next resume.
+    expect(tracker.begin({ runId: 'r2', chatId: 7 })).toBe(true);
+  });
+
+  it('regression: a new resume in a chat supersedes a timed-out one there, so a claim acks only the new run', () => {
+    const { tracker, calls, fire } = setup();
+    tracker.begin({ runId: 'r1', chatId: 7 });
+    tracker.activeChat(7);
+    fire();
+    expect(tracker.begin({ runId: 'r2', chatId: 7 })).toBe(true);
+    tracker.activeChat(7);
+    tracker.runEvent({ type: 'claimed', chatId: 7 });
+    tracker.runEvent({ type: 'claimed', chatId: 7 });
+    expect(calls.filter((c) => c.startsWith('ack'))).toEqual(['ack:r2']);
+    expect(tracker.snapshot().failed.has('r1')).toBe(true);
+  });
 });

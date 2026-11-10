@@ -1,23 +1,19 @@
 /**
- * The voice routes' use of the platform's ONE sliding-window limiter
- * (`application/ratelimit/slidingWindow`): a 429 response when `key` is over `limit`
- * per minute, or null to carry on. Fails open when the limiter is not bound.
+ * The voice routes' limits on the platform's ONE sliding-window limiter. The 429 itself is
+ * the shared presentation helper (`middleware/rateLimitResponse`); `voiceRateLimited` is that
+ * helper under the name the voice routes import.
  */
 import type { Context } from 'hono';
-import type { Env, HonoEnv } from '../../env';
-import { checkSlidingWindow } from '../../application/ratelimit/slidingWindow';
+import type { HonoEnv } from '../../env';
+import { slidingWindowLimited } from '../middleware/rateLimitResponse';
 
 /** On-device clip registrations per tenant+user per minute (each one signs and writes a row). */
 export const VOICE_REGISTER_RPM = 30;
 /** Public provenance lookups per client IP per minute (uncredentialed, so IP is the only subject). */
 export const VOICE_VERIFY_RPM = 60;
 
-export async function voiceRateLimited(c: Context<HonoEnv>, key: string, limit: number): Promise<Response | null> {
-  const verdict = await checkSlidingWindow(c.env as Env, key, limit);
-  if (!verdict || verdict.allowed) return null;
-  c.header('Retry-After', String(verdict.retryAfterSeconds));
-  return c.json({ error: 'Rate limit exceeded. Please slow down.', resetAt: verdict.resetAt }, 429);
-}
+/** A 429 when `key` is over `limit` per minute, or null to carry on. */
+export const voiceRateLimited = slidingWindowLimited;
 
 /** The caller's address as the edge saw it, or 'unknown' (one shared bucket) without one. */
 export function clientIp(c: Context<HonoEnv>): string {

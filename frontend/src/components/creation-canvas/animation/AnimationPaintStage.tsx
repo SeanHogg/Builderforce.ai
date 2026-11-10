@@ -53,6 +53,16 @@ export function AnimationPaintStage({ state, activeId, tool, brush, paintable, o
   const sequence = useRef(0);
   /** The data URL this stage just wrote, so the redraw effect does not repaint it. */
   const written = useRef<{ id: string; url: string } | null>(null);
+  /** The frame whose pixels the paint canvas holds now. */
+  const shownFrame = useRef<string | null>(null);
+  /** False while the active frame's stored pixels are still decoding: the pointer is ignored until they are drawn. */
+  const baseReady = useRef(false);
+  /**
+   * A copy of each frame's bitmap while its upload runs, so returning to that frame before
+   * the upload lands shows ITS pixels (the strip still has the older URL). Dropped once the
+   * upload settles: on success the strip carries the URL, on failure the store failure is reported.
+   */
+  const pendingPixels = useRef(new Map<string, { seq: number; pixels: HTMLCanvasElement }>());
   const { width, height, frames, background, onionSkinDepth } = state;
   const activeIndex = Math.max(0, frames.findIndex((frame) => frame.id === activeId));
   const active = frames[activeIndex];
@@ -92,14 +102,41 @@ export function AnimationPaintStage({ state, activeId, tool, brush, paintable, o
   useEffect(() => {
     const ctx = paintRef.current?.getContext('2d');
     if (!ctx || !active) return;
-    // Unwritten strokes are newer than the stored pixels: do not paint the old ones over them.
-    if (dirtyFrame.current === active.id || inFlight.current.has(active.id)) return;
-    if (written.current?.id === active.id && written.current.url === active.pixelsDataUrl) return;
+    const switched = shownFrame.current !== active.id;
+    shownFrame.current = active.id;
+    if (!switched) {
+      // Same frame, and the canvas holds strokes newer than the stored pixels (unwritten, or
+      // still uploading): do not paint the old ones over them.
+      if (dirtyFrame.current === active.id || inFlight.current.has(active.id)) return;
+      if (written.current?.id === active.id && written.current.url === active.pixelsDataUrl) return;
+    }
+    // A DIFFERENT frame is always repainted from its own source, whatever is uploading: the
+    // canvas holds the frame just left, and keeping it would label one frame's pixels as another's
+    // (and the next stroke would save them into it).
     written.current = null;
     ctx.clearRect(0, 0, width, height);
-    if (!active.pixelsDataUrl) return;
+    // A frame whose upload has not landed yet is repainted from its local bitmap, which is newer
+    // than the strip's URL.
+    const local = pendingPixels.current.get(active.id);
+    if (local) { ctx.drawImage(local.pixels, 0, 0, width, height); baseReady.current = true; return; }
+    if (!active.pixelsDataUrl) { baseReady.current = true; return; }
+    // Painting waits for the stored pixels: a stroke made before they decode would be drawn
+    // over by them (or saved without them).
+    baseReady.current = false;
     let current = true;
-    void decodeFrame(active.pixelsDataUrl).then((image) => { if (current) ctx.drawImage(image, 0, 0, width, height); }, () => undefined);
+    const reportDecode = recordedFailure('Decoding the active animation frame', undefined);
+    void decodeFrame(active.pixelsDataUrl).then(
+      (image) => {
+        if (!current) return;
+        ctx.drawImage(image, 0, 0, width, height);
+        baseReady.current = true;
+      },
+      (caught: unknown) => {
+        // The frame stays paintable (on a blank base) rather than locked; the failure is reported.
+        if (current) baseReady.current = true;
+        reportDecode(caught);
+      },
+    );
     return () => { current = false; };
   }, [active, width, height]);
 
@@ -110,6 +147,12 @@ export function AnimationPaintStage({ state, activeId, tool, brush, paintable, o
     if (!canvas || !frameId) return;
     const mine = ++sequence.current;
     inFlight.current.set(frameId, mine);
+    // Keep the bitmap locally too: the canvas is repainted as soon as the person moves to another frame.
+    const pixels = document.createElement('canvas');
+    pixels.width = canvas.width;
+    pixels.height = canvas.height;
+    pixels.getContext('2d')?.drawImage(canvas, 0, 0);
+    pendingPixels.current.set(frameId, { seq: mine, pixels });
     // `toBlob` snapshots the bitmap now, so a stroke that starts while the upload runs is not in it.
     canvas.toBlob((blob) => {
       void (async () => {
@@ -124,6 +167,7 @@ export function AnimationPaintStage({ state, activeId, tool, brush, paintable, o
           if (inFlight.current.get(frameId) === mine) onStoreFailed?.();
         } finally {
           if (inFlight.current.get(frameId) === mine) inFlight.current.delete(frameId);
+          if (pendingPixels.current.get(frameId)?.seq === mine) pendingPixels.current.delete(frameId);
         }
       })();
     }, 'image/png');
@@ -145,7 +189,7 @@ export function AnimationPaintStage({ state, activeId, tool, brush, paintable, o
   };
 
   const onPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!paintable || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    if (!paintable || !baseReady.current || (event.pointerType === 'mouse' && event.button !== 0)) return;
     const ctx = event.currentTarget.getContext('2d');
     if (!ctx) return;
     event.stopPropagation();

@@ -21,10 +21,10 @@ import {
   destinationKey,
   isJournalEventId,
   normaliseSyncDestination,
+  parseSyncId,
   type EntityDestination,
   type NormalisedDestination,
 } from '../../domain/sync/syncProtocol';
-import { serverNumericId } from './importers';
 import type { SyncAuthContext, SyncStores } from './syncPorts';
 
 export type SyncDestinationPurpose = 'push' | 'pull';
@@ -61,7 +61,7 @@ async function projectVerdict(
   stores: Pick<SyncStores, 'findMapping' | 'references'>,
   projectsCreatedInBatch: ReadonlySet<string>,
 ): Promise<ProjectVerdict> {
-  const id = serverNumericId(projectId);
+  const id = parseSyncId(projectId);
   if (id !== null) return (await stores.references.projectInTenant(tenantId, id)) ? 'owned' : 'invalid';
   if (!isJournalEventId(projectId)) return 'invalid';
   if (await stores.findMapping(tenantId, 'project', projectId)) return 'owned';

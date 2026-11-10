@@ -19,7 +19,8 @@
 import { TASK_CLOSED_STATUSES } from "@builderforce/agent-loop";
 import { railTicketProgress } from "./chatRail/railPayloads";
 import type { ToolDef } from "./fileTools";
-import { LOCAL_TICKET_ID, type ChatTicketScope, type UnsyncedTicket } from "./localTicketScope";
+import { isLocalId } from "@builderforce/local-first";
+import type { ChatTicketScope, UnsyncedTicket } from "./localTicketScope";
 
 type Args = Record<string, unknown>;
 type ReadAdapter = (args: Args, server: () => Promise<string>, scope: ChatTicketScope) => Promise<string>;
@@ -124,7 +125,7 @@ const resolveHashtag: ReadAdapter = async (args, server, scope) => {
 
 const tasksGet: ReadAdapter = async (args, server, scope) => {
   const id = typeof args.id === "string" ? args.id.trim() : "";
-  if (!LOCAL_TICKET_ID.test(id)) return server();
+  if (!isLocalId(id)) return server();
   const ticket = await scope.unsyncedTicket(id);
   // Synced (or unknown here): the server has it, and the id bridge translates the local id.
   if (!ticket) return server();

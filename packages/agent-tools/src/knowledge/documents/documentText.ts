@@ -225,16 +225,21 @@ function ooxmlText(bytes: Uint8Array, mediaType: string, signal?: AbortSignal): 
 interface PdfTextItem { str?: string; hasEOL?: boolean }
 
 async function pdfText(bytes: Uint8Array, signal?: AbortSignal): Promise<string> {
-    let mod: typeof import('unpdf');
+    let getDocument: Awaited<ReturnType<typeof import('unpdf').getResolvedPDFJS>>['getDocument'];
     try {
-        mod = await import('unpdf');
+        ({ getDocument } = await (await import('unpdf')).getResolvedPDFJS());
     } catch (error) {
         throw new DocumentEngineUnavailable(error);
     }
     signal?.throwIfAborted();
-    // A PRIVATE copy: pdf.js transfers (detaches) the buffer it is handed, which must never be the caller's.
-    const pdf = await mod.getDocumentProxy(bytes.slice());
+    // The LOADING TASK is opened here rather than through unpdf's `getDocumentProxy`: that helper awaits the task's
+    // promise and drops the task, so a malformed PDF (the promise rejects) left its worker and transport alive — one
+    // leaked pdf.js transport per bad file. Holding the task, every outcome destroys it. (`useSystemFonts` is
+    // `getDocumentProxy`'s own default.) A PRIVATE copy: pdf.js transfers (detaches) the buffer it is handed, which
+    // must never be the caller's.
+    const task = getDocument({ data: bytes.slice(), useSystemFonts: true });
     try {
+        const pdf = await task.promise;
         const pages: string[] = [];
         let size = 0;
         for (let p = 1; p <= pdf.numPages && size < DEFAULT_MAX_FILE_BYTES; p++) {
@@ -252,7 +257,7 @@ async function pdfText(bytes: Uint8Array, signal?: AbortSignal): Promise<string>
         return pages.join('\n');
     } finally {
         // PDFDocumentProxy has no destroy(); the loading task owns the worker and transport.
-        await pdf.loadingTask.destroy();
+        await task.destroy();
     }
 }
 
@@ -300,7 +305,17 @@ export async function readDocument(bytes: Uint8Array, mediaType: string, signal?
         return unreadable(error instanceof Error && error.message ? error.message : 'unknown error');
     }
     const text = stripControl(raw).trim();
-    return text ? { text: text.slice(0, DEFAULT_MAX_FILE_BYTES) } : { failure: 'no-text' };
+    return text ? { text: clipToCodePoints(text, DEFAULT_MAX_FILE_BYTES) } : { failure: 'no-text' };
+}
+
+/**
+ * `text` cut to at most `max` UTF-16 units on a CODE-POINT boundary: a plain `slice` can end between the two halves
+ * of a surrogate pair, and the lone high half left behind makes the fact fail `isCleanText` (the server refuses it).
+ */
+function clipToCodePoints(text: string, max: number): string {
+    if (text.length <= max) return text;
+    const last = text.charCodeAt(max - 1);
+    return text.slice(0, last >= 0xd800 && last <= 0xdbff ? max - 1 : max);
 }
 
 /**

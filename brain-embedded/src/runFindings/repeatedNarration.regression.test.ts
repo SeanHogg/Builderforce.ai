@@ -26,6 +26,17 @@ describe('repeated_narration agrees with the B7 fold', () => {
     expect(narration(b)[0]).toMatchObject({ params: { turns: 2 } });
   });
 
+  it('regression: a turn the fold ignores (no calls) never becomes the original a repeat names', () => {
+    const b = new TraceBuilder()
+      .turn({ role: 'code', calls: [write('a.ts')], text: 'Continuing with the wiring of the panel.' })
+      .turn({ role: 'code', calls: [], text: 'Continuing with the wiring of the panel.' })
+      .turn({ role: 'code', calls: [write('c.ts')], text: 'Continuing with the wiring of the panel.' });
+    const [found] = narration(b);
+    expect(found).toMatchObject({ params: { turns: 2 } });
+    // Turns are 1-based: the call-less middle turn (2) is not the original; turn 1 is.
+    expect(found!.evidence.map((e) => e.turn)).toEqual([1, 3]);
+  });
+
   it('regression: a repeat is matched against the last KEPT narration, as the fold does', () => {
     const b = new TraceBuilder()
       .turn({ role: 'code', calls: [write('a.ts')], text: 'Continuing with the wiring of the panel.' })

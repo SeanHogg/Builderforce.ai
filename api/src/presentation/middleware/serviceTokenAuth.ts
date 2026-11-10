@@ -11,6 +11,19 @@
  *   3. enforces the endpoint scope (least privilege — migration 0070),
  *   4. resolves the (tenantId, segmentId) scope for the named account/company.
  *
+ * The inbound host OIDC path (`X-IdP-Token`, spec 05 §2.1) carries its OWN scope
+ * set, never "everything":
+ *   - granted by default: `ingest:feedback` only (an end-user token for one
+ *     segment — the embedded feedback widget);
+ *   - `segments:manage` / `webhooks:manage` (and any other seam scope) are refused
+ *     with 403 UNLESS the verified token's `scope` / `scp` claim names that scope
+ *     explicitly (rule + claimable set live in application/auth/hostOidc.ts);
+ *   - the result is `boundToSegment: true`: the caller may act only on the ONE
+ *     segment its verified claims resolve to (seam routes enforce this through
+ *     `authorizeSegmentTarget`);
+ *   - `x-builderforce-workspace` is required and must be a positive safe integer
+ *     (400). There is no default tenant — see parseWorkspaceHeader.
+ *
  * It throws TenantAccessError on failure so the route can render it with the
  * existing respondToAccessError helper.
  */
@@ -29,6 +42,10 @@ export interface ServiceContext {
   /** UUID of the bfk_* key that authenticated, or null when an inbound host OIDC
    *  token (verified by hostOidc.ts) drove the resolution instead. */
   tenantApiKeyId: string | null;
+  /** True on the host OIDC path: the caller is an end-user token for ONE segment
+   *  and may act only on `segmentId` (never tenant-wide). False for bfk_* keys,
+   *  which manage the tenant's segments as designed. */
+  boundToSegment: boolean;
 }
 
 export interface SegmentCoordinates {
@@ -60,25 +77,19 @@ export async function authenticateServiceToken(
   const authHeader = c.req.header('Authorization') ?? '';
 
   if (hostToken && !authHeader.startsWith('Bearer bfk_')) {
+    const tenantId = parseWorkspaceHeader(c.req.header('x-builderforce-workspace'));
     const db = buildDatabase(c.env);
-    // The tenant a host token can speak for is carried in the same
-    // `x-builderforce-workspace` header the bfk_* path honours; absent that it
-    // is the default (tenant 1) host trust is configured against. The claims
-    // caller requires the tenant to have an idpIssuer configured and rejects
-    // direct tenants, so an unconfigured tenant fails closed.
-    const tenantIdHeader = c.req.header('x-builderforce-workspace');
-    const tenantId = tenantIdHeader ? Number(tenantIdHeader) : 1;
-    if (!Number.isFinite(tenantId)) {
-      throw new TenantAccessError(400, 'invalid_workspace', 'x-builderforce-workspace must be a tenant id.');
-    }
-
-    const resolved = await resolveSegmentFromHostToken(c.env, db, tenantId, hostToken);
+    // Verification (401) and the OIDC scope rule (403) are both decided inside
+    // resolveSegmentFromHostToken, before any segment is resolved/created.
+    const resolved = await resolveSegmentFromHostToken(c.env, db, tenantId, hostToken, requiredScope);
     if (!resolved.ok) {
-      throw new TenantAccessError(401, 'invalid_idp_token', resolved.error);
+      throw resolved.status === 403
+        ? new TenantAccessError(403, 'insufficient_scope', resolved.error)
+        : new TenantAccessError(401, 'invalid_idp_token', resolved.error);
     }
     // The verified claims name the coordinates; the request body's coords are
     // IGNORED on this path so a caller cannot widen a verified claim set.
-    return { tenantId, segmentId: resolved.segmentId, tenantApiKeyId: null };
+    return { tenantId, segmentId: resolved.segmentId, tenantApiKeyId: null, boundToSegment: true };
   }
 
   const access = await requireTenantAccess(c);
@@ -105,5 +116,25 @@ export async function authenticateServiceToken(
     companyId: coords.companyId,
   }, c.env);
 
-  return { tenantId: access.tenantId, segmentId, tenantApiKeyId: access.tenantApiKeyId };
+  return { tenantId: access.tenantId, segmentId, tenantApiKeyId: access.tenantApiKeyId, boundToSegment: false };
+}
+
+/**
+ * The tenant a host OIDC token speaks for. REQUIRED on the OIDC path and must be
+ * a positive safe integer (400 otherwise). There is deliberately no default:
+ * spec 05 §2.1 binds host trust to a NAMED tenant (`Tenant.idpIssuer`), not to
+ * tenant 1, and a silent default would route an unaddressed token at whichever
+ * tenant happens to be id 1.
+ */
+export function parseWorkspaceHeader(value: string | undefined): number {
+  const raw = (value ?? '').trim();
+  const tenantId = /^\d+$/.test(raw) ? Number(raw) : NaN;
+  if (!Number.isSafeInteger(tenantId) || tenantId <= 0) {
+    throw new TenantAccessError(
+      400,
+      'invalid_workspace',
+      'x-builderforce-workspace is required with X-IdP-Token and must be a positive integer tenant id.',
+    );
+  }
+  return tenantId;
 }

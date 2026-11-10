@@ -747,6 +747,9 @@ describe('a run that ships its change closes its own ticket', () => {
     };
     const runTool = async (name: string, args: unknown) => {
       calls.push({ name, args });
+      // The delta mint yields the run's OWN ticket; the deterministic finish closes THAT one
+      // (deltaTicketId), not a separately-listed ticket.
+      if (name === 'builtin_tickets_from_delta') return { ok: true, taskId: 2394 };
       if (name === 'builtin_chats_list_tickets') return TICKET;
       if (name === 'git_status') return { ok: true, action: 'status', output: statusOutput };
       return { ok: true };
@@ -837,6 +840,9 @@ describe('a local run is its own reviewer: it ships its change instead of parkin
     };
     const runTool = async (name: string, args: unknown) => {
       calls.push({ name, args });
+      // The delta mint yields the run's OWN ticket; the deterministic finish closes THAT one
+      // (deltaTicketId), not a separately-listed ticket.
+      if (name === 'builtin_tickets_from_delta') return { ok: true, taskId: 2466 };
       if (name === 'builtin_chats_list_tickets') return TICKET;
       if (name === 'git_push') return { ok: true, action: 'push', output: 'Pushed main to origin\n## main...origin/main' };
       return { ok: true };

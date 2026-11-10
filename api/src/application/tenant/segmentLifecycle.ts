@@ -35,6 +35,30 @@ export interface NewSegment {
 
 export type SegmentPatch = Partial<{ status: SegmentStatus; plan: string; displayName: string }>;
 
+/**
+ * Who is driving a seam segment write. A tenant-wide principal (a `segments:manage`
+ * bfk_* key, or a manager session) manages every segment of its tenant; a
+ * segment-bound principal (a host OIDC end-user token) may act ONLY on the one
+ * segment its verified claims resolved to.
+ */
+export interface SegmentPrincipal {
+  segmentId: string;
+  boundToSegment: boolean;
+}
+
+export type SegmentTargetDecision = { ok: true } | { ok: false; status: 403; error: string };
+
+/**
+ * May `principal` act on segment `targetId`? `null` means "a segment that does not
+ * exist yet" (eager provisioning) — never allowed for a segment-bound principal,
+ * whose own segment always exists once its token has been resolved.
+ */
+export function authorizeSegmentTarget(principal: SegmentPrincipal, targetId: string | null): SegmentTargetDecision {
+  if (!principal.boundToSegment) return { ok: true };
+  if (targetId !== null && targetId === principal.segmentId) return { ok: true };
+  return { ok: false, status: 403, error: 'This identity token may only act on its own segment.' };
+}
+
 /** The tenant's segment for one (account, company) pair — the provisioning idempotency key. */
 export async function findSegmentByExternalIds(
   db: Db, tenantId: number, accountId: string, companyId: string,

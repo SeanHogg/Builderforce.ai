@@ -4,11 +4,19 @@
  * payloads but are owned here so the package has no dependency on the app.
  */
 
+import { parseSyncId } from '@builderforce/local-first';
 import type { SpendSavingsSummary } from './spendSavings';
+
+/**
+ * A chat's VIEW KEY: the numeric id a chat is addressed by in this package (a local chat's
+ * device-only key, or a server chat's own id). Not a LocalId (docs/design/typed-entity-ids.md
+ * §3); an alias only — no field is renamed.
+ */
+export type ViewKey = number;
 
 /** A brain chat (conversation) record. */
 export interface BrainChat {
-  id: number;
+  id: ViewKey;
   title: string;
   projectId: number | null;
   /** Where the chat was created (e.g. 'brainstorm' | 'ide' | 'project'). */
@@ -94,7 +102,8 @@ export interface BrainChat {
  */
 export function serverChatIdOf(chat: Pick<BrainChat, 'id' | 'origin' | 'serverId'> | null | undefined): number | null {
   if (!chat) return null;
-  if (chat.serverId != null) return chat.serverId;
+  const bound = parseSyncId(chat.serverId);
+  if (bound != null) return bound;
   return chat.origin === 'local' ? null : chat.id;
 }
 

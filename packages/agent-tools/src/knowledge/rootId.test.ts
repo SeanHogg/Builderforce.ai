@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { folderIdOf, isPackRootId, isWellFormedPackRootId, packRootIdFor, repoIdOfRemote, rootIdFor, rootIdOfSourceRef, rootRelOf, sourcePathOf, splitSourceRef } from './rootId.js';
+import { folderIdOf, isPackRootId, isWellFormedPackRootId, packRootIdFor, repoIdOfRemote, rootIdFor, rootIdOfSourceRef, rootRelOf, sourcePathIn, sourcePathOf, splitSourceRef } from './rootId.js';
 
 describe('packRootIdFor / isPackRootId — an uploaded pack is a root on the `pack` host', () => {
     it('slugs the name and adds a short stable hash, into a parseable root id', () => {
@@ -111,5 +111,15 @@ describe('source refs split unambiguously', () => {
         // A path that starts with ':' is exact once the root is known; the heuristic alone would take the colon for the root.
         expect(splitSourceRef('src:web:r:::foo', ['web:r'])).toEqual({ rootId: 'web:r', path: ':foo' });
         expect(splitSourceRef('src:web:r:::foo')).toEqual({ rootId: 'web:r:', path: 'foo' });
+    });
+});
+
+describe('sourcePathIn — THE replica path of a source ref', () => {
+    it('regression: a root id ending in ":" keeps the whole path (a first-`::` cut read `:docs/a.md`)', () => {
+        expect(sourcePathIn('src:cloud:5:::docs/a.md', 'cloud:5:')).toBe('docs/a.md');
+        expect(sourcePathIn('src:cloud:5:::docs/a.md', '')).toBe('docs/a.md');
+        expect(sourcePathIn('src:web:r:::foo', 'web:r')).toBe(':foo');
+        expect(sourcePathIn('src:ws:test::src/C#/a.cs', 'ws:test')).toBe('src/C#/a.cs');
+        expect(sourcePathIn('plain', 'ws:test')).toBe('plain');
     });
 });

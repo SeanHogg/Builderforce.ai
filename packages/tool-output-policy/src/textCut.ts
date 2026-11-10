@@ -1,10 +1,12 @@
 /**
- * Plain-text cuts. Three shapes, each owned once:
+ * Plain-text cuts. Four shapes, each owned once:
  *
- *   • {@link keepTail}    — a capture BUFFER for a live process (the verdict prints last);
- *   • {@link cutHead}     — a result whose beginning is what matters, snapped to a line;
- *   • {@link cutHeadTail} — a log: the command's start AND its end (where test/build
- *                           summaries live), with an explicit elision marker between.
+ *   • {@link keepTail}       — a capture BUFFER for a live process (the verdict prints last);
+ *   • {@link cutHead}        — a result whose beginning is what matters, snapped to a line;
+ *   • {@link cutHeadTail}    — a log: the command's start AND its end (where test/build
+ *                              summaries live), with an explicit elision marker between;
+ *   • {@link truncateMiddle} — a short free-text value (a label, a title, an error) cut at
+ *                              its middle, never splitting a surrogate pair.
  */
 
 /** Keep the last `max` chars — a rolling capture buffer. */
@@ -82,4 +84,57 @@ export function cutHeadTail(text: string, maxChars: number, opts: CutHeadTailOpt
   const elided = text.slice(headEnd, tailStart);
   const marker = `\n…[${elided.length.toLocaleString('en-US')} chars (${countLines(elided).toLocaleString('en-US')} lines) elided — showing the first ${head.length.toLocaleString('en-US')} and the last ${tail.length.toLocaleString('en-US')} of ${text.length.toLocaleString('en-US')} chars]…\n`;
   return `${head}${marker}${tail}`;
+}
+
+export interface TruncateMiddleOptions {
+  /**
+   * What goes between the kept head and tail. A string is used verbatim (e.g. `'...'` for a
+   * short label); a function receives the number of characters omitted. The function is
+   * first called with `text.length` to size the room, then with the real omitted count.
+   * Defaults to a `…(N chars omitted from the middle)…` line.
+   */
+  marker?: string | ((omitted: number) => string);
+  /**
+   * Give the head and the tail the same `floor(room / 2)` share (a label reads balanced).
+   * By default the head takes the odd character.
+   */
+  symmetric?: boolean;
+}
+
+const defaultMiddleMarker = (omitted: number): string =>
+  `\n…(${omitted.toLocaleString('en-US')} chars omitted from the middle)…\n`;
+
+const isHighSurrogate = (c: number): boolean => c >= 0xd800 && c <= 0xdbff;
+const isLowSurrogate = (c: number): boolean => c >= 0xdc00 && c <= 0xdfff;
+
+/** The first `n` chars of `s`, never ending on a lone high surrogate. */
+function safePrefix(s: string, n: number): string {
+  let end = Math.max(0, Math.min(n, s.length));
+  if (end > 0 && end < s.length && isHighSurrogate(s.charCodeAt(end - 1))) end -= 1;
+  return s.slice(0, end);
+}
+
+/** The last `n` chars of `s`, never starting on a lone low surrogate. */
+function safeSuffix(s: string, n: number): string {
+  if (n <= 0) return '';
+  let start = Math.max(0, s.length - n);
+  if (start > 0 && isLowSurrogate(s.charCodeAt(start))) start += 1;
+  return s.slice(start);
+}
+
+/**
+ * Bound `text` to `max` characters by cutting its MIDDLE: head and tail kept, one marker
+ * between. Cuts never split a surrogate pair (so a cut may keep one char fewer). When the
+ * budget cannot hold even the marker, the head alone is returned.
+ */
+export function truncateMiddle(text: string, max: number, opts: TruncateMiddleOptions = {}): string {
+  if (text.length <= max) return text;
+  const { marker = defaultMiddleMarker, symmetric = false } = opts;
+  const markerFor = typeof marker === 'string' ? () => marker : marker;
+  const room = Math.max(0, max - markerFor(text.length).length);
+  if (room === 0) return safePrefix(text, max);
+  const tailShare = Math.floor(room / 2);
+  const head = safePrefix(text, symmetric ? tailShare : room - tailShare);
+  const tail = safeSuffix(text, tailShare);
+  return `${head}${markerFor(text.length - head.length - tail.length)}${tail}`;
 }

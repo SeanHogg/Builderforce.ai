@@ -54,7 +54,10 @@ function buildCommitCommand(opts: { message: string; paths: string[]; branch?: s
   // it could not find — never a silent empty stage.
   const resolveLines = opts.paths.map((p, i) => {
     const candidates = commitPathCandidates(p, opts.repo).map(shellQuote).join(" ");
-    return `P${i}="$(pick ${candidates})" || MISSING="$MISSING ${shellQuote(p).slice(1, -1)}"`;
+    // The path goes into MISSING as its own SINGLE-QUOTED word, concatenated after the
+    // double-quoted prefix: stripping the quotes and splicing it inside "…" let a
+    // nonexistent path like `$(touch pwned)` or `` `id` `` execute.
+    return `P${i}="$(pick ${candidates})" || MISSING="$MISSING "${shellQuote(p)}`;
   });
   const paths = opts.paths.map((_, i) => `"$P${i}"`).join(" ");
   return [

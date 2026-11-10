@@ -2,7 +2,7 @@ import { existsSync, statSync } from "node:fs";
 import fs from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { sliceUtf16Safe } from "../utils.js";
+import { truncateMiddle as truncateMiddleText } from "@builderforce/tool-output-policy";
 import { assertSandboxPath } from "./sandbox-paths.js";
 
 const CHUNK_LIMIT = 8 * 1024;
@@ -169,12 +169,9 @@ export function chunkString(input: string, limit = CHUNK_LIMIT) {
   return chunks;
 }
 
+/** Shorten a label to `max` chars around a `...` — the shared cut, balanced halves. */
 export function truncateMiddle(str: string, max: number) {
-  if (str.length <= max) {
-    return str;
-  }
-  const half = Math.floor((max - 3) / 2);
-  return `${sliceUtf16Safe(str, 0, half)}...${sliceUtf16Safe(str, -half)}`;
+  return truncateMiddleText(str, max, { marker: "...", symmetric: true });
 }
 
 export function sliceLogLines(

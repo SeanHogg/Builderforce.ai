@@ -25,19 +25,18 @@
  * `concurrentRunCap`). Everything FAILS OPEN on a lookup error: admission bounds a burst, it
  * is not a second point of failure for the run it guards.
  */
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import { inTransaction, type Db, type Tx } from '../../infrastructure/database/connection';
 import { executions } from '../../infrastructure/database/schema';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { liveExecution } from '../rehearsal/executionMode';
 import { AUTO_RUN_REASON_TEXT } from '../swimlane/evaluateAutoRun';
 import { ADMISSION_CANCEL_ACTOR } from './admissionActor';
 import { recordCloudToolEvent } from './cloudToolEvents';
 import { enforceConcurrentRunCap, liveCloudExecutionIds, resolveConcurrentRunLimit } from './concurrentRunCap';
 import { parkDeferredDispatch, type DeferredDispatchParams } from './deferredDispatch';
 import { notifyExecutionSubscribers } from './executionEvents';
-import { findLiveExecution, LIVE_EXECUTION_STATUSES } from './liveExecutionStatus';
+import { findLiveExecution, liveRunsForTask } from './liveExecutionStatus';
 import { recordAutoRunSkip } from './autoRunSkipLedger';
 import type { RuntimeService } from './RuntimeService';
 
@@ -66,22 +65,6 @@ const capRefusal = (limit: number, current: number, effectivePlan: string): Admi
   effectivePlan,
   message: `This workspace already has ${current} of ${limit} cloud runs in flight, the most its ${effectivePlan} plan allows at once. Wait for a run to finish or cancel one.`,
 });
-
-/** The live runs of one ticket, oldest first. */
-async function liveRunsForTask(
-  db: Db | Tx, tenantId: number, taskId: number,
-): Promise<Array<{ id: number; status: string }>> {
-  return db
-    .select({ id: executions.id, status: executions.status })
-    .from(executions)
-    .where(and(
-      eq(executions.tenantId, tenantId),
-      eq(executions.taskId, taskId),
-      inArray(executions.status, [...LIVE_EXECUTION_STATUSES]),
-      liveExecution(),
-    ))
-    .orderBy(asc(executions.id));
-}
 
 /** The ticket's live run (the newest, matching the autonomy evaluator's `already_running`), or null. */
 export async function findLiveExecutionForTask(

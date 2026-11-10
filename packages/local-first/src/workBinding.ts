@@ -22,15 +22,14 @@ import { importKey, isOwnRecord, queueImport } from './journalRules.js';
 import { chatTicketLinkWaitsOn } from './chatTicketLink.js';
 import type { ChatTicketLinkValue, EntityDestination, LocalRecord, ProjectValue, TicketValue } from './records.js';
 import { SCAN_STOP, selectRecords, type LocalFirstStore } from './store.js';
-
-const SERVER_REFERENCE = /^\d+$/;
+import { parseSyncId } from './entityId.js';
 
 /** The import keys a ticket must follow: its local project, its local parent. */
 export function ticketWaitsOn(ticket: TicketValue): string[] {
   const waits: string[] = [];
-  if (!SERVER_REFERENCE.test(ticket.projectId.trim())) waits.push(importKey('project', ticket.projectId));
+  if (parseSyncId(ticket.projectId.trim()) === null) waits.push(importKey('project', ticket.projectId));
   const parent = ticket.parentTicketId?.trim();
-  if (parent && !SERVER_REFERENCE.test(parent)) waits.push(importKey('ticket', parent));
+  if (parent && parseSyncId(parent) === null) waits.push(importKey('ticket', parent));
   return waits;
 }
 

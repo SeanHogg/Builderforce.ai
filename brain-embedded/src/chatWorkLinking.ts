@@ -24,7 +24,9 @@
  *
  * Kept framework-free (pure strings + Sets) so it is safe in every bundle.
  */
+import { syncIdText } from '@builderforce/local-first';
 import { LOCAL_TICKET_CREATE_TOOL, SERVER_TICKET_LINK_TOOL, SERVER_TICKET_TOOLS, type TicketToolVocabulary } from './ticketToolVocabulary';
+import { entityIdsOf } from './toolResultRecord';
 
 /**
  * Advertised (gateway `builtin_*`) names of the platform tools that RECORD work
@@ -205,11 +207,13 @@ function selectLinkedTasks(listResult: unknown, statuses: ReadonlySet<string>): 
   const out: LinkedTicketToAdvance[] = [];
   for (const r of rows) {
     if (!r || typeof r !== 'object') continue;
-    const row = r as { kind?: unknown; ref?: unknown; status?: unknown; exists?: unknown };
+    const row = r as { kind?: unknown; ref?: unknown; syncId?: unknown; status?: unknown; exists?: unknown };
     if (typeof row.kind !== 'string' || !TASK_TIER_KINDS.has(row.kind)) continue;
     if (row.exists === false) continue;
-    const ref = typeof row.ref === 'number' ? String(row.ref) : typeof row.ref === 'string' && row.ref.trim() ? row.ref : null;
-    if (!ref) continue;
+    // A task-tier row's ref IS its account id: the row's `syncId`, else its numeric `ref`.
+    const { syncId } = entityIdsOf({ syncId: row.syncId, id: row.ref });
+    if (syncId == null) continue;
+    const ref = syncIdText(syncId);
     if (typeof row.status !== 'string' || !statuses.has(row.status.toLowerCase())) continue;
     out.push({ kind: row.kind, ref });
   }

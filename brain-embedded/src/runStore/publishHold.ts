@@ -54,15 +54,52 @@ export interface PublishHold {
 }
 
 /**
- * Lift the hold — a later user turn explicitly asked to commit / push / ship / open a
- * PR. Narrow on purpose: only an affirmative ship order ends a hold the person set,
- * so a follow-up that merely continues the work cannot silently reopen shipping.
+ * Lift the hold — a later user turn explicitly ORDERS a commit / push / ship / merge / PR.
+ * Narrow on purpose: only an affirmative ship order ends a hold the person set, so a
+ * follow-up that merely continues the work cannot silently reopen shipping.
+ *
+ * The matcher reads the turn CLAUSE by clause (split on sentence punctuation and commas)
+ * and lifts only when a clause IS the order:
+ *
+ *   [acknowledgement…] [go-ahead framing] VERB [end of clause | publish object …]
+ *
+ *  - acknowledgement: "ok", "yes", "lgtm", "looks good", "validated", "please", "now"…
+ *  - go-ahead framing (optional): "go ahead and", "you can (now)", "feel free to",
+ *    "(it is) ok/fine/safe to", "time to", "let us", "please".
+ *  - VERB: commit · push · ship · merge · land · publish · release · open/raise a PR —
+ *    and it must OPEN the clause (after the two parts above), so "fix the push
+ *    notification handler" / "update the release notes" never match.
+ *  - publish object: what follows the verb must be what is shipped ("it", "them",
+ *    "everything", "the changes", "your work", "to main", "and push"…) or nothing at all,
+ *    so a verb used as a noun or adjective ("push notifications are broken", "release notes
+ *    need work", "commit message is too long") never matches.
+ *
+ * A negated order ("don't push yet") never opens with the verb, so it never lifts — and
+ * `declinesShipping` re-arms the hold on it anyway.
  */
-const ASKS_TO_SHIP =
-  /\b(?:commit|push|ship|merg\w*|land|publish|release)\b/i;
+const PUBLISH_VERB = String.raw`(?:commit|push|ship|merge|land|publish|release|(?:open|raise|create)\s+(?:a|the)\s+(?:pr|pull\s+request))`;
+
+const PUBLISH_OBJECT =
+  String.raw`(?:it|them|this|that|these|those|everything|all|now|away|changes|` +
+  String.raw`(?:the|your|my|our)\s+(?:changes?|code|work|fix(?:es)?|branch|commits?|pr|diff|edits?|updates?|lot)|` +
+  String.raw`and\s+${PUBLISH_VERB}|` +
+  String.raw`to\s+(?:main|master|origin|remote|github|prod(?:uction)?|the\s+(?:remote|repo|base\s+branch|main\s+branch|branch)))`;
+
+const ACKNOWLEDGEMENT =
+  String.raw`(?:(?:ok(?:ay)?|yes|yep|yeah|sure|great|good|perfect|thanks|thank\s+you|lgtm|looks\s+good|all\s+good|validated|verified|approved|done|now|please|so|then|and|alright)\b[\s!–—-]*)*`;
+
+const GO_AHEAD =
+  String.raw`(?:go\s+ahead\s+(?:and\s+)?|you\s+(?:can|may)\s+(?:now\s+)?(?:go\s+ahead\s+and\s+)?|feel\s+free\s+to\s+|(?:it\s+is\s+|it['’]?s\s+)?(?:ok(?:ay)?|fine|safe)\s+to\s+|time\s+to\s+|let['’]?s\s+|please\s+)?`;
+
+const SHIP_ORDER = new RegExp(
+  String.raw`^${ACKNOWLEDGEMENT}${GO_AHEAD}${PUBLISH_VERB}(?:\s*$|\s+${PUBLISH_OBJECT}\b)`,
+  'i',
+);
 
 export function asksToShip(text: string | null | undefined): boolean {
-  return ASKS_TO_SHIP.test(text ?? '');
+  return (text ?? '')
+    .split(/[.!?;:\n,]+/)
+    .some((clause) => SHIP_ORDER.test(clause.trim()));
 }
 
 /** A raw shell `git commit` / `git push`, however git's own options precede the verb. */

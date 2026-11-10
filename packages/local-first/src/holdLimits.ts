@@ -46,3 +46,52 @@ export function holdGiveUpReason(
   }
   return heldMs >= HOLD_MAX_AGE_MS ? `gave_up:${detail ?? status}` : undefined;
 }
+
+/** Backoff after a hold: 30s · 2^(n-1), capped at an hour. Give up only on AGE ({@link holdGiveUpReason}), never on a count. */
+export const HOLD_BACKOFF_BASE_MS = 30_000;
+export const HOLD_BACKOFF_CAP_MS = 60 * 60 * 1000;
+
+/** The wait before the `attempts`-th hold of an event is re-sent. */
+export function holdBackoffMs(attempts: number): number {
+  return Math.min(HOLD_BACKOFF_CAP_MS, HOLD_BACKOFF_BASE_MS * 2 ** (Math.max(1, attempts) - 1));
+}
+
+export type HoldStatus = 'dependency_pending' | 'conflict' | 'rejected';
+
+/** The hold fields a journal event carries between attempts. */
+export interface HeldEventState {
+  readonly holdKind?: string;
+  readonly holdAttempts?: number;
+  readonly heldSince?: string;
+}
+
+/** What the receipt loop does with a held event: re-hold it with this state, or dead-letter it. */
+export type HoldTransition =
+  | { readonly kind: 'hold'; readonly hold: { holdKind: HoldStatus; holdAttempts: number; heldSince: string; nextAttemptAt: string } }
+  | { readonly kind: 'dead_letter'; readonly reason: string; readonly at: string };
+
+/**
+ * The next hold state of `event` after the server answered `status` (with `detail`) at `at`.
+ *
+ * A different KIND of hold than the last (waiting on a parent, then a conflict) starts a fresh clock
+ * and a fresh attempt count: a long dependency wait must not make a later refusal give up instantly.
+ * Out of patience ({@link holdGiveUpReason}) it is a dead letter, so sync status says so instead of
+ * retrying forever; otherwise it backs off ({@link holdBackoffMs}). Pure.
+ */
+export function nextHoldTransition(
+  event: HeldEventState,
+  status: HoldStatus,
+  detail: string | undefined,
+  at: Date,
+): HoldTransition {
+  const now = at.toISOString();
+  const sameKind = event.holdKind === undefined || event.holdKind === status;
+  const holdAttempts = (sameKind ? (event.holdAttempts ?? 0) : 0) + 1;
+  const heldSince = sameKind ? (event.heldSince ?? now) : now;
+  const giveUp = holdGiveUpReason(status, detail, at.getTime() - Date.parse(heldSince));
+  if (giveUp !== undefined) return { kind: 'dead_letter', reason: giveUp, at: now };
+  return {
+    kind: 'hold',
+    hold: { holdKind: status, holdAttempts, heldSince, nextAttemptAt: new Date(at.getTime() + holdBackoffMs(holdAttempts)).toISOString() },
+  };
+}

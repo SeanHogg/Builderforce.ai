@@ -21,6 +21,7 @@ export function interruptedRunsLabels(): Record<string, string> {
     "ir.dismiss": t("Dismiss"),
     "ir.failed": t("Couldn't resume"),
     "ir.busy": t("This chat is running"),
+    "ir.chatPending": t("Another run is resuming in this chat"),
     "ir.continue": t("Continue the task that was interrupted when the editor closed."),
     "ir.continueAsk": t("The original request, verbatim:"),
     "ir.continuePlan": t("The plan when it stopped:"),

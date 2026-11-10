@@ -70,13 +70,20 @@ export const syncEvents = pgTable('sync_events', {
   index('idx_sync_events_entity').on(t.tenantId, t.entityType, t.clientEntityId),
 ]);
 
-/** Client entity UUID → server id + current version (the optimistic-concurrency counter). */
+/**
+ * Client entity UUID → server id + current version (the optimistic-concurrency counter).
+ *
+ * `sync_id` (migration 1339, expand): the server row's integer key — the SyncId of
+ * docs/design/typed-entity-ids.md — NULL when the entity has none (mirror, usage, tier
+ * tickets, run steps). `server_id` text stays until the contract push drops it.
+ */
 export const syncEntityMappings = pgTable('sync_entity_mappings', {
   id:            bigserial('id', { mode: 'number' }).primaryKey(),
   tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   entityType:    varchar('entity_type', { length: 40 }).notNull(),
   clientEntityId: uuid('client_entity_id').notNull(),
   serverId:      varchar('server_id', { length: 128 }).notNull(),
+  syncId:        bigint('sync_id', { mode: 'number' }),
   serverVersion: integer('server_version').notNull(),
   destinationKey: text('destination_key').notNull(),
   payloadHash:   varchar('payload_hash', { length: 128 }).notNull(),
@@ -86,6 +93,8 @@ export const syncEntityMappings = pgTable('sync_entity_mappings', {
 }, (t) => [
   uniqueIndex('uq_sync_entity_mappings_client').on(t.tenantId, t.entityType, t.clientEntityId),
   index('idx_sync_entity_mappings_server').on(t.tenantId, t.entityType, t.serverId),
+  // Plain, NOT unique: one SyncId may map to several client ids (re-linked or adopted entities).
+  index('idx_sync_entity_mappings_sync_id').on(t.tenantId, t.entityType, t.syncId),
 ]);
 
 /**

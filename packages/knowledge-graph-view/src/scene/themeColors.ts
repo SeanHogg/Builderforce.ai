@@ -135,22 +135,47 @@ export function readThemeColors(el: Element): ThemeColors {
     return out;
 }
 
-/** Theme colours for `el`, re-read when the theme flips. Null until the element mounts. */
+/** True when every tone resolves to the same colour in both readings. */
+export function sameThemeColors(a: ThemeColors | null, b: ThemeColors | null): boolean {
+    if (a === b) return true;
+    if (!a || !b) return false;
+    return TONES.every((tone) => a[tone] === b[tone]);
+}
+
+/**
+ * Theme colours for `el`, re-read when the theme flips. Null until the element mounts.
+ *
+ * `style` stays observed (a host may set the tokens inline on `<html>`), but an inline-style change
+ * that moves no tone — a modal's `overflow` scroll-lock, a drag cursor — keeps the SAME object, so the
+ * canvas and the WebGL materials keyed on it do not repaint. A burst of mutations is coalesced into
+ * one read per animation frame.
+ */
 export function useThemeColors(el: Element | null): ThemeColors | null {
     const [colors, setColors] = useState<ThemeColors | null>(null);
     useEffect(() => {
         if (!el) return undefined;
-        const read = () => setColors(readThemeColors(el));
+        const read = () => {
+            const next = readThemeColors(el);
+            setColors((prev) => (sameThemeColors(prev, next) ? prev : next));
+        };
+        const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : null;
+        let frame: number | null = null;
+        const schedule = () => {
+            if (!raf) { read(); return; }
+            if (frame !== null) return;
+            frame = raf(() => { frame = null; read(); });
+        };
         read();
-        const observer = new MutationObserver(read);
+        const observer = new MutationObserver(schedule);
         for (const target of [document.documentElement, document.body]) {
             observer.observe(target, { attributes: true, attributeFilter: ['class', 'data-theme', 'style'] });
         }
         const media = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
-        media?.addEventListener?.('change', read);
+        media?.addEventListener?.('change', schedule);
         return () => {
             observer.disconnect();
-            media?.removeEventListener?.('change', read);
+            media?.removeEventListener?.('change', schedule);
+            if (frame !== null && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(frame);
         };
     }, [el]);
     return colors;

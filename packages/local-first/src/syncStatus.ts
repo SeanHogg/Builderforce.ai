@@ -61,7 +61,7 @@ function sameRecord(entityType: LocalRecord['entityType'], id: string, record: L
  */
 export function hasServerMapping(
   record: Pick<LocalRecord, 'entityType' | 'id'>,
-  mappings: readonly ServerMapping[],
+  mappings: readonly Pick<ServerMapping, 'entityType' | 'clientEntityId' | 'serverVersion'>[],
 ): boolean {
   return mappings.some(
     (mapping) => mapping.entityType === record.entityType && mapping.clientEntityId === record.id && isImported(mapping),

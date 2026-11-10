@@ -59,13 +59,8 @@ import {
   deleteWebsitePage,
   landingPageDetail,
   listLandingPages,
-  publicLandingPageCached,
-  publicWebsitePageCached,
   publishLandingPage,
   publishWebsitePage,
-  recordLandingPageConversion,
-  recordLandingPageView,
-  recordSeoImpression,
   reorderBlocks,
   retireSeoPattern,
   seoPatternSummary,
@@ -78,6 +73,13 @@ import {
   upsertSeoPage,
   websiteTree,
 } from '../../application/marketing/webSurface';
+import {
+  publicLandingPageCached,
+  publicWebsitePageCached,
+  recordLandingPageConversion,
+  recordLandingPageView,
+  recordSeoImpression,
+} from '../../application/marketing/webSurfacePublicDelivery';
 
 /** The public SEO impression beacon. A visitor's browser sends it fire-and-forget,
  *  so it NEVER refuses: a missing/non-string `path`, or a body that is not an object

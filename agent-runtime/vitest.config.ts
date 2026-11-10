@@ -90,6 +90,11 @@ export default defineConfig({
         find: "@builderforce/agent-tools/knowledge-index.js",
         replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "knowledge-index.ts"),
       },
+      {
+        // The A2A transport (`extensions/a2a`: inbound server + a2a_send client), same NodeNext `.js` form.
+        find: "@builderforce/agent-tools/a2a.js",
+        replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "a2a.ts"),
+      },
       // Every source-only package under `packages/`, derived from their manifests.
       // These were six hand-written entries and had already fallen behind the
       // registry: `canvas-widget-protocol`, `creation-canvas-contract`,

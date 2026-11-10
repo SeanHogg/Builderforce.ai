@@ -1,10 +1,10 @@
 import { useRef, useState } from 'react';
-import type { useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import { DocumentMarkdown } from '@/components/DocumentMarkdown';
 import type { DocumentBlock } from '@/domains/collab/domain/blockDocument';
 import { toModelText } from '@/domains/collab/domain/drawingPlaceholders';
-import { knowledgeApi, type AnalysisResult } from '@/lib/knowledgeApi';
+import { knowledgeApi, type AnalysisCategory, type AnalysisFinding, type AnalysisResult } from '@/lib/knowledgeApi';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { badge, btnPrimary } from '../knowledgeStyles';
 
@@ -15,21 +15,36 @@ function severityColor(severity: string): React.CSSProperties {
 }
 
 /**
+ * Severity and category are MODEL output: the type says `'low' | 'medium' | 'high'`, but nothing
+ * stops the model answering `critical`. Only a known value names a catalog key; anything else is
+ * worded by the `_other` key instead of rendering a raw `knowledge.severity_critical`.
+ */
+const KNOWN_SEVERITIES: ReadonlySet<string> = new Set<AnalysisFinding['severity']>(['low', 'medium', 'high']);
+const KNOWN_CATEGORIES: ReadonlySet<string> = new Set<AnalysisCategory>(['inefficiency', 'gap', 'risk', 'clarity']);
+
+export function severityKey(severity: unknown): string {
+  return typeof severity === 'string' && KNOWN_SEVERITIES.has(severity) ? `severity_${severity}` : 'severity_other';
+}
+
+export function categoryKey(category: unknown): string {
+  return typeof category === 'string' && KNOWN_CATEGORIES.has(category) ? `category_${category}` : 'category_other';
+}
+
+/**
  * The AI analysis of a knowledge document: findings plus an improved flow the person can
  * apply. The model is shown the document with drawings as `[[bf-drawing:N]]` placeholders;
  * `onApplyFlow` gets the snapshot those numbers refer to so the drawings can be restored.
  */
 export function AnalyzePanel({
   docId,
-  t,
   getBlocks,
   onApplyFlow,
 }: {
   docId: string;
-  t: ReturnType<typeof useTranslations>;
   getBlocks: () => readonly DocumentBlock[];
   onApplyFlow: (flow: string, snapshot: readonly DocumentBlock[]) => void;
 }) {
+  const t = useTranslations('knowledge');
   const errorMessage = useErrorMessage();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -99,8 +114,8 @@ export function AnalyzePanel({
                       style={{ padding: 12, borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--surface-2)' }}
                     >
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
-                        <span style={{ ...badge, ...severityColor(f.severity) }}>{t(`severity_${f.severity}`)}</span>
-                        <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t(`category_${f.category}`)}</span>
+                        <span style={{ ...badge, ...severityColor(f.severity) }}>{t(severityKey(f.severity))}</span>
+                        <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t(categoryKey(f.category))}</span>
                       </div>
                       <div style={{ fontSize: 'var(--font-size-body)', fontWeight: 600 }}>{f.issue}</div>
                       {f.recommendation && (

@@ -41,9 +41,9 @@ import {
   preludeRejection,
   rejected,
   sameCanonical,
-  serverNumericId,
   type BoundedImportOutcome,
 } from './index';
+import { mappedServerKey } from '../syncIds';
 
 const ROLES = new Set(['user', 'assistant', 'system', 'tool']);
 /** `brain_chat_messages.event_key` is varchar(160). */
@@ -187,7 +187,7 @@ async function mutateMessage(
   const gate = mutateGate(event, ctx, mapping);
   if (gate) return gate;
   const current = mapping as SyncEntityMappingRow;
-  const id = serverNumericId(current.serverId);
+  const id = mappedServerKey(current);
   if (id === null) return rejected('server_id_invalid');
   if (isStepId(id)) return mutateStep(event, ctx, stores, tx, current, id, steps);
   try {

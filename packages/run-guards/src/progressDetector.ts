@@ -83,6 +83,30 @@ export interface ProgressDetectorState {
   advisory?: ReadinessAdvisoryState;
   /** B4: the batching nudge's plain-JSON state (streak + one-shot fired flag). */
   batching?: BatchingNudgeState;
+  /** `reverifying`: paths this run has written (most recent last, at most {@link MAX_REVERIFY_PATHS}). */
+  writtenPaths?: string[];
+  /** `reverifying`: written paths already read back since their last write (bounded likewise). */
+  readBackSinceWrite?: string[];
+}
+
+/** Written / read-back paths remembered for `reverifying` — enough for a real run, small
+ *  enough for durable state; beyond it the oldest are dropped. */
+const MAX_REVERIFY_PATHS = 500;
+
+/** Add `path` as the most recent member, dropping the oldest past {@link MAX_REVERIFY_PATHS}. */
+function addBounded(set: Set<string>, path: string): void {
+  set.delete(path);
+  set.add(path);
+  while (set.size > MAX_REVERIFY_PATHS) {
+    const oldest = set.values().next().value;
+    if (oldest === undefined) break;
+    set.delete(oldest);
+  }
+}
+
+/** A restored path list, trimmed to the newest {@link MAX_REVERIFY_PATHS}. */
+function restoreBounded(paths: readonly string[] | undefined): Set<string> {
+  return new Set((paths ?? []).slice(-MAX_REVERIFY_PATHS));
 }
 
 export interface ProgressDetectorPorts extends NoProgressPorts {
@@ -159,8 +183,8 @@ export class ProgressDetector {
     this.steer = state.steer;
     this.readiness = new ReadinessAdvisory(state.advisory);
     this.batching = new BatchingNudge(state.batching);
-    this.writtenPaths = new Set();
-    this.readBackSinceWrite = new Set();
+    this.writtenPaths = restoreBounded(state.writtenPaths);
+    this.readBackSinceWrite = restoreBounded(state.readBackSinceWrite);
     this.readThisTurn = [];
     this.allReadsRepeatReadBacks = true;
     this.turnCalls = [];
@@ -199,7 +223,7 @@ export class ProgressDetector {
         const path = pathArgOf(args);
         this.forgetVisitsOf(path);
         if (path) {
-          this.writtenPaths.add(path);
+          addBounded(this.writtenPaths, path);
           this.readBackSinceWrite.delete(path);
         }
       }
@@ -209,7 +233,7 @@ export class ProgressDetector {
         this.readThisTurn.push(target);
         if (this.writtenPaths.has(target)) {
           if (!this.readBackSinceWrite.has(target)) this.allReadsRepeatReadBacks = false;
-          this.readBackSinceWrite.add(target);
+          addBounded(this.readBackSinceWrite, target);
         } else {
           this.allReadsRepeatReadBacks = false;
         }
@@ -323,11 +347,6 @@ export class ProgressDetector {
     this.steer = note;
   }
 
-  /** B1: the readiness advisory awaiting its one turn ("" when none). */
-  readinessNote(): string {
-    return this.readiness.snapshot().note;
-  }
-
   /** The note the current turn's request carries ("" when none). */
   steerNote(): string {
     return this.steer ?? "";
@@ -349,11 +368,17 @@ export class ProgressDetector {
       ...(this.unkeptTurns ? { unkeptTurns: this.unkeptTurns } : {}),
       ...(this.quietTurns ? { quietTurns: this.quietTurns } : {}),
       ...(this.steer ? { steer: this.steer } : {}),
-      ...(this.readiness.snapshot().note ? { advisory: this.readiness.snapshot() } : {}),
+      // `fired` persists on its own: a consumed one-off advisory must not re-fire on resume.
+      ...((): Record<string, unknown> => {
+        const a = this.readiness.snapshot();
+        return a.note || a.fired ? { advisory: a } : {};
+      })(),
       ...((): Record<string, unknown> => {
         const b = this.batching.snapshot();
         return b.streak || b.fired ? { batching: b } : {};
       })(),
+      ...(this.writtenPaths.size ? { writtenPaths: [...this.writtenPaths] } : {}),
+      ...(this.readBackSinceWrite.size ? { readBackSinceWrite: [...this.readBackSinceWrite] } : {}),
     };
   }
 }

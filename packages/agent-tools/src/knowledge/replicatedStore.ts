@@ -23,7 +23,7 @@
 
 import type { Extracted, KnowledgeStore, NodeRef, Scope, StoredFact, StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
 import { factDigest, relationDigest } from '@seanhogg/builderforce-memory/knowledge/pack';
-import { pathOfRef } from './replicaPack.js';
+import { sourcePathIn } from './rootId.js';
 import { factKey, fileKey, relationKey, type ReplicaQueue } from './replicaQueue.js';
 
 /** The server's copy, read-only (a client store satisfies the first two). */
@@ -101,7 +101,7 @@ export function replicatedKnowledgeStore(args: ReplicatedStoreArgs): KnowledgeSt
         const known = await knownHashes();
         if (known.get(ref) === hash) return [];
         if (hash) known.set(ref, hash); else known.delete(ref);
-        return [fileKey(pathOfRef(rootId ?? '', ref), hash)];
+        return [fileKey(sourcePathIn(ref, rootId ?? ''), hash)];
     };
 
     /** File keys staled but not yet given their output: the ones a pump may have held back. */
@@ -193,12 +193,12 @@ export function replicatedKnowledgeStore(args: ReplicatedStoreArgs): KnowledgeSt
             const keys: string[] = [];
             for (const e of extracted) {
                 keys.push(...(await fileChanged(e.sourceRef, args.rootId, hash)));
-                if (before && before.length === 0 && replica) keys.push(fileKey(pathOfRef(args.rootId ?? '', e.sourceRef), hash));
+                if (before && before.length === 0 && replica) keys.push(fileKey(sourcePathIn(e.sourceRef, args.rootId ?? ''), hash));
             }
             await mark(keys);
             // A file staled before its output was stored (a live edit) may already have been held back by a pump that ran in between: the same
             // hash is not a change, so nothing re-kicked it. Kick the pump when this output is one that was waited for. Debounced by the host.
-            const waited = extracted.some((e) => staled.delete(fileKey(pathOfRef(args.rootId ?? '', e.sourceRef), hash)))
+            const waited = extracted.some((e) => staled.delete(fileKey(sourcePathIn(e.sourceRef, args.rootId ?? ''), hash)))
                 || (await local.hasRecheck?.(hash)) === true; // an answer of [] (nothing extracted) is as much an answer as a body
             if (waited) args.onQueued?.();
         };

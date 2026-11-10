@@ -78,6 +78,58 @@ describe("the replica pump's lock", () => {
     await again!.release();
   });
 
+  it('regression: a host that stalled past the stale window never stamps over, nor frees, the lock another host took', async () => {
+    vi.useFakeTimers();
+    let clock = 10_000;
+    const files = memoryFiles();
+    const a = await acquireReplicaLock(files, ROOT, { pid: 'host-a', now: () => clock });
+    expect(a?.lost?.aborted).toBe(false);
+    // Host A sleeps (no refresh runs) past the stale window; host B takes the root.
+    clock += LOCK_STALE_MS + 1;
+    const b = await acquireReplicaLock(files, ROOT, { pid: 'host-b', now: () => clock });
+    expect(b).toBeDefined();
+    // A wakes: its refresh finds B's stamp, so it loses the lock instead of overwriting it.
+    clock += LOCK_REFRESH_MS;
+    await vi.advanceTimersByTimeAsync(LOCK_REFRESH_MS);
+    expect(a!.lost!.aborted).toBe(true);
+    expect(b!.lost!.aborted).toBe(false);
+    expect(record(files)).toEqual({ pid: 'host-b', at: clock }); // B's own refresh, not A's
+    await a!.release();
+    expect(record(files).pid).toBe('host-b'); // A's release never wrote at:0 over B's lock
+    expect(await acquireReplicaLock(files, ROOT, { pid: 'host-c', now: () => clock + 1 })).toBeUndefined();
+    await b!.release();
+    expect(record(files)).toEqual({ pid: 'host-b', at: 0 });
+  });
+
+  it('regression: with an exclusive create two hosts racing a stale lock leave exactly one holder', async () => {
+    const files = memoryFiles();
+    const exclusive = Object.assign(files, {
+      createExclusive: async (n: string, t: string) => { await Promise.resolve(); if (files.data.has(n)) return false; files.data.set(n, t); return true; },
+      rename: async (from: string, to: string) => {
+        await Promise.resolve();
+        const t = files.data.get(from);
+        if (t === undefined) throw new Error('ENOENT');
+        files.data.delete(from); files.data.set(to, t);
+      },
+      remove: async (n: string) => { files.data.delete(n); },
+    });
+    await acquireReplicaLock(exclusive, ROOT, { pid: 'crashed', now: () => 1000 }); // never refreshed, never released
+    const later = 1000 + LOCK_STALE_MS + 1;
+    const [x, y] = await Promise.all([
+      acquireReplicaLock(exclusive, ROOT, { pid: 'host-a', now: () => later }),
+      acquireReplicaLock(exclusive, ROOT, { pid: 'host-b', now: () => later }),
+    ]);
+    expect([x, y].filter(Boolean)).toHaveLength(1);
+    const winner = x ? 'host-a' : 'host-b';
+    expect(record(files)).toEqual({ pid: winner, at: later });
+    expect(await acquireReplicaLock(exclusive, ROOT, { pid: 'host-c', now: () => later + 1 })).toBeUndefined(); // a fresh lock is refused
+    await (x ?? y)!.release();
+    expect(files.data.has(lockFileName(ROOT))).toBe(false); // released by removing the file, so the next exclusive create wins
+    const next = await acquireReplicaLock(exclusive, ROOT, { pid: 'host-c', now: () => later + 2 });
+    expect(next).toBeDefined();
+    await next!.release();
+  });
+
   it('a string owner (a browser tab) holds the lock, refuses another tab and re-acquires its own', async () => {
     const files = memoryFiles();
     const tabA = fileReplicaLock({ owner: 'tab-a', now: () => 5000 });

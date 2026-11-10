@@ -11,22 +11,41 @@
  *
  * Created on first use and never rewritten: two imports racing on a new tenant both try to
  * insert, one wins (`ON CONFLICT DO NOTHING`), and both then read the winner's value.
- * Cached per isolate — a salt never changes, so a cached copy cannot go stale.
+ *
+ * CACHING — L1 ONLY, ON PURPOSE. The read goes through the canonical `getOrSetCached`, but
+ * with NO cache env, so it never reaches the KV layer: the salt is HMAC key material, and a
+ * copy in a shared KV namespace would put a secret in a second store with its own readers,
+ * retention and backups. In-isolate it is the same bytes the isolate already holds while
+ * hashing. The L1 entry is TTL-bounded ({@link REF_SALT_L1_TTL_MS}) and single-flight, so
+ * concurrent first reads share one load. A salt never changes, so a cached copy cannot go
+ * stale; the TTL only bounds how long it sits in memory.
  */
 
 import type { Db } from '../../infrastructure/database/connection';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { hiringRefSalts } from '../../infrastructure/database/schema/hiring';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { bytesToHex } from '../../domain/shared/bytes';
 
-const cache = new Map<number, string>();
+/** How long a loaded salt stays in isolate memory. */
+export const REF_SALT_L1_TTL_MS = 10 * 60_000;
 
-/** Forget cached salts (tests). */
-export function clearRefSaltCache(): void { cache.clear(); }
+/** Folded into the key so {@link clearRefSaltCache} can drop every tenant at once. */
+let generation = 0;
+
+/** Forget cached salts (tests: "a fresh isolate"). */
+export function clearRefSaltCache(): void { generation += 1; }
 
 export async function loadRefSalt(db: Db, tenantId: number): Promise<string> {
-  const known = cache.get(tenantId);
-  if (known) return known;
+  return getOrSetCached(
+    undefined, // L1 only: a secret never goes to KV (see header)
+    `hiring:ref-salt:g${generation}:${tenantId}`,
+    () => readOrCreateRefSalt(db, tenantId),
+    { l1TtlMs: REF_SALT_L1_TTL_MS },
+  );
+}
+
+async function readOrCreateRefSalt(db: Db, tenantId: number): Promise<string> {
   const read = async (): Promise<string | undefined> => (await db
     .select({ salt: hiringRefSalts.salt })
     .from(hiringRefSalts)
@@ -42,6 +61,5 @@ export async function loadRefSalt(db: Db, tenantId: number): Promise<string> {
     salt = await read();
   }
   if (!salt) throw new Error('The candidate-ref salt could not be created.');
-  cache.set(tenantId, salt);
   return salt;
 }

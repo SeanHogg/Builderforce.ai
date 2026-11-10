@@ -8,7 +8,7 @@
  * walk per graph object. Test files are found by the existing `isTestPath`.
  */
 
-import type { KnowledgeGraph, NodeRef } from '@seanhogg/builderforce-memory/knowledge';
+import { fileRefOf as fileOf, type KnowledgeGraph, type NodeRef } from '@seanhogg/builderforce-memory/knowledge';
 import { pathOf } from '../graphModel';
 import { isTestPath } from './drawers/testShapeModel';
 import { fileNodesOf, mapEdges } from './outlineGraph';
@@ -22,11 +22,6 @@ export interface StaticReach {
     /** The non-test files a test reaches within {@link MAX_REACH_DEPTH}. */
     reached: ReadonlySet<NodeRef>;
 }
-
-const fileOf = (ref: NodeRef): NodeRef => {
-    const hash = ref.indexOf('#');
-    return hash >= 0 ? (ref.slice(0, hash) as NodeRef) : ref;
-};
 
 const memo = new WeakMap<KnowledgeGraph, StaticReach | null>();
 

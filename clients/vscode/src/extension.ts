@@ -58,6 +58,7 @@ import { localChatOf, openableLocalChat, openServerChatOnWeb, type SessionChat }
 import { registerTaskActions } from "./taskActions";
 import { ClosedTasksTreeProvider } from "./closedTasksTree";
 import { createVsCodeRunHost } from "./brainRunHostPorts";
+import type { BrainRunHost } from "./brainRunHostContract";
 import { installRunRecovery } from "./installRunRecovery";
 import { AuditExecution } from "./auditExecution";
 import { appUrl } from "./auth";
@@ -345,6 +346,7 @@ export function activate(context: vscode.ExtensionContext): void {
   };
   void installRunRecovery(context);
   const runHost = createVsCodeRunHost(context, { onChatsChanged, onPlatformWrite, localModels: getLocalModelsConfig });
+  activeRunHost = runHost;
   context.subscriptions.push({ dispose: () => runHost.dispose() });
   configureWorkspaceSurfaces({
     runHost,
@@ -1296,10 +1298,15 @@ async function reviewHumanRequests(
 }
 
 let auditExecution: AuditExecution | undefined;
+/** The run host, so deactivate can await its queued sub-agent journal writes. */
+let activeRunHost: BrainRunHost | undefined;
 
 export async function deactivate(): Promise<void> {
   // No run outlives the editor: every background shell job (a dev server, a watcher) dies here.
   await Promise.all([auditExecution?.flushClose(), killAllJobs()]);
+  // A child that settled during close has its persist queued: land it, or the parent's
+  // journal record still says `running` and the resume offers a dead child (chat #61651).
+  await activeRunHost?.flush?.();
   // Flush and close the knowledge SQLite handles before the host exits (the same shared shutdown the subscription starts: every caller awaits the one real close).
   await shutdownKnowledge();
 }

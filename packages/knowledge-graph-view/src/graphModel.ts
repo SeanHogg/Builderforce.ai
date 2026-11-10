@@ -95,15 +95,8 @@ export function labelFor(index: ReadonlyMap<string, KNode>, ref: string): string
     return at >= 0 ? ref.slice(at + 2) : ref;
 }
 
-/** A `src:` ref's root-relative file path (a section's `#anchor` dropped); undefined for facts and entities. */
-export function pathOf(ref: string): string | undefined {
-    if (!ref.startsWith('src:')) return undefined;
-    const at = ref.indexOf('::');
-    if (at < 0) return undefined;
-    const path = ref.slice(at + 2);
-    const hash = path.indexOf('#');
-    return hash >= 0 ? path.slice(0, hash) : path;
-}
+/** A `src:` ref's root-relative file path (a section's `#anchor` dropped); undefined for facts and entities. Memory owns the ref grammar. */
+export { pathOfRef as pathOf } from '@seanhogg/builderforce-memory/knowledge';
 
 /** Facts, claims and entities about a node (its `about` edges, both directions). */
 export function knowledgeAbout(graph: KnowledgeGraph, ref: string): { facts: KNode[]; claims: KNode[] } {

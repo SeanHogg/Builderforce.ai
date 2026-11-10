@@ -21,7 +21,8 @@
 
 import type { KnowledgeStore } from '@seanhogg/builderforce-memory/knowledge';
 import { differingBuckets, leafDelta, manifestTree, rootLeaves } from '@seanhogg/builderforce-memory/knowledge/pack';
-import { pathOfRef, type ReplicaSource } from './replicaPack.js';
+import type { ReplicaSource } from './replicaPack.js';
+import { sourcePathIn } from './rootId.js';
 import { factKey, relationKey, type ReplicaAck } from './replicaQueue.js';
 
 export interface ReconcileQueries {
@@ -51,7 +52,7 @@ export async function planReconcile(args: {
 }, attempt = 0): Promise<ReconcilePlan> {
     const { rootId, client } = args;
     const [facts, relations] = await Promise.all([args.local.facts({ rootId }), args.local.relations({ rootId })]);
-    const tree = manifestTree(rootLeaves(rootId, { files: args.sources.map((x) => ({ path: pathOfRef(rootId, x.ref), hash: x.hash })), facts, relations }));
+    const tree = manifestTree(rootLeaves(rootId, { files: args.sources.map((x) => ({ path: sourcePathIn(x.ref, rootId), hash: x.hash })), facts, relations }));
     const server = await client.syncManifest(rootId);
 
     const treeKeys = new Set([...tree.leaves.values()].flat().map((l) => l.key));

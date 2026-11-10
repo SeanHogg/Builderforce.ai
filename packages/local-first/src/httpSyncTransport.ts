@@ -14,6 +14,7 @@
  */
 
 import type { SyncReceipt } from './records.js';
+import { parseSyncId, syncIdText } from './entityId.js';
 import type { SyncPullResult, SyncPushBatch, SyncTransport, SyncTransportInit } from './sync.js';
 
 /** Push route (`syncRoutes.ts` under `/api/sync/v1`). */
@@ -160,7 +161,16 @@ function readReceipt(value: unknown, url: string): SyncReceipt {
     status: row.status as SyncReceipt['status'],
     receivedAt: row.receivedAt,
   };
-  if (typeof row.serverId === 'string') receipt.serverId = row.serverId;
+  // The receipt keeps what the wire said: `syncId` (a number or decimal text) and `serverId` (text,
+  // or a number — which used to be dropped silently, so the device never learned the entity was
+  // imported). The coordinator reads `syncId ?? serverId` through `parseSyncId`.
+  const syncId = parseSyncId(row.syncId);
+  if (syncId !== null) receipt.syncId = syncId;
+  if (typeof row.serverId === 'string' && row.serverId !== '') receipt.serverId = row.serverId;
+  else {
+    const numeric = parseSyncId(row.serverId);
+    if (numeric !== null) receipt.serverId = syncIdText(numeric);
+  }
   if (typeof row.serverVersion === 'number' && Number.isFinite(row.serverVersion)) {
     receipt.serverVersion = row.serverVersion;
   } else if (row.serverVersion !== undefined) {

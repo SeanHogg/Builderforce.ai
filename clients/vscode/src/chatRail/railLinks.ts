@@ -12,7 +12,7 @@
  */
 
 import { ingestServerRecords, linkChatTicket, unlinkChatTicket, type LocalFirstStore } from "@builderforce/local-first";
-import { linkTierFields, ticketServerId } from "./railPayloads";
+import { linkTierFields, ticketMappingOf } from "./railPayloads";
 import type { ChatRailMutationOutcome, ChatRef, RailLinkType, RailTicketRef } from "./railProtocol";
 import { ticketRows } from "./railRows";
 import { resolveChat, type ResolvedChat } from "./resolveChat";
@@ -30,7 +30,7 @@ function failure(error: unknown): ChatRailMutationOutcome {
 /** The local ticket a `(kind, ref)` names, or undefined when the device has none. */
 async function knownTicket(store: LocalFirstStore, ticket: RailTicketRef): Promise<string | undefined> {
   return store.read(async (tx) => {
-    const mapped = await tx.mappingByServerId("ticket", ticketServerId(ticket.kind, ticket.ref));
+    const mapped = await ticketMappingOf(tx, ticket.kind, ticket.ref);
     if (mapped) return mapped.clientEntityId;
     const local = await tx.get("ticket", ticket.ref);
     return local && !local.deletedAt ? local.id : undefined;

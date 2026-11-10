@@ -17,9 +17,10 @@ import type { ShellCapability } from "./capabilities.js";
 import type { ToolResult } from "./tool.js";
 
 /** A safe git ref/path token — blocks shell metacharacters so a model-supplied
- *  branch/path can't inject a second command. */
+ *  branch/path can't inject a second command, and a leading `-` so it can't be read as
+ *  an OPTION (`--upload-pack=…`, `-D`) by git or gh: no valid ref name starts with one. */
 export function safeGitArg(v: unknown): string | null {
-  return typeof v === "string" && /^[\w./@-]+$/.test(v) ? v : null;
+  return typeof v === "string" && /^[\w./@-]+$/.test(v) && !v.startsWith("-") ? v : null;
 }
 
 /** Shell-quote a model-supplied string for a single-quoted POSIX argument. Commit

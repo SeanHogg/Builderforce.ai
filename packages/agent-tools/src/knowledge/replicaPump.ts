@@ -347,6 +347,8 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
                 };
                 state.lastSyncAt = new Date(now()).toISOString();
                 conflicts = 0; bodyConflicts = 0; noDiff = false; force = undefined; owned = undefined;
+                // A cut that landed lets the next pack grow back (doubling, unlimited once a pack carried the rest), so one 413 never throttles the whole run.
+                if (maxFiles !== undefined) maxFiles = built.final ? undefined : maxFiles * 2;
                 delete state.parts;
                 if (retryNextCycle) break;
             } catch (error) {
