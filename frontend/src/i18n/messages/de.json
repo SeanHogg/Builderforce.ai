@@ -38803,5 +38803,163 @@
       "acquireFailed": "Diese Stimme konnte nicht hinzugefügt werden. Versuche es erneut.",
       "refresh": "Aktualisieren"
     }
+  },
+  "runDelta": {
+    "cardTitle": "Lauf-Delta",
+    "openDetails": "Details öffnen",
+    "openCode": "Code öffnen",
+    "close": "Schließen",
+    "panelTitle": "Was dieser Lauf verändert hat",
+    "heuristicMark": "≈",
+    "heuristicHint": "Heuristisch geschätzt, nicht exakt gemessen",
+    "introducedCount": "{count} neu",
+    "resolvedCount": "{count} behoben",
+    "changedCount": "{count} geändert",
+    "blastRadius": "Auswirkungsradius",
+    "blastRadiusValue": "Auswirkungsradius: {band}",
+    "blocking": "Blockiert den Abschluss eines autonomen Laufs",
+    "noFindings": "Keine Befunde",
+    "findingsHeading": "Befunde",
+    "metricsHeading": "Metriken",
+    "evidenceHeading": "Belege",
+    "paramsHeading": "Details",
+    "excludedHeading": "Dateien außerhalb der Bewertung",
+    "failedHeading": "Prüfungen, die nicht liefen",
+    "metricValue": "{before} → {after}[[ {unit}]]",
+    "notMeasuredValue": "nicht gemessen",
+    "waived": "Risiko akzeptiert: {reason}",
+    "sideBefore": "Vorher",
+    "sideAfter": "Nachher",
+    "headline": {
+      "sentence": "{lead}: {clauses}.",
+      "sentenceNoClauses": "{lead}.",
+      "clause": "{dimension} ({detail})",
+      "detail": "[[{count} × ]]{label}",
+      "clauseSeparator": "; ",
+      "listSeparator": ", ",
+      "unchanged": "Unverändert: {dimensions}.",
+      "notMeasured": "Nicht gemessen: {dimensions}.",
+      "metricRegressed": "{metric} hat sich verschlechtert"
+    },
+    "verdicts": {
+      "better": "Besser",
+      "worse": "Schlechter",
+      "same": "Unverändert",
+      "notComparable": "Nicht vergleichbar",
+      "notMeasured": "Nicht gemessen"
+    },
+    "dimensions": {
+      "security": "Sicherheit",
+      "performance": "Leistung",
+      "quality": "Qualität",
+      "ilitiesFunctionalSuitability": "Funktionale Eignung",
+      "ilitiesCompatibility": "Kompatibilität",
+      "ilitiesInteractionCapability": "Interaktionsfähigkeit",
+      "ilitiesReliability": "Zuverlässigkeit",
+      "ilitiesMaintainability": "Wartbarkeit",
+      "ilitiesFlexibility": "Flexibilität",
+      "ilitiesSafety": "Betriebssicherheit"
+    },
+    "severities": {
+      "info": "Hinweis",
+      "warn": "Warnung",
+      "error": "Fehler"
+    },
+    "lineages": {
+      "introduced": "Neu in diesem Lauf",
+      "resolved": "Von diesem Lauf behoben",
+      "changed": "Von diesem Lauf geändert",
+      "persisting": "Bereits vorhanden",
+      "present": "Jetzt vorhanden"
+    },
+    "changes": {
+      "grew": "gewachsen",
+      "shrank": "geschrumpft",
+      "moved": "verschoben"
+    },
+    "bands": {
+      "low": "niedrig",
+      "medium": "mittel",
+      "high": "hoch"
+    },
+    "reasons": {
+      "staticOnly": "Nur statische Analyse",
+      "ruleNotBuilt": "Regel noch nicht umgesetzt",
+      "ruleFailed": "Eine Prüfung ist fehlgeschlagen",
+      "ruleThrew": "Die Prüfung brach mit einem Fehler ab",
+      "metricNotMeasured": "Eine Metrik wurde nicht gemessen",
+      "testsWeakened": "Tests abgeschwächt",
+      "heuristic": "Heuristisch",
+      "notComparable": "Nicht vergleichbar",
+      "beforeUnresolved": "Einige Vorher-Dateien konnten nicht gelesen werden",
+      "headSwitched": "Der Branch hat sich während des Laufs geändert",
+      "extractorMismatch": "Unterschiedlicher Extraktor auf beiden Seiten",
+      "extractorVersionChanged": "Extraktor-Version geändert",
+      "contentHashRuleChanged": "Regel für den Inhalts-Hash geändert",
+      "toolMissing": "{tool} fehlt auf einer Seite",
+      "toolVersionChanged": "Version von {tool} geändert",
+      "analyzerFailed": "{tool} ist fehlgeschlagen",
+      "scopeChanged": "Umfang geändert",
+      "repoChanged": "Repository geändert",
+      "branchChanged": "Branch geändert",
+      "truncated": "Ergebnisse wurden gekürzt",
+      "insufficientHistory": "Zu wenige frühere Läufe für eine Einordnung"
+    },
+    "clauses": {
+      "findingsResolved": "Befunde behoben",
+      "metricsImproved": "Metriken verbessert",
+      "worse": "verschlechtert"
+    },
+    "rules": {
+      "guardRemoved": "Route hat ihren Auth-Guard verloren",
+      "guardWeakened": "Routen-Guard abgeschwächt",
+      "entryAdded": "Neuer Einstiegspunkt",
+      "entryRemoved": "Einstiegspunkt entfernt",
+      "capabilityAdded": "Neue Systemfähigkeit",
+      "weakCrypto": "Schwache Kryptografie",
+      "secretAdded": "Geheimnis in den Code eingefügt",
+      "ioInLoop": "E/A in einer Schleife",
+      "syncIo": "Blockierender E/A-Aufruf",
+      "testDeleted": "Test gelöscht",
+      "testSkipped": "Test übersprungen",
+      "onlyAdded": "Fokussierter Test (.only) hinzugefügt",
+      "assertionsReduced": "Weniger Assertions",
+      "matcherWeakened": "Schwächerer Assertion-Matcher",
+      "suppressionAdded": "Lint- oder Typprüfung unterdrückt",
+      "timeoutRaised": "Test-Timeout erhöht",
+      "snapshotUpdatedWithImpl": "Snapshot zusammen mit dem Code aktualisiert",
+      "assertionEditedWithImpl": "Assertion zusammen mit dem Code geändert",
+      "apiBreaking": "Inkompatible API-Änderung",
+      "apiAdded": "Neue öffentliche API",
+      "cloneGroup": "Duplizierter Code",
+      "cycle": "Abhängigkeitszyklus",
+      "godModule": "Übergroßes Modul",
+      "partitionViolation": "Partitionsgrenze überschritten",
+      "unusedDependency": "Ungenutzte Abhängigkeit",
+      "unusedExport": "Ungenutzter Export",
+      "unusedFile": "Ungenutzte Datei",
+      "godFileGrowth": "Übergroße Datei ist gewachsen",
+      "destructiveDdl": "Destruktive Schemaänderung",
+      "forcePush": "Force-Push in einem Skript",
+      "rmRf": "Rekursives Löschen in einem Skript"
+    },
+    "metrics": {
+      "complexityMax": "Höchste Komplexität",
+      "complexitySum": "Gesamtkomplexität",
+      "todoAdded": "Hinzugefügte TODOs",
+      "anyCastAdded": "Hinzugefügte \"any\"-Casts"
+    },
+    "units": {
+      "cyclomatic": "zyklomatisch"
+    },
+    "excluded": {
+      "preimageTooLarge": "Vorher-Version zu groß zum Aufbewahren",
+      "preimageMissing": "Vorher-Version fehlt",
+      "gitUnavailable": "Git nicht verfügbar",
+      "changedIgnored": "Ignorierte Datei",
+      "changedOutsideRun": "Außerhalb dieses Laufs geändert",
+      "submoduleMoved": "Submodul verschoben",
+      "binary": "Binärdatei"
+    }
   }
 }

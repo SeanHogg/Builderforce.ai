@@ -38803,5 +38803,163 @@
       "acquireFailed": "No se pudo añadir esta voz. Inténtalo de nuevo.",
       "refresh": "Actualizar"
     }
+  },
+  "runDelta": {
+    "cardTitle": "Cambios de la ejecución",
+    "openDetails": "Ver detalles",
+    "openCode": "Abrir código",
+    "close": "Cerrar",
+    "panelTitle": "Qué cambió esta ejecución",
+    "heuristicMark": "≈",
+    "heuristicHint": "Estimado con una heurística, no medido con exactitud",
+    "introducedCount": "{count} nuevos",
+    "resolvedCount": "{count} resueltos",
+    "changedCount": "{count} modificados",
+    "blastRadius": "Radio de impacto",
+    "blastRadiusValue": "Radio de impacto: {band}",
+    "blocking": "Impide finalizar una ejecución autónoma",
+    "noFindings": "Sin hallazgos",
+    "findingsHeading": "Hallazgos",
+    "metricsHeading": "Métricas",
+    "evidenceHeading": "Evidencia",
+    "paramsHeading": "Detalles",
+    "excludedHeading": "Archivos fuera de los veredictos",
+    "failedHeading": "Comprobaciones que no se ejecutaron",
+    "metricValue": "{before} → {after}[[ {unit}]]",
+    "notMeasuredValue": "sin medir",
+    "waived": "Riesgo aceptado: {reason}",
+    "sideBefore": "Antes",
+    "sideAfter": "Después",
+    "headline": {
+      "sentence": "{lead}: {clauses}.",
+      "sentenceNoClauses": "{lead}.",
+      "clause": "{dimension} ({detail})",
+      "detail": "[[{count} × ]]{label}",
+      "clauseSeparator": "; ",
+      "listSeparator": ", ",
+      "unchanged": "Sin cambios: {dimensions}.",
+      "notMeasured": "Sin medir: {dimensions}.",
+      "metricRegressed": "{metric} empeoró"
+    },
+    "verdicts": {
+      "better": "Mejor",
+      "worse": "Peor",
+      "same": "Sin cambios",
+      "notComparable": "No comparable",
+      "notMeasured": "Sin medir"
+    },
+    "dimensions": {
+      "security": "Seguridad",
+      "performance": "Rendimiento",
+      "quality": "Calidad",
+      "ilitiesFunctionalSuitability": "Idoneidad funcional",
+      "ilitiesCompatibility": "Compatibilidad",
+      "ilitiesInteractionCapability": "Capacidad de interacción",
+      "ilitiesReliability": "Fiabilidad",
+      "ilitiesMaintainability": "Mantenibilidad",
+      "ilitiesFlexibility": "Flexibilidad",
+      "ilitiesSafety": "Protección"
+    },
+    "severities": {
+      "info": "Información",
+      "warn": "Advertencia",
+      "error": "Error"
+    },
+    "lineages": {
+      "introduced": "Nuevos en esta ejecución",
+      "resolved": "Resueltos por esta ejecución",
+      "changed": "Modificados por esta ejecución",
+      "persisting": "Ya existían",
+      "present": "Presentes ahora"
+    },
+    "changes": {
+      "grew": "creció",
+      "shrank": "se redujo",
+      "moved": "se movió"
+    },
+    "bands": {
+      "low": "bajo",
+      "medium": "medio",
+      "high": "alto"
+    },
+    "reasons": {
+      "staticOnly": "Solo análisis estático",
+      "ruleNotBuilt": "Regla aún no implementada",
+      "ruleFailed": "Falló una comprobación",
+      "ruleThrew": "La comprobación se detuvo con un error",
+      "metricNotMeasured": "No se midió una métrica",
+      "testsWeakened": "Pruebas debilitadas",
+      "heuristic": "Heurístico",
+      "notComparable": "No comparable",
+      "beforeUnresolved": "No se pudieron leer algunos archivos anteriores",
+      "headSwitched": "La rama cambió durante la ejecución",
+      "extractorMismatch": "Extractor distinto en cada lado",
+      "extractorVersionChanged": "Cambió la versión del extractor",
+      "contentHashRuleChanged": "Cambió la regla del hash de contenido",
+      "toolMissing": "Falta {tool} en un lado",
+      "toolVersionChanged": "Cambió la versión de {tool}",
+      "analyzerFailed": "{tool} falló",
+      "scopeChanged": "Cambió el alcance",
+      "repoChanged": "Cambió el repositorio",
+      "branchChanged": "Cambió la rama",
+      "truncated": "Los resultados se truncaron",
+      "insufficientHistory": "No hay suficientes ejecuciones anteriores para clasificar"
+    },
+    "clauses": {
+      "findingsResolved": "hallazgos resueltos",
+      "metricsImproved": "métricas mejoradas",
+      "worse": "empeoró"
+    },
+    "rules": {
+      "guardRemoved": "La ruta perdió su protección de autenticación",
+      "guardWeakened": "Protección de ruta debilitada",
+      "entryAdded": "Nuevo punto de entrada",
+      "entryRemoved": "Punto de entrada eliminado",
+      "capabilityAdded": "Nueva capacidad del sistema",
+      "weakCrypto": "Criptografía débil",
+      "secretAdded": "Secreto añadido al código",
+      "ioInLoop": "E/S dentro de un bucle",
+      "syncIo": "Llamada de E/S bloqueante",
+      "testDeleted": "Prueba eliminada",
+      "testSkipped": "Prueba omitida",
+      "onlyAdded": "Prueba enfocada (.only) añadida",
+      "assertionsReduced": "Menos aserciones",
+      "matcherWeakened": "Comparador de aserción más débil",
+      "suppressionAdded": "Comprobación de lint o de tipos suprimida",
+      "timeoutRaised": "Tiempo de espera de prueba aumentado",
+      "snapshotUpdatedWithImpl": "Snapshot actualizado junto con el código",
+      "assertionEditedWithImpl": "Aserción editada junto con el código",
+      "apiBreaking": "Cambio incompatible en la API",
+      "apiAdded": "Nueva API pública",
+      "cloneGroup": "Código duplicado",
+      "cycle": "Ciclo de dependencias",
+      "godModule": "Módulo demasiado grande",
+      "partitionViolation": "Se cruzó un límite de partición",
+      "unusedDependency": "Dependencia sin usar",
+      "unusedExport": "Exportación sin usar",
+      "unusedFile": "Archivo sin usar",
+      "godFileGrowth": "Un archivo demasiado grande creció",
+      "destructiveDdl": "Cambio destructivo en el esquema",
+      "forcePush": "Push forzado en un script",
+      "rmRf": "Borrado recursivo en un script"
+    },
+    "metrics": {
+      "complexityMax": "Complejidad máxima",
+      "complexitySum": "Complejidad total",
+      "todoAdded": "TODO añadidos",
+      "anyCastAdded": "Conversiones a \"any\" añadidas"
+    },
+    "units": {
+      "cyclomatic": "ciclomática"
+    },
+    "excluded": {
+      "preimageTooLarge": "Versión anterior demasiado grande para conservarla",
+      "preimageMissing": "Falta la versión anterior",
+      "gitUnavailable": "Git no disponible",
+      "changedIgnored": "Archivo ignorado",
+      "changedOutsideRun": "Modificado fuera de esta ejecución",
+      "submoduleMoved": "Submódulo movido",
+      "binary": "Archivo binario"
+    }
   }
 }

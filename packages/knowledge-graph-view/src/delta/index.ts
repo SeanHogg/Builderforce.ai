@@ -1,0 +1,14 @@
+/** The run delta presentation (PRD 41 §C11): props-only card, panel and dimension row, plus their labels. */
+
+export { RunDeltaCard, type RunDeltaCardProps } from './RunDeltaCard';
+export { RunDeltaPanel, groupFindings, type RunDeltaPanelProps } from './RunDeltaPanel';
+export { DimensionRow, lineageCounts, type DimensionRowProps } from './DimensionRow';
+export { DeltaFindingItem, type RunDeltaCodeTarget } from './DeltaFindingItem';
+export { VerdictMark, VerdictIcon, VERDICT_TONE } from './VerdictMark';
+export {
+    clauseLabel, dimensionLabel, headlineText, metricLabel, metricValueText, quantizedValue, reasonLabel, ruleLabel, verdictLabel,
+} from './deltaText';
+export { DEFAULT_RUN_DELTA_LABELS, RUN_DELTA_NAMESPACE, labelKey, runDeltaLabels, type RunDeltaLabels } from './labels';
+export {
+    RUN_DELTA_CLAUSE_CODES, RUN_DELTA_EXCLUDED_REASONS, RUN_DELTA_METRIC_IDS, RUN_DELTA_REASON_CODES, RUN_DELTA_TOOL_REASON_PREFIXES,
+} from './codes';

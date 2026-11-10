@@ -5,7 +5,8 @@
   "type": "module",
   "description": "THE run delta engine (PRD 41 Part C): both sides of an agent run reduced to findings and metrics by registry rules, lineage and comparability from builderforce-memory, per-dimension verdicts, a headline sentence model, the v1 blast radius and a quantized digest. Pure: no I/O, no clock, no randomness; hosts supply DeltaPorts.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./contract": "./src/contract.ts"
   },
   "types": "./src/index.ts",
   "scripts": {

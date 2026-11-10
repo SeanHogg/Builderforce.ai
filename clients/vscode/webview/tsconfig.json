@@ -65,7 +65,17 @@
       "@builderforce/prefetch": ["../../../packages/prefetch/src/index.ts"],
       "@builderforce/knowledge-graph-view": ["../../../packages/knowledge-graph-view/src/index.ts"],
       "@builderforce/knowledge-graph-view/testing": ["../../../packages/knowledge-graph-view/src/testing.ts"],
-      "@builderforce/knowledge-graph-view/tokens.css": ["../../../packages/knowledge-graph-view/src/tokens.css"]
+      "@builderforce/knowledge-graph-view/tokens.css": ["../../../packages/knowledge-graph-view/src/tokens.css"],
+      // The run delta: the host protocol names `RunDelta` (`brainRunHostProtocol.ts`), and the chat
+      // mounts the view's card and panel (PRD 41 §C11).
+      "@builderforce/run-delta": ["../../../packages/run-delta/src/index.ts"],
+      "@builderforce/run-delta/contract": ["../../../packages/run-delta/src/contract.ts"],
+      "@builderforce/knowledge-graph-view/delta": ["../../../packages/knowledge-graph-view/src/delta/index.ts"],
+      // The view's source has no install of its own: its React is this package's one copy (as in tsconfig.canvas.json).
+      "react": ["../node_modules/@types/react/index.d.ts"],
+      "react/*": ["../node_modules/@types/react/*"],
+      "@builderforce/secret-redaction": ["../../../packages/secret-redaction/src/index.ts"],
+      "@builderforce/agent-tools/code-mask": ["../../../packages/agent-tools/src/knowledge/codeMask.ts"]
     }
   },
   // The editor's OWN code, checked strictly. Everything that compiles FRONTEND

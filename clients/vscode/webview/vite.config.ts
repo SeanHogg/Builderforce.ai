@@ -101,6 +101,8 @@ function canvasMessages(): Plugin {
         ...collectCanvasNamespaces(path.join(frontendSrc, 'components/tools/CodeAuditVisualizer.tsx'), frontendSrc),
         // The Visualization panel's Knowledge view reads `knowledgeGraph.*` through this adapter.
         ...collectCanvasNamespaces(path.join(frontendSrc, 'lib/knowledge/labels.ts'), frontendSrc),
+        // The chat's run delta card and panel read `runDelta.*` (PRD 41 §C11).
+        ...collectCanvasNamespaces(path.join(HERE, 'src/chat/runDelta/useRunDeltaLabels.ts'), frontendSrc),
         // The Voice marketplace view (`voice.marketplace.*`) — the SAME component the web mounts.
         ...collectCanvasNamespaces(path.join(frontendSrc, 'components/voice/VoiceMarketplace.tsx'), frontendSrc)])];
       const bundle: Record<string, Record<string, unknown>> = {};

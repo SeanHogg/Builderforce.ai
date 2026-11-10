@@ -9,8 +9,9 @@ import type { FindingEvidence, SourceLocation } from './types';
 import { cssVar } from './scene/themeColors';
 import { list, muted, quietButton } from './styles';
 
-/** `path:start–end` (one line: `path:start`). */
+/** `path:start–end` (one line: `path:start`; `startLine` 0 = the whole file: `path`). */
 export function locationText(l: Pick<SourceLocation, 'path' | 'startLine' | 'endLine'>): string {
+    if (l.startLine < 1) return l.path;
     return `${l.path}:${l.startLine}${l.endLine !== l.startLine ? `–${l.endLine}` : ''}`;
 }
 

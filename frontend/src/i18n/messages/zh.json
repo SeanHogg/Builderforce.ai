@@ -38803,5 +38803,163 @@
       "acquireFailed": "无法添加此声音，请重试。",
       "refresh": "刷新"
     }
+  },
+  "runDelta": {
+    "cardTitle": "运行变化",
+    "openDetails": "查看详情",
+    "openCode": "打开代码",
+    "close": "关闭",
+    "panelTitle": "本次运行改变了什么",
+    "heuristicMark": "≈",
+    "heuristicHint": "由启发式估算，并非精确测量",
+    "introducedCount": "新增 {count}",
+    "resolvedCount": "已解决 {count}",
+    "changedCount": "已变更 {count}",
+    "blastRadius": "影响范围",
+    "blastRadiusValue": "影响范围：{band}",
+    "blocking": "会阻止自主运行完成",
+    "noFindings": "无发现",
+    "findingsHeading": "发现",
+    "metricsHeading": "指标",
+    "evidenceHeading": "证据",
+    "paramsHeading": "详情",
+    "excludedHeading": "未计入结论的文件",
+    "failedHeading": "未运行的检查",
+    "metricValue": "{before} → {after}[[ {unit}]]",
+    "notMeasuredValue": "未测量",
+    "waived": "已接受风险：{reason}",
+    "sideBefore": "之前",
+    "sideAfter": "之后",
+    "headline": {
+      "sentence": "{lead}：{clauses}。",
+      "sentenceNoClauses": "{lead}。",
+      "clause": "{dimension}（{detail}）",
+      "detail": "[[{count} × ]]{label}",
+      "clauseSeparator": "；",
+      "listSeparator": "、",
+      "unchanged": "未变化：{dimensions}。",
+      "notMeasured": "未测量：{dimensions}。",
+      "metricRegressed": "{metric} 退化"
+    },
+    "verdicts": {
+      "better": "更好",
+      "worse": "更差",
+      "same": "无变化",
+      "notComparable": "无法比较",
+      "notMeasured": "未测量"
+    },
+    "dimensions": {
+      "security": "安全性",
+      "performance": "性能",
+      "quality": "质量",
+      "ilitiesFunctionalSuitability": "功能适合性",
+      "ilitiesCompatibility": "兼容性",
+      "ilitiesInteractionCapability": "交互能力",
+      "ilitiesReliability": "可靠性",
+      "ilitiesMaintainability": "可维护性",
+      "ilitiesFlexibility": "灵活性",
+      "ilitiesSafety": "安全保障"
+    },
+    "severities": {
+      "info": "信息",
+      "warn": "警告",
+      "error": "错误"
+    },
+    "lineages": {
+      "introduced": "本次运行新增",
+      "resolved": "本次运行已解决",
+      "changed": "本次运行已变更",
+      "persisting": "原本就存在",
+      "present": "当前存在"
+    },
+    "changes": {
+      "grew": "扩大",
+      "shrank": "缩小",
+      "moved": "已移动"
+    },
+    "bands": {
+      "low": "低",
+      "medium": "中",
+      "high": "高"
+    },
+    "reasons": {
+      "staticOnly": "仅静态分析",
+      "ruleNotBuilt": "规则尚未构建",
+      "ruleFailed": "有检查失败",
+      "ruleThrew": "检查因错误中止",
+      "metricNotMeasured": "有指标未测量",
+      "testsWeakened": "测试被削弱",
+      "heuristic": "启发式",
+      "notComparable": "无法比较",
+      "beforeUnresolved": "部分修改前的文件无法读取",
+      "headSwitched": "运行期间分支发生了变化",
+      "extractorMismatch": "两侧的提取器不同",
+      "extractorVersionChanged": "提取器版本已变化",
+      "contentHashRuleChanged": "内容哈希规则已变化",
+      "toolMissing": "{tool} 在一侧缺失",
+      "toolVersionChanged": "{tool} 版本已变化",
+      "analyzerFailed": "{tool} 运行失败",
+      "scopeChanged": "范围已变化",
+      "repoChanged": "仓库已变化",
+      "branchChanged": "分支已变化",
+      "truncated": "结果被截断",
+      "insufficientHistory": "历史运行不足，无法排名"
+    },
+    "clauses": {
+      "findingsResolved": "个发现已解决",
+      "metricsImproved": "指标已改善",
+      "worse": "变差"
+    },
+    "rules": {
+      "guardRemoved": "路由失去了身份验证守卫",
+      "guardWeakened": "路由守卫被削弱",
+      "entryAdded": "新的入口点",
+      "entryRemoved": "入口点被移除",
+      "capabilityAdded": "新增系统能力",
+      "weakCrypto": "弱加密算法",
+      "secretAdded": "代码中加入了密钥",
+      "ioInLoop": "循环中的 I/O",
+      "syncIo": "阻塞式 I/O 调用",
+      "testDeleted": "测试被删除",
+      "testSkipped": "测试被跳过",
+      "onlyAdded": "新增了聚焦测试（.only）",
+      "assertionsReduced": "断言减少",
+      "matcherWeakened": "断言匹配器变弱",
+      "suppressionAdded": "屏蔽了 lint 或类型检查",
+      "timeoutRaised": "测试超时被调高",
+      "snapshotUpdatedWithImpl": "快照随代码一起更新",
+      "assertionEditedWithImpl": "断言随代码一起修改",
+      "apiBreaking": "破坏性 API 变更",
+      "apiAdded": "新的公共 API",
+      "cloneGroup": "重复代码",
+      "cycle": "依赖循环",
+      "godModule": "过大的模块",
+      "partitionViolation": "越过了分区边界",
+      "unusedDependency": "未使用的依赖",
+      "unusedExport": "未使用的导出",
+      "unusedFile": "未使用的文件",
+      "godFileGrowth": "过大的文件继续变大",
+      "destructiveDdl": "破坏性的数据库结构变更",
+      "forcePush": "脚本中的强制推送",
+      "rmRf": "脚本中的递归删除"
+    },
+    "metrics": {
+      "complexityMax": "最高复杂度",
+      "complexitySum": "总复杂度",
+      "todoAdded": "新增的 TODO",
+      "anyCastAdded": "新增的 \"any\" 类型转换"
+    },
+    "units": {
+      "cyclomatic": "圈复杂度"
+    },
+    "excluded": {
+      "preimageTooLarge": "修改前版本过大，未保留",
+      "preimageMissing": "缺少修改前版本",
+      "gitUnavailable": "Git 不可用",
+      "changedIgnored": "已忽略的文件",
+      "changedOutsideRun": "在本次运行之外被修改",
+      "submoduleMoved": "子模块已移动",
+      "binary": "二进制文件"
+    }
   }
 }

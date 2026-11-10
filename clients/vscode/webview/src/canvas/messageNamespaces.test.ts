@@ -56,6 +56,17 @@ describe('canvas message namespaces', () => {
     expect(namespaces).toContain('knowledgeGraph');
   }, CLOSURE_WALK_TIMEOUT_MS);
 
+  it('derives the chat run delta card namespace from its labels hook, in every locale', () => {
+    const { frontendSrc } = canvasPaths(WEBVIEW_DIR);
+    const namespaces = collectCanvasNamespaces(path.join(WEBVIEW_DIR, 'src/chat/runDelta/useRunDeltaLabels.ts'), frontendSrc);
+    // Without it the card would render its English defaults in every language.
+    expect(namespaces).toContain('runDelta');
+    for (const locale of LOCALES) {
+      const catalog = JSON.parse(fs.readFileSync(path.join(frontendSrc, `i18n/messages/${locale}.json`), 'utf8')) as Record<string, unknown>;
+      expect(catalog.runDelta, `${locale}.json runDelta`).toBeTypeOf('object');
+    }
+  }, CLOSURE_WALK_TIMEOUT_MS);
+
   it('ships every derived namespace in every locale catalog', () => {
     const { entry, frontendSrc } = canvasPaths(WEBVIEW_DIR);
     const namespaces = collectCanvasNamespaces(entry, frontendSrc);

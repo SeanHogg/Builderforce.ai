@@ -49,6 +49,8 @@
       "@builderforce/agent-tools/knowledge": ["../packages/agent-tools/src/knowledge/index.ts"],
       "@builderforce/knowledge-graph-view": ["../packages/knowledge-graph-view/src/index.ts"],
       "@builderforce/knowledge-graph-view/tokens.css": ["../packages/knowledge-graph-view/src/tokens.css"],
+      "@builderforce/run-delta/contract": ["../packages/run-delta/src/contract.ts"],
+      "@builderforce/agent-tools/code-mask": ["../packages/agent-tools/src/knowledge/codeMask.ts"],
       "@builderforce/knowledge-browser": ["../packages/knowledge-browser/src/index.ts"],
       "@builderforce/agent-tools/knowledge-index": ["../packages/agent-tools/src/knowledge-index.ts"],
       "@builderforce/agent-tools/prefetch": ["../packages/agent-tools/src/prefetch/index.ts"],
