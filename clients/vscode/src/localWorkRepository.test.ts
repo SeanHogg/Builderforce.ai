@@ -9,8 +9,11 @@ import {
   importKey,
   newLocalRecord,
   queueImport,
+  RECORD_PAYLOAD_FENCE_KEY,
+  sendablePayload,
   UNBOUND_DESTINATION,
   type EntityDestination,
+  type JournalEvent,
   type LocalFirstStore,
   type SyncPushBatch,
 } from "@builderforce/local-first";
@@ -32,6 +35,9 @@ const ACCOUNT = Object.freeze({
   tenantId: "tenant-a",
   projectId: "server-project-9",
 });
+
+/** What an event waits on, the record-payload fence aside (every bound import marker carries it). */
+const dependsOnBesidesFence = (event: JournalEvent): string[] => event.dependsOn.filter((dependency) => dependency !== RECORD_PAYLOAD_FENCE_KEY);
 
 function harness() {
   const store = createMemoryLocalFirstStore();
@@ -293,6 +299,8 @@ describe("localWorkRepository", () => {
     }
     const pendingFor = async (store: ReturnType<typeof harness>["store"], id: string) =>
       (await store.read((tx) => tx.pending())).filter((event) => event.clientEntityId === id);
+    /** What the event carries when it is sent: a bound import is a record-payload marker, read from its row. */
+    const sentPayload = (store: ReturnType<typeof harness>["store"], event: JournalEvent) => store.read((tx) => sendablePayload(tx, event));
 
     it("REPLACES the pending import with the newest state instead of appending a local-baseVersion update", async () => {
       const { store, repo, project, ticket } = await boundHarness();
@@ -301,9 +309,9 @@ describe("localWorkRepository", () => {
       const pending = await pendingFor(store, ticket.id);
       expect(pending).toHaveLength(1);
       expect(pending[0]).toMatchObject({ operation: "import", idempotencyKey: importKey("ticket", ticket.id) });
-      expect(pending[0]?.payload).toMatchObject({ title: "Edited in the window", status: "done" });
-      // It keeps the waits the bind gave it: the chat and the project.
-      expect(pending[0]?.dependsOn).toEqual([importKey("chat", CHAT), importKey("project", project.id)]);
+      expect(await sentPayload(store, pending[0]!)).toMatchObject({ title: "Edited in the window", status: "done" });
+      // It keeps the waits the bind gave it: the chat and the project (plus the record-payload fence every marker carries).
+      expect(dependsOnBesidesFence(pending[0]!)).toEqual([importKey("chat", CHAT), importKey("project", project.id)]);
     });
 
     it("sends nothing for a ticket deleted before the server ever saw it", async () => {
@@ -338,7 +346,7 @@ describe("localWorkRepository", () => {
       const live = (await pendingFor(store, ticket.id)).filter((event) => !event.deadLetter);
       expect(live).toHaveLength(1);
       expect(live[0]).toMatchObject({ operation: "import" });
-      expect(live[0]?.payload).toMatchObject({ title: "After the refusal" });
+      expect(await sentPayload(store, live[0]!)).toMatchObject({ title: "After the refusal" });
     });
 
     it("does not wait on a project or chat the server has already imported", async () => {
@@ -486,10 +494,9 @@ describe("localWorkRepository", () => {
         operation: "create",
         idempotencyKey: `ticket:${ticket.id}:v1`,
       });
-      expect(pending.find((event) => event.clientEntityId === linkId)).toMatchObject({
-        operation: "import",
-        dependsOn: [importKey("chat", CHAT), importKey("ticket", ticket.id)],
-      });
+      const linkImport = pending.find((event) => event.clientEntityId === linkId);
+      expect(linkImport).toMatchObject({ operation: "import" });
+      expect(dependsOnBesidesFence(linkImport!)).toEqual([importKey("chat", CHAT), importKey("ticket", ticket.id)]);
 
       const pushed = await pushAll(store, boundTo);
       const order = pushed.map((event) => event.clientEntityId);
