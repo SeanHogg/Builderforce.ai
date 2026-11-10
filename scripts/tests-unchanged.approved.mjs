@@ -63,6 +63,13 @@ export const APPROVED_PERMANENT = [
     reason: "PRD 42 A1: the built-in browser model is named per vendor (Gemini Nano (Chrome) / Phi-4-mini (Edge)), and a downloadable or downloading model is reported as a state row instead of null (unavailable is still null). The old assertions describe the superseded behaviour.",
     approvedBy: APPROVED_BY,
   },
+  {
+    file: 'brain-embedded/src/run/areaR/menu.test.ts',
+    blob: '8e189ba2a71edda213462f1dadf82a53e7575b6a',
+    changed: "'once planning closes…' expects the code-turn menu (edit_file, ask_user and the three router tools) instead of the 64-tool menu minus hand_off; 'a catalog the limit holds whole…' builds a 20+2 tool fixture (was 62+2). Its assertions are unchanged.",
+    reason: "Stale premise since cda0c33e9: the turn after planning closes is a CODE turn, capped by roleCap.ts (22 tools, no catalog-order backfill), so a 64-tool menu can no longer appear there. The fixture shrinks so that 'a catalog the limit holds whole is never trimmed' still holds under the code cap.",
+    approvedBy: APPROVED_BY,
+  },
 ];
 
 /**
