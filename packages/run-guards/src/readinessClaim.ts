@@ -24,17 +24,26 @@ export const UNKEPT_STEER_AT = 1;
 const READY_PATTERNS: readonly RegExp[] = [
   // "Now I have everything I need", "I've got all the context", "we now have enough"
   /\b(?:i|we)(?:'ve| have)?\s+(?:now\s+)?(?:have|got)\s+(?:got\s+)?(?:everything|all\s+(?:the\s+)?(?:context|information|info|details|i\s+need|we\s+need)|enough)\b/,
-  // "Now I have the full picture", "I have a complete understanding", "we now have a clear overview"
-  /\b(?:now\s+)?(?:i|we)(?:'ve|\s+have)?\s+(?:now\s+)?(?:have\s+|got\s+)?(?:a|the)\s+(?:clear|complete|full|good|solid|whole)\s+(?:picture|understanding|view|overview|grasp)\b/,
+  // "I've got all the component contracts", "we have all of the pieces" (run #70776)
+  /\b(?:i|we)(?:'ve| have)?\s+(?:now\s+)?(?:have|got)\s+all\s+(?:of\s+)?(?:the\s+)?(?:[\w/-]+\s+){0,3}(?:contracts|pieces|interfaces|signatures)\b/,
+  // "Now I have the full picture", "I have a complete understanding", "I have a thorough map" (run #70776)
+  /\b(?:now\s+)?(?:i|we)(?:'ve|\s+have)?\s+(?:now\s+)?(?:have\s+|got\s+)?(?:a|the)\s+(?:clear|complete|full|good|solid|whole|thorough)\s+(?:picture|understanding|view|overview|grasp|map)\b/,
+  // "Analysis is over; time to build." (run #70776)
+  /\b(?:analysis|investigation|exploration|research)\s+(?:is|'s)\s+(?:over|done|complete|finished)\b/,
+  // "Now I understand the camera registry pattern" (run #70776) — never "I don't understand"
+  /\b(?:now\s+(?:i|we)|(?:i|we)\s+now)\s+(?:fully\s+|clearly\s+)?understand\b/,
+  // "Implementing now", "now implementing" (run #70776)
+  /^\s*(?:(?:implementing|building|coding)(?:\s+(?:it|this|that))?\s+now|now\s+(?:implementing|building|coding))\b/,
   // "one final check, then I write", "one more file before I implement"
   /\bone\s+(?:last|final|more)\s+(?:check|look|read|thing|file)\b[^.!?\n]*\b(?:then|before)\b[^.!?\n]*\b(?:write|implement|edit|make|apply|update|change|fix|code)\b/,
   // "now I'll write", "let me now implement", "time to make the change" — never "make sure"
-  /\b(?:now\s+(?:i'll|i\s+will|let\s+me|let's)|(?:i'll|i\s+will|let\s+me|let's)\s+now|time\s+to)\s+(?:write|implement|make(?!\s+(?:sure|certain))|apply|edit|update(?!\s+(?:my|our)\s+(?:understanding|notes|picture))|create|fix|start\s+(?:writing|implementing|coding|the\s+(?:edit|change|implementation)))\b/,
+  /\b(?:now\s+(?:i'll|i\s+will|let\s+me|let's)|(?:i'll|i\s+will|let\s+me|let's)\s+now|time\s+to)\s+(?:write|implement|build|code|make(?!\s+(?:sure|certain))|apply|edit|update(?!\s+(?:my|our)\s+(?:understanding|notes|picture))|create|fix|start\s+(?:writing|implementing|coding|the\s+(?:edit|change|implementation)))\b/,
   /\blet\s+me\s+(?:write|make|apply)\s+the\s+(?:update|change|changes|edit|edits|fix|implementation)\s+now\b/,
 ];
 
-/** Words before a claim that deny it or make it conditional ("I don't have…", "once I have…"). */
-const NEGATION = /\b(?:don't|do\s+not|doesn't|haven't|have\s+not|not\s+yet|still\s+need|need\s+(?:more|to\s+(?:read|check|look|see|find|understand))|before\s+(?:i|we)\s+have|until\s+(?:i|we)\s+have|once\s+(?:i|we)\s+have|when\s+(?:i|we)\s+have|if\s+(?:i|we)\s+(?:have|had))\b/;
+/** Words before a claim that deny it or make it conditional ("I don't have…", "once I have…",
+ *  "once the analysis is done…", "it's not time to build"). */
+const NEGATION = /\b(?:don't|do\s+not|doesn't|haven't|have\s+not|isn't|is\s+not|not\s+yet|not\s+(?:time|ready)|still\s+need|need\s+(?:more|to\s+(?:read|check|look|see|find|understand))|before\s+(?:i|we)\s+have|until\s+(?:i|we)\s+have|once|unless|when\s+(?:i|we)\s+have|if\s+(?:i|we)\s+(?:have|had)|(?:if|when|after|until|before)\s+(?:the|my|our)\s+(?:\w+\s+){1,2}(?:is|are|'s))\b/;
 
 /** Code fences, inline code, block quotes and quoted strings are someone else's words. */
 function ownWords(text: string): string {

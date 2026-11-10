@@ -50,6 +50,36 @@ describe("claimsReady", () => {
   });
 });
 
+describe("regression: chat #70776 readiness wording", () => {
+  it.each([
+    "I have a thorough map of the camera/registry architecture now",
+    "I have a complete map. Analysis is over; time to build.",
+    "I have everything I need. Implementing now",
+    "I have all the component contracts",
+    "Now I understand the camera registry pattern",
+    "Analysis is over; time to build.",
+    "Implementing now",
+  ])("matches: %s", (text) => {
+    expect(claimsReady(text)).toBe(true);
+  });
+
+  it.each([
+    "I don't have a complete map yet.",
+    "I don't have all the component contracts yet.",
+    "Do I have a thorough map of the registry?",
+    "Is the analysis over?",
+    "Once I have a complete map, I'll build it.",
+    "Once the analysis is done, time to build.",
+    "When the analysis is over I will implement it.",
+    "If I had a thorough map I could start.",
+    "It's not time to build yet.",
+    "I don't understand the camera registry pattern yet.",
+    "Do I understand the registry now?",
+  ])("does not match a denial, question or condition: %s", (text) => {
+    expect(claimsReady(text)).toBe(false);
+  });
+});
+
 describe("UnkeptClaimTracker", () => {
   it("counts a claim followed by reads only, and clears on any other call", () => {
     const t = new UnkeptClaimTracker();
