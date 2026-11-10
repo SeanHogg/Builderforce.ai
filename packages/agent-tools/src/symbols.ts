@@ -21,6 +21,8 @@
  * missed or spurious symbol costs one extra read, never a wrong edit. Pure: no I/O.
  */
 
+import { CallbackOwnerScan } from "./callbackOwners.js";
+
 /** What a definition is. `heading` is a Markdown section, `table` a SQL object. */
 export type SymbolKind =
   | "function"
@@ -55,6 +57,11 @@ export interface CodeSymbol {
    * top-level definition and in languages whose members are not attributed.
    */
   container?: string;
+  /**
+   * A CALLBACK OWNER (`callbackOwners.ts`): a `function` that is the inline callback of a top-level statement (a route
+   * handler, a listener), named after its call (`routes.post "/me"`). Called by its framework, never by name.
+   */
+  callback?: true;
 }
 
 /** Definitions returned per file — a generated or data file must not flood a map. */
@@ -153,64 +160,15 @@ function closesWithBody(lines: readonly string[], at: number): boolean {
   return false;
 }
 
-/** Test and spec files: the code pack never reads their registrations as the service's surface (`codeRoutes`). */
-const TEST_SOURCE_PATH = /(?:\.|\/)(?:test|spec)\.[a-z]+$|(?:^|\/)__tests__\//;
-export function isTestSourcePath(path: string): boolean {
-  return TEST_SOURCE_PATH.test(path.replace(/\\/g, "/"));
-}
-
-/**
- * A top-level statement that hands an inline callback to a call and opens its body on the same line:
- * `routes.post("/me/youtube", validate(s), async (c) => {` · `chrome.runtime.onMessage.addListener((msg) => {` ·
- * `app.on("ready", function () {`. Group 1 is its indent, group 2 the callee.
- *
- * Such a statement becomes a CALLBACK OWNER: a `function` definition whose body is the callback's, so the calls in a
- * route handler or a message listener have an owner (PRD 43 P0b — the sequence starts there). It is a statement at
- * column 0, or a first-level statement of a column-0 block that declares nothing (`if (!window.__x) {`); never in a test
- * file ({@link isTestSourcePath}), never a test callee (`describe`, `it`, `test`, hooks). Its NAME, one stable format:
- *   `<callee>` + (when an argument on that line is a string literal) ` "<first literal>"`, + ` #<n>` from the second
- *   owner of the same name in the file on:  `channelRoutes.post "/me/youtube"` · `chrome.runtime.onMessage.addListener`
- *   · `app.on "ready" #2`. Never a plain identifier ({@link isCallbackOwnerName}); never exported.
- */
-const JS_CALLBACK_STATEMENT = new RegExp(`^([ \\t]*)(${ID}(?:\\??\\.${ID})*)\\s*\\((.*)(?:=>|\\bfunction\\b[^{]*\\))\\s*\\{\\s*$`);
-/** A column-0 block that is no declaration — its first-level statements are still top level (`if (!window.__x) {`). */
-const JS_TOP_BLOCK = /^(?:if\s*\(.*\)|\}?\s*else(?:\s+if\s*\(.*\))?|try|\}?\s*finally|\{)\s*\{\s*$/;
-/** Callees whose callback is a test, a hook of one, or plain scheduling: never a callback owner. */
-const NOT_CALLBACK_OWNERS = new Set([
-  "describe", "it", "test", "suite", "bench", "beforeEach", "afterEach", "beforeAll", "afterAll",
-  ...JS_KEYWORDS,
-]);
-/** The first string literal on a line after `from` (no template with substitutions). */
-const FIRST_STRING = /(["'`])((?:\\.|(?!\1)[^\\])*)\1/;
-
-/**
- * Whether a definition's name is a callback owner's (see {@link extractSymbols}): `callee` or `callee "literal"`, with
- * an optional `#n` suffix — never a plain identifier.
- */
-export function isCallbackOwnerName(name: string): boolean {
-  return !new RegExp(`^${ID}$`).test(name);
-}
-
 function extractJs(lines: string[], out: CodeSymbol[], path = ""): void {
   // The class whose body we are in (its closing brace sits at column 0).
   let cls: string | undefined;
-  // The indent of the first-level statements of a column-0 non-declaration block ("" before the first one is seen).
-  let topBlock: string | undefined;
-  // The indent of the callback owner whose body we are in: until a line at that indent closes it.
-  let inCallback: string | undefined;
-  const callbacks = !isTestSourcePath(path);
-  const named = new Map<string, number>();
+  // The callback owners (callbackOwners.ts): a route handler or a listener owns its callback's body.
+  const owners = new CallbackOwnerScan(path);
   eachLine(lines, out, (line, lineNo) => {
     if (/^\}/.test(line)) cls = undefined;
-    if (inCallback !== undefined) {
-      const rest = line.startsWith(inCallback) ? line.slice(inCallback.length) : undefined;
-      if (rest !== undefined && /^[})]/.test(rest)) { inCallback = undefined; return; }
-      // A column-0 statement that closes nothing ends a body whose close was not seen (a definition is never lost to it).
-      if (!/^\S/.test(line) || /^[})\]`]/.test(line)) return;
-      inCallback = undefined;
-    }
-    if (/^\S/.test(line)) topBlock = JS_TOP_BLOCK.test(line) ? "" : undefined;
-    else if (topBlock === "" && line.trim()) topBlock = /^[ \t]*/.exec(line)![0];
+    if (owners.inBody(line)) return;
+    owners.track(line);
     for (const rule of JS_RULES) {
       const m = rule.re.exec(line);
       if (!m) continue;
@@ -223,17 +181,8 @@ function extractJs(lines: string[], out: CodeSymbol[], path = ""): void {
       return;
     }
     if (cls === undefined) {
-      const cb = callbacks ? JS_CALLBACK_STATEMENT.exec(line) : null;
-      const indent = cb ? group(cb, 1) : "";
-      const callee = cb ? group(cb, 2) : "";
-      if (cb && (indent === "" || indent === topBlock) && !NOT_CALLBACK_OWNERS.has(callee.split(".")[0]!)) {
-        const literal = FIRST_STRING.exec(group(cb, 3));
-        const base = literal && !literal[2]!.includes("${") ? `${callee} "${literal[2]}"` : callee;
-        const n = (named.get(base) ?? 0) + 1;
-        named.set(base, n);
-        out.push({ name: n === 1 ? base : `${base} #${n}`, kind: "function", line: lineNo, exported: false });
-        inCallback = indent;
-      }
+      const owner = owners.ownerAt(line, lineNo);
+      if (owner) out.push(owner);
       return;
     }
     const open = JS_METHOD_OPEN.exec(line);

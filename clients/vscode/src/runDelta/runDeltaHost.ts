@@ -25,6 +25,7 @@ import { buildLocalCapabilityProvider } from "../localCapabilities";
 import { folderKnowledge } from "../knowledge/folderKnowledge";
 import { openRoot, workspaceFolders } from "../knowledge/knowledgeService";
 import { rootForPath } from "../knowledge/knowledgeRoots";
+import { rootModules } from "../knowledge/rootModules";
 import { emitProductEvent } from "../telemetry/productEvents";
 import type { PreimageSink, StatHashHint } from "../runChangeBaseline";
 import type { DeltaComputedEvent, RepoHostSources } from "./finalizeRunDelta";
@@ -98,7 +99,7 @@ async function knowledgeOf(secrets: vscode.SecretStorage, placement: RepoPlaceme
   const partitions = await readPartitions({ caps: buildLocalCapabilityProvider(kroot.folderPath) });
   const persistence = persistenceOf(kroot.folderPath);
   return {
-    rootId: kroot.rootId, placement, store: open.local, manifest: open.manifest, packs: reviewPacks({ partitions }),
+    rootId: kroot.rootId, placement, store: open.local, manifest: open.manifest, packs: reviewPacks({ partitions, modules: await rootModules(kroot) }),
     generation: () => persistence.getMeta("generation") ?? "0",
   };
 }

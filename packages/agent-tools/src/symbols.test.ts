@@ -199,6 +199,30 @@ describe("container: the type a member belongs to", () => {
     expect(names("src/routes.test.ts", src)).toEqual(["2:const:routes*", "20:function:after*"]);
   });
 
+  // regression: P0c review #6 / #13 — owners are flagged, schedulers and keyword-led statements are none, a chain is named
+  // by the call that owns the callback, and only the FIRST argument's literal (capped) names it.
+  it("regression: flags owners; setTimeout / void (async …) are none; a Hono chain names its owning call; first-argument literal only", () => {
+    const src = [
+      "setTimeout(() => {",
+      "});",
+      "void (async () => {",
+      "})();",
+      'app.get("/a", h).post("/b", async (c) => {',
+      "});",
+      'emitter.on(EVENT, "x", (e) => {',
+      "});",
+      `routes.get("${"y".repeat(100)}", (c) => {`,
+      "});",
+      "",
+    ].join("\n");
+    const syms = extractSymbols("src/a.ts", src);
+    expect(syms.map((s) => `${s.line}:${s.name}:${s.callback}`)).toEqual([
+      '5:app.post "/b":true',
+      "7:emitter.on:true",
+      `9:routes.get "${"y".repeat(80)}":true`,
+    ]);
+  });
+
   it("attributes Python methods to the top-level class, and emits a closure as nothing", () => {
     const src = [
       "class Repo:",

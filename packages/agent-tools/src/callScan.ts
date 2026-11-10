@@ -155,6 +155,8 @@ export function callsIn(line: string): CallAt[] {
 
 /** Files whose `<Name` is JSX (a `.ts` file's `<T>x` is a type assertion). */
 export const JSX_FILE = /\.(?:tsx|jsx|js|mjs|cjs)$/i;
+/** Keywords after which an expression (so a JSX element) may start. */
+const EXPRESSION_KEYWORDS = new Set(["return", "yield", "await", "case", "default", "else", "in", "of", "typeof", "void", "throw", "do"]);
 /** A JSX element's tag that names a component (capitalised; `<div` is an intrinsic element and names nothing). */
 const JSX_TAG = new RegExp(`<(\\/?)([A-Z][\\w$]*(?:\\.${ID})*)(?=[\\s/>]|$)`, "g");
 
@@ -170,7 +172,13 @@ export function jsxTagsIn(line: string): Array<{ name: string; column: number; s
     const at = m.index!;
     let p = at - 1;
     while (p >= 0 && isSpace(line.charCodeAt(p))) p -= 1;
-    if (p >= 0 && (isIdChar(line.charCodeAt(p)) || line[p] === ")" || line[p] === "]" || line[p] === ".")) continue;
+    if (p >= 0 && (line[p] === ")" || line[p] === "]" || line[p] === ".")) continue;
+    if (p >= 0 && isIdChar(line.charCodeAt(p))) {
+      // After a name it is a type argument (`Array<Foo>`), unless the word is a keyword an expression follows (`return <Foo/>`).
+      let w = p;
+      while (w >= 0 && isIdChar(line.charCodeAt(w))) w -= 1;
+      if (!EXPRESSION_KEYWORDS.has(line.slice(w + 1, p + 1))) continue;
+    }
     const start = at + 1 + m[1]!.length;
     const after = line.slice(start + m[2]!.length);
     if (/^\s*(?:extends\b|,)/.test(after) || /^>\s*\(/.test(after)) continue;

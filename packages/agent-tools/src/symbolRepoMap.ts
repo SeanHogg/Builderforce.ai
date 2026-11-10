@@ -10,6 +10,7 @@
 
 import type { RepoMapResult, RepoSemanticCapability, SemanticSearchResult } from "./capabilities.js";
 import type { CodeSymbol } from "./symbols.js";
+import { isTestSourcePath } from "./testPaths.js";
 
 export interface IndexedFile {
   path: string;
@@ -27,7 +28,6 @@ const DEFAULT_MAP_TOKENS = 1500;
 const SYMBOLS_PER_FILE = 8;
 /** Rough chars-per-token for budgeting the rendered map. */
 const CHARS_PER_TOKEN = 4;
-const TEST_FILE = /(^|\/)(__tests__|tests?|spec)\/|\.(test|spec)\.[^/]+$/i;
 
 function queryTerms(query: string | undefined): string[] {
   return (query ?? "")
@@ -50,7 +50,7 @@ function scoreFile(file: IndexedFile, focus: readonly string[], terms: readonly 
   }
   const exported = file.symbols.filter((s) => s.exported && s.kind !== "heading").length;
   score += Math.min(exported, 30) * 2 + Math.min(file.symbols.length, 30) * 0.5;
-  if (TEST_FILE.test(file.path)) score -= 30;
+  if (isTestSourcePath(file.path)) score -= 30;
   score -= file.path.split("/").length * 0.5;
   return score;
 }

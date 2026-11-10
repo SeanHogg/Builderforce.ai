@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { extractSymbols } from "./symbols.js";
+import { resolveRelativePath } from "@seanhogg/builderforce-memory/knowledge";
+import { codeParser } from "./knowledge/codePack.js";
+import { extractSymbols, type CodeSymbol } from "./symbols.js";
 import { extractSymbolRelations, MAX_SYMBOL_EDGES_PER_SYMBOL, MAX_CALL_SITES_PER_EDGE, relationsSupported, type SymbolRelation } from "./symbolRelations.js";
 
 const SOURCE = [
@@ -293,6 +295,39 @@ describe("extractSymbolRelations", () => {
     expect(mine.find((r) => "module" in r.to && r.to.name === "Card")!.sites).toEqual([{ path: "src/page.tsx", line: 8, column: 8, order: 1 }]);
     // The same tag in a `.ts` file is a type assertion's `<`, never a render.
     expect(extractSymbolRelations("src/page.ts", src, extractSymbols("src/page.ts", src)).some((r) => r.kind === "calls" && "module" in r.to && r.to.name === "Card")).toBe(false);
+  });
+
+  // regression: P0c review #4 — the rollup's relations are the regex extractor's, whatever symbol source the pack has.
+  it("regression: a pack given tree-sitter-shaped symbols (no container) stores the same rollup as the regex extractor", () => {
+    const parse = (symbolsOf?: (p: string, t: string) => readonly CodeSymbol[]) =>
+      codeParser(symbolsOf).extract!({ id: PATH, content: { kind: "text", text: SOURCE }, metadata: {} } as never, [], { rootId: "r", knownKeys: new Map(), resolvePath: resolveRelativePath }).edges;
+    const flat = (p: string, t: string) => extractSymbols(p, t).map(({ container: _c, ...s }) => s);
+    expect(parse(flat)).toEqual(parse());
+  });
+
+  // regression: P0c review #5 — a regex literal holding `(` or `{` inside a class member is no call and no brace.
+  it("regression: a regex literal with ( and { in a class member is masked (the code pack's ONE masker)", () => {
+    const src = ["export class Parser {", "  run(s: string) {", "    const re = /^\\(\\{x/;", "    return this.load(s);", "  }", "  load(s: string) {", "    return s;", "  }", "}", ""].join("\n");
+    const syms = extractSymbols("p.ts", src);
+    const out = extractSymbolRelations("p.ts", src, syms).filter((r) => r.kind === "calls");
+    expect(out.map((r) => ("symbol" in r.to ? syms[r.to.symbol]!.name : "")).filter(Boolean)).toEqual(["load"]);
+    expect(out[0]!.sites![0]!.order).toBe(0);
+  });
+
+  // regression: P0c review #7 — a 200 KB single line (a minified bundle) is skipped, in bounded time.
+  it("regression: a 200 KB single line costs bounded time", () => {
+    const line = `export function big() { ${"new A(x).b(y); <C/> f(g(h)); ".repeat(7000)} }`;
+    const t = performance.now();
+    extractSymbolRelations("big.tsx", line, extractSymbols("big.tsx", line));
+    expect(performance.now() - t).toBeLessThan(500);
+  });
+
+  // regression: P0c review #8 — a generic arrow's type parameters in a .tsx file are no render.
+  it("regression: <T extends X>, <T,> and <T>( in a .tsx file are no JSX render", () => {
+    const src = ['import { T } from "./t";', "export function f() {", "  const a = <T extends object>(x: T) => x;", "  const b = <T,>(x: T) => x;", "  const c = <T>(x: T) => x;", "  return <T />;", "}", ""].join("\n");
+    const syms = extractSymbols("f.tsx", src);
+    const sites = extractSymbolRelations("f.tsx", src, syms).filter((r) => r.kind === "calls").flatMap((r) => r.sites!.map((s) => s.line));
+    expect(sites).toEqual([6]);
   });
 
   it("reads JS/TS only", () => {

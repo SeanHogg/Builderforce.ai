@@ -24,7 +24,7 @@ import { gitHistoryPort } from "@builderforce/agent-tools/node-git-history.js";
 import { gitBlobId, gitIndexHints } from "@builderforce/agent-tools/node-knowledge-store.js";
 import {
   claimSimilarity, indexedSymbolSource, planKnowledgeReviewDetail,
-  reviewIndexPort, reviewPacks, runKnowledgeReview, watchFileEdits, workspaceCodeAnalyzers, createFsDirectorySource,
+  reviewIndexPort, reviewPacks, rootModuleResolution, runKnowledgeReview, watchFileEdits, workspaceCodeAnalyzers, createFsDirectorySource,
   type KnowledgeReviewPorts, type PumpSource,
 } from "@builderforce/agent-tools/knowledge/index.js";
 import {
@@ -139,7 +139,7 @@ function keepFresh(rootId: string, rootPath: string, ports: KnowledgeReviewPorts
     store: ports.store,
     manifest: ports.manifest,
     // No symbol index: an edited file is read from its NEW content, not from definitions known before the edit.
-    packs: reviewPacks(ports.partitions ? { partitions: ports.partitions } : {}),
+    packs: reviewPacks({ ...(ports.partitions ? { partitions: ports.partitions } : {}), ...(ports.modules ? { modules: ports.modules } : {}) }),
     onError: loggedFallback("stale marking", undefined),
   });
   if (!stop) return;
@@ -240,7 +240,10 @@ export function onPremKnowledgeRowsHost(deps: OnPremKnowledgeDeps): KnowledgeRow
         ),
         async review(plan, signal, opts) {
           const real = await resolveRoot();
-          const { ports, pump } = await reviewPorts(deps, rel, rootId, title, real);
+          const reviewed = await reviewPorts(deps, rel, rootId, title, real);
+          const pump = reviewed.pump;
+          // The root's path aliases, read once: the review's extracts and the stale-marking watcher's resolve alike.
+          const ports: KnowledgeReviewPorts = { ...reviewed.ports, modules: await rootModuleResolution(reviewed.ports.source, plan) };
           const force = opts?.force === true;
           // The host raises the root's bulk-upload window around the run; the pack goes up once, after it.
           const report = await replicaHost.duringReview(

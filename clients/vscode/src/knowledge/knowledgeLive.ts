@@ -19,6 +19,7 @@ import { buildLocalCapabilityProvider } from "../localCapabilities";
 import { createDirectorySource } from "./vscodeDirectorySource";
 import { vscodeKnowledgeFs } from "./knowledgeFs";
 import { rootById, type KnowledgeRoot } from "./knowledgeRoots";
+import { rootModules } from "./rootModules";
 import { loadGraph, log, onKnowledgeChanged, openRoot, workspaceFolders, type GraphQuery } from "./knowledgeService";
 
 /** Changes settle this long before the graph is re-read. */
@@ -72,6 +73,8 @@ export function subscribeLiveGraph(
     try {
       const open = openRoot(secrets, root);
       const partitions = await readPartitions({ caps: buildLocalCapabilityProvider(root.folderPath) }).catch((error: unknown) => { log("live partitions", error); return undefined; });
+      // The root's path aliases, so an edited file's re-extract stores the same resolved edges a review does.
+      const modules = await rootModules(root);
       if (!live) return;
       entityKeys = knownKeysCache(open.store, rootId);
       stopWatch = watchFileEdits({
@@ -80,7 +83,7 @@ export function subscribeLiveGraph(
         // The folder's watcher (`knowledgeFs`) already settles a burst: no second wait here.
         debounceMs: 0,
         // No warm symbol index: an edited file is read from its NEW content.
-        packs: reviewPacks(partitions ? { partitions } : {}),
+        packs: reviewPacks({ ...(partitions ? { partitions } : {}), modules }),
         onEdited: (paths) => {
           for (const p of paths) watched.add(p);
           refresh();

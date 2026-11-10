@@ -121,4 +121,9 @@ export class ModuleAliasCache {
     forget(rootKey: string): void {
         this.roots.delete(rootKey);
     }
+
+    /** Forgets every root whose key is a `/`-separated path holding `path` (an alias config a watcher saw change). */
+    forgetContaining(path: string): void {
+        for (const key of [...this.roots.keys()]) if (path === key || path.startsWith(`${key.replace(/\/$/, '')}/`)) this.roots.delete(key);
+    }
 }

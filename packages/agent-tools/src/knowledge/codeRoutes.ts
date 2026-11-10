@@ -17,7 +17,7 @@
  * entries joined by `;`, in source order, capped at {@link MAX_ROUTES}. Pure.
  */
 
-import { isTestSourcePath } from '../symbols.js';
+import { isTestSourcePath } from '../testPaths.js';
 import { maskSource } from './codeMask.js';
 
 export const MAX_ROUTES = 50;

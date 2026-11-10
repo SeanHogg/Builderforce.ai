@@ -96,7 +96,7 @@ export interface KnowledgeReviewPorts {
     onSystemsError?(error: unknown): void;
     /**
      * The root's path aliases and which modules exist, for the code pack's per-file extract (`moduleAliases.ts`). Absent ⇒ a
-     * run reads them ONCE from its `source` over the files it lists ({@link reviewModules}).
+     * run reads them ONCE from its `source` over the files it lists ({@link rootModuleResolution}).
      */
     modules?: ModuleResolution;
 }
@@ -187,10 +187,11 @@ export function reviewPacks(
 }
 
 /**
- * A root's {@link ModuleResolution} for one run: its alias configs read through `source` (only those among the listed
- * files), and module existence answered from the same listing. Read once per run, before the first extract.
+ * THE way any extract path gets a root's {@link ModuleResolution}: its alias configs read through `source` (only those
+ * among the listed files), and module existence answered from the same listing (the plan's files, else one listing).
+ * A review reads it once per run; a watcher or a run delta once per start (a host may keep it until a config changes).
  */
-export async function reviewModules(source: DirectorySource, plan?: PlanDetail): Promise<ModuleResolution> {
+export async function rootModuleResolution(source: DirectorySource, plan?: PlanDetail): Promise<ModuleResolution> {
     const paths = await reviewedPaths(source, plan)();
     const listed = new Set(paths);
     const read = async (path: string): Promise<string | undefined> => {
@@ -287,7 +288,7 @@ async function reviewAndIndex(
     // Two passes share ONE plan: its manifest hashes are the last review's (what pass 2's "recent" compares against), and neither pass walks again.
     const plan = opts.plan ?? (twoPass ? await planKnowledgeReviewDetail(ports, opts.force ? { force: true } : {}) : undefined);
     // The root's aliases, once per run: every extract of it (in-thread or pooled, both passes) resolves with the same ones.
-    const modules = ports.modules ?? await reviewModules(ports.source, plan);
+    const modules = ports.modules ?? await rootModuleResolution(ports.source, plan);
     ports = { ...ports, modules };
     const pool = poolWithAliases(opts.extractPool, modules);
     const passOpts: KnowledgeReviewOptions = { ...opts, ...(plan ? { plan } : {}), ...(pool ? { extractPool: pool } : {}) };

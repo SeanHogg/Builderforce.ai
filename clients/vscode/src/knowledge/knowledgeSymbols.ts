@@ -26,6 +26,7 @@ import {
   sourcePathOf, type AliasConfigPorts, type ModuleAliases,
 } from "@builderforce/agent-tools/knowledge";
 import { UNTIMED, type LoadTimer } from "./knowledgeLoadTrace";
+import { onAliasConfigChanged } from "./aliasConfigEvents";
 import { assertInsideRoot } from "./knowledgeFixPaths";
 import type { KnowledgeSymbolRecord, KnowledgeSymbolRelation } from "./knowledgeProtocol";
 import { isSafeRelative } from "./safePath";
@@ -256,6 +257,8 @@ export async function rootSymbols(
 
 /** The root's alias configs, read once per root and reused while they keep their modification times. */
 const sharedAliasCache = new ModuleAliasCache();
+// A tsconfig/jsconfig created, changed or deleted under a root (the knowledge folder watcher): its aliases are read again.
+onAliasConfigChanged((path) => sharedAliasCache.forgetContaining(path));
 
 /** {@link rootConfigReader} plus a guarded stat, for the {@link ModuleAliasCache}. */
 export function rootConfigPorts(rootPath: string, ports: SymbolFilePorts = nodeSymbolPorts): AliasConfigPorts {

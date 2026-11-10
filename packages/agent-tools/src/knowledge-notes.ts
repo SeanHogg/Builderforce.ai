@@ -22,6 +22,7 @@
  */
 
 import { rankByCount } from "@seanhogg/builderforce-memory/working";
+import { isTestSourcePath } from "./testPaths.js";
 
 /** Directory names of the on-disk knowledge tree, so no surface spells them itself. */
 export const KNOWLEDGE_DIRS = {
@@ -143,9 +144,7 @@ export function deriveActivitySummary(activity: RunActivity): string {
   const ranChecks = toolSet.has("run_checks");
 
   const isTest =
-    [...created, ...edited].some(
-      (f) => f.includes(".test.") || f.includes(".spec.") || f.includes("__tests__"),
-    ) || ranChecks;
+    [...created, ...edited].some(isTestSourcePath) || ranChecks;
 
   // Read-only exploration: the agent only LOOKED. A run that also ran checks or
   // commands did more than read, so it must not be labelled as pure analysis.

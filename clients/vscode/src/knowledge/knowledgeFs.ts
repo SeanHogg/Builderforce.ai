@@ -14,6 +14,7 @@ import { appendFile, mkdir, open, rename, rm, stat as nodeStat, type FileHandle 
 import { dirname } from "node:path";
 import * as vscode from "vscode";
 import type { KnowledgeFs } from "./vscodeDirectorySource";
+import { isAliasConfigFile, noteAliasConfigChanged } from "./aliasConfigEvents";
 import type { KnowledgeFiles } from "./knowledgeStores";
 import type { IgnoreFilePort } from "./knowledgeExclude";
 
@@ -64,6 +65,8 @@ export function vscodeKnowledgeFs(): KnowledgeFs {
       let timer: ReturnType<typeof setTimeout> | undefined;
       const note = (uri: vscode.Uri): void => {
         if (isKnowledgeCachePath(uri.fsPath)) return;
+        // A tsconfig/jsconfig created, changed or deleted: the root's cached path aliases are stale at once.
+        if (isAliasConfigFile(uri.fsPath)) noteAliasConfigChanged(uri.fsPath);
         changed.add(uri.fsPath.replace(/\\/g, "/"));
         if (timer) clearTimeout(timer);
         timer = setTimeout(() => {
