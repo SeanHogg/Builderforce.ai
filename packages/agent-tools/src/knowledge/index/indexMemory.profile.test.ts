@@ -170,6 +170,9 @@ describe("knowledge-index memory profile (#6350)", () => {
 
     // The host's retained set must be a real (non-trivial) share of what the index holds.
     expect(hostTotal).toBeGreaterThan(0);
-    expect(retainedDelta).toBeGreaterThan(hostTotal * 0.25);
+    // A heap delta only means something after a FORCED collection. Without --expose-gc,
+    // `global.gc` is undefined and an unforced GC between the two samples can make the
+    // delta negative (CI saw −370 KB), so the share check runs only when GC was forced.
+    if (typeof global.gc === "function") expect(retainedDelta).toBeGreaterThan(hostTotal * 0.25);
   }, 60_000);
 });
