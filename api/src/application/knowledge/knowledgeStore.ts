@@ -47,6 +47,10 @@ function toScopeRecord(row: typeof knowledgeScopes.$inferSelect): KnowledgeScope
     ...(row.previousDigest ? { previousDigest: row.previousDigest } : {}),
     ...(row.lastReviewedAt ? { lastReviewedAt: row.lastReviewedAt.toISOString() } : {}),
     ...(row.provenance ? { provenance: row.provenance } : {}),
+    ...(row.extractorVersion ? { extractorVersion: row.extractorVersion } : {}),
+    ...(row.toolVersions ? { toolVersions: row.toolVersions } : {}),
+    ...(row.previousExtractorVersion ? { previousExtractorVersion: row.previousExtractorVersion } : {}),
+    ...(row.previousToolVersions ? { previousToolVersions: row.previousToolVersions } : {}),
   };
 }
 
@@ -178,7 +182,15 @@ export function drizzleKnowledgeStore(db: Db, tenantId: number, projectId: numbe
         lastDigest: scope.lastDigest ?? null,
         lastReviewedAt: scope.lastReviewedAt ? new Date(scope.lastReviewedAt) : null,
         provenance: scope.provenance ?? null,
+        // What the review was measured with describes the review at `lastDigest`: stored only with a digest.
+        extractorVersion: scope.lastDigest ? scope.extractorVersion ?? null : null,
+        toolVersions: scope.lastDigest ? scope.toolVersions ?? null : null,
       };
+      // The digest is new: its review's measurement (unknown when unstated) replaces the stored one, which moves to
+      // `previous_*` with the digest. The same digest again keeps what is stored unless the write states it.
+      const isNewDigest = sql`${knowledgeScopes.lastDigest} IS DISTINCT FROM ${scope.lastDigest ?? null}`;
+      const keptUnlessNew = (column: typeof knowledgeScopes.extractorVersion | typeof knowledgeScopes.toolVersions) =>
+        sql`CASE WHEN ${isNewDigest} THEN NULL ELSE ${column} END`;
       await db.insert(knowledgeScopes).values(values).onConflictDoUpdate({
         target: [knowledgeScopes.tenantId, knowledgeScopes.projectId, knowledgeScopes.rootId],
         set: {
@@ -191,6 +203,10 @@ export function drizzleKnowledgeStore(db: Db, tenantId: number, projectId: numbe
           ...(scope.lastDigest ? {
             lastDigest: scope.lastDigest,
             previousDigest: sql`CASE WHEN ${knowledgeScopes.lastDigest} IS DISTINCT FROM ${scope.lastDigest} THEN ${knowledgeScopes.lastDigest} ELSE ${knowledgeScopes.previousDigest} END`,
+            previousExtractorVersion: sql`CASE WHEN ${isNewDigest} THEN ${knowledgeScopes.extractorVersion} ELSE ${knowledgeScopes.previousExtractorVersion} END`,
+            previousToolVersions: sql`CASE WHEN ${isNewDigest} THEN ${knowledgeScopes.toolVersions} ELSE ${knowledgeScopes.previousToolVersions} END`,
+            extractorVersion: scope.extractorVersion ?? keptUnlessNew(knowledgeScopes.extractorVersion),
+            toolVersions: scope.toolVersions ?? keptUnlessNew(knowledgeScopes.toolVersions),
           } : {}),
           ...(scope.lastReviewedAt ? { lastReviewedAt: values.lastReviewedAt } : {}),
         },

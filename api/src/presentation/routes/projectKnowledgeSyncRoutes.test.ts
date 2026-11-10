@@ -67,6 +67,29 @@ describe.each([['tenant door', () => createProjectKnowledgeRoutes({} as never)],
     expect(mocks.apply.mock.calls[0]![1]).toMatchObject({ syncId: 'abcdefgh', part: 0, parts: 2 });
   });
 
+  it('passes what the review was measured with (PRD 41 §C9), and nothing when the client states none', async () => {
+    mocks.apply.mockResolvedValue({ applied: true, generation: 4, digest: 'd' });
+    const tools = encodeURIComponent(JSON.stringify({ knip: '5.30.0', jscpd: '4.0.5' }));
+    const stated = send(new Uint8Array([1]), KPACK, `?extractorVersion=5&toolVersions=${tools}`);
+    await make().request(stated.url, stated.init);
+    expect(mocks.apply.mock.calls[0]![1].measured).toEqual({ extractorVersion: '5', toolVersions: { knip: '5.30.0', jscpd: '4.0.5' } });
+    const bare = send(new Uint8Array([1]));
+    await make().request(bare.url, bare.init);
+    expect(mocks.apply.mock.calls[1]![1]).not.toHaveProperty('measured');
+  });
+
+  it.each([
+    ['only the extractor', '?extractorVersion=5'],
+    ['tools that are not JSON', '?extractorVersion=5&toolVersions=knip'],
+    ['a tool version that is not text', `?extractorVersion=5&toolVersions=${encodeURIComponent('{"knip":5}')}`],
+  ])('refuses %s with 400 bad_measured, never storing an unknown', async (_case, query) => {
+    const { url, init } = send(new Uint8Array([1]), KPACK, query);
+    const res = await make().request(url, init);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'bad_measured' });
+    expect(mocks.apply).not.toHaveBeenCalled();
+  });
+
   it.each([[409, 'generation_mismatch'], [413, 'pack_too_large'], [422, 'bad_pack']] as const)('maps %i %s to a typed answer', async (status, code) => {
     mocks.apply.mockRejectedValue(new KnowledgeSyncError(status, code, 'no', { generation: 3 }));
     const { url, init } = send(new Uint8Array([1]));

@@ -30,6 +30,7 @@ import {
 import { isCleanKey, isCleanText } from './packKeyGuard.js';
 import { factKey, relationKey, type ReplicaAnalysis } from './replicaQueue.js';
 import { sourcePathIn } from './rootId.js';
+import { knowledgeMeasuredWith, type KnowledgeMeasuredWith } from './measuredWith.js';
 
 /** A row the pack left out because the server would refuse its key (`422 bad_pack`), with the dirty key it settles. */
 export interface SkippedRow { key: string; reason: string }
@@ -79,6 +80,12 @@ export interface BuiltPack {
     /** The pack was not cut: it carried every touched key but the held-back files (and so the rows, scope and analysis; the scope's review digest only when nothing is held). */
     final: boolean;
     analysisSent: boolean;
+    /**
+     * What the review this pack records was measured with (PRD 41 §C9) — set only when the pack carries the scope WITH its
+     * review digest, the one write the platform stores it on. The pack's scope section has no field for it, so it rides
+     * the sync request beside the pack.
+     */
+    measured?: KnowledgeMeasuredWith;
     /** Rows left out because their path or key holds a control character; their keys are in `sentKeys` (settled, never retried). */
     skipped: SkippedRow[];
     /** Rows that are not the pack's to carry, with their dirty keys: sent through `writeRows` after the pack. */
@@ -249,6 +256,7 @@ async function buildOnce(args: BuildArgs, prep: Prepared, memo: Memo, limit: num
     // The local state, as the tree sees it: which keys are leaves, which rows exist.
     let allFacts: StoredFact[] = [], allRels: StoredRelation[] = [];
     let treeKeys = new Set<string>();
+    let measured: KnowledgeMeasuredWith | undefined;
     if (final) {
         const [facts, rels] = await (memo.rows ??= Promise.all([local.facts({ rootId }), local.relations({ rootId })]));
         allFacts = facts.filter((f) => {
@@ -355,6 +363,7 @@ async function buildOnce(args: BuildArgs, prep: Prepared, memo: Memo, limit: num
         const scope = (await local.scopes()).find((s) => s.rootId === rootId);
         // While a file is held back the review digest is not the server's state: the scope goes without it (the immutable review snapshot is keyed by it).
         if (scope) { const { lastDigest: _held, ...rest } = scope; pack.scope = complete ? scope : rest; }
+        if (pack.scope?.lastDigest) measured = knowledgeMeasuredWith(pack.scope.packs);
         if (args.analysis) pack.analysis = { sha: args.analysis.sha, snapshot: args.analysis.snapshot };
     }
     if (tombstones.files.length + tombstones.facts.length + tombstones.relations.length > 0) pack.deletes = tombstones;
@@ -373,6 +382,7 @@ async function buildOnce(args: BuildArgs, prep: Prepared, memo: Memo, limit: num
         sentKeys,
         final,
         analysisSent: final && !!args.analysis,
+        ...(measured ? { measured } : {}),
         sideRows: side,
         waiting: holdKeys.size,
         waitingHashes: [...holdHashes],

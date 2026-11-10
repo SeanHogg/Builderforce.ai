@@ -3,6 +3,7 @@
  * `/api/projects`, host key under `/api/agent/projects`) next to the other knowledge routes:
  *
  *   POST /:projectId/knowledge/sync?syncId=&part=&parts=   one BFKP pack (or one part of one) → { generation, digest }
+ *        &extractorVersion=&toolVersions=                  what the review the pack records was measured with (PRD 41 §C9)
  *   GET  /:projectId/knowledge/sync/manifest?root=         the root digest and the 4,096 bucket digests (BFKP)
  *   GET  /:projectId/knowledge/sync/manifest?root=&view=generation   `{ generation, digest }` only (JSON): the quiet-root probe
  *   POST /:projectId/knowledge/sync/manifest               the leaves of the buckets asked for (BFKP in, BFKP out)
@@ -21,6 +22,8 @@ import { bucketIdsOf, haveBitmap, manifestGeneration, manifestLeaves, manifestSu
 import { KnowledgeSyncError, MAX_SYNC_BODY_BYTES } from '../../application/knowledge/sync/knowledgeSyncPorts';
 import { reportedFallback } from '../../application/observability/caughtErrorReporter';
 import { KnowledgeWriteError } from '../../application/knowledge/knowledgeWriteError';
+import type { ScopeMeasuredWith } from '../../application/knowledge/knowledgePorts';
+import { z } from './requestBody';
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -78,6 +81,27 @@ export function stageActorOf(c: Context): string | undefined {
 
 const intOf =(v: string | undefined): number | undefined => (v === undefined || v === '' ? undefined : Number(v));
 
+/** What a review was measured with (PRD 41 §C9): the extractor version, and analyzer name → version (≤ 32 tools). */
+export const zExtractorVersion = z.string().min(1).max(64);
+export const zToolVersions = z.record(z.string().min(1).max(64), z.string().min(1).max(64))
+  .refine((v) => Object.keys(v).length <= 32, 'at most 32 tools');
+
+/**
+ * `?extractorVersion=&toolVersions=<json>` of a sync request: what the review its pack records was measured with. Both
+ * or neither; a malformed value is the caller's 400, never silently dropped (it would store an unknown).
+ */
+export function measuredOf(c: Context): ScopeMeasuredWith | undefined {
+  const extractor = c.req.query('extractorVersion');
+  const tools = c.req.query('toolVersions');
+  if (extractor === undefined && tools === undefined) return undefined;
+  let parsedTools: unknown;
+  try { parsedTools = tools === undefined ? undefined : JSON.parse(tools); } catch { parsedTools = undefined; }
+  const e = zExtractorVersion.safeParse(extractor);
+  const t = zToolVersions.safeParse(parsedTools);
+  if (!e.success || !t.success) throw new KnowledgeSyncError(400, 'bad_measured', 'extractorVersion and toolVersions (a JSON object of tool → version) go together');
+  return { extractorVersion: e.data, toolVersions: t.data };
+}
+
 /** A typed sync refusal as a response: its status, `{ error, code, …detail }`, and `Retry-After` on a retryable 503. */
 export function syncRefusal(error: KnowledgeSyncError): Response {
   const res = json({ error: error.message, code: error.code, ...(error.detail ?? {}) }, error.status);
@@ -104,9 +128,13 @@ export function registerKnowledgeSyncRoutes(router: Hono<HonoEnv>, h: SyncRouteH
     const syncId = c.req.query('syncId');
     const parts = intOf(c.req.query('parts'));
     const part = intOf(c.req.query('part'));
+    const measured = measuredOf(c);
     const result = await applyKnowledgePack(
       { ...p, userId: h.person(c), actorRole: (c.get('role') as string | undefined) ?? null, stageActor: stageActorOf(c) },
-      { body: await bodyOf(c), ...(syncId ? { syncId } : {}), ...(part !== undefined ? { part } : {}), ...(parts !== undefined ? { parts } : {}) },
+      {
+        body: await bodyOf(c), ...(syncId ? { syncId } : {}), ...(part !== undefined ? { part } : {}), ...(parts !== undefined ? { parts } : {}),
+        ...(measured ? { measured } : {}),
+      },
     );
     return json({ ok: true, ...result });
   })));

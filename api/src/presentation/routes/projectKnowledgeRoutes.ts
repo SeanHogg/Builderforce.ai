@@ -50,7 +50,7 @@ import { admitClientResult } from './clientResultHttp';
 import { judgeCostFor } from '../../application/knowledge/judgeCostEstimate';
 import { parseBody, z } from './requestBody';
 import { KnowledgeSyncError } from '../../application/knowledge/sync/knowledgeSyncPorts';
-import { registerKnowledgeSyncRoutes, syncRefusal } from './projectKnowledgeSyncRoutes';
+import { registerKnowledgeSyncRoutes, syncRefusal, zExtractorVersion, zToolVersions } from './projectKnowledgeSyncRoutes';
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -104,7 +104,10 @@ const zScope = z.object({
   packs: z.array(z.string().min(1).max(64)).max(16),
   lastDigest: z.string().max(64).optional(),
   lastReviewedAt: z.string().datetime().optional(),
-});
+  /** What the review at `lastDigest` was measured with (PRD 41 §C9); stored only with a digest. */
+  extractorVersion: zExtractorVersion.optional(),
+  toolVersions: zToolVersions.optional(),
+}).refine((s) => (s.extractorVersion === undefined) === (s.toolVersions === undefined), 'extractorVersion and toolVersions go together');
 const WriteBody = z.object({
   /** The root every row of this chunk belongs to (a pack upload sends it on each chunk). */
   root: z.string().min(1).max(512).optional(),

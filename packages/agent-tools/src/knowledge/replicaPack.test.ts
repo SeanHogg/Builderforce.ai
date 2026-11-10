@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { srcRef } from '@seanhogg/builderforce-memory/knowledge';
 import { decodePack } from '@seanhogg/builderforce-memory/knowledge/pack';
 import { buildPack } from './replicaPack.js';
+import { knowledgeMeasuredWith } from './measuredWith.js';
 import { extraction, fakeServer, hashOf, ROOT, world, type World } from './replicaTestkit.test-util.js';
 
 async function setup(files: number) {
@@ -51,6 +52,18 @@ describe('buildPack cuts by decoded size and rows', () => {
         const built = await buildPack({ ...base, maxDecodedBytes: 10 });
         expect(built.files).toBe(1);
         expect(built.final).toBe(false);
+    });
+});
+
+describe('what the review was measured with (PRD 41 §C9)', () => {
+    it('goes with a pack whose scope records the review digest, and with no other', async () => {
+        const { w, base } = await setup(4);
+        expect((await buildPack(base)).measured).toBeUndefined();
+        await w.local.write({ scope: { rootId: ROOT, title: 'test', packs: ['code'], lastDigest: 'abcdef12' }, facts: [], relations: [] });
+        const built = await buildPack(base);
+        await expect(decodePack(built.bytes)).resolves.toMatchObject({ scope: { lastDigest: 'abcdef12' } });
+        expect(built.measured).toEqual(knowledgeMeasuredWith(['code']));
+        expect(built.measured!.toolVersions).toMatchObject({ knip: expect.any(String), jscpd: expect.any(String), 'dependency-cruiser': expect.any(String) });
     });
 });
 

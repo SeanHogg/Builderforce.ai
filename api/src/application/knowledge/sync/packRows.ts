@@ -9,7 +9,7 @@
  * names it" is true when it is acted on.
  */
 import { factDigest, factLeafKey, fileLeafKey, parseRelationLeafKey, relationDigest, relationLeafKey, type Pack } from '@seanhogg/builderforce-memory/knowledge/pack';
-import type { ExtractedCachePort } from '../knowledgePorts';
+import type { ExtractedCachePort, ScopeMeasuredWith } from '../knowledgePorts';
 import type { LeafRow } from '../knowledgeLedger';
 import { MAX_KNOWLEDGE_WRITE_ROWS, writeKnowledge, type KnowledgeFactInput } from '../writeKnowledge';
 import type { ApplyDeps, PackUnit, SkippedTombstone } from './applyKnowledgePack';
@@ -25,8 +25,11 @@ export function leavesOf(pack: Pack): LeafRow[] {
   ];
 }
 
-/** Facts, relations and the scope, through the single writer, on the transaction's handle. */
-export async function writeRows(deps: ApplyDeps, unit: PackUnit, pack: Pack): Promise<{ facts: number; relations: number }> {
+/**
+ * Facts, relations and the scope, through the single writer, on the transaction's handle. `measured` (what the review was
+ * measured with, stated beside the pack) joins the scope; the store keeps it only with a review digest.
+ */
+export async function writeRows(deps: ApplyDeps, unit: PackUnit, pack: Pack, measured?: ScopeMeasuredWith): Promise<{ facts: number; relations: number }> {
   const root = pack.rootId;
   // The pack already wrote the sources and the review snapshot; the writer only writes rows here.
   const blobs: ExtractedCachePort = { ...deps.extracted, setSource: async () => undefined, snapshotReview: async () => undefined };
@@ -43,7 +46,7 @@ export async function writeRows(deps: ApplyDeps, unit: PackUnit, pack: Pack): Pr
   // Facts first, then relations: a relation to a fact never lands before the fact.
   for (let i = 0; i < facts.length; i += MAX_KNOWLEDGE_WRITE_ROWS) written.facts += (await write({ facts: facts.slice(i, i + MAX_KNOWLEDGE_WRITE_ROWS) })).factsWritten;
   for (let i = 0; i < relations.length; i += MAX_KNOWLEDGE_WRITE_ROWS) written.relations += (await write({ relations: relations.slice(i, i + MAX_KNOWLEDGE_WRITE_ROWS) })).relationsWritten;
-  if (pack.scope) await write({ scope: pack.scope });
+  if (pack.scope) await write({ scope: { ...pack.scope, ...measured } });
   return written;
 }
 

@@ -29,13 +29,25 @@ export interface ScopeProvenance {
   uploadedBy?: string;
 }
 
-/** What a scope write carries: memory's record plus an uploaded pack's provenance (kept for pack roots only). */
-export type KnowledgeScopeWrite = ScopeRecord & { provenance?: ScopeProvenance };
+/**
+ * What a review was measured with (PRD 41 §C9): the extractor version and analyzer name → version, as the uploading
+ * client states them. Stored only with a write that records a review digest; absent = unknown.
+ */
+export interface ScopeMeasuredWith {
+  extractorVersion?: string;
+  toolVersions?: Record<string, string>;
+}
 
-export interface KnowledgeScope extends ScopeRecord {
+/** What a scope write carries: memory's record plus an uploaded pack's provenance (kept for pack roots only) and what the review was measured with. */
+export type KnowledgeScopeWrite = ScopeRecord & ScopeMeasuredWith & { provenance?: ScopeProvenance };
+
+export interface KnowledgeScope extends ScopeRecord, ScopeMeasuredWith {
   /** An uploaded pack's provenance (PRD 40, OD-3); absent on a reviewed root. */
   provenance?: ScopeProvenance;
   previousDigest?: string;
+  /** What the review at `previousDigest` was measured with (it moves with the digest); absent = unknown. */
+  previousExtractorVersion?: string;
+  previousToolVersions?: Record<string, string>;
 }
 
 export interface KnowledgeStorePort {

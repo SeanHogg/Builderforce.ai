@@ -173,6 +173,19 @@ describe('applyKnowledgePack', () => {
     expect(w.puts).toEqual(['bundle', `snapshot:${ROOT}:abcdef12`]);
   });
 
+  it('writes what the review was measured with (stated beside the pack) onto the scope it records (PRD 41 §C9)', async () => {
+    const scopes: unknown[] = [];
+    const tx = atomically(w);
+    const spying = (<T>(work: (unit: Parameters<Parameters<typeof tx>[0]>[0]) => Promise<T>) => tx((unit) => {
+      unit.store.upsertScope = async (s) => { scopes.push(s); };
+      return work(unit);
+    })) as ApplyDeps['atomically'];
+    const pack = { ...packOf(rowsFor(3)), scope: { rootId: ROOT, title: 't', packs: ['code'], lastDigest: 'abcdef12' } };
+    const measured = { extractorVersion: '5', toolVersions: { knip: '5.30.0' } };
+    await applyKnowledgePack(deps({ atomically: spying }), { body: await encodePack(pack), measured });
+    expect(scopes).toEqual([expect.objectContaining({ rootId: ROOT, lastDigest: 'abcdef12', ...measured })]);
+  });
+
   it('answers 413 for an oversized analysis BEFORE the transaction: nothing is written', async () => {
     const pack = { ...packOf(rowsFor(2)), analysis: { sha: 'abc123', snapshot: { blob: 'x'.repeat(2.2 * 1024 * 1024) } } };
     await expect(apply(pack)).rejects.toMatchObject({ status: 413 });

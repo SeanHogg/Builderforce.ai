@@ -27,6 +27,14 @@ describe('client.sync (PRD 41 A11)', () => {
     expect(calls[0]!.path).toBe('/api/projects/5/knowledge/sync?syncId=abcdefgh&part=0&parts=3');
   });
 
+  it('states what the review was measured with beside the pack (PRD 41 §C9)', async () => {
+    const { client, calls } = clientWith(() => json({ ok: true, applied: true, generation: 3, digest: 'd' }));
+    await client.sync('r', { bytes: new Uint8Array([1]), measured: { extractorVersion: '5', toolVersions: { knip: '5.30.0' } } });
+    const q = new URL(calls[0]!.path, 'http://x').searchParams;
+    expect(q.get('extractorVersion')).toBe('5');
+    expect(JSON.parse(q.get('toolVersions')!)).toEqual({ knip: '5.30.0' });
+  });
+
   it('maps 409, 413 and 422 to typed errors that keep status and code', async () => {
     const mk = (status: number, code: string, extra: object = {}) => clientWith(() => json({ error: 'no', code, ...extra }, status)).client.sync('r', { bytes: new Uint8Array([1]) });
     const conflict = await mk(409, 'generation_mismatch', { generation: 9, digest: 'abc' }).catch((e) => e);

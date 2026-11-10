@@ -907,6 +907,12 @@ export const knowledgeScopes = pgTable('knowledge_scopes', {
   lastReviewedAt: timestamp('last_reviewed_at'),
   /** An uploaded pack's `{ reviewedBy?, judgeModel?, policy?, reviewedAt? }` (migration 1294, PRD 40 OD-3); pack roots only. */
   provenance:     jsonb('provenance').$type<{ reviewedBy?: string; judgeModel?: string; policy?: string; reviewedAt?: string }>(),
+  /** What the review at `lastDigest` was measured with (migration 1343, PRD 41 §C9); null = unknown. */
+  extractorVersion: varchar('extractor_version', { length: 64 }),
+  toolVersions:     jsonb('tool_versions').$type<Record<string, string>>(),
+  /** The same for `previousDigest`: moves with it when a new digest is recorded. */
+  previousExtractorVersion: varchar('previous_extractor_version', { length: 64 }),
+  previousToolVersions:     jsonb('previous_tool_versions').$type<Record<string, string>>(),
 }, (t) => [
   unique('uq_knowledge_scope').on(t.tenantId, t.projectId, t.rootId),
 ]);

@@ -306,10 +306,15 @@ export class KnowledgeBridge implements vscode.Disposable {
   private async baseline(rootId: string): Promise<{ graph: unknown; comparable: boolean } | null> {
     const client = linkedKnowledgeClient(this.secrets);
     if (!client) return null;
-    const previous = (await client.scopes()).find((s) => s.rootId === rootId)?.previousDigest;
-    if (!previous) return null;
-    const graph = await client.graph(rootId, { at: previous });
-    return isGraph(graph) ? knowledgeBaseline(graph, { rootId, packs: reviewPacks({}).map((p) => p.id) }) : graph ? { graph, comparable: false } : null;
+    const scope = (await client.scopes()).find((s) => s.rootId === rootId);
+    if (!scope?.previousDigest) return null;
+    const graph = await client.graph(rootId, { at: scope.previousDigest });
+    // What the platform stored for THAT review (absent = unknown, which is never comparable).
+    const measured = {
+      ...(scope.previousExtractorVersion !== undefined ? { extractorVersion: scope.previousExtractorVersion } : {}),
+      ...(scope.previousToolVersions !== undefined ? { toolVersions: scope.previousToolVersions } : {}),
+    };
+    return isGraph(graph) ? knowledgeBaseline(graph, measured, { rootId, packs: reviewPacks({}).map((p) => p.id) }) : graph ? { graph, comparable: false } : null;
   }
 
   dispose(): void {
