@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("vscode", () => ({ workspace: { workspaceFolders: [] }, l10n: { t: (m: string) => m } }));
+vi.mock("vscode", () => ({
+  workspace: { workspaceFolders: [] },
+  l10n: { t: (m: string) => m },
+  EventEmitter: class { event = () => ({ dispose() {} }); fire() {} dispose() {} },
+}));
 import type { RunDelta } from "@builderforce/run-delta";
 import { headSwitched, parseCatFileBatch, type RepoGit } from "./gitSide";
 import { confinedPath } from "./openCode";
