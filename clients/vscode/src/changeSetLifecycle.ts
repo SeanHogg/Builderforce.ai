@@ -134,6 +134,20 @@ export function finishChangeSet(
   };
 }
 
+/**
+ * The baseline as the synced lifecycle record carries it: a non-git folder's fingerprints (its whole working set, up to
+ * 20,000 paths) stay on the device; the record keeps their count. The baseline hash still covers them.
+ */
+function syncedBaseline(baseline: RunChangeBaseline): RunChangeBaseline {
+  if (!baseline.repos.some((repo) => repo.kind === "folder")) return baseline;
+  return {
+    ...baseline,
+    repos: baseline.repos.map((repo) => (repo.kind === "folder" && repo.omittedFiles === undefined
+      ? { ...repo, files: {}, omittedFiles: Object.keys(repo.files).length, preimageTooLarge: undefined }
+      : repo)),
+  };
+}
+
 function lifecyclePayload(set: ChangeSetLifecycle): ChangeSetLifecycleValue {
   const repository = set.baseline.repos.map((repo) => repo.repository).sort().join("\n") || "workspace";
   return {
@@ -143,7 +157,7 @@ function lifecyclePayload(set: ChangeSetLifecycle): ChangeSetLifecycleValue {
     files: [],
     author: set.author,
     baselineHash: set.baselineHash,
-    baseline: set.baseline,
+    baseline: syncedBaseline(set.baseline),
     ...(set.finalizedAt ? { finalizedAt: set.finalizedAt } : {}),
     ...(set.finalizationHash ? { finalizationHash: set.finalizationHash } : {}),
     ...(set.changeSetIds ? { changeSetIds: set.changeSetIds } : {}),

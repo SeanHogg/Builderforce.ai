@@ -19,7 +19,7 @@ import { BrainTimeline, Markdown, TranslatableText } from '@seanhogg/builderforc
 import { RunDeltaCard, RunDeltaPanel, type RunDeltaCodeTarget } from '@builderforce/knowledge-graph-view/delta';
 import { onHostMessage, post, request } from '../../vscodeBridge';
 import {
-  RUN_DELTA_CARD, RUN_DELTA_GET, cardKey, cardsFromAnswer, mergeCards, placeCards, rememberAnchor, type RunDeltaCardPayload,
+  RUN_DELTA_CARD, RUN_DELTA_GET, cardKey, cardsFromAnswer, codePathOf, mergeCards, placeCards, rememberAnchor, type RunDeltaCardPayload,
 } from './runDeltaCards';
 import { useRunDeltaLabels } from './useRunDeltaLabels';
 
@@ -27,9 +27,6 @@ type TimelineProps = ComponentProps<typeof BrainTimeline>;
 
 /** Below this width the panel is a bottom sheet (the chat is a narrow sidebar view). */
 const COMPACT_BELOW_PX = 600;
-
-/** A local repository root (POSIX or Windows), as opposed to a remote URL identity. */
-const isLocalRoot = (repo: string): boolean => /^(\/|[A-Za-z]:[\\/])/.test(repo);
 
 /** The repo's last path segment, for a run that touched more than one repository. */
 const repoName = (repo: string): string => repo.replace(/[\\/]+$/, '').split(/[\\/:]/).filter(Boolean).pop() ?? repo;
@@ -73,11 +70,11 @@ export function useRunDeltaCards(chatId: number | null, messages: readonly Brain
       (answer) => { if (live) setCards((current) => mergeCards(cardsFromAnswer(answer), current)); },
       () => {},
     );
-    const off = onHostMessage<RunDeltaCardPayload & { type?: string }>(RUN_DELTA_CARD, ({ chatId: forChat, runId, repo, delta }) => {
+    const off = onHostMessage<RunDeltaCardPayload & { type?: string }>(RUN_DELTA_CARD, ({ chatId: forChat, runId, repo, root, delta }) => {
       if (forChat !== chatId) return;
       // The run just settled: its card follows the reply that ended it, here and when the chat reopens.
       if (lastReply.current !== undefined) rememberAnchor(runId, lastReply.current);
-      setCards((current) => mergeCards(current, [{ chatId: forChat, runId, repo, delta }]));
+      setCards((current) => mergeCards(current, [{ chatId: forChat, runId, repo, root, delta }]));
     });
     return () => { live = false; off(); };
   }, [chatId]);
@@ -120,10 +117,10 @@ export function useRunDeltaCards(chatId: number | null, messages: readonly Brain
 
   const open = openKey ? cards.find((c) => cardKey(c) === openKey) : undefined;
   const openCode = useMemo(() => {
-    if (!open || !isLocalRoot(open.repo)) return undefined;
-    const root = open.repo.replace(/[\\/]+$/, '');
+    // Offered whenever the card names a local root (always, from a host that sends `root`).
+    if (!open || codePathOf(open, '') === undefined) return undefined;
     return (target: RunDeltaCodeTarget) => post('canvas.openFile', {
-      path: `${root}/${target.path}`,
+      path: codePathOf(open, target.path)!,
       ...(target.line ? { range: { startLine: target.line, startColumn: 1, endLine: target.line, endColumn: 1 } } : {}),
     });
   }, [open]);

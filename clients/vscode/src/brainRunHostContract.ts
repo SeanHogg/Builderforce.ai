@@ -21,6 +21,7 @@ import type {
   ServedRead,
 } from "@seanhogg/builderforce-brain-embedded";
 import type { LocalRuntimeProbe } from "@builderforce/local-inference";
+import type { RunDelta } from "@builderforce/run-delta";
 import type { PolicyGate, RunKnowledgeLog } from "@builderforce/agent-tools";
 import type { ToolDef } from "./fileTools";
 import type { NativeRunLabels } from "./nativeBrainRun";
@@ -259,6 +260,8 @@ export interface BrainRunHost {
   attach(sink: RunSink): () => void;
   /** The run list's interrupted rows (`interruptedRunsView.ts`): journal one as acknowledged (dismissed, or resumed by the webview through the composer). Idempotent. Absent on a host without a run journal. */
   acknowledgeInterrupted?(runId: string): Promise<void>;
+  /** The stored run deltas of a run or of a chat (`run-delta/get`, PRD 41 §C14). Absent on a host that records none. */
+  runDeltas?(query: { runId?: string; chatId?: number }): Promise<Array<{ chatId: number; runId: string; repo: string; root: string; delta: RunDelta }>>;
   /** Resolves once the durable writes this host queued (its sub-agent journal) have landed or been given up — awaited on deactivate so a child settling during close is not left `running`. */
   flush?(): Promise<void>;
   dispose(): void;

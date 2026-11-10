@@ -111,8 +111,18 @@ vi.mock("./hooks/editorDirectives", () => ({ editorRunDirectives: async () => []
 
 vi.mock("./memoryStaleness", () => ({ withWorkspaceStaleness: (hooks: unknown) => hooks }));
 
+// The run delta (its own suites under `runDelta/`) opens the folder's knowledge file; these suites test the change set alone.
+vi.mock("./runDelta/editorRunDelta", () => ({
+  editorRunDelta: () => ({
+    capture: async () => ({}),
+    onFinalized: () => () => undefined,
+    attach: () => () => undefined,
+    runDeltas: async () => [],
+  }),
+}));
+
 import { createVsCodeRunHost } from "./brainRunHostPorts";
-import { attributeRunChanges, FINGERPRINT_HASH_MAX_BYTES, fingerprintFile, fingerprintFiles } from "./runChangeBaseline";
+import { attributeRunChanges, STAT_HINT_MIN_BYTES, fingerprintFile, fingerprintFiles } from "./runChangeBaseline";
 import {
   beginChangeSet,
   changeSetCompleteness,
@@ -660,21 +670,33 @@ describe("change set baseline and finalization", () => {
 });
 
 describe("bounded baseline fingerprints", () => {
-  it("content-hashes small files, fingerprints large ones by size and mtime, and keeps input order", async () => {
+  it("content-hashes every file of any size with the EOL-normalized hash, and keeps input order", async () => {
     const root = await workspace();
     const small = path.join(root, "small.txt");
     const large = path.join(root, "large.bin");
     await fs.writeFile(small, "hello");
-    await fs.writeFile(large, Buffer.alloc(FINGERPRINT_HASH_MAX_BYTES + 1, 1));
+    await fs.writeFile(large, Buffer.alloc(STAT_HINT_MIN_BYTES + 1, 1));
 
     expect(await fingerprintFile(small)).toBe(sha("hello"));
+    // PRD 41 C1 step 1: a large file is content-hashed too (memory's contentHash), never a size + mtime stand-in.
     const largePrint = await fingerprintFile(large);
-    expect(largePrint).toMatch(new RegExp(`^stat:${FINGERPRINT_HASH_MAX_BYTES + 1}:\\d+$`));
+    expect(largePrint).toBe(`sha256:${createHash("sha256").update(Buffer.alloc(STAT_HINT_MIN_BYTES + 1, 1)).digest("hex")}`);
     expect(await fingerprintFile(path.join(root, "missing"))).toBeUndefined();
+    // CRLF and LF spellings of one text are one content.
+    const crlf = path.join(root, "crlf.txt");
+    await fs.writeFile(crlf, "a\r\nb\r\n");
+    expect(await fingerprintFile(crlf)).toBe(sha("a\nb\n"));
 
-    // A change to a large file still shows: its size (or mtime) moves.
+    // A change to a large file shows: its content moves.
     await fs.appendFile(large, Buffer.from([2]));
     expect(await fingerprintFile(large)).not.toBe(largePrint);
+
+    // A big file whose stat matches its knowledge stat row reuses the row's hash without a read.
+    const hint = vi.fn(async () => "f".repeat(64));
+    expect(await fingerprintFile(large, hint)).toBe(`sha256:${"f".repeat(64)}`);
+    expect(hint).toHaveBeenCalledTimes(1);
+    expect(await fingerprintFile(small, hint)).toBe(sha("hello"));
+    expect(hint).toHaveBeenCalledTimes(1);
 
     const many = await Promise.all(
       Array.from({ length: 20 }, async (_, index) => {

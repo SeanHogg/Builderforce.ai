@@ -44,9 +44,13 @@ import {
   captureRunChangeBaseline,
   fingerprintFiles,
   repositoryIdentityOf,
+  type BaselineCaptureOptions,
   type ChangeAttribution,
+  type ChangeSetRepoBaseline,
   type RunChangeBaseline,
+  type StatHashHint,
 } from "./runChangeBaseline";
+import { listWorkingSet, workingSetStatus } from "./runDelta/folderWorkingSet";
 import {
   deviceIdOf,
   readChangeSetLifecycle,
@@ -68,6 +72,38 @@ export function runChangeSetId(runId: string, repoRoot: string): string {
   return `changeset:${runId}:${repoKey}`;
 }
 
+/** One committed change-set record and the repository root it describes. */
+export interface CommittedChangeSet {
+  id: string;
+  root: string;
+}
+
+/** A repository's working tree at finalization: a git repo's pending changes, or a non-git folder's working set. */
+interface CurrentRepo {
+  root: string;
+  branch?: string;
+  changes: ReadonlyArray<{ path: string; relativePath: string; status: string }>;
+}
+
+/** The repositories to diff: every pending git repo, plus every non-git folder the baseline covered. */
+async function currentRepos(baseline: RunChangeBaseline): Promise<CurrentRepo[]> {
+  // A mid-run read can repopulate the cache. Attribute against a fresh working tree,
+  // not that snapshot. This does not upload the diff and does not apply it anywhere.
+  refreshPendingChanges();
+  const pending = await detectPendingChanges();
+  const repos: CurrentRepo[] = [...pending.repos];
+  // A folder whose baseline was capped, or read back without its files, cannot be attributed truthfully: it is skipped.
+  const folders = baseline.repos.filter((repo): repo is ChangeSetRepoBaseline & { kind: "folder" } =>
+    repo.kind === "folder" && !repo.truncated && repo.omittedFiles === undefined);
+  for (const folder of folders) {
+    if (repos.some((repo) => normalizePath(repo.root) === normalizePath(folder.root))) continue;
+    const listed = await listWorkingSet(folder.root);
+    if (listed.truncated) continue;
+    repos.push({ root: folder.root, changes: workingSetStatus(folder.files, listed.files, folder.root) });
+  }
+  return repos;
+}
+
 /**
  * Close a run's change evidence: re-read the working tree, keep only the changes the
  * run truthfully owns, and commit one immutable change-set per touched repository.
@@ -75,7 +111,7 @@ export function runChangeSetId(runId: string, repoRoot: string): string {
  */
 export async function finalizeRunChangeSets(
   store: LocalFirstStore,
-  deps: { deviceId: string; now?: () => Date },
+  deps: { deviceId: string; now?: () => Date; hint?: StatHashHint },
   args: {
     runId: string;
     baseline: RunChangeBaseline;
@@ -84,24 +120,35 @@ export async function finalizeRunChangeSets(
     author: string;
   },
 ): Promise<string[]> {
+  return (await finalizeRunChangeSetRepos(store, deps, args)).map((set) => set.id);
+}
+
+/** {@link finalizeRunChangeSets}, with the repository root of each committed record (what the run delta reads). */
+export async function finalizeRunChangeSetRepos(
+  store: LocalFirstStore,
+  deps: { deviceId: string; now?: () => Date; hint?: StatHashHint },
+  args: {
+    runId: string;
+    baseline: RunChangeBaseline;
+    destination?: EntityDestination;
+    author: string;
+  },
+): Promise<CommittedChangeSet[]> {
   const at = (deps.now?.() ?? new Date()).toISOString();
-  // A mid-run read can repopulate the cache. Attribute against a fresh working tree,
-  // not that snapshot. This does not upload the diff and does not apply it anywhere.
-  refreshPendingChanges();
-  const current = await detectPendingChanges();
-  const committed: string[] = [];
+  const current = await currentRepos(args.baseline);
+  const committed: CommittedChangeSet[] = [];
 
   // Baseline repos by normalized root; current repos drive the diff (a repo the run
   // dirtied that was clean at baseline appears only here).
   const baselineByRoot = new Map(args.baseline.repos.map((repo) => [normalizePath(repo.root), repo]));
-  const roots = new Set<string>([...current.repos.map((repo) => normalizePath(repo.root))]);
+  const roots = new Set<string>([...current.map((repo) => normalizePath(repo.root))]);
 
   for (const rootKey of roots) {
-    const repo = current.repos.find((candidate) => normalizePath(candidate.root) === rootKey)!;
+    const repo = current.find((candidate) => normalizePath(candidate.root) === rootKey)!;
     const baseline = baselineByRoot.get(rootKey);
     const changes = attributeRunChanges(
       baseline?.files ?? {},
-      await fingerprintFiles(repo.changes.map((change) => change.path)).then((hashes) =>
+      await fingerprintFiles(repo.changes.map((change) => change.path), deps.hint).then((hashes) =>
         repo.changes.map((change, index) => ({
           relativePath: change.relativePath,
           status: change.status,
@@ -114,11 +161,11 @@ export async function finalizeRunChangeSets(
     const id = runChangeSetId(args.runId, repo.root);
     const existing = await store.read((tx) => tx.get<LocalChangeSetValue>("change-set", id));
     if (existing) {
-      committed.push(id);
+      committed.push({ id, root: repo.root });
       continue; // immutable: a retried finalization returns the stored record
     }
     const repository = baseline?.repository ?? (await repositoryIdentityOf(repo.root));
-    const baseCommit = baseline?.baseCommit ?? (await baseCommitOf(repo.root));
+    const baseCommit = baseline?.kind === "folder" ? undefined : baseline?.baseCommit ?? (await baseCommitOf(repo.root));
     const record = newLocalRecord<LocalChangeSetValue>({
       id,
       entityType: "change-set",
@@ -156,9 +203,16 @@ export async function finalizeRunChangeSets(
         payload: record.payload,
       });
     });
-    committed.push(id);
+    committed.push({ id, root: repo.root });
   }
   return committed;
+}
+
+/** A finalized run's change evidence: what the run delta is computed from. */
+export interface FinalizedRunChangeSets {
+  runId: string;
+  baseline: RunChangeBaseline;
+  committed: CommittedChangeSet[];
 }
 
 /**
@@ -199,6 +253,14 @@ export async function recordChangeSetAroundRun<T>(
     now?: () => Date;
     /** Evidence that could not be recorded. The run is never failed for it. Default `console.warn`. */
     onError?: (error: unknown) => void;
+    /** How the baseline is read: pre-images, the stat hint (also used at finalization), the workspace folders. */
+    capture?: BaselineCaptureOptions;
+    /**
+     * Told once the set is finalized, with the committed records and the baseline they were diffed against — the run
+     * delta's hook (`runDelta/finalizeRunDelta.ts`). Called, never awaited: nothing it does can fail or delay the run's
+     * result. A throw is reported to `onError`.
+     */
+    onFinalized?: (closed: FinalizedRunChangeSets) => void;
   },
   run: () => Promise<T>,
 ): Promise<T> {
@@ -206,7 +268,7 @@ export async function recordChangeSetAroundRun<T>(
   const onError = args.onError ?? ((error: unknown) => console.warn("change set:", error));
   let baseline: RunChangeBaseline | undefined;
   try {
-    baseline = await captureRunChangeBaseline(args.now?.() ?? new Date());
+    baseline = await captureRunChangeBaseline(args.now?.() ?? new Date(), args.capture);
   } catch (error) {
     onError(error);
     baseline = undefined;
@@ -247,11 +309,12 @@ export async function recordChangeSetAroundRun<T>(
     if (deviceId && ownsRun) {
       try {
         const stored = await readChangeSetLifecycle(args.store, args.runId);
-        const baselineForClose = stored?.baseline ?? baseline;
+        // The in-process baseline is whole; the stored one is the restart fallback (a folder's files are not stored).
+        const baselineForClose = baseline ?? stored?.baseline;
         if (baselineForClose && !stored?.finalizedAt) {
-          const ids = await finalizeRunChangeSets(
+          const committed = await finalizeRunChangeSetRepos(
             args.store,
-            { deviceId, ...(args.now ? { now: args.now } : {}) },
+            { deviceId, ...(args.now ? { now: args.now } : {}), ...(args.capture?.hint ? { hint: args.capture.hint } : {}) },
             {
               runId: args.runId,
               baseline: baselineForClose,
@@ -266,10 +329,15 @@ export async function recordChangeSetAroundRun<T>(
               runId: args.runId,
               baseline: baselineForClose,
               author: args.author,
-              changeSetIds: ids,
+              changeSetIds: committed.map((set) => set.id),
               ...(args.destination ? { destination: args.destination } : {}),
             },
           );
+          try {
+            args.onFinalized?.({ runId: args.runId, baseline: baselineForClose, committed });
+          } catch (error) {
+            onError(error);
+          }
         }
       } catch (error) {
         // A missing change-set must not fail the run. A recorded baseline stays partial.

@@ -42,7 +42,7 @@ export const SYNC_PASS_BIND_TYPES: ReadonlySet<LocalEntityType> = new Set<LocalE
 const KNOWN_TYPES: ReadonlySet<string> = new Set<LocalEntityType>([
   'project', 'ticket', 'chat', 'message', 'execution', 'step', 'approval', 'audit-definition', 'audit-run',
   'audit-finding', 'change-set', 'memory-fact', 'attachment-manifest', 'policy-snapshot', 'remediation',
-  'usage', 'run-outcome', 'chat-ticket-link',
+  'usage', 'run-outcome', 'chat-ticket-link', 'run-delta',
 ]);
 
 const bySequence = (a: JournalEvent, b: JournalEvent): number => a.localSequence - b.localSequence;

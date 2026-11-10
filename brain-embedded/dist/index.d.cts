@@ -76,7 +76,9 @@ type LocalEntityType = 'project' | 'ticket' | 'chat' | 'message' | 'execution' |
  | 'usage'
 /** How one run ended on this device (succeeded / failed / stopped / budget-contained),
  *  keyed by its run id — read by the pipeline route report. Local only, never synced. */
- | 'run-outcome';
+ | 'run-outcome'
+/** One run's delta per repository (PRD 41 §C14), `run-delta:<runId>:<repoKey>`: immutable, synced as a mirror record. */
+ | 'run-delta';
 interface DestinationBinding {
     platformInstance?: string;
     accountId?: string;

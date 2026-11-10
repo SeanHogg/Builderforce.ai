@@ -28,12 +28,25 @@ export function mergeCards(current: readonly RunDeltaCardPayload[], incoming: re
     return [...byKey.values()];
 }
 
-/** A `run-delta/get` answer → payloads; anything else (an older host, an error shape) → none. */
+/** A `run-delta/get` answer → payloads; anything else (an older host, an error shape) → none. `root` may be absent (an older host). */
 export function cardsFromAnswer(answer: unknown): RunDeltaCardPayload[] {
     if (!Array.isArray(answer)) return [];
     return answer.filter((c): c is RunDeltaCardPayload =>
         !!c && typeof c === 'object' && typeof c.runId === 'string' && typeof c.repo === 'string' && typeof c.chatId === 'number'
+        && (c.root === undefined || typeof c.root === 'string')
         && !!c.delta && typeof c.delta === 'object' && Array.isArray(c.delta.dimensions));
+}
+
+/** A local repository root (POSIX or Windows), as opposed to a remote URL identity. */
+const isLocalRoot = (repo: string): boolean => /^(\/|[A-Za-z]:[\\/])/.test(repo);
+
+/**
+ * Where a card's file opens: `root + '/' + path` (the host's absolute repository root), else the repo identity when it is a local
+ * path (an older host sent no root); undefined when neither names a local folder.
+ */
+export function codePathOf(card: Pick<RunDeltaCardPayload, 'repo' | 'root'>, path: string): string | undefined {
+    const root = typeof card.root === 'string' && card.root ? card.root : isLocalRoot(card.repo) ? card.repo : undefined;
+    return root === undefined ? undefined : `${root.replace(/[\\/]+$/, '')}/${path}`;
 }
 
 const ANCHOR_KEY = 'bf.runDelta.anchors';

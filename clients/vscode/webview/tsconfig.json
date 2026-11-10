@@ -75,7 +75,12 @@
       "react": ["../node_modules/@types/react/index.d.ts"],
       "react/*": ["../node_modules/@types/react/*"],
       "@builderforce/secret-redaction": ["../../../packages/secret-redaction/src/index.ts"],
-      "@builderforce/agent-tools/code-mask": ["../../../packages/agent-tools/src/knowledge/codeMask.ts"]
+      "@builderforce/agent-tools/code-mask": ["../../../packages/agent-tools/src/knowledge/codeMask.ts"],
+      // The view's and the engine's sources import memory's subpaths and install nothing of their own (as in
+      // tsconfig.canvas.json): they resolve to this package's one install.
+      "@seanhogg/builderforce-memory/knowledge": ["../node_modules/@seanhogg/builderforce-memory/dist/knowledge/index.d.ts"],
+      "@seanhogg/builderforce-memory/knowledge/pack": ["../node_modules/@seanhogg/builderforce-memory/dist/knowledge/pack/index.d.ts"],
+      "@seanhogg/builderforce-memory/ingest": ["../node_modules/@seanhogg/builderforce-memory/dist/ingest/index.d.ts"]
     }
   },
   // The editor's OWN code, checked strictly. Everything that compiles FRONTEND

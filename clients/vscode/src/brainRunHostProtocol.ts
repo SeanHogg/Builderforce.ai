@@ -15,6 +15,7 @@ import {
   type ModelFallbackSurface,
   type ReasoningIntent,
 } from "@seanhogg/builderforce-brain-embedded";
+import type { RunDelta } from "@builderforce/run-delta";
 import type { ChildView } from "./childRuns";
 import type { InterruptedRunView } from "./interruptedRunTypes";
 import { listDelta, sentOf, type SentList } from "./listDelta";
@@ -90,7 +91,14 @@ export type RunHostMessage =
   | { type: "run.interrupted"; runs: InterruptedRunView[] }
   /** Hybrid's pick (`from`) failed and the turn was answered with Auto — the panel shows
    *  the one-line notice for this chat. `reason` is WHY (clamped), shown after the line. */
-  | { type: "run.modelFallback"; chatId: number; from: string; reason?: string };
+  | { type: "run.modelFallback"; chatId: number; from: string; reason?: string }
+  /**
+   * A finished run's delta for one repository (PRD 41 §C14), posted once it is stored (`runDelta/finalizeRunDelta.ts`).
+   * `repo` is the change set's repository identity (its remote URL, else its root path); `root` is the repository's absolute
+   * local root, where a card path opens (`root + '/' + path`). The panel holding `chatId` shows the card; `run-delta/get`
+   * answers the same payloads for a reopened chat.
+   */
+  | { type: "run-delta/card"; chatId: number; runId: string; repo: string; root: string; delta: RunDelta };
 
 /** A webview panel watching the runs — anything that can be posted to. */
 export interface RunSink {

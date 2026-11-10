@@ -38,6 +38,8 @@ export const MIRROR_ENTITY_TYPES = [
   'attachment-manifest',
   'policy-snapshot',
   'remediation',
+  /** PRD 41 §C14: a run's delta per repository; the `run_deltas` tables import from here (WS11). */
+  'run-delta',
 ] as const satisfies readonly LocalEntityType[];
 
 const MIRROR_TYPE_SET: ReadonlySet<string> = new Set(MIRROR_ENTITY_TYPES);

@@ -23,6 +23,7 @@ import type { HashCache } from './knowledge/statManifest.js';
 export { gitBlobId, gitIndexHints } from './node-knowledge/gitIndexHints.js';
 export { migrateLegacyKnowledge, type MigrationOptions, type MigrationResult } from './node-knowledge/legacyMigration.js';
 export { knowledgeDbPath, KNOWLEDGE_BUSY_TIMEOUT_MS } from './node-knowledge/openKnowledgeDb.js';
+export { PREIMAGE_RETENTION_MS, putPreimages, readPreimages, sweepPreimages, unpinPreimages, type PreimageWrite } from './node-knowledge/preimageRows.js';
 export type { SqliteKnowledgeDb } from './node-knowledge/sqliteRows.js';
 
 export interface NodeKnowledgeStore {

@@ -1,0 +1,83 @@
+/**
+ * The run delta, assembled for the editor's host-owned runs (`brainRunHostPorts.ts`): what a run start hands the change set's
+ * baseline (pre-images, the stat hint, the workspace folders), the `onFinalized` hook that starts the delta once the run has
+ * settled, the card relay the chat panels attach to, and the `run-delta/get` read.
+ *
+ * The editor adapters (`runDeltaHost.ts` — knowledge store, folder SQLite) are loaded LAZILY, on the first run start: the run
+ * host must not pull the knowledge host's module graph in at construction.
+ */
+
+import type { LocalFirstStore } from "@builderforce/local-first";
+import type * as vscode from "vscode";
+import type { RunHostMessage, RunSink } from "../brainRunHostProtocol";
+import { hostLog } from "../hostLog";
+import type { BaselineCaptureOptions } from "../runChangeBaseline";
+import type { FinalizedRunChangeSets } from "../runChangeSets";
+import { startRunDelta } from "./finalizeRunDelta";
+import { readRunDeltas, type RunDeltaCard } from "./runDeltaRecords";
+
+type DeltaHost = typeof import("./runDeltaHost");
+
+export interface EditorRunDelta {
+  /** The baseline options of one run (resolves the adapters on first use). */
+  capture(runId: string): Promise<BaselineCaptureOptions>;
+  /** The change set's `onFinalized` for one run: starts the delta, detached. */
+  onFinalized(run: { chatId: number; mode: "interactive" | "autonomous" }): (closed: FinalizedRunChangeSets) => void;
+  attach(sink: RunSink): () => void;
+  runDeltas(query: { runId?: string; chatId?: number }): Promise<RunDeltaCard[]>;
+}
+
+const log = (what: string, error: unknown): void =>
+  hostLog(`[run delta] ${what}: ${error instanceof Error ? error.message : String(error)}`);
+
+export function editorRunDelta(args: {
+  secrets: vscode.SecretStorage;
+  store: LocalFirstStore;
+  deviceId: () => string;
+  workspaceFolders: () => string[];
+}): EditorRunDelta {
+  let host: Promise<DeltaHost> | undefined;
+  const loadHost = (): Promise<DeltaHost> => (host ??= import("./runDeltaHost"));
+  // The `run-delta/card` relay: every attached panel hears a stored delta (it shows it when it holds that chat).
+  const sinks = new Set<RunSink>();
+  const post = (card: RunDeltaCard): void => {
+    const message: RunHostMessage = { type: "run-delta/card", ...card };
+    for (const sink of sinks) {
+      try { sink.post(message); } catch { /* a disposed panel; its detach follows */ }
+    }
+  };
+  return {
+    async capture(runId) {
+      try {
+        const h = await loadHost();
+        return {
+          preimages: h.preimageSinkFor(runId),
+          hint: h.statHashHint(),
+          folders: args.workspaceFolders(),
+          onPreimageError: (error) => log("pre-images", error),
+        };
+      } catch (error) {
+        log("baseline adapters", error);
+        return { folders: args.workspaceFolders() };
+      }
+    },
+    onFinalized(run) {
+      return (closed) => {
+        void loadHost().then((h) => startRunDelta({
+          store: args.store,
+          deviceId: args.deviceId,
+          sources: h.editorDeltaSources(args.secrets, log),
+          release: h.releasePreimages,
+          post,
+          telemetry: h.deltaTelemetry(hostLog),
+          onError: (error) => log(`run ${closed.runId}`, error),
+        }, { ...run, closed }), (error: unknown) => log("load", error));
+      };
+    },
+    attach(sink) {
+      sinks.add(sink);
+      return () => { sinks.delete(sink); };
+    },
+    runDeltas: (query) => readRunDeltas(args.store, query),
+  };
+}

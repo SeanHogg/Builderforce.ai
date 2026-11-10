@@ -34,6 +34,7 @@ import { createBrainRunHost, type BrainRunHost } from "./brainRunHost";
 import { editorShipPorts } from "./verify/editorShipPorts";
 import { gateStarts } from "./hostStartGate";
 import { changeSetIdentityForHostRun, recordChangeSetAroundRun } from "./runChangeSets";
+import { editorRunDelta } from "./runDelta/editorRunDelta";
 import { installRunRecovery } from "./installRunRecovery";
 import { createHostRunLifecycle } from "./hostRunLifecycle";
 import { installLocalDomainTools, type DomainToolRequest } from "./installLocalDomainTools";
@@ -273,6 +274,14 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     log: hostLog,
   });
   const detachLifecycle = host.attach(lifecycle.sink);
+  // PRD 41: each finalized change set gets its run delta, computed after the run settled and posted to the chat.
+  const deviceId = (): string => ctx.globalState.get<string>(LOCAL_DEVICE_KEY) ?? "";
+  const delta = editorRunDelta({
+    secrets,
+    store: local.store,
+    deviceId,
+    workspaceFolders: () => (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath),
+  });
   // A commit while chats run may have bound one of them (the run's own bind, a sync
   // receipt, an adopt): re-read the bound ids. Commits are per message or model call, so
   // only one that touched a mapping or a chat row (or whose change is unknown) is worth the read.
@@ -291,19 +300,25 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     attach: (sink) => {
       const offRuns = host.attach(sink);
       const offInterrupted = interrupted.attach(sink);
-      return () => { offRuns(); offInterrupted(); };
+      const offDeltas = delta.attach(sink);
+      return () => { offRuns(); offInterrupted(); offDeltas(); };
     },
     acknowledgeInterrupted: interrupted.acknowledge,
-    ...gateStarts(host, (payload, start) => {
+    runDeltas: delta.runDeltas,
+    ...gateStarts(host, async (payload, start) => {
       const { runId, author } = changeSetIdentityForHostRun(payload, () => crypto.randomUUID());
       if (!isRunning(payload.chatId)) lifecycle.started(payload.chatId, runId, askedText(payload.userTurn));
       return recordChangeSetAroundRun(
         {
           store: local.store,
-          deviceId: () => ctx.globalState.get<string>(LOCAL_DEVICE_KEY) ?? "",
+          deviceId,
           runId,
           author,
           stillRunning: () => isRunning(payload.chatId),
+          onError: (error) => hostLog(`[change set] ${error instanceof Error ? error.message : String(error)}`),
+          capture: await delta.capture(runId),
+          // An audit is the autonomous start (§12.5 policy applies); every chat turn is interactive.
+          onFinalized: delta.onFinalized({ chatId: payload.chatId, mode: payload.audit ? "autonomous" : "interactive" }),
         },
         start,
       );

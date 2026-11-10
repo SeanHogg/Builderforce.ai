@@ -311,6 +311,24 @@ export interface StoredGraphArgs {
     nearDuplicates?: SimilarPair[];
     focus?: string[];
     maxNodes?: number;
+    /**
+     * Root-relative path → the content hash to read that file at instead of the stored one (`null`: the file is absent).
+     * The run delta builds both sides of a run this way (PRD 41 C1): the stored graph with the run's changed files swapped
+     * to their before (or after) extracts, which the caller has put in the store's extract cache under those hashes.
+     */
+    hashOverrides?: ReadonlyMap<string, string | null>;
+}
+
+/** The content hash of every file a stored graph reads: the review's (or a newer edit's), with `overrides` applied. */
+export async function storedFileHashes(
+    manifest: IngestManifest, rootId: string, overrides?: ReadonlyMap<string, string | null>,
+): Promise<Map<string, string>> {
+    const hashes = await currentFileHashes(manifest, rootId);
+    for (const [path, hash] of overrides ?? []) {
+        if (hash === null) hashes.delete(path);
+        else hashes.set(path, hash);
+    }
+    return hashes;
 }
 
 /**
@@ -321,7 +339,7 @@ export interface StoredGraphArgs {
 export async function buildStoredGraph(args: StoredGraphArgs): Promise<KnowledgeGraph | null> {
     const { rootId, store, manifest } = args;
     // A file edited since its review is read at its NEW hash (`markFileEdited`), so its claims show stale.
-    const files = [...(await currentFileHashes(manifest, rootId))].map(([id, hash]) => ({ id, hash }));
+    const files = [...(await storedFileHashes(manifest, rootId, args.hashOverrides))].map(([id, hash]) => ({ id, hash }));
     const roots = (await manifest.get(analysisManifestKey(rootId))) ?? [];
     if (files.length === 0 && roots.length === 0) return null;
     const extracted: Extracted[] = [];

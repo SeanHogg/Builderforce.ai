@@ -302,6 +302,15 @@ export class WorkspaceSurface implements vscode.Disposable {
       case "run.acknowledgeInterrupted":
         if (typeof msg.runId === "string") void hooks.runHost?.acknowledgeInterrupted?.(msg.runId);
         break;
+      // A run's (or a chat's) stored deltas — the `run-delta/card` payloads again, for a reopened chat (PRD 41 §C14).
+      case "run-delta/get":
+        try {
+          const query = { ...(typeof msg.runId === "string" ? { runId: msg.runId } : {}), ...(typeof msg.chatId === "number" ? { chatId: msg.chatId } : {}) };
+          this.respond(msg.id, true, (await hooks.runHost?.runDeltas?.(query)) ?? []);
+        } catch (error) {
+          this.respond(msg.id, false, undefined, error instanceof Error ? error.message : String(error));
+        }
+        break;
       // Scoped to the chat the surface is showing: several chats run at once out in the
       // host, and a switch flipped in one must not answer a confirm parked in another.
       case "run.autoApprove":

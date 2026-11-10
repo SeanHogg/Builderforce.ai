@@ -23,7 +23,7 @@ export {
 } from './dependencyCruiserRules.js';
 export {
     KNOWLEDGE_REVIEW_MODEL_CALLS, analysisManifestKey, analysisSha, buildStoredGraph,
-    planKnowledgeReview, planKnowledgeReviewDetail, reviewIndexPort, reviewPacks, runKnowledgeReview, workspaceCodeAnalyzers,
+    planKnowledgeReview, planKnowledgeReviewDetail, reviewIndexPort, reviewPacks, runKnowledgeReview, storedFileHashes, workspaceCodeAnalyzers,
     type KnowledgeReviewOptions, type KnowledgeReviewPorts, type ReviewIndexPort, type StoredGraphArgs, type WorkspaceAnalyzersDeps,
 } from './reviewRunner.js';
 export { indexedSymbolLookup, indexedSymbolSource, type SymbolLookup } from './indexedSymbols.js';
@@ -40,7 +40,7 @@ export {
     KNOWLEDGE_SKIP_DIRS, MAX_LISTED_FILES, createFsDirectorySource, isBuilderforceState, isSkippedPath, listsFile, normalizePath, textDocument,
     type FsDirectorySource, type FsDirectorySourceOptions, type HashCache, type KnowledgeFs,
 } from './fsDirectorySource.js';
-export { deferredHashCache, memoryHashCache, type GitHints, type StatRow, type StatSet } from './statManifest.js';
+export { deferredHashCache, memoryHashCache, reusedHash, type GitHints, type StatRow, type StatSet } from './statManifest.js';
 export { documentDoc, EXTRACTABLE_DOCUMENT_MEDIA_TYPES, extractDocumentText, withDocumentText } from './documents/index.js';
 export { extractedLogFileName, manifestFileName, migratingRootFiles, analysisPendingFileName, dirtyFileName, replicaFileName, runFileName, runsIndexFileName, snapshotFileName, type KnowledgeFiles } from './fileManifest.js';
 export {

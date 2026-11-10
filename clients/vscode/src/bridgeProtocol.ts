@@ -123,6 +123,9 @@ export const BRAIN_HOST_MESSAGES = [
   'run.resync',
   /** Acknowledge one interrupted run of the run list: dismissed, or resumed by the webview through the composer (`runId`; `interruptedRunsView.ts`). Idempotent. */
   'run.acknowledgeInterrupted',
+  /** A run's stored deltas (PRD 41 §C14) — request `{ runId }` or `{ chatId }` → `Array<{ chatId, runId, repo, root, delta }>`,
+   *  the `run-delta/card` payloads, oldest first (empty when none). A reopened chat shows its cards again from it. */
+  'run-delta/get',
   'llm.fetch',
   'llm.abort',
   'model.set',
