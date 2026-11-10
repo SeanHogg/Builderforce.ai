@@ -17,12 +17,12 @@
  *     (a sub-agent), it is steered again.
  *
  * Lever `a3_progress_detector` (on at 100%; `COST_LEVER_A3_PROGRESS_DETECTOR=off` turns it
- * off on this device). Trace: `loop.progress_check`, and `loop.progress_forced` for a
- * forced turn.
+ * off on this device). Trace: `loop.progress_check`, `loop.progress_advisory` for a B1/B4
+ * advisory (not a trip), and `loop.progress_forced` for a forced turn.
  */
 
 import { ASK_USER_TOOL, ASK_USER_TOOL_SPEC } from '@builderforce/agent-loop';
-import { ProgressDetector, progressAdvice, type ProgressAction } from '@builderforce/run-guards';
+import { ProgressDetector, progressAdvice, progressTraceStep, type ProgressAction, type ProgressTraceStep } from '@builderforce/run-guards';
 import { isUnscopedMutation } from '../readCoverage';
 import { isReadOnlyShellCall } from '../readOnlyShell';
 import { isRouterTool } from '../toolRouter';
@@ -50,6 +50,8 @@ export class RunProgressGuard {
   private due: TripAction | null = null;
   /** The note the next turn opens with, when the host shows it in place of an escalation. */
   private steer: string | undefined;
+  /** The B1 / B4 advisory the last turn produced, waiting to be traced. */
+  private advisory: ProgressAction | null = null;
 
   constructor(on = deviceLeverOn('a3_progress_detector')) {
     this.detector = on
@@ -76,6 +78,8 @@ export class RunProgressGuard {
     if (!action) return null;
     if (action.kind === 'advisory') {
       this.steer = action.note;
+      // Not a trip, but still the run's record: kept for the trace until taken.
+      this.advisory = action;
       return null;
     }
     // The detector's second note says the run moved to a stronger model; here the second
@@ -90,6 +94,13 @@ export class RunProgressGuard {
   /** The note the next turn opens with ("" when none) — a trip steer, or the B1 advisory. */
   steerNote(): string {
     return this.steer ?? this.detector?.steerNote() ?? '';
+  }
+
+  /** The advisory the last turn produced, taken once (null when none). */
+  takeAdvisory(): ProgressAction | null {
+    const advisory = this.advisory;
+    this.advisory = null;
+    return advisory;
   }
 
   /** The escalation or pause waiting for this turn, taken once. */
@@ -109,15 +120,16 @@ export class RunProgressGuard {
 export function progressAfterToolCalls(run: BrainRunContext): (ctx: { step: number }) => void {
   return (ctx) => {
     const action = run.progress.endTurn();
+    // ONE mapping for trips and advisories alike (`progressTraceStep`), so every host's row matches.
+    const advisory = run.progress.takeAdvisory();
+    if (advisory) traceStep(run, ctx.step, progressTraceStep(advisory));
     if (!action) return;
-    pushTrace(run.c, {
-      ts: nowIso(),
-      category: 'message',
-      label: 'loop.progress_check',
-      args: { step: ctx.step, trip: action.trip, signal: action.signal.kind, action: action.kind },
-      result: `progress check ${action.trip}: ${action.signal.kind} → ${action.kind}`,
-    });
+    traceStep(run, ctx.step, progressTraceStep(action));
   };
+}
+
+function traceStep(run: BrainRunContext, step: number, s: ProgressTraceStep): void {
+  pushTrace(run.c, { ts: nowIso(), category: 'message', label: s.label, args: { step, ...s.args }, result: s.result });
 }
 
 /**

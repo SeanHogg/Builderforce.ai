@@ -18,7 +18,7 @@
  * Node.
  */
 
-import { ProgressDetector, progressPauseQuestion, type ProgressAction } from "@builderforce/run-guards";
+import { ProgressDetector, progressPauseQuestion, progressTraceStep, type ProgressAction } from "@builderforce/run-guards";
 import type { DifficultyFeatures } from "@builderforce/difficulty-router";
 import type { TierLadder } from "@builderforce/run-policy";
 import type { LoopGuardState, RunState } from "../../contract.js";
@@ -238,7 +238,10 @@ export class RunGuards {
   private async onTrip(action: ProgressAction, ports: GuardPorts): Promise<void> {
     let outcome: string = action.kind;
     if (action.kind === "advisory") {
-      // B1: an early-readiness steer, never a ladder trip — no pause, no escalation.
+      // B1 readiness / B4 batching: a one-off steer, never a ladder trip — no pause, no
+      // escalation. Still a row on the timeline (the one mapping every host traces through).
+      const s = progressTraceStep(action);
+      await ports.onEvent?.({ tool: s.label, detail: s.args, result: s.result });
       return;
     }
     if (action.kind === "escalate") {
@@ -257,11 +260,12 @@ export class RunGuards {
     } else if (action.kind === "pause") {
       this.pendingPause = action.question;
     }
-    await ports.onEvent?.({
-      tool: "loop.progress_check",
+    // The same mapping as the advisory; this host records the outcome it took and the model.
+    const s = progressTraceStep(action, {
+      outcome,
       detail: { trip: action.trip, signal: action.signal, outcome, model: ports.model?.get().model ?? null },
-      result: `progress check ${action.trip}: ${action.signal.kind} → ${outcome}`,
     });
+    await ports.onEvent?.({ tool: s.label, detail: s.args, result: s.result });
   }
 
   /** A3: a pause parked the run — the next dispatched call returns it, once. */

@@ -27,6 +27,19 @@ describe("progressTraceStep", () => {
     expect(progressTraceStep({ kind: "advisory", note: BATCHING_NUDGE_NOTE }).args).toEqual({ advisory: "batching" });
   });
 
+  it("lets a host that acted on a trip record its own outcome and detail on the same row", () => {
+    const d = new ProgressDetector({}, ports);
+    d.observe("write_file", { path: "a.ts", content: "A" }, okData);
+    d.observe("write_file", { path: "a.ts", content: "B" }, okData);
+    d.observe("write_file", { path: "a.ts", content: "A" }, okData);
+    const action = d.endTurn()!;
+    expect(progressTraceStep(action, { outcome: "pause", detail: { trip: 1, outcome: "pause" } })).toEqual({
+      label: "loop.progress_check",
+      args: { trip: 1, outcome: "pause" },
+      result: "progress check 1: edit_revert → pause",
+    });
+  });
+
   it("traces a trip the way hosts already record loop.progress_check", () => {
     const d = new ProgressDetector({}, ports);
     d.observe("write_file", { path: "a.ts", content: "A" }, okData);

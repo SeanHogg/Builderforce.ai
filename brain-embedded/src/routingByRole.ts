@@ -12,6 +12,7 @@
 import type { BrainTraceEvent } from './brainTriage';
 import type { ModelTurn } from './modelScorecard';
 import { FAILOVER_SEPARATOR } from './runStore/gatewayRoutingTrace';
+import { HAND_OFF_CLASH_LABEL, HAND_OFF_MODE_LABEL, describeClash, type HandOffDecision } from './handOffParallelism';
 
 export interface RoleRouting {
   role: string;
@@ -32,6 +33,29 @@ export interface RoutingByRole {
   handOffsForced: number;
   /** Times analysis ended without a hand-off once the budget was spent. */
   planBudgetsSpent: number;
+  /** How each hand-off ran (`hand_off.mode`): side by side, inline or mixed, and the overlap that decided it. */
+  handOffModes?: HandOffDecision[];
+  /** Plans sent back once because their tasks' paths overlapped (`hand_off.scope_clash`). */
+  handOffClashesRefused?: number;
+}
+
+function decisionOf(e: BrainTraceEvent): HandOffDecision | null {
+  const a = e.args as Partial<HandOffDecision> | undefined;
+  if (!a || (a.mode !== 'parallel' && a.mode !== 'inline' && a.mode !== 'mixed')) return null;
+  return {
+    mode: a.mode,
+    parallelTasks: Array.isArray(a.parallelTasks) ? a.parallelTasks : [],
+    inlineTasks: Array.isArray(a.inlineTasks) ? a.inlineTasks : [],
+    clash: a.clash ?? null,
+  };
+}
+
+/** One hand-off's line: how it ran and, where tasks went inline over an overlap, which. */
+function decisionLine(d: HandOffDecision): string {
+  const counts = d.mode === 'parallel' ? `${d.parallelTasks.length} side by side`
+    : d.mode === 'mixed' ? `${d.parallelTasks.length} side by side, ${d.inlineTasks.length} inline`
+    : `${d.inlineTasks.length} inline`;
+  return `  • hand_off: ${d.mode} — ${counts}${d.clash && d.mode !== 'parallel' ? ` · overlap: ${describeClash(d.clash)}` : ''}`;
 }
 
 const ranked = (counts: Map<string, number>): Array<[string, number]> =>
@@ -63,6 +87,8 @@ export function routingByRole(turns: readonly ModelTurn[], events: readonly Brai
     handOffs: roleHandoffs.filter((e) => hasArg(e, 'via')).length,
     handOffsForced: count('loop.hand_off_due'),
     planBudgetsSpent: count('loop.plan_budget_spent'),
+    handOffModes: events.filter((e) => e.label === HAND_OFF_MODE_LABEL).map(decisionOf).filter((d): d is HandOffDecision => d !== null),
+    handOffClashesRefused: count(HAND_OFF_CLASH_LABEL),
   };
 }
 
@@ -80,8 +106,10 @@ export function formatRoutingByRole(r: RoutingByRole | undefined): string[] {
   lines.push(
     `  • analysis → code: ${r.coderReasks} re-ask(s) on a first edit · ${r.handOffs} hand_off call(s)`
       + (r.handOffsForced ? ` · ${r.handOffsForced} forced by the analysis budget` : '')
-      + (r.planBudgetsSpent ? ` · ${r.planBudgetsSpent} ended analysis with no hand-off` : ''),
+      + (r.planBudgetsSpent ? ` · ${r.planBudgetsSpent} ended analysis with no hand-off` : '')
+      + (r.handOffClashesRefused ? ` · ${r.handOffClashesRefused} plan(s) sent back once for overlapping paths` : ''),
   );
+  for (const d of r.handOffModes ?? []) lines.push(decisionLine(d));
   // The failure this section exists for: the planner re-asked a stronger coder and the
   // same model answered. Only an unpinned run re-asks, so a pin never raises it.
   const plan = r.roles.find((x) => x.role === 'plan')?.models[0]?.model;

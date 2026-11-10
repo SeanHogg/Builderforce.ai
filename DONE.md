@@ -1,3 +1,26 @@
+## ✅ RESOLVED 2026-11-10: editor run #70776: planned work reaches local sub-agents, its tickets move, and it syncs (Local-first · Agents)
+
+- **Context.** In editor run #70776, `hand_off` filed 4 tickets, coded everything in the session, stalled, and was stopped. The tickets stayed in backlog at 0%, and nothing ever synced (389 events queued, "Last push: never").
+- **Fan-out.** One task's `paths` named a parent folder of the others', so `canRunInParallel` silently sent the whole plan inline.
+  - The first overlapping `hand_off` now gets one correction naming the two tasks and the path. This is skipped on a forced turn, so it cannot dead-end the run.
+  - If the plan comes back unchanged, the leading disjoint tasks fan out to local `spawn_agents`, and everything from the first overlapping or pathless task runs inline in plan order.
+  - The mode and the clash are recorded as a `hand_off.mode` trace step, in the plan message, and in the routing report.
+  - Ticket descriptions carry at most a 600-char summary excerpt.
+  - Code: `handOffParallelism.ts`, `handOffFanOut.ts`, `handOffNext.ts`; `planHandoff.ts` is now 356 lines.
+- **Ticket status.**
+  - The hand-off moves its tickets to in_progress through one `ticketStatusMove` helper: `ticket-move` for local tickets, `builtin_tasks_update` for server tickets.
+  - The close-out moves only the hand-off's own local tickets, never overrides blocked/cancelled/review, and every move goes through one `moveTicket`.
+  - `deterministicFinish` returned at its gate before every step (since 7c32705c5), so an unshipped run never advanced tickets, attached later touched files, or wrote held notes. The gate now applies only to the review and the move to done.
+  - The driver-run `finishCloseOut` computes `verified` from evidence instead of hard-coding `true`.
+- **Duplicate delta tickets.** `recordCodeChangeTicket` reads `taskId ?? id` through the one `serverTicketId` parser. Chat #61651 had 17 duplicates.
+- **Progress guard.**
+  - The first read-back of a just-written file is no longer `reverifying`.
+  - `claimsReady` recognises #70776's readiness wording.
+  - Advisories and trips are traced through one `progressTraceStep` in brain-embedded and agent-run.
+- **Sync.** Hybrid and Specific grant `synchronize` when signed in. An explicit `false` still wins, it is always off while signed out, and Local only stays locked. Commit 4d833df68.
+- **Staffing line.** It no longer claims local tickets are "staffed after they sync".
+- **Tests.** New tests: `handOffClash.e2e`, `handOffForcedClash.e2e`, `handOffParallelism`, `localTicketCloseOut`, `runBackstops.deltaTicketId`, `progressGuard.advisory`, `progressAdvisoryEvent` (agent-run). `brainCloseOut.test.ts` is ported off the deleted `closeOutRun`. Named `regression:` tests cover each defect.
+
 ## ✅ RESOLVED 2026-11-10: editor run waste found in chat #61651's own runs: role cap bypassed, `;` chains on cmd.exe, unsynced-ticket retry loop, ticket guard with no way through (Agents · VSIX)
 
 - **Context.** All ten done checks of the chat #61651 brief (shell truth, workspace map, delegation dedup, git_status, EOL edits, deterministic finish, remember_fact, latency failover, wider turns) were already on main with tests. The fixes below come from mining that chat's own journal: 690 turns, 1,020 calls, 95 identical repeat calls, 60 failed steps.

@@ -121,6 +121,8 @@ export interface BrainRunContext {
   reviewRecoveryUsed: boolean;
   delegationRecoveryUsed: boolean;
   restateRecoveryUsed: boolean;
+  /** The planner was already told once that its `hand_off` tasks overlap (`handOffParallelism.ts`); the next plan is carried out as is. */
+  handOffClashRefused?: boolean;
   /** Re-prompts this run has had from the host's stop hook (bounded in `stopHooks.ts`). */
   stopHookRounds: number;
   /** Carries the undelegated-request decision from `beforeToolCalls` to the `ask_user`

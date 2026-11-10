@@ -14,7 +14,8 @@ import type { ChatCompletionMessage } from '../streamChatCompletion';
 import { isFailedToolResult } from '../brainTriage';
 import { isRouterTool, handleRouterCall } from '../toolRouter';
 import { handOffTrace } from '../runPolicyTraces';
-import { HAND_OFF_TOOL, executeHandOff, parseHandOff } from '../planHandoff';
+import { FAN_OUT_TOOL, HAND_OFF_TOOL, executeHandOff, parseHandOff } from '../planHandoff';
+import { HAND_OFF_CLASH_LABEL, HAND_OFF_MODE_LABEL, handOffModeSentence, planScopeClash, scopeClashCorrective } from '../handOffParallelism';
 import { codeChangesOf } from '../codeChanges';
 import { delegationPlaceholders } from '../placeholderGuard';
 import { undelegatedRequestNudge } from '@builderforce/agent-run';
@@ -106,6 +107,20 @@ export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatC
       }
       const plan = parseHandOff(call.args);
       if (typeof plan === 'string') return { result: { data: { ok: false, error: plan } } };
+      // Overlapping slices cannot run side by side. Where the host can fan out, the planner is
+      // told ONCE which two tasks clash and on what path, so it can narrow them (chat #70776: a
+      // parent directory sent four tasks inline). Nothing is filed and the role stays; a second
+      // overlapping plan is carried out as is. Never on a FORCED hand-off turn: the run gets one,
+      // and a refusal there would end planning with nothing filed (`planBudgetTurn`).
+      const clash = !run.handOffClashRefused && !run.policy.handOffForced && new Set(catalogToolNames).has(FAN_OUT_TOOL)
+        ? planScopeClash(plan.tasks)
+        : null;
+      if (clash) {
+        run.handOffClashRefused = true;
+        const error = scopeClashCorrective(clash);
+        pushTrace(c, { ts: nowIso(), category: 'message', label: HAND_OFF_CLASH_LABEL, args: { step: iter, ...clash }, result: error });
+        return { result: { data: { ok: false, error } } };
+      }
       // The role flips BEFORE the children start: they and every later turn are code.
       reportToPolicy(run, { type: 'hand_off' });
       pushTrace(c, handOffTrace(nowIso(), ctx.step, plan.tasks.length, HAND_OFF_TOOL));
@@ -128,6 +143,11 @@ export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatC
         },
         step: (label, args, out, durationMs) => pushTrace(c, {
           ts: nowIso(), category: 'tool', label, durationMs, args, result: out ?? null, isError: isFailedToolResult(out),
+        }),
+        // How the plan ran — side by side, inline or mixed, and the overlap that decided it —
+        // so the diagnostics report can say why tasks did not run as sub-agents.
+        decided: (decision) => pushTrace(c, {
+          ts: nowIso(), category: 'message', label: HAND_OFF_MODE_LABEL, args: { step: iter, ...decision }, result: handOffModeSentence(decision),
         }),
         postPlan: async (text) => {
           const [msg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: text, metadata: JSON.stringify({ [MID_TURN_META_KEY]: true }) }]);

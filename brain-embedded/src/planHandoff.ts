@@ -13,28 +13,31 @@
  *   1. files ONE ticket per task, linked to the chat (the board shows the plan);
  *   2. posts the plan into the chat;
  *   3. switches the run to the coding role, and
- *      • where the host can fan out (`spawn_agents`, the editor) and the tasks own
- *        disjoint paths, starts one coding child per task, side by side — in the editor
- *        they run in the BACKGROUND (the coder keeps working; each child posts into the
- *        chat under its own name and its report reaches the coder when it finishes);
+ *      • where the host can fan out (`spawn_agents`, the editor), starts one coding child
+ *        per leading task that owns disjoint paths, side by side — in the editor they run in
+ *        the BACKGROUND (the coder keeps working; each child posts into the chat under its own
+ *        name and its report reaches the coder when it finishes). From the first task that
+ *        overlaps, or owns none, onward the coder takes them in plan order
+ *        (`handOffParallelism.ts` decides the split; `handOffFanOut.ts` carries it);
  *      • otherwise hands the coder the task list to implement in order.
+ *   Every filed ticket moves to `in_progress` as the work starts.
  *
  * Pure apart from the injected ports, so the run store only wires it.
  */
 
 import type { BrainToolSpec } from './streamChatCompletion';
-import { RESOLVE_OPEN_ISSUES, VERIFY_DELEGATION_STEP, VERIFY_STEP, overlappingScopes } from '@builderforce/agent-tools';
-import { ticketToolVocabulary } from './ticketToolVocabulary';
+import { BACKGROUND_NEXT, INLINE_NEXT, MIXED_BACKGROUND_NEXT, MIXED_PARALLEL_NEXT, PARALLEL_NEXT } from './handOffNext';
+import { ticketStatusMove, ticketToolVocabulary } from './ticketToolVocabulary';
+import { toolResultRecord } from './toolResultRecord';
+import { FAN_OUT_TOOL, fanOut, inlineTaskList } from './handOffFanOut';
+import { modeOf, splitForParallel, splitLayoutLine, type HandOffDecision, type HandOffMode, type ParallelSplit, type ScopeClash } from './handOffParallelism';
+
+export { canRunInParallel } from './handOffParallelism';
+export type { HandOffDecision, HandOffMode, ScopeClash } from './handOffParallelism';
 
 export const HAND_OFF_TOOL = 'hand_off';
 
-/** The fan-out tool the editor hosts register. Named here, not imported, because the
- *  tool lives in the host; its absence is what selects the inline path. */
-export const FAN_OUT_TOOL = 'spawn_agents';
-
-/** Children one fan-out call may start — `spawn_agents`' own cap. Larger plans run in
- *  batches, one batch after another. */
-export const FAN_OUT_BATCH = 4;
+export { FAN_OUT_BATCH, FAN_OUT_TOOL } from './handOffFanOut';
 
 /** Tasks one plan may carry. Beyond this the plan is a roadmap, not a hand-off. */
 export const MAX_HAND_OFF_TASKS = 12;
@@ -128,14 +131,22 @@ export function parseHandOff(args: unknown): HandOffPlan | string {
   return { summary, tasks };
 }
 
-/** The ticket body — the brief, where it lives, and how it is accepted. */
-function ticketDescription(task: HandOffTask, summary: string): string {
+/**
+ * Longest excerpt of the plan's summary a TICKET carries. The whole summary rode on every ticket
+ * (chat #70776: four `ticket-create` calls of 7–9 KB each); the children and the inline coder
+ * still get it in full through {@link childTaskBrief}.
+ */
+export const TICKET_CONTEXT_MAX_CHARS = 600;
+
+/** The ticket body — the brief, where it lives, how it is accepted, and a short excerpt of the research. */
+export function ticketDescription(task: HandOffTask, summary: string): string {
+  const context = summary.length > TICKET_CONTEXT_MAX_CHARS ? `${summary.slice(0, TICKET_CONTEXT_MAX_CHARS - 1).trimEnd()}…` : summary;
   return [
     task.brief,
     task.paths.length ? `Paths: ${task.paths.join(', ')}` : '',
     task.acceptance ? `Done when: ${task.acceptance}` : '',
     task.constraints ? `Do not: ${task.constraints}` : '',
-    summary ? `Context: ${summary}` : '',
+    context ? `Context: ${context}` : '',
   ].filter(Boolean).join('\n\n');
 }
 
@@ -174,24 +185,21 @@ export function childTaskBrief(task: HandOffTask, ctx: BriefContext, ticketId?: 
 }
 
 /**
- * Whether the plan can run side by side: two or more tasks, every one owning paths, and
- * no two owning the same file. A plan that fails this runs inline, in order — the safe
- * reading of a breakdown whose slices touch each other. This is where slices are kept
- * apart: every child is a clone of its owner, and nothing downstream restricts it.
+ * The plan as the user reads it in the chat. `layout` is either whether the whole plan runs
+ * side by side, or the split the run chose — which then also says which tasks run in order and why.
  */
-export function canRunInParallel(tasks: readonly HandOffTask[]): boolean {
-  if (tasks.length < 2 || tasks.some((t) => t.paths.length === 0)) return false;
-  return overlappingScopes(tasks.map((t) => ({ label: t.title, paths: t.paths }))) === null;
-}
-
-/** The plan as the user reads it in the chat. */
-export function planMessage(plan: HandOffPlan, ticketIds: ReadonlyArray<TicketRef | undefined>, parallel: boolean): string {
+export function planMessage(plan: HandOffPlan, ticketIds: ReadonlyArray<TicketRef | undefined>, layout: boolean | ParallelSplit): string {
   const lines = plan.tasks.map((t, i) => {
     const id = ticketIds[i];
     return `${i + 1}. ${id != null ? `#${id} ` : ''}${t.title}${t.paths.length ? ` — ${t.paths.join(', ')}` : ''}`;
   });
+  const mode = typeof layout === 'boolean' ? (layout ? 'parallel' : 'inline') : modeOf(layout);
+  const header = mode === 'parallel' ? ' (running side by side; each reports back here)'
+    : mode === 'mixed' ? ' (partly side by side; each agent reports back here)'
+    : '';
   return [
-    `**Plan — ${plan.tasks.length} task${plan.tasks.length === 1 ? '' : 's'}**${parallel ? ' (running side by side; each reports back here)' : ''}`,
+    `**Plan — ${plan.tasks.length} task${plan.tasks.length === 1 ? '' : 's'}**${header}`,
+    typeof layout === 'boolean' ? '' : splitLayoutLine(layout),
     plan.summary,
     lines.join('\n'),
   ].filter(Boolean).join('\n\n');
@@ -214,18 +222,22 @@ export interface HandOffPorts {
   step?(label: string, args: Record<string, unknown>, out: unknown, durationMs: number): void;
   /** Post the plan into the chat. */
   postPlan?(text: string): Promise<void>;
+  /** Told how the plan was finally carried out (after any fan-out refusal), for the run's record. */
+  decided?(decision: HandOffDecision): void;
   now?(): number;
 }
 
 /** What the coding model reads back as the `hand_off` result. */
 export interface HandOffOutcome {
   ok: boolean;
-  mode: 'parallel' | 'inline';
+  mode: HandOffMode;
   tickets: Array<{ title: string; id?: TicketRef }>;
   workstreams?: unknown[];
   changedFiles?: string[];
   /** Placeholders the children wrote, for the run's placeholder guard. */
   placeholders?: unknown[];
+  /** The overlap that kept tasks out of the fan-out (`inline` / `mixed` only). */
+  clash?: ScopeClash;
   next: string;
 }
 
@@ -267,7 +279,7 @@ async function fileTickets(plan: HandOffPlan, ports: HandOffPorts): Promise<Arra
       taskType: 'task',
     });
     // A host may hand the result back as JSON text.
-    const record = asRecord(out);
+    const record = toolResultRecord(out);
     const failed = isFailed(record ?? out);
     const id = !failed ? record?.id : undefined;
     ids.push(typeof id === 'number' || (vocabulary.local && typeof id === 'string' && id) ? id : undefined);
@@ -276,36 +288,20 @@ async function fileTickets(plan: HandOffPlan, ports: HandOffPorts): Promise<Arra
   return ids;
 }
 
-/** Parse a host tool's result, which may arrive as a JSON string. */
-function asRecord(out: unknown): Record<string, unknown> | null {
-  if (typeof out === 'string') {
-    try {
-      const parsed = JSON.parse(out) as unknown;
-      return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
-    } catch {
-      return null;
-    }
+/**
+ * The work starts now, side by side or inline: move every filed ticket to `in_progress` with the
+ * status tool of the vocabulary that filed it — when the host advertises that tool. Each move is a
+ * recorded step; a refused one leaves the ticket where it was and the run goes on.
+ */
+async function startTickets(ids: ReadonlyArray<TicketRef | undefined>, ports: HandOffPorts): Promise<void> {
+  const vocabulary = ticketToolVocabulary(ports.toolNames);
+  for (const id of ids) {
+    if (id == null) continue;
+    const move = ticketStatusMove(id, 'in_progress', vocabulary);
+    if (!move || !ports.toolNames.has(move.tool)) continue;
+    await call(ports, move.tool, { ...move.args });
   }
-  return out && typeof out === 'object' ? (out as Record<string, unknown>) : null;
 }
-
-const INLINE_NEXT =
-  'HAND-OFF: the analysis is complete and you are the coding model. Implement the tasks below in order — do not re-plan or re-read what the planner already read. ' +
-  `When all are done, check them. ${VERIFY_STEP} Then commit and push, and report per ticket.`;
-
-/** What every fan-out leaves the coder: the children's open issues are its work now. */
-const RESOLVE_REPORTS =
-  `Each report ends with its Open issues — ${RESOLVE_OPEN_ISSUES}. Fix what the slices broke between them, and implement any task that failed.`;
-
-// A host that fanned out can spawn, so the checking is always delegated from here.
-const PARALLEL_NEXT =
-  'HAND-OFF: the tasks ran side by side, one coding agent each, and each has reported into the chat. ' +
-  `You are the coding model. ${RESOLVE_REPORTS} Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
-
-const BACKGROUND_NEXT =
-  'HAND-OFF: one coding agent per task is now running IN THE BACKGROUND, each posting into the chat under its own name. ' +
-  'You are the coding model: do not redo their tasks. Work on anything not delegated, then call wait_agents for their reports (or act on each as it arrives). ' +
-  `${RESOLVE_REPORTS} Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
 
 /**
  * Carry the plan out. Never throws: a failed ticket or a refused fan-out degrades to the
@@ -313,65 +309,48 @@ const BACKGROUND_NEXT =
  */
 export async function executeHandOff(plan: HandOffPlan, ports: HandOffPorts): Promise<HandOffOutcome> {
   const ids = await fileTickets(plan, ports);
+  await startTickets(ids, ports);
   const tickets = plan.tasks.map((t, i) => ({ title: t.title, ...(ids[i] != null ? { id: ids[i] } : {}) }));
-  const parallel = ports.toolNames.has(FAN_OUT_TOOL) && canRunInParallel(plan.tasks);
+  const all = plan.tasks.map((_, i) => i);
+  const canFanOut = ports.toolNames.has(FAN_OUT_TOOL);
+  const split: ParallelSplit = canFanOut ? splitForParallel(plan.tasks) : { parallel: [], inline: all, clash: null };
   const briefContext: BriefContext = { summary: plan.summary, request: ports.request, knowledge: ports.knowledge };
-  await ports.postPlan?.(planMessage(plan, ids, parallel)).catch(() => undefined);
+  const brief = (i: number): string => childTaskBrief(plan.tasks[i]!, briefContext, ids[i]);
+  await ports.postPlan?.(planMessage(plan, ids, split)).catch(() => undefined);
 
-  if (parallel) {
-    const workstreams: unknown[] = [];
-    const changed = new Set<string>();
-    const placeholders: unknown[] = [];
-    let fanOutOk = true;
-    // The editor's fan-out returns HANDLES (`agents`, `running: true`): the children work
-    // in the background and report later. A host that blocks returns `workstreams`.
-    let background = false;
-    for (let start = 0; start < plan.tasks.length; start += FAN_OUT_BATCH) {
-      const batch = plan.tasks.slice(start, start + FAN_OUT_BATCH);
-      const out = asRecord(await call(ports, FAN_OUT_TOOL, {
-        workstreams: batch.map((t, k) => {
-          const id = ids[start + k];
-          return {
-            label: id != null ? `#${id} ${t.title}` : t.title,
-            task: childTaskBrief(t, briefContext, id),
-            role: 'code',
-            ...(id != null ? { ticket: String(id) } : {}),
-          };
-        }),
-      }));
-      // A refusal BEFORE any child started (a persona that does not resolve): nothing was written,
-      // so the whole plan falls back to the inline path below.
-      const started = Array.isArray(out?.agents) ? (out!.agents as unknown[]) : Array.isArray(out?.workstreams) ? (out!.workstreams as unknown[]) : null;
-      if (!out || (out.ok === false && !started)) {
-        if (start === 0) {
-          fanOutOk = false;
-          break;
-        }
-        workstreams.push({ ok: false, error: typeof out?.error === 'string' ? out.error : 'fan-out failed', tasks: batch.map((t) => t.title) });
-        continue;
-      }
-      if (started) workstreams.push(...started);
-      if (out.running === true) background = true;
-      if (Array.isArray(out.changedFiles)) for (const f of out.changedFiles) if (typeof f === 'string') changed.add(f);
-      if (Array.isArray(out.placeholders)) placeholders.push(...out.placeholders);
-    }
-    if (fanOutOk) {
-      return {
-        ok: true,
-        mode: 'parallel',
-        tickets,
-        workstreams,
-        ...(changed.size ? { changedFiles: [...changed] } : {}),
-        ...(placeholders.length ? { placeholders } : {}),
-        next: background ? BACKGROUND_NEXT : PARALLEL_NEXT,
-      };
-    }
+  const decide = (mode: HandOffMode, parallel: readonly number[], inline: readonly number[]): void => ports.decided?.({
+    mode,
+    parallelTasks: parallel.map((i) => plan.tasks[i]!.title),
+    inlineTasks: inline.map((i) => plan.tasks[i]!.title),
+    clash: split.clash,
+  });
+  const clash = split.clash ? { clash: split.clash } : {};
+
+  const ran = split.parallel.length ? await fanOut(plan, split.parallel, ids, brief, (name, args) => call(ports, name, args)) : null;
+  if (ran) {
+    const mode = modeOf(split);
+    decide(mode, split.parallel, split.inline);
+    // Key order is the order the coder reads the result in; a full fan-out reads as it always has.
+    return {
+      ok: true,
+      mode,
+      tickets,
+      workstreams: ran.workstreams,
+      ...(ran.changedFiles.length ? { changedFiles: ran.changedFiles } : {}),
+      ...(ran.placeholders.length ? { placeholders: ran.placeholders } : {}),
+      ...(mode === 'mixed' ? clash : {}),
+      next: mode === 'parallel'
+        ? (ran.background ? BACKGROUND_NEXT : PARALLEL_NEXT)
+        : `${ran.background ? MIXED_BACKGROUND_NEXT : MIXED_PARALLEL_NEXT}\n\n${inlineTaskList(plan, split.inline, ids, brief)}`,
+    };
   }
 
+  decide('inline', [], all);
   return {
     ok: true,
     mode: 'inline',
     tickets,
-    next: `${INLINE_NEXT}\n\n${plan.tasks.map((t, i) => `${i + 1}. ${ids[i] != null ? `#${ids[i]} ` : ''}${t.title}\n${childTaskBrief(t, briefContext, ids[i])}`).join('\n\n')}`,
+    ...clash,
+    next: `${INLINE_NEXT}\n\n${inlineTaskList(plan, all, ids, brief)}`,
   };
 }

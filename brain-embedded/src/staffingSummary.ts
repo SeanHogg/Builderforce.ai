@@ -23,6 +23,7 @@
 
 import { isFailedToolResult, isTicketWriteTool, type BrainTraceEvent } from './brainTriage';
 import { isLocalTicketCreateLabel } from './ticketToolVocabulary';
+import { toolResultRecord } from './toolResultRecord';
 
 /**
  * Tool labels that put a HUMAN OR AGENT on work: the direct dispatch, the ticket
@@ -89,25 +90,13 @@ export interface StaffingSummary {
    *  - `no-work-filed`     — nothing was filed and nothing was staffed; there is no gap.
    *  - `staffed`           — somebody (or some persona) is on the work.
    *  - `filed-not-staffed` — work exists, and nobody was even ASKED to run it.
-   *  - `filed-locally`     — every ticket was filed on this device; staffing happens after it syncs.
+   *  - `filed-locally`     — every ticket was filed on this device; the session and its local sub-agents run the
+   *                           work here, and the tickets sync to the account when sync is on (the import never staffs).
    *  - `staffing-refused`  — somebody was asked and the platform said no.
    */
   verdict: 'no-work-filed' | 'staffed' | 'filed-not-staffed' | 'filed-locally' | 'staffing-refused';
 }
 
-/** Read a tool result as an object, parsing the JSON string form the local executors return. */
-function resultObject(result: unknown): Record<string, unknown> | null {
-  if (result && typeof result === 'object') return result as Record<string, unknown>;
-  if (typeof result === 'string') {
-    try {
-      const parsed = JSON.parse(result) as unknown;
-      return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
 
 /**
  * Did this staffing call actually staff anything?
@@ -120,7 +109,7 @@ function resultObject(result: unknown): Record<string, unknown> | null {
  */
 function didDispatch(ev: BrainTraceEvent): boolean {
   if (ev.isError || isFailedToolResult(ev.result)) return false;
-  const r = resultObject(ev.result);
+  const r = toolResultRecord(ev.result);
   if (!r) return true;
   const autoRun = r.autoRun && typeof r.autoRun === 'object' ? (r.autoRun as Record<string, unknown>) : null;
   if (autoRun && typeof autoRun.dispatched === 'boolean') return autoRun.dispatched;
@@ -130,7 +119,7 @@ function didDispatch(ev: BrainTraceEvent): boolean {
 
 /** The message a refused staffing call gave, flattened and trimmed. */
 function refusalMessage(ev: BrainTraceEvent): string {
-  const r = resultObject(ev.result);
+  const r = toolResultRecord(ev.result);
   const raw =
     (r && typeof r.error === 'string' && r.error)
     || (r && typeof r.detail === 'string' && r.detail)
@@ -175,7 +164,7 @@ export function staffingSummaryInTrace(events: BrainTraceEvent[]): StaffingSumma
       const agent = asAgentOf(ev.args);
       if (!agent) continue;
       const args = ev.args as { label?: unknown; task?: unknown } | undefined;
-      const result = resultObject(ev.result);
+      const result = toolResultRecord(ev.result);
       const label =
         (typeof args?.label === 'string' && args.label.trim())
         || (typeof result?.label === 'string' && result.label.trim())
@@ -251,7 +240,7 @@ export function formatStaffingSummary(s: StaffingSummary, opts?: { sessionShippe
     : s.verdict === 'filed-not-staffed'
       ? ' — the work was filed but nobody is running it'
       : s.verdict === 'filed-locally'
-        ? ' — filed on this device, staffing after it syncs to the account'
+        ? ' — filed on this device; the work runs here, by the session and its local sub-agents, and the tickets sync to the account when sync is on'
       : s.verdict === 'staffing-refused'
         ? ' — every attempt to staff the work was refused, so nobody is running it'
         : '';

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { BrainTraceEvent } from '../brainTriage';
 import type { BackstopRun } from '../runStore/runBackstops';
+import type { BrainRunContext } from '../runStore/brainRunContext';
 import { createEvidenceLedger } from '@builderforce/run-guards';
-import { closeOutRun, REVIEW_RECORD_TOOL, reviewedThisRun, verificationOf, type CloseOutInput } from './brainCloseOut';
+import { deterministicFinish } from '../runStore/deterministicFinish';
+import { REVIEW_RECORD_TOOL, reviewedThisRun, verificationOf, type CloseOutInput } from './brainCloseOut';
 
 /** A fake tool runner over the host's executors: records every call, answers the ticket list. */
 function fakeTools(tickets: unknown[] = [{ kind: 'task', ref: 41, status: 'in_review' }]) {
@@ -30,17 +32,35 @@ function evidence(path: string, outcomes: Array<'pass' | 'fail' | 'unavailable'>
   return ledger;
 }
 
-function input(tools: ReturnType<typeof fakeTools>, over: Partial<CloseOutInput> = {}): CloseOutInput {
-  return {
+/** The run context the finish reads the chat id from (the ticket list it closes against). */
+const run = { c: { runUsage: {}, trace: [] }, req: {}, serverChatId: 7, recalled: null } as unknown as BrainRunContext;
+
+type FinishInput = CloseOutInput & { verified: boolean; hasTicket: boolean };
+
+/**
+ * The close-out input as `startRun`'s settle builds it: `verified` is the run's evidence read by
+ * `verificationOf`, `hasTicket` is the ticket the run minted (overridable for a device-filed ticket).
+ */
+function input(tools: ReturnType<typeof fakeTools>, over: Partial<FinishInput> = {}): FinishInput {
+  const base: CloseOutInput = {
     serverChatId: 7, view: view(), req: { runTool: tools.runTool, projectId: 3 }, needsTicket: true, shipped: true,
     reviewedInPreview: [], openPlaceholders: 0, trace: [], evidence: evidence('/repo/src/a.ts', ['pass']), ...over,
   };
+  return {
+    ...base,
+    verified: verificationOf(base.evidence, base.view.touchedFiles).verified,
+    hasTicket: base.view.deltaTicketId != null,
+    ...over,
+  };
 }
+
+const reviewed = (tools: ReturnType<typeof fakeTools>) => tools.calls.some((c) => c.name === REVIEW_RECORD_TOOL);
+const movedToDone = (tools: ReturnType<typeof fakeTools>) => tools.calls.some((c) => c.name === 'builtin_tasks_update' && c.args.status === 'done');
 
 describe('the host close-out of a shipped run (zero model turns)', () => {
   it('records the review on the ticket THIS run created, then moves the linked in_review ticket to done', async () => {
     const tools = fakeTools();
-    await closeOutRun(input(tools));
+    await deterministicFinish(input(tools), run);
     const names = tools.calls.map((c) => c.name);
     const review = tools.calls.find((c) => c.name === REVIEW_RECORD_TOOL);
     expect(review?.args).toMatchObject({ taskId: 41, verdict: 'complete' });
@@ -53,7 +73,7 @@ describe('the host close-out of a shipped run (zero model turns)', () => {
   it('never records a second review when the run recorded its own', async () => {
     const tools = fakeTools();
     const own: BrainTraceEvent = { ts: '', category: 'tool', label: REVIEW_RECORD_TOOL, args: { taskId: 41, verdict: 'complete' }, result: { ok: true } };
-    await closeOutRun(input(tools, { trace: [own] }));
+    await deterministicFinish(input(tools, { trace: [own] }), run);
     expect(tools.calls.filter((c) => c.name === REVIEW_RECORD_TOOL)).toHaveLength(0);
     expect(tools.calls).toContainEqual({ name: 'builtin_tasks_update', args: { id: 41, status: 'done' } });
   });
@@ -61,30 +81,37 @@ describe('the host close-out of a shipped run (zero model turns)', () => {
   it('holds the close-out when placeholders are outstanding: no review, never done', async () => {
     const tools = fakeTools();
     const v = view();
-    await closeOutRun(input(tools, { view: v, openPlaceholders: 2 }));
-    expect(tools.calls.some((c) => c.name === REVIEW_RECORD_TOOL)).toBe(false);
-    expect(tools.calls.some((c) => c.name === 'builtin_tasks_update' && c.args.status === 'done')).toBe(false);
+    const res = await deterministicFinish(input(tools, { view: v, openPlaceholders: 2 }), run);
+    expect(res.finished).toBe(false);
+    expect(reviewed(tools)).toBe(false);
+    expect(movedToDone(tools)).toBe(false);
     expect(v.notes.some((n) => n.label === 'run.close_out_held')).toBe(true);
   });
 
   it('does nothing toward done when the run did not ship', async () => {
     const tools = fakeTools();
-    await closeOutRun(input(tools, { shipped: false }));
-    expect(tools.calls.some((c) => c.name === REVIEW_RECORD_TOOL)).toBe(false);
+    await deterministicFinish(input(tools, { shipped: false }), run);
+    expect(reviewed(tools)).toBe(false);
     expect(tools.calls.some((c) => c.args.status === 'done')).toBe(false);
   });
 
   it('records no review when the run created no ticket of its own', async () => {
+    // It still holds a ticket (one filed on the device), so the finish runs — but the review is
+    // only ever recorded on a ticket THIS run minted.
     const tools = fakeTools();
-    await closeOutRun(input(tools, { view: view({ deltaTicketId: null }) }));
-    expect(tools.calls.some((c) => c.name === REVIEW_RECORD_TOOL)).toBe(false);
+    const res = await deterministicFinish(input(tools, { view: view({ deltaTicketId: null }), hasTicket: true }), run);
+    expect(res.finished).toBe(true);
+    expect(reviewed(tools)).toBe(false);
   });
 
   it('regression: chat #60338 close-out never records a "complete" review nobody performed — shipped with no verification stays in review', async () => {
     const tools = fakeTools();
     const v = view();
-    await closeOutRun(input(tools, { view: v, evidence: undefined }));
-    expect(tools.calls.some((c) => c.name === REVIEW_RECORD_TOOL)).toBe(false);
+    const finish = input(tools, { view: v, evidence: undefined });
+    expect(finish.verified).toBe(false);
+    const res = await deterministicFinish(finish, run);
+    expect(res.finished).toBe(false);
+    expect(reviewed(tools)).toBe(false);
     expect(tools.calls.some((c) => c.args.status === 'done')).toBe(false);
     const held = v.notes.find((n) => n.label === 'run.close_out_held');
     expect(held?.args).toMatchObject({ reason: 'unverified' });
@@ -94,7 +121,10 @@ describe('the host close-out of a shipped run (zero model turns)', () => {
     for (const ev of [evidence('/repo/src/a.ts', ['pass', 'fail']), evidence('/repo/src/other.ts', ['pass']), evidence('/repo/src/a.ts', ['unavailable'])]) {
       const tools = fakeTools();
       const v = view();
-      await closeOutRun(input(tools, { view: v, evidence: ev }));
+      const finish = input(tools, { view: v, evidence: ev });
+      expect(finish.verified).toBe(false);
+      const res = await deterministicFinish(finish, run);
+      expect(res.finished).toBe(false);
       expect(tools.calls.some((c) => c.name === REVIEW_RECORD_TOOL || c.args.status === 'done')).toBe(false);
       expect(v.notes.some((n) => n.label === 'run.close_out_held')).toBe(true);
     }
@@ -102,9 +132,46 @@ describe('the host close-out of a shipped run (zero model turns)', () => {
 
   it('a verified close-out names the passing checks in the review', async () => {
     const tools = fakeTools();
-    await closeOutRun(input(tools));
+    await deterministicFinish(input(tools), run);
     expect(String(tools.calls.find((c) => c.name === REVIEW_RECORD_TOOL)?.args.summary)).toContain('/repo/src/a.ts test "check-0"');
     expect(verificationOf(undefined, ['src/a.ts'])).toMatchObject({ verified: false });
+  });
+
+  it('regression: an unshipped run still advances its tickets to in_progress at settle (chat #70776)', async () => {
+    const LOCAL = '0b1c2d3e-0000-4000-8000-000000000001';
+    const filedLocally: BrainTraceEvent = { ts: '', category: 'tool', label: 'ticket-create', args: { title: 'A', auto: true, reason: 'hand_off' }, result: { id: LOCAL } };
+    // The chat links a server ticket still in the backlog.
+    const tools = fakeTools([{ kind: 'task', ref: 41, status: 'backlog' }]);
+    const res = await deterministicFinish(input(tools, { shipped: false, trace: [filedLocally] }), run);
+    expect(res.finished).toBe(false);
+    // The server linked ticket advances through builtin_tasks_update…
+    expect(tools.calls).toContainEqual({ name: 'builtin_tasks_update', args: { id: 41, status: 'in_progress' } });
+    // …and the device-filed one through ticket-move.
+    expect(tools.calls.some((c) => c.name === 'ticket-move' && c.args.id === LOCAL && c.args.status === 'in_progress')).toBe(true);
+    expect(movedToDone(tools)).toBe(false);
+    expect(tools.calls.some((c) => c.name === 'ticket-move' && c.args.status === 'done')).toBe(false);
+  });
+
+  it('an unshipped run still attaches its later-touched files to its delta ticket', async () => {
+    const tools = fakeTools();
+    const v = view({ touchedFiles: ['src/a.ts', 'src/b.ts'], deltaRecordedFiles: ['src/a.ts'] });
+    await deterministicFinish(input(tools, { view: v, shipped: false }), run);
+    const attach = tools.calls.find((c) => c.name === 'builtin_tickets_from_delta');
+    expect(attach?.args).toMatchObject({ files: ['src/b.ts'] });
+    expect(reviewed(tools)).toBe(false);
+  });
+
+  it('nothing moves to done when the gate fails, whichever condition fails it', async () => {
+    const LOCAL = '0b1c2d3e-0000-4000-8000-000000000002';
+    const filedLocally: BrainTraceEvent = { ts: '', category: 'tool', label: 'ticket-create', args: { title: 'A', auto: true, reason: 'hand_off' }, result: { id: LOCAL } };
+    const fails: Array<Partial<FinishInput>> = [{ shipped: false }, { verified: false }, { openPlaceholders: 1 }, { hasTicket: false }];
+    for (const over of fails) {
+      const tools = fakeTools();
+      const res = await deterministicFinish(input(tools, { trace: [filedLocally], ...over }), run);
+      expect(res).toMatchObject({ finished: false, reviewRecorded: false, ticketClosed: false });
+      expect(tools.calls.some((c) => c.args.status === 'done')).toBe(false);
+      expect(reviewed(tools)).toBe(false);
+    }
   });
 
   it('reads only SUCCESSFUL reviews as recorded', () => {

@@ -20,7 +20,7 @@ import { emptyRunUsage } from '../memorySavings';
 import { emit, getCell, nowIso, recordRunFailure, runTrace } from './runCells';
 import { appendRunMessage } from './runControl';
 import { keepStoppedTurn, persistStep } from './turnPersistence';
-import { settleView } from './runBackstops';
+import { localTicketsFiledInRun, settleView } from './runBackstops';
 import { verificationOf, type CloseOutInput } from '../run/brainCloseOut';
 import { deterministicFinish, finishConditionMet } from './deterministicFinish';
 import type { BrainRunContext } from './brainRunContext';
@@ -180,7 +180,8 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
       const needsTicket = !aborted && changed && req.projectId != null && !!req.runTool;
       const openPh = openPlaceholders();
       const verification = verificationOf(evidence, c.touchedFiles);
-      const hasTicket = view.deltaTicketId != null;
+      // The run's ticket: the delta it minted on the account, or one it filed on the device (`ticket-create`).
+      const hasTicket = view.deltaTicketId != null || localTicketsFiledInRun(trace).length > 0;
       // FIX #6 DETERMINISTIC FINISH: when shipped + verified + no placeholders + a linked ticket, the
       // close-out is the run's FINISH — the host records the review, moves the ticket to done, and the
       // learn write is host-side (`emitEvermindLearnReconcile`), all ZERO model turns. `finished` is the

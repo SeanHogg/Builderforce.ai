@@ -386,7 +386,7 @@ export {
   childTaskBrief,
   planMessage,
 } from './planHandoff';
-export type { BriefContext, HandOffPlan, HandOffTask, HandOffPorts, HandOffOutcome } from './planHandoff';
+export type { BriefContext, HandOffPlan, HandOffTask, HandOffPorts, HandOffOutcome, HandOffDecision, HandOffMode, ScopeClash } from './planHandoff';
 export {
   LOCAL_TICKET_CREATE_TOOL,
   SERVER_TICKET_CREATE_TOOL,

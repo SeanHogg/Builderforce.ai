@@ -67,3 +67,36 @@ export function ticketToolVocabulary(toolNames?: Iterable<string>): TicketToolVo
 export function isLocalTicketCreateLabel(label: string): boolean {
   return LOCAL_TICKET_CREATE_LABEL.test(label);
 }
+
+/** The account's status change (numeric id) and the editor's (local id, or the numeric id once synced). */
+const SERVER_TICKET_MOVE_TOOL = 'builtin_tasks_update';
+const LOCAL_TICKET_MOVE_TOOL = 'ticket-move';
+
+/**
+ * THE parse of an account ticket id: a positive integer, or its decimal text (a relay may answer
+ * with JSON text, so an id can arrive as `"41"`). Null for anything else — nothing can address it.
+ */
+export function serverTicketId(raw: unknown): number | null {
+  const id = typeof raw === 'number' ? raw : typeof raw === 'string' && /^\d+$/.test(raw.trim()) ? Number(raw.trim()) : NaN;
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+/** The call that moves one ticket to a status. */
+export interface TicketStatusMove {
+  readonly tool: string;
+  readonly args: { id: number | string; status: string };
+}
+
+/**
+ * The tool and arguments that move ticket `ref` to `status`, by the vocabulary that filed it
+ * (`ticket-move` takes a local id and a synced numeric one alike). Null for a server ref that is
+ * not an account id — nothing can move it.
+ */
+export function ticketStatusMove(ref: number | string, status: string, vocabulary: TicketToolVocabulary): TicketStatusMove | null {
+  if (vocabulary.local) {
+    const id = String(ref).trim();
+    return id ? { tool: LOCAL_TICKET_MOVE_TOOL, args: { id, status } } : null;
+  }
+  const id = serverTicketId(ref);
+  return id != null ? { tool: SERVER_TICKET_MOVE_TOOL, args: { id, status } } : null;
+}

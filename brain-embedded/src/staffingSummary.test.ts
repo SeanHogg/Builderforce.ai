@@ -20,7 +20,10 @@ describe('staffingSummaryInTrace', () => {
     const s = staffingSummaryInTrace([tool('ticket-create', { id: 'u1' }), tool('ticket-create', { id: 'u2' })]);
     expect(s).toMatchObject({ ticketsCreated: 2, filedLocally: 2, verdict: 'filed-locally' });
     const text = formatStaffingSummary(s).join('\n');
-    expect(text).toMatch(/staffing after it syncs/i);
+    // The work runs HERE; the account import never staffs a synced ticket, so "staffing after it syncs" was false.
+    expect(text).toMatch(/the work runs here, by the session and its local sub-agents/i);
+    expect(text).toMatch(/sync to the account when sync is on/i);
+    expect(text).not.toMatch(/staffing after it syncs/i);
     expect(text).not.toMatch(/nobody is running it/i);
     // A mix with an account ticket is still an unstaffed account ticket.
     expect(staffingSummaryInTrace([tool('ticket-create', { id: 'u1' }), tool('builtin_tasks_create', { id: 3 })]).verdict).toBe('filed-not-staffed');

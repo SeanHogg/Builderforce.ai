@@ -8,7 +8,12 @@
  */
 
 import { isFailedToolResult } from '../brainTriage';
-import type { LinkedTicketToAdvance } from '../chatWorkLinking';
+import { NOT_STARTED_TASK_STATUSES, type LinkedTicketToAdvance } from '../chatWorkLinking';
+import {
+  LOCAL_TICKET_CREATE_TOOL, SERVER_TICKET_TOOLS, isLocalTicketCreateLabel, serverTicketId, ticketStatusMove, ticketToolVocabulary,
+  type TicketStatusMove,
+} from '../ticketToolVocabulary';
+import { toolResultRecord } from '../toolResultRecord';
 import type { BrainTraceEvent } from '../brainTriage';
 import type { RunCell } from './runCell';
 import { nowIso, nowMs, pushTrace } from './runCells';
@@ -142,8 +147,12 @@ export async function recordCodeChangeTicket(
     if (files.length) c.deltaTitleCount = files.length;
     // Only a MINT yields an id to attach to; an attach returns the same ticket, so
     // reading the id back off either result is correct and keeps this one branch.
-    const id = (out as { id?: unknown } | null)?.id;
-    if (c.deltaTicketId == null && typeof id === 'number') c.deltaTicketId = id;
+    // `from_delta` answers `{ deltaId, kind, taskId, deduped }` — the TICKET is `taskId` (`id` on older
+    // relays), possibly as JSON text or a numeric string. Reading only `id` left this unset, so every
+    // capture minted again (chat #61651: 17 identical "Code change (1 file)" tickets).
+    const record = toolResultRecord(out);
+    const id = serverTicketId(record?.taskId ?? record?.id);
+    if (c.deltaTicketId == null && id != null) c.deltaTicketId = id;
     // The model's own from_delta/link call is what `ticketRecorded` tracks; a mint we
     // performed satisfies the same guarantee, so the settle pass must not mint again.
     c.ticketRecorded = true;
@@ -185,44 +194,148 @@ export async function recordCodeChangeTicket(
  * rides the same gateway MCP relay the model uses); `select` says which of them the
  * evidence covers. The REASON rides on each step: a ticket that changed status by
  * itself must say what changed it, or the board's history reads as an unexplained
- * move. Best-effort and fail-closed per ticket, a durable step each, never throws.
+ * move. Best-effort and fail-closed per ticket, a durable step each, never throws. Returns how many
+ * moved. `reason: null` records the bare `{ id, status }` step — the deterministic finish's own
+ * move to done, whose provenance rides the trace instead.
  */
 export async function updateLinkedTickets(
   serverChatId: number | null,
   c: RunCell | BackstopRun,
-  req: BrainRunRequest,
+  req: Pick<BrainRunRequest, 'runTool'>,
   select: (listed: unknown) => LinkedTicketToAdvance[],
   status: 'in_progress' | 'done',
-  reason: 'worked-ticket-off-backlog' | 'shipped-to-base-branch' | 'reviewed-in-preview',
-): Promise<void> {
+  reason: TicketMoveReason | null,
+): Promise<number> {
   // An unbound local chat has no linked tickets on the platform to move.
-  if (!req.runTool || serverChatId == null) return;
+  if (!req.runTool || serverChatId == null) return 0;
   let listed: unknown;
   try {
     listed = await req.runTool('builtin_chats_list_tickets', { chatId: serverChatId });
   } catch {
-    return; // can't read the links — nothing to move
+    return 0; // can't read the links — nothing to move
   }
+  let moved = 0;
   for (const t of select(listed)) {
-    const id = Number(t.ref);
-    if (!Number.isInteger(id)) continue;
-    const toolStart = nowMs();
-    let out: unknown;
-    try {
-      out = await req.runTool('builtin_tasks_update', { id, status });
-    } catch (e) {
-      out = { ok: false, error: e instanceof Error ? e.message : String(e) };
-    }
-    noteOf(c)({
-      ts: nowIso(),
-      category: 'tool',
-      label: 'builtin_tasks_update',
-      durationMs: nowMs() - toolStart,
-      args: { id, status, auto: true, reason },
-      result: out ?? null,
-      isError: isFailedToolResult(out),
-    });
+    const move = ticketStatusMove(t.ref, status, SERVER_TICKET_TOOLS);
+    if (move && (await moveTicket(c, req, move, reason))) moved += 1;
   }
+  return moved;
+}
+
+/** Why the host moved a ticket — recorded on the step, so the board's history explains the move. */
+export type TicketMoveReason = 'worked-ticket-off-backlog' | 'shipped-to-base-branch' | 'reviewed-in-preview';
+
+/**
+ * THE host's ticket status move: run one {@link ticketStatusMove} through the run's tool runner and
+ * record it as a durable step. With a reason the step says the host made it (`auto`, `reason`);
+ * with `null` it carries only the move's own args. Best-effort, never throws; true when it moved.
+ */
+export async function moveTicket(
+  c: RunCell | BackstopRun,
+  req: Pick<BrainRunRequest, 'runTool'>,
+  move: TicketStatusMove,
+  reason: TicketMoveReason | null,
+): Promise<boolean> {
+  if (!req.runTool) return false;
+  const toolStart = nowMs();
+  let out: unknown;
+  try {
+    out = await req.runTool(move.tool, { ...move.args });
+  } catch (e) {
+    out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  const failed = isFailedToolResult(out);
+  noteOf(c)({
+    ts: nowIso(),
+    category: 'tool',
+    label: move.tool,
+    durationMs: nowMs() - toolStart,
+    args: reason ? { ...move.args, auto: true, reason } : { ...move.args },
+    result: out ?? null,
+    isError: failed,
+  });
+  return !failed;
+}
+
+/** The editor's vocabulary: a ticket `ticket-create` filed moves with `ticket-move`. */
+const LOCAL_VOCABULARY = ticketToolVocabulary([LOCAL_TICKET_CREATE_TOOL]);
+/** A status change by either vocabulary: the editor's `ticket-move` or the account's `builtin_tasks_update`. */
+const MOVE_LABEL = /^(ticket[-_.]move|builtin_tasks_update)$/i;
+
+const succeeded = (ev: BrainTraceEvent): boolean => ev.category === 'tool' && !ev.isError && !isFailedToolResult(ev.result);
+
+/**
+ * The device-local tickets THIS run's HAND-OFF filed (`ticket-create` steps recorded with
+ * `reason: 'hand_off'`), in the order filed, once each — the tickets the run's own work stands
+ * for. A follow-up or bug ticket the model files mid-run is NOT one: the close-out never moves it.
+ * The account's chat listing cannot see a ticket that has not synced, so the run's own record is
+ * the only place they can be read from.
+ */
+export function localTicketsFiledInRun(trace: readonly BrainTraceEvent[]): string[] {
+  const ids: string[] = [];
+  for (const ev of trace) {
+    if (!succeeded(ev) || !isLocalTicketCreateLabel(ev.label)) continue;
+    if ((ev.args as { reason?: unknown } | undefined)?.reason !== 'hand_off') continue;
+    const id = toolResultRecord(ev.result)?.id;
+    const ref = typeof id === 'string' ? id.trim() : typeof id === 'number' ? String(id) : '';
+    if (ref && !ids.includes(ref)) ids.push(ref);
+  }
+  return ids;
+}
+
+/** The status each ticket was last moved to by a successful status move in this run, keyed by its id as text. */
+function statusesInRun(trace: readonly BrainTraceEvent[]): Map<string, string> {
+  const moved = new Map<string, string>();
+  for (const ev of trace) {
+    if (!succeeded(ev) || !MOVE_LABEL.test(ev.label)) continue;
+    const a = (ev.args ?? {}) as { id?: unknown; status?: unknown };
+    if ((typeof a.id === 'string' || typeof a.id === 'number') && typeof a.status === 'string') moved.set(String(a.id).trim(), a.status);
+  }
+  return moved;
+}
+
+/**
+ * Whether the host may move a ticket last seen at `current` (undefined = not moved this run) to
+ * `status`. Only forward out of a not-started lane, or from `in_progress` to `done`: a ticket the
+ * run put in review, blocked, cancelled or done stays where it was put.
+ */
+function mayMove(current: string | undefined, status: 'in_progress' | 'done'): boolean {
+  if (current === undefined || NOT_STARTED_TASK_STATUSES.has(current)) return true;
+  return status === 'done' && current === 'in_progress';
+}
+
+/**
+ * The close-out's moves for the run's OWN tickets the account's chat listing cannot show — the
+ * same reasons {@link updateLinkedTickets} moves the account's: `in_progress` for worked tickets
+ * still unmoved, `done` on the shipped and verified finish. The set is the hand-off's local
+ * filings ({@link localTicketsFiledInRun}) and, on the move to done, the run's delta ticket when
+ * the caller passes it (a chat with no server link, whose listing cannot see it). Never overrides a
+ * status the run set itself ({@link mayMove}). A durable step each; best-effort, never throws.
+ * Returns how many moved.
+ */
+export async function updateRunLocalTickets(
+  trace: readonly BrainTraceEvent[],
+  c: RunCell | BackstopRun,
+  req: Pick<BrainRunRequest, 'runTool'>,
+  status: 'in_progress' | 'done',
+  reason: 'worked-ticket-off-backlog' | 'shipped-to-base-branch',
+  deltaTicketId: number | null = null,
+): Promise<number> {
+  if (!req.runTool) return 0;
+  const already = statusesInRun(trace);
+  const moves: TicketStatusMove[] = [];
+  for (const ref of localTicketsFiledInRun(trace)) {
+    const move = mayMove(already.get(ref), status) ? ticketStatusMove(ref, status, LOCAL_VOCABULARY) : null;
+    if (move) moves.push(move);
+  }
+  // The delta ticket opens in review; only the finish moves it, and only to done.
+  if (status === 'done' && deltaTicketId != null && mayMove(already.get(String(deltaTicketId)), status)) {
+    const move = ticketStatusMove(deltaTicketId, status, SERVER_TICKET_TOOLS);
+    if (move) moves.push(move);
+  }
+  let moved = 0;
+  for (const move of moves) if (await moveTicket(c, req, move, reason)) moved += 1;
+  return moved;
 }
 
 /**

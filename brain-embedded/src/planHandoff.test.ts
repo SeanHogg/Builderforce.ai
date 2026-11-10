@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { canRunInParallel, executeHandOff, parseHandOff, planMessage, type HandOffPorts, type HandOffTask } from './planHandoff';
+import { TICKET_CONTEXT_MAX_CHARS, childTaskBrief, ticketDescription } from './planHandoff';
 import { subagentReportMessage } from '@builderforce/agent-loop';
 
 const task = (title: string, paths: string[] = []): HandOffTask => ({ title, brief: `do ${title}`, paths });
@@ -148,6 +149,123 @@ describe('executeHandOff', () => {
     const out = await executeHandOff({ summary: '', tasks: [task('A')] }, ports({ toolNames: new Set(), projectId: undefined }));
     expect(out.tickets).toEqual([{ title: 'A' }]);
     expect(out.mode).toBe('inline');
+  });
+});
+
+describe('executeHandOff — partial parallelism (chat #70776)', () => {
+  // The overlapping (parent-directory) task comes LAST: the two before it may run side by side.
+  const PLAN = {
+    summary: 'research',
+    tasks: [task('Style', ['pkg/src/surface/style']), task('Features', ['pkg/src/surface/features']), task('Surface', ['pkg/src/surface'])],
+  };
+  const CLASH = { a: 'Style', b: 'Surface', path: 'pkg/src/surface/style' };
+
+  it('parent-directory task FIRST: nothing fans out — order beats parallelism', async () => {
+    const calls: string[] = [];
+    const out = await executeHandOff({ summary: '', tasks: [PLAN.tasks[2]!, PLAN.tasks[0]!, PLAN.tasks[1]!] }, {
+      runTool: async (name) => { calls.push(name); return { id: 1 }; },
+      toolNames: new Set(['builtin_tasks_create', 'spawn_agents']),
+      projectId: 1,
+    });
+    expect(calls).not.toContain('spawn_agents');
+    expect(out.mode).toBe('inline');
+    expect(out.clash).toEqual({ a: 'Surface', b: 'Style', path: 'pkg/src/surface' });
+    expect(out.next.indexOf('1. #1 Surface')).toBeLessThan(out.next.indexOf('2. #1 Style'));
+  });
+
+  it('fans out the leading disjoint tasks, inlines the rest after them, and records the decision', async () => {
+    const fanned: string[][] = [];
+    const posted: string[] = [];
+    const decisions: unknown[] = [];
+    const out = await executeHandOff(PLAN, {
+      runTool: async (name, args) => {
+        if (name === 'builtin_tasks_create') return { id: 200 + PLAN.tasks.findIndex((t) => t.title === args.title) };
+        if (name === 'spawn_agents') {
+          const ws = args.workstreams as Array<{ label: string }>;
+          fanned.push(ws.map((w) => w.label));
+          return { ok: true, running: true, agents: ws.map((_, i) => ({ ok: true, handle: `a${i}` })) };
+        }
+        return { ok: true };
+      },
+      toolNames: new Set(['builtin_tasks_create', 'spawn_agents']),
+      projectId: 1,
+      postPlan: async (text) => { posted.push(text); },
+      decided: (d) => decisions.push(d),
+    });
+    expect(fanned).toEqual([['#200 Style', '#201 Features']]);
+    expect(out.mode).toBe('mixed');
+    expect(out.clash).toEqual(CLASH);
+    expect(out.next).toContain('IN THE BACKGROUND');
+    expect(out.next).toContain('call wait_agents for their reports FIRST');
+    expect(out.next).toContain('they overlap those paths or own none');
+    expect(out.next).toContain('3. #202 Surface');
+    expect(out.next).not.toContain('1. #200 Style');
+    expect(posted[0]).toContain('Side by side: tasks 1 and 2.');
+    expect(posted[0]).toContain('Then in order, by the coding model: task 3');
+    expect(decisions).toEqual([{ mode: 'mixed', parallelTasks: ['Style', 'Features'], inlineTasks: ['Surface'], clash: CLASH }]);
+  });
+
+  it('records inline with the clash when the fan-out of the subset is refused', async () => {
+    const decisions: Array<{ mode: string }> = [];
+    const out = await executeHandOff(PLAN, {
+      runTool: async (name) => (name === 'spawn_agents' ? { ok: false, error: 'no' } : { id: 1 }),
+      toolNames: new Set(['builtin_tasks_create', 'spawn_agents']),
+      projectId: 1,
+      decided: (d) => decisions.push(d),
+    });
+    expect(out.mode).toBe('inline');
+    expect(out.clash).toEqual(CLASH);
+    expect(decisions.map((d) => d.mode)).toEqual(['inline']);
+  });
+});
+
+describe('executeHandOff — filed tickets move to in_progress as the work starts', () => {
+  it('local vocabulary: ticket-move with the local id', async () => {
+    const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+    const steps: string[] = [];
+    await executeHandOff({ summary: '', tasks: [task('A'), task('B')] }, {
+      runTool: async (name, args) => {
+        calls.push({ name, args });
+        return name === 'ticket-create' ? JSON.stringify({ id: `0b1c2d3e-0000-4000-8000-00000000000${calls.length}` }) : JSON.stringify({ ok: true });
+      },
+      toolNames: new Set(['ticket-create', 'ticket-move']),
+      projectId: 3,
+      step: (label) => steps.push(label),
+    });
+    const moves = calls.filter((c) => c.name === 'ticket-move');
+    expect(moves.map((m) => m.args)).toEqual([
+      { id: '0b1c2d3e-0000-4000-8000-000000000001', status: 'in_progress' },
+      { id: '0b1c2d3e-0000-4000-8000-000000000002', status: 'in_progress' },
+    ]);
+    expect(steps.filter((s) => s === 'ticket-move')).toHaveLength(2);
+  });
+
+  it('server vocabulary: builtin_tasks_update with the numeric id; nothing when the tool is not advertised', async () => {
+    const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+    const run = (names: string[]) => executeHandOff({ summary: '', tasks: [task('A')] }, {
+      runTool: async (name, args) => { calls.push({ name, args }); return { id: 41 }; },
+      toolNames: new Set(names),
+      projectId: 3,
+    });
+    await run(['builtin_tasks_create', 'builtin_tasks_update']);
+    expect(calls.filter((c) => c.name === 'builtin_tasks_update').map((c) => c.args)).toEqual([{ id: 41, status: 'in_progress' }]);
+    calls.length = 0;
+    await run(['builtin_tasks_create']);
+    expect(calls.map((c) => c.name)).toEqual(['builtin_tasks_create']);
+  });
+});
+
+describe('ticketDescription', () => {
+  it('carries only a short excerpt of the summary; the children still get it whole', () => {
+    const summary = 'x'.repeat(TICKET_CONTEXT_MAX_CHARS * 10);
+    const body = ticketDescription(task('A', ['a']), summary);
+    const context = body.slice(body.indexOf('Context: ') + 'Context: '.length);
+    expect(context.length).toBe(TICKET_CONTEXT_MAX_CHARS);
+    expect(context.endsWith('…')).toBe(true);
+    expect(body).toContain('do A');
+    expect(body).toContain('Paths: a');
+    expect(ticketDescription(task('A'), 'short')).toContain('Context: short');
+    expect(childTaskBrief(task('A'), { summary })).toContain(summary);
   });
 });
 
