@@ -368,7 +368,8 @@ export interface TicketValue {
 /**
  * Lifecycle of a local run. `completed`, `failed` and `cancelled` (a person pressed
  * Stop) are terminal; `interrupted` is what restart recovery writes for a run the dead
- * host left unfinished.
+ * host left unfinished. `awaiting_input` with a `hold` is a run whose turn completed but
+ * that waits on a person before it may count as finished (PRD 41 §12.5).
  */
 export type ExecutionStatus =
   | 'queued'
@@ -394,6 +395,12 @@ export interface ExecutionValue {
   parentRunId?: ClientEntityId;
   status: ExecutionStatus;
   checkpoint?: { step: number; safeToResume: boolean; state?: unknown };
+  /**
+   * Why a run whose own turn completed is held for a person (status `awaiting_input`) instead of being finished: an
+   * autonomous run whose run delta computed blocking codes (PRD 41 §12.5). `rules` are those blocking rule ids, and
+   * `reason` names them. A held run is not in flight: restart recovery leaves it as it is.
+   */
+  hold?: { reason: string; rules: string[] };
 }
 
 export interface ChangeSetValue {

@@ -12,7 +12,13 @@ import {
 } from "@builderforce/local-first";
 import { createDurableLocalFirstStore, type DurableLocalFirstStore } from "./durableLocalFirstStore";
 import { JOURNAL_FILE } from "./localFirstJournalIo";
-import { PRE_MIGRATION_SUFFIX, migrateEventBacklog } from "./localFirstEventMigration";
+import {
+  BACKUP_KEEP_MS,
+  PRE_MIGRATION_RECORD_SUFFIX,
+  PRE_MIGRATION_SUFFIX,
+  migrateEventBacklog,
+  restorePreMigrationBackup,
+} from "./localFirstEventMigration";
 
 const directories: string[] = [];
 async function directory(): Promise<string> {
@@ -67,10 +73,11 @@ describe("event-backlog migration at open", () => {
     expect(state.events).toHaveLength(50);
     expect(state.events.every((event) => event.payload === null && typeof (event as { payloadSize?: unknown }).payloadSize === "number")).toBe(true);
 
-    // A later healthy open has nothing to migrate: the backup has done its job.
+    // A later open runs nothing again (the store records the run) and keeps the backup: the
+    // marked events have not synced, and seven days have not passed.
     const again = createDurableLocalFirstStore(root);
     await again.read(async () => 0);
-    expect(nodeFs.existsSync(backupOf(root))).toBe(false);
+    expect(nodeFs.existsSync(backupOf(root))).toBe(true);
     expect((await again.export()).events).toEqual(state.events);
   });
 
@@ -140,10 +147,54 @@ describe("migrateEventBacklog", () => {
     expect(await payloadEvents(memory)).toBe(0);
     expect(nodeFs.readFileSync(`${journalFile}${PRE_MIGRATION_SUFFIX}`, "utf8")).toBe("pre-migration bytes");
 
-    // Idempotent: nothing left, nothing committed, and the backup is retired.
+    // One-time: nothing is planned again, nothing committed — and the backup stays.
     let committed = 0;
     expect(await migrateEventBacklog(portsOver(memory, journalFile, async () => { committed += 1; }))).toBeUndefined();
     expect(committed).toBe(0);
-    expect(nodeFs.existsSync(`${journalFile}${PRE_MIGRATION_SUFFIX}`)).toBe(false);
+    expect(nodeFs.existsSync(`${journalFile}${PRE_MIGRATION_SUFFIX}`)).toBe(true);
+  });
+
+  it("keeps the backup until every marked event has synced AND seven days have passed", async () => {
+    const root = await directory();
+    const journalFile = nodePath.join(root, JOURNAL_FILE);
+    nodeFs.writeFileSync(journalFile, "pre-migration bytes");
+    const memory = createMemoryLocalFirstStore();
+    await memory.transact((tx) => writeLegacy(tx, 0, 3));
+    let clock = Date.parse("2026-11-10T00:00:00.000Z");
+    const ports = { ...portsOver(memory, journalFile, async (delta: LocalFirstDelta) => { memory.applyDelta(delta); }), now: () => clock };
+    await migrateEventBacklog(ports);
+    const backup = `${journalFile}${PRE_MIGRATION_SUFFIX}`;
+
+    clock += BACKUP_KEEP_MS + 1; // eight days on, but the markers are still pending
+    await migrateEventBacklog(ports);
+    expect(nodeFs.existsSync(backup)).toBe(true);
+
+    await memory.transact(async (tx) => { await tx.acknowledge((await tx.pending()).map((event) => event.eventId)); });
+    await migrateEventBacklog({ ...ports, now: () => Date.parse("2026-11-12T00:00:00.000Z") }); // synced, but only two days
+    expect(nodeFs.existsSync(backup)).toBe(true);
+    await migrateEventBacklog(ports); // synced and past seven days
+    expect(nodeFs.existsSync(backup)).toBe(false);
+    expect(nodeFs.existsSync(`${journalFile}${PRE_MIGRATION_RECORD_SUFFIX}`)).toBe(false);
+  });
+
+  it("restorePreMigrationBackup puts the pre-migration journal back and the store is never migrated again", async () => {
+    const root = await directory();
+    const legacy = createDurableLocalFirstStore(root);
+    await legacy.transact((tx) => writeLegacy(tx, 0, 10));
+    await legacy.flush();
+    const original = nodeFs.readFileSync(nodePath.join(root, JOURNAL_FILE));
+    const migrated = createDurableLocalFirstStore(root);
+    expect(await payloadEvents(migrated)).toBe(0);
+    await migrated.flush();
+
+    const locks: string[] = [];
+    expect(await restorePreMigrationBackup(nodePath.join(root, JOURNAL_FILE), async (work) => { locks.push("held"); return work(); })).toBe(true);
+    expect(locks).toEqual(["held"]);
+    expect(nodeFs.readFileSync(nodePath.join(root, JOURNAL_FILE))).toEqual(original);
+    // The next open reads the restored journal as it was, payload copies and all.
+    const restored = createDurableLocalFirstStore(root);
+    expect(await payloadEvents(restored)).toBe(10);
+    // Without a backup there is nothing to restore.
+    expect(await restorePreMigrationBackup(nodePath.join(await directory(), JOURNAL_FILE), (work) => work())).toBe(false);
   });
 });

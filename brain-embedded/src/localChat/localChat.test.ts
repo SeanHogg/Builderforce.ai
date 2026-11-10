@@ -5,7 +5,10 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { createMemoryLocalFirstStore, newLocalRecord, type EntityDestination } from '@builderforce/local-first';
-import { journalWrite, sendablePayload, type JournalEvent, type LocalFirstStore } from '@builderforce/local-first';
+import { RECORD_PAYLOAD_FENCE_KEY, isRecordPayloadFence, journalWrite, sendablePayload, type JournalEvent, type LocalFirstStore } from '@builderforce/local-first';
+
+/** The queued work: not a partition's record-payload fence (it only holds older builds off markers). */
+const work = (events: JournalEvent[]): JournalEvent[] => events.filter((event) => !isRecordPayloadFence(event));
 
 /** What sync sends for `event` (a queued import is read from its record when it is sent). */
 const sent = (store: LocalFirstStore, event: JournalEvent): Promise<unknown> => store.read((tx) => sendablePayload(tx, event));
@@ -149,7 +152,7 @@ describe('sync on enable — the chat history goes to the account once', () => {
     await ledger.record({ chatId: chat.id, runKey: 1, model: 'openai/gpt-x', route: 'gateway', usage: { prompt: 5, completion: 5 } });
 
     expect(await bindChatHistoryForSync(store, DEVICE, ACCOUNT)).toBe(1);
-    const pending = await store.read((tx) => tx.pending());
+    const pending = work(await store.read((tx) => tx.pending()));
     expect(pending.every((e) => e.destination.kind === 'bound')).toBe(true);
     expect(pending.every((e) => e.operation === 'import')).toBe(true);
     expect(pending.map((e) => e.entityType).sort()).toEqual(['chat', 'message', 'message', 'usage']);
@@ -157,7 +160,8 @@ describe('sync on enable — the chat history goes to the account once', () => {
     const chatImport = pending.find((e) => e.entityType === 'chat')!;
     expect((await sent(store, chatImport) as { chat: { title: string } }).chat.title).toBe('Renamed offline');
     // Every message and usage import waits on the chat's.
-    for (const event of pending.filter((e) => e.entityType !== 'chat')) expect(event.dependsOn).toEqual([chatImport.idempotencyKey]);
+    // (Besides the record-payload fence every queued import carries for older builds.)
+    for (const event of pending.filter((e) => e.entityType !== 'chat')) expect(event.dependsOn).toEqual([chatImport.idempotencyKey, RECORD_PAYLOAD_FENCE_KEY]);
   });
 
   it('a chat bound by sign-in imports naming its server chat, so the server adopts it', async () => {
@@ -251,7 +255,7 @@ describe('unbound journalWrite — no full-payload copy while unbound', () => {
       await journalWrite(tx, record, 'create', { key: 'chat:bind-1' });
     });
     expect(await bindChatHistoryForSync(store, DEVICE, ACCOUNT)).toBe(1);
-    const [importEvent] = await store.read((tx) => tx.pending());
+    const [importEvent] = work(await store.read((tx) => tx.pending()));
     expect(importEvent?.operation).toBe('import');
     expect(importEvent?.destination).toEqual(ACCOUNT);
     // The authoritative send path rebuilt the payload from the record, not the marker.

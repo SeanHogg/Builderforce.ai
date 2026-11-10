@@ -60,15 +60,20 @@ export interface EventMigrationPorts {
 /** Migrate the backlog if this store never ran it. Returns the plan that was committed, or undefined. */
 export async function migrateEventBacklog(ports: EventMigrationPorts): Promise<EventBacklogMigrationPlan | undefined> {
   const journalFile = ports.journalFile;
-  // Lock-free first: a migrated store (the usual open) never takes the lock.
+  // Lock-free first: a migrated store, or one with nothing to migrate (the usual open), never
+  // takes the lock and writes nothing — the flag is recorded only with a migration that changed
+  // something, so a store with no backlog is planned again (a cheap filter) and never touched.
   if (eventBacklogMigrated(ports.view()) || await exists(`${journalFile}${MIGRATION_DISABLED_SUFFIX}`)) {
     await retireBackup(journalFile, ports.view(), ports.now?.() ?? Date.now());
     return undefined;
   }
+  const probe = planEventBacklogMigration(ports.view());
+  if (probe.stripped + probe.dropped === 0) return undefined;
   return ports.locked(async () => {
     if (eventBacklogMigrated(ports.view())) return undefined;
     const plan = planEventBacklogMigration(ports.view());
     const changes = plan.stripped + plan.dropped > 0;
+    if (!changes) return undefined;
     // The FIRST pre-migration state is the one worth keeping: a resumed migration keeps it.
     if (changes && !(await exists(`${journalFile}${PRE_MIGRATION_SUFFIX}`))) {
       await copyDurably(journalFile, journalFile, `${journalFile}${PRE_MIGRATION_SUFFIX}`);

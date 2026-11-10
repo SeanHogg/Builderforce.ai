@@ -155,7 +155,8 @@ describe('planEventBacklogMigration', () => {
       receipts: [],
       nextSequence: 9,
     }, { newId: () => 'fence-1', at: 'now' });
-    expect(plan).toMatchObject({ stripped: 1, dropped: 1, kept: 3, markedEventIds: ['fresh'] });
+    // Held and materialized imports are not candidates at all; the stale one is kept.
+    expect(plan).toMatchObject({ stripped: 1, dropped: 1, kept: 1, markedEventIds: ['fresh'] });
     expect(plan.deltas).toEqual([
       { acknowledgedEvents: ['gone'] },
       { events: [expect.objectContaining({ eventId: 'fence-1', idempotencyKey: RECORD_PAYLOAD_FENCE_KEY, localSequence: 9, deadLetter: expect.anything() })], nextSequence: 10 },

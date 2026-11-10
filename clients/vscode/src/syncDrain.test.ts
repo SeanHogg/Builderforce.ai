@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { drainSync, type DrainRateLimit } from "./syncDrain";
+import { DRAIN_PULL_EVERY_MS, drainSync, type DrainRateLimit } from "./syncDrain";
 
 /** A partition of `total` events, `batch` accepted per round; records whether each round pulled. */
 function partition(total: number, batch: number) {
@@ -24,7 +24,7 @@ describe("drainSync", () => {
   it("keeps pushing batches until the destination has nothing pending — pulling once at each end", async () => {
     const p = partition(250, 100);
     const result = await drainSync(p.ports);
-    expect(result).toEqual({ rounds: 3, more: false });
+    expect(result).toMatchObject({ rounds: 3, more: false });
     expect(await p.ports.pending()).toBe(0);
     // The first round pulls, the pushes in between do not, one closing pull reads back the rest.
     expect(p.pulls).toEqual([true, false, false, true]);
@@ -32,7 +32,7 @@ describe("drainSync", () => {
 
   it("runs a single round when one batch covers everything", async () => {
     const p = partition(5, 100);
-    expect(await drainSync(p.ports)).toEqual({ rounds: 1, more: false });
+    expect(await drainSync(p.ports)).toMatchObject({ rounds: 1, more: false });
     expect(p.pulls).toEqual([true]);
   });
 
@@ -47,7 +47,7 @@ describe("drainSync", () => {
       round: async () => { rounds += 1; return { pushed: 0, duplicates: 0 }; },
       pending: async () => 4,
     });
-    expect(result).toEqual({ rounds: 1, more: false });
+    expect(result).toMatchObject({ rounds: 1, more: false });
     expect(rounds).toBe(1);
   });
 
@@ -65,7 +65,8 @@ describe("drainSync", () => {
     const p = partition(10_000, 100);
     const round = p.ports.round;
     const result = await drainSync({ ...p.ports, round: async (o) => { clock += 1_000; return round(o); } }, { maxMs: 5_000, now: () => clock });
-    expect(result).toEqual({ rounds: 5, more: true });
+    expect(result).toMatchObject({ rounds: 5, more: true });
+    expect(result.resumeAfterMs).toBeUndefined();
   });
 
   it("leaves the reserve of the tenant's request bucket to the person, resuming at its reset", async () => {
@@ -82,19 +83,38 @@ describe("drainSync", () => {
       rateLimit: () => limit,
     }, { now: () => 10_000 });
     // 299 → 249 → 199 → 149 (< 150, half of 300): stop after the third round.
-    expect(result).toEqual({ rounds: 3, more: true, resumeAfterMs: 60_000 });
+    expect(result).toMatchObject({ rounds: 3, more: true, resumeAfterMs: 60_000 });
   });
 
-  it("a pass that continues a drain does not pull first, and still closes with one pull", async () => {
+  it("a pass that continues a drain does not pull first (a recent pull), and still closes with one pull", async () => {
     const p = partition(250, 100);
-    expect(await drainSync(p.ports, { pullFirst: false })).toEqual({ rounds: 3, more: false });
+    expect(await drainSync(p.ports, { pullFirst: false, lastPullAt: Date.now() })).toMatchObject({ rounds: 3, more: false });
     expect(p.pulls).toEqual([false, false, false, true]);
+  });
+
+  it("a long drain still pulls every DRAIN_PULL_EVERY_MS, across continuing passes", async () => {
+    let clock = 0;
+    const p = partition(100_000, 100);
+    const round = p.ports.round;
+    const ports = { ...p.ports, round: async (o: { pull: boolean }) => { clock += 60_000; return round(o); } };
+    // A continuing pass whose drain last pulled 4 minutes ago: it pulls one minute in.
+    const result = await drainSync(ports, { pullFirst: false, lastPullAt: -4 * 60_000, now: () => clock, maxMs: 11 * 60_000 });
+    // Round 2 starts 5 minutes after that pull; the next pull comes 5 minutes after round 2's.
+    expect(p.pulls.slice(0, 8)).toEqual([false, true, false, false, false, false, false, true]);
+    expect(result.lastPullAt).toBe(8 * 60_000);
+    expect(DRAIN_PULL_EVERY_MS).toBe(5 * 60_000);
+  });
+
+  it("a continuing pass with no pull on record pulls first", async () => {
+    const p = partition(150, 100);
+    await drainSync(p.ports, { pullFirst: false });
+    expect(p.pulls[0]).toBe(true);
   });
 
   it("a nearly spent sliding window still pauses long enough for a burst", async () => {
     const p = partition(10_000, 100);
     const result = await drainSync({ ...p.ports, rateLimit: () => ({ limit: 300, remaining: 10, resetAt: new Date(10_500).toISOString() }) }, { now: () => 10_000 });
-    expect(result).toEqual({ rounds: 1, more: true, resumeAfterMs: 10_000 });
+    expect(result).toMatchObject({ rounds: 1, more: true, resumeAfterMs: 10_000 });
   });
 
   it("stops on a 429 and reports the server's Retry-After", async () => {
@@ -105,6 +125,23 @@ describe("drainSync", () => {
     expect(result).toEqual({ rounds: 0, more: true, resumeAfterMs: 12_000 });
   });
 
+  it("stops before the next round once cancelled (the host is shutting down)", async () => {
+    const p = partition(10_000, 100);
+    let cancelled = false;
+    const round = p.ports.round;
+    const result = await drainSync({
+      ...p.ports,
+      round: async (o) => {
+        const summary = await round(o);
+        if (p.rounds() === 2) cancelled = true;
+        return summary;
+      },
+      cancelled: () => cancelled,
+    });
+    expect(result).toMatchObject({ rounds: 2, more: false });
+    expect(p.rounds()).toBe(2);
+  });
+
   it("any other failure still throws", async () => {
     await expect(drainSync({
       round: async () => { throw Object.assign(new Error("boom"), { status: 500 }); },
@@ -113,6 +150,6 @@ describe("drainSync", () => {
   });
 
   it("stops when the lease is held elsewhere", async () => {
-    expect(await drainSync({ round: async () => undefined, pending: async () => 9 })).toEqual({ rounds: 1, more: false });
+    expect(await drainSync({ round: async () => undefined, pending: async () => 9 })).toMatchObject({ rounds: 1, more: false });
   });
 });

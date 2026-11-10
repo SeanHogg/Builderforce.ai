@@ -10,6 +10,14 @@ import type { EntityDestination, ProjectValue, TicketValue } from './records.js'
 import { createMemoryLocalFirstStore, newLocalRecord, type LocalFirstStore } from './store.js';
 import { importKey, queueImport } from './journalRules.js';
 import { bindWorkForSync } from './workBinding.js';
+import { RECORD_PAYLOAD_FENCE_KEY, isRecordPayloadFence } from './recordPayloadMarker.js';
+import { sendablePayload } from './syncRound.js';
+import type { JournalEvent } from './records.js';
+
+/** The queued work (not the partition's record-payload fence, which only holds older builds off markers). */
+const work = (events: readonly JournalEvent[]): JournalEvent[] => events.filter((event) => !isRecordPayloadFence(event));
+/** What an event waits on, the fence aside. */
+const dependsOn = (event: JournalEvent): string[] => event.dependsOn.filter((dependency) => dependency !== RECORD_PAYLOAD_FENCE_KEY);
 
 const ACCOUNT: EntityDestination = { kind: 'bound', platformInstance: 'https://builderforce.ai', tenantId: '7' };
 const DEVICE = 'device-1';
@@ -63,20 +71,19 @@ describe('bindWorkForSync', () => {
 
     expect(await bindWorkForSync(store, DEVICE, ACCOUNT)).toBe(3);
 
-    const pending = await store.read((tx) => tx.pending());
+    const pending = work(await store.read((tx) => tx.pending()));
     expect(pending.every((event) => event.destination.kind === 'bound' && event.operation === 'import')).toBe(true);
     const byId = new Map(pending.map((event) => [event.clientEntityId, event]));
     const chatImport = pending.find((event) => event.entityType === 'chat')!;
     const project = byId.get(PROJECT)!;
     const epic = byId.get(EPIC)!;
     const task = byId.get(TASK)!;
-    expect(project.dependsOn).toEqual([]);
-    expect(epic.dependsOn).toEqual([chatImport.idempotencyKey, project.idempotencyKey]);
-    expect(task.dependsOn).toEqual([chatImport.idempotencyKey, project.idempotencyKey, epic.idempotencyKey]);
-    // The import is the ticket's current state, read from the record when it is sent (a
-    // record-payload marker), including what sync turns into the chat link.
-    expect(epic).toMatchObject({ payloadFrom: 'record', payload: null });
-    expect((await store.read((tx) => tx.get('ticket', EPIC)))!.payload).toMatchObject({ taskType: 'epic', chatClientId });
+    expect(dependsOn(project)).toEqual([]);
+    expect(dependsOn(epic)).toEqual([chatImport.idempotencyKey, project.idempotencyKey]);
+    expect(dependsOn(task)).toEqual([chatImport.idempotencyKey, project.idempotencyKey, epic.idempotencyKey]);
+    // The import carries the ticket's current state — read from the record when it is sent —
+    // including what sync turns into the chat link.
+    expect(await store.read((tx) => sendablePayload(tx, epic))).toMatchObject({ taskType: 'epic', chatClientId });
     // Queue order is dependency order: project, then the parent, then its child.
     const order = pending.filter((event) => event.entityType !== 'chat').map((event) => event.clientEntityId);
     expect(order).toEqual([PROJECT, EPIC, TASK]);
@@ -92,9 +99,10 @@ describe('bindWorkForSync', () => {
       }));
     });
     expect(await bindWorkForSync(store, DEVICE, ACCOUNT)).toBe(1);
-    const pending = await store.read((tx) => tx.pending());
+    const pending = work(await store.read((tx) => tx.pending()));
     expect(pending).toHaveLength(1);
-    expect(pending[0]).toMatchObject({ entityType: 'ticket', operation: 'import', dependsOn: [] });
+    expect(pending[0]).toMatchObject({ entityType: 'ticket', operation: 'import' });
+    expect(dependsOn(pending[0]!)).toEqual([]);
     expect(importKey('ticket', TASK)).toBe(pending[0]!.idempotencyKey);
   });
 
