@@ -173,17 +173,27 @@ describe('applyKnowledgePack', () => {
     expect(w.puts).toEqual(['bundle', `snapshot:${ROOT}:abcdef12`]);
   });
 
-  it('writes what the review was measured with (stated beside the pack) onto the scope it records (PRD 41 §C9)', async () => {
+  it('writes what the review was measured with — read from the pack\'s own scope — onto the scope it records (PRD 41 §C9)', async () => {
     const scopes: unknown[] = [];
     const tx = atomically(w);
     const spying = (<T>(work: (unit: Parameters<Parameters<typeof tx>[0]>[0]) => Promise<T>) => tx((unit) => {
       unit.store.upsertScope = async (s) => { scopes.push(s); };
       return work(unit);
     })) as ApplyDeps['atomically'];
-    const pack = { ...packOf(rowsFor(3)), scope: { rootId: ROOT, title: 't', packs: ['code'], lastDigest: 'abcdef12' } };
     const measured = { extractorVersion: '5', toolVersions: { knip: '5.30.0' } };
-    await applyKnowledgePack(deps({ atomically: spying }), { body: await encodePack(pack), measured });
-    expect(scopes).toEqual([expect.objectContaining({ rootId: ROOT, lastDigest: 'abcdef12', ...measured })]);
+    const pack = { ...packOf(rowsFor(3)), scope: { rootId: ROOT, title: 't', packs: ['code'], lastDigest: 'abcdef12', measured } };
+    await applyKnowledgePack(deps({ atomically: spying }), { body: await encodePack(pack) });
+    expect(scopes).toEqual([expect.objectContaining({ rootId: ROOT, lastDigest: 'abcdef12', measured })]);
+  });
+
+  it.each([
+    ['an extractor version over 64 characters', { extractorVersion: 'x'.repeat(65), toolVersions: {} }],
+    ['more than 32 tools', { extractorVersion: '5', toolVersions: Object.fromEntries(Array.from({ length: 33 }, (_, i) => [`t${i}`, '1'])) }],
+    ['an empty tool version', { extractorVersion: '5', toolVersions: { knip: '' } }],
+  ])('refuses a pack whose scope states %s with 422 bad_pack, before anything is written', async (_case, measured) => {
+    const pack = { ...packOf(rowsFor(2)), scope: { rootId: ROOT, title: 't', packs: ['code'], lastDigest: 'abcdef12', measured } };
+    await expect(apply(pack)).rejects.toMatchObject({ status: 422, code: 'bad_pack' });
+    expect(w.roots.size).toBe(0);
   });
 
   it('answers 413 for an oversized analysis BEFORE the transaction: nothing is written', async () => {

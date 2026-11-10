@@ -5,6 +5,7 @@
 
 import type { KnowledgePack, ReviewArgs } from '@seanhogg/builderforce-memory/knowledge';
 import { defaultJudgementTimeoutMs, judgementWithTimeout } from './judgement.js';
+import { knowledgeMeasuredWith } from './measuredWith.js';
 import type { KnowledgeReviewOptions, KnowledgeReviewPorts } from './reviewRunner.js';
 
 export function directoryArgs(
@@ -17,6 +18,9 @@ export function directoryArgs(
         store: ports.store,
         packs,
         manifest: ports.manifest,
+        // What this review is measured with, NOW (PRD 41 §C9): memory stamps it on the scope with the review's digest, and the
+        // pack carries that record — never the versions of whichever host syncs it later.
+        measured: knowledgeMeasuredWith(packs.map((p) => p.id), { analyzers: !!ports.analyzers }),
         // A per-request timeout so a stalled engine cannot hang the whole review at `judge`:
         // the affected sections stay unjudged and a later run judges them again. The wrapper
         // lives here (not in memory's `reviewDirectory`), so the ONE review pipeline is unchanged.

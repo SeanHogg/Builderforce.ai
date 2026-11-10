@@ -11,6 +11,7 @@ import type {
   JudgementResult,
   KnowledgeGraph,
   KnowledgeStore,
+  MeasuredWith,
   ScopeRecord,
   StoredFact,
   StoredRelation,
@@ -79,14 +80,11 @@ export interface KnowledgeScopeRecord extends ScopeRecord {
   provenance?: PackScopeProvenance;
   previousDigest?: string;
   /**
-   * What the review at `lastDigest` / `previousDigest` was measured with (PRD 41 §C9): the extractor version and the
-   * analyzer versions. Absent when the platform holds no record — a review stored before it recorded them — which a
+   * What the review at `previousDigest` was measured with (PRD 41 §C9; the review at `lastDigest` is memory's
+   * `ScopeRecord.measured`). Absent when the platform holds no record — a review stored before it recorded them — which a
    * comparison reads as unknown, never as equal.
    */
-  extractorVersion?: string;
-  toolVersions?: Record<string, string>;
-  previousExtractorVersion?: string;
-  previousToolVersions?: Record<string, string>;
+  previousMeasured?: MeasuredWith;
   /** `pack` = an uploaded portable knowledge pack, `review` = a reviewed folder. Computed by
    *  the server from the root id (`isPackRootId`); absent from an older server (= `review`). */
   kind?: 'pack' | 'review';
@@ -166,14 +164,11 @@ export class KnowledgeApiError extends Error {
 /** A body entry the have-check asks about: the content hash and the source whose entry the stored body must hold. */
 export interface SyncHavePair { hash: string; sourceRef: string }
 
-/** What the review a pack records was measured with (PRD 41 §C9); agent-tools `knowledgeMeasuredWith` produces it. */
-export interface SyncMeasured { extractorVersion: string; toolVersions: Record<string, string> }
-
 /**
- * One request of a sync: the pack's bytes, or one ordered part of them. `measured` goes with a pack whose scope records a
- * review digest (the pack's scope section has no field for it); the server stores it on the root's scope.
+ * One request of a sync: the pack's bytes, or one ordered part of them. What the review was measured with rides IN the
+ * pack (its scope's `measured`, BFKP MEAS section, PRD 41 §C9) — never beside it.
  */
-export interface SyncPart { bytes: Uint8Array; syncId?: string; part?: number; parts?: number; measured?: SyncMeasured }
+export interface SyncPart { bytes: Uint8Array; syncId?: string; part?: number; parts?: number }
 
 /** The server's answer to a pack (or to a part that is not the last). */
 export type SyncAck =

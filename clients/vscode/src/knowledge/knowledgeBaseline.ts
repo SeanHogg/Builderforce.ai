@@ -1,55 +1,28 @@
 /**
- * Compare's "before" in the editor (PRD 41 §C9): the platform's previous review of a root, marked
- * `comparable` by memory's ONE `comparable()` — the same rules the web analysis compare and the run
- * delta use. A side not comparable shows its findings as "present now", never as resolved.
+ * Compare's "before" in the editor (PRD 41 §C9): the platform's previous review of a root, judged by agent-tools
+ * `knowledgeComparability` — memory's ONE `comparable()`, the same rule the web baseline applies. A side not
+ * comparable shows its findings as "present now", never as resolved, and the view shows WHY (`reasons`).
  *
- * The meta of each side is what it can state for itself:
- *   - the packs that measured it (`tools`: a pack measured on one side only is `tool-missing:<pack>`,
- *     so its findings never read as fixed), from the stored graph's `scope.packs` and the packs this
- *     editor reviews with;
- *   - the analyzer versions (also `tools`, name → version) and the extractor version: the platform's
- *     as stored with that review (`previousToolVersions` / `previousExtractorVersion` of the root's
- *     scope), this editor's from agent-tools `knowledgeMeasuredWith` — the same values its uploads state;
- *   - the content-hash rule (`contentHashRule`): this editor's `CONTENT_HASH_RULE`; a stored graph
- *     records none, which memory reads as the baseline rule;
- *   - the root (`scope`).
- *
- * A review the platform stored before it recorded versions states none. That is an UNKNOWN, and C9
- * never presents an unknown producer as the same one ("missing analyzer output must never be presented
- * as a fix"): memory's `comparable()` compares an absent field equal only to an absent one, so such a
- * baseline is `extractor-version-changed` / `tool-missing:<tool>` — not comparable — until the root is
- * reviewed again.
+ * Each side states what ITS review recorded when it ran (`ScopeRecord.measured`), never this host's versions now:
+ *   - before: the stored graph's packs and the platform's `previousMeasured` for that review;
+ *   - after: the shown graph's review — this machine's local scope when the root is here (hashed by this editor's
+ *     `CONTENT_HASH_RULE`), else the platform's latest scope.
+ * A review that recorded none (stored before versions were recorded) is UNKNOWN, never "the same".
  */
 
-import { comparable, CONTENT_HASH_RULE, type ComparabilityMeta, type KnowledgeGraph } from "@seanhogg/builderforce-memory/knowledge";
-import { knowledgeMeasuredWith } from "@builderforce/agent-tools/knowledge";
+import { CONTENT_HASH_RULE, type ComparabilityReason, type KnowledgeGraph, type MeasuredWith } from "@seanhogg/builderforce-memory/knowledge";
+import { knowledgeComparability } from "@builderforce/agent-tools/knowledge";
 
-/** What a review was measured with, as far as it is known (absent = unknown). */
-export interface MeasuredWith {
-  extractorVersion?: string;
-  toolVersions?: Readonly<Record<string, string>>;
-}
+/** The after side: its root, packs, what its review recorded, and whether this editor hashed it (`local`). */
+export interface BaselineAfter { rootId: string; packs: readonly string[]; measured: MeasuredWith | undefined; local: boolean }
 
-/** A side's meta from its packs, its root, its content-hash rule (absent ⇒ memory's baseline rule) and what it was measured with. */
-export function knowledgeSideMeta(side: { rootId: string; packs: readonly string[]; contentHashRule?: string } & MeasuredWith): ComparabilityMeta {
-  return {
-    scope: side.rootId,
-    tools: { ...Object.fromEntries([...new Set(side.packs)].map((pack) => [pack, ""])), ...side.toolVersions },
-    ...(side.extractorVersion !== undefined ? { extractorVersion: side.extractorVersion } : {}),
-    ...(side.contentHashRule ? { contentHashRule: side.contentHashRule } : {}),
-  };
-}
-
-/**
- * The baseline the view compares against: the stored graph, comparable exactly when memory's `comparable()` finds no
- * reason. `measured` is what the platform stored for that review (absent fields = unknown).
- */
+/** The baseline the view compares against, with memory's verdict and its reasons. */
 export function knowledgeBaseline(
-  before: KnowledgeGraph, measured: MeasuredWith, after: { rootId: string; packs: readonly string[] },
-): { graph: KnowledgeGraph; comparable: boolean } {
-  const verdict = comparable(
-    knowledgeSideMeta({ rootId: before.scope.rootId, packs: before.scope.packs, ...measured }),
-    knowledgeSideMeta({ ...after, ...knowledgeMeasuredWith(after.packs), contentHashRule: CONTENT_HASH_RULE }),
+  before: KnowledgeGraph, measured: MeasuredWith | undefined, after: BaselineAfter,
+): { graph: KnowledgeGraph; comparable: boolean; reasons: ComparabilityReason[] } {
+  const verdict = knowledgeComparability(
+    { rootId: before.scope.rootId, packs: before.scope.packs, measured },
+    { rootId: after.rootId, packs: after.packs, measured: after.measured, ...(after.local ? { contentHashRule: CONTENT_HASH_RULE } : {}) },
   );
-  return { graph: before, comparable: verdict.comparable };
+  return { graph: before, comparable: verdict.comparable, reasons: verdict.reasons };
 }

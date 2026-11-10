@@ -60,10 +60,6 @@ export function createSyncClient(base: string, doFetch: (url: string, init?: Req
       if (part.syncId) q.set('syncId', part.syncId);
       if (part.part !== undefined) q.set('part', String(part.part));
       if (part.parts !== undefined) q.set('parts', String(part.parts));
-      if (part.measured) {
-        q.set('extractorVersion', part.measured.extractorVersion);
-        q.set('toolVersions', JSON.stringify(part.measured.toolVersions));
-      }
       const query = q.size > 0 ? `?${q.toString()}` : '';
       const res = await call(`/knowledge/sync${query}`, { method: 'POST', headers: { 'Content-Type': KPACK_CONTENT_TYPE }, body: part.bytes as unknown as BodyInit });
       const body = (await res.json()) as { applied?: boolean; reconcile?: boolean; generation?: number; digest?: string; received?: number; parts?: number };

@@ -33,14 +33,13 @@ import type { KnowledgeStore, StoredFact, StoredRelation } from '@seanhogg/build
 import { MAX_PART_BYTES, splitParts } from '@seanhogg/builderforce-memory/knowledge/pack';
 import { buildPack, type PackQueries, type ReplicaSource } from './replicaPack.js';
 import type { ReplicaQueue } from './replicaQueue.js';
-import type { KnowledgeMeasuredWith } from './measuredWith.js';
 import { generationCheckDue, readServerGeneration, type GenerationReader } from './replicaGenerationCheck.js';
 export { GENERATION_CHECK_INTERVAL_MS } from './replicaGenerationCheck.js';
 import { planReconcile, type ReconcileQueries } from './replicaReconcile.js';
 
 /** The knowledge client's sync calls the pump uses (a `KnowledgeClient` satisfies it structurally). */
 export interface ReplicaClient extends PackQueries, ReconcileQueries, Partial<Pick<GenerationReader, 'syncGeneration'>> {
-    sync(rootId: string, part: { bytes: Uint8Array; syncId?: string; part?: number; parts?: number; measured?: KnowledgeMeasuredWith }): Promise<
+    sync(rootId: string, part: { bytes: Uint8Array; syncId?: string; part?: number; parts?: number }): Promise<
         { applied: true; generation: number; digest: string; reconcile?: true } | { applied: false; received: number; parts: number }>;
     /** The existing single writer (≤ 500 rows): the path for rows a pack does not carry. */
     writeRows(rootId: string, rows: { facts: readonly StoredFact[]; relations: readonly StoredRelation[] }): Promise<void>;
@@ -313,9 +312,7 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
                     await emit();
                     // A stalled host whose lock may already be another's sends nothing more: the other host pumps this queue now.
                     if (args.lockHeld && !args.lockHeld()) throw new Stop();
-                    ack = await guarded.sync(rootId, {
-                        bytes: parts[i]!, ...(syncId ? { syncId, part: i, parts: parts.length } : {}), ...(built.measured ? { measured: built.measured } : {}),
-                    });
+                    ack = await guarded.sync(rootId, { bytes: parts[i]!, ...(syncId ? { syncId, part: i, parts: parts.length } : {}) });
                 }
                 state.parts = { sent: parts.length, total: parts.length };
                 if (!ack || !ack.applied) throw new Error('the server did not apply the pack');

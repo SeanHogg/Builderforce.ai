@@ -12,7 +12,7 @@
  * the route's door + `projectInTenantCached`, before a port exists.
  */
 import type {
-  Extracted, NodeRef, ScopeRecord, StoredFact, StoredRelation,
+  Extracted, MeasuredWith, NodeRef, ScopeRecord, StoredFact, StoredRelation,
 } from '@seanhogg/builderforce-memory/knowledge';
 import type { SerializedRepoGraphShape } from '@builderforce/agent-tools';
 
@@ -30,24 +30,18 @@ export interface ScopeProvenance {
 }
 
 /**
- * What a review was measured with (PRD 41 §C9): the extractor version and analyzer name → version, as the uploading
- * client states them. Stored only with a write that records a review digest; absent = unknown.
+ * What a scope write carries: memory's record — its `measured` (PRD 41 §C9) is what the review at `lastDigest` was measured
+ * with, recorded when that review ran and carried by the pack; stored only with a digest, absent = unknown — plus an
+ * uploaded pack's provenance (kept for pack roots only).
  */
-export interface ScopeMeasuredWith {
-  extractorVersion?: string;
-  toolVersions?: Record<string, string>;
-}
+export type KnowledgeScopeWrite = ScopeRecord & { provenance?: ScopeProvenance };
 
-/** What a scope write carries: memory's record plus an uploaded pack's provenance (kept for pack roots only) and what the review was measured with. */
-export type KnowledgeScopeWrite = ScopeRecord & ScopeMeasuredWith & { provenance?: ScopeProvenance };
-
-export interface KnowledgeScope extends ScopeRecord, ScopeMeasuredWith {
+export interface KnowledgeScope extends ScopeRecord {
   /** An uploaded pack's provenance (PRD 40, OD-3); absent on a reviewed root. */
   provenance?: ScopeProvenance;
   previousDigest?: string;
   /** What the review at `previousDigest` was measured with (it moves with the digest); absent = unknown. */
-  previousExtractorVersion?: string;
-  previousToolVersions?: Record<string, string>;
+  previousMeasured?: MeasuredWith;
 }
 
 export interface KnowledgeStorePort {

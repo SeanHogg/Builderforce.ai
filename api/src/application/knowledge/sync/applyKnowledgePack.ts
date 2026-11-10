@@ -34,7 +34,7 @@ import { srcRef } from '@seanhogg/builderforce-memory/knowledge';
 import { isPackRootId } from '@builderforce/agent-tools';
 import { inTransaction, type Db } from '../../../infrastructure/database/connection';
 import type { Env } from '../../../env';
-import type { ExtractedCachePort, KnowledgeStorePort, ScopeMeasuredWith } from '../knowledgePorts';
+import type { ExtractedCachePort, KnowledgeStorePort } from '../knowledgePorts';
 import { KNOWLEDGE_HASH_PATTERN, MAX_ANALYSIS_SNAPSHOT_BYTES, putAnalysisSnapshot } from '../knowledgePerception';
 import { reportedFallback } from '../../observability/caughtErrorReporter';
 import { bumpKnowledgeVersion } from '../knowledgeVersion';
@@ -83,11 +83,6 @@ export interface ApplyInput {
   syncId?: string;
   part?: number;
   parts?: number;
-  /**
-   * What the review this pack records was measured with (PRD 41 §C9), stated beside the pack (its scope section has no
-   * field for it). Stored on the root's scope only with a scope that records a review digest.
-   */
-  measured?: ScopeMeasuredWith;
 }
 
 /** A tombstone whose leaf was removed but whose row was kept, and why. */
@@ -265,7 +260,7 @@ export async function applyKnowledgePack(deps: ApplyDeps, input: ApplyInput): Pr
       await unit.ledger.sources.upsert(root, plan.upsert);
       await unit.ledger.sources.mark(root, plan.remove);
       if (plan.stale.length > 0) await unit.store.markRelationsStaleMany(plan.stale);
-      const written = await writeRows(deps, unit, pack, input.measured);
+      const written = await writeRows(deps, unit, pack);
       // The digest of THIS ROOT'S leaves, from the stored bucket digests with only the touched buckets recomputed.
       const committed = await commitLeaves(unit.ledger, root, {
         leaves: leavesOf(pack), touched: [...tomb.keys, ...legacy.leafKeys], base: head.baseGeneration,

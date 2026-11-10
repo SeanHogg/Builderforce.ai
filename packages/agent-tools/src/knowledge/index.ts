@@ -50,7 +50,7 @@ export {
 export { replicatedKnowledgeStore, type ReadThrough, type ReplicaTarget, type ReplicatedStoreArgs } from './replicatedStore.js';
 export { GENERATION_CHECK_INTERVAL_MS, emptyReplicaState, pumpReplica, type PumpArgs, type ReplicaClient, type ReplicaFailure, type ReplicaPackStats, type ReplicaState } from './replicaPump.js';
 export { buildPack, DIFF_MAX_FILES, type BuiltPack, type ReplicaSource, type SkippedRow } from './replicaPack.js';
-export { knowledgeMeasuredWith, type KnowledgeMeasuredWith } from './measuredWith.js';
+export { knowledgeComparability, knowledgeMeasuredWith, knowledgeSideMeta, MEASURED_UNKNOWN, PACK_TOOL_PREFIX, type KnowledgeSide } from './measuredWith.js';
 export { hasControlChar, isCleanKey, isCleanText, isWellFormedString } from './packKeyGuard.js';
 export { planReconcile, type ReconcilePlan } from './replicaReconcile.js';
 export { currentSourcesOf, enqueueFirstSync, enqueueSources, type FirstSyncCounts } from './replicaFirstSync.js';

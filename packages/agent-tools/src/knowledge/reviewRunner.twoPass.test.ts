@@ -27,6 +27,18 @@ describe('the two-pass review (PRD 41 A10)', () => {
         expect(next.awaitingJudge).toEqual([]);
     });
 
+    it('the judge pass restates what the map pass recorded it was measured with — never "no analyzers" (PRD 41 §C9)', async () => {
+        const p = ports(countingJudgement());
+        // Pass 1 ran the analyzers: its digest write records them (the judge pass runs without the analyzer port).
+        const mapPass = { extractorVersion: '6', toolVersions: { knip: '5.30.0' } };
+        const write = p.store.write.bind(p.store);
+        let digestWrites = 0;
+        p.store.write = (batch) => write(batch.scope.lastDigest && digestWrites++ === 0 ? { ...batch, scope: { ...batch.scope, measured: mapPass } } : batch);
+        await runKnowledgeReview(p, { judgeFiles: 1 });
+        expect(digestWrites).toBeGreaterThan(1); // the judge pass wrote its own digest too
+        expect((await p.store.scopes())[0]!.measured).toEqual(mapPass);
+    });
+
     it('a budget of 0 leaves a complete map and every judged file owed', async () => {
         const judge = countingJudgement();
         const report = await runKnowledgeReview(ports(judge), { judgeFiles: 0 });

@@ -280,6 +280,8 @@ export interface KnowledgeBaseline {
      * resolved. Default true.
      */
     comparable?: boolean;
+    /** Why not (memory's `comparable()` reason codes, PRD 41 §C9): Compare shows each, localized. */
+    reasons?: readonly string[];
 }
 
 export interface KnowledgeSnapshot {

@@ -13,6 +13,7 @@ import type { KnowledgeGraphLabels } from './labels';
 import { compareGraphs, nodeIndex } from './graphModel';
 import { findingItems, findingTitle } from './findingText';
 import { EvidenceList } from './EvidenceList';
+import { compareReasonText, reviewAgainFixes } from './compareReasons';
 import { cssVar } from './scene/themeColors';
 import { card, heading, list, muted } from './styles';
 import type { EvidenceSide, FindingEvidence, KnowledgeBaseline, SourceLocation } from './types';
@@ -29,13 +30,24 @@ export function ComparePanel({ before, after, labels, evidence, onOpenSource }: 
     const cmp = useMemo(() => (before ? compareGraphs(before.graph, after) : null), [before, after]);
     if (!before || !cmp) return <p style={muted}>{labels.compareEmpty}</p>;
     const comparable = before.comparable !== false;
+    const reasons = before.reasons ?? [];
     const cell = { padding: '6px 8px', borderBottom: `1px solid ${cssVar('border')}`, textAlign: 'end' as const };
     const verdict = (b: number, a: number) =>
         a < b ? { text: labels.compareBetter, tone: cssVar('agrees') } : a > b ? { text: labels.compareWorse, tone: cssVar('violation') } : { text: labels.compareSame, tone: cssVar('muted') };
     return (
         <section aria-label={labels.compareTitle} style={{ display: 'grid', gap: 8 }}>
             <h3 style={heading}>{labels.compareTitle}</h3>
-            {!comparable && <p role="status" style={{ ...muted, margin: 0 }}>{labels.compareIncomparable}</p>}
+            {!comparable && (
+                <div role="status" style={{ ...muted, margin: 0, display: 'grid', gap: 4 }}>
+                    <p style={{ margin: 0 }}>{labels.compareIncomparable}</p>
+                    {reasons.length > 0 && (
+                        <ul style={{ margin: 0, paddingInlineStart: 16, display: 'grid', gap: 2 }}>
+                            {reasons.map((code) => <li key={code} data-reason={code}>{compareReasonText(labels, code)}</li>)}
+                        </ul>
+                    )}
+                    {reviewAgainFixes(reasons) && <p style={{ margin: 0, fontWeight: 600 }}>{labels.compareReviewAgain}</p>}
+                </div>
+            )}
             <div style={{ overflowX: 'auto' }}>
                 <table style={{ borderCollapse: 'collapse', fontSize: 12, color: cssVar('text'), width: '100%' }}>
                     <thead>

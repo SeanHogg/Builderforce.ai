@@ -124,6 +124,8 @@ async function judgeAll(d: JudgePassDeps, opts: KnowledgeReviewOptions, budget: 
     const only = ordered.slice(0, budget);
     // Judging alone: no analyzers, no coverage / history / owner reads (the map pass did them), only the parsers.
     const { analyzers: _analyzers, history: _history, rootFiles: _rootFiles, ...judgingPorts } = ports;
+    // Judging measures nothing new: each slice's finish restates what the map pass recorded (PRD 41 §C9), never "no analyzers".
+    const recorded = (await ports.store.scopes()).find((s) => s.rootId === mapped.rootId)?.measured;
     let report = mapped;
     for (let at = 0; at < only.length; at += JUDGE_INDEX_EVERY) {
         const slice = only.slice(at, at + JUDGE_INDEX_EVERY);
@@ -136,7 +138,8 @@ async function judgeAll(d: JudgePassDeps, opts: KnowledgeReviewOptions, budget: 
             ...opts, plan,
             ...(opts.onStep ? { onStep: (s: ReviewStep) => { if (s.phase === 'judge') opts.onStep!(s); } } : {}),
         };
-        const judged = await reviewDirectory(d.directoryArgs(judgingPorts, judgeOpts, forward, { only: slice }));
+        const args = d.directoryArgs(judgingPorts, judgeOpts, forward, { only: slice });
+        const judged = await reviewDirectory(recorded ? { ...args, measured: recorded } : args);
         report = mergeReports(report, judged, new Set(slice));
         await d.indexReviewed(ports, mapped.rootId, d.tell); // each judged file is now in the map
         if (judged.aborted || judged.judgeStopped) break;

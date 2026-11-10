@@ -9,7 +9,7 @@
 
 import * as vscode from "vscode";
 import { factKeyOf, type Finding, type KnowledgeGraph, type NodeRef } from "@seanhogg/builderforce-memory/knowledge";
-import { factRightsCache, humanFactBatch, readSystems, reviewPacks, type FactRightsCache } from "@builderforce/agent-tools/knowledge";
+import { factRightsCache, humanFactBatch, readSystems, type FactRightsCache } from "@builderforce/agent-tools/knowledge";
 import { knowledgeBaseline } from "./knowledgeBaseline";
 import { openWorkspace } from "../openWorkspace";
 import { SELECTED_TENANT_KEY } from "../projectState";
@@ -312,19 +312,24 @@ export class KnowledgeBridge implements vscode.Disposable {
     return null;
   }
 
-  /** Compare's "before": the root's previous review on the platform, `comparable` by memory's rules (PRD 41 §C9); none for a local root. */
-  private async baseline(rootId: string): Promise<{ graph: unknown; comparable: boolean } | null> {
+  /**
+   * Compare's "before": the root's previous review on the platform, `comparable` by memory's rules with the `reasons` it is
+   * not (PRD 41 §C9; the view shows them localized); none for a local root.
+   */
+  private async baseline(rootId: string): Promise<{ graph: unknown; comparable: boolean; reasons?: string[] } | null> {
     const client = linkedKnowledgeClient(this.secrets);
     if (!client) return null;
     const scope = (await client.scopes()).find((s) => s.rootId === rootId);
     if (!scope?.previousDigest) return null;
     const graph = await client.graph(rootId, { at: scope.previousDigest });
-    // What the platform stored for THAT review (absent = unknown, which is never comparable).
-    const measured = {
-      ...(scope.previousExtractorVersion !== undefined ? { extractorVersion: scope.previousExtractorVersion } : {}),
-      ...(scope.previousToolVersions !== undefined ? { toolVersions: scope.previousToolVersions } : {}),
-    };
-    return isGraph(graph) ? knowledgeBaseline(graph, measured, { rootId, packs: reviewPacks({}).map((p) => p.id) }) : graph ? { graph, comparable: false } : null;
+    // `previousMeasured`: what the platform stored for THAT review; the after side is what the shown graph's review recorded —
+    // this machine's local scope when the root is here, else the platform's latest (absent = unknown, never comparable).
+    const root = rootById(rootId, workspaceFolders());
+    const local = root ? (await openRoot(this.secrets, root).store.scopes()).find((s) => s.rootId === rootId) : undefined;
+    const after = local
+      ? { rootId, packs: local.packs, measured: local.measured, local: true }
+      : { rootId, packs: scope.packs, measured: scope.measured, local: false };
+    return isGraph(graph) ? knowledgeBaseline(graph, scope.previousMeasured, after) : graph ? { graph, comparable: false } : null;
   }
 
   dispose(): void {

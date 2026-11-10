@@ -13,7 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@seanhogg/builderforce-memory": "^2026.10.72",
+    "@seanhogg/builderforce-memory": "^2026.10.73",
     "@seanhogg/builderforce-memory-engine": "^2026.10.63"
   },
   "devDependencies": {

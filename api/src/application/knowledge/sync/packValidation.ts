@@ -11,11 +11,13 @@
  *   - duplicates: two EXTR bodies for one hash, two files with one source id, two relations with one identity —
  *     a multi-row upsert cannot touch one row twice;
  *   - contradictions: a key both upserted and tombstoned in one pack;
- *   - provenance: a pack carries MODEL rows (human and agent rows travel by their own writers).
+ *   - provenance: a pack carries MODEL rows (human and agent rows travel by their own writers);
+ *   - the scope's `measured` (PRD 41 §C9) within `measuredBounds.ts`.
  */
 import { factLeafKey, fileLeafKey, relationLeafKey, type Pack } from '@seanhogg/builderforce-memory/knowledge/pack';
 import { isCleanKey, isCleanText } from '@builderforce/agent-tools';
 import { KNOWLEDGE_HASH_PATTERN } from '../knowledgePerception';
+import { measuredProblem } from '../measuredBounds';
 import { KnowledgeSyncError } from './knowledgeSyncPorts';
 
 const bad = (message: string): never => { throw new KnowledgeSyncError(422, 'bad_pack', message); };
@@ -68,6 +70,10 @@ export function checkRootId(rootId: string): void {
 
 export function validatePack(pack: Pack): void {
   checkRootId(pack.rootId);
+  // What the review was measured with (PRD 41 §C9) rides in the scope: held to the bound its columns store.
+  const measured = pack.scope?.measured;
+  const problem = measured ? measuredProblem(measured) : undefined;
+  if (problem) bad(problem);
 
   for (const f of pack.files ?? []) {
     id('a file path', f.path, MAX_PATH_BYTES);

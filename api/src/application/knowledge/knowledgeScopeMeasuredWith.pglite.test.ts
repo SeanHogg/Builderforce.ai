@@ -39,8 +39,8 @@ beforeEach(async () => { await pg.exec('DELETE FROM knowledge_scopes'); });
 const ROOT = 'ws:a';
 const V5 = { extractorVersion: '5', toolVersions: { knip: '5.30.0', jscpd: '4.0.5' } };
 const V6 = { extractorVersion: '6', toolVersions: { knip: '5.31.0', jscpd: '4.0.5' } };
-const review = (digest: string | undefined, measured: Partial<typeof V5> = {}) =>
-  store.upsertScope({ rootId: ROOT, title: 'A', packs: ['code'], ...(digest ? { lastDigest: digest } : {}), ...measured });
+const review = (digest: string | undefined, measured?: typeof V5) =>
+  store.upsertScope({ rootId: ROOT, title: 'A', packs: ['code'], ...(digest ? { lastDigest: digest } : {}), ...(measured ? { measured } : {}) });
 
 describe('migration 1343', () => {
   it('re-runs cleanly (expand only, idempotent)', async () => {
@@ -68,40 +68,44 @@ describe('migration 1343', () => {
 describe('scope store: what a review was measured with (PRD 41 §C9)', () => {
   it('round-trips the values written with a review digest', async () => {
     await review('d1', V5);
-    expect(await store.scope(ROOT)).toMatchObject({ lastDigest: 'd1', ...V5 });
-    expect((await store.scopes())[0]).toMatchObject({ lastDigest: 'd1', ...V5 });
+    expect(await store.scope(ROOT)).toMatchObject({ lastDigest: 'd1', measured: V5 });
+    expect((await store.scopes())[0]).toMatchObject({ lastDigest: 'd1', measured: V5 });
   });
 
   it('moves them to previous_* with the digest, so the baseline is judged by ITS review', async () => {
     await review('d1', V5);
     await review('d2', V6);
     expect(await store.scope(ROOT)).toMatchObject({
-      lastDigest: 'd2', ...V6, previousDigest: 'd1', previousExtractorVersion: '5', previousToolVersions: V5.toolVersions,
+      lastDigest: 'd2', measured: V6, previousDigest: 'd1', previousMeasured: V5,
     });
   });
 
-  it('a re-sent final chunk (same digest) moves nothing; one without the values keeps what is stored', async () => {
+  it('a re-sent final chunk (same digest) moves nothing; one without the values is unknown, never the stored versions', async () => {
     await review('d1', V5);
     await review('d2', V6);
+    await review('d2', V6);
+    expect(await store.scope(ROOT)).toMatchObject({ lastDigest: 'd2', measured: V6, previousDigest: 'd1', previousMeasured: V5 });
+    // The same digest from a client that states nothing: unknown (memory's rule), never the stored versions.
     await review('d2');
-    expect(await store.scope(ROOT)).toMatchObject({ lastDigest: 'd2', ...V6, previousDigest: 'd1', previousExtractorVersion: '5' });
+    const s = await store.scope(ROOT);
+    expect(s).not.toHaveProperty('measured');
+    expect(s).toMatchObject({ lastDigest: 'd2', previousDigest: 'd1', previousMeasured: V5 });
   });
 
   it('a new review that states none is unknown — never the previous review\'s values', async () => {
     await review('d1', V5);
     await review('d2');
     const s = await store.scope(ROOT);
-    expect(s).not.toHaveProperty('extractorVersion');
-    expect(s).not.toHaveProperty('toolVersions');
-    expect(s).toMatchObject({ previousDigest: 'd1', ...{ previousExtractorVersion: '5', previousToolVersions: V5.toolVersions } });
+    expect(s).not.toHaveProperty('measured');
+    expect(s).toMatchObject({ previousDigest: 'd1', previousMeasured: V5 });
   });
 
   it('a scope write without a digest (held back) stores none and changes none', async () => {
     await review(undefined, V5);
-    expect(await store.scope(ROOT)).not.toHaveProperty('extractorVersion');
+    expect(await store.scope(ROOT)).not.toHaveProperty('measured');
     await review('d1', V5);
     await review(undefined, V6);
-    expect(await store.scope(ROOT)).toMatchObject({ lastDigest: 'd1', ...V5 });
+    expect(await store.scope(ROOT)).toMatchObject({ lastDigest: 'd1', measured: V5 });
   });
 
   it('a row from before the migration (NULL columns) reads as unknown: no fields at all', async () => {
@@ -109,6 +113,6 @@ describe('scope store: what a review was measured with (PRD 41 §C9)', () => {
       VALUES (1, 1, '${ROOT}', 'A', ARRAY['code'], 'd2', 'd1')`);
     const s = await store.scope(ROOT);
     expect(s).toMatchObject({ lastDigest: 'd2', previousDigest: 'd1' });
-    for (const k of ['extractorVersion', 'toolVersions', 'previousExtractorVersion', 'previousToolVersions']) expect(s).not.toHaveProperty(k);
+    for (const k of ['measured', 'previousMeasured']) expect(s).not.toHaveProperty(k);
   });
 });

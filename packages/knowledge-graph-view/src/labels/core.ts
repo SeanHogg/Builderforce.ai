@@ -180,6 +180,25 @@ export interface CoreLabels extends LoadLabels, ReviewRunLabels {
     compareAdded: string;
     compareResolved: string;
     compareIncomparable: string;
+    /**
+     * Why before and after do not compare — one per memory `comparable()` reason (PRD 41 §C9). `{tool}` is an analyzer,
+     * `{pack}` a pack's name.
+     */
+    compareReasonExtractorVersion: string;
+    /** agent-tools `MEASURED_UNKNOWN`: a side whose review recorded nothing it was measured with. */
+    compareReasonMeasuredUnknown: string;
+    compareReasonExtractorMismatch: string;
+    compareReasonContentHashRule: string;
+    compareReasonToolMissing: string;
+    compareReasonToolVersion: string;
+    compareReasonPackMissing: string;
+    compareReasonAnalyzerFailed: string;
+    compareReasonScope: string;
+    compareReasonRepo: string;
+    compareReasonBranch: string;
+    compareReasonTruncated: string;
+    /** Shown under the reasons when a version or tool drifted: a new review measures both sides alike. */
+    compareReviewAgain: string;
     /** The Before/After control's group name (shown when the host keeps a baseline). */
     revisionLabel: string;
     /** The always-available capture: copies the view + run state for a bug/improvement report. */
@@ -383,6 +402,19 @@ compareNodes: 'Nodes',
 compareAdded: 'Appeared',
 compareResolved: 'Resolved',
 compareIncomparable: 'Before and after were measured differently, so a missing finding is not counted as resolved.',
+compareReasonExtractorVersion: 'The extractor version changed, or the earlier review did not record it.',
+compareReasonMeasuredUnknown: 'A review did not record what it was measured with.',
+compareReasonExtractorMismatch: 'A different extractor measured each side.',
+compareReasonContentHashRule: 'Files were hashed by a different rule.',
+compareReasonToolMissing: '{tool} measured only one side.',
+compareReasonToolVersion: '{tool} changed version between the two reviews.',
+compareReasonPackMissing: 'The {pack} pack reviewed only one side.',
+compareReasonAnalyzerFailed: '{tool} failed on one side.',
+compareReasonScope: 'The two reviews are of different folders.',
+compareReasonRepo: 'The two reviews are of different repositories.',
+compareReasonBranch: 'The two reviews are of different branches.',
+compareReasonTruncated: 'One side was cut short, so its findings are partial.',
+compareReviewAgain: 'Review again to compare.',
 revisionLabel: 'Revision',
 copyDiagnostics: 'Copy diagnostics',
 };

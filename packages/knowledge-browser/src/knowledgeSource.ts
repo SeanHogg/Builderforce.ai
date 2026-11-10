@@ -5,7 +5,8 @@
  *   factActions → the facts endpoint's `viewer` + `createdBy`, read once per graph version
  *             (agent-tools `factRightsCache` — the server's delete rule, one copy)
  *   baseline → the root's previous review, server-built at its stored digest
- *             (`graph(root, { at: previousDigest })`) — the same "before" on every host
+ *             (`graph(root, { at: previousDigest })`) — the same "before" on every host — judged
+ *             comparable to the latest by agent-tools `knowledgeComparability` (PRD 41 §C9), with its reasons
  *   review  → memory's planReview/reviewDirectory in a Web Worker, into a LOCAL store (IndexedDB rows,
  *             `browserKnowledge.ts`) replicated to the project by ONE pack per root (the agent-tools replica
  *             host, `browserReplica.ts`), with `client.judgement` as the JudgementPort, the shared pack
@@ -30,7 +31,7 @@
 
 import { factKeyOf, filesManifestKey, type DirectorySource, type KnowledgeGraph, type NodeRef, type ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
 import {
-  KNOWLEDGE_REVIEW_MODEL_CALLS, createReviewRecorder, dirtyFileName, factRightsCache, humanFactBatch,
+  KNOWLEDGE_REVIEW_MODEL_CALLS, createReviewRecorder, dirtyFileName, factRightsCache, humanFactBatch, knowledgeComparability,
   type PumpSource, type SkippedFolder,
 } from '@builderforce/agent-tools/knowledge';
 import type { KnowledgeClient, KnowledgeScopeRecord } from '@builderforce/knowledge-client';
@@ -247,10 +248,18 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): BrowserKnow
       // The view lists scopes before it loads a root (again after a review, which moves the
       // digests): wait for that listing so "before" is the review before the newest one.
       await scopesListing;
-      const at = scopeRecords.get(rootId)?.previousDigest;
+      const record = scopeRecords.get(rootId);
+      const at = record?.previousDigest;
       if (!at) return null;
       const graph = await client.graph(rootId, { at });
-      return graph ? { graph } : null;
+      if (!graph) return null;
+      // PRD 41 §C9, the editor's rule (agent-tools `knowledgeComparability`): the previous review against the latest, each
+      // with what the platform stored it was measured with when it ran (absent = unknown — never comparable).
+      const verdict = knowledgeComparability(
+        { rootId, packs: graph.scope.packs, measured: record.previousMeasured },
+        { rootId, packs: record.packs, measured: record.measured },
+      );
+      return { graph, comparable: verdict.comparable, reasons: verdict.reasons };
     },
     async targets() {
       providersReady = loadProviders();

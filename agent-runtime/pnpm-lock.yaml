@@ -255,7 +255,7 @@ importers:
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.3.0)(@vitest/browser-playwright@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
     optionalDependencies:
       '@seanhogg/builderforce-memory':
-        specifier: ^2026.10.72
+        specifier: ^2026.10.73
         version: 2026.10.73(@seanhogg/builderforce-memory-engine@2026.10.63)
       '@seanhogg/builderforce-memory-mcp':
         specifier: ^2026.10.67
@@ -427,7 +427,7 @@ importers:
         specifier: ^0.26.2
         version: 0.26.2(apache-arrow@18.1.0)
       '@seanhogg/builderforce-memory':
-        specifier: ^2026.10.72
+        specifier: ^2026.10.73
         version: 2026.10.73(@seanhogg/builderforce-memory-engine@2026.10.63)
       '@seanhogg/builderforce-memory-engine':
         specifier: ^2026.10.63

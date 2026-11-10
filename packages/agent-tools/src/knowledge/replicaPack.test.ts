@@ -56,14 +56,28 @@ describe('buildPack cuts by decoded size and rows', () => {
 });
 
 describe('what the review was measured with (PRD 41 §C9)', () => {
-    it('goes with a pack whose scope records the review digest, and with no other', async () => {
+    it('rides IN the pack as the review recorded it — never this host\'s versions at pack time (a review queued across an upgrade)', async () => {
         const { w, base } = await setup(4);
-        expect((await buildPack(base)).measured).toBeUndefined();
-        await w.local.write({ scope: { rootId: ROOT, title: 'test', packs: ['code'], lastDigest: 'abcdef12' }, facts: [], relations: [] });
-        const built = await buildPack(base);
-        await expect(decodePack(built.bytes)).resolves.toMatchObject({ scope: { lastDigest: 'abcdef12' } });
-        expect(built.measured).toEqual(knowledgeMeasuredWith(['code']));
-        expect(built.measured!.toolVersions).toMatchObject({ knip: expect.any(String), jscpd: expect.any(String), 'dependency-cruiser': expect.any(String) });
+        const recorded = { extractorVersion: '1', toolVersions: { knip: '0.0.1' } };
+        expect(recorded).not.toEqual(knowledgeMeasuredWith(['code']));
+        await w.local.write({ scope: { rootId: ROOT, title: 'test', packs: ['code'], lastDigest: 'abcdef12', measured: recorded }, facts: [], relations: [] });
+        const pack = await decodePack((await buildPack(base)).bytes);
+        expect(pack.scope).toMatchObject({ lastDigest: 'abcdef12', measured: recorded });
+    });
+
+    it('is held back with the review digest while a file is held (it describes the review AT that digest)', async () => {
+        const w = world();
+        await w.review(0, 2);
+        const hash = hashOf(1100), ref = srcRef(ROOT, 'data/locked.bin');
+        await w.store.markStale({ rootId: ROOT }, ref as never, hash); // a hash with no body the project holds
+        w.sources.push({ ref, hash });
+        await w.local.write({ scope: { rootId: ROOT, title: 'test', packs: ['code'], lastDigest: 'abcdef12', measured: knowledgeMeasuredWith(['code']) }, facts: [], relations: [] });
+        const built = await buildPack({ rootId: ROOT, local: w.local, sources: w.sources, client: fakeServer().client, touched: (await w.queue.snapshot()).keys, baseGeneration: 0 });
+        expect(built.waiting).toBe(1);
+        const scope = (await decodePack(built.bytes)).scope;
+        expect(scope).toBeDefined();
+        expect(scope).not.toHaveProperty('lastDigest');
+        expect(scope).not.toHaveProperty('measured');
     });
 });
 
