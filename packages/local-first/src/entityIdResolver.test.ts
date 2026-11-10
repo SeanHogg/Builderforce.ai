@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { entityIdResolver } from './entityIdResolver.js';
 import type { LocalId, SyncId } from './entityId.js';
 import { createMemoryLocalFirstStore, newLocalRecord } from './store.js';
-import { UNBOUND_DESTINATION } from './records.js';
+import { UNBOUND_DESTINATION, earliestMapping } from './records.js';
 import { ingestServerRecords } from './ingestServerRecords.js';
 
 const ACCOUNT_A = { kind: 'bound' as const, tenantId: '7', accountId: 'a' };
@@ -148,5 +148,63 @@ describe('regression: an ingested server row finds its mapping in its own tenant
     expect(result.clientIds).toHaveLength(1);
     expect(result.clientIds[0]).not.toBe(TICKET_A);
     expect(result.clientIds[0]).not.toBe(TICKET_B);
+  });
+});
+
+describe('regression: signed-out and platform-instance scopes', () => {
+  const STAGING = { kind: 'bound' as const, platformInstance: 'https://staging.example', tenantId: '7' };
+  const PROD = { kind: 'bound' as const, platformInstance: 'https://prod.example', tenantId: '7' };
+
+  it('the signed-out scope (UNBOUND_DESTINATION) reads unbound rows only, never an account', async () => {
+    const store = await seeded();
+    await store.transact(async (tx) => {
+      await tx.putMapping({ destination: UNBOUND_DESTINATION, entityType: 'ticket', clientEntityId: UNBOUND, syncId: 41, serverVersion: 1 });
+    });
+    expect(await store.read((tx) => tx.mappingByServerId('ticket', 40, UNBOUND_DESTINATION))).toBeUndefined();
+    expect(await store.read((tx) => tx.mappingByServerId('ticket', 41, UNBOUND_DESTINATION))).toMatchObject({ clientEntityId: UNBOUND });
+    expect(await entityIdResolver(store).localIdOf('ticket', sync(40), UNBOUND_DESTINATION)).toBeNull();
+  });
+
+  it('a tenant id on two platform instances is two accounts when the scope names the instance', async () => {
+    const store = createMemoryLocalFirstStore();
+    await store.transact(async (tx) => {
+      // Staging mapped FIRST: an instance-blind tenant scope picks it.
+      await tx.putMapping({ destination: STAGING, entityType: 'chat', clientEntityId: TICKET_A, syncId: 40, serverVersion: 1 });
+      await tx.putMapping({ destination: PROD, entityType: 'chat', clientEntityId: TICKET_B, syncId: 40, serverVersion: 1 });
+    });
+    expect(await store.read((tx) => tx.mappingByServerId('chat', 40, { tenantId: '7', platformInstance: 'https://prod.example' })))
+      .toMatchObject({ clientEntityId: TICKET_B });
+    expect(await store.read((tx) => tx.mappingByServerId('chat', 40, { tenantId: '7', platformInstance: 'https://staging.example' })))
+      .toMatchObject({ clientEntityId: TICKET_A });
+    expect(await store.read((tx) => tx.mappingByServerId('chat', 40, { tenantId: '7', platformInstance: 'https://other.example' })))
+      .toBeUndefined();
+  });
+});
+
+describe('earliestMapping: the one earliest-in-scope pick', () => {
+  const rows = [
+    { destination: ACCOUNT_B, entityType: 'ticket' as const, clientEntityId: TICKET_B, syncId: sync(40), serverVersion: 1, mappedSeq: 2 },
+    { destination: ACCOUNT_A, entityType: 'ticket' as const, clientEntityId: TICKET_A, syncId: sync(40), serverVersion: 1, mappedSeq: 3 },
+    { destination: ACCOUNT_A, entityType: 'chat' as const, clientEntityId: SPEC, syncId: sync(40), serverVersion: 1, mappedSeq: 1 },
+  ];
+  const is40 = (row: { syncId?: SyncId | null }) => row.syncId === 40;
+
+  it('takes the lowest mappedSeq of the type, inside the scope', () => {
+    expect(earliestMapping(rows, 'ticket', undefined, is40)?.clientEntityId).toBe(TICKET_B);
+    expect(earliestMapping(rows, 'ticket', { tenantId: '7' }, is40)?.clientEntityId).toBe(TICKET_A);
+    expect(earliestMapping(rows, 'ticket', UNBOUND_DESTINATION, is40)).toBeUndefined();
+    expect(earliestMapping(rows, 'ticket', undefined, () => false)).toBeUndefined();
+  });
+
+  it('gives the same answer as the store', async () => {
+    const store = createMemoryLocalFirstStore();
+    await store.transact(async (tx) => {
+      for (const row of rows) await tx.putMapping(row);
+    });
+    const facts = await store.export();
+    for (const scope of [undefined, { tenantId: '7' }, { tenantId: '8' }, ACCOUNT_A]) {
+      const fromStore = await store.read((tx) => tx.mappingByServerId('ticket', 40, scope));
+      expect(earliestMapping(facts.mappings, 'ticket', scope, is40)?.clientEntityId).toBe(fromStore?.clientEntityId);
+    }
   });
 });

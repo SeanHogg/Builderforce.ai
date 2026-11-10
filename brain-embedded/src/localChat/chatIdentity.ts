@@ -13,7 +13,7 @@
  * from the host, so a chat bound in workspace A is not named in workspace B.
  */
 
-import { BOUND_ONLY_VERSION, SCAN_STOP, parseSyncId, queueImport, syncIdText, type EntityDestination, type LocalFirstStore, type LocalFirstTransaction } from '@builderforce/local-first';
+import { BOUND_ONLY_VERSION, SCAN_STOP, parseSyncId, queueImport, syncIdText, type EntityDestination, type EntityScope, type LocalFirstStore, type LocalFirstTransaction } from '@builderforce/local-first';
 import { chatRecordById, liveRecords, scanLive, type ChatValue } from './records';
 import type { ViewKey } from '../types';
 
@@ -32,8 +32,13 @@ export interface LocalChatIdentity {
   serverIdFor(localId: ViewKey): Promise<number | undefined>;
   /** The local chat's stable client id, or undefined when the store does not hold it. */
   clientIdFor(localId: ViewKey): Promise<string | undefined>;
-  /** The local chat bound to a server chat in the current account, or undefined. */
-  localIdFor(serverId: number): Promise<ViewKey | undefined>;
+  /**
+   * The local chat bound to a server chat, or undefined. Without `scope`: the mapping in the port's
+   * current destination exactly (undefined when signed out). With `scope` (the host's active
+   * account, `EntityScope`): the earliest chat mapping carrying that SyncId inside it — a server
+   * chat id is only unique per tenant, so another account's chat 40 is never this one.
+   */
+  localIdFor(serverId: number, scope?: EntityScope): Promise<ViewKey | undefined>;
   /**
    * Bind a local chat when signed in and allowed: an existing binding wins, else the
    * server chat is created and mapped. Concurrent calls for one chat share one request.
@@ -99,7 +104,18 @@ export function createLocalChatIdentity(options: { store: LocalFirstStore; devic
   return {
     serverIdFor: async (localId) => (await read(localId))?.serverId,
     clientIdFor: async (localId) => (await read(localId))?.chat.id,
-    localIdFor: (serverId) => store.read(async (tx) => {
+    localIdFor: (serverId, scope) => store.read(async (tx) => {
+      if (scope !== undefined) {
+        const syncId = parseSyncId(serverId);
+        if (syncId === null) return undefined;
+        const mapping = await tx.mappingByServerId('chat', syncId, scope);
+        // Only a row CARRYING the SyncId (re-read: brands do not survive the store). The store
+        // normalises every row's `syncId`, and also returns a `syncId: null` row with the same key
+        // text — a different entity, never this chat.
+        if (!mapping || parseSyncId(mapping.syncId) !== syncId) return undefined;
+        const chat = (await liveRecords<ChatValue>(tx, 'chat', deviceId, (row) => row.id === mapping.clientEntityId))[0];
+        return chat?.payload.chat.id;
+      }
       const destination = port.destination();
       // Just each chat's two ids — a scan, not a copy of every chat row.
       const chats: Array<{ clientId: string; localId: number }> = [];

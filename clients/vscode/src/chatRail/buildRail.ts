@@ -14,7 +14,7 @@
  *   it from its kind and ref in the reader's language.
  */
 
-import { compareMappingAge, inEntityScope, parseSyncId, syncIdText, type ChatTicketLinkValue, type EntityScope, type LocalRecord, type ServerMapping, type SyncId } from "@builderforce/local-first";
+import { earliestMapping, parseSyncId, syncIdText, type ChatTicketLinkValue, type EntityScope, type LocalEntityType, type LocalRecord, type ServerMapping, type SyncId } from "@builderforce/local-first";
 import type { LocalFirstView } from "../localFirstView";
 import { presentRecordSyncStatus } from "../syncStatusPresenter";
 import { railTicketProgress, type RailRunPayload, type RailTicketPayload } from "./railPayloads";
@@ -48,11 +48,7 @@ export function chatClientIdOf(facts: Pick<RailFacts, "records" | "mappings">, r
   const sync = parseSyncId(ref);
   if (sync === null) return undefined;
   // The same answer the store's `mappingByServerId` gives: the earliest mapping, in the active account.
-  let mapping: ServerMapping | undefined;
-  for (const row of facts.mappings) {
-    if (row.entityType !== "chat" || parseSyncId(row.syncId) !== sync || !inEntityScope(row.destination, scope)) continue;
-    if (!mapping || compareMappingAge(row, mapping) < 0) mapping = row;
-  }
+  const mapping = earliestMapping(facts.mappings, "chat", scope, (row) => parseSyncId(row.syncId) === sync);
   if (!mapping) return undefined;
   const live = facts.records.some((row) => row.entityType === "chat" && row.id === mapping.clientEntityId && !row.deletedAt);
   return live ? mapping.clientEntityId : undefined;
@@ -67,14 +63,24 @@ export function readRailFromFacts(facts: RailFacts, ref: ChatRef, lastRefreshAt?
     return { found: false, tickets: [], links: [], runHistory: EMPTY_HISTORY, freshness: { source: "device" }, runClientIds: [] };
   }
 
-  // Each record's SyncId (re-checked: a snapshot row has lost its brand). A mapping with no integer
-  // key (a tier ticket, a mirror record) has none.
-  const syncIds = new Map<string, SyncId>();
+  // Each record's SyncId (re-checked: a snapshot row has lost its brand), from its mappings INSIDE
+  // `scope` only: one client id mapped in two accounts has two SyncIds, and another account's is
+  // not this one's. (A record's own destination is not the key: a chat bound by `adopt` keeps an
+  // unbound record and an account-destination mapping.) Several in scope: the earliest wins, as
+  // in the store. A mapping with no integer key (a tier ticket, a mirror record) has none.
+  const syncKey = (type: string, id: string) => `${type}\u0000${id}`;
+  const byEntity = new Map<string, ServerMapping[]>();
   for (const mapping of facts.mappings) {
-    const sync = parseSyncId(mapping.syncId);
-    if (sync !== null) syncIds.set(`${mapping.entityType}\u0000${mapping.clientEntityId}`, sync);
+    if (parseSyncId(mapping.syncId) === null) continue;
+    const key = syncKey(mapping.entityType, mapping.clientEntityId);
+    const group = byEntity.get(key);
+    if (group) group.push(mapping);
+    else byEntity.set(key, [mapping]);
   }
-  const syncIdOf = (type: string, id: string) => syncIds.get(`${type}\u0000${id}`);
+  const syncIdOf = (type: LocalEntityType, id: string): SyncId | undefined => {
+    const mapping = earliestMapping(byEntity.get(syncKey(type, id)) ?? [], type, scope, () => true);
+    return mapping ? parseSyncId(mapping.syncId) ?? undefined : undefined;
+  };
 
   const tickets = new Map<string, Readonly<LocalRecord<RailTicketPayload>>>();
   const linkRecords: Readonly<LocalRecord<ChatTicketLinkValue>>[] = [];

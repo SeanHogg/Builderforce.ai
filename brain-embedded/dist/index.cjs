@@ -6168,7 +6168,15 @@ function createLocalChatIdentity(options) {
   return {
     serverIdFor: async (localId) => (await read2(localId))?.serverId,
     clientIdFor: async (localId) => (await read2(localId))?.chat.id,
-    localIdFor: (serverId) => store.read(async (tx) => {
+    localIdFor: (serverId, scope) => store.read(async (tx) => {
+      if (scope !== void 0) {
+        const syncId = parseSyncId(serverId);
+        if (syncId === null) return void 0;
+        const mapping = await tx.mappingByServerId("chat", syncId, scope);
+        if (!mapping || parseSyncId(mapping.syncId) !== syncId) return void 0;
+        const chat = (await liveRecords(tx, "chat", deviceId, (row) => row.id === mapping.clientEntityId))[0];
+        return chat?.payload.chat.id;
+      }
       const destination = port.destination();
       const chats = [];
       await scanLive(tx, "chat", deviceId, (row) => {

@@ -8,7 +8,7 @@
  * it durable) or drops the transaction. A `work` that throws therefore publishes nothing.
  */
 
-import { compareMappingAge, destinationKey, inEntityScope, normalizeServerMapping, type EntityDestination, type EntityScope, type JournalEvent, type LocalEntityType, type LocalRecord, type ServerMapping, type ServerMappingInput, type SyncConflict, type SyncReceipt } from './records.js';
+import { destinationKey, earliestMapping, normalizeServerMapping, type EntityDestination, type EntityScope, type JournalEvent, type LocalEntityType, type LocalRecord, type ServerMapping, type ServerMappingInput, type SyncConflict, type SyncReceipt } from './records.js';
 import { parseEntityRef, parseSyncId, syncIdText, tierRefText } from './entityId.js';
 import type { LocalFirstDelta } from './localFirstDelta.js';
 import { DraftMap } from './draftMap.js';
@@ -199,33 +199,28 @@ export class Transaction implements LocalFirstTransaction {
       // type" (`syncId: null`, a run step) but whose key text is this number: the same server row,
       // so an ingest of it must land on that row, not mint a second LocalId.
       const text = syncIdText(syncId);
-      return this.earliestMapping(entityType, scope, (mapping) => mapping.syncId === syncId)
-        ?? this.earliestMapping(entityType, scope, (mapping) => (mapping.syncId ?? null) === null && mapping.serverId === text);
+      return this.earliestInScope(entityType, scope, (mapping) => mapping.syncId === syncId)
+        ?? this.earliestInScope(entityType, scope, (mapping) => (mapping.syncId ?? null) === null && mapping.serverId === text);
     }
     if (typeof serverId !== 'string' || serverId.trim() === '') return undefined;
     const tier = parseEntityRef(serverId);
     const externalRef = tier && 'tier' in tier ? tierRefText(tier.tier) : undefined;
-    return this.earliestMapping(entityType, scope, (mapping) =>
+    return this.earliestInScope(entityType, scope, (mapping) =>
       mapping.serverId === serverId || (externalRef !== undefined && mapping.externalRef === externalRef));
   }
 
   async mappingByExternalRef(entityType: LocalEntityType, externalRef: string, scope?: EntityScope): Promise<ServerMapping | undefined> {
     if (typeof externalRef !== 'string' || externalRef.trim() === '') return undefined;
-    return this.earliestMapping(entityType, scope, (mapping) => mapping.externalRef === externalRef);
+    return this.earliestInScope(entityType, scope, (mapping) => mapping.externalRef === externalRef);
   }
 
   /** The EARLIEST (`compareMappingAge`) mapping of `entityType` inside `scope` that `match` accepts. */
-  private earliestMapping(
+  private earliestInScope(
     entityType: LocalEntityType,
     scope: EntityScope | undefined,
     match: (mapping: ServerMapping) => boolean,
   ): ServerMapping | undefined {
-    let earliest: ServerMapping | undefined;
-    for (const mapping of this.mappings.values()) {
-      if (mapping.entityType !== entityType || !match(mapping) || !inEntityScope(mapping.destination, scope)) continue;
-      if (!earliest || compareMappingAge(mapping, earliest) < 0) earliest = mapping;
-    }
-    return clone(earliest);
+    return clone(earliestMapping(this.mappings.values(), entityType, scope, match));
   }
 
   async putReceipt(receipt: SyncReceipt): Promise<void> {

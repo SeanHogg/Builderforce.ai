@@ -105,7 +105,7 @@ export function localChatTicketScope(
       // Another chat: the model names chats by their SERVER id (the account's tools list those).
       const serverId = parseSyncId(typeof chatId === "string" ? chatId.trim() : chatId);
       if (serverId === null) return undefined;
-      const localId = await identity.localIdFor(serverId);
+      const localId = await identity.localIdFor(serverId, scope?.());
       return localId === undefined ? undefined : identity.clientIdFor(localId);
     },
     unsyncedTickets: (chatClientId) => store.read((tx) => scanUnsyncedTickets(tx, new Set([chatClientId]))),

@@ -91,7 +91,9 @@ type EntityDestination = {
 } & DestinationBinding);
 /**
  * Where an id lookup may look (typed-entity-ids §3):
- * - an `EntityDestination` — exactly that destination;
+ * - an `EntityDestination` — exactly that destination. `UNBOUND_DESTINATION` is the SIGNED-OUT
+ *   scope: with no account there is no tenant to narrow to, so a lookup reads unbound rows only
+ *   (never another account's bound ones);
  * - an ACCOUNT scope `{ tenantId, accountId?, platformInstance? }` — every bound destination of that
  *   tenant (narrowed by the fields given) PLUS the unbound one. The store cannot tell which account is
  *   active, so a caller without a destination MUST pass its tenant: a SyncId is only unique per
@@ -2255,8 +2257,13 @@ interface LocalChatIdentity {
     serverIdFor(localId: ViewKey): Promise<number | undefined>;
     /** The local chat's stable client id, or undefined when the store does not hold it. */
     clientIdFor(localId: ViewKey): Promise<string | undefined>;
-    /** The local chat bound to a server chat in the current account, or undefined. */
-    localIdFor(serverId: number): Promise<ViewKey | undefined>;
+    /**
+     * The local chat bound to a server chat, or undefined. Without `scope`: the mapping in the port's
+     * current destination exactly (undefined when signed out). With `scope` (the host's active
+     * account, `EntityScope`): the earliest chat mapping carrying that SyncId inside it — a server
+     * chat id is only unique per tenant, so another account's chat 40 is never this one.
+     */
+    localIdFor(serverId: number, scope?: EntityScope): Promise<ViewKey | undefined>;
     /**
      * Bind a local chat when signed in and allowed: an existing binding wins, else the
      * server chat is created and mapped. Concurrent calls for one chat share one request.

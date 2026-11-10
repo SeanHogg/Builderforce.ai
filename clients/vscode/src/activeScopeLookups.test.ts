@@ -8,10 +8,11 @@ import { describe, expect, it } from "vitest";
 import {
   createMemoryLocalFirstStore,
   newLocalRecord,
+  UNBOUND_DESTINATION,
   type EntityDestination,
   type LocalFirstStore,
 } from "@builderforce/local-first";
-import { chatClientIdOf } from "./chatRail/buildRail";
+import { chatClientIdOf, readRailFromFacts } from "./chatRail/buildRail";
 import { resolveChat } from "./chatRail/resolveChat";
 import { resolveLocalReference } from "./localEntityRefs";
 import { ticketServerIdLookup } from "./localTicketIdBridge";
@@ -20,6 +21,7 @@ const A: EntityDestination = { kind: "bound", platformInstance: "https://api.exa
 const B: EntityDestination = { kind: "bound", platformInstance: "https://api.example", tenantId: "8" };
 const CHAT_A = "00000000-0000-4000-8000-00000000000a";
 const CHAT_B = "00000000-0000-4000-8000-00000000000b";
+const CHAT_U = "00000000-0000-4000-8000-00000000000c";
 const TICKET_A = "11111111-1111-4111-8111-11111111111a";
 const TICKET_B = "11111111-1111-4111-8111-11111111111b";
 
@@ -65,5 +67,27 @@ describe("regression: id lookups stay inside the active account", () => {
     expect(await lookup(TICKET_B)).toBeUndefined();
     tenantId = "8";
     expect(await lookup(TICKET_B)).toBe("40");
+  });
+
+  it("signed out (UNBOUND_DESTINATION): no account's chat or ticket 40 resolves", async () => {
+    const store = await twoTenants();
+    expect(chatClientIdOf(await store.export(), 40, UNBOUND_DESTINATION)).toBeUndefined();
+    expect(await store.read((tx) => resolveChat(tx, 40, UNBOUND_DESTINATION))).toBeUndefined();
+    expect(await resolveLocalReference(store, "ticket", "40", UNBOUND_DESTINATION)).toBe("40");
+    expect(await ticketServerIdLookup(store, () => UNBOUND_DESTINATION)(TICKET_A)).toBeUndefined();
+  });
+
+  it("readRailFromFacts: a chat's SyncId counts only from a mapping inside the scope", async () => {
+    const store = await twoTenants();
+    // An unbound chat record whose only mapping is tenant A's (bound by adopt into A).
+    await store.transact(async (tx) => {
+      await tx.put(newLocalRecord({ id: CHAT_U, entityType: "chat", deviceId: "d", destination: UNBOUND_DESTINATION, payload: {} }));
+      await tx.putMapping({ destination: A, entityType: "chat", clientEntityId: CHAT_U, syncId: 41, serverVersion: 1 });
+    });
+    const facts = await store.export();
+    expect(readRailFromFacts(facts, CHAT_U, undefined, { tenantId: "7" }).freshness.source).toBe("server-observed");
+    // Tenant B (and signed out) never sees A's binding as this chat's.
+    expect(readRailFromFacts(facts, CHAT_U, undefined, { tenantId: "8" }).freshness.source).toBe("device");
+    expect(readRailFromFacts(facts, CHAT_U, undefined, UNBOUND_DESTINATION).freshness.source).toBe("device");
   });
 });

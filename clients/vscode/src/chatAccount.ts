@@ -11,7 +11,7 @@
  */
 
 import type * as vscode from "vscode";
-import type { AccountScope, EntityDestination } from "@builderforce/local-first";
+import { UNBOUND_DESTINATION, type AccountScope, type EntityDestination, type EntityScope } from "@builderforce/local-first";
 import type { ChatBindingPort, SpendSavingsSummary } from "@seanhogg/builderforce-brain-embedded";
 import { createBrainChat, listBrainChats, workspaceTenantId } from "./bfApi";
 import { getBaseUrl } from "./gateway";
@@ -21,27 +21,40 @@ import { ttlCache } from "./ttlCache";
 /** The workspace's recent chats a spend read covers — the same page the Sessions tree lists. */
 const SPEND_PAGE = 100;
 
+/**
+ * The platform instance this window talks to: the API base URL's origin. THE value a bound
+ * destination records (`chatAccountDestination`), so a scope built from it matches those rows.
+ * Undefined when the base URL cannot be read.
+ */
+function activePlatformInstance(): string | undefined {
+  try {
+    return new URL(getBaseUrl()).origin;
+  } catch {
+    return undefined;
+  }
+}
+
 /** The destination a chat binds into now, or undefined when signed out. */
 export function chatAccountDestination(): EntityDestination | undefined {
   const tenantId = workspaceTenantId();
   if (tenantId === undefined) return undefined;
-  let platformInstance: string;
-  try {
-    platformInstance = new URL(getBaseUrl()).origin;
-  } catch {
-    return undefined;
-  }
+  const platformInstance = activePlatformInstance();
+  if (platformInstance === undefined) return undefined;
   return { kind: "bound", platformInstance, tenantId: String(tenantId) };
 }
 
 /**
- * The account scope an id lookup runs in (typed-entity-ids §3): the active workspace's tenant. A
- * SyncId is only unique per tenant, so a tool or rail lookup never resolves another account's
- * entity. Undefined when signed out (the lookup then reads every destination — the legacy scan).
+ * The scope an id lookup runs in (typed-entity-ids §3): the active workspace's tenant ON this
+ * platform instance (a tenant id that exists on staging and prod names two accounts). A SyncId is
+ * only unique per tenant, so a tool or rail lookup never resolves another account's entity.
+ * Signed out there is no account: the lookup reads UNBOUND rows only, never any account's.
  */
-export function activeEntityScope(): AccountScope | undefined {
+export function activeEntityScope(): EntityScope {
   const tenantId = workspaceTenantId();
-  return tenantId === undefined ? undefined : { tenantId: String(tenantId) };
+  if (tenantId === undefined) return UNBOUND_DESTINATION;
+  const platformInstance = activePlatformInstance();
+  const scope: AccountScope = { tenantId: String(tenantId), ...(platformInstance !== undefined ? { platformInstance } : {}) };
+  return scope;
 }
 
 /** A bind is a connected feature; a policy that cannot be read is a refusal. */

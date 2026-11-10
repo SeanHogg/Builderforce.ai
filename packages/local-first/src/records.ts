@@ -42,7 +42,9 @@ export const UNBOUND_DESTINATION: EntityDestination = { kind: 'unbound' };
 
 /**
  * Where an id lookup may look (typed-entity-ids §3):
- * - an `EntityDestination` — exactly that destination;
+ * - an `EntityDestination` — exactly that destination. `UNBOUND_DESTINATION` is the SIGNED-OUT
+ *   scope: with no account there is no tenant to narrow to, so a lookup reads unbound rows only
+ *   (never another account's bound ones);
  * - an ACCOUNT scope `{ tenantId, accountId?, platformInstance? }` — every bound destination of that
  *   tenant (narrowed by the fields given) PLUS the unbound one. The store cannot tell which account is
  *   active, so a caller without a destination MUST pass its tenant: a SyncId is only unique per
@@ -232,6 +234,26 @@ export function compareMappingAge(a: ServerMapping, b: ServerMapping): number {
   const ka = `${destinationKey(a.destination)}:${a.entityType}:${a.clientEntityId}`;
   const kb = `${destinationKey(b.destination)}:${b.entityType}:${b.clientEntityId}`;
   return ka < kb ? -1 : ka > kb ? 1 : 0;
+}
+
+/**
+ * THE "earliest mapping in scope" pick: the first (`compareMappingAge`) row of `mappings` that is
+ * of `entityType`, inside `scope` (`inEntityScope`) and accepted by `match`. The store's
+ * `mappingByServerId` / `mappingByExternalRef` and any reader of a mapping snapshot share it, so
+ * both give the same answer. Returns the row itself (no copy).
+ */
+export function earliestMapping(
+  mappings: Iterable<ServerMapping>,
+  entityType: LocalEntityType,
+  scope: EntityScope | undefined,
+  match: (mapping: ServerMapping) => boolean,
+): ServerMapping | undefined {
+  let earliest: ServerMapping | undefined;
+  for (const mapping of mappings) {
+    if (mapping.entityType !== entityType || !match(mapping) || !inEntityScope(mapping.destination, scope)) continue;
+    if (!earliest || compareMappingAge(mapping, earliest) < 0) earliest = mapping;
+  }
+  return earliest;
 }
 
 export interface SyncReceipt {

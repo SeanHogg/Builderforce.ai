@@ -8,6 +8,7 @@
 import * as vscode from "vscode";
 import type { LocalChatIdentity } from "@seanhogg/builderforce-brain-embedded";
 import { getCurrentUserId } from "./bfApi";
+import { activeEntityScope } from "./chatAccount";
 import { getWebBaseUrl } from "./gateway";
 import { localBrainApplication } from "./localFirstStore";
 
@@ -19,9 +20,9 @@ export interface SessionChat {
   ownerId?: string | null;
 }
 
-/** The local chat bound to a server chat, or undefined when this machine has none. */
+/** The local chat bound to a server chat in the active account, or undefined when this machine has none. */
 export function localChatOf(ctx: vscode.ExtensionContext, serverId: number): Promise<number | undefined> {
-  return localBrainApplication(ctx).identity.localIdFor(serverId);
+  return localBrainApplication(ctx).identity.localIdFor(serverId, activeEntityScope());
 }
 
 /** Each LOCAL chat's bound server chat id; unbound chats are left out. */
