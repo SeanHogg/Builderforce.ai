@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("vscode", () => ({ workspace: { workspaceFolders: [] }, l10n: { t: (m: string) => m } }));
 import type { RunDelta } from "@builderforce/run-delta";
 import { headSwitched, parseCatFileBatch, type RepoGit } from "./gitSide";
 import { confinedPath } from "./openCode";
