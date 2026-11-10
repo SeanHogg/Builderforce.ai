@@ -152,10 +152,7 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
   - **Nothing lists local audit runs.** `listLocalAuditRuns` has no consumers, so a held audit shows only through the `auditExecution` warning. Fix: wire an audit-runs view, or delete the function if nothing should list them.
   - **Binary sniffing still disagrees in four places.** `changedExcerpt.ts`, `contextPack/buildContextPack.ts` and two agent-runtime files scan the whole buffer with `includes(0)`, and `webview/src/attachmentUpload.ts` sniffs 8,000 bytes. Moving them to memory's `isBinaryBytes` changes their behaviour, so decide per caller.
 - **Run delta: the rest of PRD 41 ([PRD 41](./docs/specs/41-prd-offline-understanding-and-run-delta.md) §7); paused 2026-11-10 by the operator, mid-pass.**
-  - **Shipped:**
-    - WS3 background indexer (0df16cbf9).
-    - In builderforce-memory 2026.10.74–.80: the WS15 stats module (Wilcoxon exact p, HL bootstrap, `meanAndSd`, the `createRng` shift fix), `FactStorePort` with epoch/generation CAS, the `check_scheduler` model card (engine .64–.65) and the `saveFactGraph` fast path.
-    - All 17 package.json files pin memory ^2026.10.80 and engine ^2026.10.65, and all 16 lockfiles are refreshed (frozen installs pass).
+  - **Shipped:** WS3, WS15, the memory 2026.10.77–.80 primitives and the pin bump; see DONE.md 2026-11-10.
   - **Everything below went to main in the operator's sweep commit 7674bbd64 ("Improvements", 2026-11-10).** It skipped the planned review gate and the full typecheck of the staged set, so main carries the WS4, WS8, WS9 and L3 code exactly as each agent was stopped. The next step is a Haiku typecheck and targeted tests over the run-delta family on main, then the review rounds below. The code spans:
     - `packages/run-delta`, `packages/agent-tools/src/{delta,knowledge/facts}`;
     - `clients/vscode/src/{runDelta,knowledge}`, `packages/knowledge-graph-view/src/delta`, `frontend/src/components/runDelta`;
@@ -191,7 +188,7 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
     - WS17: rule precision, calibration and process control.
     - WS21: ranking, similar runs and the card's Predicted block.
     - WS22: people scores (Opus review for RBAC and privacy).
-  - **WS18 (run risk model):** *Blocker: needs at least 500 final WS16 labels; the labels pipeline isn't committed yet.*
+  - **WS18 (run risk model):** *Blocker: needs at least 500 final WS16 labels, which accrue as runs finish.*
 - **Cloud run isolation (G1/G2, [PRD 09](./docs/specs/09-prd-cloud-agent-validation.md)): egress allowlist built but off; secret containment under rework (in progress 2026-11-08).**
   - G1 egress: the outbound allowlist and its lifecycle shipped (`sandboxEgressLifecycle.ts`, b55198fc0 / adc99aa42 / e867b3bd1) behind `SANDBOX_EGRESS_ENFORCE`, which stays off. *Blocker: a live probe in a deployed container (raw TCP/DNS blocked, HTTPS through the proxy to an allowed registry, interception installed before start, `ctx.exports.ContainerProxy` resolves) before the flag is turned on.*
   - G2 secret containment: the env scrub, `persist-credentials: false`, the one redaction package and the audit-write guard are on main (3a2c752db, e707549cf). An Opus review found the model shell could still read the runner's environ (same uid) and credentials in `.git/config`. The redesign (a separate `bfagent` user with its own group, all workspace fs/git through a helper running as that user, authenticated git only in a server-owned mirror with bundle handoff) and the redaction-quality fixes are in progress, partly swept unreviewed into local ee2222212. Next: verify, Opus re-review, commit, push.
