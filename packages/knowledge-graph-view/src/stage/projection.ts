@@ -28,8 +28,11 @@ export function documentHeight(bounds: Bounds, width: number): number {
     return Math.ceil(d * ((width - 2 * FIT_MARGIN) / w) + 2 * FIT_MARGIN);
 }
 
+/** Where a projection writes a screen point: a pair, or the scratch `Float64Array` the pick and anchor paths reuse. */
+export type Vec2Out = { 0: number; 1: number } | Float64Array;
+
 /** World (x, y, z) → CSS px in the box, written to `out[0]`, `out[1]`. */
-export function projectGround(v: GroundView, x: number, y: number, z: number, out: { 0: number; 1: number }): void {
+export function projectGround(v: GroundView, x: number, y: number, z: number, out: Vec2Out): void {
     const a = (v.tilt * Math.PI) / 180;
     out[0] = (x - v.cx) * v.zoom + v.width / 2;
     out[1] = ((z - v.cz) * Math.cos(a) - y * Math.sin(a)) * v.zoom + v.height / 2;
