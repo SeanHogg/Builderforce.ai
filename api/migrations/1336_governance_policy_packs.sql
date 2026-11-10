@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS governance_rules (
   description TEXT NOT NULL,             -- the rule in plain language (the LLM reads this)
   severity    VARCHAR(20) NOT NULL DEFAULT 'medium', -- blocker|critical|high|medium|low|info
   -- Deterministic pre-filter (optional): { kind: regex|path_required|path_forbidden|dependency|glob, ... }
-  check       JSONB,
+  "check"     JSONB,                     -- quoted: CHECK is a reserved word in Postgres
   guidance    TEXT,                      -- remediation hint surfaced on findings
   enabled     BOOLEAN NOT NULL DEFAULT true,
   created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
