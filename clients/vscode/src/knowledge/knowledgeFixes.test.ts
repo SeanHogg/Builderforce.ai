@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { srcRef, type Finding } from "@seanhogg/builderforce-memory/knowledge";
-import { applyKnipFix, fixBranchName, knipRanOk, parseStatusZ, type FixPorts, type StatusEntry } from "./knowledgeFixes";
+import { applyCodemod, fixBranchName, knipRanOk, parseStatusZ, type FixPorts, type StatusEntry } from "./knowledgeFixes";
 
 vi.mock("vscode", async () => (await import("./vscodeL10nMock")).vscodeL10nMock);
 
-const finding = (kind: string, ...paths: string[]): Finding => ({ id: "f", kind, pack: "code", nodes: paths.map((p) => srcRef("r", p)), severity: "warn", params: {} });
+/** An unused-export finding names its export (`params.name`, PRD 41 §C3); every other kind names none. */
+const finding = (kind: string, ...paths: string[]): Finding => ({ id: "f", kind, pack: "code", nodes: paths.map((p) => srcRef("r", p)), severity: "warn", params: kind === "unused-export" ? { name: "x" } : {} });
 
 interface Options {
   /** Files in the work tree that differ from HEAD before the run. */
@@ -28,6 +29,12 @@ interface Options {
 function fake(o: Options = {}) {
   let tree: StatusEntry[] = o.before ?? [];
   const log: string[] = [];
+  /** What either codemod (knip's `run` or the per-export `removeExport`) does to the fake tree. */
+  const codemod = async (entry: string): Promise<void> => {
+    log.push(entry);
+    if (o.knip) tree = o.knip();
+    if (o.failRun) throw o.failRun;
+  };
   const ports: FixPorts = {
     hasHead: async () => o.head ?? true,
     headSha: async () => "h1",
@@ -40,11 +47,8 @@ function fake(o: Options = {}) {
       currentBranch: async () => o.on ?? "main",
       switchTo: async (b: string) => { log.push(`switch:${b}`); return o.switchFails ? { ok: false as const, reason: "no" } : { ok: true as const }; },
     }),
-    run: async () => {
-      log.push("run");
-      if (o.knip) tree = o.knip();
-      if (o.failRun) throw o.failRun;
-    },
+    run: async () => codemod("run"),
+    removeExport: async (path: string, name: string) => codemod(`removeExport:${path}#${name}`),
     restore: async (paths) => {
       if (o.restoreFails) throw new Error("checkout failed");
       log.push(`restore:${paths.join(",")}`);
@@ -62,71 +66,90 @@ const knipEdits = (): StatusEntry[] => [
   { code: "??", path: "new.ts" },
 ];
 
-describe("applyKnipFix - preconditions", () => {
+describe("applyCodemod - preconditions", () => {
   it("refuses a work tree with untracked files, and never runs knip", async () => {
     const t = fake({ before: [{ code: "??", path: "scratch.ts" }] });
-    await expect(applyKnipFix(t.ports, "r", finding("unused-export", "a.ts"))).rejects.toThrow(/Commit or stash/);
+    await expect(applyCodemod(t.ports, "r", finding("unused-export", "a.ts"))).rejects.toThrow(/Commit or stash/);
     expect(t.log).toEqual([]);
   });
 
   it("refuses an editor with unsaved changes", async () => {
     const t = fake({ buffers: ["a.ts"] });
-    await expect(applyKnipFix(t.ports, "r", finding("unused-export", "a.ts"))).rejects.toThrow(/unsaved/);
+    await expect(applyCodemod(t.ports, "r", finding("unused-export", "a.ts"))).rejects.toThrow(/unsaved/);
     expect(t.log).toEqual([]);
   });
 
   it("refuses a repository with no HEAD commit", async () => {
-    await expect(applyKnipFix(fake({ head: false }).ports, "r", finding("unused-export", "a.ts"))).rejects.toThrow(/no commit/);
+    await expect(applyCodemod(fake({ head: false }).ports, "r", finding("unused-export", "a.ts"))).rejects.toThrow(/no commit/);
   });
 
   it("refuses when git status cannot be read (a failed read is not clean)", async () => {
     const t = fake({ statusFails: true });
-    await expect(applyKnipFix(t.ports, "r", finding("unused-export", "a.ts"))).rejects.toThrow(/could not be read/);
+    await expect(applyCodemod(t.ports, "r", finding("unused-export", "a.ts"))).rejects.toThrow(/could not be read/);
     expect(t.log).toEqual([]);
   });
 
   it("rejects a kind with no codemod", async () => {
-    await expect(applyKnipFix(fake().ports, "r", finding("clone-group", "a.ts"))).rejects.toThrow(/no automatic fix/);
+    await expect(applyCodemod(fake().ports, "r", finding("clone-group", "a.ts"))).rejects.toThrow(/no automatic fix/);
   });
 });
 
-describe("applyKnipFix - scoping", () => {
+describe("applyCodemod - scoping", () => {
   it("keeps the finding's file, restores stray edits and deletions, deletes files knip created", async () => {
     const t = fake({ knip: knipEdits });
-    const out = await applyKnipFix(t.ports, "r", finding("unused-export", "a.ts"));
+    const out = await applyCodemod(t.ports, "r", finding("unused-export", "a.ts"));
     expect(out.changed).toEqual(["a.ts"]);
     expect(out.conflicts).toBeUndefined();
-    expect(out.note).toMatch(/every unused export/);
-    expect(t.log).toEqual(["run", "restore:b.ts,c.ts", "remove:new.ts"]);
+    expect(t.log).toEqual(["removeExport:a.ts#x", "restore:b.ts,c.ts", "remove:new.ts"]);
+  });
+
+  it("an unused-export fix removes ONLY the export the finding names, never runs knip --fix", async () => {
+    const t = fake({ knip: () => [{ code: " M", path: "a.ts" }] });
+    const named: Finding = { ...finding("unused-export", "a.ts"), params: { count: 1, files: 1, name: "helper" } };
+    await applyCodemod(t.ports, "r", named);
+    expect(t.log).toEqual(["removeExport:a.ts#helper"]);
+  });
+
+  it("refuses an unused-export finding that names no export (built before names were badged), and changes nothing", async () => {
+    const t = fake({ knip: knipEdits });
+    const legacy: Finding = { ...finding("unused-export", "a.ts"), params: { count: 2, files: 1 } };
+    await expect(applyCodemod(t.ports, "r", legacy)).rejects.toThrow(/does not name the export/);
+    expect(t.log).toEqual([]);
+  });
+
+  it("an unused-file fix runs knip's file removal", async () => {
+    const t = fake({ knip: () => [{ code: " D", path: "a.ts" }] });
+    await applyCodemod(t.ports, "r", finding("unused-file", "a.ts"));
+    expect(t.log).toEqual(["run"]);
   });
 
   it("keeps a file the person saved during the run and reports it as a conflict", async () => {
     const t = fake({ knip: knipEdits, saves: ["b.ts"] });
-    const out = await applyKnipFix(t.ports, "r", finding("unused-export", "a.ts"));
+    const out = await applyCodemod(t.ports, "r", finding("unused-export", "a.ts"));
     expect(out.conflicts).toEqual(["b.ts"]);
-    expect(t.log).toEqual(["run", "restore:c.ts", "remove:new.ts"]);
+    expect(t.log).toEqual(["removeExport:a.ts#x", "restore:c.ts", "remove:new.ts"]);
   });
 
   it("restores the strays even when knip crashes mid-way, and still reports the crash", async () => {
     const t = fake({ knip: knipEdits, failRun: new Error("knip could not run") });
-    await expect(applyKnipFix(t.ports, "r", finding("unused-export", "a.ts"))).rejects.toThrow(/knip could not run/);
-    expect(t.log).toEqual(["run", "restore:b.ts,c.ts", "remove:new.ts"]);
+    await expect(applyCodemod(t.ports, "r", finding("unused-export", "a.ts"))).rejects.toThrow(/knip could not run/);
+    expect(t.log).toEqual(["removeExport:a.ts#x", "restore:b.ts,c.ts", "remove:new.ts"]);
   });
 
   it("rejects loudly when a restore fails", async () => {
     const t = fake({ knip: knipEdits, restoreFails: true });
-    await expect(applyKnipFix(t.ports, "r", finding("unused-export", "a.ts"))).rejects.toThrow(/could not be undone/);
+    await expect(applyCodemod(t.ports, "r", finding("unused-export", "a.ts"))).rejects.toThrow(/could not be undone/);
   });
 
   it("serialises two fixes of the same root", async () => {
     const order: string[] = [];
     const slow = (name: string, ms: number): FixPorts => ({
       ...fake().ports,
-      run: async () => { order.push(`${name}:start`); await new Promise((r) => setTimeout(r, ms)); order.push(`${name}:end`); },
+      removeExport: async () => { order.push(`${name}:start`); await new Promise((r) => setTimeout(r, ms)); order.push(`${name}:end`); },
     });
     await Promise.all([
-      applyKnipFix(slow("one", 20), "r", finding("unused-export", "a.ts")),
-      applyKnipFix(slow("two", 1), "r", finding("unused-export", "a.ts")),
+      applyCodemod(slow("one", 20), "r", finding("unused-export", "a.ts")),
+      applyCodemod(slow("two", 1), "r", finding("unused-export", "a.ts")),
     ]);
     expect(order).toEqual(["one:start", "one:end", "two:start", "two:end"]);
   });
@@ -151,26 +174,26 @@ describe("helpers", () => {
   });
 });
 
-describe("applyKnipFix - apply to branch", () => {
+describe("applyCodemod - apply to branch", () => {
   it("switches to fix/<kind>-<slug>-<time>-<hash> BEFORE running, and returns the branch", async () => {
     const t = fake({ knip: knipEdits, branch: true });
-    const out = await applyKnipFix(t.ports, "r", finding("unused-export", "src/Billing.ts"));
+    const out = await applyCodemod(t.ports, "r", finding("unused-export", "src/Billing.ts"));
     expect(out.branch).toMatch(/^fix\/unused-export-billing-\d{14}-[a-z0-9]{6,8}$/);
     expect(t.log[0]).toBe(`branch:${out.branch}`);
-    expect(t.log[1]).toBe("run");
+    expect(t.log[1]).toBe("removeExport:src/Billing.ts#x");
     expect(out.branchError).toBeUndefined();
   });
 
   it("applies in place when git cannot switch, and SAYS why (never swallows it)", async () => {
     const t = fake({ knip: knipEdits, branch: false });
-    const out = await applyKnipFix(t.ports, "r", finding("unused-export", "a.ts"));
+    const out = await applyCodemod(t.ports, "r", finding("unused-export", "a.ts"));
     expect(out.branch).toBeUndefined();
     expect(out.branchError).toBe("fatal: a branch named that exists");
     expect(out.changed).toEqual(["a.ts"]);
   });
 
   it("applies in place when the host has no branch port", async () => {
-    const out = await applyKnipFix(fake({ knip: knipEdits }).ports, "r", finding("unused-file", "a.ts"));
+    const out = await applyCodemod(fake({ knip: knipEdits }).ports, "r", finding("unused-file", "a.ts"));
     expect(out.branch).toBeUndefined();
     expect(out.branchError).toBeUndefined();
   });
@@ -178,20 +201,20 @@ describe("applyKnipFix - apply to branch", () => {
   it("records the branch the person was on, so undo can return them to it", async () => {
     const t = fake({ knip: knipEdits, branch: true, on: "develop" });
     const seen: { origin?: string }[] = [];
-    await applyKnipFix(t.ports, "r", finding("unused-file", "a.ts"), (snapshot) => { seen.push(snapshot); return "id"; });
+    await applyCodemod(t.ports, "r", finding("unused-file", "a.ts"), (snapshot) => { seen.push(snapshot); return "id"; });
     expect(seen[0]!.origin).toBe("develop");
   });
 
   it("records no origin when the fix applied in place", async () => {
     const t = fake({ knip: knipEdits, branch: false });
     const seen: { origin?: string }[] = [];
-    await applyKnipFix(t.ports, "r", finding("unused-file", "a.ts"), (snapshot) => { seen.push(snapshot); return "id"; });
+    await applyCodemod(t.ports, "r", finding("unused-file", "a.ts"), (snapshot) => { seen.push(snapshot); return "id"; });
     expect(seen[0]!.origin).toBeUndefined();
   });
 
   it("goes back to the original branch when the codemod fails, and does not delete the fix branch", async () => {
     const t = fake({ knip: knipEdits, branch: true, on: "develop", failRun: new Error("knip could not run") });
-    await expect(applyKnipFix(t.ports, "r", finding("unused-file", "a.ts"))).rejects.toThrow(/knip could not run/);
+    await expect(applyCodemod(t.ports, "r", finding("unused-file", "a.ts"))).rejects.toThrow(/knip could not run/);
     expect(t.log).toContain("switch:develop");
     expect(t.log.some((l) => l.startsWith("delete"))).toBe(false);
   });
@@ -203,7 +226,7 @@ describe("applyKnipFix - apply to branch", () => {
 
   it("regression: knip changing nothing returns the person to their branch and deletes the empty fix branch", async () => {
     const t = fake({ knip: () => [], branch: true, on: "develop" });
-    const out = await applyKnipFix(withDelete(t), "r", finding("unused-file", "a.ts"), () => "id");
+    const out = await applyCodemod(withDelete(t), "r", finding("unused-file", "a.ts"), () => "id");
     expect(out.changed).toEqual([]);
     expect(out.branch).toBeUndefined();
     expect(out.fixId).toBeUndefined();
@@ -214,7 +237,7 @@ describe("applyKnipFix - apply to branch", () => {
   it("regression: a snapshot that throws reverts the fix, returns to the original branch and deletes the fix branch", async () => {
     const t = fake({ knip: knipEdits, branch: true, on: "develop" });
     const ports: FixPorts = { ...withDelete(t), hashObjects: async () => { throw new Error("hash-object failed"); } };
-    await expect(applyKnipFix(ports, "r", finding("unused-export", "a.ts"), () => "id")).rejects.toThrow(/recorded for undo.*hash-object failed/);
+    await expect(applyCodemod(ports, "r", finding("unused-export", "a.ts"), () => "id")).rejects.toThrow(/recorded for undo.*hash-object failed/);
     expect(t.log).toContain("restore:a.ts");
     expect(t.log).toContain("switch:develop");
     expect(t.log.some((l) => l.startsWith("delete:fix/"))).toBe(true);
@@ -224,7 +247,7 @@ describe("applyKnipFix - apply to branch", () => {
   it("regression: an unreadable HEAD (no snapshot) is treated as no undo record, not a silent success", async () => {
     const t = fake({ knip: knipEdits, branch: true, on: "develop" });
     const ports: FixPorts = { ...withDelete(t), headSha: async () => undefined };
-    await expect(applyKnipFix(ports, "r", finding("unused-export", "a.ts"), () => "id")).rejects.toThrow(/recorded for undo/);
+    await expect(applyCodemod(ports, "r", finding("unused-export", "a.ts"), () => "id")).rejects.toThrow(/recorded for undo/);
     expect(t.log).toContain("switch:develop");
   });
 
@@ -244,7 +267,7 @@ describe("applyKnipFix - apply to branch", () => {
     // The strays restore fine; only putting the finding's own file back fails.
     const restore = t.ports.restore;
     const ports: FixPorts = { ...withDelete(t), ...hashFails, restore: async (paths) => { if (paths.includes("a.ts")) throw new Error("checkout locked"); await restore(paths); } };
-    const error = await rejection(applyKnipFix(ports, "r", finding("unused-export", "a.ts"), () => "id"));
+    const error = await rejection(applyCodemod(ports, "r", finding("unused-export", "a.ts"), () => "id"));
     expect(error.message).toMatch(/reverting it failed \(checkout locked\).*hash-object failed/);
     expect((error.cause as Error).message).toBe("checkout locked");
     expect(t.log).toContain("switch:develop");
@@ -253,7 +276,7 @@ describe("applyKnipFix - apply to branch", () => {
 
   it("regression: applied in place (no branch), the message does not claim a branch switch", async () => {
     const t = fake({ knip: knipEdits });
-    const error = await rejection(applyKnipFix({ ...t.ports, ...hashFails }, "r", finding("unused-export", "a.ts"), () => "id"));
+    const error = await rejection(applyCodemod({ ...t.ports, ...hashFails }, "r", finding("unused-export", "a.ts"), () => "id"));
     expect(error.message).toMatch(/so it was reverted: hash-object failed/);
     expect(error.message).not.toMatch(/back on your branch/);
     expect((error.cause as Error).message).toBe("hash-object failed");
@@ -261,7 +284,7 @@ describe("applyKnipFix - apply to branch", () => {
 
   it("regression: when the switch back fails, the message says the person is still on the fix branch", async () => {
     const t = fake({ knip: knipEdits, branch: true, on: "develop", switchFails: true });
-    const error = await rejection(applyKnipFix({ ...withDelete(t), ...hashFails }, "r", finding("unused-export", "a.ts"), () => "id"));
+    const error = await rejection(applyCodemod({ ...withDelete(t), ...hashFails }, "r", finding("unused-export", "a.ts"), () => "id"));
     expect(error.message).toMatch(/still on fix\/unused-export-a-/);
     expect(t.log.some((l) => l.startsWith("delete:"))).toBe(false);
   });

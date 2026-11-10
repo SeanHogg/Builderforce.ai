@@ -16,8 +16,9 @@
 import { randomUUID } from "node:crypto";
 import type { Finding } from "@seanhogg/builderforce-memory/knowledge";
 import { sourcePathOf } from "@builderforce/agent-tools/knowledge";
+import { ExportRemovalRefusal } from "@builderforce/agent-tools/node-symbols";
 import { PathRefusal } from "./knowledgeFixPaths";
-import { applyKnipFix, isFixableKind, nodeFixPorts, serialized, type FixPorts } from "./knowledgeFixes";
+import { applyCodemod, exportNameOf, isFixableKind, nodeFixPorts, serialized, type FixPorts } from "./knowledgeFixes";
 import { execCheck, resolveCheck } from "./knowledgeFixSteps";
 import { fixText } from "./knowledgeFixText";
 import { undoSnapshot, UndoPartial, type FixSnapshot } from "./knowledgeFixUndo";
@@ -58,8 +59,12 @@ export async function treeKey(ports: Pick<FixPorts, "status" | "headSha" | "hash
   return JSON.stringify([head, status, blobs]);
 }
 
-/** A refused path in the person's words; anything else is passed on as it is. */
+/** A refused path or export in the person's words; anything else is passed on as it is. */
 function worded(error: unknown): unknown {
+  if (error instanceof ExportRemovalRefusal) {
+    const name = error.exportName;
+    return new Error(error.code === "not-found" ? fixText.exportNotFound(name) : error.code === "unsupported" ? fixText.exportUnsupported(name) : fixText.exportUnparsed(name));
+  }
   if (!(error instanceof PathRefusal)) return error;
   return new Error(error.code === "outside" ? fixText.outsideFolder(error.path) : error.code === "link" ? fixText.throughLink(error.path) : fixText.isLink(error.path));
 }
@@ -99,7 +104,7 @@ export class KnowledgeFixSession {
     this.gate();
     await this.allowScripts(rootId);
     this.forgetPreviews(rootId);
-    return applyKnipFix(this.host.fixPorts(rootPath), rootId, finding, (snapshot) => {
+    return applyCodemod(this.host.fixPorts(rootPath), rootId, finding, (snapshot) => {
       const fixId = randomUUID();
       this.records.set(fixId, { rootId, snapshot });
       return fixId;
@@ -143,7 +148,7 @@ export class KnowledgeFixSession {
     if (tree !== null && cached?.tree === tree) return cached.preview;
     try {
       const report = await runKnipReport(rootPath);
-      const preview = { files: previewOf(report, finding.kind, filesOf(rootId, finding)) };
+      const preview = { files: previewOf(report, finding.kind, filesOf(rootId, finding), exportNameOf(finding)) };
       if (tree !== null) this.previews.set(slot, { tree, preview });
       else this.previews.delete(slot);
       return preview;
@@ -182,7 +187,7 @@ export class KnowledgeFixSession {
     await this.allowScripts(rootId);
     return serialized(rootId, async () => {
       try {
-        const left = stillReported(await runKnipReport(rootPath, signal), finding.kind, filesOf(rootId, finding));
+        const left = stillReported(await runKnipReport(rootPath, signal), finding.kind, filesOf(rootId, finding), exportNameOf(finding));
         return left.length === 0 ? { status: "pass" } : { status: "fail", detail: fixText.rescanStill(left.join(", ")).slice(0, DETAIL_CAP) };
       } catch (error) {
         const why = error instanceof ShellFailure ? `${error.message}${error.output ? `\n${error.output}` : ""}` : error instanceof Error ? error.message : String(error);

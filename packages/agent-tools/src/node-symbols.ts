@@ -28,6 +28,9 @@ import { isSkippedDirName, WORKSPACE_SKIP_DIRS } from "./skipDirs.js";
 // The tree-sitter extractor (web-tree-sitter WASM, regex fallback per language) lives in
 // its own module and is re-exported from this export condition.
 export { treeSitterSymbolExtractor, type TreeSitterExtractorOptions } from "./node-tree-sitter.js";
+// The per-export remover (the `unused-export` fix) parses with the same grammars.
+export { removeExportFromSource } from "./node-export-remover.js";
+export { ExportRemovalRefusal, type ExportRemoval, type ExportRemovalAction, type ExportRemovalRefusalCode } from "./exportRemoval.js";
 
 /** How a file's definitions are read. `id` is stamped on the snapshot: a snapshot built by
  *  a different extractor is re-parsed, never trusted. */

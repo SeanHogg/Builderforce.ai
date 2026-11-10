@@ -238,12 +238,10 @@ export interface KnowledgeFixResult {
   fixId?: string;
   /** Why no branch was made (git refused), when the fix applied in place instead. */
   branchError?: string;
-  /** The finding's files knip changed. */
+  /** The finding's files the fix changed. */
   changed: string[];
-  /** Files the person saved during the run that knip also changed: left as they are, to be checked. */
+  /** Files the person saved during the run that the fix also changed: left as they are, to be checked. */
   conflicts?: string[];
-  /** What the fix did beyond the named export: knip fixes the whole file. */
-  note?: string;
 }
 
 export type KnowledgeOp = KnowledgeCall["op"];

@@ -62,10 +62,13 @@ export function knipReportCommand(): string {
   return analyzerCommand(knipSpec(), '.', bundled?.knip);
 }
 
-/** The pinned knip invocation, applying its own fixes (`--fix`) instead of reporting. Deleting files is opt-in per call. */
-export function knipFixCommand(fixTypes: readonly ('exports' | 'files')[]): string {
-  const removeFiles = fixTypes.includes('files') ? '--allow-remove-files ' : '';
-  return knipReportCommand().replace('--reporter=json --no-progress', `--fix --fix-type ${fixTypes.join(',')} ${removeFiles}--no-progress`);
+/**
+ * The pinned knip invocation that DELETES the project's unused files (`--fix --fix-type files`).
+ * Unused exports are never fixed through knip (it removes every unused export of a file at once);
+ * that fix is the per-export remover (`removeExportFromSource`, `./node-symbols`).
+ */
+export function knipRemoveFilesCommand(): string {
+  return knipReportCommand().replace('--reporter=json --no-progress', '--fix --fix-type files --allow-remove-files --no-progress');
 }
 
 /** npm diagnostics may surround JSON in a shell's combined stdout/stderr stream. */

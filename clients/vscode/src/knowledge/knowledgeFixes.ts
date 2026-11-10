@@ -1,10 +1,14 @@
 /**
  * `applyFix` (PRD 38, Option B+ Contract 4): only the finding kinds that have a
- * deterministic codemod are applied here - `unused-export` and `unused-file`, through the
- * pinned knip `--fix` (`knipFixCommand`, next to the analyzer pins). Every other kind
- * rejects, and the view falls back to `onCompose`.
+ * deterministic codemod are applied here ({@link CODEMODS}). Every other kind rejects, and the
+ * view falls back to `onCompose`.
  *
- * knip fixes the whole project, so the fix is guarded and SCOPED:
+ *   unused-export  the per-export remover (`removeExportFromSource`, `@builderforce/agent-tools/node-symbols`)
+ *                  removes ONLY the export the finding names (`params.name`), never the file's other
+ *                  unused exports (PRD 41 WS9);
+ *   unused-file    the pinned knip `--fix --fix-type files` (`knipRemoveFilesCommand`).
+ *
+ * A codemod may touch more than the finding (knip fixes the whole project), so the fix is guarded and SCOPED:
  *
  *   precondition  the work tree must be COMPLETELY clean (`git status --porcelain=v1 -z
  *                 --untracked-files=all` is empty: nothing modified, staged or untracked),
@@ -20,22 +24,41 @@
  * Because the tree was clean, HEAD IS the state before, so nothing of the person's is lost.
  */
 
-import { rm } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { knipFixCommand } from "@builderforce/agent-tools";
+import { knipRemoveFilesCommand } from "@builderforce/agent-tools";
 import { sourcePathOf } from "@builderforce/agent-tools/knowledge";
 import { runGit } from "@builderforce/agent-tools/node-git-history";
+import { removeExportFromSource } from "@builderforce/agent-tools/node-symbols";
 import type { Finding } from "@seanhogg/builderforce-memory/knowledge";
+import { symbolGrammarOptions } from "../workspaceSymbols";
 import { assertInsideRoot } from "./knowledgeFixPaths";
 import type { KnowledgeFixResult } from "./knowledgeProtocol";
 import { runShell } from "./knowledgeShell";
 import { fixText } from "./knowledgeFixText";
 import { snapshotFix, type FixSnapshot } from "./knowledgeFixUndo";
 
-/** The finding kinds a codemod exists for, and the knip fix types each runs. */
-const FIXABLE: Record<string, readonly ("exports" | "files")[]> = {
-  "unused-export": ["exports"],
-  "unused-file": ["files"],
+/** One codemod: what it does to the work tree for a finding whose files are `wanted`. Validation that needs no git runs in `prepare`, before the lock. */
+interface Codemod {
+  prepare(finding: Finding, wanted: ReadonlySet<string>): (ports: FixPorts) => Promise<void>;
+}
+
+/** The one export an `unused-export` finding names (`params.name`); absent on a finding that covers the whole file. */
+export const exportNameOf = (finding: Finding): string | undefined =>
+  (typeof finding.params?.name === "string" && finding.params.name ? finding.params.name : undefined);
+
+/** The finding kinds a codemod exists for. */
+const CODEMODS: Record<string, Codemod> = {
+  "unused-export": {
+    prepare(finding, wanted) {
+      const name = exportNameOf(finding);
+      // A finding from before names were badged covers every export of the file: no single export to remove.
+      if (!name || wanted.size !== 1) throw new Error(fixText.noExportName());
+      const [path] = wanted;
+      return (ports) => ports.removeExport(path!, name);
+    },
+  },
+  "unused-file": { prepare: () => (ports) => ports.run(knipRemoveFilesCommand()) },
 };
 
 const KNIP_TIMEOUT_MS = 10 * 60_000;
@@ -65,6 +88,8 @@ export interface FixPorts {
   watchSaves(): { stop(): string[] };
   /** Runs a shell command in the root; rejects when it could not run or failed. */
   run(command: string): Promise<void>;
+  /** Removes the ONE export `name` from the root-relative file; rejects (an `ExportRemovalRefusal`, the file untouched) when the remover refuses. */
+  removeExport(path: string, name: string): Promise<void>;
   /** `git --literal-pathspecs checkout HEAD -- paths`; rejects on failure or on a path that reaches outside the root. */
   restore(paths: string[]): Promise<void>;
   /** The commit HEAD is at; undefined when git failed. */
@@ -75,11 +100,11 @@ export interface FixPorts {
   inHead?(paths: string[]): Promise<Set<string>>;
   /** Takes paths out of the index without touching the files. */
   unstage?(paths: string[]): Promise<void>;
-  /** Deletes files knip created; rejects on failure. */
+  /** Deletes files the codemod created; rejects on failure. */
   remove(paths: string[]): Promise<void>;
 }
 
-export const isFixableKind = (kind: string): boolean => kind in FIXABLE;
+export const isFixableKind = (kind: string): boolean => kind in CODEMODS;
 
 /** `git status --porcelain=v1 -z` output as entries, the prefix of the root inside the repo removed. Pure. */
 export function parseStatusZ(out: string, prefix: string): StatusEntry[] {
@@ -119,15 +144,21 @@ export function serialized<T>(rootId: string, work: () => Promise<T>): Promise<T
 }
 
 /** Applies the finding's codemod. `record` (when the host can undo) stores the snapshot taken under the lock and returns the id the result carries. */
-export function applyKnipFix(ports: FixPorts, rootId: string, finding: Finding, record?: (snapshot: FixSnapshot) => string): Promise<KnowledgeFixResult> {
-  const fixTypes = FIXABLE[finding.kind];
-  if (!fixTypes) return Promise.reject(new Error(fixText.noAutomaticFix(finding.kind)));
+export function applyCodemod(ports: FixPorts, rootId: string, finding: Finding, record?: (snapshot: FixSnapshot) => string): Promise<KnowledgeFixResult> {
+  const codemod = CODEMODS[finding.kind];
+  if (!codemod) return Promise.reject(new Error(fixText.noAutomaticFix(finding.kind)));
   const wanted = new Set(finding.nodes.flatMap((ref) => {
     const path = sourcePathOf(ref, rootId);
     return path ? [path] : [];
   }));
   if (wanted.size === 0) return Promise.reject(new Error(fixText.noFileOfFolder()));
-  return serialized(rootId, () => fix(ports, wanted, fixTypes, fixBranchName(finding, wanted, new Date()), record));
+  let apply: (ports: FixPorts) => Promise<void>;
+  try {
+    apply = codemod.prepare(finding, wanted);
+  } catch (error) {
+    return Promise.reject(error);
+  }
+  return serialized(rootId, () => fix(ports, wanted, apply, fixBranchName(finding, wanted, new Date()), record));
 }
 
 /**
@@ -145,7 +176,7 @@ export function fixBranchName(finding: Pick<Finding, "id" | "kind">, wanted: Rea
   return `fix/${clean(finding.kind)}-${slug ? slug + "-" : ""}${stamp}-${h.toString(36).padStart(6, "0").slice(0, 8)}`;
 }
 
-async function fix(ports: FixPorts, wanted: ReadonlySet<string>, fixTypes: readonly ("exports" | "files")[], branchName: string, record?: (snapshot: FixSnapshot) => string): Promise<KnowledgeFixResult> {
+async function fix(ports: FixPorts, wanted: ReadonlySet<string>, apply: (ports: FixPorts) => Promise<void>, branchName: string, record?: (snapshot: FixSnapshot) => string): Promise<KnowledgeFixResult> {
   if (!(await ports.hasHead())) throw new Error(fixText.noCommit());
   const before = await ports.status();
   if (before === undefined) throw new Error(fixText.statusUnreadable());
@@ -167,7 +198,7 @@ async function fix(ports: FixPorts, wanted: ReadonlySet<string>, fixTypes: reado
   let outcome: { changed: string[]; conflicts: string[] } | undefined;
   let restoreError: unknown;
   try {
-    await ports.run(knipFixCommand(fixTypes));
+    await apply(ports);
   } catch (error) {
     runError = error;
   } finally {
@@ -196,11 +227,11 @@ async function fix(ports: FixPorts, wanted: ReadonlySet<string>, fixTypes: reado
     await ports.deleteBranch?.(branch).catch(() => undefined);
     return true;
   };
-  // knip changed nothing the finding names: an undo-capable host would hold no record, so no
+  // The codemod changed nothing the finding names: an undo-capable host would hold no record, so no
   // empty fix branch is left behind.
   if (record && changed.length === 0) {
     const kept = branch && !(await abandonBranch());
-    return { ...(kept ? { branch } : {}), ...(branchError ? { branchError } : {}), changed, ...(conflicts.length > 0 ? { conflicts } : {}), note: fixText.fixNote() };
+    return { ...(kept ? { branch } : {}), ...(branchError ? { branchError } : {}), changed, ...(conflicts.length > 0 ? { conflicts } : {}) };
   }
   let fixId: string | undefined;
   if (record) {
@@ -233,10 +264,10 @@ async function fix(ports: FixPorts, wanted: ReadonlySet<string>, fixTypes: reado
       throw Object.assign(new Error(message), { cause: revertError ?? error });
     }
   }
-  return { ...(branch ? { branch } : {}), ...(branchError ? { branchError } : {}), ...(fixId ? { fixId } : {}), changed, ...(conflicts.length > 0 ? { conflicts } : {}), note: fixText.fixNote() };
+  return { ...(branch ? { branch } : {}), ...(branchError ? { branchError } : {}), ...(fixId ? { fixId } : {}), changed, ...(conflicts.length > 0 ? { conflicts } : {}) };
 }
 
-/** Puts these root-relative paths back to HEAD (a file knip created is deleted). */
+/** Puts these root-relative paths back to HEAD (a file the codemod created is deleted). */
 async function revertPaths(ports: FixPorts, paths: readonly string[]): Promise<void> {
   const want = new Set(paths);
   const entries = ((await ports.status()) ?? []).filter((e) => want.has(e.path));
@@ -246,7 +277,7 @@ async function revertPaths(ports: FixPorts, paths: readonly string[]): Promise<v
   if (remove.length > 0) await ports.remove(remove);
 }
 
-/** After knip: put every stray change back (except what the person saved) and report what stayed. */
+/** After the codemod: put every stray change back (except what the person saved) and report what stayed. */
 async function settle(ports: FixPorts, wanted: ReadonlySet<string>, saved: ReadonlySet<string>): Promise<{ changed: string[]; conflicts: string[] }> {
   const after = await ports.status();
   if (after === undefined) throw new Error(fixText.statusUnreadableAfter());
@@ -265,7 +296,7 @@ async function settle(ports: FixPorts, wanted: ReadonlySet<string>, saved: Reado
 }
 
 /** The git, file and shell ports of a folder; the editor-bound ones (`dirtyBuffers`, `watchSaves`) come from the caller. */
-export function nodeFixPorts(rootPath: string): Required<Pick<FixPorts, "status" | "hasHead" | "createBranch" | "currentBranch" | "switchTo" | "deleteBranch" | "run" | "restore" | "remove" | "headSha" | "hashObjects" | "inHead" | "unstage">> {
+export function nodeFixPorts(rootPath: string): Required<Pick<FixPorts, "status" | "hasHead" | "createBranch" | "currentBranch" | "switchTo" | "deleteBranch" | "run" | "removeExport" | "restore" | "remove" | "headSha" | "hashObjects" | "inHead" | "unstage">> {
   const orThrow = async (args: string[]): Promise<string> => {
     const run = await runGit(rootPath, args);
     if (run.stdout === undefined) throw new Error(fixText.gitFailed(args[0] ?? "", run.stderr ? `: ${run.stderr.trim().slice(0, 300)}` : ""));
@@ -299,6 +330,14 @@ export function nodeFixPorts(rootPath: string): Required<Pick<FixPorts, "status"
       return parseStatusZ(out.stdout, prefix.stdout.trim());
     },
     run: (command) => runShell(command, rootPath, { ok: knipRanOk, timeoutMs: KNIP_TIMEOUT_MS }),
+    async removeExport(path, name) {
+      await assertInsideRoot(rootPath, path);
+      const file = join(rootPath, path);
+      const content = await readFile(file, "utf8");
+      // Refuses (file untouched) rather than guess: see `exportRemoval.ts`.
+      const { source } = await removeExportFromSource(path, content, name, symbolGrammarOptions());
+      if (source !== content) await writeFile(file, source, "utf8");
+    },
     // Literal pathspecs: a name like `app/[id]/page.tsx` or `a*.ts` is that file, never a glob.
     async restore(paths) {
       for (const p of paths) await assertInsideRoot(rootPath, p);

@@ -46,9 +46,14 @@ export function setSymbolGrammarDir(dir: string): void {
   extractor = undefined;
 }
 
+/** Where the tree-sitter wasm loads from: the bundle's `out/tree-sitter`, else the installed packages. */
+export function symbolGrammarOptions(): { wasmDir?: string } {
+  return grammarDir ? { wasmDir: grammarDir } : {};
+}
+
 /** Tree-sitter where a grammar loads, the line-regex extractor everywhere else. */
 function editorExtractor(): SymbolExtractor {
-  extractor ??= treeSitterSymbolExtractor(grammarDir ? { wasmDir: grammarDir } : {});
+  extractor ??= treeSitterSymbolExtractor(symbolGrammarOptions());
   return extractor;
 }
 

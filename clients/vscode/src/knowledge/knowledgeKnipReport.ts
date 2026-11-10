@@ -1,9 +1,9 @@
 /**
  * knip's own REPORT (the pinned analyzer, `--reporter=json`, nothing changed), read two ways:
  *
- *   preview  what the fix would remove: per file, the unused exports it names (this is knip's own
- *            list of what `--fix` deletes, so it is a dry run without writing a byte);
- *   re-scan  whether the finding is gone: the finding's files no longer appear in the report.
+ *   preview  what the fix would remove: per file, the unused export the finding names (every
+ *            unused export of the file for a finding that names none), as a dry run without writing a byte;
+ *   re-scan  whether the finding is gone: its export (or file) no longer appears in the report.
  *
  * The report goes to a temp file (stdout is capped for display, and a real report is large).
  */
@@ -37,20 +37,24 @@ export async function runKnipReport(rootPath: string, signal?: AbortSignal): Pro
   }
 }
 
-/** The finding's files still reported by knip for its kind. Pure. */
-export function stillReported(report: KnipReport, kind: string, wanted: readonly string[]): string[] {
-  const want = new Set(wanted.map(norm));
-  if (kind === "unused-file") return report.files.filter((f) => want.has(f));
-  if (kind === "unused-export") return report.issues.filter((i) => want.has(i.file) && (i.exports?.length ?? 0) > 0).map((i) => i.file);
+/** A file's unused exports in knip's report: only `exportName` when the finding names one. */
+const unusedExportsOf = (report: KnipReport, path: string, exportName?: string): { name: string; line?: number }[] =>
+  (report.issues.find((i) => i.file === path)?.exports ?? []).filter((e) => exportName === undefined || e.name === exportName);
+
+/** The finding's files still reported by knip for its kind (for an `unused-export` naming one export, only while THAT export is reported). Pure. */
+export function stillReported(report: KnipReport, kind: string, wanted: readonly string[], exportName?: string): string[] {
+  const want = [...new Set(wanted.map(norm))];
+  if (kind === "unused-file") return report.files.filter((f) => want.includes(f));
+  if (kind === "unused-export") return want.filter((f) => unusedExportsOf(report, f, exportName).length > 0);
   return [];
 }
 
-/** What the fix removes, per file, from knip's report. A file knip no longer reports is listed with nothing to remove. Pure. */
-export function previewOf(report: KnipReport, kind: string, wanted: readonly string[]): FixPreviewRow[] {
+/** What the fix removes, per file, from knip's report (only `exportName` when the finding names one). A file knip no longer reports is listed with nothing to remove. Pure. */
+export function previewOf(report: KnipReport, kind: string, wanted: readonly string[], exportName?: string): FixPreviewRow[] {
   return wanted.map((raw): FixPreviewRow => {
     const path = norm(raw);
     if (kind === "unused-export") {
-      const names = report.issues.find((i) => i.file === path)?.exports ?? [];
+      const names = unusedExportsOf(report, path, exportName);
       return { path, ...(names.length > 0 ? { removed: names.length, lines: names.map((e) => `- export ${e.name}${e.line ? `  (line ${e.line})` : ""}`) } : {}) };
     }
     return { path, ...(report.files.includes(path) ? { removed: 1, lines: ["- (the whole file)"] } : {}) };

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CodeAnalysisSnapshot } from './codeAnalysis.js';
-import { analyzeCodebaseTool, analyzerCommand, ANALYZERS, knipFixCommand, knipReportCommand, setBundledAnalyzers, TYPESCRIPT_PIN } from './codeAnalysisTool.js';
+import { analyzeCodebaseTool, analyzerCommand, ANALYZERS, knipRemoveFilesCommand, knipReportCommand, setBundledAnalyzers, TYPESCRIPT_PIN } from './codeAnalysisTool.js';
 
 const dependency = { modules: [{ source: 'src/a.ts', dependencies: [] }] };
 const duplicates = { duplicates: [] };
@@ -35,7 +35,7 @@ describe('bundled analyzers (PRD 41 A3)', () => {
     expect(commands.some((c) => c.includes('npm exec') || c.includes('npm '))).toBe(false);
     // Fix preview and re-scan read the same bundled knip.
     expect(knipReportCommand()).toBe('node "/ext/knip/bin/knip.js" --reporter=json --no-progress');
-    expect(knipFixCommand(['exports'])).toBe('node "/ext/knip/bin/knip.js" --fix --fix-type exports --no-progress');
+    expect(knipRemoveFilesCommand()).toBe('node "/ext/knip/bin/knip.js" --fix --fix-type files --allow-remove-files --no-progress');
   });
 
   it('marks an analyzer with no bundled entry not_measured / analyzer-unavailable, never a clean zero', async () => {

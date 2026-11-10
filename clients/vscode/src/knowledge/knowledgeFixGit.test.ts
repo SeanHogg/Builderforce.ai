@@ -5,7 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { assertInsideRoot, isSafeRelative } from "./knowledgeFixPaths";
-import { nodeFixPorts } from "./knowledgeFixes";
+import { ExportRemovalRefusal } from "@builderforce/agent-tools/node-symbols";
+import { srcRef, type Finding } from "@seanhogg/builderforce-memory/knowledge";
+import { applyCodemod, nodeFixPorts } from "./knowledgeFixes";
 import { snapshotFix, undoSnapshot } from "./knowledgeFixUndo";
 
 vi.mock("vscode", async () => (await import("./vscodeL10nMock")).vscodeL10nMock);
@@ -161,6 +163,25 @@ describe.skipIf(!hasGit())("the fix branch", () => {
     const again = await ports.createBranch("fix/dup");
     expect(again.ok).toBe(false);
     expect(again.ok === false && again.reason).toMatch(/already exists|exists/i);
+  });
+});
+
+describe.skipIf(!hasGit())("the unused-export fix through the real ports", () => {
+  const exportFinding = (name: string): Finding => ({ id: `f-${name}`, kind: "unused-export", pack: "code", nodes: [srcRef("r", "src/a.ts")], severity: "info", params: { count: 1, files: 1, name } });
+  const editorPorts = { dirtyBuffers: () => [], watchSaves: () => ({ stop: () => [] }) };
+
+  it("regression: with two unused exports in one file, fixing one leaves the other exported", async () => {
+    const root = await repo({ "src/a.ts": "export const one = 1;\n\nexport function two() {\n  return 2;\n}\n" });
+    const out = await applyCodemod({ ...nodeFixPorts(root), ...editorPorts }, "r", exportFinding("one"));
+    expect(out.changed).toEqual(["src/a.ts"]);
+    expect(await read(root, "src/a.ts")).toBe("export function two() {\n  return 2;\n}\n");
+  });
+
+  it("refuses a name the file does not export, and leaves the file as it was", async () => {
+    const body = "export const one = 1;\n";
+    const root = await repo({ "src/a.ts": body });
+    await expect(nodeFixPorts(root).removeExport("src/a.ts", "missing")).rejects.toBeInstanceOf(ExportRemovalRefusal);
+    expect(await read(root, "src/a.ts")).toBe(body);
   });
 });
 

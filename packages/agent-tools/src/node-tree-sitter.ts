@@ -24,12 +24,23 @@ export interface TreeSitterExtractorOptions {
   maxParseBytes?: number;
 }
 
-/** The structural slice of web-tree-sitter this module uses (0.22 API). */
-interface TsNode { startPosition: { row: number }; text: string }
+/** The structural slice of web-tree-sitter this module uses (0.22 API). Indices are UTF-16 (JS string) offsets. */
+export interface TreeSitterNode {
+  readonly type: string;
+  readonly text: string;
+  readonly startIndex: number;
+  readonly endIndex: number;
+  readonly startPosition: { row: number };
+  readonly hasError: boolean;
+  readonly children: TreeSitterNode[];
+  readonly namedChildren: TreeSitterNode[];
+  childForFieldName(field: string): TreeSitterNode | null;
+}
+type TsNode = TreeSitterNode;
 interface TsQuery { captures(node: TsNode): Array<{ name: string; node: TsNode }> }
 interface TsLanguage { query(source: string): TsQuery }
 interface TsTree { rootNode: TsNode; delete(): void }
-interface TsParser { setLanguage(lang: TsLanguage): void; parse(source: string): TsTree }
+interface TsParser { setLanguage(lang: TsLanguage): void; parse(source: string): TsTree; delete(): void }
 interface TsParserCtor {
   new (): TsParser;
   init(opts?: { locateFile?: (name: string, dir: string) => string }): Promise<void>;
@@ -175,6 +186,68 @@ function wasmLocator(wasmDir?: string): { runtime: string; grammar: (file: strin
   }
 }
 
+/** The web-tree-sitter runtime, initialised once per runtime wasm; null when it cannot load. */
+const runtimes = new Map<string, Promise<TsParserCtor | null>>();
+function loadRuntime(runtimeWasm: string): Promise<TsParserCtor | null> {
+  let loaded = runtimes.get(runtimeWasm);
+  if (!loaded) {
+    loaded = (async () => {
+      try {
+        const mod = (await import("web-tree-sitter")) as unknown as { default?: TsParserCtor } & TsParserCtor;
+        const Parser = (mod.default ?? mod) as TsParserCtor;
+        await Parser.init({ locateFile: () => runtimeWasm });
+        return Parser;
+      } catch {
+        return null;
+      }
+    })();
+    runtimes.set(runtimeWasm, loaded);
+  }
+  return loaded;
+}
+
+/** A grammar, loaded once per wasm path; null when it cannot load. */
+const grammars = new Map<string, Promise<{ Parser: TsParserCtor; lang: TsLanguage } | null>>();
+function loadGrammar(locator: NonNullable<ReturnType<typeof wasmLocator>>, wasm: string): Promise<{ Parser: TsParserCtor; lang: TsLanguage } | null> {
+  const file = locator.grammar(wasm);
+  let loaded = grammars.get(file);
+  if (!loaded) {
+    loaded = (async () => {
+      const Parser = await loadRuntime(locator.runtime);
+      if (!Parser) return null;
+      try {
+        return { Parser, lang: await Parser.Language.load(file) };
+      } catch {
+        return null;
+      }
+    })();
+    grammars.set(file, loaded);
+  }
+  return loaded;
+}
+
+/**
+ * Parses one JS/TS file with its grammar and hands the `program` node to `read`; the tree and
+ * parser are freed afterwards. Undefined when the file is not JS/TS or the grammar cannot load.
+ */
+export async function parseJsTs<T>(relPath: string, content: string, read: (root: TreeSitterNode) => T, opts: Pick<TreeSitterExtractorOptions, "wasmDir"> = {}): Promise<T | undefined> {
+  const grammar = GRAMMAR_BY_EXT[extOf(relPath)];
+  const locator = wasmLocator(opts.wasmDir);
+  if (!grammar || grammar.family !== "js" || !locator) return undefined;
+  const loaded = await loadGrammar(locator, grammar.wasm);
+  if (!loaded) return undefined;
+  const parser = new loaded.Parser();
+  let tree: TsTree | null = null;
+  try {
+    parser.setLanguage(loaded.lang);
+    tree = parser.parse(content);
+    return read(tree.rootNode);
+  } finally {
+    tree?.delete();
+    parser.delete();
+  }
+}
+
 /**
  * A {@link SymbolExtractor}-shaped tree-sitter extractor. Lazy: nothing loads until the
  * first file of a supported language; each grammar loads once and a failure is
@@ -185,36 +258,21 @@ export function treeSitterSymbolExtractor(opts: TreeSitterExtractorOptions = {})
   extract(relPath: string, content: string): Promise<CodeSymbol[]>;
 } {
   const maxParseBytes = opts.maxParseBytes ?? 400_000;
-  let parserCtor: Promise<TsParserCtor | null> | null = null;
   // One parser per grammar, reused: parsing is synchronous, so concurrent extracts never
   // share it mid-parse, and a parser per file would leak wasm memory.
   const languages = new Map<string, Promise<{ parser: TsParser; query: TsQuery } | null>>();
   const locator = wasmLocator(opts.wasmDir);
-
-  const runtime = (): Promise<TsParserCtor | null> => {
-    parserCtor ??= (async () => {
-      if (!locator) return null;
-      try {
-        const mod = (await import("web-tree-sitter")) as unknown as { default?: TsParserCtor } & TsParserCtor;
-        const Parser = (mod.default ?? mod) as TsParserCtor;
-        await Parser.init({ locateFile: () => locator.runtime });
-        return Parser;
-      } catch {
-        return null;
-      }
-    })();
-    return parserCtor;
-  };
 
   const language = (g: Grammar): Promise<{ parser: TsParser; query: TsQuery } | null> => {
     const key = `${g.wasm}\n${g.query}`;
     let loaded = languages.get(key);
     if (!loaded) {
       loaded = (async () => {
-        const Parser = await runtime();
-        if (!Parser || !locator) return null;
+        if (!locator) return null;
+        const grammar = await loadGrammar(locator, g.wasm);
+        if (!grammar) return null;
+        const { Parser, lang } = grammar;
         try {
-          const lang = await Parser.Language.load(locator.grammar(g.wasm));
           const parser = new Parser();
           parser.setLanguage(lang);
           return { parser, query: lang.query(g.query) };

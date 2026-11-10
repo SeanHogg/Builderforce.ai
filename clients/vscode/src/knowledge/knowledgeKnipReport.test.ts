@@ -22,6 +22,11 @@ describe("stillReported (the re-scan)", () => {
     expect(stillReported(report, "unused-export", ["src/clean.ts"])).toEqual([]);
   });
 
+  it("a named unused-export finding is gone when knip no longer names THAT export, whatever else the file still has", () => {
+    expect(stillReported(report, "unused-export", ["src/api.ts"], "legacy")).toEqual(["src/api.ts"]);
+    expect(stillReported(report, "unused-export", ["src/api.ts"], "removedAlready")).toEqual([]);
+  });
+
   it("reads Windows separators and ./ the same", () => {
     expect(stillReported(report, "unused-file", [".\\src\\dead.ts"])).toEqual(["src/dead.ts"]);
   });
@@ -36,6 +41,10 @@ describe("previewOf (what the fix removes)", () => {
     expect(previewOf(report, "unused-export", ["src/api.ts"])).toEqual([
       { path: "src/api.ts", removed: 2, lines: ["- export oldHelper  (line 12)", "- export legacy"] },
     ]);
+  });
+
+  it("lists ONLY the export a finding names: the fix removes that one, not its neighbours", () => {
+    expect(previewOf(report, "unused-export", ["src/api.ts"], "legacy")).toEqual([{ path: "src/api.ts", removed: 1, lines: ["- export legacy"] }]);
   });
 
   it("marks a whole file for removal, and lists a file knip no longer reports with nothing to remove", () => {

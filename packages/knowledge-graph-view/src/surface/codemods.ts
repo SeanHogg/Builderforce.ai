@@ -3,7 +3,8 @@
  * catalog key naming the Apply card. Adding a codemod is a row here (and the host's
  * `applyFixKinds` / `applyFix` handling it), never a branch in a component.
  *
- * `builtin` rows are the ones every host with `applyFix` is assumed to run (the knip codemods);
+ * `builtin` rows are the ones every host with `applyFix` is assumed to run (the per-export remover for
+ * `unused-export`, knip's file removal for `unused-file`);
  * any other row is offered only when the source lists its kind in `applyFixKinds`.
  */
 

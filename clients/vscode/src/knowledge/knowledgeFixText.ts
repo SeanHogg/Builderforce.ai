@@ -45,5 +45,8 @@ export const fixText = {
   notRecordedStillOnBranch: (branch: string, why: string): string => t("The fix could not be recorded for undo, so it was reverted, but you are still on {0}: {1}", branch, why),
   notRecordedRevertFailed: (why: string, revertWhy: string): string => t("The fix could not be recorded for undo, and reverting it failed ({1}): {0} Check the work tree with git status.", why, revertWhy),
   gitFailed: (command: string, why: string): string => t("git {0} failed{1}", command, why),
-  fixNote: (): string => t("knip removes every unused export in each of these files, not only the one the finding names."),
+  noExportName: (): string => t("The finding does not name the export to remove. Run the review again, then apply the fix."),
+  exportNotFound: (name: string): string => t("No top-level export named \"{0}\" was found, so nothing was changed.", name),
+  exportUnsupported: (name: string): string => t("\"{0}\" is exported in a form the fix does not edit, so nothing was changed.", name),
+  exportUnparsed: (name: string): string => t("The file could not be parsed cleanly, so \"{0}\" was not removed.", name),
 } as const;
