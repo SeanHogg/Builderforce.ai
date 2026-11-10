@@ -798,8 +798,13 @@ function extractJs(lines, out, path = "") {
   eachLine(lines, out, (line, lineNo) => {
     if (/^\}/.test(line)) cls = void 0;
     if (inCallback !== void 0) {
-      if (line.startsWith(inCallback) && /^[})]/.test(line.slice(inCallback.length))) inCallback = void 0;
-      return;
+      const rest = line.startsWith(inCallback) ? line.slice(inCallback.length) : void 0;
+      if (rest !== void 0 && /^[})]/.test(rest)) {
+        inCallback = void 0;
+        return;
+      }
+      if (!/^\S/.test(line) || /^[})\]`]/.test(line)) return;
+      inCallback = void 0;
     }
     if (/^\S/.test(line)) topBlock = JS_TOP_BLOCK.test(line) ? "" : void 0;
     else if (topBlock === "" && line.trim()) topBlock = /^[ \t]*/.exec(line)[0];
@@ -2602,14 +2607,13 @@ var localResearchTool = defineTool({
 
 // ../packages/agent-tools/src/codeAnalysis.ts
 var import_knowledge = require("@seanhogg/builderforce-memory/knowledge");
-var import_knowledge2 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/dependencyCruiserRules.ts
-var import_knowledge3 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge2 = require("@seanhogg/builderforce-memory/knowledge");
 var LAYER_RULE_PREFIX = "kg-layer";
 function alternation(globs) {
   if (globs.length === 0) return void 0;
-  return globs.map((g) => `(?:${(0, import_knowledge3.globToRegExp)(g).source})`).join("|");
+  return globs.map((g) => `(?:${(0, import_knowledge2.globToRegExp)(g).source})`).join("|");
 }
 function matchOf(rule, earlier) {
   const not = alternation(earlier.flatMap((r) => r.match));
@@ -2618,12 +2622,12 @@ function matchOf(rule, earlier) {
 function toDependencyCruiserRules(reg) {
   if (!reg.allow) return [];
   const ordered = reg.partitions;
-  const named = ordered.filter((r) => r.id !== import_knowledge3.TOP_LEVEL_FOLDER && r.match.length > 0);
+  const named = ordered.filter((r) => r.id !== import_knowledge2.TOP_LEVEL_FOLDER && r.match.length > 0);
   const matchById = new Map(named.map((r) => [r.id, matchOf(r, ordered.slice(0, ordered.indexOf(r)))]));
   const rules = [];
   for (const from of named) {
     for (const to of named) {
-      const verdict = (0, import_knowledge3.verdictOf)(from.id, to.id, reg);
+      const verdict = (0, import_knowledge2.verdictOf)(from.id, to.id, reg);
       if (verdict !== "upward" && verdict !== "skips") continue;
       rules.push({
         name: `${LAYER_RULE_PREFIX}-${from.id}-to-${to.id}`,
@@ -2649,16 +2653,16 @@ var ANALYZER_VERSIONS = {
 var import_ingest = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/fsDirectorySource.ts
-var import_knowledge6 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge5 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/statManifest.ts
 var RACY_WINDOW_NS = BigInt(2e9);
 
 // ../packages/agent-tools/src/knowledge/documents/withDocumentText.ts
-var import_knowledge5 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge4 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/documents/documentText.ts
-var import_knowledge4 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge3 = require("@seanhogg/builderforce-memory/knowledge");
 var PDF_MEDIA_TYPE = "application/pdf";
 var DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 var XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -2927,7 +2931,7 @@ function createAnalyzeCodebaseTool(options = {}) {
         capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
         source: { commit, branch, scope, dirty, ...dirtyHash ? { dirtyHash } : {}, ...repository ? { repository } : {} },
         tools,
-        ...(0, import_knowledge2.normalizeAnalysis)(outputs[0], outputs[1], outputs[2], scope)
+        ...(0, import_knowledge.normalizeAnalysis)(outputs[0], outputs[1], outputs[2], scope)
       };
       return { data: { snapshot } };
     }
@@ -3823,8 +3827,8 @@ var spawnAgentsTool = withDelegationNote(defineTool({
 var SUBAGENT_TOOLS = [spawnAgentTool, spawnAgentsTool, ...SUBAGENT_CONTROL_TOOLS];
 
 // ../packages/agent-tools/src/symbolRelations.ts
+var import_knowledge6 = require("@seanhogg/builderforce-memory/knowledge");
 var import_knowledge7 = require("@seanhogg/builderforce-memory/knowledge");
-var import_knowledge8 = require("@seanhogg/builderforce-memory/knowledge");
 var ID2 = "[A-Za-z_$][\\w$]*";
 var IMPORT_NAMED = new RegExp(`^\\s*(?:type\\s+)?(${ID2})(?:\\s+as\\s+(${ID2}))?\\s*$`);
 var IMPORT_NAMESPACE = new RegExp(`\\*\\s*as\\s+(${ID2})`);
@@ -3836,10 +3840,13 @@ var NEW = new RegExp(`(?:^|[^\\w$])new\\s+(${ID2}(?:\\.${ID2})?)`);
 var PARAM_PROP = new RegExp(`\\b(?:public|private|protected|readonly)\\s+(?:readonly\\s+)?(${ID2})\\s*\\??\\s*:\\s*(${ID2}(?:\\.${ID2})?)`, "g");
 var LOCAL_DECL = new RegExp(`\\b(?:const|let|var|function\\s*\\*?|class|catch\\s*\\()\\s*(${ID2})`, "g");
 var LAST_ID = new RegExp(`(${ID2})\\s*(?:=[^,]*)?\\s*$`);
+var CALLBACK_PARAMS = new RegExp(`(?:\\(([^()]*)\\)(?:\\s*:\\s*[^=()]+)?\\s*=>|(${ID2})\\s*=>|\\bfunction\\b[^(]*\\(([^()]*)\\))\\s*\\{\\s*$`);
 var PARAM_NAME = new RegExp(`^\\s*(?:\\.\\.\\.)?(?:(?:public|private|protected|readonly)\\s+)*(${ID2})`);
+var NEW_BEFORE = new RegExp(`\\bnew\\s+(${ID2}(?:\\.${ID2})?)\\s*(?:<[^<>()]*>)?\\s*$`);
+var JSX_TAG = new RegExp(`<(\\/?)([A-Z][\\w$]*(?:\\.${ID2})*)(?=[\\s/>]|$)`, "g");
 
 // ../packages/agent-tools/src/knowledge/codePack.ts
-var import_knowledge16 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge15 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest3 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/codeComplexity.ts
@@ -3848,7 +3855,7 @@ var JS_DECISIONS = new RegExp(String.raw`\b(?:if|for|while|case|catch)\b|&&|\|\|
 var OO_DECISIONS = new RegExp(String.raw`\b(?:if|for|foreach|while|case|catch)\b|&&|\|\||\?\?|${TERNARY}`, "g");
 
 // ../packages/agent-tools/src/knowledge/codeNodes.ts
-var import_knowledge9 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge8 = require("@seanhogg/builderforce-memory/knowledge");
 var import_working4 = require("@seanhogg/builderforce-memory/working");
 var import_ingest2 = require("@seanhogg/builderforce-memory/ingest");
 var CODE_BADGES = {
@@ -3893,7 +3900,7 @@ var CODE_BADGES = {
 };
 
 // ../packages/agent-tools/src/knowledge/codePatterns.ts
-var import_knowledge10 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge9 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/codeRoutes.ts
 var METHODS = "get|post|put|patch|delete|options|head|all";
@@ -3905,23 +3912,23 @@ var NEXT_WITH_PATH = new RegExp(String.raw`\s*\.\s*(${METHODS})\s*\(\s*(['"` + "
 var NEXT_ANY = new RegExp(String.raw`\s*\.\s*(${METHODS})\s*\(`, "y");
 
 // ../packages/agent-tools/src/knowledge/codeFindings.ts
-var import_knowledge11 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge10 = require("@seanhogg/builderforce-memory/knowledge");
 var UNUSED_ITEMS = [
   { kind: "unused-export", names: CODE_BADGES.unusedExportNames, count: CODE_BADGES.unusedExports, anchorKind: "symbol" },
   { kind: "unused-dependency", names: CODE_BADGES.unusedDependencyNames, count: CODE_BADGES.unusedDependencies, anchorKind: "package" }
 ];
 
 // ../packages/agent-tools/src/knowledge/codeRollup.ts
-var import_knowledge14 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/moduleAliases.ts
-var import_knowledge12 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/rootId.ts
 var import_knowledge13 = require("@seanhogg/builderforce-memory/knowledge");
 
+// ../packages/agent-tools/src/knowledge/moduleAliases.ts
+var import_knowledge11 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/rootId.ts
+var import_knowledge12 = require("@seanhogg/builderforce-memory/knowledge");
+
 // ../packages/agent-tools/src/knowledge/codeLayers.ts
-var import_knowledge15 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge14 = require("@seanhogg/builderforce-memory/knowledge");
 var FOLDER_LAYERS = {
   presentation: ["routes", "components", "app", "pages", "webview", "views", "hooks", "handlers", "controllers", "ui"],
   application: ["application", "use-cases", "usecases", "services", "lib", "clients", "commands", "queries"],
@@ -3961,10 +3968,10 @@ function defaultLayerRegistry() {
 var CODE_LAYERS = defaultLayerRegistry();
 
 // ../packages/agent-tools/src/knowledge/knowledgePacks.ts
-var import_knowledge18 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge17 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/documents/documentsPack.ts
-var import_knowledge17 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge16 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest4 = require("@seanhogg/builderforce-memory/ingest");
 var DOCUMENTS_PACK_ID = "documents";
 var documentsParser = {
@@ -3975,36 +3982,36 @@ var documentsParser = {
 var DOCUMENTS_PACK = {
   id: DOCUMENTS_PACK_ID,
   parsers: [documentsParser],
-  ...import_knowledge17.DOCS_PACK.judgement ? { judgement: import_knowledge17.DOCS_PACK.judgement } : {}
+  ...import_knowledge16.DOCS_PACK.judgement ? { judgement: import_knowledge16.DOCS_PACK.judgement } : {}
 };
 
 // ../packages/agent-tools/src/knowledge/codeExtracted.ts
-var import_knowledge19 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge18 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/reviewRunner.ts
-var import_knowledge27 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge26 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/codeGraph.ts
-var import_knowledge20 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge19 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/codeRootSignals.ts
-var import_knowledge22 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge21 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest5 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/codeCoverage.ts
 var MAX_FILE_BYTES = 40 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/codeOwners.ts
-var import_knowledge21 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge20 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/fileEdits.ts
-var import_knowledge23 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge22 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
 var import_ingest6 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/graphIgnore.ts
-var import_knowledge24 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge23 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
 var MAX_GRAPH_FILE_BYTES = 256 * 1024;
@@ -4014,10 +4021,10 @@ var cache = createShaCache({
 });
 
 // ../packages/agent-tools/src/knowledge/reviewJudgePass.ts
-var import_knowledge25 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge24 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/judgement.ts
-var import_knowledge26 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge25 = require("@seanhogg/builderforce-memory/knowledge");
 var KNOWLEDGE_EXTRACT_SYSTEM = [
   "You read one section of a document and list what it asserts.",
   'Reply with JSON only: {"extract":[{"ref":<the ref given>,"claims":[{"subject","predicate","object","quote"}],"entities":[{"name","type"}]}]}.',
@@ -4031,16 +4038,16 @@ var KNOWLEDGE_COMPARE_SYSTEM = [
 ].join("\n");
 
 // ../packages/agent-tools/src/knowledge/humanFact.ts
-var import_knowledge28 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge27 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/documents/documentDoc.ts
-var import_knowledge29 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge28 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/index/persistence.ts
-var import_knowledge30 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge29 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/replicaQueue.ts
-var import_knowledge31 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge30 = require("@seanhogg/builderforce-memory/knowledge");
 var import_pack = require("@seanhogg/builderforce-memory/knowledge/pack");
 
 // ../packages/agent-tools/src/knowledge/replicatedStore.ts
@@ -4050,7 +4057,7 @@ var import_pack2 = require("@seanhogg/builderforce-memory/knowledge/pack");
 var import_pack5 = require("@seanhogg/builderforce-memory/knowledge/pack");
 
 // ../packages/agent-tools/src/knowledge/replicaPack.ts
-var import_knowledge32 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge31 = require("@seanhogg/builderforce-memory/knowledge");
 var import_pack3 = require("@seanhogg/builderforce-memory/knowledge/pack");
 var DEFAULT_MAX_DECODED = 16 * 1024 * 1024;
 var EMPTY_PACK = { rootId: "", baseGeneration: 0, targetDigest: import_pack3.ZERO_DIGEST };
@@ -4068,20 +4075,20 @@ var MAX_ANALYSIS_BYTES = 2 * 1024 * 1024;
 var MAX_SYNC_PACK_BYTES = 24 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/replicaFirstSync.ts
-var import_knowledge33 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge32 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/claimSimilarity.ts
-var import_knowledge34 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge33 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/portablePack.ts
-var import_knowledge35 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge34 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/packGraph.ts
-var import_knowledge36 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge35 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest7 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/pinpointMatch.ts
-var import_knowledge37 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge36 = require("@seanhogg/builderforce-memory/knowledge");
 var MAX_PINPOINT_IMAGE_BYTES = 8 * 1024 * 1024;
 var MAX_DATA_URL_CHARS = Math.ceil(MAX_PINPOINT_IMAGE_BYTES * 4 / 3) + 64;
 var PINPOINT_VISION_SYSTEM = [
@@ -4321,6 +4328,23 @@ var PLATFORM_ROUTE_RULES = Object.freeze([
   { path: "/api/data-sources/*/query", capability: "connected-feature", note: "a data-source query \u2014 a read" },
   { path: "/api/vscode/connect", capability: "connected-feature", note: "the editor presence beat" }
 ]);
+
+// ../packages/local-first/src/payloadHash.ts
+function fnv1a32(text, seed = 2166136261) {
+  let hash = seed >>> 0;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+function hashPayload(payload) {
+  const text = JSON.stringify(payload) ?? "null";
+  return `fnv1a:${fnv1a32(text).toString(16).padStart(8, "0")}`;
+}
+
+// ../packages/local-first/src/recordPayloadMarker.ts
+var NULL_PAYLOAD_HASH = hashPayload(null);
 
 // ../packages/local-first/src/domainToolClass.ts
 var LOCAL_DOMAIN_TOOL_NAMES = Object.freeze([

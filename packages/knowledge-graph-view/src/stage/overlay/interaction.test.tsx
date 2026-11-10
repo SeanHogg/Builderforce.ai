@@ -75,7 +75,7 @@ describe('a11y proxies (PRD 43 B5)', () => {
     it('focus returns to a station\'s proxy (after its card closes)', () => {
         const bus = settledBus();
         const slot = map.a11y[1]!.slot;
-        render(<StageProxies bus={bus} keys={keys} selected={null} onSelect={() => {}} />);
+        render(<StageProxies bus={bus} selected={null} onSelect={() => {}} />);
         act(() => { expect(focusProxy(bus, keys[slot]!)).toBe(true); });
         expect(document.activeElement?.getAttribute('data-slot')).toBe(String(slot));
         expect(focusProxy(bus, 'st:nowhere')).toBe(false);
@@ -90,7 +90,7 @@ describe('a11y proxies (PRD 43 B5)', () => {
         const bus = settledBus(p, frameProjector({ zoom: 4, cx: Math.min(...xs), cz: p.position[slots[0]! * 3 + 2]!, width: 300, height: 300 }));
         const reveal = vi.fn();
         bus.onReveal(reveal);
-        render(<StageProxies bus={bus} keys={keys} selected={keys[right]!} onSelect={() => {}} />);
+        render(<StageProxies bus={bus} selected={keys[right]!} onSelect={() => {}} />);
         const proxy = document.querySelector<HTMLButtonElement>(`[data-slot="${right}"]`)!;
         expect(proxy.dataset.offscreen).toBe('true');
         act(() => proxy.focus());

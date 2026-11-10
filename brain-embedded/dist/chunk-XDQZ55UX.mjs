@@ -129,22 +129,25 @@ function parseEntityRef(v) {
 
 // ../packages/local-first/src/records.ts
 var UNBOUND_DESTINATION = { kind: "unbound" };
-
-// ../packages/local-first/src/recordIndex.ts
-function defineRecordIndex(entityType, name, keyOf) {
-  return Object.freeze({ entityType, name, keyOf });
-}
-function indexKeyOf(index, row) {
-  if (row.deletedAt) return void 0;
-  try {
-    return index.keyOf(row);
-  } catch {
-    return void 0;
+function destinationKey(destination) {
+  if (destination.kind === "unbound") return "unbound";
+  const parts = [
+    destination.platformInstance ?? "",
+    destination.accountId ?? "",
+    destination.tenantId ?? "",
+    destination.projectId ?? "",
+    destination.repository ?? ""
+  ];
+  const raw = parts.join("\0");
+  let key = DESTINATION_KEYS.get(raw);
+  if (key === void 0) {
+    key = parts.map(encodeURIComponent).join(":");
+    if (DESTINATION_KEYS.size >= 1024) DESTINATION_KEYS.clear();
+    DESTINATION_KEYS.set(raw, key);
   }
+  return key;
 }
-
-// ../packages/local-first/src/storeContract.ts
-var SCAN_STOP = /* @__PURE__ */ Symbol.for("builderforce.local-first.scan-stop");
+var DESTINATION_KEYS = /* @__PURE__ */ new Map();
 
 // ../packages/local-first/src/payloadHash.ts
 function fnv1a32(text, seed = 2166136261) {
@@ -162,9 +165,61 @@ function hashPayload(payload) {
 
 // ../packages/local-first/src/recordPayloadMarker.ts
 var MARKER_NOT_BEFORE = "9999-12-31T23:59:59.999Z";
+var RECORD_PAYLOAD_FENCE_KEY = "builderforce:record-payload-fence:v1";
+var RECORD_PAYLOAD_FENCE_ID = "00000000-0000-4000-8000-00000000fe0c";
+var RECORD_PAYLOAD_FENCE_REASON = "record_payload_fence";
+var NULL_PAYLOAD_HASH = hashPayload(null);
 function recordPayloadMarker() {
   return { payload: null, payloadFrom: "record", nextAttemptAt: MARKER_NOT_BEFORE };
 }
+function fencedDependsOn(dependsOn) {
+  return dependsOn.includes(RECORD_PAYLOAD_FENCE_KEY) ? [...dependsOn] : [...dependsOn, RECORD_PAYLOAD_FENCE_KEY];
+}
+function isRecordPayloadFence(event) {
+  return event.idempotencyKey === RECORD_PAYLOAD_FENCE_KEY;
+}
+async function ensureRecordPayloadFence(tx, destination) {
+  const key = destinationKey(destination);
+  const lookup = tx.pendingLookup?.();
+  let present = false;
+  if (lookup) {
+    present = lookup.byKey(RECORD_PAYLOAD_FENCE_KEY).some((event) => destinationKey(event.destination) === key);
+  } else {
+    await tx.scanPending((event) => {
+      if (isRecordPayloadFence(event)) present = true;
+    }, destination);
+  }
+  if (present) return;
+  const at2 = (/* @__PURE__ */ new Date()).toISOString();
+  const fence = await tx.append({
+    idempotencyKey: RECORD_PAYLOAD_FENCE_KEY,
+    clientEntityId: RECORD_PAYLOAD_FENCE_ID,
+    entityType: "policy-snapshot",
+    operation: "create",
+    schemaVersion: 1,
+    occurredAt: at2,
+    dependsOn: [],
+    destination,
+    payload: null
+  });
+  await tx.deadLetter(fence.eventId, RECORD_PAYLOAD_FENCE_REASON, at2);
+}
+
+// ../packages/local-first/src/recordIndex.ts
+function defineRecordIndex(entityType, name, keyOf) {
+  return Object.freeze({ entityType, name, keyOf });
+}
+function indexKeyOf(index, row) {
+  if (row.deletedAt) return void 0;
+  try {
+    return index.keyOf(row);
+  } catch {
+    return void 0;
+  }
+}
+
+// ../packages/local-first/src/storeContract.ts
+var SCAN_STOP = /* @__PURE__ */ Symbol.for("builderforce.local-first.scan-stop");
 
 // ../packages/local-first/src/clone.ts
 function clone(value) {
@@ -183,19 +238,6 @@ async function scanByIndex(tx, index, key, visit) {
   if (tx.scanIndex) return tx.scanIndex(index, key, visit);
   return tx.scan(index.entityType, (row) => indexKeyOf(index, row) === key ? visit(row) : void 0);
 }
-async function scanPendingOfRow(tx, clientEntityId, visit, destination) {
-  if (tx.scanPendingOf) return tx.scanPendingOf(clientEntityId, visit, destination);
-  return tx.scanPending((event) => event.clientEntityId === clientEntityId ? visit(event) : void 0, destination);
-}
-async function selectPendingOf(tx, entityType, clientEntityId, where, destination) {
-  const matches = [];
-  await scanPendingOfRow(tx, clientEntityId, (event) => {
-    if (event.deadLetter || event.entityType !== entityType) return;
-    if (!where || where(event)) matches.push(event);
-  }, destination);
-  matches.sort((a, b) => a.localSequence - b.localSequence);
-  return clone(matches);
-}
 function newLocalRecord(input) {
   const at2 = input.occurredAt ?? (/* @__PURE__ */ new Date()).toISOString();
   return {
@@ -209,6 +251,24 @@ function newLocalRecord(input) {
     payload: input.payload,
     provenance: { deviceId: input.deviceId, source: "local" }
   };
+}
+
+// ../packages/local-first/src/dependencyGraph.ts
+var bySequence = (a, b) => a.localSequence - b.localSequence;
+
+// ../packages/local-first/src/pendingQueries.ts
+async function scanPendingOfRow(tx, clientEntityId, visit, destination) {
+  if (tx.scanPendingOf) return tx.scanPendingOf(clientEntityId, visit, destination);
+  return tx.scanPending((event) => event.clientEntityId === clientEntityId ? visit(event) : void 0, destination);
+}
+async function selectPendingOf(tx, entityType, clientEntityId, where, destination) {
+  const matches = [];
+  await scanPendingOfRow(tx, clientEntityId, (event) => {
+    if (event.deadLetter || event.entityType !== entityType) return;
+    if (!where || where(event)) matches.push(event);
+  }, destination);
+  matches.sort(bySequence);
+  return clone(matches);
 }
 
 // ../packages/local-first/src/domainToolClass.ts
@@ -340,6 +400,7 @@ async function dropPending(tx, record) {
 async function queueImport(tx, record, chatClientId, waitsOn = []) {
   await dropPending(tx, record);
   if (record.deletedAt) return;
+  if (record.destination.kind === "bound") await ensureRecordPayloadFence(tx, record.destination);
   await tx.append({
     idempotencyKey: importKey(record.entityType, record.id),
     clientEntityId: record.id,
@@ -347,9 +408,8 @@ async function queueImport(tx, record, chatClientId, waitsOn = []) {
     operation: "import",
     schemaVersion: record.schemaVersion,
     occurredAt: record.occurredAt,
-    dependsOn: [...chatClientId && record.entityType !== "chat" ? [importKey("chat", chatClientId)] : [], ...waitsOn],
+    dependsOn: fencedDependsOn([...chatClientId && record.entityType !== "chat" ? [importKey("chat", chatClientId)] : [], ...waitsOn]),
     destination: record.destination,
-    // The import is the row as it is when SENT: no copy of the payload waits in the journal.
     ...recordPayloadMarker()
   });
 }
@@ -2034,8 +2094,13 @@ function extractJs(lines, out, path = "") {
   eachLine(lines, out, (line, lineNo) => {
     if (/^\}/.test(line)) cls = void 0;
     if (inCallback !== void 0) {
-      if (line.startsWith(inCallback) && /^[})]/.test(line.slice(inCallback.length))) inCallback = void 0;
-      return;
+      const rest = line.startsWith(inCallback) ? line.slice(inCallback.length) : void 0;
+      if (rest !== void 0 && /^[})]/.test(rest)) {
+        inCallback = void 0;
+        return;
+      }
+      if (!/^\S/.test(line) || /^[})\]`]/.test(line)) return;
+      inCallback = void 0;
     }
     if (/^\S/.test(line)) topBlock = JS_TOP_BLOCK.test(line) ? "" : void 0;
     else if (topBlock === "" && line.trim()) topBlock = /^[ \t]*/.exec(line)[0];
@@ -3838,11 +3903,10 @@ var localResearchTool = defineTool({
 
 // ../packages/agent-tools/src/codeAnalysis.ts
 import {
-  analysisMeta,
-  comparable,
-  compareAnalysis as compareMeasured
+  normalizeAnalysis,
+  compareAnalysis,
+  analysisMeta
 } from "@seanhogg/builderforce-memory/knowledge";
-import { normalizeAnalysis } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/dependencyCruiserRules.ts
 import {
@@ -5275,7 +5339,10 @@ var NEW = new RegExp(`(?:^|[^\\w$])new\\s+(${ID2}(?:\\.${ID2})?)`);
 var PARAM_PROP = new RegExp(`\\b(?:public|private|protected|readonly)\\s+(?:readonly\\s+)?(${ID2})\\s*\\??\\s*:\\s*(${ID2}(?:\\.${ID2})?)`, "g");
 var LOCAL_DECL = new RegExp(`\\b(?:const|let|var|function\\s*\\*?|class|catch\\s*\\()\\s*(${ID2})`, "g");
 var LAST_ID = new RegExp(`(${ID2})\\s*(?:=[^,]*)?\\s*$`);
+var CALLBACK_PARAMS = new RegExp(`(?:\\(([^()]*)\\)(?:\\s*:\\s*[^=()]+)?\\s*=>|(${ID2})\\s*=>|\\bfunction\\b[^(]*\\(([^()]*)\\))\\s*\\{\\s*$`);
 var PARAM_NAME = new RegExp(`^\\s*(?:\\.\\.\\.)?(?:(?:public|private|protected|readonly)\\s+)*(${ID2})`);
+var NEW_BEFORE = new RegExp(`\\bnew\\s+(${ID2}(?:\\.${ID2})?)\\s*(?:<[^<>()]*>)?\\s*$`);
+var JSX_TAG = new RegExp(`<(\\/?)([A-Z][\\w$]*(?:\\.${ID2})*)(?=[\\s/>]|$)`, "g");
 
 // ../packages/agent-tools/src/knowledge/codePack.ts
 import {
@@ -7491,7 +7558,7 @@ var SOURCE_EXTENSIONS = /* @__PURE__ */ new Set([".ts", ".tsx", ".mts", ".cts", 
 function isSourceFile(path) {
   return SOURCE_EXTENSIONS.has(extOf(path));
 }
-function dirOf2(path) {
+function dirOf3(path) {
   const normalized = normalizeEvidencePath(path);
   const slash2 = normalized.lastIndexOf("/");
   return slash2 >= 0 ? normalized.slice(0, slash2) : "";
@@ -7507,10 +7574,10 @@ function covers(test, file, policy) {
   const coverage = policy.newSourceTestCoverage ?? ["stem"];
   if (coverage.includes("stem") && basenameOf2(test.absPath).startsWith(stemOf(file.absPath) + ".")) return true;
   if (coverage.includes("directory")) {
-    const dir = dirOf2(file.absPath);
-    if (dirOf2(test.absPath) === dir) return true;
+    const dir = dirOf3(file.absPath);
+    if (dirOf3(test.absPath) === dir) return true;
     const dirName = dir.slice(dir.lastIndexOf("/") + 1);
-    if (dirName && dirOf2(test.absPath) === dirOf2(dir) && basenameOf2(test.absPath).startsWith(dirName + ".")) return true;
+    if (dirName && dirOf3(test.absPath) === dirOf3(dir) && basenameOf2(test.absPath).startsWith(dirName + ".")) return true;
   }
   if (coverage.includes("import") && test.imports?.length) {
     const target = moduleKey(file.absPath);
@@ -10289,4 +10356,4 @@ export {
   toolCallArgBytes,
   createComposingActivity
 };
-//# sourceMappingURL=chunk-6AJTQ2M6.mjs.map
+//# sourceMappingURL=chunk-XDQZ55UX.mjs.map

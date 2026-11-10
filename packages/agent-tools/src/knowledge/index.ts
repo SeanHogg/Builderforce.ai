@@ -80,13 +80,13 @@ export {
     type PackFromSnapshotArgs, type PackProvenance, type PackSnapshot, type PortableKnowledgePack,
 } from './portablePack.js';
 export { mergePacksWithCards, packFromStore, packGraph, reviewHasWork, type PackFromStoreArgs, type PackGraphQuery } from './packGraph.js';
-export { buildCodeGraph, type CodeGraphOptions } from './codeGraph.js';
+export { buildCodeGraph } from './codeGraph.js';
 export {
-    ALIAS_CONFIG_FILES, NO_MODULE_ALIASES, PACKAGE_MODULE_DIR, aliasesOf, isAliasConfigPath, joinRootPath, loadModuleAliases, packageModulePath, parseConfigText,
-    resolveImportPath, resolveModuleAlias, specifierOfPackagePath,
-    type AliasPattern, type AliasScope, type ModuleAliases, type ParsedAliasConfig, type ReadConfigText,
+    NO_MODULE_ALIASES, PACKAGE_MODULE_DIR, aliasCandidates, isAliasSpecifier, resolveImportPath,
+    type ModuleAliases, type ModuleResolution,
 } from './moduleAliases.js';
-export { fileRollup, moduleFileCandidates, moduleFileOf, repointRollupEdges, rollupEdges } from './codeRollup.js';
+export { ModuleAliasCache, type AliasConfigPorts } from './moduleAliasLoader.js';
+export { fileRollup, moduleFileCandidates, moduleFileOf, repointRollupEdges } from './codeRollup.js';
 export { LAYER_IDS, isDefaultLayers, type LayerId, type LayerRule } from './codeLayers.js';
 export { coverageSourceState, type CoverageRoot, type CoverageSkip, type CoverageSourceState } from './codeCoverage.js';
 export { CHURN_DAYS, type HistoryPort } from './historyPort.js';

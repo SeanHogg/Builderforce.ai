@@ -90,6 +90,7 @@ function AssistantRowInner({
   onRate,
   rating,
   renderAssistantActions,
+  renderAfterMessage,
 }: {
   node: Extract<TimelineNode, { kind: 'assistant' }>;
   labels: BrainTimelineLabels;
@@ -106,6 +107,8 @@ function AssistantRowInner({
   onRate?: (msg: BrainMessage, rating: MessageRating) => void;
   rating?: MessageRating;
   renderAssistantActions?: (msg: BrainMessage) => React.ReactNode;
+  /** A host block under the reply, after its footer line (e.g. the run delta card of the run this reply ended). */
+  renderAfterMessage?: (msg: BrainMessage) => React.ReactNode;
 }) {
   // An assistant turn produced by an invited agent (not the BRAIN) is
   // attributed to it — show the agent's avatar + name in place of the
@@ -147,6 +150,7 @@ function AssistantRowInner({
         <div className="bf-tl__body bf-tl__thought-line">
           {renderMsg(node.message, 'assistant', bodyText)}
           {prov && <ProvenanceChip prov={prov} labels={labels} identity={modelIdentity} />}
+          {renderAfterMessage?.(node.message)}
         </div>
       </li>
     );
@@ -191,6 +195,7 @@ function AssistantRowInner({
             {renderAssistantActions?.(node.message)}
           </div>
         </div>
+        {renderAfterMessage?.(node.message)}
       </div>
     </li>
   );

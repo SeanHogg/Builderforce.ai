@@ -40,6 +40,7 @@ import { getBaseUrl } from "./gateway";
 import { hostLog } from "./hostLog";
 import { installSyncCoordinator } from "./installSyncCoordinator";
 import { drainSync } from "./syncDrain";
+import { createPassScheduler, type PassOutcome } from "./syncPassScheduler";
 import { localBrainApplication } from "./localFirstStore";
 import { platformFetch, platformPolicy } from "./platformPolicy";
 
@@ -63,17 +64,13 @@ export function installChatSync(ctx: vscode.ExtensionContext): vscode.Disposable
     },
     onRateLimit: (limit) => { rateLimit = limit; },
   });
-  /** Set when a pass stopped with work left: when the next one may start (ms epoch). */
-  let resumeAt: number | undefined;
   /** The last pass stopped short of an empty queue: the next one continues its drain. */
   let continuing = false;
-
-  let running = false;
-  let again = false;
+  /** When the drain last pulled: a continuing drain still pulls every `DRAIN_PULL_EVERY_MS`. */
+  let lastPullAt: number | undefined;
   let disposed = false;
 
-  const pass = async (): Promise<void> => {
-    resumeAt = undefined;
+  const pass = async (): Promise<PassOutcome | void> => {
     const destination = chatAccountDestination();
     if (!destination) return;
     const installed = installSyncCoordinator({
@@ -93,48 +90,27 @@ export function installChatSync(ctx: vscode.ExtensionContext): vscode.Disposable
       round: ({ pull }) => installed.coordinator.synchronize(destination, { pull }),
       pending: () => local.store.read((tx) => countLivePending(tx, destination)),
       rateLimit: () => rateLimit,
-    }, { pullFirst: !continuing });
+      cancelled: () => disposed,
+    }, { pullFirst: !continuing, ...(continuing && lastPullAt !== undefined ? { lastPullAt } : {}) });
+    lastPullAt = drained.lastPullAt;
     // Work left (the pass's time ran out, or the shared request bucket is at its reserve):
     // the next pass follows as soon as allowed, not at the 5-minute heartbeat — and continues
     // this drain rather than starting one (no second pull).
     continuing = drained.more;
-    resumeAt = drained.more ? Date.now() + (drained.resumeAfterMs ?? 0) : undefined;
     // A receipt moved usage onto the platform: re-read its figure rather than serve the
     // cached one, which the device's own estimate no longer covers for those rows.
     invalidateServerChatSpend();
+    return drained.more ? { resumeAt: Date.now() + (drained.resumeAfterMs ?? 0) } : undefined;
   };
 
-  const run = async (): Promise<void> => {
-    if (disposed) return;
-    if (running) {
-      again = true;
-      return;
-    }
-    running = true;
-    try {
-      do {
-        again = false;
-        await pass();
-      } while (again && !disposed);
-    } catch (error) {
-      hostLog(`[chat sync] pass failed: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      running = false;
-    }
-    if (resumeAt !== undefined) schedule();
-  };
-
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  /** Debounced — and never before a rate-limited pass said the next may start. */
-  const schedule = (): void => {
-    if (disposed || policy.allows("synchronize") !== true) return;
-    if (timer) clearTimeout(timer);
-    const delay = Math.max(DEBOUNCE_MS, (resumeAt ?? 0) - Date.now());
-    timer = setTimeout(() => {
-      timer = undefined;
-      void run();
-    }, delay);
-  };
+  // Single-flight, debounced, and never before a deferred pass's `resumeAt` (`syncPassScheduler.ts`).
+  const scheduler = createPassScheduler({
+    pass,
+    enabled: () => policy.allows("synchronize") === true,
+    debounceMs: DEBOUNCE_MS,
+    onError: (error) => hostLog(`[chat sync] pass failed: ${error instanceof Error ? error.message : String(error)}`),
+  });
+  const schedule = scheduler.schedule;
 
   // A write that left nothing to send (a pull's cursor, a receipt) triggers nothing — so
   // the sync's own writes cannot loop it. Unbound rows count only for the sync slice (chats
@@ -151,7 +127,7 @@ export function installChatSync(ctx: vscode.ExtensionContext): vscode.Disposable
     if (change && !change.events) return;
     const destination = chatAccountDestination();
     if (!destination) return;
-    const duringPass = running;
+    const duringPass = scheduler.running();
     void local.store.read(async (tx) => {
       let pending = false;
       if (!duringPass) {
@@ -164,7 +140,8 @@ export function installChatSync(ctx: vscode.ExtensionContext): vscode.Disposable
     })
       .then((pending) => {
         if (!pending) return;
-        if (running) again = true;
+        // During a pass this asks for one more after it; otherwise a debounced pass.
+        if (scheduler.running()) void scheduler.run();
         else schedule();
       })
       .catch(() => undefined);
@@ -181,7 +158,7 @@ export function installChatSync(ctx: vscode.ExtensionContext): vscode.Disposable
       offStore();
       offPolicy();
       clearInterval(heartbeat);
-      if (timer) clearTimeout(timer);
+      scheduler.dispose();
     },
   };
 }

@@ -84,14 +84,15 @@ describe('ranged uploads', () => {
         const stage = createWebGLStage({ text: textPort });
         stage.setMarks(marks);
         stage.setPlacement(place('map'), 0, 0);
-        const paint = attr(stage.object!, 'paint');
-        paint.clearUpdateRanges(); // as three does after an upload
+        const paintOf = (m: InstancedMesh) => m.geometry.getAttribute('paint') as InstancedBufferAttribute;
+        for (const m of markMeshes(stage.object!)) paintOf(m).clearUpdateRanges(); // as three does after an upload
         stage.setPaint(paintMarks(graph, model, { lensId: 'structure', overlay: PRESETS.risk, lit: null, roles: null }));
+        const painted = markMeshes(stage.object!).map((m) => paintOf(m).updateRanges.length);
         stage.setPlacement(drill(3), 0, 400);
-        const ranges = markMeshes(stage.object!).flatMap((m) => (m.geometry.getAttribute('paint') as InstancedBufferAttribute).updateRanges);
-        // The repaint's full range is still there beside the append's.
-        expect(ranges.some((r) => r.start === 0)).toBe(true);
-        expect(ranges.some((r) => r.start > 0)).toBe(true);
+        // A batch the drill appended into holds the repaint's range AND the append's: one more range, none dropped.
+        const after = markMeshes(stage.object!).map((m) => paintOf(m).updateRanges.length);
+        expect(after.some((n, b) => painted[b]! >= 1 && n === painted[b]! + 1)).toBe(true);
+        expect(after.every((n, b) => n >= painted[b]!)).toBe(true);
     });
 });
 
@@ -104,20 +105,21 @@ describe('mid-tween replacement', () => {
         stage.setPlacement(g, 0, 400);
         stage.tick(200);
         const root = stage.object!;
-        const mesh = markMeshes(root)[0]!;
-        const u = (mesh.material as { uniforms: Record<string, { value: number }> }).uniforms;
+        const b = model.marks.batches.findIndex((x) => x.slots.length > 0);
+        const mesh = markMeshes(root)[b]!;
+        const u = (mesh.material as unknown as { uniforms: Record<string, { value: number }> }).uniforms;
         const t = u.uT!.value, flip = u.uFlip!.value;
         expect(t).toBeGreaterThan(0); expect(t).toBeLessThan(1);
         // On screen now: mix(from, to, t), with from/to picked by uFlip (0: A → B).
         const [fromSet, toSet] = flip === 0 ? ['placeA', 'placeB'] : ['placeB', 'placeA'];
-        const at = (set: string) => [0, 1, 2, 3].map((c) => (attr(root, set).array as Float32Array)[c]!);
+        const at = (set: string) => [0, 1, 2, 3].map((c) => (attr(root, set, b).array as Float32Array)[c]!);
         const from = at(fromSet), to = at(toSet);
         const onScreen = from.map((v, c) => v + (to[c]! - v) * t);
         stage.setPlacement(map, 200, 400);
         const u2 = u.uFlip!.value;
         const [stale, target] = u2 === 0 ? ['placeA', 'placeB'] : ['placeB', 'placeA'];
         at(stale).forEach((v, c) => expect(v).toBeCloseTo(onScreen[c]!, 4));
-        const slot = model.marks.batches[0]!.slots[0]!;
+        const slot = model.marks.batches[b]!.slots[0]!;
         expect(at(target)[0]).toBeCloseTo(map.position[slot * 3]!);
         expect(u.uT!.value).toBe(0);
     });

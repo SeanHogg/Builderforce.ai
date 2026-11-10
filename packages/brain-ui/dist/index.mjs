@@ -366,10 +366,10 @@ function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateFile, lab
 var Markdown = React.memo(MarkdownInner);
 
 // src/translation/TranslatableText.tsx
-import { useEffect as useEffect3, useRef as useRef3, useState as useState3 } from "react";
+import { useEffect as useEffect2, useRef as useRef3, useState as useState3 } from "react";
 
 // src/translation/context.tsx
-import { createContext, useContext, useEffect, useMemo as useMemo2, useRef } from "react";
+import { createContext, useContext, useLayoutEffect, useMemo as useMemo2, useRef } from "react";
 
 // src/translation/translationCache.ts
 var TRANSLATION_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1e3;
@@ -398,6 +398,25 @@ function memoryTranslationCache() {
     }
   };
 }
+function retirableTranslationCache(inner) {
+  let retired = false;
+  return {
+    get: (key) => inner.get(key),
+    set: async (key, entry) => {
+      if (!retired) await inner.set(key, entry);
+    },
+    clear: () => inner.clear(),
+    retire: () => {
+      retired = true;
+    }
+  };
+}
+function selectEvictions(rows, now, max = TRANSLATION_CACHE_MAX_ENTRIES) {
+  const live = rows.filter((row) => now - row.at <= TRANSLATION_CACHE_TTL_MS);
+  const expired = rows.filter((row) => now - row.at > TRANSLATION_CACHE_TTL_MS);
+  const overflow = [...live].sort((a, b) => a.at - b.at).slice(0, Math.max(0, live.length - max));
+  return [...expired, ...overflow].map((row) => row.key);
+}
 var DB_NAME = "bf-translation-cache";
 var STORE = "kv";
 function openDb() {
@@ -417,14 +436,25 @@ function request(db, mode, run) {
     req.onerror = () => reject(req.error);
   });
 }
-async function prune(db, now) {
-  const keys = await request(db, "readonly", (s) => s.getAllKeys());
-  const values = await request(db, "readonly", (s) => s.getAll());
-  const rows = keys.map((key, i) => ({ key, at: values[i]?.at ?? 0 }));
-  const live = rows.filter((row) => now - row.at <= TRANSLATION_CACHE_TTL_MS);
-  const expired = rows.filter((row) => now - row.at > TRANSLATION_CACHE_TTL_MS);
-  const overflow = live.sort((a, b) => a.at - b.at).slice(0, Math.max(0, live.length - TRANSLATION_CACHE_MAX_ENTRIES));
-  for (const row of [...expired, ...overflow]) await request(db, "readwrite", (s) => s.delete(row.key));
+function prune(db, now) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    const store = tx.objectStore(STORE);
+    const rows = [];
+    const cursor = store.openCursor();
+    cursor.onsuccess = () => {
+      const at = cursor.result;
+      if (at) {
+        rows.push({ key: at.key, at: at.value?.at ?? 0 });
+        at.continue();
+        return;
+      }
+      for (const key of selectEvictions(rows, now)) store.delete(key);
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
 }
 function indexedDbTranslationCache() {
   const memory = memoryTranslationCache();
@@ -484,6 +514,24 @@ var shared;
 function defaultTranslationCache() {
   return shared ??= indexedDbTranslationCache();
 }
+
+// src/translation/recentOutcomes.ts
+var FAILED_OUTCOME_TTL_MS = 6e4;
+var recentOutcomes = /* @__PURE__ */ new Map();
+var recentOutcome = (key) => {
+  const hit = recentOutcomes.get(key);
+  if (!hit) return void 0;
+  if (hit.until < Date.now()) {
+    recentOutcomes.delete(key);
+    return void 0;
+  }
+  return hit.outcome;
+};
+var clearRecentOutcomes = () => recentOutcomes.clear();
+var rememberOutcome = (key, outcome) => {
+  if (recentOutcomes.size > 500) recentOutcomes.clear();
+  recentOutcomes.set(key, { until: Date.now() + FAILED_OUTCOME_TTL_MS, outcome });
+};
 
 // src/spend/format.ts
 function formatUsd(usd, locale) {
@@ -549,20 +597,27 @@ import { jsx as jsx2 } from "react/jsx-runtime";
 var TranslationContext = createContext(null);
 function TranslationProvider({ tasks, cloud, locale, cache: cache2, labels, openModelPicker, identity, children }) {
   const resolvedCache = cache2 === void 0 ? defaultTranslationCache() : cache2;
+  const scopedCache = useMemo2(() => resolvedCache ? retirableTranslationCache(resolvedCache) : null, [resolvedCache, identity]);
   const lastIdentity = useRef(identity);
-  useEffect(() => {
+  const lastScoped = useRef(scopedCache);
+  useLayoutEffect(() => {
+    if (lastScoped.current !== scopedCache) lastScoped.current?.retire();
+    lastScoped.current = scopedCache;
     if (identity === void 0) return;
-    if (lastIdentity.current !== identity && lastIdentity.current) void resolvedCache?.clear().catch(() => void 0);
+    if (lastIdentity.current !== identity && lastIdentity.current) {
+      clearRecentOutcomes();
+      void resolvedCache?.clear().catch(() => void 0);
+    }
     lastIdentity.current = identity;
-  }, [identity, resolvedCache]);
+  }, [identity, resolvedCache, scopedCache]);
   const value = useMemo2(() => ({
     tasks,
     cloud,
     locale,
-    cache: resolvedCache,
+    cache: scopedCache,
     labels: { ...DEFAULT_TRANSLATION_LABELS, ...labels },
     ...openModelPicker ? { openModelPicker } : {}
-  }), [tasks, cloud, locale, resolvedCache, labels, openModelPicker]);
+  }), [tasks, cloud, locale, scopedCache, labels, openModelPicker]);
   return /* @__PURE__ */ jsx2(TranslationContext.Provider, { value, children });
 }
 function useTranslationContext() {
@@ -619,22 +674,7 @@ async function translateWithEngines(wiring, texts, from, signal) {
 }
 
 // src/translation/useTranslatedText.ts
-import { useEffect as useEffect2, useRef as useRef2, useState as useState2 } from "react";
-var FAILED_OUTCOME_TTL_MS = 6e4;
-var recentOutcomes = /* @__PURE__ */ new Map();
-var recentOutcome = (key) => {
-  const hit = recentOutcomes.get(key);
-  if (!hit) return void 0;
-  if (hit.until < Date.now()) {
-    recentOutcomes.delete(key);
-    return void 0;
-  }
-  return hit.outcome;
-};
-var rememberOutcome = (key, outcome) => {
-  if (recentOutcomes.size > 500) recentOutcomes.clear();
-  recentOutcomes.set(key, { until: Date.now() + FAILED_OUTCOME_TTL_MS, outcome });
-};
+import { useEffect, useRef as useRef2, useState as useState2 } from "react";
 function useTranslatedText(text, contentId, enabled) {
   const ctx = useTranslationContext();
   const wiring = useRef2(ctx);
@@ -645,7 +685,7 @@ function useTranslatedText(text, contentId, enabled) {
   const locale = ctx?.locale ?? "";
   const cache2 = ctx?.cache ?? null;
   const [state, setState] = useState2({ status: "plain" });
-  useEffect2(() => {
+  useEffect(() => {
     const current = wiring.current;
     if (!current || !enabled || text.trim().length < 2) {
       setState({ status: "plain" });
@@ -698,7 +738,7 @@ function useTranslatedText(text, contentId, enabled) {
 import { Fragment as Fragment2, jsx as jsx3, jsxs as jsxs2 } from "react/jsx-runtime";
 function useEverVisible(ref, active) {
   const [seen, setSeen] = useState3(false);
-  useEffect3(() => {
+  useEffect2(() => {
     if (seen || !active) return void 0;
     const el = ref.current;
     if (!el || typeof IntersectionObserver === "undefined") {
@@ -1066,7 +1106,7 @@ function formatPayload(value) {
 }
 
 // src/LiveActivity.tsx
-import React2, { useEffect as useEffect4, useState as useState4 } from "react";
+import React2, { useEffect as useEffect3, useState as useState4 } from "react";
 import { formatBytes } from "@seanhogg/builderforce-brain-embedded";
 import { jsx as jsx4, jsxs as jsxs3 } from "react/jsx-runtime";
 var SLOW_AFTER_MS = 12e3;
@@ -1113,13 +1153,13 @@ function phaseLine(activity, labels) {
 function LiveActivityInner({ activity, isRunning, labels: partial, model, modelTitle }) {
   const labels = { ...DEFAULT_LIVE_ACTIVITY_LABELS, ...partial };
   const [fallbackStart, setFallbackStart] = useState4(() => isRunning ? Date.now() : null);
-  useEffect4(() => {
+  useEffect3(() => {
     setFallbackStart((prev) => isRunning ? prev ?? Date.now() : null);
   }, [isRunning]);
   const live = activity ?? (isRunning && fallbackStart != null ? { phase: "starting", startedAt: fallbackStart, step: 0 } : null);
   const [now, setNow] = useState4(() => Date.now());
   const startedAt = live?.startedAt;
-  useEffect4(() => {
+  useEffect3(() => {
     if (startedAt == null) return;
     setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), TICK_MS);
@@ -1348,7 +1388,7 @@ var DEFAULT_TIMELINE_LABELS = {
 };
 
 // src/timeline/useTranscriptScroll.ts
-import { useEffect as useEffect5, useRef as useRef4 } from "react";
+import { useEffect as useEffect4, useRef as useRef4 } from "react";
 function useTranscriptScroll(autoScroll, revealMessage) {
   const scrollRef = useRef4(null);
   const contentRef = useRef4(null);
@@ -1358,7 +1398,7 @@ function useTranscriptScroll(autoScroll, revealMessage) {
     if (!el) return;
     pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   };
-  useEffect5(() => {
+  useEffect4(() => {
     if (!autoScroll) return;
     const scroller = scrollRef.current;
     const content = contentRef.current;
@@ -1372,7 +1412,7 @@ function useTranscriptScroll(autoScroll, revealMessage) {
     ro.observe(content);
     return () => ro.disconnect();
   }, [autoScroll]);
-  useEffect5(() => {
+  useEffect4(() => {
     if (revealMessage == null) return;
     pinnedRef.current = false;
     const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -1398,7 +1438,7 @@ function useTranscriptScroll(autoScroll, revealMessage) {
 }
 
 // src/timeline/useRenderWindow.ts
-import { useCallback, useLayoutEffect, useMemo as useMemo4, useRef as useRef5, useState as useState6 } from "react";
+import { useCallback, useLayoutEffect as useLayoutEffect2, useMemo as useMemo4, useRef as useRef5, useState as useState6 } from "react";
 var TIMELINE_PAGE_SIZE = 150;
 var REVEAL_LEAD = 10;
 function renderRange(keys, anchor, revealIndex) {
@@ -1449,7 +1489,7 @@ function useRenderWindow(nodes, conversationKey, reveal, scrollRef) {
     if (keepPlace && el) fromBottom.current = el.scrollHeight - el.scrollTop;
     setState((prev) => ({ ...prev, conversation: conversationKey, anchor: next }));
   }, [scrollRef, conversationKey]);
-  useLayoutEffect(() => {
+  useLayoutEffect2(() => {
     const el = scrollRef.current;
     if (el && fromBottom.current != null) el.scrollTop = el.scrollHeight - fromBottom.current;
     fromBottom.current = null;
@@ -1722,7 +1762,8 @@ function AssistantRowInner({
   onReplay,
   onRate,
   rating,
-  renderAssistantActions
+  renderAssistantActions,
+  renderAfterMessage
 }) {
   const author = parseMessageAuthor(node.message);
   const card = onAnswerQuestion ? parseAskUser(node.text) : null;
@@ -1737,7 +1778,8 @@ function AssistantRowInner({
       /* @__PURE__ */ jsx11("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx11("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("thinking") }) }),
       /* @__PURE__ */ jsxs9("div", { className: "bf-tl__body bf-tl__thought-line", children: [
         renderMsg(node.message, "assistant", bodyText),
-        prov && /* @__PURE__ */ jsx11(ProvenanceChip, { prov, labels, identity: modelIdentity })
+        prov && /* @__PURE__ */ jsx11(ProvenanceChip, { prov, labels, identity: modelIdentity }),
+        renderAfterMessage?.(node.message)
       ] })
     ] });
   }
@@ -1777,7 +1819,8 @@ function AssistantRowInner({
           ),
           renderAssistantActions?.(node.message)
         ] })
-      ] })
+      ] }),
+      renderAfterMessage?.(node.message)
     ] })
   ] });
 }
@@ -1795,7 +1838,7 @@ var AssistantRow = memo2(AssistantRowInner);
 import { memo as memo4 } from "react";
 
 // src/prefetch/PrefetchChips.tsx
-import { memo as memo3, useEffect as useEffect6, useRef as useRef6 } from "react";
+import { memo as memo3, useEffect as useEffect5, useRef as useRef6 } from "react";
 import { Fragment as Fragment4, jsx as jsx12, jsxs as jsxs10 } from "react/jsx-runtime";
 var DEFAULT_PREFETCH_CHIP_LABELS = {
   confirmPrompt: "Run {action}? It changes files in your workspace.",
@@ -1830,7 +1873,7 @@ var PrefetchConfirmChip = memo3(function PrefetchConfirmChip2({
 }) {
   const labels = { ...DEFAULT_PREFETCH_CHIP_LABELS, ...overrides };
   const runRef = useRef6(null);
-  useEffect6(() => runRef.current?.focus(), [confirm]);
+  useEffect5(() => runRef.current?.focus(), [confirm]);
   const action = prefetchLabelText(labelOf, confirm.labelKey, confirm.actionId);
   const onKeyDown = (e) => {
     if (e.key === "Escape") {
@@ -2598,7 +2641,7 @@ function timelineLabelsFrom(lookup, overrides) {
 }
 
 // src/inlineTitle/InlineChatTitle.tsx
-import { useEffect as useEffect7, useRef as useRef7, useState as useState9 } from "react";
+import { useEffect as useEffect6, useRef as useRef7, useState as useState9 } from "react";
 import { jsx as jsx18, jsxs as jsxs16 } from "react/jsx-runtime";
 var DEFAULT_INLINE_CHAT_TITLE_LABELS = {
   edit: "Edit chat title",
@@ -2621,7 +2664,7 @@ function InlineChatTitle({
   const settled = useRef7(false);
   const from = useRef7("");
   const input = useRef7(null);
-  useEffect7(() => {
+  useEffect6(() => {
     setShown(null);
     if (editing) {
       setEditing(false);
@@ -2658,7 +2701,7 @@ function InlineChatTitle({
     settled.current = true;
     end();
   };
-  useEffect7(() => {
+  useEffect6(() => {
     if (!editing) return;
     const el = input.current;
     if (!el) return;
@@ -2779,7 +2822,7 @@ function ModelFallbackNotice({ channel, labels: partial, className }) {
 }
 
 // src/ToolConfirmBar.tsx
-import { memo as memo6, useEffect as useEffect8, useRef as useRef8 } from "react";
+import { memo as memo6, useEffect as useEffect7, useRef as useRef8 } from "react";
 import { prefetchConfirmOf } from "@seanhogg/builderforce-brain-embedded";
 import { Fragment as Fragment6, jsx as jsx20, jsxs as jsxs18 } from "react/jsx-runtime";
 var DEFAULT_TOOL_CONFIRM_LABELS = {
@@ -2787,7 +2830,8 @@ var DEFAULT_TOOL_CONFIRM_LABELS = {
   approve: "Approve",
   approveAll: "Always",
   deny: "Cancel",
-  aria: "Approve this action"
+  aria: "Approve this action",
+  evidence: "Checks: {evidence}"
 };
 function toolConfirmLabelsFrom(lookup) {
   const approveAllTitle = lookup("approveAllTitle");
@@ -2819,7 +2863,7 @@ var ToolConfirmBar = memo6(function ToolConfirmBar2({
 }) {
   const labels = { ...DEFAULT_TOOL_CONFIRM_LABELS, ...labelOverrides };
   const approveRef = useRef8(null);
-  useEffect8(() => approveRef.current?.focus(), [req]);
+  useEffect7(() => approveRef.current?.focus(), [req]);
   const prefetch = prefetchConfirmOf(req);
   if (prefetch) {
     return /* @__PURE__ */ jsx20(
@@ -2843,6 +2887,7 @@ var ToolConfirmBar = memo6(function ToolConfirmBar2({
       after
     ] }) }),
     children ?? (command ? /* @__PURE__ */ jsx20("pre", { className: "bf-confirm__cmd", children: command }) : args ? /* @__PURE__ */ jsx20("div", { className: "bf-confirm__args", children: args }) : null),
+    req.evidence ? /* @__PURE__ */ jsx20("div", { className: "bf-confirm__evidence", children: labels.evidence.split("{evidence}").join(req.evidence) }) : null,
     /* @__PURE__ */ jsxs18("div", { className: "bf-confirm__actions", children: [
       /* @__PURE__ */ jsx20("button", { ref: approveRef, type: "button", className: "bf-confirm__btn bf-confirm__btn--primary", onClick: onApprove, children: labels.approve }),
       onApproveAll && /* @__PURE__ */ jsx20("button", { type: "button", className: "bf-confirm__btn", onClick: onApproveAll, title: labels.approveAllTitle, children: labels.approveAll }),
@@ -3783,7 +3828,7 @@ function promptTrailingAction({ canSubmit, running, canStop, voice, recording })
 }
 
 // src/useVoiceDictation.ts
-import { useCallback as useCallback6, useEffect as useEffect9, useRef as useRef11, useState as useState12 } from "react";
+import { useCallback as useCallback6, useEffect as useEffect8, useRef as useRef11, useState as useState12 } from "react";
 function recognitionCtor() {
   if (typeof window === "undefined") return null;
   const w = window;
@@ -3832,14 +3877,14 @@ function useVoiceDictation(getValue, onChange) {
       done();
     }
   }, [getValue, onChange, stopVoice]);
-  useEffect9(() => () => {
+  useEffect8(() => () => {
     recognitionRef.current?.stop();
   }, []);
   return { supported, recording, startVoice, stopVoice };
 }
 
 // src/promptOptions/PromptOptionsMenu.tsx
-import { useEffect as useEffect12, useMemo as useMemo8, useRef as useRef15, useState as useState18 } from "react";
+import { useEffect as useEffect11, useMemo as useMemo8, useRef as useRef15, useState as useState18 } from "react";
 import {
   buildModelItems as buildModelItems2,
   DEFAULT_MODEL_IDENTITY as DEFAULT_MODEL_IDENTITY2,
@@ -3975,14 +4020,14 @@ function promptOptionsLabelsFrom(lookup) {
 }
 
 // src/popover/usePopover.ts
-import { useCallback as useCallback7, useEffect as useEffect10, useRef as useRef12, useState as useState13 } from "react";
+import { useCallback as useCallback7, useEffect as useEffect9, useRef as useRef12, useState as useState13 } from "react";
 function usePopover() {
   const [open, setOpen] = useState13(false);
   const rootRef = useRef12(null);
   const close = useCallback7(() => setOpen(false), []);
   const toggle = useCallback7(() => setOpen((value) => !value), []);
   const show = useCallback7(() => setOpen(true), []);
-  useEffect10(() => {
+  useEffect9(() => {
     if (!open) return;
     const onDown = (event) => {
       if (rootRef.current && !rootRef.current.contains(event.target)) setOpen(false);
@@ -4321,7 +4366,7 @@ function LocalModelList({ state, labels, activeRef, locale, hideHeading, onSelec
 }
 
 // src/localModels/useLocalModels.ts
-import { useCallback as useCallback8, useEffect as useEffect11, useRef as useRef13, useState as useState16 } from "react";
+import { useCallback as useCallback8, useEffect as useEffect10, useRef as useRef13, useState as useState16 } from "react";
 var controllersByStore = /* @__PURE__ */ new WeakMap();
 function controllersOf(store) {
   let map = controllersByStore.get(store);
@@ -4336,7 +4381,7 @@ function useLocalModels(store) {
   const [rows, setRows] = useState16(store ? null : NO_ROWS);
   const [failed, setFailed] = useState16(() => /* @__PURE__ */ new Set());
   const live = useRef13(true);
-  useEffect11(() => {
+  useEffect10(() => {
     live.current = true;
     if (!store) {
       setRows(NO_ROWS);
@@ -4613,7 +4658,7 @@ function PromptOptionsMenu({
   const openTab = openOn?.tab;
   const openToken = openOn?.token;
   const handledToken = useRef15(openToken);
-  useEffect12(() => {
+  useEffect11(() => {
     if (openToken === void 0 || !openTab || openToken === handledToken.current) return;
     handledToken.current = openToken;
     setTab(openTab);
@@ -4786,7 +4831,7 @@ function useComposerMenuRequest(composerId) {
 }
 
 // src/inferenceMode/InferenceModeFirstRun.tsx
-import { useEffect as useEffect13, useId, useRef as useRef16 } from "react";
+import { useEffect as useEffect12, useId, useRef as useRef16 } from "react";
 import { jsx as jsx41, jsxs as jsxs37 } from "react/jsx-runtime";
 var ASKED = ["hybrid", "local-only"];
 function InferenceModeFirstRun({ labels, onChoose }) {
@@ -4794,7 +4839,7 @@ function InferenceModeFirstRun({ labels, onChoose }) {
   const first = useRef16(null);
   const region = useRef16(null);
   const announcement = `${labels.inferenceModeAskTitle} ${labels.inferenceModeAskBody}`;
-  useEffect13(() => {
+  useEffect12(() => {
     first.current?.focus();
     if (region.current) region.current.textContent = announcement;
   }, [announcement]);
@@ -4826,7 +4871,7 @@ function InferenceModeFirstRun({ labels, onChoose }) {
 }
 
 // src/inferenceMode/useInferenceModeGate.ts
-import { useCallback as useCallback11, useEffect as useEffect14, useRef as useRef17, useState as useState19 } from "react";
+import { useCallback as useCallback11, useEffect as useEffect13, useRef as useRef17, useState as useState19 } from "react";
 function useInferenceModeGate(inferenceMode) {
   const needsChoice = !!inferenceMode?.needsChoice;
   const held = useRef17([]);
@@ -4861,7 +4906,7 @@ function useInferenceModeGate(inferenceMode) {
     };
     void Promise.resolve(onChangeRef.current?.(mode)).then(run, run);
   }, [release]);
-  useEffect14(() => {
+  useEffect13(() => {
     if (needsChoice || held.current.length === 0) return;
     for (const send of release()) send();
   }, [needsChoice, release]);
@@ -5026,7 +5071,7 @@ function RecipientPicker({ participants, recipient, onChoose, labels, disabled, 
 }
 
 // src/recipient/useRecipientChoice.ts
-import { useEffect as useEffect15, useMemo as useMemo9, useState as useState20 } from "react";
+import { useEffect as useEffect14, useMemo as useMemo9, useState as useState20 } from "react";
 import {
   mentionRecipient,
   resolveRecipient,
@@ -5040,10 +5085,10 @@ var UNUSED_STORE = createComposerDraftStore();
 // src/recipient/useRecipientChoice.ts
 function useRecipientChoice({ participants, input, draftStore, resetKey }) {
   const [choice, setChoice] = useState20(null);
-  useEffect15(() => {
+  useEffect14(() => {
     setChoice(null);
   }, [resetKey]);
-  useEffect15(() => {
+  useEffect14(() => {
     setChoice((c) => c && c !== "brain" && !participants.some((p) => p.kind === c.kind && p.ref === c.ref) ? null : c);
   }, [participants]);
   const fromInput = useMemo9(() => mentionRecipient(input ?? "", participants), [input, participants]);
@@ -5324,7 +5369,7 @@ function PendingChangesList({
 }
 
 // src/chatTickets/ChatTicketsPanel.tsx
-import { memo as memo10, useCallback as useCallback15, useEffect as useEffect18, useMemo as useMemo11, useRef as useRef19, useState as useState27 } from "react";
+import { memo as memo10, useCallback as useCallback15, useEffect as useEffect17, useMemo as useMemo11, useRef as useRef19, useState as useState27 } from "react";
 
 // src/chatTickets/tokens.ts
 var V = {
@@ -5531,7 +5576,7 @@ function resolveRunGate(adapter) {
 }
 
 // src/chatTickets/useChatProgressSync.ts
-import { useCallback as useCallback12, useEffect as useEffect16, useRef as useRef18 } from "react";
+import { useCallback as useCallback12, useEffect as useEffect15, useRef as useRef18 } from "react";
 function ticketCountsAreStale(row, tickets) {
   if (!row || row.ticketCount == null || row.ticketOpenCount == null || row.ticketDoneCount == null) return false;
   const health = rollupChatTicketHealth(tickets);
@@ -5541,7 +5586,7 @@ function useChatProgressSync(chatId, chatList, onStale) {
   const rowRef = useRef18(void 0);
   const onStaleRef = useRef18(onStale);
   const reported = useRef18(null);
-  useEffect16(() => {
+  useEffect15(() => {
     rowRef.current = chatList.find((c) => c.id === chatId);
     onStaleRef.current = onStale;
   }, [chatList, chatId, onStale]);
@@ -5736,7 +5781,7 @@ function SpendPill({ summary, labels: overrides, locale }) {
 }
 
 // src/chatTickets/LinkForm.tsx
-import { useEffect as useEffect17, useMemo as useMemo10, useState as useState21 } from "react";
+import { useEffect as useEffect16, useMemo as useMemo10, useState as useState21 } from "react";
 
 // src/chatTickets/types.ts
 var TICKET_KINDS = ["task", "epic", "gap", "objective", "initiative", "portfolio", "roadmap", "spec", "retro", "poker"];
@@ -5822,7 +5867,7 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
   const [busy, setBusy] = useState21(false);
   const [results, setResults] = useState21([]);
   const [loading, setLoading] = useState21(false);
-  useEffect17(() => {
+  useEffect16(() => {
     let live = true;
     setLoading(true);
     const h = setTimeout(() => {
@@ -5844,7 +5889,7 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
     [results, existing, kind]
   );
   const atCap = results.length >= SEARCH_LIMIT;
-  useEffect17(() => {
+  useEffect16(() => {
     if (ref && !shown.some((o) => o.ref === ref)) setRef("");
   }, [shown, ref]);
   const submit = async () => {
@@ -6097,7 +6142,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   const [panel, setPanel] = useState27(null);
   const togglePanel = (key) => setPanel((open) => open === key ? null : key);
   const openExtension = extensions?.find((ext) => ext.key === panel) ?? null;
-  useEffect18(() => {
+  useEffect17(() => {
     if (panel && !isBuiltinPanel(panel) && !extensions?.some((ext) => ext.key === panel)) setPanel(null);
   }, [panel, extensions]);
   const [lineageKey, setLineageKey] = useState27(null);
@@ -6128,13 +6173,13 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     setMembers(mem);
     setQuestions(qs);
   }, [adapter, chatId, platformSections, showTickets]);
-  useEffect18(() => {
+  useEffect17(() => {
     void load();
   }, [load, refreshSignal]);
-  useEffect18(() => {
+  useEffect17(() => {
     if (liveTickets) showTickets([...liveTickets]);
   }, [liveTickets, showTickets]);
-  useEffect18(() => {
+  useEffect17(() => {
     if (platformSections) adapter.loadAgentPool().then(setPool).catch(() => setPool([]));
   }, [adapter, platformSections]);
   const flash = (m) => {
@@ -6667,12 +6712,12 @@ function createChatTicketsRestAdapter(opts) {
 }
 
 // src/chatTickets/useChatParticipants.ts
-import { useEffect as useEffect19, useMemo as useMemo12, useState as useState28 } from "react";
+import { useEffect as useEffect18, useMemo as useMemo12, useState as useState28 } from "react";
 function useChatParticipants(adapter, chatId, refreshSignal = 0) {
   const [pool, setPool] = useState28([]);
   const [invited, setInvited] = useState28([]);
   const [members, setMembers] = useState28([]);
-  useEffect19(() => {
+  useEffect18(() => {
     if (chatId == null) {
       setInvited([]);
       setMembers([]);
@@ -6694,7 +6739,7 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
     };
   }, [adapter, chatId, refreshSignal]);
   const needsPool = invited.some((a) => !a.name);
-  useEffect19(() => {
+  useEffect18(() => {
     if (!needsPool) return;
     let ok = true;
     adapter.loadAgentPool().then((p) => {
@@ -6734,7 +6779,7 @@ function useChatActivitySignal(messages) {
 }
 
 // src/mention/MentionAutocomplete.tsx
-import { useCallback as useCallback16, useEffect as useEffect20, useMemo as useMemo14, useState as useState29 } from "react";
+import { useCallback as useCallback16, useEffect as useEffect19, useMemo as useMemo14, useState as useState29 } from "react";
 import {
   activeMentionToken,
   filterMentionCandidates
@@ -6760,7 +6805,7 @@ function useMentionAutocomplete(opts) {
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, participants.length]);
-  useEffect20(() => {
+  useEffect19(() => {
     recompute();
   }, [value, recompute]);
   const choose = useCallback16((r) => {
@@ -6878,7 +6923,7 @@ var POP = {
 };
 
 // src/mention/TicketAutocomplete.tsx
-import { useCallback as useCallback17, useEffect as useEffect21, useMemo as useMemo15, useState as useState30 } from "react";
+import { useCallback as useCallback17, useEffect as useEffect20, useMemo as useMemo15, useState as useState30 } from "react";
 import {
   activeTicketToken,
   filterTicketCandidates
@@ -6904,7 +6949,7 @@ function useTicketAutocomplete(opts) {
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, tickets.length]);
-  useEffect21(() => {
+  useEffect20(() => {
     recompute();
   }, [value, recompute]);
   const choose = useCallback17((t) => {
@@ -7074,7 +7119,7 @@ function chatDiagnosticsReads(adapter, chatId) {
 }
 
 // src/evermind/EvermindConsole.tsx
-import { useCallback as useCallback22, useEffect as useEffect24, useId as useId2, useMemo as useMemo17, useRef as useRef21, useState as useState35 } from "react";
+import { useCallback as useCallback22, useEffect as useEffect23, useId as useId2, useMemo as useMemo17, useRef as useRef21, useState as useState35 } from "react";
 
 // src/evermind/types.ts
 function defaultFormatWhen(atMs) {
@@ -7478,7 +7523,7 @@ function Confirm({
 }
 
 // src/evermind/EvermindAnalyzer.tsx
-import { useCallback as useCallback20, useEffect as useEffect22, useMemo as useMemo16, useState as useState33 } from "react";
+import { useCallback as useCallback20, useEffect as useEffect21, useMemo as useMemo16, useState as useState33 } from "react";
 import { Fragment as Fragment17, jsx as jsx64, jsxs as jsxs60 } from "react/jsx-runtime";
 var TONE = {
   ok: "ok",
@@ -7494,7 +7539,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
   const [applying, setApplying] = useState33(false);
   const [repair, setRepair] = useState33(null);
   const [error, setError] = useState33(null);
-  useEffect22(() => {
+  useEffect21(() => {
     setSelected(new Set(analysis?.findings.map((f) => f.id) ?? []));
   }, [analysis]);
   const run = useCallback20(async () => {
@@ -7641,7 +7686,7 @@ function FindingRow({
 }
 
 // src/evermind/EvermindDiagnostics.tsx
-import { useCallback as useCallback21, useEffect as useEffect23, useRef as useRef20, useState as useState34 } from "react";
+import { useCallback as useCallback21, useEffect as useEffect22, useRef as useRef20, useState as useState34 } from "react";
 import { Fragment as Fragment18, jsx as jsx65, jsxs as jsxs61 } from "react/jsx-runtime";
 function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
   const [report, setReport] = useState34(null);
@@ -7668,7 +7713,7 @@ function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
 function EvermindDiagnostics({ t, disabled, copy }) {
   const { report, copied, revealed } = copy;
   const areaRef = useRef20(null);
-  useEffect23(() => {
+  useEffect22(() => {
     if (!revealed) return;
     areaRef.current?.focus();
     areaRef.current?.select();
@@ -8021,11 +8066,11 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       if (tg) setTargets(tg);
     }
   }, [adapter]);
-  useEffect24(() => {
+  useEffect23(() => {
     setLoaded(false);
     void reload();
   }, [reload]);
-  useEffect24(() => {
+  useEffect23(() => {
     if (!canManage) return;
     let cancelled = false;
     void adapter.loadSeedModels().then((m) => {
@@ -8043,7 +8088,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       cancelled = true;
     };
   }, [adapter, canManage]);
-  useEffect24(() => {
+  useEffect23(() => {
     if (!refreshMs) return;
     const hidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
     const id = setInterval(() => {
@@ -8059,7 +8104,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     };
   }, [refreshMs, busy, reload]);
   const lastRefreshSignal = useRef21(refreshSignal);
-  useEffect24(() => {
+  useEffect23(() => {
     if (refreshSignal == null || refreshSignal === lastRefreshSignal.current) return;
     lastRefreshSignal.current = refreshSignal;
     void reload();
@@ -8086,7 +8131,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
   }, [onValidate]);
   const pollTimer = useRef21(null);
   const mounted = useRef21(true);
-  useEffect24(() => {
+  useEffect23(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
@@ -9453,7 +9498,7 @@ function Row2({ item, onAction }) {
 }
 
 // src/composer/BrainComposer.tsx
-import { memo as memo12, useCallback as useCallback25, useEffect as useEffect29, useRef as useRef24, useState as useState41 } from "react";
+import { memo as memo12, useCallback as useCallback25, useEffect as useEffect28, useRef as useRef24, useState as useState41 } from "react";
 
 // src/workStatus/consumptionSnapshot.ts
 var TTL_MS = 6e4;
@@ -9486,10 +9531,10 @@ function subscribeConsumptionSnapshot(listener) {
 }
 
 // src/workStatus/useConsumptionSnapshot.ts
-import { useEffect as useEffect25, useState as useState37 } from "react";
+import { useEffect as useEffect24, useState as useState37 } from "react";
 function useConsumptionSnapshot(request2) {
   const [snapshot, setSnapshot] = useState37(cachedConsumptionSnapshot());
-  useEffect25(() => {
+  useEffect24(() => {
     if (!request2) return void 0;
     let alive = true;
     const off = subscribeConsumptionSnapshot((s) => {
@@ -9624,11 +9669,11 @@ function AccountStatus({ snapshot, labels, locale, onUpgrade }) {
 }
 
 // src/workStatus/EvermindStatus.tsx
-import { useEffect as useEffect26, useState as useState38 } from "react";
+import { useEffect as useEffect25, useState as useState38 } from "react";
 import { jsx as jsx72, jsxs as jsxs67 } from "react/jsx-runtime";
 function EvermindStatus({ request: request2, projectId, labels }) {
   const [head, setHead] = useState38(null);
-  useEffect26(() => {
+  useEffect25(() => {
     if (projectId == null) {
       setHead(null);
       return void 0;
@@ -9740,7 +9785,7 @@ function healthLabel(health, labels) {
 }
 
 // src/connections/useProviderReconnect.ts
-import { useCallback as useCallback23, useEffect as useEffect27, useMemo as useMemo20, useRef as useRef22, useSyncExternalStore as useSyncExternalStore3 } from "react";
+import { useCallback as useCallback23, useEffect as useEffect26, useMemo as useMemo20, useRef as useRef22, useSyncExternalStore as useSyncExternalStore3 } from "react";
 
 // src/connections/reconnectFlow.ts
 var REASONS = ["unavailable", "denied", "expired", "failed"];
@@ -9881,7 +9926,7 @@ function useProviderReconnect(client, provider, { openUrl, onConnected }) {
   const seen = useRef22(state.connected);
   const onConnectedRef = useRef22(onConnected);
   onConnectedRef.current = onConnected;
-  useEffect27(() => {
+  useEffect26(() => {
     if (state.connected === seen.current) return;
     seen.current = state.connected;
     onConnectedRef.current?.();
@@ -9996,7 +10041,7 @@ function ConnectionRow({ row, connections, labels, onChanged, onReconnected }) {
 }
 
 // src/connections/useProviderConnections.ts
-import { useCallback as useCallback24, useEffect as useEffect28, useState as useState40 } from "react";
+import { useCallback as useCallback24, useEffect as useEffect27, useState as useState40 } from "react";
 function useProviderConnections(client) {
   const [state, setState] = useState40({ kind: "loading" });
   const reload = useCallback24(async () => {
@@ -10007,7 +10052,7 @@ function useProviderConnections(client) {
       setState({ kind: "failed" });
     }
   }, [client]);
-  useEffect28(() => {
+  useEffect27(() => {
     void reload();
   }, [reload]);
   const patch = useCallback24((provider, change) => {
@@ -10464,7 +10509,7 @@ function BrainComposerInner(props) {
     if (draftStore) draftStore.set(next);
     else onChangeRef.current?.(next);
   }, [draftStore]);
-  useEffect29(() => {
+  useEffect28(() => {
     if (focusToken == null) return;
     const el = textareaRef.current;
     if (!el) return;
@@ -10636,11 +10681,11 @@ function BrainComposerInner(props) {
 var BrainComposer = memo12(BrainComposerInner);
 
 // src/composer/useChatMemorySwitch.ts
-import { useCallback as useCallback26, useEffect as useEffect30, useState as useState42 } from "react";
+import { useCallback as useCallback26, useEffect as useEffect29, useState as useState42 } from "react";
 function useChatMemorySwitch(opts) {
   const { chatId, serverValue, persist } = opts;
   const [enabled, setLocal] = useState42(serverValue ?? true);
-  useEffect30(() => {
+  useEffect29(() => {
     setLocal(serverValue ?? true);
   }, [chatId, serverValue]);
   const setEnabled = useCallback26((on) => {

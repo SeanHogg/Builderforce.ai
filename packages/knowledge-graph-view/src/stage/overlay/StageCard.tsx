@@ -23,6 +23,7 @@ import { useSlotAnchor } from '../anchor/useSlotAnchor';
 import { satelliteKeys } from '../drill/unfold';
 import type { StageMap } from '../drill/useStageMap';
 import { focusProxy } from '../StageProxies';
+import type { Placement } from '../types';
 
 export interface StageCardProps {
     /** The open card's slot key (a station at the current level); null = no card. */
@@ -82,7 +83,7 @@ export function StageCard({ cardKey, map, drill, graph, labels, compact, onClose
         <StationCard
             key={station.id} card={card} labels={labels} compact={compact} at={{ left: 0, top: 0 }}
             boxRef={ref as MutableRefObject<HTMLDivElement | null>} loading={drill.loading} onClose={close}
-            onEnter={() => { onClose(); drill.enter(station.id); }}
+            onEnter={() => { onClose(); focusProxy(bus, cardKey); drill.enter(station.id); }}
             onUnfold={() => map.toggleUnfold(station.id)}
             onCallers={() => act(() => onQuestion?.('callers'))}
             onApi={() => act(() => onOpenPanel?.('api'))}

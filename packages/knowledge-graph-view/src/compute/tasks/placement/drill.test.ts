@@ -137,7 +137,9 @@ describe('the ranked incident index (B5: sent once, sliced on the main thread)',
         const a = model.nodeSlot.get(e.from)!, b = model.nodeSlot.get(e.to)!;
         expect([...inc.neighbours.subarray(inc.offsets[a]!, inc.offsets[a + 1]!)]).toContain(b);
         expect([...inc.neighbours.subarray(inc.offsets[b]!, inc.offsets[b + 1]!)]).toContain(a);
-        expect(inc.importance[apiSlot]).toBeCloseTo(api.use, 5);
+        // Picking's tie-break importance is the MarkSet's: a node's importance, a station's use.
+        expect(marks.importance[apiSlot]).toBeCloseTo(api.use, 5);
+        expect(marks.importance[0]).toBeCloseTo(graph.nodes[0]!.importance, 5);
     });
 });
 

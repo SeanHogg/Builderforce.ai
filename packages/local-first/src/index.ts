@@ -3,6 +3,7 @@ export * from './inferenceMode.js';
 export * from './platformRoutes.js';
 export * from './platformRequestGate.js';
 export * from './store.js';
+export * from './pendingQueries.js';
 export {
   CLIENT_ID_NOT_UUID,
   isIntegerIdText,

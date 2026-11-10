@@ -197,17 +197,22 @@ export async function materializeRound(tx: LocalFirstTransaction, picked: readon
     // As it is NOW (another commit may have filled it since the pick), with the wired dependencies.
     let wire: JournalEvent = { ...current, dependsOn: wired.dependsOn };
     if (isRecordPayloadMarker(current)) {
+      // Filling a marker without committing it would let a resend carry other bytes than the
+      // first push: a transaction that cannot persist it must not send it.
+      if (!tx.materializeEvent) throw new Error('record_payload_marker_needs_materialize_event');
       const record = await tx.get(current.entityType, current.clientEntityId);
       if (!record || record.deletedAt) {
+        // Nothing left to import. Its dependents were wired to it: stop here, so none of them goes
+        // up this round — the next round resolves the acknowledged dependency as satisfied.
         gone.push(current.eventId);
-        continue;
+        break;
       }
       const payload = await recordPayloadOf(tx, current, record);
       const filled = materializedEvent(current, payload);
       wire = { ...filled, dependsOn: wired.dependsOn };
       const size = jsonBytes(wire);
       if (out.length > 0 && bytes + size > maxBytes) break;
-      if (tx.materializeEvent) await tx.materializeEvent(current.eventId, payload);
+      await tx.materializeEvent(current.eventId, payload);
       out.push(wire);
       bytes += size;
       continue;

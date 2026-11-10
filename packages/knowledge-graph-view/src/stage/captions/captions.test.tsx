@@ -7,7 +7,7 @@ import { ZoomProvider, type ZoomApi } from '../../surface/zoom';
 import { createNoopStage } from '../renderer';
 import { Stage } from '../Stage';
 import { CAPTION_MAX } from './CaptionLayer';
-import { cssMatrix, groundAffine, inverseLinear } from './transform';
+import { applyCaptionTransform, cssMatrix, groundAffine, inverseLinear } from './transform';
 
 const graph = surfaceFixture();
 const model = buildStageModel(graph, []);

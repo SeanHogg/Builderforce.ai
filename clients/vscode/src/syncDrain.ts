@@ -45,6 +45,8 @@ export interface DrainPorts {
   pending(): Promise<number>;
   /** The limiter's state from the last response, when the transport saw one. */
   rateLimit?(): DrainRateLimit | undefined;
+  /** The host is shutting down: stop before the next round. Checked every round. */
+  cancelled?(): boolean;
 }
 
 export interface DrainOptions {
@@ -57,13 +59,23 @@ export interface DrainOptions {
    * from the bucket it is waiting on. The closing pull still reads back what was sent.
    */
   readonly pullFirst?: boolean;
+  /**
+   * When this drain last pulled (ms epoch; a continuing pass passes the previous result's). A
+   * drain never goes longer than `DRAIN_PULL_EVERY_MS` without a pull, so a long queue still
+   * hears the server's changes while it sends.
+   */
+  readonly lastPullAt?: number;
 }
 
 /** The shortest pause a rate-limited pass takes, so the next one starts with room for a burst. */
 const MIN_RATE_PAUSE_MS = 10_000;
+/** A drain pulls at least this often, however many continuing passes it spans. */
+export const DRAIN_PULL_EVERY_MS = 5 * 60_000;
 
 export interface DrainResult {
   readonly rounds: number;
+  /** When this drain last pulled (pass it to a continuing pass). */
+  readonly lastPullAt?: number;
   /** Work is left that this pass stopped short of (budget, rate limit): schedule the next pass. */
   readonly more: boolean;
   /** Do not start the next pass before this many ms (a 429, or a spent bucket until its reset). */
@@ -85,14 +97,24 @@ export async function drainSync(ports: DrainPorts, options: DrainOptions = {}): 
   const pullFirst = options.pullFirst ?? true;
   let rounds = 0;
   let pushedOnly = !pullFirst;
+  let lastPull = options.lastPullAt;
   let before = await ports.pending();
-  const result = (more: boolean, resumeAfterMs?: number): DrainResult =>
-    ({ rounds, more, ...(resumeAfterMs !== undefined ? { resumeAfterMs } : {}) });
+  const result = (more: boolean, resumeAfterMs?: number): DrainResult => ({
+    rounds, more,
+    ...(lastPull !== undefined ? { lastPullAt: lastPull } : {}),
+    ...(resumeAfterMs !== undefined ? { resumeAfterMs } : {}),
+  });
+  const stale = (): boolean => lastPull === undefined || now() - lastPull >= DRAIN_PULL_EVERY_MS;
   for (;;) {
+    // Shutting down: the round in flight finished; start no other.
+    if (ports.cancelled?.()) return result(false);
     let summary: DrainRound | undefined;
+    // The first round pulls (conflicts surface before anything is sent); the rest push only —
+    // unless the last pull is `DRAIN_PULL_EVERY_MS` old.
+    const pull = rounds === 0 ? pullFirst || stale() : stale();
     try {
-      // The first round pulls (conflicts surface before anything is sent); the rest push only.
-      summary = await ports.round({ pull: rounds === 0 && pullFirst });
+      summary = await ports.round({ pull });
+      if (pull) lastPull = now();
     } catch (error) {
       const limited = rateLimited(error);
       if (!limited) throw error;
@@ -105,7 +127,10 @@ export async function drainSync(ports: DrainPorts, options: DrainOptions = {}): 
     const progressed = summary.pushed + summary.duplicates > 0 || after < before;
     if (after === 0 || !progressed) {
       // One pull closes a drain that pushed without pulling: it reads back what it sent.
-      if (pushedOnly) await closingPull(ports);
+      if (pushedOnly) {
+        await closingPull(ports);
+        lastPull = now();
+      }
       return result(false);
     }
     before = after;

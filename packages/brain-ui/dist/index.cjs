@@ -662,6 +662,25 @@ function memoryTranslationCache() {
     }
   };
 }
+function retirableTranslationCache(inner) {
+  let retired = false;
+  return {
+    get: (key) => inner.get(key),
+    set: async (key, entry) => {
+      if (!retired) await inner.set(key, entry);
+    },
+    clear: () => inner.clear(),
+    retire: () => {
+      retired = true;
+    }
+  };
+}
+function selectEvictions(rows, now, max = TRANSLATION_CACHE_MAX_ENTRIES) {
+  const live = rows.filter((row) => now - row.at <= TRANSLATION_CACHE_TTL_MS);
+  const expired = rows.filter((row) => now - row.at > TRANSLATION_CACHE_TTL_MS);
+  const overflow = [...live].sort((a, b) => a.at - b.at).slice(0, Math.max(0, live.length - max));
+  return [...expired, ...overflow].map((row) => row.key);
+}
 var DB_NAME = "bf-translation-cache";
 var STORE = "kv";
 function openDb() {
@@ -681,14 +700,25 @@ function request(db, mode, run) {
     req.onerror = () => reject(req.error);
   });
 }
-async function prune(db, now) {
-  const keys = await request(db, "readonly", (s) => s.getAllKeys());
-  const values = await request(db, "readonly", (s) => s.getAll());
-  const rows = keys.map((key, i) => ({ key, at: values[i]?.at ?? 0 }));
-  const live = rows.filter((row) => now - row.at <= TRANSLATION_CACHE_TTL_MS);
-  const expired = rows.filter((row) => now - row.at > TRANSLATION_CACHE_TTL_MS);
-  const overflow = live.sort((a, b) => a.at - b.at).slice(0, Math.max(0, live.length - TRANSLATION_CACHE_MAX_ENTRIES));
-  for (const row of [...expired, ...overflow]) await request(db, "readwrite", (s) => s.delete(row.key));
+function prune(db, now) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    const store = tx.objectStore(STORE);
+    const rows = [];
+    const cursor = store.openCursor();
+    cursor.onsuccess = () => {
+      const at = cursor.result;
+      if (at) {
+        rows.push({ key: at.key, at: at.value?.at ?? 0 });
+        at.continue();
+        return;
+      }
+      for (const key of selectEvictions(rows, now)) store.delete(key);
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
 }
 function indexedDbTranslationCache() {
   const memory = memoryTranslationCache();
@@ -748,6 +778,24 @@ var shared;
 function defaultTranslationCache() {
   return shared ??= indexedDbTranslationCache();
 }
+
+// src/translation/recentOutcomes.ts
+var FAILED_OUTCOME_TTL_MS = 6e4;
+var recentOutcomes = /* @__PURE__ */ new Map();
+var recentOutcome = (key) => {
+  const hit = recentOutcomes.get(key);
+  if (!hit) return void 0;
+  if (hit.until < Date.now()) {
+    recentOutcomes.delete(key);
+    return void 0;
+  }
+  return hit.outcome;
+};
+var clearRecentOutcomes = () => recentOutcomes.clear();
+var rememberOutcome = (key, outcome) => {
+  if (recentOutcomes.size > 500) recentOutcomes.clear();
+  recentOutcomes.set(key, { until: Date.now() + FAILED_OUTCOME_TTL_MS, outcome });
+};
 
 // src/spend/format.ts
 function formatUsd(usd, locale) {
@@ -813,20 +861,27 @@ var import_jsx_runtime2 = require("react/jsx-runtime");
 var TranslationContext = (0, import_react2.createContext)(null);
 function TranslationProvider({ tasks, cloud, locale, cache: cache2, labels, openModelPicker, identity, children }) {
   const resolvedCache = cache2 === void 0 ? defaultTranslationCache() : cache2;
+  const scopedCache = (0, import_react2.useMemo)(() => resolvedCache ? retirableTranslationCache(resolvedCache) : null, [resolvedCache, identity]);
   const lastIdentity = (0, import_react2.useRef)(identity);
-  (0, import_react2.useEffect)(() => {
+  const lastScoped = (0, import_react2.useRef)(scopedCache);
+  (0, import_react2.useLayoutEffect)(() => {
+    if (lastScoped.current !== scopedCache) lastScoped.current?.retire();
+    lastScoped.current = scopedCache;
     if (identity === void 0) return;
-    if (lastIdentity.current !== identity && lastIdentity.current) void resolvedCache?.clear().catch(() => void 0);
+    if (lastIdentity.current !== identity && lastIdentity.current) {
+      clearRecentOutcomes();
+      void resolvedCache?.clear().catch(() => void 0);
+    }
     lastIdentity.current = identity;
-  }, [identity, resolvedCache]);
+  }, [identity, resolvedCache, scopedCache]);
   const value = (0, import_react2.useMemo)(() => ({
     tasks,
     cloud,
     locale,
-    cache: resolvedCache,
+    cache: scopedCache,
     labels: { ...DEFAULT_TRANSLATION_LABELS, ...labels },
     ...openModelPicker ? { openModelPicker } : {}
-  }), [tasks, cloud, locale, resolvedCache, labels, openModelPicker]);
+  }), [tasks, cloud, locale, scopedCache, labels, openModelPicker]);
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(TranslationContext.Provider, { value, children });
 }
 function useTranslationContext() {
@@ -884,21 +939,6 @@ async function translateWithEngines(wiring, texts, from, signal) {
 
 // src/translation/useTranslatedText.ts
 var import_react3 = require("react");
-var FAILED_OUTCOME_TTL_MS = 6e4;
-var recentOutcomes = /* @__PURE__ */ new Map();
-var recentOutcome = (key) => {
-  const hit = recentOutcomes.get(key);
-  if (!hit) return void 0;
-  if (hit.until < Date.now()) {
-    recentOutcomes.delete(key);
-    return void 0;
-  }
-  return hit.outcome;
-};
-var rememberOutcome = (key, outcome) => {
-  if (recentOutcomes.size > 500) recentOutcomes.clear();
-  recentOutcomes.set(key, { until: Date.now() + FAILED_OUTCOME_TTL_MS, outcome });
-};
 function useTranslatedText(text, contentId, enabled) {
   const ctx = useTranslationContext();
   const wiring = (0, import_react3.useRef)(ctx);
@@ -1966,7 +2006,8 @@ function AssistantRowInner({
   onReplay,
   onRate,
   rating,
-  renderAssistantActions
+  renderAssistantActions,
+  renderAfterMessage
 }) {
   const author = (0, import_builderforce_brain_embedded7.parseMessageAuthor)(node.message);
   const card = onAnswerQuestion ? (0, import_builderforce_brain_embedded4.parseAskUser)(node.text) : null;
@@ -1981,7 +2022,8 @@ function AssistantRowInner({
       /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("thinking") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "bf-tl__body bf-tl__thought-line", children: [
         renderMsg(node.message, "assistant", bodyText),
-        prov && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(ProvenanceChip, { prov, labels, identity: modelIdentity })
+        prov && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(ProvenanceChip, { prov, labels, identity: modelIdentity }),
+        renderAfterMessage?.(node.message)
       ] })
     ] });
   }
@@ -2021,7 +2063,8 @@ function AssistantRowInner({
           ),
           renderAssistantActions?.(node.message)
         ] })
-      ] })
+      ] }),
+      renderAfterMessage?.(node.message)
     ] })
   ] });
 }
@@ -3027,7 +3070,8 @@ var DEFAULT_TOOL_CONFIRM_LABELS = {
   approve: "Approve",
   approveAll: "Always",
   deny: "Cancel",
-  aria: "Approve this action"
+  aria: "Approve this action",
+  evidence: "Checks: {evidence}"
 };
 function toolConfirmLabelsFrom(lookup) {
   const approveAllTitle = lookup("approveAllTitle");
@@ -3083,6 +3127,7 @@ var ToolConfirmBar = (0, import_react19.memo)(function ToolConfirmBar2({
       after
     ] }) }),
     children ?? (command ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("pre", { className: "bf-confirm__cmd", children: command }) : args ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "bf-confirm__args", children: args }) : null),
+    req.evidence ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "bf-confirm__evidence", children: labels.evidence.split("{evidence}").join(req.evidence) }) : null,
     /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "bf-confirm__actions", children: [
       /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { ref: approveRef, type: "button", className: "bf-confirm__btn bf-confirm__btn--primary", onClick: onApprove, children: labels.approve }),
       onApproveAll && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { type: "button", className: "bf-confirm__btn", onClick: onApproveAll, title: labels.approveAllTitle, children: labels.approveAll }),

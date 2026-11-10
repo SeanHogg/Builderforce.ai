@@ -27,6 +27,7 @@ import { extractSymbols, symbolLanguageOf, type CodeSymbol, type SymbolLanguage 
 import { contentBadges } from './codeFileBadges.js';
 import { CODE_FINDING_RULES } from './codeFindings.js';
 import { fileRollup } from './codeRollup.js';
+import type { ModuleResolution } from './moduleAliases.js';
 import { codeLanguageOf, isShellPath } from './codeMask.js';
 import { basenameOf, CODE_BADGES, CODE_PACK_ID, codeFileNode } from './codeNodes.js';
 
@@ -86,7 +87,7 @@ export function codeParser(symbolsOf: SymbolSource = extractSymbols, modules?: M
                 },
             });
             return {
-                sourceRef: node.ref, sourceHash, nodes: [node], edges: fileRollup(ctx.rootId, path, text, symbols, ctx.resolvePath),
+                sourceRef: node.ref, sourceHash, nodes: [node], edges: fileRollup(ctx.rootId, path, text, ctx.resolvePath, modules),
                 keys: keysOf(path, exported).map((key) => ({ ref: node.ref, key })),
             };
         },
@@ -116,8 +117,10 @@ export interface CodePackDeps {
     analyzers?: AnalyzerPort;
     /** The layers; default {@link CODE_LAYERS}. Pass {@link loadCodePartitions}'s result to honour an override. */
     partitions?: PartitionRegistry;
-    /** Definitions per file; default the regex extractor. */
+    /** Definitions per file; default the regex extractor. (The symbol-level relations always read the regex extractor's: `fileRollup`.) */
     symbolsOf?: SymbolSource;
+    /** The root's path aliases (and which modules exist), so the extract stores an alias import's resolved module path. */
+    modules?: ModuleResolution;
 }
 
 /**
@@ -127,7 +130,7 @@ export interface CodePackDeps {
 export function createCodePack(deps: CodePackDeps = {}): KnowledgePack {
     return {
         id: CODE_PACK_ID,
-        parsers: [codeParser(deps.symbolsOf)],
+        parsers: [codeParser(deps.symbolsOf, deps.modules)],
         partitions: deps.partitions ?? CODE_LAYERS,
         findings: [...CODE_FINDING_RULES],
         ...(deps.analyzers ? { analyzers: deps.analyzers } : {}),

@@ -5,12 +5,12 @@ import {
   createMemoryLocalFirstStore,
   newLocalRecord,
   SCAN_STOP,
-  selectPending,
   selectRecords,
   type AppendJournalEvent,
   type LocalFirstChange,
   type LocalFirstDelta,
 } from './store.js';
+import { selectPending } from './pendingQueries.js';
 
 const record = (id: string, text = id) => newLocalRecord({ id, entityType: 'ticket', payload: { text }, deviceId: 'd' });
 const event = (key: string, extra: Partial<AppendJournalEvent> = {}): AppendJournalEvent => ({

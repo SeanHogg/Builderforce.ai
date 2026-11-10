@@ -47,7 +47,6 @@ import { reviewPortsFor } from "./reviewPortsFor";
 import { reviewRecords, useRecordMemento } from "./knowledgeSyncStatus";
 import { reviewParallelism } from "./review/extractPoolHost";
 import { UNTIMED, type LoadTimer } from "./knowledgeLoadTrace";
-import { rootConfigReader } from "./knowledgeSymbols";
 
 /** Where the reviewed roots are listed (`workspaceState`), set at activation. */
 let reviewedRootsMemento: RootsMemento | undefined;
@@ -246,8 +245,6 @@ export async function loadGraph(
   if (nearDuplicates) onNearDuplicates?.(nearDuplicates.length);
   return timer.phase("build", () => buildStoredGraph({
     rootId, store: open.store, manifest: open.manifest, packs: reviewPacks({ partitions }),
-    // The root's tsconfig path aliases, so an import by alias lands on its file in the symbol-edge rollup.
-    readText: rootConfigReader(root.folderPath),
     ...(nearDuplicates ? { nearDuplicates } : {}),
     ...(q.focus ? { focus: q.focus } : {}),
     ...(q.maxNodes ? { maxNodes: q.maxNodes } : {}),
