@@ -278,7 +278,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     // host surface shares, re-bound per call so a mid-run switch is honoured.
     const needsConfirm = (req: { name: string; args: unknown }): boolean =>
       nativeNeedsConfirm(defs, flag.autoApprove ? "acceptEdits" : "ask", gates)(req);
-    approvals.describeWith(key, (name, args) => approvalRequestFor(defs, gates, name, args));
+    approvals.describeWith(key, (name, args, evidence) => approvalRequestFor(defs, gates, name, args, evidence));
     // A sub-agent's turns are routed for ITS role (explore / code / verify), not its owner's.
     // A Hybrid pick that failed and was answered with Auto is announced to THIS chat's
     // panel, which shows the one-line notice — a fallback is never silent.

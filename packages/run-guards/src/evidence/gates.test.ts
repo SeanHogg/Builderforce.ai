@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_EVIDENCE_POLICY,
-  commitGate,
   outgoingGate,
   reviewGate,
-  shellBypass,
   shellPublishHint,
   type EvidencePolicy,
   type OutgoingFile,
@@ -46,16 +44,10 @@ function passingLedger(absPath: string, hash = "h1") {
   return l;
 }
 
-describe("outgoingGate / commitGate", () => {
+describe("outgoingGate", () => {
   it("passes when every required check has a passing record for the file's hash", () => {
     const v = outgoingGate([file("packages/a/src/x.ts")], passingLedger("packages/a/src/x.ts"), POLICY);
     expect(v).toEqual({ ok: true, unavailable: [] });
-  });
-
-  it("commitGate is the same gate (one gate serves commit advisory and push refusal)", () => {
-    const files = [file("packages/a/src/x.ts")];
-    const ledger = passingLedger("packages/a/src/x.ts");
-    expect(commitGate(files, ledger, POLICY)).toEqual(outgoingGate(files, ledger, POLICY));
   });
 
   it("refuses on a failing check and names the file, check and first findings", () => {
@@ -181,11 +173,71 @@ describe("outgoingGate / commitGate", () => {
     expect(outgoingGate(files, l, POLICY)).toEqual({ ok: true, unavailable: [] });
   });
 
+  it("regression: .spec and .test.js files are tests (one isTestPath rule, shared with no_progress)", () => {
+    const dir = "packages/a/src/";
+    for (const testName of ["foo.spec.ts", "foo.test.js"]) {
+      const files = [file(dir + "foo.ts", { isNew: true }), file(dir + testName, { isNew: true })];
+      const l = passingLedger(dir + "foo.ts");
+      for (const kind of ["diagnostics", "typecheck", "test"] as const) l.record(dir + testName, "h1", rec({ kind, name: kind, exitCode: null }));
+      // The test covers the new source, and is not itself refused as an untested new source.
+      expect(outgoingGate(files, l, POLICY).ok).toBe(true);
+    }
+  });
+
   it("an unrelated test file does not satisfy the requirement — the name must start with the stem", () => {
     const dir = "packages/agent-runtime/extensions/a2a/src/";
     const files = [file(dir + "inbound.ts", { isNew: true }), file(dir + "other.test.ts", { isNew: true })];
     const v = outgoingGate(files, passingLedger(dir + "inbound.ts"), POLICY);
     expect(v.ok).toBe(false);
+  });
+
+  it("regression: a push like ea57946ea (directory-tested detectors, label catalogs, a barrel) is not refused", () => {
+    const src = "brain-embedded/src/runFindings/";
+    const kgv = "packages/knowledge-graph-view/src/";
+    const paths = [
+      src + "detectors/bracketBreak.ts",
+      src + "detectors/editChurn.ts",
+      src + "detectors.write.test.ts",
+      src + "index.ts",
+      src + "types.ts",
+      src + "fixtures/traceBuilder.ts",
+      src + "registry.ts",
+      src + "registry.test.ts",
+      kgv + "labels/surface.agentRuns.ts",
+      kgv + "labels/surface.style.ts",
+      kgv + "surface/FourPlusOneCamera.tsx",
+      kgv + "surface/KeyFeaturesCamera.tsx",
+      kgv + "surface/architectureCameras.test.tsx",
+      kgv + "surface/drawers/agentRuns/RunFiles.tsx",
+      kgv + "surface/drawers/agentRuns/AgentRunsPanel.test.tsx",
+      "clients/vscode/src/verify/fullTier.ts",
+      "clients/vscode/src/verify/shipPorts.test.ts",
+      "clients/vscode/esbuild.config.mjs",
+      "packages/x/src/global.d.ts",
+    ];
+    const files = paths.map((p) => file(p, { isNew: true }));
+    const l = createEvidenceLedger();
+    for (const p of paths) {
+      for (const kind of ["diagnostics", "typecheck", "test"] as const) l.record(p, "h1", rec({ kind, name: kind, exitCode: null }));
+    }
+    expect(outgoingGate(files, l, DEFAULT_EVIDENCE_POLICY)).toEqual({ ok: true, unavailable: [] });
+  });
+
+  it("the default policy accepts a test in the push that imports the new file", () => {
+    const files = [
+      file("pkg/src/deep/widget.ts", { isNew: true }),
+      file("pkg/test/widgetBehaviour.test.ts", { isNew: true, imports: ["pkg/src/deep/widget.js"] }),
+    ];
+    const l = createEvidenceLedger();
+    for (const f of files) for (const kind of ["diagnostics", "typecheck", "test"] as const) l.record(f.absPath, "h1", rec({ kind, name: kind, exitCode: null }));
+    expect(outgoingGate(files, l, DEFAULT_EVIDENCE_POLICY).ok).toBe(true);
+    // Without the import, the same push is refused.
+    expect(outgoingGate([files[0]!, file("pkg/test/widgetBehaviour.test.ts", { isNew: true })], l, DEFAULT_EVIDENCE_POLICY).ok).toBe(false);
+  });
+
+  it("a file the host could not check at HEAD is reported unavailable, never passed on working-tree evidence", () => {
+    const v = outgoingGate([file("packages/a/src/x.ts", { unavailable: "modified in the working tree" })], passingLedger("packages/a/src/x.ts"), POLICY);
+    expect(v).toEqual({ ok: true, unavailable: ["packages/a/src/x.ts: modified in the working tree"] });
   });
 
   it("extensions with no required policy pass without any records", () => {
@@ -239,16 +291,12 @@ describe("reviewGate (OD-1)", () => {
   });
 });
 
-describe("shellPublishHint / shellBypass", () => {
+describe("shellPublishHint", () => {
   it("advises on a shell git commit or push (never a refusal — the outgoing gate reads the real commits)", () => {
     const hint = shellPublishHint("git -C Builderforce.ai commit -am wip && git push");
     expect(hint).toBeTruthy();
     expect(hint).toContain("git_push");
     expect(shellPublishHint("git -C Builderforce.ai status")).toBeNull();
     expect(shellPublishHint("pnpm test")).toBeNull();
-  });
-
-  it("shellBypass is the same advisory", () => {
-    expect(shellBypass("git push")).toEqual(shellPublishHint("git push"));
   });
 });

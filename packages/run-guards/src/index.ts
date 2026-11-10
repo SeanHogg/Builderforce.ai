@@ -116,13 +116,12 @@ export {
 } from "./evidence/ledger.js";
 export {
   DEFAULT_EVIDENCE_POLICY,
-  commitGate,
   outgoingGate,
   reviewGate,
-  shellBypass,
   shellPublishHint,
   type EvidencePolicy,
   type GateVerdict,
+  type NewSourceTestCoverage,
   type OutgoingFile,
   type ReviewVerdict,
 } from "./evidence/gates.js";

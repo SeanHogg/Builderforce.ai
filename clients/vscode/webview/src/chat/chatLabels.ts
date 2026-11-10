@@ -133,6 +133,7 @@ const TOOL_CONFIRM_KEY: Readonly<Record<string, string>> = {
   approveAll: 'app.always',
   deny: 'app.cancel',
   aria: 'app.confirmAria',
+  evidence: 'app.confirmEvidence',
 };
 
 const ASK_USER_KEY: Readonly<Record<string, string>> = {

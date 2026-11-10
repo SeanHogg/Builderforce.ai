@@ -62,9 +62,9 @@ export function createVerifierPort(deps: VerifyHostDeps): VerifierPort {
       return diagnostics(paths.map((p) => absoluteIn(deps.root, p)));
     },
 
-    async full(paths) {
+    async full(paths, opts) {
       const byAbs = new Map(paths.map((p) => [absoluteIn(deps.root, p), p]));
-      const records = await runFullTier([...byAbs.keys()], { root: deps.root, cache, readText: read, diagnostics });
+      const records = await runFullTier([...byAbs.keys()], { root: deps.root, cache, readText: read, diagnostics }, opts);
       const out = new Map<string, readonly CheckRecord[]>();
       for (const [abs, asked] of byAbs) {
         const found = records.get(abs);
@@ -77,8 +77,8 @@ export function createVerifierPort(deps: VerifyHostDeps): VerifierPort {
 
 /** The GitPort: real commits, real bytes. A repo the call did not name is the workspace root. */
 export function createGit(deps: VerifyHostDeps): GitPort {
-  const port = createGitPort(deps.git, deps.readText ?? readText);
-  return { outgoing: (repo) => port.outgoing(absoluteIn(deps.root, repo || ".")) };
+  const port = createGitPort(deps.git);
+  return { outgoing: (repo, opts) => port.outgoing(absoluteIn(deps.root, repo || "."), opts) };
 }
 
 /** The ReviewerPort: one independent review sub-run (its deps are per run — see `shipPorts.ts`). */

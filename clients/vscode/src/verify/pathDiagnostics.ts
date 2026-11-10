@@ -5,8 +5,9 @@
  * Each path is opened via `vscode.workspace.openTextDocument` (a file that is not
  * shown still gets a TextDocument and its language server still reports), then we
  * wait for `onDidChangeDiagnostics` to fire for that URI or 3 s, and read
- * `vscode.languages.getDiagnostics`. A file with no diagnostics at all yields no
- * record — nothing ran, so nothing is claimed (OD-3).
+ * `vscode.languages.getDiagnostics`. A code file the language server was asked about
+ * and reported clean yields a PASS record (findings empty) — a clean read is evidence;
+ * only a path set with no code document to ask about yields no record (OD-3).
  *
  * Known limit (stated where it applies): the fast tier only sees the EDITED file.
  * Dependents in the same package are covered by the full tier's package typecheck;
@@ -60,8 +61,8 @@ function isCodeLanguage(languageId: string): boolean {
 
 /**
  * Diagnostics for exactly these absolute paths. Returns null when the language
- * server layer cannot answer here (no files resolved, or no diagnostics reported
- * for any of them) — `unavailable`, never a silent pass.
+ * server layer cannot answer here (no code document resolved) — `unavailable`; a
+ * clean read is a pass record with no findings.
  */
 export async function pathDiagnostics(
   absPaths: readonly string[],
@@ -120,8 +121,6 @@ export async function pathDiagnostics(
       if (lines.length >= MAX_FINDINGS) break;
     }
   }
-  if (lines.length === 0) return null;
-
   const hasError = lines.some((l) => l.split(/\s+/)[1] === "error");
   return {
     kind: "diagnostics",

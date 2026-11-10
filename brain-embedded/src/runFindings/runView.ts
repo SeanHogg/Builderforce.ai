@@ -7,6 +7,7 @@
  * The per-turn numbers come from {@link modelTurnLog}, the role/hand-off picture from {@link routingByRole}, the
  * ticket/dispatch picture from {@link staffingSummaryInTrace} — no second copy of any of them. Pure.
  */
+import { editedPathsOf } from '@builderforce/agent-tools';
 import { isFailedToolResult, type BrainTraceEvent } from '../brainTriage';
 import { utf8ByteLength } from '../composingActivity';
 import { isCodeChangeTool } from '../localWorkspaceTools';
@@ -34,16 +35,6 @@ function jsonBytes(v: unknown): number {
   }
 }
 
-/** The paths a code change names: its own `path`, or each entry of a batched `edits[]`. */
-export function changedPaths(args: Record<string, unknown>): string[] {
-  const one = (a: Record<string, unknown>): string | null => {
-    const p = a.path ?? a.file_path ?? a.filePath;
-    return typeof p === 'string' && p.trim() ? p.trim().replace(/\\/g, '/').replace(/^\.\//, '') : null;
-  };
-  const paths = Array.isArray(args.edits) ? args.edits.map((e) => one(record(e))) : [one(args)];
-  return [...new Set(paths.filter((p): p is string => p !== null))];
-}
-
 function isCheck(ev: BrainTraceEvent): boolean {
   if (CHECK_TOOL.test(ev.label)) return true;
   return SHELL_TOOLS.has(ev.label) && CHECK_COMMAND.test(commandOf(ev));
@@ -58,7 +49,7 @@ function callOf(ev: BrainTraceEvent, step: number, turn: number): ViewCall {
     argBytes: jsonBytes(ev.args),
     write,
     check: ok && isCheck(ev),
-    paths: write ? changedPaths(args) : [],
+    paths: write ? editedPathsOf(ev.label, args) : [],
   };
 }
 

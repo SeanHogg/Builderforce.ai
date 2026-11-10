@@ -16,14 +16,16 @@ import { fileRefFor } from './agentRunsModel';
 
 export interface RunFilesProps {
     files: readonly AgentRunFile[];
+    /** The graph root's absolute folder (`AgentRunReport.root`); an absolute path outside it is not on the graph. */
+    root?: string | undefined;
     graph: KnowledgeGraph;
     labels: KnowledgeGraphLabels;
     onShow(refs: string[]): void;
 }
 
-export function RunFiles({ files, graph, labels, onShow }: RunFilesProps) {
+export function RunFiles({ files, root, graph, labels, onShow }: RunFilesProps) {
     const t = labels.surface.agentRuns;
-    const refs = useMemo(() => new Map(files.map((f) => [f.path, fileRefFor(graph, f.path)])), [files, graph]);
+    const refs = useMemo(() => new Map(files.map((f) => [f.path, fileRefFor(graph, f.path, root)])), [files, graph, root]);
     if (files.length === 0) return <p style={{ ...TYPE.bodyMuted, margin: 0 }}>{t.filesEmpty}</p>;
     return (
         <ul data-testid="kg-agent-run-files" style={{ ...list, gap: 6 }}>

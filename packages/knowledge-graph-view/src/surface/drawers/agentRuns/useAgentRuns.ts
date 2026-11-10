@@ -16,7 +16,8 @@ export interface AgentRunsState {
     select(id: string): void;
 }
 
-export function useAgentRuns(port: AgentRunsPort | undefined): AgentRunsState {
+/** @param rootId the graph's root, so the host can say where it sits on disk (`AgentRunReport.root`). */
+export function useAgentRuns(port: AgentRunsPort | undefined, rootId?: string): AgentRunsState {
     // No port ⇒ nothing recorded (the registry hides the drawer then, but a forced render must not spin forever).
     const [list, setList] = useState<AgentRunList>(port ? { state: 'loading' } : { state: 'ready', runs: [] });
     const [selected, setSelected] = useState<string | null>(null);
@@ -39,11 +40,11 @@ export function useAgentRuns(port: AgentRunsPort | undefined): AgentRunsState {
         const mine = ++ticket.current;
         setSelected(id);
         setDetail({ state: 'loading' });
-        port.report(id).then(
+        port.report(id, rootId).then(
             (report) => { if (ticket.current === mine) setDetail(report ? { state: 'ready', report } : { state: 'missing' }); },
             () => { if (ticket.current === mine) setDetail({ state: 'missing' }); },
         );
-    }, [port]);
+    }, [port, rootId]);
 
     return { list, selected, detail, select };
 }

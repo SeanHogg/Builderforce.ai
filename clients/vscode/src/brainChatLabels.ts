@@ -274,6 +274,7 @@ export function brainChatLabels(): Record<string, string> {
     "app.cancel": t("Cancel"),
     "app.always": t("Always"),
     "app.confirmAria": t("Approve this action"),
+    "app.confirmEvidence": t("Checks: {evidence}"),
     "app.dismiss": t("Dismiss"),
     "app.reconnect": t("Reconnect"),
     "app.byoUnused": t("Your connected {provider} account couldn’t be used this run (its token looks expired or revoked), so it ran on the shared model pool instead of your own model. Reconnect it in the web app under Settings ▸ API Keys."),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bracketBalance, bracketDelta, changesBalance } from './editBalance.js';
+import { bracketBalance, bracketDelta, changesBalance, describeBracketDelta } from './editBalance.js';
 
 describe('bracketDelta', () => {
   it('reports zeros for a balanced replacement', () => {
@@ -58,5 +58,46 @@ describe('bracketDelta', () => {
       '};',
     ].join('\n');
     expect(bracketDelta(oldString, newString, 'labels.ts')).toEqual({ curly: -1, paren: 0, square: 0 });
+  });
+
+  const zero = { curly: 0, paren: 0, square: 0 };
+
+  it('regression: a regex literal holding a quote does not swallow the rest of the line', () => {
+    expect(bracketBalance(`s.replace(/["']/g, '')`)).toEqual(zero);
+    expect(bracketDelta('a', `s.replace(/["']/g, '')`, 'ts')).toEqual(zero);
+  });
+
+  it('regression: a regex literal holding `//` is not a comment', () => {
+    expect(bracketBalance('/https?:\\/\\//')).toEqual(zero);
+    expect(bracketBalance('const ok = /https?:\\/\\//.test(url) && f(x);')).toEqual(zero);
+  });
+
+  it('still reads `/` after a value as division', () => {
+    expect(bracketBalance('const r = (a) / 2 / (b);')).toEqual(zero);
+    expect(bracketBalance('x = total / count; f(')).toEqual({ curly: 0, paren: 1, square: 0 });
+  });
+
+  it('regression: an apostrophe in JSX text is not a string', () => {
+    expect(bracketBalance(`<p>Don't</p>{xs.map((x) => (`, { jsx: true })).toEqual({ curly: 1, paren: 2, square: 0 });
+    expect(bracketDelta(`<p>Dont</p>{xs.map((x) => (`, `<p>Don't</p>{xs.map((x) => (`, 'src/List.tsx')).toEqual(zero);
+  });
+
+  it('regression: brackets in JSX text do not count', () => {
+    expect(bracketDelta('<p>a b</p>', '<p>a (b</p>', 'tsx')).toEqual(zero);
+    expect(bracketDelta('', 'return (\n  <div title="x (">\n    a (b [c\n    <span>{f(x)}</span>\n  </div>\n);', 'jsx')).toEqual(zero);
+  });
+
+  it('counts an unclosed container inside JSX', () => {
+    expect(bracketDelta('<p>{a}</p>', '<p>{f(a}</p>', 'tsx')).toEqual({ curly: 0, paren: 1, square: 0 });
+  });
+
+  it('keeps tsx type parameters as code', () => {
+    expect(bracketBalance('const id = <T,>(x: T) => x; f(', { jsx: true })).toEqual({ curly: 0, paren: 1, square: 0 });
+    expect(bracketBalance('const id = <T extends U>(x: T) => [x', { jsx: true })).toEqual({ curly: 0, paren: 0, square: 1 });
+  });
+
+  it('describeBracketDelta renders only the kinds that moved, in either style', () => {
+    expect(describeBracketDelta({ curly: -1, paren: 1, square: 0 })).toBe('curly -1 · paren +1');
+    expect(describeBracketDelta({ curly: -1, paren: 1, square: 0 }, 'glyph')).toBe('`{}` -1, `()` +1');
   });
 });

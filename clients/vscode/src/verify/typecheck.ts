@@ -6,17 +6,16 @@
  * runs only the changed file's own tests).
  *
  * The shell port runs through the host's real process runner (`execRunner`), which
- * returns the REAL process exit code — never one parsed out of the model's output.
- * On Windows the package-manager shim must be launched `.cmd` (`pnpm.cmd`,
- * `npm.cmd`): a bare `child_process.spawn("pnpm")` without a shell cannot start a
- * batch file on win32. A command that does not finish within its budget is exit 124
- * — recorded "unavailable", never "pass" (OD-3).
+ * returns the REAL process exit code — never one parsed out of the model's output —
+ * and takes an argument array, never a shell string (Windows `.cmd` shims are launched
+ * there, for the package managers only). A command that does not finish within its
+ * budget is exit 124 — recorded "unavailable", never "pass" (OD-3).
  */
 
 import * as path from "path";
 import { planInRunVerify, type PackageScriptRunner } from "@builderforce/run-guards";
 import type { CheckRecord } from "./types";
-import { DID_NOT_FINISH, execRunner, type Runner } from "./execRunner";
+import { DID_NOT_FINISH, execRunner, type Argv, type Runner } from "./execRunner";
 
 /** The sandbox's clone, as the caller reads it (`runSandboxVerify`'s `VerifySandbox`). */
 export interface VerifySandboxLike {
@@ -24,25 +23,22 @@ export interface VerifySandboxLike {
   list(glob: string): Promise<string[]>;
 }
 
-/** The run's bounded shell (`runSandboxVerify`'s `VerifyShell`): heartbeat + cancel. */
+/** The ONE bounded shell every verify tier runs through: an argument array, never a shell string. */
 export interface VerifyShellLike {
-  runFor(command: string, timeoutMs: number): Promise<{ exitCode?: number }>;
+  runFor(argv: Argv, timeoutMs: number): Promise<{ exitCode?: number }>;
 }
 
 /** The whole verify's budget — room for the checks that follow it. */
-const VERIFY_BUDGET_MS = 9 * 60_000;
+export const VERIFY_BUDGET_MS = 9 * 60_000;
 /** Below this a command is not started: it could not finish. */
 const MIN_COMMAND_MS = 30_000;
 /** At most this many commands run — a verify must not become a second run. */
 const MAX_VERIFY_COMMANDS = 3;
 
-/** Windows: the runner word must be the `.cmd` shim (a bare `pnpm` cannot exec a batch file). */
-export function windowsCommand(command: string): string {
-  if (process.platform !== "win32") return command;
-  const m = /^(\S+)\s+(.*)$/.exec(command);
-  if (!m) return command;
-  if (/\.(cmd|bat|ps1)$/i.test(m[1])) return command; // already a shim
-  return `${m[1]}.cmd ${m[2]}`;
+/** A planned script command (`pnpm run typecheck`) as argv; null when a word is not a plain token. */
+function argvOf(command: string): Argv | null {
+  const words = command.trim().split(/\s+/);
+  return words.length && words.every((w) => /^[\w@.:/=+-]+$/.test(w)) ? words : null;
 }
 
 /** The runner the lockfile names (npm when none does) — only a ROOT lockfile selects it. */
@@ -57,7 +53,7 @@ async function detectRunner(sandbox: VerifySandboxLike): Promise<PackageScriptRu
 /** The shell port `runSandboxVerify` calls: the host's real process runner, exit code real. */
 export function vsixVerifyShell(cwd: string, runner: Runner = execRunner): VerifyShellLike {
   return {
-    runFor: (command, timeoutMs) => runner(windowsCommand(command), { cwd, timeout: timeoutMs }),
+    runFor: (argv, timeoutMs) => runner(argv, { cwd, timeout: timeoutMs }),
   };
 }
 
@@ -105,7 +101,11 @@ export async function runTypecheckVerify(
   const records: CheckRecord[] = [];
   for (const command of commands) {
     const left = deadline - now();
-    const exitCode = left < MIN_COMMAND_MS ? DID_NOT_FINISH : await shell.runFor(command, left).then((r) => (typeof r.exitCode === "number" ? r.exitCode : 1));
+    const argv = argvOf(command);
+    // Not started when the budget cannot fit it, or when the script name is not a plain token: "unavailable".
+    const exitCode = left < MIN_COMMAND_MS || !argv
+      ? DID_NOT_FINISH
+      : await shell.runFor(argv, left).then((r) => (typeof r.exitCode === "number" ? r.exitCode : 1));
     records.push({
       kind: "typecheck",
       name: command,

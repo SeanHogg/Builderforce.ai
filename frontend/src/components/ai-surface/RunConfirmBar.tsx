@@ -36,6 +36,8 @@ export function RunConfirmBar({ runKey, onApproveAll }: { runKey: RunKey | null;
         approveAllTitle: tBrain('approveAllTitle'),
         deny: tCommon('cancel'),
         aria: tBrain('confirmActionAria'),
+        // The bar fills `{evidence}` itself; ICU gets the placeholder back literally.
+        evidence: tBrain('confirmEvidence', { evidence: '{evidence}' }),
       }}
       prefetchLabels={prefetchLabels}
       prefetchLabelOf={prefetchLabelOf}

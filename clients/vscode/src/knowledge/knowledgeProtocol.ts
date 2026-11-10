@@ -90,7 +90,7 @@ export type KnowledgeCall =
   | { op: "excludeFromReview"; rootId: string; path: string }
   // Agent-run findings (PRD 46 §3.4): the recent local chats that ran tools, and one run's report.
   | { op: "agentRuns" }
-  | { op: "agentRunReport"; id: string };
+  | { op: "agentRunReport"; id: string; rootId?: string };
 
 /** How a run ended; `interrupted` is the host's own word for a record left `running` by a window that closed. */
 export type KnowledgeRunOutcome = NonNullable<ReviewRun["outcome"]> | "interrupted";

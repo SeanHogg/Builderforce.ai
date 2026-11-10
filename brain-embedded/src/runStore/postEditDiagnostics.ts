@@ -24,6 +24,7 @@
  * reference host implementation.
  */
 
+import { editedPathsOf } from '@builderforce/agent-tools';
 import type { CheckRecord } from '@builderforce/run-guards';
 import type { VerifierPort } from './runTypes';
 
@@ -50,7 +51,7 @@ export async function postEditDiagnostics(
   verifier: VerifierPort | undefined,
 ): Promise<string | null> {
   if (!verifier || !EDIT_TOOLS.has(call.name) || !succeeded(call.result)) return null;
-  const paths = editedPaths(call.args);
+  const paths = editedPathsOf(call.name, call.args);
   if (!paths.length) return null;
 
   let record: CheckRecord | null;
@@ -63,13 +64,6 @@ export async function postEditDiagnostics(
   }
   if (!record || record.outcome !== 'fail') return null;
   return postEditNote(record);
-}
-
-/** The files ONE edit call wrote: its `path`, and each entry of an `edit_file` batch's `edits[]`. */
-function editedPaths(args: unknown): string[] {
-  const a = (args ?? {}) as { path?: unknown; edits?: unknown };
-  const raw = [a.path, ...(Array.isArray(a.edits) ? a.edits.map((e) => (e as { path?: unknown } | null)?.path) : [])];
-  return [...new Set(raw.filter((p): p is string => typeof p === 'string' && !!p.trim()).map((p) => p.trim()))];
 }
 
 /** The D7 note a failed diagnostics check adds to the tool result. */

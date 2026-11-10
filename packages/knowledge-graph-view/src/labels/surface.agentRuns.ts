@@ -5,6 +5,9 @@ export type AgentRunFindingKindId =
     | 'analysis_overrun' | 'unkept_readiness' | 'serial_single_writes' | 'prompt_bloat' | 'unverified_writes' | 'bracket_break'
     | 'edit_churn' | 'filed_then_inline' | 'same_model_roles' | 'oversized_args' | 'slow_turns' | 'repeated_narration' | 'stopped_unverified';
 
+/** What an evidence row measured, keyed exactly as the evidence's `note`; the host words it, the run carries only numbers. */
+export type AgentRunEvidenceNoteId = 'argBytes' | 'argBytesShared' | 'slowTurn';
+
 export interface AgentRunsLabels {
     agentRuns: {
         loading: string;
@@ -25,6 +28,8 @@ export interface AgentRunsLabels {
         findingsTitle: string;
         /** An evidence row. `{turn}` (optional part), `{label}`. */
         evidenceRow: string;
+        /** An evidence row's measurement, by its `note`. `argBytes*`: `{bytes}`; `slowTurn`: `{ms}`, `{completionTokens}`, `{argBytes}`. */
+        evidenceNotes: Record<AgentRunEvidenceNoteId, string>;
         filesTitle: string;
         filesEmpty: string;
         /** `{count}`. */
@@ -57,6 +62,11 @@ export const AGENT_RUNS_DEFAULTS: AgentRunsLabels = {
         legendTitle: 'Turn kinds',
         findingsTitle: 'Findings',
         evidenceRow: '[[Turn {turn} · ]]{label}',
+        evidenceNotes: {
+            argBytes: '{bytes} bytes of arguments',
+            argBytesShared: '{bytes} bytes of arguments · repeats a block another call carries',
+            slowTurn: '{ms} ms · {completionTokens} completion tokens · {argBytes} bytes of arguments',
+        },
         filesTitle: 'Files touched',
         filesEmpty: 'This run wrote no files.',
         fileWrites: '{count} writes',

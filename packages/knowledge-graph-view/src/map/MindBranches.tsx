@@ -7,7 +7,7 @@
 import { memo, type KeyboardEvent } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { counted, isOne } from '../surface/plural';
-import { kindLabel, kindShape } from '../names';
+import { kindLabel } from '../names';
 import { cssVar } from '../scene/themeColors';
 import { labelFitsAt } from './labelBudget';
 import { SHAPE_PATHS } from '../shapes';

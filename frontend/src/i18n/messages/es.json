@@ -4795,6 +4795,8 @@
     "category_gap": "Laguna",
     "category_risk": "Riesgo",
     "category_clarity": "Claridad",
+    "severity_other": "Sin clasificar",
+    "category_other": "Otra",
     "homeTitle": "Conocimiento",
     "homeSubtitle": "Todo lo que tu equipo sabe — SOPs, procesos y documentos en un solo lugar. Mira cuánto has capturado, dónde están las lagunas y qué necesita revisión.",
     "coverageTitle": "Cobertura estándar",
@@ -13028,6 +13030,18 @@
         "title": "Los cambios llegan mientras miras: actualizaciones en caliente, hojas de estilo reales y los frameworks que ya usas",
         "description": "La app que construyes en un lienzo de Builderforce ahora se actualiza en su sitio mientras editas, conservando lo que escribiste y dónde estabas. Compila Sass, SCSS y Less, aísla de verdad los CSS Modules, carga las hojas de estilo de tus paquetes y ejecuta servidores de desarrollo de Next.js y SvelteKit en el navegador."
       },
+      "one-agent-one-kernel": {
+        "title": "Un agente, un núcleo: todas las superficies de Builderforce usan ahora el mismo motor",
+        "description": "Tu chat en VS Code, la aplicación web, Rovr y los canales on-prem eran cuatro entornos de ejecución que podían no coincidir. Ahora son un único núcleo de ejecución: un bucle, una política de herramientas, una respuesta, trabajes donde trabajes."
+      },
+      "portable-knowledge-packs": {
+        "title": "Empaqueta el conocimiento que tu revisión demostró y deja que cualquier agente lo use",
+        "description": "La revisión del código de tu equipo convierte una carpeta en hechos. Ahora esos hechos se empaquetan en un .bfpack portátil que puedes compartir, versionar y entregar a cualquier LLM, para que la comprensión que ganó tu revisión viaje con el trabajo."
+      },
+      "see-what-went-wrong-in-an-agent-run": {
+        "title": "La ejecución del agente «funcionó». Ahora puedes ver qué salió mal en ella",
+        "description": "Un agente del editor gasta tres millones de tokens de prompt, hace trece cambios y lo detienen, y el informe dice Inconcluso. El panel Agent runs del Visualizer de VS Code lee la ejecución registrada y señala cada problema, con el turno, la herramienta y el archivo como evidencia."
+      },
       "no-account-no-gpu-you-choose-where-it-runs": {
         "title": "Sin cuenta, sin GPU, sin red: y tú eliges adónde van tus palabras",
         "description": "Studio y Rovr ahora se abren con un modelo funcionando y sin cuenta, sin llamada de registro y sin necesidad de GPU. Cada superficie —la web, la extensión de VS Code y el panel lateral de Rovr— hace una sola pregunta sobre dónde se ejecutan tus palabras: Solo local, Híbrido o un Modelo específico. Y Híbrido aprende, en tu dispositivo, qué turnos mantener en local."
@@ -13226,6 +13240,7 @@
     "saveTitleAria": "Guardar título del chat",
     "cancelTitleAria": "Cancelar",
     "confirmActionAria": "Confirmar acción",
+    "confirmEvidence": "Comprobaciones: {evidence}",
     "wantsTo": "Brain quiere <b>{action}</b>. Apruébalo para ejecutarlo.",
     "approveAllTitle": "Aprobar esta acción y aprobar automáticamente todas las siguientes en esta conversación",
     "captureHasTrace": "Copiar esta ejecución (pasos del LLM, cadena de herramientas, errores y transcripción) al portapapeles",
@@ -34510,6 +34525,8 @@
       "acceptedAlready": "El riesgo del commit {sha} ya estaba aceptado.",
       "acceptError": "No se pudo aceptar el riesgo.",
       "loadPrsError": "No se pudieron cargar las pull requests abiertas.",
+      "loadGateError": "No se pudo cargar la puerta de fusión de esta pull request.",
+      "statusUnknown": "Desconocido",
       "openAction": "Ejecutar análisis",
       "title": "Ejecutar un análisis",
       "crumb": "Gobernanza · Análisis de vulnerabilidades",
@@ -34535,6 +34552,12 @@
       }
     },
     "dsrExecute": {
+      "confirmErase": {
+        "title": "¿Borrar los datos de este interesado?",
+        "message": "Ejecutar esta solicitud borra de forma permanente los registros que este segmento tiene sobre {subject} y lo añade a la lista de no contactar. Los datos borrados no se pueden recuperar.",
+        "subjectFallback": "el interesado",
+        "confirmLabel": "Borrar definitivamente"
+      },
       "notVerified": "La identidad del interesado no se ha verificado. Verifícala antes de ejecutar esta solicitud.",
       "verifyIdentity": "Verificar identidad",
       "identityVerified": "Identidad verificada",
@@ -37602,6 +37625,11 @@
         "legendTitle": "Tipos de turno",
         "findingsTitle": "Hallazgos",
         "evidenceRow": "[[Turno {turn} · ]]{label}",
+        "evidenceNotes": {
+          "argBytes": "{bytes} bytes de argumentos",
+          "argBytesShared": "{bytes} bytes de argumentos · repite un bloque que lleva otra llamada",
+          "slowTurn": "{ms} ms · {completionTokens} tokens de respuesta · {argBytes} bytes de argumentos"
+        },
         "filesTitle": "Archivos modificados",
         "filesEmpty": "Esta ejecución no escribió ningún archivo.",
         "fileWrites": "{count} escrituras",

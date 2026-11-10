@@ -232,6 +232,69 @@ export interface BatchEditEntry {
   replace_all?: boolean;
 }
 
+/**
+ * One file a write call changed, read from its ARGUMENTS: the path, and — when the call carries them — the text
+ * it replaced (`before`) and the text it put there (`after`). An `edit_file` replacement carries both; a whole-file
+ * `write_file` carries only `after` (the bytes it overwrote are not in the call); any other code change (a delete,
+ * a rename) carries neither.
+ */
+export interface EditedFile {
+  path: string;
+  before?: string;
+  after?: string;
+}
+
+const editStr = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
+
+/** A call's or entry's path (`path`, `file_path` or `filePath`), trimmed, `/`-separated, without a leading `./`. */
+function editPathOf(a: Record<string, unknown>): string | null {
+  const p = a.path ?? a.file_path ?? a.filePath;
+  return typeof p === "string" && p.trim() ? p.trim().replace(/\\/g, "/").replace(/^\.\//, "") : null;
+}
+
+/**
+ * Every file ONE write call changed, from its arguments — THE reading of "what an edit wrote" (the run view's
+ * written paths, the post-edit balance note and diagnostics, the `bracket_break` detector).
+ *   - `edit_file`: its single `{path, old_string, new_string}` and each `edits[]` entry (an entry with no path
+ *     takes the call's), one row per replacement, in order;
+ *   - `write_file`: `{ path, after: content }`;
+ *   - anything else, or an edit with no readable replacement: the call's path alone.
+ * Rows are per replacement, so a path may repeat; callers wanting files dedupe. Pure — success is the caller's.
+ */
+export function editedFilesOf(toolName: string, args: unknown): EditedFile[] {
+  const a = (args && typeof args === "object" && !Array.isArray(args) ? args : {}) as Record<string, unknown>;
+  const top = editPathOf(a);
+  const out: EditedFile[] = [];
+  if (toolName === "edit_file") {
+    const replacement = (e: Record<string, unknown>, fallback: string | null): void => {
+      const path = editPathOf(e) ?? fallback;
+      const before = editStr(e.old_string);
+      const after = editStr(e.new_string);
+      if (path && (before !== undefined || after !== undefined)) {
+        out.push({ path, ...(before !== undefined ? { before } : {}), ...(after !== undefined ? { after } : {}) });
+      } else if (path && e !== a) {
+        out.push({ path });
+      }
+    };
+    if ("old_string" in a || "new_string" in a) replacement(a, null);
+    if (Array.isArray(a.edits)) {
+      for (const raw of a.edits) {
+        if (raw && typeof raw === "object") replacement(raw as Record<string, unknown>, top);
+      }
+    }
+  } else if (toolName === "write_file" && top) {
+    const after = editStr(a.content);
+    out.push({ path: top, ...(after !== undefined ? { after } : {}) });
+  }
+  if (out.length === 0 && top) out.push({ path: top });
+  return out;
+}
+
+/** The distinct paths {@link editedFilesOf} names, first-seen order. */
+export function editedPathsOf(toolName: string, args: unknown): string[] {
+  return [...new Set(editedFilesOf(toolName, args).map((f) => f.path))];
+}
+
 /** The most edits one `edit_file` call applies in a batch (PRD 45 §4.7 B3). */
 export const EDIT_BATCH_MAX = 20;
 

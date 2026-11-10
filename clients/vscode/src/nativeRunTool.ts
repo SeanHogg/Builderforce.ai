@@ -100,6 +100,8 @@ export function approvalRequestFor(
   gates: readonly PolicyGate[] | undefined,
   name: string,
   args: unknown,
+  /** The ship gate's evidence line the paused call carries (`pendingConfirm.evidence`). */
+  evidence?: string,
 ): NativeApprovalRequest {
   const record = argsRecord(args);
   const decision = evaluatePolicyGate(gates, name, toolCallPaths(record), undefined, declaredOf(defs, name));
@@ -108,6 +110,7 @@ export function approvalRequestFor(
     args: record,
     label: toolLabel(defs, name, record),
     ...(decision.action === "require-approval" ? { gateReason: decision.reason } : {}),
+    ...(evidence ? { evidence } : {}),
   };
 }
 

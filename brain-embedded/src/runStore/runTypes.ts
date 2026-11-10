@@ -25,7 +25,11 @@ export interface VerifierPort {
   /** Fast tier, ≤ 3 s: language-server diagnostics for exactly these files. Null = unavailable. */
   diagnostics(absPaths: readonly string[]): Promise<CheckRecord | null>;
   /** Full tier for these files: owning packages' typecheck + targeted tests + repo guards. Cached by (path, hash, check). */
-  full(absPaths: readonly string[]): Promise<ReadonlyMap<string, readonly CheckRecord[]>>;
+  full(
+    absPaths: readonly string[],
+    /** `budgetMs` bounds the whole call: a check that cannot finish inside it is recorded "unavailable", never waited on. */
+    opts?: { budgetMs?: number },
+  ): Promise<ReadonlyMap<string, readonly CheckRecord[]>>;
 }
 
 /** The git port: the host reads the REAL commits, never the model's claims. */
@@ -35,7 +39,18 @@ export interface GitPort {
    * `diff` is the text `diffHash` hashes — what the reviewer reads (OD-1); a reviewer
    * handed no diff hashes the empty string and can never match `diffHash`.
    */
-  outgoing(repo: string): Promise<{ files: OutgoingFile[]; diffHash: string; baseBranch: boolean; diff?: string }>;
+  outgoing(
+    repo: string,
+    /** `pullRequest` ⇒ compare against the PR's base (merge-base with it), not `@{u}`. */
+    opts?: { pullRequest?: { base?: string } },
+  ): Promise<{
+    files: OutgoingFile[];
+    diffHash: string;
+    baseBranch: boolean;
+    diff?: string;
+    /** Why the outgoing change could not be computed (no upstream, empty set): reported "unavailable", never a pass, never reviewed. */
+    unavailable?: string;
+  }>;
 }
 
 /** The reviewer port: OD-1, one review sub-run by a model that did not author the change. */

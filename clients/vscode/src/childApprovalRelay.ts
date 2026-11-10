@@ -13,7 +13,7 @@ import type { NativeApprovalRequest } from "./nativeBrainRun";
 import type { ChildRuns } from "./childRuns";
 
 /** A paused call, as the store holds it. */
-type Pending = { name: string; args: unknown };
+type Pending = { name: string; args: unknown; evidence?: string };
 
 /** Asks a person about one child's paused call. */
 export type ChildApprover = (req: NativeApprovalRequest & { agentName: string }) => Promise<boolean>;
@@ -29,7 +29,7 @@ export function createChildApprovalRelay(deps: ChildApprovalRelayDeps) {
   /** By the chat a tree lives in. */
   const approvers = new Map<number, ChildApprover>();
   /** How each live run phrases a paused call (its own catalog and gates). */
-  const describers = new Map<number, (name: string, args: unknown) => NativeApprovalRequest>();
+  const describers = new Map<number, (name: string, args: unknown, evidence?: string) => NativeApprovalRequest>();
   /** The question each run is being asked about, so a cell update does not ask twice. */
   const asking = new Map<number, Pending>();
 
@@ -37,7 +37,7 @@ export function createChildApprovalRelay(deps: ChildApprovalRelayDeps) {
     register(rootChatId: number, approve: ChildApprover): void {
       approvers.set(rootChatId, approve);
     },
-    describeWith(key: number, describe: (name: string, args: unknown) => NativeApprovalRequest): void {
+    describeWith(key: number, describe: (name: string, args: unknown, evidence?: string) => NativeApprovalRequest): void {
       describers.set(key, describe);
     },
     forget(key: number): void {
@@ -52,7 +52,7 @@ export function createChildApprovalRelay(deps: ChildApprovalRelayDeps) {
       const pending = deps.pendingOf(key);
       if (!lineage || !approve || !describe || !pending || asking.get(key) === pending) return;
       asking.set(key, pending);
-      void approve({ ...describe(pending.name, pending.args), agentName: lineage.agent.name })
+      void approve({ ...describe(pending.name, pending.args, pending.evidence), agentName: lineage.agent.name })
         .catch(() => false)
         .then((ok) => {
           if (asking.get(key) === pending) asking.delete(key);

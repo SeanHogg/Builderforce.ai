@@ -5,7 +5,7 @@
  */
 import type { BrainTraceEvent } from '../brainTriage';
 import type { BrainMessage } from '../types';
-import { fileLedger } from './findingParts';
+import { fileLedger, withUniqueIds } from './findingParts';
 import { RUN_FINDING_POLICY } from './policy';
 import { RUN_FINDING_REGISTRY } from './registry';
 import { buildRunView } from './runView';
@@ -47,7 +47,7 @@ function summaryOf(view: RunView, findings: readonly RunFinding[], identity: Run
 
 export function detectRunFindings(events: BrainTraceEvent[], messages: BrainMessage[] = [], identity: RunIdentity = {}): RunFindingsReport {
   const view = buildRunView(events, messages);
-  const findings = RUN_FINDING_REGISTRY.flatMap((d) => d.detect(view)).sort(compareFindings);
+  const findings = withUniqueIds(RUN_FINDING_REGISTRY.flatMap((d) => d.detect(view)).sort(compareFindings));
   return {
     summary: summaryOf(view, findings, identity),
     turns: view.turns.map((t) => ({

@@ -32,6 +32,7 @@ import type {
 } from '@seanhogg/builderforce-memory/knowledge';
 
 import type { AppliedFix, FixCheckResult, FixCheckUpdate, FixPreview, FixStepRequest, RecordedRun } from './fixPorts';
+import type { AgentRunEvidenceNoteId } from './labels/surface.agentRuns';
 
 export type LensId =
     | 'structure' | 'partitions' | 'duplication' | 'claims' | 'links' | 'unused' | 'knowledge' | 'live' | 'compare';
@@ -122,14 +123,19 @@ export interface AgentRunSummary { id: string; title: string; startedAt: string;
 export type AgentRunTurnKind = 'read' | 'write' | 'forced' | 'text' | 'failed';
 export interface AgentRunTurn { index: number; role: string; model: string; kind: AgentRunTurnKind; toolCalls: number;
     promptTokens: number; completionTokens: number; durationMs: number }
-export interface AgentRunEvidence { step: number; turn?: number; label: string; path?: string; excerpt?: string }
+/** `note` names what the row measured (worded by `agentRuns.evidenceNotes`); `params` are its numbers. */
+export interface AgentRunEvidence { step: number; turn?: number; label: string; path?: string; excerpt?: string;
+    note?: AgentRunEvidenceNoteId; params?: Readonly<Record<string, number>> }
 export interface AgentRunFinding { id: string; kind: string; severity: AgentRunSeverity;
     params: Readonly<Record<string, string | number>>; evidence: readonly AgentRunEvidence[] }
 export interface AgentRunFile { path: string; writes: number; checked: boolean }
 export interface AgentRunReport { summary: AgentRunSummary; turns: readonly AgentRunTurn[];
-    findings: readonly AgentRunFinding[]; files: readonly AgentRunFile[] }
+    findings: readonly AgentRunFinding[]; files: readonly AgentRunFile[];
+    /** The absolute folder of the graph root named in `report(id, rootId)`, when the host knows it: an absolute file
+     *  path is matched to the graph only under it. */
+    root?: string }
 /** The host's recorded agent runs and what each did wrong. Absent ⇒ no Agent runs drawer. */
-export interface AgentRunsPort { list(): Promise<readonly AgentRunSummary[]>; report(id: string): Promise<AgentRunReport | null> }
+export interface AgentRunsPort { list(): Promise<readonly AgentRunSummary[]>; report(id: string, rootId?: string): Promise<AgentRunReport | null> }
 
 /**
  * `load`'s answer when the host holds no review of the root on THIS machine (PRD 41 A7): the view says

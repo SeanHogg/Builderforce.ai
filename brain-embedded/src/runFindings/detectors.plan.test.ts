@@ -88,6 +88,10 @@ describe('oversized_args', () => {
     const call = (t: string): BuiltCall => ({ name: 'ticket-create', args: { title: t, description: `${t}\n\nContext: ${block}` } });
     const b = new TraceBuilder().turn({ role: 'plan', calls: [call('a'), call('b')] });
     expect(of(b, 'oversized_args')[0]?.params).toMatchObject({ tool: 'ticket-create', calls: 2 });
+    // The row's words are the host's: a note key and its numbers, never an English excerpt.
+    const row = of(b, 'oversized_args')[0]?.evidence[0];
+    expect(row).toMatchObject({ note: 'argBytesShared', params: { bytes: expect.any(Number) } });
+    expect(row?.excerpt).toBeUndefined();
   });
   it('attributes a loop-answered hand_off through its turn', () => {
     const b = new TraceBuilder().turn({ role: 'plan', loopAnswered: [{ name: 'hand_off', args: { summary: 's'.repeat(6000) } }] })
@@ -104,6 +108,8 @@ describe('slow_turns', () => {
   it('fires on a turn of 60 s or more', () => {
     const b = new TraceBuilder().turn({ role: 'plan', durationMs: 61_000 }).turn({ role: 'plan', durationMs: 90_500 });
     expect(of(b, 'slow_turns')[0]).toMatchObject({ severity: 'warn', params: { turns: 2, slowestMs: 90_500 } });
+    expect(of(b, 'slow_turns')[0]?.evidence[1]).toMatchObject({ note: 'slowTurn', params: { ms: 90_500 } });
+    expect(of(b, 'slow_turns')[0]?.evidence[1]?.excerpt).toBeUndefined();
   });
   it('stays quiet under the line', () => {
     expect(of(new TraceBuilder().turn({ role: 'plan', durationMs: 59_999 }), 'slow_turns')).toEqual([]);

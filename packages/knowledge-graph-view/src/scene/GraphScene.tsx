@@ -10,11 +10,11 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Html, OrbitControls } from '@react-three/drei';
-import { Color, DoubleSide, InstancedMesh, Matrix4, Vector3 } from 'three';
+import { DoubleSide, Vector3 } from 'three';
 import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
-import type { LensDef, NodeShape } from '../lenses';
+import type { LensDef } from '../lenses';
 import { EMPTY_LAYOUT_3D, type Layout3D } from './layout3d';
 import { useComputed } from '../compute/useComputed';
 import { DEFER_EDGES_ABOVE } from './edgeBudget';

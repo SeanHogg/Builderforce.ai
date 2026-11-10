@@ -51,7 +51,6 @@ function ReviewsPanelBody({ labels, source, runs, reviews, sync, history, rootId
     const stoppingSince = state.status === 'stopping' ? state.stoppedAt : hostStoppingSince;
     const running = state.status === 'running' || hostRunning;
 
-    const canStart = review.available && !!rootId;
     // Opening the panel does NOT plan a review: planning walks and hashes every file in the folder, which the
     // person did not ask for just by opening the panel. Counting starts only on the footer's "count and start"
     // click (or Update review) — see ReviewsPanelFooter's onCountAndStart below.

@@ -4795,6 +4795,8 @@
     "category_gap": "Lacune",
     "category_risk": "Risque",
     "category_clarity": "Clarté",
+    "severity_other": "Non évaluée",
+    "category_other": "Autre",
     "homeTitle": "Connaissances",
     "homeSubtitle": "Tout le savoir de votre équipe — SOP, processus et documents au même endroit. Voyez ce qui est capturé, où sont les lacunes et ce qui doit être révisé.",
     "coverageTitle": "Couverture standard",
@@ -13028,6 +13030,18 @@
         "title": "Vos modifications arrivent sous vos yeux : mises à jour à chaud, vraies feuilles de style et les frameworks que vous utilisez déjà",
         "description": "L'app que vous construisez sur un canvas Builderforce se met désormais à jour sur place pendant que vous éditez, en gardant ce que vous avez saisi et votre position de défilement. Elle compile Sass, SCSS et Less, isole réellement les CSS Modules, charge les feuilles de style de vos paquets et exécute des serveurs de développement Next.js et SvelteKit dans le navigateur."
       },
+      "one-agent-one-kernel": {
+        "title": "Un agent, un noyau : chaque surface de Builderforce utilise désormais le même moteur",
+        "description": "Votre chat dans VS Code, l'application web, Rovr et les canaux on-prem étaient quatre environnements d'exécution susceptibles de se contredire. Ils forment désormais un seul cœur d'exécution : une boucle, une politique d'outils, une réponse, où que vous travailliez."
+      },
+      "portable-knowledge-packs": {
+        "title": "Mettez en paquet les connaissances prouvées par votre revue, et laissez n'importe quel agent s'en servir",
+        "description": "La revue de code de votre équipe transforme un dossier en faits. Ces faits se mettent désormais en paquet dans un .bfpack portable que vous pouvez partager, versionner et confier à n'importe quel LLM, pour que la compréhension acquise par votre revue voyage avec le travail."
+      },
+      "see-what-went-wrong-in-an-agent-run": {
+        "title": "L'exécution de l'agent a « fonctionné ». Vous pouvez maintenant voir ce qui a mal tourné",
+        "description": "Un agent de l'éditeur dépense trois millions de tokens de prompt, effectue treize modifications et se fait arrêter, et le rapport dit Non concluant. Le tiroir Agent runs du Visualizer de VS Code lit l'exécution enregistrée et nomme chaque problème, avec le tour, l'outil et le fichier comme preuves."
+      },
       "no-account-no-gpu-you-choose-where-it-runs": {
         "title": "Sans compte, sans GPU, sans réseau — et vous choisissez où vont vos mots",
         "description": "Studio et Rovr s’ouvrent désormais avec un modèle opérationnel, sans compte, sans appel d’inscription et sans GPU. Chaque surface — le web, l’extension VS Code et le panneau latéral Rovr — pose une seule question sur l’endroit où vos mots s’exécutent : Local uniquement, Hybride ou un Modèle spécifique. Et Hybride apprend, sur votre appareil, quels tours garder en local."
@@ -13226,6 +13240,7 @@
     "saveTitleAria": "Enregistrer le titre de la discussion",
     "cancelTitleAria": "Annuler",
     "confirmActionAria": "Confirmer l'action",
+    "confirmEvidence": "Vérifications : {evidence}",
     "wantsTo": "Brain veut <b>{action}</b>. Approuvez pour exécuter.",
     "approveAllTitle": "Approuver cette action et approuver automatiquement toutes les suivantes dans cette conversation",
     "captureHasTrace": "Copier cette exécution (étapes du LLM, chaîne d'outils, erreurs et transcription) dans le presse-papiers",
@@ -34510,6 +34525,8 @@
       "acceptedAlready": "Le risque du commit {sha} était déjà accepté.",
       "acceptError": "Le risque n’a pas pu être accepté.",
       "loadPrsError": "Impossible de charger les pull requests ouvertes.",
+      "loadGateError": "Impossible de charger la barrière de fusion de cette pull request.",
+      "statusUnknown": "Inconnu",
       "openAction": "Lancer une analyse",
       "title": "Lancer une analyse",
       "crumb": "Gouvernance · Analyses de vulnérabilités",
@@ -34535,6 +34552,12 @@
       }
     },
     "dsrExecute": {
+      "confirmErase": {
+        "title": "Effacer les données de cette personne concernée ?",
+        "message": "L’exécution de cette demande efface définitivement les enregistrements que ce segment détient sur {subject} et l’ajoute à la liste de non-contact. Les données effacées ne peuvent pas être récupérées.",
+        "subjectFallback": "la personne concernée",
+        "confirmLabel": "Effacer définitivement"
+      },
       "notVerified": "L’identité de la personne n’a pas été vérifiée. Vérifiez-la avant d’exécuter cette demande.",
       "verifyIdentity": "Vérifier l’identité",
       "identityVerified": "Identité vérifiée",
@@ -37602,6 +37625,11 @@
         "legendTitle": "Types de tour",
         "findingsTitle": "Constats",
         "evidenceRow": "[[Tour {turn} · ]]{label}",
+        "evidenceNotes": {
+          "argBytes": "{bytes} octets d'arguments",
+          "argBytesShared": "{bytes} octets d'arguments · répète un bloc qu'un autre appel transporte",
+          "slowTurn": "{ms} ms · {completionTokens} jetons de réponse · {argBytes} octets d'arguments"
+        },
         "filesTitle": "Fichiers touchés",
         "filesEmpty": "Cette exécution n'a écrit aucun fichier.",
         "fileWrites": "{count} écritures",

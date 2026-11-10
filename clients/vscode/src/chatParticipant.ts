@@ -412,7 +412,9 @@ async function confirmToolCall(req: NativeApprovalRequest, agentName?: string): 
       ? vscode.l10n.t("{0} (a BuilderForce sub-agent) wants to {1}.", agentName, req.label)
       : vscode.l10n.t("BuilderForce wants to {0}.", req.label);
   const apply = vscode.l10n.t("Apply");
-  const pick = await vscode.window.showWarningMessage(prompt, { modal: true }, apply, vscode.l10n.t("Skip"));
+  // A gated publish carries the ship gate's evidence line — what was verified, what could not run (OD-3).
+  const options = req.evidence ? { modal: true, detail: vscode.l10n.t("Checks: {0}", req.evidence) } : { modal: true };
+  const pick = await vscode.window.showWarningMessage(prompt, options, apply, vscode.l10n.t("Skip"));
   return pick === apply;
 }
 

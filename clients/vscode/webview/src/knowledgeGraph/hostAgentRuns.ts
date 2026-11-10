@@ -14,6 +14,6 @@ import type { KnowledgeTransport } from './hostKnowledgeGraphSource';
 export function hostAgentRuns(t: KnowledgeTransport): AgentRunsPort {
   return {
     list: () => t.call<RunFindingsSummary[]>({ op: 'agentRuns' }),
-    report: (id) => t.call<RunFindingsReport | null>({ op: 'agentRunReport', id }),
+    report: (id, rootId) => t.call<(RunFindingsReport & { root?: string }) | null>({ op: 'agentRunReport', id, ...(rootId ? { rootId } : {}) }),
   };
 }

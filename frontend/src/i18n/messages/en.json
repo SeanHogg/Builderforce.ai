@@ -4795,6 +4795,8 @@
     "category_gap": "Gap",
     "category_risk": "Risk",
     "category_clarity": "Clarity",
+    "severity_other": "Unrated",
+    "category_other": "Other",
     "homeTitle": "Knowledge",
     "homeSubtitle": "Everything your team knows — SOPs, processes and documents in one place. See how much you've captured, where the gaps are, and what's overdue for review.",
     "coverageTitle": "Standard coverage",
@@ -13028,6 +13030,18 @@
         "title": "Edits land while you watch — hot updates, real stylesheets and the frameworks you already use",
         "description": "The app you build on a Builderforce canvas now updates in place as you edit, keeping what you typed and where you scrolled. It compiles Sass, SCSS and Less, scopes CSS Modules for real, loads the stylesheets your packages ship, and runs Next.js and SvelteKit dev servers in the browser."
       },
+      "one-agent-one-kernel": {
+        "title": "One agent, one kernel — every Builderforce surface now runs the same engine",
+        "description": "Your chat in VS Code, the web app, Rovr and the on-prem channels used to be four runtimes that could disagree. They are now one execution core — one loop, one tool policy, one answer, wherever you work."
+      },
+      "portable-knowledge-packs": {
+        "title": "Pack the knowledge your review proved — and let any agent use it",
+        "description": "Your team's codebase review turns a folder into facts. Now those facts pack up as a portable .bfpack you can share, version, and hand to any LLM — so the understanding your review earned travels with the work."
+      },
+      "see-what-went-wrong-in-an-agent-run": {
+        "title": "The agent run \"worked\". Now you can see what went wrong in it",
+        "description": "An editor agent spends three million prompt tokens, makes thirteen changes and gets stopped, and the report says Inconclusive. The Agent runs drawer in the VS Code Visualizer reads the recorded run and names every problem in it, with the turn, the tool and the file as evidence."
+      },
       "no-account-no-gpu-you-choose-where-it-runs": {
         "title": "No account, no GPU, no network — and you choose where your words go",
         "description": "Studio and Rovr now open with a working model and no account, no sign-up call and no GPU required. Every surface — the web, the VS Code extension and the Rovr side panel — asks one question about where your words run: Local only, Hybrid or one Specific model. And Hybrid learns, on your device, which turns to keep local."
@@ -13226,6 +13240,7 @@
     "saveTitleAria": "Save chat title",
     "cancelTitleAria": "Cancel",
     "confirmActionAria": "Confirm action",
+    "confirmEvidence": "Checks: {evidence}",
     "wantsTo": "Brain wants to <b>{action}</b>. Approve to run it.",
     "approveAllTitle": "Approve this and auto-approve every following action in this conversation",
     "captureHasTrace": "Copy this run — LLM steps, tool chain, errors, and transcript — to the clipboard",
@@ -34510,6 +34525,8 @@
       "acceptedAlready": "The risk of commit {sha} was already accepted.",
       "acceptError": "The risk could not be accepted.",
       "loadPrsError": "Could not load open pull requests.",
+      "loadGateError": "Could not load the merge gate for this pull request.",
+      "statusUnknown": "Unknown",
       "openAction": "Run scan",
       "title": "Run a scan",
       "crumb": "Governance · Vulnerability scans",
@@ -34535,6 +34552,12 @@
       }
     },
     "dsrExecute": {
+      "confirmErase": {
+        "title": "Erase this subject’s data?",
+        "message": "Executing this request permanently erases the records this segment holds about {subject} and adds them to the do-not-contact list. Erased data cannot be recovered.",
+        "subjectFallback": "the subject",
+        "confirmLabel": "Erase permanently"
+      },
       "notVerified": "The subject’s identity has not been verified. Verify it before executing this request.",
       "verifyIdentity": "Verify identity",
       "identityVerified": "Identity verified",
@@ -37602,6 +37625,11 @@
         "legendTitle": "Turn kinds",
         "findingsTitle": "Findings",
         "evidenceRow": "[[Turn {turn} · ]]{label}",
+        "evidenceNotes": {
+          "argBytes": "{bytes} bytes of arguments",
+          "argBytesShared": "{bytes} bytes of arguments · repeats a block another call carries",
+          "slowTurn": "{ms} ms · {completionTokens} completion tokens · {argBytes} bytes of arguments"
+        },
         "filesTitle": "Files touched",
         "filesEmpty": "This run wrote no files.",
         "fileWrites": "{count} writes",

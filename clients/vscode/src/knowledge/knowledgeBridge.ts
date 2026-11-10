@@ -154,7 +154,12 @@ export class KnowledgeBridge implements vscode.Disposable {
       case "tryRequest": return tryRequestOf(call.req);
       case "runs": return listRuns(rootKnowledgeFiles(this.rootOf(call.rootId)), call.rootId);
       case "agentRuns": return this.agentRuns.list();
-      case "agentRunReport": return this.agentRuns.report(call.id);
+      case "agentRunReport": {
+        // The graph root's folder, so the view places an absolute path only under it; a server-only root has none.
+        const report = await this.agentRuns.report(call.id);
+        const root = call.rootId ? rootById(call.rootId, workspaceFolders())?.rootPath : undefined;
+        return report && root ? { ...report, root } : report;
+      }
       case "runRecord": return getRun(this.workspaceRoots().map(rootKnowledgeFiles), call.runId);
       case "stopRun": this.reviews.stopRun(call.runId); return null;
       case "excludeFromReview": {

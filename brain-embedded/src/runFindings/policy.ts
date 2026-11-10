@@ -2,6 +2,8 @@
  * Every threshold the run-findings detectors use, as data (PRD 46 §3.1). A detector reads its numbers here and
  * nowhere else, so tuning one is a one-line change that every surface sees.
  */
+import { NARRATION_OVERLAP } from '@seanhogg/builderforce-memory/working';
+
 export const RUN_FINDING_POLICY = Object.freeze({
   /** Read-only turns before the first write that make an analysis overrun. */
   analysisReadTurns: 8,
@@ -20,10 +22,9 @@ export const RUN_FINDING_POLICY = Object.freeze({
   sharedArgBytes: 1024,
   /** A turn this slow (ms) is slow. */
   slowTurnMs: 60_000,
-  /** Word-set overlap (|A∩B| / min(|A|,|B|)) of consecutive pre-call texts that repeats narration. */
-  narrationOverlap: 0.8,
-  /** Fewest distinct words a pre-call text needs before its overlap means anything. */
-  narrationMinWords: 3,
+  /** Word-set overlap at which a pre-call text repeats the last kept one: memory's B7 fold threshold, so the
+   *  diagnostic and the fold agree (`NARRATION_OVERLAP`, `@seanhogg/builderforce-memory/working`). */
+  narrationOverlap: NARRATION_OVERLAP,
   /** Longest excerpt an evidence row quotes. */
   excerptChars: 160,
 });

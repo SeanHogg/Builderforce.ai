@@ -1,3 +1,30 @@
+## ✅ RESOLVED 2026-11-10: PRD 46: the Visualizer names what went wrong in an agent run, and the editor's gates check real work (Agents · Visualizer)
+
+- **Context.** Editor run #70776 used 3.06M prompt tokens over 42 turns. It spent 21 turns reading and 13 turns making one write each, never ran a check, and left `labels.ts` unparseable. Chat diagnostics called it "Inconclusive". Spec: [PRD 46](./docs/specs/46-prd-agent-run-findings.md).
+- **Detectors.**
+  - `brain-embedded/src/runFindings/` holds 13 detectors, one per file and registered as data. They cover: analysis overrun, unkept readiness, serial single writes, prompt bloat, unverified writes, bracket break, edit churn, filed-then-inline, same-model roles, oversized arguments, slow turns, repeated narration, and stopped with unverified writes.
+  - They reuse the existing analysers. Finding ids are unique, and the evidence is localized data.
+  - Shipped as the `@seanhogg/builderforce-brain-embedded/runFindings` subpath.
+- **Shared helpers.** `bracketDelta` (agent-tools `editBalance.ts`) skips regex literals and JSX text. `editedFilesOf`/`editedPathsOf` (agent-tools `edit.ts`) is the one place that reads what an edit wrote.
+- **Visualizer.**
+  - New **Agent runs** drawer, from `source.agentRuns`, hidden on hosts that do not bind it. It shows a run list, a turn strip (read/write/forced/failed, bar height = prompt tokens), the findings with their evidence, and the files touched with "show on graph".
+  - The VS Code host op is `knowledge/agentRuns.ts`, with a memo keyed by `updatedAt` and capped by an LRU of 60. Reports are project-scoped.
+  - The three cameras the stopped run left half-written are finished: 4+1, Architecture Style and Key Features. Style is scored as weighted checks per style, with evidence.
+- **Runtime.**
+  - The VSIX binds the PRD 45 verifier, git and reviewer ports in both entry points.
+  - Each edit result carries post-edit diagnostics and a bracket-balance note.
+  - The ship gate sits in `callPreflight`:
+    - It hashes `HEAD` blobs.
+    - A new source file passes with a same-name test, a same-directory test or a test that imports it; barrels, types, configs and labels are exempt.
+    - A pull request is checked against the merge-base, and an empty diff reads "unavailable", never "checks passed".
+    - On Windows, `.cmd` is added only for package managers.
+    - Commands use argument arrays and never shell strings.
+    - Timeouts kill the whole process tree.
+  - Ticket→done is checked in preflight, scoped to files the run wrote, with a 20 s budget.
+  - The approval prompt shows the evidence.
+  - The replay script counts only `category === 'tool'` steps and has a parity test against `claimsReady`.
+- Release note: migration 1338. Blog: `see-what-went-wrong-in-an-agent-run.md`.
+
 ## ✅ RESOLVED 2026-11-10: editor run #70776: planned work reaches local sub-agents, its tickets move, and it syncs (Local-first · Agents)
 
 - **Context.** In editor run #70776, `hand_off` filed 4 tickets, coded everything in the session, stalled, and was stopped. The tickets stayed in backlog at 0%, and nothing ever synced (389 events queued, "Last push: never").

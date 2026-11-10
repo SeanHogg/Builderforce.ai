@@ -4,24 +4,26 @@
  * with it — the repository's own guard suite (source-package graph, silent-catch
  * sweep, manifest checks). The guard command receives the manifest path so the
  * runner knows exactly which checks to apply; the REAL exit code is the record.
+ *
+ * `node` is spawned directly with an argument array — no shell, and never `node.cmd`.
  */
 
 import * as path from "path";
 import type { CheckRecord } from "./types";
+import { DID_NOT_FINISH } from "./execRunner";
+import type { VerifyShellLike } from "./typecheck";
 
 export interface GuardFileSystem {
   exists(p: string): Promise<boolean>;
 }
 
-export interface GuardShell {
-  runFor(command: string, timeoutMs: number): Promise<{ exitCode?: number }>;
-}
+/** The one verify shell (`typecheck.ts`): an argument array, never a shell string. */
+export type GuardShell = VerifyShellLike;
 
 const MANIFEST = "scripts/checks.manifest.mjs";
 const RUNNER = "scripts/run-checks.mjs";
 /** A guard run's budget; over it, the guard is "unavailable", not "pass" (OD-3). */
-const GUARD_TIMEOUT_MS = 120_000;
-const DID_NOT_FINISH = 124;
+export const GUARD_TIMEOUT_MS = 120_000;
 
 /** Does this project declare the guard manifest? */
 export async function hasGuards(projectRoot: string, fs: GuardFileSystem): Promise<boolean> {
@@ -41,12 +43,14 @@ export async function repoGuardRecord(
 ): Promise<CheckRecord | null> {
   const now = opts?.now ?? Date.now;
   if (!(await hasGuards(projectRoot, fs))) return null;
-  const command = `node "${path.join(projectRoot, RUNNER)}" "${path.join(projectRoot, MANIFEST)}"`;
-  const r = await shell.runFor(command, opts?.timeoutMs ?? GUARD_TIMEOUT_MS);
+  const argv = ["node", path.join(projectRoot, RUNNER), path.join(projectRoot, MANIFEST)];
+  const timeoutMs = opts?.timeoutMs ?? GUARD_TIMEOUT_MS;
+  // No budget left (a bounded caller): not started — "unavailable", never a pass.
+  const r = timeoutMs > 0 ? await shell.runFor(argv, timeoutMs) : { exitCode: DID_NOT_FINISH };
   const exitCode = typeof r.exitCode === "number" ? r.exitCode : 1;
   return {
     kind: "guard",
-    name: command,
+    name: argv.join(" "),
     outcome: exitCode === DID_NOT_FINISH ? "unavailable" : exitCode === 0 ? "pass" : "fail",
     exitCode,
     findings: [],

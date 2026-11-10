@@ -10,6 +10,7 @@ export { traceWithPersistedSteps } from '../persistedSteps';
 export type {
   RunFinding,
   RunFindingEvidence,
+  RunFindingEvidenceNote,
   RunFindingKind,
   RunFindingSeverity,
   RunFindingsFile,

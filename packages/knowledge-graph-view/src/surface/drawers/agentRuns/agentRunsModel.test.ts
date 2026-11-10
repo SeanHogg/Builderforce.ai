@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from '../../../labels';
 import { surfaceFixture } from '../../../testing';
 import type { AgentRunFinding, AgentRunTurn } from '../../../types';
-import { evidenceText, fileRefFor, findingText, formatParam, sortFindings, stripGeometry, turnTitle } from './agentRunsModel';
+import { evidenceNoteText, evidenceText, fileRefFor, findingText, formatParam, sortFindings, stripGeometry, turnTitle } from './agentRunsModel';
 
 const t = L.surface.agentRuns;
 const turn = (index: number, promptTokens: number, kind: AgentRunTurn['kind'] = 'read'): AgentRunTurn =>
@@ -49,14 +49,43 @@ describe('agentRunsModel', () => {
         expect(evidenceText({ step: 3, label: 'edit_file' }, t)).toBe('edit_file');
     });
 
+    it('words an evidence note from the localized template with its numbers formatted', () => {
+        const e = { step: 5, turn: 3, label: 'edit_file', note: 'slowTurn' as const, params: { ms: 72000, completionTokens: 1200, argBytes: 3456 } };
+        expect(evidenceNoteText(e, t)).toBe('72,000 ms · 1,200 completion tokens · 3,456 bytes of arguments');
+        const localized = { ...t, evidenceNotes: { ...t.evidenceNotes, slowTurn: '{ms} ms lang' } };
+        expect(evidenceNoteText(e, localized)).toBe('72,000 ms lang');
+        expect(evidenceNoteText({ step: 1, label: 'x', excerpt: 'kept' }, t)).toBeUndefined();
+    });
+
     it('titles a bar with its numbers and its kind in words', () => {
         expect(turnTitle(turn(4, 2000, 'write'), t)).toBe('Turn 4 · code · m1 · Write · 2,000 prompt tokens · 10 completion tokens · 2 tool calls · 1.5 s');
     });
 
-    it('finds the graph file for a relative, a backslashed or an absolute path, and nothing for an unknown one', () => {
+    it('finds the graph file for a relative, a backslashed or an absolute path under the root, and nothing for an unknown one', () => {
         const graph = surfaceFixture();
         expect(fileRefFor(graph, 'cron/job.ts')).toBe('src:sys::cron/job.ts');
-        expect(fileRefFor(graph, 'C:\\repo\\cron\\job.ts')).toBe('src:sys::cron/job.ts');
+        expect(fileRefFor(graph, './cron/job.ts')).toBe('src:sys::cron/job.ts');
+        expect(fileRefFor(graph, 'C:\\repo\\cron\\job.ts', 'C:\\repo')).toBe('src:sys::cron/job.ts');
+        expect(fileRefFor(graph, 'c:\\Repo\\cron\\job.ts', 'C:\\repo\\')).toBe('src:sys::cron/job.ts');
+        expect(fileRefFor(graph, '/work/repo/cron/job.ts', '/work/repo')).toBe('src:sys::cron/job.ts');
         expect(fileRefFor(graph, 'nowhere/else.ts')).toBeUndefined();
+    });
+
+    it('places an absolute path only under the root, and never by a one-segment suffix', () => {
+        const base = surfaceFixture();
+        const job = base.nodes.find((n) => n.ref === 'src:sys::cron/job.ts')!;
+        const graph = { ...base, nodes: [...base.nodes, { ...job, ref: 'src:sys::index.ts' as typeof job.ref }] };
+        // No root, or a path outside it: not this graph's file.
+        expect(fileRefFor(graph, 'C:\\repo\\cron\\job.ts')).toBeUndefined();
+        expect(fileRefFor(graph, 'C:\\other\\cron\\job.ts', 'C:\\repo')).toBeUndefined();
+        expect(fileRefFor(graph, 'C:\\repository\\cron\\job.ts', 'C:\\repo')).toBeUndefined();
+        // The root-level index.ts is matched exactly, never as the tail of a nested one.
+        expect(fileRefFor(graph, 'C:\\repo\\index.ts', 'C:\\repo')).toBe('src:sys::index.ts');
+        expect(fileRefFor(graph, 'C:\\repo\\packages\\x\\index.ts', 'C:\\repo')).toBeUndefined();
+        expect(fileRefFor(graph, '/elsewhere/pkg/index.ts', '/work/repo')).toBeUndefined();
+        // A two-segment suffix under the root still lands.
+        expect(fileRefFor(graph, 'C:\\repo\\nested\\cron\\job.ts', 'C:\\repo')).toBe('src:sys::cron/job.ts');
+        // A relative path is exact only.
+        expect(fileRefFor(graph, 'packages/x/index.ts')).toBeUndefined();
     });
 });

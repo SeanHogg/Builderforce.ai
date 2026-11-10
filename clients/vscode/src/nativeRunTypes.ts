@@ -53,6 +53,8 @@ export interface NativeApprovalRequest {
    * differently, so the distinction has to survive to the modal.
    */
   gateReason?: string;
+  /** The ship gate's evidence line for a gated publish (PRD 45 §4.5): what was verified, what could not run, who reviewed. */
+  evidence?: string;
 }
 
 /** Prose the HOST owns, because it must be localized through `vscode.l10n.t()`. */

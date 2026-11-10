@@ -14,13 +14,13 @@
  *      gated tools (advisory; the gate catches the shell commit at push).
  *   3. the next git_push               → still REFUSED (the bytes are unchanged).
  *   4. builtin_reviews_record complete → REFUSED — no reviewGate-approved review.
- *   5. builtin_tasks_update done       → the existing branch guard already refuses
- *      (code is not on the base branch); the outgoing-gate advisory rides the result.
+ *   5. builtin_tasks_update done       → REFUSED in the preflight ("CANNOT MARK DONE"):
+ *      the run's own outgoing file fails the gate, and the ticket is never marked done.
  */
 
 import { calls, call, reply, PINNED } from '../script';
 import type { Scenario } from '../types';
-import { runOutgoingGate, shipGateRefusal, shipGateAdvisory } from '../../../runStore/shipGates';
+import { runOutgoingGate, shipGatePreflight, shipGateAdvisory, type ShipPreflight } from '../../../runStore/shipGates';
 import type { BrainRunContext } from '../../../runStore/brainRunContext';
 import type { GitPort, ReviewerPort, VerifierPort } from '../../../runStore/runTypes';
 import type { CheckRecord } from '@builderforce/run-guards';
@@ -97,10 +97,13 @@ export const gates: Scenario = {
   },
 };
 
+/** The refusal a preflight returned, or null while the call proceeds. */
+const refusalOf = (gate: ShipPreflight) => ('refusal' in gate ? gate.refusal : null);
+
 /** The pure-gate half, asserted directly (no run needed). */
 export async function assertGates(run: BrainRunContext): Promise<string[]> {
   const problems: string[] = [];
-  const refuse = await shipGateRefusal(run, 'git_push', { allowBaseBranch: true });
+  const refuse = refusalOf(await shipGatePreflight(run, 'git_push', { allowBaseBranch: true }));
   if (refuse?.ok !== false || !/no test/.test(refuse.error)) {
     problems.push(`git_push should refuse (no test), got ${JSON.stringify(refuse)}`);
   }
@@ -108,11 +111,15 @@ export async function assertGates(run: BrainRunContext): Promise<string[]> {
   if (typeof shell !== 'string' || !/git_push/.test(shell)) {
     problems.push(`run_command should hint at git_push, got ${JSON.stringify(shell)}`);
   }
-  const review = await shipGateRefusal(run, 'builtin_reviews_record', { taskId: 1, verdict: 'complete' });
+  const review = refusalOf(await shipGatePreflight(run, 'builtin_reviews_record', { taskId: 1, verdict: 'complete' }));
   if (review?.ok !== false || !/review/i.test(review.error)) {
     problems.push(`complete review should refuse without a reviewer, got ${JSON.stringify(review)}`);
   }
   const gate = await runOutgoingGate(run, '');
   if (gate.verdict.ok) problems.push('runOutgoingGate should refuse (no test)');
+  const done = refusalOf(await shipGatePreflight(run, 'builtin_tasks_update', { id: 1, status: 'done' }));
+  if (done?.ok !== false || !/CANNOT MARK DONE/.test(done.error)) {
+    problems.push(`marking the ticket done should be refused before it runs, got ${JSON.stringify(done)}`);
+  }
   return problems;
 }

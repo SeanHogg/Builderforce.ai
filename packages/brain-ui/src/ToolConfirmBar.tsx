@@ -35,6 +35,8 @@ export interface ToolConfirmBarLabels {
   deny: string;
   /** Accessible name of the bar. */
   aria: string;
+  /** The ship gate's evidence line for a gated publish — must contain `{evidence}`. */
+  evidence: string;
 }
 
 export const DEFAULT_TOOL_CONFIRM_LABELS: ToolConfirmBarLabels = {
@@ -43,6 +45,7 @@ export const DEFAULT_TOOL_CONFIRM_LABELS: ToolConfirmBarLabels = {
   approveAll: 'Always',
   deny: 'Cancel',
   aria: 'Approve this action',
+  evidence: 'Checks: {evidence}',
 };
 
 /** THE confirm bar's copy from a host catalog (canonical keys = the field names). */
@@ -52,7 +55,8 @@ export function toolConfirmLabelsFrom(lookup: LabelLookup): ToolConfirmBarLabels
 }
 
 export interface ToolConfirmBarProps {
-  req: { name: string; args: unknown };
+  /** `evidence`: the ship gate's line for a gated publish (what was verified, what could not run, who reviewed). */
+  req: { name: string; args: unknown; evidence?: string };
   onApprove: () => void;
   onDeny: () => void;
   /** Approve and stop asking. Omit and the lever is not offered. */
@@ -129,6 +133,7 @@ export const ToolConfirmBar = memo(function ToolConfirmBar({
         )}
       </div>
       {children ?? (command ? <pre className="bf-confirm__cmd">{command}</pre> : args ? <div className="bf-confirm__args">{args}</div> : null)}
+      {req.evidence ? <div className="bf-confirm__evidence">{labels.evidence.split('{evidence}').join(req.evidence)}</div> : null}
       <div className="bf-confirm__actions">
         <button ref={approveRef} type="button" className="bf-confirm__btn bf-confirm__btn--primary" onClick={onApprove}>
           {labels.approve}

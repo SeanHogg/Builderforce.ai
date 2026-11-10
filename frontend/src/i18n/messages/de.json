@@ -4795,6 +4795,8 @@
     "category_gap": "Lücke",
     "category_risk": "Risiko",
     "category_clarity": "Klarheit",
+    "severity_other": "Nicht bewertet",
+    "category_other": "Sonstige",
     "homeTitle": "Wissen",
     "homeSubtitle": "Das gesamte Wissen Ihres Teams — SOPs, Prozesse und Dokumente an einem Ort. Sehen Sie, wie viel erfasst ist, wo Lücken sind und was überprüft werden muss.",
     "coverageTitle": "Standardabdeckung",
@@ -13028,6 +13030,18 @@
         "title": "Änderungen kommen an, während Sie zusehen – Hot Updates, echte Stylesheets und die Frameworks, die Sie schon nutzen",
         "description": "Die App, die Sie auf einem Builderforce-Canvas bauen, aktualisiert sich jetzt beim Bearbeiten an Ort und Stelle und behält, was Sie eingegeben haben und wohin Sie gescrollt haben. Sie kompiliert Sass, SCSS und Less, kapselt CSS Modules wirklich, lädt die Stylesheets Ihrer Pakete und startet Next.js- und SvelteKit-Entwicklungsserver im Browser."
       },
+      "one-agent-one-kernel": {
+        "title": "Ein Agent, ein Kern – jede Builderforce-Oberfläche nutzt jetzt dieselbe Engine",
+        "description": "Ihr Chat in VS Code, die Web-App, Rovr und die On-Prem-Kanäle waren früher vier Laufzeitumgebungen, die sich widersprechen konnten. Jetzt sind sie ein einziger Ausführungskern – eine Schleife, eine Werkzeugrichtlinie, eine Antwort, wo immer Sie arbeiten."
+      },
+      "portable-knowledge-packs": {
+        "title": "Packen Sie das Wissen, das Ihr Review belegt hat – und lassen Sie jeden Agenten es nutzen",
+        "description": "Das Codebasis-Review Ihres Teams macht aus einem Ordner Fakten. Jetzt lassen sich diese Fakten als portables .bfpack packen, das Sie teilen, versionieren und jedem LLM übergeben können – damit das Verständnis, das Ihr Review erarbeitet hat, mit der Arbeit mitreist."
+      },
+      "see-what-went-wrong-in-an-agent-run": {
+        "title": "Der Agentenlauf hat „funktioniert“. Jetzt sehen Sie, was darin schiefging",
+        "description": "Ein Editor-Agent verbraucht drei Millionen Prompt-Tokens, nimmt dreizehn Änderungen vor und wird gestoppt, und der Bericht sagt Nicht eindeutig. Die Schublade Agent runs im VS-Code-Visualizer liest den aufgezeichneten Lauf und benennt jedes Problem darin, mit Turn, Werkzeug und Datei als Beleg."
+      },
       "no-account-no-gpu-you-choose-where-it-runs": {
         "title": "Kein Konto, keine GPU, kein Netz – und Sie bestimmen, wohin Ihre Worte gehen",
         "description": "Studio und Rovr starten jetzt mit einem funktionierenden Modell – ohne Konto, ohne Registrierungsaufruf und ohne GPU. Jede Oberfläche – das Web, die VS-Code-Erweiterung und der Rovr-Seitenbereich – stellt eine einzige Frage dazu, wo Ihre Worte laufen: Nur lokal, Hybrid oder ein bestimmtes Modell. Und Hybrid lernt auf Ihrem Gerät, welche Züge lokal bleiben."
@@ -13226,6 +13240,7 @@
     "saveTitleAria": "Chat-Titel speichern",
     "cancelTitleAria": "Abbrechen",
     "confirmActionAria": "Aktion bestätigen",
+    "confirmEvidence": "Prüfungen: {evidence}",
     "wantsTo": "Brain möchte <b>{action}</b>. Zum Ausführen genehmigen.",
     "approveAllTitle": "Diese Aktion genehmigen und alle folgenden Aktionen in dieser Unterhaltung automatisch genehmigen",
     "captureHasTrace": "Diesen Lauf (LLM-Schritte, Tool-Kette, Fehler und Transkript) in die Zwischenablage kopieren",
@@ -34510,6 +34525,8 @@
       "acceptedAlready": "Das Risiko von Commit {sha} war bereits akzeptiert.",
       "acceptError": "Das Risiko konnte nicht akzeptiert werden.",
       "loadPrsError": "Offene Pull-Anfragen konnten nicht geladen werden.",
+      "loadGateError": "Das Merge-Gate für diese Pull-Anfrage konnte nicht geladen werden.",
+      "statusUnknown": "Unbekannt",
       "openAction": "Scan starten",
       "title": "Scan starten",
       "crumb": "Governance · Schwachstellen-Scans",
@@ -34535,6 +34552,12 @@
       }
     },
     "dsrExecute": {
+      "confirmErase": {
+        "title": "Daten dieser betroffenen Person löschen?",
+        "message": "Wenn Sie diese Anfrage ausführen, werden die Datensätze, die dieses Segment über {subject} speichert, endgültig gelöscht, und die Person wird auf die Kontaktsperrliste gesetzt. Gelöschte Daten können nicht wiederhergestellt werden.",
+        "subjectFallback": "die betroffene Person",
+        "confirmLabel": "Endgültig löschen"
+      },
       "notVerified": "Die Identität der betroffenen Person wurde nicht verifiziert. Verifizieren Sie sie, bevor Sie diese Anfrage ausführen.",
       "verifyIdentity": "Identität verifizieren",
       "identityVerified": "Identität verifiziert",
@@ -37602,6 +37625,11 @@
         "legendTitle": "Rundenarten",
         "findingsTitle": "Befunde",
         "evidenceRow": "[[Runde {turn} · ]]{label}",
+        "evidenceNotes": {
+          "argBytes": "{bytes} Bytes an Argumenten",
+          "argBytesShared": "{bytes} Bytes an Argumenten · wiederholt einen Block, den ein anderer Aufruf ebenfalls trägt",
+          "slowTurn": "{ms} ms · {completionTokens} Antwort-Tokens · {argBytes} Bytes an Argumenten"
+        },
         "filesTitle": "Berührte Dateien",
         "filesEmpty": "Dieser Lauf hat keine Dateien geschrieben.",
         "fileWrites": "{count} Schreibvorgänge",

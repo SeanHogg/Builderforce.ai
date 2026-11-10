@@ -14,7 +14,7 @@ import { useAgentRuns } from './useAgentRuns';
 
 export function AgentRunsPanel({ graph, source, labels, onShow }: PanelProps) {
     const t = labels.surface.agentRuns;
-    const { list, selected, detail, select } = useAgentRuns(source?.agentRuns);
+    const { list, selected, detail, select } = useAgentRuns(source?.agentRuns, graph.scope.rootId);
     const note = (text: string, testId: string) => <p data-testid={testId} role="status" style={{ ...TYPE.bodyMuted, margin: 0 }}>{text}</p>;
 
     if (list.state === 'loading') return note(t.loading, 'kg-agent-runs-loading');
@@ -32,7 +32,7 @@ export function AgentRunsPanel({ graph, source, labels, onShow }: PanelProps) {
                 <>
                     <Section title={t.stripTitle}><TurnStrip turns={detail.report.turns} labels={labels} /></Section>
                     <Section title={t.findingsTitle}><RunFindingList findings={detail.report.findings} labels={labels} /></Section>
-                    <Section title={t.filesTitle}><RunFiles files={detail.report.files} graph={graph} labels={labels} onShow={onShow} /></Section>
+                    <Section title={t.filesTitle}><RunFiles files={detail.report.files} root={detail.report.root} graph={graph} labels={labels} onShow={onShow} /></Section>
                 </>
             )}
         </div>

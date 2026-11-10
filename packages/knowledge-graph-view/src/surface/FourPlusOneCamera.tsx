@@ -11,6 +11,7 @@ import { useMemo, useState, type ComponentType } from 'react';
 import type { FourPlusOneView } from '../labels/surface.4plus1';
 import { MindMap } from '../map/MindMap';
 import { cssVar } from '../scene/themeColors';
+import { muted } from '../styles';
 import { PhysicalView } from './fourPlusOne/PhysicalView';
 import { ScenariosView } from './fourPlusOne/ScenariosView';
 import type { SceneProps } from './registry';
@@ -50,7 +51,10 @@ export function FourPlusOneCamera(p: SceneProps) {
             <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
                 {view === 'logical' && <ScaleZoom><SystemTiers {...p} /></ScaleZoom>}
                 {view === 'development' && <DevelopmentView {...p} />}
-                {view === 'process' && <ScaleZoom><SequenceDiagram {...p} /></ScaleZoom>}
+                {view === 'process' && (p.surface.lines.lines.length === 0
+                    // No lines ⇒ no path to sequence (the Sequence camera is hidden then too): say why, as Scenarios does.
+                    ? <p data-testid="kg-4plus1-process-empty" role="status" style={{ ...muted, padding: 12 }}>{s.scenariosEmpty}</p>
+                    : <ScaleZoom><SequenceDiagram {...p} /></ScaleZoom>)}
                 {view === 'physical' && <Padded View={PhysicalView} p={p} />}
                 {view === 'scenarios' && <Padded View={ScenariosView} p={p} />}
             </div>

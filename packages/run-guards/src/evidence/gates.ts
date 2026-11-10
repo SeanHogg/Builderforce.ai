@@ -30,6 +30,7 @@
  * typecheck covers what imported them (PRD §4.2).
  */
 
+import { isTestPath } from "../noProgress.js";
 import { gitCommandPattern } from "./gitCommandPattern.js";
 import {
   normalizeEvidencePath,
@@ -48,9 +49,24 @@ export interface EvidencePolicy {
   required: Readonly<Record<string, readonly CheckKind[]>>;
   /** A NEW source file must ship with a test in the same push. */
   newSourceNeedsTest: boolean;
+  /**
+   * New source files the test rule does not apply to — regex sources matched against the
+   * normalised path (barrels, type-only modules, declarations, config, scripts, label
+   * catalogs, fixtures). Absent ⇒ none exempt.
+   */
+  newSourceTestExempt?: readonly string[];
+  /**
+   * What counts as a new file's test in the same push. `stem`: `x.test.ts` / `x.foo.test.ts`
+   * named after the file; `directory`: any test in the file's directory, or a test named
+   * after the directory beside it (`detectors.write.test.ts` next to `detectors/`);
+   * `import`: a test whose host-read imports resolve to the file. Absent ⇒ `["stem"]`.
+   */
+  newSourceTestCoverage?: readonly NewSourceTestCoverage[];
   /** Per check; a timeout records "unavailable", never "pass" (OD-3). */
   checkTimeoutMs: number;
 }
+
+export type NewSourceTestCoverage = "stem" | "directory" | "import";
 
 /** The default VSIX policy: .ts/.tsx need diagnostics + typecheck + test evidence. */
 export const DEFAULT_EVIDENCE_POLICY: EvidencePolicy = {
@@ -65,16 +81,47 @@ export const DEFAULT_EVIDENCE_POLICY: EvidencePolicy = {
     ".cjs": ["typecheck", "test"],
   },
   newSourceNeedsTest: true,
+  newSourceTestExempt: [
+    // Barrels / re-export entry points.
+    "(^|/)index\\.[cm]?[jt]sx?$",
+    // Type-only modules and declarations.
+    "(^|/)types\\.[cm]?tsx?$",
+    "\\.d\\.[cm]?ts$",
+    // Tool / build configuration.
+    "\\.config\\.[cm]?[jt]s$",
+    // Node scripts.
+    "\\.[cm]js$",
+    // Label / copy catalogs.
+    "(^|/)labels?/",
+    "(^|/)[^/]*(labels?|catalog)(\\.[^/]*)?\\.[cm]?[jt]sx?$",
+    // Fixtures and test helpers.
+    "(^|/)(__fixtures__|fixtures?|__mocks__|test-?utils|test-?helpers|testing)/",
+    "\\.(fixtures?|mocks?|helpers?)\\.[cm]?[jt]sx?$",
+    "(^|/)(test|spec)[-_.]?(helpers?|utils?|setup)\\.[cm]?[jt]sx?$",
+    "(^|/)(setupTests|vitest\\.setup|jest\\.setup)\\.[cm]?[jt]sx?$",
+  ],
+  newSourceTestCoverage: ["stem", "directory", "import"],
   checkTimeoutMs: 120_000,
 };
 
 export interface OutgoingFile {
   /** Key the ledger was recorded under (repo-relative with forward slashes, or absolute). */
   absPath: string;
-  /** Hash of the file's CURRENT bytes, computed by the host at gate time. */
+  /** Hash of the file's bytes AT HEAD (what is pushed), computed by the host at gate time. */
   hash: string;
   isNew: boolean;
   deleted: boolean;
+  /**
+   * Set when the host could not verify the pushed bytes (e.g. the file is also modified
+   * in the working tree, so on-disk checks would test other bytes). The gate reports it
+   * "unavailable" with this reason and never passes it on working-tree evidence (OD-3).
+   */
+  unavailable?: string;
+  /**
+   * For a test file: the paths its relative imports resolve to (same key space as
+   * `absPath`, extension optional). Read by the host from the pushed bytes.
+   */
+  imports?: readonly string[];
 }
 
 function basenameOf(path: string): string {
@@ -100,9 +147,38 @@ function isSourceFile(path: string): boolean {
   return SOURCE_EXTENSIONS.has(extOf(path));
 }
 
-/** Co-located test naming: x.test.ts(x), x.foo.test.ts(x). */
-function isTestPath(path: string): boolean {
-  return /\.test\.tsx?$/.test(basenameOf(path));
+function dirOf(path: string): string {
+  const normalized = normalizeEvidencePath(path);
+  const slash = normalized.lastIndexOf("/");
+  return slash >= 0 ? normalized.slice(0, slash) : "";
+}
+
+/** A path without its JS/TS extension — imports name modules without one (or with `.js`). */
+function moduleKey(path: string): string {
+  return normalizeEvidencePath(path).replace(/\.[cm]?[jt]sx?$/i, "");
+}
+
+function isExemptFromTestRule(path: string, policy: EvidencePolicy): boolean {
+  const normalized = normalizeEvidencePath(path);
+  return (policy.newSourceTestExempt ?? []).some((source) => new RegExp(source, "i").test(normalized));
+}
+
+/** Does `test` (a test file in the push) count as `file`'s test under the policy? */
+function covers(test: OutgoingFile, file: OutgoingFile, policy: EvidencePolicy): boolean {
+  const coverage = policy.newSourceTestCoverage ?? ["stem"];
+  if (coverage.includes("stem") && basenameOf(test.absPath).startsWith(stemOf(file.absPath) + ".")) return true;
+  if (coverage.includes("directory")) {
+    const dir = dirOf(file.absPath);
+    if (dirOf(test.absPath) === dir) return true;
+    // A test named after the directory, beside it: `detectors.write.test.ts` next to `detectors/`.
+    const dirName = dir.slice(dir.lastIndexOf("/") + 1);
+    if (dirName && dirOf(test.absPath) === dirOf(dir) && basenameOf(test.absPath).startsWith(dirName + ".")) return true;
+  }
+  if (coverage.includes("import") && test.imports?.length) {
+    const target = moduleKey(file.absPath);
+    if (test.imports.some((i) => moduleKey(i) === target)) return true;
+  }
+  return false;
 }
 
 /** Findings are "path:line:col severity message (code)" — severity is the 2nd token. */
@@ -147,7 +223,9 @@ export function outgoingGate(
   for (const file of files) {
     if (file.deleted) continue;
     const checks = ledger.for(file.absPath, file.hash);
-    const required = policy.required[extOf(file.absPath)] ?? [];
+    // The host could not check the pushed bytes: reported, never passed on other bytes' evidence.
+    const required = file.unavailable ? [] : policy.required[extOf(file.absPath)] ?? [];
+    if (file.unavailable) unavailable.push(`${file.absPath}: ${file.unavailable}`);
 
     for (const kind of required) {
       const records = checks.filter((c) => c.kind === kind);
@@ -175,15 +253,15 @@ export function outgoingGate(
     }
 
     // A new test file IS its own test — it does not need a test named after it.
-    if (policy.newSourceNeedsTest && file.isNew && isSourceFile(file.absPath) && !isTestPath(file.absPath)) {
+    if (
+      policy.newSourceNeedsTest &&
+      file.isNew &&
+      isSourceFile(file.absPath) &&
+      !isTestPath(file.absPath) &&
+      !isExemptFromTestRule(file.absPath, policy)
+    ) {
       const stem = stemOf(file.absPath);
-      const hasTest = files.some(
-        (t) =>
-          t !== file &&
-          !t.deleted &&
-          isTestPath(t.absPath) &&
-          basenameOf(t.absPath).startsWith(stem + "."),
-      );
+      const hasTest = files.some((t) => t !== file && !t.deleted && isTestPath(t.absPath) && covers(t, file, policy));
       if (!hasTest) {
         return refuse(
           `git_push refused: ${file.absPath} is new and has no test in this push. ` +
@@ -252,15 +330,3 @@ export function shellPublishHint(command: string): string | null {
     "the evidence gates and the independent review before the push leaves the machine."
   );
 }
-
-// ── Name note ────────────────────────────────────────────────────────────────
-// The PRD file (docs/specs/45-prd-deterministic-run-gates.md, the contract) names
-// these `outgoingGate` / `reviewGate` / `shellPublishHint`. The run brief that
-// scheduled this work used the older draft names; where the two do not collide the
-// draft names are kept as thin aliases so either vocabulary compiles.
-
-/** `outgoingGate` — one gate serves commit (advisory), push and PR (refusal). */
-export const commitGate = outgoingGate;
-
-/** `shellPublishHint`. */
-export const shellBypass = shellPublishHint;

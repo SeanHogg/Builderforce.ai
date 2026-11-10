@@ -79,8 +79,18 @@ export function notOnBaseBranchAdvisory(): string {
   return 'CANNOT MARK DONE — code is not on the base branch (main/master). Either ship to main/master first, or if you intentionally left the code uncommitted, say so explicitly in your reply so this guard knows to allow it.';
 }
 
-/** What the model reads when {@link canCompleteTicket} refused: the outgoing gate's own
- *  reason when that is what failed, else the base-branch advisory. */
+/**
+ * What the model reads AFTER the update ran (the ticket IS done) when {@link canCompleteTicket}
+ * says it should not be: the result can no longer say "cannot mark done" — it says what happened
+ * and how to undo it.
+ */
+export function markedDoneOffBaseAdvisory(): string {
+  return 'MARKED DONE BEFORE IT SHIPPED — the ticket is now done, but this run\'s code is not on the base branch (main/master). Ship it to main/master, or set the ticket back to in_progress and name what blocks it. If you intentionally left the code uncommitted, say so explicitly in your reply.';
+}
+
+/** What the model reads when the ship gate refuses the completion BEFORE it runs
+ *  (`shipGates.shipGatePreflight`): the outgoing gate's own reason when that is what
+ *  failed, else the base-branch advisory. */
 export function completionBlockedAdvisory(outgoing?: GateVerdict): string {
   if (outgoing && !outgoing.ok) {
     return `CANNOT MARK DONE — this run's outgoing changes fail the ship gate: ${outgoing.reason} Mark the ticket done once they pass.`;

@@ -86,6 +86,36 @@ describe('shipGatePreflight', () => {
     expect(await shipGatePreflight(runWith({ git: git() }), 'builtin_reviews_record', { taskId: 1, verdict: 'gaps' })).toEqual({});
   });
 
+  it('regression: a pull request is diffed against its base, and an empty outgoing set is "not verified", never reviewed', async () => {
+    const asked: unknown[] = [];
+    const reviewer = approving();
+    const port: GitPort = { outgoing: async (_repo, opts) => (asked.push(opts), { files: [], diffHash: 'e', baseBranch: false, diff: '', unavailable: 'no outgoing commits against origin/main' }) };
+    const gate = await shipGatePreflight(runWith({ git: port, verifier: verifier('pass'), reviewer }), 'open_pull_request', { title: 't', body: 'b', base: 'develop' });
+    expect(asked).toEqual([{ pullRequest: { base: 'develop' } }]);
+    expect(gate).toEqual({ evidence: 'not verified: no outgoing commits against origin/main' });
+    expect(reviewer.review).not.toHaveBeenCalled();
+  });
+
+  it('regression: ticket done is refused BEFORE it runs, only for this run\'s own failing outgoing files', async () => {
+    const DONE = { id: 1, status: 'done' };
+    const files = [{ absPath: FILE, hash: 'h1', isNew: false, deleted: false }];
+    const runFor = (c: Record<string, unknown>) =>
+      ({ req: { git: git({ files }), verifier: verifier('fail') }, evidence: createEvidenceLedger(), c: { authorModels: new Set(), shipReviews: [], ...c } }) as unknown as BrainRunContext;
+    const refused = await shipGatePreflight(runFor({ codeChanged: true, touchedFiles: ['src/a.ts'] }), 'builtin_tasks_update', DONE);
+    expect('refusal' in refused && refused.refusal.error).toMatch(/^CANNOT MARK DONE/);
+    // A run that wrote no code, or wrote other files, is never blocked by someone else's commit.
+    expect(await shipGatePreflight(runFor({ codeChanged: false, touchedFiles: [] }), 'builtin_tasks_update', DONE)).toEqual({});
+    expect(await shipGatePreflight(runFor({ codeChanged: true, touchedFiles: ['src/other.ts'] }), 'builtin_tasks_update', DONE)).toEqual({});
+  });
+
+  it('regression: the completion check passes the verifier a short budget', async () => {
+    const budgets: unknown[] = [];
+    const v: VerifierPort = { diagnostics: async () => null, full: async (paths, opts) => (budgets.push(opts), new Map(paths.map((p) => [p, []]))) };
+    const run = { req: { git: git(), verifier: v }, evidence: createEvidenceLedger(), c: { authorModels: new Set(), shipReviews: [], codeChanged: true, touchedFiles: [FILE] } } as unknown as BrainRunContext;
+    await shipGatePreflight(run, 'builtin_tasks_update', { id: 1, status: 'done' });
+    expect((budgets[0] as { budgetMs: number }).budgetMs).toBeLessThanOrEqual(20_000);
+  });
+
   it('refuses (never throws) when the git port fails on a gated call', async () => {
     const broken: GitPort = { outgoing: async () => { throw new Error('not a git repository'); } };
     const gate = await shipGatePreflight(runWith({ git: broken }), 'git_push', PUSH);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyStringEdit, conformToExistingEol, dominantEol, editFacts, EDIT_EXCERPT_MAX_LINES } from "./edit.js";
+import { applyStringEdit, conformToExistingEol, dominantEol, editedFilesOf, editedPathsOf, editFacts, EDIT_EXCERPT_MAX_LINES } from "./edit.js";
 
 const LF = "const a = 1;\nconst b = 2;\nconst c = 3;\n";
 const CRLF = LF.replace(/\n/g, "\r\n");
@@ -186,5 +186,32 @@ describe("editFacts — one mapping for every provider", () => {
     const facts = editFacts(applyStringEdit(LF, "  const b = 2;\n  const c = 4;", "x"));
     expect(facts.error).toMatch(/not found/);
     expect(facts.nearest?.line).toBe(2);
+  });
+});
+
+describe("editedFilesOf", () => {
+  it("reads a single edit_file replacement", () => {
+    expect(editedFilesOf("edit_file", { path: String.raw`.\src\a.ts`, old_string: "a", new_string: "b" }))
+      .toEqual([{ path: "src/a.ts", before: "a", after: "b" }]);
+  });
+  it("reads every edits[] entry, an entry without a path taking the call's", () => {
+    expect(editedFilesOf("edit_file", { path: "src/top.ts", edits: [
+      { path: "src/a.ts", old_string: "x", new_string: "y" },
+      { old_string: "p", new_string: "q" },
+    ] })).toEqual([
+      { path: "src/a.ts", before: "x", after: "y" },
+      { path: "src/top.ts", before: "p", after: "q" },
+    ]);
+  });
+  it("reads a write_file as after-only, and any other change as its path", () => {
+    expect(editedFilesOf("write_file", { path: "src/a.ts", content: "x" })).toEqual([{ path: "src/a.ts", after: "x" }]);
+    expect(editedFilesOf("delete_file", { file_path: "src/a.ts" })).toEqual([{ path: "src/a.ts" }]);
+    expect(editedFilesOf("edit_file", {})).toEqual([]);
+  });
+  it("editedPathsOf dedupes", () => {
+    expect(editedPathsOf("edit_file", { edits: [
+      { path: "a.ts", old_string: "1", new_string: "2" },
+      { path: "a.ts", old_string: "3", new_string: "4" },
+    ] })).toEqual(["a.ts"]);
   });
 });

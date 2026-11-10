@@ -196,7 +196,7 @@ export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<boole
     const pending = snapshot.pendingConfirm;
     if (!pending || confirming) return;
     confirming = true;
-    void Promise.resolve(opts.approve(approvalRequestFor(tools, policyGates, pending.name, pending.args)))
+    void Promise.resolve(opts.approve(approvalRequestFor(tools, policyGates, pending.name, pending.args, pending.evidence)))
       .catch(() => false)
       .then((ok) => {
         resolveRunConfirm(chatId, ok === true);

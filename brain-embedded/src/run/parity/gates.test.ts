@@ -18,6 +18,8 @@ describe('PRD 45 A4: chat #214 through the ship gates', () => {
     // The gates sit in the preflight: a refused call never reaches the host's runner.
     expect(ran).not.toContain('git_push');
     expect(ran).not.toContain('builtin_reviews_record');
+    // Step 5: marking the ticket done is refused BEFORE the update runs — never done-then-told.
+    expect(ran).not.toContain('builtin_tasks_update');
     expect(ran).toContain('run_command');
     const wire = JSON.stringify(record.wire);
     // Steps 1 and 3: both pushes refused for the untested new file.
@@ -26,6 +28,9 @@ describe('PRD 45 A4: chat #214 through the ship gates', () => {
     expect(wire).toContain('That shell command publishes');
     // Step 4: the author's own `complete` review is refused.
     expect(wire).toContain('no reviewGate-approved independent review exists for the current diff');
+    // Step 5: the done is refused, naming the failing outgoing file.
+    expect(wire).toContain('CANNOT MARK DONE');
+    expect(wire).toMatch(/CANNOT MARK DONE[^"]*is new and has no test in this push/);
   }, 60_000);
 
   it('the pure-gate half refuses each step on the same fake ports', async () => {
@@ -35,7 +40,7 @@ describe('PRD 45 A4: chat #214 through the ship gates', () => {
     const run = {
       req: { git, verifier, reviewer },
       evidence: createEvidenceLedger(),
-      c: { authorModels: new Set<string>(), shipReviews: [] },
+      c: { authorModels: new Set<string>(), shipReviews: [], codeChanged: true, touchedFiles: ['src/inbound.ts'] },
     } as unknown as BrainRunContext;
     expect(await assertGates(run)).toEqual([]);
   });

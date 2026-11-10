@@ -47,13 +47,15 @@ export function oversizedArgs(view: RunView): RunFinding[] {
     const shared = sharingCalls(calls);
     const flagged = calls.filter((c) => c.argBytes >= RUN_FINDING_POLICY.oversizedArgBytes || shared.has(c));
     if (flagged.length === 0) continue;
-    const evidence: RunFindingEvidence[] = flagged.map((c) => callEvidence(c, undefined, `${c.argBytes} B of arguments${shared.has(c) ? ' · repeats a block another call carries' : ''}`));
+    const evidence: RunFindingEvidence[] = flagged.map((c) => ({
+      ...callEvidence(c), note: shared.has(c) ? ('argBytesShared' as const) : ('argBytes' as const), params: { bytes: c.argBytes },
+    }));
     out.push(finding('oversized_args', 'warn', { tool, bytes: Math.max(...flagged.map((c) => c.argBytes)), calls: flagged.length }, evidence));
   }
   for (const t of view.turns) {
     if (!t.handOffVia || t.argBytes < RUN_FINDING_POLICY.oversizedArgBytes || byTool.has(t.handOffVia)) continue;
     out.push(finding('oversized_args', 'warn', { tool: t.handOffVia, bytes: t.argBytes, calls: 1 },
-      [turnEvidence(t, t.handOffVia, `${t.argBytes} B of arguments`)]));
+      [{ ...turnEvidence(t, t.handOffVia), note: 'argBytes', params: { bytes: t.argBytes } }]));
   }
   return out;
 }

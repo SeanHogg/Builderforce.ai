@@ -17,7 +17,6 @@ import type { AntiPatternGroup } from '../surface/drawers/antiPatternGroups';
 import type { LinesModel } from '../surface/lines';
 import type { PathModel } from '../surface/path';
 import type { Station, StationModel } from '../surface/stations';
-import type { TransitLayout } from '../surface/transitLayout';
 import type { EdgeBuffer } from '../scene/buffers';
 import type { Layout3D } from '../scene/layout3d';
 import type { PartitionCell } from '../graphModel';

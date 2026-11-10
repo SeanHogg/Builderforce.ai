@@ -9,7 +9,7 @@ import { card, list } from '../../../styles';
 import type { AgentRunFinding } from '../../../types';
 import { TYPE } from '../../ui/type';
 import { StateLabel } from '../ui';
-import { evidenceText, findingText, SEVERITY_TONE, sortFindings } from './agentRunsModel';
+import { evidenceNoteText, evidenceText, findingText, SEVERITY_TONE, sortFindings } from './agentRunsModel';
 
 export function RunFindingList({ findings, labels }: { findings: readonly AgentRunFinding[]; labels: KnowledgeGraphLabels }) {
     const t = labels.surface.agentRuns;
@@ -27,9 +27,12 @@ export function RunFindingList({ findings, labels }: { findings: readonly AgentR
                         {text.description && <p style={{ ...TYPE.body, margin: 0, overflowWrap: 'anywhere' }}>{text.description}</p>}
                         {f.evidence.length > 0 && (
                             <ul style={{ ...list, gap: 4 }}>
-                                {f.evidence.map((e, i) => (
+                                {f.evidence.map((e, i) => {
+                                    const note = evidenceNoteText(e, t);
+                                    return (
                                     <li key={`${e.step}:${i}`} style={{ display: 'grid', gap: 2, minWidth: 0 }}>
                                         <span style={{ ...TYPE.meta, overflowWrap: 'anywhere' }}>{evidenceText(e, t)}</span>
+                                        {note && <span data-testid="kg-agent-run-evidence-note" style={{ ...TYPE.meta, overflowWrap: 'anywhere' }}>{note}</span>}
                                         {e.path && <code style={{ ...TYPE.mono, color: cssVar('text'), overflowWrap: 'anywhere' }}>{e.path}</code>}
                                         {e.excerpt && (
                                             <pre style={{ ...TYPE.mono, margin: 0, maxHeight: 120, overflow: 'auto', padding: 8, borderRadius: 8, background: cssVar('bg'), color: cssVar('text'), whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
@@ -37,7 +40,8 @@ export function RunFindingList({ findings, labels }: { findings: readonly AgentR
                                             </pre>
                                         )}
                                     </li>
-                                ))}
+                                    );
+                                })}
                             </ul>
                         )}
                     </li>

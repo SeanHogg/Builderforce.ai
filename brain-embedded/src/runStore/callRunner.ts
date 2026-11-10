@@ -14,8 +14,8 @@ import { createLinkedToChat, isTicketRecordingTool } from '../chatWorkLinking';
 import { isCodeChangeTool } from '../localWorkspaceTools';
 import { codeChangesOf, isDelegationTool } from '../codeChanges';
 import { delegationPlaceholders, placeholderAdvisory, placeholdersWritten, placeholderTraceEvent } from '../placeholderGuard';
-import { canCompleteTicket, completionAdvisory, completionBlockedAdvisory, isTicketCompletion } from '../completionGuard';
-import { outgoingEvidenceVerdict, repoArgOf, shipGateAdvisory } from './shipGates';
+import { canCompleteTicket, completionAdvisory, isTicketCompletion, markedDoneOffBaseAdvisory } from '../completionGuard';
+import { shipGateAdvisory } from './shipGates';
 import { shippedToBaseBranch } from '../shipVerification';
 import { betweenTurnsActivity, toolActivity, visitTarget } from '../runActivity';
 import { runToolInterruptibly } from '@builderforce/agent-run';
@@ -160,12 +160,13 @@ export function callRunner(run: BrainRunContext): LoopPorts<ChatCompletionMessag
         // Second check: is code on the base branch?
         const events = c.trace;
         const isOnBaseBranch = shippedToBaseBranch(events);
-        // PRD 45 §4.3: with the host's git port bound, the outgoing changes must pass the gate too.
-        const outgoing = await outgoingEvidenceVerdict(run, repoArgOf(args));
-        const canComplete = canCompleteTicket(isOnBaseBranch, false, { wroteCodeThisRun: c.codeChanged, ...(outgoing ? { outgoing } : {}) }); // userDeclinedShipping defaults to false; no gitBranch evidence available on the ticket — rely on this run's own writes
+        // PRD 45 §4.3: the outgoing-gate condition is refused in the PREFLIGHT
+        // (`shipGates.shipGatePreflight`), before the update runs. Here the ticket is
+        // ALREADY done, so the advisory says so — never "cannot mark done".
+        const canComplete = canCompleteTicket(isOnBaseBranch, false, { wroteCodeThisRun: c.codeChanged }); // userDeclinedShipping defaults to false; no gitBranch evidence available on the ticket — rely on this run's own writes
         if (!canComplete) {
-          const said = completionBlockedAdvisory(outgoing);
-          pushTrace(c, { ts: nowIso(), category: 'message', label: 'tools.completion_guard', args: { tool: call.name, isOnBaseBranch, ...(outgoing ? { outgoingOk: outgoing.ok } : {}) }, result: said });
+          const said = markedDoneOffBaseAdvisory();
+          pushTrace(c, { ts: nowIso(), category: 'message', label: 'tools.completion_guard', args: { tool: call.name, isOnBaseBranch }, result: said });
           advisory = said;
         } else if (placeholderWarning) {
           pushTrace(c, { ts: nowIso(), category: 'message', label: 'tools.completion_guard', args: { tool: call.name, open: placeholderLedger.outstanding() }, result: placeholderWarning });

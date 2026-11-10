@@ -49,6 +49,16 @@ describe('the architecture cameras', () => {
         expect(screen.getByText(L.surface.fourPlusOne.unitsTitle)).toBeTruthy();
     });
 
+    it('4+1 Process says why it is empty on a graph with no lines, instead of an empty sequence', () => {
+        const base = surfaceFixture();
+        const noEntries = { ...base, nodes: base.nodes.map((n) => (n.partition === 'entry' ? { ...n, partition: 'application' } : n)) };
+        mount('4plus1', noEntries);
+        const views = within(screen.getByRole('radiogroup', { name: L.surface.fourPlusOne.viewsLabel }));
+        fireEvent.click(views.getByRole('radio', { name: L.surface.fourPlusOne.views.process }));
+        expect(screen.getByTestId('kg-4plus1-process-empty').textContent).toBe(L.surface.fourPlusOne.scenariosEmpty);
+        expect(screen.queryByTestId('kg-sequence')).toBeNull();
+    });
+
     it('Style shows a verdict and every style with its checks; an example selects its file', () => {
         const onSelect = mount('style');
         expect(screen.getByTestId('kg-style-verdict').textContent).toBeTruthy();

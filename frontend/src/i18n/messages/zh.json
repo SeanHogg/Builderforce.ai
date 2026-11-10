@@ -4795,6 +4795,8 @@
     "category_gap": "缺口",
     "category_risk": "风险",
     "category_clarity": "清晰度",
+    "severity_other": "未评级",
+    "category_other": "其他",
     "homeTitle": "知识",
     "homeSubtitle": "团队的全部知识——SOP、流程和文档集中于一处。查看已沉淀多少、缺口在哪里，以及哪些已过期需复审。",
     "coverageTitle": "标准覆盖率",
@@ -13028,6 +13030,18 @@
         "title": "修改即刻生效——热更新、真正的样式表，以及你已经在用的框架",
         "description": "你在 Builderforce 画布上构建的应用，现在会在你编辑时原地更新，保留你输入的内容和滚动的位置。它能编译 Sass、SCSS 和 Less，真正隔离 CSS Modules，加载你所用包自带的样式表，还能在浏览器里运行 Next.js 和 SvelteKit 开发服务器。"
       },
+      "one-agent-one-kernel": {
+        "title": "一个代理，一个内核——Builderforce 的每个界面现在都运行同一个引擎",
+        "description": "VS Code 里的聊天、网页应用、Rovr 和本地部署渠道，过去是四个可能给出不同结论的运行时。现在它们是同一个执行核心——一个循环、一套工具策略、一个答案，无论你在哪里工作。"
+      },
+      "portable-knowledge-packs": {
+        "title": "把你的审查所证明的知识打包——让任何代理都能使用",
+        "description": "团队的代码库审查把一个文件夹变成事实。现在这些事实可以打包成可移植的 .bfpack，供你分享、做版本管理，并交给任何大模型——让审查换来的理解随工作一起流转。"
+      },
+      "see-what-went-wrong-in-an-agent-run": {
+        "title": "代理运行“成功”了。现在你能看到其中哪里出了错",
+        "description": "一个编辑器代理花掉三百万提示令牌、做了十三处修改后被叫停，报告却只写着“无法判定”。VS Code Visualizer 中的 Agent runs 抽屉会读取记录下来的运行，指出其中的每一个问题，并以对应的轮次、工具和文件作为证据。"
+      },
       "no-account-no-gpu-you-choose-where-it-runs": {
         "title": "无需账户，无需 GPU，无需网络——而且由你决定你的文字去向何处",
         "description": "Studio 和 Rovr 现在一打开就有可用的模型，无需账号、无需注册调用、无需 GPU。每个界面——网页、VS Code 扩展和 Rovr 侧边栏——都只问一个问题：你的文字在哪里运行？仅本地、混合，或某一个指定模型。混合模式还会在你的设备上学习哪些轮次该留在本地。"
@@ -13226,6 +13240,7 @@
     "saveTitleAria": "保存对话标题",
     "cancelTitleAria": "取消",
     "confirmActionAria": "确认操作",
+    "confirmEvidence": "检查：{evidence}",
     "wantsTo": "Brain 想要<b>{action}</b>。批准后即可执行。",
     "approveAllTitle": "批准此操作，并自动批准本次对话中后续的所有操作",
     "captureHasTrace": "将本次运行（大模型步骤、工具链、错误和会话记录）复制到剪贴板",
@@ -34510,6 +34525,8 @@
       "acceptedAlready": "提交 {sha} 的风险此前已被接受。",
       "acceptError": "无法接受该风险。",
       "loadPrsError": "无法加载未关闭的拉取请求。",
+      "loadGateError": "无法加载此拉取请求的合并门禁。",
+      "statusUnknown": "未知",
       "openAction": "运行扫描",
       "title": "运行扫描",
       "crumb": "治理 · 漏洞扫描",
@@ -34535,6 +34552,12 @@
       }
     },
     "dsrExecute": {
+      "confirmErase": {
+        "title": "删除此数据主体的数据？",
+        "message": "执行此请求将永久删除本分段中关于 {subject} 的记录，并将其加入禁止联系名单。已删除的数据无法恢复。",
+        "subjectFallback": "该数据主体",
+        "confirmLabel": "永久删除"
+      },
       "notVerified": "尚未验证该主体的身份。请先完成验证，再执行此请求。",
       "verifyIdentity": "验证身份",
       "identityVerified": "已验证身份",
@@ -37602,6 +37625,11 @@
         "legendTitle": "轮次类型",
         "findingsTitle": "发现",
         "evidenceRow": "[[第 {turn} 轮 · ]]{label}",
+        "evidenceNotes": {
+          "argBytes": "{bytes} 字节的参数",
+          "argBytesShared": "{bytes} 字节的参数 · 重复了另一次调用携带的内容块",
+          "slowTurn": "{ms} 毫秒 · {completionTokens} 个输出词元 · {argBytes} 字节的参数"
+        },
         "filesTitle": "涉及的文件",
         "filesEmpty": "此次运行没有写入任何文件。",
         "fileWrites": "写入 {count} 次",

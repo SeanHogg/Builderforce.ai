@@ -62,7 +62,8 @@ describe('AgentRunsPanel', () => {
         const { onShow } = mount(p);
         fireEvent.click(await screen.findByRole('button', { name: /Fix the cron job/ }));
         await screen.findByTestId('kg-agent-run-findings');
-        expect(p.report).toHaveBeenCalledWith('7');
+        // The graph's root goes with the id, so the host can say where it sits on disk (`AgentRunReport.root`).
+        expect(p.report).toHaveBeenCalledWith('7', graph.scope.rootId);
 
         const bars = screen.getByTestId('kg-agent-run-strip').querySelectorAll('rect');
         expect(bars).toHaveLength(3);

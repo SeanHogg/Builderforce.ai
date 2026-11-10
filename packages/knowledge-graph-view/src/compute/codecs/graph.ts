@@ -2,7 +2,6 @@
 
 import type { KindResult } from '../kinds';
 import { lookupOf } from '../stationLookup';
-import type { TransitLayout } from '../../surface/transitLayout';
 import { mapBack, type Codec } from './codec';
 
 export const mindMap: Codec<'mindMap'> = {

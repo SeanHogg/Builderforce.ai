@@ -12,11 +12,10 @@ import type { Finding, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memo
 import { nodeIndex } from '../../graphModel';
 import { useComputed } from '../../compute/useComputed';
 import { isSmall } from '../../compute/size';
-import type { TransitRoutesResult } from '../../compute/kinds';
 import type { LinesModel } from '../lines';
 import type { OverlayModel, StationStyle } from '../overlays';
 import type { Station, StationModel } from '../stations';
-import { BAND_HEIGHT, BAND_TOP, type TransitLayout } from '../transitLayout';
+import type { TransitLayout } from '../transitLayout';
 import { routeLines, type HopRoute } from './corridors';
 import { describesLinks, docStations } from './docs';
 import type { Point } from './geometry';

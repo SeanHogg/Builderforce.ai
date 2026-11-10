@@ -35,12 +35,20 @@ export interface RunFindingsTurn {
   durationMs: number;
 }
 
+/** A note a host renders in its own words on an evidence row (`agentRuns.evidenceNotes[note]`, holes = `params`). */
+export type RunFindingEvidenceNote = 'argBytes' | 'argBytesShared' | 'slowTurn';
+
 export interface RunFindingEvidence {
   step: number;
   turn?: number;
   label: string;
   path?: string;
+  /** Text the run itself carried (a message, a title, an edit's new text) — never words of ours. */
   excerpt?: string;
+  /** What this row measured, rendered by the host from its labels with {@link RunFindingEvidence.params}. */
+  note?: RunFindingEvidenceNote;
+  /** The note's numbers. */
+  params?: Readonly<Record<string, number>>;
 }
 
 export interface RunFinding {

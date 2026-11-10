@@ -5,7 +5,11 @@
 import { RUN_FINDING_POLICY } from './policy';
 import type { RunFinding, RunFindingEvidence, RunFindingKind, RunFindingSeverity, RunView, ViewCall, ViewTurn } from './types';
 
-/** A finding; its id is the kind plus its first evidence step, so it is stable across recomputes of one run. */
+/**
+ * A finding; its id is the kind, its subject (the `path` or `tool` param, when it has one) and its first evidence
+ * step, so it is stable across recomputes of one run. Two findings one call raises on two paths differ by path;
+ * {@link withUniqueIds} settles any remaining tie (two replacements of one file in one batched call).
+ */
 export function finding(
   kind: RunFindingKind,
   severity: RunFindingSeverity,
@@ -13,7 +17,19 @@ export function finding(
   evidence: RunFindingEvidence[],
 ): RunFinding {
   const first = evidence.reduce((min, e) => Math.min(min, e.step), Number.POSITIVE_INFINITY);
-  return { id: `${kind}:${Number.isFinite(first) ? first : 0}`, kind, severity, params, evidence };
+  const subject = params.path ?? params.tool;
+  const id = `${kind}:${subject !== undefined ? `${subject}:` : ''}${Number.isFinite(first) ? first : 0}`;
+  return { id, kind, severity, params, evidence };
+}
+
+/** The findings with every id unique: a repeated id gains `#2`, `#3`… in list order (the list is already sorted). */
+export function withUniqueIds(findings: readonly RunFinding[]): RunFinding[] {
+  const seen = new Map<string, number>();
+  return findings.map((f) => {
+    const n = (seen.get(f.id) ?? 0) + 1;
+    seen.set(f.id, n);
+    return n === 1 ? f : { ...f, id: `${f.id}#${n}` };
+  });
 }
 
 /** One line of quoted text, cut to the excerpt ceiling. */

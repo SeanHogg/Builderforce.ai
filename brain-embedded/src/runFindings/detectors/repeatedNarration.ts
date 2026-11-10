@@ -1,35 +1,34 @@
 /**
- * `repeated_narration` — consecutive pre-call texts saying the same thing ("Continuing the wiring …" turn after
- * turn): the model narrating its loop instead of advancing it. Overlap is |A∩B| / min(|A|,|B|) of the word sets.
+ * `repeated_narration` — pre-call texts saying the same thing ("Continuing the wiring …" turn after turn): the
+ * model narrating its loop instead of advancing it.
+ *
+ * The verdict is memory's B7 fold itself (`foldRepeatedNarration`, `@seanhogg/builderforce-memory/working`), run
+ * over the turns' pre-call texts: a turn is a repeat exactly when the fold would replace its narration with a
+ * progress note, and the narration it repeated is the one the fold kept. So the diagnostic reports what the fold
+ * does — one similarity (Jaccard + containment over memory's tokenizer), never a second one here.
  */
+import { foldRepeatedNarration, type TranscriptMessage } from '@seanhogg/builderforce-memory/working';
 import { finding, turnEvidence } from '../findingParts';
 import { RUN_FINDING_POLICY } from '../policy';
 import type { RunFinding, RunView, ViewTurn } from '../types';
 
-function wordsOf(text: string): Set<string> {
-  return new Set(text.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? []);
-}
-
-function overlap(a: Set<string>, b: Set<string>): number {
-  const small = a.size <= b.size ? a : b;
-  const large = small === a ? b : a;
-  if (small.size === 0) return 0;
-  let shared = 0;
-  for (const w of small) if (large.has(w)) shared += 1;
-  return shared / small.size;
+/** A narrated tool-call turn as the fold sees it: an assistant message with its text and (opaque) tool calls. */
+function asNarration(t: ViewTurn): TranscriptMessage {
+  return { role: 'assistant', content: t.text, tool_calls: t.calls.map(() => ({})) } as TranscriptMessage;
 }
 
 export function repeatedNarration(view: RunView): RunFinding[] {
   // Pre-call text: what a turn said before the calls it made.
-  const narrated = view.turns
-    .filter((t) => t.calls.length > 0 && t.text.trim())
-    .map((t) => ({ t, words: wordsOf(t.text) }))
-    .filter((n) => n.words.size >= RUN_FINDING_POLICY.narrationMinWords);
+  const narrated = view.turns.filter((t) => t.calls.length > 0 && t.text.trim());
+  const msgs = narrated.map(asNarration);
+  const folded = foldRepeatedNarration(msgs, RUN_FINDING_POLICY.narrationOverlap);
   const repeats = new Set<ViewTurn>();
-  for (let i = 1; i < narrated.length; i++) {
-    if (overlap(narrated[i - 1]!.words, narrated[i]!.words) < RUN_FINDING_POLICY.narrationOverlap) continue;
-    repeats.add(narrated[i - 1]!.t);
-    repeats.add(narrated[i]!.t);
+  let lastKept: ViewTurn | null = null;
+  for (let i = 0; i < narrated.length; i++) {
+    const t = narrated[i]!;
+    if (folded[i] === msgs[i]) { lastKept = t; continue; }
+    if (lastKept) repeats.add(lastKept);
+    repeats.add(t);
   }
   if (repeats.size === 0) return [];
   const turns = [...repeats].sort((a, b) => a.index - b.index);

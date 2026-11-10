@@ -120,4 +120,9 @@ describe('bracketBalanceNote', () => {
     expect(bracketBalanceNote({ name: 'write_file', args: { path: 'a.ts', content: '{' }, result: { ok: true } })).toBeNull();
     expect(bracketBalanceNote({ name: 'edit_file', args: { ...LABELS_EDIT, path: 'docs/a.md' }, result: { ok: true } })).toBeNull();
   });
+
+  it('regression: a correct edit holding a regex literal or JSX prose is not flagged', () => {
+    expect(bracketBalanceNote({ name: 'edit_file', args: { path: 'src/a.ts', old_string: 's', new_string: `s.replace(/["']/g, '')` }, result: { ok: true } })).toBeNull();
+    expect(bracketBalanceNote({ name: 'edit_file', args: { path: 'src/A.tsx', old_string: '<p>Hi</p>', new_string: `<p>Don't (really)</p>` }, result: { ok: true } })).toBeNull();
+  });
 });

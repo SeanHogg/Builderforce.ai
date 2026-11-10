@@ -70,6 +70,20 @@ describe('bracket_break', () => {
     ] } }] });
     expect(of(b, 'bracket_break').map((f) => f.params)).toEqual([{ path: 'src/a.ts', delta: 'paren +1' }]);
   });
+  it('gives every finding of one batched call a unique id', () => {
+    const b = new TraceBuilder().turn({ role: 'code', calls: [{ name: 'edit_file', args: { edits: [
+      { path: 'src/a.ts', old_string: 'f(x)', new_string: 'f(g(x)' },
+      { path: 'src/b.ts', old_string: 'f(x)', new_string: 'f(g(x)' },
+      { path: 'src/b.ts', old_string: 'h(x)', new_string: 'h(g(x)' },
+    ] } }] });
+    const ids = of(b, 'bracket_break').map((f) => f.id);
+    expect(ids).toHaveLength(3);
+    expect(new Set(ids).size).toBe(3);
+  });
+  it('never flags a whole-file write_file', () => {
+    const b = new TraceBuilder().turn({ role: 'code', calls: [write('src/a.tsx', "export const A = () => <p>Don't (stop</p>;\n{")] });
+    expect(of(b, 'bracket_break')).toEqual([]);
+  });
   it('stays quiet on balanced edits, brackets in strings, and failed edits', () => {
     const b = new TraceBuilder().turn({ role: 'code', calls: [
       edit('src/a.ts', 'a', "const s = '{';"),

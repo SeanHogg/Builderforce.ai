@@ -12,12 +12,13 @@
  */
 
 import { createHash } from "crypto";
+import { readdir } from "fs/promises";
 import * as path from "path";
 import type { CheckKind, CheckRecord } from "./types";
 import type { VerifyCache } from "./cache";
-import { runTypecheckVerify, vsixVerifySandbox, vsixVerifyShell, type VerifyShellLike } from "./typecheck";
-import { targetedTestRecords } from "./targetedTests";
-import { repoGuardRecord } from "./repoGuards";
+import { runTypecheckVerify, VERIFY_BUDGET_MS, vsixVerifySandbox, vsixVerifyShell, type VerifyShellLike } from "./typecheck";
+import { targetedTestRecords, TEST_TIMEOUT_MS } from "./targetedTests";
+import { GUARD_TIMEOUT_MS, repoGuardRecord } from "./repoGuards";
 
 export interface FullTierDeps {
   /** The workspace root: where the repo guards are looked for, and the bound of the package walk. */
@@ -25,6 +26,8 @@ export interface FullTierDeps {
   /** Every record a file's full tier produced, by `(absPath, hash, FULL_TIER)`. */
   cache: VerifyCache<readonly CheckRecord[]>;
   readText(abs: string): Promise<string | null>;
+  /** A directory's entry names (default: the real fs) — finds a changed file's `x.<part>.test.ts`. */
+  listDir?(dir: string): Promise<string[]>;
   /** The fast tier for exactly these files (`pathDiagnostics`). */
   diagnostics(absPaths: readonly string[]): Promise<CheckRecord | null>;
   /** The bounded shell rooted at `cwd` (default: the host's real process runner). */
@@ -72,9 +75,25 @@ function diagnosticsFor(record: CheckRecord | null, file: string, root: string):
   return { ...record, outcome: failed ? "fail" : "pass", findings };
 }
 
-/** Run the full tier for these absolute paths; cached kinds are not re-run. */
-export async function runFullTier(absPaths: readonly string[], deps: FullTierDeps): Promise<Map<string, readonly CheckRecord[]>> {
+/**
+ * Run the full tier for these absolute paths; cached kinds are not re-run.
+ *
+ * `budgetMs` bounds the WHOLE call (a caller that must answer quickly, e.g. ticket
+ * completion): every check gets at most what is left, a check that cannot fit is not
+ * started, and either way it is recorded "unavailable" — never waited on for minutes.
+ * A bounded result that holds an "unavailable" record is not cached, so the next
+ * unbounded call (the push) still runs the real checks.
+ */
+export async function runFullTier(
+  absPaths: readonly string[],
+  deps: FullTierDeps,
+  opts?: { budgetMs?: number; now?: () => number },
+): Promise<Map<string, readonly CheckRecord[]>> {
   const shellAt = deps.shell ?? ((cwd: string) => vsixVerifyShell(cwd));
+  const now = opts?.now ?? Date.now;
+  const deadline = opts?.budgetMs != null ? now() + opts.budgetMs : null;
+  /** A check's own timeout, capped by what is left of the call's budget (0 ⇒ do not start it). */
+  const within = (timeoutMs: number): number => (deadline === null ? timeoutMs : Math.max(0, Math.min(timeoutMs, deadline - now())));
   const out = new Map<string, readonly CheckRecord[]>();
   const todo: { file: string; hash: string }[] = [];
   for (const file of absPaths) {
@@ -89,20 +108,33 @@ export async function runFullTier(absPaths: readonly string[], deps: FullTierDep
 
   const files = todo.map((t) => t.file);
   const diagnostics = await deps.diagnostics(files).catch(() => null);
-  const guard = await repoGuardRecord(deps.root, { exists: async (p) => (await deps.readText(p)) !== null }, shellAt(deps.root)).catch(() => null);
+  const guard = await repoGuardRecord(
+    deps.root,
+    { exists: async (p) => (await deps.readText(p)) !== null },
+    shellAt(deps.root),
+    { timeoutMs: within(GUARD_TIMEOUT_MS) },
+  ).catch(() => null);
   const typecheckByPkg = new Map<string, CheckRecord | null>();
-  const testFs = { readFile: deps.readText, exists: async (p: string) => (await deps.readText(p)) !== null };
+  const testFs = {
+    readFile: deps.readText,
+    exists: async (p: string) => (await deps.readText(p)) !== null,
+    // Lists the directory so `x.<part>.test.ts` beside a changed `x.ts` is found.
+    list: deps.listDir ?? ((dir: string) => readdir(dir)),
+  };
 
   for (const { file, hash } of todo) {
     const pkg = await owningPackage(file, deps.root, deps.readText);
     if (pkg && !typecheckByPkg.has(pkg)) {
-      const records = await runTypecheckVerify(vsixVerifySandbox(pkg, deps.readText), shellAt(pkg)).catch(() => []);
+      const records = await runTypecheckVerify(vsixVerifySandbox(pkg, deps.readText), shellAt(pkg), { budgetMs: within(VERIFY_BUDGET_MS) }).catch(() => []);
       typecheckByPkg.set(pkg, aggregate("typecheck", records));
     }
-    const tests = pkg ? aggregate("test", await targetedTestRecords([file], pkg, testFs, shellAt(pkg)).catch(() => [])) : null;
+    const tests = pkg
+      ? aggregate("test", await targetedTestRecords([file], pkg, testFs, shellAt(pkg), { timeoutMs: within(TEST_TIMEOUT_MS) }).catch(() => []))
+      : null;
     const records = [diagnosticsFor(diagnostics, file, deps.root), pkg ? typecheckByPkg.get(pkg) ?? null : null, tests, guard]
       .filter((r): r is CheckRecord => !!r);
-    deps.cache.set(file, hash, FULL_TIER, records);
+    // A bounded call's "unavailable" is the budget talking, not the check: never cached.
+    if (deadline === null || !records.some((r) => r.outcome === "unavailable")) deps.cache.set(file, hash, FULL_TIER, records);
     out.set(file, records);
   }
   return out;

@@ -12,14 +12,16 @@
  *     A base-branch `git_push`, an `open_pull_request`, and a `builtin_reviews_record`
  *     `complete` run the evidence + review gates and return `{ ok:false, error }` on
  *     refusal — WITHOUT asking the human. A refusal is ordinary tool feedback the model
- *     reads and acts on; a pass hands the approval prompt its evidence line.
+ *     reads and acts on; a pass hands the approval prompt its evidence line. A ticket
+ *     marked done is refused here too (bounded, this run's own outgoing files only), so the
+ *     ticket is never already done when the model reads why.
  *   - {@link shipGateAdvisory} — what `callRunner` attaches to the result the model
  *     reads. `run_command` gets the shell-publish hint; `git_commit` runs the full tier
  *     EARLY on the committed paths (so the push is fast) and returns failures as an
  *     advisory (commits are local and reversible; the push is the act that leaves the
  *     machine). Never a refusal here.
- *   - {@link outgoingEvidenceVerdict} — the evidence half of the outgoing gate, which the
- *     ONE done check (`completionGuard.canCompleteTicket`) takes as a condition.
+ *   - {@link outgoingEvidenceVerdict} — the evidence half of the outgoing gate, which a
+ *     commit's advisory reads.
  *
  * The evidence ledger lives on the run context (`BrainRunContext.evidence`, PRD §4.2):
  * one per run, keyed by the bytes on disk, fed ONLY by the host verifier — the model's
@@ -36,6 +38,7 @@ import {
   type GateVerdict,
   type ReviewVerdict,
 } from '@builderforce/run-guards';
+import { completionBlockedAdvisory, isTicketCompletion } from '../completionGuard';
 import type { BrainRunContext } from './brainRunContext';
 
 /** What a refusal call returns to the model (ordinary tool result, `ok:false`). */
@@ -63,29 +66,46 @@ export function policyOf(run: BrainRunContext): EvidencePolicy {
   return run.req.evidencePolicy ?? DEFAULT_EVIDENCE_POLICY;
 }
 
-/**
- * Paths in the outgoing set that lack a FRESH check record of `kind` for their current
- * hash. The host runs the full tier on exactly these (verifier caches by path/hash/check).
- */
-export function pathsMissingCheck(
-  files: ReadonlyArray<{ absPath: string; hash: string; deleted: boolean }>,
-  ledger: BrainRunContext['evidence'],
-  kind: CheckRecord['kind'],
-): string[] {
-  const missing: string[] = [];
-  for (const f of files) {
-    if (f.deleted) continue;
-    if (!ledger.for(f.absPath, f.hash).some((r) => r.kind === kind)) missing.push(f.absPath);
-  }
-  return missing;
+/** The file's extension as the policy keys it (`.ts`), lower-cased; '' when none. */
+function extensionOf(path: string): string {
+  const name = path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1);
+  const dot = name.lastIndexOf('.');
+  return dot > 0 ? name.slice(dot).toLowerCase() : '';
 }
 
-/** Run `verifier.full` on `paths` and record every returned check against the file's current hash. */
-async function verifyPaths(run: BrainRunContext, files: readonly { absPath: string; hash: string }[]): Promise<void> {
+/**
+ * Does this outgoing file lack FRESH evidence — a check kind its policy requires with no
+ * record for its current hash? A deleted file has no bytes to check and never lacks any.
+ */
+function lacksEvidence(
+  file: { absPath: string; hash: string; deleted?: boolean },
+  ledger: BrainRunContext['evidence'],
+  policy: EvidencePolicy,
+): boolean {
+  if (file.deleted) return false;
+  const required: readonly CheckRecord['kind'][] = policy.required[extensionOf(file.absPath)] ?? [];
+  const checks = ledger.for(file.absPath, file.hash);
+  return required.some((kind) => !checks.some((r) => r.kind === kind));
+}
+
+/**
+ * Run `verifier.full` on exactly the outgoing files that EXIST and lack fresh evidence
+ * (deleted files and files already checked at their current hash are skipped), and record
+ * every returned check against the file's current hash.
+ */
+async function verifyPaths(
+  run: BrainRunContext,
+  files: readonly { absPath: string; hash: string; deleted?: boolean; unavailable?: string }[],
+  opts?: { budgetMs?: number },
+): Promise<void> {
   const verifier = run.req.verifier;
-  if (!verifier || !files.length) return;
-  const byPath = new Map(files.map((f) => [f.absPath, f.hash]));
-  const records = await verifier.full(files.map((f) => f.absPath));
+  if (!verifier) return;
+  const policy = policyOf(run);
+  // A file the host marked `unavailable` (its working-tree bytes are not the pushed bytes) is never checked on disk.
+  const pending = files.filter((f) => !f.unavailable && lacksEvidence(f, run.evidence, policy));
+  if (!pending.length) return;
+  const byPath = new Map(pending.map((f) => [f.absPath, f.hash]));
+  const records = await verifier.full(pending.map((f) => f.absPath), opts);
   const now = Date.now();
   for (const [absPath, hash] of byPath) {
     for (const check of records.get(absPath) ?? []) {
@@ -104,18 +124,31 @@ async function verifyPaths(run: BrainRunContext, files: readonly { absPath: stri
  *
  * When `reviewer` is bound (OD-1), an approved independent review is also required;
  * the reviewer is handed the diff and the evidence summary ONLY.
+ *
+ * A pull request is compared against the merge-base with ITS base branch (`args.base`,
+ * else origin's default) — after the branch was pushed, `@{u}` is the branch itself and
+ * the set would be empty. When the host cannot compute the outgoing change at all (no
+ * upstream, no outgoing commits), the verdict passes but reports why (`unchecked`, OD-3):
+ * never "checks passed", and no review is spent on an empty diff.
  */
 export async function runOutgoingGate(
   run: BrainRunContext,
   repo: string,
   tool = 'git_push',
-): Promise<{ verdict: GateVerdict; diffHash: string | null; gated: boolean }> {
+  args?: unknown,
+): Promise<{ verdict: GateVerdict; diffHash: string | null; gated: boolean; unchecked?: string }> {
   const git = run.req.git;
   if (!git) return { verdict: { ok: true, unavailable: [] }, diffHash: null, gated: false };
-  const { files, diffHash, baseBranch, diff } = await git.outgoing(repo);
+  const pullRequest = tool === 'open_pull_request';
+  const base = (args as { base?: unknown } | null | undefined)?.base;
+  const out = await git.outgoing(repo, pullRequest ? { pullRequest: typeof base === 'string' && base.trim() ? { base: base.trim() } : {} } : undefined);
+  const { files, diffHash, baseBranch, diff } = out;
   // A push to a non-base branch is not gated — it cannot land on main without a pull
   // request, and the PR itself is gated (PRD §4.5).
-  if (!baseBranch && tool !== 'open_pull_request') return { verdict: { ok: true, unavailable: [] }, diffHash, gated: false };
+  if (!baseBranch && !pullRequest) return { verdict: { ok: true, unavailable: [] }, diffHash, gated: false };
+  // Nothing to check (no upstream / no PR base / no outgoing commits): "unavailable", never a pass, never reviewed.
+  const unchecked = out.unavailable ?? (files.length === 0 || (diff !== undefined && !diff.trim()) ? 'no outgoing change to check' : undefined);
+  if (unchecked) return { verdict: { ok: true, unavailable: [unchecked] }, diffHash, gated: true, unchecked };
   // Full tier for exactly the files whose bytes changed under it since the last check.
   await verifyPaths(run, files);
   const verdict = outgoingGate(files, run.evidence, policyOf(run));
@@ -194,14 +227,19 @@ export type ShipPreflight = { refusal: Refusal } | { evidence?: string };
  */
 export async function shipGatePreflight(run: BrainRunContext, name: string, args: unknown): Promise<ShipPreflight> {
   if (!run.req.git) return {};
+  // Ticket → done: refused BEFORE the update runs, so "CANNOT MARK DONE" is true when the model reads it.
+  if (isTicketCompletion(name, args)) {
+    const refusal = await completionGateRefusal(run);
+    return refusal ? { refusal } : {};
+  }
   const publish = isBaseBranchPush(name, args) || name === 'open_pull_request';
   if (!publish && !isCompleteReviewRecord(name, args)) return {};
   try {
     if (publish) {
       // git_push (base branch) and open_pull_request: the outgoing + review gates hold.
-      const { verdict, diffHash, gated } = await runOutgoingGate(run, repoArgOf(args), name);
+      const { verdict, diffHash, gated, unchecked } = await runOutgoingGate(run, repoArgOf(args), name, args);
       if (!verdict.ok) return { refusal: { ok: false, error: verdict.reason } };
-      return gated ? { evidence: approvalEvidence(run, verdict.unavailable, diffHash) } : {};
+      return gated ? { evidence: approvalEvidence(run, verdict.unavailable, diffHash, unchecked) } : {};
     }
     // builtin_reviews_record complete: refused unless a reviewGate-approved review exists
     // for the CURRENT diff. The approving reviewer is attached so the record names it.
@@ -229,17 +267,58 @@ export async function shipGatePreflight(run: BrainRunContext, name: string, args
   }
 }
 
-/** The refusal half of {@link shipGatePreflight}, or null while the call proceeds. */
-export async function shipGateRefusal(run: BrainRunContext, name: string, args: unknown): Promise<Refusal | null> {
-  const gate = await shipGatePreflight(run, name, args);
-  return 'refusal' in gate ? gate.refusal : null;
+/** The completion check's whole budget: it answers within this or records "unavailable" (never minutes). */
+export const COMPLETION_GATE_BUDGET_MS = 20_000;
+
+/** Does an outgoing file's path name one of the paths this run wrote (workspace-relative or absolute)? */
+function wroteThisRun(absPath: string, touched: readonly string[]): boolean {
+  const norm = (p: string): string => p.replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();
+  const target = norm(absPath);
+  return touched.some((t) => {
+    const p = norm(t);
+    return !!p && (target === p || target.endsWith(`/${p}`));
+  });
+}
+
+/**
+ * The ticket-completion half of the outgoing gate (PRD §4.3), run in the PREFLIGHT so the
+ * ticket is not yet done when the model reads the refusal. Applies only when this run
+ * changed code, and only to the outgoing files THIS run wrote — a shared working tree's
+ * other commits never block it. The evidence ledger is read first; any check still missing
+ * runs under {@link COMPLETION_GATE_BUDGET_MS} total, and what cannot finish is
+ * "unavailable" (a pass that is reported), never waited on. Null ⇒ the update proceeds.
+ */
+async function completionGateRefusal(run: BrainRunContext): Promise<Refusal | null> {
+  const git = run.req.git;
+  if (!git || !run.c.codeChanged || !run.c.touchedFiles?.length) return null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const budget = new Promise<'timeout'>((resolve) => {
+    timer = setTimeout(() => resolve('timeout'), COMPLETION_GATE_BUDGET_MS);
+  });
+  const check = (async (): Promise<GateVerdict | null> => {
+    const out = await git.outgoing('');
+    if (out.unavailable) return null; // nothing computable to check: never a refusal
+    const mine = out.files.filter((f) => wroteThisRun(f.absPath, run.c.touchedFiles));
+    if (!mine.length) return null;
+    await verifyPaths(run, mine, { budgetMs: COMPLETION_GATE_BUDGET_MS - 2_000 });
+    return outgoingGate(mine, run.evidence, policyOf(run));
+  })().catch(() => null); // a git / verifier hiccup never blocks a completion
+  try {
+    const verdict = await Promise.race([check, budget]);
+    if (verdict === 'timeout' || !verdict || verdict.ok) return null;
+    return { ok: false, error: completionBlockedAdvisory(verdict) };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 /**
  * The line the approval prompt shows for a gated publish that passed (PRD §4.5, OD-3):
  * what the checks proved, what could not run (never reported as verified), and who reviewed.
+ * When nothing could be checked at all (`unchecked`), it says so — never "checks passed".
  */
-function approvalEvidence(run: BrainRunContext, unavailable: readonly string[], diffHash: string | null): string {
+function approvalEvidence(run: BrainRunContext, unavailable: readonly string[], diffHash: string | null, unchecked?: string): string {
+  if (unchecked) return `not verified: ${unchecked}`;
   const checks = unavailable.length
     ? `checks passed · ${unavailable.length} check${unavailable.length === 1 ? '' : 's'} could not run here (not verified)`
     : 'checks passed';
@@ -276,9 +355,8 @@ export async function shipGateAdvisory(run: BrainRunContext, name: string, args:
     const verdict = await outgoingEvidenceVerdict(run, repoArgOf(args));
     return verdict && !verdict.ok ? `ADVISORY (commit not refused): ${verdict.reason}` : null;
   }
-  // Ticket → done is NOT gated here: the outgoing-gate condition (PRD §4.3) is one more
-  // condition of the ONE done check, `completionGuard.canCompleteTicket`, which callRunner
-  // feeds with {@link outgoingEvidenceVerdict}.
+  // Ticket → done is NOT gated here: the outgoing-gate condition (PRD §4.3) is refused in
+  // the PREFLIGHT ({@link shipGatePreflight}), before the ticket update runs.
   return null;
 }
 
@@ -286,8 +364,10 @@ export async function shipGateAdvisory(run: BrainRunContext, name: string, args:
  * The outgoing changes against their evidence (PRD §4.3) — the host's real commits
  * (`GitPort.outgoing`), the full verifier tier on any file lacking fresh evidence, then the
  * PURE `outgoingGate`. No review and no base-branch exemption: this is the evidence half,
- * what a commit's advisory and ticket completion read. Undefined when no git port is bound
- * or the port failed — the caller behaves exactly as a host without one.
+ * what a commit's advisory and ticket completion read. Undefined ONLY when no git port is
+ * bound (the caller behaves exactly as a host without one). A bound port that throws FAILS
+ * CLOSED — a refusing verdict naming the error — because a gated act never proceeds
+ * unverified (the same rule {@link shipGatePreflight} keeps). It never throws: the run reads why.
  */
 export async function outgoingEvidenceVerdict(run: BrainRunContext, repo: string): Promise<GateVerdict | undefined> {
   const git = run.req.git;
@@ -296,8 +376,9 @@ export async function outgoingEvidenceVerdict(run: BrainRunContext, repo: string
     const { files } = await git.outgoing(repo);
     await verifyPaths(run, files);
     return outgoingGate(files, run.evidence, policyOf(run));
-  } catch {
-    return undefined; // never break a commit or a completion on a git / verifier hiccup
+  } catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    return { ok: false, reason: `the ship gate could not read or verify the outgoing change (${why}). Fix the repository state and retry.` };
   }
 }
 
