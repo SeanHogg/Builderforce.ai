@@ -8,8 +8,8 @@
  */
 
 import type { DeltaRule } from '../contract.js';
-import { isJsPath, isTestPath, masked } from './support/files.js';
-import { regexOffsets, stateSides } from './support/stateRule.js';
+import { isJsPath, isTestPath } from './support/files.js';
+import { regexHits, stateSides } from './support/stateRule.js';
 
 /** The blocking fs / child_process calls (rule data). */
 export const SYNC_IO_CALLS: readonly string[] = [
@@ -29,7 +29,7 @@ export const syncIo: DeltaRule = {
     derive(input) {
         return stateSides(syncIo, {
             files: (p) => isJsPath(p) && !isTestPath(p),
-            hits: (text, path) => regexOffsets(CALL, masked(text, path).bare).map(({ offset, match }) => ({ offset, key: match[1]! })),
+            hits: (view) => regexHits(CALL, view.bare).map(({ offset, match }) => ({ offset, length: match[0].length, key: match[1]! })),
             severity: 'warn',
         }, input);
     },

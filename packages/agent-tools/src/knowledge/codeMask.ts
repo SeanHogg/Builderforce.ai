@@ -16,6 +16,9 @@
 
 import { symbolLanguageOf } from '../symbols.js';
 
+/** The ONE regex-literal escaper (preSearch.ts, pure), surfaced with the masker for scans over masked text. */
+export { escapeRegex } from '../preSearch.js';
+
 export type CommentFamily = 'c' | 'hash';
 
 /** Shell-family extensions the symbol extractor does not know; they are code, never docs. */
@@ -48,7 +51,6 @@ export interface MaskedSource {
     bare: string;
 }
 
-const blank = (ch: string): string => (ch === '\n' || ch === '\r' ? ch : ' ');
 const IDENT_START = /[A-Za-z_]/;
 const IDENT_PART = /[A-Za-z0-9_]/;
 /** Keywords after which a `/` starts a regex literal. */
@@ -56,19 +58,32 @@ const REGEX_AFTER_WORD: ReadonlySet<string> = new Set([
     'return', 'typeof', 'case', 'delete', 'void', 'throw', 'in', 'of', 'instanceof', 'new', 'else', 'do', 'yield', 'await',
 ]);
 
-/** Whether a `/` at the end of `out` (what was emitted so far) starts a regex literal rather than a division. */
+/** The longest {@link REGEX_AFTER_WORD} entry: a longer word before a `/` is never one of them. */
+const MAX_REGEX_WORD = 10;
+
+/**
+ * Whether a `/` after what was emitted so far (`out`, the masked `code` as chunks) starts a regex literal
+ * rather than a division. Walks back over the chunks: whitespace, then the previous char or word.
+ */
 function startsRegex(out: readonly string[]): boolean {
-    let k = out.length - 1;
-    while (k >= 0 && (out[k] === ' ' || out[k] === '\t' || out[k] === '\n' || out[k] === '\r')) k--;
-    if (k < 0) return true;
-    const prev = out[k]!;
-    if (/[\w$]/.test(prev)) {
-        let word = '';
-        for (; k >= 0 && /[\w$]/.test(out[k]!); k--) word = out[k]! + word;
-        return REGEX_AFTER_WORD.has(word);
+    let word = '';
+    for (let c = out.length - 1; c >= 0; c--) {
+        const chunk = out[c]!;
+        for (let k = chunk.length - 1; k >= 0; k--) {
+            const ch = chunk[k]!;
+            if (word === '' && (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r')) continue;
+            if (/[\w$]/.test(ch)) {
+                word = ch + word;
+                if (word.length > MAX_REGEX_WORD) return false;
+                continue;
+            }
+            return word !== '' ? REGEX_AFTER_WORD.has(word) : !(ch === ')' || ch === ']' || ch === '}');
+        }
     }
-    return !(prev === ')' || prev === ']' || prev === '}');
+    return word === '' || REGEX_AFTER_WORD.has(word);
 }
+
+const blankRun = (s: string): string => s.replace(/[^\n\r]/g, ' ');
 
 /** The end index (exclusive) of the regex literal opening at `at`, or -1 when none closes on its line. */
 function regexEnd(text: string, at: number): number {
@@ -104,24 +119,36 @@ export function maskSource(text: string, language?: string): MaskedSource {
     const family = commentFamilyOf(language);
     const jsLike = language === 'js';
     const rust = language === 'rust';
+    // Both outputs are built as CHUNKS (runs, not characters), so masking is linear with a small constant.
     const code: string[] = [];
     const bare: string[] = [];
     const n = text.length;
     const keep = (from: number, to: number): void => {
-        for (let k = from; k < to; k++) { code.push(text[k]!); bare.push(text[k]!); }
+        if (to <= from) return;
+        const s = text.slice(from, to);
+        code.push(s);
+        bare.push(s);
     };
     const blankBoth = (from: number, to: number): void => {
-        for (let k = from; k < to; k++) { code.push(blank(text[k]!)); bare.push(blank(text[k]!)); }
+        if (to <= from) return;
+        const s = blankRun(text.slice(from, to));
+        code.push(s);
+        bare.push(s);
     };
     const string = (from: number, to: number, quoteLen: number): void => {
-        for (let k = from; k < to; k++) {
-            const inner = k >= from + quoteLen && k < to - quoteLen;
-            code.push(text[k]!);
-            bare.push(inner ? blank(text[k]!) : text[k]!);
-        }
+        if (to <= from) return;
+        const a = Math.min(to, from + quoteLen), b = Math.max(a, to - quoteLen);
+        code.push(text.slice(from, to));
+        bare.push(text.slice(from, a) + blankRun(text.slice(a, b)) + text.slice(b, to));
     };
+    // The next char that can open a comment, a string or a regex literal; everything before it is kept as one run.
+    const special = family === 'c' ? /[/'"`]/g : /[#'"`]/g;
     let i = 0;
     while (i < n) {
+        special.lastIndex = i;
+        const hit = special.exec(text);
+        const runEnd = hit ? hit.index : n;
+        if (runEnd > i) { keep(i, runEnd); i = runEnd; continue; }
         const ch = text[i]!;
         const next = text[i + 1];
         if (family === 'c' && ch === '/' && next === '/') {

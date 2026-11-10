@@ -6,7 +6,7 @@
  */
 
 import type { MetricRule } from '../contract.js';
-import { isJsPath, masked } from './support/files.js';
+import { isJsPath } from './support/files.js';
 import { sideMetric } from './support/metric.js';
 
 const CAST = /\bas\s+(?:any|unknown)\b|<any>/g;
@@ -19,7 +19,7 @@ export const anyCastMetric: MetricRule = {
     derive(input) {
         return [sideMetric(input, {
             metricId: 'any-cast.added', unit: 'count', threshold: { warn: 1, error: 5, kind: 'abs' }, files: isJsPath, combine: 'sum',
-            value: (text, path) => [...masked(text, path).bare.matchAll(CAST)].length,
+            value: (view) => [...view.bare.matchAll(CAST)].length,
         })];
     },
 };

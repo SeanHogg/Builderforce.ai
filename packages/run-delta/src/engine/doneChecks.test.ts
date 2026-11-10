@@ -109,7 +109,8 @@ describe('PRD 41 Part C done-checks', () => {
         const clone = maint.findings.filter((f) => f.ruleId === 'clone-group');
         expect(clone.some((f) => f.lineage === 'introduced' || f.lineage === 'resolved')).toBe(false);
         expect(clone).toHaveLength(1);
-        expect(clone[0]).toMatchObject({ presentNow: true });
+        expect(clone[0]).toMatchObject({ lineage: 'present' });
+        expect(delta.summary.clauses.find((c) => c.dimension === 'ilities.maintainability')).toMatchObject({ code: 'tool-version-changed:jscpd' });
         // Content rules are not gated by that tool.
         expect(dim(delta, 'security').verdict).not.toBe('not_comparable');
     });

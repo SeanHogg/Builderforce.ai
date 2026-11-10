@@ -19,7 +19,7 @@ export const todoMetric: MetricRule = {
     derive(input) {
         return [sideMetric(input, {
             metricId: 'todo.added', unit: 'count', threshold: { warn: 1, error: 10, kind: 'abs' }, files: isCodePath, combine: 'sum',
-            value: (text) => [...text.matchAll(MARKER)].length,
+            value: (view) => [...view.text.matchAll(MARKER)].length,
         })];
     },
 };

@@ -1,51 +1,83 @@
 /**
  * rules/support/routes.ts — the C5.1 entry-point facts of ONE file, by text (WS4 tree-sitter
- * `EntryPointFact`s replace this): route registrations and the registry guards on each one's chain
- * WITHIN the file.
+ * `EntryPointFact`s replace this): route registrations, middleware, and the registry guards on each
+ * one's chain WITHIN the file. Computed once per {@link TextView}.
  *
- * Recognized registrations:
- *  - HTTP (Hono, Express-style routers): `<recv>.get|post|put|delete|patch|all|options|head('/path', …)`.
- *    The path must start with `/` and be followed by another argument, so `map.get('/x')` is not a route.
- *  - `commands.registerCommand('id', …)` (VS Code commands).
- *  - `onDidReceiveMessage(…)` (webview message handlers; keyed by ordinal).
+ * Recognized:
+ *  - HTTP (Hono, Express-style routers): `<recv>.get|post|put|delete|patch|all|options|head('/path', …)`,
+ *    where `<recv>` is an identifier (`app`, `this.router`) OR a call chain (`new Hono().use(g).get(…)`,
+ *    `app.use(g).get(…)`). The path must start with `/` and be followed by another argument, so
+ *    `map.get('/x')` is not a route.
+ *  - Middleware: `<recv>.use([prefix,] …)`, keyed `use <recv> <prefix|*>`.
+ *  - `commands.registerCommand('id', …)` (VS Code commands); `onDidReceiveMessage(…)` (webview handlers).
  *
  * A route's guard chain is every registry guard named (as an identifier, never inside a string or a
- * comment) in its call's arguments — inline middleware and the handler body — plus the guards of any
- * earlier `<recv>.use(…)` on the same receiver whose path prefix covers the route.
+ * comment) in its call's arguments, plus the guards of every earlier `.use(…)` on the same receiver
+ * (the same identifier, or earlier in the same call chain) whose prefix covers the route.
  */
 
-import { lineAt } from '../../engine/text.js';
-import { masked, matchClose } from './files.js';
+import { escapeRegex, matchClose, matchOpen, type TextView } from './files.js';
 
 export interface RouteFact {
-    /** e.g. `POST /api/projects/:id`, `command builderforce.open`, `webview-message #1`. */
+    /** e.g. `POST /api/projects/:id`, `use app /api/*`, `command builderforce.open`, `webview-message #2`. */
     key: string;
-    kind: 'http-route' | 'vscode-command' | 'webview-message';
+    kind: 'http-route' | 'middleware' | 'vscode-command' | 'webview-message';
     offset: number;
     line: number;
     /** Sorted guard names on the chain. */
     guards: string[];
+    /** The handler, when the call's last argument is a plain identifier (`h`, `handlers.list`). */
+    handler?: string;
 }
 
-const HTTP = /\b([A-Za-z_$][\w$]*)\s*\.\s*(get|post|put|delete|patch|all|options|head)\s*\(\s*(['"`])(\/[^'"`\n]*)\3\s*,/g;
-const USE = /\b([A-Za-z_$][\w$]*)\s*\.\s*use\s*\(/g;
+const HTTP = /\.\s*(get|post|put|delete|patch|all|options|head)\s*\(\s*(['"`])(\/[^'"`\n]*)\2\s*,/g;
+const USE = /\.\s*use\s*\(/g;
 const USE_PATH = /^\(\s*(['"`])([^'"`\n]*)\1/;
 const COMMAND = /\bcommands\s*\.\s*registerCommand\s*\(\s*(['"`])([^'"`\n]+)\1/g;
 const WEBVIEW = /\bonDidReceiveMessage\s*\(/g;
+const IDENT_BACK = /[\w$]/;
 
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-function guardsIn(bare: string, from: number, to: number, guardNames: readonly string[]): string[] {
-    const span = bare.slice(from, to);
-    return guardNames.filter((g) => new RegExp(`(?<![\\w$])${escapeRe(g)}(?![\\w$])`).test(span));
+interface Receiver {
+    /** Stable text label: `app`, `this.router`, `new Hono`, `createApp()`. */
+    label: string;
+    /** Which `.use` calls apply: the label for a named receiver, the chain start for an anonymous one. */
+    scope: string;
 }
 
-/** The call's argument span `[open, close]` for the `(` at or after `from`. */
-function callSpan(code: string, bare: string, from: number): [number, number] | undefined {
-    const open = code.indexOf('(', from);
-    if (open < 0) return undefined;
-    const close = matchClose(bare, open);
-    return close < 0 ? undefined : [open, close];
+function skipBack(s: string, i: number): number { while (i >= 0 && /\s/.test(s[i]!)) i--; return i; }
+
+/** The identifier ending at `end` (inclusive) and its start. */
+function identBack(s: string, end: number): { name: string; start: number } | undefined {
+    let i = end;
+    while (i >= 0 && IDENT_BACK.test(s[i]!)) i--;
+    return i === end ? undefined : { name: s.slice(i + 1, end + 1), start: i + 1 };
+}
+
+/** Walks back from the `.` before a method call to the chain's root receiver. */
+export function receiverOf(bare: string, dot: number): Receiver {
+    let i = skipBack(bare, dot - 1);
+    const names: string[] = [];
+    for (let guard = 0; guard < 256 && i >= 0; guard++) {
+        if (bare[i] === ')') {
+            const open = matchOpen(bare, i);
+            if (open < 0) break;
+            const callee = identBack(bare, skipBack(bare, open - 1));
+            if (!callee) return { label: 'chain', scope: `chain@${open}` };
+            i = skipBack(bare, callee.start - 1);
+            if (bare[i] === '.') { i = skipBack(bare, i - 1); continue; }
+            const kw = identBack(bare, i);
+            if (kw?.name === 'new') return { label: `new ${callee.name}`, scope: `chain@${kw.start}` };
+            return { label: `${callee.name}()`, scope: `chain@${callee.start}` };
+        }
+        const id = identBack(bare, i);
+        if (!id) break;
+        names.unshift(id.name);
+        i = skipBack(bare, id.start - 1);
+        if (bare[i] === '.') { i = skipBack(bare, i - 1); if (bare[i] === ')') break; continue; }
+        return { label: names.join('.'), scope: names.join('.') };
+    }
+    const label = names.length > 0 ? names.join('.') : 'chain';
+    return { label, scope: `${label}@${Math.max(0, i)}` };
 }
 
 /** `/api/*` and `/api/` cover `/api/x`; an absent path covers every route. */
@@ -55,9 +87,31 @@ function covers(prefix: string | undefined, path: string): boolean {
     return path === p || path.startsWith(p.endsWith('/') ? p : `${p}/`);
 }
 
-export function routesOf(text: string, path: string, guardRanks: Readonly<Record<string, number>>): RouteFact[] {
-    const { code, bare } = masked(text, path);
-    const guardNames = Object.keys(guardRanks).sort();
+/** The last top-level argument of the call spanning `(open, close)`, when it is a plain (dotted) identifier. */
+function handlerOf(code: string, bare: string, open: number, close: number): string | undefined {
+    let depth = 0, lastComma = open;
+    for (let i = open + 1; i < close; i++) {
+        const ch = bare[i]!;
+        if (ch === '(' || ch === '[' || ch === '{') depth++;
+        else if (ch === ')' || ch === ']' || ch === '}') depth--;
+        else if (ch === ',' && depth === 0) lastComma = i;
+    }
+    const last = code.slice(lastComma + 1, close).trim();
+    return /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(last) ? last : undefined;
+}
+
+export function routesOf(view: TextView, guardRanks: Readonly<Record<string, number>>): RouteFact[] {
+    const names = Object.keys(guardRanks).sort();
+    return view.memo(`routes\u0000${names.join(',')}`, () => compute(view, names));
+}
+
+function compute(view: TextView, guardNames: readonly string[]): RouteFact[] {
+    const { code, bare } = view;
+    const guardRe = guardNames.length > 0 ? new RegExp(`(?<![\\w$])(?:${guardNames.map(escapeRegex).join('|')})(?![\\w$])`, 'g') : undefined;
+    const guardsIn = (from: number, to: number): string[] =>
+        guardRe ? [...new Set([...bare.slice(from, to).matchAll(guardRe)].map((m) => m[0]))].sort() : [];
+    const span = (open: number): [number, number] | undefined => { const c = matchClose(bare, open); return c < 0 ? undefined : [open, c]; };
+
     const facts: RouteFact[] = [];
     const counts = new Map<string, number>();
     const keyed = (key: string) => {
@@ -66,52 +120,51 @@ export function routesOf(text: string, path: string, guardRanks: Readonly<Record
         return n === 1 ? key : `${key} #${n}`;
     };
 
-    const uses: Array<{ recv: string; offset: number; prefix?: string; guards: string[] }> = [];
-    for (let m = USE.exec(bare); m; m = USE.exec(bare)) {
-        const span = callSpan(code, bare, m.index + m[0].length - 1);
-        if (!span) continue;
-        const prefix = USE_PATH.exec(code.slice(span[0], span[1]))?.[2];
-        uses.push({ recv: m[1]!, offset: m.index, ...(prefix !== undefined ? { prefix } : {}), guards: guardsIn(bare, span[0], span[1], guardNames) });
+    const uses: Array<{ scope: string; offset: number; prefix?: string; guards: string[] }> = [];
+    for (const m of bare.matchAll(USE)) {
+        const s = span(m.index + m[0].length - 1);
+        if (!s) continue;
+        const recv = receiverOf(bare, m.index);
+        const prefix = USE_PATH.exec(code.slice(s[0], s[1]))?.[2];
+        const guards = guardsIn(s[0], s[1]);
+        uses.push({ scope: recv.scope, offset: m.index, ...(prefix !== undefined ? { prefix } : {}), guards });
+        facts.push({ key: `use ${recv.label} ${prefix ?? '*'}`, kind: 'middleware', offset: m.index, line: view.lineAt(m.index), guards });
     }
-    USE.lastIndex = 0;
 
-    for (let m = HTTP.exec(code); m; m = HTTP.exec(code)) {
+    for (const m of code.matchAll(HTTP)) {
         if (bare[m.index] !== code[m.index]) continue; // inside a string or comment
-        const span = callSpan(code, bare, m.index + m[0].indexOf('('));
-        if (!span) continue;
-        const [recv, method, , routePath] = [m[1]!, m[2]!, m[3], m[4]!];
-        const own = guardsIn(bare, span[0], span[1], guardNames);
-        const inherited = uses.filter((u) => u.recv === recv && u.offset < m!.index && covers(u.prefix, routePath)).flatMap((u) => u.guards);
+        const s = span(m.index + m[0].indexOf('('));
+        if (!s) continue;
+        const recv = receiverOf(bare, m.index);
+        const routePath = m[3]!;
+        const inherited = uses.filter((u) => u.scope === recv.scope && u.offset < m.index && covers(u.prefix, routePath)).flatMap((u) => u.guards);
+        const handler = handlerOf(code, bare, s[0], s[1]);
         facts.push({
-            key: keyed(`${method.toUpperCase()} ${routePath}`), kind: 'http-route', offset: m.index, line: lineAt(text, m.index),
-            guards: [...new Set([...own, ...inherited])].sort(),
+            key: `${m[1]!.toUpperCase()} ${routePath}`, kind: 'http-route', offset: m.index, line: view.lineAt(m.index),
+            guards: [...new Set([...guardsIn(s[0], s[1]), ...inherited])].sort(), ...(handler ? { handler } : {}),
         });
     }
-    HTTP.lastIndex = 0;
 
-    for (let m = COMMAND.exec(code); m; m = COMMAND.exec(code)) {
+    for (const m of code.matchAll(COMMAND)) {
         if (bare[m.index] !== code[m.index]) continue;
-        const span = callSpan(code, bare, m.index + m[0].indexOf('('));
-        facts.push({
-            key: keyed(`command ${m[2]!}`), kind: 'vscode-command', offset: m.index, line: lineAt(text, m.index),
-            guards: span ? guardsIn(bare, span[0], span[1], guardNames) : [],
-        });
+        const s = span(m.index + m[0].indexOf('('));
+        facts.push({ key: `command ${m[2]!}`, kind: 'vscode-command', offset: m.index, line: view.lineAt(m.index), guards: s ? guardsIn(s[0], s[1]) : [] });
     }
-    COMMAND.lastIndex = 0;
 
-    for (let m = WEBVIEW.exec(bare); m; m = WEBVIEW.exec(bare)) {
-        const span = callSpan(code, bare, m.index + m[0].length - 1);
-        facts.push({
-            key: keyed('webview-message'), kind: 'webview-message', offset: m.index, line: lineAt(text, m.index),
-            guards: span ? guardsIn(bare, span[0], span[1], guardNames) : [],
-        });
+    for (const m of bare.matchAll(WEBVIEW)) {
+        const s = span(m.index + m[0].length - 1);
+        facts.push({ key: 'webview-message', kind: 'webview-message', offset: m.index, line: view.lineAt(m.index), guards: s ? guardsIn(s[0], s[1]) : [] });
     }
-    WEBVIEW.lastIndex = 0;
 
-    return facts.sort((a, b) => a.offset - b.offset);
+    return facts.sort((a, b) => a.offset - b.offset).map((f) => ({ ...f, key: keyed(f.key) }));
 }
 
 /** The strongest rank among `guards` (0 for none). */
 export function maxRank(guards: readonly string[], ranks: Readonly<Record<string, number>>): number {
     return guards.reduce((m, g) => Math.max(m, ranks[g] ?? 0), 0);
+}
+
+/** The strongest guard (rank, then name), if any. */
+export function strongest(guards: readonly string[], ranks: Readonly<Record<string, number>>): string | undefined {
+    return [...guards].sort((a, b) => (ranks[b] ?? 0) - (ranks[a] ?? 0) || (a < b ? -1 : a > b ? 1 : 0))[0];
 }

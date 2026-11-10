@@ -4,10 +4,13 @@
  *
  *  - A file whose change-set `attribution` is `outside-run` goes to `excluded`
  *    (`changed-outside-run`) and never reaches a rule (C1, concurrent human edits).
- *  - A side the host could not resolve (an {@link UnresolvedFile}, or a path missing from the reply)
- *    excludes the file with that reason; a hash with no text on a side is `binary`.
- *  - A deleted file and an added file the {@link matchRenames rename matcher} pairs become ONE
- *    entry at the new (logical) path, with the before text keyed under it.
+ *  - A `binary`, `changed-ignored` or `submodule-moved` file (on either side), or one whose AFTER side
+ *    cannot be resolved, is excluded too.
+ *  - A file whose BEFORE side cannot be resolved ({@link UNRESOLVED_BEFORE}) is listed in `excluded`
+ *    with that reason but KEEPS its after side: rules still run on it and its findings show as
+ *    `present` (only lineage is lost; an after-side problem is never hidden).
+ *  - A deleted file and an ADDED file (no before hash) that the {@link matchRenames rename matcher}
+ *    pairs become ONE entry at the new (logical) path, with the before text keyed under it.
  *
  * Paths and texts leave here normalized (POSIX/NFC, LF), so nothing downstream depends on the OS.
  */
@@ -16,15 +19,20 @@ import type { ChangedFileInput, DeltaPorts, RunChangeSetInput, SideText, Unresol
 import { matchRenames } from './renames.js';
 import { compareStr, normalizeEol, normalizePath } from './text.js';
 
+/** Reasons that mean "the before side exists but could not be read", not "nothing to compare". */
+export const UNRESOLVED_BEFORE: ReadonlySet<UnresolvedFile['reason']> = new Set(['preimage-too-large', 'preimage-missing', 'git-unavailable']);
+
 export interface ResolvedSides {
-    /** In-run, resolvable files at their logical path, sorted. */
+    /** In-run, analyzable files at their logical path, sorted. */
     changed: ChangedFileInput[];
     before: Map<string, SideText>;
     after: Map<string, SideText>;
     /** Sorted by path. */
     excluded: UnresolvedFile[];
+    /** In-run files analyzed on their after side only (before side unresolved), sorted. */
+    unknownBefore: string[];
     renamed: Array<{ from: string; to: string }>;
-    /** In-run files before any was excluded as unresolved. */
+    /** In-run files before any exclusion. */
     inRunCount: number;
 }
 
@@ -76,20 +84,24 @@ export async function resolveSides(input: RunChangeSetInput, ports: DeltaPorts):
     const beforeAll = normalizedReply(beforeReply), afterAll = normalizedReply(afterReply);
 
     const kept: ChangedFileInput[] = [];
+    const unknownBefore: string[] = [];
     const before = new Map<string, SideText>(), after = new Map<string, SideText>();
     for (const f of inRun) {
         const b = f.beforeHash !== undefined ? sideOf(beforeAll, f.path) : undefined;
         const a = f.afterHash !== undefined ? sideOf(afterAll, f.path) : undefined;
-        const reason = typeof b === 'string' ? b : typeof a === 'string' ? a : undefined;
-        if (reason) { excluded.set(f.path, { path: f.path, reason }); continue; }
+        if (typeof a === 'string') { excluded.set(f.path, { path: f.path, reason: a }); continue; }
+        if (typeof b === 'string') {
+            excluded.set(f.path, { path: f.path, reason: b });
+            if (!UNRESOLVED_BEFORE.has(b) || !a) continue;
+            unknownBefore.push(f.path);
+        } else if (b) before.set(f.path, b);
         kept.push(f);
-        if (b && typeof b !== 'string') before.set(f.path, b);
-        if (a && typeof a !== 'string') after.set(f.path, a);
+        if (a) after.set(f.path, a);
     }
 
-    // Renames: a deleted file paired with an added file becomes one entry at the new path.
+    // Renames: a deleted file paired with an ADDED file (no before hash) becomes one entry at the new path.
     const deleted = kept.filter((f) => before.has(f.path) && !after.has(f.path));
-    const added = kept.filter((f) => after.has(f.path) && !before.has(f.path));
+    const added = kept.filter((f) => f.beforeHash === undefined && after.has(f.path));
     const pairs = matchRenames(
         deleted.map((f) => ({ path: f.path, ...(f.beforeHash ? { hash: f.beforeHash } : {}), text: before.get(f.path)!.text })),
         added.map((f) => ({ path: f.path, ...(f.afterHash ? { hash: f.afterHash } : {}), text: after.get(f.path)!.text })),
@@ -108,6 +120,7 @@ export async function resolveSides(input: RunChangeSetInput, ports: DeltaPorts):
         before,
         after,
         excluded: [...excluded.values()].sort((a, b) => compareStr(a.path, b.path)),
+        unknownBefore: unknownBefore.sort(compareStr),
         renamed: pairs.map(({ from, to }) => ({ from, to })),
         inRunCount: inRun.length,
     };

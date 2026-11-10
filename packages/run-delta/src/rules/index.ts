@@ -10,6 +10,7 @@ import { assertionEditedWithImpl } from './assertionEditedWithImpl.js';
 import { assertionsReduced } from './assertionsReduced.js';
 import { capabilityAdded } from './capabilityAdded.js';
 import { complexityMetric } from './complexityMetric.js';
+import { deltaConfigChanged } from './deltaConfigChanged.js';
 import { destructiveDdl } from './destructiveDdl.js';
 import { entryAdded } from './entryAdded.js';
 import { entryRemoved } from './entryRemoved.js';
@@ -34,7 +35,7 @@ import { weakCrypto } from './weakCrypto.js';
 
 export const BUILT_IN_RULES: readonly DeltaRule[] = [
     // security (C5)
-    guardRemoved, guardWeakened, entryAdded, entryRemoved, capabilityAdded, weakCrypto, secretAdded,
+    guardRemoved, guardWeakened, entryAdded, entryRemoved, capabilityAdded, weakCrypto, secretAdded, deltaConfigChanged,
     // performance (C6.1)
     ioInLoop, syncIo,
     // quality: test integrity (C8.2)
@@ -45,10 +46,3 @@ export const BUILT_IN_RULES: readonly DeltaRule[] = [
 ];
 
 export const BUILT_IN_METRICS: readonly MetricRule[] = [complexityMetric, todoMetric, anyCastMetric];
-
-export {
-    anyCastMetric, apiAdded, apiBreaking, assertionEditedWithImpl, assertionsReduced, capabilityAdded, complexityMetric,
-    destructiveDdl, entryAdded, entryRemoved, factFindingRules, forcePush, godFileGrowth, guardRemoved, guardWeakened,
-    ioInLoop, matcherWeakened, onlyAdded, rmRf, secretAdded, snapshotUpdatedWithImpl, suppressionAdded, syncIo,
-    testDeleted, testSkipped, timeoutRaised, todoMetric, weakCrypto,
-};

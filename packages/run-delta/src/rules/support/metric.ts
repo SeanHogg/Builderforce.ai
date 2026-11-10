@@ -4,7 +4,7 @@
  */
 
 import type { MetricDelta, RuleInput } from '../../contract.js';
-import { filePairs } from './files.js';
+import { filePairs, type TextView } from './files.js';
 
 export interface MetricSpec {
     metricId: string;
@@ -12,7 +12,7 @@ export interface MetricSpec {
     threshold: MetricDelta['threshold'];
     files(path: string): boolean;
     /** The file's value on one side, or `null` when that side cannot measure it. */
-    value(text: string, path: string, side: 'before' | 'after', sidePath: string): number | null;
+    value(view: TextView, side: 'before' | 'after'): number | null;
     combine: 'sum' | 'max';
 }
 
@@ -21,9 +21,9 @@ export function sideMetric(input: RuleInput, spec: MetricSpec): MetricDelta {
     for (const pair of filePairs(input)) {
         if (!spec.files(pair.path)) continue;
         for (const side of ['before', 'after'] as const) {
-            const st = pair[side];
-            if (!st || total[side] === null) continue;
-            const v = spec.value(st.text, pair.path, side, st.path);
+            const view = pair[side];
+            if (!view || total[side] === null) continue;
+            const v = spec.value(view, side);
             if (v === null) { total[side] = null; continue; }
             total[side] = spec.combine === 'sum' ? total[side]! + v : Math.max(total[side]!, v);
         }

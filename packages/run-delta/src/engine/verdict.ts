@@ -4,7 +4,8 @@
  *
  *  - `attack-surface` (C5, also the default): `worse` when an introduced or changed finding is
  *    error-level, or more than one warn was introduced; heuristic-only errors still give `worse`, with
- *    the `heuristic` reason. `better` when findings were resolved and no warn/error was introduced.
+ *    the `heuristic` reason. `better` when findings were resolved and NOTHING was introduced — C5 says
+ *    "nothing", so an introduced finding of ANY severity, info included, prevents `better`.
  *  - `static-tier` (C6): `worse` on an introduced/changed error-level static finding or a metric
  *    regression beyond its error threshold; `better` symmetrically (an error-level finding resolved, or
  *    an improvement beyond the error threshold). Always carries `static-only` (no dynamic tier yet).
@@ -12,13 +13,14 @@
  *    `tests-weakened` reason; otherwise the default rule.
  *
  * Shared: a metric regression beyond its `error` threshold counts as an error-level introduction; one
- * beyond `warn` only prevents `better`; an improvement beyond `warn` counts as a resolution. A dimension where no rule ran
- * is `not_measured` (`rule-not-built`, or `rule-failed`). A rule whose kind is not comparable (C9) folds
- * `not_comparable` into the verdict by {@link HEADLINE_ORDER}. Presented-now and waived findings never
- * count.
+ * beyond `warn` only prevents `better`; an improvement beyond `warn` counts as a resolution. A dimension
+ * where no rule exists is `not_measured` (`rule-not-built`). A rule whose kind is not comparable (C9),
+ * or that threw (`analyzer-failed:<ruleId>`), folds `not_comparable` into the verdict by
+ * {@link HEADLINE_ORDER}. `present` and waived findings never count.
  */
 
 import { HEADLINE_ORDER, type DeltaFinding, type DimensionId, type MetricDelta, type Verdict } from '../contract.js';
+import { isFresh, isOpen } from './findingFacts.js';
 import { sortedUnique } from './text.js';
 
 export type VerdictPolicy = 'attack-surface' | 'static-tier' | 'integrity';
@@ -37,13 +39,17 @@ export function worst(verdicts: Iterable<Verdict>): Verdict {
     return HEADLINE_ORDER[best]!;
 }
 
+/** A C8.2 test-integrity error: an error-severity finding of a C8.2 rule. */
+export const isIntegrityError = (f: DeltaFinding, integrityRules: ReadonlySet<string>): boolean =>
+    f.severity === 'error' && integrityRules.has(f.ruleId);
+
 export interface DimensionEvaluation {
     id: DimensionId;
     /** Rules and metric rules that ran to completion. */
     ran: number;
     /** Rule ids that threw. */
     failed: readonly string[];
-    /** Reasons of the rules whose kind is not comparable (empty = all comparable). */
+    /** Reasons of the rules whose kind is not comparable, `analyzer-failed:<ruleId>` included (empty = all comparable). */
     notComparable: readonly string[];
     findings: readonly DeltaFinding[];
     metrics: readonly MetricDelta[];
@@ -70,13 +76,12 @@ export function dimensionVerdict(ev: DimensionEvaluation): { verdict: Verdict; r
     const policy = VERDICT_POLICIES[ev.id] ?? DEFAULT_POLICY;
     const reasons: string[] = policy === 'static-tier' ? ['static-only'] : [];
     if (ev.failed.length > 0) reasons.push('rule-failed');
-    if (ev.ran === 0) return { verdict: 'not_measured', reasons: sortedUnique([...reasons, ev.failed.length > 0 ? 'rule-failed' : 'rule-not-built']) };
+    if (ev.ran === 0 && ev.failed.length === 0) return { verdict: 'not_measured', reasons: sortedUnique([...reasons, 'rule-not-built']) };
 
-    const open = ev.findings.filter((f) => !f.presentNow && !f.waiver);
-    const fresh = open.filter((f) => f.lineage === 'introduced' || f.lineage === 'changed');
-    const errors = fresh.filter((f) => f.severity === 'error');
-    const introducedWarns = open.filter((f) => f.lineage === 'introduced' && f.severity === 'warn').length;
-    const introducedAny = open.some((f) => f.lineage === 'introduced' && f.severity !== 'info');
+    const open = ev.findings.filter(isOpen);
+    const errors = ev.findings.filter((f) => isFresh(f) && f.severity === 'error');
+    const introduced = open.filter((f) => f.lineage === 'introduced');
+    const introducedWarns = introduced.filter((f) => f.severity === 'warn').length;
     const resolved = open.filter((f) => f.lineage === 'resolved');
 
     let metricError = false, metricWarns = 0, metricImproved: Level;
@@ -92,12 +97,12 @@ export function dimensionVerdict(ev: DimensionEvaluation): { verdict: Verdict; r
     let verdict: Verdict = 'same';
     if (policy === 'static-tier') {
         if (errors.length > 0 || metricError) verdict = 'worse';
-        else if (resolved.some((f) => f.severity === 'error') || metricImproved === 'error') verdict = 'better';
+        else if ((resolved.some((f) => f.severity === 'error') || metricImproved === 'error') && introduced.length === 0) verdict = 'better';
     } else {
-        const integrity = policy === 'integrity' && errors.some((f) => ev.integrityRules.has(f.ruleId));
+        const integrity = policy === 'integrity' && errors.some((f) => isIntegrityError(f, ev.integrityRules));
         if (integrity) reasons.push('tests-weakened');
         if (integrity || errors.length > 0 || metricError || introducedWarns > 1) verdict = 'worse';
-        else if ((resolved.length > 0 || metricImproved !== undefined) && !introducedAny && metricWarns === 0) verdict = 'better';
+        else if ((resolved.length > 0 || metricImproved !== undefined) && introduced.length === 0 && metricWarns === 0) verdict = 'better';
     }
     if (verdict === 'worse' && errors.length > 0 && errors.every((f) => f.confidence === 'heuristic')) reasons.push('heuristic');
 

@@ -17,11 +17,7 @@ export const onlyAdded: DeltaRule = {
     derive(input) {
         const out = { before: [] as RuleFinding[], after: [] as RuleFinding[] };
         for (const pair of testPairs(input)) {
-            for (const [key, t] of pair.before) {
-                if (!t.only) continue;
-                const f = testFinding(onlyAdded, pair, key, 'error', {}, { before: t });
-                out.before.push(f);
-            }
+            for (const [key, t] of pair.before) if (t.only) out.before.push(testFinding(onlyAdded, pair, key, 'error', {}, { before: t }));
             for (const [key, t] of pair.after) if (t.only) out.after.push(testFinding(onlyAdded, pair, key, 'error', {}, { after: t }));
         }
         return out;

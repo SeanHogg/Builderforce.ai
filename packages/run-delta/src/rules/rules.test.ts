@@ -63,10 +63,23 @@ describe('quality rules (C8.2) and metrics (C8.1)', () => {
         expect(d.dimensions.find((x) => x.id === 'quality')!.verdict).toBe('worse');
     });
 
-    it('a test moved to another changed test file is not deleted', async () => {
-        const t = "it('moves', () => { expect(1).toBe(1); });\n";
+    it('test-deleted matches by (file, key): a same-named test in another file does not hide a deletion (regression: review #13)', async () => {
+        const t = "it('works', () => { expect(1).toBe(1); });\n";
         const d = await run({ 'a.test.ts': t, 'b.test.ts': "it('x', () => { expect(0).toBe(0); });\n" }, { 'a.test.ts': '\n', 'b.test.ts': `${t}it('x', () => { expect(0).toBe(0); });\n` });
-        expect(introduced(d, 'quality')).toEqual([]);
+        const deleted = d.dimensions.find((x) => x.id === 'quality')!.findings.filter((f) => f.ruleId === 'test-deleted');
+        expect(deleted.map((f) => f.params['file'])).toEqual(['a.test.ts']);
+    });
+
+    it('assertion-edited-with-impl is an error in a consolidation run', async () => {
+        const before: Files = { 's.test.ts': "it('s', () => { expect(f()).toBe(2); });\n", 's.ts': 'export const f = () => 2;\n' };
+        const after: Files = { 's.test.ts': "it('s', () => { expect(f()).toBe(3); });\n", 's.ts': 'export const f = () => 3;\n' };
+        const standard = await run(before, after);
+        const consolidation = await run(before, after, { kind: 'consolidation', mode: 'autonomous' });
+        const sev = (d: RunDelta) => d.dimensions.find((x) => x.id === 'quality')!.findings.find((f) => f.ruleId === 'assertion-edited-with-impl')!.severity;
+        expect(sev(standard)).toBe('warn');
+        expect(sev(consolidation)).toBe('error');
+        expect(consolidation.dimensions.find((x) => x.id === 'quality')!.reasons).toContain('tests-weakened');
+        expect(consolidation.blocking).toEqual(['assertion-edited-with-impl']);
     });
 
     it('assertion-edited-with-impl and snapshot-updated-with-impl need an implementation change', async () => {

@@ -2,12 +2,12 @@
  * rules/support/testFacts.ts — C8.2 `testFacts` of one test file, by text (WS4 tree-sitter test facts
  * replace this): every `describe`/`it`/`test` call (and the `x`/`f` and `.skip`/`.only`/`.todo`
  * forms), nested by span, with per-test assertion counts, matcher names, timeout and assertion lines.
+ * Computed once per {@link TextView}; nesting is one stack pass (calls are visited in offset order).
  *
  * Not recognized: `test.each(table)(name, fn)` (its name is not the first argument).
  */
 
-import { lineAt } from '../../engine/text.js';
-import { masked, matchClose, squash } from './files.js';
+import { matchClose, squash, type TextView } from './files.js';
 
 export interface TestFact {
     /** `describe > describe > name`. */
@@ -38,8 +38,12 @@ interface Raw { name: string; container: boolean; open: number; close: number; s
 
 const num = (s: string): number => Number(s.replace(/_/g, ''));
 
-export function testFactsOf(text: string, path: string): TestFact[] {
-    const { code, bare } = masked(text, path);
+export function testFactsOf(view: TextView): TestFact[] {
+    return view.memo('testFacts', () => compute(view));
+}
+
+function compute(view: TextView): TestFact[] {
+    const { code, bare } = view;
     const raws: Raw[] = [];
     for (const m of code.matchAll(CALL)) {
         if (bare[m.index] !== code[m.index]) continue;
@@ -53,28 +57,25 @@ export function testFactsOf(text: string, path: string): TestFact[] {
             only: word === 'fit' || word === 'fdescribe' || /\.\s*only/.test(mods),
         });
     }
-    raws.sort((a, b) => a.offset - b.offset);
 
+    const stack: Raw[] = [];
     return raws.map((r) => {
-        const ancestors = raws.filter((p) => p.container && p !== r && p.open < r.offset && p.close > r.close);
-        const key = [...ancestors.map((a) => a.name), r.name].join(' > ');
+        while (stack.length > 0 && stack[stack.length - 1]!.close < r.offset) stack.pop();
+        const ancestors = stack.filter((p) => p.close > r.close);
         const fact: TestFact = {
-            key, container: r.container, line: lineAt(text, r.offset),
+            key: [...ancestors.map((a) => a.name), r.name].join(' > '), container: r.container, line: view.lineAt(r.offset),
             skipped: r.skip || ancestors.some((a) => a.skip), only: r.only,
             assertions: 0, matchers: [], assertionLines: [],
         };
-        if (r.container) return fact;
+        if (r.container) { stack.push(r); return fact; }
         const body = bare.slice(r.open + 1, r.close);
-        fact.assertions = [...body.matchAll(ASSERTION)].length;
+        const asserts = [...body.matchAll(ASSERTION)];
+        fact.assertions = asserts.length;
         fact.matchers = [...body.matchAll(MATCHER)].map((x) => x[1]!);
-        const timeout = OPTIONS_TIMEOUT.exec(code.slice(r.afterName, r.close))?.[1] ?? TRAILING_TIMEOUT.exec(body)?.[1];
+        const timeout = OPTIONS_TIMEOUT.exec(code.slice(r.afterName, Math.min(r.close, r.afterName + 200)))?.[1] ?? TRAILING_TIMEOUT.exec(body.slice(-64))?.[1];
         if (timeout !== undefined) fact.timeout = num(timeout);
         const lines = new Set<string>();
-        for (const a of body.matchAll(ASSERTION)) {
-            const at = r.open + 1 + a.index;
-            const start = code.lastIndexOf('\n', at) + 1, end = code.indexOf('\n', at);
-            lines.add(squash(code.slice(start, end < 0 ? code.length : end)));
-        }
+        for (const a of asserts) lines.add(squash(view.lineText(r.open + 1 + a.index, code)));
         fact.assertionLines = [...lines].sort();
         return fact;
     });

@@ -6,14 +6,34 @@
 
 import type { DeltaRegistries } from '../contract.js';
 
-/** C8.2 test-integrity rules at error level: they make quality `worse` and headline "tests were weakened". */
+/**
+ * The C8.2 test-integrity rules. Any ERROR finding of one makes quality `worse` and the headline
+ * "tests were weakened" (`assertion-edited-with-impl` is an error only in a consolidation run).
+ */
+export const TEST_INTEGRITY_RULES: readonly string[] = [
+    'assertion-edited-with-impl',
+    'assertions-reduced',
+    'matcher-weakened',
+    'only-added',
+    'snapshot-updated-with-impl',
+    'suppression-added',
+    'test-deleted',
+    'test-skipped',
+    'timeout-raised',
+];
+
+/** The C8.2 rules that can report at error severity: the ones the autonomous policy blocks on. */
 export const TEST_INTEGRITY_ERROR_RULES: readonly string[] = [
+    'assertion-edited-with-impl',
     'assertions-reduced',
     'matcher-weakened',
     'only-added',
     'test-deleted',
     'test-skipped',
 ];
+
+/** A run that edits its own gate (`.builderforce/delta.json`). */
+export const DELTA_CONFIG_RULE = 'delta-config-changed';
 
 export const DEFAULT_REGISTRIES: DeltaRegistries = {
     // Ranked: higher = stronger. A route that loses every guard is `guard-removed`; one whose strongest
@@ -76,6 +96,7 @@ export const DEFAULT_REGISTRIES: DeltaRegistries = {
         ],
         ['toBeTruthy', 'toBeFalsy', 'toBeDefined', 'toBeUndefined'],
     ],
-    // §12.5: `guard-removed` and every C8.2 error block finalization of an autonomous run.
-    blocking: ['guard-removed', ...TEST_INTEGRITY_ERROR_RULES],
+    // §12.5: `guard-removed` and every C8.2 error block finalization of an autonomous run; so does a run
+    // that edits its own delta policy.
+    blocking: ['guard-removed', DELTA_CONFIG_RULE, ...TEST_INTEGRITY_ERROR_RULES],
 };

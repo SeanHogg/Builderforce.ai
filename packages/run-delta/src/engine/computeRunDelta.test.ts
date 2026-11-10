@@ -31,12 +31,38 @@ describe('computeRunDelta', () => {
         expect(dim(delta, 'security').verdict).toBe('same');
     });
 
-    it('excludes a file whose before side is unresolved and records the reason', async () => {
-        const { input, ports } = fixture({ 'api/r.ts': GUARDED }, { 'api/r.ts': UNGUARDED }, { unresolved: { 'api/r.ts': 'preimage-too-large' } });
+    it('still analyzes the after side of a file whose before side is unresolved, as present findings (regression: review #3)', async () => {
+        const tok = 'ghp_abcdefghijklmnopqrstuvwxyz0123456789';
+        const { input, ports } = fixture(
+            { 'api/r.ts': GUARDED, 'src/big.ts': 'x\n', 'src/o.ts': 'a\n' },
+            { 'api/r.ts': UNGUARDED, 'src/big.ts': `const t = '${tok}';\n`, 'src/o.ts': 'b\n' },
+            { unresolved: { 'api/r.ts': 'preimage-too-large', 'src/big.ts': 'preimage-too-large' } },
+        );
         const delta = await computeRunDelta(input, defaultDimensionRegistry(), ports);
-        expect(delta.excluded).toEqual([{ path: 'api/r.ts', reason: 'preimage-too-large' }]);
-        expect(dim(delta, 'security').verdict).toBe('not_comparable');
-        expect(dim(delta, 'security').reasons).toContain('before-unresolved');
+        expect(delta.excluded).toEqual([{ path: 'api/r.ts', reason: 'preimage-too-large' }, { path: 'src/big.ts', reason: 'preimage-too-large' }]);
+        expect(delta.impact.changedFiles).toEqual(['api/r.ts', 'src/big.ts', 'src/o.ts']);
+        const security = dim(delta, 'security');
+        expect(security.reasons).toContain('before-unresolved');
+        expect(security.findings.filter((f) => f.lineage === 'present').map((f) => f.ruleId).sort()).toEqual(['entry-added', 'secret-added']);
+        expect(security.findings.some((f) => f.lineage === 'introduced')).toBe(false);
+        expect(security.verdict).toBe('same'); // a resolved file exists, so the dimension is still measured
+        expect(JSON.stringify(delta)).not.toContain(tok);
+    });
+
+    it('is not_comparable when no in-run file has a resolvable before side', async () => {
+        const { input, ports } = fixture({ 'api/r.ts': GUARDED }, { 'api/r.ts': UNGUARDED }, { unresolved: { 'api/r.ts': 'git-unavailable' } });
+        const delta = await computeRunDelta(input, defaultDimensionRegistry(), ports);
+        expect(dim(delta, 'security')).toMatchObject({ verdict: 'not_comparable' });
+        expect(delta.summary.clauses.find((c) => c.dimension === 'security')).toMatchObject({ code: 'before-unresolved' });
+    });
+
+    it('a binary file is excluded without making anything before-unresolved (regression: review #11)', async () => {
+        const { input, ports } = fixture({}, { 'img.png': 'x' });
+        ports.texts = async (_s, ps) => new Map(ps.map((p) => [p, { path: p, hash: 'h' }]));
+        const delta = await computeRunDelta(input, defaultDimensionRegistry(), ports);
+        expect(delta.excluded).toEqual([{ path: 'img.png', reason: 'binary' }]);
+        expect(dim(delta, 'security').reasons).not.toContain('before-unresolved');
+        expect(dim(delta, 'security').verdict).toBe('same');
     });
 
     it('head-switched makes every dimension not_comparable', async () => {

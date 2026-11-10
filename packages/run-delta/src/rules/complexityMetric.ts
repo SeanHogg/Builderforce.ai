@@ -26,11 +26,11 @@ export const complexityMetric: MetricRule = {
         return [
             sideMetric(input, {
                 metricId: 'complexity.max', unit: 'cyclomatic', threshold: { warn: 5, error: 10, kind: 'abs' }, files, combine: 'max',
-                value: (_t, _p, side, sidePath) => badge(factsOf(input, side), sidePath, 'maxComplexity'),
+                value: (view, side) => badge(factsOf(input, side), view.sidePath, 'maxComplexity'),
             }),
             sideMetric(input, {
                 metricId: 'complexity.sum', unit: 'cyclomatic', threshold: { warn: 10, error: 30, kind: 'abs' }, files, combine: 'sum',
-                value: (_t, _p, side, sidePath) => badge(factsOf(input, side), sidePath, 'complexity'),
+                value: (view, side) => badge(factsOf(input, side), view.sidePath, 'complexity'),
             }),
         ];
     },

@@ -3,7 +3,7 @@
  * under a `scripts/` directory, GitHub workflows, package manifests, Makefiles and Dockerfiles.
  */
 
-import { isShellPath } from '@builderforce/agent-tools/code-mask';
+import { isShellPath } from './files.js';
 
 export function isScriptPath(path: string): boolean {
     return isShellPath(path)

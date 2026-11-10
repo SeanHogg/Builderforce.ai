@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { MetricDelta } from '../contract.js';
 import { DEFAULT_REGISTRIES } from '../registry/defaults.js';
 import { withOverrides } from '../registry/overrides.js';
+import { unsafeRegex } from '../registry/safeRegex.js';
 import { facts } from '../testing/fixturePorts.js';
 import { blastRadius, fileCentrality } from './blastRadius.js';
 import { impactSet } from './impactSet.js';
@@ -99,13 +100,30 @@ describe('withOverrides', () => {
             io: ['^kysely\\.', '('],
             blocking: ['weak-crypto'],
             benchmarks: {},
+            nope: 1,
         });
         expect(registries.guards['requireOwner']).toBe(35);
         expect(registries.guards['requireAuth']).toBe(10);
         expect(registries.io).toContain('^kysely\\.');
         expect(registries.io).not.toContain('(');
         expect(registries.blocking).toEqual([...DEFAULT_REGISTRIES.blocking, 'weak-crypto']);
-        expect(dropped).toEqual(['invalid:guards.bad', 'invalid:io.(', 'unknown-key:benchmarks']);
+        expect(dropped).toEqual(['invalid:guards.bad', 'unknown-key:nope', 'unsafe-regex:io.invalid']);
+    });
+
+    it('rejects ReDoS-prone and over-long override regexes (regression: review #8)', () => {
+        const { registries, dropped } = withOverrides(DEFAULT_REGISTRIES, {
+            io: ['^(a+)+$', '^(a|ab)*c', '(x)\\1', `^${'a'.repeat(250)}`, '^(?:this\\.)?db\\.\\w+\\('],
+            weakCrypto: ['(?:md5)+'],
+        });
+        expect(dropped).toEqual([
+            'unsafe-regex:io.backreference', 'unsafe-regex:io.nested-quantifier', 'unsafe-regex:io.quantified-alternation', 'unsafe-regex:io.too-long',
+        ]);
+        expect(registries.io).toContain('^(?:this\\.)?db\\.\\w+\\(');
+        expect(registries.weakCrypto).toContain('(?:md5)+');
+    });
+
+    it('every built-in registry regex passes the same safety gate', () => {
+        for (const src of [...DEFAULT_REGISTRIES.io, ...DEFAULT_REGISTRIES.weakCrypto]) expect([src, unsafeRegex(src)]).toEqual([src, undefined]);
     });
 
     it('returns the defaults for a non-object', () => {

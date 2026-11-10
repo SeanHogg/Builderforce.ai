@@ -7,8 +7,7 @@
  */
 
 import type { DeltaRule } from '../contract.js';
-import { lineTextAt } from '../engine/text.js';
-import { regexOffsets, stateSides } from './support/stateRule.js';
+import { regexHits, stateSides } from './support/stateRule.js';
 
 const DDL = /\b(DROP\s+TABLE|DROP\s+COLUMN|TRUNCATE)\b/gi;
 
@@ -22,9 +21,9 @@ export const destructiveDdl: DeltaRule = {
     derive(input) {
         return stateSides(destructiveDdl, {
             files: isMigrationPath,
-            hits: (text) => regexOffsets(DDL, text)
-                .filter(({ offset }) => !/^\s*--/.test(lineTextAt(text, offset)))
-                .map(({ offset, match }) => ({ offset, key: match[1]!.toUpperCase().replace(/\s+/g, ' ') })),
+            hits: (view) => regexHits(DDL, view.text)
+                .filter(({ offset }) => !/^\s*--/.test(view.lineText(offset)))
+                .map(({ offset, match }) => ({ offset, length: match[0].length, key: match[1]!.toUpperCase().replace(/\s+/g, ' ') })),
             severity: 'error',
         }, input);
     },

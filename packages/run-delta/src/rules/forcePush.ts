@@ -7,7 +7,7 @@
 
 import type { DeltaRule } from '../contract.js';
 import { isScriptPath } from './support/scripts.js';
-import { regexOffsets, stateSides } from './support/stateRule.js';
+import { regexHits, stateSides } from './support/stateRule.js';
 
 const FORCE_PUSH = /\bgit\s+push\b[^\n;&|]*?(?:\s--force(?:-with-lease)?\b|\s-f\b|\s\+[\w/.-]+)/g;
 
@@ -19,7 +19,7 @@ export const forcePush: DeltaRule = {
     derive(input) {
         return stateSides(forcePush, {
             files: isScriptPath,
-            hits: (text) => regexOffsets(FORCE_PUSH, text).map(({ offset }) => ({ offset, key: 'git-push-force' })),
+            hits: (view) => regexHits(FORCE_PUSH, view.text).map(({ offset, match }) => ({ offset, length: match[0].length, key: 'git-push-force' })),
             severity: 'warn',
         }, input);
     },

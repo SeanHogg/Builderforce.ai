@@ -9,25 +9,26 @@
  *    the most severe introduced/changed findings (severity, then count, then id); `metric:<id>` when
  *    only a metric regressed.
  *  - `better`: `findings-resolved` (count = resolved findings), else `metrics-improved`.
- *  - `not_comparable`: the first comparability reason (e.g. `head-switched`); count = findings shown
- *    as "present now".
+ *  - `not_comparable`: the COMPARABILITY reason (`head-switched` first, then the first memory
+ *    comparability reason such as `tool-version-changed:jscpd`, then `before-unresolved`); count =
+ *    findings shown as `present`.
  */
 
-import { HEADLINE_ORDER, type DeltaFinding, type DimensionResult, type HeadlineClause, type HeadlineModel } from '../contract.js';
+import { HEADLINE_ORDER, type DimensionResult, type HeadlineClause, type HeadlineModel } from '../contract.js';
+import { isComparabilityReason } from './comparability.js';
+import { isFresh } from './findingFacts.js';
 import { compareStr } from './text.js';
-import { metricLevels, worst } from './verdict.js';
+import { isIntegrityError, metricLevels, worst } from './verdict.js';
 
 const SEVERITY_RANK = { error: 0, warn: 1, info: 2 } as const;
 
-const fresh = (f: DeltaFinding) => !f.presentNow && !f.waiver && (f.lineage === 'introduced' || f.lineage === 'changed');
-
 function worseClause(d: DimensionResult, integrityRules: ReadonlySet<string>): Omit<HeadlineClause, 'dimension' | 'verdict'> {
-    const open = d.findings.filter(fresh);
+    const fresh = d.findings.filter(isFresh);
     if (d.reasons.includes('tests-weakened')) {
-        return { code: 'tests-weakened', count: open.filter((f) => f.severity === 'error' && integrityRules.has(f.ruleId)).length };
+        return { code: 'tests-weakened', count: fresh.filter((f) => isIntegrityError(f, integrityRules)).length };
     }
     const byRule = new Map<string, { severity: number; count: number }>();
-    for (const f of open) {
+    for (const f of fresh) {
         const cur = byRule.get(f.ruleId) ?? { severity: 2, count: 0 };
         byRule.set(f.ruleId, { severity: Math.min(cur.severity, SEVERITY_RANK[f.severity]), count: cur.count + 1 });
     }
@@ -37,15 +38,20 @@ function worseClause(d: DimensionResult, integrityRules: ReadonlySet<string>): O
     return metric ? { code: `metric:${metric.metricId}`, count: 1 } : { code: 'worse', count: 0 };
 }
 
+function notComparableCode(reasons: readonly string[]): string {
+    if (reasons.includes('head-switched')) return 'head-switched';
+    return reasons.find((r) => r !== 'head-switched' && isComparabilityReason(r))
+        ?? (reasons.includes('before-unresolved') ? 'before-unresolved' : 'not-comparable');
+}
+
 function clauseOf(d: DimensionResult, integrityRules: ReadonlySet<string>): HeadlineClause {
     const base = { dimension: d.id, verdict: d.verdict };
     if (d.verdict === 'worse') return { ...base, ...worseClause(d, integrityRules) };
     if (d.verdict === 'better') {
-        const resolved = d.findings.filter((f) => !f.presentNow && f.lineage === 'resolved').length;
+        const resolved = d.findings.filter((f) => f.lineage === 'resolved').length;
         return { ...base, ...(resolved > 0 ? { code: 'findings-resolved', count: resolved } : { code: 'metrics-improved', count: 1 }) };
     }
-    const reason = d.reasons.find((r) => r !== 'not-comparable' && r !== 'static-only') ?? 'not-comparable';
-    return { ...base, code: reason, count: d.findings.filter((f) => f.presentNow).length };
+    return { ...base, code: notComparableCode(d.reasons), count: d.findings.filter((f) => f.lineage === 'present').length };
 }
 
 export function headlineModel(dimensions: readonly DimensionResult[], integrityRules: ReadonlySet<string>): HeadlineModel {

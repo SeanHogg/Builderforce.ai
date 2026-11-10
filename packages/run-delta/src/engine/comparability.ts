@@ -5,21 +5,28 @@
  * then routed to the rules it concerns:
  *  - `tool-missing:<t>`, `tool-version-changed:<t>`, `analyzer-failed:<t>` gate a rule whose
  *    `producers` (default `[rule.id]`) name `<t>`;
- *  - extractor reasons gate only rules that read extracted facts (`structure`/`body`); a `content`
- *    rule re-reads the normalized bytes itself, so an extractor change cannot skew it;
- *  - scope, repo, branch and truncation gate every rule.
+ *  - every other reason (extractor, content-hash rule, scope, repo, branch, truncation) describes the
+ *    extracted FACTS, so it gates only rules that read `structure`/`body` or are `global`. A `content`
+ *    rule re-reads both sides' normalized bytes itself; only `head-switched` stops it.
  */
 
 import { comparable, type ComparabilityMeta } from '@seanhogg/builderforce-memory/knowledge';
 import type { FactKind } from '../contract.js';
 
-const EXTRACTOR_REASONS: ReadonlySet<string> = new Set(['extractor-mismatch', 'extractor-version-changed', 'content-hash-rule-changed']);
 const TOOL_PREFIXES = ['tool-missing:', 'tool-version-changed:', 'analyzer-failed:'] as const;
+
+/** Whether a reason code is a comparability reason (memory's set, plus `head-switched`). */
+export function isComparabilityReason(reason: string): boolean {
+    return reason === 'head-switched'
+        || TOOL_PREFIXES.some((p) => reason.startsWith(p))
+        || /^(?:extractor-|content-hash-rule-changed$|scope-changed$|repo-changed$|branch-changed$|truncated$)/.test(reason);
+}
 
 export interface Gated {
     id: string;
     reads: readonly FactKind[];
     producers?: readonly string[];
+    scope?: 'impact' | 'global';
 }
 
 /** The meta reasons for this delta (sorted, deduped; empty = comparable). */
@@ -30,11 +37,10 @@ export function metaReasons(before: ComparabilityMeta, after: ComparabilityMeta)
 /** The subset of `reasons` that makes this rule's kind `not_comparable` (sorted, as given). */
 export function reasonsFor(rule: Gated, reasons: readonly string[]): string[] {
     const producers = new Set(rule.producers ?? [rule.id]);
-    const readsFacts = rule.reads.some((k) => k !== 'content');
+    const readsFacts = rule.scope === 'global' || rule.reads.some((k) => k !== 'content');
     return reasons.filter((reason) => {
         const prefix = TOOL_PREFIXES.find((p) => reason.startsWith(p));
         if (prefix) return producers.has(reason.slice(prefix.length));
-        if (EXTRACTOR_REASONS.has(reason)) return readsFacts;
-        return true;
+        return readsFacts;
     });
 }

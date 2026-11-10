@@ -24,7 +24,7 @@ export const snapshotUpdatedWithImpl: DeltaRule = {
                 ruleIdentity(snapshotUpdatedWithImpl, 'file', p.path, { members: [p.path] }),
                 'warn',
                 { file: p.path },
-                [{ side: 'before', path: p.before.path }, { side: 'after', path: p.after.path }],
+                [{ side: 'before', path: p.before.sidePath }, { side: 'after', path: p.after.sidePath }],
             ));
         }
         return { before: [], after };

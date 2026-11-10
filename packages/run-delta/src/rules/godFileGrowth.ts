@@ -24,8 +24,8 @@ export const godFileGrowth: DeltaRule = {
             if (!p.after || !isCodePath(p.path)) continue;
             const b = p.before ? lineCount(p.before.text) : 0, a = lineCount(p.after.text);
             if (a <= b || a <= GOD_FILE_LINES) continue;
-            const evidence: Evidence[] = [{ side: 'after', path: p.after.path, note: String(a) }];
-            if (p.before) evidence.push({ side: 'before', path: p.before.path, note: String(b) });
+            const evidence: Evidence[] = [{ side: 'after', path: p.after.sidePath, note: String(a) }];
+            if (p.before) evidence.push({ side: 'before', path: p.before.sidePath, note: String(b) });
             after.push(heuristicFinding(
                 ruleIdentity(godFileGrowth, 'file', p.path, { members: [p.path] }),
                 'warn',

@@ -16,11 +16,19 @@ export interface FixtureOptions {
     churn?: Record<string, number>;
     pastScores?: number[];
     mode?: RunChangeSetInput['mode'];
+    kind?: RunChangeSetInput['kind'];
     headSwitched?: boolean;
 }
 
 const encoder = new TextEncoder();
-const hash = (text: string) => contentHash(encoder.encode(text));
+/** The real content hash for ordinary fixtures; a cheap EOL-normalized FNV for multi-MB perf fixtures (test cost only). */
+const hash = (text: string): string => {
+    if (text.length < 65_536) return contentHash(encoder.encode(text));
+    const s = text.replace(/\r\n?/g, '\n');
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193) >>> 0;
+    return `fnv:${s.length}:${h.toString(16)}`;
+};
 
 export function facts(partial: Partial<SideFacts> = {}): SideFacts {
     return {
@@ -56,7 +64,10 @@ export function fixture(before: Files, after: Files, opts: FixtureOptions = {}):
         pastScores: async () => opts.pastScores ?? [],
     };
     return {
-        input: { runId: 'run-1', mode: opts.mode ?? 'interactive', files, ...(opts.headSwitched ? { headSwitched: true } : {}) },
+        input: {
+            runId: 'run-1', mode: opts.mode ?? 'interactive', files,
+            ...(opts.headSwitched ? { headSwitched: true } : {}), ...(opts.kind ? { kind: opts.kind } : {}),
+        },
         ports,
     };
 }

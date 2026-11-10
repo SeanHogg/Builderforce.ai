@@ -14,7 +14,11 @@
 import type { FindingIdentity } from '@seanhogg/builderforce-memory/knowledge';
 
 export type Verdict = 'better' | 'worse' | 'same' | 'not_comparable' | 'not_measured';
-export type Lineage = 'introduced' | 'resolved' | 'changed' | 'persisting';
+/**
+ * `present` = shown as "present now" WITHOUT lineage (C9): the finding's kind is not comparable for
+ * this delta, or its file's before side could not be resolved. It never counts toward a verdict.
+ */
+export type Lineage = 'introduced' | 'resolved' | 'changed' | 'persisting' | 'present';
 export type Severity = 'info' | 'warn' | 'error';
 
 /** `security`, `performance`, `quality`, or one ISO/IEC 25010 sub-dimension `ilities.<char>`. */
@@ -38,7 +42,7 @@ export interface Evidence {
     side: 'before' | 'after';
     path: string;
     line?: number;
-    /** A short excerpt, already redacted by the rule when it may hold a secret. */
+    /** A short excerpt. Every string of a finding is redacted (`@builderforce/secret-redaction`) before it leaves the engine. */
     snippet?: string;
     /** e.g. a route key, a guard name, a metric id. */
     note?: string;
@@ -58,11 +62,6 @@ export interface DeltaFinding {
     params: Record<string, string | number>;
     evidence: Evidence[];
     waiver?: { by: string; reason: string; at: string };
-    /**
-     * C9: the finding's kind is `not_comparable` for this delta, so it is shown as "present now"
-     * WITHOUT lineage (`lineage` is then `persisting` by convention and carries no meaning).
-     */
-    presentNow?: true;
 }
 
 export interface MetricDelta {
@@ -107,7 +106,12 @@ export interface RunDelta {
     before: { manifestGeneration: string; merkleRoot: string; baseCommit?: string };
     after: { manifestGeneration: string; merkleRoot: string };
     impact: { changedFiles: string[]; renamed: Array<{ from: string; to: string }>; dependents: string[]; entryPoints: string[] };
-    /** Files outside the verdicts, with the reason (changed outside this run, unresolved before side, …). */
+    /**
+     * Files the delta could not fully compare, with the reason. `changed-outside-run`, `binary`,
+     * `changed-ignored` and `submodule-moved` files are outside the verdicts entirely. A file whose BEFORE
+     * side is unresolved (`preimage-*`, `git-unavailable`) is still analyzed on its after side, and its
+     * findings show with lineage `present`.
+     */
     excluded: UnresolvedFile[];
     /** Sorted by dimension id. Every registered dimension is present, measured or not. */
     dimensions: DimensionResult[];
@@ -120,7 +124,14 @@ export interface RunDelta {
      * when fewer than 5 past scores exist, so the band is `low` by default).
      */
     blastRadius: { score: number; band: 'low' | 'medium' | 'high'; formula: 'v1'; reasons: string[] };
-    /** Rule ids whose introduced/changed findings block finalization of an autonomous run (§12.5 policy). Empty for interactive runs. */
+    /**
+     * Why finalization of an autonomous run is blocked (§12.5); empty = not blocked, and always empty for
+     * interactive runs. Sorted codes, FAIL-CLOSED:
+     *  - `<ruleId>`: a blocking rule has an introduced/changed ERROR finding;
+     *  - `not-comparable:<ruleId>`: a blocking rule could not certify the run (its kind is not comparable,
+     *    or it threw);
+     *  - `head-switched`: HEAD moved to an unrelated branch, so no blocking rule ran.
+     */
     blocking: string[];
     narrative?: { text: string; model: string; inputDigest: string };
     /** sha256 of the canonical delta without `narrative` (B8.2: every number quantized). */
@@ -175,8 +186,15 @@ export interface RunChangeSetInput {
     baseCommit?: string;
     /** HEAD at finalization moved to an unrelated branch ⇒ the whole delta is `not_comparable` (`head-switched`). */
     headSwitched?: boolean;
+    /**
+     * What the run set out to do. `consolidation` runs must leave tests unchanged (C8.2), so
+     * `assertion-edited-with-impl` is an error for them. Absent = `standard`.
+     */
+    kind?: RunKind;
     files: ChangedFileInput[];
 }
+
+export type RunKind = 'standard' | 'consolidation';
 
 /** A side's text of one file. `undefined` text = the file does not exist on that side. */
 export interface SideText {
@@ -203,14 +221,16 @@ export interface SideFacts {
 export interface DeltaPorts {
     /** Text of the given paths on one side (C1 resolution: extract cache / git / pre-images; after = working tree). */
     texts(side: 'before' | 'after', paths: readonly string[]): Promise<Map<string, SideText | UnresolvedFile>>;
-    /** Facts and findings of one side. `before` is the after graph with the changed files swapped to their before extracts. */
+    /**
+     * Facts and findings of one side. `before` is the after graph with the run's IN-RUN changed files only
+     * (attribution `run-authored` / `run-modified-existing`) swapped to their before extracts; files changed
+     * outside the run keep their current facts on both sides, so they never read as a run's change.
+     */
     facts(side: 'before' | 'after'): Promise<SideFacts>;
     /** 90-day churn per file (commits touching it); empty map when unknown (blast radius uses 0). */
     churn(paths: readonly string[]): Promise<Map<string, number>>;
     /** Past blast-radius scores of this repo, for the percentile bands (C10). */
     pastScores(): Promise<number[]>;
-    /** Optional analyzers (L3). A missing port or a failed run makes the rules that need it `not_measured`, never zero. */
-    analyze?(tool: string, side: 'before' | 'after', scope: readonly string[]): Promise<{ measuredBy: MeasuredBy; findings: SideFacts['findings'] }>;
 }
 
 // ─── Registry ────────────────────────────────────────────────────────────────
@@ -228,8 +248,10 @@ export interface RuleInput {
     after: ReadonlyMap<string, SideText>;
     beforeFacts: SideFacts;
     afterFacts: SideFacts;
-    /** Repo overrides from `.builderforce/delta.json` merged over the built-in registries. */
+    /** Repo overrides from `.builderforce/delta.json` merged over the built-in registries (BEFORE side; see {@link DimensionRegistry}). */
     registries: DeltaRegistries;
+    /** {@link RunChangeSetInput.kind}, defaulted to `standard`. */
+    runKind: RunKind;
 }
 
 /** A rule's raw output on ONE side, before lineage. */
@@ -248,8 +270,10 @@ export interface DeltaRule {
     reads: readonly FactKind[];
     /**
      * C9: the `ComparabilityMeta.tools` names (tools or upstream rules) whose version change, absence on
-     * one side or failure makes this rule's kind `not_comparable`. Default `[id]`. Extractor reasons gate
-     * only rules that read `structure` or `body`; scope/repo/branch/truncation gate every rule.
+     * one side or failure makes this rule's kind `not_comparable`. Default `[id]`. Every other meta reason
+     * (extractor, scope, repo, branch, truncation) gates only rules that read extracted facts (`structure`
+     * / `body`) or are `global`: a `content` rule re-reads both sides' bytes itself, so only `head-switched`
+     * stops it.
      */
     producers?: readonly string[];
     /**
@@ -287,10 +311,20 @@ export interface DeltaRegistries {
     suppressions: readonly string[];
     /** Matcher strength classes, strongest first. */
     matchers: readonly (readonly string[])[];
-    /** Rule ids that block an autonomous run's finalization when introduced or changed (§12.5). */
+    /**
+     * Rule ids that block an autonomous run's finalization (§12.5) when they have an introduced or changed
+     * finding at ERROR severity, or cannot certify the run ({@link RunDelta.blocking}). A warn-level rule
+     * listed here never blocks.
+     */
     blocking: readonly string[];
 }
 
+/**
+ * The registry a delta runs with. SECURITY: a host merging a repo's `.builderforce/delta.json`
+ * (`withOverrides`) MUST read that file from the run's BEFORE side, never the working tree: a run must
+ * not be able to weaken its own gate. A change to the file within the run is itself the blocking
+ * `delta-config-changed` finding.
+ */
 export interface DimensionRegistry {
     dimensions: readonly DimensionId[];
     rules: readonly DeltaRule[];

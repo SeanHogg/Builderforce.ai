@@ -7,8 +7,8 @@
  * over the whole tree, and changed/persisting findings outside the impact set are dropped.
  */
 
-import { pathOfRef } from '@seanhogg/builderforce-memory/knowledge';
 import type { DeltaRule, RuleFinding, SideFacts } from '../contract.js';
+import { memberPath } from '../engine/findingFacts.js';
 
 /** Kind → the `ComparabilityMeta.tools` names whose version gates it (registry data). */
 export const FACT_FINDING_KINDS: Readonly<Record<string, readonly string[]>> = {
@@ -27,7 +27,7 @@ function ofKind(facts: SideFacts, kind: string, side: 'before' | 'after'): RuleF
         severity: f.severity,
         confidence: 'measured',
         params: f.params,
-        evidence: f.identity.members.map((m) => ({ side, path: pathOfRef(m) ?? m.split('#')[0]!, note: kind })),
+        evidence: f.identity.members.map((m) => ({ side, path: memberPath(m), note: kind })),
     }));
 }
 

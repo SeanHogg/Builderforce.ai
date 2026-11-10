@@ -774,11 +774,11 @@ interface RunDelta {
   digest: string;                         // sha256(canonical(delta without narrative))
 }
 
-interface DeltaPorts {
-  facts(gen: string, paths: string[]): Promise<Map<string, FileFacts>>;
-  findings(gen: string): Promise<Finding[]>;
-  analyze(tool: AnalyzerId, side: 'before' | 'after', scope: string[]): Promise<AnalyzerRecord>;
-  metrics(side: 'before' | 'after', ids: string[]): Promise<MetricSample[]>;
+interface DeltaPorts {                    // as built in packages/run-delta/src/contract.ts
+  texts(side: 'before' | 'after', paths: readonly string[]): Promise<Map<string, SideText | UnresolvedFile>>;
+  facts(side: 'before' | 'after'): Promise<SideFacts>;   // before = after graph with IN-RUN files swapped to their before extracts
+  churn(paths: readonly string[]): Promise<Map<string, number>>;   // 90-day commits per file
+  pastScores(): Promise<number[]>;                        // the repo's past blast-radius scores (C10 bands)
 }
 
 computeRunDelta(input: RunChangeSet, registry: DimensionRegistry, ports: DeltaPorts): Promise<RunDelta>;
