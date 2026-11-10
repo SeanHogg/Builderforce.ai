@@ -42,6 +42,11 @@ export interface HostRunLifecycleDeps {
    * journaled instead of the status. Absent: every run is finished as observed.
    */
   beforeTerminal?(run: { runId: string; chatId: number; status: RunTerminalStatus }): Promise<RunHold | undefined>;
+  /**
+   * Told once the run's terminal write settled (landed or failed): with its `hold` when it was held. What waits on the
+   * journal (a release of a just-held run, the start that reports on it) waits for this.
+   */
+  onTerminal?(run: { runId: string; hold?: RunHold }): void;
   log(line: string): void;
   now?: () => Date;
 }
@@ -81,8 +86,13 @@ export function createHostRunLifecycle(deps: HostRunLifecycleDeps): HostRunLifec
     const hold = deps.beforeTerminal
       ? await deps.beforeTerminal({ runId, chatId, status }).catch((error: unknown) => (report("hold gate", runId)(error), undefined))
       : undefined;
-    if (hold && status === "completed") return deps.recovery.recordHeld({ runId, hold }).catch(report("held", runId));
-    return deps.recovery.recordFinished({ runId, status }).catch(report(status, runId));
+    const held = hold && status === "completed" ? hold : undefined;
+    try {
+      if (held) await deps.recovery.recordHeld({ runId, hold: held }).catch(report("held", runId));
+      else await deps.recovery.recordFinished({ runId, status }).catch(report(status, runId));
+    } finally {
+      deps.onTerminal?.({ runId, ...(held ? { hold: held } : {}) });
+    }
   };
 
   return {

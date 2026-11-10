@@ -10,7 +10,7 @@ import * as vscode from "vscode";
 import { getGlobalRunState, getRunSnapshot, isRunning, type BrainPersistenceAdapter, type BrainStreamFn, type LocalChatIdentity, type ModelFallbackEvent, utilityUsageObserver } from "@seanhogg/builderforce-brain-embedded";
 import { getApiKey, postRunOutcome } from "./gateway";
 import { activeEntityScope } from "./chatAccount";
-import { fetchRunContextSection, getCurrentUserId, projectEvermindHooks } from "./bfApi";
+import { activeWorkspaceManager, fetchRunContextSection, getCurrentUserId, projectEvermindHooks } from "./bfApi";
 import { localBrainApplication } from "./localFirstStore";
 import { hostLog } from "./hostLog";
 import { editorRunSettings } from "./editorRunSettings";
@@ -35,7 +35,8 @@ import { editorShipPorts } from "./verify/editorShipPorts";
 import { gateStarts } from "./hostStartGate";
 import { changeSetIdentityForHostRun, recordChangeSetAroundRun } from "./runChangeSets";
 import { editorRunDelta } from "./runDelta/editorRunDelta";
-import { releaseHeldRun, releaserOf } from "./runDelta/releaseHeldRun";
+import { authorizeRelease } from "./runDelta/releaseAuthority";
+import { RELEASE_JOURNAL_WAIT_MS, releaseHeldRun } from "./runDelta/releaseHeldRun";
 import { installRunRecovery } from "./installRunRecovery";
 import { createHostRunLifecycle } from "./hostRunLifecycle";
 import { installLocalDomainTools, type DomainToolRequest } from "./installLocalDomainTools";
@@ -289,6 +290,8 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     log: hostLog,
     // §12.5: an autonomous run's terminal status waits for its delta; blocking codes hold it (`runDelta/runHoldGate.ts`).
     beforeTerminal: delta.hold.beforeTerminal,
+    // The terminal write (or hold) landed: a release of the just-held run, and the start that reports on it, wait for it.
+    onTerminal: delta.hold.journaled,
   });
   const detachLifecycle = host.attach(lifecycle.sink);
   // A commit while chats run may have bound one of them (the run's own bind, a sync
@@ -318,7 +321,15 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     // §12.5: a person's audited release of a run held at its finalize gate (`runDelta/releaseHeldRun.ts`).
     releaseHeldRun: async (runId) => {
       await releaseHeldRun({
-        recovery, store: local.store, by: () => releaserOf(() => getCurrentUserId(secrets)),
+        recovery, store: local.store,
+        journaled: (id) => delta.hold.whenJournaled(id, RELEASE_JOURNAL_WAIT_MS),
+        // A signed-in person; on a board, with its approver authority (`runDelta/releaseAuthority.ts`).
+        releaser: (id) => authorizeRelease({
+          store: local.store,
+          currentUserId: () => getCurrentUserId(secrets),
+          isApprover: () => activeWorkspaceManager(secrets),
+          chatClientId: async (chatId) => (await local.identity.clientIdFor(chatId)) ?? undefined,
+        }, id),
         repost: delta.repost, log: (what, error) => hostLog(`[run delta] ${what}: ${String(error)}`),
       }, runId);
     },
@@ -332,7 +343,7 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
         if (mode === "autonomous") delta.hold.expect(runId);
         runWrites.delete(payload.chatId); // this turn's evidence only
       }
-      await recordChangeSetAroundRun(
+      const recorded = recordChangeSetAroundRun(
         {
           store: local.store,
           deviceId,
@@ -346,12 +357,22 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
             mode,
             writes: () => runWrites.get(payload.chatId),
             ...(workspaceRoot() ? { workspaceRoot: workspaceRoot() } : {}),
+            // PRD 41 §C14: the delta syncs with the chat's project, so the web lists it under that project.
           }),
         },
         start,
       );
-      // An autonomous start resolves after the gate's verdict: whoever awaits it (an audit) never reports a held run complete.
-      if (mode === "autonomous") await delta.hold.verdict(runId);
+      if (mode !== "autonomous") return void (await recorded);
+      try {
+        await recorded;
+      } catch (error) {
+        delta.hold.forget(runId); // nobody will read this run's verdict
+        throw error;
+      }
+      // An autonomous start resolves after the gate's verdict AND its journaling: whoever awaits it (an audit) reads the
+      // execution's hold and never reports a held run complete.
+      await delta.hold.verdict(runId);
+      await delta.hold.whenJournaled(runId, RELEASE_JOURNAL_WAIT_MS * 2);
     }),
     dispose() {
       offBindings();

@@ -166,11 +166,58 @@ export interface RunDeltaOverrides {
     dropped: DroppedOverride[];
 }
 
+/**
+ * §12.5 hold reasons, as the run's execution record carries them (`hold.reason`): `run_delta_blocking:<rule ids>` when
+ * its delta computed blocking codes, {@link RUN_DELTA_UNMEASURED} when an autonomous run that changed files could not be
+ * measured (its delta failed or timed out: fail-closed). Both are released the same way.
+ */
+export const RUN_DELTA_HOLD_PREFIX = 'run_delta_blocking:';
+export const RUN_DELTA_UNMEASURED = 'run_delta_unmeasured';
+
+/**
+ * Why `run-delta/release` was refused — the error code the host answers with, one per case the card says differently:
+ * the run is not (or no longer) held, its hold is still being recorded, the release failed, the person is signed out (or
+ * their identity could not be read), or the run is on a board and they lack its approver authority.
+ */
+export const RUN_DELTA_RELEASE_REFUSED = {
+    notHeld: 'run_delta_release_refused:not_held',
+    pending: 'run_delta_release_refused:pending',
+    error: 'run_delta_release_refused:error',
+    identityRequired: 'run_delta_release_identity_required',
+    notApprover: 'run_delta_release_refused:not_approver',
+} as const;
+export type RunDeltaReleaseRefusal = keyof typeof RUN_DELTA_RELEASE_REFUSED;
+
+/** A refusal's kind from the host's error text; anything unrecognised (a timeout, an older host) is `error`. */
+export function releaseRefusalOf(message: string): RunDeltaReleaseRefusal {
+    for (const [kind, code] of Object.entries(RUN_DELTA_RELEASE_REFUSED)) {
+        if (message === code) return kind as RunDeltaReleaseRefusal;
+    }
+    return 'error';
+}
+
+/** `run-delta/open` refused: the path is not one the stored delta names, under its root. */
+export const RUN_DELTA_OPEN_REFUSED = 'run_delta_open_refused';
+
+/**
+ * §12.5: the run is HELD at its finalize gate (awaiting review, not complete), as its execution record says — never the
+ * delta record's own claim. `rules`: the blocking rule ids that held it (empty for an unmeasured hold); `unmeasured`: it
+ * was held because its delta could not be measured.
+ */
+export interface RunDeltaHeld {
+    rules: string[];
+    unmeasured?: boolean;
+}
+
 /** The card fields every state carries. `at`: the transcript message the run produced (its last reply), the card's anchor. */
 export interface RunDeltaCardBase {
     chatId: number;
     runId: string;
     at?: number;
+    /** The run's hold (§12.5), read from its execution record. Absent: not held. */
+    blocked?: RunDeltaHeld;
+    /** A held run the person released ("Release run"): the hold no longer stands. */
+    released?: boolean;
 }
 
 /** A computed delta for one repository. `status` absent = computed (records written before the field existed). */
@@ -182,15 +229,12 @@ export interface ComputedRunDeltaCard extends RunDeltaCardBase {
     root: string;
     delta: RunDelta;
     overrides?: RunDeltaOverrides;
-    /** §12.5: the blocking rule ids that HELD this autonomous run at its finalize gate (it is awaiting review, not complete). */
-    blocked?: { rules: string[] };
-    /** A held run the person released ("Release run"): the hold no longer stands. */
-    released?: boolean;
 }
 
 /**
  * A run whose delta is not (yet) there, one per run: `pending` while it computes, `failed` when the computation ended
- * (an error, or its budget ran out) without a delta for any repository. A computed card replaces it.
+ * (an error, or its budget ran out) without a delta for any repository. A computed card replaces it. A `failed` card of
+ * an autonomous run carries `blocked.unmeasured` once its run is held for it.
  */
 export interface RunDeltaProgressCard extends RunDeltaCardBase {
     status: 'pending' | 'failed';

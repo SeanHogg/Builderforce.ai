@@ -30,6 +30,7 @@ import {
   type RunWaiver,
   type TerminalExecutionStatus,
 } from "@builderforce/local-first";
+import { RUN_DELTA_HOLD_PREFIX, RUN_DELTA_RELEASE_REFUSED, RUN_DELTA_UNMEASURED } from "@builderforce/run-delta/contract";
 import { childrenOfRecord } from "./childRunJournal";
 
 export const RUN_LIFECYCLE_SCHEMA_VERSION = 1;
@@ -46,15 +47,19 @@ export type RunTerminalStatus = TerminalExecutionStatus;
 
 export type { RunHold, RunWaiver };
 
-/** The finalize gate's hold reason prefix (`runDelta/runHoldGate.ts`): the only hold a person may release. */
-export const RUN_DELTA_HOLD_PREFIX = "run_delta_blocking:";
+export { RUN_DELTA_HOLD_PREFIX, RUN_DELTA_UNMEASURED };
 
-/** Refused: the run is not held at its finalize gate (absent, not `awaiting_input`, or held for another reason). */
-export const RUN_DELTA_RELEASE_REFUSED = "run_delta_release_refused";
+/**
+ * Is this hold the finalize gate's (`runDelta/runHoldGate.ts`)? Blocking codes (`run_delta_blocking:<ids>`) or an
+ * unmeasured autonomous run (`run_delta_unmeasured`): the only holds a person may release.
+ */
+export function isRunDeltaHold(hold: RunHold | undefined): hold is RunHold {
+  return !!hold && (hold.reason.startsWith(RUN_DELTA_HOLD_PREFIX) || hold.reason === RUN_DELTA_UNMEASURED);
+}
 
 /** Is this execution held at its finalize gate, and so releasable? */
 export function isReleasableHold(run: ExecutionValue | undefined): run is ExecutionValue & { hold: RunHold } {
-  return run?.status === "awaiting_input" && !!run.hold && run.hold.reason.startsWith(RUN_DELTA_HOLD_PREFIX);
+  return run?.status === "awaiting_input" && isRunDeltaHold(run.hold);
 }
 
 /** Thrown, before the store is touched, when a start names no run. */
@@ -201,8 +206,8 @@ export async function recordRunHeld(
 
 /**
  * A person's audited release of a run held at its finalize gate: `completed`, with its `hold` kept and the `waiver` (who,
- * when, the hold's rules) beside it. Any other run — absent, not held, held for another reason — rejects with
- * {@link RUN_DELTA_RELEASE_REFUSED} and nothing is written. Returns the waiver.
+ * when, the hold's rules) beside it. Any other run — absent, not held, held for another reason, already released —
+ * rejects with `RUN_DELTA_RELEASE_REFUSED.notHeld` and nothing is written. Returns the waiver.
  */
 export async function recordRunReleased(
   store: LocalFirstStore,
@@ -212,7 +217,7 @@ export async function recordRunReleased(
   const at = (deps.now?.() ?? new Date()).toISOString();
   return store.transact(async (tx) => {
     const run = await tx.get<ExecutionValue>("execution", args.runId);
-    if (!run || !isReleasableHold(run.payload)) throw new Error(RUN_DELTA_RELEASE_REFUSED);
+    if (!run || !isReleasableHold(run.payload)) throw new Error(RUN_DELTA_RELEASE_REFUSED.notHeld);
     const waiver: RunWaiver = { by: args.by, at, rules: [...run.payload.hold.rules] };
     await tx.put<ExecutionValue>(
       { ...run, version: run.version + 1, updatedAt: at, payload: { ...run.payload, status: "completed", waiver } },

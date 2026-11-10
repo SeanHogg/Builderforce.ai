@@ -30,6 +30,7 @@
       "@builderforce/ide-templates": ["../../packages/ide-templates/src/index.ts"],
       "@builderforce/run-context": ["../../packages/run-context/src/index.ts"],
       "@builderforce/run-delta": ["../../packages/run-delta/src/index.ts"],
+      "@builderforce/run-delta/contract": ["../../packages/run-delta/src/contract.ts"],
       "@builderforce/agent-tools/code-mask": ["../../packages/agent-tools/src/knowledge/codeMask.ts"],
       "@builderforce/secret-redaction": ["../../packages/secret-redaction/src/index.ts"],
       "@builderforce/run-guards": ["../../packages/run-guards/src/index.ts"],

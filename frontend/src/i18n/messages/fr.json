@@ -38444,7 +38444,7 @@
           "unknown": "L'étape a échoué."
         },
         "codemod": {
-          "unusedExport": "Supprimer les exports inutilisés",
+          "unusedExport": "Supprimer cet export inutilisé",
           "unusedFile": "Supprimer les fichiers inutilisés",
           "unusedDependency": "Supprimer les dépendances inutilisées",
           "splitByCommand": "Scinder par groupe de commandes",
@@ -39037,6 +39037,7 @@
     "pendingCard": "Mesure de ce que cette exécution a changé…",
     "failedCard": "Non mesuré : impossible de mesurer ce que cette exécution a changé.",
     "held": "Retenue : à examiner",
+    "heldUnmeasured": "Non mesurée : retenue pour revue",
     "heldRules": "Bloquée par {rules}",
     "releaseRun": "Libérer l’exécution",
     "releaseConfirmTitle": "Libérer cette exécution ?",
@@ -39044,6 +39045,10 @@
     "releaseConfirmLabel": "Libérer",
     "released": "Libérée par vous",
     "releaseRefused": "Impossible de libérer cette exécution : elle n’est plus retenue.",
+    "releasePending": "La retenue est encore en cours d’enregistrement. Réessayez dans un instant.",
+    "releaseError": "Impossible de libérer cette exécution. Réessayez.",
+    "releaseIdentityRequired": "Connectez-vous pour libérer cette exécution.",
+    "releaseNotApprover": "Seul un approbateur de ce tableau peut libérer cette exécution.",
     "overridesHeading": "Remplacements ignorés",
     "overrides": {
       "unknownKey": "Paramètre inconnu « {section} »",

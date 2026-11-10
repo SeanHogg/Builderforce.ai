@@ -5,8 +5,8 @@
  *
  * It must never fail the run: {@link startRunDelta} is called from the change set's `onFinalized` (after the run settled,
  * never awaited), catches everything into `onError`, and abandons a computation that outlives its budget — that delta is
- * then simply absent (nothing is stored or posted late). Only an autonomous run's terminal status waits for it, through the
- * finalize gate (below).
+ * then absent (nothing is stored or posted late; an autonomous run is held unmeasured for it). Only an autonomous run's
+ * terminal status waits for it, through the finalize gate (below).
  *
  * The registry is the built-in one merged with the repository's `.builderforce/delta.json` AS OF THE BASELINE (the engine's
  * `DELTA_CONFIG_PATH`; a change to it within the run is the engine's own blocking `delta-config-changed`). The run's `kind`
@@ -16,9 +16,11 @@
  * budget terminates.
  *
  * POLICY (§12.5). An autonomous run carries a {@link RunHoldPort} (`runHoldGate.ts`): the run host holds back its terminal
- * status until its deltas settle (within the budget), and a delta's blocking codes, reported through `block`, hold the run
- * (`awaiting_input` with those rule ids) instead of letting it complete. The record's `blocked` is exactly what the gate
- * accepted: absent for an interactive run, and for codes computed after the verdict was given.
+ * status until its deltas settle (within the gate's deadline, which starts at hand-off), and a delta's blocking codes,
+ * reported through `block` ONLY AFTER its record is stored and while the computation is still live, hold the run
+ * (`awaiting_input` with those rule ids). A delta that fails, is abandoned or is not stored reports `unmeasured`: the run
+ * is held for review (fail-closed). The record carries no hold of its own: whether the run is held, or was released, is
+ * its execution record's `hold` / `waiver`, which the cards read (`runHoldState.ts`).
  *
  * Pre-images: the run's hold on them is released once its deltas are settled (recorded or failed), and expired rows are
  * swept, in each repository's knowledge file (`deps.release`). A run that never finalizes (a crash, a closed editor) has its
@@ -179,13 +181,10 @@ async function repoDelta(
     onError: deps.onError,
   });
   const delta = await computeInWorker(prepared, signal);
-  // Reported as soon as computed, before the store: a computed blocking code holds the run even if its record is late.
-  const held = delta.blocking.length > 0 && run.hold?.block(delta.blocking) === true;
   return {
     value: {
       runId, repository, changeSetId: set.id, chatId: run.chatId, mode: run.mode, delta,
       computedMs: Date.now() - started,
-      ...(held ? { blocked: { rules: [...delta.blocking] } } : {}),
       ...(dropped.length > 0 ? { overridesDropped: redactDropped(dropped) } : {}),
     },
     local: { kind: "local", runId, chatId: run.chatId, root: set.root, repo: cs.repository, ...(run.at !== undefined ? { at: run.at } : {}) },
@@ -214,15 +213,25 @@ export async function finalizeRunDelta(
     for (const set of run.closed.committed) {
       try {
         const value = await repoDelta(deps, run, set, await sourcesOf(set.root), signal);
-        if (!value || !live()) continue;
+        if (!value || !live()) {
+          run.hold?.unmeasured(); // its change set is gone, or the budget ran out: this repository was not measured
+          continue;
+        }
         const stored = await storeRunDelta(deps.store, { deviceId: deps.deviceId(), at: nowOf(deps).toISOString(), ...(deps.destination ? { destination: deps.destination } : {}) }, value, live);
-        if (!stored || !live()) continue;
+        if (!live()) {
+          run.hold?.unmeasured();
+          continue;
+        }
+        if (!stored) continue; // an earlier finalization of this run stored (and reported) it
+        // Stored and live: only now may its blocking codes hold the run, so a hold always has the record behind it.
+        if (value.value.delta.blocking.length > 0) run.hold?.block(value.value.delta.blocking);
         const card = cardOf(value);
         cards.push(card);
         deps.post(card);
         deps.telemetry(eventOf(value));
       } catch (error) {
-        deps.onError(error); // this repository's delta is absent; the others still run
+        deps.onError(error); // this repository's delta is absent (fail-closed: not measured); the others still run
+        run.hold?.unmeasured();
       }
     }
   } finally {
@@ -233,8 +242,9 @@ export async function finalizeRunDelta(
 
 /**
  * {@link finalizeRunDelta}, bounded and detached: never rejects, and past `budgetMs` it is abandoned (logged through
- * `onError`); nothing is stored or posted after that. Either way the run's hold port is then told it settled. The promise
- * is for tests and shutdown; the run never waits on it (an autonomous run's terminal status waits on the gate instead).
+ * `onError`, and reported `unmeasured` to the hold port); nothing is stored or posted after that. Either way the run's
+ * hold port is then told it settled. The promise is for tests and shutdown; the run never waits on it (an autonomous
+ * run's terminal status waits on the gate instead).
  */
 export function startRunDelta(deps: RunDeltaDeps, run: RunDeltaRun): Promise<void> {
   let live = true;
@@ -246,10 +256,14 @@ export function startRunDelta(deps: RunDeltaDeps, run: RunDeltaRun): Promise<voi
       live = false;
       abort.abort(); // terminates the engine's worker
       deps.onError(new Error(`run_delta_budget: the delta of run ${run.closed.runId} took longer than ${budget} ms and was abandoned`));
+      run.hold?.unmeasured();
       resolve();
     }, budget);
   });
-  const work = finalizeRunDelta(deps, run, () => live, abort.signal).then(() => undefined, (error: unknown) => deps.onError(error));
+  const work = finalizeRunDelta(deps, run, () => live, abort.signal).then(() => undefined, (error: unknown) => {
+    deps.onError(error);
+    run.hold?.unmeasured();
+  });
   return Promise.race([work, timeout]).finally(() => {
     if (timer) clearTimeout(timer);
     run.hold?.settled();

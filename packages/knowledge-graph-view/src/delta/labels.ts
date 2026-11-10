@@ -99,13 +99,20 @@ export interface RunDeltaLabels {
     failedCard: string;
     /** §12.5: an autonomous run held at its finalize gate. `{rules}` = the blocking rules, localized and joined. */
     held: string;
+    /** A run held because what it changed could not be measured (fail-closed): "Not measured: held for review". */
+    heldUnmeasured: string;
     heldRules: string;
     releaseRun: string;
     releaseConfirmTitle: string;
     releaseConfirmMessage: string;
     releaseConfirmLabel: string;
     released: string;
+    /** One per refusal the host answers (`RUN_DELTA_RELEASE_REFUSED`): no longer held, still being recorded, failed, signed out, not an approver. */
     releaseRefused: string;
+    releasePending: string;
+    releaseError: string;
+    releaseIdentityRequired: string;
+    releaseNotApprover: string;
     /** The panel's ignored `.builderforce/delta.json` entries, one label per `DroppedOverrideCode` (`unsafe-regex` with a reason reads `reasons.unsafeRegex`). */
     overridesHeading: string;
     overrides: {
@@ -292,6 +299,7 @@ export const DEFAULT_RUN_DELTA_LABELS: RunDeltaLabels = {
     pendingCard: 'Measuring what this run changed…',
     failedCard: 'Not measured: what this run changed could not be measured.',
     held: 'Held: needs review',
+    heldUnmeasured: 'Not measured: held for review',
     heldRules: 'Blocked by {rules}',
     releaseRun: 'Release run',
     releaseConfirmTitle: 'Release this run?',
@@ -299,6 +307,10 @@ export const DEFAULT_RUN_DELTA_LABELS: RunDeltaLabels = {
     releaseConfirmLabel: 'Release',
     released: 'Released by you',
     releaseRefused: 'This run could not be released: it is no longer held.',
+    releasePending: 'The hold is still being recorded. Try again in a moment.',
+    releaseError: 'This run could not be released. Try again.',
+    releaseIdentityRequired: 'Sign in to release this run.',
+    releaseNotApprover: 'Only an approver on this board can release this run.',
     overridesHeading: 'Overrides ignored',
     overrides: {
         unknownKey: 'Unknown setting “{section}”',

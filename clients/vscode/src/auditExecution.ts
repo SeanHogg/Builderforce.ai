@@ -8,6 +8,7 @@ import { AuditResultsPanel } from './auditResultsPanel';
 import { registerAuditFindingsSink } from './auditToolCatalog';
 import { findRepository, getGitApi } from './gitApi';
 import { localBrainApplication } from './localFirstStore';
+import { readRunHold } from './runDelta/runHoldState';
 import { platformPolicy } from './platformPolicy';
 import { closeAuditLocally, readClosedAudit, refuseCloudLaunch, type DurableAuditClose } from './auditCloseCheckpoint';
 import {
@@ -55,16 +56,18 @@ export class AuditExecution implements vscode.Disposable {
   }
 
   /**
-   * PRD 41 §12.5: an audit is autonomous, so its run is HELD when its run delta computed blocking codes (the host's start
-   * resolves after that verdict; the rules are on its run-delta cards). A held audit is never reported complete: its
-   * conversation opens and the rules are named instead. True when it was held.
+   * PRD 41 §12.5: an audit is autonomous, so its run is HELD when its run delta stored blocking codes, or when its
+   * changes could not be measured (the host's start resolves after that verdict is journaled). Held is what the run's
+   * EXECUTION says (`runHoldState.ts`, the same source as its cards), never a card's own claim. A held audit is never
+   * reported complete: its conversation opens and the hold is named instead. True when it was held.
    */
   private async reportHeld(runId: string, chatId: number): Promise<boolean> {
-    const cards = (await this.host.runDeltas?.({ runId }).catch(() => [])) ?? [];
-    const rules = [...new Set(cards.flatMap((card) => ("blocked" in card ? card.blocked?.rules : undefined) ?? []))];
-    if (rules.length === 0) return false;
+    const state = await readRunHold(localBrainApplication(this.ctx).store, runId).catch(() => undefined);
+    if (!state || state.released) return false;
     await openWorkspace(this.ctx, { kind: 'focus', chatId });
-    void vscode.window.showWarningMessage(vscode.l10n.t('The audit is held for review, not complete: its changes hit blocking rules ({0}).', rules.join(', ')));
+    void vscode.window.showWarningMessage(state.blocked.rules.length > 0
+      ? vscode.l10n.t('The audit is held for review, not complete: its changes hit blocking rules ({0}).', state.blocked.rules.join(', '))
+      : vscode.l10n.t('The audit is held for review, not complete: what its changes did could not be measured.'));
     return true;
   }
 

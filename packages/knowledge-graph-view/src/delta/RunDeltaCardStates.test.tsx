@@ -54,6 +54,25 @@ describe('a held run on its card', () => {
         expect(released.queryByText(L.held)).toBeNull();
     });
 
+    it('shows an unmeasured hold on the not-measured card, with "Release run" and each refusal in its own words', () => {
+        const onRelease = vi.fn();
+        const card = render(<RunDeltaStatusCard status="failed" runId="r1" labels={L} held={{ rules: [], unmeasured: true, onRelease, refused: 'pending' }} />);
+        expect(card.getByText(L.heldUnmeasured)).toBeTruthy();
+        expect(card.queryByTestId('run-delta-held-rules')).toBeNull();
+        expect(card.getByRole('alert').textContent).toBe(L.releasePending);
+        fireEvent.click(card.getByText(L.releaseRun));
+        expect(onRelease).toHaveBeenCalledTimes(1);
+        card.unmount();
+        for (const [refused, text] of [['notApprover', L.releaseNotApprover], ['identityRequired', L.releaseIdentityRequired], ['error', L.releaseError], ['notHeld', L.releaseRefused]] as const) {
+            const r = render(<RunDeltaStatusCard status="failed" runId="r1" labels={L} held={{ rules: [], unmeasured: true, onRelease, refused }} />);
+            expect(r.getByRole('alert').textContent).toBe(text);
+            r.unmount();
+        }
+        // A pending card is never held.
+        const pending = render(<RunDeltaStatusCard status="pending" runId="r1" labels={L} held={{ rules: [], unmeasured: true, onRelease }} />);
+        expect(pending.queryByText(L.releaseRun)).toBeNull();
+    });
+
     it('shows no hold for a card that held nothing', () => {
         const { queryByText } = render(<RunDeltaCard delta={worseDelta()} labels={L} onOpenDetails={() => {}} />);
         expect(queryByText(L.held)).toBeNull();

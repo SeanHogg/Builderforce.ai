@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_RUN_DELTA_LABELS } from '@builderforce/knowledge-graph-view/delta';
-import { RUN_DELTA_RELEASE, cardKey, cardsFromAnswer, mergeCards, placeCards, safeRepoPath, type RunDeltaCardPayload } from './runDeltaCards';
+import { RUN_DELTA_RELEASE, RUN_DELTA_RELEASE_REFUSED, cardKey, cardsFromAnswer, mergeCards, placeCards, safeRepoPath, type RunDeltaCardPayload } from './runDeltaCards';
 import { releaseRun } from './useRunDeltaRelease';
 
 // Hoisted: the release hook's module imports the confirm provider and the bridge, neither of which a unit test needs.
@@ -75,8 +75,13 @@ describe('Release run', () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it('reports a refusal (run_delta_release_refused) as refused', async () => {
-    const send = vi.fn(async () => { throw new Error('run_delta_release_refused'); });
-    expect(await releaseRun('run-1', ['guard-removed'], L, async () => true, send)).toBe('refused');
+  it('reports each refusal the host answers as its own kind, and anything else as an error', async () => {
+    const refusedWith = async (message: string) =>
+      releaseRun('run-1', ['guard-removed'], L, async () => true, vi.fn(async () => { throw new Error(message); }));
+    expect(await refusedWith(RUN_DELTA_RELEASE_REFUSED.notHeld)).toEqual({ refused: 'notHeld' });
+    expect(await refusedWith(RUN_DELTA_RELEASE_REFUSED.pending)).toEqual({ refused: 'pending' });
+    expect(await refusedWith(RUN_DELTA_RELEASE_REFUSED.identityRequired)).toEqual({ refused: 'identityRequired' });
+    expect(await refusedWith(RUN_DELTA_RELEASE_REFUSED.notApprover)).toEqual({ refused: 'notApprover' });
+    expect(await refusedWith('Request "run-delta/release" timed out')).toEqual({ refused: 'error' });
   });
 });

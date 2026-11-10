@@ -91,7 +91,7 @@ export const FIX_DEFAULTS: FixLabels = {
             unknown: 'The step failed.',
         },
         codemod: {
-            unusedExport: 'Remove unused exports',
+            unusedExport: 'Remove this unused export',
             unusedFile: 'Remove unused files',
             unusedDependency: 'Remove unused dependencies',
             splitByCommand: 'Split by command group',

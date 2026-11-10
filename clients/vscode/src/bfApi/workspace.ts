@@ -121,14 +121,23 @@ export async function getCurrentWorkspace(
  * when the role can't be resolved (signed out / older API).
  */
 export async function canManageActiveWorkspace(secrets: vscode.SecretStorage): Promise<boolean> {
+  return (await activeWorkspaceManager(secrets)) === true;
+}
+
+/**
+ * The same manager-tier answer — the platform's approve/reject authority (`isManagerRole`, the API's `isManager`) — but
+ * saying when it could NOT be read: undefined when signed out, or the workspace or its role cannot be resolved. For a
+ * decision that must fail closed rather than read "unknown" as "no" (a held run's release, PRD 41 §12.5).
+ */
+export async function activeWorkspaceManager(secrets: vscode.SecretStorage): Promise<boolean | undefined> {
   try {
     const token = await exchangeJwt(secrets);
     const id = signedInTenantId();
-    if (!token || id === undefined) return false;
+    if (!token || id === undefined) return undefined;
     const role = (await listWorkspaces(secrets)).find((w) => w.id === id)?.role;
-    return isManagerRole(role);
+    return role === undefined ? undefined : isManagerRole(role);
   } catch {
-    return false;
+    return undefined;
   }
 }
 

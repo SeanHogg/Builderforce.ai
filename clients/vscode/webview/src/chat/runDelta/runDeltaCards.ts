@@ -12,15 +12,16 @@
 import type { RunDeltaCardPayload, RunDeltaProgressCard } from '@builderforce/run-delta/contract';
 
 export type { RunDeltaCardPayload };
+/** The host's refusal codes, from the contract (never spelled here). */
+export { RUN_DELTA_OPEN_REFUSED, RUN_DELTA_RELEASE_REFUSED, releaseRefusalOf, type RunDeltaReleaseRefusal } from '@builderforce/run-delta/contract';
 export type ComputedCard = Exclude<RunDeltaCardPayload, RunDeltaProgressCard>;
 
 export const RUN_DELTA_CARD = 'run-delta/card';
 export const RUN_DELTA_GET = 'run-delta/get';
 /** Request `{ runId, path, line? }` (path repo-relative): the host opens a path the stored delta names, under its repository root. */
 export const RUN_DELTA_OPEN_FILE = 'run-delta/open';
-/** Request `{ runId }`: release a run held at its finalize gate (§12.5). Refused with {@link RUN_DELTA_RELEASE_REFUSED}. */
+/** Request `{ runId }`: release a run held at its finalize gate (§12.5). Refused with one of `RUN_DELTA_RELEASE_REFUSED`. */
 export const RUN_DELTA_RELEASE = 'run-delta/release';
-export const RUN_DELTA_RELEASE_REFUSED = 'run_delta_release_refused';
 
 export const isProgress = (c: RunDeltaCardPayload): c is RunDeltaProgressCard => c.status === 'pending' || c.status === 'failed';
 

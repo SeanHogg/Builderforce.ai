@@ -943,6 +943,7 @@
   "The audit has not saved its findings. Open its conversation to continue.": "Die Ergebnisse wurden noch nicht gespeichert. Öffnen Sie die Unterhaltung, um fortzufahren.",
   "Audit complete. Findings and remediation tickets are saved.": "Audit abgeschlossen. Ergebnisse und Behebungstickets sind gespeichert.",
   "The audit is held for review, not complete: its changes hit blocking rules ({0}).": "Das Audit ist zur Prüfung angehalten und nicht abgeschlossen: Seine Änderungen verletzen blockierende Regeln ({0}).",
+  "The audit is held for review, not complete: what its changes did could not be measured.": "Das Audit ist zur Prüfung angehalten und nicht abgeschlossen: Die Auswirkungen seiner Änderungen konnten nicht gemessen werden.",
   "Open audit conversation": "Audit-Unterhaltung öffnen",
   "Sign in to run audits.": "Melden Sie sich an, um Audits auszuführen.",
   "Could not load the saved audit.": "Das gespeicherte Audit konnte nicht geladen werden.",

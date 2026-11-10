@@ -405,8 +405,9 @@ export interface ExecutionValue {
 }
 
 /**
- * A run held at its finalize gate: an autonomous run whose run delta computed blocking codes (PRD 41 §12.5). `rules` are
- * those blocking rule ids; `reason` names them (`run_delta_blocking:<ids>`). Carried by the run's execution record and,
+ * A run held at its finalize gate (PRD 41 §12.5): an autonomous run whose run delta stored blocking codes — `rules` are
+ * those rule ids and `reason` names them (`run_delta_blocking:<ids>`) — or that changed files and could not be measured
+ * (`run_delta_unmeasured`, no rules). Carried by the run's execution record and,
  * for an audit, by its audit-run record.
  */
 export interface RunHold {
@@ -414,7 +415,7 @@ export interface RunHold {
   rules: string[];
 }
 
-/** A person's audited release of a {@link RunHold}: who (a signed-in user id, else `local`), when (ISO), over which rules. */
+/** A person's audited release of a {@link RunHold}: who (the signed-in user's id — never anonymous), when (ISO), over which rules. */
 export interface RunWaiver {
   by: string;
   at: string;

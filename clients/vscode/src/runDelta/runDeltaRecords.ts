@@ -14,10 +14,11 @@
  */
 
 import { createHash } from "node:crypto";
-import { defineRecordIndex, newLocalRecord, scanByIndex, type EntityDestination, type ExecutionValue, type LocalFirstStore } from "@builderforce/local-first";
+import { defineRecordIndex, newLocalRecord, scanByIndex, type EntityDestination, type LocalFirstStore, type LocalFirstTransaction } from "@builderforce/local-first";
 import type { ComputedRunDeltaCard, RunDelta } from "@builderforce/run-delta";
 import { syncedRepositoryIdentity } from "../repoIdentity";
 import { droppedOverrides } from "./droppedOverrides";
+import { readRunHolds, withHold, type RunHoldState } from "./runHoldState";
 
 /** The synced value. */
 export interface RunDeltaRecordValue {
@@ -33,9 +34,8 @@ export interface RunDeltaRecordValue {
   /** Wall time of the computation, ms. */
   computedMs: number;
   /**
-   * §12.5: the blocking rule ids that HELD this autonomous run at its finalize gate (`runHoldGate.ts`): its execution is
-   * `awaiting_input` with a hold naming them, not `completed`. Absent when this delta held nothing (an interactive run, no
-   * blocking codes, or codes computed after the gate's verdict).
+   * IGNORED, no longer written (§12.5): records stored before the hold moved to the execution carried the rules that held
+   * their run here. Whether a run is held is its execution's `hold` (`runHoldState.ts`), never this field.
    */
   blocked?: { rules: string[] };
   /** Ignored `.builderforce/delta.json` entries, redacted ({@link redactDropped}). */
@@ -125,11 +125,23 @@ function cardExtrasOf({ value, local }: StoredRunDelta): Pick<RunDeltaCard, "at"
   return { ...(typeof local.at === "number" ? { at: local.at } : {}), ...(overrides ? { overrides } : {}) };
 }
 
-/** A stored delta's card: anchored to its run's reply (`at`), with the overrides it ran without (redacted). */
+/**
+ * The repository as a card names (and displays) it: a remote through {@link syncedRepositoryIdentity} — never a URL with a
+ * token in it — and a local repository by its own path (a `local:<hash>` reads as nothing to a person; a path that carries
+ * userinfo is hashed like any other). The raw identity stays in the side record for the device's own lookups.
+ */
+export function cardRepository(repo: string): string {
+  const synced = syncedRepositoryIdentity(repo);
+  return synced.startsWith("local:") && !repo.includes("@") ? repo : synced;
+}
+
+/**
+ * A stored delta's card: anchored to its run's reply (`at`), with the overrides it ran without (redacted). Its hold state
+ * is not the record's: readers add it from the run's execution (`runHoldState.withHold`).
+ */
 export const cardOf = (stored: StoredRunDelta): RunDeltaCard => ({
-  chatId: stored.value.chatId, runId: stored.value.runId, repo: stored.local.repo, root: stored.local.root, delta: stored.value.delta,
+  chatId: stored.value.chatId, runId: stored.value.runId, repo: cardRepository(stored.local.repo), root: stored.local.root, delta: stored.value.delta,
   ...cardExtrasOf(stored),
-  ...(stored.value.blocked ? { blocked: { rules: [...stored.value.blocked.rules] } } : {}),
 });
 
 /** Stores the delta once (and its side record). Returns false when one was already stored for this run and repository. */
@@ -164,17 +176,21 @@ export async function storeRunDelta(
     await tx.put(newLocalRecord<RunDeltaLocalValue>({
       id: localIdOf(id), entityType: "run-delta", deviceId: deps.deviceId, occurredAt: deps.at, schemaVersion: 1, payload: stored.local,
     }));
+    await putBlastScore(tx, deps, id, stored.value);
     written = true;
   });
   return written;
 }
 
-/** The stored deltas of a run, or of every run of a chat, oldest first, joined with their side records. */
+/**
+ * The stored deltas of a run, or of every run of a chat, oldest first, joined with their side records — each with its
+ * run's hold state as the run's EXECUTION says it (§12.5, `runHoldState.ts`): held, released, or neither.
+ */
 export async function readRunDeltas(store: LocalFirstStore, query: { runId?: string; chatId?: number }): Promise<RunDeltaCard[]> {
   if (query.runId === undefined && query.chatId === undefined) return [];
   const values = new Map<string, { at: string; value: RunDeltaRecordValue }>();
   const locals = new Map<string, RunDeltaLocalValue>();
-  const released = new Set<string>();
+  let holds = new Map<string, RunHoldState>();
   await store.read(async (tx) => {
     const visit = (row: { id: string; occurredAt: string; deletedAt?: string; payload: RunDeltaRecordValue | RunDeltaLocalValue }): void => {
       if (row.deletedAt) return;
@@ -185,31 +201,60 @@ export async function readRunDeltas(store: LocalFirstStore, query: { runId?: str
     };
     if (query.runId !== undefined) await scanByIndex(tx, RUN_DELTAS_BY_RUN, query.runId, visit);
     else await scanByIndex(tx, RUN_DELTAS_BY_CHAT, query.chatId!, visit);
-    // §12.5: a held run a person released (its execution carries the waiver) shows its blocking cards as released.
-    for (const { value } of values.values()) {
-      if (!value.blocked || released.has(value.runId)) continue;
-      if ((await tx.get<ExecutionValue>("execution", value.runId))?.payload.waiver) released.add(value.runId);
-    }
+    // §12.5: held or released is the execution's hold / waiver, never the record's own flag.
+    holds = await readRunHolds(tx, [...values.values()].map(({ value }) => value.runId));
   });
   return [...values]
     .flatMap(([id, { at, value }]) => {
       const local = locals.get(id);
       if (!local) return [];
-      const card = cardOf({ value, local });
-      return [{ at, card: value.blocked && released.has(value.runId) ? { ...card, released: true } : card }];
+      return [{ at, card: withHold(cardOf({ value, local }), holds.get(value.runId)) }];
     })
     .sort((a, b) => a.at.localeCompare(b.at) || a.card.repo.localeCompare(b.card.repo))
     .map((f) => f.card);
 }
 
-/** Past blast-radius scores of a repository (C10), from its stored deltas. */
-export async function pastBlastScores(store: LocalFirstStore, repository: string): Promise<number[]> {
-  const scores: number[] = [];
+/** At most this many past blast-radius scores (the newest) feed a delta's ranking (C10). */
+export const MAX_PAST_SCORES = 200;
+
+/**
+ * The device-only score row, `run-delta-score:<runId>:<repoKey>`: one number per stored delta, indexed by repository, so
+ * the ranking reads a repository's scores without loading a single delta payload. Put with the delta (never journaled).
+ */
+export interface RunDeltaScoreValue {
+  kind: "score";
+  /** As synced ({@link RunDeltaRecordValue.repository}). */
+  repository: string;
+  score: number;
+  /** When the delta was stored (ISO): the newest {@link MAX_PAST_SCORES} are read. */
+  at: string;
+}
+
+const isScoreValue = (p: unknown): p is RunDeltaScoreValue => !!p && typeof p === "object" && (p as { kind?: unknown }).kind === "score";
+
+/** The score rows of one repository (C10 past scores). */
+export const RUN_DELTA_SCORES_BY_REPOSITORY = defineRecordIndex<RunDeltaScoreValue>(
+  "run-delta", "vscode.runDelta.scoreRepository", (row) => (isScoreValue(row.payload) ? row.payload.repository : undefined),
+);
+
+async function putBlastScore(
+  tx: Pick<LocalFirstTransaction, "put">, deps: { deviceId: string; at: string }, deltaKey: string, value: RunDeltaRecordValue,
+): Promise<void> {
+  const score = value.delta.blastRadius?.score;
+  if (typeof score !== "number" || !Number.isFinite(score)) return;
+  await tx.put(newLocalRecord<RunDeltaScoreValue>({
+    id: `run-delta-score:${deltaKey.slice("run-delta:".length)}`, entityType: "run-delta", deviceId: deps.deviceId,
+    occurredAt: deps.at, schemaVersion: 1, payload: { kind: "score", repository: value.repository, score, at: deps.at },
+  }));
+}
+
+/** Past blast-radius scores of a repository (C10): the newest {@link MAX_PAST_SCORES}, from its score rows alone. */
+export async function pastBlastScores(store: LocalFirstStore, repository: string, limit = MAX_PAST_SCORES): Promise<number[]> {
+  const rows: Array<{ at: string; score: number }> = [];
   await store.read(async (tx) => {
-    await scanByIndex<RunDeltaRecordValue>(tx, RUN_DELTAS_BY_REPOSITORY, repository, (row) => {
-      const score = row.payload.delta?.blastRadius?.score;
-      if (typeof score === "number") scores.push(score);
+    await scanByIndex<RunDeltaScoreValue>(tx, RUN_DELTA_SCORES_BY_REPOSITORY, repository, (row) => {
+      rows.push({ at: row.payload.at, score: row.payload.score });
     });
   });
-  return scores;
+  return rows.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit).map((r) => r.score);
 }

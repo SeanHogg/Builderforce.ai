@@ -20,6 +20,7 @@ import { createLateRepushLimit } from "./initBudget";
 import { LocalFetchProxy } from "./localFetchProxy";
 import { pickWorkspaceContext } from "./contextPicker";
 import { hostAttachmentIngress } from "./hostIngress";
+import { handleRunDeltaRequest } from "./runDelta/runDeltaSurface";
 import type { AttachmentIngressRequest } from "./attachmentIngress";
 
 /** Inbound messages unique to the workspace surface (the shared cases live in the bridge). */
@@ -302,42 +303,15 @@ export class WorkspaceSurface implements vscode.Disposable {
       case "run.acknowledgeInterrupted":
         if (typeof msg.runId === "string") void hooks.runHost?.acknowledgeInterrupted?.(msg.runId);
         break;
-      // A run-delta card's Open code, confined by the host to the paths that stored delta names, under its root.
+      // A card's Open code, a held run's release, a chat's stored cards (PRD 41 §C14, §12.5): `runDelta/runDeltaSurface.ts`.
       case "run-delta/open":
-        try {
-          const req = msg as BrainInbound & { path?: unknown; line?: unknown };
-          const file = typeof msg.runId === "string" && typeof req.path === "string"
-            ? await hooks.runHost?.openRunDeltaFile?.({ runId: msg.runId, path: req.path })
-            : undefined;
-          if (!file) {
-            this.respond(msg.id, false, undefined, "run_delta_open_refused");
-            break;
-          }
-          const line = typeof req.line === "number" && req.line > 0 ? Math.floor(req.line) : undefined;
-          await openCapturedFile(file, line ? { startLine: line, startColumn: 1, endLine: line, endColumn: 1 } : undefined);
-          this.respond(msg.id, true, true);
-        } catch (error) {
-          this.respond(msg.id, false, undefined, error instanceof Error ? error.message : String(error));
-        }
-        break;
-      // A person's audited release of a run held at its finalize gate (PRD 41 §12.5); any other run is refused.
       case "run-delta/release":
-        try {
-          if (typeof msg.runId !== "string" || !hooks.runHost?.releaseHeldRun) throw new Error("run_delta_release_refused");
-          await hooks.runHost.releaseHeldRun(msg.runId);
-          this.respond(msg.id, true, true);
-        } catch (error) {
-          this.respond(msg.id, false, undefined, error instanceof Error ? error.message : String(error));
-        }
-        break;
-      // A run's (or a chat's) stored deltas — the `run-delta/card` payloads again, for a reopened chat (PRD 41 §C14).
       case "run-delta/get":
-        try {
-          const query = { ...(typeof msg.runId === "string" ? { runId: msg.runId } : {}), ...(typeof msg.chatId === "number" ? { chatId: msg.chatId } : {}) };
-          this.respond(msg.id, true, (await hooks.runHost?.runDeltas?.(query)) ?? []);
-        } catch (error) {
-          this.respond(msg.id, false, undefined, error instanceof Error ? error.message : String(error));
-        }
+        await handleRunDeltaRequest(msg.type, msg as unknown as Record<string, unknown>, {
+          ...(hooks.runHost ? { runHost: hooks.runHost } : {}),
+          openFile: (file, line) => openCapturedFile(file, line ? { startLine: line, startColumn: 1, endLine: line, endColumn: 1 } : undefined),
+          respond: (ok, result, error) => this.respond(msg.id, ok, result, error),
+        });
         break;
       // Scoped to the chat the surface is showing: several chats run at once out in the
       // host, and a switch flipped in one must not answer a confirm parked in another.

@@ -23,7 +23,7 @@ import { RunDeltaCard, RunDeltaPanel, RunDeltaStatusCard, type RunDeltaCodeTarge
 import { onHostMessage, request } from '../../vscodeBridge';
 import {
   RUN_DELTA_CARD, RUN_DELTA_GET, RUN_DELTA_OPEN_FILE, cardKey, cardsFromAnswer, isProgress, mergeCards, placeCards, safeRepoPath,
-  type ComputedCard, type RunDeltaCardPayload,
+  type RunDeltaCardPayload,
 } from './runDeltaCards';
 import { useRunDeltaLabels } from './useRunDeltaLabels';
 import { useRunDeltaRelease, type RunDeltaRelease } from './useRunDeltaRelease';
@@ -60,16 +60,20 @@ const RunDeltaContext = createContext<RunDeltaFooters | null>(null);
 /** Wraps the timeline with the chat's placed cards (`value` = {@link RunDeltaChat.footers}). */
 export const RunDeltaFootersProvider = RunDeltaContext.Provider;
 
-/** A held card's hold state (§12.5): the rules, released or not, and "Release run" while it still holds. */
-function heldOf(c: ComputedCard, release: RunDeltaRelease) {
-  const rules = c.blocked?.rules ?? [];
-  if (rules.length === 0) return undefined;
+/**
+ * A held card's hold state (§12.5), as the host read it from the run's execution: the rules (none for a run held because
+ * it could not be measured), released or not, and "Release run" while it still holds.
+ */
+function heldOf(c: RunDeltaCardPayload, release: RunDeltaRelease) {
+  if (!c.blocked) return undefined;
+  const rules = c.blocked.rules;
   return {
     rules,
+    unmeasured: c.blocked.unmeasured === true,
     released: c.released === true,
     onRelease: () => release.release(c.runId, rules),
     releasing: release.releasing.has(c.runId),
-    refused: release.refused.has(c.runId),
+    refused: release.refused.get(c.runId),
   };
 }
 
@@ -81,7 +85,7 @@ function RunDeltaAfter({ messageId }: { messageId: number }) {
   return (
     <div style={{ display: 'grid', gap: 8, marginTop: 8, minWidth: 0 }}>
       {here.map((c) => (isProgress(c)
-        ? <RunDeltaStatusCard key={cardKey(c)} status={c.status} runId={c.runId} labels={ctx.labels} />
+        ? <RunDeltaStatusCard key={cardKey(c)} status={c.status} runId={c.runId} labels={ctx.labels} held={heldOf(c, ctx.release)} />
         : (
           <RunDeltaCard
             key={cardKey(c)}

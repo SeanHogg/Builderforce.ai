@@ -38444,7 +38444,7 @@
           "unknown": "该步骤失败。"
         },
         "codemod": {
-          "unusedExport": "移除未使用的导出",
+          "unusedExport": "移除此未使用的导出",
           "unusedFile": "移除未使用的文件",
           "unusedDependency": "移除未使用的依赖",
           "splitByCommand": "按命令组拆分",
@@ -39037,6 +39037,7 @@
     "pendingCard": "正在衡量此次运行带来的变化…",
     "failedCard": "未衡量：无法衡量此次运行带来的变化。",
     "held": "已暂停：需要审查",
+    "heldUnmeasured": "未测量：已暂停待审核",
     "heldRules": "被以下规则阻止：{rules}",
     "releaseRun": "放行运行",
     "releaseConfirmTitle": "放行此次运行？",
@@ -39044,6 +39045,10 @@
     "releaseConfirmLabel": "放行",
     "released": "已由你放行",
     "releaseRefused": "无法放行此次运行：它已不再处于暂停状态。",
+    "releasePending": "暂停状态仍在记录中，请稍后重试。",
+    "releaseError": "无法放行此次运行，请重试。",
+    "releaseIdentityRequired": "请登录后放行此次运行。",
+    "releaseNotApprover": "只有此看板的审批人才能放行此次运行。",
     "overridesHeading": "已忽略的覆盖设置",
     "overrides": {
       "unknownKey": "未知设置“{section}”",

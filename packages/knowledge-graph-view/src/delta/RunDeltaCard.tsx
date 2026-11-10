@@ -48,7 +48,7 @@ export function RunDeltaCard({ delta, labels, repoLabel, onOpenDetails, held }: 
                 <span style={{ color: VERDICT_TONE[delta.headline], paddingTop: 1 }}><VerdictIcon verdict={delta.headline} /></span>
                 <span data-testid="run-delta-headline">{headline}</span>
             </p>
-            {held && held.rules.length > 0 && <HeldNotice {...held} labels={labels} />}
+            {held && (held.rules.length > 0 || held.unmeasured) && <HeldNotice {...held} labels={labels} />}
             <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                 {delta.dimensions.map((d) => <DimensionRow key={d.id} dimension={d} labels={labels} />)}
             </ul>

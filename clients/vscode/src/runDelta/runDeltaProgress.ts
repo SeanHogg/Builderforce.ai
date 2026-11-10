@@ -39,10 +39,12 @@ export interface RunDeltaProgress {
 
 export function createRunDeltaProgress(relay: (card: RunDeltaCardPayload) => void): RunDeltaProgress {
   const runs = new Map<string, RunDeltaProgressCard>();
-  const computed = new Set<string>();
+  /** The runs being measured now: whether each has posted a computed card yet. Only these are tracked — a computed card
+   *  posted again later (a release's re-post) must not leave an entry nobody removes. */
+  const measuring = new Map<string, boolean>();
   const post = (card: RunDeltaCardPayload): void => {
     if (card.status !== "pending" && card.status !== "failed") {
-      computed.add(card.runId);
+      if (measuring.has(card.runId)) measuring.set(card.runId, true);
       runs.delete(card.runId);
     }
     relay(card);
@@ -54,12 +56,15 @@ export function createRunDeltaProgress(relay: (card: RunDeltaCardPayload) => voi
       const pending: RunDeltaProgressCard = { ...run, status: "pending" };
       runs.set(run.runId, pending);
       while (runs.size > MAX_TRACKED) runs.delete(runs.keys().next().value!);
+      measuring.set(run.runId, false);
       relay(pending);
       let over = false;
       return () => {
         if (over) return;
         over = true;
-        if (computed.delete(run.runId)) return;
+        const computed = measuring.get(run.runId) === true;
+        measuring.delete(run.runId);
+        if (computed) return;
         const failed: RunDeltaProgressCard = { ...run, status: "failed" };
         runs.set(run.runId, failed);
         relay(failed);

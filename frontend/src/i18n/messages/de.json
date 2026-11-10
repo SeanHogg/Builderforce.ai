@@ -38444,7 +38444,7 @@
           "unknown": "Der Schritt ist fehlgeschlagen."
         },
         "codemod": {
-          "unusedExport": "Ungenutzte Exporte entfernen",
+          "unusedExport": "Diesen ungenutzten Export entfernen",
           "unusedFile": "Ungenutzte Dateien entfernen",
           "unusedDependency": "Ungenutzte Abhängigkeiten entfernen",
           "splitByCommand": "Nach Befehlsgruppe aufteilen",
@@ -39037,6 +39037,7 @@
     "pendingCard": "Messe, was dieser Lauf verändert hat …",
     "failedCard": "Nicht gemessen: Was dieser Lauf verändert hat, konnte nicht gemessen werden.",
     "held": "Angehalten: Prüfung nötig",
+    "heldUnmeasured": "Nicht gemessen: zur Prüfung angehalten",
     "heldRules": "Blockiert durch {rules}",
     "releaseRun": "Lauf freigeben",
     "releaseConfirmTitle": "Diesen Lauf freigeben?",
@@ -39044,6 +39045,10 @@
     "releaseConfirmLabel": "Freigeben",
     "released": "Von dir freigegeben",
     "releaseRefused": "Dieser Lauf konnte nicht freigegeben werden: Er ist nicht mehr angehalten.",
+    "releasePending": "Die Anhaltung wird noch gespeichert. Versuche es gleich noch einmal.",
+    "releaseError": "Dieser Lauf konnte nicht freigegeben werden. Versuche es erneut.",
+    "releaseIdentityRequired": "Melde dich an, um diesen Lauf freizugeben.",
+    "releaseNotApprover": "Nur eine genehmigende Person dieses Boards kann diesen Lauf freigeben.",
     "overridesHeading": "Ignorierte Überschreibungen",
     "overrides": {
       "unknownKey": "Unbekannte Einstellung „{section}“",

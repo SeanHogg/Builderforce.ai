@@ -943,6 +943,7 @@
   "The audit has not saved its findings. Open its conversation to continue.": "The audit has not saved its findings. Open its conversation to continue.",
   "Audit complete. Findings and remediation tickets are saved.": "Audit complete. Findings and remediation tickets are saved.",
   "The audit is held for review, not complete: its changes hit blocking rules ({0}).": "The audit is held for review, not complete: its changes hit blocking rules ({0}).",
+  "The audit is held for review, not complete: what its changes did could not be measured.": "The audit is held for review, not complete: what its changes did could not be measured.",
   "Open audit conversation": "Open audit conversation",
   "Sign in to run audits.": "Sign in to run audits.",
   "Could not load the saved audit.": "Could not load the saved audit.",

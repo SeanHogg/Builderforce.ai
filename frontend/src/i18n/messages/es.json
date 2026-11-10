@@ -38444,7 +38444,7 @@
           "unknown": "El paso falló."
         },
         "codemod": {
-          "unusedExport": "Quitar exportaciones sin usar",
+          "unusedExport": "Quitar esta exportación sin usar",
           "unusedFile": "Quitar archivos sin usar",
           "unusedDependency": "Quitar dependencias sin usar",
           "splitByCommand": "Dividir por grupo de comandos",
@@ -39037,6 +39037,7 @@
     "pendingCard": "Midiendo lo que cambió esta ejecución…",
     "failedCard": "Sin medir: no se pudo medir lo que cambió esta ejecución.",
     "held": "Retenida: requiere revisión",
+    "heldUnmeasured": "Sin medir: retenida para revisión",
     "heldRules": "Bloqueada por {rules}",
     "releaseRun": "Liberar ejecución",
     "releaseConfirmTitle": "¿Liberar esta ejecución?",
@@ -39044,6 +39045,10 @@
     "releaseConfirmLabel": "Liberar",
     "released": "Liberada por ti",
     "releaseRefused": "No se pudo liberar esta ejecución: ya no está retenida.",
+    "releasePending": "La retención todavía se está registrando. Inténtalo de nuevo en un momento.",
+    "releaseError": "No se pudo liberar esta ejecución. Inténtalo de nuevo.",
+    "releaseIdentityRequired": "Inicia sesión para liberar esta ejecución.",
+    "releaseNotApprover": "Solo un aprobador de este tablero puede liberar esta ejecución.",
     "overridesHeading": "Configuraciones ignoradas",
     "overrides": {
       "unknownKey": "Ajuste desconocido «{section}»",

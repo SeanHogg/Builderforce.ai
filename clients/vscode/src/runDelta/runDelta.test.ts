@@ -42,7 +42,9 @@ import { recordChangeSetAroundRun, type FinalizedRunChangeSets, type LocalChange
 import { createHostRunLifecycle } from "../hostRunLifecycle";
 import { installRunRecovery } from "../installRunRecovery";
 import { finalizeRunDelta, RUN_DELTA_BUDGET_MS, startRunDelta, type RepoHostSources, type RunDeltaDeps } from "./finalizeRunDelta";
-import { createRunHoldGate, type RunHoldPort } from "./runHoldGate";
+import { createRunHoldGate, UNMEASURED_HOLD, type RunHoldPort } from "./runHoldGate";
+import { holdStateOf, withHold } from "./runHoldState";
+import { isReleasableHold } from "../runRecovery";
 import { repoGit } from "./gitSide";
 import { PreimageBudget, PREIMAGE_MAX_FILE_BYTES } from "./preimageBudget";
 import { readRunDeltas, type RunDeltaCard, type RunDeltaRecordValue } from "./runDeltaRecords";
@@ -127,7 +129,8 @@ async function runWithDelta(
     {
       store, deviceId: "device-1", runId, author: "agent:test",
       capture: { preimages: (_root, items) => putPreimages(k.persistence, runId, items, Date.now()) },
-      onFinalized: (closed) => { delta = startRunDelta(deps, { chatId: 7, mode, closed, ...(writes ? { writes, workspaceRoot: closed.committed[0]?.root ?? "" } : {}), ...(hold ? { hold } : {}) }); },
+      // The editor's hand-off (`editorRunDelta.onFinalized`): the gate's clock starts here.
+      onFinalized: (closed) => { hold?.begin(closed.committed.length > 0); delta = startRunDelta(deps, { chatId: 7, mode, closed, ...(writes ? { writes, workspaceRoot: closed.committed[0]?.root ?? "" } : {}), ...(hold ? { hold } : {}) }); },
       onError: (error) => errors.push(error),
     },
     edit,
@@ -144,7 +147,7 @@ async function runWithDelta(
 async function autonomousRun(store: LocalFirstStore, k: NodeKnowledgeStore, runId: string, edit: () => Promise<void>, extra: Partial<RunDeltaDeps> = {}) {
   const recovery = installRunRecovery({ globalState: { get: () => undefined, update: async () => undefined } }, { store, deviceId: "device-1" });
   await recovery.recovered;
-  const gate = createRunHoldGate({ budgetMs: RUN_DELTA_BUDGET_MS });
+  const gate = createRunHoldGate({ budgetMs: RUN_DELTA_BUDGET_MS, finalizeCeilingMs: 120_000 });
   const lifecycle = createHostRunLifecycle({ recovery, snapshot: () => ({ error: "", trace: [] }), log: () => undefined, beforeTerminal: gate.beforeTerminal });
   lifecycle.started(7, runId);
   gate.expect(runId);
@@ -210,15 +213,15 @@ describe.skipIf(!localSqliteAvailable())("run delta at run finalization (PRD 41 
     expect(errors).toEqual([]);
     const value = (await deltaRows(store))[0]!.payload;
     expect(value.mode).toBe("autonomous");
-    expect(value.blocked?.rules).toContain("guard-removed");
-    // The run's terminal status is the held one, naming the same rules — never `completed`.
+    // The record claims no hold of its own; the run's terminal status is the held one, naming the stored codes.
+    expect(value.blocked).toBeUndefined();
     expect(execution?.status).toBe("awaiting_input");
-    expect(execution?.hold?.rules).toEqual(value.blocked?.rules);
+    expect(execution?.hold?.rules).toEqual(value.delta.blocking);
     expect(execution?.hold?.reason).toContain("guard-removed");
     expect(verdict).toEqual(execution?.hold);
-    // The card shows it.
-    expect(cards[0]?.blocked?.rules).toContain("guard-removed");
-    expect(await readRunDeltas(store, { runId: "run-audit" })).toEqual(cards);
+    // The card, read back, shows the hold the execution carries (the live card was posted before the verdict).
+    const [card] = await readRunDeltas(store, { runId: "run-audit" });
+    expect(card).toEqual({ ...cards[0], blocked: { rules: execution?.hold?.rules } });
   });
 
   it("completes an autonomous run whose delta has no blocking findings (§12.5)", async () => {
@@ -235,17 +238,42 @@ describe.skipIf(!localSqliteAvailable())("run delta at run finalization (PRD 41 
     expect(execution?.hold).toBeUndefined();
   });
 
-  it("does not hold an autonomous run whose delta ran out of budget (§12.5: fail-closed only for computed codes)", async () => {
+  // CONTRACT CHANGE (§12.5 decision 5): fail-closed. This run used to complete; it is now held for review, releasable.
+  it("holds unmeasured an autonomous run whose delta ran out of budget (§12.5: fail-closed)", async () => {
     const root = await repo({ "api/routes.ts": GUARDED });
     const k = knowledgeFile(root);
     const store = createMemoryLocalFirstStore();
-    // A delta that cannot meet its budget (its sources never answer): abandoned, nothing stored, and the run completes.
+    // A delta that cannot meet its budget (its sources never answer): abandoned, nothing stored, the run held unmeasured.
     const { verdict, execution } = await autonomousRun(store, k, "run-late", () => write(root, "api/routes.ts", UNGUARDED), {
       sources: () => new Promise(() => undefined), budgetMs: 20,
     });
     expect(await deltaRows(store)).toEqual([]);
-    expect(verdict).toBeUndefined();
-    expect(execution?.status).toBe("completed");
+    expect(verdict).toEqual(UNMEASURED_HOLD);
+    expect(execution?.status).toBe("awaiting_input");
+    expect(isReleasableHold(execution)).toBe(true);
+  });
+
+  it("regression: blocking codes whose store fails hold the run unmeasured with a releasable card, never a hold no record backs", async () => {
+    const root = await repo({ "api/routes.ts": GUARDED });
+    const k = knowledgeFile(root);
+    const store = createMemoryLocalFirstStore();
+    // The delta computes guard-removed, then its store throws.
+    const failing = new Proxy(store, {
+      get(target, prop) {
+        if (prop === "transact") return () => Promise.reject(new Error("disk full"));
+        const value = Reflect.get(target, prop, target) as unknown;
+        return typeof value === "function" ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+      },
+    });
+    const { verdict, execution, cards, errors } = await autonomousRun(store, k, "run-store-fails", () => write(root, "api/routes.ts", UNGUARDED), { store: failing });
+    expect(String(errors[0])).toMatch(/disk full/);
+    expect(cards).toEqual([]);
+    expect(await deltaRows(store)).toEqual([]);
+    // Not held on codes no stored record carries: held unmeasured, and the run's failed card reads back releasable.
+    expect(verdict).toEqual(UNMEASURED_HOLD);
+    expect(isReleasableHold(execution)).toBe(true);
+    const failed = withHold({ chatId: 7, runId: "run-store-fails", status: "failed" as const }, holdStateOf(execution));
+    expect(failed).toEqual({ chatId: 7, runId: "run-store-fails", status: "failed", blocked: { rules: [], unmeasured: true } });
   });
 
   it("reads delta.json overrides from the baseline, never from the run's own edit of it", async () => {
@@ -254,7 +282,7 @@ describe.skipIf(!localSqliteAvailable())("run delta at run finalization (PRD 41 
     const root = await repo({ "api/r.ts": route("requireTeamLead, "), ".builderforce/delta.json": JSON.stringify({ guards: { requireTeamLead: 20 } }) });
     const k = knowledgeFile(root);
     const store = createMemoryLocalFirstStore();
-    await autonomousRun(store, k, "run-weaken", async () => {
+    const { execution } = await autonomousRun(store, k, "run-weaken", async () => {
       await write(root, "api/r.ts", route(""));
       // The run tries to drop the guard from the registry in the same edit.
       await write(root, ".builderforce/delta.json", JSON.stringify({ guards: {} , blocking: [] }));
@@ -262,8 +290,8 @@ describe.skipIf(!localSqliteAvailable())("run delta at run finalization (PRD 41 
     const value = (await deltaRows(store))[0]!.payload;
     const security = value.delta.dimensions.find((d) => d.id === "security")!;
     expect(security.findings.map((f) => f.ruleId)).toContain("guard-removed");
-    expect(value.blocked?.rules).toContain("guard-removed");
-    expect(value.blocked?.rules).toContain("delta-config-changed");
+    expect(execution?.hold?.rules).toContain("guard-removed");
+    expect(execution?.hold?.rules).toContain("delta-config-changed");
   });
 
   it("makes every change outside-run when another run overlapped, unless the run's own tools wrote it (conservative)", async () => {

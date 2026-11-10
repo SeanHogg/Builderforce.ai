@@ -943,6 +943,7 @@
   "The audit has not saved its findings. Open its conversation to continue.": "审计尚未保存发现的问题。请打开其对话以继续。",
   "Audit complete. Findings and remediation tickets are saved.": "审计完成。发现的问题和修复工单已保存。",
   "The audit is held for review, not complete: its changes hit blocking rules ({0}).": "审计已暂停待审核，尚未完成：其更改触发了阻断规则（{0}）。",
+  "The audit is held for review, not complete: what its changes did could not be measured.": "审计已暂停待审核，尚未完成：无法衡量其更改的影响。",
   "Open audit conversation": "打开审计对话",
   "Sign in to run audits.": "请登录以运行审计。",
   "Could not load the saved audit.": "无法加载已保存的审计。",

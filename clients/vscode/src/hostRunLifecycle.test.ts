@@ -126,4 +126,30 @@ describe("host run lifecycle", () => {
     const clean = await store.read((tx) => tx.get<ExecutionValue>("execution", "host-run:9:clean"));
     expect(clean?.payload.status).toBe("completed");
   });
+
+  it("tells onTerminal once the terminal write landed, with the hold when it was held (what a release waits on)", async () => {
+    const store = createMemoryLocalFirstStore();
+    const recovery = installRunRecovery(ctx(), { store, deviceId: "device-1", now: () => at });
+    const hold = { reason: "run_delta_unmeasured", rules: [] };
+    const seen: Array<{ runId: string; hold?: unknown; status?: string }> = [];
+    const lifecycle = createHostRunLifecycle({
+      recovery, snapshot: () => ({ error: "", trace: [] }), log: vi.fn(), now: () => at,
+      beforeTerminal: async ({ runId }) => (runId === "host-run:10:held" ? hold : undefined),
+      onTerminal: (run) => {
+        // The write is already in the store when this is told.
+        void store.read((tx) => tx.get<ExecutionValue>("execution", run.runId)).then((row) => seen.push({ ...run, status: row?.payload.status }));
+      },
+    });
+    lifecycle.started(10, "host-run:10:held");
+    lifecycle.started(11, "host-run:11:done");
+    await settle();
+    lifecycle.sink.post({ type: "run.settled", chatId: 10 });
+    lifecycle.sink.post({ type: "run.settled", chatId: 11 });
+    await settle();
+    await settle();
+    expect(seen).toEqual(expect.arrayContaining([
+      { runId: "host-run:10:held", hold, status: "awaiting_input" },
+      { runId: "host-run:11:done", status: "completed" },
+    ]));
+  });
 });

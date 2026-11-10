@@ -27,6 +27,19 @@ describe("the run delta card lifecycle (pending → computed | failed)", () => {
     expect(posted).toEqual([{ chatId: 7, runId: "r1", status: "pending" }, { chatId: 7, runId: "r1", status: "failed" }]);
   });
 
+  it("regression: a computed card posted again after the run's measurement (a release's re-post) leaves nothing tracked", () => {
+    const posted: RunDeltaCardPayload[] = [];
+    const progress = createRunDeltaProgress((c) => posted.push(c));
+    const first = progress.begin({ chatId: 7, runId: "r1", repos: 1 });
+    progress.post(computed("r1"));
+    first();
+    // Re-posts after the end used to leave the run marked computed forever, so a later measurement never failed.
+    progress.post(computed("r1"));
+    progress.post(computed("r1"));
+    progress.begin({ chatId: 7, runId: "r1", repos: 1 })();
+    expect(posted.at(-1)).toEqual({ chatId: 7, runId: "r1", status: "failed" });
+  });
+
   it("posts nothing for a run with no change set to measure", () => {
     const posted: RunDeltaCardPayload[] = [];
     const progress = createRunDeltaProgress((c) => posted.push(c));
