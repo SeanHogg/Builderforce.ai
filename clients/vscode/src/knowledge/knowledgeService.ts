@@ -24,7 +24,7 @@ import {
   type FsDirectorySource, type KnowledgeReviewOptions,
 } from "@builderforce/agent-tools/knowledge";
 import { readPartitions } from "@builderforce/agent-tools/prefetch";
-import { gitIndexHints } from "@builderforce/agent-tools/node-knowledge-store";
+import { gitBlobId, gitIndexHints } from "@builderforce/agent-tools/node-knowledge-store";
 import { createKnowledgeClient, type KnowledgeClient } from "@builderforce/knowledge-client";
 import type { KnowledgeGraph, KnowledgeStore, LocalSnapshotStore, PlanDetail, ReviewReport } from "@seanhogg/builderforce-memory/knowledge";
 import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
@@ -138,6 +138,7 @@ export function openRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot, opt
     source: createDirectorySource({
       fs: vscodeKnowledgeFs(), rootPath: root.rootPath, rootId, title: root.title, hashCache,
       gitHints: (path) => gitIndexHints(path),
+      gitBlobId,
       onHashCacheError: (error) => log("stat manifest", error),
     }),
     // A kicked pump resolves its source when it STARTS, never holding the client of a project the workspace left.

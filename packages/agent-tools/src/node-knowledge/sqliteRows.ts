@@ -23,6 +23,7 @@ import type { KnowledgeSnapshot, RowChange, RowPersistence } from '@seanhogg/bui
 import type { ChunkFingerprint } from '@seanhogg/builderforce-memory/ingest';
 import type { LocalSqliteDb } from '../node-local-sqlite.js';
 import { writeManifestEntries, type ManifestBuffer, type ManifestSink, type PendingManifest } from './manifestBuffer.js';
+import { deleteStatOf } from './statRows.js';
 
 export const FORMAT_VERSION = '1';
 
@@ -68,6 +69,8 @@ export class SqliteKnowledgeDb implements RowPersistence, ManifestSink {
     /** The generation this store last saw. */
     private seen: number;
     private dataVersion: number;
+    /** The `manifest_seq` this store last saw: a manifest-only commit elsewhere moves it (and not the generation). */
+    private manifestSeen: string | undefined;
     /** One gate for every step that talks to the file about the whole store (apply, load, a migration's transaction). */
     private tail: Promise<unknown> = Promise.resolve();
 
@@ -80,6 +83,7 @@ export class SqliteKnowledgeDb implements RowPersistence, ManifestSink {
         if (!this.formatNewer) ensureSchema(db);
         this.seen = this.generation();
         this.dataVersion = this.readDataVersion();
+        this.manifestSeen = this.manifestSeq();
     }
 
     assertWritable(): void {
@@ -115,6 +119,8 @@ export class SqliteKnowledgeDb implements RowPersistence, ManifestSink {
 
     private generation(): number { return Number(this.getMeta('generation') ?? 0); }
 
+    private manifestSeq(): string | undefined { return this.getMeta('manifest_seq'); }
+
     private readDataVersion(): number {
         const row = this.db.prepare('PRAGMA data_version').get() as Record<string, unknown> | undefined;
         return Number(Object.values(row ?? {})[0] ?? 0);
@@ -142,6 +148,7 @@ export class SqliteKnowledgeDb implements RowPersistence, ManifestSink {
             try {
                 this.dataVersion = this.readDataVersion();
                 this.seen = this.generation();
+                this.manifestSeen = this.manifestSeq();
                 const snap = this.readAll();
                 return snap.scopes.length === 0 && Object.keys(snap.facts).length === 0 && !snap.recheck ? undefined : snap;
             } finally {
@@ -170,7 +177,8 @@ export class SqliteKnowledgeDb implements RowPersistence, ManifestSink {
         const delRel = db.prepare('DELETE FROM relation WHERE root_id = ? AND from_ref = ? AND to_ref = ? AND kind = ?');
         const delExt = db.prepare('DELETE FROM extracted WHERE hash = ?');
         const delRecheck = db.prepare('DELETE FROM recheck WHERE hash = ?');
-        for (const id of c.deletes.scopes) delScope.run(id);
+        // A removed root takes its stat manifest with it.
+        for (const id of c.deletes.scopes) { delScope.run(id); deleteStatOf(db, id); }
         for (const [root, key] of c.deletes.facts) delFact.run(root, key);
         for (const [root, from, to, kind] of c.deletes.relations) delRel.run(root, from, to, kind);
         for (const h of c.deletes.extracted) delExt.run(h);
@@ -208,10 +216,12 @@ export class SqliteKnowledgeDb implements RowPersistence, ManifestSink {
             this.setMeta('format', FORMAT_VERSION);
             const reloaded = mismatch ? this.readAll() : undefined;
             const version = this.readDataVersion(); // read inside the transaction every time, so the no-mismatch path refreshes it too
+            const manifestSeq = this.manifestSeq();
             this.db.exec('COMMIT');
             // Only after the commit: a retry of a committed change then sees a mismatch and just reloads.
             this.seen = next;
             this.dataVersion = version;
+            this.manifestSeen = manifestSeq;
             return { generation: next, ...(reloaded ? { reloaded } : {}) };
         } catch (err) {
             this.rollback();
@@ -230,11 +240,22 @@ export class SqliteKnowledgeDb implements RowPersistence, ManifestSink {
         return out;
     }
 
-    /** True when another connection committed since this one last loaded or reloaded (`PRAGMA data_version`). */
+    /**
+     * True when facts or the manifest changed since this connection last loaded or reloaded: the generation moved (this
+     * connection's own migration included, which `data_version` never reports), or another connection committed
+     * (`PRAGMA data_version`) a manifest-only change (`manifest_seq`). A commit that touched neither (another window's stat
+     * manifest save) is taken as seen and reports false: it must not force a full fact reload.
+     */
     async changedElsewhere(): Promise<boolean> {
         await this.settled();
-        // The generation also moves for this connection's own migration, which `data_version` never reports.
-        return this.serial(() => this.readDataVersion() !== this.dataVersion || this.generation() !== this.seen);
+        return this.serial(() => {
+            if (this.generation() !== this.seen) return true;
+            const version = this.readDataVersion();
+            if (version === this.dataVersion) return false;
+            if (this.manifestSeq() !== this.manifestSeen) return true;
+            this.dataVersion = version;
+            return false;
+        });
     }
 
     async readCommitted(sourceId: string): Promise<ChunkFingerprint[] | undefined> {
@@ -256,8 +277,12 @@ export class SqliteKnowledgeDb implements RowPersistence, ManifestSink {
             try {
                 this.db.exec('BEGIN IMMEDIATE');
                 writeManifestEntries(this.db, taken);
+                // Other windows tell this manifest-only commit from a stat save by the sequence (see `changedElsewhere`).
+                const seq = String(Number(this.manifestSeq() ?? 0) + 1);
+                this.setMeta('manifest_seq', seq);
                 this.setMeta('format', FORMAT_VERSION);
                 this.db.exec('COMMIT');
+                this.manifestSeen = seq;
             } catch (err) {
                 this.rollback();
                 throw err;
@@ -265,9 +290,22 @@ export class SqliteKnowledgeDb implements RowPersistence, ManifestSink {
         }).catch((err: unknown) => { this.buffer.restore(taken); throw err; });
     }
 
+    /** ONE read transaction (a consistent view of several statements), on the gate. */
+    readOwn<T>(work: (db: LocalSqliteDb) => T): Promise<T> {
+        return this.serial(() => {
+            this.db.exec('BEGIN');
+            try {
+                return work(this.db);
+            } finally {
+                this.db.exec('COMMIT');
+            }
+        });
+    }
+
     /**
      * ONE write transaction of rows outside the fact graph (the plan's stat manifest, `statRows.ts`): on the gate, refused on a
-     * file of a newer format, and the generation stays (no fact changed, so no other window reloads its facts for it).
+     * file of a newer format. Neither the generation nor `manifest_seq` moves, so another window's `changedElsewhere` takes it
+     * as seen and does not reload its facts for it.
      */
     writeOwn(work: (db: LocalSqliteDb) => void): Promise<void> {
         try { this.assertWritable(); } catch (err) { return Promise.reject(err); }

@@ -1,29 +1,46 @@
 /**
  * node-knowledge/gitIndexHints.ts — the plan's git fast path (PRD 41 B2 step 3), Node hosts only. In a git work tree:
  *
- *   - `git ls-files -s -z` names the index blob of every tracked file under the root (paths relative to the root, the cwd);
- *   - `git status --porcelain=v2 -z --untracked-files=no -- .` names every tracked file whose work tree differs from the index
- *     (paths relative to the repository root, so the root's `--show-prefix` is stripped).
+ *   - `git ls-files -v -s -z` names the index blob of every tracked file under the root (paths relative to the root, the cwd),
+ *     keeping only entries git really compares (tag `H`: not assume-unchanged, not skip-worktree);
+ *   - `git --no-optional-locks status --porcelain=v2 -z --untracked-files=no -- .` names every tracked file whose work tree
+ *     differs from the index (paths relative to the repository root, so the root's `--show-prefix` is stripped). It never
+ *     takes the index lock.
  *
  * A tracked file that status does not name is clean against the index: its blob id is a HINT the stat prefilter may use to
  * reuse a stored sha256 without a read (`knowledge/statManifest.ts`). It is never an identity: facts are keyed by the content
- * hash. Not a work tree, no git, a timeout, any failure: undefined, and the walk takes the stat path.
+ * hash. Not a work tree, no git, a timeout, any failure: undefined, and the walk takes the stat path. {@link gitBlobId} lets
+ * the walk record a hint only for bytes whose blob id IS the index blob.
  */
 
+import { createHash } from 'node:crypto';
 import { runGit } from '../node-git-history.js';
 import { msToNs, type GitHints } from '../knowledge/statManifest.js';
 
 /** git is a shortcut: past this the walk does not wait for it. */
 export const GIT_HINTS_TIMEOUT_MS = 10_000;
 
-/** Index entries of regular files (stage 0, mode 100644/100755): root-relative path → blob id. Symlinks and gitlinks are not files the walk hashes. */
+/** Arguments of the ls-files run: `-v` tags each entry, so assume-unchanged and skip-worktree entries can be left out. */
+export const GIT_LS_FILES_ARGS: readonly string[] = ['ls-files', '-v', '-s', '-z'];
+/**
+ * Arguments of the status run. `--no-optional-locks`: a background status never takes `.git/index.lock` to refresh the index,
+ * so it cannot make the person's own `git` command fail with "index.lock exists".
+ */
+export const GIT_STATUS_ARGS: readonly string[] = ['--no-optional-locks', 'status', '--porcelain=v2', '-z', '--untracked-files=no', '--', '.'];
+
+/**
+ * Index entries of `git ls-files -v -s -z` git really checks (tag `H`), regular files only (stage 0, mode 100644/100755):
+ * root-relative path → blob id. An assume-unchanged entry (lowercase tag) or a skip-worktree one (`S`) is one git does NOT
+ * compare with the work tree, so status calling it clean says nothing about its bytes; symlinks and gitlinks are not files the
+ * walk hashes.
+ */
 export function parseLsFilesStaged(out: string): Map<string, string> {
     const blobs = new Map<string, string>();
     for (const entry of out.split('\0')) {
         const tab = entry.indexOf('\t');
         if (tab < 0) continue;
-        const [mode, blob, stage] = entry.slice(0, tab).split(' ');
-        if (stage !== '0' || (mode !== '100644' && mode !== '100755') || !blob) continue;
+        const [tag, mode, blob, stage] = entry.slice(0, tab).split(' ');
+        if (tag !== 'H' || stage !== '0' || (mode !== '100644' && mode !== '100755') || !blob) continue;
         blobs.set(entry.slice(tab + 1), blob);
     }
     return blobs;
@@ -57,15 +74,22 @@ export async function gitIndexHints(rootPath: string, opts: { timeoutMs?: number
     const takenAtNs = msToNs((opts.now ?? Date.now)());
     const [where, staged, status] = await Promise.all([
         runGit(rootPath, ['rev-parse', '--is-inside-work-tree', '--show-prefix'], { timeoutMs }),
-        runGit(rootPath, ['ls-files', '-s', '-z'], { timeoutMs }),
-        runGit(rootPath, ['status', '--porcelain=v2', '-z', '--untracked-files=no', '--', '.'], { timeoutMs }),
+        runGit(rootPath, [...GIT_LS_FILES_ARGS], { timeoutMs }),
+        runGit(rootPath, [...GIT_STATUS_ARGS], { timeoutMs }),
     ]);
     if (where.stdout === undefined || staged.stdout === undefined || status.stdout === undefined) return undefined;
     const [inside, prefix = ''] = where.stdout.split(/\r?\n/);
     if (inside !== 'true') return undefined;
     const blobs = parseLsFilesStaged(staged.stdout);
     for (const path of parseDirtyAgainstIndex(status.stdout)) {
-        if (path.startsWith(prefix)) blobs.delete(path.slice(prefix.length));
+        // A dirty path that is not under the root means the paths do not line up as assumed: trust none of them.
+        if (!path.startsWith(prefix)) return undefined;
+        blobs.delete(path.slice(prefix.length));
     }
     return { blobs, takenAtNs };
+}
+
+/** The git blob id of bytes: `sha1("blob <len>\0" + bytes)`, the id `git hash-object` gives a file with no filters. */
+export function gitBlobId(bytes: Uint8Array): string {
+    return createHash('sha1').update(`blob ${bytes.byteLength}\0`).update(bytes).digest('hex');
 }

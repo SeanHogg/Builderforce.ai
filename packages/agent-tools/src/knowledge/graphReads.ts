@@ -1,10 +1,9 @@
 /**
  * knowledge/graphReads.ts — what the repo graph read of each FILE, and what it left out (PRD 41 A9).
  *
- * Every source file up to the L3 cap (`MAX_LISTED_FILES`) is read, in bounded concurrent batches, and
- * only its parsed facts are kept. A file it cannot use, or one past the cap (`listing-truncated`), is
- * COUNTED here by reason — never dropped silently — so diagnostics can show, per system, the files
- * read and the files skipped and why.
+ * The graph has no file-count cap: every source file is read, in bounded concurrent batches, and
+ * only its parsed facts are kept. A file it cannot use is COUNTED here by reason — never dropped
+ * silently — so diagnostics can show, per system, the files read and the files skipped and why.
  *
  * The graph reads FILES; it does not know systems. The systems are detected once, by the systems
  * record ({@link recordSystems}), which assigns these files to them.

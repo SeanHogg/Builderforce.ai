@@ -20,7 +20,7 @@ import type { SqliteKnowledgeDb } from './node-knowledge/sqliteRows.js';
 import { sqliteHashCache } from './node-knowledge/statRows.js';
 import type { HashCache } from './knowledge/statManifest.js';
 
-export { gitIndexHints } from './node-knowledge/gitIndexHints.js';
+export { gitBlobId, gitIndexHints } from './node-knowledge/gitIndexHints.js';
 export { migrateLegacyKnowledge, type MigrationOptions, type MigrationResult } from './node-knowledge/legacyMigration.js';
 export { knowledgeDbPath, KNOWLEDGE_BUSY_TIMEOUT_MS } from './node-knowledge/openKnowledgeDb.js';
 export type { SqliteKnowledgeDb } from './node-knowledge/sqliteRows.js';

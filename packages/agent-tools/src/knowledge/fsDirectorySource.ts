@@ -23,7 +23,8 @@ import { mediaTypeOfPath, sha256Hex, type DirectorySource } from '@seanhogg/buil
 import type { SourceDocument } from '@seanhogg/builderforce-memory/ingest';
 import { isSkippedDirName, isVcsMetadataName, skippedDirReason, WORKSPACE_SKIP_DIRS, type SkippedFolder } from '../skipDirs.js';
 import { slashPath } from './rootRelative.js';
-import { EMPTY_STAT_SET, memoryHashCache, msToNs, reusedHash, sameRow, type GitHints, type HashCache, type StatRow, type StatSet } from './statManifest.js';
+import { memoryHashCache, msToNs, type GitHints, type HashCache } from './statManifest.js';
+import { StatWalk } from './statWalk.js';
 import { withDocumentText } from './documents/withDocumentText.js';
 
 /** Directory names no review walks, on any host (the definition index's list). */
@@ -75,6 +76,9 @@ const BUILDERFORCE_INPUTS: ReadonlySet<string> = new Set(['.builderforce/ignore'
 export const MAX_LISTED_FILES = 20_000;
 /** Files of one folder stat'ed and hashed at once. */
 const HASH_CONCURRENCY = 16;
+/** The default content hash and the rule it follows: they change TOGETHER (raw sha256 is `raw`). */
+export const DEFAULT_HASH: (bytes: Uint8Array) => string = sha256Hex;
+export const DEFAULT_HASH_RULE: string = 'raw';
 
 export interface FsDirectorySourceOptions {
     fs: KnowledgeFs;
@@ -88,12 +92,20 @@ export interface FsDirectorySourceOptions {
     hashCache?: HashCache;
     /** A Node host's git fast path (`gitIndexHints`): blob ids of the tracked files clean against the index. Undefined ⇒ the stat path only. */
     gitHints?: (rootPath: string) => Promise<GitHints | undefined>;
+    /** The git blob id of bytes (Node: `gitBlobId`): a hint is recorded only for bytes whose blob id is the index blob. */
+    gitBlobId?: (bytes: Uint8Array) => string;
     /** Told when the stat manifest could not be loaded or saved (the walk goes on; the cost is a re-hash). */
     onHashCacheError?: (error: unknown) => void;
     /** The clock (ms) the racy rule measures against; default `Date.now`. */
     now?: () => number;
-    /** The content hash of a file's bytes; default memory's {@link sha256Hex}. A host may pass a native one that yields the SAME lowercase hex digest. */
+    /** The content hash of a file's bytes; default {@link DEFAULT_HASH}. A host may pass a native one that yields the SAME lowercase hex digest. */
     hash?: (bytes: Uint8Array) => string;
+    /**
+     * The rule `hash` follows, recorded with the stat rows so a host whose digest changes never reuses a hash of the old one.
+     * Default {@link DEFAULT_HASH_RULE} with the default `hash`; a host passing its own `hash` passes its rule too (without one
+     * the stat manifest is not used).
+     */
+    hashRule?: string;
     /**
      * Files larger than this many bytes are listed with their size and a placeholder hash, never read: for a host whose
      * plan skips them as too large (the plan classifies those by size alone). Default: every file is hashed.
@@ -143,55 +155,40 @@ export function createFsDirectorySource(opts: FsDirectorySourceOptions): FsDirec
     const nested = new Set<string>();
     const underWalked = (rel: string): boolean => !isSkippedPath(rel, skipDirs, nested);
 
-    const digest = opts.hash ?? sha256Hex;
+    const digest = opts.hash ?? DEFAULT_HASH;
+    const hashRule = opts.hashRule ?? (opts.hash ? undefined : DEFAULT_HASH_RULE);
     const maxListed = opts.maxListed ?? Number.POSITIVE_INFINITY;
+    const startWalk = (): Promise<StatWalk> => StatWalk.start({
+        cache, rootId, root, rule: hashRule, digest, now,
+        ...(opts.gitHints ? { gitHints: opts.gitHints } : {}),
+        ...(opts.gitBlobId ? { gitBlobId: opts.gitBlobId } : {}),
+        ...(opts.onHashCacheError ? { onError: opts.onHashCacheError } : {}),
+    });
 
-    /** One walk's view of the stat manifest: what it loaded, what git said, and the rows it will save. */
-    interface WalkStats { prior: StatSet; hints: () => Promise<GitHints | undefined>; next: Map<string, StatRow>; changed: boolean }
-    const startWalk = async (): Promise<WalkStats> => {
-        // git starts beside the load but is awaited only by a file the stat path cannot clear: a warm walk never waits on it.
-        // git failing is the stat path, silently.
-        const asked = opts.gitHints ? opts.gitHints(root).catch(() => undefined) : Promise.resolve(undefined);
-        const prior = await cache.load(rootId).catch((error: unknown) => { opts.onHashCacheError?.(error); return undefined; });
-        return { prior: prior ?? EMPTY_STAT_SET, hints: () => asked, next: new Map(), changed: false };
-    };
-    /** Saves the walk's rows once (only when something changed): a complete walk replaces the root's rows, a capped one merges. */
-    const endWalk = async (walk: WalkStats, complete: boolean): Promise<void> => {
-        // A complete walk that saw fewer files than the rows hold had files deleted.
-        const changed = walk.changed || (complete && walk.next.size !== walk.prior.rows.size);
-        if (!changed) return;
-        const rows = complete ? walk.next : new Map([...walk.prior.rows, ...walk.next]);
-        await cache.save(rootId, [...rows.values()], msToNs(now())).catch((error: unknown) => { opts.onHashCacheError?.(error); });
-    };
-
-    const hashOf = async (rel: string, walk: WalkStats): Promise<{ hash: string; size: number }> => {
+    const hashOf = async (rel: string, walk: StatWalk): Promise<{ hash: string; size: number }> => {
         const abs = `${root}/${rel}`;
         const st = await fs.stat(abs);
         // A file the plan skips by size needs its size only: never read, and a hash no other file can equal.
         if (opts.skipHashAbove !== undefined && st.size > opts.skipHashAbove) return { hash: `unhashed:${st.size}:${abs}`, size: st.size };
         const stat = { size: st.size, mtimeNs: st.mtimeNs ?? msToNs(st.mtime), ...(st.fileId !== undefined ? { fileId: st.fileId } : {}) };
-        const row = walk.prior.rows.get(rel);
-        let reused = reusedHash(stat, row, walk.prior, undefined);
-        let blob: string | undefined;
-        if (reused === undefined) {
-            const hints = await walk.hints();
-            blob = hints?.blobs.get(rel);
-            reused = reusedHash(stat, row, walk.prior, blob, hints?.takenAtNs);
-        }
-        const hash = reused ?? digest(await fs.readFile(abs));
-        // A file git has no clean entry for keeps the blob its row was hashed at only while its bytes are those (a reused hash).
-        const gitBlob = blob ?? (reused !== undefined ? row?.gitBlob : undefined);
-        const next: StatRow = { path: rel, ...stat, hash, ...(gitBlob !== undefined ? { gitBlob } : {}) };
-        walk.next.set(rel, next);
-        // A racy file re-hashed to the same bytes still changes the set: its save moves the write time past its mtime.
-        if (reused === undefined || !sameRow(row, next)) walk.changed = true;
-        return { hash, size: st.size };
+        return { hash: await walk.hashOf(rel, stat, () => fs.readFile(abs)), size: st.size };
     };
 
     async function* list(): AsyncIterable<{ path: string; hash: string; size: number }> {
+        const walk = await startWalk();
+        let complete = false;
+        // Saved however the walk ends: a capped walk, or a consumer that stops early, saves what it visited as a merge.
+        try {
+            complete = yield* walkFiles(walk);
+        } finally {
+            await walk.end(complete);
+        }
+    }
+
+    /** The walk itself; true when it reached the end (false: stopped at the cap). */
+    async function* walkFiles(walk: StatWalk): AsyncGenerator<{ path: string; hash: string; size: number }, boolean> {
         const queue: string[] = [''];
         let listed = 0;
-        const walk = await startWalk();
         skipped = [];
         nested.clear();
         gitRoots.clear();
@@ -244,14 +241,11 @@ export function createFsDirectorySource(opts: FsDirectorySourceOptions): FsDirec
                 for (const file of hashed) {
                     if (!file) continue;
                     yield file;
-                    if (++listed >= maxListed) {
-                        await endWalk(walk, false);
-                        return;
-                    }
+                    if (++listed >= maxListed) return false;
                 }
             }
         }
-        await endWalk(walk, true);
+        return true;
     }
 
     const read = async (path: string): Promise<SourceDocument> => {

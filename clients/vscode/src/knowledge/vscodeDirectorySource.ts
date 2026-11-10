@@ -15,7 +15,7 @@ import { nodeSha256Hex } from "./nodeSha256";
 
 export type { HashCache, KnowledgeFs };
 
-export interface DirectorySourceOptions extends Pick<FsDirectorySourceOptions, "gitHints" | "onHashCacheError"> {
+export interface DirectorySourceOptions extends Pick<FsDirectorySourceOptions, "gitHints" | "gitBlobId" | "onHashCacheError"> {
   fs: KnowledgeFs;
   /** Absolute path of the folder reviewed. */
   rootPath: string;
@@ -61,7 +61,8 @@ export function withEventLoopYield<T extends FsDirectorySource>(source: T, every
 export function createDirectorySource(opts: DirectorySourceOptions): FsDirectorySource {
   const { yieldEvery, yieldDelay, ...rest } = opts;
   return withEventLoopYield(
-    createFsDirectorySource({ ...rest, hash: nodeSha256Hex, skipHashAbove: DEFAULT_MAX_FILE_BYTES }),
+    // The hash and its rule go together: the stat manifest never reuses a hash made under another rule.
+    createFsDirectorySource({ ...rest, hash: nodeSha256Hex, hashRule: "raw", skipHashAbove: DEFAULT_MAX_FILE_BYTES }),
     yieldEvery ?? EVENT_LOOP_YIELD_EVERY,
     yieldDelay ?? eventLoopYield,
   );
