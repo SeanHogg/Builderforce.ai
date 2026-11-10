@@ -24,6 +24,11 @@ export default [
   // scripts/entity-id-parsing.allowlist.mjs. Its matcher's own test runs next to it (plain node:test).
   ['check:entity-id-parsing', '../../scripts/check-entity-id-parsing.mjs'],
   ['check:entity-id-parsing-scan', '../../scripts/lib/entityIdParsing.test.mjs'],
+  // Also repo-level (PRD 41 §D0): measured decides, predicted advises — nothing under
+  // packages/run-delta/src/{engine,rules,verdict} may reach predict/, by any import chain.
+  // Its rule's own test runs next to it (plain node:test).
+  ['check:run-delta-layers', '../../scripts/check-run-delta-layers.mjs'],
+  ['check:run-delta-layers-rule', '../../scripts/lib/runDeltaLayers.test.mjs'],
   // Also repo-level: `packages/bfi-web` is a VENDORED wasm-pack build (PRD 34 §4). This
   // holds its bytes to the commit + hashes in its SOURCE.json — no Rust needed — so a
   // hand-edited or half-replaced engine fails here instead of in a browser.

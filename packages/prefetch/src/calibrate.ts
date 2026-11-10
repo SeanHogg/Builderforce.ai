@@ -6,10 +6,13 @@
  * Not `difficulty-router`'s head itself: that one is batch-fitted by an injected trainer
  * over its own feature contract, while this one learns one outcome at a time on the
  * device. The family (and the cold-start rule — conservative until evidence) is shared.
+ * The maths — σ(w·x + b) and the online SGD step — is builderforce-memory's `./stats`
+ * logistic head (PRD 41 D13); this module owns only the state, thresholds and storage.
  *
  * Every function returns a NEW state; nothing here mutates its input. Pure.
  */
 
+import { logisticProbability, onlineLogisticStep } from '@seanhogg/builderforce-memory/stats';
 import { LEXICAL_FEATURES } from './lexical.js';
 import type { ActionHead, ActionThreshold, CalibrationState, GateOutcome, LoggedOutcome } from './types.js';
 
@@ -48,18 +51,10 @@ export function thresholdOf(state: CalibrationState | undefined, id: string): Ac
   return state?.thresholds[id] ?? { answer: COLD_START.answer, prefetch: COLD_START.prefetch, n: 0 };
 }
 
-function sigmoid(z: number): number {
-  if (z >= 0) return 1 / (1 + Math.exp(-z));
-  const e = Math.exp(z);
-  return e / (1 + e);
-}
-
 /** P(the action settles this request) from its head. 0 for features of the wrong shape. */
 export function predict(head: ActionHead, features: readonly number[]): number {
   if (features.length !== head.weights.length) return 0;
-  let z = head.bias;
-  for (let i = 0; i < features.length; i++) z += head.weights[i]! * features[i]!;
-  return sigmoid(z);
+  return logisticProbability(head.weights, head.bias, features);
 }
 
 /**
@@ -72,12 +67,8 @@ export function updateHead(state: CalibrationState, outcome: GateOutcome): Calib
   const heads = { ...state.heads };
   if (outcome.features.length === LEXICAL_FEATURES) {
     const head = headOf(state, id);
-    const err = (outcome.accepted ? 1 : 0) - predict(head, outcome.features);
-    heads[id] = {
-      weights: head.weights.map((w, i) => w + LEARNING_RATE * err * outcome.features[i]!),
-      bias: head.bias + LEARNING_RATE * err,
-      n: head.n + 1,
-    };
+    const stepped = onlineLogisticStep(head.weights, head.bias, outcome.features, outcome.accepted ? 1 : 0, LEARNING_RATE);
+    heads[id] = { weights: stepped.weights, bias: stepped.bias, n: head.n + 1 };
   }
   const outcomes = { ...(state.outcomes ?? {}) };
   if (outcome.tier !== 1 && outcome.route !== 'llm') {

@@ -164,7 +164,7 @@ function scriptKindFor(ts, file) {
  * @param {string} text
  * @returns {{ specifier: string, pos: number }[]}
  */
-function parseModuleSpecifiers(ts, file, text) {
+export function parseModuleSpecifiers(ts, file, text) {
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, false, scriptKindFor(ts, file));
   /** @type {{ specifier: string, pos: number }[]} */
   const found = [];
@@ -192,7 +192,7 @@ function parseModuleSpecifiers(ts, file, text) {
 }
 
 /** A file whose imports are dev-time only: tests, and the configs that run them. */
-function isTestFile(file) {
+export function isTestFile(file) {
   const name = file.split(/[\\/]/).pop() ?? '';
   return /\.(test|spec)\.[cm]?[jt]sx?$/.test(name) || /\.config\.[cm]?[jt]s$/.test(name);
 }
@@ -273,7 +273,7 @@ export async function scanBareImports({ ts, repoRoot, dirs, mustContain, onFile 
 const RELATIVE_SUFFIXES = ['', '.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs', '/index.ts', '/index.tsx', '/index.js'];
 
 /** The source file a relative import resolves to, or null when nothing on disk matches. */
-function resolveRelativeFile(fromFile, specifier) {
+export function resolveRelativeFile(fromFile, specifier) {
   const base = resolve(fromFile, '..', specifier);
   const stems = /\.[cm]?jsx?$/.test(base) ? [base.replace(/\.([cm]?)js(x?)$/, '.$1ts$2'), base] : [base];
   for (const stem of stems) {

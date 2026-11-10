@@ -15,6 +15,8 @@
  * bound (95%).
  */
 
+import { wilsonInterval } from '@seanhogg/builderforce-memory/stats';
+
 export const MAX_REPRESENTATIVES = 3;
 export const MAX_CANDIDATES = 200;
 const KMEDOIDS_ROUNDS = 8;
@@ -116,15 +118,8 @@ export function pickRepresentatives(candidates: readonly ClusterCandidate[], k =
     }));
 }
 
-/** 95% Wilson score interval of `hits / n`. */
-export function wilson(hits: number, n: number, z = 1.96): { low: number; high: number } {
-  if (n <= 0) return { low: 0, high: 1 };
-  const p = Math.min(1, Math.max(0, hits / n));
-  const denom = 1 + (z * z) / n;
-  const centre = (p + (z * z) / (2 * n)) / denom;
-  const half = (z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n))) / denom;
-  return { low: Math.max(0, centre - half), high: Math.min(1, centre + half) };
-}
+/** 95% Wilson score interval of `hits / n`: builderforce-memory's ONE (PRD 41 D13). */
+export { wilsonInterval as wilson };
 
 export interface RateWindow {
   /** Sessions that hit the issue. */
@@ -139,5 +134,5 @@ export const REGRESSION_MIN_SESSIONS = 30;
 /** Whether the after-release rate sits above the before-release interval. */
 export function isRegressed(before: RateWindow, after: RateWindow): boolean {
   if (before.sessions < REGRESSION_MIN_SESSIONS || after.sessions < REGRESSION_MIN_SESSIONS) return false;
-  return wilson(after.hits, after.sessions).low > wilson(before.hits, before.sessions).high;
+  return wilsonInterval(after.hits, after.sessions).low > wilsonInterval(before.hits, before.sessions).high;
 }

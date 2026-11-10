@@ -32,8 +32,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@seanhogg/builderforce-memory": "^2026.10.71",
-    "@seanhogg/builderforce-memory-engine": "^2026.10.62",
+    "@seanhogg/builderforce-memory": "^2026.10.72",
+    "@seanhogg/builderforce-memory-engine": "^2026.10.63",
     "fflate": "^0.8.2",
     "tree-sitter-wasms": "^0.1.11",
     "unpdf": "^1.9.1",

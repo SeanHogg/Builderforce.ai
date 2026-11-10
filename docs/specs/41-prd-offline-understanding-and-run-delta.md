@@ -1545,7 +1545,14 @@ GBM, naive Bayes and k-means. Its task catalog in `ml/tasks` already includes `r
 - The `stats` module holds **only what that catalog lacks**. It imports, and never
   re-implements, the `ml/classical` primitives.
 - Where `ml/classical` needs more (L2, class weights or IRLS in `logistic.ts`; a Mahalanobis
-  term in `anomaly_composite.ts`), it is extended in place.
+  term in `anomaly_composite.ts`), it is extended in place. Ledoit–Wolf lives in
+  `ml/classical/covariance.ts`, because the Mahalanobis term fits on it, and `stats` re-exports it.
+- **One deliberate exception: the binary logistic head.** `stats/logistic.ts` (`sigmoid`,
+  `logisticProbability`, `onlineLogisticStep`) is float64 and does not import the engine. It
+  scores a stored head and folds in one outcome at a time on the device, for prefetch calibration
+  and difficulty-head scoring. The engine's `LogisticModel` is a Float32 softmax that fits in
+  batches (gradient descent or IRLS) and remains the only trainer. The engine's training kernels
+  keep their own sigmoid (`training/cpu_ops.ts`).
 - Part D's *models* are registered as `ml/tasks` entries (`run_risk`, `case_mix`,
   `finding_rank`, `check_scheduler`). The run anomaly score extends the existing `run_anomaly`.
 
@@ -2019,7 +2026,7 @@ Version bumps and ROADMAP/DONE entries stay with the session model.
 7. **Engine floor:** `engines.vscode` rises to `^1.101.0`. G03 is unblocked, and WS2 uses
    SQLite from the start.
 8. **Cross-tenant training:** opt-in. Default off for enterprise plans, on for free plans,
-   stated in the privacy terms.
+   stated in the privacy terms. This codebase's paid plans (pro, teams) take the enterprise default: off.
 9. **People are scored** (managers need it). Person and experience features are allowed in
    the D5 risk model, and D14 defines the fair scoring method:
    - risk-adjusted;

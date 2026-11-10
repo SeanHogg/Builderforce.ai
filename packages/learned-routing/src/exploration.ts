@@ -16,6 +16,7 @@
  * That is the ONLY way a cold model reaches the front, so the cap is exact.
  */
 
+import { betaMoments, normalDraw } from '@seanhogg/builderforce-memory/stats';
 import { blendedQualityScore, type ModelQualitySignals } from './modelQualityScore.js';
 import { decaySince } from './recencyDecay.js';
 
@@ -54,13 +55,6 @@ export function posteriorEvidence(s: ModelQualitySignals & DecayedEvidence, nowM
   return Math.max(0, (runs + ratings) * decaySince(s.at, nowMs));
 }
 
-/** One standard normal draw (Box–Muller) from the injected source. PURE given `rng`. */
-function standardNormal(rng: RandomSource): number {
-  const u = Math.max(Number.EPSILON, rng());
-  const v = rng();
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-}
-
 /**
  * One Thompson draw of a model's quality: a Beta(q·e + 1, (1−q)·e + 1) posterior over
  * the blended score `q` with evidence `e`, sampled by its normal approximation (mean and
@@ -70,11 +64,8 @@ function standardNormal(rng: RandomSource): number {
 export function sampleQuality(s: ModelQualitySignals & DecayedEvidence, rng: RandomSource, nowMs?: number): number {
   const q = Math.min(1, Math.max(0, blendedQualityScore(s)));
   const e = posteriorEvidence(s, nowMs);
-  const a = q * e + 1;
-  const b = (1 - q) * e + 1;
-  const mean = a / (a + b);
-  const sd = Math.sqrt((a * b) / ((a + b) * (a + b) * (a + b + 1)));
-  return Math.min(1, Math.max(0, mean + sd * standardNormal(rng)));
+  const { mean, variance } = betaMoments(q * e + 1, (1 - q) * e + 1);
+  return Math.min(1, Math.max(0, mean + Math.sqrt(variance) * normalDraw(rng)));
 }
 
 /** Does this pick spend its exploration slot on a cold model? PURE given `rng`. */

@@ -8,11 +8,13 @@
  * {@link LogisticTrainer}; this module only builds the samples, and reduces the fitted
  * two-class softmax to the binary head it stores: for classes (passes, fails),
  * `P(fails) = σ((W₁ − W₀)·x + (b₁ − b₀))`, which is exactly the softmax's class-1 output.
+ * Scoring that head is builderforce-memory's `./stats` `logisticProbability` (PRD 41 D13).
  *
  * Cold start is today's behaviour: no head, too few samples, or a held-out loss no better
  * than a coin (ln 2 nats) and the weak model is always tried.
  */
 
+import { logisticProbability } from '@seanhogg/builderforce-memory/stats';
 import {
   difficultyFeatureDim,
   featurize,
@@ -162,19 +164,11 @@ export async function trainLogistic(
   };
 }
 
-function sigmoid(z: number): number {
-  if (z >= 0) return 1 / (1 + Math.exp(-z));
-  const e = Math.exp(z);
-  return e / (1 + e);
-}
-
 /** P(the weak model's attempt at `f` fails). 0.5 (no information) for a head of the wrong shape. */
 export function predictWeakFailure(head: DifficultyHead, f: DifficultyFeatures): number {
   const x = featurize(f, head.vocab);
   if (x.length !== head.w.length) return 0.5;
-  let z = head.b;
-  for (let i = 0; i < x.length; i++) z += head.w[i]! * x[i]!;
-  return sigmoid(z);
+  return logisticProbability(head.w, head.b, x);
 }
 
 /** Enough rows, and a held-out loss that beats a coin. */

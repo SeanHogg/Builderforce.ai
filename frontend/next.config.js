@@ -168,6 +168,10 @@ const nextConfig = {
       // `@builderforce/agent-run` (the canvas's one agent) binds the packer and the fold.
       '@seanhogg/builderforce-memory/handoff': './node_modules/@seanhogg/builderforce-memory/dist/handoff/index.js',
       '@seanhogg/builderforce-memory/working': './node_modules/@seanhogg/builderforce-memory/dist/working/index.js',
+      // PRD 41 D13: the ONE stats home — knowledge-graph-view, learned-routing, prefetch,
+      // difficulty-router and pipeline-route import it from source; it reaches the engine
+      // only through the engine's light `./ml/classical` subpath.
+      '@seanhogg/builderforce-memory/stats': './node_modules/@seanhogg/builderforce-memory/dist/stats/index.js',
       'react-markdown': './node_modules/react-markdown/index.js',
       'remark-gfm': './node_modules/remark-gfm/index.js',
       sharp: './src/lib/turbopackEmptyModule.ts',

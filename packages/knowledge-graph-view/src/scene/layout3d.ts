@@ -15,6 +15,7 @@
  */
 
 import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
+import { createRng } from '@seanhogg/builderforce-memory/stats';
 import { cmp, importanceOf, round } from '../order';
 import { canonicalEdgesTask } from './canonicalEdges';
 import { layoutSpringsTask } from './layoutSprings';
@@ -66,18 +67,6 @@ export function hash32(text: string): number {
     return h >>> 0;
 }
 
-/** mulberry32 — a tiny seeded PRNG. */
-function rng(seed: number): () => number {
-    let a = seed >>> 0;
-    return () => {
-        a = (a + 0x6d2b79f5) >>> 0;
-        let t = a;
-        t = Math.imul(t ^ (t >>> 15), t | 1);
-        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-}
-
 /** A layout in progress: call `step()` (one relaxation pass) until it returns true, then read `result()`. */
 export interface LayoutTask {
     step(): boolean;
@@ -94,7 +83,8 @@ export function layoutTask(
     const planes = planeOrderTask(nodes, edgesIn, opts.partitionOrder);
     let order: string[] = [];
     let planeY = new Map<string, number>();
-    const random = rng(hash32(rootId));
+    // The stats module's ONE seeded PRNG (xoshiro128**), seeded by the root id's hash.
+    const random = createRng(hash32(rootId));
 
     // Planes are placements (a partition, else a community). Areas: the node's area, else its plane as one area.
     const planeKeys = nodes.map((n) => planeKeyOf(n, nodes) ?? NONE);

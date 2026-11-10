@@ -11,28 +11,19 @@
  */
 
 import type { ReplayImpactDto } from '@builderforce/interaction-contract';
+import { wilsonInterval } from '@seanhogg/builderforce-memory/stats';
 import type { Finding, ImpactCohorts } from './types';
+
+/** The Wilson score interval (95% by default; [0, 1] when n is 0): builderforce-memory's ONE (PRD 41 D13). */
+export { wilsonInterval };
 
 export const IMPACT_HORIZON_DAYS = 30;
 /** Fewer visits than this in either cohort → no point estimate, low confidence. */
 export const MIN_COHORT_VISITS = 100;
 /** Both cohorts at least this large AND an interval clear of zero → high confidence. */
 export const HIGH_CONFIDENCE_VISITS = 1_000;
-/** 95% two-sided. */
-const Z = 1.96;
 
 const round1 = (n: number): number => Math.round(n * 10) / 10;
-
-/** The Wilson score interval of `successes / n`; [0, 1] when n is 0. */
-export function wilsonInterval(successes: number, n: number, z: number = Z): { low: number; high: number } {
-  if (!(n > 0)) return { low: 0, high: 1 };
-  const p = Math.min(1, Math.max(0, successes / n));
-  const z2 = z * z;
-  const denom = 1 + z2 / n;
-  const centre = (p + z2 / (2 * n)) / denom;
-  const half = (z * Math.sqrt((p * (1 - p)) / n + z2 / (4 * n * n))) / denom;
-  return { low: Math.max(0, centre - half), high: Math.min(1, centre + half) };
-}
 
 const rate = (c: { visits: number; conversions: number }): number => (c.visits > 0 ? c.conversions / c.visits : 0);
 

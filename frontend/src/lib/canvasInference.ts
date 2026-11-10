@@ -23,6 +23,7 @@
  * indistinguishable from a bug.
  */
 
+import { wilsonInterval } from '@seanhogg/builderforce-memory/stats';
 import { mean, stddev } from './canvasStatistics';
 
 function round(value: number): number {
@@ -67,12 +68,8 @@ export interface Interval { low: number; high: number; level: number }
  */
 export function proportionInterval(successes: number, total: number, level: number = 0.95): Interval | null {
   if (!Number.isFinite(successes) || !Number.isFinite(total) || total <= 0 || successes < 0 || successes > total) return null;
-  const z = criticalValue(level);
-  const proportion = successes / total;
-  const denominator = 1 + z * z / total;
-  const centre = (proportion + z * z / (2 * total)) / denominator;
-  const margin = z * Math.sqrt(proportion * (1 - proportion) / total + z * z / (4 * total * total)) / denominator;
-  return { low: round(Math.max(0, centre - margin)), high: round(Math.min(1, centre + margin)), level };
+  const { low, high } = wilsonInterval(successes, total, criticalValue(level));
+  return { low: round(low), high: round(high), level };
 }
 
 /**

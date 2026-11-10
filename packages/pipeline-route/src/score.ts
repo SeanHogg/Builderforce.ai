@@ -16,8 +16,11 @@
  * WOULD have done), and the words "full pipeline" in the request force it.
  *
  * PURE — no I/O, no env, no clock. The action type is the caller's (the shared lexical
- * classifier in `@builderforce/workload`), so this package depends on nothing.
+ * classifier in `@builderforce/workload`); the only dependency is the ONE sigmoid in
+ * builderforce-memory's `./stats` (PRD 41 D13).
  */
+
+import { sigmoid } from '@seanhogg/builderforce-memory/stats';
 
 export type PipelineRoute = 'full' | 'quick';
 export type PipelineRoutingMode = 'auto' | 'always';
@@ -107,7 +110,6 @@ export interface PipelineScore {
   reason: string;
 }
 
-const sigmoid = (z: number): number => 1 / (1 + Math.exp(-z));
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 /** The threshold a caller asked for, clamped, or the default for anything not a number. */
