@@ -373,7 +373,7 @@ Planning today hashes every file (329 s for 16.7k files). That cost goes:
      for files detected as text. Binary files are hashed raw.
    - So a Windows `core.autocrlf` checkout and a Linux checkout of the same commit hash
      identically. The cross-OS digest, pre-image hashes and the oracle all rely on this.
-   - The normalization rule is part of `EXTRACTOR_VERSION`.
+   - The normalization rule is recorded in the extractor state (`contentHashRule`; an absent record is the baseline `eol-lf@1`), separate from `EXTRACTOR_VERSION`. It never owes files on its own: adopting it moves the hash of every CRLF file, so those re-extract through the content change, and LF files keep their hash.
 1. **Stat manifest.** `(path, size, mtimeNs, ino/fileId)` per file, persisted with the plan
    manifest. Stats are read with `bigint: true`, because Windows file ids and nanosecond
    mtimes lose precision as JS numbers. A file whose stat tuple is unchanged reuses its stored
