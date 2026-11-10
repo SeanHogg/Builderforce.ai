@@ -111,6 +111,13 @@
      "error": "",
      "errorAction": null,
      "confirm": null,
+     "activity": "thinking:context-fold#0"
+    },
+    {
+     "running": true,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
      "activity": null
     },
     {
@@ -525,6 +532,32 @@
  },
  "error": {},
  "agentOnly": {
-  "recorded": []
+  "recorded": [
+   {
+    "entryPoint": "web",
+    "toolCalls": 0,
+    "toolErrors": 0,
+    "tokens": 0,
+    "cacheReadTokens": 0,
+    "compactions": 1,
+    "stallRecoveries": 0,
+    "escalations": 0,
+    "coveredReadStubs": 0,
+    "shellFileReads": 0,
+    "repoErrors": 0,
+    "contextPackTokens": 0,
+    "unkeptReadyClaims": 0,
+    "verify": "not-run",
+    "firstSpawnTurn": null,
+    "modelPreflight": "ok",
+    "progressTrips": {},
+    "clientRunId": "ide:7001:<epoch>",
+    "model": "default",
+    "source": "external",
+    "terminalStatus": "cancelled",
+    "steps": 0,
+    "routingSignal": false
+   }
+  ]
  }
 }
