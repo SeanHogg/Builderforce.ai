@@ -52,8 +52,10 @@ import {
   type StatHashHint,
 } from "./runChangeBaseline";
 import { listWorkingSet, workingSetStatus } from "./runDelta/folderWorkingSet";
+import { syncedRepositoryIdentity } from "./repoIdentity";
 import {
   deviceIdOf,
+  isoDay,
   readChangeSetLifecycle,
   recordChangeSetBaseline,
   recordChangeSetFinalization,
@@ -68,13 +70,37 @@ export interface LocalChangeSetValue extends ChangeSetValue {
 }
 
 /**
- * The attributed per-repository change sets of one repository (the lifecycle rows are in no group): what the run delta's
- * overlap test reads instead of every change set on the device.
+ * The attributed per-repository change sets of one repository (the lifecycle rows are in no group), keyed by the stored
+ * (local) identity: what commit attribution reads instead of every change set on the device.
  */
 export const CHANGE_SETS_BY_REPOSITORY = defineRecordIndex<LocalChangeSetValue>(
   "change-set", "vscode.changeSet.repository",
   (row) => ((row.payload as { kind?: unknown }).kind === "lifecycle" ? undefined : row.payload.repository),
 );
+
+/**
+ * The same change sets grouped by repository AND the UTC day they were captured ({@link changeSetDayKey}): the run delta's
+ * overlap test reads only the days of its own window, never a repository's whole history.
+ */
+export const CHANGE_SETS_BY_REPOSITORY_DAY = defineRecordIndex<LocalChangeSetValue>(
+  "change-set", "vscode.changeSet.repositoryDay",
+  (row) => ((row.payload as { kind?: unknown }).kind === "lifecycle" || typeof row.payload.capturedAt !== "string"
+    ? undefined
+    : changeSetDayKey(row.payload.repository, row.payload.capturedAt)),
+);
+
+/** {@link CHANGE_SETS_BY_REPOSITORY_DAY}'s key: the repository and the UTC day of an ISO time. */
+export function changeSetDayKey(repository: string, iso: string): string {
+  return `${repository}\n${isoDay(iso)}`;
+}
+
+/**
+ * What the sync carries for a change set: the record with its repository named by {@link syncedRepositoryIdentity} (no
+ * credentials, no local path). The stored record keeps the local identity, which this device's readers look repositories up by.
+ */
+export function syncedChangeSetPayload(payload: LocalChangeSetValue): LocalChangeSetValue {
+  return { ...payload, repository: syncedRepositoryIdentity(payload.repository) };
+}
 
 /** The change-set record id is derived from the run and repo, so re-finalizing dedupes. */
 export function runChangeSetId(runId: string, repoRoot: string): string {
@@ -210,7 +236,7 @@ export async function finalizeRunChangeSetRepos(
         occurredAt: at,
         dependsOn: [`execution:start:${args.runId}`],
         destination: record.destination,
-        payload: record.payload,
+        payload: syncedChangeSetPayload(record.payload),
       });
     });
     committed.push({ id, root: repo.root });

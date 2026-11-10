@@ -15,17 +15,28 @@ import {
   type LocalFirstStore,
 } from "@builderforce/local-first";
 import { normalizePath } from "./gitChangeModel";
+import { syncedRepositoryIdentity } from "./repoIdentity";
 import type { RunChangeBaseline } from "./runChangeBaseline";
 
 /**
  * One per run. Distinct from {@link runChangeSetId} so the immutable per-repo diff
  * is never overwritten when the set opens or closes.
  */
-/** The lifecycles of runs still in flight (a baseline and no finalization): the run delta's overlap test reads only these. */
+/**
+ * The lifecycles of runs still in flight (a baseline and no finalization), grouped by the UTC day of their baseline
+ * ({@link isoDay}): the run delta's overlap test reads only these, and only the days a live run can have started on.
+ */
 export const OPEN_CHANGE_SET_LIFECYCLES = defineRecordIndex<ChangeSetLifecycleValue>(
-  "change-set", "vscode.changeSet.openLifecycle",
-  (row) => (isChangeSetLifecycle(row.payload) && !row.payload.finalizedAt ? "open" : undefined),
+  "change-set", "vscode.changeSet.openLifecycleDay",
+  (row) => (isChangeSetLifecycle(row.payload) && !row.payload.finalizedAt && typeof row.payload.baseline?.capturedAt === "string"
+    ? isoDay(row.payload.baseline.capturedAt)
+    : undefined),
 );
+
+/** The UTC day (`YYYY-MM-DD`) of an ISO time: the bucket the time-bounded change-set indexes group by. */
+export function isoDay(iso: string): string {
+  return iso.slice(0, 10);
+}
 
 export function changeSetLifecycleId(runId: string): string {
   return `changeset-lifecycle:${runId}`;
@@ -171,6 +182,22 @@ function lifecyclePayload(set: ChangeSetLifecycle): ChangeSetLifecycleValue {
   };
 }
 
+/**
+ * What the sync carries for a lifecycle: every repository and root named by {@link syncedRepositoryIdentity} (no
+ * credentials, no local path: a root is always `local:<hash>`). The stored record keeps the local values: a restart's
+ * fallback baseline reads them.
+ */
+export function syncedLifecyclePayload(payload: ChangeSetLifecycleValue): ChangeSetLifecycleValue {
+  const repos = payload.baseline.repos.map((repo) => ({
+    ...repo, root: syncedRepositoryIdentity(repo.root), repository: syncedRepositoryIdentity(repo.repository),
+  }));
+  return {
+    ...payload,
+    repository: repos.map((repo) => repo.repository).sort().join("\n") || "workspace",
+    baseline: { ...payload.baseline, repos },
+  };
+}
+
 function lifecycleFromPayload(payload: ChangeSetLifecycleValue): ChangeSetLifecycle {
   return {
     runId: payload.runId,
@@ -246,7 +273,7 @@ export async function recordChangeSetBaseline(
       occurredAt: at,
       dependsOn: [`execution:start:${args.runId}`],
       destination: record.destination,
-      payload: record.payload,
+      payload: syncedLifecyclePayload(record.payload),
     });
   });
   const stored = await readChangeSetLifecycle(store, args.runId);
@@ -298,7 +325,7 @@ export async function recordChangeSetFinalization(
         occurredAt: at,
         dependsOn: [`execution:start:${args.runId}`],
         destination: record.destination,
-        payload: record.payload,
+        payload: syncedLifecyclePayload(record.payload),
       });
       return;
     }
@@ -315,7 +342,7 @@ export async function recordChangeSetFinalization(
       occurredAt: at,
       dependsOn: [`change-set:baseline:${id}`],
       destination: existing.destination,
-      payload,
+      payload: syncedLifecyclePayload(payload),
     });
   });
   const stored = await readChangeSetLifecycle(store, args.runId);

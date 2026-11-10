@@ -14,9 +14,9 @@
  */
 
 import { createHash } from "node:crypto";
-import * as path from "node:path";
 import { defineRecordIndex, newLocalRecord, scanByIndex, type EntityDestination, type ExecutionValue, type LocalFirstStore } from "@builderforce/local-first";
 import type { ComputedRunDeltaCard, RunDelta } from "@builderforce/run-delta";
+import { syncedRepositoryIdentity } from "../repoIdentity";
 import { droppedOverrides } from "./droppedOverrides";
 
 /** The synced value. */
@@ -88,9 +88,9 @@ export const RUN_DELTAS_BY_CHAT = defineRecordIndex<RunDeltaRecordValue | RunDel
 
 const sha = (text: string): string => createHash("sha256").update(text).digest("hex");
 
-/** The repository identity that may leave the device: a remote URL as it is, a local path as `local:<hash>`. */
+/** The repository identity that may leave the device: a remote URL without credentials, a local path as `local:<hash>` (`repoIdentity.ts`). */
 export function syncedRepository(repo: string): string {
-  return path.isAbsolute(repo) || /^[A-Za-z]:[\\/]/.test(repo) ? `local:${sha(repo.replace(/\\/g, "/")).slice(0, 16)}` : repo;
+  return syncedRepositoryIdentity(repo);
 }
 
 /**

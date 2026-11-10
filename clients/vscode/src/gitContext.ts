@@ -21,6 +21,7 @@ import * as vscode from "vscode";
 import { collectRepoChanges, parsePorcelain } from "./gitChangeModel";
 import { findRepository, getGitApi, runGit, watchGitRepositories, type GitApiRepository } from "./gitApi";
 import type { GitContext } from "./idePersona";
+import { syncedRepositoryIdentity } from "./repoIdentity";
 import { ttlCache } from "./ttlCache";
 
 // The SHAPE lives in `idePersona.ts` (host-free, so it can cross the webview
@@ -71,10 +72,14 @@ export function parseRemoteUrl(url: string): { owner: string; repo: string; host
   return { owner, repo, host };
 }
 
-/** Attach `owner`/`repo` to a context from its remote URL, in one place. */
-function withRemote(ctx: GitContext, remoteUrl: string | undefined): GitContext {
-  if (!remoteUrl) return ctx;
-  const parsed = parseRemoteUrl(remoteUrl);
+/**
+ * Attach `owner`/`repo` to a context from its remote URL, in one place. The context crosses the webview bridge and is written
+ * into the model's prompt, so the URL it carries is the synced identity (`repoIdentity.ts`): no credentials, no local path.
+ */
+function withRemote(ctx: GitContext, origin: string | undefined): GitContext {
+  if (!origin) return ctx;
+  const parsed = parseRemoteUrl(origin);
+  const remoteUrl = syncedRepositoryIdentity(origin);
   return parsed
     ? { ...ctx, remoteUrl, owner: parsed.owner, repo: parsed.repo, host: parsed.host }
     : { ...ctx, remoteUrl };

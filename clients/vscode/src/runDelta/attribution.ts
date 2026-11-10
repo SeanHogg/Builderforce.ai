@@ -19,8 +19,8 @@
 import * as path from "node:path";
 import { scanByIndex, type LocalFirstStore } from "@builderforce/local-first";
 import type { ChangedFileInput } from "@builderforce/run-delta";
-import { OPEN_CHANGE_SET_LIFECYCLES, type ChangeSetLifecycleValue } from "../changeSetLifecycle";
-import { CHANGE_SETS_BY_REPOSITORY, type LocalChangeSetValue } from "../runChangeSets";
+import { isoDay, OPEN_CHANGE_SET_LIFECYCLES, type ChangeSetLifecycleValue } from "../changeSetLifecycle";
+import { CHANGE_SETS_BY_REPOSITORY_DAY, changeSetDayKey, type LocalChangeSetValue } from "../runChangeSets";
 
 /** An in-flight lifecycle older than this is a dead run's, not a parallel one. */
 export const STALE_RUN_MS = 12 * 60 * 60 * 1000;
@@ -35,24 +35,50 @@ export interface AttributionScope {
   until: string;
 }
 
-/** Whether another run's window overlapped this run's on the same repository. */
+/** At most this many UTC days of a window are read (a garbage or ancient `since` cannot make the read unbounded). */
+export const MAX_WINDOW_DAYS = 400;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** The UTC days from `since` through `until` (plus the next day, for a clock that ran ahead), oldest first. */
+export function windowDays(since: string, until: string): string[] {
+  const end = Date.parse(until);
+  if (!Number.isFinite(end)) return [];
+  const parsed = Date.parse(since);
+  const start = Number.isFinite(parsed) ? Math.max(Math.min(parsed, end), end - MAX_WINDOW_DAYS * DAY_MS) : end;
+  const days: string[] = [];
+  for (let at = Math.floor(start / DAY_MS) * DAY_MS; at <= end + DAY_MS; at += DAY_MS) {
+    days.push(isoDay(new Date(at).toISOString()));
+  }
+  return days;
+}
+
+/**
+ * Whether another run's window overlapped this run's on the same repository. Bounded by time: it reads only the change sets
+ * captured on the days of this run's window and the lifecycles opened within {@link STALE_RUN_MS} of its end, through their
+ * day-keyed indexes — never every change set the repository ever recorded.
+ */
 export async function overlappingRun(store: LocalFirstStore, scope: AttributionScope): Promise<boolean> {
   const staleBefore = new Date(Date.parse(scope.until) - STALE_RUN_MS).toISOString();
   let overlap = false;
   await store.read(async (tx) => {
     // Finalized during (or after the start of) this run: its window reached into ours.
-    await scanByIndex<LocalChangeSetValue>(tx, CHANGE_SETS_BY_REPOSITORY, scope.repository, (row) => {
-      const p = row.payload;
-      if (p.runId !== scope.runId && typeof p.capturedAt === "string" && p.capturedAt >= scope.since) overlap = true;
-    });
-    if (overlap) return;
+    for (const day of windowDays(scope.since, scope.until)) {
+      await scanByIndex<LocalChangeSetValue>(tx, CHANGE_SETS_BY_REPOSITORY_DAY, changeSetDayKey(scope.repository, day), (row) => {
+        const p = row.payload;
+        if (p.runId !== scope.runId && typeof p.capturedAt === "string" && p.capturedAt >= scope.since) overlap = true;
+      });
+      if (overlap) return;
+    }
     // Still in flight: started before now, not finalized, and not a dead run's leftover.
-    await scanByIndex<ChangeSetLifecycleValue>(tx, OPEN_CHANGE_SET_LIFECYCLES, "open", (row) => {
-      const p = row.payload;
-      const started = p.baseline?.capturedAt;
-      if (p.runId === scope.runId || typeof started !== "string" || started > scope.until || started < staleBefore) return;
-      if (p.baseline.repos.some((repo) => repo.repository === scope.repository)) overlap = true;
-    });
+    for (const day of windowDays(staleBefore, scope.until)) {
+      await scanByIndex<ChangeSetLifecycleValue>(tx, OPEN_CHANGE_SET_LIFECYCLES, day, (row) => {
+        const p = row.payload;
+        const started = p.baseline?.capturedAt;
+        if (p.runId === scope.runId || typeof started !== "string" || started > scope.until || started < staleBefore) return;
+        if (p.baseline.repos.some((repo) => repo.repository === scope.repository)) overlap = true;
+      });
+      if (overlap) return;
+    }
   });
   return overlap;
 }

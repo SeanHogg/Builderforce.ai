@@ -15,6 +15,7 @@
 
 import { createRequire } from "node:module";
 import * as path from "node:path";
+import { retryingLoad } from "./retryingLoad.js";
 import { extractSymbols, MAX_SYMBOLS_PER_FILE, type CodeSymbol, type SymbolKind } from "./symbols.js";
 
 export interface TreeSitterExtractorOptions {
@@ -186,44 +187,29 @@ function wasmLocator(wasmDir?: string): { runtime: string; grammar: (file: strin
   }
 }
 
-/** The web-tree-sitter runtime, initialised once per runtime wasm; null when it cannot load. */
-const runtimes = new Map<string, Promise<TsParserCtor | null>>();
+/**
+ * The web-tree-sitter runtime, initialised once per runtime wasm; null when it cannot load. Only a success is kept: a failure
+ * is retried after `LOAD_RETRY_MS` (`retryingLoad.ts`), so one transient load error never disables tree-sitter (and the
+ * export remover built on it) for the session.
+ */
+const runtimes = retryingLoad<TsParserCtor>();
 function loadRuntime(runtimeWasm: string): Promise<TsParserCtor | null> {
-  let loaded = runtimes.get(runtimeWasm);
-  if (!loaded) {
-    loaded = (async () => {
-      try {
-        const mod = (await import("web-tree-sitter")) as unknown as { default?: TsParserCtor } & TsParserCtor;
-        const Parser = (mod.default ?? mod) as TsParserCtor;
-        await Parser.init({ locateFile: () => runtimeWasm });
-        return Parser;
-      } catch {
-        return null;
-      }
-    })();
-    runtimes.set(runtimeWasm, loaded);
-  }
-  return loaded;
+  return runtimes(runtimeWasm, async () => {
+    const mod = (await import("web-tree-sitter")) as unknown as { default?: TsParserCtor } & TsParserCtor;
+    const Parser = (mod.default ?? mod) as TsParserCtor;
+    await Parser.init({ locateFile: () => runtimeWasm });
+    return Parser;
+  });
 }
 
-/** A grammar, loaded once per wasm path; null when it cannot load. */
-const grammars = new Map<string, Promise<{ Parser: TsParserCtor; lang: TsLanguage } | null>>();
+/** A grammar, loaded once per wasm path; null when it cannot load (retried like the runtime). */
+const grammars = retryingLoad<{ Parser: TsParserCtor; lang: TsLanguage }>();
 function loadGrammar(locator: NonNullable<ReturnType<typeof wasmLocator>>, wasm: string): Promise<{ Parser: TsParserCtor; lang: TsLanguage } | null> {
   const file = locator.grammar(wasm);
-  let loaded = grammars.get(file);
-  if (!loaded) {
-    loaded = (async () => {
-      const Parser = await loadRuntime(locator.runtime);
-      if (!Parser) return null;
-      try {
-        return { Parser, lang: await Parser.Language.load(file) };
-      } catch {
-        return null;
-      }
-    })();
-    grammars.set(file, loaded);
-  }
-  return loaded;
+  return grammars(file, async () => {
+    const Parser = await loadRuntime(locator.runtime);
+    return Parser ? { Parser, lang: await Parser.Language.load(file) } : null;
+  });
 }
 
 /**
@@ -250,8 +236,9 @@ export async function parseJsTs<T>(relPath: string, content: string, read: (root
 
 /**
  * A {@link SymbolExtractor}-shaped tree-sitter extractor. Lazy: nothing loads until the
- * first file of a supported language; each grammar loads once and a failure is
- * remembered, so a missing wasm costs one attempt, then the regex extractor.
+ * first file of a supported language; each grammar loads once, and a failure is
+ * remembered for `LOAD_RETRY_MS` — a missing wasm costs one attempt per window, the
+ * regex extractor reads meanwhile — then retried.
  */
 export function treeSitterSymbolExtractor(opts: TreeSitterExtractorOptions = {}): {
   readonly id: string;
@@ -260,30 +247,20 @@ export function treeSitterSymbolExtractor(opts: TreeSitterExtractorOptions = {})
   const maxParseBytes = opts.maxParseBytes ?? 400_000;
   // One parser per grammar, reused: parsing is synchronous, so concurrent extracts never
   // share it mid-parse, and a parser per file would leak wasm memory.
-  const languages = new Map<string, Promise<{ parser: TsParser; query: TsQuery } | null>>();
+  const languages = retryingLoad<{ parser: TsParser; query: TsQuery }>();
   const locator = wasmLocator(opts.wasmDir);
 
-  const language = (g: Grammar): Promise<{ parser: TsParser; query: TsQuery } | null> => {
-    const key = `${g.wasm}\n${g.query}`;
-    let loaded = languages.get(key);
-    if (!loaded) {
-      loaded = (async () => {
-        if (!locator) return null;
-        const grammar = await loadGrammar(locator, g.wasm);
-        if (!grammar) return null;
-        const { Parser, lang } = grammar;
-        try {
-          const parser = new Parser();
-          parser.setLanguage(lang);
-          return { parser, query: lang.query(g.query) };
-        } catch {
-          return null;
-        }
-      })();
-      languages.set(key, loaded);
-    }
-    return loaded;
-  };
+  const language = (g: Grammar): Promise<{ parser: TsParser; query: TsQuery } | null> =>
+    languages(`${g.wasm}
+${g.query}`, async () => {
+      if (!locator) return null;
+      const grammar = await loadGrammar(locator, g.wasm);
+      if (!grammar) return null;
+      const { Parser, lang } = grammar;
+      const parser = new Parser();
+      parser.setLanguage(lang);
+      return { parser, query: lang.query(g.query) };
+    });
 
   return {
     id: "tree-sitter-1",

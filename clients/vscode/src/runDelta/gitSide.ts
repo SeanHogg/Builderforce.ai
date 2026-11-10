@@ -44,10 +44,20 @@ export function parseCatFileBatch(out: Buffer, paths: readonly string[]): Map<st
   return blobs;
 }
 
+/**
+ * A full object id (SHA-1 or SHA-256 hex): the ONLY commit-ish this module hands git. A `baseCommit` can come from a stored
+ * record (the restart fallback), so each one is checked before it becomes an argument or a `cat-file` spec: a value that is
+ * not an object id (`-…`, a range, a ref name) is refused as "git could not answer".
+ */
+export function isCommitId(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{40,64}$/.test(value);
+}
+
 export function repoGit(root: string): RepoGit {
   const git = (args: string[]) => runGit(root, args, { timeoutMs: GIT_TIMEOUT_MS });
   return {
     blobs(commit, paths) {
+      if (!isCommitId(commit)) return Promise.resolve(undefined);
       if (paths.length === 0) return Promise.resolve(new Map());
       // Each spec is one stdin line; a path holding a newline cannot be named on it (git C-quotes such a path anyway).
       if (paths.some((p) => /[\r\n]/.test(p))) return Promise.resolve(undefined);
@@ -69,11 +79,12 @@ export function repoGit(root: string): RepoGit {
       return { ...(commit ? { commit } : {}), ...(branch && branch !== "HEAD" ? { branch } : {}) };
     },
     async isAncestor(ancestor, commit) {
-      const out = await git(["merge-base", "--is-ancestor", ancestor, commit]);
+      if (!isCommitId(ancestor) || !isCommitId(commit)) return undefined;
+      const out = await git(["merge-base", "--is-ancestor", "--end-of-options", ancestor, commit]);
       if (out.stdout !== undefined) return true;
       // Exit 1 is "not an ancestor"; an unknown commit is "git could not answer". The wrapper reports both as `error`, so a
       // second question tells them apart: does git know both commits?
-      const [a, b] = await Promise.all([git(["cat-file", "-e", `${ancestor}^{commit}`]), git(["cat-file", "-e", `${commit}^{commit}`])]);
+      const [a, b] = await Promise.all([git(["cat-file", "-e", "--end-of-options", `${ancestor}^{commit}`]), git(["cat-file", "-e", "--end-of-options", `${commit}^{commit}`])]);
       return a.stdout !== undefined && b.stdout !== undefined ? false : undefined;
     },
   };
