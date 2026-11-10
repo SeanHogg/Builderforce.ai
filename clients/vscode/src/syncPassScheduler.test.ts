@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createPassScheduler, type PassOutcome } from "./syncPassScheduler";
+import { MAX_TIMER_MS, createPassScheduler, type PassOutcome } from "./syncPassScheduler";
 
 /** A fake clock and timer: `tick(ms)` runs every timer due by then. */
 function harness(passes: Array<() => Promise<PassOutcome | void>>) {
@@ -86,6 +86,12 @@ describe("createPassScheduler", () => {
     release();
     await first;
     expect(h.runs()).toBe(2);
+  });
+
+  it("a resumeAt beyond what a timer can hold is clamped, not fired at once", async () => {
+    const h = harness([async () => ({ resumeAt: 10 * 2 ** 31 })]);
+    await h.scheduler.run();
+    expect(h.pendingTimers()).toEqual([MAX_TIMER_MS]);
   });
 
   it("dispose stops every timer", async () => {

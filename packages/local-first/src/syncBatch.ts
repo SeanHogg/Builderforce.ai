@@ -6,8 +6,10 @@
 import type { JournalEvent } from './records.js';
 import { dependencyIndex, resolveDependency, type DependencyIndex } from './dependencyGraph.js';
 import { isRecordPayloadMarker } from './recordPayloadMarker.js';
+import { isHeldEvent } from './holdLimits.js';
 
-export const jsonBytes =(value: unknown): number => new TextEncoder().encode(JSON.stringify(value)).length;
+/** The UTF-8 size of `value` as JSON: what a batch's byte limit measures. */
+export const jsonBytes = (value: unknown): number => new TextEncoder().encode(JSON.stringify(value)).length;
 
 /**
  * Put `dependsOn` on the wire as event ids, resolved NOW. A dependency is a logical write's
@@ -56,8 +58,7 @@ export function batchEvents(
   maxBytes: number,
   at: number,
 ): { batch: JournalEvent[]; bytes: number } {
-  const isHeld = (event: JournalEvent): boolean => (event.holdAttempts ?? 0) > 0;
-  const held = new Set(events.filter(isHeld).map((event) => event.eventId));
+  const held = new Set(events.filter(isHeldEvent).map((event) => event.eventId));
   const pending = new Set(events.map((event) => event.eventId));
   const behindHeld = new Set<string>();
   for (const event of events) {

@@ -15,7 +15,7 @@
  */
 
 import type { JournalCompactionPolicy, LocalFirstDelta, LocalFirstSnapshot } from "@builderforce/local-first";
-import { shouldCompactJournal } from "@builderforce/local-first";
+import { pruneSettledReceipts, shouldCompactJournal } from "@builderforce/local-first";
 import { compactJournal, type CompactionPorts } from "./localFirstCompaction";
 import type { CompactionBackoff } from "./localFirstCompactionBackoff";
 
@@ -32,6 +32,8 @@ export interface CompactionSchedulerPorts {
   readonly policy?: Partial<JournalCompactionPolicy>;
   readonly compactAfterAcknowledged?: number;
   onBackgroundError(error: unknown): void;
+  /** After a published compaction: drop these receipts (by event id) from the window's own state. */
+  dropReceipts?(eventIds: readonly string[]): void;
 }
 
 export interface CompactionScheduler {
@@ -54,7 +56,18 @@ export function createCompactionScheduler(ports: CompactionSchedulerPorts): Comp
       try {
         if (!ports.backoff.allowed()) return; // re-checked before the temp is streamed
         const counted = acknowledged;
-        await compactJournal({ io: ports.io, view: ports.view, exclusive: ports.exclusive, policy });
+        // The new base drops the receipts no status read needs (`pruneSettledReceipts`) — and once
+        // it is published, this window drops them from its own state too, so it matches the file.
+        let pruned: string[] = [];
+        const view = (): LocalFirstSnapshot => {
+          const full = ports.view();
+          const slim = pruneSettledReceipts(full);
+          const kept = new Set(slim.receipts.map((receipt) => receipt.eventId));
+          pruned = full.receipts.filter((receipt) => !kept.has(receipt.eventId)).map((receipt) => receipt.eventId);
+          return slim;
+        };
+        const published = await compactJournal({ io: ports.io, view, exclusive: ports.exclusive, policy });
+        if (published && pruned.length > 0) ports.dropReceipts?.(pruned);
         acknowledged = Math.max(0, acknowledged - counted);
         ports.backoff.succeeded();
       } catch (error) {

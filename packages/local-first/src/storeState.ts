@@ -314,6 +314,9 @@ export class CommittedState {
       this.adoptMapping(normalizeServerMapping(raw));
       change.sync();
     }
+    for (const id of delta.prunedReceipts ?? []) {
+      if (this.receipts.delete(id)) change.sync();
+    }
     for (const receipt of delta.receipts ?? []) {
       this.receipts.set(receipt.eventId, receipt);
       change.sync();

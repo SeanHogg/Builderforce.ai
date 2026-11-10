@@ -58,6 +58,15 @@ export function holdBackoffMs(attempts: number): number {
 
 export type HoldStatus = 'dependency_pending' | 'conflict' | 'rejected';
 
+/**
+ * Whether the server has held this event at least once (`dependency_pending`, `conflict`, a
+ * non-permanent refusal): it was SENT, it waits out a backoff, and it goes after fresh work.
+ * The ONE definition the batcher, the round picker and the backlog migration read.
+ */
+export function isHeldEvent(event: { readonly holdAttempts?: number }): boolean {
+  return (event.holdAttempts ?? 0) > 0;
+}
+
 /** The hold fields a journal event carries between attempts. */
 export interface HeldEventState {
   readonly holdKind?: string;

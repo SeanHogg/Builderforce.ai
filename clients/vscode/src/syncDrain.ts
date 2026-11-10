@@ -118,7 +118,8 @@ export async function drainSync(ports: DrainPorts, options: DrainOptions = {}): 
     } catch (error) {
       const limited = rateLimited(error);
       if (!limited) throw error;
-      return result(true, limited.retryAfterMs ?? DEFAULT_RETRY_MS);
+      // Never less than the rate pause: a `Retry-After: 0` must not spin the next pass at once.
+      return result(true, Math.max(MIN_RATE_PAUSE_MS, limited.retryAfterMs ?? DEFAULT_RETRY_MS));
     }
     rounds += 1;
     if (!summary) return result(false); // the lease is held elsewhere: that holder drains

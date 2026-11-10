@@ -8,6 +8,9 @@
  * heartbeat. The next pass is left to the timer, which fires at `resumeAt`.
  */
 
+/** The longest delay `setTimeout` honours. */
+export const MAX_TIMER_MS = 2 ** 31 - 1;
+
 export interface PassOutcome {
   /** Work is left and the next pass must not start before this instant (ms epoch). */
   readonly resumeAt?: number;
@@ -51,7 +54,8 @@ export function createPassScheduler(ports: PassSchedulerPorts): PassScheduler {
   const schedule = (): void => {
     if (disposed || !ports.enabled()) return;
     if (timer !== undefined) clearTimer(timer);
-    const delay = Math.max(ports.debounceMs, (resumeAt ?? 0) - now());
+    // Clamped to what a timer can hold (2^31-1 ms): a longer delay would fire at once instead.
+    const delay = Math.min(MAX_TIMER_MS, Math.max(ports.debounceMs, (resumeAt ?? 0) - now()));
     timer = setTimer(() => {
       timer = undefined;
       void run();

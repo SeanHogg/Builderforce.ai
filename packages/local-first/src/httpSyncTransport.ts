@@ -137,6 +137,23 @@ async function resolveHeaders(headers: HttpSyncHeaders | undefined): Promise<Rec
   return merged;
 }
 
+/**
+ * A `Retry-After` header in ms: delta-seconds (what our limiter sends, `rateLimitResponse.ts`) or
+ * an HTTP-date (RFC 9110 §10.2.3 allows both; a proxy in front of the API may send one). A past
+ * date is 0. Anything unreadable is undefined, and the drain then waits its own default.
+ */
+export function parseRetryAfter(header: string | null | undefined, now: number): number | undefined {
+  if (header === null || header === undefined || header.trim() === '') return undefined;
+  const text = header.trim();
+  // Capped: a wrong or hostile header must not park sync for days (or overflow a timer).
+  if (/^\d+(\.\d+)?$/.test(text)) return Math.min(MAX_RETRY_AFTER_MS, Math.ceil(Number(text) * 1000));
+  const at = Date.parse(text);
+  return Number.isFinite(at) ? Math.min(MAX_RETRY_AFTER_MS, Math.max(0, at - now)) : undefined;
+}
+
+/** The longest wait a `Retry-After` may impose: an hour. */
+export const MAX_RETRY_AFTER_MS = 60 * 60 * 1000;
+
 /** The tenant limiter's `X-RateLimit-*` headers (`rateLimitMiddleware.ts`), when the response carries them. */
 function readRateLimit(response: HttpSyncResponse): SyncRateLimit | undefined {
   const limit = Number(response.headers?.get('x-ratelimit-limit'));
@@ -163,10 +180,8 @@ async function postJson(
   if (limit) options.onRateLimit?.(limit);
   if (!response.ok) {
     const error = new HttpSyncTransportError('sync_http_status', response.status, url, await refusalCode(response));
-    const retryAfter = Number(response.headers?.get('retry-after'));
-    if (response.status === 429 && Number.isFinite(retryAfter) && retryAfter >= 0) {
-      Object.assign(error, { retryAfterMs: Math.ceil(retryAfter * 1000) });
-    }
+    const retryAfterMs = response.status === 429 ? parseRetryAfter(response.headers?.get('retry-after'), Date.now()) : undefined;
+    if (retryAfterMs !== undefined) Object.assign(error, { retryAfterMs });
     throw error;
   }
   try {

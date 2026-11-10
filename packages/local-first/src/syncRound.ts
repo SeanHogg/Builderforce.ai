@@ -31,6 +31,7 @@ import {
   type DependencyIndex,
 } from './dependencyGraph.js';
 import { backingOff, batchEvents, jsonBytes, wireDependencies, wireEvent } from './syncBatch.js';
+import { isHeldEvent } from './holdLimits.js';
 import { partitionUnboundPending, type UnboundSyncRefusal } from './creationDestination.js';
 import { importPayload } from './journalRules.js';
 import { isRecordPayloadMarker, materializedEvent } from './recordPayloadMarker.js';
@@ -54,14 +55,13 @@ export async function pickRound(tx: LocalFirstTransaction, destination: EntityDe
   const key = destinationKey(destination);
   const lookup = tx.pendingLookup?.();
   if (!lookup) return pickGeneral(tx, key, limits);
-  const isHeld = (event: JournalEvent): boolean => (event.holdAttempts ?? 0) > 0;
 
   // A first look at the head of the queue: the journal keeps its events in sequence order, so the
   // next batch is almost always among the first fresh events — read just those, not the queue.
   const head: JournalEvent[] = [];
   let truncated = false;
   await tx.scanPending((event) => {
-    if (event.deadLetter || isHeld(event)) return;
+    if (event.deadLetter || isHeldEvent(event)) return;
     if (head.length >= HEAD_WINDOW) { truncated = true; return SCAN_STOP; }
     head.push(event as JournalEvent);
   }, destination);
@@ -76,7 +76,7 @@ export async function pickRound(tx: LocalFirstTransaction, destination: EntityDe
   const partition: JournalEvent[] = [];
   await tx.scanPending((event) => { if (!event.deadLetter) partition.push(event as JournalEvent); }, destination);
   partition.sort(bySequence);
-  const ordered = [...partition.filter((event) => !isHeld(event)), ...partition.filter(isHeld)];
+  const ordered = [...partition.filter((event) => !isHeldEvent(event)), ...partition.filter(isHeldEvent)];
   const picked = await walk(tx, key, lookup, ordered, limits);
   return { batch: picked.batch, refused: picked.refused };
 }
@@ -146,7 +146,7 @@ function stuckCheck(tx: LocalFirstTransaction, index: DependencyIndex, facts: Ma
       const resolved = resolveDependency(dependency, index, event);
       if (resolved.kind === 'blocked' || resolved.kind === 'awaiting-bind') { result = true; break; }
       if (resolved.kind !== 'event' || resolved.event.eventId === event.eventId) continue;
-      if ((resolved.event.holdAttempts ?? 0) > 0) { result = true; break; }
+      if (isHeldEvent(resolved.event)) { result = true; break; }
       if (depth < 64 && await visit(resolved.event, depth + 1)) { result = true; break; }
     }
     memo.set(event.eventId, result);

@@ -7,6 +7,8 @@ import {
   HTTP_SYNC_PUSH_PATH,
   HttpSyncTransportError,
   createHttpSyncTransport,
+  parseRetryAfter,
+  MAX_RETRY_AFTER_MS,
   type HttpSyncFetch,
   type HttpSyncRequest,
   type HttpSyncResponse,
@@ -260,6 +262,27 @@ describe('createHttpSyncTransport — the tenant rate limit', () => {
   it('a 429 carries the server\'s Retry-After', async () => {
     const { fetch } = install(() => withHeaders(jsonResponse({ error: 'Rate limit exceeded. Please slow down.' }, 429), { 'retry-after': '17' }));
     await expect(transport(fetch).push(batch)).rejects.toMatchObject({ status: 429, retryAfterMs: 17_000 });
+  });
+
+  it('reads Retry-After as delta-seconds or as an HTTP-date; anything else is unread', () => {
+    const now = Date.parse('2026-11-10T00:00:00.000Z');
+    expect(parseRetryAfter('17', now)).toBe(17_000);
+    expect(parseRetryAfter('1.5', now)).toBe(1_500);
+    expect(parseRetryAfter('Tue, 10 Nov 2026 00:00:30 GMT', now)).toBe(30_000);
+    expect(parseRetryAfter('Mon, 09 Nov 2026 23:00:00 GMT', now)).toBe(0); // already past
+    expect(parseRetryAfter('soon', now)).toBeUndefined();
+    // Capped at an hour: a huge delta-seconds or a far-future date never parks sync for longer.
+    expect(parseRetryAfter('999999999999', now)).toBe(MAX_RETRY_AFTER_MS);
+    expect(parseRetryAfter('Fri, 31 Dec 9999 23:59:59 GMT', now)).toBe(MAX_RETRY_AFTER_MS);
+    expect(parseRetryAfter(null, now)).toBeUndefined();
+  });
+
+  it('a 429 with an HTTP-date Retry-After carries it in ms', async () => {
+    const at = new Date(Date.now() + 45_000).toUTCString();
+    const { fetch } = install(() => withHeaders(jsonResponse({ error: 'rate' }, 429), { 'retry-after': at }));
+    const error = await transport(fetch).push(batch).catch((caught: unknown) => caught) as HttpSyncTransportError;
+    expect(error.retryAfterMs).toBeGreaterThan(40_000);
+    expect(error.retryAfterMs).toBeLessThanOrEqual(45_000);
   });
 
   it('a response without the headers reports nothing (an older server, a test fake)', async () => {

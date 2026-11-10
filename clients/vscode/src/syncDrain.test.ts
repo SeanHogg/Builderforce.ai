@@ -125,6 +125,14 @@ describe("drainSync", () => {
     expect(result).toEqual({ rounds: 0, more: true, resumeAfterMs: 12_000 });
   });
 
+  it("a 429 with Retry-After 0 still pauses the minimum", async () => {
+    const result = await drainSync({
+      round: async () => { throw Object.assign(new Error("sync_http_status"), { status: 429, retryAfterMs: 0 }); },
+      pending: async () => 50,
+    });
+    expect(result).toEqual({ rounds: 0, more: true, resumeAfterMs: 10_000 });
+  });
+
   it("stops before the next round once cancelled (the host is shutting down)", async () => {
     const p = partition(10_000, 100);
     let cancelled = false;

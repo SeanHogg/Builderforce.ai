@@ -23,7 +23,7 @@
 
 import nodeFs from "node:fs";
 import nodePath from "node:path";
-import type { JournalEvent, LocalFirstDelta, LocalFirstSnapshot } from "@builderforce/local-first";
+import { isImported, type JournalEvent, type LocalFirstDelta, type LocalFirstSnapshot } from "@builderforce/local-first";
 import { LEGACY_JOURNAL_FILE } from "./localFirstJournalIo";
 import { readLegacyJournal } from "./localFirstMigration";
 
@@ -128,7 +128,12 @@ export function planLegacyMerge(baseline: LegacyBaseline, legacy: LocalFirstSnap
     return have === undefined || have < row.version;
   });
   const seen = new Set([...baseline.eventIds, ...current.events.map((event) => event.eventId), ...current.receipts.map((receipt) => receipt.eventId)]);
-  const fresh = legacy.events.filter((event) => !seen.has(event.eventId)).sort((a, b) => a.localSequence - b.localSequence);
+  // A receipt can be pruned at compaction (`pruneSettledReceipts`), so `seen` alone may no longer
+  // know an event the server took: the row's IMPORTED mapping says the creating write went up.
+  const imported = new Set(current.mappings.filter(isImported).map((mapping) => `${mapping.entityType}:${mapping.clientEntityId}`));
+  const settled = (event: JournalEvent): boolean =>
+    (event.operation === "create" || event.operation === "import") && imported.has(`${event.entityType}:${event.clientEntityId}`);
+  const fresh = legacy.events.filter((event) => !seen.has(event.eventId) && !settled(event)).sort((a, b) => a.localSequence - b.localSequence);
   // v2 numbered its events from the same starting point v3 did: renumber so no two share a sequence.
   let next = current.nextSequence;
   const events: JournalEvent[] = fresh.map((event) => ({ ...event, localSequence: next++ }));

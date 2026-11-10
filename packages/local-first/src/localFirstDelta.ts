@@ -51,6 +51,12 @@ export interface LocalFirstDelta {
   acknowledgedEvents?: string[];
   mappings?: ServerMapping[];
   receipts?: SyncReceipt[];
+  /**
+   * Receipts dropped (by event id) — IN MEMORY only: what a window applies after it published a
+   * compacted base without them (`pruneSettledReceipts`), so its state matches the file. Never
+   * written to a journal frame (an older reader would ignore it).
+   */
+  prunedReceipts?: string[];
   conflicts?: SyncConflict[];
   /** Cursors set, by destination key. */
   cursors?: Record<string, string>;

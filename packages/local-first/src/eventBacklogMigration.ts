@@ -41,6 +41,7 @@ import { importPayload, unboundMarkerFields } from './journalRules.js';
 import { SYNC_PASS_BIND_TYPES } from './dependencyGraph.js';
 import { fencedDependsOn, isRecordPayloadFence, isRecordPayloadMarker, recordPayloadFenceEvent, recordPayloadMarker } from './recordPayloadMarker.js';
 import { hashPayload } from './payloadHash.js';
+import { isHeldEvent } from './holdLimits.js';
 import { mappingKey } from './storeState.js';
 
 /** Types whose live unbound writes are markers (`journalWrite`): their old payload copies migrate. */
@@ -83,7 +84,7 @@ const unboundCandidate = (event: JournalEvent): boolean =>
 
 const boundCandidate = (event: JournalEvent): boolean =>
   event.destination?.kind === 'bound' && event.operation === 'import' && SYNC_PASS_BIND_TYPES.has(event.entityType)
-  && carriesPayload(event) && !event.deadLetter && event.materializedAt === undefined && (event.holdAttempts ?? 0) === 0;
+  && carriesPayload(event) && !event.deadLetter && event.materializedAt === undefined && !isHeldEvent(event);
 
 const sameJson = (a: unknown, b: unknown): boolean => (JSON.stringify(a) ?? 'null') === (JSON.stringify(b) ?? 'null');
 

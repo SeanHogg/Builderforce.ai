@@ -319,6 +319,7 @@ export function createDurableLocalFirstStore(
   // `flush()` waits for a queued compaction.
   const compaction = createCompactionScheduler({
     io, view: () => memory.view(), exclusive, serialized, backoff: compactionBackoff, onBackgroundError,
+    dropReceipts: (eventIds) => { memory.applyDelta({ prunedReceipts: [...eventIds] }); },
     ...(options.compaction ? { policy: options.compaction } : {}),
     ...(options.compactAfterAcknowledged !== undefined ? { compactAfterAcknowledged: options.compactAfterAcknowledged } : {}),
   });

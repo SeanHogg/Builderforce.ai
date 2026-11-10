@@ -124,9 +124,10 @@ export async function copyCommittedTail(
  * One compaction job, run on the store's serial queue. Re-checks the policy first, so jobs
  * queued behind the one that already folded the tail do nothing.
  */
-export async function compactJournal(ports: CompactionPorts): Promise<void> {
+/** Returns whether a compacted base was published (false: nothing to do, or discarded). */
+export async function compactJournal(ports: CompactionPorts): Promise<boolean> {
   const { io, policy } = ports;
-  if (!shouldCompactJournal(io.tail(), policy)) return;
+  if (!shouldCompactJournal(io.tail(), policy)) return false;
   const source: CompactionSource = {
     snapshot: ports.view(),
     baseCommittedBytes: io.committedBytes(),
@@ -134,14 +135,15 @@ export async function compactJournal(ports: CompactionPorts): Promise<void> {
   };
   const temporary = await streamCompactionTemp(io.journalFile, source.snapshot);
   try {
-    await ports.exclusive(async () => {
+    return await ports.exclusive(async () => {
       const replaced = !sameFile(io.identity(), source.baseIdentity) || io.committedBytes() < source.baseCommittedBytes;
       if (replaced || !shouldCompactJournal(io.tail(), policy)) {
         await io.discardCompacted(temporary.path);
-        return;
+        return false;
       }
       await io.publishCompacted(temporary.path, temporary.frames, (temp, tempEnd, journalEnd) =>
         copyCommittedTail(io.journalFile, source.baseCommittedBytes, journalEnd, temp, tempEnd), temporary.generation);
+      return true;
     });
   } catch (error) {
     await io.discardCompacted(temporary.path);

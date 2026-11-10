@@ -161,6 +161,7 @@ export {
   recordPayloadMarker,
 } from './recordPayloadMarker.js';
 export { sendablePayload } from './syncRound.js';
+export { pruneSettledReceipts } from './receiptPruning.js';
 export {
   MARKER_WRITTEN_TYPES,
   EVENT_BACKLOG_MIGRATED,
