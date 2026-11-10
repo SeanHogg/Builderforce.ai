@@ -195,8 +195,7 @@ export async function recordCodeChangeTicket(
  * evidence covers. The REASON rides on each step: a ticket that changed status by
  * itself must say what changed it, or the board's history reads as an unexplained
  * move. Best-effort and fail-closed per ticket, a durable step each, never throws. Returns how many
- * moved. `reason: null` records the bare `{ id, status }` step — the deterministic finish's own
- * move to done, whose provenance rides the trace instead.
+ * moved.
  */
 export async function updateLinkedTickets(
   serverChatId: number | null,
@@ -204,7 +203,7 @@ export async function updateLinkedTickets(
   req: Pick<BrainRunRequest, 'runTool'>,
   select: (listed: unknown) => LinkedTicketToAdvance[],
   status: 'in_progress' | 'done',
-  reason: TicketMoveReason | null,
+  reason: TicketMoveReason,
 ): Promise<number> {
   // An unbound local chat has no linked tickets on the platform to move.
   if (!req.runTool || serverChatId == null) return 0;
@@ -227,14 +226,14 @@ export type TicketMoveReason = 'worked-ticket-off-backlog' | 'shipped-to-base-br
 
 /**
  * THE host's ticket status move: run one {@link ticketStatusMove} through the run's tool runner and
- * record it as a durable step. With a reason the step says the host made it (`auto`, `reason`);
- * with `null` it carries only the move's own args. Best-effort, never throws; true when it moved.
+ * record it as a durable step. The tool receives only the move's own args; the step also says the
+ * host made it (`auto`, `reason`). Best-effort, never throws; true when it moved.
  */
 export async function moveTicket(
   c: RunCell | BackstopRun,
   req: Pick<BrainRunRequest, 'runTool'>,
   move: TicketStatusMove,
-  reason: TicketMoveReason | null,
+  reason: TicketMoveReason,
 ): Promise<boolean> {
   if (!req.runTool) return false;
   const toolStart = nowMs();
@@ -250,7 +249,7 @@ export async function moveTicket(
     category: 'tool',
     label: move.tool,
     durationMs: nowMs() - toolStart,
-    args: reason ? { ...move.args, auto: true, reason } : { ...move.args },
+    args: { ...move.args, auto: true, reason },
     result: out ?? null,
     isError: failed,
   });

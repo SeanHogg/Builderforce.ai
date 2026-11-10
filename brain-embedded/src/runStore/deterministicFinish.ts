@@ -27,7 +27,7 @@ import { localTicketsFiledInRun, recordCodeChangeTicket, retitleShippedDeltaTick
 import { recordShipReview, verificationOf, type CloseOutInput } from '../run/brainCloseOut';
 import type { BrainRunContext } from './brainRunContext';
 import type { BrainRunRequest } from './runTypes';
-import { nowIso, runTrace } from './runCells';
+import { nowIso, pushTrace, runTrace } from './runCells';
 import { shippedToBaseBranch } from '../shipVerification';
 
 /** The narrow FinishHook the {@link withDeterministicFinish} wrapper composes around. */
@@ -128,8 +128,9 @@ export async function deterministicFinish(
   // 2. Move the linked ticket(s) to done — only when the finish gate holds, and only those the chat
   // still lists as completable. The review (step 1) ran first; this closes the linked ticket(s).
   // An unbound chat (no server chat) has no listing to read: its tickets close in the pass below.
-  // The step records only `{ id, status }` (reason `null`); provenance rides the trace.
-  if (finishing && (await updateLinkedTickets(run.serverChatId, view, req, linkedTicketsToComplete, 'done', null)) > 0) result.ticketClosed = true;
+  // The tool receives only `{ id, status }`; the recorded step carries why (`auto`, the reason), so a
+  // ticket that closed itself is never an unexplained status change in the board's history.
+  if (finishing && (await updateLinkedTickets(run.serverChatId, view, req, linkedTicketsToComplete, 'done', 'shipped-to-base-branch')) > 0) result.ticketClosed = true;
   // The run's OWN tickets close on the same finish: the hand-off's local filings, read from its own
   // record — and its delta ticket when no server chat lists it.
   const unlistedDelta = run.serverChatId == null ? view.deltaTicketId : null;
@@ -164,9 +165,21 @@ function shippedOf(run: BrainRunContext): boolean {
 
 /** Does the run hold a LINKED ticket to close out — one the chat carries, or one it filed on the device? */
 async function hasLinkedTicket(run: BrainRunContext): Promise<boolean> {
-  const { req, serverChatId } = run;
+  return holdsLinkedTicket(runTrace(run.c), run.serverChatId, run.req);
+}
+
+/**
+ * THE "holds a ticket to close" read, shared by the driver-run close-out and the `startRun` settle:
+ * a ticket the run filed on the device, or one the account's chat listing still shows as completable
+ * (a ticket the chat links whose delta id this run never read back counts — it is still the run's).
+ */
+export async function holdsLinkedTicket(
+  trace: Parameters<typeof localTicketsFiledInRun>[0],
+  serverChatId: number | null,
+  req: Pick<BrainRunRequest, 'runTool'>,
+): Promise<boolean> {
   if (!req.runTool) return false;
-  if (localTicketsFiledInRun(runTrace(run.c)).length > 0) return true;
+  if (localTicketsFiledInRun(trace).length > 0) return true;
   if (serverChatId == null) return false;
   let listed: unknown;
   try { listed = await req.runTool('builtin_chats_list_tickets', { chatId: serverChatId }); } catch { return false; }
@@ -207,9 +220,14 @@ export function withDeterministicFinish<T extends InnerFinishHook>(run: BrainRun
     ...inner,
     gate: async (ctx: PolicyContext) => {
       // Best-effort: a close-out failure must not refuse the finish (the gate below is the
-      // authority), but the reason is surfaced so a failed close-out is diagnosable, not silent.
+      // authority), but the reason is traced on the run so a failed close-out is diagnosable, not silent.
       await finishCloseOut(run).catch((reason: unknown) => {
-        console.warn('deterministic-finish close-out failed', reason);
+        pushTrace(run.c, {
+          ts: nowIso(),
+          category: 'message',
+          label: 'finish.close_out_error',
+          result: `The close-out failed: ${reason instanceof Error ? reason.message : String(reason)}. The finish goes on; its tickets were not moved.`,
+        });
       });
       return inner.gate(ctx);
     },

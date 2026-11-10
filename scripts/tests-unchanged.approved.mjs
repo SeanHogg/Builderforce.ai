@@ -75,8 +75,8 @@ export const APPROVED_PERMANENT = [
 export const APPROVED_THIS_PUSH = [
   {
     file: 'brain-embedded/src/brainRunStore.test.ts',
-    changed: "One expectation: the hand-off test's `builtin_chats_link_ticket` call count is 0 (was 2).",
-    reason: "Intended change (chat-link-on-create): a created work item is linked to its chat BY the create call — the run stamps its server chat onto the create, the server links it — so no separate link call follows a create. The stamped chat is asserted in runStore/createChatStamp.test.ts.",
+    changed: "One expectation: the hand-off test's `builtin_chats_link_ticket` call count is 0 (was 2). And in 'hands overlapping tasks to the coder in order instead of fanning them out' the scripted planner calls `hand_off` on turns 1 AND 2 (was turn 1 only) and the result is read from the LAST tool message (was the first); its three assertions are unchanged.",
+    reason: "Intended change (chat-link-on-create): a created work item is linked to its chat BY the create call — the run stamps its server chat onto the create, the server links it — so no separate link call follows a create. The stamped chat is asserted in runStore/createChatStamp.test.ts. Intended change (run #70776, 19c8131bd): the first overlapping hand_off is sent back once naming the clash so the planner can narrow its paths; handed off again unchanged, it runs inline in plan order exactly as the test asserts. The send-back is asserted in handOffClash.e2e.test.ts.",
     approvedBy: APPROVED_BY,
   },
   // The parity snapshots reconciled with the same intended change by

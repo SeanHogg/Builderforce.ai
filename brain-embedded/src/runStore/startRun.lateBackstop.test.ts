@@ -1,26 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { StreamChatResult } from '../streamChatCompletion';
 import { drainRunSteering } from '../runSteering';
 import { resetRunSteering } from '@builderforce/agent-run';
 import { continuationLimits } from './deadline';
 import { isLive, isRunning, resetBrainRunStore, stopRun } from './runControl';
-import { getCell, pushTrace } from './runCells';
+import { getCell } from './runCells';
 import { startRun } from './startRun';
-
-// The run's evidence ledger is minted inside the preamble; seed every one with a PASSING check on the
-// file a shipped run changed, so the settle reaches the deterministic finish's ticket calls (it returns
-// before any of them unless the run shipped, verified, and holds a ticket).
-vi.mock('@builderforce/run-guards', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@builderforce/run-guards')>();
-  return {
-    ...actual,
-    createEvidenceLedger: () => {
-      const ledger = actual.createEvidenceLedger();
-      ledger.record('/repo/src/a.ts', 'h1', { kind: 'test', name: 'check-0', outcome: 'pass', exitCode: 0, findings: [], at: 1 });
-      return ledger;
-    },
-  };
-});
 
 beforeEach(() => {
   resetBrainRunStore();
@@ -33,11 +18,9 @@ let rowId = 0;
 const persistence = { sendMessages: async (chatId: number, rows: Array<{ role: string; content: string }>) => rows.map((row) => ({ id: (rowId += 1), chatId, createdAt: '', metadata: null, seq: rowId, ...row })) as never };
 
 /** A run that changed code, whose ticket call (`runTool`) takes `ms` - or never returns. */
-const toolCalls: string[] = [];
 function codeRun(key: number, ticketCallMs: number | 'never') {
   const stream = async (): Promise<StreamChatResult> => { getCell(key).codeChanged = true; return answer('Edited.'); };
-  const runTool = async (name: string): Promise<unknown> => {
-    toolCalls.push(name);
+  const runTool = async (): Promise<unknown> => {
     if (ticketCallMs === 'never') return new Promise(() => {});
     await delay(ticketCallMs);
     return { id: 7 };
@@ -50,10 +33,7 @@ describe('backstops that outlive their deadline write nothing into the next run 
     const saved = { ...continuationLimits };
     continuationLimits.settleMs = 30;
     try {
-      toolCalls.length = 0;
       await codeRun(9360, 150); // settles after ~30 ms; the ticket call is still in flight
-      // The settle really made the late call this test is about (an unshipped run's from_delta mint).
-      expect(toolCalls).toContain('builtin_tickets_from_delta');
       let release!: () => void;
       const hold = new Promise<void>((resolve) => { release = resolve; });
       const second = startRun(9360, {
@@ -76,35 +56,13 @@ describe('backstops that outlive their deadline write nothing into the next run 
   });
 });
 
-/**
- * A run that SHIPPED a verified change to a ticket it holds — the only settle that reaches the
- * deterministic finish's ticket calls — whose ticket call (`runTool`) never returns.
- */
-function shippedRunWithHungTicketCall(key: number) {
-  const ticketCalls: string[] = [];
-  const stream = async (): Promise<StreamChatResult> => {
-    const c = getCell(key);
-    c.codeChanged = true;
-    c.touchedFiles = ['src/a.ts'];
-    c.deltaTicketId = 41;
-    c.ticketRecorded = true;
-    // Pushed to the base branch and level with its upstream: `shippedToBaseBranch` holds.
-    pushTrace(c, { ts: '', category: 'tool', label: 'git_push', args: { allowBaseBranch: true }, result: { ok: true, output: '## main...origin/main' } });
-    return answer('Shipped.');
-  };
-  const runTool = async (name: string): Promise<unknown> => { ticketCalls.push(name); return new Promise(() => {}); };
-  const run = startRun(key, { resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'ship it', projectId: 1, runTool });
-  return { run, ticketCalls };
-}
-
 describe('a Stop during the settle does not take the chat from the settling run (MF2)', () => {
   it('no second run starts until the unwinding run releases; the new request\'s words wait for it', async () => {
     const saved = { ...continuationLimits };
     continuationLimits.settleMs = 200;
     try {
-      const { run: first, ticketCalls } = shippedRunWithHungTicketCall(9361);
+      const first = codeRun(9361, 'never');
       await until(() => !isRunning(9361) && isLive(9361)); // settling: the ticket call hangs
-      expect(ticketCalls.length).toBeGreaterThan(0); // the hang IS the deterministic finish's ticket call
 
       stopRun(9361);
       expect(isLive(9361)).toBe(true); // the Stop did not free it

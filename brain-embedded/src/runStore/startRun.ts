@@ -22,7 +22,7 @@ import { appendRunMessage } from './runControl';
 import { keepStoppedTurn, persistStep } from './turnPersistence';
 import { localTicketsFiledInRun, settleView } from './runBackstops';
 import { verificationOf, type CloseOutInput } from '../run/brainCloseOut';
-import { deterministicFinish, finishConditionMet } from './deterministicFinish';
+import { deterministicFinish, finishConditionMet, holdsLinkedTicket } from './deterministicFinish';
 import type { BrainRunContext } from './brainRunContext';
 import { resolveServerChatId } from './serverChat';
 import { prepareBrainRun } from './runPreamble';
@@ -186,7 +186,7 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
       // close-out is the run's FINISH — the host records the review, moves the ticket to done, and the
       // learn write is host-side (`emitEvermindLearnReconcile`), all ZERO model turns. `finished` is the
       // gate an empty-ask continuation suppressor reads: when true, an empty ask must NOT auto-continue.
-      const finished = finishConditionMet({ shipped, verified: verification.verified, openPlaceholders: openPh, hasTicket });
+      // It is read once the close-out has run, because the linked ticket may only be known from the chat's listing.
       // The backstops hold the chat (the claim) - so they wait at most `settleMs`: a hung ticket call must not
       // leave the chat live forever. Late work finishes in the background on the snapshot, writing nothing
       // into a later run; a failure of it is traced (while this run is current), never unhandled.
@@ -195,7 +195,12 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
       // FIX #6: entered through `runDeterministicFinish` — the named deterministic-finish module (`runStore/deterministicFinish.ts`).
       const closeOut: CloseOutInput & { verified: boolean; hasTicket: boolean } = { serverChatId, view, req, needsTicket, shipped, reviewedInPreview, openPlaceholders: openPh, trace, evidence, verified: verification.verified, hasTicket };
       c.finishClosedOut = true; // this path is the closer; the finish-hook wrapper stands down
-      await within(left(), async () => { await deterministicFinish(closeOut, { c, req, serverChatId, recalled: null } as BrainRunContext); }, () => view.note?.({
+      await within(left(), async () => {
+        // A ticket the chat links (its delta id never read back, or linked by hand) is the run's ticket too:
+        // read the listing only when it is the one thing the finish gate still lacks. Inside the bounded settle.
+        if (!closeOut.hasTicket && finishConditionMet({ ...closeOut, hasTicket: true })) closeOut.hasTicket = await holdsLinkedTicket(trace, serverChatId, req);
+        await deterministicFinish(closeOut, { c, req, serverChatId, recalled: null } as BrainRunContext);
+      }, () => view.note?.({
         ts: nowIso(),
         category: 'message',
         label: 'run.backstop_timeout',
@@ -212,6 +217,7 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
       // wrapper (`deterministicFinish.ts`) — which closes out a run `startRun` never drives —
       // stands down on this flag, so the close-out runs exactly once across the two paths.
       c.finishClosedOut = true;
+      const finished = finishConditionMet(closeOut);
       // Teach learned routing how this run's CODER did. Not awaited — a report must
       // never hold the run open or fail it.
       // Every run — top-level or sub-agent — is graded by the same rule, on its own request.

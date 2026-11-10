@@ -1574,8 +1574,9 @@ describe('planning ends in tasks, and the tasks are the hand-off (chat #133)', (
       runTool: async (name) => { calls.push(name); return { ok: true }; },
       stream: async (opts) => {
         turn += 1;
-        if (turn === 1) return { text: '', toolCalls: [{ id: 'h1', name: 'hand_off', args: JSON.stringify(overlapping) }], finishReason: 'tool_calls' };
-        const tool = opts.messages.find((m) => m.role === 'tool');
+        // The first overlapping plan is sent back once naming the clash; the planner hands it off again unchanged.
+        if (turn <= 2) return { text: '', toolCalls: [{ id: `h${turn}`, name: 'hand_off', args: JSON.stringify(overlapping) }], finishReason: 'tool_calls' };
+        const tool = opts.messages.filter((m) => m.role === 'tool').at(-1);
         handOffResult = String(tool?.content ?? '');
         return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
       },
