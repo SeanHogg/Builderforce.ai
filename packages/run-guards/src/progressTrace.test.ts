@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ProgressDetector } from "./progressDetector.js";
 import { progressTraceStep } from "./progressTrace.js";
 import { BATCHING_NUDGE_NOTE } from "./batchingNudge.js";
+import { NO_PROGRESS_TURNS } from "./noProgress.js";
 
 const READS = new Set(["read_file", "search_code"]);
 const ports = { isReadOnly: (tool: string) => READS.has(tool) };
@@ -36,5 +37,28 @@ describe("progressTraceStep", () => {
       args: { trip: 1, signal: "edit_revert", action: "steer" },
       result: "progress check 1: edit_revert → steer",
     });
+  });
+
+  it("a no_progress trip still traces as a check — the advisory never masks it", () => {
+    const d = new ProgressDetector({}, ports);
+    // Seed 10 known paths in one ground turn (the idle counter starts after it), then run
+    // NO_PROGRESS_TURNS pure-idle single-readonly turns re-reading rotating known paths —
+    // exactly the batchingNudge streak scenario. The SERIAL_SINGLE_CALLS_AT-th returns the
+    // one-shot advisory INSTEAD of the trip that turn, but the idle window keeps filling
+    // and the NO_PROGRESS_TURNS-th turn yields the no_progress trip.
+    const KNOWN = Array.from({ length: 10 }, (_, i) => `known${i}.ts`);
+    for (const p of KNOWN) d.observe("read_file", { path: p }, okData);
+    expect(d.endTurn()).toBeNull(); // the ground turn
+    let action: ReturnType<ProgressDetector["endTurn"]> = null;
+    for (let i = 0; i < NO_PROGRESS_TURNS; i++) {
+      d.observe("read_file", { path: KNOWN[i % KNOWN.length]! }, okData);
+      action = d.endTurn();
+    }
+    expect(action).not.toBeNull();
+    expect(action!.kind).not.toBe("advisory");
+    if (action!.kind !== "advisory") {
+      expect(progressTraceStep(action!).label).toBe("loop.progress_check");
+      expect(action!.signal.kind).toBe("no_progress");
+    }
   });
 });
