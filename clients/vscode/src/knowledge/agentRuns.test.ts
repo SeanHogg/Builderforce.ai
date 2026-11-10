@@ -7,7 +7,15 @@ vi.mock("@seanhogg/builderforce-brain-embedded/runFindings", async (importOrigin
 });
 
 import { detectRunFindings } from "@seanhogg/builderforce-brain-embedded/runFindings";
-import { CHATS_SCANNED, createAgentRuns, MEMO_SIZE, type AgentRunsStore } from "./agentRuns";
+import {
+  AGENT_RUNS_SHOWN,
+  AgentRunsTimeoutError,
+  CHATS_SCANNED,
+  createAgentRuns,
+  MEMO_SIZE,
+  READ_WINDOW,
+  type AgentRunsStore,
+} from "./agentRuns";
 
 const detect = vi.mocked(detectRunFindings);
 
@@ -31,6 +39,13 @@ function fakeStore(chats: BrainChat[], messages: Map<number, BrainMessage[]>) {
     getMessages: vi.fn(async (chatId: number) => messages.get(chatId) ?? []),
   } satisfies AgentRunsStore;
   return store;
+}
+
+/** The store's batch read, over the same messages (an unknown chat maps to []). */
+function withBatch<S extends ReturnType<typeof fakeStore>>(store: S, messages: Map<number, BrainMessage[]>) {
+  return Object.assign(store, {
+    getMessagesForChats: vi.fn(async (chatIds: readonly number[]) => new Map(chatIds.map((id) => [id, messages.get(id) ?? []]))),
+  });
 }
 
 describe("createAgentRuns", () => {
@@ -120,6 +135,36 @@ describe("createAgentRuns", () => {
     expect(store.getMessages).toHaveBeenCalledTimes(CHATS_SCANNED);
   });
 
+  // regression: the drawer sat on "Reading the recorded agent runs…" — one full store read per chat (11 s on a real store).
+  it("reads the chats the memo cannot answer in ONE batch read, never chat by chat", async () => {
+    const chats = [chat(1, "One"), chat(2, "Two"), chat(3, "Three")];
+    const messages = new Map<number, BrainMessage[]>(chats.map((c) => [c.id, [msg("user", "go"), step("read_file")]]));
+    const store = withBatch(fakeStore(chats, messages), messages);
+    const runs = createAgentRuns(store, () => undefined);
+    expect((await runs.list()).map((s) => s.id)).toEqual(["1", "2", "3"]);
+    expect(store.getMessagesForChats).toHaveBeenCalledTimes(1);
+    expect(store.getMessagesForChats).toHaveBeenCalledWith([1, 2, 3]);
+    expect(store.getMessages).not.toHaveBeenCalled();
+    // Only the chat whose stamp moved is read again; an all-memo list reads nothing.
+    chats[1] = chat(2, "Two", 1, "2026-11-09T11:00:00Z");
+    await runs.list();
+    expect(store.getMessagesForChats).toHaveBeenLastCalledWith([2]);
+    await runs.list();
+    expect(store.getMessagesForChats).toHaveBeenCalledTimes(2);
+    expect(store.getMessages).not.toHaveBeenCalled();
+  });
+
+  it("reads window by window and stops once AGENT_RUNS_SHOWN runs are found, never reading older windows", async () => {
+    const chats = Array.from({ length: CHATS_SCANNED }, (_, i) => chat(i + 1, `Chat ${i + 1}`));
+    const messages = new Map<number, BrainMessage[]>(chats.map((c) => [c.id, [msg("user", "go"), step("read_file")]]));
+    const store = withBatch(fakeStore(chats, messages), messages);
+    const list = await createAgentRuns(store, () => undefined).list();
+    expect(list).toHaveLength(AGENT_RUNS_SHOWN);
+    const read = store.getMessagesForChats.mock.calls.flatMap(([ids]) => [...ids]);
+    expect(store.getMessagesForChats.mock.calls.every(([ids]) => ids.length <= READ_WINDOW)).toBe(true);
+    expect(read).toEqual(chats.slice(0, AGENT_RUNS_SHOWN).map((c) => c.id));
+  });
+
   // regression: the drawer sat on "Reading the recorded agent runs…" — one full store read per chat, unbounded.
   it("stops fresh reads once the budget is spent, still answering memo hits, and the next list picks up the rest", async () => {
     const chats = [chat(1, "One"), chat(2, "Two"), chat(3, "Three")];
@@ -134,6 +179,51 @@ describe("createAgentRuns", () => {
     expect((await runs.list()).map((s) => s.id)).toEqual(["1", "2"]);
     expect((await runs.list()).map((s) => s.id)).toEqual(["1", "2", "3"]);
     expect(store.getMessages).toHaveBeenCalledTimes(3);
+  });
+
+  it("rejects a list whose read hangs and lets the next list (Retry) read afresh", async () => {
+    vi.useFakeTimers();
+    try {
+      const messages = new Map<number, BrainMessage[]>([[1, [msg("user", "go"), step("read_file")]]]);
+      const store = fakeStore([chat(1, "One")], messages);
+      store.listChats.mockImplementationOnce(() => new Promise(() => undefined)); // never settles
+      const runs = createAgentRuns(store, () => undefined, { timeoutMs: 1_000 });
+      const stuck = runs.list();
+      expect(runs.list()).toBe(stuck); // shared while in flight
+      const failed = expect(stuck).rejects.toThrow(AgentRunsTimeoutError);
+      await vi.advanceTimersByTimeAsync(1_000);
+      await failed;
+      expect((await runs.list()).map((s) => s.id)).toEqual(["1"]);
+      expect(store.listChats).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not share one project's in-flight list with another project", async () => {
+    const chats = [chat(1, "One", 1), chat(2, "Two", 2)];
+    const messages = new Map<number, BrainMessage[]>(chats.map((c) => [c.id, [msg("user", "go"), step("read_file")]]));
+    const store = fakeStore(chats, messages);
+    let project = 1;
+    const runs = createAgentRuns(store, () => project);
+    const first = runs.list();
+    project = 2;
+    const second = runs.list();
+    expect(second).not.toBe(first);
+    expect((await first).map((s) => s.id)).toEqual(["1"]);
+    expect((await second).map((s) => s.id)).toEqual(["2"]);
+  });
+
+  it("falls back to chat-by-chat reads when the batch read fails, still isolating a broken chat", async () => {
+    const messages = new Map<number, BrainMessage[]>([[1, [msg("user", "go"), step("read_file")]], [2, [msg("user", "go"), step("read_file")]]]);
+    const store = withBatch(fakeStore([chat(1, "One"), chat(2, "Broken")], messages), messages);
+    store.getMessagesForChats.mockRejectedValue(new Error("store busy"));
+    store.getMessages.mockImplementation(async (chatId: number) => {
+      if (chatId === 2) throw new Error("No such local chat: 2");
+      return messages.get(chatId) ?? [];
+    });
+    expect((await createAgentRuns(store, () => undefined).list()).map((s) => s.id)).toEqual(["1"]);
+    expect(store.getMessages).toHaveBeenCalledTimes(2);
   });
 
   it("leaves out a chat whose messages cannot be read instead of failing the list", async () => {

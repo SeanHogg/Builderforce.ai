@@ -7,11 +7,16 @@
  * without reading its messages again — including the "not a run" verdict. The memo is an LRU of {@link MEMO_SIZE}
  * chats. No `vscode` here — the bridge hands in the chat store and the project to scope by.
  *
- * The list looks through the {@link CHATS_SCANNED} most recent chats and reads the messages of every one the memo
- * does not hold in ONE batch (`getMessagesForChats`: one store read, each chat through the store's chat index — a
- * chat's read costs that chat, never every chat's rows). A store without the batch read, or a batch that fails, is
- * read chat by chat; a chat whose read fails is skipped rather than failing the list, and overlapping list calls
- * share one read.
+ * Reading: the {@link CHATS_SCANNED} most recent chats, newest first, in windows of {@link READ_WINDOW}. Each window's
+ * chats the memo cannot answer are read in ONE batch (`getMessagesForChats`: one store read, each chat through the
+ * store's chat index — a chat's read costs that chat, never every chat's rows), and the walk stops as soon as
+ * {@link AGENT_RUNS_SHOWN} runs are found, so the older windows are never read. Bounds, kept although the index made a
+ * read cheap (measured on a 263 MB / 75k-message store: a cold list 2.1 s, ~1.6 s of it run-findings CPU, warm 0.14 s):
+ *   - {@link LIST_BUDGET_MS}: past it no new window is read (memo hits are still answered; the next open continues);
+ *   - {@link LIST_TIMEOUT_MS}: a list that has not settled by then (a store read that hangs) rejects and is dropped,
+ *     so Retry starts a fresh read instead of being handed the stuck one.
+ * A store without the batch read, or a batch that fails, is read chat by chat; a chat whose read fails is skipped
+ * rather than failing the list; overlapping list calls for the same project share one read.
  */
 
 import { isStepMessage, type BrainChat, type BrainMessage, type BrainPersistenceAdapter } from "@seanhogg/builderforce-brain-embedded";
@@ -25,9 +30,24 @@ import {
 /** How many runs the list shows. */
 export const AGENT_RUNS_SHOWN = 20;
 /** How many recent chats the list looks through for runs (a chat with no step rows is not a run). */
-export const CHATS_SCANNED = 60;
+export const CHATS_SCANNED = 30;
+/** How many chats one batch read covers; the walk stops between windows once enough runs are found. */
+export const READ_WINDOW = 10;
+/** How long one list may spend reading chats the memo does not hold; past it, only memo hits are answered. */
+export const LIST_BUDGET_MS = 5_000;
+/** A list not settled by then is rejected and forgotten, so the next `list()` reads afresh. */
+export const LIST_TIMEOUT_MS = 20_000;
 /** How many chats' verdicts the memo keeps (least recently used goes first). */
 export const MEMO_SIZE = 60;
+
+export interface AgentRunsOptions {
+  /** {@link LIST_BUDGET_MS} by default; tests pass their own. */
+  budgetMs?: number;
+  /** {@link LIST_TIMEOUT_MS} by default; tests pass their own. */
+  timeoutMs?: number;
+  /** The clock the budget is measured on (tests inject one). */
+  now?: () => number;
+}
 
 export type AgentRunsStore = Pick<BrainPersistenceAdapter, "listChats" | "getChat" | "getMessages" | "getMessagesForChats">;
 
@@ -38,36 +58,52 @@ export interface AgentRuns {
 
 type ChatRef = Pick<BrainChat, "id" | "title" | "updatedAt">;
 
+export class AgentRunsTimeoutError extends Error {
+  constructor(ms: number) {
+    super(`agent runs list did not settle in ${ms} ms`);
+    this.name = "AgentRunsTimeoutError";
+  }
+}
+
 /**
  * @param store the local chat store (`localBrainApplication(ctx).persistence`)
  * @param projectId the Visualizer's linked project, when there is one; its chats only
  */
-export function createAgentRuns(store: AgentRunsStore, projectId: () => number | string | undefined): AgentRuns {
+export function createAgentRuns(store: AgentRunsStore, projectId: () => number | string | undefined, options: AgentRunsOptions = {}): AgentRuns {
+  const budgetMs = options.budgetMs ?? LIST_BUDGET_MS;
+  const timeoutMs = options.timeoutMs ?? LIST_TIMEOUT_MS;
+  const now = options.now ?? Date.now;
   /** Insertion order is recency: a hit is re-inserted, the first key is the eviction victim. */
   const memo = new Map<number, { updatedAt: string; report: RunFindingsReport | null }>();
-  /** The list read under way: a drawer reopened (or a second panel) while it runs shares it. */
-  let listing: Promise<RunFindingsSummary[]> | undefined;
+  /** The list read under way per project: a drawer reopened (or a second panel) on the same project shares it. */
+  const listing = new Map<string, Promise<RunFindingsSummary[]>>();
 
   const memoHit = (chat: ChatRef): boolean => memo.get(chat.id)?.updatedAt === chat.updatedAt;
 
-  /** The messages of the chats the memo cannot answer, in one read; undefined when the store cannot batch. */
-  async function readBatch(chats: readonly ChatRef[]): Promise<ReadonlyMap<number, BrainMessage[]> | undefined> {
+  /** One window's chats the memo cannot answer, in one read; undefined when the store cannot batch (or it failed). */
+  async function readWindow(chats: readonly ChatRef[]): Promise<ReadonlyMap<number, BrainMessage[]> | undefined> {
     const fresh = chats.filter((chat) => !memoHit(chat)).map((chat) => chat.id);
     if (fresh.length === 0 || !store.getMessagesForChats) return undefined;
-    // A failed batch is not a failed list: every chat is then read on its own (and fails on its own).
+    // A failed batch is not a failed list: its chats are then read one by one (and fail one by one).
     return store.getMessagesForChats(fresh).catch(() => undefined);
   }
 
-  async function listRuns(): Promise<RunFindingsSummary[]> {
-    const project = projectId();
+  async function listRuns(project: number | string | undefined): Promise<RunFindingsSummary[]> {
     const chats = await store.listChats({ ...(project !== undefined ? { projectId: String(project) } : {}), limit: CHATS_SCANNED });
-    const batch = await readBatch(chats);
+    const deadline = now() + budgetMs;
     const out: RunFindingsSummary[] = [];
-    for (const chat of chats) {
-      if (out.length >= AGENT_RUNS_SHOWN) break;
-      // One chat that cannot be read (deleted meanwhile, a damaged row) is left out, not the whole list.
-      const report = await reportOf(chat, batch?.get(chat.id)).catch(() => null);
-      if (report) out.push(report.summary);
+    for (let at = 0; at < chats.length && out.length < AGENT_RUNS_SHOWN; at += READ_WINDOW) {
+      const window = chats.slice(at, at + READ_WINDOW);
+      const batch = now() > deadline ? undefined : await readWindow(window);
+      for (const chat of window) {
+        if (out.length >= AGENT_RUNS_SHOWN) break;
+        const read = batch?.get(chat.id);
+        // Out of budget: a memo hit (or a chat already read) is free, a fresh read waits for the next open.
+        if (!memoHit(chat) && !read && now() > deadline) continue;
+        // One chat that cannot be read (deleted meanwhile, a damaged row) is left out, not the whole list.
+        const report = await reportOf(chat, read).catch(() => null);
+        if (report) out.push(report.summary);
+      }
     }
     return out;
   }
@@ -96,10 +132,27 @@ export function createAgentRuns(store: AgentRunsStore, projectId: () => number |
     return report;
   }
 
+  /** `work`, or a rejection once {@link LIST_TIMEOUT_MS} passes without it settling. */
+  function withTimeout<T>(work: Promise<T>): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new AgentRunsTimeoutError(timeoutMs)), timeoutMs);
+    });
+    return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
+  }
+
   return {
     list() {
-      listing ??= listRuns().finally(() => { listing = undefined; });
-      return listing;
+      const project = projectId();
+      const key = String(project ?? "");
+      const shared = listing.get(key);
+      if (shared) return shared;
+      const run: Promise<RunFindingsSummary[]> = withTimeout(listRuns(project)).finally(() => {
+        // Settled or timed out: forget it, so the next list (a Retry) reads afresh.
+        if (listing.get(key) === run) listing.delete(key);
+      });
+      listing.set(key, run);
+      return run;
     },
     async report(id) {
       const chatId = Number(id);
