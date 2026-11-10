@@ -85,6 +85,7 @@ describe("ProgressDetector", () => {
     const d = new ProgressDetector({}, ports);
     // Turn 1: the run writes and verifies a file.
     d.observe("edit_file", { path: "src/a.ts", old_string: "x", new_string: "y" }, okData);
+    d.observe("read_file", { path: "src/a.ts" }, okData);
     expect(d.endTurn()).toBeNull();
     // Turn 2: it re-reads that same file it wrote — no new path, no change, no test movement.
     d.observe("read_file", { path: "src/a.ts" }, okData);
@@ -100,6 +101,30 @@ describe("ProgressDetector", () => {
     // The run wrote a file AND reached a new one — that is real work, not a verification loop.
     d.observe("read_file", { path: "src/a.ts" }, okData);
     d.observe("read_file", { path: "src/never-seen.ts" }, okData);
+    expect(d.endTurn()).toBeNull();
+  });
+
+  it("regression: first read-back after a write is not re-verification (chat #70776)", () => {
+    const d = new ProgressDetector({}, ports);
+    // The edit applied but may have half-applied: reading it back once is inspecting it.
+    d.observe("edit_file", { path: "src/labels.ts", old_string: "x", new_string: "y" }, okData);
+    expect(d.endTurn()).toBeNull();
+    d.observe("read_file", { path: "src/labels.ts", offset: 40, limit: 30 }, okData);
+    expect(d.endTurn()).toBeNull();
+    // A second look at the same unchanged bytes IS re-verification.
+    d.observe("read_file", { path: "src/labels.ts" }, okData);
+    expect(d.endTurn()).toMatchObject({ kind: "steer", signal: { kind: "reverifying" } });
+  });
+
+  it("a new write restarts the read-back: write, read, write again, read is silent", () => {
+    const d = new ProgressDetector({}, ports);
+    d.observe("edit_file", { path: "src/a.ts", old_string: "x", new_string: "y" }, okData);
+    expect(d.endTurn()).toBeNull();
+    d.observe("read_file", { path: "src/a.ts" }, okData);
+    expect(d.endTurn()).toBeNull();
+    d.observe("edit_file", { path: "src/a.ts", old_string: "y", new_string: "z" }, okData);
+    expect(d.endTurn()).toBeNull();
+    d.observe("read_file", { path: "src/a.ts" }, okData);
     expect(d.endTurn()).toBeNull();
   });
 

@@ -113,6 +113,7 @@ export class NoProgressTracker {
   private churnThisTurn = false;
   private churnTurns: number;
   private lastGround = false;
+  private lastIdle = false;
   private turn = 0;
   private readonly lastSeenAt: Map<string, number>;
   private readonly targetOf: (tool: string, args: unknown) => string | null;
@@ -185,6 +186,7 @@ export class NoProgressTracker {
       progressed = this.churnTurns <= CHURN_TURNS;
     }
     this.lastGround = this.groundThisTurn;
+    this.lastIdle = !progressed;
     this.idleTurns = progressed ? 0 : this.idleTurns + 1;
     this.groundThisTurn = false;
     this.churnThisTurn = false;
@@ -195,6 +197,12 @@ export class NoProgressTracker {
   /** Whether the turn {@link endTurn} last closed made GROUND progress (not churn alone). */
   get lastTurnGround(): boolean {
     return this.lastGround;
+  }
+
+  /** Whether the turn {@link endTurn} last closed made NO progress at all (neither
+   *  ground nor churn) — the pure-idle turn the B4 batching nudge targets. */
+  get lastTurnIdle(): boolean {
+    return this.lastIdle;
   }
 
   /** Start the window over (the run was steered, escalated or resumed by a human). */

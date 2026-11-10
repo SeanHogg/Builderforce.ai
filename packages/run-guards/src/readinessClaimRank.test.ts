@@ -19,8 +19,19 @@ function turn(d: ProgressDetector, text: string, calls: Array<[string, Record<st
 describe("ProgressDetector: where unkept_ready ranks", () => {
   it("outranks no_progress when both fill on the same turn", () => {
     const d = detector();
-    // Idle turns: a listing names no path, so nothing is new ground.
-    for (let i = 0; i < NO_PROGRESS_TURNS - 2; i++) expect(turn(d, "", [["list_files", {}]])).toBeNull();
+    // Idle turns: a listing names no path, so nothing is new ground. PRD 45 B4: a streak of
+    // single-readonly idle turns now earns the one-shot batching advisory before the ladder trips —
+    // accept it exactly once, assert it never repeats; the ladder assertions below stay authoritative.
+    let nudged = false;
+    for (let i = 0; i < NO_PROGRESS_TURNS - 2; i++) {
+      const r = turn(d, "", [["list_files", {}]]);
+      if (r != null && r.kind === "advisory") {
+        expect(nudged).toBe(false);
+        nudged = true;
+      } else {
+        expect(r).toBeNull();
+      }
+    }
     // B1: the FIRST unkept claim fires the one-off advisory before the trip.
     expect(turn(d, READY, [["list_files", {}]])).toMatchObject({ kind: "advisory" });
     const action = turn(d, READY, [["list_files", {}]]);

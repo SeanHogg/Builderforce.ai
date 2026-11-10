@@ -249,9 +249,19 @@ describe("churn is bounded", () => {
     const d = new ProgressDetector({}, { isReadOnly: (tool, args) => tool === "run_command" && String((args as { command?: string }).command).startsWith("cat") });
     d.observe("read_file", { path: "a.ts" }, okData);
     d.endTurn();
+    // PRD 45 B4: these single-readonly turns earn no ground (the isReadOnly port gives churn no
+    // credit and each re-read earns no ground), so the one-shot batching advisory fires mid-loop —
+    // accept it exactly once; the ladder assertions below are unaffected.
+    let nudged = false;
     for (let i = 0; i < NO_PROGRESS_TURNS - 1; i++) {
       d.observe("run_command", { command: `cat a.ts ${i}` }, okData);
-      expect(d.endTurn()).toBeNull();
+      const r = d.endTurn();
+      if (r != null && r.kind === "advisory") {
+        expect(nudged).toBe(false);
+        nudged = true;
+      } else {
+        expect(r).toBeNull();
+      }
     }
     d.observe("run_command", { command: "cat a.ts last" }, okData);
     expect(trip(d.endTurn())?.kind).toBe("no_progress");

@@ -133,10 +133,16 @@ export class ProgressDetector {
    *  turns, never a trip and never touching UNKEPT_READY_AT or any other signal. */
   private readonly batching: BatchingNudge;
   private turnSignal: ProgressSignal | null = null;
-  /** Every path this run has written, so a re-read of one is re-verification, not discovery. */
+  /** Every path this run has written, so a repeat read-back of one is re-verification, not discovery. */
   private writtenPaths: Set<string>;
+  /** Read targets on written paths already read back since that path's last write: the
+   *  first read-back after a write inspects the edit (it may have half-applied); only a
+   *  later look at the same unchanged bytes is re-verification. Cleared per path on write. */
+  private readBackSinceWrite: Set<string>;
   /** Read-only targets seen this turn, to tell an all-written re-read turn from real work. */
   private readThisTurn: string[];
+  /** Whether every read this turn was a repeat read-back of an unchanged written path. */
+  private allReadsRepeatReadBacks: boolean;
   /** Every call of the current turn, for the B4 batching nudge's read-only count. */
   private turnCalls: Array<{ tool: string; args: unknown; result: ObservedResult }>;
 
@@ -154,7 +160,9 @@ export class ProgressDetector {
     this.readiness = new ReadinessAdvisory(state.advisory);
     this.batching = new BatchingNudge(state.batching);
     this.writtenPaths = new Set();
+    this.readBackSinceWrite = new Set();
     this.readThisTurn = [];
+    this.allReadsRepeatReadBacks = true;
     this.turnCalls = [];
   }
 
@@ -179,6 +187,8 @@ export class ProgressDetector {
     if (unscoped) {
       this.visits.markAllMayHaveChanged();
       this.edits.reset();
+      // Any file may now differ, so no read-back is a look at unchanged bytes.
+      if (wrote) this.readBackSinceWrite.clear();
     } else if ((this.ports.isDelete ?? ((t) => t === "delete_file"))(tool)) {
       this.edits.record(tool, args, { ok, deleted: ok });
       this.forgetVisitsOf(pathArgOf(args));
@@ -190,12 +200,19 @@ export class ProgressDetector {
         this.forgetVisitsOf(path);
         if (path) {
           this.writtenPaths.add(path);
+          this.readBackSinceWrite.delete(path);
         }
       }
     } else if (ok && this.ports.isReadOnly?.(tool, args)) {
       const target = visitTargetOf(args);
       if (target) {
         this.readThisTurn.push(target);
+        if (this.writtenPaths.has(target)) {
+          if (!this.readBackSinceWrite.has(target)) this.allReadsRepeatReadBacks = false;
+          this.readBackSinceWrite.add(target);
+        } else {
+          this.allReadsRepeatReadBacks = false;
+        }
         const visit = this.visits.record(`${tool}:${target}`, args);
         if (visit.count >= REVISIT_HARD_AT && !visit.mayHaveChanged) this.raise({ kind: "circling_read", tool, target, count: visit.count });
       }
@@ -230,19 +247,21 @@ export class ProgressDetector {
     // The previous trip's steer has now been shown for one turn.
     this.steer = undefined;
     const idle = this.progress.endTurn();
-    // A turn whose only read activity is files the run itself already wrote — no new
-    // path, no change, no test movement — is re-verifying already-shipped ground. It is
-    // the exact loop that evades no_progress (constant new-target ground) and
-    // circling_read (reset by every successful write): re-running a filtered type-check,
-    // or re-reading a file the run committed, to convince itself the work landed. A turn
-    // that also breaks new ground or writes is real work, not re-verification.
-    if (!this.turnSignal && this.readThisTurn.length > 0) {
-      const allWritten = this.readThisTurn.every((t) => this.writtenPaths.has(t));
-      if (allWritten && !this.progress.lastTurnGround && idle > 0) {
+    // A turn whose only read activity is files the run itself already wrote AND already
+    // read back since that write — no new path, no change, no test movement — is
+    // re-verifying already-shipped ground. It is the exact loop that evades no_progress
+    // (constant new-target ground) and circling_read (reset by every successful write):
+    // re-running a filtered type-check, or re-reading a file the run committed, to
+    // convince itself the work landed. The FIRST read-back after a write is not part of
+    // it: that inspects the edit, which may have half-applied (chat #70776). A turn that
+    // also breaks new ground or writes is real work, not re-verification.
+    if (!this.turnSignal && this.readThisTurn.length > 0 && this.allReadsRepeatReadBacks) {
+      if (!this.progress.lastTurnGround && idle > 0) {
         this.raise({ kind: "reverifying", count: this.readThisTurn.length });
       }
     }
     this.readThisTurn = [];
+    this.allReadsRepeatReadBacks = true;
     // New files do not excuse it: the run said it had what it needed.
     const unkeptBefore = this.claims.snapshot().unkept;
     const unkept = this.claims.endTurn();
@@ -260,10 +279,15 @@ export class ProgressDetector {
       this.readiness.endTurn();
       const advisoryNote = this.readiness.observe(this.unkeptTurns);
       if (advisoryNote) return { kind: "advisory", note: advisoryNote };
-      // B4: the batching nudge, on the next turn after SERIAL_SINGLE_CALLS_AT
-      // consecutive single-readonly turns. Advisory only — the ladder, UNKEPT_READY_AT
-      // and every other signal are untouched.
-      if (batchNote) return { kind: "advisory", note: batchNote };
+      // B4: the batching nudge, on the turn after SERIAL_SINGLE_CALLS_AT consecutive
+      // single-readonly turns. Advisory only — the ladder, UNKEPT_READY_AT and every other
+      // signal are untouched, and it sits inside `if (!signal)` so it never masks a trip.
+      // It surfaces only on a PURE-IDLE turn — `lastTurnIdle` is true exactly when the turn
+      // made no ground AND no churn — because a turn that reached a fresh path, moved a
+      // test, or changed a check result did real work, not serial re-reading. A churn turn
+      // (a distinct edit) is likewise not a serial-read turn. Firing here would mask the
+      // productive-turn signals (no_progress, readiness) these tests pin.
+      if (batchNote && this.progress.lastTurnIdle) return { kind: "advisory", note: batchNote };
       // Sustained GROUND progress ends the stuck stretch the ladder was counting. A churn
       // turn neither adds to the streak nor breaks it; an idle turn resets it.
       if (this.progress.lastTurnGround) this.quietTurns += 1;
