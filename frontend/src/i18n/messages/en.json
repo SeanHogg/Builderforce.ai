@@ -13031,7 +13031,7 @@
         "description": "The app you build on a Builderforce canvas now updates in place as you edit, keeping what you typed and where you scrolled. It compiles Sass, SCSS and Less, scopes CSS Modules for real, loads the stylesheets your packages ship, and runs Next.js and SvelteKit dev servers in the browser."
       },
       "one-agent-one-kernel": {
-        "title": "One agent, one kernel — every Builderforce surface now runs the same engine",
+        "title": "One agent, one kernel — VS Code, the web app, Rovr and on-prem now run the same engine",
         "description": "Your chat in VS Code, the web app, Rovr and the on-prem channels used to be four runtimes that could disagree. They are now one execution core — one loop, one tool policy, the same rules, guards and verification, wherever you work."
       },
       "portable-knowledge-packs": {
@@ -13040,7 +13040,7 @@
       },
       "see-what-went-wrong-in-an-agent-run": {
         "title": "The agent run \"worked\". Now you can see what went wrong in it",
-        "description": "An editor agent spends three million prompt tokens, makes thirteen changes and gets stopped, and the report says Inconclusive. The Agent runs drawer in the VS Code Visualizer reads the recorded run and names every problem in it, with the turn, the tool and the file as evidence."
+        "description": "An editor agent spends three million prompt tokens, makes thirteen changes and gets stopped, and the report says Inconclusive. The Agent runs drawer in the VS Code Visualizer reads the recorded run and names the problems its detectors find, with the turn, the tool and the file as evidence."
       },
       "no-account-no-gpu-you-choose-where-it-runs": {
         "title": "No account, no GPU, no network — and you choose where your words go",

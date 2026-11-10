@@ -1,7 +1,7 @@
 ---
 title: The agent run "worked". Now you can see what went wrong in it
 date: 2026-11-09
-description: An editor agent spends three million prompt tokens, makes thirteen changes and gets stopped, and the report says Inconclusive. The Agent runs drawer in the VS Code Visualizer reads the recorded run and names every problem in it, with the turn, the tool and the file as evidence.
+description: An editor agent spends three million prompt tokens, makes thirteen changes and gets stopped, and the report says Inconclusive. The Agent runs drawer in the VS Code Visualizer reads the recorded run and names the problems its detectors find, with the turn, the tool and the file as evidence.
 tags: [agents, vscode, observability, knowledge, product]
 author: Sean Hogg
 ---

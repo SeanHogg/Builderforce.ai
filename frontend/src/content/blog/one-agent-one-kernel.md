@@ -1,12 +1,12 @@
 ---
-title: One agent, one kernel — every Builderforce surface now runs the same engine
+title: One agent, one kernel — VS Code, the web app, Rovr and on-prem now run the same engine
 date: 2026-11-08
 description: Your chat in VS Code, the web app, Rovr and the on-prem channels used to be four runtimes that could disagree. They are now one execution core — one loop, one tool policy, the same rules, guards and verification, wherever you work.
 tags: [agents, architecture, vscode, web, product]
 author: Sean Hogg
 ---
 
-# One agent, one kernel — every Builderforce surface now runs the same engine
+# One agent, one kernel — VS Code, the web app, Rovr and on-prem now run the same engine
 
 Start a chat with an agent in VS Code, then pick it up in the browser mid-thread, and the agent that answers you there has the same tools, follows the same rules and guards, and has its work checked by the same verification. A fix you get in one place is a fix in every place.
 

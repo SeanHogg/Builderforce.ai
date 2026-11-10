@@ -13031,7 +13031,7 @@
         "description": "La app que construyes en un lienzo de Builderforce ahora se actualiza en su sitio mientras editas, conservando lo que escribiste y dónde estabas. Compila Sass, SCSS y Less, aísla de verdad los CSS Modules, carga las hojas de estilo de tus paquetes y ejecuta servidores de desarrollo de Next.js y SvelteKit en el navegador."
       },
       "one-agent-one-kernel": {
-        "title": "Un agente, un núcleo: todas las superficies de Builderforce usan ahora el mismo motor",
+        "title": "Un agente, un núcleo: VS Code, la aplicación web, Rovr y on-prem usan ahora el mismo motor",
         "description": "Tu chat en VS Code, la aplicación web, Rovr y los canales on-prem eran cuatro entornos de ejecución que podían no coincidir. Ahora son un único núcleo de ejecución: un bucle, una política de herramientas, las mismas reglas, salvaguardas y verificación, trabajes donde trabajes."
       },
       "portable-knowledge-packs": {
@@ -13040,7 +13040,7 @@
       },
       "see-what-went-wrong-in-an-agent-run": {
         "title": "La ejecución del agente «funcionó». Ahora puedes ver qué salió mal en ella",
-        "description": "Un agente del editor gasta tres millones de tokens de prompt, hace trece cambios y lo detienen, y el informe dice Inconcluso. El panel Agent runs del Visualizer de VS Code lee la ejecución registrada y señala cada problema, con el turno, la herramienta y el archivo como evidencia."
+        "description": "Un agente del editor gasta tres millones de tokens de prompt, hace trece cambios y lo detienen, y el informe dice Inconcluso. El panel Agent runs del Visualizer de VS Code lee la ejecución registrada y señala los problemas que encuentran sus detectores, con el turno, la herramienta y el archivo como evidencia."
       },
       "no-account-no-gpu-you-choose-where-it-runs": {
         "title": "Sin cuenta, sin GPU, sin red: y tú eliges adónde van tus palabras",

@@ -13031,7 +13031,7 @@
         "description": "你在 Builderforce 画布上构建的应用，现在会在你编辑时原地更新，保留你输入的内容和滚动的位置。它能编译 Sass、SCSS 和 Less，真正隔离 CSS Modules，加载你所用包自带的样式表，还能在浏览器里运行 Next.js 和 SvelteKit 开发服务器。"
       },
       "one-agent-one-kernel": {
-        "title": "一个代理，一个内核——Builderforce 的每个界面现在都运行同一个引擎",
+        "title": "一个代理，一个内核——VS Code、网页应用、Rovr 和本地部署现在运行同一个引擎",
         "description": "VS Code 里的聊天、网页应用、Rovr 和本地部署渠道，过去是四个可能给出不同结论的运行时。现在它们是同一个执行核心——一个循环、一套工具策略、同样的规则、防护和验证，无论你在哪里工作。"
       },
       "portable-knowledge-packs": {
@@ -13040,7 +13040,7 @@
       },
       "see-what-went-wrong-in-an-agent-run": {
         "title": "代理运行“成功”了。现在你能看到其中哪里出了错",
-        "description": "一个编辑器代理花掉三百万提示令牌、做了十三处修改后被叫停，报告却只写着“无法判定”。VS Code Visualizer 中的 Agent runs 抽屉会读取记录下来的运行，指出其中的每一个问题，并以对应的轮次、工具和文件作为证据。"
+        "description": "一个编辑器代理花掉三百万提示令牌、做了十三处修改后被叫停，报告却只写着“无法判定”。VS Code Visualizer 中的 Agent runs 抽屉会读取记录下来的运行，指出其检测器发现的问题，并以对应的轮次、工具和文件作为证据。"
       },
       "no-account-no-gpu-you-choose-where-it-runs": {
         "title": "无需账户，无需 GPU，无需网络——而且由你决定你的文字去向何处",

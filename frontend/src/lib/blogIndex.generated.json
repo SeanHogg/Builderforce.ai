@@ -3,7 +3,7 @@
     "slug": "see-what-went-wrong-in-an-agent-run",
     "title": "The agent run \"worked\". Now you can see what went wrong in it",
     "date": "2026-11-09",
-    "description": "An editor agent spends three million prompt tokens, makes thirteen changes and gets stopped, and the report says Inconclusive. The Agent runs drawer in the VS Code Visualizer reads the recorded run and names every problem in it, with the turn, the tool and the file as evidence.",
+    "description": "An editor agent spends three million prompt tokens, makes thirteen changes and gets stopped, and the report says Inconclusive. The Agent runs drawer in the VS Code Visualizer reads the recorded run and names the problems its detectors find, with the turn, the tool and the file as evidence.",
     "tags": [
       "agents",
       "vscode",
@@ -30,7 +30,7 @@
   },
   {
     "slug": "one-agent-one-kernel",
-    "title": "One agent, one kernel — every Builderforce surface now runs the same engine",
+    "title": "One agent, one kernel — VS Code, the web app, Rovr and on-prem now run the same engine",
     "date": "2026-11-08",
     "description": "Your chat in VS Code, the web app, Rovr and the on-prem channels used to be four runtimes that could disagree. They are now one execution core — one loop, one tool policy, the same rules, guards and verification, wherever you work.",
     "tags": [

@@ -13031,7 +13031,7 @@
         "description": "L'app que vous construisez sur un canvas Builderforce se met désormais à jour sur place pendant que vous éditez, en gardant ce que vous avez saisi et votre position de défilement. Elle compile Sass, SCSS et Less, isole réellement les CSS Modules, charge les feuilles de style de vos paquets et exécute des serveurs de développement Next.js et SvelteKit dans le navigateur."
       },
       "one-agent-one-kernel": {
-        "title": "Un agent, un noyau : chaque surface de Builderforce utilise désormais le même moteur",
+        "title": "Un agent, un noyau : VS Code, l'application web, Rovr et on-prem utilisent désormais le même moteur",
         "description": "Votre chat dans VS Code, l'application web, Rovr et les canaux on-prem étaient quatre environnements d'exécution susceptibles de se contredire. Ils forment désormais un seul cœur d'exécution : une boucle, une politique d'outils, les mêmes règles, garde-fous et vérifications, où que vous travailliez."
       },
       "portable-knowledge-packs": {
@@ -13040,7 +13040,7 @@
       },
       "see-what-went-wrong-in-an-agent-run": {
         "title": "L'exécution de l'agent a « fonctionné ». Vous pouvez maintenant voir ce qui a mal tourné",
-        "description": "Un agent de l'éditeur dépense trois millions de tokens de prompt, effectue treize modifications et se fait arrêter, et le rapport dit Non concluant. Le tiroir Agent runs du Visualizer de VS Code lit l'exécution enregistrée et nomme chaque problème, avec le tour, l'outil et le fichier comme preuves."
+        "description": "Un agent de l'éditeur dépense trois millions de tokens de prompt, effectue treize modifications et se fait arrêter, et le rapport dit Non concluant. Le tiroir Agent runs du Visualizer de VS Code lit l'exécution enregistrée et nomme les problèmes que trouvent ses détecteurs, avec le tour, l'outil et le fichier comme preuves."
       },
       "no-account-no-gpu-you-choose-where-it-runs": {
         "title": "Sans compte, sans GPU, sans réseau — et vous choisissez où vont vos mots",

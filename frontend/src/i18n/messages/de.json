@@ -13031,7 +13031,7 @@
         "description": "Die App, die Sie auf einem Builderforce-Canvas bauen, aktualisiert sich jetzt beim Bearbeiten an Ort und Stelle und behält, was Sie eingegeben haben und wohin Sie gescrollt haben. Sie kompiliert Sass, SCSS und Less, kapselt CSS Modules wirklich, lädt die Stylesheets Ihrer Pakete und startet Next.js- und SvelteKit-Entwicklungsserver im Browser."
       },
       "one-agent-one-kernel": {
-        "title": "Ein Agent, ein Kern – jede Builderforce-Oberfläche nutzt jetzt dieselbe Engine",
+        "title": "Ein Agent, ein Kern – VS Code, die Web-App, Rovr und On-Prem nutzen jetzt dieselbe Engine",
         "description": "Ihr Chat in VS Code, die Web-App, Rovr und die On-Prem-Kanäle waren früher vier Laufzeitumgebungen, die sich widersprechen konnten. Jetzt sind sie ein einziger Ausführungskern – eine Schleife, eine Werkzeugrichtlinie, dieselben Regeln, Schutzmechanismen und Prüfungen, wo immer Sie arbeiten."
       },
       "portable-knowledge-packs": {
@@ -13040,7 +13040,7 @@
       },
       "see-what-went-wrong-in-an-agent-run": {
         "title": "Der Agentenlauf hat „funktioniert“. Jetzt sehen Sie, was darin schiefging",
-        "description": "Ein Editor-Agent verbraucht drei Millionen Prompt-Tokens, nimmt dreizehn Änderungen vor und wird gestoppt, und der Bericht sagt Nicht eindeutig. Die Schublade Agent runs im VS-Code-Visualizer liest den aufgezeichneten Lauf und benennt jedes Problem darin, mit Turn, Werkzeug und Datei als Beleg."
+        "description": "Ein Editor-Agent verbraucht drei Millionen Prompt-Tokens, nimmt dreizehn Änderungen vor und wird gestoppt, und der Bericht sagt Nicht eindeutig. Die Schublade Agent runs im VS-Code-Visualizer liest den aufgezeichneten Lauf und benennt die Probleme, die seine Detektoren finden, mit Turn, Werkzeug und Datei als Beleg."
       },
       "no-account-no-gpu-you-choose-where-it-runs": {
         "title": "Kein Konto, keine GPU, kein Netz – und Sie bestimmen, wohin Ihre Worte gehen",
