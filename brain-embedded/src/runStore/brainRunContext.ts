@@ -28,6 +28,19 @@ import type { BrainRunRequest } from './runTypes';
 import type { RunPipeline } from './pipelineRoute';
 import type { CacheServedStreak, RunView } from '@builderforce/agent-run';
 import type { RunProgressGuard } from './progressGuard';
+
+/**
+ * The tool names the run's prompt carries, by where they came from (`runPreamble.ts`). A capped turn on an editor surface requires
+ * only {@link turn} and {@link contract} of them; {@link system} alone competes on relevance (`run/brainPlatformTools.ts`).
+ */
+export interface PromptToolNames {
+  /** Named by the system prompt as sent, the standing persona and directives (per-turn text the lever folds in included). */
+  readonly system: readonly string[];
+  /** Named by THIS turn's own text: the person's message, the turn block, and the per-turn parts wherever they ride. */
+  readonly turn: readonly string[];
+  /** Named by a contract a capped turn carries out itself (the Studio's preview review, `previewReview.ts`). */
+  readonly contract: readonly string[];
+}
 import type { OutcomeReport } from '../run/eventSink';
 
 /** Read-only, idempotent LOCAL file/search tools whose exact-repeat call within a run is
@@ -71,6 +84,8 @@ export interface BrainRunContext {
   catalogToolNames: string[];
   /** Tool names every turn's selection must keep (see `runPreamble.ts`). */
   alwaysAdvertised: string[];
+  /** Where the prompt's tool names came from, recorded as the preamble built it (see {@link PromptToolNames}). */
+  promptTools: PromptToolNames;
   /** Tools this run has actually called — pinned into every later turn's selection. */
   usedTools: Set<string>;
   /** The run's system prompt, every directive folded in. */

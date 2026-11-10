@@ -21,6 +21,13 @@
 - **Staffing line.** It no longer claims local tickets are "staffed after they sync".
 - **Tests.** New tests: `handOffClash.e2e`, `handOffForcedClash.e2e`, `handOffParallelism`, `localTicketCloseOut`, `runBackstops.deltaTicketId`, `progressGuard.advisory`, `progressAdvisoryEvent` (agent-run). `brainCloseOut.test.ts` is ported off the deleted `closeOutRun`. Named `regression:` tests cover each defect.
 
+## ✅ RESOLVED 2026-11-10: editor code turns advertise ~25 tools, not 37–57 — prompt-only-named tools leave code/verify turns (Agents · VSIX)
+
+- **What.** The run directives (chat mode, ticket linking, ship contract, turn optimisation) name 19 `builtin_*` tools, and every named tool was required, so editor code turns stayed at 37+ tools after the role cap. Now `runPreamble.ts` records `promptTools {system, turn, contract}` on `BrainRunContext`. On code/verify turns, and only where code can change here (`canChangeCodeHere`), `brainPlatformTools.ts` demotes tools named ONLY by the system prompt to relevance. Tools named by the turn's own text, the Studio preview-review contract (`builtin_reviews_record`), `ask_user` and `hand_off` stay required. Web Brain, plan and chat turns are unchanged.
+- **Safety.** The Brain surface is `closed`, so a direct call to an unadvertised catalog tool still executes. It is traced once through the shared `traceRouted` (`callPreflight.ts`), after the preflight lets the call through. The router rides every trimmed turn.
+- **Measured.** A fixture code turn advertises 22 + 3 router tools (was 50 → 37 → 25). `roleCap.vsix.test.ts` asserts ≤ 30; `brainPlatformTools.promptNamed.test.ts` drives the real `selectPlatformCatalog`.
+- **Also.** `areaR/menu.test.ts` assumed a 64-tool code turn, a premise stale since cda0c33e9 introduced the role cap. Only the expectation and fixture size changed.
+
 ## ✅ RESOLVED 2026-11-10: editor run waste found in chat #61651's own runs: role cap bypassed, `;` chains on cmd.exe, unsynced-ticket retry loop, ticket guard with no way through (Agents · VSIX)
 
 - **Context.** All ten done checks of the chat #61651 brief (shell truth, workspace map, delegation dedup, git_status, EOL edits, deterministic finish, remember_fact, latency failover, wider turns) were already on main with tests. The fixes below come from mining that chat's own journal: 690 turns, 1,020 calls, 95 identical repeat calls, 60 failed steps.

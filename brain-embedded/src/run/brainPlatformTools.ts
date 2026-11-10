@@ -15,17 +15,13 @@ import { ASK_USER_TOOL, ASK_USER_TOOL_SPEC, type ParsedToolCall, type TurnContex
 import { resolveToolAlias, type ToolSchema } from '@builderforce/agent-tools';
 import { DEFAULT_TOOL_LIMIT, isCappedToolRole, type PlatformTools, type PlatformToolResult } from '@builderforce/agent-run';
 import { offersHandOff } from '@builderforce/run-policy';
-import { toolNamesMentionedIn } from '@builderforce/agent-stall';
 import type { BrainToolSpec, ChatCompletionMessage } from '../streamChatCompletion';
 import { HAND_OFF_TOOL } from '../planHandoff';
 import { relevantTools } from '../selectTools';
 import { isRouterTool } from '../toolRouter';
-import { nowIso, pushTrace } from '../runStore/runCells';
-import { localToolsIn, memoryToolsIn, studioToolsIn } from '../localWorkspaceTools';
+import { canChangeCodeHere, localToolsIn, memoryToolsIn, studioToolsIn } from '../localWorkspaceTools';
 import { skillToolsIn } from '../skillLibraryTools';
-import { turnContextCarrier } from '../runStore/turnContext';
-import { userTextOf } from '../runStore/convoText';
-import { callPreflight } from '../runStore/callPreflight';
+import { callPreflight, traceRouted } from '../runStore/callPreflight';
 import { callRunner, declineMalformedCall } from '../runStore/callRunner';
 import { callPostStep } from '../runStore/callPostStep';
 import { progressAfterToolCalls } from '../runStore/progressGuard';
@@ -52,20 +48,7 @@ function kernelCall(run: BrainRunContext, id: string, name: string, args: Record
   return { call: { id, name, args, raw, malformed: rawArguments !== undefined }, ctx: { step, messages: run.convo } as unknown as TurnContext<ChatCompletionMessage> };
 }
 
-type NamingRun = Pick<BrainRunContext, 'c' | 'catalogToolNames' | 'systemPrompt'>;
-
-/** The turn block where it rides the system prompt (no user message carried it): the tags `runStore/turnContext.ts` wraps it in. */
-const TURN_BLOCK = /<turn_context>[\s\S]*?<\/turn_context>/g;
-
-/**
- * The prose a run's tool names come from, split: the system prompt proper (persona and the run's standing directives), and the TURN's
- * own text - the latest user message carrying the turn block (`turnContext.ts`), or the block itself where it rides the system prompt.
- */
-function namingText(run: NamingRun): { system: string; turn: string } {
-  const carrier = turnContextCarrier(run.c);
-  if (carrier) return { system: run.systemPrompt, turn: userTextOf(carrier) };
-  return { system: run.systemPrompt.replace(TURN_BLOCK, ''), turn: (run.systemPrompt.match(TURN_BLOCK) ?? []).join('\n\n') };
-}
+type NamingRun = Pick<BrainRunContext, 'catalogToolNames' | 'promptTools'>;
 
 /** The host's surface vocabulary: its workspace, Studio, memory and skill tools (`runPreamble.ts` puts all of them in `alwaysAdvertised`). */
 function vocabularyOf(names: readonly string[]): string[] {
@@ -73,27 +56,29 @@ function vocabularyOf(names: readonly string[]): string[] {
 }
 
 /**
- * The run's surface VOCABULARY its prompt does not name: the vocabulary less any the system prompt or the turn block names. A
- * vocabulary tool the prompt names stays required on every turn; the rest is required only on an uncapped turn (see {@link surfaceRequired}).
+ * The run's surface VOCABULARY its prompt does not name: the vocabulary less any the system prompt or the turn names (`promptTools`,
+ * recorded by the preamble). A vocabulary tool the prompt names stays required on every turn; the rest is required only on an uncapped
+ * turn (see {@link surfaceRequired}).
  */
 export function unnamedVocabulary(run: NamingRun): Set<string> {
-  const { system, turn } = namingText(run);
-  const named = new Set(toolNamesMentionedIn(`${system}\n\n${turn}`));
+  const named = new Set([...run.promptTools.system, ...run.promptTools.turn]);
   return new Set(vocabularyOf(run.catalogToolNames).filter((n) => !named.has(n)));
 }
 
 /**
- * The tools ONLY the system prompt proper names, outside the surface vocabulary: the board, ticket and close-out tools the persona and
- * the standing directives (`chatMode.ts`, `chatWorkLinking.ts`, `selfReviewShip.ts`, `previewReview.ts`) name for every phase. A capped
- * turn does not require them: they compete on relevance, and a direct call to one still runs (the surface's catalog is closed, so the
- * kernel hands every name to {@link brainPlatformTools}' preflight and execute, which trace it as routed). What the turn's own text names
- * (the person's message, the turn block), `ask_user` and `hand_off` are never in this set. A role-set tool needs no exemption here: the
- * role cap (`roleCap.ts`) requires its own set whatever this says.
+ * The tools ONLY the standing system prompt names, outside the surface vocabulary: the board, ticket and close-out tools the persona and
+ * the directives (`chatMode.ts`, `chatWorkLinking.ts`, `selfReviewShip.ts`) name for every phase. On an EDITOR surface (it holds the
+ * workspace file tools, `canChangeCodeHere`) a capped turn does not require them: they compete on relevance, and a direct call to one
+ * still runs (the surface's catalog is closed, so the kernel hands every name to {@link brainPlatformTools}' preflight and execute, which
+ * trace it as routed). A surface without the file tools (the web Brain) acts through those very tools, so nothing is demoted there. What
+ * the turn names, what a contract the turn carries out names (the Studio's preview review), `ask_user` and `hand_off` are never in this
+ * set. A role-set tool needs no exemption: the role cap (`roleCap.ts`) requires its own set whatever this says.
  */
 export function promptOnlyNamed(run: NamingRun): Set<string> {
-  const { system, turn } = namingText(run);
-  const kept = new Set([...toolNamesMentionedIn(turn), ...vocabularyOf(run.catalogToolNames), ASK_USER_TOOL, HAND_OFF_TOOL]);
-  return new Set(toolNamesMentionedIn(system).filter((n) => !kept.has(n)));
+  if (!canChangeCodeHere(run.catalogToolNames)) return new Set();
+  const { system, turn, contract } = run.promptTools;
+  const kept = new Set([...turn, ...contract, ...vocabularyOf(run.catalogToolNames), ASK_USER_TOOL, HAND_OFF_TOOL]);
+  return new Set(system.filter((n) => !kept.has(n)));
 }
 
 /** What the run's prompt names, read once: the vocabulary it leaves unnamed, and what only its system prompt names. */
@@ -117,23 +102,16 @@ export function surfaceRequired(run: Pick<BrainRunContext, 'alwaysAdvertised' | 
 }
 
 export function brainPlatformTools(run: BrainRunContext): BrainPlatform {
-  // Read once, at the first turn's selection: the prompt and the turn block are the run's own, and a later fold that restores the
-  // carrier must not change what the run counts as named.
+  // The names are the preamble's record (`promptTools`), fixed for the run: derived once.
   let naming: PromptNaming | undefined;
   const named = (): PromptNaming => (naming ??= { unnamed: unnamedVocabulary(run), promptOnly: promptOnlyNamed(run) });
-  // The menu a CAPPED turn advertised, by name: a direct call to a catalog tool outside it is traced as routed (it runs as the router's
-  // `invoke` would - the surface's catalog is closed, so the kernel hands it to the preflight and execute below either way).
+  // The menu a CAPPED turn advertised, by name: a direct call to a catalog tool outside it that the preflight let through is traced as
+  // routed (it runs as the router's `invoke` would - the surface's catalog is closed, so the kernel hands it to the preflight and execute).
   let cappedMenu: { step: number; names: ReadonlySet<string> } | undefined;
   const traceUnadvertised = (raw: string, step: number): void => {
     const name = resolveToolAlias(raw);
     if (!cappedMenu || cappedMenu.step !== step || cappedMenu.names.has(name) || isRouterTool(name) || !run.catalogToolNames.includes(name)) return;
-    pushTrace(run.c, {
-      ts: nowIso(),
-      category: 'message',
-      label: 'tools.routed',
-      args: { step, via: 'direct' },
-      result: `Called ${name} directly; it was not advertised this turn, so it ran as a tool-router call.`,
-    });
+    traceRouted(run.c, step, 'direct', name);
   };
   const before = callPreflight(run);
   const dispatch = callRunner(run);
@@ -192,13 +170,13 @@ export function brainPlatformTools(run: BrainRunContext): BrainPlatform {
       // The preflight (router, `ask_user`, `hand_off`, confirm gate, dedupe) runs where the loop runs it: ahead of the dispatch, not raced
       // against the person's Stop. A Stop pressed during a hand-off waits for it to end, so its tickets and children are on the trace.
       async preflight(raw, { step }) {
-        traceUnadvertised(raw.name, step);
         const { call, ctx } = kernelCall(run, raw.id, raw.name, raw.malformed ? {} : raw.args, step, raw.malformed ? raw.arguments : undefined);
         const pre = await before(call, ctx);
         if (pre && 'result' in pre) {
           ran.set(raw.id, { call, result: pre.result, ctx });
           return { result: pre.result };
         }
+        traceUnadvertised(raw.name, step);
         const target = pre && 'rewrite' in pre ? pre.rewrite : call;
         prepared.set(raw.id, { call: target, ctx });
         return pre && 'rewrite' in pre ? { rewrite: { name: target.name, args: target.args } } : undefined;
@@ -210,10 +188,10 @@ export function brainPlatformTools(run: BrainRunContext): BrainPlatform {
         // Reached without the kernel's preflight (a caller that dispatches directly): the same steps, here.
         let early: PlatformToolResult | undefined;
         if (!held) {
-          traceUnadvertised(name, env.step);
           const fresh = kernelCall(run, id, name, args, env.step);
           const pre = await before(fresh.call, fresh.ctx);
           if (pre && 'result' in pre) early = pre.result;
+          else traceUnadvertised(name, env.step);
           held = { call: pre && 'rewrite' in pre ? pre.rewrite : fresh.call, ctx: fresh.ctx };
         }
         const result: PlatformToolResult = early ?? (await dispatch(held.call, held.ctx));

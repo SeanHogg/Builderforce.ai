@@ -5,6 +5,7 @@
  * a planning or chat turn keeps `alwaysAdvertised` exactly.
  */
 import { describe, expect, it } from 'vitest';
+import { toolNamesMentionedIn } from '@builderforce/agent-stall';
 import { brainPlatformTools, unnamedVocabulary } from './brainPlatformTools';
 import { LOCAL_WORKSPACE_TOOLS } from '../localWorkspaceTools';
 import type { BrainRunContext } from '../runStore/brainRunContext';
@@ -24,6 +25,8 @@ function runFor(phase: string, systemPrompt = SYSTEM_PROMPT): BrainRunContext {
     allTools: [],
     catalogToolNames: CATALOG,
     alwaysAdvertised: ALWAYS,
+    // What `runPreamble.ts` records: the names of the system prompt (here the only prompt text).
+    promptTools: { system: toolNamesMentionedIn(systemPrompt), turn: [], contract: [] },
     usedTools: new Set<string>(),
     systemPrompt,
     requestQuery: 'fix the parser',

@@ -37,7 +37,7 @@ import { isFollowUpTurn, latestUserText } from './convoText';
 import { answerFromMemory, recallForRun } from './runMemory';
 import { answerDeterministically } from './prefetchGate';
 import { gatherHostRunContext, recordServedReads } from './hostRunContext';
-import type { BrainRunContext } from './brainRunContext';
+import type { BrainRunContext, PromptToolNames } from './brainRunContext';
 import type { OutcomeReport } from '../run/eventSink';
 import type { BrainRunRequest } from './runTypes';
 import { attachTurnContext, restoreTurnContext, turnContextBlock, turnContextCarrier } from './turnContext';
@@ -136,9 +136,15 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
   const host = await gatherHostRunContext(c, req, !!evermind?.recall);
   const { recalled, block: recallBlock, blockTokens: recallBlockTokens } = await recallForRun(c, convo, evermind, host.recallHint);
   let systemPrompt = resolvedSystemPrompt;
+  // The per-turn parts the lever folds into the system prompt instead (`stablePrefix` off): still THIS turn's text (`promptTools.turn`).
+  const turnPartsInPrompt: string[] = [];
+  const intoPrompt = (part: string): void => {
+    systemPrompt = `${systemPrompt}\n\n${part}`;
+    turnPartsInPrompt.push(part);
+  };
   if (recallBlock) {
     if (stablePrefix) turnParts.push(recallBlock);
-    else systemPrompt = `${systemPrompt}\n\n${recallBlock}`;
+    else intoPrompt(recallBlock);
   }
   const priorRecall = { query: latestUserText(convo), result: recalled };
 
@@ -177,7 +183,7 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
       if (typeof extra === 'string' && extra.trim()) {
         // Fetched per turn with the latest user text — volatile by construction.
         if (stablePrefix) turnParts.push(extra);
-        else systemPrompt = `${systemPrompt}\n\n${extra}`;
+        else intoPrompt(extra);
       }
     } catch {
       // ignore — proceed without the augmentation
@@ -233,7 +239,8 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
   }
   // The Studio's twin: its change lives in a preview no one else can reach, so the
   // session reviews it there and the reviewed tickets close (see `previewReview.ts`).
-  if (canReviewInPreview(catalogToolNames)) systemPrompt = `${systemPrompt}\n\n${previewReviewDirective(serverChatId, ticketToolVocabulary(catalogToolNames))}`;
+  const previewReview = canReviewInPreview(catalogToolNames) ? previewReviewDirective(serverChatId, ticketToolVocabulary(catalogToolNames)) : null;
+  if (previewReview) systemPrompt = `${systemPrompt}\n\n${previewReview}`;
   // The tool work of this chat's earlier turns, which a transcript seeded from history
   // does not carry — so "continue" builds on what was read instead of reading it again.
   if (c.priorResearch) systemPrompt = `${systemPrompt}\n\n${c.priorResearch}`;
@@ -245,7 +252,7 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
   const { userRequest } = reading;
   for (const directive of reading.directives) {
     if (stablePrefix) turnParts.push(directive);
-    else systemPrompt = `${systemPrompt}\n\n${directive}`;
+    else intoPrompt(directive);
   }
 
   // Tool names the resolved system prompt tells the model to call. Always advertised.
@@ -266,8 +273,17 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
   // The per-turn block is model-facing prose too: a tool it names is pinned exactly as
   // one named in the system prompt was when the block lived there.
   const turnContext = turnContextBlock(turnParts);
+  // Recorded by source, here where each text is known (`promptTools`): a capped editor turn requires what the turn and the Studio's
+  // review contract name, while what only the standing system prompt names competes on relevance (`run/brainPlatformTools.ts`).
+  const systemNamed = toolNamesMentionedIn(systemPrompt);
+  const blockNamed = turnContext ? toolNamesMentionedIn(turnContext) : [];
+  const promptTools: PromptToolNames = {
+    system: systemNamed,
+    turn: [...new Set([...blockNamed, ...toolNamesMentionedIn([...turnPartsInPrompt, userRequest].join('\n\n'))])],
+    contract: previewReview ? toolNamesMentionedIn(previewReview) : [],
+  };
   const alwaysAdvertised = [
-    ...toolNamesMentionedIn(turnContext ? `${systemPrompt}\n\n${turnContext}` : systemPrompt),
+    ...new Set([...systemNamed, ...blockNamed]),
     ...localToolsIn(catalogToolNames),
     // The Studio's workspace vocabulary, including the preview review its contract
     // requires — empty everywhere but the Studio (see `studioToolsIn`).
@@ -308,6 +324,7 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
     allTools,
     catalogToolNames,
     alwaysAdvertised,
+    promptTools,
     // Tools this run has actually called — pinned into every later turn's selection
     // so a multi-step task never loses a tool it is mid-way through using.
     usedTools: new Set<string>(),

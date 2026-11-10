@@ -31,6 +31,22 @@ import { isPublishCall, publishHoldRefusal } from './publishHold';
 import { shipGatePreflight } from './shipGates';
 import { isDedupableRead, reportToPolicy, type BrainRunContext } from './brainRunContext';
 
+/**
+ * The ONE `tools.routed` step: a call that reached a tool the turn did not advertise, through the router (`via` = the router tool) or
+ * directly (`via` = `'direct'`: the surface's catalog is closed, so the call ran as a router `invoke` would, `run/brainPlatformTools.ts`).
+ */
+export function traceRouted(c: BrainRunContext['c'], step: number, via: string, name: string): void {
+  pushTrace(c, {
+    ts: nowIso(),
+    category: 'message',
+    label: 'tools.routed',
+    args: { step, via },
+    result: via === 'direct'
+      ? `Called ${name} directly (it was not advertised this turn), so it ran as a tool-router call.`
+      : `Called ${name} through the tool router (it was not advertised directly this turn).`,
+  });
+}
+
 export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatCompletionMessage>['beforeDispatch']> {
   const { c, chatId, runKey, req, allTools, catalogToolNames, usedTools, readCoverage, writeLedger, placeholderLedger } = run;
   const { runTool, needsConfirm, persistence } = req;
@@ -65,13 +81,7 @@ export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatC
       }
       const routedArgs = routed.dispatch.args ?? {};
       call = { ...call, name: routed.dispatch.name, args: routedArgs, raw: { ...call.raw, name: routed.dispatch.name, arguments: JSON.stringify(routedArgs) } };
-      pushTrace(c, {
-        ts: nowIso(),
-        category: 'message',
-        label: 'tools.routed',
-        args: { step: iter, via: rawCall.name },
-        result: `Called ${call.name} through the tool router (it was not advertised directly this turn).`,
-      });
+      traceRouted(c, iter, rawCall.name, call.name);
     }
     // `ask_user` never reaches the host's tool runner — it is not a workspace action,
     // and `beforeToolCalls` has already settled every WELL-FORMED question as the

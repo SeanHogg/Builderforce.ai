@@ -12,12 +12,14 @@
  * consulted, because a closed surface skips it.
  *
  * A capped role keeps:
- *   • the surface's REQUIRED set, always — the tools the turn block names, the vocabulary the
- *     prompt names, `ask_user`, `hand_off`. Dropping a tool the prompt tells the model to call is
- *     what cost a 78-call / 44-minute run (`brain-embedded/src/runStore/runPreamble.ts`), so the
- *     cap never narrows it. The board tools ONLY the Brain's system prompt names (its standing
- *     ticket and close-out directives, ~19 names) are not required on a capped turn: they compete
- *     on relevance, and a direct call to one still runs, because a closed surface is handed every
+ *   • the surface's REQUIRED set, always — whatever the surface hands as required. The Brain hands
+ *     the tools the turn names, the vocabulary the prompt names, the tools a contract the turn
+ *     carries out names (the Studio's preview review), `ask_user` and `hand_off`. Dropping a tool
+ *     the prompt tells the model to call is what cost a 78-call / 44-minute run
+ *     (`brain-embedded/src/runStore/runPreamble.ts`), so the cap never narrows the required set.
+ *     On an editor surface the board tools ONLY the Brain's standing system prompt names (its
+ *     ticket and close-out directives, ~19 names) are not handed as required: they compete on
+ *     relevance, and a direct call to one still runs, because a closed surface is handed every
  *     name (`ownsCall`) and nothing on that path checks the menu. The surface's VOCABULARY (the host's workspace, memory and skill
  *     tools the prompt does NOT name) is not the surface's to require on a capped turn (the
  *     Brain splits it off, `brain-embedded/src/run/brainPlatformTools.ts`): the role set below keeps the part of it a code or verify
@@ -55,8 +57,8 @@ export const ROLE_TOOL_LIMIT: Readonly<Record<CappedToolRole, number>> = { code:
  * A name the catalog does not hold is simply absent. Trimmed after chat #61651 (VSIX 2026.10.153:
  * 54–57 tools on every code turn): `semantic_search` (`search_code` covers a code turn),
  * `builtin_skills_read` and `remember_fact` (the deterministic finish module records the learned
- * fact as a host action) left the code set; each stays reachable through the router and required
- * whenever the prompt or the turn block names it.
+ * fact as a host action) left the code set; each stays reachable through the router, and required
+ * whenever the surface hands it as required (the Brain: a vocabulary tool its prompt names).
  */
 export const ROLE_COMPANION_TOOLS: Readonly<Record<CappedToolRole, readonly string[]>> = {
   code: [
@@ -76,7 +78,8 @@ export const ROLE_COMPANION_TOOLS: Readonly<Record<CappedToolRole, readonly stri
  * module's host action, so `builtin_reviews_record` and `builtin_tasks_update` left this set with
  * `open_pull_request`, `stop_agent`, `message_agent` and `update_task_state` (chat #61651's 54–57
  * tools a code turn). They compete on the request ("open a PR" still matches `open_pull_request`),
- * stay required whenever the prompt names them, and stay reachable through the router.
+ * stay required only when the surface hands them as required (the Brain: the turn or a contract
+ * the turn carries out names them, or a surface without the file tools), and stay reachable through the router.
  */
 export const ROLE_GUARANTEED_TOOLS: readonly string[] = [
   "git_commit", "git_push", "output_filter", "wait_agents", "hand_off",
@@ -111,7 +114,7 @@ export interface RoleCappedSelection {
 
 /**
  * The selection a capped role's turn makes over `catalogNames`. `surfaceRequired` is the surface's
- * required set (the tools the prompt names, `ask_user`, `hand_off`; never its unnamed vocabulary) and `keep` its
+ * required set (the Brain's: what the turn names, the named vocabulary, `ask_user`, `hand_off`; never its unnamed vocabulary) and `keep` its
  * own vocabulary a role must not lose (e.g. a Studio's build tools): both always survive. The cap
  * removes only the catalog-order backfill and the tools that neither the role nor the request needs.
  */
