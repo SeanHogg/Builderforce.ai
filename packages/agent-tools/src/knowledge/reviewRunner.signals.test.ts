@@ -23,7 +23,9 @@ function reviewPorts(): KnowledgeReviewPorts {
   const analyzers: AnalyzerPort = {
     analyse: async (rootId) => repoGraphToExtracted({ graph: { paths: ['src/boot.ts', 'src/core.ts'], out: [[[1, 1]], []] } }, rootId),
   };
-  const history: HistoryPort = { commitsTouching: async () => new Map([['src/boot.ts', 2], ['src/ghost.ts', 5]]) };
+  const at = new Date().toISOString();
+  const touch = (path: string, n: number) => Array.from({ length: n }, () => ({ at, paths: [path], fileCount: 1 }));
+  const history: HistoryPort = { commits: async () => [...touch('src/boot.ts', 2), ...touch('src/ghost.ts', 5)] };
   return {
     source: memorySource(FILES),
     store: localSnapshotStore({ read: async () => snapshot, write: async (s) => { snapshot = s; } }),

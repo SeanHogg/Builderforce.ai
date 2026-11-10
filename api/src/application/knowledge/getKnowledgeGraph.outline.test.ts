@@ -62,8 +62,8 @@ describe('getKnowledgeGraph outline', () => {
     const d = deps('outline-v2');
     const a = await getKnowledgeGraph(d, { rootId: ROOT, maxNodes: 1 });
     const b = await getKnowledgeGraph(d, { rootId: ROOT, maxNodes: 1, focus: [`src:${ROOT}::docs/c.md`] });
-    expect(loaded.filter((k) => k.startsWith('kg:v5:'))).toHaveLength(2);
-    expect(loaded.filter((k) => k.startsWith('kg-outline:v1:'))).toEqual([
+    expect(loaded.filter((k) => k.startsWith('kg:v6:'))).toHaveLength(2);
+    expect(loaded.filter((k) => k.startsWith('kg-outline:v2:'))).toEqual([
       knowledgeOutlineCacheKey({ tenantId: 41, projectId: 7, rootId: ROOT, scopeDigest: loaded.find((k) => k.startsWith('kg-outline:'))!.split(':').slice(-2)[0]!, version: 'outline-v2' }),
     ]);
     expect(b?.outline).toEqual(a?.outline);

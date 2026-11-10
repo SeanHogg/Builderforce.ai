@@ -3,29 +3,52 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { COMMIT_MARK, countCommitsPerPath, gitHistoryPort, parseRecentCommits } from "./node-git-history.js";
+import { churnOf } from "./knowledge/historyPort.js";
+import { COMMIT_MARK, gitHistoryPort, parseCommitFiles, parseRecentCommits } from "./node-git-history.js";
 
 /** The commit-header marker the git log format writes (`%x1e`). */
 const RS = COMMIT_MARK;
-const SHA_A = `${RS}${"a".repeat(40)}`;
-const SHA_B = `${RS}${"b".repeat(40)}`;
+const NOW = Date.parse("2026-11-10T00:00:00Z");
+const SHA_A = `${RS}2026-11-09T10:00:00+00:00`;
+const SHA_B = `${RS}2026-11-08T10:00:00+00:00`;
+const churn = (log: string, wanted: string[]) => [...churnOf(parseCommitFiles(log), wanted, 90, NOW)].sort();
 
-describe("countCommitsPerPath", () => {
+describe("parseCommitFiles", () => {
+  it("reads each commit's time, its distinct files and its whole-commit file count", () => {
+    const log = [SHA_A, "src/a.ts", "src/b.ts", "src/a.ts", "", SHA_B, "src\\c.ts", ""].join("\n");
+    expect(parseCommitFiles(log)).toEqual([
+      { at: "2026-11-09T10:00:00+00:00", paths: ["src/a.ts", "src/b.ts"], fileCount: 2 },
+      { at: "2026-11-08T10:00:00+00:00", paths: ["src/c.ts"], fileCount: 1 },
+    ]);
+  });
+
+  it("makes paths root-relative by the prefix, dropping the rest but counting them in fileCount", () => {
+    const log = [SHA_A, "pkg/a.ts", "other/b.ts", "pkg/sub/c.ts", "README.md", ""].join("\n");
+    expect(parseCommitFiles(log, "pkg/")).toEqual([{ at: "2026-11-09T10:00:00+00:00", paths: ["a.ts", "sub/c.ts"], fileCount: 4 }]);
+  });
+});
+
+describe("churn from the parsed log", () => {
   it("counts commits per wanted path, once per commit", () => {
     const log = [SHA_A, "src/a.ts", "src/b.ts", "src/a.ts", "", SHA_B, "src/a.ts", "other.ts", ""].join("\n");
-    expect([...countCommitsPerPath(log, new Set(["src/a.ts", "src/b.ts"]))].sort()).toEqual([["src/a.ts", 2], ["src/b.ts", 1]]);
+    expect(churn(log, ["src/a.ts", "src/b.ts"])).toEqual([["src/a.ts", 2], ["src/b.ts", 1]]);
+  });
+
+  it("counts only the last 90 days of a longer history", () => {
+    const log = [SHA_A, "src/a.ts", `${RS}2026-05-01T00:00:00+00:00`, "src/a.ts", ""].join("\n");
+    expect(churn(log, ["src/a.ts"])).toEqual([["src/a.ts", 1]]);
   });
 
   it("regression: a file NAMED like a sha is a path, not a commit separator", () => {
     const hexName = "c".repeat(40);
     const log = [SHA_A, hexName, "src/a.ts", "src/a.ts", ""].join("\n");
     // Read as a separator, the second src/a.ts would have counted as a second commit.
-    expect([...countCommitsPerPath(log, new Set(["src/a.ts", hexName]))].sort()).toEqual([[hexName, 1], ["src/a.ts", 1]]);
+    expect(churn(log, ["src/a.ts", hexName])).toEqual([[hexName, 1], ["src/a.ts", 1]]);
   });
 
   it("regression: a path ending (or starting) in spaces keeps them", () => {
     const log = [SHA_A, "notes ", " lead.md", "notes", ""].join("\r\n");
-    expect([...countCommitsPerPath(log, new Set(["notes ", " lead.md", "notes"]))].sort()).toEqual([[" lead.md", 1], ["notes ", 1], ["notes", 1]]);
+    expect(churn(log, ["notes ", " lead.md", "notes"])).toEqual([[" lead.md", 1], ["notes ", 1], ["notes", 1]]);
   });
 });
 
@@ -69,7 +92,7 @@ describe("gitHistoryPort", () => {
       writeFileSync(join(dir, "a.ts"), "2");
       sh("commit", "-q", "-am", "two");
       const port = await gitHistoryPort(dir);
-      const counts = await port!.commitsTouching([hexName, "a.ts"], 30);
+      const counts = churnOf(await port!.commits(30, 5000), [hexName, "a.ts"], 30);
       expect([...counts].sort()).toEqual([["a.ts", 2], [hexName, 1]]);
     } finally {
       rmSync(dir, { recursive: true, force: true });

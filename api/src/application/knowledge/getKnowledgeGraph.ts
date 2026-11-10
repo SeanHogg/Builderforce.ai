@@ -9,7 +9,7 @@
  *   join        `buildCodeGraph` (memory's `buildGraph` + layer resolution) with the ONE pack list (`knowledgePacks`).
  *
  * Cached through `getOrSetCached` under
- *   kg:v5:${tenant}:${project}:${root}:${scopeDigest}:${knowledgeVersion}:${focusHash}:${maxNodes}
+ *   kg:v6:${tenant}:${project}:${root}:${scopeDigest}:${knowledgeVersion}:${focusHash}:${maxNodes}
  * New data changes the key — never a TTL invalidation. `scopeDigest` is the review digest
  * plus, for the linked repo, the commit sha (a new commit is new perception).
  *
@@ -61,7 +61,7 @@ export function clampMaxNodes(raw: number | undefined): number {
 export function knowledgeGraphCacheKey(parts: {
   tenantId: number; projectId: number; rootId: string; scopeDigest: string; version: string; focusHash: string; maxNodes: number;
 }): string {
-  return `kg:v5:${parts.tenantId}:${parts.projectId}:${parts.rootId}:${parts.scopeDigest}:${parts.version}:${parts.focusHash}:${parts.maxNodes}`;
+  return `kg:v6:${parts.tenantId}:${parts.projectId}:${parts.rootId}:${parts.scopeDigest}:${parts.version}:${parts.focusHash}:${parts.maxNodes}`;
 }
 
 /**
@@ -70,7 +70,7 @@ export function knowledgeGraphCacheKey(parts: {
  * shares this one copy instead of carrying its own.
  */
 export function knowledgeOutlineCacheKey(parts: { tenantId: number; projectId: number; rootId: string; scopeDigest: string; version: string }): string {
-  return `kg-outline:v1:${parts.tenantId}:${parts.projectId}:${parts.rootId}:${parts.scopeDigest}:${parts.version}`;
+  return `kg-outline:v2:${parts.tenantId}:${parts.projectId}:${parts.rootId}:${parts.scopeDigest}:${parts.version}`;
 }
 
 const focusHashOf = (focus: readonly string[]): string =>

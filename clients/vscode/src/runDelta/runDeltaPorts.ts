@@ -12,7 +12,7 @@
  * `preparedPorts.ts` serves `DeltaPorts` from that data: pure, so it runs the same in a worker and in this thread.
  */
 
-import { CHURN_DAYS } from "@builderforce/agent-tools/knowledge";
+import { CHURN_DAYS, churnOf, HISTORY_MAX_COMMITS } from "@builderforce/agent-tools/knowledge";
 import { gitHistoryPort } from "@builderforce/agent-tools/node-git-history";
 import type { DeltaRegistries, RunChangeSetInput } from "@builderforce/run-delta";
 import type { PreparedDelta } from "./preparedPorts";
@@ -43,7 +43,9 @@ export async function churnAt(root: string, git: RepoGit | undefined, paths: rea
   const key = `${root}\u0000${head}\u0000${[...paths].sort().join("\u0000")}`;
   let hit = churnCache.get(key);
   if (!hit) {
-    hit = gitHistoryPort(root).then((port) => port?.commitsTouching([...paths], CHURN_DAYS) ?? new Map<string, number>()).catch(() => new Map<string, number>());
+    hit = gitHistoryPort(root)
+      .then(async (port) => (port ? churnOf(await port.commits(CHURN_DAYS, HISTORY_MAX_COMMITS), paths, CHURN_DAYS) : new Map<string, number>()))
+      .catch(() => new Map<string, number>());
     churnCache.set(key, hit);
     if (churnCache.size > CHURN_CACHE_MAX) churnCache.delete(churnCache.keys().next().value!);
   }

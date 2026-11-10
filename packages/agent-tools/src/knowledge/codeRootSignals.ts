@@ -12,14 +12,17 @@
  * (the caller's `knownPaths`); `buildCodeGraph` drops any that still have no parser node.
  */
 
-import { canonicalJson, compareStr, type AnalyzerPort, type Extracted, type KNode } from '@seanhogg/builderforce-memory/knowledge';
+import {
+    canonicalJson, coChangePartners, compareStr, decodeCoChange, encodeCoChange, srcRef,
+    type AnalyzerPort, type Extracted, type KNode, type NodeRef,
+} from '@seanhogg/builderforce-memory/knowledge';
 import { hashText } from '@seanhogg/builderforce-memory/ingest';
 import { readCoverage, type CoverageRoot, type CoverageSkip } from './codeCoverage.js';
 import { codeFileNode, CODE_BADGES, ROOT_OUTPUT_HASH_PREFIX, ROOT_SIGNALS_REF } from './codeNodes.js';
 import { CODEOWNERS_LOCATIONS, ownersFor, parseCodeOwners } from './codeOwners.js';
 import { isCodePath } from './codePack.js';
 import type { KnowledgeFs } from './fsDirectorySource.js';
-import { CHURN_DAYS, type HistoryPort } from './historyPort.js';
+import { CHURN_DAYS, churnOf, HISTORY_DAYS, HISTORY_MAX_COMMITS, type HistoryCommit, type HistoryPort } from './historyPort.js';
 import { slashPath } from './rootRelative.js';
 
 export interface RootSignalsDeps {
@@ -39,6 +42,8 @@ export interface RootSignals {
     owners: ReadonlyMap<string, string>;
     entries: ReadonlySet<string>;
     skipped: readonly CoverageSkip[];
+    /** The root's commits (newest first), paths cut to the review's code files: the `coChange` input. Absent ⇒ no co-change. */
+    history?: readonly HistoryCommit[];
 }
 
 const settled = async <T>(job: () => Promise<T>, empty: T): Promise<T> => {
@@ -59,18 +64,42 @@ async function readOwners(fs: KnowledgeFs, rootPath: string, paths: readonly str
 /** Reads the signals for `candidates` (root-relative paths the review saw); results for files outside its code files are dropped. */
 export async function readRootSignals(deps: RootSignalsDeps, candidates: readonly string[]): Promise<RootSignals> {
     const paths = candidates.filter(isCodePath);
-    const [coverage, churn, owners, entries] = await Promise.all([
+    const [coverage, commits, owners, entries] = await Promise.all([
         deps.files ? settled(() => readCoverage(deps.files!), { values: new Map<string, number>(), skipped: [] as CoverageSkip[] }) : { values: new Map<string, number>(), skipped: [] as CoverageSkip[] },
-        deps.history ? settled(async () => churnOf(await deps.history!.commits(HISTORY_DAYS, HISTORY_MAX_COMMITS), paths, CHURN_DAYS), new Map<string, number>()) : new Map<string, number>(),
+        // ONE history read serves churn (its last CHURN_DAYS) and co-change (all of it).
+        deps.history ? settled(() => deps.history!.commits(HISTORY_DAYS, HISTORY_MAX_COMMITS), [] as HistoryCommit[]) : [] as HistoryCommit[],
         deps.files ? settled(() => readOwners(deps.files!.fs, deps.files!.rootPath, paths), new Map<string, string>()) : new Map<string, string>(),
         deps.entryPaths ? settled(() => deps.entryPaths!(candidates), new Set<string>() as ReadonlySet<string>) : new Set<string>() as ReadonlySet<string>,
     ]);
     const known = new Set(paths);
     const only = <V>(m: ReadonlyMap<string, V>): Map<string, V> => new Map([...m].filter(([path]) => known.has(path)));
     return {
-        coverage: only(coverage.values), churn: only(churn), owners: only(owners),
+        coverage: only(coverage.values), churn: churnOf(commits, paths, CHURN_DAYS), owners: only(owners),
         entries: new Set([...entries].filter((p) => known.has(p))), skipped: coverage.skipped,
+        // Each commit keeps only the review's code files; `fileCount` stays the whole commit's for the bulk cut.
+        history: commits.map((c) => ({ ...c, paths: c.paths.filter((p) => known.has(p)) })),
     };
+}
+
+/**
+ * The `coChange` badge value per path (PRD 38 P4): memory's partners over the history, refs in the file-node form churn's
+ * nodes use. A file with no partner — or whose partners all fail to encode — gets no entry: never an empty badge.
+ */
+function coChangeOf(history: readonly HistoryCommit[], rootId: string): Map<string, string> {
+    const out = new Map<string, string>();
+    if (history.length === 0) return out;
+    const pathOf = new Map<NodeRef, string>();
+    const commits = history.map((c) => ({
+        at: c.at, fileCount: c.fileCount,
+        refs: c.paths.map((path) => { const ref = srcRef(rootId, path); pathOf.set(ref, path); return ref; }),
+    }));
+    for (const [ref, partners] of coChangePartners(commits)) {
+        const path = pathOf.get(ref);
+        if (path === undefined || partners.length === 0) continue;
+        const value = encodeCoChange(partners);
+        if (decodeCoChange(value).length > 0) out.set(path, value);
+    }
+    return out;
 }
 
 /** The ONE root-level `Extracted` of all signal nodes (none when no file has a signal). */
@@ -83,6 +112,7 @@ export function rootSignalsToExtracted(signals: RootSignals, rootId: string): Ex
     for (const [path, value] of signals.churn) if (value > 0) put(path, CODE_BADGES.churn, value);
     for (const [path, value] of signals.owners) put(path, CODE_BADGES.owner, value);
     for (const path of signals.entries) put(path, CODE_BADGES.entry, 1);
+    for (const [path, value] of coChangeOf(signals.history ?? [], rootId)) put(path, CODE_BADGES.coChange, value);
     if (badges.size === 0) return [];
     const nodes: KNode[] = [...badges].sort((a, b) => compareStr(a[0], b[0])).map(([path, b]) => codeFileNode(rootId, path, { badges: b }));
     const body = { nodes, edges: [], keys: [] as Extracted['keys'] };

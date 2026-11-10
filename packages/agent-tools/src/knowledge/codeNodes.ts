@@ -7,7 +7,7 @@
  * Pure: no I/O. Worker-safe.
  */
 
-import { canonicalJson, srcRef, type Extracted, type KEdge, type KNode, type NodeRef } from '@seanhogg/builderforce-memory/knowledge';
+import { canonicalJson, COCHANGE_BADGE, srcRef, type Extracted, type KEdge, type KNode, type NodeRef } from '@seanhogg/builderforce-memory/knowledge';
 import { areaOfPath } from '@seanhogg/builderforce-memory/working';
 import { hashText } from '@seanhogg/builderforce-memory/ingest';
 
@@ -41,6 +41,8 @@ export const CODE_BADGES = {
     coverage: 'coverage',
     /** Commits touching the file in the last 90 days, from the host's `HistoryPort` (deterministic). */
     churn: 'churn',
+    /** The file's co-change partners over the last year of history (memory's `encodeCoChange`, PRD 38 P4); absent with none. */
+    coChange: COCHANGE_BADGE,
     /** First CODEOWNERS owner of the file (deterministic). */
     owner: 'owner',
     /** Comma-separated design-pattern ids (heuristic). */

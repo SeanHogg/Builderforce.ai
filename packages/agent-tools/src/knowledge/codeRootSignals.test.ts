@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { AnalyzerPort } from '@seanhogg/builderforce-memory/knowledge';
+import { decodeCoChange, type AnalyzerPort } from '@seanhogg/builderforce-memory/knowledge';
 import { rootLevelExtracted, codeFileNode, ROOT_SIGNALS_REF } from './codeNodes.js';
 import { readRootSignals, rootSignalsToExtracted, withRootSignals } from './codeRootSignals.js';
-import type { HistoryPort } from './historyPort.js';
+import type { HistoryCommit, HistoryPort } from './historyPort.js';
 import { memoryKnowledgeFs } from './memoryKnowledgeFs.test-util.js';
 
 const ROOT = 'r';
@@ -16,8 +16,10 @@ const files = () => ({
     rootPath: '/repo',
   },
 });
+/** A history in which each path was touched by `count` commits of its own, today. */
 const history = (counts: Record<string, number>): HistoryPort => ({
-  commitsTouching: async () => new Map(Object.entries(counts)),
+  commits: async () => Object.entries(counts).flatMap(([path, n]) =>
+    Array.from({ length: n }, () => ({ at: new Date().toISOString(), paths: [path], fileCount: 1 }))),
 });
 const NO_SKIPS: never[] = [];
 const badgesOf = (out: Awaited<ReturnType<AnalyzerPort['analyse']>>) =>
@@ -32,7 +34,7 @@ describe('readRootSignals', () => {
   });
 
   it('a failing source is the absence of its badge, never a throw', async () => {
-    const failing: HistoryPort = { commitsTouching: async () => { throw new Error('git exploded'); } };
+    const failing: HistoryPort = { commits: async () => { throw new Error('git exploded'); } };
     const signals = await readRootSignals({ ...files(), history: failing }, ['src/a.ts']);
     expect(signals.churn.size).toBe(0);
     expect(signals.coverage.size).toBe(1);
@@ -73,6 +75,50 @@ describe('rootSignalsToExtracted', () => {
 
   it('emits nothing when no file has a signal', () => {
     expect(rootSignalsToExtracted({ coverage: new Map(), churn: new Map(), owners: new Map(), entries: new Set(), skipped: NO_SKIPS }, ROOT)).toEqual([]);
+  });
+});
+
+describe('co-change (PRD 38 P4)', () => {
+  const day = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
+  /** a.ts and b.ts always change together; c.ts changes alone; 200-day-old commits are outside churn but inside co-change. */
+  const commits = (): HistoryCommit[] => [
+    ...[1, 2, 3, 200, 201].map((n) => ({ at: day(n), paths: ['a.ts', 'b.ts'], fileCount: 2 })),
+    ...[4, 5, 6, 7, 8, 9].map((n) => ({ at: day(n), paths: ['c.ts'], fileCount: 1 })),
+  ];
+  const port = (list: HistoryCommit[]): HistoryPort => ({ commits: async () => list });
+  const badgesByPath = async (list: HistoryCommit[] | undefined) => {
+    const signals = await readRootSignals(list ? { history: port(list) } : {}, ['a.ts', 'b.ts', 'c.ts']);
+    return new Map(rootSignalsToExtracted(signals, ROOT).flatMap((e) => e.nodes.map((n) => [n.ref.slice(`src:${ROOT}::`.length), n.badges ?? {}] as const)));
+  };
+
+  it('stamps each file\'s partners as file-node refs, from the same history churn reads', async () => {
+    const out = await badgesByPath(commits());
+    expect(decodeCoChange(out.get('a.ts')?.coChange).map((p) => [p.ref, p.together, p.ofSelf])).toEqual([['src:r::b.ts', 5, 5]]);
+    expect(decodeCoChange(out.get('b.ts')?.coChange).map((p) => p.ref)).toEqual(['src:r::a.ts']);
+    expect(out.get('c.ts')).toEqual({ churn: 6 });
+    // Churn counts only the last 90 days of the one history read.
+    expect(out.get('a.ts')?.churn).toBe(3);
+  });
+
+  it('has no coChange badge without history', async () => {
+    expect([...(await badgesByPath(undefined)).values()].some((b) => 'coChange' in b)).toBe(false);
+  });
+
+  it('excludes bulk commits by their whole-repo fileCount', async () => {
+    const bulk = commits().map((c) => (c.paths.length === 2 ? { ...c, fileCount: 51 } : c));
+    const out = await badgesByPath(bulk);
+    expect(out.get('a.ts')?.coChange).toBeUndefined();
+    expect(out.get('a.ts')?.churn).toBe(3);
+  });
+
+  it('regression: never writes an empty coChange badge', async () => {
+    for (const list of [[], commits().slice(0, 2), commits().map((c) => ({ ...c, fileCount: 99 }))]) {
+      for (const badges of (await badgesByPath(list)).values()) {
+        if ('coChange' in badges) expect(decodeCoChange(badges.coChange).length).toBeGreaterThan(0);
+      }
+    }
+    const lone = rootSignalsToExtracted({ coverage: new Map(), churn: new Map(), owners: new Map(), entries: new Set(), skipped: NO_SKIPS, history: [] }, ROOT);
+    expect(lone).toEqual([]);
   });
 });
 
