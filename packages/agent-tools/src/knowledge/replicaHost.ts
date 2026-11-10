@@ -264,6 +264,7 @@ export function createReplicaHost(opts: ReplicaHostOptions = {}): ReplicaHost {
                     const state = await pumpReplica({
                         queue: held.queue, local: source.local, client: source.client, signal: abort.signal, initial: held.state,
                         projectId: source.projectId, rootId: source.rootId, maxTransientStreak: BACKGROUND_TRANSIENT_STREAK,
+                        ...(held2.isFresh ? { lockHeld: () => held2.isFresh!() } : {}),
                         sources: async () => (await currentSourcesOf(source.manifest, source.rootId)).map((s) => {
                             const bytes = source.sizeOf?.(sourcePathIn(s.ref, source.rootId));
                             return bytes === undefined ? s : { ...s, bytes };

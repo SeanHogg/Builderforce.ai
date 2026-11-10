@@ -4,7 +4,8 @@
  * mentions a publish word as a noun ("push notification", "release notes").
  */
 import { describe, expect, it } from 'vitest';
-import { asksToShip, publishHoldFromPersonTurns } from './publishHold';
+import { asksToShip, publishHold, publishHoldFromPersonTurns } from './publishHold';
+import { personTurns } from './chatAsks';
 
 const LIFTS: readonly string[] = [
   'commit',
@@ -26,6 +27,12 @@ const LIFTS: readonly string[] = [
   'land it',
   'it is fine to push',
   'Thanks! Commit everything.',
+  // regression (review): question-form and colloquial go-aheads were false HOLDS.
+  'can you commit?',
+  'could you push it',
+  "you're good to push",
+  'push up the changes',
+  'push to the feature branch',
 ];
 
 const KEEPS_HOLD: readonly string[] = [
@@ -43,6 +50,14 @@ const KEEPS_HOLD: readonly string[] = [
   'make the publish button blue',
   'the landing page title is off',
   '',
+  // regression (review): deferred orders were false LIFTS.
+  'commit it after I check the tests',
+  'push it tomorrow',
+  'Ship it, but not yet',
+  'go ahead and commit once CI is green',
+  // A bare affirmative with no publish question before it orders nothing.
+  'yes',
+  'go ahead',
 ];
 
 describe('asksToShip — the publish-hold lift matcher', () => {
@@ -56,6 +71,19 @@ describe('asksToShip — the publish-hold lift matcher', () => {
       expect(asksToShip(phrase)).toBe(false);
     });
   }
+  it('regression: a bare "yes" / "go ahead" answering "shall I commit/push?" lifts', () => {
+    expect(asksToShip('yes', 'All 12 files are done and the tests pass. Shall I commit and push?')).toBe(true);
+    expect(asksToShip('Go ahead.', 'Do you want me to push this to main?')).toBe(true);
+    expect(asksToShip('yes please', 'Would you like me to open a PR?')).toBe(true);
+  });
+
+  it('a bare affirmative to some OTHER question, or a qualified yes, does not lift', () => {
+    expect(asksToShip('yes', 'Shall I also fix the push notification handler?')).toBe(false);
+    expect(asksToShip('yes', 'Want me to add a test?')).toBe(false);
+    expect(asksToShip('yes but fix the lint first', 'Shall I commit?')).toBe(false);
+    expect(asksToShip('yes, after lunch', 'Shall I push?')).toBe(false);
+  });
+
   it('is false for null / undefined', () => {
     expect(asksToShip(null)).toBe(false);
     expect(asksToShip(undefined)).toBe(false);
@@ -82,6 +110,14 @@ describe('publishHoldFromPersonTurns', () => {
   it('a later decline re-arms the hold after a lift (the last relevant turn wins)', () => {
     const hold = publishHoldFromPersonTurns([{ text: HOLD }, { text: 'ship it' }, { text: 'wait, do not push' }]);
     expect(hold).toEqual({ messageNumber: 3, text: 'wait, do not push' });
+  });
+
+  it('regression: publishHold reads the assistant turn a bare "yes" answers', () => {
+    const user = (content: string) => { const m = { role: 'user' as const, content }; personTurns.add(m); return m; };
+    const convo = [user(HOLD), { role: 'assistant' as const, content: 'Validated locally. Shall I commit and push now?' }, user('yes')];
+    expect(publishHold(convo)).toBeNull();
+    const unrelated = [user(HOLD), { role: 'assistant' as const, content: 'Shall I rename the helper?' }, user('yes')];
+    expect(publishHold(unrelated)?.messageNumber).toBe(1);
   });
 
   it('a ship order with no hold standing changes nothing', () => {

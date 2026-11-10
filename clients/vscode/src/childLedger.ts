@@ -64,8 +64,8 @@ export interface ChildLedgerPorts {
 export const PERSIST_ATTEMPTS = 3;
 
 /**
- * How many SETTLED children the ledger keeps for the session. Beyond it the oldest settled
- * child is dropped (its journal record already carries it); a running child is never dropped.
+ * How many SETTLED children the ledger keeps live for the session. Beyond it the oldest settled
+ * child moves to its chat's compact archive (still persisted with its run); a running child never moves.
  */
 export const MAX_SETTLED_CHILDREN = 256;
 
@@ -92,9 +92,23 @@ interface Entry {
 
 export function createChildLedger(ports: ChildLedgerPorts = {}): ChildLedger {
   const entries = new Map<number, Entry>();
+  /**
+   * Per chat, the settled children pruned out of {@link entries}, in their compact persisted
+   * form. They stay in every persist of their chat: a write REPLACES a run's `children`
+   * (`childRunJournal.ts`), so dropping one here would erase it from its run's journal.
+   */
+  const archive = new Map<number, Array<{ seq: number; child: PersistedChild }>>();
+  /** Spawn order, so archived and live children persist in the order they were started. */
+  const seqOf = new Map<number, number>();
+  let nextSeq = 0;
 
   const childrenOf = (rootChatId: number): PersistedChild[] =>
-    [...entries.values()].filter((e) => e.rootChatId === rootChatId).map((e) => e.child);
+    [
+      ...(archive.get(rootChatId) ?? []),
+      ...[...entries.values()].filter((e) => e.rootChatId === rootChatId).map((e) => ({ seq: seqOf.get(e.key) ?? 0, child: e.child })),
+    ]
+      .sort((a, b) => a.seq - b.seq)
+      .map((x) => x.child);
 
   /** Per chat, the tail of its serial write queue. */
   const queues = new Map<number, Promise<void>>();
@@ -122,20 +136,28 @@ export function createChildLedger(ports: ChildLedgerPorts = {}): ChildLedger {
     });
   };
 
-  /** Keep at most {@link MAX_SETTLED_CHILDREN} settled entries, oldest dropped first (Map order = spawn order). */
+  /**
+   * Keep at most {@link MAX_SETTLED_CHILDREN} settled entries live (the duplicate rule and
+   * `settled` scan them), oldest first moved to {@link archive} — never dropped from a persist.
+   */
   const pruneSettled = (): void => {
     let settled = 0;
     for (const e of entries.values()) if (e.child.state !== "running") settled += 1;
     for (const [key, e] of entries) {
       if (settled <= MAX_SETTLED_CHILDREN) break;
       if (e.child.state === "running") continue;
+      const kept = archive.get(e.rootChatId) ?? [];
+      kept.push({ seq: seqOf.get(key) ?? 0, child: e.child });
+      archive.set(e.rootChatId, kept);
       entries.delete(key);
+      seqOf.delete(key);
       settled -= 1;
     }
   };
 
   return {
     spawned(s) {
+      seqOf.set(s.key, nextSeq++);
       entries.set(s.key, {
         key: s.key,
         ownerKey: s.ownerKey,

@@ -16,7 +16,7 @@ import { rebaseImportsOntoMapping, rebaseNewerWrites } from './journalRules.js';
 import { nextHoldTransition, type HoldStatus } from './holdLimits.js';
 import { batchEvents, wireDependencies } from './syncBatch.js';
 import { addSyncSummary, countReceipt, emptySyncSummary, type SyncSummary } from './syncSummary.js';
-import { parseSyncId } from './entityId.js';
+import { parseSyncId, type SyncId } from './entityId.js';
 import { isAlreadySatisfiedDelete, isPermanentRefusal } from './permanentRefusals.js';
 
 export const SYNC_PROTOCOL_VERSION = 1;
@@ -85,6 +85,15 @@ export interface SyncCoordinatorOptions {
 }
 
 /**
+ * The SyncId a wire row (a receipt, a pulled record) names: its `syncId`, else its `serverId` read
+ * as one — EXCEPT an explicit `syncId: null`, which is the server saying the `serverId` text is not
+ * a SyncId of this entity type (a Brain run step's id is not a message id). Never guessed past that.
+ */
+function wireSyncId(wire: { syncId?: unknown; serverId?: unknown }): SyncId | null {
+  return wire.syncId === null ? null : parseSyncId(wire.syncId) ?? parseSyncId(wire.serverId);
+}
+
+/**
  * A live parent lookup a caller used to pass into sync. Accepted only so the
  * call can prove it is never invoked. It does not select a destination.
  */
@@ -120,8 +129,10 @@ async function mergePulled(
     await tx.putConflict(conflict);
     return true;
   }
+  // The wire row's server keys belong to the MAPPING only, never to the stored record.
+  const { syncId: _wireSyncId, serverId: _wireServerId, ...record } = remote as LocalRecord & { syncId?: unknown; serverId?: unknown };
   await tx.put({
-    ...remote,
+    ...record,
     destination,
     baseVersion: remote.version,
     provenance: { ...remote.provenance, deviceId: remote.provenance?.deviceId ?? 'remote', source: 'imported' },
@@ -133,7 +144,7 @@ async function mergePulled(
   // the live client id via `mappingByServerId`. Idempotent — writing the same
   // row again is the same mapping.
   const wire = remote as { syncId?: unknown; serverId?: unknown };
-  const syncId = parseSyncId(wire.syncId) ?? parseSyncId(wire.serverId);
+  const syncId = wireSyncId(wire);
   const serverId = typeof wire.serverId === 'string' && wire.serverId.trim() !== '' ? wire.serverId : undefined;
   if (syncId !== null || serverId !== undefined) {
     await tx.putMapping({
@@ -250,7 +261,7 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
         // EVEN WITHOUT an integer id (a mirror / usage row is keyed by its UUID, or by nothing), or
         // the row would re-queue as an import forever. Its `syncId` is then null — never guessed.
         if (receipt.serverVersion !== undefined) {
-          const syncId = parseSyncId(receipt.syncId) ?? parseSyncId(receipt.serverId);
+          const syncId = wireSyncId(receipt);
           await tx.putMapping({
             destination,
             entityType: event.entityType,

@@ -15,8 +15,10 @@ export interface KnowledgeFiles {
     write(name: string, text: string): Promise<void>;
     /** Appends to a file (created, with its folder, when missing). Optional: without it an append is a read plus a write of the concatenation. */
     append?(name: string, text: string): Promise<void>;
-    /** Renames within the folder, replacing the target: with it a file can be written atomically (temp, then rename). */
+    /** Renames within the folder, replacing the target: with it a file can be written atomically (temp, then rename). Rejects when `from` is missing (the replica lock's takeover relies on it). */
     rename?(from: string, to: string): Promise<void>;
+    /** Creates `name` with `text` only when it does not exist (`wx`): true when THIS call created it, false when it existed. Optional: without it the replica lock falls back to write-then-verify. */
+    createExclusive?(name: string, text: string): Promise<boolean>;
     /** Deletes a file (a missing one is not an error). Optional: a host without it keeps old run records instead of pruning them. */
     remove?(name: string): Promise<void>;
     /** The file names directly inside a sub-folder (`runs`); [] when it does not exist. Optional: a host without it cannot rebuild a torn run index or prune orphans. */

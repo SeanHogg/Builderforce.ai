@@ -9,7 +9,8 @@
  *     workspace folder's `.builderforce/knowledge/`.
  */
 
-import { appendFile } from "node:fs/promises";
+import { appendFile, mkdir, open, rename, rm, type FileHandle } from "node:fs/promises";
+import { dirname } from "node:path";
 import * as vscode from "vscode";
 import type { KnowledgeFs } from "./vscodeDirectorySource";
 import type { KnowledgeFiles } from "./knowledgeStores";
@@ -120,10 +121,41 @@ export function workspaceKnowledgeFiles(folderPath: string): KnowledgeFiles {
         return [];
       }
     },
+    // The node fs, not the workspace fs: the replica lock's takeover needs a rename that rejects
+    // when another host already moved the file (ENOENT), and replaces the target otherwise.
     async rename(from, to) {
-      await fs.rename(vscode.Uri.joinPath(dir, from), vscode.Uri.joinPath(dir, to), { overwrite: true });
+      const target = vscode.Uri.joinPath(dir, to);
+      await mkdir(vscode.Uri.joinPath(target, "..").fsPath, { recursive: true });
+      await rename(vscode.Uri.joinPath(dir, from).fsPath, target.fsPath);
     },
+    createExclusive: (name, text) => createExclusiveFile(vscode.Uri.joinPath(dir, name).fsPath, text),
   };
+}
+
+/**
+ * Creates `path` with `text` only when it does not exist — the OS's atomic exclusive create
+ * (`open(path, "wx")`), so of two hosts racing for one file exactly one wins. True when THIS
+ * call created it, false when it already existed; any other failure rejects. A write that
+ * fails after the create removes the half file, so a crashed create never holds the name.
+ */
+export async function createExclusiveFile(path: string, text: string): Promise<boolean> {
+  await mkdir(dirname(path), { recursive: true });
+  let handle: FileHandle;
+  try {
+    handle = await open(path, "wx");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+    throw error;
+  }
+  try {
+    await handle.writeFile(text, "utf8");
+  } catch (error) {
+    await handle.close().catch(() => undefined);
+    await rm(path, { force: true }).catch(() => undefined);
+    throw error;
+  }
+  await handle.close();
+  return true;
 }
 
 /** A root's `.builderforce/ignore` through the workspace fs; a write goes to a temp file first and replaces the ignore file by rename (atomic). */

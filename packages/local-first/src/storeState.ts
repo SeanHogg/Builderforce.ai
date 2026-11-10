@@ -74,6 +74,26 @@ export class CommittedState {
    */
   readonly recordTypes = new Map<string, Set<string>>();
   nextSequence = 1;
+  /** The highest `mappedSeq` any committed mapping carries: a new mapping takes the next one. */
+  maxMappedSeq = 0;
+
+  noteMappedSeq(seq: number | undefined): void {
+    if (seq !== undefined && seq > this.maxMappedSeq) this.maxMappedSeq = seq;
+  }
+
+  /**
+   * Commit one (normalised) mapping. A row without a `mappedSeq` (an older window's write) keeps the
+   * sequence of the row it replaces, or takes the next one — so "earliest" never moves on an update.
+   */
+  private adoptMapping(mapping: ServerMapping): void {
+    const key = mappingKey(mapping);
+    let row = mapping;
+    if (row.mappedSeq === undefined) {
+      row = { ...row, mappedSeq: this.mappings.get(key)?.mappedSeq ?? this.maxMappedSeq + 1 };
+    }
+    this.noteMappedSeq(row.mappedSeq);
+    this.mappings.set(key, row);
+  }
 
   /** Add a row's id to the per-type index. Idempotent: an update keeps its position. */
   private indexRecord(entityType: string, id: string): void {
@@ -96,10 +116,10 @@ export class CommittedState {
     }
     for (const event of initial?.events ?? []) state.events.set(event.eventId, event);
     // Legacy rows (no `syncId`, `kind:ref` in `serverId`) are read through the ONE normaliser; nothing is dropped.
-    for (const raw of initial?.mappings ?? []) {
-      const mapping = normalizeServerMapping(raw);
-      state.mappings.set(mappingKey(mapping), mapping);
-    }
+    // A legacy row without a `mappedSeq` gets the next one AFTER every persisted one, in load order.
+    const loaded = (initial?.mappings ?? []).map(normalizeServerMapping);
+    for (const mapping of loaded) state.noteMappedSeq(mapping.mappedSeq);
+    for (const mapping of loaded) state.adoptMapping(mapping);
     for (const receipt of initial?.receipts ?? []) state.receipts.set(receipt.eventId, receipt);
     for (const conflict of initial?.conflicts ?? []) state.conflicts.set(conflict.id, conflict);
     for (const [key, cursor] of Object.entries(initial?.cursors ?? {})) state.cursors.set(key, cursor);
@@ -145,8 +165,7 @@ export class CommittedState {
       change.event();
     }
     for (const raw of delta.mappings ?? []) {
-      const mapping = normalizeServerMapping(raw);
-      this.mappings.set(mappingKey(mapping), mapping);
+      this.adoptMapping(normalizeServerMapping(raw));
       change.sync();
     }
     for (const receipt of delta.receipts ?? []) {
@@ -188,5 +207,6 @@ export class CommittedState {
     this.cursors.clear();
     this.pendingKeys.clear();
     this.nextSequence = 1;
+    this.maxMappedSeq = 0;
   }
 }

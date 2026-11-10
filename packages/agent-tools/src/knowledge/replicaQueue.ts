@@ -134,6 +134,16 @@ export function memoryReplicaPersistence(): ReplicaPersistence {
 
 interface Parsed { keys: string[]; projectId?: number; ack?: ReplicaAck; analysis?: ReplicaAnalysis; corrupt: boolean; legacy: boolean }
 
+/**
+ * The path an old stale mark named: a `src:` ref through THE parser (a root id ending in ':' included); an older ref without
+ * the `src:` prefix keeps the old reading (everything after its first `::`); a string with neither names no file.
+ */
+function legacyStalePath(sourceRef: string): string | undefined {
+    if (sourceRef.startsWith('src:')) return splitSourceRef(sourceRef)?.path;
+    const at = sourceRef.indexOf('::');
+    return at > 0 ? sourceRef.slice(at + 2) : undefined;
+}
+
 /** The keys an old op log owed: its fact and relation keys, and the files its stale marks named. */
 function keysOfLegacyOps(ops: unknown[]): string[] {
     const keys: string[] = [];
@@ -143,7 +153,7 @@ function keysOfLegacyOps(ops: unknown[]): string[] {
             for (const k of op.facts ?? []) keys.push(factKey(k));
             for (const k of op.relations ?? []) keys.push(`r:${k}`);
         } else if (op?.op === 'markStale' && typeof op.sourceRef === 'string') {
-            const path = splitSourceRef(op.sourceRef)?.path;
+            const path = legacyStalePath(op.sourceRef);
             if (path !== undefined) keys.push(fileKey(path, ''));
         }
     }

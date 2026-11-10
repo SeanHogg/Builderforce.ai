@@ -4,7 +4,7 @@ import { detectUnbackedTicketClaim, isTicketWriteTool, type BrainTraceEvent } fr
 import { previewReviewDirective } from './previewReview';
 import { restatedReplyNudge } from './restatedReply';
 import { executeHandOff, type HandOffPorts, type HandOffTask } from './planHandoff';
-import { SERVER_TICKET_TOOLS, serverTicketId, ticketStatusMove, ticketToolVocabulary } from './ticketToolVocabulary';
+import { SERVER_TICKET_TOOLS, ticketStatusMove, ticketToolVocabulary } from './ticketToolVocabulary';
 
 const LOCAL = ticketToolVocabulary(['read_file', 'ticket-create', 'ticket-update']);
 const task = (title: string): HandOffTask => ({ title, brief: `do ${title}`, paths: [] });
@@ -70,12 +70,6 @@ describe('ticketToolVocabulary', () => {
 });
 
 describe('the ONE ticket-id parse and status move', () => {
-  it('reads an account id from a number or its decimal text, and nothing else', () => {
-    expect(serverTicketId(41)).toBe(41);
-    expect(serverTicketId(' 41 ')).toBe(41);
-    for (const bad of [0, -3, 1.5, '1e3', '41abc', '', null, undefined, 'local-uuid']) expect(serverTicketId(bad)).toBeNull();
-  });
-
   it('moves by the vocabulary that filed the ticket', () => {
     expect(ticketStatusMove('41', 'done', SERVER_TICKET_TOOLS)).toEqual({ tool: 'builtin_tasks_update', args: { id: 41, status: 'done' } });
     expect(ticketStatusMove('1e3', 'done', SERVER_TICKET_TOOLS)).toBeNull();

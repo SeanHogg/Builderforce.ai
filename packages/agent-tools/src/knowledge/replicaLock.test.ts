@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { KnowledgeFiles } from './fileManifest.js';
-import { LOCK_REFRESH_MS, LOCK_STALE_MS, acquireReplicaLock, fileReplicaLock, lockFileName } from './replicaLock.js';
+import { LOCK_FRESH_MS, LOCK_REFRESH_MS, LOCK_STALE_MS, acquireReplicaLock, fileReplicaLock, lockFileName } from './replicaLock.js';
 
 const ROOT = 'repo/docs';
 
@@ -128,6 +128,52 @@ describe("the replica pump's lock", () => {
     const next = await acquireReplicaLock(exclusive, ROOT, { pid: 'host-c', now: () => later + 2 });
     expect(next).toBeDefined();
     await next!.release();
+  });
+
+  it('regression: two hosts taking over one stale lock where BOTH renames succeed (Windows) still leave exactly one holder', async () => {
+    const files = memoryFiles();
+    const exclusive = Object.assign(files, {
+      createExclusive: async (n: string, t: string) => { await Promise.resolve(); if (files.data.has(n)) return false; files.data.set(n, t); return true; },
+      // Reports success even when the source is already gone: the rename arbitrates nothing.
+      rename: async (from: string, to: string) => {
+        await Promise.resolve();
+        const t = files.data.get(from);
+        if (t !== undefined) { files.data.delete(from); files.data.set(to, t); }
+      },
+      remove: async (n: string) => { files.data.delete(n); },
+    });
+    await acquireReplicaLock(exclusive, ROOT, { pid: 'crashed', now: () => 1000 });
+    const later = 1000 + LOCK_STALE_MS + 1;
+    for (let round = 0; round < 3; round++) {
+      const hosts = await Promise.all(['host-a', 'host-b', 'host-c'].map((pid) => acquireReplicaLock(exclusive, ROOT, { pid, now: () => later + round * LOCK_STALE_MS * 2 })));
+      const holders = hosts.filter(Boolean);
+      expect(holders).toHaveLength(1);
+      expect(files.data.has(lockFileName(ROOT))).toBe(true);
+      // Leave the winner's lock to go stale for the next round (never released).
+    }
+  });
+
+  it('regression: after a stall past the fresh window the holder counts the lock lost and its refresh never rewrites it', async () => {
+    vi.useFakeTimers();
+    let clock = 10_000;
+    const files = memoryFiles();
+    const a = await acquireReplicaLock(files, ROOT, { pid: 'host-a', now: () => clock });
+    expect(a!.isFresh!()).toBe(true);
+    clock += LOCK_FRESH_MS; // asleep: no refresh ran, so the last successful stamp is a refresh short of stale
+    expect(a!.isFresh!()).toBe(false); // the pump asks this before each send
+    expect(a!.lost!.aborted).toBe(true);
+    clock += LOCK_REFRESH_MS;
+    await vi.advanceTimersByTimeAsync(LOCK_REFRESH_MS);
+    expect(record(files)).toEqual({ pid: 'host-a', at: 10_000 }); // no check-then-write over a host that may have taken over
+    await a!.release();
+  });
+
+  it('regression: two default-owner hosts in ONE process never take each other\'s lock as their own', async () => {
+    const files = memoryFiles();
+    const first = await fileReplicaLock().acquire(files, ROOT);
+    expect(first).toBeDefined();
+    expect(await fileReplicaLock().acquire(files, ROOT)).toBeUndefined();
+    await first!.release();
   });
 
   it('a string owner (a browser tab) holds the lock, refuses another tab and re-acquires its own', async () => {

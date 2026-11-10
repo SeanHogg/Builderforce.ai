@@ -37,19 +37,33 @@ describe("createChildLedger", () => {
     expect(written.at(-1)?.[0]?.state).toBe("done");
   });
 
-  it("regression: settled children are pruned past the cap; running children are never dropped", () => {
-    const ledger = createChildLedger();
+  it("regression: a prune past the cap never shrinks the PERSISTED children list (a write replaces the run's list)", async () => {
+    let persisted: PersistedChild[] = [];
+    const ledger = createChildLedger({ persist: (_chat, children) => { persisted = children.map((c) => ({ ...c })); } });
+    const total = MAX_SETTLED_CHILDREN + 5;
     ledger.spawned(spawn(0));
-    for (let k = 1; k <= MAX_SETTLED_CHILDREN + 5; k += 1) {
+    for (let k = 1; k <= total; k += 1) {
+      ledger.spawned(spawn(k));
+      ledger.settled(k, report(k), "inbox");
+    }
+    // A later spawn in the same chat after the prune: its write must still carry every earlier child.
+    ledger.spawned(spawn(total + 1));
+    await ledger.flush();
+    expect(persisted.map((c) => c.handle)).toEqual(Array.from({ length: total + 2 }, (_, k) => `c${k}`));
+    expect(persisted.find((c) => c.handle === "c1")?.report?.output).toBe("ok");
+    expect(persisted.find((c) => c.handle === "c0")?.state).toBe("running");
+    expect(ledger.liveWork(1).map((w) => w.handle)).toEqual(["c0", `c${total + 1}`]);
+  });
+
+  it("archives per chat: another chat's prune does not leak into or erase this chat's list", () => {
+    const ledger = createChildLedger();
+    ledger.spawned(spawn(10_000, 2));
+    ledger.settled(10_000, report(10_000), "wait");
+    for (let k = 1; k <= MAX_SETTLED_CHILDREN + 2; k += 1) {
       ledger.spawned(spawn(k));
       ledger.settled(k, report(k), "wait");
     }
-    const kids = ledger.childrenOf(1);
-    expect(kids.filter((c) => c.state !== "running")).toHaveLength(MAX_SETTLED_CHILDREN);
-    expect(kids.find((c) => c.handle === "c0")?.state).toBe("running");
-    // The oldest settled went first.
-    expect(kids.some((c) => c.handle === "c1")).toBe(false);
-    expect(kids.some((c) => c.handle === `c${MAX_SETTLED_CHILDREN + 5}`)).toBe(true);
-    expect(ledger.liveWork(1).map((w) => w.handle)).toEqual(["c0"]);
+    expect(ledger.childrenOf(2).map((c) => c.handle)).toEqual(["c10000"]);
+    expect(ledger.childrenOf(1)).toHaveLength(MAX_SETTLED_CHILDREN + 2);
   });
 });

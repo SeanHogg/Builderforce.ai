@@ -111,7 +111,13 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 Source: [offline-first review](./docs/design/vsix-offline-first-architecture-review.md).
 
 - **Three local ticket writers.** `frontend/src/lib/localFirst/workManagement.ts` (web), `packages/local-first/src/localWork.ts` `createLocalWork` (used by `localTools.ts` `executeDomainTool`) and `clients/vscode/src/localTicketRepository.ts` (VSIX) each build the ticket record, its create event and its dependencies separately. Only the VSIX writer carries `chatClientId`, `taskType` or server references. Fix: move the VSIX repository's rules into `packages/local-first` as the one ticket and project repository, port the web and `executeDomainTool` callers onto it, and delete the two thinner copies with their tests run unchanged. Fixing it means a chat-created ticket links on every local host, not only the editor. The chat-link fix landed in f6cad9f14, so this is unblocked.
-- **No typed entity id: local UUID vs sync id is guessed at every call site.** Three UUID regexes (`clients/vscode/src/localTicketScope.ts`, `packages/local-first/src/clientEntityIdentity.ts`, `storeContract.ts`), 28 ad hoc `Number(ref)`/`serverNumericId` coercions, and sync `server_id` stored as `varchar(128)` (`api/.../schema/sync.ts`). It caused the local-ticket skip and the `.id`-vs-`taskId` duplicate tickets. Fix: one `LocalId` (UUID) and `SyncId` (bigint) primitive with `parseEntityRef` and a single resolver in `packages/local-first`; tool results carry `{localId, syncId}`; `server_id` columns move to bigint across two migrations. Starts after the #70776 batch commits (same files).
+- **Typed ids, contract push still to come: `sync_entity_mappings.server_id` and the wire's `serverId` text are still dual-written beside `sync_id`.** The expand push (migration 1339, `docs/design/typed-entity-ids.md` §4) added `sync_id bigint`. The api reader prefers `server_id` (`api/src/application/sync/syncIds.ts mappedServerKey`) because rows written by the old Worker leave `sync_id` stale. The contract push will:
+  - drop `server_id` from mappings, after a backfill re-run;
+  - flip `mappedServerKey` to read `sync_id` first;
+  - stop sending `serverId` text on receipts;
+  - drop `ServerMapping.serverId` on the device.
+
+  Blocker: the `/api/sync` push telemetry has to show no client below the version that reads `syncId`, and that takes a release in the field.
   - `newSourceNeedsTest` refuses any new source file that lacks a test with the same name, including barrels, types and labels.
   - The `open_pull_request` gate checks an empty `@{u}..HEAD` set and still reports "checks passed".
   - On Windows, `windowsCommand` turns `node` into `node.cmd`, so every guard fails.

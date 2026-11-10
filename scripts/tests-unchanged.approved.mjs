@@ -86,6 +86,13 @@ export const APPROVED_THIS_PUSH = [
     reason: "Intended change (chat-link-on-create): a created work item is linked to its chat BY the create call — the run stamps its server chat onto the create, the server links it — so no separate link call follows a create. The stamped chat is asserted in runStore/createChatStamp.test.ts. Intended change (run #70776, 19c8131bd): the first overlapping hand_off is sent back once naming the clash so the planner can narrow its paths; handed off again unchanged, it runs inline in plan order exactly as the test asserts. The send-back is asserted in handOffClash.e2e.test.ts.",
     approvedBy: APPROVED_BY,
   },
+  {
+    file: 'brain-embedded/src/ticketToolVocabulary.test.ts',
+    changed: "The 'reads an account id from a number or its decimal text, and nothing else' case (serverTicketId) and its import are removed.",
+    reason: 'serverTicketId absorbed by parseSyncId/entityIdsOf — typed-entity-ids §5; the parse is covered by entityId.test.ts',
+    approvedBy: APPROVED_BY,
+    cases: 1,
+  },
   // The parity snapshots reconciled with the same intended change by
   // brain-embedded/scripts/apply-intended-snapshot-change-chat-link.mjs (its header names the three edits).
   ...[

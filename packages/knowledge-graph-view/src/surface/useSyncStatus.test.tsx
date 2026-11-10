@@ -190,6 +190,28 @@ describe('useSyncStatus while an upload is under way', () => {
     });
 });
 
+describe('useSyncStatus visibility', () => {
+    afterEach(() => vi.useRealTimers());
+
+    it('regression: becoming visible with a poll pending reads once, not twice', async () => {
+        vi.useFakeTimers();
+        const read = vi.fn(async (): Promise<SyncStatus> => ({ local: { files: 3, docs: 0 }, sources: [], replica: { dirty: 3, sending: true, failed: [] } }));
+        const source = sourceOf(read);
+        renderHook(() => useSyncStatus(source, 'a', 'g'));
+        await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+        expect(read).toHaveBeenCalledTimes(1);
+        // A 2 s poll is pending; the page announces it is visible half-way through.
+        await act(async () => { await vi.advanceTimersByTimeAsync(SYNC_POLL_MS / 2); });
+        await act(async () => { document.dispatchEvent(new Event('visibilitychange')); await vi.advanceTimersByTimeAsync(0); });
+        expect(read).toHaveBeenCalledTimes(2);
+        // The old timer's deadline passes: no extra read. The next one is a full interval after the visible read.
+        await act(async () => { await vi.advanceTimersByTimeAsync(SYNC_POLL_MS / 2); });
+        expect(read).toHaveBeenCalledTimes(2);
+        await act(async () => { await vi.advanceTimersByTimeAsync(SYNC_POLL_MS / 2); });
+        expect(read).toHaveBeenCalledTimes(3);
+    });
+});
+
 describe('syncPollDelay', () => {
     it('doubles from SYNC_POLL_MS and caps at SYNC_POLL_MAX_MS', () => {
         expect(syncPollDelay(0)).toBe(SYNC_POLL_MS);

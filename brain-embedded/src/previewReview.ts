@@ -28,6 +28,7 @@
  * Framework-free (strings, Sets, predicates) so it is safe in every bundle.
  */
 
+import { parseSyncId } from '@builderforce/local-first';
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
 import { SERVER_TICKET_LINK_TOOL, SERVER_TICKET_TOOLS, type TicketToolVocabulary } from './ticketToolVocabulary';
 import { canReviewInPreview, isCodeChangeTool, PREVIEW_REVIEW_TOOL } from './localWorkspaceTools';
@@ -81,8 +82,7 @@ function completeReviewTaskId(event: BrainTraceEvent): number | null {
   // The server's verdict is authoritative (an omitted verdict with gaps reads as "gaps").
   const recorded = (event.result as { verdict?: unknown } | null | undefined)?.verdict ?? args.verdict;
   if (recorded !== 'complete') return null;
-  const taskId = Number(args.taskId);
-  return Number.isInteger(taskId) && taskId > 0 ? taskId : null;
+  return parseSyncId(args.taskId);
 }
 
 /**

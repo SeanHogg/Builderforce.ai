@@ -10,8 +10,8 @@
  * aborts {@link ReplicaLock.lost}, and the holder stops pumping.
  *
  * Acquiring uses the files' exclusive create (`wx`, {@link ReplicaLockFiles.createExclusive}) when the host has one: only
- * one host can create the file, and a stale or released lock is first moved aside by an atomic rename that only one host can
- * win. Without it the lock falls back to write-then-verify; two hosts racing that window are settled by the first refresh,
+ * one host can create the file, and a stale or released lock is first moved aside (best effort) — the exclusive create, never
+ * the rename, decides the winner of a takeover. Without it the lock falls back to write-then-verify; two hosts racing that window are settled by the first refresh,
  * which the loser sees as a lost lock.
  */
 
@@ -19,6 +19,8 @@ import { replicaFileName, type KnowledgeFiles } from './fileManifest.js';
 
 export const LOCK_REFRESH_MS = 30_000;
 export const LOCK_STALE_MS = 120_000;
+/** A holder whose last successful stamp is older than this counts its lock as lost: one refresh short of stale, so it stops before another host can take over. */
+export const LOCK_FRESH_MS = LOCK_STALE_MS - LOCK_REFRESH_MS;
 
 export const lockFileName = (rootId: string): string => replicaFileName(rootId).replace(/\.json$/, '.lock');
 
@@ -43,17 +45,22 @@ function parse(text: string | undefined): LockRecord | undefined {
 
 export interface ReplicaLock {
     release(): Promise<void>;
-    /** Aborted when a refresh found the lock taken by another owner: the holder must stop pumping. Absent for a lock that cannot be lost (Web Locks). */
+    /** Aborted when a refresh found the lock taken by another owner (or its stamp went stale): the holder must stop pumping. Absent for a lock that cannot be lost (Web Locks). */
     readonly lost?: AbortSignal;
+    /** Whether the last successful stamp is still fresh enough that no other host can have taken over: asked before each send (aborts `lost` when not). */
+    isFresh?(): boolean;
 }
 
-/** Who holds the lock when the caller names no owner: the process id where there is one, else an id made once. */
+/**
+ * Who holds the lock when the caller names no owner: a per-INSTANCE id (the process id plus a random nonce), so two hosts in
+ * one process (two replica hosts, an extension host and its worker) never read each other's lock as their own.
+ */
 function defaultOwner(): Owner {
     const pid = (globalThis as { process?: { pid?: unknown } }).process?.pid;
-    if (typeof pid === 'number') return pid;
     // Typed structurally: the api's lib has no WebCrypto global; node and browsers do.
-    const uuid = (globalThis as { crypto?: { randomUUID?(): string } }).crypto?.randomUUID?.();
-    return uuid ?? `tab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+    const nonce = (globalThis as { crypto?: { randomUUID?(): string } }).crypto?.randomUUID?.()
+        ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+    return typeof pid === 'number' ? `${pid}-${nonce}` : `tab-${nonce}`;
 }
 
 /** Reads the lock file: `ok` false when the read itself failed (nothing can be concluded about the owner). */
@@ -67,7 +74,8 @@ const liveOther = (held: LockRecord | undefined, pid: Owner, at: number): boolea
 
 /**
  * Takes the lock with the files' exclusive create: create it; else, when what is there is free to take (stale, released,
- * corrupt or this owner's), move it aside with ONE rename (a second host's rename of the same file fails) and create again.
+ * corrupt or this owner's), move it aside (best effort) and create again. Only the exclusive create decides who holds it,
+ * on every path: the takeover's rename may succeed for several hosts at once (Windows), and a host that loses the create backs off.
  */
 async function takeExclusive(files: ReplicaLockFiles, name: string, pid: Owner, at: number): Promise<boolean> {
     const create = files.createExclusive!.bind(files);
@@ -76,8 +84,12 @@ async function takeExclusive(files: ReplicaLockFiles, name: string, pid: Owner, 
     const seen = await readLock(files, name);
     if (!seen.ok || liveOther(parse(seen.text), pid, at)) return false;
     if (files.rename) {
+        // Best effort only: on Windows two hosts renaming the same file can BOTH succeed, so the rename decides nothing.
+        // The exclusive create below is the only arbiter; a host that loses it backs off.
         const aside = `${name}.${String(pid)}-${at.toString(36)}.taken`;
-        try { await files.rename(name, aside); } catch { return false; } // another host moved it first
+        const again = await readLock(files, name);
+        if (!again.ok || liveOther(parse(again.text), pid, at)) return false; // a fresh lock appeared meanwhile: never move it
+        await files.rename(name, aside).catch(() => undefined);
         const moved = await readLock(files, aside);
         await files.remove?.(aside).catch(() => undefined);
         // The rename raced a fresh create: what was moved is another owner's live lock, not the stale one. Put it back.
@@ -126,11 +138,20 @@ export async function acquireReplicaLock(
         const rec = parse(seen.text);
         return !!rec && rec.pid === pid && rec.at === stamp;
     };
+    /** The lock is lost once its last SUCCESSFUL stamp is old enough that another host may already have taken it (a stall). */
+    const fresh = (): boolean => {
+        if (lost.signal.aborted) return false;
+        if (now() - stamp < LOCK_FRESH_MS) return true;
+        stop(); lost.abort();
+        return false;
+    };
     let busy = false;
     const refresh = async (): Promise<void> => {
         if (busy || lost.signal.aborted) return;
         busy = true;
         try {
+            // After a stall a check-then-write could pass the check and stamp over a host that took over in between: never rewrite.
+            if (!fresh()) return;
             const mine = await stillMine();
             if (mine === undefined) return; // unreadable this tick: try again on the next
             if (!mine) { stop(); lost.abort(); return; }
@@ -148,6 +169,7 @@ export async function acquireReplicaLock(
     const stop = (): void => clearInterval(timer);
     return {
         lost: lost.signal,
+        isFresh: fresh,
         async release() {
             stop();
             if (lost.signal.aborted || (await stillMine()) !== true) return; // another owner's lock: never freed by this holder
@@ -162,7 +184,7 @@ export interface ReplicaLockPort {
     acquire(files: KnowledgeFiles, rootId: string): Promise<ReplicaLock | undefined>;
 }
 
-/** The file-backed lock, one owner per instance (default: the process id, else a random id made once). */
+/** The file-backed lock, one owner per instance (default: the process id plus a random nonce, made once per instance). */
 export function fileReplicaLock(opts: { owner?: Owner; now?: () => number } = {}): ReplicaLockPort {
     const pid = opts.owner ?? defaultOwner();
     return { acquire: (files, rootId) => acquireReplicaLock(files, rootId, { pid, ...(opts.now ? { now: opts.now } : {}) }) };

@@ -24,6 +24,7 @@ import {
   destinationKey,
   isImported,
   journalWrite,
+  parseSyncId,
   queueImport,
   selectPending,
   selectRecords,
@@ -39,10 +40,9 @@ import {
 
 /**
  * A DECIMAL id is a SERVER reference (the model is handed numeric server project and
- * ticket ids), never a local one: client ids are UUIDs.
+ * ticket ids), never a local one: client ids are UUIDs. `parseSyncId` is the one parse.
  */
-const SERVER_REFERENCE = /^\d+$/;
-export const isServerReference = (id: string): boolean => SERVER_REFERENCE.test(id.trim());
+export const isServerReference = (id: string): boolean => parseSyncId(id.trim()) !== null;
 
 export type LocalProject = LocalRecord<ProjectValue>;
 export type LocalTicket = LocalRecord<TicketValue>;

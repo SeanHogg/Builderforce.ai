@@ -4,7 +4,7 @@
  * The read path answers the same question from a snapshot (`chatClientIdOf` in `buildRail.ts`).
  */
 
-import { parseSyncId, type EntityDestination, type LocalFirstTransaction, type SyncId } from "@builderforce/local-first";
+import { parseSyncId, type EntityDestination, type EntityScope, type LocalFirstTransaction, type SyncId } from "@builderforce/local-first";
 import type { ChatRef } from "./railProtocol";
 
 export interface ResolvedChat {
@@ -14,12 +14,13 @@ export interface ResolvedChat {
   destination: EntityDestination;
 }
 
-export async function resolveChat(tx: LocalFirstTransaction, ref: ChatRef): Promise<ResolvedChat | undefined> {
+/** `scope`: the active account (`activeEntityScope`) — a server chat id is only unique per tenant. */
+export async function resolveChat(tx: LocalFirstTransaction, ref: ChatRef, scope?: EntityScope): Promise<ResolvedChat | undefined> {
   if (typeof ref === "number") {
     const sync = parseSyncId(ref);
     if (sync === null) return undefined;
-    const mapping = await tx.mappingByServerId("chat", sync);
-    if (!mapping) return undefined;
+    const mapping = await tx.mappingByServerId("chat", sync, scope);
+    if (!mapping || parseSyncId(mapping.syncId) !== sync) return undefined;
     const chat = await tx.get("chat", mapping.clientEntityId);
     if (!chat || chat.deletedAt) return undefined;
     return { clientId: chat.id, serverId: sync, destination: mapping.destination };

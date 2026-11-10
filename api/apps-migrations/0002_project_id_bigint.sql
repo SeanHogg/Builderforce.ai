@@ -7,7 +7,9 @@
 -- the old Worker keeps working. migrate.mjs runs this file as one transaction, so
 -- `SET LOCAL lock_timeout` makes it fail fast rather than block live site traffic.
 SET LOCAL lock_timeout = '5s';
-SET LOCAL statement_timeout = '15min';
+-- The whole DO block is ONE statement, so no statement cap: the rewrites take as long
+-- as they take. lock_timeout is what protects traffic.
+SET LOCAL statement_timeout = 0;
 
 DO $$
 DECLARE

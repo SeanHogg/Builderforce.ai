@@ -34,11 +34,16 @@ describe('syncIdOf', () => {
 });
 
 describe('mappedServerKey (the coalescing reader)', () => {
-  it('reads sync_id first', () => {
-    expect(mappedServerKey({ serverId: '9', syncId: 5 })).toBe(5);
+  it('reads server_id first: the old Worker rewrites it without touching a now-stale sync_id', () => {
+    // A revived link re-keyed by the old Worker: server_id moved to 9, sync_id still says 5.
+    expect(mappedServerKey({ serverId: '9', syncId: 5 })).toBe(9);
   });
 
-  it('falls back to the parsed server_id when sync_id is null or absent (a row the old Worker wrote)', () => {
+  it('falls back to sync_id when server_id holds no integer', () => {
+    expect(mappedServerKey({ serverId: MIRROR, syncId: 5 })).toBe(5);
+  });
+
+  it('reads the parsed server_id when sync_id is null or absent (a row the old Worker wrote)', () => {
     expect(mappedServerKey({ serverId: '9', syncId: null })).toBe(9);
     expect(mappedServerKey({ serverId: '9' })).toBe(9);
     // A step keeps its key in server_id only: the importer still finds the step.
@@ -119,8 +124,9 @@ describe('receipts and pulled records carry syncId', () => {
     expect(ticketReceipt).toMatchObject({ status: 'accepted', serverId: '42', syncId: 42 });
     expect(mirrorReceipt).toMatchObject({ status: 'accepted', serverId: MIRROR });
     expect(mirrorReceipt).not.toHaveProperty('syncId');
+    // An integer server id that is not a SyncId is said EXPLICITLY, unlike an older server's silence.
     expect(stepReceipt).toMatchObject({ status: 'accepted', serverId: STEP_SERVER_ID });
-    expect(stepReceipt).not.toHaveProperty('syncId');
+    expect(stepReceipt).toHaveProperty('syncId', null);
 
     // The mapping dual-writes: text for older devices, the integer key for new ones.
     const mappings = h.stores.state().mappings;
@@ -135,7 +141,7 @@ describe('receipts and pulled records carry syncId', () => {
 
   it('sends syncId and serverId on snapshot and delta records (pull never sent the id before)', async () => {
     const h = harness();
-    await h.push([event(TICKET, 'ticket'), event(MIRROR, 'execution')]);
+    await h.push([event(TICKET, 'ticket'), event(MIRROR, 'execution'), event(STEP, 'message')]);
     const snapshot = await h.pull({ destination: DESTINATION, limit: 50 });
     expect(snapshot.ok).toBe(true);
     if (!snapshot.ok) return;
@@ -143,6 +149,7 @@ describe('receipts and pulled records carry syncId', () => {
     expect(byId.get(TICKET)).toMatchObject({ syncId: 42, serverId: '42' });
     expect(byId.get(MIRROR)).not.toHaveProperty('syncId');
     expect(byId.get(MIRROR)).not.toHaveProperty('serverId');
+    expect(byId.get(STEP)).toMatchObject({ serverId: STEP_SERVER_ID, syncId: null });
 
     const updated = { ...event(TICKET, 'ticket'), operation: 'update', baseVersion: 1 };
     await h.push([updated]);

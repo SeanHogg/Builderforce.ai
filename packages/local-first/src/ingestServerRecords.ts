@@ -24,9 +24,9 @@
 import { materialize } from './applyServerCursor.js';
 import { chatTicketLinkId, linkServerIds } from './chatTicketLink.js';
 import { clone } from './clone.js';
-import { mintLocalId, parseEntityRef, tierRefText } from './entityId.js';
+import { mintLocalId, parseEntityRef, parseSyncId, tierRefText } from './entityId.js';
 import { canonicalPayloadHash } from './payloadHash.js';
-import type { ChatTicketLinkValue, EntityDestination, LocalEntityType, LocalRecord } from './records.js';
+import type { ChatTicketLinkValue, EntityDestination, LocalEntityType, LocalRecord, ServerMapping } from './records.js';
 import type { LocalFirstTransaction } from './storeContract.js';
 import type { LocalFirstStore } from './store.js';
 import { tombstoneRecord } from './tombstone.js';
@@ -105,6 +105,14 @@ const pendingKey = (entityType: string, id: string): string => `${entityType}\u0
  * The mapping a server row already has, in any destination (earliest wins): a tier ticket's
  * `kind:ref` is its `externalRef`; anything else is its server key (`syncId`, or legacy text).
  */
+/** Whether `mapping` already names the server key `serverId` (its SyncId, tier ref, or text). */
+function sameServerKey(mapping: ServerMapping, serverId: string): boolean {
+  const ref = parseEntityRef(serverId);
+  if (ref && 'sync' in ref) return parseSyncId(mapping.syncId) === ref.sync || mapping.serverId === serverId;
+  if (ref && 'tier' in ref) return mapping.externalRef === tierRefText(ref.tier);
+  return mapping.serverId === serverId;
+}
+
 function mappingOfRow(tx: LocalFirstTransaction, row: ServerRecordRow): ReturnType<LocalFirstTransaction['mappingByServerId']> {
   const ref = parseEntityRef(row.serverId);
   return ref && 'tier' in ref
@@ -194,7 +202,7 @@ export async function ingestServerRecords(
         // A derived link id may already be mapped (this device linked it and the server imported
         // it): keep that mapping's version, only learn the server id; never reset it to 1.
         const known = await tx.mapping(row.entityType, clientId, row.destination);
-        if (!known || known.serverId !== row.serverId || known.serverVersion < 1) {
+        if (!known || !sameServerKey(known, row.serverId) || known.serverVersion < 1) {
           await tx.putMapping({
             destination: row.destination,
             entityType: row.entityType,

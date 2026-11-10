@@ -49,7 +49,8 @@ describe('Stop, then Force stop, on the real state machine', () => {
     it('stays "stopping" while the host is silent; after the threshold Force stop lets go: the view is stopped and offers Resume', async () => {
         const source = hangingSource();
         render(<App source={source} />);
-        await screen.findByTestId('kg-review-start');
+        // Nothing is planned on open: the footer's Start review counts and starts in one press.
+        await screen.findByTestId('kg-review-idle');
         fireEvent.click(footer());
         await waitFor(() => expect(footer().textContent).toBe(L.reviewStop));
 

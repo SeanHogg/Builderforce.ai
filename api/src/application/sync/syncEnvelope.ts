@@ -23,6 +23,7 @@ import {
   SYNC_PROTOCOL_VERSION,
   hashSyncPayload,
   isJournalEventId,
+  parseSyncId,
   type EntityDestination,
   type LocalEntityType,
   type SyncReceipt,
@@ -184,8 +185,11 @@ export function receipt(
 ): SyncReceipt {
   const row: SyncReceipt = { eventId, status, receivedAt };
   if (extra?.serverId) row.serverId = extra.serverId;
-  // The integer server key (`syncIdOf`), beside the text id older devices read.
+  // The integer server key (`syncIdOf`), beside the text id older devices read. An integer server
+  // id that is NOT a SyncId (a run step) is said with an explicit `null`, so the device does not
+  // read it as an older server that never sent the field.
   if (typeof extra?.syncId === 'number') row.syncId = extra.syncId;
+  else if (extra?.syncId === null && parseSyncId(extra.serverId) !== null) row.syncId = null;
   if (typeof extra?.serverVersion === 'number') row.serverVersion = extra.serverVersion;
   if (extra?.detail) row.detail = extra.detail;
   return row;

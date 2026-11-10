@@ -40,6 +40,34 @@ export type EntityDestination =
 
 export const UNBOUND_DESTINATION: EntityDestination = { kind: 'unbound' };
 
+/**
+ * Where an id lookup may look (typed-entity-ids §3):
+ * - an `EntityDestination` — exactly that destination;
+ * - an ACCOUNT scope `{ tenantId, accountId?, platformInstance? }` — every bound destination of that
+ *   tenant (narrowed by the fields given) PLUS the unbound one. The store cannot tell which account is
+ *   active, so a caller without a destination MUST pass its tenant: a SyncId is only unique per
+ *   tenant, and another account's ticket 40 is not this one's.
+ * - omitted — every destination. LEGACY only (kept so callers migrate without breaking): it can
+ *   resolve another tenant's entity. Do not use it in new code.
+ */
+export type EntityScope = EntityDestination | AccountScope;
+
+export interface AccountScope {
+  tenantId: string;
+  accountId?: string;
+  platformInstance?: string;
+}
+
+/** Whether a mapping / record in `destination` is inside `scope` (omitted ⇒ everywhere). */
+export function inEntityScope(destination: EntityDestination, scope: EntityScope | undefined): boolean {
+  if (scope === undefined) return true;
+  if ('kind' in scope) return destinationKey(destination) === destinationKey(scope);
+  if (destination.kind === 'unbound') return true;
+  return destination.tenantId === scope.tenantId
+    && (scope.accountId === undefined || destination.accountId === scope.accountId)
+    && (scope.platformInstance === undefined || destination.platformInstance === scope.platformInstance);
+}
+
 export function destinationKey(destination: EntityDestination): string {
   if (destination.kind === 'unbound') return 'unbound';
   return [
@@ -121,10 +149,21 @@ export interface ServerMapping {
   destination: EntityDestination;
   entityType: LocalEntityType;
   clientEntityId: ClientEntityId;
-  syncId: SyncId | null;
+  /**
+   * Always set (number or null) on a row the store hands out: `normalizeServerMapping` writes it.
+   * Optional in the TYPE only so a fixture / an older reader's literal still fits; a reader treats
+   * `undefined` exactly as `null` (`parseSyncId(mapping.syncId)`).
+   */
+  syncId?: SyncId | null;
   serverVersion: number;
   /** A planning tier's `kind:ref` (portfolio, objective, initiative, roadmap, spec). */
   externalRef?: string;
+  /**
+   * When this device first wrote the mapping, as a store-wide increasing number. THE "earliest
+   * mapping" order (with the mapping key as tie-break): persisted with the row, so it survives a
+   * restart and the canonical (sorted) snapshot encoding. Legacy rows get one on load, in load order.
+   */
+  mappedSeq?: number;
   /**
    * LEGACY text form, written beside `syncId` for one release so an older extension window that
    * shares the journal still reads the row. Also carries a non-integer server key (a mirror
@@ -159,10 +198,14 @@ export function normalizeServerMapping(raw: ServerMappingInput | ServerMapping):
   const serverId = typeof serverIdText === 'string' && serverIdText !== ''
     ? serverIdText
     : syncId !== null ? syncIdText(syncId) : undefined;
+  const mappedSeq = typeof raw.mappedSeq === 'number' && Number.isSafeInteger(raw.mappedSeq) && raw.mappedSeq > 0
+    ? raw.mappedSeq
+    : undefined;
   if (
     raw.syncId === syncId
     && loose.serverId === serverId
     && (loose.externalRef === externalRef || (externalRef === undefined && !('externalRef' in raw)))
+    && (raw.mappedSeq === mappedSeq || (mappedSeq === undefined && !('mappedSeq' in raw)))
   ) {
     return raw as ServerMapping;
   }
@@ -174,7 +217,21 @@ export function normalizeServerMapping(raw: ServerMappingInput | ServerMapping):
     syncId,
     ...(externalRef !== undefined ? { externalRef } : {}),
     ...(serverId !== undefined ? { serverId } : {}),
+    ...(mappedSeq !== undefined ? { mappedSeq } : {}),
   };
+}
+
+/**
+ * THE "earliest mapping" order: `mappedSeq` ascending (a row without one — never in a store, which
+ * backfills — sorts last), then the mapping key. Deterministic in memory and after a reload.
+ */
+export function compareMappingAge(a: ServerMapping, b: ServerMapping): number {
+  const sa = a.mappedSeq ?? Number.MAX_SAFE_INTEGER;
+  const sb = b.mappedSeq ?? Number.MAX_SAFE_INTEGER;
+  if (sa !== sb) return sa - sb;
+  const ka = `${destinationKey(a.destination)}:${a.entityType}:${a.clientEntityId}`;
+  const kb = `${destinationKey(b.destination)}:${b.entityType}:${b.clientEntityId}`;
+  return ka < kb ? -1 : ka > kb ? 1 : 0;
 }
 
 export interface SyncReceipt {
@@ -189,8 +246,12 @@ export interface SyncReceipt {
   clientEntityId?: ClientEntityId;
   status: 'accepted' | 'duplicate' | 'conflict' | 'rejected' | 'dependency_pending';
   receivedAt: string;
-  /** The server's integer key for the entity, when it has one. */
-  syncId?: number;
+  /**
+   * The server's integer key for the entity, when it has one. An EXPLICIT `null` means the server
+   * says its `serverId` text is NOT a SyncId of this entity type (a Brain run step's id is a step
+   * id, not a message id): nothing may derive one from `serverId` then.
+   */
+  syncId?: number | null;
   /** The server's key as text (legacy, and the only key of a mirror/usage row: a UUID). */
   serverId?: string;
   serverVersion?: number;

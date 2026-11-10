@@ -12,15 +12,18 @@ export interface ReviewsDeps {
 }
 
 
-/** Presses the review action's button (opens the Reviews panel; with nothing planned it starts counting). */
+/**
+ * Presses the review action's button: it opens the Reviews panel and counts NOTHING (planning walks and hashes every file,
+ * which the person did not ask for by opening the panel — RunPanel.tsx). The panel shows the idle body until Start review.
+ */
 export async function openReviews({ screen, fireEvent }: ReviewsDeps): Promise<void> {
     fireEvent.click(await screen.findByTestId('kg-review-action'));
 }
 
-/** Opens the panel and presses Start review once the plan is ready (the footer's button). */
+/** Opens the panel and presses Start review: with nothing planned, the footer's one press counts the files and starts. */
 export async function startReviewing(deps: ReviewsDeps): Promise<void> {
     await openReviews(deps);
-    await deps.screen.findByTestId('kg-review-start'); // the plan is ready
+    await deps.screen.findByTestId('kg-review-idle'); // nothing planned yet
     deps.fireEvent.click(await deps.screen.findByTestId('kg-footer-action'));
 }
 

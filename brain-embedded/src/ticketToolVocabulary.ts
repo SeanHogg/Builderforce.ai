@@ -19,7 +19,7 @@
  * SERVER vocabulary, which is what every surface used before the editor filed locally.
  */
 
-import { parseEntityRef, parseSyncId, syncIdText, type EntityRef, type SyncId } from '@builderforce/local-first';
+import { parseEntityRef, syncIdText, type EntityRef } from '@builderforce/local-first';
 
 export const SERVER_TICKET_CREATE_TOOL = 'builtin_tasks_create';
 export const SERVER_TICKET_LINK_TOOL = 'builtin_chats_link_ticket';
@@ -73,15 +73,6 @@ export function isLocalTicketCreateLabel(label: string): boolean {
 /** The account's status change (numeric id) and the editor's (local id, or the numeric id once synced). */
 const SERVER_TICKET_MOVE_TOOL = 'builtin_tasks_update';
 const LOCAL_TICKET_MOVE_TOOL = 'ticket-move';
-
-/**
- * An account ticket id handed in as an ARGUMENT (a number or its decimal text, surrounding
- * whitespace allowed): `parseSyncId` of it. Not a tool-result reader — results are read by
- * `entityIdsOf` (toolResultRecord.ts). No production caller; kept for its contract test.
- */
-export function serverTicketId(raw: unknown): SyncId | null {
-  return parseSyncId(typeof raw === 'string' ? raw.trim() : raw);
-}
 
 /** The call that moves one ticket to a status. */
 export interface TicketStatusMove {

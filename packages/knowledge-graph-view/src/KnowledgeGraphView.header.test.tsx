@@ -67,22 +67,26 @@ describe('the status chip and the action button', () => {
         expect(screen.queryByRole('button', { name: /more actions/i })).toBeNull();
     });
 
-    it('opens the Reviews panel when the button is pressed, and counts the files at once', async () => {
-        await mount(sourceOf({ syncStatus: async () => sync() }));
+    it('opens the Reviews panel when the button is pressed, and counts nothing until Start review', async () => {
+        // Opening does not plan (RunPanel.tsx): planning walks and hashes every file, which opening the panel did not ask for.
+        const source = sourceOf({ syncStatus: async () => sync() }) as KnowledgeGraphSource & { requests: unknown[] };
+        await mount(source);
         fireEvent.click(await screen.findByTestId('kg-review-action'));
         const panel = await screen.findByRole('dialog', { name: 'Builderforce' });
-        expect(await within(panel).findByTestId('kg-review-start')).toBeTruthy();
-        expect(screen.getByTestId('kg-status-chip').getAttribute('data-kind')).toBe('ready');
+        expect(await within(panel).findByTestId('kg-review-idle')).toBeTruthy();
+        expect(within(panel).queryByTestId('kg-review-planning')).toBeNull();
+        expect(source.requests).toEqual([]);
     });
 });
 
 describe('the review in the strip', () => {
-    it('opens the Reviews panel by itself for the plan, and the chip says it is running after Start', async () => {
-        await mount(sourceOf());
+    it('Start review in the panel counts and starts in one press, and the chip leaves the ready state', async () => {
+        const source = sourceOf() as KnowledgeGraphSource & { confirmed: boolean[] };
+        await mount(source);
         fireEvent.click(await screen.findByTestId('kg-review-action'));
-        await screen.findByTestId('kg-review-start');
-        expect(screen.getByTestId('kg-status-chip').textContent).toContain(L.surface.run.review.chipReady);
+        await screen.findByTestId('kg-review-idle');
         fireEvent.click(screen.getByTestId('kg-footer-action'));
+        await waitFor(() => expect(source.confirmed).toEqual([true]));
         await waitFor(() => expect(screen.getByTestId('kg-status-chip').getAttribute('data-kind')).not.toBe('ready'));
     });
 });

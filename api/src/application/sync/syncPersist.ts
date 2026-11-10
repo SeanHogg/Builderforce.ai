@@ -13,7 +13,7 @@
  */
 
 import { CLIENT_REPORTED_EVIDENCE } from '../../domain/sync/occurredAtGate';
-import type { EntityDestination, LocalEntityType, LocalRecord, SyncReceipt } from '../../domain/sync/syncProtocol';
+import { parseSyncId, type EntityDestination, type LocalEntityType, type LocalRecord, type SyncReceipt } from '../../domain/sync/syncProtocol';
 import { receipt, type ParsedEvent } from './syncEnvelope';
 import { syncIdOf } from './syncIds';
 import type {
@@ -181,14 +181,16 @@ export function replayReceipt(eventId: string, replayPayloadHash: string, existi
 }
 
 /**
- * A record as pull serves it: the `LocalRecord` plus, when the entity has an integer server
- * key, its `syncId` and the `serverId` text (pull never sent the id before 1339).
+ * A record as pull serves it: the `LocalRecord` plus, when its server id is an integer, the
+ * `serverId` text and its `syncId` (pull never sent the id before 1339). `syncId: null` is
+ * EXPLICIT for an integer server id that is not a SyncId (a run step), so the device does not
+ * read it as an older server; a record with no integer server id carries neither field.
  */
-export type PulledRecord = LocalRecord & { syncId?: number; serverId?: string };
+export type PulledRecord = LocalRecord & { syncId?: number | null; serverId?: string };
 
 function withServerIds(record: LocalRecord, serverId: string | null | undefined): PulledRecord {
-  const syncId = syncIdOf(record.entityType, serverId);
-  return syncId === null ? record : { ...record, serverId: serverId as string, syncId };
+  if (parseSyncId(serverId) === null) return record;
+  return { ...record, serverId: serverId as string, syncId: syncIdOf(record.entityType, serverId) };
 }
 
 function copyPayload<T>(value: T): T {

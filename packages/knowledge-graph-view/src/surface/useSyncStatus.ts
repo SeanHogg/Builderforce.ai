@@ -81,19 +81,27 @@ export function useSyncStatus(source: KnowledgeGraphSource, rootId: string | nul
         return () => { live = false; };
     }, [read, source, rootId, refreshKey, again]);
     const refresh = useCallback(() => setAgain((n) => n + 1), []);
+    /** The pending poll, so a read started by the page becoming visible cancels it (one read, not two). */
+    const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     useEffect(() => {
         if (!polling.current) return undefined;
         const timer = setTimeout(() => {
+            pollTimer.current = null;
             if (typeof document !== 'undefined' && document.hidden) return; // resumed by `visibilitychange`
             byPoll.current = true;
             setAgain((n) => n + 1);
         }, syncPollDelay(misses.current));
-        return () => clearTimeout(timer);
+        pollTimer.current = timer;
+        return () => {
+            clearTimeout(timer);
+            if (pollTimer.current === timer) pollTimer.current = null;
+        };
     }, [settled]);
     useEffect(() => {
         if (typeof document === 'undefined') return undefined;
         const onVisible = () => {
             if (document.hidden || !polling.current) return;
+            if (pollTimer.current !== null) { clearTimeout(pollTimer.current); pollTimer.current = null; }
             misses.current = 0;
             byPoll.current = true;
             setAgain((n) => n + 1);

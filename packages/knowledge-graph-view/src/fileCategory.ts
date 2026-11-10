@@ -8,7 +8,7 @@
  * file-category classifier (verified 2026-11-09), so this is the one copy — do not add a second.
  */
 
-import type { KNode } from '@seanhogg/builderforce-memory/knowledge';
+import { pathOfRef, type KNode } from '@seanhogg/builderforce-memory/knowledge';
 
 export type FileCategory = 'source' | 'test' | 'doc' | 'config' | 'style' | 'data' | 'other';
 
@@ -48,11 +48,8 @@ const TEST_EXT = new Set(['test', 'spec', 'stories', 'cy']);
 const TEST_DIR = /(^|\/)(__tests?__|test|tests|spec|specs|e2e|cypress|__mocks__|fixtures?)(\/|$)/i;
 const TEST_SUFFIX = /\.(test|spec|stories|cy)\.[^/.]+$/i;
 
-/** The path a node's `ref` carries, without the leading `src:<root>::` scheme prefix. */
-function pathOf(ref: string): string {
-    const i = ref.indexOf('::');
-    return i >= 0 ? ref.slice(i + 2) : ref;
-}
+/** The file path a `src:` ref names (memory's grammar: a `#section` is not part of the path); any other ref is read as-is. */
+const pathOf = (ref: string): string => pathOfRef(ref) ?? ref;
 
 /** The lowercase final extension, or '' when there is none. */
 function extOf(path: string): string {

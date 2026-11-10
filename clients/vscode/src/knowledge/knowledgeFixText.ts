@@ -41,6 +41,9 @@ export const fixText = {
   statusUnreadableAfter: (): string => t("Git status could not be read after the fix."),
   headUnreadable: (): string => t("The current commit could not be read."),
   notRecorded: (why: string): string => t("The fix could not be recorded for undo, so it was reverted and you are back on your branch: {0}", why),
+  notRecordedReverted: (why: string): string => t("The fix could not be recorded for undo, so it was reverted: {0}", why),
+  notRecordedStillOnBranch: (branch: string, why: string): string => t("The fix could not be recorded for undo, so it was reverted, but you are still on {0}: {1}", branch, why),
+  notRecordedRevertFailed: (why: string, revertWhy: string): string => t("The fix could not be recorded for undo, and reverting it failed ({1}): {0} Check the work tree with git status.", why, revertWhy),
   gitFailed: (command: string, why: string): string => t("git {0} failed{1}", command, why),
   fixNote: (): string => t("knip removes every unused export in each of these files, not only the one the finding names."),
 } as const;

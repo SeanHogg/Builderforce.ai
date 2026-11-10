@@ -32,7 +32,7 @@ export type SyncEventInput = JournalEvent<unknown>;
 /** What the event journal answers for a replayed (tenant, device, eventId). */
 export interface StoredSyncEvent {
   /** The event's entity type, so a replayed receipt answers the same `syncId` the first did. */
-  entityType?: string;
+  entityType: string;
   batchId: string;
   status: SyncReceiptStatus;
   serverId: string | null;

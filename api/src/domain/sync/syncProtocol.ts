@@ -40,6 +40,7 @@ export {
   type LocalRecord,
   type SyncPullResult,
   type SyncPushBatch,
+  /** `syncId` may be an EXPLICIT `null`: the server id is an integer but not a SyncId (a run step). */
   type SyncReceipt,
 } from '@builderforce/local-first';
 

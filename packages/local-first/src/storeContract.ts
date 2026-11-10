@@ -11,6 +11,7 @@
 
 import type {
   EntityDestination,
+  EntityScope,
   JournalEvent,
   LocalEntityType,
   LocalRecord,
@@ -80,18 +81,21 @@ export interface LocalFirstTransaction {
   putMapping(mapping: ServerMappingInput): Promise<void>;
   mapping(entityType: LocalEntityType, clientEntityId: string, destination: EntityDestination): Promise<ServerMapping | undefined>;
   /**
-   * The reverse of `mapping`: the EARLIEST row (insertion order) of `entityType` whose server
-   * key is `serverId` — a SyncId (number or decimal text) matches `syncId`; any other text
-   * matches the legacy `serverId` text (a mirror row's UUID) or, for `kind:ref`, `externalRef`.
-   * `destination` given ⇒ only that destination's rows; omitted ⇒ any destination. Scans the
-   * mapping rows — bounded by the entity count.
+   * The reverse of `mapping`: the EARLIEST row (`compareMappingAge`: `mappedSeq`, then key — the
+   * same order in memory and after a reload) of `entityType` whose server key is `serverId`:
+   * - a SyncId (number or decimal text) matches `syncId`; failing any such row, a row with
+   *   `syncId: null` whose `serverId` text is that number (a run step's server row);
+   * - any other text matches the legacy `serverId` text (a mirror row's UUID) or, for `kind:ref`,
+   *   `externalRef`.
+   * `scope` (see `EntityScope`): a destination, or an account (`{ tenantId }`: its destinations plus
+   * unbound). Omitted ⇒ every destination — legacy, may cross tenants. Scans the mapping rows.
    */
-  mappingByServerId(entityType: LocalEntityType, serverId: string | number, destination?: EntityDestination): Promise<ServerMapping | undefined>;
+  mappingByServerId(entityType: LocalEntityType, serverId: string | number, scope?: EntityScope): Promise<ServerMapping | undefined>;
   /**
    * The EARLIEST row of `entityType` whose `externalRef` is `externalRef` (a tier ticket's
-   * `kind:ref`). `destination` omitted ⇒ any destination.
+   * `kind:ref`), inside `scope` (as `mappingByServerId`).
    */
-  mappingByExternalRef(entityType: LocalEntityType, externalRef: string, destination?: EntityDestination): Promise<ServerMapping | undefined>;
+  mappingByExternalRef(entityType: LocalEntityType, externalRef: string, scope?: EntityScope): Promise<ServerMapping | undefined>;
   putReceipt(receipt: SyncReceipt): Promise<void>;
   putConflict(conflict: SyncConflict): Promise<void>;
   conflicts(): Promise<SyncConflict[]>;

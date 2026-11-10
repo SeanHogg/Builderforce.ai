@@ -43,7 +43,12 @@ const KID = 'host-key-1';
 
 /** Minimal fake DB: answers the tenants.idpIssuer read; the segment table is
  *  stubbed so resolveSegment can lazy-create/read through it. */
-function makeDb(opts: { idpIssuer?: string | null; settings?: string | null } = {}): { db: Db; segmentRows: Map<string, unknown> } {
+function makeDb(opts: {
+  idpIssuer?: string | null;
+  settings?: string | null;
+  /** Ids of OTHER tenants that trust the same issuer (the shared-issuer read). */
+  otherTenantsTrustingIssuer?: number[];
+} = {}): { db: Db; segmentRows: Map<string, unknown> } {
   const segmentRows = new Map<string, unknown>();
   const db = {
     select: (fields?: unknown) => ({
@@ -54,6 +59,9 @@ function makeDb(opts: { idpIssuer?: string | null; settings?: string | null } = 
             // columns were projected: the idpIssuer read names `idpIssuer`.
             if (fields && typeof fields === 'object' && 'idpIssuer' in (fields as object)) {
               return opts.idpIssuer ? [{ idpIssuer: opts.idpIssuer, settings: opts.settings ?? null }] : [];
+            }
+            if (fields && typeof fields === 'object' && 'otherTenantId' in (fields as object)) {
+              return (opts.otherTenantsTrustingIssuer ?? []).map((otherTenantId) => ({ otherTenantId }));
             }
             // A segment read (findFederated re-read): the resolver only looks up
             // by (externalAccountId, externalCompanyId), which our where-cond
@@ -292,6 +300,29 @@ describe('verifyHostOidcToken — expiry and audience', () => {
     const { db } = makeDb({ idpIssuer: ISSUER, settings: JSON.stringify({ idpAudience: 'https://builderforce.ai' }) });
     expect((await verifyHostOidcToken(env, db, TENANT_ID, await mintToken({ aud: 'https://builderforce.ai' }))).ok).toBe(true);
     expect((await verifyHostOidcToken(env, db, TENANT_ID, await mintToken({ aud: ['x', 'https://builderforce.ai'] }))).ok).toBe(true);
+  });
+
+  it('regression: two tenants sharing an issuer with no idpAudience — the token cannot replay across workspaces', async () => {
+    // Tenant 7 and tenant 8 both trust ISSUER; the same token is presented to each
+    // by flipping x-builderforce-workspace. Neither may accept it unbound.
+    const token = await mintToken();
+    const forSeven = makeDb({ idpIssuer: ISSUER, otherTenantsTrustingIssuer: [8] });
+    const forEight = makeDb({ idpIssuer: ISSUER, otherTenantsTrustingIssuer: [7] });
+    const expected = {
+      ok: false,
+      error: 'This identity provider is trusted by more than one workspace; configure idpAudience for this workspace.',
+    };
+    expect(await verifyHostOidcToken(env, forSeven.db, 7, token)).toEqual(expected);
+    expect(await verifyHostOidcToken(env, forEight.db, 8, token)).toEqual(expected);
+  });
+
+  it('two tenants sharing an issuer each bind tokens by their own idpAudience', async () => {
+    const seven = makeDb({ idpIssuer: ISSUER, settings: JSON.stringify({ idpAudience: 'aud-7' }), otherTenantsTrustingIssuer: [8] });
+    const eight = makeDb({ idpIssuer: ISSUER, settings: JSON.stringify({ idpAudience: 'aud-8' }), otherTenantsTrustingIssuer: [7] });
+    const tokenForSeven = await mintToken({ aud: 'aud-7' });
+    expect((await verifyHostOidcToken(env, seven.db, 7, tokenForSeven)).ok).toBe(true);
+    expect(await verifyHostOidcToken(env, eight.db, 8, tokenForSeven))
+      .toEqual({ ok: false, error: 'Token was not issued for this audience.' });
   });
 
   it('fails closed when the tenant settings JSON is unreadable', async () => {

@@ -19,6 +19,11 @@ export default [
   // projects that carry the package transitively — with no entry at all — are
   // invisible. See scripts/pinnedDependencies.mjs.
   ['check:pinned-deps', '../../scripts/check-pinned-deps.mjs'],
+  // Also repo-level (typed-entity-ids §8): every UUID check and whole-string integer id parse goes through
+  // packages/local-first/src/entityId.ts; the non-id sites and the api's §7 UUID sweep are in
+  // scripts/entity-id-parsing.allowlist.mjs. Its matcher's own test runs next to it (plain node:test).
+  ['check:entity-id-parsing', '../../scripts/check-entity-id-parsing.mjs'],
+  ['check:entity-id-parsing-scan', '../../scripts/lib/entityIdParsing.test.mjs'],
   // Also repo-level: `packages/bfi-web` is a VENDORED wasm-pack build (PRD 34 §4). This
   // holds its bytes to the commit + hashes in its SOURCE.json — no Rust needed — so a
   // hand-edited or half-replaced engine fails here instead of in a browser.

@@ -204,12 +204,43 @@ export function cmdCannotRun(output: string): boolean {
  *
  * Rewrite only a redirection TARGET of exactly `nul` (any case), including cmd's `<nul`
  * input idiom: `foo.nul`, `nullable`, `> nul.txt` and a quoted `"…>nul"` (a nested
- * `cmd //c "dir >nul"`, where nul IS the device) are untouched.
+ * `cmd //c "dir >nul"`, where nul IS the device) are untouched. Only text OUTSIDE quotes is
+ * a redirection: a `2>nul` inside a quoted commit message, PR body or path is data, and is
+ * never rewritten.
  */
 const CMD_NULL_REDIRECT = /(\d?>>?|&>>?|<)\s*nul(?![\w.\/\\:"'-])/gi;
 
+/** Per character of `command`: true when bash reads it as QUOTED (or escaped) text, never as syntax. */
+function quotedMask(command: string): boolean[] {
+  const mask = new Array<boolean>(command.length).fill(false);
+  let state: "none" | "single" | "double" = "none";
+  for (let i = 0; i < command.length; i++) {
+    const c = command[i];
+    if (state === "single") {
+      mask[i] = true;
+      if (c === "'") state = "none";
+    } else if (state === "double") {
+      mask[i] = true;
+      if (c === "\\" && i + 1 < command.length) mask[++i] = true;
+      else if (c === '"') state = "none";
+    } else if (c === "\\" && i + 1 < command.length) {
+      mask[i] = true;
+      mask[++i] = true;
+    } else if (c === "'" || c === '"') {
+      mask[i] = true;
+      state = c === "'" ? "single" : "double";
+    }
+  }
+  return mask;
+}
+
 export function toBashNullDevice(command: string): string {
-  return command.replace(CMD_NULL_REDIRECT, "$1/dev/null");
+  if (!/nul/i.test(command)) return command;
+  const quoted = quotedMask(command);
+  return command.replace(CMD_NULL_REDIRECT, (match: string, op: string, offset: number) => {
+    for (let i = offset; i < offset + match.length; i++) if (quoted[i]) return match;
+    return `${op}/dev/null`;
+  });
 }
 
 /** Cached bash lookup — resolving it walks the filesystem, and the shell capability

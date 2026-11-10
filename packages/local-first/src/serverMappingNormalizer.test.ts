@@ -5,6 +5,9 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeServerMapping, UNBOUND_DESTINATION, type ServerMapping } from './records.js';
 import { createMemoryLocalFirstStore } from './store.js';
+import { encodeJournalFrame } from './journalCodec.js';
+import { decodeJournalFrames } from './journalReplay.js';
+import { decodeTransactionalSnapshot, encodeTransactionalSnapshot } from './transactionalRecord.js';
 
 const BOUND = { kind: 'bound' as const, tenantId: '7' };
 const T = '11111111-1111-4111-8111-111111111111';
@@ -81,5 +84,47 @@ describe('regression: stores normalise legacy mapping rows', () => {
       expect.objectContaining({ clientEntityId: T, syncId: 77, serverId: '77' }),
       expect.objectContaining({ clientEntityId: C, syncId: 78, serverId: '78' }),
     ]);
+  });
+});
+
+describe('regression: "earliest mapping" survives a restart (mappedSeq)', () => {
+  // Z sorts AFTER A by key, but is mapped FIRST: the canonical (key-sorted) encodings must not flip it.
+  const Z = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+  const A = '00000000-0000-4000-8000-00000000000a';
+
+  async function mappedZThenA() {
+    const store = createMemoryLocalFirstStore();
+    await store.transact((tx) => tx.putMapping({ destination: BOUND, entityType: 'chat', clientEntityId: Z, syncId: 61651, serverVersion: 1 }));
+    await store.transact((tx) => tx.putMapping({ destination: BOUND, entityType: 'chat', clientEntityId: A, syncId: 61651, serverVersion: 1 }));
+    return store;
+  }
+
+  it('in memory: the first mapped wins, and an update does not move it', async () => {
+    const store = await mappedZThenA();
+    await store.transact((tx) => tx.putMapping({ destination: BOUND, entityType: 'chat', clientEntityId: Z, syncId: 61651, serverVersion: 2 }));
+    expect(await store.read((tx) => tx.mappingByServerId('chat', 61651))).toMatchObject({ clientEntityId: Z });
+  });
+
+  it('after a reload through the journal frame and the transactional snapshot encodings', async () => {
+    const snapshot = await (await mappedZThenA()).export();
+    const viaJournal = decodeJournalFrames(encodeJournalFrame(snapshot)).at(-1)!;
+    const viaRecord = decodeTransactionalSnapshot(encodeTransactionalSnapshot(snapshot));
+    for (const reloaded of [viaJournal, viaRecord]) {
+      expect(reloaded.mappings.map((m) => m.clientEntityId)).toEqual([A, Z]); // the encodings sort by key
+      const store = createMemoryLocalFirstStore(reloaded);
+      expect(await store.read((tx) => tx.mappingByServerId('chat', 61651))).toMatchObject({ clientEntityId: Z });
+    }
+  });
+
+  it('legacy rows (no mappedSeq) are backfilled after every persisted one, in load order', async () => {
+    const legacy = { destination: BOUND, entityType: 'chat' as const, clientEntityId: A, serverId: '7', serverVersion: 1 };
+    const persisted = { destination: BOUND, entityType: 'chat' as const, clientEntityId: Z, syncId: 7, serverId: '7', serverVersion: 1, mappedSeq: 3 };
+    const store = createMemoryLocalFirstStore({ mappings: [legacy, persisted] as ServerMapping[] });
+    const { mappings } = await store.export();
+    expect(mappings.find((m) => m.clientEntityId === A)?.mappedSeq).toBe(4);
+    expect(await store.read((tx) => tx.mappingByServerId('chat', 7))).toMatchObject({ clientEntityId: Z });
+    // A new mapping after load continues the sequence.
+    await store.transact((tx) => tx.putMapping({ destination: BOUND, entityType: 'chat', clientEntityId: T, syncId: 8, serverVersion: 1 }));
+    expect((await store.read((tx) => tx.mapping('chat', T, BOUND)))?.mappedSeq).toBe(5);
   });
 });

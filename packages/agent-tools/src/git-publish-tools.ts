@@ -236,6 +236,28 @@ function publishToolResult(action: string, r: { ok: boolean; stdout?: string; ex
   return { data: { ok: r.ok, action, output: out.slice(0, 20_000), ...(r.error ? { error: r.error } : {}) } };
 }
 
+/**
+ * The refusal for a branch / base / reviewer the caller SUPPLIED that `safeGitArg` rejects,
+ * or null when each is absent ("" counts as absent) or valid. An invalid value must stop the
+ * tool: dropped to null it would silently retarget the script — commit onto the CURRENT
+ * branch, clean up HEAD, PR against the default base, skip the reviewer.
+ */
+function invalidRefResult(action: string, refs: Record<string, unknown>): ToolResult | null {
+  for (const [name, value] of Object.entries(refs)) {
+    for (const v of Array.isArray(value) ? value : [value]) {
+      if (typeof v !== "string" || v === "" || safeGitArg(v) !== null) continue;
+      return {
+        data: {
+          ok: false,
+          action,
+          error: `${name} '${v}' is not a valid name — use only letters, digits and . _ / @ - (no spaces, no shell characters, not starting with '-'), so nothing was run`,
+        },
+      };
+    }
+  }
+  return null;
+}
+
 /** Run a publish script through the shell capability, with the same not-a-repo remedy
  *  the read-only git tools give. */
 async function runPublishTool(
@@ -278,6 +300,8 @@ export const gitCommitTool: ToolDefinition = defineTool({
     if (paths.length === 0) {
       return Promise.resolve({ data: { ok: false, action: "commit", error: "paths is required — list the exact files you changed. Run git_status to see them. Do not pass '.' or '-A': the working tree may hold changes that are not yours." } });
     }
+    const badRef = invalidRefResult("commit", { branch: args.branch });
+    if (badRef) return Promise.resolve(badRef);
     const repo = typeof args.repo === "string" ? args.repo : undefined;
     return runPublishTool(
       "commit",
@@ -328,6 +352,8 @@ export const openPullRequestTool: ToolDefinition = defineTool({
     if (!title) return Promise.resolve({ data: { ok: false, action: "pull_request", error: "title is required" } });
     const repo = typeof args.repo === "string" ? args.repo : undefined;
     const reviewers = Array.isArray(args.reviewers) ? args.reviewers.filter((r): r is string => typeof r === "string") : undefined;
+    const badRef = invalidRefResult("pull_request", { base: args.base, reviewers });
+    if (badRef) return Promise.resolve(badRef);
     return runPublishTool(
       "pull_request",
       buildPullRequestCommand({ title, body, base: typeof args.base === "string" ? args.base : undefined, reviewers }),
@@ -360,6 +386,8 @@ export const gitCleanupMergedTool: ToolDefinition = defineTool({
   },
   requires: ["git.write"],
   execute: (args, ctx) => {
+    const badRef = invalidRefResult("cleanup", { branch: args.branch, baseBranch: args.baseBranch });
+    if (badRef) return Promise.resolve(badRef);
     const repo = typeof args.repo === "string" ? args.repo : undefined;
     return runPublishTool(
       "cleanup",

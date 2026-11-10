@@ -15,6 +15,11 @@
  * A host OIDC token (X-IdP-Token) is segment-bound: on the admin/segments routes
  * it may act only on its own resolved segment (authorizeSegmentTarget → 403);
  * a bfk_* key keeps tenant-wide segment management.
+ *
+ * By design, a segment-bound token whose verified claims EXPLICITLY grant
+ * `segments:manage` may PUT its own segment (change its plan/status/displayName)
+ * and DELETE (erase) its own segment — the host chose to delegate that by
+ * minting the scope claim. It can never touch another segment.
  */
 
 import { Hono } from 'hono';

@@ -20,7 +20,9 @@
  *     explicitly (rule + claimable set live in application/auth/hostOidc.ts);
  *   - the result is `boundToSegment: true`: the caller may act only on the ONE
  *     segment its verified claims resolve to (seam routes enforce this through
- *     `authorizeSegmentTarget`);
+ *     `authorizeSegmentTarget`). By design, a bound token that explicitly
+ *     claims `segments:manage` CAN change its own segment's plan/status and
+ *     erase it — the host delegated that by minting the claim;
  *   - `x-builderforce-workspace` is required and must be a positive safe integer
  *     (400). There is no default tenant — see parseWorkspaceHeader.
  *

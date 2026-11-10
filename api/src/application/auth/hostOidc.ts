@@ -30,6 +30,14 @@
  * then the whole trust). Configure it for every production host so a token the
  * host minted for another relying party cannot be replayed here.
  *
+ * Shared issuers: `tenants.idp_issuer` is not unique and the token's tenant is
+ * chosen by the caller's `x-builderforce-workspace` header, so if two tenants
+ * trust the same issuer, a token minted for one would replay against the other.
+ * Rule: when the tenant's issuer is ALSO trusted by any other tenant, an
+ * `idpAudience` MUST be configured for it (per-tenant audiences are what bind a
+ * token to one workspace); without one every token is rejected with a clear
+ * configuration error. A sole-trusting tenant may still leave audience unset.
+ *
  * Scopes (the rule `serviceTokenAuth.ts` enforces): a host token is an END-USER
  * token for ONE segment. It is granted `HOST_OIDC_BASELINE_SCOPES`
  * (`ingest:feedback` — the embedded feedback widget) by default. Any other seam
@@ -47,7 +55,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { parseJws, verifyJwsWithJwks } from '../../infrastructure/auth/jws';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import { tenants } from '../../infrastructure/database/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import type { TenantApiScope } from '../llm/tenantApiKeyService';
 
 /** JWKS cache TTL. An enterprise host rotates rarely; an unknown `kid` forces a
@@ -114,6 +122,16 @@ async function hostTrustOf(db: Db, tenantId: number): Promise<HostTrust | null |
   const audience = idpAudienceFrom(row.settings);
   if (audience === 'unreadable') return 'unreadable';
   return { issuer: row.idpIssuer, audience };
+}
+
+/** Does any OTHER tenant trust the same issuer? (`tenants.idp_issuer` is not unique.) */
+async function issuerSharedWithAnotherTenant(db: Db, tenantId: number, issuer: string): Promise<boolean> {
+  const [other] = await db
+    .select({ otherTenantId: tenants.id })
+    .from(tenants)
+    .where(and(eq(tenants.idpIssuer, issuer), ne(tenants.id, tenantId)))
+    .limit(1);
+  return Boolean(other);
 }
 
 function audienceMatches(aud: unknown, expected: string): boolean {

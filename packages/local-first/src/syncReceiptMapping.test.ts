@@ -106,3 +106,65 @@ describe('regression: the HTTP transport accepts numeric ids', () => {
     expect(receipt.serverId).toBe(MIRROR_UUID);
   });
 });
+
+describe('regression: an explicit syncId: null (a Brain run step) is never re-derived from serverId', () => {
+  const STEP = '33333333-3333-4333-8333-333333333333';
+
+  it('the transport keeps the explicit null', async () => {
+    const transport = createHttpSyncTransport({
+      baseUrl: 'https://builderforce.test',
+      fetch: async (): Promise<HttpSyncResponse> => ({
+        ok: true,
+        status: 200,
+        json: async () => [{ eventId: 'evt-1', status: 'accepted', receivedAt: AT, serverVersion: 1, syncId: null, serverId: '5' }],
+      }),
+    });
+    const [receipt] = await transport.push({ protocolVersion: 1, deviceId: 'd', destination: BOUND, events: [] } as unknown as SyncPushBatch);
+    expect(receipt).toMatchObject({ syncId: null, serverId: '5' });
+  });
+
+  it('a push receipt with syncId: null writes syncId null, serverId text kept', async () => {
+    const store = createMemoryLocalFirstStore();
+    await store.transact((tx) => tx.append({
+      idempotencyKey: `message:${STEP}`, clientEntityId: STEP, entityType: 'message', operation: 'import',
+      schemaVersion: 1, occurredAt: AT, dependsOn: [], destination: BOUND, payload: {},
+    }));
+    await coordinatorFor(store, (batch) => batch.events.map((e) => ({ eventId: e.eventId, status: 'accepted', syncId: null, serverId: '5', serverVersion: 1 }))).synchronize(BOUND);
+    expect(await store.read((tx) => tx.mapping('message', STEP, BOUND))).toMatchObject({ syncId: null, serverId: '5' });
+  });
+});
+
+describe('regression: pull — the mapping holds the server keys, the stored record does not', () => {
+  const PULLED = '44444444-4444-4444-8444-444444444444';
+  const STEP = '55555555-5555-4555-8555-555555555555';
+
+  const pulledRow = (id: string, entityType: string, keys: Record<string, unknown>) => ({
+    id, entityType, schemaVersion: 1, version: 3, destination: BOUND, occurredAt: AT, updatedAt: AT, payload: { title: 'x' }, ...keys,
+  });
+
+  it('syncId lands on the mapping and is stripped from the record', async () => {
+    const store = createMemoryLocalFirstStore();
+    const policy = createPlatformPolicy();
+    policy.set({ synchronize: true });
+    const coordinator = createSyncCoordinator({
+      store, policy, deviceId: 'd', lease: { run: (_owner, work) => work() },
+      transport: {
+        async push() { return []; },
+        async pull() {
+          return { records: [
+            pulledRow(PULLED, 'ticket', { syncId: 501, serverId: '501' }),
+            pulledRow(STEP, 'message', { syncId: null, serverId: '5' }),
+          ] as never[] };
+        },
+      },
+    });
+    await coordinator.synchronize(BOUND);
+    const record = await store.read((tx) => tx.get('ticket', PULLED));
+    expect(record).toBeDefined();
+    expect(record).not.toHaveProperty('syncId');
+    expect(record).not.toHaveProperty('serverId');
+    expect(await store.read((tx) => tx.mapping('ticket', PULLED, BOUND))).toMatchObject({ syncId: 501, serverId: '501', serverVersion: 3 });
+    // The pulled step's explicit null is kept: its id is not message 5.
+    expect(await store.read((tx) => tx.mapping('message', STEP, BOUND))).toMatchObject({ syncId: null, serverId: '5' });
+  });
+});

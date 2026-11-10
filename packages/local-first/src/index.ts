@@ -17,14 +17,16 @@ export {
   type SyncId,
 } from './entityId.js';
 export { entityIdResolver, type EntityIdResolver, type SyncEntityType } from './entityIdResolver.js';
-export { TERMINAL_EXECUTION_STATUSES, UNBOUND_DESTINATION, destinationKey, isTerminalExecutionStatus, normalizeServerMapping } from './records.js';
+export { TERMINAL_EXECUTION_STATUSES, UNBOUND_DESTINATION, compareMappingAge, destinationKey, inEntityScope, isTerminalExecutionStatus, normalizeServerMapping } from './records.js';
 export type {
   AuditFindingValue,
   ChatTicketLinkType,
   ChatTicketLinkValue,
   ChangeSetValue,
   DestinationBinding,
+  AccountScope,
   EntityDestination,
+  EntityScope,
   ExecutionStatus,
   ExecutionValue,
   JournalEvent,

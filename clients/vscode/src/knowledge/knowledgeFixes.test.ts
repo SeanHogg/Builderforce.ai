@@ -228,6 +228,44 @@ describe("applyKnipFix - apply to branch", () => {
     expect(t.log).toContain("switch:develop");
   });
 
+  const hashFails: Pick<FixPorts, "hashObjects"> = { hashObjects: async () => { throw new Error("hash-object failed"); } };
+  /** The rejection of an apply that must fail. */
+  const rejection = async (run: Promise<unknown>): Promise<Error & { cause?: unknown }> => {
+    try {
+      await run;
+    } catch (error) {
+      return error as Error & { cause?: unknown };
+    }
+    throw new Error("expected the fix to reject");
+  };
+
+  it("regression: a revert that fails still leaves the branch, keeps the snapshot error and attaches the revert error as cause", async () => {
+    const t = fake({ knip: knipEdits, branch: true, on: "develop" });
+    // The strays restore fine; only putting the finding's own file back fails.
+    const restore = t.ports.restore;
+    const ports: FixPorts = { ...withDelete(t), ...hashFails, restore: async (paths) => { if (paths.includes("a.ts")) throw new Error("checkout locked"); await restore(paths); } };
+    const error = await rejection(applyKnipFix(ports, "r", finding("unused-export", "a.ts"), () => "id"));
+    expect(error.message).toMatch(/reverting it failed \(checkout locked\).*hash-object failed/);
+    expect((error.cause as Error).message).toBe("checkout locked");
+    expect(t.log).toContain("switch:develop");
+    expect(t.log.some((l) => l.startsWith("delete:fix/"))).toBe(true);
+  });
+
+  it("regression: applied in place (no branch), the message does not claim a branch switch", async () => {
+    const t = fake({ knip: knipEdits });
+    const error = await rejection(applyKnipFix({ ...t.ports, ...hashFails }, "r", finding("unused-export", "a.ts"), () => "id"));
+    expect(error.message).toMatch(/so it was reverted: hash-object failed/);
+    expect(error.message).not.toMatch(/back on your branch/);
+    expect((error.cause as Error).message).toBe("hash-object failed");
+  });
+
+  it("regression: when the switch back fails, the message says the person is still on the fix branch", async () => {
+    const t = fake({ knip: knipEdits, branch: true, on: "develop", switchFails: true });
+    const error = await rejection(applyKnipFix({ ...withDelete(t), ...hashFails }, "r", finding("unused-export", "a.ts"), () => "id"));
+    expect(error.message).toMatch(/still on fix\/unused-export-a-/);
+    expect(t.log.some((l) => l.startsWith("delete:"))).toBe(false);
+  });
+
   it("names branches safely, apart per finding and per moment", () => {
     const now = new Date("2026-11-06T10:20:30Z");
     const f1 = { id: "one", kind: "unused-file" }, f2 = { id: "two", kind: "unused-file" };

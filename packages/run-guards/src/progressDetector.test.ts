@@ -3,6 +3,7 @@ import { ProgressDetector, type ProgressAction } from "./progressDetector.js";
 import { NO_PROGRESS_TURNS } from "./noProgress.js";
 import { REVISIT_HARD_AT } from "./visitTally.js";
 import { FAILURE_HARD_AT } from "./failureTally.js";
+import { MAX_REVERIFY_PATHS } from "./reverifyTracker.js";
 
 const READS = new Set(["read_file", "search_code"]);
 const ports = { isReadOnly: (tool: string) => READS.has(tool) };
@@ -132,7 +133,8 @@ describe("ProgressDetector", () => {
     for (let i = 0; i < 600; i++) d.observe("edit_file", { path: `src/f${i}.ts`, old_string: "x", new_string: "y" }, okData);
     d.endTurn();
     const written = d.snapshot().writtenPaths ?? [];
-    expect(written.length).toBe(500);
+    expect(written.length).toBe(MAX_REVERIFY_PATHS);
+    expect(MAX_REVERIFY_PATHS).toBe(200);
     expect(written[written.length - 1]).toBe("src/f599.ts");
     expect(written).not.toContain("src/f0.ts");
   });

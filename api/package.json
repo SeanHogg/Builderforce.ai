@@ -15,6 +15,7 @@
     "type-check": "tsc --noEmit",
     "check:source-package-graph": "node ../scripts/check-source-package-graph.mjs",
     "check:single-tool-classifier": "node ../scripts/check-single-tool-classifier.mjs",
+    "check:entity-id-parsing": "node ../scripts/check-entity-id-parsing.mjs",
     "check:schema": "node scripts/check-schema-drift.mjs",
     "check:db-access": "node scripts/check-db-access.mjs",
     "check:sites-worker-graph": "node scripts/check-sites-worker-graph.mjs",

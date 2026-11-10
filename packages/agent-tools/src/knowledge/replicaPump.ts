@@ -112,6 +112,8 @@ export interface PumpArgs {
     maxPackBytes?: number;
     /** Names a multi-part pack. */
     newSyncId?(): string;
+    /** Whether this host still holds the root's lock (its last stamp is fresh): asked before each send; false stops the pump. */
+    lockHeld?(): boolean;
     /** Injected for tests. */
     sleep?(ms: number, signal: AbortSignal): Promise<void>;
     now?(): number;
@@ -308,6 +310,8 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
                 for (let i = 0; i < parts.length; i++) {
                     state.parts = { sent: i, total: parts.length };
                     await emit();
+                    // A stalled host whose lock may already be another's sends nothing more: the other host pumps this queue now.
+                    if (args.lockHeld && !args.lockHeld()) throw new Stop();
                     ack = await guarded.sync(rootId, { bytes: parts[i]!, ...(syncId ? { syncId, part: i, parts: parts.length } : {}) });
                 }
                 state.parts = { sent: parts.length, total: parts.length };

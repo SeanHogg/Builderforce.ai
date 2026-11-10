@@ -164,8 +164,10 @@ function readReceipt(value: unknown, url: string): SyncReceipt {
   // The receipt keeps what the wire said: `syncId` (a number or decimal text) and `serverId` (text,
   // or a number — which used to be dropped silently, so the device never learned the entity was
   // imported). The coordinator reads `syncId ?? serverId` through `parseSyncId`.
+  // An EXPLICIT null is kept: the server is saying `serverId` is not a SyncId (a run step).
   const syncId = parseSyncId(row.syncId);
-  if (syncId !== null) receipt.syncId = syncId;
+  if (row.syncId === null) receipt.syncId = null;
+  else if (syncId !== null) receipt.syncId = syncId;
   if (typeof row.serverId === 'string' && row.serverId !== '') receipt.serverId = row.serverId;
   else {
     const numeric = parseSyncId(row.serverId);

@@ -6,6 +6,7 @@
  * the shared helpers that fold lives on.
  */
 
+import { parseSyncId } from '@builderforce/local-first';
 import { normalizeEvidencePath, createEvidenceLedger, type EvidenceLedger } from '@builderforce/run-guards';
 import { isFailedToolResult, type BrainTraceEvent } from '../brainTriage';
 import { nowIso, nowMs } from '../runStore/runCells';
@@ -68,8 +69,8 @@ export function reviewedThisRun(trace: readonly BrainTraceEvent[]): Set<number> 
   const ids = new Set<number>();
   for (const ev of trace) {
     if (ev.category !== 'tool' || ev.label !== REVIEW_RECORD_TOOL || ev.isError || isFailedToolResult(ev.result)) continue;
-    const id = Number((ev.args as { taskId?: unknown } | undefined)?.taskId);
-    if (Number.isInteger(id)) ids.add(id);
+    const id = parseSyncId((ev.args as { taskId?: unknown } | undefined)?.taskId);
+    if (id !== null) ids.add(id);
   }
   return ids;
 }

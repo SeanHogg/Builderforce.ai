@@ -98,6 +98,7 @@ import { createModelProvisioner, hostModelProvisioner } from "./hostBfi/provisio
 import { provisionProgressReporter } from "./hostBfi/provisionProgress";
 import { hostPageEngines } from "./pageEngineBridge";
 import { killAllJobs } from "./localShellJobs";
+import { parseSyncId } from "@builderforce/local-first";
 
 /** Pull a numeric Brain chat id out of a Sessions tree item or a raw id argument. */
 /**
@@ -112,7 +113,7 @@ import { killAllJobs } from "./localShellJobs";
 function chatIdOf(item: bfApi.BfBrainChat | number | string | SessionTreeNode | undefined): number | undefined {
   if (item == null) return undefined;
   if (typeof item === "number") return item;
-  if (typeof item === "string") return Number(item) || undefined;
+  if (typeof item === "string") return parseSyncId(item) ?? undefined;
   const fromNode = chatOfSessionNode(item);
   if (fromNode) return fromNode.id;
   return typeof (item as bfApi.BfBrainChat).id === "number" ? (item as bfApi.BfBrainChat).id : undefined;

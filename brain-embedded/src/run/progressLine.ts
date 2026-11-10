@@ -11,6 +11,8 @@
  * records is the only input.
  */
 
+import { isTestPath } from '@builderforce/run-guards';
+
 /** The trace-event slice this module reads — structural, so no runtime import of the
  *  triage module (and its dependency graph) is needed; `BrainTraceEvent` satisfies it. */
 export interface ProgressTraceEvent {
@@ -63,12 +65,6 @@ function isGlobalTypecheck(label: string, args: unknown): boolean {
 function isTestRunCall(label: string, args: unknown): boolean {
   const text = `${label} ${JSON.stringify(args ?? {})}`;
   return /vitest|jest|mocha|\.test\.|\.spec\.|\btest\b|\btests\b/i.test(text) && !/tsc|typecheck|type-check/i.test(text);
-}
-
-/** A test artifact's own path (`.test.`/`.spec.`/`__tests__/`), never a source path. */
-function isTestPath(path: string): boolean {
-  const p = path.replace(/\\/g, '/');
-  return /\.(test|spec)\.[^/]+$/.test(p) || /\/__tests__\//.test(p);
 }
 
 /** The basename without extension — what a check's output mentions for a file. */

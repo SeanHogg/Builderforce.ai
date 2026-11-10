@@ -54,6 +54,7 @@ describe('withFailedAccounts', () => {
     expect(out.name).toBe('BrainRequestError');
     expect((out as unknown as { retryAfterMs: number }).retryAfterMs).toBe(1234);
     expect((out as { cause?: unknown }).cause).toBe(original);
+    expect(out.stack?.split('\n')[0]).toBe(`BrainRequestError: ${out.message}`);
     // The original is untouched.
     expect(original.message).toBe('no provider is connected');
   });

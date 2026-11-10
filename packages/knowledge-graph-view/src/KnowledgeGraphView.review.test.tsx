@@ -14,6 +14,8 @@ vi.mock('./scene/GraphScene', () => ({ default: () => null }));
 interface ScriptOptions {
   estimate?: ReviewEstimate;
   unjudged?: number;
+  /** No graph yet: the view offers Review a folder, whose plan opens the Reviews panel by itself. */
+  empty?: boolean;
 }
 
 /** A review the test steps through: plan → (Confirm) → progress → waits for `finish()` or Stop → done. */
@@ -37,43 +39,55 @@ function scripted(opts: ScriptOptions = {}) {
       yield { type: 'done', rootId: plan.rootId, report: { ...FIXTURE_REPORT, unjudged: opts.unjudged ?? 0 } };
     })();
   };
-  const source = Object.assign(fixtureSource([docsFixture()]), { review, subscribeLive });
+  const source = Object.assign(fixtureSource(opts.empty ? [] : [docsFixture()]), { review, subscribeLive });
   return { source, run, subscribeLive, unsubscribe };
 }
 
+/**
+ * The plan the person reads before anything is spent: Review a folder plans and the Reviews panel opens by itself on it.
+ * (The panel's own Start review, with nothing planned, counts and starts in one press — `startReview` below.)
+ */
+async function planReview(source: ReturnType<typeof scripted>['source']) {
+  render(<div style={{ height: 600 }}><KnowledgeGraphView source={source} /></div>);
+  fireEvent.click(await screen.findByRole('button', { name: L.reviewFolder }));
+  await screen.findByTestId('kg-review-start');
+}
+
+/** The review action's button opens the Reviews panel (nothing is counted on open); Start review counts and starts in one press. */
 async function startReview(source: ReturnType<typeof scripted>['source']) {
   render(<div style={{ height: 600 }}><KnowledgeGraphView source={source} /></div>);
   await openList({ screen, fireEvent });
-  await openReviews({ screen, fireEvent }); // the review action's button opens the Reviews panel, which counts the files at once
-  await screen.findByTestId('kg-review-start');
+  await openReviews({ screen, fireEvent });
+  await screen.findByTestId('kg-review-idle');
+  fireEvent.click(await screen.findByTestId('kg-footer-action'));
 }
 
 describe('review confirm chip', () => {
   it('shows ≈ calls and ≈ cost, and no pending note, when the host priced the pass', async () => {
-    const { source } = scripted({ estimate: { modelCalls: 4, costUsd: 0.08 } });
-    await startReview(source);
+    const { source } = scripted({ estimate: { modelCalls: 4, costUsd: 0.08 }, empty: true });
+    await planReview(source);
     expect(await screen.findByText(/^≈ 4 model calls · ≈ .*0[.,]08/)).toBeTruthy();
     expect(screen.queryByText(L.reviewPlanCostPending)).toBeNull();
   });
 
   it('shows ≈ calls and the localized "cost shown after routing" note when the host did not price the pass', async () => {
-    const { source } = scripted({ estimate: { modelCalls: 4 } });
-    await startReview(source);
+    const { source } = scripted({ estimate: { modelCalls: 4 }, empty: true });
+    await planReview(source);
     expect(await screen.findByText(/^≈ 4 model calls · /)).toBeTruthy();
     expect(screen.getByText(new RegExp(L.reviewPlanCostPending))).toBeTruthy();
   });
 
   it('shows ≈ calls and the local note, no price, when the pass runs on the person’s local model', async () => {
-    const { source } = scripted({ estimate: { modelCalls: 4, costUsd: 0, local: true } });
-    await startReview(source);
+    const { source } = scripted({ estimate: { modelCalls: 4, costUsd: 0, local: true }, empty: true });
+    await planReview(source);
     expect(await screen.findByText(/^≈ 4 model calls · /)).toBeTruthy();
     expect(screen.getByText(new RegExp(L.reviewPlanCostLocal))).toBeTruthy();
     expect(screen.queryByText(L.reviewPlanCostPending)).toBeNull();
   });
 
   it('shows what was counted as three tiles and offers what changed or everything again, with what changed chosen', async () => {
-    const { source } = scripted();
-    await startReview(source);
+    const { source } = scripted({ empty: true });
+    await planReview(source);
     const r = L.surface.run.review;
     const start = await screen.findByTestId('kg-review-start');
     expect(within(start).getByText(r.tileUnchanged)).toBeTruthy();
@@ -90,7 +104,6 @@ describe('review run', () => {
   it('shows phase, n of m, a bar and the file while running, and Stop aborts the run', async () => {
     const { source, run } = scripted();
     await startReview(source);
-    fireEvent.click(await screen.findByTestId('kg-footer-action'));
 
     expect(await screen.findByText('Judging · 2 of 5')).toBeTruthy();
     expect(screen.getByRole('meter').getAttribute('aria-valuenow')).toBe('40');
@@ -107,7 +120,6 @@ describe('review run', () => {
   it('ends on Done with what was written, and offers no Continue when nothing is left', async () => {
     const { source, run } = scripted({ unjudged: 0 });
     await startReview(source);
-    fireEvent.click(await screen.findByTestId('kg-footer-action'));
     await screen.findByText('Judging · 2 of 5');
     run.finish();
     expect(await screen.findByText(L.reviewDoneTitle)).toBeTruthy();

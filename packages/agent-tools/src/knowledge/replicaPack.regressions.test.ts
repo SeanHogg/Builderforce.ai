@@ -58,6 +58,29 @@ describe('a root id ending in ":"', () => {
         const queue = createReplicaQueue(memoryReplicaPersistence(), { legacy: { read: async () => oldLog, remove: async () => undefined } });
         expect((await queue.snapshot()).keys).toEqual([fileLeafKey('docs/a.md', '')]);
     });
+
+    it('regression: an old stale mark without the `src:` prefix keeps its old reading (after the first `::`)', async () => {
+        const oldLog = JSON.stringify({ version: 1, ops: [
+            { op: 'markStale', rootId: 'r', sourceRef: 'r::docs/b.md', hash: 'h2' },
+            { op: 'markStale', rootId: 'r', sourceRef: 'no-separator', hash: 'h3' },
+        ] });
+        const queue = createReplicaQueue(memoryReplicaPersistence(), { legacy: { read: async () => oldLog, remove: async () => undefined } });
+        expect((await queue.snapshot()).keys).toEqual([fileLeafKey('docs/b.md', '')]);
+    });
+});
+
+describe('a pump whose host lost the lock', () => {
+    it('regression: sends nothing once the lock is no longer fresh (a stalled host), and keeps the work dirty', async () => {
+        const w = world();
+        await w.review(0, 3);
+        const srv = fakeServer();
+        const state = await pumpReplica({
+            queue: w.queue, local: w.local, client: srv.client, signal: new AbortController().signal, rootId: ROOT,
+            sources: async () => w.sources, projectId: 1, lockHeld: () => false,
+        });
+        expect(srv.syncs()).toHaveLength(0);
+        expect(state.dirty).toBeGreaterThan(0);
+    });
 });
 
 describe('halving retries', () => {
@@ -67,7 +90,9 @@ describe('halving retries', () => {
         const srv = fakeServer();
         let have = 0, leaves = 0;
         const reads = new Map<string, number>();
-        const local = { ...w.local, getExtracted: async (h: string) => { reads.set(h, (reads.get(h) ?? 0) + 1); return w.local.getExtracted!(h); } };
+        const local = w.local;
+        const read = local.getExtracted!.bind(local);
+        local.getExtracted = async (h: string) => { reads.set(h, (reads.get(h) ?? 0) + 1); return read(h); };
         const client: PackQueries = {
             syncHave: async (r, p) => { have += 1; return srv.client.syncHave(r, p); },
             syncLeaves: async (r, b) => { leaves += 1; return srv.client.syncLeaves(r, b); },

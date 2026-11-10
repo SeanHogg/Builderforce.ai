@@ -28,6 +28,7 @@ import { pathArgOf } from "./fingerprint.js";
 import { UNKEPT_READY_AT, UnkeptClaimTracker, type UnkeptClaimState } from "./readinessClaim.js";
 import { ReadinessAdvisory, type ReadinessAdvisoryState } from "./readinessAdvisory.js";
 import { BatchingNudge, type BatchingNudgeState, turnCallsOf } from "./batchingNudge.js";
+import { ReverifyTracker, type ReverifyState } from "./reverifyTracker.js";
 
 /** Ground-progress, signal-free turns in a row that clear the trip ladder: trips far apart are
  *  separate stuck stretches, and only back-to-back ones should end in a pause. */
@@ -62,7 +63,8 @@ export type ProgressAction =
    *  trip: it does not touch the ladder, the trip count or `tripsBySignal`. */
   | { kind: "advisory"; note: string };
 
-export interface ProgressDetectorState {
+/** `writtenPaths` / `readBackSinceWrite` are the `reverifying` tracker's ({@link ReverifyState}). */
+export interface ProgressDetectorState extends ReverifyState {
   visits?: VisitTallyState;
   failures?: FailureTallyState;
   edits?: EditRevertState;
@@ -83,30 +85,6 @@ export interface ProgressDetectorState {
   advisory?: ReadinessAdvisoryState;
   /** B4: the batching nudge's plain-JSON state (streak + one-shot fired flag). */
   batching?: BatchingNudgeState;
-  /** `reverifying`: paths this run has written (most recent last, at most {@link MAX_REVERIFY_PATHS}). */
-  writtenPaths?: string[];
-  /** `reverifying`: written paths already read back since their last write (bounded likewise). */
-  readBackSinceWrite?: string[];
-}
-
-/** Written / read-back paths remembered for `reverifying` — enough for a real run, small
- *  enough for durable state; beyond it the oldest are dropped. */
-const MAX_REVERIFY_PATHS = 500;
-
-/** Add `path` as the most recent member, dropping the oldest past {@link MAX_REVERIFY_PATHS}. */
-function addBounded(set: Set<string>, path: string): void {
-  set.delete(path);
-  set.add(path);
-  while (set.size > MAX_REVERIFY_PATHS) {
-    const oldest = set.values().next().value;
-    if (oldest === undefined) break;
-    set.delete(oldest);
-  }
-}
-
-/** A restored path list, trimmed to the newest {@link MAX_REVERIFY_PATHS}. */
-function restoreBounded(paths: readonly string[] | undefined): Set<string> {
-  return new Set((paths ?? []).slice(-MAX_REVERIFY_PATHS));
 }
 
 export interface ProgressDetectorPorts extends NoProgressPorts {
@@ -157,16 +135,8 @@ export class ProgressDetector {
    *  turns, never a trip and never touching UNKEPT_READY_AT or any other signal. */
   private readonly batching: BatchingNudge;
   private turnSignal: ProgressSignal | null = null;
-  /** Every path this run has written, so a repeat read-back of one is re-verification, not discovery. */
-  private writtenPaths: Set<string>;
-  /** Read targets on written paths already read back since that path's last write: the
-   *  first read-back after a write inspects the edit (it may have half-applied); only a
-   *  later look at the same unchanged bytes is re-verification. Cleared per path on write. */
-  private readBackSinceWrite: Set<string>;
-  /** Read-only targets seen this turn, to tell an all-written re-read turn from real work. */
-  private readThisTurn: string[];
-  /** Whether every read this turn was a repeat read-back of an unchanged written path. */
-  private allReadsRepeatReadBacks: boolean;
+  /** `reverifying`: written paths and their read-backs (persisted, bounded). */
+  private readonly reverify: ReverifyTracker;
   /** Every call of the current turn, for the B4 batching nudge's read-only count. */
   private turnCalls: Array<{ tool: string; args: unknown; result: ObservedResult }>;
 
@@ -183,10 +153,7 @@ export class ProgressDetector {
     this.steer = state.steer;
     this.readiness = new ReadinessAdvisory(state.advisory);
     this.batching = new BatchingNudge(state.batching);
-    this.writtenPaths = restoreBounded(state.writtenPaths);
-    this.readBackSinceWrite = restoreBounded(state.readBackSinceWrite);
-    this.readThisTurn = [];
-    this.allReadsRepeatReadBacks = true;
+    this.reverify = new ReverifyTracker(state);
     this.turnCalls = [];
   }
 
@@ -212,7 +179,7 @@ export class ProgressDetector {
       this.visits.markAllMayHaveChanged();
       this.edits.reset();
       // Any file may now differ, so no read-back is a look at unchanged bytes.
-      if (wrote) this.readBackSinceWrite.clear();
+      if (wrote) this.reverify.wroteAnything();
     } else if ((this.ports.isDelete ?? ((t) => t === "delete_file"))(tool)) {
       this.edits.record(tool, args, { ok, deleted: ok });
       this.forgetVisitsOf(pathArgOf(args));
@@ -222,21 +189,12 @@ export class ProgressDetector {
       if (ok) {
         const path = pathArgOf(args);
         this.forgetVisitsOf(path);
-        if (path) {
-          addBounded(this.writtenPaths, path);
-          this.readBackSinceWrite.delete(path);
-        }
+        if (path) this.reverify.wrote(path);
       }
     } else if (ok && this.ports.isReadOnly?.(tool, args)) {
       const target = visitTargetOf(args);
       if (target) {
-        this.readThisTurn.push(target);
-        if (this.writtenPaths.has(target)) {
-          if (!this.readBackSinceWrite.has(target)) this.allReadsRepeatReadBacks = false;
-          addBounded(this.readBackSinceWrite, target);
-        } else {
-          this.allReadsRepeatReadBacks = false;
-        }
+        this.reverify.read(target);
         const visit = this.visits.record(`${tool}:${target}`, args);
         if (visit.count >= REVISIT_HARD_AT && !visit.mayHaveChanged) this.raise({ kind: "circling_read", tool, target, count: visit.count });
       }
@@ -279,13 +237,10 @@ export class ProgressDetector {
     // convince itself the work landed. The FIRST read-back after a write is not part of
     // it: that inspects the edit, which may have half-applied (chat #70776). A turn that
     // also breaks new ground or writes is real work, not re-verification.
-    if (!this.turnSignal && this.readThisTurn.length > 0 && this.allReadsRepeatReadBacks) {
-      if (!this.progress.lastTurnGround && idle > 0) {
-        this.raise({ kind: "reverifying", count: this.readThisTurn.length });
-      }
+    const rereads = this.reverify.endTurn();
+    if (!this.turnSignal && rereads > 0 && !this.progress.lastTurnGround && idle > 0) {
+      this.raise({ kind: "reverifying", count: rereads });
     }
-    this.readThisTurn = [];
-    this.allReadsRepeatReadBacks = true;
     // New files do not excuse it: the run said it had what it needed.
     const unkeptBefore = this.claims.snapshot().unkept;
     const unkept = this.claims.endTurn();
@@ -377,8 +332,7 @@ export class ProgressDetector {
         const b = this.batching.snapshot();
         return b.streak || b.fired ? { batching: b } : {};
       })(),
-      ...(this.writtenPaths.size ? { writtenPaths: [...this.writtenPaths] } : {}),
-      ...(this.readBackSinceWrite.size ? { readBackSinceWrite: [...this.readBackSinceWrite] } : {}),
+      ...this.reverify.snapshot(),
     };
   }
 }

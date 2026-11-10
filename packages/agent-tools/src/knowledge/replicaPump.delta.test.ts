@@ -33,7 +33,7 @@ describe('delta, not replay', () => {
         expect(syncs[0]!.pack!.files).toHaveLength(10);
         expect(state.dirty).toBe(0);
         expect(srv.s.files.get(pathOf(41))).toBe(hashOf(41, 1));
-    });
+    }, 30_000); // a 300-file review: slow runners pass 10 s
 
     it('a removed file travels as a tombstone', async () => {
         const w = world();
@@ -96,7 +96,7 @@ describe('reconcile', () => {
         expect(sent.pack!.baseGeneration).toBe(1);
         expect(state.dirty).toBe(0);
         expect(srv.s.files.get(pathOf(105))).toBe(hashOf(105, 1));
-    });
+    }, 30_000); // two 400-file reviews: slow runners pass 10 s
 
     it('a 409 (another machine synced meanwhile) reconciles and sends only the difference', async () => {
         const w = world();

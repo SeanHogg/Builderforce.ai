@@ -106,6 +106,15 @@ export function withFailedAccounts(e: unknown, failed: readonly LocalFirstAttemp
   const out = Object.create(Object.getPrototypeOf(e) as object) as BrainRequestError;
   Object.defineProperties(out, Object.getOwnPropertyDescriptors(e));
   Object.defineProperty(out, 'message', { value: prefix + e.message, writable: true, configurable: true, enumerable: false });
+  // The stack's first line is `<name>: <message>` — re-headed so a logged stack reads the prefixed message too.
+  // (The header was captured in `super()`, before `name` was set, so it may read `Error: …`.)
+  if (typeof e.stack === 'string') {
+    const nl = e.stack.indexOf('\n');
+    const first = nl < 0 ? e.stack : e.stack.slice(0, nl);
+    const frames = nl < 0 ? '' : e.stack.slice(nl);
+    const stack = first.endsWith(e.message) ? `${e.name}: ${out.message}${frames}` : `${e.name}: ${out.message}\n${e.stack}`;
+    Object.defineProperty(out, 'stack', { value: stack, writable: true, configurable: true, enumerable: false });
+  }
   if (!Object.prototype.hasOwnProperty.call(e, 'cause')) {
     Object.defineProperty(out, 'cause', { value: e, writable: true, configurable: true, enumerable: false });
   }

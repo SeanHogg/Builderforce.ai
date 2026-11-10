@@ -11,7 +11,7 @@
  */
 
 import type * as vscode from "vscode";
-import type { EntityDestination } from "@builderforce/local-first";
+import type { AccountScope, EntityDestination } from "@builderforce/local-first";
 import type { ChatBindingPort, SpendSavingsSummary } from "@seanhogg/builderforce-brain-embedded";
 import { createBrainChat, listBrainChats, workspaceTenantId } from "./bfApi";
 import { getBaseUrl } from "./gateway";
@@ -32,6 +32,16 @@ export function chatAccountDestination(): EntityDestination | undefined {
     return undefined;
   }
   return { kind: "bound", platformInstance, tenantId: String(tenantId) };
+}
+
+/**
+ * The account scope an id lookup runs in (typed-entity-ids §3): the active workspace's tenant. A
+ * SyncId is only unique per tenant, so a tool or rail lookup never resolves another account's
+ * entity. Undefined when signed out (the lookup then reads every destination — the legacy scan).
+ */
+export function activeEntityScope(): AccountScope | undefined {
+  const tenantId = workspaceTenantId();
+  return tenantId === undefined ? undefined : { tenantId: String(tenantId) };
 }
 
 /** A bind is a connected feature; a policy that cannot be read is a refusal. */

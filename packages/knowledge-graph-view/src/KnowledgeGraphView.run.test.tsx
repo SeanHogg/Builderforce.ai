@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** The Reviews panel from the view (PRD 41 A8): the review action's button and chip (ask-bar row) open it; it counts at once; closing it cancels a plan but never stops a run. */
+/** The Reviews panel from the view (PRD 41 A8): the review action's button and chip (ask-bar row) open it; it counts nothing until Start review; closing it cancels a plan but never stops a run. */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { KnowledgeGraphView } from './KnowledgeGraphView';
@@ -14,7 +14,7 @@ vi.mock('./scene/GraphScene', () => ({ default: () => null }));
 afterEach(cleanup);
 
 /** A review that plans, waits for the answer, reports one progress and then waits for Stop. */
-function runSource(withRuns = true) {
+function runSource(withRuns = true, graphs = [docsFixture()]) {
     const listeners = new Set<(run: StoredReviewRun) => void>();
     const runs: ReviewRunsPort = {
         subscribe: (cb) => { listeners.add(cb); return () => { listeners.delete(cb); }; },
@@ -32,7 +32,7 @@ function runSource(withRuns = true) {
         yield { type: 'progress', progress: { phase: 'extract', done: 1, total: 4, path: 'lease.md' } };
         await new Promise<void>((resolve) => ctl.signal.addEventListener('abort', () => resolve()));
     })();
-    const source = Object.assign(fixtureSource([docsFixture()]), { review }, withRuns ? { runs } : {});
+    const source = Object.assign(fixtureSource(graphs), { review }, withRuns ? { runs } : {});
     return { source, answers, push: (run: StoredReviewRun) => act(() => listeners.forEach((l) => l(run))) };
 }
 
@@ -45,36 +45,40 @@ async function mount(source: ReturnType<typeof runSource>['source']) {
     await openList({ screen, fireEvent });
 }
 
-/** The review action's button → the plan is ready → Start review: the review is running. */
+/** The review action's button → nothing planned → Start review counts and starts in one press: the review is running. */
 async function reviewRunning(source: ReturnType<typeof runSource>['source']) {
     await mount(source);
     await openReviews({ screen, fireEvent });
-    await screen.findByTestId('kg-review-start');
+    await screen.findByTestId('kg-review-idle');
     fireEvent.click(screen.getByTestId('kg-footer-action'));
     await waitFor(() => expect(chip().getAttribute('data-kind')).toBe('running'));
 }
 
 describe('the Reviews panel from the strip', () => {
-    it('opens from the action button as a slide-out and not a modal, and counts the files at once', async () => {
-        const { source } = runSource();
+    it('opens from the action button as a slide-out and not a modal, and counts nothing until Start review', async () => {
+        const { source, answers } = runSource();
         await mount(source);
         expect(drawer()).toBeNull();
 
         await openReviews({ screen, fireEvent });
         const open = await screen.findByRole('dialog', { name: 'docs' });
         expect(open.getAttribute('aria-modal')).toBe('false');
-        expect(await within(open).findByTestId('kg-review-start')).toBeTruthy();
+        // Opening does not plan (RunPanel.tsx): planning walks and hashes every file, which opening the panel did not ask for.
+        expect(await within(open).findByTestId('kg-review-idle')).toBeTruthy();
+        expect(within(open).queryByTestId('kg-review-planning')).toBeNull();
+        expect(answers).toEqual([]);
     });
 
     it('cancels the plan when the panel is closed on it, and writes nothing', async () => {
-        const { source, answers } = runSource();
-        await mount(source);
-        await openReviews({ screen, fireEvent });
-        const open = await screen.findByRole('dialog', { name: 'docs' });
-        await within(open).findByTestId('kg-review-start');
+        // A plan the person reads first comes from Review a folder (the panel opens by itself on it); the panel's own Start counts and starts in one press.
+        const { source, answers } = runSource(true, []);
+        render(<div style={{ height: 600 }}><KnowledgeGraphView source={source} /></div>);
+        fireEvent.click(await screen.findByRole('button', { name: L.reviewFolder }));
+        await screen.findByTestId('kg-review-start');
+        const open = screen.getByRole('dialog');
         fireEvent.click(within(open).getByRole('button', { name: L.close }));
         await waitFor(() => expect(answers).toEqual([false]));
-        expect(drawer()).toBeNull();
+        expect(open.isConnected).toBe(false);
     });
 
     it('shows the run the host reports, and only this folder\'s', async () => {

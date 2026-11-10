@@ -196,4 +196,19 @@ describe("toBashNullDevice", () => {
       "grep -F '2>nul' notes.md",
     ]) expect(toBashNullDevice(cmd)).toBe(cmd);
   });
+
+  it("regression: never rewrites a 2>nul inside quoted text (commit messages, PR bodies, paths)", () => {
+    for (const cmd of [
+      "git commit -m 'fix: silence 2>nul in the script'",
+      'git commit -m "fix: silence 2> nul in the script"',
+      "gh pr create --title 't' --body 'it'\\''s about >nul and <nul'",
+      'echo "a \\" 2>nul b"',
+      "echo \\>nul",
+    ]) expect(toBashNullDevice(cmd)).toBe(cmd);
+  });
+
+  it("still rewrites the unquoted redirect beside quoted text", () => {
+    expect(toBashNullDevice("git commit -m 'about 2>nul' 2>nul")).toBe("git commit -m 'about 2>nul' 2>/dev/null");
+    expect(toBashNullDevice("findstr \"x\" a.txt >nul 2>&1")).toBe("findstr \"x\" a.txt >/dev/null 2>&1");
+  });
 });

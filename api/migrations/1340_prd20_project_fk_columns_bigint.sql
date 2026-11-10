@@ -35,7 +35,9 @@
 -- (and in front of) production traffic; a timeout rolls the whole file back — re-run it.
 -- The old Worker keeps working against the result: int4 → int8 widening is additive.
 SET LOCAL lock_timeout = '5s';
-SET LOCAL statement_timeout = '15min';
+-- The whole DO block is ONE statement, so no statement cap: the rewrites take as long
+-- as they take. lock_timeout is what protects traffic.
+SET LOCAL statement_timeout = 0;
 
 DO $$
 DECLARE

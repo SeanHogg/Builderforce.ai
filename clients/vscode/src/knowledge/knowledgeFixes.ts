@@ -210,10 +210,27 @@ async function fix(ports: FixPorts, wanted: ReadonlySet<string>, fixTypes: reado
       if (!snapshot && ports.headSha && ports.hashObjects) throw new Error(fixText.headUnreadable());
       fixId = snapshot ? record(snapshot) : undefined;
     } catch (error) {
-      // No undo record: never leave the fix applied on its branch. Revert it, go back, drop the branch.
-      await revertPaths(ports, changed);
-      await abandonBranch();
-      throw new Error(fixText.notRecorded(error instanceof Error ? error.message : String(error)));
+      // No undo record: never leave the fix applied on its branch. Revert it, then ALWAYS try to
+      // go back and drop the branch; the message says what actually happened.
+      const why = error instanceof Error ? error.message : String(error);
+      let revertError: unknown;
+      let back = false;
+      try {
+        await revertPaths(ports, changed);
+      } catch (failure) {
+        revertError = failure;
+      } finally {
+        back = await abandonBranch().catch(() => false);
+      }
+      const message = revertError !== undefined
+        ? fixText.notRecordedRevertFailed(why, revertError instanceof Error ? revertError.message : String(revertError))
+        : !branch
+          ? fixText.notRecordedReverted(why)
+          : back
+            ? fixText.notRecorded(why)
+            : fixText.notRecordedStillOnBranch(branch, why);
+      // The snapshot's failure is the message; the revert's (when it failed too) rides as the cause.
+      throw Object.assign(new Error(message), { cause: revertError ?? error });
     }
   }
   return { ...(branch ? { branch } : {}), ...(branchError ? { branchError } : {}), ...(fixId ? { fixId } : {}), changed, ...(conflicts.length > 0 ? { conflicts } : {}), note: fixText.fixNote() };
