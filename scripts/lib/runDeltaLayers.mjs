@@ -11,6 +11,8 @@
  * import graph; this module only judges a graph, so the test feeds it fixtures.
  */
 
+import { isTestFile } from './moduleImports.mjs';
+
 /** The package's source root, repo-relative. */
 export const RUN_DELTA_SRC = 'packages/run-delta/src';
 
@@ -31,9 +33,9 @@ function layerOf(rel) {
   return slash < 0 ? null : rest.slice(0, slash);
 }
 
-/** A test file is not shipped code: it may import both sides. */
+/** A test file (the ONE rule, moduleImports' `isTestFile`) or a fixture is not shipped code: it may import both sides. */
 export function isTestPath(rel) {
-  return /\.(test|spec)\.[cm]?[jt]sx?$/.test(rel) || rel.split('/').includes('__fixtures__');
+  return isTestFile(rel) || rel.split('/').includes('__fixtures__');
 }
 
 export const isVerdictFile = (rel) => VERDICT_LAYERS.includes(layerOf(rel) ?? '') && !isTestPath(rel);

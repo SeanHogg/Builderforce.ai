@@ -1553,6 +1553,10 @@ GBM, naive Bayes and k-means. Its task catalog in `ml/tasks` already includes `r
   and difficulty-head scoring. The engine's `LogisticModel` is a Float32 softmax that fits in
   batches (gradient descent or IRLS) and remains the only trainer. The engine's training kernels
   keep their own sigmoid (`training/cpu_ops.ts`).
+- **Two mulberry32 copies stay on purpose; they are not `stats` PRNG copies to migrate.**
+  `packages/knowledge-graph-view/src/perf/syntheticGraph.ts` (test-only) keeps it because the golden SYNTH
+  counts depend on its exact stream. `packages/voice-provenance/src/watermark.ts` keeps it because detecting
+  watermarks that already exist needs the exact chips they were made with.
 - Part D's *models* are registered as `ml/tasks` entries (`run_risk`, `case_mix`,
   `finding_rank`, `check_scheduler`). The run anomaly score extends the existing `run_anomaly`.
 
