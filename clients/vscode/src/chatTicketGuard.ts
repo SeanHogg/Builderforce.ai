@@ -35,6 +35,8 @@ export const TICKET_STATE_WRITES: Readonly<Record<string, (args: Args) => unknow
   builtin_tasks_delete: (args) => args.id,
   // A `complete` verdict closes the reviewed ticket; a `gaps` verdict files new work and closes nothing.
   builtin_reviews_record: (args) => (args.verdict === "complete" ? args.taskId : undefined),
+  // A sign-off verdict moves the ticket through its review lanes.
+  builtin_kanban_signoff: (args) => args.taskId,
   "ticket-update": (args) => args.id,
   "ticket-move": (args) => args.id,
   "ticket-archive": (args) => args.id,
@@ -89,6 +91,8 @@ export function guardChatTicketWrites(
   scope: ChatTicketScope,
   serverRefs: ServerLinkedRefs,
   ticketServerId?: TicketServerIdLookup,
+  /** Asked only when the guard would refuse: whether the person named this ticket (`ticketChatOwnership.ts`). */
+  personNamed?: (ticketId: string) => Promise<boolean>,
 ): readonly ToolDef[] {
   const chat = scope.current;
   if (!chat || (!chat.clientChatId && chat.serverChatId == null)) return tools;
@@ -117,7 +121,8 @@ export function guardChatTicketWrites(
         const raw = ticketOf(args);
         if (raw === undefined || raw === null || raw === "") return tool.execute(args, root, run);
         const ticketId = String(raw).trim().replace(/^#/, "");
-        return (await linked(ticketId)) ? tool.execute(args, root, run) : refusal(ticketId, chat);
+        if (await linked(ticketId)) return tool.execute(args, root, run);
+        return (await personNamed?.(ticketId).catch(() => false)) ? tool.execute(args, root, run) : refusal(ticketId, chat);
       },
     };
   });

@@ -20,6 +20,10 @@ export const MAX_LIVE_CHILDREN = 12;
 /** How deep spawning nests — the cap the cloud's children share. */
 export { MAX_CHILD_DEPTH };
 
+/** The handle a child is minted under (`a${n}`, below) — ONE shape, so other tools can recognise one. */
+const subAgentHandle = (n: number): string => `a${n}`;
+export const isSubAgentHandle = (id: string): boolean => /^a\d+$/.test(id);
+
 export type ChildState = "running" | "done" | "failed" | "stopped";
 
 /** What a settled child tells its owner. */
@@ -109,7 +113,7 @@ export function createChildRuns(): ChildRuns {
       const n = (counters.get(input.rootChatId) ?? 0) + 1;
       counters.set(input.rootChatId, n);
       const { ticket, ...rest } = input;
-      const lineage: RunLineage = { ...rest, handle: `a${n}` };
+      const lineage: RunLineage = { ...rest, handle: subAgentHandle(n) };
       const key = nextKey--;
       records.set(key, { key, lineage, ...(ticket ? { ticket } : {}), state: "running" });
       return { key, lineage };

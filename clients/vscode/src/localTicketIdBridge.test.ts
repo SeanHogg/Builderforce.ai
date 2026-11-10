@@ -63,6 +63,89 @@ describe("bridgeLocalTicketIds", () => {
   });
 });
 
+describe("bridgeLocalTicketIds — an unsynced ticket answers truthfully for the sync mode", () => {
+  it("regression: sync off says the ticket stays local, not to retry (chat #61651: 10 of 12 reviews_record failed on 'retry shortly')", async () => {
+    const seen = vi.fn(async () => "ok");
+    const lookup = vi.fn(async () => undefined);
+    const [tool] = bridgeLocalTicketIds([serverTool("builtin_reviews_record", seen)], lookup, { syncOn: () => false });
+    const out = JSON.parse(await tool!.execute({ taskId: LOCAL, verdict: "complete" }, "")) as { ok: boolean; retryable: boolean; error: string };
+    expect(out.ok).toBe(false);
+    expect(out.retryable).toBe(false);
+    expect(out.error).toContain("sync is off in this mode");
+    expect(out.error).toContain("retrying will not help");
+    expect(out.error).toContain("ticket-update");
+    expect(out.error).not.toContain("retry shortly");
+    expect(lookup).toHaveBeenCalledTimes(1);
+    expect(seen).not.toHaveBeenCalled();
+  });
+
+  it("sync off on another tool names the local ticket tools", async () => {
+    const [tool] = bridgeLocalTicketIds([serverTool("builtin_tasks_update", async () => "ok")], async () => undefined, { syncOn: () => false });
+    const out = JSON.parse(await tool!.execute({ id: LOCAL, status: "done" }, "")) as { retryable: boolean; error: string };
+    expect(out.retryable).toBe(false);
+    expect(out.error).toContain("ticket-update, ticket-move");
+  });
+
+  it("sync on waits for the receipt: a mapping that lands after 1 s goes through with the server id", async () => {
+    vi.useFakeTimers();
+    try {
+      const seen = vi.fn(async () => "ok");
+      let mapped: string | undefined;
+      setTimeout(() => { mapped = "88"; }, 1_000);
+      const [tool] = bridgeLocalTicketIds([serverTool("builtin_reviews_record", seen)], async () => mapped, { syncOn: () => true });
+      const pending = tool!.execute({ taskId: LOCAL, verdict: "complete" }, "");
+      await vi.advanceTimersByTimeAsync(1_500);
+      expect(await pending).toBe("ok");
+      expect(seen).toHaveBeenCalledWith({ taskId: 88, verdict: "complete" }, "", undefined);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("sync on: a Stop mid-wait returns the stopped result within one interval", async () => {
+    vi.useFakeTimers();
+    try {
+      const seen = vi.fn(async () => "ok");
+      const stop = new AbortController();
+      const [tool] = bridgeLocalTicketIds([serverTool("builtin_tasks_update", seen)], async () => undefined, { syncOn: () => true });
+      let settled = false;
+      const pending = tool!.execute({ id: LOCAL }, "", { signal: stop.signal }).finally(() => { settled = true; });
+      await vi.advanceTimersByTimeAsync(1_000);
+      stop.abort();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(settled).toBe(true);
+      expect(JSON.parse(await pending)).toEqual({ ok: false, aborted: true, error: "the run was stopped" });
+      expect(seen).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("sync on, never mapped: a non-retryable error after the wait, pointing at the local tools", async () => {
+    vi.useFakeTimers();
+    try {
+      const seen = vi.fn(async () => "ok");
+      const lookup = vi.fn(async () => undefined);
+      const [tool] = bridgeLocalTicketIds([serverTool("builtin_tasks_update", seen)], lookup, { syncOn: () => true });
+      let settled = false;
+      const pending = tool!.execute({ id: LOCAL }, "").finally(() => { settled = true; });
+      await vi.advanceTimersByTimeAsync(4_000);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1_500);
+      const out = JSON.parse(await pending) as { ok: boolean; retryable: boolean; error: string };
+      expect(out.ok).toBe(false);
+      expect(out.retryable).toBe(false);
+      expect(out.error).toContain("did not arrive within 5 s");
+      expect(out.error).toContain("ticket-update, ticket-move");
+      expect(out.error).not.toContain("retry shortly");
+      expect(lookup.mock.calls.length).toBeGreaterThan(10);
+      expect(seen).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("routeToLocalDomainTools — only implemented names are repointed", () => {
   it("leaves a catalog tool the classifier calls local but this host does not implement", () => {
     const memoryRecall = serverTool("memory-recall", async () => "server");

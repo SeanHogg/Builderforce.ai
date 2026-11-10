@@ -25,7 +25,9 @@ export { withPipefail } from "./shell-command-shape.js";
  * so this is found via git's own install rather than by hoping it is on `PATH`.
  *
  * Ordinary one-liners are untouched and keep running in the platform default shell,
- * so nothing that worked before changes.
+ * so nothing that worked before changes. The exception is syntax cmd.exe silently
+ * misreads rather than rejects: a POSIX `;` chain (chat #61651, `git status --short
+ * --branch; echo ---` ⇒ git exit 129 "unknown option `branch;'") goes to bash too.
  */
 
 /**
@@ -42,6 +44,18 @@ const POSIX_ONLY_CONTROL = [
 /** `$(…)` command substitution - POSIX, but Windows PowerShell's `$(…)` subexpression reads it too. */
 const COMMAND_SUBSTITUTION = /\$\((?!\()/;
 const POSIX_ONLY = [...POSIX_ONLY_CONTROL, COMMAND_SUBSTITUTION];
+
+/**
+ * Shell syntax cmd.exe does not read, matched against the QUOTE-BLANKED command (so `echo "a;b"` stays put).
+ * `;` as a command separator: cmd.exe chains with `&`, so `git status --short --branch; echo ---` reached git as
+ * the argument `--branch;` and exited 129 "unknown option `branch;'" (chat #61651) - output {@link cmdCannotRun}
+ * cannot recognise, so the bash retry never fired. An unspaced `;` counts only when the token holding it has no
+ * `=`, `\` or `:`: `set PATH=C:\a;%PATH%` and `x=a;b` are cmd's own list syntax and stay in cmd.
+ */
+const CMD_UNSUPPORTED = [
+  /;\s+\S|\s;\S/,                                          // `a; b` / `a ;b` command separator
+  /(?:^|\s)[^\s=\\:]*[^\s;=\\:];[A-Za-z][^\s=\\:]*(?=\s|$)/, // `git status;git log` / `cd x;ls`
+];
 
 /**
  * Coreutils that DO NOT EXIST as `cmd.exe` commands, so invoking one there fails with
@@ -151,6 +165,8 @@ function needsBashForPowerShell(command: string): boolean {
 export function needsPosixShell(command: string, shell: "cmd" | "powershell" = "cmd"): boolean {
   if (shell === "powershell") return needsBashForPowerShell(command);
   if (POSIX_ONLY.some((re) => re.test(command))) return true;
+  const bare = withoutQuoted(command);
+  if (CMD_UNSUPPORTED.some((re) => re.test(bare))) return true;
   return commandWords(command).some((w) => POSIX_UTILITIES.has(w));
 }
 

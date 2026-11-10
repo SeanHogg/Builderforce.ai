@@ -19,6 +19,7 @@ import type { ShellJobStart, ShellJobStatus } from "@builderforce/agent-tools";
 import { killProcessTree, spawnCommand } from "./processTree";
 import { forgetRunOutputs, retainOutput } from "./localShellOutputs";
 import { invalidateRunCache } from "./localShellCache";
+import { isSubAgentHandle } from "./childRuns";
 
 /** The run a job belongs to; `undefined` = a caller with no run (a hook, a test). */
 export type JobOwner = number | undefined;
@@ -84,7 +85,10 @@ const unknownJob = (id: string): ShellJobStatus => ({
   ok: false,
   id,
   status: "unknown",
-  error: `no background job "${id}" in this run (it may belong to another run, or to one that has ended)`,
+  // A sub-agent handle (`a14`) polled with command_status meant wait_agents (chat #61651). Jobs are `job-N`.
+  error: isSubAgentHandle(id)
+    ? `"${id}" is a sub-agent, not a background command — use wait_agents (or message_agent) for it`
+    : `no background job "${id}" in this run (it may belong to another run, or to one that has ended)`,
 });
 
 export function startJob(command: string, opts: StartJobOptions): ShellJobStart {

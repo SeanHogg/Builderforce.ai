@@ -13,12 +13,16 @@
 
 import { ASK_USER_TOOL_SPEC, type ParsedToolCall, type TurnContext } from '@builderforce/agent-loop';
 import type { ToolSchema } from '@builderforce/agent-tools';
-import { DEFAULT_TOOL_LIMIT, type PlatformTools, type PlatformToolResult } from '@builderforce/agent-run';
+import { DEFAULT_TOOL_LIMIT, isCappedToolRole, type PlatformTools, type PlatformToolResult } from '@builderforce/agent-run';
 import { offersHandOff } from '@builderforce/run-policy';
+import { toolNamesMentionedIn } from '@builderforce/agent-stall';
 import type { BrainToolSpec, ChatCompletionMessage } from '../streamChatCompletion';
 import { HAND_OFF_TOOL } from '../planHandoff';
 import { relevantTools } from '../selectTools';
-import { studioToolsIn } from '../localWorkspaceTools';
+import { localToolsIn, memoryToolsIn, studioToolsIn } from '../localWorkspaceTools';
+import { skillToolsIn } from '../skillLibraryTools';
+import { turnContextCarrier } from '../runStore/turnContext';
+import { userTextOf } from '../runStore/convoText';
 import { callPreflight } from '../runStore/callPreflight';
 import { callRunner, declineMalformedCall } from '../runStore/callRunner';
 import { callPostStep } from '../runStore/callPostStep';
@@ -46,7 +50,35 @@ function kernelCall(run: BrainRunContext, id: string, name: string, args: Record
   return { call: { id, name, args, raw, malformed: rawArguments !== undefined }, ctx: { step, messages: run.convo } as unknown as TurnContext<ChatCompletionMessage> };
 }
 
+/**
+ * The run's surface VOCABULARY its prompt does not name: the host's workspace, Studio, memory and skill tools (`runPreamble.ts` puts
+ * all of them in `alwaysAdvertised`) less any the system prompt or the turn block names. A tool the prompt names stays required on
+ * every turn; this vocabulary is required only on an uncapped turn (see {@link surfaceRequired}).
+ */
+export function unnamedVocabulary(run: Pick<BrainRunContext, 'c' | 'catalogToolNames' | 'systemPrompt'>): Set<string> {
+  const names = run.catalogToolNames;
+  // The turn block rides the latest user message when one carries it (`turnContext.ts`), else the system prompt already holds it.
+  const carrier = turnContextCarrier(run.c);
+  const named = new Set(toolNamesMentionedIn(carrier ? `${run.systemPrompt}\n\n${userTextOf(carrier)}` : run.systemPrompt));
+  return new Set([...localToolsIn(names), ...studioToolsIn(names), ...memoryToolsIn(names), ...skillToolsIn(names)].filter((n) => !named.has(n)));
+}
+
+/**
+ * The required set this turn's selection holds. A code or verify turn is capped (`@builderforce/agent-run` `roleCap.ts`): it requires
+ * what the prompt names, `ask_user` and `hand_off`, while its role set keeps the vocabulary a coder needs and the rest of the vocabulary
+ * competes on relevance (chat #61651: requiring all of it held every VSIX code turn at 54–57 tools). Every other turn keeps the whole
+ * `alwaysAdvertised` set, as it always has.
+ */
+export function surfaceRequired(run: Pick<BrainRunContext, 'alwaysAdvertised' | 'policy' | 'canAskUser'>, unnamed: () => ReadonlySet<string>): Set<string> {
+  const base = isCappedToolRole(run.policy.phase) ? run.alwaysAdvertised.filter((n) => !unnamed().has(n)) : run.alwaysAdvertised;
+  return new Set(offersHandOff(run.policy) && run.canAskUser ? [...base, HAND_OFF_TOOL] : base);
+}
+
 export function brainPlatformTools(run: BrainRunContext): BrainPlatform {
+  // Read once, at the first turn's selection: the prompt and the turn block are the run's own, and a later fold that restores the
+  // carrier must not change what the run counts as named.
+  let unnamed: Set<string> | undefined;
+  const vocabulary = (): Set<string> => (unnamed ??= unnamedVocabulary(run));
   const before = callPreflight(run);
   const dispatch = callRunner(run);
   const after = callPostStep(run);
@@ -80,9 +112,9 @@ export function brainPlatformTools(run: BrainRunContext): BrainPlatform {
         // The pins are the tools THIS run called (`callPostStep`): a tool reached through the router is the tool it reached, a fold does not
         // forget one, and an earlier run's calls pin nothing - the transcript the agent would read them off holds all three wrongly.
         // The ranking stays the Brain's own (`selectTools.ts`), not the shared scorer the cloud and the canvas keep, and the required tools are held to the cap as the Brain's loop always held them.
-        // A code or verify turn is capped to its role's tools plus what matches the request (`@builderforce/agent-run` `roleCap.ts`); a
-        // Studio keeps its build vocabulary through it.
-        return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT, capRequired: true, role: run.policy.phase, roleKeep: studioToolsIn(run.catalogToolNames), rank: (tools: readonly ToolSchema[], query: string) => relevantTools(tools as unknown as BrainToolSpec[], query) as unknown as ToolSchema[], pinned: [...run.usedTools], required: new Set(offersHandOff(run.policy) && run.canAskUser ? [...run.alwaysAdvertised, HAND_OFF_TOOL] : run.alwaysAdvertised) };
+        // A code or verify turn is capped to what the prompt names, its role's tools and what matches the request (`@builderforce/agent-run`
+        // `roleCap.ts`, {@link surfaceRequired}); a Studio keeps its build vocabulary through it. The router rides every trimmed turn (`brainTurnMenu.ts`).
+        return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT, capRequired: true, role: run.policy.phase, roleKeep: studioToolsIn(run.catalogToolNames), rank: (tools: readonly ToolSchema[], query: string) => relevantTools(tools as unknown as BrainToolSpec[], query) as unknown as ToolSchema[], pinned: [...run.usedTools], required: surfaceRequired(run, vocabulary) };
       },
       // ONE cap on a result: the Brain's own, applied inside `callRunner` (`trimToolResult`, by LINE, sized to the serving
       // model's window). The agent's per-tool cap would cut the already budgeted text a second time and drop its paging fields.

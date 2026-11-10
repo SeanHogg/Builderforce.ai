@@ -78,10 +78,7 @@ describe("the code/verify turn cap", () => {
 
   it.each(["code", "verify"] as const)("a %s turn always keeps the delivery and coordination tools the catalog holds", (role) => {
     const names = selectFor(role, "fix the null check in the parser", { required: [] });
-    for (const must of [
-      "git_commit", "git_push", "open_pull_request", "output_filter", "wait_agents", "stop_agent", "message_agent",
-      "update_task_state", "hand_off", "builtin_reviews_record", "builtin_tasks_update",
-    ]) {
+    for (const must of ["git_commit", "git_push", "output_filter", "wait_agents", "hand_off"]) {
       expect(names).toContain(must);
     }
     expect(ROLE_GUARANTEED_TOOLS.every((n) => roleToolNames(role).includes(n))).toBe(true);
@@ -93,9 +90,9 @@ describe("the code/verify turn cap", () => {
     expect(sel.required).not.toContain("hand_off");
   });
 
-  it("keeps ticket and platform tools out of a code turn unless the ask is about tickets (the ticket update is guaranteed)", () => {
+  it("keeps ticket and platform tools out of a code turn unless the ask is about tickets (close-out is the finish module's)", () => {
     const plain = selectFor("code", "fix the null check in the parser");
-    expect(plain.filter((n) => n.startsWith("builtin_tasks_") || n.startsWith("builtin_tickets_"))).toEqual(["builtin_tasks_update"]);
+    expect(plain.filter((n) => n.startsWith("builtin_tasks_") || n.startsWith("builtin_tickets_"))).toEqual([]);
     expect(plain.some((n) => n.startsWith("builtin_platform_"))).toBe(false);
 
     const ticketAsk = selectFor("code", "update the ticket on the board when the fix lands");

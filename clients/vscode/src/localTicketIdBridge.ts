@@ -66,6 +66,77 @@ const unsynced = (id: string): string =>
     error: `ticket ${id} has not synced to the account yet; sync runs within seconds when sync is on — retry shortly, or keep working with ticket-update`,
   });
 
+/**
+ * Sync is off in this mode: the ticket will not reach the account, so a retry is a loop
+ * (chat #61651: `builtin_reviews_record` failed 10 of 12 times on "retry shortly" until the
+ * repeat-failure guard tripped). Say so, and name the local tools that do the job.
+ */
+const localToolsHint = (id: string, toolName: string): string =>
+  toolName === "builtin_reviews_record"
+    ? `Record the verdict on the local ticket instead: write it into the ticket with ticket-update (id ${id}) and set its status with ticket-move.`
+    : `Keep working on it with the local ticket tools (ticket-update, ticket-move) by this local id.`;
+
+const localOnly = (id: string, toolName: string): string =>
+  JSON.stringify({
+    ok: false,
+    retryable: false,
+    error: `ticket ${id} lives only on this device: sync is off in this mode, so ${toolName} cannot reach it and retrying will not help. ${localToolsHint(id, toolName)}`,
+  });
+
+/** Sync is on, and the call already waited for the receipt: another try is not the way forward. */
+const waitedOut = (id: string, toolName: string, waitMs: number): string =>
+  JSON.stringify({
+    ok: false,
+    retryable: false,
+    error: `ticket ${id} has not synced to the account: its server id did not arrive within ${Math.round(waitMs / 1000)} s of waiting, so ${toolName} cannot reach it now. ${localToolsHint(id, toolName)}`,
+  });
+
+/** The run was stopped while the call waited for a receipt. */
+const STOPPED = JSON.stringify({ ok: false, aborted: true, error: "the run was stopped" });
+
+/** How long a call waits for a ticket's sync receipt when sync is on, before it gives up. */
+export interface UnsyncedWait {
+  timeoutMs: number;
+  intervalMs: number;
+  /** The timer; injectable so a test drives it with fake timers. Resolves early when `signal` aborts. */
+  sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
+}
+
+export const DEFAULT_UNSYNCED_WAIT: UnsyncedWait = {
+  timeoutMs: 5_000,
+  intervalMs: 250,
+  sleep: (ms, signal) =>
+    new Promise((resolve) => {
+      if (signal?.aborted) return resolve();
+      const done = (): void => {
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", done);
+        resolve();
+      };
+      const timer = setTimeout(done, ms);
+      signal?.addEventListener("abort", done, { once: true });
+    }),
+};
+
+export interface BridgeOptions {
+  /** Whether sync is on now (the platform's `synchronize` capability). Absent: unknown — no wait, the plain "not synced yet". */
+  syncOn?: () => boolean;
+  wait?: Partial<UnsyncedWait>;
+}
+
+/** Poll the lookup until the mapping appears, the wait runs out, or the run is stopped. */
+async function awaitMapping(lookup: TicketServerIdLookup, localId: string, wait: UnsyncedWait, signal?: AbortSignal): Promise<string | "stopped" | undefined> {
+  const rounds = Math.max(1, Math.ceil(wait.timeoutMs / Math.max(1, wait.intervalMs)));
+  for (let round = 0; round < rounds; round += 1) {
+    if (signal?.aborted) return "stopped";
+    await wait.sleep(wait.intervalMs, signal);
+    if (signal?.aborted) return "stopped";
+    const serverId = await lookup(localId);
+    if (serverId) return serverId;
+  }
+  return undefined;
+}
+
 /** Let a ticket-id argument also be given as a local id (the schema says number; the model may hold a UUID). */
 function widened(parameters: Record<string, unknown>, argNames: readonly string[]): Record<string, unknown> {
   const properties = parameters.properties as Record<string, Record<string, unknown>> | undefined;
@@ -83,7 +154,23 @@ function widened(parameters: Record<string, unknown>, argNames: readonly string[
 }
 
 /** Wrap the catalog's server tools that take a ticket id so a local id is translated first. */
-export function bridgeLocalTicketIds(tools: readonly ToolDef[], lookup: TicketServerIdLookup): readonly ToolDef[] {
+export function bridgeLocalTicketIds(tools: readonly ToolDef[], lookup: TicketServerIdLookup, options: BridgeOptions = {}): readonly ToolDef[] {
+  const wait: UnsyncedWait = { ...DEFAULT_UNSYNCED_WAIT, ...options.wait };
+  // Sync off: the ticket stays on this device — say so. Sync on: the receipt is usually seconds away — wait for it.
+  // Unknown (no predicate): the plain "not synced yet".
+  const resolve = async (localId: string, toolName: string, signal?: AbortSignal): Promise<string | { refused: string }> => {
+    const serverId = await lookup(localId);
+    if (serverId) return serverId;
+    const syncOn = options.syncOn?.();
+    if (syncOn === false) return { refused: localOnly(localId, toolName) };
+    if (syncOn === true) {
+      const later = await awaitMapping(lookup, localId, wait, signal);
+      if (later === "stopped") return { refused: STOPPED };
+      if (later) return later;
+      return { refused: waitedOut(localId, toolName, wait.timeoutMs) };
+    }
+    return { refused: unsynced(localId) };
+  };
   return tools.map((tool) => {
     const argNames = SERVER_TICKET_ID_ARGS[tool.name];
     if (!argNames) return tool;
@@ -95,8 +182,8 @@ export function bridgeLocalTicketIds(tools: readonly ToolDef[], lookup: TicketSe
         for (const name of argNames) {
           const value = next[name];
           if (typeof value !== "string" || !LOCAL_ID.test(value.trim())) continue;
-          const serverId = await lookup(value.trim());
-          if (!serverId) return unsynced(value.trim());
+          const serverId = await resolve(value.trim(), tool.name, run?.signal);
+          if (typeof serverId !== "string") return serverId.refused;
           next[name] = Number(serverId);
         }
         return tool.execute(next, root, run);

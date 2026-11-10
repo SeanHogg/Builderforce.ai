@@ -71,6 +71,16 @@ describe("background jobs are the run's own", () => {
     expect((await shell.poll(started.id!)).status).toBe("running");
     await killRunJobs(9121);
   }, 15_000);
+
+  it("a sub-agent id polled as a job points at wait_agents (chat #61651)", async () => {
+    const shell = createLocalShell(os.tmpdir(), { jobOwner: 9131 });
+    const agent = await shell.poll("a14");
+    expect(agent.status).toBe("unknown");
+    expect(agent.error).toContain("is a sub-agent, not a background command");
+    expect(agent.error).toContain("wait_agents");
+    const job = await shell.poll("job-99");
+    expect(job.error).toContain('no background job "job-99"');
+  });
 });
 
 describe("a foreground command that times out", () => {

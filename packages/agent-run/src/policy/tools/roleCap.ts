@@ -13,9 +13,13 @@
  *
  * A capped role keeps:
  *   • the surface's REQUIRED set, always — every tool the prompt or the turn block names,
- *     the host's workspace vocabulary (`localToolsIn`), `hand_off`. Dropping a tool the
- *     prompt tells the model to call is what cost a 78-call / 44-minute run
- *     (`brain-embedded/src/runStore/runPreamble.ts`), so the cap never narrows it;
+ *     `ask_user`, `hand_off`. Dropping a tool the prompt tells the model to call is what
+ *     cost a 78-call / 44-minute run (`brain-embedded/src/runStore/runPreamble.ts`), so the
+ *     cap never narrows it. The surface's VOCABULARY (the host's workspace, memory and skill
+ *     tools the prompt does NOT name) is not the surface's to require on a capped turn (the
+ *     Brain splits it off, `brain-embedded/src/run/brainPlatformTools.ts`): the role set below keeps the part of it a code or verify
+ *     turn needs, and the rest competes on relevance like any tool. Chat #61651 (VSIX
+ *     2026.10.153) measured the cost of holding it: every code turn advertised 54–57 tools;
  *   • its role tool set — the shared core names ({@link coreToolNames}), the
  *     navigation/inspection companions a host advertises under its own names
  *     ({@link ROLE_COMPANION_TOOLS}) and the delivery/coordination tools every code and
@@ -24,6 +28,11 @@
  *     so platform/ticket tools reach a code turn only when the ask is about them;
  *   • the tools the run already called or loaded through the router (pinned, appended);
  *   • everything else stays reachable through the surface's router (`builtin_tools_find`).
+ *
+ * The role DATA below was trimmed for the same measurement: the code set held 30 tools before
+ * a single prompt-named tool, so no split of the required set could bring a code turn near the
+ * cap. What left it (close-out, extra coordination, overlapping search) is owned elsewhere or
+ * matched on demand, and the router is the fallback for every trimmed name.
  *
  * Pure; no `node:*`, no DOM.
  */
@@ -39,13 +48,17 @@ export const ROLE_TOOL_LIMIT: Readonly<Record<CappedToolRole, number>> = { code:
 
 /**
  * The companions a role keeps beside the shared core names — the editor's names for symbol
- * navigation, background-command status, read-only git, project memory, the skill library and
- * asking the person. A name the catalog does not hold is simply absent.
+ * navigation, background-command status, read-only git, project recall and asking the person.
+ * A name the catalog does not hold is simply absent. Trimmed after chat #61651 (VSIX 2026.10.153:
+ * 54–57 tools on every code turn): `semantic_search` (`search_code` covers a code turn),
+ * `builtin_skills_read` and `remember_fact` (the deterministic finish module records the learned
+ * fact as a host action) left the code set; each stays reachable through the router and required
+ * whenever the prompt or the turn block names it.
  */
 export const ROLE_COMPANION_TOOLS: Readonly<Record<CappedToolRole, readonly string[]>> = {
   code: [
-    "find_symbol", "file_outline", "semantic_search", "command_status", "command_stop",
-    "git_status", "git_diff", "recall_facts", "remember_fact", "ask_user", "builtin_skills_read",
+    "find_symbol", "file_outline", "command_status", "command_stop",
+    "git_status", "git_diff", "recall_facts", "ask_user",
   ],
   verify: [
     "find_symbol", "file_outline", "command_status", "command_stop",
@@ -54,13 +67,16 @@ export const ROLE_COMPANION_TOOLS: Readonly<Record<CappedToolRole, readonly stri
 };
 
 /**
- * The tools a code or verify turn may never lose (where the catalog holds them): shipping the
- * change (commit, push, pull request), reading a retained command output, coordinating
- * sub-agents, reporting state and handing off, recording a review and updating the ticket.
+ * The tools a code or verify turn may never lose (where the catalog holds them): committing and
+ * pushing the change, reading a retained command output, waiting on sub-agents and handing off.
+ * Close-out (the review record, the ticket status, the learned fact) is the deterministic finish
+ * module's host action, so `builtin_reviews_record` and `builtin_tasks_update` left this set with
+ * `open_pull_request`, `stop_agent`, `message_agent` and `update_task_state` (chat #61651's 54–57
+ * tools a code turn). They compete on the request ("open a PR" still matches `open_pull_request`),
+ * stay required whenever the prompt names them, and stay reachable through the router.
  */
 export const ROLE_GUARANTEED_TOOLS: readonly string[] = [
-  "git_commit", "git_push", "open_pull_request", "output_filter", "wait_agents", "stop_agent", "message_agent",
-  "update_task_state", "hand_off", "builtin_reviews_record", "builtin_tasks_update",
+  "git_commit", "git_push", "output_filter", "wait_agents", "hand_off",
 ];
 
 /** Room a capped role keeps for tools that MATCH the request, on top of its required set. */
@@ -92,7 +108,7 @@ export interface RoleCappedSelection {
 
 /**
  * The selection a capped role's turn makes over `catalogNames`. `surfaceRequired` is the surface's
- * required set (the tools the prompt names, its workspace vocabulary, `hand_off`) and `keep` its
+ * required set (the tools the prompt names, `ask_user`, `hand_off`; never its unnamed vocabulary) and `keep` its
  * own vocabulary a role must not lose (e.g. a Studio's build tools): both always survive. The cap
  * removes only the catalog-order backfill and the tools that neither the role nor the request needs.
  */

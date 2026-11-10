@@ -29,6 +29,15 @@ import type { ChatTicketScope } from "./localTicketScope";
 import { guardChatTicketWrites, serverLinkedRefsVia } from "./chatTicketGuard";
 import type { ToolDef } from "./fileTools";
 import { toolMutating } from "./toolMutating";
+import { personNamedTicket, type LatestUserText } from "./ticketChatOwnership";
+
+/** The run's facts the ticket wrappers read at call time. */
+export interface RunTicketPorts {
+  /** Whether sync is on now: an unsynced ticket then waits for its receipt; off, the bridge says it stays local. */
+  syncOn?: () => boolean;
+  /** The person's latest message in the run's chat: naming a ticket there lets the chat guard pass its write. */
+  latestUserText?: LatestUserText;
+}
 
 /**
  * The server MCP tools whose job the local adapter now does. Hidden from the editor's
@@ -206,6 +215,7 @@ export function routeToLocalDomainTools(
   chatClientId?: string,
   ticketServerId?: TicketServerIdLookup,
   chatTickets?: ChatTicketScope,
+  options: RunTicketPorts = {},
 ): readonly ToolDef[] {
   const localExecute = (name: LocalDomainToolName): ToolDef["execute"] => async (args) =>
     JSON.stringify(await run({ tool: name, args: stampedArgs(name, args, chatClientId) }));
@@ -226,10 +236,14 @@ export function routeToLocalDomainTools(
   );
   const all = added.length === 0 ? routed : [...routed, ...added];
   // The account's own ticket tools take numeric ids; translate a local id to its server id.
-  const bridged = ticketServerId ? bridgeLocalTicketIds(all, ticketServerId) : all;
+  const bridged = ticketServerId
+    ? bridgeLocalTicketIds(all, ticketServerId, options.syncOn ? { syncOn: options.syncOn } : {})
+    : all;
   if (!chatTickets) return bridged;
   // Outermost: a read sees the model's own id (an unsynced local id answers locally before the
   // bridge would refuse it), and the guard checks the id the model named.
   const reads = unionLocalTicketReads(bridged, chatTickets);
-  return guardChatTicketWrites(reads, chatTickets, serverLinkedRefsVia(tools, chatTickets.current), ticketServerId);
+  // The person naming the ticket in their latest message lets the write through (`ticketChatOwnership.ts`).
+  const personNamed = options.latestUserText ? personNamedTicket(options.latestUserText, ticketServerId) : undefined;
+  return guardChatTicketWrites(reads, chatTickets, serverLinkedRefsVia(tools, chatTickets.current), ticketServerId, personNamed);
 }

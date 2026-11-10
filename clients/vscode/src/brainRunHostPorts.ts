@@ -7,7 +7,7 @@
  */
 
 import * as vscode from "vscode";
-import { getGlobalRunState, getRunSnapshot, isRunning, type BrainStreamFn, type LocalChatIdentity, type ModelFallbackEvent, utilityUsageObserver } from "@seanhogg/builderforce-brain-embedded";
+import { getGlobalRunState, getRunSnapshot, isRunning, type BrainPersistenceAdapter, type BrainStreamFn, type LocalChatIdentity, type ModelFallbackEvent, utilityUsageObserver } from "@seanhogg/builderforce-brain-embedded";
 import { getApiKey, postRunOutcome } from "./gateway";
 import { fetchRunContextSection, projectEvermindHooks } from "./bfApi";
 import { localBrainApplication } from "./localFirstStore";
@@ -38,6 +38,7 @@ import { installLocalDomainTools, type DomainToolRequest } from "./installLocalD
 import { routeToLocalDomainTools } from "./localDomainToolRouting";
 import { ticketServerIdLookup } from "./localTicketIdBridge";
 import { localChatTicketScope } from "./localTicketScope";
+import { platformCapabilityAllows } from "./platformPolicy";
 import type { PlatformChatIdentity } from "./platformTools";
 import type { ToolDef } from "./fileTools";
 import { changeTouches, type LocalFirstStore } from "@builderforce/local-first";
@@ -101,6 +102,7 @@ function routeDomainToolsLocal(
   ctx: vscode.ExtensionContext,
   store: LocalFirstStore,
   identity: LocalChatIdentity,
+  messages: Pick<BrainPersistenceAdapter, "getMessages">,
   tools: readonly ToolDef[],
   chat?: PlatformChatIdentity,
 ): readonly ToolDef[] {
@@ -111,7 +113,36 @@ function routeDomainToolsLocal(
     chat?.clientChatId,
     ticketServerIdLookup(store),
     localChatTicketScope(store, identity, chat),
+    {
+      // Read at call time: the mode (and with it sync) can change while the run is going.
+      syncOn: () => platformCapabilityAllows("synchronize"),
+      latestUserText: () => latestUserText(messages, chat?.localChatId),
+    },
   );
+}
+
+/** The newest rows read for the person's latest message; the whole transcript only when a long run buried it. */
+const LATEST_USER_TAIL = 40;
+
+const lastUserRow = (rows: readonly { role: string; content: string }[]): string | undefined => {
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    const row = rows[i]!;
+    if (row.role === "user") return row.content;
+  }
+  return undefined;
+};
+
+/**
+ * The person's latest message in the run's chat — read at call time, so a steer counts. Asked
+ * only when the chat guard would refuse a write, and from the transcript's tail.
+ */
+async function latestUserText(messages: Pick<BrainPersistenceAdapter, "getMessages">, localChatId: unknown): Promise<string | undefined> {
+  const chatId = Number(localChatId);
+  if (!Number.isInteger(chatId)) return undefined;
+  const tail = await messages.getMessages(chatId, LATEST_USER_TAIL);
+  const found = lastUserRow(tail);
+  if (found !== undefined || tail.length < LATEST_USER_TAIL) return found;
+  return lastUserRow(await messages.getMessages(chatId));
 }
 
 export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeRunHostHooks): BrainRunHost {
@@ -145,7 +176,7 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     tools: async (projectId, children, signal, opts) => {
       const tools = await brainToolCatalog(secrets, workspaceRoot() || undefined, projectId, children, signal, opts);
       const catalog = opts.audit && projectId != null ? auditToolCatalog(secrets, tools, projectId, opts.audit) : tools;
-      return routeDomainToolsLocal(ctx, local.store, local.identity, catalog, opts.chatIdentity);
+      return routeDomainToolsLocal(ctx, local.store, local.identity, local.persistence, catalog, opts.chatIdentity);
     },
     workspaceRoot,
     stream: streamForRoute,

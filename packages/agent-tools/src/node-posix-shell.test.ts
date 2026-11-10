@@ -64,6 +64,18 @@ describe("needsPosixShell", () => {
     expect(needsPosixShell('[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }')).toBe(true);
     expect(needsPosixShell('export FOO=1')).toBe(true);
   });
+
+  it("routes an unquoted `;` chain to bash — cmd.exe handed `--branch;` to git (chat #61651)", () => {
+    expect(needsPosixShell("git status --short --branch; echo ---")).toBe(true);
+    expect(needsPosixShell('git status --short a.ts b.ts; echo "---done"')).toBe(true);
+    expect(needsPosixShell("git status;git log")).toBe(true);
+    expect(needsPosixShell("cd x;ls")).toBe(true);
+    expect(needsPosixShell("set x=a;b")).toBe(false);
+    // A `;` inside quotes is an argument, and cmd's own `;` path lists carry no spaces.
+    expect(needsPosixShell('echo "a;b"')).toBe(false);
+    expect(needsPosixShell("set PATH=C:\\tools;%PATH%")).toBe(false);
+    expect(needsPosixShell("git log --oneline -5")).toBe(false);
+  });
 });
 
 describe("findBash", () => {
