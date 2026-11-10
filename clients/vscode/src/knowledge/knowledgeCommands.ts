@@ -26,6 +26,7 @@ import { BuilderForceAuthProvider } from "../auth";
 import { resumeAuthPaused } from "./knowledgeReplica";
 import { shutdownKnowledge } from "./folderKnowledge";
 import { replicateReviewedRoots } from "./knowledgeReplicate";
+import { startBackgroundIndexer } from "./backgroundIndexer";
 
 /** The folder the command was invoked on (explorer), else the one the person picks. */
 async function folderToReview(uri: unknown): Promise<vscode.Uri | undefined> {
@@ -82,6 +83,9 @@ export function registerKnowledgeCommands(context: vscode.ExtensionContext): voi
     vscode.authentication.onDidChangeSessions((e) => {
       if (e.provider.id === BuilderForceAuthProvider.id) void resumeAuthPaused();
     }),
+    // PRD 41 B6: every workspace folder indexed in the background (L0–L2 always; L3 when idle on mains), unless turned off.
+    // Registered BEFORE the shutdown below, and the shutdown itself awaits the indexer's quiet (`beforeKnowledgeShutdown`).
+    startBackgroundIndexer(context),
     // Queues are made durable and pumps stop with the extension (the queues resume on the next open); then the folders' SQLite connections close (one shared shutdown, also awaited by `deactivate`).
     { dispose: () => { void shutdownKnowledge(); } },
   );

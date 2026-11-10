@@ -25,6 +25,7 @@ import type { ReviewProgress } from "@seanhogg/builderforce-memory/knowledge";
 import { extractPoolDown, prewarmExtractPool } from "./review/extractPoolHost";
 import { throttledEmit } from "./review/throttledEmit";
 import { markOwed } from "./review/retryOwed";
+import { preemptBackground } from "./indexLevels";
 import { onTheWireReport } from "./review/reviewRunRecorder";
 import { stopRunById, trackRun } from "./review/reviewRuns";
 
@@ -98,14 +99,22 @@ export class KnowledgeReviewSessions implements vscode.Disposable {
         if (req.retry?.length) {
           // Retry (PRD 41 A8): the failed files are owed a review, then it is the normal plan and confirm. Never while one is running.
           // The check and the hold are one synchronous step, so no review (this panel's, a pre-fetch, a pack review, a closed
-          // panel's) starts between them; the owed marks and the plan are written inside the hold.
-          if (isRootReviewing(root.rootId)) throw new Error(vscode.l10n.t("A review of this folder is already running."));
-          const retry = req.retry;
-          const rootId = root.rootId;
-          plan = await duringReview(rootId, review.open.files, undefined, async () => {
-            await markOwed(review.open.manifest, rootId, retry);
-            return review.plan(force);
-          });
+          // panel's) starts between them; the owed marks and the plan are written inside the hold. A background indexer pass
+          // is not "a review running": it is stopped first (it reruns after) and held off until this hold is taken, so only the
+          // person's own reviews refuse.
+          const release = await preemptBackground(root.rootId);
+          try {
+            if (isRootReviewing(root.rootId)) throw new Error(vscode.l10n.t("A review of this folder is already running."));
+            const retry = req.retry;
+            const rootId = root.rootId;
+            plan = await duringReview(rootId, review.open.files, undefined, async () => {
+              release();
+              await markOwed(review.open.manifest, rootId, retry);
+              return review.plan(force);
+            });
+          } finally {
+            release();
+          }
         } else {
           plan = await review.plan(force);
         }

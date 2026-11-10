@@ -27,6 +27,9 @@ export interface ProductEvent {
 export const PRODUCT_EVENT_PROPS: Readonly<Record<string, readonly string[]>> = {
   // PRD 41 §4 (WS7): counts and the headline, never content.
   "delta.computed": ["surface", "mode", "headline", "ms", "files", "excluded", "introduced", "resolved", "blocking"],
+  // PRD 41 §4 (WS3): the background indexer's plan time and each level's time to ready, as counts and durations.
+  "index.plan_ms": ["surface", "ms", "files", "changed"],
+  "index.level_ready": ["surface", "level", "ms", "files"],
 };
 
 /** A code: an enum value or identifier, never a path, sentence or token. */

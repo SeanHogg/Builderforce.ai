@@ -18,6 +18,7 @@ export const replicatedStoreOf = host.replicatedStoreOf;
 export const duringReview = host.duringReview;
 export const setRootReviewing = host.setRootReviewing;
 export const isRootReviewing = host.isRootReviewing;
+export const isReviewingUnder = host.isReviewingUnder;
 export const replicaDrained = host.replicaDrained;
 export const stopReplicaPump = host.stopReplicaPump;
 export const startReplicaPump = host.startReplicaPump;

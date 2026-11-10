@@ -53,10 +53,17 @@ export interface KnowledgeRoot {
   rel: string;
 }
 
-const slash = (p: string): string => p.replace(/\\/g, "/").replace(/\/+$/, "");
-const same = (a: string, b: string): boolean => (process.platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b);
-const inside = (child: string, parent: string): boolean =>
-  same(child, parent) || (child.length > parent.length && same(child.slice(0, parent.length + 1), `${parent}/`));
+/** The editor's ONE path comparison (roots, the background indexer's watcher and its editor priorities): `/`-separated, no trailing `/`. */
+export const slash = (p: string): string => p.replace(/\\/g, "/").replace(/\/+$/, "");
+/** Paths compare case-insensitively where the file system does (Windows). */
+const CASE_INSENSITIVE = process.platform === "win32";
+/** A path as a comparison key: slashed, and lower-cased where paths are case-insensitive. */
+export const pathKey = (p: string, caseInsensitive: boolean = CASE_INSENSITIVE): string => (caseInsensitive ? slash(p).toLowerCase() : slash(p));
+export const same = (a: string, b: string, caseInsensitive: boolean = CASE_INSENSITIVE): boolean =>
+  caseInsensitive ? a.toLowerCase() === b.toLowerCase() : a === b;
+/** `child` is `parent` or under it (both slashed). */
+export const inside = (child: string, parent: string, caseInsensitive: boolean = CASE_INSENSITIVE): boolean =>
+  same(child, parent, caseInsensitive) || (child.length > parent.length && same(child.slice(0, parent.length + 1), `${parent}/`, caseInsensitive));
 
 const folderName = (folder: string): string => path.basename(folder) || "workspace";
 

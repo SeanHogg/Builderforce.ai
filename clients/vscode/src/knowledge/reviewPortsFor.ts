@@ -62,6 +62,37 @@ function measuringRepoMap(recorder: ReviewRecorder): RepoGraphPort {
   };
 }
 
+/**
+ * The root's code analyzers (the bundled ones, through the local shell): the ONE builder a review and the background
+ * indexer's L3 pass (PRD 41 B6) share. With a `recorder` the repo graph's edge count is reported to the review's record.
+ */
+export function rootCodeAnalyzers(args: {
+  open: Pick<OpenRoot, "root" | "files" | "pump">;
+  caps: ReturnType<typeof buildLocalCapabilityProvider>;
+  partitions: FullReviewPorts["partitions"];
+  log: Log;
+  recorder?: ReviewRecorder;
+}): NonNullable<KnowledgeReviewPorts["analyzers"]> {
+  const { open, caps, partitions, log, recorder } = args;
+  const { root, pump } = open;
+  return workspaceCodeAnalyzers({
+    caps,
+    ...(partitions ? { partitions } : {}),
+    ...(recorder ? { repoGraph: measuringRepoMap(recorder) } : {}),
+    ...(root.rel ? { path: root.rel } : {}),
+    // The analysis is always kept locally (the review stores its output); linked, its snapshot is queued for the project.
+    ...(pump ? {
+      upload: async (sha: string, snapshot: unknown) => {
+        const queue = replicaQueueFor(root.rootId, open.files);
+        await queue.adopt(pump.projectId);
+        queue.setAnalysis({ sha, snapshot: snapshot as AnalysisSnapshotPayload });
+      },
+    } : {}),
+    onUploadError: (error) => log("analysis upload", error),
+    onWarn: (message) => log("analysis", message),
+  });
+}
+
 /** The source, counting what its walk lists (logged once per plan, and every {@link WALK_HEARTBEAT_FILES} files). */
 function measuredSource(source: FsDirectorySource, onFile: (count: number) => void): FsDirectorySource {
   return {
@@ -79,10 +110,12 @@ function measuredSource(source: FsDirectorySource, onFile: (count: number) => vo
 export type FullReviewPorts = KnowledgeReviewPorts & { symbolLookup: SymbolLookup };
 
 export interface RootPortsBuilder {
-  /** The plan: the count and the walk behind it; waits only for what planning uses. */
-  plan(opts: { force: boolean }): Promise<PlanDetail>;
+  /** The plan: the count and the walk behind it; waits only for what planning uses. `background`: never starts the run-only ports, counts no compare calls. */
+  plan(opts: { force: boolean; background?: boolean }): Promise<PlanDetail>;
   /** The ports a run (and the judge-model read) uses. */
   full(): Promise<FullReviewPorts>;
+  /** The ports of a map-only pass (no judge, no `similar`): the background indexer's L1 pass, and with `analyzers` its L3 pass. */
+  mapOnly(analyzers: boolean): Promise<FullReviewPorts>;
   /** Run-only ports that never answered within their cap, by name (they were logged and skipped). */
   degraded(): readonly string[];
 }
@@ -123,8 +156,9 @@ export function reviewPortsFor(deps: RootPortsDeps): RootPortsBuilder {
   const history = step("history", () => gitHistoryPort(root.rootPath, { onWarn: (message) => log("history", message) }), undefined);
   const index = step("index", () => getHostKnowledgeIndex(root.rootId), undefined, true);
 
-  const full = once(async (): Promise<FullReviewPorts> => {
-    const [parts, syms, judge, hist, idx] = await Promise.all([partitions(), symbols(), judgement(), history(), index()]);
+  /** Everything a run uses except the judge: what a map-only pass (the background indexer's, PRD 41 B6) runs on. */
+  const runPorts = async (withAnalyzers: boolean): Promise<FullReviewPorts> => {
+    const [parts, syms, hist] = await Promise.all([partitions(), symbols(), history()]);
     return {
       source: open.source,
       store: open.store,
@@ -133,27 +167,10 @@ export function reviewPortsFor(deps: RootPortsDeps): RootPortsBuilder {
       symbolsOf: indexedSymbolSource(syms, root.rel),
       // The same index hits, as plain data for the extraction pool's jobs (one symbol rule on both paths).
       symbolLookup: indexedSymbolLookup(syms, root.rel),
-      analyzers: workspaceCodeAnalyzers({
-        caps,
-        partitions: parts,
-        repoGraph: measuringRepoMap(recorder),
-        ...(root.rel ? { path: root.rel } : {}),
-        // The analysis is always kept locally (the review stores its output); linked, its snapshot is queued for the project.
-        ...(open.pump ? {
-          upload: async (sha: string, snapshot: unknown) => {
-            const queue = replicaQueueFor(root.rootId, open.files);
-            await queue.adopt(open.pump!.projectId);
-            queue.setAnalysis({ sha, snapshot: snapshot as AnalysisSnapshotPayload });
-          },
-        } : {}),
-        onUploadError: (error) => log("analysis upload", error),
-        onWarn: (message) => log("analysis", message),
-      }),
+      ...(withAnalyzers ? { analyzers: rootCodeAnalyzers({ open, caps, partitions: parts, log, recorder }) } : {}),
       ...(hist ? { history: hist } : {}),
       rootFiles: { fs: vscodeKnowledgeFs(), rootPath: root.rootPath },
       onSignalsSkipped: (skipped) => recorder.signals(skipped),
-      ...(judge ? { judgement: judge } : {}),
-      ...(idx ? { similar: claimSimilarity(idx, open.store, root.rootId) } : {}),
       // After the review the root's graph feeds the knowledge index (the shared runner does it and reports the phase).
       index: reviewIndexPort(() => getHostKnowledgeIndex(root.rootId)),
       // No `platformGraph`: the knowledge index is fed from the LOCAL graph too, so nothing the editor
@@ -161,12 +178,24 @@ export function reviewPortsFor(deps: RootPortsDeps): RootPortsBuilder {
       onIndexError: (error) => log("index upsert", error),
       onSystemsError: (error) => log("systems", error),
     };
+  };
+  const mapWithAnalyzers = once(() => runPorts(true));
+  const mapWithoutAnalyzers = once(() => runPorts(false));
+
+  const full = once(async (): Promise<FullReviewPorts> => {
+    const [ports, judge, idx] = await Promise.all([mapWithAnalyzers(), judgement(), index()]);
+    return {
+      ...ports,
+      ...(judge ? { judgement: judge } : {}),
+      ...(idx ? { similar: claimSimilarity(idx, open.store, root.rootId) } : {}),
+    };
   });
 
-  async function plan({ force }: { force: boolean }): Promise<PlanDetail> {
+  async function plan({ force, background = false }: { force: boolean; background?: boolean }): Promise<PlanDetail> {
     const started = Date.now();
-    // The run-only setup starts now, in the background; the plan below does not wait for it.
-    void full().catch(() => undefined);
+    // The run-only setup starts now, in the background; the plan below does not wait for it. A background plan never
+    // starts it: the indexer's passes do not judge, so no judge (no model server) is started for them.
+    if (!background) void full().catch(() => undefined);
     const planOnly = <T>(name: string, work: () => Promise<T>, fallback: T): Promise<T> =>
       boundedStep(work, planMs, {
         fallback,
@@ -175,7 +204,7 @@ export function reviewPortsFor(deps: RootPortsDeps): RootPortsBuilder {
       });
     const [parts, judge] = await Promise.all([
       boundedStep(partitions, planMs, { fallback: undefined, onTimeout: (elapsed) => log("partitions", `no answer after ${elapsed}ms; the plan goes on without them`) }),
-      planOnly("judge configured", judgeConfigured, false),
+      background ? Promise.resolve(false) : planOnly("judge configured", judgeConfigured, false),
     ]);
     const portsMs = Date.now() - started;
     const walkStarted = Date.now();
@@ -200,5 +229,5 @@ export function reviewPortsFor(deps: RootPortsDeps): RootPortsBuilder {
     }
   }
 
-  return { plan, full, degraded: () => [...degraded] };
+  return { plan, full, mapOnly: (analyzers) => (analyzers ? mapWithAnalyzers() : mapWithoutAnalyzers()), degraded: () => [...degraded] };
 }

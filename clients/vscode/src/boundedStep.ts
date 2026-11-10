@@ -16,6 +16,23 @@ export interface BoundedStepOptions<T> {
   onFail?: (error: unknown, elapsedMs: number) => void;
 }
 
+/**
+ * A setup step that yields to an abort signal: the step's value, or the signal's reason the moment it aborts (an aborted
+ * signal rejects at once). The step itself runs on; its late rejection is swallowed.
+ */
+export function untilAborted<T>(step: Promise<T>, signal: AbortSignal): Promise<T> {
+  step.catch(() => undefined);
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(signal.reason);
+    signal.addEventListener("abort", onAbort, { once: true });
+    step.then(
+      (value) => { signal.removeEventListener("abort", onAbort); resolve(value); },
+      (error: unknown) => { signal.removeEventListener("abort", onAbort); reject(error); },
+    );
+  });
+}
+
 export async function boundedStep<T>(work: () => Promise<T>, ms: number, options: BoundedStepOptions<T>): Promise<T> {
   const started = Date.now();
   let timer: ReturnType<typeof setTimeout> | undefined;

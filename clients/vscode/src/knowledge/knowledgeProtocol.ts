@@ -19,6 +19,9 @@
 
 import type { PinpointMatchResult, ReplicaState } from "@builderforce/agent-tools/knowledge";
 import type { CallSite, Finding, KnowledgeGraph, ReviewPlan, ReviewFailure, ReviewProgress, ReviewReport, ReviewRun } from "@seanhogg/builderforce-memory/knowledge";
+import type { IndexLevelStatus } from "./indexLevels";
+
+export type { IndexLevelStatus };
 
 export const KNOWLEDGE_CALL = "knowledge.call";
 export const KNOWLEDGE_EVENT = "knowledge.event";
@@ -288,4 +291,6 @@ export type KnowledgeEvent =
   // `error` is the reason shown to the person; the rest is the diagnostic detail the view's
   // *Copy details* carries (the stack, the extension build, the folder) — all logged host-side too.
   | { stream: string; type: "failed"; error: string; detail?: string; host?: string; rootPath?: string }
-  | { stream: string; type: "graph"; graph: KnowledgeGraph; changed: string[] };
+  | { stream: string; type: "graph"; graph: KnowledgeGraph; changed: string[] }
+  // PRD 41 B6: the background indexer's level for the root on a live stream (L0–L3 ready, what runs, what waits).
+  | { stream: string; type: "level"; status: IndexLevelStatus };

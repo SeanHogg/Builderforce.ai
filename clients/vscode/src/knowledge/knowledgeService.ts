@@ -21,7 +21,7 @@ import * as vscode from "vscode";
 import {
   buildStoredGraph, createReviewRecorder, deferredHashCache, migratingRootFiles, reviewPacks,
   rootManifest, rootStore, runKnowledgeReview,
-  type FsDirectorySource, type KnowledgeReviewOptions,
+  type FsDirectorySource, type KnowledgeReviewOptions, type ReviewRecorder,
 } from "@builderforce/agent-tools/knowledge";
 import { readPartitions } from "@builderforce/agent-tools/prefetch";
 import { gitBlobId, gitIndexHints } from "@builderforce/agent-tools/node-knowledge-store";
@@ -47,6 +47,8 @@ import { reviewPortsFor } from "./reviewPortsFor";
 import { reviewRecords, useRecordMemento } from "./knowledgeSyncStatus";
 import { reviewParallelism } from "./review/extractPoolHost";
 import { UNTIMED, type LoadTimer } from "./knowledgeLoadTrace";
+import { preemptBackground } from "./indexLevels";
+import { untilAborted } from "../boundedStep";
 
 /** Where the reviewed roots are listed (`workspaceState`), set at activation. */
 let reviewedRootsMemento: RootsMemento | undefined;
@@ -159,6 +161,10 @@ export interface RootReview {
   run(opts: KnowledgeReviewOptions): Promise<ReviewReport>;
   /** The model(s) that actually judged during this review's runs, e.g. "local/ollama/qwen3"; undefined when no judgement ran or the judge names no model. */
   judgeModel(): Promise<string | undefined>;
+  /** The background indexer's reconciling plan (PRD 41 B6): the same plan, starting no judge and recording no confirm. */
+  backgroundPlan(): Promise<PlanDetail>;
+  /** The background indexer's map-only pass on `plan`: no model call; with `analyzers` the bundled analyzers run (L3). */
+  mapPass(opts: { plan: PlanDetail; analyzers: boolean; signal: AbortSignal }): Promise<ReviewReport>;
 }
 
 /** `builderforce.knowledge.judgeBudgetFiles` (PRD 41 A10): files judged per run after the map is complete; default 500, never negative. */
@@ -180,10 +186,17 @@ export function onKnowledgeChanged(cb: (rootId: string) => void): () => void {
  * the project's bulk extracted route for the files' content hashes first, so unchanged files cost no
  * model call (offline, the same review runs without it).
  */
-export function reviewRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot, opts: { seed?: boolean } = {}): RootReview {
-  const open = openRoot(secrets, root, { readThrough: !!opts.seed });
+export function reviewRoot(
+  secrets: vscode.SecretStorage,
+  root: KnowledgeRoot,
+  opts: { seed?: boolean; open?: OpenRoot; recorder?: ReviewRecorder } = {},
+): RootReview {
+  // `open` / `recorder`: a root already opened and its recorder (the background indexer keeps ONE of each for its life, so
+  // its source and stat manifest carry over from cycle to cycle while the run ports are made fresh).
+  const open = opts.open ?? openRoot(secrets, root, { readThrough: !!opts.seed });
   // What this review skips (plan, folders, coverage, uploads during the run) is recorded per root for the sync status.
-  const recorder = createReviewRecorder({ rootId: root.rootId, store: reviewRecords, folders: () => open.source.skippedFolders() });
+  // Records land only in `finish()`, which only `run` calls: a background `mapPass` never writes the sync status.
+  const recorder = opts.recorder ?? createReviewRecorder({ rootId: root.rootId, store: reviewRecords, folders: () => open.source.skippedFolders() });
   const ports = reviewPortsFor({ secrets, open, recorder, log });
   return {
     open,
@@ -196,21 +209,46 @@ export function reviewRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot, o
     },
     async run(opts) {
       await open.migrated;
-      const p = await ports.full();
-      if (reviewedRootsMemento) await rememberRoot(reviewedRootsMemento, root.rootId);
-      // The shared runner feeds the knowledge index (reported as the `index` phase).
-      recorder.begin();
-      return duringReview(root.rootId, open.files, open.pump, async () => {
-        // Extraction runs in the worker pool and judging N wide (PRD 41 A8); the caller's options win.
-        const report = await runKnowledgeReview(p, { ...reviewParallelism(p.symbolLookup, root.rootPath), judgeFiles: judgeBudgetFiles(), ...opts });
-        recorder.finish();
-        for (const cb of changedListeners) cb(root.rootId);
-        return report;
-      });
+      // A background indexer pass on this root stops first (it reruns after), and none starts again until this review holds
+      // the root itself (released inside `duringReview` below, or when the setup fails): the person's review never waits behind one.
+      const release = await preemptBackground(root.rootId);
+      try {
+        const p = await ports.full();
+        if (reviewedRootsMemento) await rememberRoot(reviewedRootsMemento, root.rootId);
+        // The shared runner feeds the knowledge index (reported as the `index` phase).
+        recorder.begin();
+        return await duringReview(root.rootId, open.files, open.pump, async () => {
+          release(); // the root is held by this review now
+          // Extraction runs in the worker pool and judging N wide (PRD 41 A8); the caller's options win.
+          const report = await runKnowledgeReview(p, { ...reviewParallelism(p.symbolLookup, root.rootPath), judgeFiles: judgeBudgetFiles(), ...opts });
+          recorder.finish();
+          for (const cb of changedListeners) cb(root.rootId);
+          return report;
+        });
+      } finally {
+        release();
+      }
     },
     async judgeModel() {
       const judgement = (await ports.full()).judgement as Partial<TrackedJudgement> | undefined;
       return judgement?.modelsUsed?.().join(", ") || undefined;
+    },
+    async backgroundPlan() {
+      await open.migrated;
+      return ports.plan({ force: false, background: true });
+    },
+    async mapPass({ plan, analyzers, signal }) {
+      // Every setup step yields to the pass's signal: a preemption, a keystroke or shutdown never waits on a slow port.
+      await untilAborted(open.migrated, signal);
+      const p = await untilAborted(ports.mapOnly(analyzers), signal);
+      signal.throwIfAborted();
+      return duringReview(root.rootId, open.files, open.pump, async () => {
+        signal.throwIfAborted();
+        // Map only (`judgeFiles: 0`, no judge port): no model call; the files it does not reach stay owed.
+        const report = await runKnowledgeReview(p, { ...reviewParallelism(p.symbolLookup, root.rootPath), plan, judgeFiles: 0, signal });
+        for (const cb of changedListeners) cb(root.rootId);
+        return report;
+      });
     },
   };
 }

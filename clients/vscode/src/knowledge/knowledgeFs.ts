@@ -38,8 +38,10 @@ function exclusiveOn<T>(path: string, task: () => Promise<T>): Promise<T> {
   return run;
 }
 
-export function vscodeKnowledgeFs(): KnowledgeFs {
+/** `watchDebounceMs`: how long `watch` settles a burst; default {@link WATCH_DEBOUNCE_MS} (the background indexer coalesces at its own 100 ms and passes 0). */
+export function vscodeKnowledgeFs(opts: { watchDebounceMs?: number } = {}): KnowledgeFs {
   const fs = vscode.workspace.fs;
+  const watchDebounceMs = opts.watchDebounceMs ?? WATCH_DEBOUNCE_MS;
   return {
     async readDirectory(path) {
       const entries = await fs.readDirectory(uriOf(path));
@@ -73,7 +75,7 @@ export function vscodeKnowledgeFs(): KnowledgeFs {
           const paths = [...changed];
           changed.clear();
           cb(paths);
-        }, WATCH_DEBOUNCE_MS);
+        }, watchDebounceMs);
       };
       const subs = [watcher.onDidChange(note), watcher.onDidCreate(note), watcher.onDidDelete(note)];
       return () => {

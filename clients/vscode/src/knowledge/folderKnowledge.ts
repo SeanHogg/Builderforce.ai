@@ -82,6 +82,14 @@ export async function closeFolderKnowledge(): Promise<void> {
   }
 }
 
+const shutdownSteps = new Set<() => Promise<void>>();
+
+/** Runs `step` (and awaits it) at the start of {@link shutdownKnowledge}, before replicas and stores close. Returns the unregister. */
+export function beforeKnowledgeShutdown(step: () => Promise<void>): () => void {
+  shutdownSteps.add(step);
+  return () => { shutdownSteps.delete(step); };
+}
+
 /**
  * The extension's ONE shutdown: replicas stop (their pumps read these stores), then the stores flush and close. VS Code disposes
  * subscriptions without awaiting `deactivate()`, so both call this: the in-flight promise is shared and every caller awaits the
@@ -90,6 +98,9 @@ export async function closeFolderKnowledge(): Promise<void> {
 export function shutdownKnowledge(): Promise<void> {
   shutdown ??= (async () => {
     closing = true;
+    // Writers that are not reviews (the background indexer) stop and settle first: none may write into a closing store.
+    // A step's failure never keeps the stores open.
+    await Promise.all([...shutdownSteps].map((step) => Promise.resolve().then(step).catch(() => undefined)));
     try {
       await disposeReplicas();
     } finally {

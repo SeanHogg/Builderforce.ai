@@ -76,6 +76,8 @@ export interface ReplicaHost {
     duringReview<T>(rootId: string, files: KnowledgeFiles, pump: PumpSource | undefined, run: () => Promise<T>): Promise<T>;
     setRootReviewing(rootId: string, files: KnowledgeFiles, active: boolean): void;
     isRootReviewing(rootId: string): boolean;
+    /** The root, or a sub-folder root of it (`<rootId>:<rel>`), is held as reviewing. */
+    isReviewingUnder(rootId: string): boolean;
     replicaDrained(rootId: string): Promise<void>;
     /** Waits for the running pump at most `ms` (the timer is unref'd). */
     drainedWithin(rootId: string, ms: number): Promise<'drained' | 'pending'>;
@@ -207,6 +209,8 @@ export function createReplicaHost(opts: ReplicaHostOptions = {}): ReplicaHost {
         },
 
         isRootReviewing: (rootId) => (entries.get(rootId)?.reviewing ?? 0) > 0,
+
+        isReviewingUnder: (rootId) => [...entries].some(([id, e]) => e.reviewing > 0 && (id === rootId || id.startsWith(`${rootId}:`))),
 
         replicaDrained: (rootId) => entries.get(rootId)?.running ?? Promise.resolve(),
 

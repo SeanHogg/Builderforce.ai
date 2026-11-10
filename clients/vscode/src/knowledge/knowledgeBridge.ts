@@ -33,6 +33,7 @@ import { excludeFromReview } from "./knowledgeExclude";
 import { rootIgnoreFile } from "./knowledgeFs";
 import { duringReview, isRootReviewing } from "./knowledgeReplica";
 import { subscribeLiveGraph } from "./knowledgeLive";
+import { onIndexLevel, preemptBackground } from "./indexLevels";
 import { notReviewedHere } from "./knowledgeNotHere";
 import { assertWritable, packRootGraph, packScopeRows, readOnlyPack } from "./packs/packRoots";
 import { linkedKnowledgeClient, linkedProject, loadGraph, log, openRoot, rootKnowledgeFiles, workspaceFolders, type GraphQuery } from "./knowledgeService";
@@ -129,7 +130,10 @@ export class KnowledgeBridge implements vscode.Disposable {
       }
       case "live": {
         this.live.get(call.stream)?.();
-        this.live.set(call.stream, subscribeLiveGraph(this.secrets, call.rootId, (graph, changed) => this.event({ stream: call.stream, type: "graph", graph, changed }), (id) => this.loadedBy.get(id)));
+        const stopGraph = subscribeLiveGraph(this.secrets, call.rootId, (graph, changed) => this.event({ stream: call.stream, type: "graph", graph, changed }), (id) => this.loadedBy.get(id));
+        // The background indexer's level for the root rides the same stream (PRD 41 B6).
+        const stopLevel = onIndexLevel(call.rootId, (status) => this.event({ stream: call.stream, type: "level", status }));
+        this.live.set(call.stream, () => { stopGraph(); stopLevel(); });
         return null;
       }
       case "unlive": this.live.get(call.stream)?.(); this.live.delete(call.stream); return null;
@@ -162,11 +166,17 @@ export class KnowledgeBridge implements vscode.Disposable {
       case "excludeFromReview": {
         const root = this.rootOf(call.rootId);
         const open = openRoot(this.secrets, root);
-        await excludeFromReview({
-          rootId: call.rootId, path: call.path, file: rootIgnoreFile(root.rootPath), isReviewing: isRootReviewing,
-          copies: async () => (await readSystems(open.manifest, call.rootId)).flatMap((s) => (s.copyOf !== undefined ? [s.path] : [])),
-          hold: (run) => duringReview(call.rootId, open.files, undefined, run),
-        });
+        // A background indexer pass is not "a review running": it stops first, and is held off until this write ends.
+        const release = await preemptBackground(call.rootId);
+        try {
+          await excludeFromReview({
+            rootId: call.rootId, path: call.path, file: rootIgnoreFile(root.rootPath), isReviewing: isRootReviewing,
+            copies: async () => (await readSystems(open.manifest, call.rootId)).flatMap((s) => (s.copyOf !== undefined ? [s.path] : [])),
+            hold: (run) => duringReview(call.rootId, open.files, undefined, run),
+          });
+        } finally {
+          release();
+        }
         return null;
       }
       case "symbols": {
