@@ -1,18 +1,21 @@
 /**
- * `DeltaPorts` for ONE repository root (PRD 41 §C1, §C10): the engine's only view of the host.
+ * The engine's inputs for ONE repository root (PRD 41 §C1, §C10), gathered on the extension host and handed to the engine as
+ * PLAIN DATA ({@link PreparedDelta}), so `computeRunDelta` can run in a worker thread (`deltaWorkerHost.ts`) that the budget
+ * can terminate.
  *
- *   - `texts`: {@link SideTexts} (pre-images and `git show` before, the working tree after), remembered per side so `facts`
- *     builds each side from exactly the texts the rules read;
- *   - `facts`: {@link sideFacts} over the folder's knowledge store, the run's in-run files swapped to that side;
- *   - `churn`: ONE `git log --since=90.days --name-only` per run (agent-tools' `gitHistoryPort`, the churn badge's reader),
- *     cached by HEAD so a second delta of the same tree reads none;
- *   - `pastScores`: the repository's stored deltas;
- *   - `analyze`: absent — the analyzers stay L3 `not_measured` this pass, and the engine reports them so.
+ *   - texts: {@link SideTexts} — pre-images and the base commit's blobs before, the working tree after — for every in-run file;
+ *   - facts: {@link sideFacts} over the folder's knowledge store, each side built from exactly those texts, the in-run files
+ *     swapped (`outside-run` files keep the stored copy on both sides);
+ *   - churn: ONE `git log --since=90.days --name-only` per run (agent-tools' `gitHistoryPort`), cached by HEAD;
+ *   - pastScores: the repository's stored deltas.
+ *
+ * `preparedPorts.ts` serves `DeltaPorts` from that data: pure, so it runs the same in a worker and in this thread.
  */
 
 import { CHURN_DAYS } from "@builderforce/agent-tools/knowledge";
 import { gitHistoryPort } from "@builderforce/agent-tools/node-git-history";
-import type { ChangedFileInput, DeltaPorts, SideText, UnresolvedFile } from "@builderforce/run-delta";
+import type { DeltaRegistries, RunChangeSetInput } from "@builderforce/run-delta";
+import type { PreparedDelta } from "./preparedPorts";
 import type { RepoGit } from "./gitSide";
 import { sideFacts, sideFilesOf, type KnowledgeContext } from "./sideFacts";
 import type { SideTexts } from "./sideTexts";
@@ -20,8 +23,8 @@ import type { SideTexts } from "./sideTexts";
 export interface RepoDeltaSources {
   root: string;
   texts: SideTexts;
-  /** The change set as the engine reads it (from {@link SideTexts.inputs}). */
-  inputs: readonly ChangedFileInput[];
+  input: RunChangeSetInput;
+  registries: DeltaRegistries;
   knowledge?: KnowledgeContext;
   git?: RepoGit;
   pastScores(): Promise<number[]>;
@@ -47,23 +50,27 @@ export async function churnAt(root: string, git: RepoGit | undefined, paths: rea
   return hit;
 }
 
-export function runDeltaPorts(src: RepoDeltaSources): DeltaPorts {
-  const byPath = new Map(src.inputs.map((f) => [f.path, f]));
-  const seen: Record<"before" | "after", Map<string, SideText | UnresolvedFile>> = { before: new Map(), after: new Map() };
-  const inRun = src.inputs.filter((f) => f.attribution !== "outside-run");
+/** Gathers the engine's inputs on this thread: texts first, then each side's facts from them. */
+export async function prepareDelta(src: RepoDeltaSources): Promise<PreparedDelta> {
+  const inRun = src.input.files.filter((f) => f.attribution !== "outside-run");
+  const [before, after] = await Promise.all([
+    src.texts.beforeTexts(inRun.filter((f) => f.beforeHash !== undefined).map((f) => ({ path: f.path, beforeHash: f.beforeHash! }))),
+    src.texts.afterTexts(inRun.filter((f) => f.afterHash !== undefined).map((f) => f.path)),
+  ]);
+  const files = (side: "before" | "after") => inRun.map((f) => {
+    const hash = side === "before" ? f.beforeHash : f.afterHash;
+    return { path: f.path, ...(hash ? { hash } : {}) };
+  });
+  const [beforeFacts, afterFacts, churn, pastScores] = await Promise.all([
+    sideFacts(src.knowledge, sideFilesOf(files("before"), before), src.onError),
+    sideFacts(src.knowledge, sideFilesOf(files("after"), after), src.onError),
+    churnAt(src.root, src.git, inRun.map((f) => f.path)),
+    src.pastScores(),
+  ]);
   return {
-    async texts(side, paths) {
-      const out = side === "before"
-        ? await src.texts.beforeTexts(paths.map((p) => ({ path: p, ...(byPath.get(p)?.beforeHash ? { beforeHash: byPath.get(p)!.beforeHash! } : {}) })))
-        : await src.texts.afterTexts(paths);
-      for (const [p, t] of out) seen[side].set(p, t);
-      return out;
-    },
-    facts(side) {
-      const files = inRun.map((f) => ({ path: f.path, ...((side === "before" ? f.beforeHash : f.afterHash) ? { hash: (side === "before" ? f.beforeHash : f.afterHash)! } : {}) }));
-      return sideFacts(src.knowledge, sideFilesOf(files, seen[side]), src.onError);
-    },
-    churn: (paths) => churnAt(src.root, src.git, paths),
-    pastScores: () => src.pastScores(),
+    input: src.input, registries: src.registries,
+    texts: { before: [...before], after: [...after] },
+    facts: { before: beforeFacts, after: afterFacts },
+    churn: [...churn], pastScores,
   };
 }

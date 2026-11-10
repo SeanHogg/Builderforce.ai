@@ -1,18 +1,19 @@
 /**
  * node-git-history.ts — the Node implementation of the review's `HistoryPort` over
- * `git log` (PRD 38, Option B+ Contract 1: the `churn` badge). Node-only
+ * `git log` (PRD 38, Option B+ Contract 1: the `churn` badge; P4: `coChange`). Node-only
  * (`child_process`): the package root and `./knowledge` never import it.
  *
- * One `git log --name-only --since=<n>.days --format=${CHURN_FORMAT}` per call, run in the reviewed
- * folder with `--relative` so paths are root-relative, and with `core.quotepath=false` so a
- * non-ASCII path is its real name, not an octal-escaped string. Not a git repository, no
- * git, a failed run: no port / an empty map — never a throw into the review. A run that
- * hits the timeout is reported through `onWarn` (an empty map there would otherwise look
- * like "no recent commits").
+ * One `git log --name-only --full-diff --since=<n>.days --max-count=<m> --format=${HISTORY_FORMAT} -- .`
+ * per call, run in the reviewed folder (so only its commits), with `core.quotepath=false` so a
+ * non-ASCII path is its real name, not an octal-escaped string. Paths come back repo-relative
+ * (`--full-diff`: every file of the commit, for its `fileCount`) and are made root-relative by
+ * the folder's `--show-prefix`. Not a git repository, no git, a failed run: no port / an empty
+ * list — never a throw into the review. A run that hits the timeout is reported through
+ * `onWarn` (an empty list there would otherwise look like "no recent commits").
  */
 
 import { execFile } from "node:child_process";
-import type { HistoryPort } from "./knowledge/historyPort.js";
+import type { HistoryCommit, HistoryPort } from "./knowledge/historyPort.js";
 
 const MAX_BUFFER = 256 * 1024 * 1024;
 const TIMEOUT_MS = 60_000;
@@ -34,8 +35,8 @@ const formatEscape = (char: string): string => `%x${char.charCodeAt(0).toString(
 /** THE `--format` of `recentCommits`, read back by `parseRecentCommits`: `<RS>%H|%cI|%an<US>%s`. */
 export const RECENT_COMMITS_FORMAT = `${formatEscape(COMMIT_MARK)}%H|%cI|%an${formatEscape(AUTHOR_END)}%s`;
 
-/** THE `--format` of the churn count, read back by `countCommitsPerPath`: `<RS>%H`. */
-export const CHURN_FORMAT = `${formatEscape(COMMIT_MARK)}%H`;
+/** THE `--format` of the history port's log, read back by `parseCommitFiles`: `<RS>%cI` (committer time, what `--since` filters on). */
+export const HISTORY_FORMAT = `${formatEscape(COMMIT_MARK)}%cI`;
 
 /** One line of `git log` output with only its terminator removed — a path may legally begin or end with spaces. */
 const logLines = (log: string): string[] => log.split(/\r?\n/);
@@ -114,36 +115,47 @@ export async function recentCommits(rootDir: string, count: number, options: Git
   return parseRecentCommits(run.stdout);
 }
 
-/** Commits per path from `git log --name-only --format=${CHURN_FORMAT}` output, for the wanted paths only. */
-export function countCommitsPerPath(log: string, wanted: ReadonlySet<string>): Map<string, number> {
-  const counts = new Map<string, number>();
-  let seen = new Set<string>();
+/**
+ * `git log --name-only --full-diff --format=${HISTORY_FORMAT}` output as commits, in log order. Paths are repo-relative in
+ * the log; `prefix` (the root's `git rev-parse --show-prefix`, `/`-ended or empty) is stripped from those inside the root
+ * and the rest are dropped, while `fileCount` counts every distinct file of the commit. Pure.
+ */
+export function parseCommitFiles(log: string, prefix = ""): HistoryCommit[] {
+  const root = prefix.replace(/\\/g, "/");
+  const out: Array<{ at: string; all: Set<string>; inRoot: Set<string> }> = [];
+  let current: (typeof out)[number] | undefined;
   for (const line of logLines(log)) {
     if (!line) continue;
-    if (line.startsWith(COMMIT_MARK)) { seen = new Set(); continue; }
+    if (line.startsWith(COMMIT_MARK)) {
+      current = { at: line.slice(COMMIT_MARK.length).trim(), all: new Set(), inRoot: new Set() };
+      out.push(current);
+      continue;
+    }
+    if (!current) continue;
     const path = line.replace(/\\/g, "/");
-    if (!wanted.has(path) || seen.has(path)) continue;
-    seen.add(path);
-    counts.set(path, (counts.get(path) ?? 0) + 1);
+    current.all.add(path);
+    if (path.startsWith(root) && path.length > root.length) current.inRoot.add(path.slice(root.length));
   }
-  return counts;
+  return out.map((c) => ({ at: c.at, paths: [...c.inRoot], fileCount: c.all.size }));
 }
 
 /** The history port for `rootDir`, or undefined when it is not inside a git work tree. */
 export async function gitHistoryPort(rootDir: string, options: GitHistoryOptions = {}): Promise<HistoryPort | undefined> {
-  const inside = await git(rootDir, ["rev-parse", "--is-inside-work-tree"]);
-  if (inside.stdout?.trim() !== "true") return undefined;
+  const inside = await git(rootDir, ["rev-parse", "--is-inside-work-tree", "--show-prefix"]);
+  const [flag, prefix = ""] = (inside.stdout ?? "").split(/\r?\n/);
+  if (flag?.trim() !== "true") return undefined;
   return {
-    async commitsTouching(paths, sinceDays) {
-      if (paths.length === 0) return new Map();
+    async commits(sinceDays, maxCommits) {
       const days = Math.max(1, Math.floor(sinceDays));
-      const run = await git(rootDir, ["log", "--name-only", "--relative", `--since=${days}.days`, `--format=${CHURN_FORMAT}`, "--", "."]);
+      const max = Math.max(1, Math.floor(maxCommits));
+      // `-- .` picks the root's commits; `--full-diff` lists ALL their files (repo-relative) so the bulk cut sees the whole commit.
+      const run = await git(rootDir, ["log", "--name-only", "--full-diff", `--since=${days}.days`, `--max-count=${max}`, `--format=${HISTORY_FORMAT}`, "--", "."]);
       if (run.stdout === undefined) {
-        if (run.failure === "timeout") options.onWarn?.(`git log did not finish within ${TIMEOUT_MS / 1000}s: churn is missing, not zero.`);
-        else if (run.failure === "buffer") options.onWarn?.("git log produced too much output: churn is missing, not zero.");
-        return new Map();
+        if (run.failure === "timeout") options.onWarn?.(`git log did not finish within ${TIMEOUT_MS / 1000}s: history (churn, co-change) is missing, not zero.`);
+        else if (run.failure === "buffer") options.onWarn?.("git log produced too much output: history (churn, co-change) is missing, not zero.");
+        return [];
       }
-      return countCommitsPerPath(run.stdout, new Set(paths));
+      return parseCommitFiles(run.stdout, prefix.trim());
     },
   };
 }

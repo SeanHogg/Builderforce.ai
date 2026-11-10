@@ -22,9 +22,10 @@ import { open, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { extractSymbolRelations, extractSymbols, isSymbolIndexable, MAX_CALL_SITES_PER_EDGE, type CodeSymbol, type SymbolRelation } from "@builderforce/agent-tools";
 import {
-  isCodePath, loadModuleAliases, moduleFileCandidates, NO_MODULE_ALIASES, PACKAGE_MODULE_DIR, resolveImportPath, sourcePathOf,
-  type ModuleAliases, type ReadConfigText,
+  aliasCandidates, isAliasSpecifier, isCodePath, ModuleAliasCache, moduleFileCandidates, NO_MODULE_ALIASES, PACKAGE_MODULE_DIR, resolveImportPath,
+  sourcePathOf, type AliasConfigPorts, type ModuleAliases,
 } from "@builderforce/agent-tools/knowledge";
+import { UNTIMED, type LoadTimer } from "./knowledgeLoadTrace";
 import { assertInsideRoot } from "./knowledgeFixPaths";
 import type { KnowledgeSymbolRecord, KnowledgeSymbolRelation } from "./knowledgeProtocol";
 import { isSafeRelative } from "./safePath";
@@ -149,6 +150,7 @@ export async function withRelations(
     }
     return index;
   };
+  const aliasShaped = (fromPath: string, spec: string): boolean => /^(?:@\/|~\/|#)/.test(spec) || isAliasSpecifier(fromPath, spec, aliases);
   const probed = new Map<string, string | null>();
   const fileOfModule = async (modulePath: string): Promise<string | null> => {
     const loaded = moduleFileCandidates(modulePath).find((p) => byPath.has(p));
@@ -171,11 +173,18 @@ export async function withRelations(
     if ("symbol" in to) return f.records[to.symbol]?.ref;
     const qualified = to.member ? `${to.name}.${to.member}` : to.name;
     const relative = to.module.startsWith(".");
-    const packageRef = `src:${rootId}::${PACKAGE_MODULE_DIR}${packageOf(to.module)}#${qualified}`;
-    // THE import resolution (agent-tools `moduleAliases`): a relative import, or an alias of the root's tsconfig.
-    const modulePath = resolveImportPath(f.path, to.module, aliases);
-    if (!modulePath) return relative ? undefined : packageRef;
-    const file = await fileOfModule(modulePath);
+    // A package keeps its package name; an alias-shaped specifier that names nothing keeps the whole specifier (`@/lib/x`).
+    const packageRef = `src:${rootId}::${PACKAGE_MODULE_DIR}${aliasShaped(f.path, to.module) ? to.module : packageOf(to.module)}#${qualified}`;
+    let file: string | null = null;
+    let modulePath: string | undefined;
+    if (relative) {
+      modulePath = resolveImportPath(f.path, to.module);
+      if (!modulePath) return undefined;
+      file = await fileOfModule(modulePath);
+    } else {
+      // THE ordered alias candidates (agent-tools `aliasCandidates`), the same list the extract's resolution walks.
+      for (const candidate of aliasCandidates(f.path, to.module, aliases)) if ((file = await fileOfModule(candidate))) break;
+    }
     // An alias that names no file of the root stays a package; a relative import of nothing is a missing terminus.
     if (!file) return relative ? `src:${rootId}::${modulePath}#${qualified}` : packageRef;
     const target = byPath.get(file);
@@ -209,6 +218,7 @@ export async function withRelations(
 /** The definitions in `fileRefs` (the refs of `rootId`'s files) under `rootPath`, each with its symbol-level relations. */
 export async function rootSymbols(
   rootPath: string, rootId: string, fileRefs: unknown, ports: SymbolFilePorts = nodeSymbolPorts, cache: SymbolCache<FileSymbols> = sharedCache,
+  timer: LoadTimer = UNTIMED, aliasCache: ModuleAliasCache = sharedAliasCache,
 ): Promise<KnowledgeSymbolRecord[]> {
   const out: FileSymbols[] = [];
   let total = 0;
@@ -238,8 +248,30 @@ export async function rootSymbols(
   }
   // The root's path aliases are read only when a relation names a bare specifier (one may be an alias of the root).
   const bare = out.some((f) => f.relations.some((r) => !("symbol" in r.to) && !r.to.module.startsWith(".")));
-  const aliases = bare ? await loadModuleAliases(out.map((f) => f.path), rootConfigReader(rootPath, ports)) : NO_MODULE_ALIASES;
+  const aliases = bare
+    ? await timer.phase("aliases", () => aliasCache.get(rootPath, out.map((f) => f.path), rootConfigPorts(rootPath, ports)))
+    : NO_MODULE_ALIASES;
   return withRelations(rootPath, rootId, out, ports, aliases);
+}
+
+/** The root's alias configs, read once per root and reused while they keep their modification times. */
+const sharedAliasCache = new ModuleAliasCache();
+
+/** {@link rootConfigReader} plus a guarded stat, for the {@link ModuleAliasCache}. */
+export function rootConfigPorts(rootPath: string, ports: SymbolFilePorts = nodeSymbolPorts): AliasConfigPorts {
+  return {
+    read: rootConfigReader(rootPath, ports),
+    mtime: async (rel) => {
+      try {
+        if (!isSafeRelative(rel)) return undefined;
+        await ports.guard(rootPath, rel);
+        const info = await ports.stat(join(rootPath, rel));
+        return info.isFile ? info.mtimeMs : undefined;
+      } catch {
+        return undefined;
+      }
+    },
+  };
 }
 
 /** A root's config files are small; a larger one is not read. */
@@ -249,7 +281,7 @@ export const MAX_CONFIG_FILE_BYTES = 256 * 1024;
  * Reads a root-relative config file for `loadModuleAliases`, under the same guards as a source file: a safe path inside
  * the root, a regular file, at most {@link MAX_CONFIG_FILE_BYTES}. Undefined when it is absent or refused.
  */
-export function rootConfigReader(rootPath: string, ports: SymbolFilePorts = nodeSymbolPorts): ReadConfigText {
+export function rootConfigReader(rootPath: string, ports: SymbolFilePorts = nodeSymbolPorts): AliasConfigPorts["read"] {
   return async (rel) => {
     try {
       if (!isSafeRelative(rel)) return undefined;

@@ -8,6 +8,7 @@
 
 import { createHash } from "node:crypto";
 import {
+  defineRecordIndex,
   newLocalRecord,
   type ChangeSetValue,
   type EntityDestination,
@@ -20,6 +21,12 @@ import type { RunChangeBaseline } from "./runChangeBaseline";
  * One per run. Distinct from {@link runChangeSetId} so the immutable per-repo diff
  * is never overwritten when the set opens or closes.
  */
+/** The lifecycles of runs still in flight (a baseline and no finalization): the run delta's overlap test reads only these. */
+export const OPEN_CHANGE_SET_LIFECYCLES = defineRecordIndex<ChangeSetLifecycleValue>(
+  "change-set", "vscode.changeSet.openLifecycle",
+  (row) => (isChangeSetLifecycle(row.payload) && !row.payload.finalizedAt ? "open" : undefined),
+);
+
 export function changeSetLifecycleId(runId: string): string {
   return `changeset-lifecycle:${runId}`;
 }

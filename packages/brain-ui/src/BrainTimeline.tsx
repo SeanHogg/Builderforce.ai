@@ -80,6 +80,12 @@ export interface BrainTimelineProps {
    *  Copy and "send again" are built in — see {@link MessageActions} — so a host never
    *  re-implements them. */
   renderAssistantActions?: (msg: BrainMessage) => React.ReactNode;
+  /**
+   * A host block under an assistant reply, after its footer line (the run delta card of the run the
+   * reply ended). Pass a STABLE function: the rows are memoized on it, so a host whose blocks change
+   * renders a component here that reads its own state, not a new callback per change.
+   */
+  renderAfterMessage?: (msg: BrainMessage) => React.ReactNode;
   /** Re-send a message's text as the next turn. When omitted the "send again" action
    *  hides itself, so a read-only transcript offers only copy. */
   onReplayMessage?: (msg: BrainMessage, role: 'user' | 'assistant') => void;
@@ -146,6 +152,7 @@ function BrainTimelineInner({
   isOwnMessage,
   renderStreaming,
   renderAssistantActions,
+  renderAfterMessage,
   onReplayMessage,
   onRateMessage,
   ratings,
@@ -275,6 +282,7 @@ function BrainTimelineInner({
                   onRate={onRateMessage}
                   rating={ratings?.[node.message.id]}
                   renderAssistantActions={renderAssistantActions}
+                  renderAfterMessage={renderAfterMessage}
                 />
               );
             case 'thinking':

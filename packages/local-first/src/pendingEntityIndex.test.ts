@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createMemoryLocalFirstStore,
+  isRecordPayloadFence,
   newLocalRecord,
   queueImport,
   scanPendingOfRow,
@@ -89,7 +90,7 @@ describe('the per-row pending index', () => {
       }
     });
     expect(fullScans).toBe(0);
-    const events = store.view().events as JournalEvent[];
+    const events = (store.view().events as JournalEvent[]).filter((event) => !isRecordPayloadFence(event));
     // Each row's unbound marker was dropped and replaced by ONE import.
     expect(events).toHaveLength(rows.length);
     expect(events.every((event) => event.operation === 'import' && event.destination.kind === 'bound')).toBe(true);

@@ -10,6 +10,7 @@ import { USE_CASE } from '../surface/transit/testFixtures';
 import { surfaceFixture } from '../testing';
 import type { SymbolRecord } from '../types';
 import { bindContextLoss } from './contextLoss';
+import { uploadRange } from './stats';
 import type { LabelText, TextPort } from './labels/LabelLayer';
 import { createNoopStage, createWebGLStage, type StageRenderer } from './renderer';
 import type { Placement } from './types';
@@ -89,10 +90,15 @@ describe('ranged uploads', () => {
         stage.setPaint(paintMarks(graph, model, { lensId: 'structure', overlay: PRESETS.risk, lit: null, roles: null }));
         const painted = markMeshes(stage.object!).map((m) => paintOf(m).updateRanges.length);
         stage.setPlacement(drill(3), 0, 400);
-        // A batch the drill appended into holds the repaint's range AND the append's: one more range, none dropped.
+        // The append added its range, and no repainted batch lost the repaint's (the old clear-then-add dropped it).
         const after = markMeshes(stage.object!).map((m) => paintOf(m).updateRanges.length);
-        expect(after.some((n, b) => painted[b]! >= 1 && n === painted[b]! + 1)).toBe(true);
+        expect(after.some((n, b) => n > painted[b]!)).toBe(true);
         expect(after.every((n, b) => n >= painted[b]!)).toBe(true);
+        // Two writes to ONE attribute in one commit: both ranges stay queued.
+        const one = paintOf(markMeshes(stage.object!).find((m) => paintOf(m).updateRanges.length > 0)!);
+        const n = one.updateRanges.length;
+        uploadRange(stage.stats, one, 1, 1);
+        expect(one.updateRanges).toHaveLength(n + 1);
     });
 });
 

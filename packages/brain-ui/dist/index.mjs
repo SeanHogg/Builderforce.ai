@@ -2444,6 +2444,7 @@ function BrainTimelineInner({
   isOwnMessage,
   renderStreaming,
   renderAssistantActions,
+  renderAfterMessage,
   onReplayMessage,
   onRateMessage,
   ratings,
@@ -2542,7 +2543,8 @@ function BrainTimelineInner({
                 onReplay: onReplayMessage,
                 onRate: onRateMessage,
                 rating: ratings?.[node.message.id],
-                renderAssistantActions
+                renderAssistantActions,
+                renderAfterMessage
               },
               node.key
             );

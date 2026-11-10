@@ -51,7 +51,8 @@ export function StageInteraction({ bus, renderer, keys, placement, tweening, sel
     // tie-break `nearestHit` uses) and the live keys (appended slots included).
     useLayoutEffect(() => {
         bus.source = renderer;
-        return () => { if (bus.source === renderer) bus.source = null; };
+        const off = renderer.onKeys(() => bus.keysChanged());
+        return () => { off(); if (bus.source === renderer) bus.source = null; };
     }, [bus, renderer]);
     useLayoutEffect(() => {
         bus.setPlacement(placement, keys);

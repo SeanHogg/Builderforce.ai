@@ -31,6 +31,7 @@
 
 import { createHash } from "node:crypto";
 import {
+  defineRecordIndex,
   newLocalRecord,
   type ChangeSetValue,
   type EntityDestination,
@@ -65,6 +66,15 @@ export interface LocalChangeSetValue extends ChangeSetValue {
   capturedAt: string;
   files: Array<{ path: string; beforeHash?: string; afterHash?: string; patchManifestId?: string; attribution: ChangeAttribution; status: string }>;
 }
+
+/**
+ * The attributed per-repository change sets of one repository (the lifecycle rows are in no group): what the run delta's
+ * overlap test reads instead of every change set on the device.
+ */
+export const CHANGE_SETS_BY_REPOSITORY = defineRecordIndex<LocalChangeSetValue>(
+  "change-set", "vscode.changeSet.repository",
+  (row) => ((row.payload as { kind?: unknown }).kind === "lifecycle" ? undefined : row.payload.repository),
+);
 
 /** The change-set record id is derived from the run and repo, so re-finalizing dedupes. */
 export function runChangeSetId(runId: string, repoRoot: string): string {
@@ -266,6 +276,13 @@ export async function recordChangeSetAroundRun<T>(
 ): Promise<T> {
   if (args.stillRunning?.()) return run();
   const onError = args.onError ?? ((error: unknown) => console.warn("change set:", error));
+  // Every exit that does not hand the finalized set to `onFinalized` releases the run's pre-images.
+  let handedOff = false;
+  const release = (): void => {
+    if (handedOff) return;
+    handedOff = true;
+    try { args.capture?.release?.(); } catch (error) { onError(error); }
+  };
   let baseline: RunChangeBaseline | undefined;
   try {
     baseline = await captureRunChangeBaseline(args.now?.() ?? new Date(), args.capture);
@@ -334,7 +351,10 @@ export async function recordChangeSetAroundRun<T>(
             },
           );
           try {
-            args.onFinalized?.({ runId: args.runId, baseline: baselineForClose, committed });
+            if (args.onFinalized) {
+              handedOff = true; // the delta releases them once it settles
+              args.onFinalized({ runId: args.runId, baseline: baselineForClose, committed });
+            }
           } catch (error) {
             onError(error);
           }
@@ -344,5 +364,6 @@ export async function recordChangeSetAroundRun<T>(
         onError(error);
       }
     }
+    release();
   }
 }

@@ -27,6 +27,15 @@ vi.mock("./gitApi", () => ({
   runGit: (cwd: string, args: string) => git.runGit(cwd, args),
 }));
 
+// The change set's git reads go through agent-tools' array-arg runner: the same fake answers them.
+vi.mock("@builderforce/agent-tools/node-git-history", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@builderforce/agent-tools/node-git-history")>()),
+  runGit: async (cwd: string, args: string[]) => {
+    const stdout = await git.runGit(cwd, args.join(" "));
+    return stdout === undefined ? { failure: "error" } : { stdout };
+  },
+}));
+
 vi.mock("vscode", () => ({
   workspace: { workspaceFolders: [{ uri: { fsPath: "/ws" } }] },
   l10n: { t: (message: string) => message },

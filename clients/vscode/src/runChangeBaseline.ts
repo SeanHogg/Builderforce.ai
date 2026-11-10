@@ -25,7 +25,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { detectPendingChanges, refreshPendingChanges, type PendingChangeRepo } from "./gitChanges";
 import { normalizePath, repoName } from "./gitChangeModel";
-import { runGit } from "./gitApi";
+import { runGit } from "@builderforce/agent-tools/node-git-history";
 import { mapLimit } from "./gitBranchFacts";
 import { nodeContentHash } from "./knowledge/nodeSha256";
 import { listWorkingSet } from "./runDelta/folderWorkingSet";
@@ -191,13 +191,23 @@ export function attributeRunChanges(
   return out.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
 }
 
+/** One git call's ceiling for the change set and the run delta (inside the delta's own budget). */
+export const REPO_GIT_TIMEOUT_MS = 10_000;
+
+/**
+ * One git answer, trimmed (undefined when git could not answer or printed nothing), through agent-tools' `runGit` — the ONE git
+ * runner of the change set and the run delta (argument arrays: a path is never re-quoted for a shell).
+ */
+export async function gitLine(cwd: string, args: string[]): Promise<string | undefined> {
+  return (await runGit(cwd, args, { timeoutMs: REPO_GIT_TIMEOUT_MS })).stdout?.trim() || undefined;
+}
+
 export async function baseCommitOf(root: string): Promise<string | undefined> {
-  return (await runGit(root, "rev-parse HEAD")) || undefined;
+  return gitLine(root, ["rev-parse", "HEAD"]);
 }
 
 export async function repositoryIdentityOf(root: string): Promise<string> {
-  const remote = (await runGit(root, "config --get remote.origin.url"))?.trim();
-  return remote || root;
+  return (await gitLine(root, ["config", "--get", "remote.origin.url"])) || root;
 }
 
 export interface BaselineCaptureOptions {
@@ -209,6 +219,11 @@ export interface BaselineCaptureOptions {
   folders?: readonly string[];
   /** A pre-image sink failure (the baseline still stands; those files resolve as `preimage-missing`). */
   onPreimageError?: (error: unknown) => void;
+  /**
+   * The run's pre-images will never be read: its change set was not finalized here (a start that did not own the run, no device
+   * id, a set already finalized, a failed finalization). The holder releases their pins. Never throws into the run.
+   */
+  release?: () => void;
 }
 
 async function gitRepoEntry(
@@ -218,7 +233,7 @@ async function gitRepoEntry(
 ): Promise<ChangeSetRepoBaseline> {
   const baseCommit = await baseCommitOf(repo.root);
   const read = await readBaselineFiles(repo.changes, budget, opts.hint);
-  await storePreimages(repo.root, read.preimages, opts);
+  storePreimages(repo.root, read.preimages, opts);
   return {
     root: repo.root,
     name: repo.name,
@@ -230,10 +245,14 @@ async function gitRepoEntry(
   };
 }
 
-async function storePreimages(root: string, items: Array<{ hash: string; bytes: Uint8Array }>, opts: BaselineCaptureOptions): Promise<void> {
+/**
+ * Hands the bytes to the sink WITHOUT waiting for the write: the run's first model call never waits on SQLite. The sink owns the
+ * write's completion (the delta's reader waits for it, `runDeltaHost.ts`).
+ */
+function storePreimages(root: string, items: Array<{ hash: string; bytes: Uint8Array }>, opts: BaselineCaptureOptions): void {
   if (!opts.preimages || items.length === 0) return;
   try {
-    await opts.preimages(root, items);
+    void opts.preimages(root, items).catch((error: unknown) => opts.onPreimageError?.(error));
   } catch (error) {
     opts.onPreimageError?.(error);
   }
@@ -243,7 +262,7 @@ async function storePreimages(root: string, items: Array<{ hash: string; bytes: 
 async function uncoveredFolders(folders: readonly string[], covered: Set<string>): Promise<Array<{ root: string; git: boolean }>> {
   const out: Array<{ root: string; git: boolean }> = [];
   for (const folder of folders) {
-    const top = await runGit(folder, "rev-parse --show-toplevel");
+    const top = await gitLine(folder, ["rev-parse", "--show-toplevel"]);
     const root = top ? path.resolve(top) : folder;
     const key = normalizePath(root);
     if (covered.has(key)) continue;
@@ -269,14 +288,14 @@ export async function captureRunChangeBaseline(now: Date = new Date(), opts: Bas
   const covered = new Set(pending.repos.map((repo) => normalizePath(repo.root)));
   for (const { root, git } of await uncoveredFolders(opts.folders ?? [], covered)) {
     if (git) {
-      const branch = await runGit(root, "rev-parse --abbrev-ref HEAD");
+      const branch = await gitLine(root, ["rev-parse", "--abbrev-ref", "HEAD"]);
       repos.push(await gitRepoEntry({ root, name: repoName(root), changes: [], ...(branch && branch !== "HEAD" ? { branch } : {}) }, budget, opts));
       continue;
     }
     const listed = await listWorkingSet(root);
     if (listed.files.length === 0) continue; // an empty or unreadable folder has nothing a run could change
     const read = await readBaselineFiles(listed.files, budget, opts.hint);
-    await storePreimages(root, read.preimages, opts);
+    storePreimages(root, read.preimages, opts);
     repos.push({
       root,
       name: repoName(root),

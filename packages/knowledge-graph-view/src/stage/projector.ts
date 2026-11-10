@@ -1,27 +1,27 @@
 /**
  * World → screen for the stage (PRD 43 B5): the fitted top-down frame, a three.js camera's matrices, and the rig's own
- * projection all as ONE {@link Projector}. Picking reads a projector as a 4×4 screen matrix ({@link screenMatrixOf}) so
- * a settle projects every slot in one tight loop with the matrix inlined — no call per point, no allocation.
- * Pure, no DOM, no three.
+ * projection all as ONE {@link Projector}. The math is the shared `projection.ts` (the rig reads it too), so picking,
+ * the a11y proxies, the captions and the camera never disagree. Picking reads a projector as a 4×4 screen matrix
+ * ({@link screenMatrixOf}) so a settle projects every slot in one tight loop with the matrix inlined. Pure, no DOM, no three.
  */
 
+import { fitView, groundScreenMatrix, projectGround, type GroundView } from './projection';
 import type { Placement } from './types';
 
 /** The orthographic top-down frame the stage fits a placement into. */
 export interface ScreenFrame { zoom: number; cx: number; cz: number; width: number; height: number }
 
-const FIT_MARGIN = 16;
+const groundOf = (f: ScreenFrame): GroundView => ({ cx: f.cx, cz: f.cz, zoom: f.zoom, tilt: 0, width: f.width, height: f.height });
 
 /** The frame that fits `p`'s bounds into a `width` × `height` box (world x → screen x, world z → screen y). */
 export function frameOf(p: Pick<Placement, 'bounds'>, width: number, height: number): ScreenFrame {
-    const { min, max } = p.bounds;
-    const w = Math.max(1, max[0] - min[0]), h = Math.max(1, max[2] - min[2]);
-    const zoom = Math.max(1e-3, Math.min((width - 2 * FIT_MARGIN) / w, (height - 2 * FIT_MARGIN) / h));
-    return { zoom, cx: (min[0] + max[0]) / 2, cz: (min[2] + max[2]) / 2, width, height };
+    return { ...fitView(p.bounds, width, height), width, height };
 }
 
 export function toScreen(f: ScreenFrame, x: number, z: number): [number, number] {
-    return [(x - f.cx) * f.zoom + f.width / 2, (z - f.cz) * f.zoom + f.height / 2];
+    const out: [number, number] = [0, 0];
+    projectGround(groundOf(f), x, 0, z, out);
+    return out;
 }
 
 /** World → screen pixels for the current camera. `project` writes x, y into `out`; false = behind the camera. */
@@ -41,42 +41,68 @@ export interface Projector {
 }
 
 export function frameProjector(f: ScreenFrame): Projector {
-    const hw = f.width / 2, hh = f.height / 2;
-    const screen = Float64Array.from([f.zoom, 0, 0, 0, 0, 0, 0, 0, 0, f.zoom, 0, 0, hw - f.cx * f.zoom, hh - f.cz * f.zoom, 0, 1]);
+    const view = groundOf(f);
     return {
-        width: f.width, height: f.height, pxPerWorld: f.zoom, key: `f|${f.zoom}|${f.cx}|${f.cz}|${f.width}|${f.height}`, screen,
-        project(x, _y, z, out) { out[0] = (x - f.cx) * f.zoom + hw; out[1] = (z - f.cz) * f.zoom + hh; return true; },
+        width: f.width, height: f.height, pxPerWorld: f.zoom, key: `f|${f.zoom}|${f.cx}|${f.cz}|${f.width}|${f.height}`, screen: groundScreenMatrix(view),
+        project(x, y, z, out) { projectGround(view, x, y, z, out); return true; },
     };
 }
 
-/** A three.js camera's (column-major) `projectionMatrix` × `matrixWorldInverse`, as a projector into a `width` × `height` box. */
-export function cameraProjector(cam: { projectionMatrix: { elements: ArrayLike<number> }; matrixWorldInverse: { elements: ArrayLike<number> } }, width: number, height: number): Projector {
-    const p = cam.projectionMatrix.elements, v = cam.matrixWorldInverse.elements;
-    const m = new Float64Array(16);
-    for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) {
-        let s = 0;
-        for (let k = 0; k < 4; k++) s += p[k * 4 + r]! * v[c * 4 + k]!;
-        m[c * 4 + r] = s;
+type CameraLike = { projectionMatrix: { elements: ArrayLike<number> }; matrixWorldInverse: { elements: ArrayLike<number> } };
+
+/**
+ * A three.js camera as a projector, REUSED frame after frame (the canvas tap updates it every frame): the matrices are
+ * written into scratch arrays and the key changes only when a view number does — no allocation, no string build per frame.
+ */
+export class CameraProjector implements Projector {
+    width = 0;
+    height = 0;
+    pxPerWorld = 1;
+    key = 'c0';
+    /** Clip-space view-projection (`projectionMatrix × matrixWorldInverse`) and the same folded into screen pixels. */
+    private readonly m = new Float64Array(16);
+    readonly screen = new Float64Array(16);
+    private version = 0;
+
+    /** Re-reads `cam` in a `width` × `height` box; true when the projection changed (the key moved). */
+    update(cam: CameraLike, width: number, height: number): boolean {
+        const p = cam.projectionMatrix.elements, v = cam.matrixWorldInverse.elements, m = this.m;
+        let changed = width !== this.width || height !== this.height;
+        for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) {
+            let s = 0;
+            for (let k = 0; k < 4; k++) s += p[k * 4 + r]! * v[c * 4 + k]!;
+            if (m[c * 4 + r] !== s) { m[c * 4 + r] = s; changed = true; }
+        }
+        if (!changed) return false;
+        this.width = width; this.height = height;
+        // Clip → screen pixels folded in: sx = (x/w + 1)·W/2 ⇒ row0' = (row0 + row3)·W/2; sy = (1 − y/w)·H/2 ⇒ row1' = (row3 − row1)·H/2.
+        for (let c = 0; c < 4; c++) {
+            this.screen[c * 4] = (m[c * 4]! + m[c * 4 + 3]!) * width / 2;
+            this.screen[c * 4 + 1] = (m[c * 4 + 3]! - m[c * 4 + 1]!) * height / 2;
+            this.screen[c * 4 + 2] = 0;
+            this.screen[c * 4 + 3] = m[c * 4 + 3]!;
+        }
+        // Pixels per world unit: an orthographic camera's x scale is 2 / (right − left) in NDC per world unit.
+        this.pxPerWorld = Math.abs(m[0]!) * width / 2 + Math.abs(m[8]!) * width / 2 || 1;
+        this.key = `c${++this.version}`;
+        return true;
     }
-    // Clip → screen pixels folded in: sx = (x/w + 1)·W/2 ⇒ row0' = (row0 + row3)·W/2; sy = (1 − y/w)·H/2 ⇒ row1' = (row3 − row1)·H/2.
-    const screen = new Float64Array(16);
-    for (let c = 0; c < 4; c++) {
-        screen[c * 4] = (m[c * 4]! + m[c * 4 + 3]!) * width / 2;
-        screen[c * 4 + 1] = (m[c * 4 + 3]! - m[c * 4 + 1]!) * height / 2;
-        screen[c * 4 + 3] = m[c * 4 + 3]!;
+
+    project(x: number, y: number, z: number, out: Float64Array): boolean {
+        const s = this.screen;
+        const w = s[3]! * x + s[7]! * y + s[11]! * z + s[15]!;
+        if (w <= 1e-9) return false;
+        out[0] = (s[0]! * x + s[4]! * y + s[8]! * z + s[12]!) / w;
+        out[1] = (s[1]! * x + s[5]! * y + s[9]! * z + s[13]!) / w;
+        return true;
     }
-    // Pixels per world unit: an orthographic camera's x scale is 2 / (right − left) in NDC per world unit.
-    const pxPerWorld = Math.abs(m[0]!) * width / 2 + Math.abs(m[8]!) * width / 2 || 1;
-    return {
-        width, height, pxPerWorld, key: `c|${width}|${height}|${Array.prototype.join.call(m, ',')}`, screen,
-        project(x, y, z, out) {
-            const w = m[3]! * x + m[7]! * y + m[11]! * z + m[15]!;
-            if (w <= 1e-9) return false;
-            out[0] = ((m[0]! * x + m[4]! * y + m[8]! * z + m[12]!) / w + 1) * width / 2;
-            out[1] = (1 - (m[1]! * x + m[5]! * y + m[9]! * z + m[13]!) / w) * height / 2;
-            return true;
-        },
-    };
+}
+
+/** A one-off camera projector (tests, a measurement page): {@link CameraProjector} read once. */
+export function cameraProjector(cam: CameraLike, width: number, height: number): Projector {
+    const projector = new CameraProjector();
+    projector.update(cam, width, height);
+    return projector;
 }
 
 /**

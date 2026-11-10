@@ -61,7 +61,7 @@ export async function readRootSignals(deps: RootSignalsDeps, candidates: readonl
     const paths = candidates.filter(isCodePath);
     const [coverage, churn, owners, entries] = await Promise.all([
         deps.files ? settled(() => readCoverage(deps.files!), { values: new Map<string, number>(), skipped: [] as CoverageSkip[] }) : { values: new Map<string, number>(), skipped: [] as CoverageSkip[] },
-        deps.history ? settled(() => deps.history!.commitsTouching([...paths], CHURN_DAYS), new Map<string, number>()) : new Map<string, number>(),
+        deps.history ? settled(async () => churnOf(await deps.history!.commits(HISTORY_DAYS, HISTORY_MAX_COMMITS), paths, CHURN_DAYS), new Map<string, number>()) : new Map<string, number>(),
         deps.files ? settled(() => readOwners(deps.files!.fs, deps.files!.rootPath, paths), new Map<string, string>()) : new Map<string, string>(),
         deps.entryPaths ? settled(() => deps.entryPaths!(candidates), new Set<string>() as ReadonlySet<string>) : new Set<string>() as ReadonlySet<string>,
     ]);

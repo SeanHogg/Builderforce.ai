@@ -14,6 +14,7 @@ import { hostLog } from "../hostLog";
 import type { BaselineCaptureOptions } from "../runChangeBaseline";
 import type { FinalizedRunChangeSets } from "../runChangeSets";
 import { startRunDelta } from "./finalizeRunDelta";
+import { runDeltaFile, type OpenCodeRequest } from "./openCode";
 import { readRunDeltas, type RunDeltaCard } from "./runDeltaRecords";
 
 type DeltaHost = typeof import("./runDeltaHost");
@@ -21,10 +22,16 @@ type DeltaHost = typeof import("./runDeltaHost");
 export interface EditorRunDelta {
   /** The baseline options of one run (resolves the adapters on first use). */
   capture(runId: string): Promise<BaselineCaptureOptions>;
-  /** The change set's `onFinalized` for one run: starts the delta, detached. */
-  onFinalized(run: { chatId: number; mode: "interactive" | "autonomous" }): (closed: FinalizedRunChangeSets) => void;
+  /**
+   * The change set's `onFinalized` for one run: starts the delta, detached. `writes` is read then: the run's own file-tool
+   * writes (its write evidence), as recorded by the run host.
+   */
+  onFinalized(run: { chatId: number; mode: "interactive" | "autonomous"; writes?: () => readonly string[] | undefined; workspaceRoot?: string }):
+    (closed: FinalizedRunChangeSets) => void;
   attach(sink: RunSink): () => void;
   runDeltas(query: { runId?: string; chatId?: number }): Promise<RunDeltaCard[]>;
+  /** A card's Open code: the confined absolute file (`openCode.ts`), or undefined when refused. */
+  openFile(request: OpenCodeRequest): Promise<string | undefined>;
 }
 
 const log = (what: string, error: unknown): void =>
@@ -55,23 +62,25 @@ export function editorRunDelta(args: {
           hint: h.statHashHint(),
           folders: args.workspaceFolders(),
           onPreimageError: (error) => log("pre-images", error),
+          release: () => { void h.releaseRun(runId).catch((error: unknown) => log("pre-image release", error)); },
         };
       } catch (error) {
         log("baseline adapters", error);
         return { folders: args.workspaceFolders() };
       }
     },
-    onFinalized(run) {
+    onFinalized({ writes, ...run }) {
       return (closed) => {
+        const written = writes?.();
         void loadHost().then((h) => startRunDelta({
           store: args.store,
           deviceId: args.deviceId,
-          sources: h.editorDeltaSources(args.secrets, log),
+          sources: h.editorDeltaSources(args.secrets, log, closed.runId),
           release: h.releasePreimages,
           post,
           telemetry: h.deltaTelemetry(hostLog),
           onError: (error) => log(`run ${closed.runId}`, error),
-        }, { ...run, closed }), (error: unknown) => log("load", error));
+        }, { ...run, closed, ...(written ? { writes: written } : {}) }), (error: unknown) => log("load", error));
       };
     },
     attach(sink) {
@@ -79,5 +88,6 @@ export function editorRunDelta(args: {
       return () => { sinks.delete(sink); };
     },
     runDeltas: (query) => readRunDeltas(args.store, query),
+    openFile: (request) => runDeltaFile(args.store, request),
   };
 }

@@ -7,7 +7,7 @@
  */
 
 import { forgetRootPorts } from "@builderforce/agent-tools/knowledge";
-import { migrateLegacyKnowledge, nodeKnowledgeStore, type NodeKnowledgeStore } from "@builderforce/agent-tools/node-knowledge-store";
+import { migrateLegacyKnowledge, nodeKnowledgeStore, sweepPreimages, type NodeKnowledgeStore } from "@builderforce/agent-tools/node-knowledge-store";
 import { disposeReplicas } from "./knowledgeReplica";
 import type { KnowledgeFiles } from "./knowledgeStores";
 
@@ -32,6 +32,8 @@ export function folderKnowledge(folderPath: string, log?: Pick<FolderKnowledgeLo
     folders.set(folderPath, (held = nodeKnowledgeStore(folderPath)));
     if (held.recoveredFrom) log?.info(`knowledge index of ${folderPath} was corrupt; kept as ${held.recoveredFrom} and started empty (the next review re-indexes)`);
     if (held.formatNewer) log?.info(`knowledge index of ${folderPath} was written by a newer BuilderForce; it is read-only here until this extension is updated`);
+    // PRD 41 C1.3: run pre-images past their retention (and pins of runs that never finalized) go when the store opens.
+    else void sweepPreimages(held.persistence, Date.now()).catch(() => undefined);
   }
   return held;
 }

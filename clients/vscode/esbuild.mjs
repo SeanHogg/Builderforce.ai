@@ -175,6 +175,11 @@ const hostWorker = harness || integration ? null : { ...options, entryPoints: ["
  * extension bundle; `out/` ships in the .vsix, so no `.vscodeignore` entry is needed.
  */
 const extractWorker = harness || integration ? null : { ...options, entryPoints: ["src/knowledge/review/extractWorker.ts"], outfile: "out/knowledgeExtractWorker.js" };
+/**
+ * The run delta's engine worker (`src/runDelta/deltaWorker.ts`, PRD 41 §C14): a FOURTH entry, started per delta by
+ * `deltaWorkerHost.ts` with `worker_threads` and terminated when the delta's budget runs out. Same options as the extension.
+ */
+const deltaWorker = harness || integration ? null : { ...options, entryPoints: ["src/runDelta/deltaWorker.ts"], outfile: "out/runDeltaWorker.js" };
 async function copyBfiWasm() {
   const wasm = createRequire(import.meta.url).resolve("@seanhogg/bfi-web/bfi_web_bg.wasm");
   fs.mkdirSync("out", { recursive: true });
@@ -289,6 +294,7 @@ if (watch) {
     await copyBfiWasm();
   }
   if (extractWorker) await (await esbuild.context(extractWorker)).watch();
+  if (deltaWorker) await (await esbuild.context(deltaWorker)).watch();
   console.log("[esbuild] watching…");
 } else {
   await esbuild.build(options);
@@ -297,4 +303,5 @@ if (watch) {
     await copyBfiWasm();
   }
   if (extractWorker) await esbuild.build(extractWorker);
+  if (deltaWorker) await esbuild.build(deltaWorker);
 }

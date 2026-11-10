@@ -36,7 +36,12 @@ export interface RunDeltaLabels {
     metricsHeading: string;
     evidenceHeading: string;
     paramsHeading: string;
+    /** Files whose before side could not be read: analyzed on the after side only (lineage `present`). */
+    unresolvedHeading: string;
     excludedHeading: string;
+    /** `{count}` hits folded into one finding (`params.aggregated`). */
+    aggregated: string;
+    blockingHeading: string;
     failedHeading: string;
     /** `{before}` → `{after}` `{unit}` (a missing side reads {@link notMeasuredValue}). */
     metricValue: string;
@@ -83,6 +88,12 @@ export interface RunDeltaLabels {
     units: Record<string, string>;
     /** `UnresolvedFile.reason`. */
     excluded: Record<string, string>;
+    /** A finding param's name; a key with no entry is shown as the key. */
+    params: Record<string, string>;
+    /** Coded param values by param name (`via`, `change`, `kind`, `crossed`); any other value is data, shown as is. */
+    paramValues: Record<string, Record<string, string>>;
+    /** `unsafe-regex:<key>.<reason>` reasons. */
+    unsafeReasons: Record<string, string>;
 }
 
 export const DEFAULT_RUN_DELTA_LABELS: RunDeltaLabels = {
@@ -104,7 +115,10 @@ export const DEFAULT_RUN_DELTA_LABELS: RunDeltaLabels = {
     metricsHeading: 'Metrics',
     evidenceHeading: 'Evidence',
     paramsHeading: 'Details',
-    excludedHeading: 'Files outside the verdicts',
+    unresolvedHeading: 'Files without a before side',
+    excludedHeading: 'Excluded files',
+    aggregated: 'aggregated ({count})',
+    blockingHeading: 'What blocks an autonomous run',
     failedHeading: 'Checks that did not run',
     metricValue: '{before} → {after}[[ {unit}]]',
     notMeasuredValue: 'not measured',
@@ -161,6 +175,8 @@ export const DEFAULT_RUN_DELTA_LABELS: RunDeltaLabels = {
         branchChanged: 'Branch changed',
         truncated: 'Results were truncated',
         insufficientHistory: 'Not enough past runs to rank',
+        notComparableRule: '{rule} could not be certified',
+        unsafeRegex: '{key}: unsafe pattern dropped ({reason})',
     },
     clauses: { findingsResolved: 'findings resolved', metricsImproved: 'metrics improved', worse: 'got worse' },
     rules: {
@@ -195,6 +211,7 @@ export const DEFAULT_RUN_DELTA_LABELS: RunDeltaLabels = {
         destructiveDdl: 'Destructive schema change',
         forcePush: 'Force push in a script',
         rmRf: 'Recursive delete in a script',
+        deltaConfigChanged: 'Delta policy file changed',
     },
     metrics: {
         complexityMax: 'Highest complexity',
@@ -212,6 +229,42 @@ export const DEFAULT_RUN_DELTA_LABELS: RunDeltaLabels = {
         changedOutsideRun: 'Changed outside this run',
         submoduleMoved: 'Submodule moved',
         binary: 'Binary file',
+    },
+    params: {
+        route: 'Route',
+        guard: 'Guard',
+        via: 'Detected by',
+        file: 'File',
+        from: 'Previously',
+        replacement: 'Replaced by',
+        kind: 'Kind',
+        guards: 'Guards',
+        symbol: 'Symbol',
+        change: 'Change',
+        before: 'Before',
+        after: 'After',
+        crossed: 'Crossed the size limit',
+        test: 'Test',
+        assertions: 'Assertions',
+        to: 'Now',
+        loop: 'Loop',
+        call: 'Call',
+        key: 'Match',
+        count: 'Count',
+        members: 'Members',
+    },
+    paramValues: {
+        via: { chain: 'Handler chain', middleware: 'Middleware', rekeyed: 'Route renamed', unguardedSibling: 'Unguarded among guarded siblings' },
+        change: { added: 'Added', edited: 'Edited', deleted: 'Deleted', removed: 'Removed', changed: 'Changed' },
+        kind: { httpRoute: 'HTTP route', middleware: 'Middleware', vscodeCommand: 'VS Code command', webviewMessage: 'Webview message' },
+        crossed: { '0': 'No', '1': 'Yes' },
+    },
+    unsafeReasons: {
+        tooLong: 'too long',
+        invalid: 'invalid',
+        backreference: 'backreference',
+        nestedQuantifier: 'nested quantifier',
+        quantifiedAlternation: 'quantified alternation',
     },
 };
 

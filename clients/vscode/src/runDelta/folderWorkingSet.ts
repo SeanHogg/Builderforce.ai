@@ -5,8 +5,8 @@
  *
  * The walk skips what the knowledge walk skips (`isSkippedPath`: dependency folders, VCS metadata), BuilderForce's own state
  * (`listsFile`; the repository's `.builderforce/delta.json` is kept: it is an input the delta reads), and any nested git
- * checkout (a repository is its own baseline entry, never part of the folder's). It stops at {@link WORKING_SET_MAX_FILES},
- * the knowledge listing's cap, and says so (`truncated`): a capped listing cannot tell a deleted file from an unlisted one, so
+ * checkout (a repository is its own baseline entry, never part of the folder's). It stops at {@link WORKING_SET_MAX_FILES}
+ * and says so (`truncated`): a capped listing cannot tell a deleted file from an unlisted one, so
  * the change set does not attribute a truncated folder.
  */
 
@@ -14,7 +14,12 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { isSkippedPath, listsFile, MAX_LISTED_FILES } from "@builderforce/agent-tools/knowledge";
 
-export const WORKING_SET_MAX_FILES = MAX_LISTED_FILES;
+/**
+ * A non-git folder's working set is fingerprinted (and pre-imaged) before EVERY run start, so it is capped well below the
+ * knowledge listing's {@link MAX_LISTED_FILES}: past it the folder is `truncated` and not attributed, and the run start never
+ * waits on hashing a large tree.
+ */
+export const WORKING_SET_MAX_FILES = Math.min(2_000, MAX_LISTED_FILES);
 
 export interface WorkingSetFile {
   /** Absolute path. */

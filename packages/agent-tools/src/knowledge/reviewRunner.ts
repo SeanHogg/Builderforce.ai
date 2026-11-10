@@ -206,7 +206,7 @@ export async function reviewModules(source: DirectorySource, plan?: PlanDetail):
  */
 function poolWithAliases(pool: ExtractPool | undefined, modules: ModuleResolution): ExtractPool | undefined {
     if (!pool || modules.aliases.scopes.length === 0) return pool;
-    return (job, signal) => pool({ ...job, aliases: modules.aliases } as ExtractJob, signal);
+    return (job, signal) => pool(Object.assign({}, job, { aliases: modules.aliases }) as ExtractJob, signal);
 }
 
 /**

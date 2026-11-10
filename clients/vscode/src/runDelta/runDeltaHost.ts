@@ -1,12 +1,17 @@
 /**
  * The editor's adapters for the run delta (PRD 41 §C14, VSIX row): where a repository's pre-images, knowledge facts and git
  * come from, the stat-manifest hint for the baseline's fingerprints, and `delta.computed`. The composition root
- * (`brainRunHostPorts.ts`) assembles these; the delta itself (`finalizeRunDelta.ts`) and the baseline (`runChangeBaseline.ts`)
- * only see the ports.
+ * (`brainRunHostPorts.ts`, through `editorRunDelta.ts`) assembles these; the delta itself (`finalizeRunDelta.ts`) and the
+ * baseline (`runChangeBaseline.ts`) only see the ports.
  *
- * A repository's knowledge file is its WORKSPACE FOLDER's (`folderKnowledge`, one connection per folder, shared with the
- * knowledge view); a repository outside every folder uses its own root's file. Nothing here throws into a run: a store that
- * cannot open (an older Node without `node:sqlite`, a newer-format file) leaves pre-images and facts absent.
+ * A repository's knowledge file is a WORKSPACE FOLDER's (`folderKnowledge`, one connection per folder, shared with the
+ * knowledge view), chosen by ONE rule for capture, read and release (`repoPlacement.ts`): the folder holding the repository,
+ * else the folder the repository holds (a monorepo subfolder opened on its own). Outside every folder: none — nothing is
+ * written outside the workspace. Nothing here throws into a run: a store that cannot open (an older Node without
+ * `node:sqlite`, a newer-format file) leaves pre-images and facts absent.
+ *
+ * Pre-image writes are not awaited by the run start (`runChangeBaseline.ts`): each run's writes are tracked here, and its
+ * reads and its release wait for them.
  */
 
 import * as path from "node:path";
@@ -23,21 +28,36 @@ import { rootForPath } from "../knowledge/knowledgeRoots";
 import type { PreimageSink, StatHashHint } from "../runChangeBaseline";
 import type { DeltaComputedEvent, RepoHostSources } from "./finalizeRunDelta";
 import { repoGit } from "./gitSide";
+import { placeRepo, type RepoPlacement } from "./repoPlacement";
 
 const HEX64 = /^[0-9a-f]{64}$/;
 
-/** The workspace folder holding `abs` (the innermost): whose knowledge file a repository uses. Outside every folder: none. */
-function folderOf(abs: string): string | undefined {
-  return rootForPath(abs, workspaceFolders())?.folderPath;
-}
+const placementOf = (repoRoot: string): RepoPlacement | undefined => placeRepo(repoRoot, workspaceFolders().map((f) => f.path));
 
 const persistenceOf = (folder: string) => folderKnowledge(folder).persistence;
 
+/** Each run's pre-image writes still in flight. */
+const pendingWrites = new Map<string, Set<Promise<unknown>>>();
+/** The folders each run wrote pre-images to (what {@link releaseRun} unpins). */
+const writtenFolders = new Map<string, Set<string>>();
+
+/** Resolves when every pre-image write of `runId` so far has settled. */
+async function writesSettled(runId: string): Promise<void> {
+  await Promise.allSettled([...(pendingWrites.get(runId) ?? [])]);
+}
+
 /** The baseline's pre-image sink for one run: each repository's bytes into its folder's knowledge file, pinned to the run. */
 export function preimageSinkFor(runId: string): PreimageSink {
-  return async (root, items) => {
-    const folder = folderOf(root);
-    if (folder) await putPreimages(persistenceOf(folder), runId, items, Date.now());
+  return (root, items) => {
+    const placement = placementOf(root);
+    if (!placement) return Promise.resolve();
+    const write = putPreimages(persistenceOf(placement.folder), runId, items, Date.now());
+    writtenFolders.set(runId, (writtenFolders.get(runId) ?? new Set<string>()).add(placement.folder));
+    const set = pendingWrites.get(runId) ?? new Set<Promise<unknown>>();
+    pendingWrites.set(runId, set);
+    set.add(write);
+    void write.finally(() => set.delete(write)).catch(() => undefined);
+    return write;
   };
 }
 
@@ -48,7 +68,7 @@ export function preimageSinkFor(runId: string): PreimageSink {
 export function statHashHint(): StatHashHint {
   const sets = new Map<string, Promise<{ rootId: string; set: StatSet } | undefined>>();
   return async (absPath, st) => {
-    const folder = folderOf(absPath);
+    const folder = rootForPath(absPath, workspaceFolders())?.folderPath;
     const root = folder ? rootForPath(folder, workspaceFolders()) : undefined;
     if (!root) return undefined;
     let held = sets.get(root.folderPath);
@@ -66,51 +86,61 @@ export function statHashHint(): StatHashHint {
 }
 
 /**
- * A repository's knowledge root, opened for the delta (the knowledge view's own store and manifest): the WORKSPACE FOLDER's
- * root — the one a review indexes — with the repository's place in it as the path prefix. A repository that is not inside a
- * workspace folder (a folder opened below its root) has no facts.
+ * A repository's knowledge root, opened for the delta (the knowledge view's own store and manifest): its placement folder's
+ * root — the one a review indexes — with the repository's place relative to it.
  */
-async function knowledgeOf(secrets: vscode.SecretStorage, root: string): Promise<RepoHostSources["knowledge"]> {
-  const folder = folderOf(root);
-  const kroot = folder ? rootForPath(folder, workspaceFolders()) : undefined;
-  if (!folder || !kroot) return undefined;
-  const rel = path.relative(folder, root).split(path.sep).join("/");
-  const prefix = rel ? `${rel}/` : "";
+async function knowledgeOf(secrets: vscode.SecretStorage, placement: RepoPlacement): Promise<RepoHostSources["knowledge"]> {
+  const kroot = rootForPath(placement.folder, workspaceFolders());
+  if (!kroot) return undefined;
   const open = openRoot(secrets, kroot);
   await open.migrated;
   const partitions = await readPartitions({ caps: buildLocalCapabilityProvider(kroot.folderPath) });
   const persistence = persistenceOf(kroot.folderPath);
   return {
-    rootId: kroot.rootId, prefix, store: open.local, manifest: open.manifest, packs: reviewPacks({ partitions }),
+    rootId: kroot.rootId, placement, store: open.local, manifest: open.manifest, packs: reviewPacks({ partitions }),
     generation: () => persistence.getMeta("generation") ?? "0",
   };
 }
 
-/** Everything one repository root offers the delta, each part degrading on its own. */
-export function editorDeltaSources(secrets: vscode.SecretStorage, log: (what: string, error: unknown) => void): (root: string) => Promise<RepoHostSources> {
+/** Everything one repository root offers one run's delta, each part degrading on its own. */
+export function editorDeltaSources(
+  secrets: vscode.SecretStorage, log: (what: string, error: unknown) => void, runId: string,
+): (root: string) => Promise<RepoHostSources> {
   return async (root) => {
+    const placement = placementOf(root);
     let preimages: RepoHostSources["preimages"];
     try {
-      const folder = folderOf(root);
-      if (folder) {
-        const db = persistenceOf(folder);
-        preimages = { read: (hashes) => readPreimages(db, hashes) };
+      if (placement) {
+        const db = persistenceOf(placement.folder);
+        preimages = { read: async (hashes) => { await writesSettled(runId); return readPreimages(db, hashes); } };
       }
     } catch (error) {
       log("pre-image store", error);
     }
-    const knowledge = await knowledgeOf(secrets, root).catch((error: unknown) => { log("knowledge facts", error); return undefined; });
+    const knowledge = placement ? await knowledgeOf(secrets, placement).catch((error: unknown) => { log("knowledge facts", error); return undefined; }) : undefined;
     return { git: repoGit(root), ...(preimages ? { preimages } : {}), ...(knowledge ? { knowledge } : {}) };
   };
 }
 
-/** Releases a run's pre-image pins in a repository's knowledge file and sweeps expired rows (`RunDeltaDeps.release`). */
+/** Releases a run's pre-image pins in a repository's knowledge file (after its writes settle) and sweeps expired rows. */
 export async function releasePreimages(root: string, runId: string): Promise<void> {
-  const folder = folderOf(root);
-  if (!folder) return;
-  const db = persistenceOf(folder);
+  await writesSettled(runId);
+  pendingWrites.delete(runId);
+  writtenFolders.delete(runId);
+  const placement = placementOf(root);
+  if (!placement) return;
+  const db = persistenceOf(placement.folder);
   await unpinPreimages(db, runId, Date.now());
   await sweepPreimages(db, Date.now());
+}
+
+/** Releases every pin of a run whose change set was never finalized here (`BaselineCaptureOptions.release`). */
+export async function releaseRun(runId: string): Promise<void> {
+  await writesSettled(runId);
+  pendingWrites.delete(runId);
+  const folders = writtenFolders.get(runId) ?? new Set<string>();
+  writtenFolders.delete(runId);
+  for (const folder of folders) await unpinPreimages(persistenceOf(folder), runId, Date.now());
 }
 
 /** `delta.computed`: the VSIX has no named-event telemetry channel (its activity signals are billable time), so it is logged. */

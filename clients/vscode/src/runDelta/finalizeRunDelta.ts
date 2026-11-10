@@ -7,8 +7,12 @@
  * (after the run settled, never awaited), catches everything into `onError`, and abandons a computation that outlives its
  * budget — that delta is then simply absent (nothing is stored or posted late).
  *
- * The registry is the built-in one merged with the repository's `.builderforce/delta.json` AS OF THE BASELINE
- * ({@link DELTA_OVERRIDES_PATH}). The run's `kind` is left unset: nothing a host start carries says a run is a consolidation.
+ * The registry is the built-in one merged with the repository's `.builderforce/delta.json` AS OF THE BASELINE (the engine's
+ * `DELTA_CONFIG_PATH`; a change to it within the run is the engine's own blocking `delta-config-changed`). The run's `kind`
+ * is left unset: nothing a host start carries says a run is a consolidation.
+ *
+ * The inputs are gathered on this thread (`runDeltaPorts.ts`); the engine runs in a worker (`deltaWorkerHost.ts`) that the
+ * budget terminates.
  *
  * POLICY (§12.5). An autonomous run whose delta has blocking findings is recorded `blocked` with their rule ids. There is no
  * finalize gate to refuse in this host: an audit run's completion is written DURING the run by the agent's findings tool
@@ -19,15 +23,18 @@
  * pins expire after the retention (`sweepPreimages`).
  */
 
-import { computeRunDelta, defaultDimensionRegistry, DEFAULT_REGISTRIES, withOverrides, type RunDelta } from "@builderforce/run-delta";
+import { DEFAULT_REGISTRIES, DELTA_CONFIG_PATH, withOverrides, type DeltaRegistries, type RunDelta } from "@builderforce/run-delta";
 import type { EntityDestination, LocalFirstStore } from "@builderforce/local-first";
 import { normalizePath } from "../gitChangeModel";
 import { fingerprintHash, type ChangeSetRepoBaseline } from "../runChangeBaseline";
 import type { FinalizedRunChangeSets, LocalChangeSetValue } from "../runChangeSets";
-import { deltaAttribution, parallelClaims } from "./attribution";
+import { deltaAttribution, overlappingRun, writesInRepo } from "./attribution";
+import { computeInWorker } from "./deltaWorkerHost";
 import { headSwitched, type RepoGit } from "./gitSide";
-import { runDeltaPorts } from "./runDeltaPorts";
-import { cardOf, pastBlastScores, storeRunDelta, type RunDeltaCard, type RunDeltaRecordValue } from "./runDeltaRecords";
+import { prepareDelta } from "./runDeltaPorts";
+import {
+  cardOf, pastBlastScores, redactDropped, storeRunDelta, syncedRepository, type RunDeltaCard, type StoredRunDelta,
+} from "./runDeltaRecords";
 import type { KnowledgeContext } from "./sideFacts";
 import { SideTexts, type PreimageReader } from "./sideTexts";
 
@@ -40,9 +47,6 @@ export interface RepoHostSources {
   preimages?: { read: PreimageReader };
   knowledge?: KnowledgeContext;
 }
-
-/** The repository's delta overrides, read from the BEFORE side only. */
-export const DELTA_OVERRIDES_PATH = ".builderforce/delta.json";
 
 /** `delta.computed` (PRD 41 §4 telemetry): counts and the headline, never content. */
 export interface DeltaComputedEvent {
@@ -82,11 +86,18 @@ export interface RunDeltaRun {
   chatId: number;
   mode: "interactive" | "autonomous";
   closed: FinalizedRunChangeSets;
+  /**
+   * The run's own write evidence: the paths its file tools created, edited or deleted (its recorded tool calls), as the tools
+   * named them. Undefined: none recorded (attribution falls back to the overlap rule alone).
+   */
+  writes?: readonly string[];
+  /** The folder the tools resolve a relative path against. */
+  workspaceRoot?: string;
 }
 
 const nowOf = (deps: Pick<RunDeltaDeps, "now">): Date => deps.now?.() ?? new Date();
 
-function eventOf(value: RunDeltaRecordValue): DeltaComputedEvent {
+function eventOf({ value }: StoredRunDelta): DeltaComputedEvent {
   const findings = value.delta.dimensions.flatMap((d) => d.findings);
   return {
     name: "delta.computed", surface: "vscode", mode: value.mode, headline: value.delta.headline, ms: value.computedMs,
@@ -104,36 +115,38 @@ function eventOf(value: RunDeltaRecordValue): DeltaComputedEvent {
  */
 async function beforeOverrides(base: Pick<ChangeSetRepoBaseline, "files" | "baseCommit" | "kind">, sources: RepoHostSources): Promise<unknown> {
   let text: string | undefined;
-  if (DELTA_OVERRIDES_PATH in base.files) {
-    const hash = fingerprintHash(base.files[DELTA_OVERRIDES_PATH]);
+  if (DELTA_CONFIG_PATH in base.files) {
+    const hash = fingerprintHash(base.files[DELTA_CONFIG_PATH]);
     if (!hash) return undefined; // it did not exist at baseline
     const bytes = sources.preimages ? (await sources.preimages.read([hash])).get(hash) : undefined;
     if (!bytes) throw new Error("unreadable:preimage-missing"); // it existed, but its before bytes are gone
     text = new TextDecoder("utf-8").decode(bytes);
   } else if (base.baseCommit && base.kind !== "folder" && sources.git) {
-    text = await sources.git.show(base.baseCommit, DELTA_OVERRIDES_PATH);
+    const blobs = await sources.git.blobs(base.baseCommit, [DELTA_CONFIG_PATH]);
+    if (blobs === undefined) throw new Error("unreadable:git-unavailable");
+    const bytes = blobs.get(DELTA_CONFIG_PATH);
+    text = bytes ? new TextDecoder("utf-8").decode(bytes) : undefined;
   }
   return text === undefined ? undefined : (JSON.parse(text) as unknown);
 }
 
-async function registryOf(
+async function registriesOf(
   base: Pick<ChangeSetRepoBaseline, "files" | "baseCommit" | "kind">, sources: RepoHostSources,
-): Promise<{ registry: ReturnType<typeof defaultDimensionRegistry>; dropped: string[] }> {
+): Promise<{ registries: DeltaRegistries; dropped: string[] }> {
   let raw: unknown;
   try {
     raw = await beforeOverrides(base, sources);
   } catch (error) {
     const unreadable = error instanceof Error && error.message.startsWith("unreadable:");
-    return { registry: defaultDimensionRegistry(), dropped: [unreadable ? error.message : "invalid:json"] };
+    return { registries: DEFAULT_REGISTRIES, dropped: [unreadable ? error.message : "invalid:json"] };
   }
-  const { registries, dropped } = withOverrides(DEFAULT_REGISTRIES, raw);
-  return { registry: defaultDimensionRegistry(registries), dropped };
+  return withOverrides(DEFAULT_REGISTRIES, raw);
 }
 
 /** The delta of ONE committed change set. Undefined when the record is gone. */
 async function repoDelta(
-  deps: RunDeltaDeps, run: RunDeltaRun, set: { id: string; root: string }, sources: RepoHostSources,
-): Promise<RunDeltaRecordValue | undefined> {
+  deps: RunDeltaDeps, run: RunDeltaRun, set: { id: string; root: string }, sources: RepoHostSources, signal: AbortSignal,
+): Promise<StoredRunDelta | undefined> {
   const started = Date.now();
   const record = await deps.store.read((tx) => tx.get<LocalChangeSetValue>("change-set", set.id));
   if (!record) return undefined;
@@ -142,25 +155,31 @@ async function repoDelta(
   const base: Pick<ChangeSetRepoBaseline, "root" | "baseCommit" | "branch" | "files" | "preimageTooLarge" | "kind"> =
     run.closed.baseline.repos.find((r) => normalizePath(r.root) === normalizePath(set.root))
     ?? { root: set.root, files: {}, ...(cs.baseCommit ? { baseCommit: cs.baseCommit } : {}) };
-  const claims = await parallelClaims(deps.store, { runId, repository: cs.repository, since: run.closed.baseline.capturedAt });
+  const repository = syncedRepository(cs.repository);
+  const overlap = await overlappingRun(deps.store, {
+    runId, repository: cs.repository, since: run.closed.baseline.capturedAt, until: nowOf(deps).toISOString(),
+  });
+  const writes = run.writes ? writesInRepo(run.writes, set.root, run.workspaceRoot) : undefined;
   const texts = new SideTexts(base, sources.git, sources.preimages?.read);
-  const inputs = await texts.inputs(cs.files.map((f) => ({ ...f, attribution: deltaAttribution(f, claims) })));
+  const files = await texts.inputs(cs.files.map((f) => ({ ...f, attribution: deltaAttribution(f, { overlap, ...(writes ? { writes } : {}) }) })));
   const switched = sources.git && base.kind !== "folder" ? await headSwitched(sources.git, base) : false;
-  const { registry, dropped } = await registryOf(base, sources);
-  const delta = await computeRunDelta(
-    { runId, mode: run.mode, ...(base.baseCommit ? { baseCommit: base.baseCommit } : {}), ...(switched ? { headSwitched: true } : {}), files: inputs },
-    registry,
-    runDeltaPorts({
-      root: set.root, texts, inputs, ...(sources.knowledge ? { knowledge: sources.knowledge } : {}), ...(sources.git ? { git: sources.git } : {}),
-      pastScores: () => pastBlastScores(deps.store, cs.repository),
-      onError: deps.onError,
-    }),
-  );
+  const { registries, dropped } = await registriesOf(base, sources);
+  const prepared = await prepareDelta({
+    root: set.root, texts, registries,
+    input: { runId, mode: run.mode, ...(base.baseCommit ? { baseCommit: base.baseCommit } : {}), ...(switched ? { headSwitched: true } : {}), files },
+    ...(sources.knowledge ? { knowledge: sources.knowledge } : {}), ...(sources.git ? { git: sources.git } : {}),
+    pastScores: () => pastBlastScores(deps.store, repository),
+    onError: deps.onError,
+  });
+  const delta = await computeInWorker(prepared, signal);
   return {
-    runId, repository: cs.repository, root: set.root, changeSetId: set.id, chatId: run.chatId, mode: run.mode, delta,
-    computedMs: Date.now() - started,
-    ...(run.mode === "autonomous" && delta.blocking.length > 0 ? { blocked: { rules: [...delta.blocking] } } : {}),
-    ...(dropped.length > 0 ? { overridesDropped: dropped } : {}),
+    value: {
+      runId, repository, changeSetId: set.id, chatId: run.chatId, mode: run.mode, delta,
+      computedMs: Date.now() - started,
+      ...(run.mode === "autonomous" && delta.blocking.length > 0 ? { blocked: { rules: [...delta.blocking] } } : {}),
+      ...(dropped.length > 0 ? { overridesDropped: redactDropped(dropped) } : {}),
+    },
+    local: { kind: "local", runId, chatId: run.chatId, root: set.root, repo: cs.repository },
   };
 }
 
@@ -168,7 +187,9 @@ async function repoDelta(
  * Computes, stores and posts the run's deltas, one per committed change set. `live()` false (the budget ran out) stops it
  * from storing or posting anything further. Returns the cards it stored.
  */
-export async function finalizeRunDelta(deps: RunDeltaDeps, run: RunDeltaRun, live: () => boolean = () => true): Promise<RunDeltaCard[]> {
+export async function finalizeRunDelta(
+  deps: RunDeltaDeps, run: RunDeltaRun, live: () => boolean = () => true, signal: AbortSignal = new AbortController().signal,
+): Promise<RunDeltaCard[]> {
   const cards: RunDeltaCard[] = [];
   const roots = new Map<string, string>();
   for (const r of run.closed.baseline.repos) roots.set(normalizePath(r.root), r.root);
@@ -183,7 +204,7 @@ export async function finalizeRunDelta(deps: RunDeltaDeps, run: RunDeltaRun, liv
   try {
     for (const set of run.closed.committed) {
       try {
-        const value = await repoDelta(deps, run, set, await sourcesOf(set.root));
+        const value = await repoDelta(deps, run, set, await sourcesOf(set.root), signal);
         if (!value || !live()) continue;
         const stored = await storeRunDelta(deps.store, { deviceId: deps.deviceId(), at: nowOf(deps).toISOString(), ...(deps.destination ? { destination: deps.destination } : {}) }, value, live);
         if (!stored || !live()) continue;
@@ -208,14 +229,16 @@ export async function finalizeRunDelta(deps: RunDeltaDeps, run: RunDeltaRun, liv
 export function startRunDelta(deps: RunDeltaDeps, run: RunDeltaRun): Promise<void> {
   let live = true;
   const budget = deps.budgetMs ?? RUN_DELTA_BUDGET_MS;
+  const abort = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<void>((resolve) => {
     timer = setTimeout(() => {
       live = false;
+      abort.abort(); // terminates the engine's worker
       deps.onError(new Error(`run_delta_budget: the delta of run ${run.closed.runId} took longer than ${budget} ms and was abandoned`));
       resolve();
     }, budget);
   });
-  const work = finalizeRunDelta(deps, run, () => live).then(() => undefined, (error: unknown) => deps.onError(error));
+  const work = finalizeRunDelta(deps, run, () => live, abort.signal).then(() => undefined, (error: unknown) => deps.onError(error));
   return Promise.race([work, timeout]).finally(() => { if (timer) clearTimeout(timer); });
 }

@@ -14,7 +14,8 @@
 import { createContext, useContext } from 'react';
 import { PickIndex, type PickOptions, type Projector, type StageHit } from '../pick';
 import type { SlotIncident } from '../overlay/incident';
-import type { MarkSet, Placement } from '../types';
+import type { StageRenderer } from '../renderer';
+import type { Placement } from '../types';
 
 export const SETTLE_MS = 120;
 
@@ -31,15 +32,11 @@ export interface StageOptions {
 }
 
 /**
- * What the bus reads of the renderer at a settle: the depth (towers are measured at their drawn height), the MarkSet
- * (its `importance` is picking's tie-break, the same reading `nearestHit` uses) and, once the port has it, the LIVE keys
- * (the MarkSet's plus every slot a drill appended).
+ * What the bus reads of the renderer: the depth (towers are measured at their drawn height), the MarkSet (its
+ * `importance` is picking's tie-break, the same reading `nearestHit` uses) and the LIVE keys (the MarkSet's plus every
+ * slot a drill appended).
  */
-export interface StageSource {
-    readonly depth: number;
-    readonly marks: MarkSet | null;
-    keys?(): readonly string[];
-}
+export type StageSource = Pick<StageRenderer, 'depth' | 'marks' | 'keys'>;
 
 /** Where the bus moves keyboard focus once the next settle has rebuilt the proxies: a slot's key, or the first stop. */
 export type FocusRequest = { key: string } | { first: true };
@@ -55,7 +52,6 @@ export class StageBus {
     /** A focus move waiting for the proxies of the next settle (`StageProxies` performs it). */
     focusRequest: FocusRequest | null = null;
     private stored: readonly string[] = [];
-    private live: { from: readonly string[]; p: Placement | null; keys: readonly string[] } | null = null;
     /** The slot under the pointer (-1 none). */
     hover = -1;
     /** True once a real camera pushed a projection: the fitted-frame fallback stops being used. */
@@ -79,21 +75,15 @@ export class StageBus {
     extrudeScale(): number { return this.source ? this.source.depth : 1; }
 
     /**
-     * The LIVE key of every slot: the renderer's when its port offers them; else the stored keys with the slots the
-     * current placement appends (a drilled level's symbols, `Placement.append`) — so an appended symbol is selectable,
-     * focusable and anchorable. Stable while its inputs are.
+     * The LIVE key of every slot — the renderer's (`StageRenderer.keys()`: the MarkSet's plus every slot a drill
+     * appended), so an appended symbol is selectable, focusable and anchorable; the stored MarkSet keys with no renderer.
      */
-    get keys(): readonly string[] {
-        const fromSource = this.source?.keys?.();
-        if (fromSource) return fromSource;
-        const marks = this.source?.marks?.keys;
-        const from = marks && marks.length > this.stored.length ? marks : this.stored;
-        const p = this.placement, run = p?.append;
-        if (!run || run.base + run.keys.length <= from.length) return from;
-        if (this.live && this.live.from === from && this.live.p === p) return this.live.keys;
-        const keys = [...from.slice(0, run.base), ...run.keys];
-        this.live = { from, p, keys };
-        return keys;
+    get keys(): readonly string[] { return this.source ? this.source.keys() : this.stored; }
+
+    /** The live keys changed (`StageRenderer.onKeys`: an append, a new MarkSet): the grid is rebuilt under them. */
+    keysChanged(): void {
+        this.dropIndex();
+        if (!this.tweening) this.settle(); else this.schedule();
     }
     /** The a11y proxies' container (focus return reads it). */
     proxyRoot: HTMLElement | null = null;

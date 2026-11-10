@@ -3,6 +3,7 @@ import {
   countPending,
   createMemoryLocalFirstStore,
   importKey,
+  isRecordPayloadFence,
   newLocalRecord,
   queueImport,
   type EntityDestination,
@@ -116,9 +117,10 @@ describe('countPending', () => {
     expect(await store.read((tx) => countPending(tx, BOUND))).toBe(41);
     // A transaction's own writes are counted too (the draft's adjustments).
     await store.transact(async (tx) => {
-      const [first] = await tx.pending(BOUND);
+      // (Not the partitions' record-payload fences: those are counted as neither.)
+      const [first] = (await tx.pending(BOUND)).filter((event) => !isRecordPayloadFence(event));
       await tx.acknowledge([first!.eventId]);
-      await tx.deadLetter((await tx.pending(OTHER))[0]!.eventId, 'x', 'now');
+      await tx.deadLetter((await tx.pending(OTHER)).filter((event) => !isRecordPayloadFence(event))[0]!.eventId, 'x', 'now');
       expect(tx.pendingCount!(BOUND)).toEqual({ live: 40, dead: 1 });
       expect(tx.pendingCount!(OTHER)).toEqual({ live: 0, dead: 1 });
     });

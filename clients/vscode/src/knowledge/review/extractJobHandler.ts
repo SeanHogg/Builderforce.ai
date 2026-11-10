@@ -14,7 +14,8 @@
 import { readFile } from "node:fs/promises";
 import * as nodePath from "node:path";
 import type { CodeSymbol } from "@builderforce/agent-tools";
-import { documentDoc, reviewPacks } from "@builderforce/agent-tools/knowledge";
+import { existsSync } from "node:fs";
+import { documentDoc, moduleFileCandidates, reviewPacks, type ModuleAliases, type ModuleResolution } from "@builderforce/agent-tools/knowledge";
 import { DEFAULT_MAX_FILE_BYTES, ExtractFailed, extractJob, isBinaryText, isDocumentPath, reasonOf, type ExtractJob, type ExtractJobResult } from "@seanhogg/builderforce-memory/knowledge";
 import { nodeContentHash } from "../nodeSha256";
 
@@ -30,7 +31,38 @@ export const DOCUMENT_READ_TIMEOUT_MS = 60_000;
 export interface ReadFrom { rootPath: string; path: string; hash: string }
 
 /** Memory's job plus the index's definitions of the file, when the index holds it, plus an optional read-in-the-worker. */
-export type HostExtractJob = ExtractJob & { symbols?: readonly CodeSymbol[]; readFrom?: ReadFrom };
+export type HostExtractJob = ExtractJob & { symbols?: readonly CodeSymbol[]; readFrom?: ReadFrom; aliases?: ModuleAliases };
+
+/** Module paths found (or not) on a root's disk, per root: a worker answers `exists` for many jobs of one review. */
+const diskModules = new Map<string, Map<string, boolean>>();
+const MAX_DISK_MODULES = 20_000;
+
+/**
+ * The root's aliases (the job's, read once per review by the runner) with module existence answered from the root's
+ * disk: the worker sees the files the review lists. Without a root on disk, the first alias target is taken.
+ */
+function jobModules(job: HostExtractJob): ModuleResolution | undefined {
+  if (!job.aliases) return undefined;
+  const root = job.readFrom ? nodePath.resolve(job.readFrom.rootPath) : undefined;
+  if (!root) return { aliases: job.aliases };
+  let known = diskModules.get(root);
+  if (!known) diskModules.set(root, (known = new Map()));
+  if (known.size > MAX_DISK_MODULES) known.clear();
+  return {
+    aliases: job.aliases,
+    exists: (modulePath) => {
+      let hit = known!.get(modulePath);
+      if (hit === undefined) {
+        hit = moduleFileCandidates(modulePath).some((p) => {
+          const abs = nodePath.resolve(root, p);
+          return abs.startsWith(root + nodePath.sep) && existsSync(abs);
+        });
+        known!.set(modulePath, hit);
+      }
+      return hit;
+    },
+  };
+}
 
 /** What a host job returns: memory's result; `binary` ⇒ the file is binary text and nothing was extracted (the step is `skipped: binary`). */
 export type HostExtractResult = ExtractJobResult & { binary?: true };
@@ -68,7 +100,8 @@ export async function handleExtractJob(job: HostExtractJob, readTimeoutMs: numbe
     ready = { ...base, doc, hash: job.readFrom.hash } as ExtractJob;
   }
   // Host setup (the packs, the symbol lookup) and a malformed job fail as plain errors: they say nothing about the file, so they are transient.
-  const packs = reviewPacks(symbols ? { symbolsOf: () => symbols } : {});
+  const modules = jobModules(job);
+  const packs = reviewPacks({ ...(symbols ? { symbolsOf: () => symbols } : {}), ...(modules ? { modules } : {}) });
   if (!ready.doc) throw new Error(`extract job for ${ready.path} carries no document (readByPool needs a reading worker)`);
   // The read above fails TRANSIENTLY too (a lock, a timeout, a changed file). Only a throw from the parser or extractor itself is the PROVEN-final
   // failure: it is marked, so the review records a terminal answer instead of retrying forever.

@@ -302,6 +302,24 @@ export class WorkspaceSurface implements vscode.Disposable {
       case "run.acknowledgeInterrupted":
         if (typeof msg.runId === "string") void hooks.runHost?.acknowledgeInterrupted?.(msg.runId);
         break;
+      // A run-delta card's Open code, confined by the host to the paths that stored delta names, under its root.
+      case "run-delta/open":
+        try {
+          const req = msg as BrainInbound & { path?: unknown; line?: unknown };
+          const file = typeof msg.runId === "string" && typeof req.path === "string"
+            ? await hooks.runHost?.openRunDeltaFile?.({ runId: msg.runId, path: req.path })
+            : undefined;
+          if (!file) {
+            this.respond(msg.id, false, undefined, "run_delta_open_refused");
+            break;
+          }
+          const line = typeof req.line === "number" && req.line > 0 ? Math.floor(req.line) : undefined;
+          await openCapturedFile(file, line ? { startLine: line, startColumn: 1, endLine: line, endColumn: 1 } : undefined);
+          this.respond(msg.id, true, true);
+        } catch (error) {
+          this.respond(msg.id, false, undefined, error instanceof Error ? error.message : String(error));
+        }
+        break;
       // A run's (or a chat's) stored deltas — the `run-delta/card` payloads again, for a reopened chat (PRD 41 §C14).
       case "run-delta/get":
         try {

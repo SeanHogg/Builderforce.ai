@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  EVENT_BACKLOG_MIGRATED,
+  MARKER_NOT_BEFORE,
+  RECORD_PAYLOAD_FENCE_KEY,
   createMemoryLocalFirstStore,
   createSyncCoordinator,
+  isRecordPayloadFence,
   newLocalRecord,
   planEventBacklogMigration,
   queueImport,
   type EntityDestination,
-  MARKER_NOT_BEFORE,
   type JournalEvent,
   type LocalFirstSnapshot,
   type LocalRecord,
@@ -21,13 +24,15 @@ import { batchEvents } from './syncBatch.js';
 
 const BOUND: EntityDestination = { kind: 'bound', platformInstance: 'https://example.test', tenantId: '1' };
 const uuid = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+/** The events that are work (not the partition's record-payload fence). */
+const work = (events: readonly JournalEvent[]): JournalEvent[] => events.filter((event) => !isRecordPayloadFence(event));
 
 /** A store as a pre-marker build left it: unbound message rows, each with an event carrying its payload. */
 async function legacyStore(count: number): Promise<MemoryLocalFirstStore> {
   const store = createMemoryLocalFirstStore();
   await store.transact(async (tx) => {
     for (let index = 0; index < count; index += 1) {
-      const record = newLocalRecord({ id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`, entityType: 'message', payload: { chatId: 1, message: { id: index, content: `m${index}` } }, deviceId: 'd1' });
+      const record = newLocalRecord({ id: uuid(index), entityType: 'message', payload: { chatId: 1, message: { id: index, content: `m${index}` } }, deviceId: 'd1' });
       await tx.put(record);
       await tx.append({
         idempotencyKey: `message:${index}`,
@@ -48,6 +53,16 @@ async function legacyStore(count: number): Promise<MemoryLocalFirstStore> {
 const apply = (store: MemoryLocalFirstStore, plan: ReturnType<typeof planEventBacklogMigration>): void => {
   for (const delta of plan.deltas) store.applyDelta(delta);
 };
+
+const okTransport = (pushed: SyncPushBatch[] = []): SyncTransport => ({
+  async push(batch) {
+    pushed.push(structuredClone(batch));
+    return batch.events.map((sent) => ({ eventId: sent.eventId, status: 'accepted', serverVersion: 1 }) as SyncReceipt);
+  },
+  async pull() { return { records: [] }; },
+});
+const coordinatorOver = (store: MemoryLocalFirstStore, transport: SyncTransport) =>
+  createSyncCoordinator({ store, transport, deviceId: 'd1', policy: { assert: () => undefined } as never, lease: { run: (_owner, run) => run() } });
 
 describe('planEventBacklogMigration', () => {
   it('turns a payload copy into the marker the live path writes, only when the row matches', async () => {
@@ -94,10 +109,17 @@ describe('planEventBacklogMigration', () => {
     expect(store.view().events).toHaveLength(1);
   });
 
-  it('is idempotent: the migrated state plans nothing', async () => {
+  it('runs ONCE: its last frame records the migration, and a migrated store plans nothing', async () => {
     const store = await legacyStore(5);
-    apply(store, planEventBacklogMigration(store.view()));
-    expect(planEventBacklogMigration(store.view())).toEqual({ deltas: [], stripped: 0, dropped: 0, kept: 0 });
+    const plan = planEventBacklogMigration(store.view(), { at: '2026-11-10T00:00:00.000Z' });
+    expect(plan.deltas.at(-1)).toEqual({ cursors: { [EVENT_BACKLOG_MIGRATED]: '2026-11-10T00:00:00.000Z' } });
+    apply(store, plan);
+    expect(planEventBacklogMigration(store.view())).toEqual({ deltas: [], stripped: 0, dropped: 0, kept: 0, markedEventIds: [] });
+    // Even a payload copy written after it (an older build's) is no longer this migration's to touch.
+    await store.transact(async (tx) => {
+      await tx.append({ idempotencyKey: 'late', clientEntityId: uuid(0), entityType: 'message', operation: 'create', schemaVersion: 1, occurredAt: 'x', dependsOn: [], destination: { kind: 'unbound' }, payload: store.view().records[0]!.payload });
+    });
+    expect(planEventBacklogMigration(store.view()).deltas).toEqual([]);
   });
 
   const event = (over: Partial<JournalEvent>): JournalEvent => ({
@@ -113,24 +135,35 @@ describe('planEventBacklogMigration', () => {
       events: [event({ eventId: 'update', operation: 'update' }), event({ eventId: 'ticket', entityType: 'ticket', destination: { kind: 'unbound' } })],
       receipts: [],
     };
-    expect(planEventBacklogMigration(snapshot).deltas).toEqual([]);
+    expect(planEventBacklogMigration(snapshot)).toMatchObject({ stripped: 0, dropped: 0, kept: 0 });
   });
 
-  it('turns a bound import carrying the row\'s payload into a record-payload marker; a sent (held) or stale one keeps its copy', () => {
+  it('turns a fresh bound import into a FENCED record-payload marker; a held, materialized or stale one keeps its copy', () => {
     const plan = planEventBacklogMigration({
-      records: [boundRow({ a: 1 }), { ...boundRow({ a: 2 }), id: 'stale' }, { ...boundRow({ a: 3 }), id: 'held' }, { ...boundRow({ a: 4 }), id: 'gone', deletedAt: 'x' }],
+      records: [
+        boundRow({ a: 1 }), { ...boundRow({ a: 2 }), id: 'stale' }, { ...boundRow({ a: 3 }), id: 'held' },
+        { ...boundRow({ a: 5 }), id: 'sent' }, { ...boundRow({ a: 4 }), id: 'gone', deletedAt: 'x' },
+      ],
       events: [
-        event({ eventId: 'fresh' }),
+        event({ eventId: 'fresh', dependsOn: ['chat:c:import'] }),
         event({ eventId: 'stale', clientEntityId: 'stale', payload: { a: 'old' } }),
         event({ eventId: 'held', clientEntityId: 'held', payload: { a: 3 }, holdAttempts: 1 }),
+        // Materialized by this build and pushed (its response lost): the server holds THIS hash.
+        event({ eventId: 'sent', clientEntityId: 'sent', payload: { a: 5 }, materializedAt: '2026-11-10T00:00:00.000Z' }),
         event({ eventId: 'gone', clientEntityId: 'gone', payload: { a: 4 } }),
       ],
       receipts: [],
-    });
-    expect(plan).toMatchObject({ stripped: 1, dropped: 1, kept: 2 });
+      nextSequence: 9,
+    }, { newId: () => 'fence-1', at: 'now' });
+    expect(plan).toMatchObject({ stripped: 1, dropped: 1, kept: 3, markedEventIds: ['fresh'] });
     expect(plan.deltas).toEqual([
       { acknowledgedEvents: ['gone'] },
-      { events: [expect.objectContaining({ eventId: 'fresh', localSequence: 1, payload: null, payloadFrom: 'record', nextAttemptAt: MARKER_NOT_BEFORE })] },
+      { events: [expect.objectContaining({ eventId: 'fence-1', idempotencyKey: RECORD_PAYLOAD_FENCE_KEY, localSequence: 9, deadLetter: expect.anything() })], nextSequence: 10 },
+      { events: [expect.objectContaining({
+        eventId: 'fresh', localSequence: 1, payload: null, payloadFrom: 'record', nextAttemptAt: MARKER_NOT_BEFORE,
+        dependsOn: ['chat:c:import', RECORD_PAYLOAD_FENCE_KEY],
+      })] },
+      { cursors: { [EVENT_BACKLOG_MIGRATED]: 'now' } },
     ]);
   });
 
@@ -147,35 +180,56 @@ describe('planEventBacklogMigration', () => {
   it('a migrated bound import goes up with the row\'s payload, committed to the event BEFORE the push', async () => {
     const store = createMemoryLocalFirstStore({ records: [boundRow({ a: 1 })], events: [event({ eventId: uuid(1), clientEntityId: 'row', payloadHash: hashPayload({ a: 1 }) })] });
     apply(store, planEventBacklogMigration(store.view()));
-    expect(store.view().events[0]).toMatchObject({ payload: null, payloadFrom: 'record' });
+    expect(work(store.view().events)[0]).toMatchObject({ payload: null, payloadFrom: 'record' });
     // The push fails after the payload was materialized: a resend must carry the SAME bytes.
     let attempt = 0;
     const pushed: SyncPushBatch[] = [];
-    const transport: SyncTransport = {
-      async push(batch) {
-        pushed.push(structuredClone(batch));
+    const ok = okTransport(pushed);
+    const coordinator = coordinatorOver(store, {
+      ...ok,
+      async push(batch, init) {
         attempt += 1;
-        if (attempt === 1) throw new Error('network');
-        return batch.events.map((sent) => ({ eventId: sent.eventId, status: 'accepted', serverVersion: 1 }) as SyncReceipt);
+        if (attempt === 1) {
+          pushed.push(structuredClone(batch));
+          throw new Error('network');
+        }
+        return ok.push(batch, init);
       },
-      async pull() { return { records: [] }; },
-    };
-    const coordinator = createSyncCoordinator({ store, transport, deviceId: 'd1', policy: { assert: () => undefined } as never, lease: { run: (_owner, work) => work() } });
+    });
     await expect(coordinator.synchronize(BOUND)).rejects.toThrow('network');
-    expect(store.view().events[0]).toMatchObject({ payload: { a: 1 }, payloadHash: hashPayload({ a: 1 }) });
-    expect(store.view().events[0]!.payloadFrom).toBeUndefined();
+    const filled = work(store.view().events)[0]!;
+    expect(filled).toMatchObject({ payload: { a: 1 }, payloadHash: hashPayload({ a: 1 }) });
+    expect(filled.payloadFrom).toBeUndefined();
+    expect(filled.materializedAt).toEqual(expect.any(String));
+    expect(filled.dependsOn).not.toContain(RECORD_PAYLOAD_FENCE_KEY);
+    // regression: a later migration (a reopened store that never recorded the run) must NOT turn
+    // the materialized event back into a marker — the resend would carry a different hash.
+    const again = planEventBacklogMigration({ ...store.view(), cursors: {} });
+    expect(again.markedEventIds).toEqual([]);
     // The row changes without a journal write; the resend still carries what was first sent.
     store.applyDelta({ records: [boundRow({ a: 'changed' })] });
     await coordinator.synchronize(BOUND);
     expect(pushed.map((batch) => batch.events[0]!.payload)).toEqual([{ a: 1 }, { a: 1 }]);
     expect(pushed.every((batch) => batch.events[0]!.payloadHash === hashPayload({ a: 1 }) && !('payloadFrom' in batch.events[0]!))).toBe(true);
-    expect(store.view().events).toEqual([]);
+    expect(work(store.view().events)).toEqual([]);
+  });
+
+  it('self-heals a marker an older build rebased into an update {payload: null}: it goes up filled from the row', async () => {
+    // What an older build's `rebaseImportsOntoMapping` makes of a marker: an update keeping only
+    // the payload (null) and `dependsOn` (with the fence).
+    const rebased = event({ eventId: uuid(2), operation: 'update', baseVersion: 1, payload: null, payloadHash: hashPayload(null), dependsOn: [RECORD_PAYLOAD_FENCE_KEY] });
+    const store = createMemoryLocalFirstStore({ records: [boundRow({ a: 7 })], events: [rebased], cursors: { [EVENT_BACKLOG_MIGRATED]: 'x' } });
+    const pushed: SyncPushBatch[] = [];
+    await coordinatorOver(store, okTransport(pushed)).synchronize(BOUND);
+    const sent = pushed.flatMap((batch) => batch.events);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ eventId: uuid(2), operation: 'update', payload: { a: 7 }, payloadHash: hashPayload({ a: 7 }), dependsOn: [] });
   });
 
   it('slices the work into bounded deltas', async () => {
     const store = await legacyStore(5);
-    const plan = planEventBacklogMigration(store.view(), 2);
-    expect(plan.deltas.map((delta) => delta.events?.length)).toEqual([2, 2, 1]);
+    const plan = planEventBacklogMigration(store.view(), { slice: 2 });
+    expect(plan.deltas.map((delta) => delta.events?.length)).toEqual([2, 2, 1, undefined]);
   });
 
   it('sync still binds and sends the rows after the migration (the import is read from the record)', async () => {
@@ -189,27 +243,15 @@ describe('planEventBacklogMigration', () => {
       }
     });
     const pushed: SyncPushBatch[] = [];
-    const transport: SyncTransport = {
-      async push(batch) {
-        pushed.push(batch);
-        return batch.events.map((event) => ({ eventId: event.eventId, status: 'accepted', serverVersion: 1 }) as SyncReceipt);
-      },
-      async pull() { return { records: [] }; },
-    };
-    const coordinator = createSyncCoordinator({
-      store, transport, deviceId: 'd1',
-      policy: { assert: () => undefined } as never,
-      lease: { run: (_owner, work) => work() },
-    });
-    await coordinator.synchronize(BOUND);
+    await coordinatorOver(store, okTransport(pushed)).synchronize(BOUND);
     const sent = pushed.flatMap((batch) => batch.events);
     expect(sent).toHaveLength(2);
     const rows = store.view().records;
-    for (const event of sent) {
-      expect(event.operation).toBe('import');
-      expect(event.payload).toEqual(rows.find((row) => row.id === event.clientEntityId)!.payload);
+    for (const sentEvent of sent) {
+      expect(sentEvent.operation).toBe('import');
+      expect(sentEvent.payload).toEqual(rows.find((row) => row.id === sentEvent.clientEntityId)!.payload);
     }
     // Every event is settled: the markers went with the bind, the imports with their receipts.
-    expect(store.view().events).toEqual([]);
+    expect(work(store.view().events)).toEqual([]);
   });
 });

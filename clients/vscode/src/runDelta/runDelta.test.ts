@@ -116,7 +116,7 @@ function deltaDeps(store: LocalFirstStore, sources: RunDeltaDeps["sources"], ext
 /** One run through the change set's own wrapper, with the delta started from its `onFinalized`. */
 async function runWithDelta(
   store: LocalFirstStore, k: NodeKnowledgeStore, runId: string, edit: () => Promise<void>,
-  extra: Partial<RunDeltaDeps> = {}, mode: "interactive" | "autonomous" = "interactive",
+  extra: Partial<RunDeltaDeps> = {}, mode: "interactive" | "autonomous" = "interactive", writes?: string[],
 ) {
   const { deps, cards, errors, events } = deltaDeps(store, sourcesFor(k), { release: releaseFor(k), ...extra });
   let delta: Promise<void> | undefined;
@@ -124,13 +124,18 @@ async function runWithDelta(
     {
       store, deviceId: "device-1", runId, author: "agent:test",
       capture: { preimages: (_root, items) => putPreimages(k.persistence, runId, items, Date.now()) },
-      onFinalized: (closed) => { delta = startRunDelta(deps, { chatId: 7, mode, closed }); },
+      onFinalized: (closed) => { delta = startRunDelta(deps, { chatId: 7, mode, closed, ...(writes ? { writes, workspaceRoot: closed.committed[0]?.root ?? "" } : {}) }); },
       onError: (error) => errors.push(error),
     },
     edit,
   );
   await delta;
   return { cards, errors, events, finalized: delta !== undefined };
+}
+
+/** The synced `run-delta` rows (the device-only side records share the entity type). */
+async function deltaRows(store: LocalFirstStore) {
+  return (await store.read((tx) => tx.list<RunDeltaRecordValue>("run-delta"))).filter((r) => !!r.payload.delta);
 }
 
 const GUARDED = "app.get('/api/projects/:id', requireAuth, async (c) => c.json(await load(c)));\n";
@@ -144,7 +149,7 @@ describe.skipIf(!localSqliteAvailable())("run delta at run finalization (PRD 41 
     const { cards, errors, events } = await runWithDelta(store, k, "run-guard", () => write(root, "api/routes.ts", UNGUARDED));
 
     expect(errors).toEqual([]);
-    const stored = await store.read((tx) => tx.list<RunDeltaRecordValue>("run-delta"));
+    const stored = await deltaRows(store);
     expect(stored).toHaveLength(1);
     const value = stored[0]!.payload;
     expect(stored[0]!.id).toMatch(/^run-delta:run-guard:[0-9a-f]{16}$/);
@@ -173,7 +178,7 @@ describe.skipIf(!localSqliteAvailable())("run delta at run finalization (PRD 41 
     const k = knowledgeFile(root);
     const store = createMemoryLocalFirstStore();
     await runWithDelta(store, k, "run-audit", () => write(root, "api/routes.ts", UNGUARDED), {}, "autonomous");
-    const value = (await store.read((tx) => tx.list<RunDeltaRecordValue>("run-delta")))[0]!.payload;
+    const value = (await deltaRows(store))[0]!.payload;
     expect(value.mode).toBe("autonomous");
     expect(value.blocked?.rules).toContain("guard-removed");
   });
@@ -189,21 +194,19 @@ describe.skipIf(!localSqliteAvailable())("run delta at run finalization (PRD 41 
       // The run tries to drop the guard from the registry in the same edit.
       await write(root, ".builderforce/delta.json", JSON.stringify({ guards: {} , blocking: [] }));
     }, {}, "autonomous");
-    const value = (await store.read((tx) => tx.list<RunDeltaRecordValue>("run-delta")))[0]!.payload;
+    const value = (await deltaRows(store))[0]!.payload;
     const security = value.delta.dimensions.find((d) => d.id === "security")!;
     expect(security.findings.map((f) => f.ruleId)).toContain("guard-removed");
     expect(value.blocked?.rules).toContain("guard-removed");
+    expect(value.blocked?.rules).toContain("delta-config-changed");
   });
 
-  it("excludes a file a parallel run claimed at its current content (outside-run)", async () => {
+  it("makes every change outside-run when another run overlapped, unless the run's own tools wrote it (conservative)", async () => {
     const root = await repo({ "api/routes.ts": GUARDED, "src/other.ts": "export const a = 1;\n" });
     const k = knowledgeFile(root);
-    const store = createMemoryLocalFirstStore();
-    const { errors } = await runWithDelta(store, k, "run-mine", async () => {
-      await write(root, "src/other.ts", "export const a = 2;\n");
-      await write(root, "api/routes.ts", UNGUARDED);
-      // A parallel run on the same tree finalized first and claimed the route file at this content.
+    const parallel = async (store: LocalFirstStore) => {
       const { nodeContentHash } = await import("../knowledge/nodeSha256");
+      // A parallel run on the same tree finalized while this one was going.
       await store.transact(async (tx) => {
         await tx.put(newLocalRecord<LocalChangeSetValue>({
           id: "changeset:run-other:0000000000000000", entityType: "change-set", deviceId: "device-1",
@@ -213,12 +216,54 @@ describe.skipIf(!localSqliteAvailable())("run delta at run finalization (PRD 41 
           },
         }));
       });
+    };
+    // No write evidence: neither change can be proven this run's.
+    const store = createMemoryLocalFirstStore();
+    const { errors } = await runWithDelta(store, k, "run-mine", async () => {
+      await write(root, "src/other.ts", "export const a = 2;\n");
+      await write(root, "api/routes.ts", UNGUARDED);
+      await parallel(store);
     });
     expect(errors).toEqual([]);
-    const value = (await store.read((tx) => tx.list<RunDeltaRecordValue>("run-delta"))).find((r) => r.payload.runId === "run-mine")!.payload;
-    expect(value.delta.excluded).toContainEqual({ path: "api/routes.ts", reason: "changed-outside-run" });
-    expect(value.delta.impact.changedFiles).toEqual(["src/other.ts"]);
+    const value = (await deltaRows(store)).find((r) => r.payload.runId === "run-mine")!.payload;
+    expect(value.delta.excluded).toEqual([
+      { path: "api/routes.ts", reason: "changed-outside-run" },
+      { path: "src/other.ts", reason: "changed-outside-run" },
+    ]);
     expect(value.delta.dimensions.flatMap((d) => d.findings).map((f) => f.ruleId)).not.toContain("guard-removed");
+
+    // The run's own file tool wrote the route: that file is the run's, the other is still outside.
+    sh(root, "git checkout -q -- .");
+    const store2 = createMemoryLocalFirstStore();
+    await runWithDelta(store2, k, "run-mine-2", async () => {
+      await write(root, "src/other.ts", "export const a = 2;\n");
+      await write(root, "api/routes.ts", UNGUARDED);
+      await parallel(store2);
+    }, {}, "interactive", ["api/routes.ts"]);
+    const second = (await deltaRows(store2)).find((r) => r.payload.runId === "run-mine-2")!.payload;
+    expect(second.delta.impact.changedFiles).toEqual(["api/routes.ts"]);
+    expect(second.delta.excluded).toEqual([{ path: "src/other.ts", reason: "changed-outside-run" }]);
+    expect(second.delta.dimensions.flatMap((d) => d.findings).map((f) => f.ruleId)).toContain("guard-removed");
+  });
+
+  it("treats a run still in flight (baseline, no finalization) as overlapping", async () => {
+    const root = await repo({ "src/a.ts": "a\n" });
+    const k = knowledgeFile(root);
+    const store = createMemoryLocalFirstStore();
+    await runWithDelta(store, k, "run-x", async () => {
+      await write(root, "src/a.ts", "b\n");
+      await store.transact(async (tx) => {
+        await tx.put(newLocalRecord({
+          id: "changeset-lifecycle:run-live", entityType: "change-set", deviceId: "device-1",
+          payload: {
+            kind: "lifecycle", runId: "run-live", repository: root, files: [], author: "agent:other", baselineHash: "sha256:x",
+            baseline: { capturedAt: new Date(Date.now() - 1000).toISOString(), repos: [{ root, name: "r", repository: root, files: {} }] },
+          },
+        }));
+      });
+    });
+    const value = (await deltaRows(store))[0]!.payload;
+    expect(value.delta.excluded).toEqual([{ path: "src/a.ts", reason: "changed-outside-run" }]);
   });
 
   it("does not let a set finalized BEFORE this run's baseline claim its files", async () => {
@@ -236,7 +281,7 @@ describe.skipIf(!localSqliteAvailable())("run delta at run finalization (PRD 41 
       }));
     });
     await runWithDelta(store, k, "run-new", () => write(root, "api/routes.ts", UNGUARDED));
-    const value = (await store.read((tx) => tx.list<RunDeltaRecordValue>("run-delta")))[0]!.payload;
+    const value = (await deltaRows(store))[0]!.payload;
     expect(value.delta.excluded).toEqual([]);
     expect(value.delta.impact.changedFiles).toEqual(["api/routes.ts"]);
   });
@@ -294,7 +339,7 @@ describe.skipIf(!localSqliteAvailable())("run delta at run finalization (PRD 41 
     await finalizeRunDelta(second.deps, { chatId: 3, mode: "interactive", closed: closed! });
     expect(first.cards).toHaveLength(1);
     expect(second.cards).toEqual([]);
-    expect(await store.read((tx) => tx.list("run-delta"))).toHaveLength(1);
+    expect(await deltaRows(store)).toHaveLength(1);
   });
 
   it("never fails or delays the run: a delta failure is reported and the delta is simply absent", async () => {
@@ -327,7 +372,7 @@ describe.skipIf(!localSqliteAvailable())("run delta at run finalization (PRD 41 
     const hung = deltaDeps(store, () => new Promise(() => undefined), { budgetMs: 20 });
     await startRunDelta(hung.deps, { chatId: 1, mode: "interactive", closed });
     expect(String(hung.errors[0])).toMatch(/run_delta_budget/);
-    expect(await store.read((tx) => tx.list("run-delta"))).toEqual([]);
+    expect(await deltaRows(store)).toEqual([]);
   });
 });
 

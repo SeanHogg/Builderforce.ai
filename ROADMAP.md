@@ -109,7 +109,24 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
   - **P1:** MarkSet + Placement + Map (Transit + Tower).
   - **P1b:** semantic zoom, system → class → method → code.
   - **P2–P5:** the remaining placements (Mind map, Sequence, Graph, 3D, System/Heat/4+1/Style/Features). Only List stays DOM.
-- **No run delta yet: PRD 41 WS2 (SQLite fact store) is open ([PRD 41](./docs/specs/41-prd-offline-understanding-and-run-delta.md)).** WS1 (offline closure) shipped in 325f4faaf (see DONE.md). Still open: WS2, the SQLite fact store in `.builderforce/cache/` (Opus-reviewed), and the run delta that reads recorded change sets (`brainRunHostPorts.ts`). Another session is building the node:sqlite store (`packages/agent-tools/src/node-knowledge/*`).
+- **Run delta: the rest of PRD 41 is open ([PRD 41](./docs/specs/41-prd-offline-understanding-and-run-delta.md)).** WS1, WS2, WS6 and the VS Code run delta (WS7 engine, host, card) shipped (see DONE.md, 2026-11-10). Still open, by workstream:
+  - **WS3:** background indexer.
+  - **WS4:** tree-sitter extraction v3 and the rules that need it.
+  - **WS5:** consolidation runs. `kind: 'consolidation'` is in the contract; nothing produces it yet.
+  - **WS8:** full security: taint-lite, STRIDE, osv/gitleaks adapters, config rules.
+  - **WS9:** remaining perf, -ilities and quality rules.
+  - **WS10:** web/canvas card, plus delta history and trend.
+  - **WS11:** SARIF export and server persistence (`run_deltas` tables).
+  - **WS12:** dynamic tier.
+  - **WS13:** packaged offline acceptance and the cloud delta.
+  - **WS15–22:** Part D.
+  - **The L3 analyzer tier in the delta.** The `analyze` port was removed from `DeltaPorts`; re-adding it needs WS4's extractor.
+- **Run delta: blocked items ([PRD 41](./docs/specs/41-prd-offline-understanding-and-run-delta.md) §12.5, C9, C14).**
+  - **No finalize gate for autonomous runs in the VSIX.** An audit / auto-approve / sub-agent run writes its completion during the run, so a blocking delta is only flagged (`blocked`) on the run-delta record and the card; it cannot hold the run. *Blocker: the run kernel needs a finalize hook that runs before completion is written.*
+  - **No named-event telemetry channel in the VSIX.** `delta.computed` goes to the output log only. *Blocker: a decision on which telemetry channel the VSIX uses for named product events.*
+  - **No extractor/tool versions on platform-stored graphs.** The VSIX baseline cannot apply the C9 extractor-version and tool-version comparability rules to a platform graph. *Blocker: the platform graph rows need those version columns, which is a migration.*
+  - **No "measuring…" pending state in the contract.** The card appears only once the delta is computed. *Blocker: a contract change (`RunDelta.status: 'pending'`) shared by engine, host and UI.*
+  - **knip `--fix` on one unused-export finding fixes the whole file.** *Blocker: knip has no per-export fix; a per-finding fix needs our own export remover.*
 - **Cloud run isolation (G1/G2, [PRD 09](./docs/specs/09-prd-cloud-agent-validation.md)): egress allowlist built but off; secret containment under rework (in progress 2026-11-08).**
   - G1 egress: the outbound allowlist and its lifecycle shipped (`sandboxEgressLifecycle.ts`, b55198fc0 / adc99aa42 / e867b3bd1) behind `SANDBOX_EGRESS_ENFORCE`, which stays off. *Blocker: a live probe in a deployed container (raw TCP/DNS blocked, HTTPS through the proxy to an allowed registry, interception installed before start, `ctx.exports.ContainerProxy` resolves) before the flag is turned on.*
   - G2 secret containment: the env scrub, `persist-credentials: false`, the one redaction package and the audit-write guard are on main (3a2c752db, e707549cf). An Opus review found the model shell could still read the runner's environ (same uid) and credentials in `.git/config`. The redesign (a separate `bfagent` user with its own group, all workspace fs/git through a helper running as that user, authenticated git only in a server-owned mirror with bundle handoff) and the redaction-quality fixes are in progress, partly swept unreviewed into local ee2222212. Next: verify, Opus re-review, commit, push.

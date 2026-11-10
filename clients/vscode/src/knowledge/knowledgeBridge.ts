@@ -171,7 +171,10 @@ export class KnowledgeBridge implements vscode.Disposable {
       }
       case "symbols": {
         const rootPath = this.rootOf(call.rootId).rootPath;
-        return this.symbolsGate.run(call.rootId, call.fileRefs, (refs) => rootSymbols(rootPath, call.rootId, refs));
+        // Traced, so the alias load (`aliases`) is a named phase of the call.
+        return this.trace.run("symbols", call.rootId, (traced) =>
+          this.symbolsGate.run(call.rootId, call.fileRefs, (refs) => rootSymbols(rootPath, call.rootId, refs, undefined, undefined, traced.timer)),
+          (records) => ({ count: records.length }));
       }
     }
   }

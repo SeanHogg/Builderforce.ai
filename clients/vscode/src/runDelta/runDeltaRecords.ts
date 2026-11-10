@@ -3,20 +3,26 @@
  * (a retried finalization keeps the stored one) through the same `newLocalRecord` + `tx.put` + `tx.append` path as the change
  * set it was computed from, so it syncs as a mirror record behind that change set.
  *
- * Also the reads the host serves: a run's (or a chat's) stored deltas for the chat card (`run-delta/get`), and a
- * repository's past blast-radius scores for the C10 percentile bands.
+ * PRIVACY. The synced payload carries no local data: the repository is named by its remote URL, or by `local:<hash>` when it
+ * has none (never its absolute path), and ignored `.builderforce/delta.json` entries are reduced to their code plus a hash
+ * of the key ({@link redactDropped}, at most {@link MAX_DROPPED}). What only this device needs — the absolute root and the
+ * plain repository identity — is a SIDE record, `run-delta-local:<runId>:<repoKey>`, written with no journal event, so it is
+ * never mirrored.
+ *
+ * Also the reads the host serves, through record indexes (never a scan of every delta): a run's or a chat's stored deltas for
+ * the chat card (`run-delta/get`), one delta for Open code, and a repository's past blast-radius scores (C10).
  */
 
-import { newLocalRecord, type EntityDestination, type LocalFirstStore } from "@builderforce/local-first";
+import { createHash } from "node:crypto";
+import * as path from "node:path";
+import { defineRecordIndex, newLocalRecord, scanByIndex, type EntityDestination, type LocalFirstStore } from "@builderforce/local-first";
 import type { RunDelta } from "@builderforce/run-delta";
 
-/** What a stored delta carries beside the engine's result. */
+/** The synced value. */
 export interface RunDeltaRecordValue {
   runId: string;
-  /** The change set's repository identity (remote URL, else the root path). */
+  /** The repository identity as synced: its remote URL, else `local:<hash of the root>`. */
   repository: string;
-  /** The repository's absolute local root on this device (where the card's "Open code" resolves a path). */
-  root: string;
   /** The change-set record the delta was computed from. */
   changeSetId: string;
   /** The chat whose run it was (the host's local chat id). */
@@ -25,21 +31,78 @@ export interface RunDeltaRecordValue {
   delta: RunDelta;
   /** Wall time of the computation, ms. */
   computedMs: number;
-  /** §12.5: an autonomous run whose delta holds blocking findings, with their rule ids. */
+  /** §12.5: an autonomous run whose delta holds blocking codes. */
   blocked?: { rules: string[] };
-  /** `.builderforce/delta.json` entries that were ignored (codes from `withOverrides`). */
+  /** Ignored `.builderforce/delta.json` entries, redacted ({@link redactDropped}). */
   overridesDropped?: string[];
 }
 
-/** The chat card's payload: what `run-delta/card` carries and `run-delta/get` answers with. */
+/** The device-only side record: never journaled, so never synced. */
+export interface RunDeltaLocalValue {
+  kind: "local";
+  runId: string;
+  chatId: number;
+  /** The absolute repository root on this device (Open code resolves under it). */
+  root: string;
+  /** The plain repository identity (remote URL, else the root path). */
+  repo: string;
+}
+
+/** The chat card's payload: what `run-delta/card` carries and `run-delta/get` answers with. Local data, never synced. */
 export interface RunDeltaCard {
   chatId: number;
   runId: string;
   /** The repository identity (its remote URL, else its root path). */
   repo: string;
-  /** The absolute local repository root: a card path opens at `root + '/' + path`. */
+  /** The absolute local repository root: a card path opens under it (`run-delta/openFile`). */
   root: string;
   delta: RunDelta;
+}
+
+/** What a delta is stored with: the synced value and the device's side record. */
+export interface StoredRunDelta {
+  value: RunDeltaRecordValue;
+  local: RunDeltaLocalValue;
+}
+
+/** At most this many ignored-override codes are kept. */
+export const MAX_DROPPED = 20;
+
+const isLocalValue = (p: unknown): p is RunDeltaLocalValue => !!p && typeof p === "object" && (p as { kind?: unknown }).kind === "local";
+const isDeltaValue = (p: unknown): p is RunDeltaRecordValue => !!p && typeof p === "object" && !isLocalValue(p) && !!(p as { delta?: unknown }).delta;
+
+/** The synced deltas of one repository (C10 past scores). */
+export const RUN_DELTAS_BY_REPOSITORY = defineRecordIndex<RunDeltaRecordValue>(
+  "run-delta", "vscode.runDelta.repository", (row) => (isDeltaValue(row.payload) ? row.payload.repository : undefined),
+);
+/** Every run-delta row (synced and side record) of one run. */
+export const RUN_DELTAS_BY_RUN = defineRecordIndex<RunDeltaRecordValue | RunDeltaLocalValue>(
+  "run-delta", "vscode.runDelta.runId", (row) => row.payload?.runId,
+);
+/** Every run-delta row (synced and side record) of one chat. */
+export const RUN_DELTAS_BY_CHAT = defineRecordIndex<RunDeltaRecordValue | RunDeltaLocalValue>(
+  "run-delta", "vscode.runDelta.chatId", (row) => row.payload?.chatId,
+);
+
+const sha = (text: string): string => createHash("sha256").update(text).digest("hex");
+
+/** The repository identity that may leave the device: a remote URL as it is, a local path as `local:<hash>`. */
+export function syncedRepository(repo: string): string {
+  return path.isAbsolute(repo) || /^[A-Za-z]:[\\/]/.test(repo) ? `local:${sha(repo.replace(/\\/g, "/")).slice(0, 16)}` : repo;
+}
+
+/** `invalid:guards.myGuard` → `invalid:guards#<hash>`: the code and section stay, the repo's own names do not. */
+export function redactDropped(codes: readonly string[]): string[] {
+  const out = codes.slice(0, MAX_DROPPED).map((code) => {
+    const colon = code.indexOf(":");
+    if (colon < 0) return code.slice(0, 40);
+    const head = code.slice(0, colon);
+    const rest = code.slice(colon + 1);
+    const dot = rest.indexOf(".");
+    const section = (dot < 0 ? rest : rest.slice(0, dot)).slice(0, 32);
+    return dot < 0 ? `${head}:${section}` : `${head}:${section}#${sha(rest.slice(dot + 1)).slice(0, 8)}`;
+  });
+  return codes.length > MAX_DROPPED ? [...out, `truncated:${codes.length - MAX_DROPPED}`] : out;
 }
 
 /** `changeset:<runId>:<repoKey>` → `run-delta:<runId>:<repoKey>`: the same run and repository key. */
@@ -49,29 +112,26 @@ export function runDeltaId(changeSetId: string): string {
   return `run-delta:${runId}:${repoKey}`;
 }
 
-export const cardOf = (value: RunDeltaRecordValue): RunDeltaCard =>
-  ({ chatId: value.chatId, runId: value.runId, repo: value.repository, root: value.root, delta: value.delta });
+const localIdOf = (deltaId: string): string => `run-delta-local:${deltaId.slice("run-delta:".length)}`;
 
-/** Stores the delta once. Returns false when one was already stored for this run and repository. */
+export const cardOf = (stored: StoredRunDelta): RunDeltaCard =>
+  ({ chatId: stored.value.chatId, runId: stored.value.runId, repo: stored.local.repo, root: stored.local.root, delta: stored.value.delta });
+
+/** Stores the delta once (and its side record). Returns false when one was already stored for this run and repository. */
 export async function storeRunDelta(
   store: LocalFirstStore,
   deps: { deviceId: string; at: string; destination?: EntityDestination },
-  value: RunDeltaRecordValue,
+  stored: StoredRunDelta,
   /** False once the computation was abandoned: checked inside the transaction, so nothing lands after that. */
   live: () => boolean = () => true,
 ): Promise<boolean> {
-  const id = runDeltaId(value.changeSetId);
-  let stored = false;
+  const id = runDeltaId(stored.value.changeSetId);
+  let written = false;
   await store.transact(async (tx) => {
     if (!live() || await tx.get("run-delta", id)) return;
     const record = newLocalRecord<RunDeltaRecordValue>({
-      id,
-      entityType: "run-delta",
-      deviceId: deps.deviceId,
-      destination: deps.destination ?? { kind: "unbound" },
-      occurredAt: deps.at,
-      schemaVersion: 1,
-      payload: value,
+      id, entityType: "run-delta", deviceId: deps.deviceId, destination: deps.destination ?? { kind: "unbound" },
+      occurredAt: deps.at, schemaVersion: 1, payload: stored.value,
     });
     await tx.put(record);
     await tx.append({
@@ -81,38 +141,51 @@ export async function storeRunDelta(
       operation: "create",
       schemaVersion: record.schemaVersion,
       occurredAt: deps.at,
-      dependsOn: [`change-set:create:${value.changeSetId}`],
+      dependsOn: [`change-set:create:${stored.value.changeSetId}`],
       destination: record.destination,
       payload: record.payload,
     });
-    stored = true;
+    // The side record: put, never appended — no journal event, so the sync never carries it.
+    await tx.put(newLocalRecord<RunDeltaLocalValue>({
+      id: localIdOf(id), entityType: "run-delta", deviceId: deps.deviceId, occurredAt: deps.at, schemaVersion: 1, payload: stored.local,
+    }));
+    written = true;
   });
-  return stored;
+  return written;
 }
 
-/** The stored deltas of a run, or of every run of a chat, oldest first. */
+/** The stored deltas of a run, or of every run of a chat, oldest first, joined with their side records. */
 export async function readRunDeltas(store: LocalFirstStore, query: { runId?: string; chatId?: number }): Promise<RunDeltaCard[]> {
   if (query.runId === undefined && query.chatId === undefined) return [];
-  const found: Array<{ at: string; card: RunDeltaCard }> = [];
+  const values = new Map<string, { at: string; value: RunDeltaRecordValue }>();
+  const locals = new Map<string, RunDeltaLocalValue>();
   await store.read(async (tx) => {
-    await tx.scan<RunDeltaRecordValue>("run-delta", (row) => {
-      const p = row.payload;
-      if (row.deletedAt || !p?.delta) return;
-      if (query.runId !== undefined && p.runId !== query.runId) return;
-      if (query.chatId !== undefined && p.chatId !== query.chatId) return;
-      found.push({ at: row.occurredAt, card: cardOf(p) });
-    });
+    const visit = (row: { id: string; occurredAt: string; deletedAt?: string; payload: RunDeltaRecordValue | RunDeltaLocalValue }): void => {
+      if (row.deletedAt) return;
+      if (query.runId !== undefined && row.payload.runId !== query.runId) return;
+      if (query.chatId !== undefined && row.payload.chatId !== query.chatId) return;
+      if (isLocalValue(row.payload)) locals.set(`run-delta:${row.id.slice("run-delta-local:".length)}`, row.payload);
+      else if (isDeltaValue(row.payload)) values.set(row.id, { at: row.occurredAt, value: row.payload });
+    };
+    if (query.runId !== undefined) await scanByIndex(tx, RUN_DELTAS_BY_RUN, query.runId, visit);
+    else await scanByIndex(tx, RUN_DELTAS_BY_CHAT, query.chatId!, visit);
   });
-  return found.sort((a, b) => a.at.localeCompare(b.at) || a.card.repo.localeCompare(b.card.repo)).map((f) => f.card);
+  return [...values]
+    .flatMap(([id, { at, value }]) => {
+      const local = locals.get(id);
+      return local ? [{ at, card: cardOf({ value, local }) }] : [];
+    })
+    .sort((a, b) => a.at.localeCompare(b.at) || a.card.repo.localeCompare(b.card.repo))
+    .map((f) => f.card);
 }
 
 /** Past blast-radius scores of a repository (C10), from its stored deltas. */
 export async function pastBlastScores(store: LocalFirstStore, repository: string): Promise<number[]> {
   const scores: number[] = [];
   await store.read(async (tx) => {
-    await tx.scan<RunDeltaRecordValue>("run-delta", (row) => {
-      const score = row.payload?.delta?.blastRadius?.score;
-      if (!row.deletedAt && row.payload?.repository === repository && typeof score === "number") scores.push(score);
+    await scanByIndex<RunDeltaRecordValue>(tx, RUN_DELTAS_BY_REPOSITORY, repository, (row) => {
+      const score = row.payload.delta?.blastRadius?.score;
+      if (typeof score === "number") scores.push(score);
     });
   });
   return scores;

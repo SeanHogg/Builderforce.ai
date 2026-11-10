@@ -14,15 +14,8 @@ const pick = (map: Record<string, string>, code: string): string | undefined => 
 /** The lineage a finding is shown under. `present` = "present now" WITHOUT lineage (C9): it never counts as new or resolved. */
 export type LineageGroup = 'introduced' | 'resolved' | 'changed' | 'persisting' | 'present';
 
-/**
- * A finding's {@link LineageGroup}. The contract is mid-move from a `presentNow` flag to a `present` lineage
- * value; both read as `present`, so the card is right whichever shape the engine sends.
- */
-export function lineageGroup(f: DeltaFinding): LineageGroup {
-    const lineage = f.lineage as string;
-    if (lineage === 'present' || (f as { presentNow?: boolean }).presentNow === true) return 'present';
-    return lineage as LineageGroup;
-}
+/** A finding's {@link LineageGroup}: its lineage, `present` included. */
+export const lineageGroup = (f: DeltaFinding): LineageGroup => f.lineage;
 
 export const verdictLabel = (l: RunDeltaLabels, v: Verdict): string => l.verdicts[labelKey(v) as keyof RunDeltaLabels['verdicts']] ?? v;
 
@@ -33,17 +26,47 @@ export const ruleLabel = (l: RunDeltaLabels, ruleId: string): string => pick(l.r
 
 export const metricLabel = (l: RunDeltaLabels, metricId: string): string => pick(l.metrics, metricId) ?? metricId;
 
-/** A reason code, including memory's `tool-missing:<tool>` family. */
+/**
+ * A reason code. Prefixed families carry their subject after the colon: memory's `tool-missing:<tool>` /
+ * `tool-version-changed:<tool>`, `analyzer-failed:<ruleId>` and `not-comparable:<ruleId>` (the id read as a rule
+ * label), and an override's `unsafe-regex:<key>.<reason>`.
+ */
 export function reasonLabel(l: RunDeltaLabels, code: string): string {
     const colon = code.indexOf(':');
     if (colon > 0) {
         const prefix = code.slice(0, colon);
+        const subject = code.slice(colon + 1);
+        if (prefix === 'not-comparable' && l.reasons.notComparableRule) return fillTemplate(l.reasons.notComparableRule, { rule: ruleLabel(l, subject) });
+        if (prefix === 'unsafe-regex' && l.reasons.unsafeRegex) {
+            const dot = subject.lastIndexOf('.');
+            const reason = dot > 0 ? subject.slice(dot + 1) : '';
+            return fillTemplate(l.reasons.unsafeRegex, { key: dot > 0 ? subject.slice(0, dot) : subject, reason: pick(l.unsafeReasons, reason) ?? reason });
+        }
         if ((RUN_DELTA_TOOL_REASON_PREFIXES as readonly string[]).includes(prefix)) {
             const template = pick(l.reasons, prefix);
-            if (template) return fillTemplate(template, { tool: code.slice(colon + 1) });
+            if (template) return fillTemplate(template, { tool: prefix === 'analyzer-failed' ? ruleLabel(l, subject) : subject });
         }
     }
     return pick(l.reasons, code) ?? code;
+}
+
+/** A blocking code (`RunDelta.blocking`): a rule id, `not-comparable:<ruleId>` or `head-switched`. */
+export const blockingLabel = (l: RunDeltaLabels, code: string): string => pick(l.rules, code) ?? reasonLabel(l, code);
+
+/** A finding param's name. */
+export const paramLabel = (l: RunDeltaLabels, key: string): string => pick(l.params, key) ?? key;
+
+/** A param value: localized when the param is a coded one (, , , ) and the value is known, else as is. */
+export function paramValueLabel(l: RunDeltaLabels, key: string, value: string | number): string {
+    const values = l.paramValues[labelKey(key)];
+    return (values && pick(values, String(value))) ?? String(value);
+}
+
+/** An evidence note: the finding's own rule id (fact findings) or its  code reads localized; any other note is data. */
+export function noteLabel(l: RunDeltaLabels, finding: Pick<DeltaFinding, 'ruleId' | 'params'>, note: string): string {
+    if (note === finding.ruleId) return ruleLabel(l, note);
+    if (finding.params.change !== undefined && String(finding.params.change) === note) return paramValueLabel(l, 'change', note);
+    return note;
 }
 
 /** A headline clause code: a rule id, `metric:<id>`, a clause code or a reason. */

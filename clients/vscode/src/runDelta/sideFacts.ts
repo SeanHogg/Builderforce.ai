@@ -25,15 +25,16 @@ import {
 } from "@seanhogg/builderforce-memory/knowledge";
 import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
 import type { SideFacts, SideText } from "@builderforce/run-delta";
+import { toKnowledgePath, toRepoPath, type RepoPlacement } from "./repoPlacement";
 
 /** A repository's knowledge root, opened: what a side's facts are read from. */
 export interface KnowledgeContext {
   rootId: string;
   /**
-   * Where the repository sits inside the knowledge root, as a root-relative prefix (`''` when they are one folder, `'app/'` for
-   * a repository nested in the reviewed workspace folder): a knowledge path is `prefix + repoPath`.
+   * Where the repository sits relative to the knowledge root (`repoPlacement.ts`): a nested repository adds its folder
+   * prefix, a repository above the opened folder strips the folder's own. Paths outside the root have no knowledge.
    */
-  prefix: string;
+  placement: RepoPlacement;
   /** The root's LOCAL store (never the replicated wrapper: a delta's cache writes are not shared work). */
   store: KnowledgeStore;
   manifest: IngestManifest;
@@ -63,12 +64,12 @@ function emptyFacts(files: readonly SideFile[], generation: string): SideFacts {
   };
 }
 
-/** `prefix + repoPath` → `repoPath`; undefined for a knowledge path outside the repository. */
-const repoPathOf = (prefix: string, knowledgePath: string | undefined): string | undefined =>
-  knowledgePath !== undefined && knowledgePath.startsWith(prefix) ? knowledgePath.slice(prefix.length) : undefined;
+/** A knowledge path → its repo-relative path; undefined outside the repository. */
+const repoPathOf = (placement: RepoPlacement, knowledgePath: string | undefined): string | undefined =>
+  knowledgePath === undefined ? undefined : toRepoPath(placement, knowledgePath);
 
 /** The file→file imports and the file badges of a graph, repository-relative. */
-function graphShape(graph: KnowledgeGraph, prefix: string): Pick<SideFacts, "imports" | "badges"> {
+function graphShape(graph: KnowledgeGraph, prefix: RepoPlacement): Pick<SideFacts, "imports" | "badges"> {
   const outline = outlineOf(graph);
   const pathOf = (index: number): string | undefined => {
     const file = outline.files[index];
@@ -99,8 +100,10 @@ function graphShape(graph: KnowledgeGraph, prefix: string): Pick<SideFacts, "imp
  */
 export async function sideFacts(ctx: KnowledgeContext | undefined, files: readonly SideFile[], onError?: (error: unknown) => void): Promise<SideFacts> {
   if (!ctx) return emptyFacts(files, "0");
-  const { rootId, store, manifest, packs, prefix } = ctx;
-  const at = (p: string): string => `${prefix}${p}`;
+  const { rootId, store, manifest, packs, placement: prefix } = ctx;
+  // Only files inside the knowledge root are swapped; a repo path outside it has no facts there.
+  files = files.filter((f) => toKnowledgePath(prefix, f.path) !== undefined);
+  const at = (p: string): string => toKnowledgePath(prefix, p)!;
   const overrides = new Map<string, string | null>();
   for (const f of files) {
     if (f.absent) overrides.set(at(f.path), null);

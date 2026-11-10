@@ -176,6 +176,8 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
   // local_device_id_required and crash the extension host on first activation).
   const streamForRoute = async (onFallback?: (event: ModelFallbackEvent) => void): Promise<BrainStreamFn> =>
     routeStream(await resolveModelRoute(secrets, { turn: true }), await getApiKey(secrets), onFallback);
+  /** Each chat's latest run's file-tool writes (paths as its tools named them), for the run delta. */
+  const runWrites = new Map<number, string[]>();
   const host = createBrainRunHost({
     tools: async (projectId, children, signal, opts) => {
       const tools = await brainToolCatalog(secrets, workspaceRoot() || undefined, projectId, children, signal, opts);
@@ -244,8 +246,12 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     onRunsChanged: (state) => reportRuns(state),
     // The note, then (Memory on) the code map + learned facts — the one run-end step the
     // native chat participant shares.
-    sessionNote: (chatId, run, opts) =>
-      recordEditorRunEnd(secrets, workspaceRoot(), editorChatSessionKey(chatId), run, opts, { ledger: local.usage, chatId, runKey: chatId, identity: local.identity }),
+    sessionNote: (chatId, run, opts) => {
+      // The run's own write evidence for its delta's attribution (`runDelta/attribution.ts`).
+      const { created, edited, deleted } = run.activity;
+      runWrites.set(chatId, [...(created ?? []), ...(edited ?? []), ...(deleted ?? [])]);
+      return recordEditorRunEnd(secrets, workspaceRoot(), editorChatSessionKey(chatId), run, opts, { ledger: local.usage, chatId, runKey: chatId, identity: local.identity });
+    },
     // Fresh per run: the notes of the run that just finished, not the panel's copy.
     recentActivity: (chatId) => recentActivitySection(workspaceRoot() || undefined, chatId != null ? editorChatSessionKey(chatId) : undefined),
     // Bounded like the panel's init: a run never waits on a cold definition index's
@@ -305,9 +311,13 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     },
     acknowledgeInterrupted: interrupted.acknowledge,
     runDeltas: delta.runDeltas,
+    openRunDeltaFile: delta.openFile,
     ...gateStarts(host, async (payload, start) => {
       const { runId, author } = changeSetIdentityForHostRun(payload, () => crypto.randomUUID());
-      if (!isRunning(payload.chatId)) lifecycle.started(payload.chatId, runId, askedText(payload.userTurn));
+      if (!isRunning(payload.chatId)) {
+        lifecycle.started(payload.chatId, runId, askedText(payload.userTurn));
+        runWrites.delete(payload.chatId); // this turn's evidence only
+      }
       return recordChangeSetAroundRun(
         {
           store: local.store,
@@ -317,8 +327,14 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
           stillRunning: () => isRunning(payload.chatId),
           onError: (error) => hostLog(`[change set] ${error instanceof Error ? error.message : String(error)}`),
           capture: await delta.capture(runId),
-          // An audit is the autonomous start (§12.5 policy applies); every chat turn is interactive.
-          onFinalized: delta.onFinalized({ chatId: payload.chatId, mode: payload.audit ? "autonomous" : "interactive" }),
+          // §12.5: an audit, or a turn started with Auto on (no human approves its writes), is autonomous; only a human-driven
+          // turn with approvals is interactive. Sub-agents start through the host's internal start, never through here.
+          onFinalized: delta.onFinalized({
+            chatId: payload.chatId,
+            mode: payload.audit || payload.autoApprove ? "autonomous" : "interactive",
+            writes: () => runWrites.get(payload.chatId),
+            ...(workspaceRoot() ? { workspaceRoot: workspaceRoot() } : {}),
+          }),
         },
         start,
       );

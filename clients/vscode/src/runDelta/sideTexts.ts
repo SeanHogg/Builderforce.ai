@@ -4,9 +4,11 @@
  * BEFORE, in the C1 order:
  *   1. a file dirty at baseline → its pre-image, by `beforeHash` (`preimageRows.ts`); over a cap it is `preimage-too-large`,
  *      otherwise missing it is `preimage-missing`;
- *   2. a file clean at baseline → `git show <baseCommit>:<path>`. The change-set record carries no `beforeHash` for it (the
- *      baseline only fingerprints dirty files), so {@link SideTexts.inputs} reads it here and stamps the hash; a path git
- *      does not hold at the base commit was created by the run. No git (or no base commit) → `git-unavailable`;
+ *   2. a file clean at baseline → its blob at `<baseCommit>`, every such file in ONE `git cat-file --batch` (`gitSide.ts`), as
+ *      BYTES: hashed raw with the same content hash, decoded for the rules separately. The change-set record carries no
+ *      `beforeHash` for it (the baseline only fingerprints dirty files), so {@link SideTexts.inputs} reads it here and stamps
+ *      the hash; a path git does not hold at the base commit was created by the run. No git (or no base commit) →
+ *      `git-unavailable`;
  *   3. a text holding a NUL in its first 8 KiB is `binary` (no text; the engine excludes it).
  * AFTER is the working tree at finalization.
  *
@@ -32,7 +34,6 @@ export interface ChangeSetFileView {
 /** Reads pre-image bytes by content hash. */
 export type PreimageReader = (hashes: readonly string[]) => Promise<Map<string, Uint8Array>>;
 
-const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8");
 
 function sideText(file: string, bytes: Uint8Array): SideText {
@@ -71,11 +72,11 @@ export class SideTexts {
   async inputs(files: readonly ChangeSetFileView[]): Promise<ChangedFileInput[]> {
     const clean = files.filter((f) => !this.dirtyAtBaseline(f.path) && f.beforeHash === undefined);
     const atBase = this.git && this.repo.baseCommit && this.repo.kind !== "folder" && clean.length > 0
-      ? await this.git.pathsAt(this.repo.baseCommit, clean.map((f) => f.path))
+      ? await this.git.blobs(this.repo.baseCommit, clean.map((f) => f.path))
       : undefined;
     const out: ChangedFileInput[] = [];
     for (const f of files) {
-      const beforeHash = this.dirtyBefore(f) ?? fingerprintHash(f.beforeHash) ?? (await this.cleanBefore(f, atBase));
+      const beforeHash = this.dirtyBefore(f) ?? fingerprintHash(f.beforeHash) ?? this.cleanBefore(f, atBase);
       const afterHash = fingerprintHash(f.afterHash);
       out.push({
         path: f.path,
@@ -98,7 +99,7 @@ export class SideTexts {
     return UNREADABLE_BEFORE;
   }
 
-  private async cleanBefore(f: ChangeSetFileView, atBase: Set<string> | undefined): Promise<string | undefined> {
+  private cleanBefore(f: ChangeSetFileView, atBase: ReadonlyMap<string, Uint8Array | null> | undefined): string | undefined {
     if (this.dirtyAtBaseline(f.path)) return undefined; // dirty and absent at baseline: it did not exist then
     if (this.repo.kind === "folder") return undefined; // a folder's baseline is its whole working set: not in it ⇒ created
     if (atBase === undefined) {
@@ -106,13 +107,9 @@ export class SideTexts {
       this.before.set(f.path, { path: f.path, reason: "git-unavailable" });
       return UNREADABLE_BEFORE;
     }
-    if (!atBase.has(f.path)) return undefined;
-    const text = await this.git!.show(this.repo.baseCommit!, f.path);
-    if (text === undefined) {
-      this.before.set(f.path, { path: f.path, reason: "git-unavailable" });
-      return UNREADABLE_BEFORE;
-    }
-    const side = sideText(f.path, encoder.encode(text));
+    const bytes = atBase.get(f.path);
+    if (!bytes) return undefined; // not a blob at the base commit: the run created it
+    const side = sideText(f.path, bytes);
     this.before.set(f.path, side);
     return side.hash;
   }
