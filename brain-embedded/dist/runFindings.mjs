@@ -4,7 +4,9 @@ import {
   changesBalance,
   claimsReady,
   commandOf,
-  formatBytes,
+  describeBracketDelta,
+  editedFilesOf,
+  editedPathsOf,
   isCacheAnswered,
   isCodeChangeTool,
   isFailedToolResult,
@@ -14,9 +16,10 @@ import {
   staffingSummaryInTrace,
   traceWithPersistedSteps,
   utf8ByteLength
-} from "./chunk-HUXONYGK.mjs";
+} from "./chunk-C5BODSXM.mjs";
 
 // src/runFindings/policy.ts
+import { NARRATION_OVERLAP } from "@seanhogg/builderforce-memory/working";
 var RUN_FINDING_POLICY = Object.freeze({
   /** Read-only turns before the first write that make an analysis overrun. */
   analysisReadTurns: 8,
@@ -35,10 +38,9 @@ var RUN_FINDING_POLICY = Object.freeze({
   sharedArgBytes: 1024,
   /** A turn this slow (ms) is slow. */
   slowTurnMs: 6e4,
-  /** Word-set overlap (|A∩B| / min(|A|,|B|)) of consecutive pre-call texts that repeats narration. */
-  narrationOverlap: 0.8,
-  /** Fewest distinct words a pre-call text needs before its overlap means anything. */
-  narrationMinWords: 3,
+  /** Word-set overlap at which a pre-call text repeats the last kept one: memory's B7 fold threshold, so the
+   *  diagnostic and the fold agree (`NARRATION_OVERLAP`, `@seanhogg/builderforce-memory/working`). */
+  narrationOverlap: NARRATION_OVERLAP,
   /** Longest excerpt an evidence row quotes. */
   excerptChars: 160
 });
@@ -49,7 +51,17 @@ var SHELL_TOOLS = /* @__PURE__ */ new Set(["run_command", "shell", "bash", "exec
 // src/runFindings/findingParts.ts
 function finding(kind, severity, params, evidence) {
   const first = evidence.reduce((min, e) => Math.min(min, e.step), Number.POSITIVE_INFINITY);
-  return { id: `${kind}:${Number.isFinite(first) ? first : 0}`, kind, severity, params, evidence };
+  const subject = params.path ?? params.tool;
+  const id = `${kind}:${subject !== void 0 ? `${subject}:` : ""}${Number.isFinite(first) ? first : 0}`;
+  return { id, kind, severity, params, evidence };
+}
+function withUniqueIds(findings) {
+  const seen = /* @__PURE__ */ new Map();
+  return findings.map((f) => {
+    const n = (seen.get(f.id) ?? 0) + 1;
+    seen.set(f.id, n);
+    return n === 1 ? f : { ...f, id: `${f.id}#${n}` };
+  });
 }
 function excerpt(text) {
   const flat = text.replace(/\s+/g, " ").trim();
@@ -112,33 +124,18 @@ function analysisOverrun(view) {
 }
 
 // src/runFindings/detectors/bracketBreak.ts
-var str = (v) => typeof v === "string" ? v : "";
-function describeDelta(d) {
-  return ["curly", "paren", "square"].filter((k) => d[k] !== 0).map((k) => `${k} ${d[k] > 0 ? "+" : ""}${d[k]}`).join(" \xB7 ");
-}
-function replacements(c) {
-  const pathOf = (a) => str(a.path ?? a.file_path ?? a.filePath);
-  if (Array.isArray(c.args.edits)) {
-    return c.args.edits.map((e) => {
-      const a = e ?? {};
-      return { path: pathOf(a), before: str(a.old_string), after: str(a.new_string) };
-    });
-  }
-  if ("new_string" in c.args) return [{ path: pathOf(c.args), before: str(c.args.old_string), after: str(c.args.new_string) }];
-  if ("content" in c.args) return [{ path: pathOf(c.args), before: "", after: str(c.args.content) }];
-  return [];
-}
 function bracketBreak(view) {
   const out = [];
   for (const c of view.calls) {
     if (!c.write) continue;
-    for (const r of replacements(c)) {
+    for (const r of editedFilesOf(c.name, c.args)) {
+      if (r.before === void 0 || r.after === void 0) continue;
       const delta = bracketDelta(r.before, r.after, r.path);
       if (!changesBalance(delta)) continue;
       out.push(finding(
         "bracket_break",
         "error",
-        { path: r.path, delta: describeDelta(delta) },
+        { path: r.path, delta: describeBracketDelta(delta) },
         [callEvidence(c, r.path, r.after)]
       ));
     }
@@ -203,7 +200,11 @@ function oversizedArgs(view) {
     const shared = sharingCalls(calls);
     const flagged = calls.filter((c) => c.argBytes >= RUN_FINDING_POLICY.oversizedArgBytes || shared.has(c));
     if (flagged.length === 0) continue;
-    const evidence = flagged.map((c) => callEvidence(c, void 0, `${c.argBytes} B of arguments${shared.has(c) ? " \xB7 repeats a block another call carries" : ""}`));
+    const evidence = flagged.map((c) => ({
+      ...callEvidence(c),
+      note: shared.has(c) ? "argBytesShared" : "argBytes",
+      params: { bytes: c.argBytes }
+    }));
     out.push(finding("oversized_args", "warn", { tool, bytes: Math.max(...flagged.map((c) => c.argBytes)), calls: flagged.length }, evidence));
   }
   for (const t of view.turns) {
@@ -212,7 +213,7 @@ function oversizedArgs(view) {
       "oversized_args",
       "warn",
       { tool: t.handOffVia, bytes: t.argBytes, calls: 1 },
-      [turnEvidence(t, t.handOffVia, `${t.argBytes} B of arguments`)]
+      [{ ...turnEvidence(t, t.handOffVia), note: "argBytes", params: { bytes: t.argBytes } }]
     ));
   }
   return out;
@@ -235,24 +236,25 @@ function promptBloat(view) {
 }
 
 // src/runFindings/detectors/repeatedNarration.ts
-function wordsOf(text) {
-  return new Set(text.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? []);
+import { foldRepeatedNarration } from "@seanhogg/builderforce-memory/working";
+function asNarration(t) {
+  return { role: "assistant", content: t.text, tool_calls: t.calls.map(() => ({})) };
 }
-function overlap(a, b) {
-  const small = a.size <= b.size ? a : b;
-  const large = small === a ? b : a;
-  if (small.size === 0) return 0;
-  let shared = 0;
-  for (const w of small) if (large.has(w)) shared += 1;
-  return shared / small.size;
-}
+var isCandidate = (t) => t.calls.length > 0 && t.text.trim().length > 0;
 function repeatedNarration(view) {
-  const narrated = view.turns.filter((t) => t.calls.length > 0 && t.text.trim()).map((t) => ({ t, words: wordsOf(t.text) })).filter((n) => n.words.size >= RUN_FINDING_POLICY.narrationMinWords);
+  const msgs = view.turns.map(asNarration);
+  const folded = foldRepeatedNarration(msgs, RUN_FINDING_POLICY.narrationOverlap);
   const repeats = /* @__PURE__ */ new Set();
-  for (let i = 1; i < narrated.length; i++) {
-    if (overlap(narrated[i - 1].words, narrated[i].words) < RUN_FINDING_POLICY.narrationOverlap) continue;
-    repeats.add(narrated[i - 1].t);
-    repeats.add(narrated[i].t);
+  let lastKept = null;
+  for (let i = 0; i < view.turns.length; i++) {
+    const t = view.turns[i];
+    if (!isCandidate(t)) continue;
+    if (folded[i] === msgs[i]) {
+      lastKept = t;
+      continue;
+    }
+    if (lastKept) repeats.add(lastKept);
+    repeats.add(t);
   }
   if (repeats.size === 0) return [];
   const turns = [...repeats].sort((a, b) => a.index - b.index);
@@ -303,7 +305,7 @@ function slowTurns(view) {
   const slow = view.turns.filter((t) => t.durationMs >= RUN_FINDING_POLICY.slowTurnMs);
   if (slow.length === 0) return [];
   const slowestMs = Math.max(...slow.map((t) => t.durationMs));
-  return [finding("slow_turns", "warn", { turns: slow.length, slowestMs }, slow.map((t) => turnEvidence(t, "llm.complete", `${t.durationMs} ms \xB7 ${t.completionTokens} completion tok \xB7 ${formatBytes(t.argBytes)} of arguments`)))];
+  return [finding("slow_turns", "warn", { turns: slow.length, slowestMs }, slow.map((t) => ({ ...turnEvidence(t), note: "slowTurn", params: { ms: t.durationMs, completionTokens: t.completionTokens, argBytes: t.argBytes } })))];
 }
 
 // src/runFindings/detectors/stoppedUnverified.ts
@@ -382,14 +384,6 @@ function jsonBytes(v) {
     return 0;
   }
 }
-function changedPaths(args) {
-  const one = (a) => {
-    const p = a.path ?? a.file_path ?? a.filePath;
-    return typeof p === "string" && p.trim() ? p.trim().replace(/\\/g, "/").replace(/^\.\//, "") : null;
-  };
-  const paths = Array.isArray(args.edits) ? args.edits.map((e) => one(record(e))) : [one(args)];
-  return [...new Set(paths.filter((p) => p !== null))];
-}
 function isCheck(ev) {
   if (CHECK_TOOL.test(ev.label)) return true;
   return SHELL_TOOLS.has(ev.label) && CHECK_COMMAND.test(commandOf(ev));
@@ -407,7 +401,7 @@ function callOf(ev, step, turn) {
     argBytes: jsonBytes(ev.args),
     write,
     check: ok && isCheck(ev),
-    paths: write ? changedPaths(args) : []
+    paths: write ? editedPathsOf(ev.label, args) : []
   };
 }
 function kindOf(t, failed) {
@@ -504,7 +498,7 @@ function summaryOf(view, findings, identity) {
 }
 function detectRunFindings(events, messages = [], identity = {}) {
   const view = buildRunView(events, messages);
-  const findings = RUN_FINDING_REGISTRY.flatMap((d) => d.detect(view)).sort(compareFindings);
+  const findings = withUniqueIds(RUN_FINDING_REGISTRY.flatMap((d) => d.detect(view)).sort(compareFindings));
   return {
     summary: summaryOf(view, findings, identity),
     turns: view.turns.map((t) => ({

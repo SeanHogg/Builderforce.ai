@@ -109,6 +109,7 @@ import {
 import {
   BACK_TO_BACK_AT,
   BASE_BRANCHES,
+  BOUND_ONLY_VERSION,
   CODE_CHANGE_TOOLS,
   CONTROL_TOOL_NAMES,
   DEFAULT_CHAT_ACTIVITY_LABELS,
@@ -118,6 +119,7 @@ import {
   FailureTally,
   HAND_OFF_CLASH_LABEL,
   HAND_OFF_MODE_LABEL,
+  INFERENCE_MODES,
   LEXICAL_WEIGHTS,
   LOCAL_TICKET_CREATE_TOOL,
   LOCAL_WORKSPACE_TOOLS,
@@ -137,6 +139,7 @@ import {
   ReadCoverage,
   ReadsWithoutSpawn,
   RunKnowledgeRecorder,
+  SCAN_STOP,
   SERVER_TICKET_CREATE_TOOL,
   SERVER_TICKET_LINK_TOOL,
   SERVER_TICKET_TOOLS,
@@ -150,6 +153,7 @@ import {
   TOOL_SEARCH_TOOL,
   UNBACKED_TICKET_CLAIM_NOTICE,
   UNBACKED_WRITE_CLAIM_NOTICE,
+  UNBOUND_DESTINATION,
   UNSCOPED_MUTATION_TOOLS,
   VERIFY_DELEGATION_STEP,
   VERIFY_STEP,
@@ -190,12 +194,17 @@ import {
   continuationDirective,
   createComposingActivity,
   createEvidenceLedger,
+  defaultInferenceMode,
+  describeBracketDelta,
   describeLiveStep,
   describeStreamFailure,
   detectAnnouncedButUnmadeToolCall,
   detectUnbackedTicketClaim,
   detectUnbackedWriteClaim,
   dirtyPathsOf,
+  editedFilesOf,
+  editedPathsOf,
+  entityIdsOf,
   evaluatePolicyGate,
   failureReason,
   formatAdvertised,
@@ -225,6 +234,8 @@ import {
   isEvermindModel,
   isExhaustedStall,
   isFailedToolResult,
+  isImported,
+  isInferenceMode,
   isLocalTicketCreateLabel,
   isLocalWorkspaceTool,
   isMalformedToolCall,
@@ -233,6 +244,7 @@ import {
   isMutatingTool,
   isMutationTool,
   isNotARepo,
+  isOwnRecord,
   isReadFileResult,
   isReadOnlyShellCall,
   isRepoPublishTool,
@@ -240,9 +252,11 @@ import {
   isStepMessage,
   isStoppedBeforeStart,
   isStoppedTurn,
+  isTestPath,
   isTicketWriteTool,
   isTruncatedTurn,
   isUnscopedMutationTool,
+  journalWrite,
   judgeWith,
   lastServedModel,
   lexicalStems,
@@ -258,6 +272,7 @@ import {
   modelTurnLog,
   modelsUsedInTrace,
   narratedUnadvertisedInTrace,
+  newLocalRecord,
   nextFallbackModel,
   normalizeEvidencePath,
   normalizeToolName,
@@ -269,6 +284,7 @@ import {
   parseRoleGateRefusal,
   parseShellFileRead,
   parseStepMessage,
+  parseSyncId,
   planInRunVerify,
   planScopeClash,
   policyGateCallKey,
@@ -277,6 +293,7 @@ import {
   progressPauseQuestion,
   progressTraceStep,
   promisesUnfinishedWork,
+  queueImport,
   rankLexically,
   recordShellFileRead,
   renderPolicyDirectives,
@@ -289,8 +306,8 @@ import {
   runProgressVerdict,
   scopeClashCorrective,
   searchToolSchemas,
+  selectRecords,
   serverChatIdOf,
-  serverTicketId,
   shapeToolResult,
   shellPrintAsRead,
   shellPublishHint,
@@ -313,6 +330,7 @@ import {
   stoppedBeforeStartRow,
   stoppedTurnMetadata,
   studioToolsIn,
+  syncIdText,
   ticketStatusMove,
   ticketToolVocabulary,
   toolActivity,
@@ -325,6 +343,7 @@ import {
   toolSideEffect,
   traceWithPersistedSteps,
   trimToolResult,
+  truncateMiddle,
   truncatedResultNote,
   turnInterruption,
   utf8ByteLength,
@@ -333,7 +352,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-HUXONYGK.mjs";
+} from "./chunk-C5BODSXM.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useEffect, useMemo } from "react";
@@ -861,32 +880,7 @@ function reasoningForRun(o) {
   return o.thinking ? { level: effortProfile(o.effort).reasoningLevel } : void 0;
 }
 
-// src/streamChatCompletion.ts
-var UPSTREAM_EVIDENCE_FIELD = "x_builderforce_upstream";
-function readUpstreamEvidence(frame) {
-  const raw = frame?.[UPSTREAM_EVIDENCE_FIELD];
-  if (!raw || typeof raw.functionCalls !== "number") return void 0;
-  return {
-    items: raw.items && typeof raw.items === "object" ? raw.items : {},
-    functionCalls: raw.functionCalls,
-    recovered: typeof raw.recovered === "number" ? raw.recovered : 0
-  };
-}
-var GATEWAY_ROUTING_FIELD = "_builderforce";
-function readGatewayRouting(frame) {
-  const raw = frame?.[GATEWAY_ROUTING_FIELD];
-  if (!raw || !Array.isArray(raw.failovers)) return void 0;
-  const failovers = raw.failovers.flatMap((f) => {
-    const o = f;
-    return o && typeof o.model === "string" ? [{ model: o.model, vendor: String(o.vendor ?? ""), code: Number.isFinite(Number(o.code)) ? Number(o.code) : 0, ...o.kind ? { kind: String(o.kind) } : {} }] : [];
-  });
-  const candidates = Array.isArray(raw.candidates) ? raw.candidates.filter((c) => typeof c === "string") : void 0;
-  return {
-    failovers,
-    ...candidates?.length ? { candidates } : {},
-    ...typeof raw.traceId === "string" ? { traceId: raw.traceId } : {}
-  };
-}
+// src/streamErrors.ts
 var StreamInterruptedError = class extends Error {
   model;
   /** What the failed request looked like (destination, phase, elapsed, size) - for logs and triage. */
@@ -939,6 +933,33 @@ var RepetitionLoopError = class extends StreamInterruptedError {
     this.copies = loop.copies;
   }
 };
+
+// src/streamChatCompletion.ts
+var UPSTREAM_EVIDENCE_FIELD = "x_builderforce_upstream";
+function readUpstreamEvidence(frame) {
+  const raw = frame?.[UPSTREAM_EVIDENCE_FIELD];
+  if (!raw || typeof raw.functionCalls !== "number") return void 0;
+  return {
+    items: raw.items && typeof raw.items === "object" ? raw.items : {},
+    functionCalls: raw.functionCalls,
+    recovered: typeof raw.recovered === "number" ? raw.recovered : 0
+  };
+}
+var GATEWAY_ROUTING_FIELD = "_builderforce";
+function readGatewayRouting(frame) {
+  const raw = frame?.[GATEWAY_ROUTING_FIELD];
+  if (!raw || !Array.isArray(raw.failovers)) return void 0;
+  const failovers = raw.failovers.flatMap((f) => {
+    const o = f;
+    return o && typeof o.model === "string" ? [{ model: o.model, vendor: String(o.vendor ?? ""), code: Number.isFinite(Number(o.code)) ? Number(o.code) : 0, ...o.kind ? { kind: String(o.kind) } : {} }] : [];
+  });
+  const candidates = Array.isArray(raw.candidates) ? raw.candidates.filter((c) => typeof c === "string") : void 0;
+  return {
+    failovers,
+    ...candidates?.length ? { candidates } : {},
+    ...typeof raw.traceId === "string" ? { traceId: raw.traceId } : {}
+  };
+}
 async function defaultMapError(res) {
   return brainRequestError(res.status, await readErrorBody(res), res.statusText);
 }
@@ -1267,339 +1288,6 @@ function useBrainConfig() {
   if (!ctx) throw new Error("useBrainConfig must be used within a BrainProvider");
   return ctx;
 }
-
-// ../packages/local-first/src/policy.ts
-var LOCAL_FIRST_POLICY = Object.freeze({
-  synchronize: false,
-  gatewayInference: false,
-  connectedFeatures: false,
-  authenticate: false,
-  modelDownloads: false,
-  directProviders: false,
-  externalMcp: false,
-  gitRemotes: false
-});
-
-// ../packages/local-first/src/inferenceMode.ts
-var INFERENCE_MODES = Object.freeze(["hybrid", "local-only", "specific"]);
-function isInferenceMode(value) {
-  return typeof value === "string" && INFERENCE_MODES.includes(value);
-}
-function defaultInferenceMode(context) {
-  return context.signedIn ? "hybrid" : "local-only";
-}
-
-// ../packages/local-first/src/platformRoutes.ts
-var PLATFORM_ROUTE_RULES = Object.freeze([
-  { path: "/api/auth", match: "contains", capability: "authenticate", note: "token exchange and session" },
-  { path: "/api/vscode/tenants/*/token", capability: "authenticate", note: "the editor's tenant token exchange" },
-  { path: "/chat/completions", match: "contains", capability: "gateway-inference", content: true, note: "a gateway completion \u2014 the prompt" },
-  { path: "/api/brain/stream", capability: "gateway-inference", content: true, note: "the Brain's streamed turn \u2014 the prompt" },
-  { path: "/llm/v1/models", capability: "connected-feature", note: "the model catalog" },
-  { path: "/api/llm/models", capability: "connected-feature", note: "the model catalog" },
-  { path: "/api/limbic/block", capability: "connected-feature", content: true, note: "personality block \u2014 once per session; the per-turn affect is appraised on the device" },
-  { path: "/api/limbic", match: "prefix", capability: "connected-feature", content: true, note: "the personality / affect store" },
-  { path: "/api/projects/*/evermind/recall", capability: "connected-feature", content: true, note: "memory recall \u2014 a read that sends the prompt" },
-  { path: "/api/projects/*/evermind", match: "contains", capability: "connected-feature", content: true, note: "a project's Evermind memory" },
-  { path: "/api/evermind", match: "contains", capability: "connected-feature", content: true, note: "Evermind memory" },
-  { path: "/api/sync", match: "prefix", capability: "synchronize", content: true, note: "the local-first sync transport \u2014 the records themselves" },
-  // PRD 36: a signed-in editor BINDS its local chat to a server chat so the chat's
-  // tickets, usage and memory land on it. The bind sends a title and a project — never
-  // the transcript (that is `/messages`, below, and the sync transport above).
-  { path: "/api/brain/chats", capability: "connected-feature", note: "binding a chat to the account \u2014 its title and project only" },
-  { path: "/api/brain/chats/*/messages", content: true, note: "a Brain chat's transcript" },
-  { path: "/api/chats/*/messages", content: true, note: "a chat's transcript" },
-  { path: "/api/brain/upload", content: true, note: "an uploaded file" },
-  { path: "/api/brain/fetch-url", content: true, note: "a page fetched for the Brain \u2014 the URL the person gave" },
-  { path: "/product-report", match: "suffix", content: true, note: "an error report \u2014 what was on screen" },
-  // Sockets that carry the person's content (an upgrade is a GET, so these keep the
-  // read default): live canvas sync, rooms and meetings, an execution's stream, an
-  // agent host's chat. A socket that only says "something changed" is not tagged.
-  { path: "/api/creation-sessions/*/ws", content: true, note: "a canvas session's live sync" },
-  { path: "/api/guest/rooms/*/ws", content: true, note: "a guest room's shared transcript and meeting" },
-  { path: "/api/agile/ceremonies/rooms/*/ws", content: true, note: "a ceremony room's live conversation" },
-  { path: "/api/meetings/rooms/*/ws", content: true, note: "a meeting room's signalling" },
-  { path: "/api/runtime/executions/*/stream", content: true, note: "an execution's live stream \u2014 messages, tool results, file changes" },
-  { path: "/api/agent-hosts/*/ws", content: true, note: "an agent host's chat" },
-  { path: "/api/guest/research", match: "prefix", content: true, note: "a guest canvas's research call \u2014 the query" },
-  { path: "/api/guest/career", match: "prefix", content: true, note: "a guest canvas's career tool \u2014 the r\xE9sum\xE9 / job text" },
-  { path: "/search", match: "suffix", capability: "connected-feature", note: "a search \u2014 a read" },
-  { path: "/api/dashboards/query", capability: "connected-feature", note: "a dashboard query \u2014 a read" },
-  { path: "/api/data-sources/*/query", capability: "connected-feature", note: "a data-source query \u2014 a read" },
-  { path: "/api/vscode/connect", capability: "connected-feature", note: "the editor presence beat" }
-]);
-
-// ../packages/local-first/src/records.ts
-var UNBOUND_DESTINATION = { kind: "unbound" };
-
-// ../packages/local-first/src/storeContract.ts
-var SCAN_STOP = /* @__PURE__ */ Symbol.for("builderforce.local-first.scan-stop");
-
-// ../packages/local-first/src/clone.ts
-function clone(value) {
-  return structuredClone(value);
-}
-
-// ../packages/local-first/src/payloadHash.ts
-function fnv1a32(text2, seed = 2166136261) {
-  let hash = seed >>> 0;
-  for (let index = 0; index < text2.length; index += 1) {
-    hash ^= text2.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-function hashPayload(payload) {
-  const text2 = JSON.stringify(payload) ?? "null";
-  return `fnv1a:${fnv1a32(text2).toString(16).padStart(8, "0")}`;
-}
-
-// ../packages/local-first/src/store.ts
-async function selectRecords(tx, type, where) {
-  const matches = [];
-  await tx.scan(type, (row) => {
-    if (!where || where(row)) matches.push(row);
-  });
-  return clone(matches);
-}
-async function selectPending(tx, where, destination) {
-  const matches = [];
-  await tx.scanPending((event) => {
-    if (event.deadLetter) return;
-    if (!where || where(event)) matches.push(event);
-  }, destination);
-  matches.sort((a, b) => a.localSequence - b.localSequence);
-  return clone(matches);
-}
-function newLocalRecord(input) {
-  const at = input.occurredAt ?? (/* @__PURE__ */ new Date()).toISOString();
-  return {
-    id: input.id,
-    entityType: input.entityType,
-    schemaVersion: input.schemaVersion ?? 1,
-    version: 1,
-    destination: input.destination ?? UNBOUND_DESTINATION,
-    occurredAt: at,
-    updatedAt: at,
-    payload: input.payload,
-    provenance: { deviceId: input.deviceId, source: "local" }
-  };
-}
-
-// ../packages/local-first/src/domainToolClass.ts
-var LOCAL_DOMAIN_TOOL_NAMES = Object.freeze([
-  "project-create",
-  "project-update",
-  "project-move",
-  "project-archive",
-  "ticket-create",
-  "ticket-update",
-  "ticket-move",
-  "ticket-archive",
-  "ticket-delete",
-  "memory-recall",
-  "local-memory-recall",
-  "audit-finding",
-  "local-audit-finding"
-]);
-var CONNECTED_ONLY_DOMAIN_TOOL_NAMES = Object.freeze([
-  "cloud-execution",
-  "meeting-join",
-  "remote-session-read"
-]);
-var LOCAL = new Set(LOCAL_DOMAIN_TOOL_NAMES);
-var CONNECTED = new Set(CONNECTED_ONLY_DOMAIN_TOOL_NAMES);
-var LOCAL_CLASS = Object.freeze({ mode: "local" });
-var CONNECTED_CLASS = Object.freeze({ mode: "connected-only" });
-var UNKNOWN_CLASS = Object.freeze({ mode: "unknown" });
-
-// ../packages/local-first/src/journalCodec.ts
-var MAGIC_BYTES = 5;
-var JOURNAL_HEADER_BYTES = MAGIC_BYTES + 8;
-var RESET_PREFIX = new TextEncoder().encode('{"reset":true');
-var TABLES = (() => {
-  const tables = new Int32Array(8 * 256);
-  for (let n2 = 0; n2 < 256; n2 += 1) {
-    let c = n2;
-    for (let bit = 0; bit < 8; bit += 1) c = c & 1 ? c >>> 1 ^ 3988292384 : c >>> 1;
-    tables[n2] = c;
-  }
-  for (let n2 = 0; n2 < 256; n2 += 1) {
-    let c = tables[n2];
-    for (let k = 1; k < 8; k += 1) {
-      c = tables[c & 255] ^ c >>> 8;
-      tables[k * 256 + n2] = c;
-    }
-  }
-  return tables;
-})();
-
-// ../packages/local-first/src/journalCompaction.ts
-var DEFAULT_JOURNAL_COMPACTION = Object.freeze({
-  maxFrames: 8192,
-  maxBytes: 64 * 1024 * 1024
-});
-var DEFAULT_COMPACTION_FRAME = Object.freeze({
-  maxBytes: 256 * 1024,
-  maxRows: 500
-});
-var encoder = new TextEncoder();
-
-// ../packages/local-first/src/creationDestination.ts
-var LOCAL_CREATE_PATHS = Object.freeze([
-  Object.freeze({
-    id: "localWork.createProject",
-    module: "localWork.ts",
-    entry: "createLocalWork(store).createProject",
-    writes: Object.freeze(["project"])
-  }),
-  Object.freeze({
-    id: "localWork.createTicket",
-    module: "localWork.ts",
-    entry: "createLocalWork(store).createTicket",
-    writes: Object.freeze(["ticket"])
-  }),
-  Object.freeze({
-    id: "transactionalRecord.commit",
-    module: "transactionalRecord.ts",
-    entry: "createTransactionalRecordStore(options).commit",
-    writes: Object.freeze(["project", "ticket", "chat", "audit-run", "execution"])
-  }),
-  Object.freeze({
-    id: "hostChatRecord.ensureChat",
-    module: "hostChatRecord.ts",
-    entry: "createHostChatLog(store).appendTurn/appendRun/appendStep/appendApproval",
-    writes: Object.freeze(["chat"])
-  }),
-  Object.freeze({
-    id: "hostChatRecord.appendRun",
-    module: "hostChatRecord.ts",
-    entry: "createHostChatLog(store).appendRun",
-    writes: Object.freeze(["execution"])
-  }),
-  Object.freeze({
-    id: "localAudit.createLocalAuditFinding",
-    module: "localAudit.ts",
-    entry: "createLocalAuditFinding(store, input)",
-    writes: Object.freeze(["audit-finding"])
-  }),
-  Object.freeze({
-    id: "factProvenance.remember",
-    module: "factProvenance.ts",
-    entry: "createFactStore(store).remember",
-    writes: Object.freeze(["memory-fact"])
-  })
-]);
-
-// ../packages/local-first/src/journalRules.ts
-var BOUND_ONLY_VERSION = 0;
-var PAYLOAD_ON_DELETE = /* @__PURE__ */ new Set(["chat-ticket-link"]);
-var importKey = (type, id) => `${type}:${id}:import`;
-function isOwnRecord(row, deviceId) {
-  return row.provenance?.source !== "imported" || row.provenance.deviceId === deviceId;
-}
-function isImported(mapping) {
-  return mapping !== void 0 && mapping.serverVersion > BOUND_ONLY_VERSION;
-}
-function unboundMarker(record2, operation) {
-  const text2 = JSON.stringify(record2.payload) ?? "null";
-  return {
-    operation,
-    payloadSize: text2.length,
-    payloadHash: hashPayload(record2.payload),
-    payload: null
-  };
-}
-async function dropPending(tx, record2) {
-  const stale = await selectPending(tx, (event) => event.clientEntityId === record2.id && event.entityType === record2.entityType);
-  if (stale.length > 0) await tx.acknowledge(stale.map((event) => event.eventId));
-}
-function importPayload(record2, mapping) {
-  if (record2.entityType !== "chat" || mapping?.serverVersion !== BOUND_ONLY_VERSION) return record2.payload;
-  const serverId = Number(mapping.serverId);
-  return Number.isSafeInteger(serverId) && serverId > 0 ? { ...record2.payload, serverId } : record2.payload;
-}
-async function queueImport(tx, record2, chatClientId, waitsOn = []) {
-  await dropPending(tx, record2);
-  if (record2.deletedAt) return;
-  const mapping = await tx.mapping(record2.entityType, record2.id, record2.destination);
-  await tx.append({
-    idempotencyKey: importKey(record2.entityType, record2.id),
-    clientEntityId: record2.id,
-    entityType: record2.entityType,
-    operation: "import",
-    schemaVersion: record2.schemaVersion,
-    occurredAt: record2.occurredAt,
-    dependsOn: [...chatClientId && record2.entityType !== "chat" ? [importKey("chat", chatClientId)] : [], ...waitsOn],
-    destination: record2.destination,
-    payload: importPayload(record2, mapping)
-  });
-}
-async function journalWrite(tx, record2, operation, options) {
-  if (record2.destination.kind === "unbound") {
-    await tx.append({
-      idempotencyKey: options.key,
-      clientEntityId: record2.id,
-      entityType: record2.entityType,
-      schemaVersion: record2.schemaVersion,
-      occurredAt: record2.occurredAt,
-      ...record2.baseVersion !== void 0 ? { baseVersion: record2.baseVersion } : {},
-      dependsOn: options.dependsOn ?? [],
-      destination: record2.destination,
-      // The marker carries size + a content hash of the real payload, never the
-      // payload itself; the record is the only copy while unbound (module comment).
-      ...unboundMarker(record2, operation)
-    });
-    return;
-  }
-  const mapping = await tx.mapping(record2.entityType, record2.id, record2.destination);
-  if (!isImported(mapping)) {
-    await queueImport(tx, record2, options.chatClientId);
-    return;
-  }
-  await dropPending(tx, record2);
-  await tx.append({
-    idempotencyKey: `${options.key}:server`,
-    clientEntityId: record2.id,
-    entityType: record2.entityType,
-    operation,
-    schemaVersion: record2.schemaVersion,
-    occurredAt: record2.occurredAt,
-    baseVersion: mapping.serverVersion,
-    dependsOn: [],
-    destination: record2.destination,
-    payload: operation === "delete" && !PAYLOAD_ON_DELETE.has(record2.entityType) ? null : record2.payload
-  });
-}
-
-// ../packages/local-first/src/holdLimits.ts
-var SYNC_EVENT_RETENTION_DAYS = 90;
-var DAY_MS = 24 * 60 * 60 * 1e3;
-var HOLD_MAX_AGE_MS = 7 * DAY_MS;
-var DEPENDENCY_PENDING_MAX_AGE_MS = SYNC_EVENT_RETENTION_DAYS * DAY_MS;
-
-// ../packages/local-first/src/sync.ts
-var HOLD_BACKOFF_CAP_MS = 60 * 60 * 1e3;
-
-// ../packages/local-first/src/syncLease.ts
-var DEFAULT_COORDINATOR_WORK_TIMEOUT_MS = 5 * 6e4;
-
-// ../packages/local-first/src/redaction.ts
-var INDEXEDDB_REDACTED_KEYS = [
-  "token",
-  "password",
-  "authorization",
-  "cookie",
-  "apikey",
-  "clientsecret"
-];
-var INDEXEDDB_REDACTION_RULE = `Only exportForUploadOrLog() output may be uploaded or logged. It strips every secret-shaped key at every depth \u2014 a key whose lowercase name is one of ${INDEXEDDB_REDACTED_KEYS.join(", ")} or contains token, secret, password, authorization, cookie, or apikey \u2014 so accessToken, client_secret and sessionCookie are stripped too. The strip is recursive through arrays and nested objects, the input is not mutated, and a dropped key is absent rather than blanked. export() is the unfiltered local record and must not leave the device.`;
-
-// ../packages/local-first/src/tombstone.ts
-var RESNAPSHOT = Object.freeze({ action: "resnapshot" });
-
-// ../packages/local-first/src/applyServerCursor.ts
-var RESNAPSHOT2 = Object.freeze({ resnapshotRequired: true });
 
 // src/localFirstPersistence.ts
 import { summarizeTranscript } from "@seanhogg/builderforce-memory/working";
@@ -3176,7 +2864,7 @@ var MARKETPLACE_LISTING_KINDS = [
   }
 ];
 var LISTING_KIND_IDS = MARKETPLACE_LISTING_KINDS.map((spec) => spec.id);
-var DAY_MS2 = 24 * 60 * 60 * 1e3;
+var DAY_MS = 24 * 60 * 60 * 1e3;
 
 // ../packages/creation-canvas-contract/src/academic.ts
 var ACADEMIC_OBJECT_KINDS = [
@@ -4540,8 +4228,7 @@ async function chatRecordById(tx, deviceId, id) {
 async function boundServerId(tx, clientId, destination) {
   if (!destination || destination.kind !== "bound") return void 0;
   const mapping = await tx.mapping("chat", clientId, destination);
-  const id = mapping ? Number(mapping.serverId) : NaN;
-  return Number.isSafeInteger(id) && id > 0 ? id : void 0;
+  return (mapping ? parseSyncId(mapping.syncId ?? mapping.serverId) : null) ?? void 0;
 }
 function createLocalChatIdentity(options) {
   const { store, deviceId, port } = options;
@@ -4551,9 +4238,11 @@ function createLocalChatIdentity(options) {
     return chat ? { chat, serverId: await boundServerId(tx, chat.id, port.destination()) } : void 0;
   });
   const map = async (clientId, destination, serverId) => {
+    const syncId = parseSyncId(serverId);
+    if (syncId == null) return;
     await store.transact(async (tx) => {
       if (await tx.mapping("chat", clientId, destination)) return;
-      await tx.putMapping({ destination, entityType: "chat", clientEntityId: clientId, serverId: String(serverId), serverVersion: BOUND_ONLY_VERSION });
+      await tx.putMapping({ destination, entityType: "chat", clientEntityId: clientId, syncId, serverId: syncIdText(syncId), serverVersion: BOUND_ONLY_VERSION });
       let queued = false;
       await tx.scanPending((event) => {
         if (event.entityType === "chat" && event.clientEntityId === clientId && event.operation === "import") {
@@ -6412,7 +6101,7 @@ var ACTION_TYPE_SET = new Set(ACTION_TYPES);
 // ../packages/learned-routing/src/recencyDecay.ts
 var ROUTING_HALF_LIFE_DAYS = 30;
 var DECAYED_WINDOW_DAYS = 4 * ROUTING_HALF_LIFE_DAYS;
-var DAY_MS3 = 24 * 60 * 60 * 1e3;
+var DAY_MS2 = 24 * 60 * 60 * 1e3;
 
 // ../packages/learned-routing/src/runOutcomeTelemetry.ts
 var ALL_ENTRY_POINTS = ["vscode", "web", "rovr", "canvas", "on-prem", "cloud"];
@@ -6779,6 +6468,143 @@ function localFallbackTrace(ts, step, attempts) {
   };
 }
 
+// src/localFirstErrors.ts
+var AUTH_CODE = /^(?:invalid_api_key|invalid_key|invalid_token|token_expired|expired_token|invalid_grant|invalid_credentials?|authentication_error|authentication_failed|unauthori[sz]ed|unauthenticated|not_authenticated|key_revoked|revoked_key)$/i;
+var AUTH_PHRASE = new RegExp(
+  [
+    String.raw`\bunauthori[sz]ed\b`,
+    String.raw`\bunauthenticated\b`,
+    String.raw`\bnot\s+authenticated\b`,
+    String.raw`\bauthentication\s+(?:failed|required|error)\b`,
+    String.raw`\b(?:invalid|bad|wrong|incorrect|revoked|expired|missing|unknown|malformed)\s+(?:api[_ -]?key|key|access\s+token|token|credentials?|bearer)\b`,
+    String.raw`\b(?:api[_ -]?key|access\s+token|token|credentials?|session)\s+(?:is\s+|has\s+|was\s+)?(?:invalid|expired|revoked|not\s+valid|been\s+revoked)\b`,
+    String.raw`\bsign\s*in\s+again\b`
+  ].join("|"),
+  "i"
+);
+function codesOf(body) {
+  const err = typeof body.error === "object" && body.error !== null ? body.error : void 0;
+  return [body.code, err?.code, err?.type].filter((v) => typeof v === "string" && v.length > 0);
+}
+function refusesCredential(body) {
+  const b = body ?? {};
+  const codes = codesOf(b);
+  if (codes.some((c) => AUTH_CODE.test(c))) return true;
+  const text2 = [typeof b.error === "string" ? b.error : b.error?.message, b.message].filter((v) => typeof v === "string").join(" ");
+  return AUTH_PHRASE.test(text2);
+}
+function providerErrorMapper(provider, label) {
+  return async (res) => {
+    const body = await readErrorBody(res);
+    const mapped = brainRequestError(res.status, body, res.statusText);
+    if (res.status !== 401 && !(res.status === 403 && refusesCredential(body))) return mapped;
+    return new BrainRequestError(`${label} rejected the sign-in (${res.status}). ${mapped.message}`, {
+      status: res.status,
+      code: PROVIDER_AUTH_REQUIRED,
+      provider,
+      providerLabel: label
+    });
+  };
+}
+function withModelRef(e, ref) {
+  if (e instanceof RepetitionLoopError || !(e instanceof StreamInterruptedError || e instanceof TransportError)) return e;
+  if (e.model === ref) return e;
+  const out = e instanceof StreamInterruptedError ? new StreamInterruptedError(e.message, ref, e.detail, { pinned: e.pinned }) : new TransportError(e.message, ref, { cause: e.cause, unreachable: e.unreachable, pinned: e.pinned });
+  out.name = e.name;
+  if (e.stack) out.stack = e.stack;
+  if (e instanceof StreamInterruptedError && e.cause !== void 0) out.cause = e.cause;
+  return out;
+}
+function withFailedAccounts(e, failed4) {
+  if (!(e instanceof BrainRequestError) || failed4.length === 0) return e;
+  const prefix = failed4.map((r) => `${r.attempt.kind === "local" ? r.attempt.ref : "account"} could not take this turn (${r.detail ?? r.outcome}). `).join("");
+  const out = Object.create(Object.getPrototypeOf(e));
+  Object.defineProperties(out, Object.getOwnPropertyDescriptors(e));
+  Object.defineProperty(out, "message", { value: prefix + e.message, writable: true, configurable: true, enumerable: false });
+  if (typeof e.stack === "string") {
+    const nl = e.stack.indexOf("\n");
+    const first = nl < 0 ? e.stack : e.stack.slice(0, nl);
+    const frames = nl < 0 ? "" : e.stack.slice(nl);
+    const stack = first.endsWith(e.message) ? `${e.name}: ${out.message}${frames}` : `${e.name}: ${out.message}
+${e.stack}`;
+    Object.defineProperty(out, "stack", { value: stack, writable: true, configurable: true, enumerable: false });
+  }
+  if (!Object.prototype.hasOwnProperty.call(e, "cause")) {
+    Object.defineProperty(out, "cause", { value: e, writable: true, configurable: true, enumerable: false });
+  }
+  return out;
+}
+
+// src/localCredentialState.ts
+function createCredentialTracker() {
+  const states = /* @__PURE__ */ new WeakMap();
+  return {
+    stateOf: (signal) => (signal ? states.get(signal) : void 0) ?? "none",
+    track: (endpoint, signal) => {
+      const mark = (state) => {
+        if (signal) states.set(signal, state);
+      };
+      mark(endpoint.credential ? "pending" : "none");
+      if (!endpoint.credential) return endpoint;
+      const lookup = endpoint.credential;
+      return {
+        ...endpoint,
+        credential: async (stale) => {
+          mark("pending");
+          try {
+            return await lookup(stale);
+          } finally {
+            mark("resolved");
+          }
+        }
+      };
+    }
+  };
+}
+
+// src/localTransport.ts
+var globalFetch = (input, init) => fetch(input, init);
+function localTransport(endpoint, fetchImpl = globalFetch, options = {}) {
+  const baseUrl = normalizeLocalBaseUrl(endpoint.baseUrl);
+  const runtime = options.runtime ? localRuntime(options.runtime) : void 0;
+  const credentials = createCredentialTracker();
+  return {
+    baseUrl,
+    getToken: () => endpoint.token ?? null,
+    wire: "openai",
+    ...runtime?.providerSampling ? { providerSampling: true } : {},
+    // A hosted runtime reached directly (Kimi Code) is named in a silence error; an on-device engine keeps the neutral default.
+    ...runtime && !runtime.onDevice ? { destination: { label: runtime.label, host: hostOf(baseUrl) } } : {},
+    credentialState: (signal) => credentials.stateOf(signal),
+    // A hosted runtime backed by the person's OWN account (registry `accountProvider`) that refuses the credential is a
+    // PROVIDER sign-in problem; mapped to the generic 401 it would be read as a BuilderForce session error.
+    ...runtime?.accountProvider ? { mapError: providerErrorMapper(runtime.accountProvider, runtime.label) } : {},
+    fetch: async (input, init) => {
+      const tracked = credentials.track(endpoint, init.signal ?? void 0);
+      try {
+        return await fetchLocal(tracked, fetchImpl, rewriteToLocalUrl(input), init);
+      } catch (e) {
+        if (!options.failFast || init.signal?.aborted) throw e;
+        throw new Error(`local_runtime_unreachable: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+  };
+}
+async function completeLocal(endpoint, model, messages, signal, fetchImpl = globalFetch) {
+  const res = await fetchLocal(endpoint, fetchImpl, localChatCompletionsUrl(endpoint.baseUrl), {
+    method: "POST",
+    headers: { "content-type": "application/json", ...localAuthHeaders(endpoint) },
+    body: JSON.stringify({ model, messages, stream: false }),
+    ...signal ? { signal } : {}
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch((e) => `(body unreadable: ${e instanceof Error ? e.message : String(e)})`);
+    throw new Error(`local_complete_failed_${res.status}: ${txt.slice(0, 200)}`);
+  }
+  const json = await res.json();
+  return json.choices?.[0]?.message?.content ?? "";
+}
+
 // src/windowFit/modelWindow.ts
 var positive = (n2) => typeof n2 === "number" && Number.isFinite(n2) && n2 > 0 ? Math.floor(n2) : void 0;
 function contextWindowOf(modelRef, sources = {}) {
@@ -6802,69 +6628,7 @@ async function resolveContextWindow(modelRef, sources = {}) {
   return contextWindowOf(modelRef, { ...sources.cloud ? { cloud: sources.cloud } : {}, ...probes ? { probes } : {} });
 }
 
-// src/localFirstTransport.ts
-var globalFetch = (input, init) => fetch(input, init);
-var AUTH_REFUSAL = /unauthori[sz]ed|unauthenticated|expired|token|credential|authenticat|\bapi[_ ]?key\b|\bkey\b/i;
-function refusesCredential(body) {
-  const b = body ?? {};
-  const text2 = [b.code, typeof b.error === "string" ? b.error : b.error?.message, b.message].filter((v) => typeof v === "string").join(" ");
-  return AUTH_REFUSAL.test(text2);
-}
-function providerErrorMapper(provider, label) {
-  return async (res) => {
-    const body = await readErrorBody(res);
-    const mapped = brainRequestError(res.status, body, res.statusText);
-    if (res.status !== 401 && !(res.status === 403 && refusesCredential(body))) return mapped;
-    return new BrainRequestError(`${label} rejected the sign-in (${res.status}). ${mapped.message}`, {
-      status: res.status,
-      code: PROVIDER_AUTH_REQUIRED,
-      provider,
-      providerLabel: label
-    });
-  };
-}
-function localTransport(endpoint, fetchImpl = globalFetch, options = {}) {
-  const baseUrl = normalizeLocalBaseUrl(endpoint.baseUrl);
-  const runtime = options.runtime ? localRuntime(options.runtime) : void 0;
-  const credentialStates = /* @__PURE__ */ new WeakMap();
-  const stateOf2 = (signal) => (signal ? credentialStates.get(signal) : void 0) ?? "none";
-  return {
-    baseUrl,
-    getToken: () => endpoint.token ?? null,
-    wire: "openai",
-    ...runtime?.providerSampling ? { providerSampling: true } : {},
-    // A hosted runtime reached directly (Kimi Code) is named in a silence error; an on-device engine keeps the neutral default.
-    ...runtime && !runtime.onDevice ? { destination: { label: runtime.label, host: hostOf(baseUrl) } } : {},
-    credentialState: (signal) => stateOf2(signal),
-    // A hosted runtime backed by the person's OWN account (registry `accountProvider`) that refuses the credential is a
-    // PROVIDER sign-in problem; mapped to the generic 401 it would be read as a BuilderForce session error.
-    ...runtime?.accountProvider ? { mapError: providerErrorMapper(runtime.accountProvider, runtime.label) } : {},
-    fetch: async (input, init) => {
-      const signal = init.signal ?? void 0;
-      const mark = (state) => {
-        if (signal) credentialStates.set(signal, state);
-      };
-      mark(endpoint.credential ? "pending" : "none");
-      const tracked = endpoint.credential ? {
-        ...endpoint,
-        credential: async (stale) => {
-          mark("pending");
-          try {
-            return await endpoint.credential(stale);
-          } finally {
-            mark("resolved");
-          }
-        }
-      } : endpoint;
-      try {
-        return await fetchLocal(tracked, fetchImpl, rewriteToLocalUrl(input), init);
-      } catch (e) {
-        if (!options.failFast || init.signal?.aborted) throw e;
-        throw new Error(`local_runtime_unreachable: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    }
-  };
-}
+// src/localTargetStream.ts
 function probedTarget(ref, probes) {
   for (const p of probes) {
     if (!p.reachable) continue;
@@ -6895,14 +6659,20 @@ async function streamOnLocal(target, opts, handlers, transport, messages, picked
   }
   return { ...served, resolvedModel: target.ref, resolvedVendor: `local/${target.provider}`, ...account ? { account } : {} };
 }
-function withModelRef(e, ref) {
-  if (e instanceof RepetitionLoopError || !(e instanceof StreamInterruptedError || e instanceof TransportError)) return e;
-  if (e.model === ref) return e;
-  const out = e instanceof StreamInterruptedError ? new StreamInterruptedError(e.message, ref, e.detail, { pinned: e.pinned }) : new TransportError(e.message, ref, { cause: e.cause, unreachable: e.unreachable, pinned: e.pinned });
-  out.name = e.name;
-  if (e.stack) out.stack = e.stack;
-  if (e instanceof StreamInterruptedError && e.cause !== void 0) out.cause = e.cause;
-  return out;
+function committingHandlers(handlers, commit, servedAs) {
+  if (servedAs) handlers.onModel?.(servedAs, void 0);
+  return {
+    ...handlers,
+    onTextDelta: (delta) => {
+      commit();
+      handlers.onTextDelta?.(delta);
+    },
+    onToolCallDelta: (index, partial) => {
+      commit();
+      handlers.onToolCallDelta?.(index, partial);
+    },
+    ...servedAs ? { onModel: () => void 0 } : {}
+  };
 }
 function createLocalStream(endpoint, model, fetchImpl, route = {}) {
   const pin = parseLocalModelRef(route.ref);
@@ -6932,6 +6702,8 @@ function createLocalStream(endpoint, model, fetchImpl, route = {}) {
     return streamOnLocal(pinned, opts, committingHandlers(handlers, () => void 0, pinned.ref), transport, messages, true);
   };
 }
+
+// src/localFirstTransport.ts
 function localFirstWorkload(call2) {
   const chars = JSON.stringify(call2.messages).length + (call2.tools ? JSON.stringify(call2.tools).length : 0);
   return profileWorkload({
@@ -6952,37 +6724,6 @@ function coreMessages(messages) {
   const system = messages.filter((m) => m.role === "system");
   const lastUser = [...messages].reverse().find((m) => m.role === "user" && !isVolatileTail(m));
   return lastUser ? [...system, lastUser] : system;
-}
-function committingHandlers(handlers, commit, servedAs) {
-  if (servedAs) handlers.onModel?.(servedAs, void 0);
-  return {
-    ...handlers,
-    onTextDelta: (delta) => {
-      commit();
-      handlers.onTextDelta?.(delta);
-    },
-    onToolCallDelta: (index, partial) => {
-      commit();
-      handlers.onToolCallDelta?.(index, partial);
-    },
-    ...servedAs ? { onModel: () => void 0 } : {}
-  };
-}
-function withFailedAccounts(e, failed4) {
-  if (!(e instanceof BrainRequestError) || failed4.length === 0) return e;
-  const prefix = failed4.map((r) => `${r.attempt.kind === "local" ? r.attempt.ref : "account"} could not take this turn (${r.detail ?? r.outcome}). `).join("");
-  const out = new BrainRequestError(prefix + e.message, {
-    status: e.status,
-    ...e.code ? { code: e.code } : {},
-    ...e.reason ? { reason: e.reason } : {},
-    ...e.unlock ? { unlock: e.unlock } : {},
-    ...e.requiredPlan ? { requiredPlan: e.requiredPlan } : {},
-    ...e.feature ? { feature: e.feature } : {},
-    ...e.provider ? { provider: e.provider } : {},
-    ...e.providerLabel ? { providerLabel: e.providerLabel } : {}
-  });
-  if (e.stack) out.stack = e.stack;
-  return out;
 }
 var answered = (r) => r.text.trim().length > 0 || r.toolCalls.length > 0;
 function createLocalFirstStream(input) {
@@ -7040,20 +6781,6 @@ function createLocalFirstStream(input) {
     return { ...result, localFirst: summaries };
   };
 }
-async function completeLocal(endpoint, model, messages, signal, fetchImpl = globalFetch) {
-  const res = await fetchLocal(endpoint, fetchImpl, localChatCompletionsUrl(endpoint.baseUrl), {
-    method: "POST",
-    headers: { "content-type": "application/json", ...localAuthHeaders(endpoint) },
-    body: JSON.stringify({ model, messages, stream: false }),
-    ...signal ? { signal } : {}
-  });
-  if (!res.ok) {
-    const txt = await res.text().catch((e) => `(body unreadable: ${e instanceof Error ? e.message : String(e)})`);
-    throw new Error(`local_complete_failed_${res.status}: ${txt.slice(0, 200)}`);
-  }
-  const json = await res.json();
-  return json.choices?.[0]?.message?.content ?? "";
-}
 async function completeLocalFirst(input) {
   const plan = localFirstPlan({
     probes: input.probes,
@@ -7071,6 +6798,34 @@ async function completeLocalFirst(input) {
     }
   );
   return result;
+}
+
+// src/hostPickFallback.ts
+function isFallbackFailure(err, local) {
+  if (local) return true;
+  if (err instanceof BrainRequestError) return err.status >= 500;
+  return err instanceof TransportError || err instanceof StreamInterruptedError;
+}
+async function pickThenAuto(pinned, fallback, handlers, signal, pick) {
+  let committed = false;
+  const watched = {
+    ...handlers,
+    onTextDelta: (delta) => {
+      committed = true;
+      handlers.onTextDelta?.(delta);
+    },
+    onToolCallDelta: (index, partial) => {
+      committed = true;
+      handlers.onToolCallDelta?.(index, partial);
+    }
+  };
+  try {
+    return await pinned(watched);
+  } catch (err) {
+    if (committed || signal?.aborted || !isFallbackFailure(err, pick.local)) throw err;
+    pick.onFallback?.({ from: pick.from, reason: err instanceof Error ? err.message : String(err) });
+    return fallback();
+  }
 }
 
 // src/windowFit/packForModel.ts
@@ -7167,7 +6922,7 @@ function recallBlock(recall) {
 async function packForModel(input) {
   const summarizer = input.summarizer;
   const reserve = handoffReserveTokens(input.maxTokens);
-  const pack2 = await packHandoff({
+  const pack = await packHandoff({
     messages: input.messages,
     targetContextTokens: packTargetTokens(input.to, input.contextTokens, reserve),
     reserveOutputTokens: reserve,
@@ -7183,13 +6938,13 @@ async function packForModel(input) {
   input.onTrace?.({
     ...input.from ? { from: input.from } : {},
     to: input.to,
-    dropped: pack2.dropped,
-    summarized: pack2.summarized,
-    recalled: pack2.recalled,
-    estimatedTokens: pack2.estimatedTokens,
-    fits: pack2.fits
+    dropped: pack.dropped,
+    summarized: pack.summarized,
+    recalled: pack.recalled,
+    estimatedTokens: pack.estimatedTokens,
+    fits: pack.fits
   });
-  return { messages: pack2.messages, pack: pack2 };
+  return { messages: pack.messages, pack };
 }
 var HANDOFF_FIT_MEMOS = 16;
 function createHandoffFit(options = {}) {
@@ -7214,8 +6969,8 @@ function createHandoffFit(options = {}) {
       remember(key, memo);
       return reused;
     }
-    const { messages: packed, pack: pack2 } = await packForModel({ messages, ...fitInput, ...options });
-    if (pack2.fits) remember(key, packMemoOf(messages, packed));
+    const { messages: packed, pack } = await packForModel({ messages, ...fitInput, ...options });
+    if (pack.fits) remember(key, packMemoOf(messages, packed));
     else packs.delete(key);
     return packed;
   };
@@ -7872,32 +7627,6 @@ function createHostModelStream(input) {
     });
   };
 }
-function isFallbackFailure(err, local) {
-  if (local) return true;
-  if (err instanceof BrainRequestError) return err.status >= 500;
-  return err instanceof TransportError || err instanceof StreamInterruptedError;
-}
-async function pickThenAuto(pinned, fallback, handlers, signal, pick) {
-  let committed = false;
-  const watched = {
-    ...handlers,
-    onTextDelta: (delta) => {
-      committed = true;
-      handlers.onTextDelta?.(delta);
-    },
-    onToolCallDelta: (index, partial) => {
-      committed = true;
-      handlers.onToolCallDelta?.(index, partial);
-    }
-  };
-  try {
-    return await pinned(watched);
-  } catch (err) {
-    if (committed || signal?.aborted || !isFallbackFailure(err, pick.local)) throw err;
-    pick.onFallback?.({ from: pick.from, reason: err instanceof Error ? err.message : String(err) });
-    return fallback();
-  }
-}
 function unpicked(opts) {
   const { modelStrict: _strict, model: _model, routingMode: _routing, ...rest } = opts;
   return rest;
@@ -8327,21 +8056,69 @@ function translatorFactory() {
   if (typeof globalThis === "undefined") return null;
   return globalThis.Translator ?? null;
 }
+var MAX_NEEDED_PAIRS = 8;
+var neededPairs = /* @__PURE__ */ new Map();
+var pairKey = (p) => `${p.from.toLowerCase()}>${p.to.toLowerCase()}`;
+function noteTranslatorPairNeeded(pair) {
+  const key = pairKey(pair);
+  neededPairs.delete(key);
+  neededPairs.set(key, pair);
+  while (neededPairs.size > MAX_NEEDED_PAIRS) neededPairs.delete(neededPairs.keys().next().value);
+}
+function neededTranslatorPairs() {
+  return [...neededPairs.values()];
+}
+function translatorPairsToDownload(o) {
+  const viewer = o.locale?.split("-")[0]?.toLowerCase();
+  const candidates = [
+    ...neededTranslatorPairs(),
+    ...o.translatorPairs ?? [],
+    ...viewer ? [{ from: "en", to: viewer }] : []
+  ];
+  const out = /* @__PURE__ */ new Map();
+  for (const p of candidates) {
+    if (!p.from || !p.to || p.from.toLowerCase() === p.to.toLowerCase()) continue;
+    if (!out.has(pairKey(p))) out.set(pairKey(p), p);
+  }
+  return [...out.values()];
+}
+function recordingFactory(factory, pair) {
+  if (!factory) return null;
+  return {
+    availability: async (options) => {
+      const state = await factory.availability(options);
+      if (state === "downloadable" || state === "downloading") noteTranslatorPairNeeded(pair);
+      else neededPairs.delete(pairKey(pair));
+      return state;
+    },
+    create: (options) => factory.create(options)
+  };
+}
 var translatorAdapter = {
   id: "translator",
   kinds: ["translate"],
   // The API's presence; whether a pair's pack is ready is asked per translate.
   ready: async () => translatorFactory() !== null,
-  // The pack is per pair: English → the viewer's language (none when they read English).
+  // One pack per pair a translation needs; every `create()` starts in this synchronous run
+  // (inside the click's activation). Combined progress is the mean over the pairs.
   download: (o) => {
-    const target = o.locale?.split("-")[0]?.toLowerCase();
-    if (!target || target === "en") return Promise.resolve();
-    return downloadTaskModel(translatorFactory(), { sourceLanguage: "en", targetLanguage: target }, o);
+    const factory = translatorFactory();
+    const pairs = translatorPairsToDownload(o);
+    if (!factory || pairs.length === 0) return Promise.resolve();
+    const fractions = new Array(pairs.length).fill(0);
+    const report = (i, f) => {
+      fractions[i] = Math.max(fractions[i] ?? 0, f);
+      o.onProgress(fractions.reduce((a, b) => a + b, 0) / fractions.length);
+    };
+    const downloads = pairs.map(
+      (p, i) => downloadTaskModel(factory, { sourceLanguage: p.from, targetLanguage: p.to }, { ...o, onProgress: (f) => report(i, f) })
+    );
+    return Promise.all(downloads).then(() => void 0);
   },
   translate: (text2, o) => {
     if (!o.from) return Promise.resolve(null);
     return withTaskSession(
-      translatorFactory(),
+      recordingFactory(translatorFactory(), { from: o.from, to: o.to }),
       { sourceLanguage: o.from, targetLanguage: o.to },
       o.signal,
       async (session) => {
@@ -8385,7 +8162,8 @@ async function downloadBuiltInModel(options = {}) {
     (adapter, i) => adapter.download({
       onProgress: (f) => report(i + 1, f),
       ...signal ? { signal } : {},
-      ...locale ? { locale } : {}
+      ...locale ? { locale } : {},
+      ...options.translatorPairs ? { translatorPairs: options.translatorPairs } : {}
     }).then(() => report(i + 1, 1))
   );
   const [mainResult, ...taskResults] = await Promise.allSettled([main, ...tasks]);
@@ -8462,6 +8240,9 @@ var ON_DEVICE_TASK_ROUTES = {
 var MAX_SUMMARY_CHUNKS = 8;
 var CHUNK_BUDGET_SHARE = 0.8;
 
+// src/onDevice/chunkedSummary.ts
+import { chunkedTextSummary } from "@seanhogg/builderforce-memory/working";
+
 // src/onDevice/taskPrompts.ts
 var WORDS = { short: "a few sentences", medium: "a short paragraph", long: "several paragraphs" };
 function summarizePrompt(text2, o) {
@@ -8521,83 +8302,23 @@ function parseJsonReply(reply) {
 }
 
 // src/onDevice/chunkedSummary.ts
-var MAX_MERGE_DEPTH = 3;
-var MAX_REFIT_ATTEMPTS = 3;
-var SEPARATORS = ["\n\n", "\n"];
-function pieces(text2, maxChars, level = 0) {
-  if (text2.length <= maxChars) return [text2];
-  const separator = SEPARATORS[level];
-  if (separator === void 0) {
-    const out = [];
-    for (let i = 0; i < text2.length; i += maxChars) out.push(text2.slice(i, i + maxChars));
-    return out;
-  }
-  const parts = text2.split(separator);
-  if (parts.length === 1) return pieces(text2, maxChars, level + 1);
-  return parts.flatMap((p, i) => pieces(i < parts.length - 1 ? p + separator : p, maxChars, level + 1));
-}
-function pack(text2, maxChars) {
-  const chunks = [];
-  let current = "";
-  for (const piece of pieces(text2, maxChars)) {
-    if (current && current.length + piece.length > maxChars) {
-      chunks.push(current);
-      current = "";
-    }
-    current += piece;
-  }
-  if (current.trim()) chunks.push(current);
-  return chunks;
-}
 var DEFAULT_OUTPUT_TOKENS2 = 512;
 function summaryReserveTokens(o) {
   const expectedOutput = o.maxWords ? Math.ceil(o.maxWords * 1.5) : DEFAULT_OUTPUT_TOKENS2;
   return approxTokens(summarizePrompt("", o).system) + expectedOutput;
 }
-async function fitChunks(chunks, limit, input) {
-  const out = [];
-  for (const chunk2 of chunks) {
-    let parts = [chunk2];
-    for (let attempt = 0; attempt < MAX_REFIT_ATTEMPTS; attempt++) {
-      const next = [];
-      let over = false;
-      for (const part of parts) {
-        throwIfAborted(input.signal);
-        const tokens = await input.budget.measure(part, input.signal);
-        if (tokens <= limit || part.length <= 1) {
-          next.push(part);
-          continue;
-        }
-        over = true;
-        next.push(...pack(part, Math.max(1, Math.floor(part.length / tokens * limit * 0.9))));
-      }
-      parts = next;
-      if (!over) break;
-    }
-    out.push(...parts);
-  }
-  return out;
-}
-async function chunkedSummary(input, depth2 = 0) {
-  const { text: text2, budget: budget2, signal } = input;
-  throwIfAborted(signal);
-  const room = Math.max(Math.floor(budget2.limit / 2), budget2.limit - (input.reserveTokens ?? 0));
-  const limit = Math.max(1, Math.floor(room * CHUNK_BUDGET_SHARE));
-  const tokens = await budget2.measure(text2, signal);
-  if (tokens <= limit) return input.summarizeChunk(text2);
-  if (depth2 >= MAX_MERGE_DEPTH) return null;
-  const chunks = await fitChunks(pack(text2, Math.max(1, Math.floor(text2.length / tokens * limit))), limit, input);
-  if (chunks.length > MAX_SUMMARY_CHUNKS) return null;
-  const summaries = [];
-  for (const chunk2 of chunks) {
-    throwIfAborted(signal);
-    const summary = await input.summarizeChunk(chunk2);
-    if (summary === null) return null;
-    summaries.push(summary);
-  }
-  const merged = summaries.join("\n\n");
-  if (merged.length >= text2.length) return null;
-  return chunkedSummary({ ...input, text: merged }, depth2 + 1);
+function chunkedSummary(input) {
+  const { text: text2, budget: budget2, summarizeChunk, reserveTokens, signal } = input;
+  return chunkedTextSummary({
+    text: text2,
+    limit: budget2.limit,
+    measure: (t, s) => budget2.measure(t, s),
+    summarizeChunk: (chunk2) => summarizeChunk(chunk2),
+    maxChunks: MAX_SUMMARY_CHUNKS,
+    budgetShare: CHUNK_BUDGET_SHARE,
+    reserveTokens,
+    signal
+  });
 }
 
 // ../packages/json-schema/src/index.ts
@@ -9164,11 +8885,11 @@ function inBandError(e) {
   if (!(e instanceof PageEngineError)) return { message: errorMessage(e) };
   return { code: e.code, message: e.message.includes(e.code) ? e.message : `${e.code}: ${e.message}` };
 }
-var encoder2 = new TextEncoder();
-var sseFrame = (data) => encoder2.encode(`data: ${JSON.stringify(data)}
+var encoder = new TextEncoder();
+var sseFrame = (data) => encoder.encode(`data: ${JSON.stringify(data)}
 
 `);
-var DONE_FRAME = encoder2.encode("data: [DONE]\n\n");
+var DONE_FRAME = encoder.encode("data: [DONE]\n\n");
 function sseBody(first, chunks, signal) {
   let pending = first;
   return new ReadableStream({
@@ -10317,8 +10038,9 @@ function selectLinkedTasks(listResult, statuses) {
     const row = r;
     if (typeof row.kind !== "string" || !TASK_TIER_KINDS.has(row.kind)) continue;
     if (row.exists === false) continue;
-    const ref = typeof row.ref === "number" ? String(row.ref) : typeof row.ref === "string" && row.ref.trim() ? row.ref : null;
-    if (!ref) continue;
+    const { syncId } = entityIdsOf({ syncId: row.syncId, id: row.ref });
+    if (syncId == null) continue;
+    const ref = syncIdText(syncId);
     if (typeof row.status !== "string" || !statuses.has(row.status.toLowerCase())) continue;
     out.push({ kind: row.kind, ref });
   }
@@ -10566,7 +10288,7 @@ async function compactMessages(messages, opts = CLOUD_COMPACT_DEFAULTS, summariz
   }
   const briefIdx = opts.pinTaskBrief ? taskRowIndex(source) : -1;
   const brief = briefIdx >= 0 ? source[briefIdx] : void 0;
-  const pack2 = await packHandoff2({
+  const pack = await packHandoff2({
     messages: source,
     ...brief ? { pinned: (_m, i) => i === briefIdx } : {},
     targetContextTokens: budget2,
@@ -10583,18 +10305,18 @@ ${summary.trim()}` : "";
     ...opts.recall ? { recall: opts.recall } : {},
     ...opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}
   });
-  const packed = pack2.dropped > 0 ? pack2.messages : [...source];
+  const packed = pack.dropped > 0 ? pack.messages : [...source];
   const messageBudget = Math.max(0, budget2 - toolsTokens);
-  const out = !pack2.fits || messagesTokens(packed) > messageBudget ? elideToFit(packed, messageBudget) : packed;
+  const out = !pack.fits || messagesTokens(packed) > messageBudget ? elideToFit(packed, messageBudget) : packed;
   const elided = out.some((m, i) => m !== packed[i]);
-  if (pack2.dropped === 0 && !elided && mask.masked === 0) return untouched();
+  if (pack.dropped === 0 && !elided && mask.masked === 0) return untouched();
   return {
     messages: out,
     compacted: true,
-    summarized: pack2.summarized && pack2.dropped > 0,
+    summarized: pack.summarized && pack.dropped > 0,
     beforeTokens,
     afterTokens: messagesTokens(out) + toolsTokens,
-    droppedMessages: pack2.dropped,
+    droppedMessages: pack.dropped,
     ...mask.masked > 0 ? { maskedObservations: mask.masked } : {}
   };
 }
@@ -11028,7 +10750,7 @@ async function packForModelHandoff(input, access) {
   const all = [system, ...mapped];
   const beforeTokens = tokensOf3(all, defaultEstimateTokens4);
   const reserve = handoffReserveTokens(input.maxTokens);
-  const pack2 = await packHandoff3({
+  const pack = await packHandoff3({
     messages: all,
     targetContextTokens: packTargetTokens2(input.contextWindow, input.priceTierBoundary, reserve),
     reserveOutputTokens: reserve,
@@ -11040,10 +10762,10 @@ async function packForModelHandoff(input, access) {
       return row !== void 0 && input.pinned(row);
     } } : {}
   });
-  if (pack2.dropped === 0) return { messages: [...input.messages], dropped: 0, noted: false, fits: pack2.fits, beforeTokens, afterTokens: beforeTokens };
+  if (pack.dropped === 0) return { messages: [...input.messages], dropped: 0, noted: false, fits: pack.fits, beforeTokens, afterTokens: beforeTokens };
   const messages = [];
   let noted = false;
-  for (const view of pack2.messages) {
+  for (const view of pack.messages) {
     if (view === system) continue;
     const original = back.get(view);
     if (original) {
@@ -11053,7 +10775,7 @@ async function packForModelHandoff(input, access) {
     messages.push(access.summary(typeof view.content === "string" ? view.content : JSON.stringify(view.content), view.role));
     noted = true;
   }
-  return { messages, dropped: pack2.dropped, noted, fits: pack2.fits, beforeTokens, afterTokens: pack2.estimatedTokens };
+  return { messages, dropped: pack.dropped, noted, fits: pack.fits, beforeTokens, afterTokens: pack.estimatedTokens };
 }
 var WIDEST_DROPPED = 99999;
 function noteText(from, to, dropped) {
@@ -12223,7 +11945,7 @@ function withPostEditNote(data, v) {
   return v && !v.ok ? withAdvisory(data, postEditNote(v)) : data;
 }
 
-// ../packages/agent-run/src/policy/guards/index.ts
+// ../packages/agent-run/src/policy/guards/ports.ts
 function guardLeversOf(levers) {
   const on = new Set(levers);
   return {
@@ -12233,6 +11955,8 @@ function guardLeversOf(levers) {
     d8_parallel_tool_calls: on.has("d8_parallel_tool_calls")
   };
 }
+
+// ../packages/agent-run/src/policy/guards/index.ts
 var RunGuards = class {
   cascade;
   progress;
@@ -12346,6 +12070,7 @@ var RunGuards = class {
   async onTrip(action, ports) {
     let outcome = action.kind;
     if (action.kind === "advisory") {
+      this.progress?.setSteer(action.note);
       const s2 = progressTraceStep(action);
       await ports.onEvent?.({ tool: s2.label, detail: s2.args, result: s2.result });
       return;
@@ -12827,8 +12552,8 @@ function focusTerms(entry) {
   const heads = (entry.outline ?? []).map((h) => h.heading).filter(Boolean);
   return [path, ...heads].join(" ");
 }
-function focusHint(pack2) {
-  return pack2.focus.map(focusTerms).filter(Boolean).join("\n");
+function focusHint(pack) {
+  return pack.focus.map(focusTerms).filter(Boolean).join("\n");
 }
 
 // ../packages/agent-run/src/policy/context/index.ts
@@ -13835,13 +13560,13 @@ function reaskAsCoder(state, policy, completion, asked) {
 import { volatileTail as volatileTail2 } from "@seanhogg/builderforce-memory/handoff";
 var EMPTY_PACK = { focus: [], facts: [], recall: [] };
 async function buildContextPack(input, hooks, state, offered) {
-  let pack2;
+  let pack;
   try {
-    pack2 = await input.ports.context.pack(input.task);
+    pack = await input.ports.context.pack(input.task);
   } catch {
-    pack2 = EMPTY_PACK;
+    pack = EMPTY_PACK;
   }
-  const built = pack2;
+  const built = pack;
   const once = { ...input, ports: { ...input.ports, context: { pack: () => built } } };
   let recalled = void 0;
   try {
@@ -13849,7 +13574,7 @@ async function buildContextPack(input, hooks, state, offered) {
   } catch {
     recalled = void 0;
   }
-  return recalled && recalled.length > 0 ? { ...pack2, recall: [...pack2.recall, ...recalled] } : pack2;
+  return recalled && recalled.length > 0 ? { ...pack, recall: [...pack.recall, ...recalled] } : pack;
 }
 function openingRows(task, gates) {
   const system = [];
@@ -13861,9 +13586,9 @@ function openingRows(task, gates) {
     { role: "user", content: task.prompt }
   ];
 }
-function turnContextBlock(pack2, brief, sections = []) {
+function turnContextBlock(pack, brief, sections = []) {
   const lines = [];
-  for (const file of pack2.focus) {
+  for (const file of pack.focus) {
     if (file.content !== void 0) {
       lines.push(`## ${file.path}`, file.content);
     } else if (file.outline && file.outline.length > 0) {
@@ -13871,21 +13596,21 @@ function turnContextBlock(pack2, brief, sections = []) {
       for (const entry of file.outline) lines.push(`- ${entry.heading} (line ${entry.line})`);
     }
   }
-  if (pack2.chat) {
-    lines.push(`## chat`, `${pack2.chat.tickets.length} linked tickets, ${pack2.chat.runs.length} runs`);
+  if (pack.chat) {
+    lines.push(`## chat`, `${pack.chat.tickets.length} linked tickets, ${pack.chat.runs.length} runs`);
   }
-  for (const repo of pack2.repos ?? []) {
+  for (const repo of pack.repos ?? []) {
     lines.push(`## repo ${repo.repo}`, `branch ${repo.branch}`, repo.dirty.length > 0 ? `dirty: ${repo.dirty.join(", ")}` : "clean");
   }
-  for (const fact of pack2.facts) lines.push(`## ${fact.key}`, fact.content);
-  if (pack2.recall.length > 0) lines.push("## recall", ...pack2.recall);
+  for (const fact of pack.facts) lines.push(`## ${fact.key}`, fact.content);
+  if (pack.recall.length > 0) lines.push("## recall", ...pack.recall);
   if (brief && brief.trim()) lines.push("## brief", brief.trim());
   for (const section of sections) if (section.trim()) lines.push(section.trim());
   if (lines.length === 0) return null;
   return lines.join("\n");
 }
-function withVolatileTail(transcript, pack2, brief, sections = []) {
-  const tail = volatileTail2([turnContextBlock(pack2, brief, sections)]);
+function withVolatileTail(transcript, pack, brief, sections = []) {
+  const tail = volatileTail2([turnContextBlock(pack, brief, sections)]);
   return tail ? [...transcript, tail] : [...transcript];
 }
 
@@ -13913,7 +13638,7 @@ function askFields(ask2) {
     ...ask2.excludeModels && ask2.excludeModels.length > 0 ? { excludeModels: ask2.excludeModels } : {}
   };
 }
-async function completeTurn(input, state, hooks, ctx, offered, transcript, pack2, made) {
+async function completeTurn(input, state, hooks, ctx, offered, transcript, pack, made) {
   const view = currentView(transcript, offered);
   const pctx = policyContext(input, state, view, ctx.step, ctx.stepInCall);
   const selected = made ? made.tools : await hooks.tools.select(pctx, offered);
@@ -13937,7 +13662,7 @@ async function completeTurn(input, state, hooks, ctx, offered, transcript, pack2
     ...fields ?? {}
   };
   const requestFor = (askedModel, ask2, extra = []) => ({
-    messages: measureTurnTail(state, withVolatileTail(extra.length > 0 ? [...transcript, ...extra] : transcript, pack2, brief ?? null, sections)),
+    messages: measureTurnTail(state, withVolatileTail(extra.length > 0 ? [...transcript, ...extra] : transcript, pack, brief ?? null, sections)),
     ...askedModel ? { model: askedModel, strict: ask2?.strict ?? false } : {},
     ...tools.length > 0 ? { tools } : {},
     ...decision?.maxTokens !== void 0 ? { maxTokens: decision.maxTokens } : {},
@@ -13998,7 +13723,7 @@ async function completeTurn(input, state, hooks, ctx, offered, transcript, pack2
     meta: { model: completion.model, usage: completion.usage, interrupted: completion.interrupted, ...completion.parts ? { parts: completion.parts } : {}, ...completion.meta ? { native: completion.meta } : {} }
   };
 }
-async function synthesizeFinal(input, state, hooks, transcript, pack2, tally) {
+async function synthesizeFinal(input, state, hooks, transcript, pack, tally) {
   if (input.signal?.aborted) return null;
   const pctx = policyContext(input, state, currentView(transcript, []), state.step, 0);
   const prompt = hooks.stall.synthesis?.(pctx);
@@ -14011,7 +13736,7 @@ async function synthesizeFinal(input, state, hooks, transcript, pack2, tally) {
   try {
     completion = await input.ports.model.complete(
       {
-        messages: [...withVolatileTail(transcript, pack2, null, input.ports.context.turnSections?.() ?? []), ask2],
+        messages: [...withVolatileTail(transcript, pack, null, input.ports.context.turnSections?.() ?? []), ask2],
         ...model ? { model, strict: decision?.strict ?? false } : {},
         maxTokens: SYNTHESIS_MAX_TOKENS,
         ...askFields(fields)
@@ -14667,12 +14392,12 @@ async function runAgent(input) {
   const tally = state.telemetry ??= freshTally();
   const offered = offeredSchemas(ports);
   const transcript = asMessages(state.messages);
-  let pack2 = state.context ?? EMPTY_PACK;
+  let pack = state.context ?? EMPTY_PACK;
   if (!resumed) {
     transcript.splice(0, transcript.length, ...task.transcript ?? openingRows(task, policy.approvalGates));
     state.messages = transcript;
-    pack2 = await buildContextPack(input, hooks, state, offered);
-    state.context = pack2;
+    pack = await buildContextPack(input, hooks, state, offered);
+    state.context = pack;
   }
   ports.attach?.({
     policy: () => state.model,
@@ -14680,10 +14405,10 @@ async function runAgent(input) {
   });
   if (!resumed) {
     await emit(ports.events, { kind: "run.started", step: state.step });
-    if (pack2.answer) {
-      appendRows(input, transcript, { role: "assistant", content: pack2.answer });
+    if (pack.answer) {
+      appendRows(input, transcript, { role: "assistant", content: pack.answer });
       state.messages = transcript;
-      return settle(input, hooks, state, transcript, "finished", { output: pack2.answer });
+      return settle(input, hooks, state, transcript, "finished", { output: pack.answer });
     }
     const preflight = await hooks.model.preflight?.(policyContext(input, state, currentView(transcript, offered), state.step, 0));
     if (preflight) await emit(ports.events, preflight);
@@ -14723,7 +14448,7 @@ async function runAgent(input) {
         tool: (call2, result) => announceRow(input, toolRow(call2.id, result, ports.platform?.verbatimText === true))
       },
       ports: {
-        complete: (ctx) => completeTurn(input, state, hooks, ctx, offered, transcript, pack2, run.selection),
+        complete: (ctx) => completeTurn(input, state, hooks, ctx, offered, transcript, pack, run.selection),
         dispatch: (call2, ctx) => dispatchCall(input, state, call2, run.watch, run.facts, ctx.step),
         ...isReadOnly ? { isReadOnly } : {}
       },
@@ -14749,7 +14474,7 @@ async function runAgent(input) {
   if (loopResult.exhausted || loopResult.finished && loopResult.ok && !loopResult.output.trim()) {
     let output;
     try {
-      output = await synthesizeFinal(input, state, hooks, transcript, pack2, tally);
+      output = await synthesizeFinal(input, state, hooks, transcript, pack, tally);
     } catch (err) {
       return settle(input, hooks, state, transcript, "failed", { reason: err instanceof Error ? err.message : String(err), ...isResumable(input, err) ? { cause: err } : {} });
     }
@@ -16626,8 +16351,7 @@ function completeReviewTaskId(event) {
   const args = event.args ?? {};
   const recorded = event.result?.verdict ?? args.verdict;
   if (recorded !== "complete") return null;
-  const taskId = Number(args.taskId);
-  return Number.isInteger(taskId) && taskId > 0 ? taskId : null;
+  return parseSyncId(args.taskId);
 }
 function ticketsReviewedInPreview(events) {
   const tools = toolEvents(events);
@@ -16722,8 +16446,7 @@ async function recordCodeChangeTicket(serverChatId, c, req, phase) {
   if (!isFailedToolResult(out)) {
     c.deltaRecordedFiles = [...c.deltaRecordedFiles, ...files];
     if (files.length) c.deltaTitleCount = files.length;
-    const record2 = toolResultRecord(out);
-    const id = serverTicketId(record2?.taskId ?? record2?.id);
+    const id = entityIdsOf(out).syncId;
     if (c.deltaTicketId == null && id != null) c.deltaTicketId = id;
     c.ticketRecorded = true;
   } else if (isRoleRefusal(out)) {
@@ -16769,7 +16492,7 @@ async function moveTicket(c, req, move, reason) {
     category: "tool",
     label: move.tool,
     durationMs: nowMs2() - toolStart,
-    args: reason ? { ...move.args, auto: true, reason } : { ...move.args },
+    args: { ...move.args, auto: true, reason },
     result: out ?? null,
     isError: failed4
   });
@@ -16783,8 +16506,8 @@ function localTicketsFiledInRun(trace4) {
   for (const ev of trace4) {
     if (!succeeded4(ev) || !isLocalTicketCreateLabel(ev.label)) continue;
     if (ev.args?.reason !== "hand_off") continue;
-    const id = toolResultRecord(ev.result)?.id;
-    const ref = typeof id === "string" ? id.trim() : typeof id === "number" ? String(id) : "";
+    const { localId, syncId } = entityIdsOf(ev.result);
+    const ref = localId ?? (syncId != null ? syncIdText(syncId) : null);
     if (ref && !ids.includes(ref)) ids.push(ref);
   }
   return ids;
@@ -16867,8 +16590,8 @@ function reviewedThisRun(trace4) {
   const ids = /* @__PURE__ */ new Set();
   for (const ev of trace4) {
     if (ev.category !== "tool" || ev.label !== REVIEW_RECORD_TOOL2 || ev.isError || isFailedToolResult(ev.result)) continue;
-    const id = Number(ev.args?.taskId);
-    if (Number.isInteger(id)) ids.add(id);
+    const id = parseSyncId(ev.args?.taskId);
+    if (id !== null) ids.add(id);
   }
   return ids;
 }
@@ -16942,7 +16665,7 @@ async function deterministicFinish(input, run) {
       }
     }
   }
-  if (finishing && await updateLinkedTickets(run.serverChatId, view, req, linkedTicketsToComplete, "done", null) > 0) result.ticketClosed = true;
+  if (finishing && await updateLinkedTickets(run.serverChatId, view, req, linkedTicketsToComplete, "done", "shipped-to-base-branch") > 0) result.ticketClosed = true;
   const unlistedDelta = run.serverChatId == null ? view.deltaTicketId : null;
   if (finishing && await updateRunLocalTickets(input.trace, view, fullReq, "done", "shipped-to-base-branch", unlistedDelta) > 0) result.ticketClosed = true;
   if (reviewedInPreview.length && req.projectId != null) {
@@ -16955,9 +16678,11 @@ function shippedOf(run) {
   return run.c.codeChanged && run.c.touchedFiles.length > 0 && shippedToBaseBranch(runTrace(run.c), { touchedFiles: run.c.touchedFiles });
 }
 async function hasLinkedTicket(run) {
-  const { req, serverChatId } = run;
+  return holdsLinkedTicket(runTrace(run.c), run.serverChatId, run.req);
+}
+async function holdsLinkedTicket(trace4, serverChatId, req) {
   if (!req.runTool) return false;
-  if (localTicketsFiledInRun(runTrace(run.c)).length > 0) return true;
+  if (localTicketsFiledInRun(trace4).length > 0) return true;
   if (serverChatId == null) return false;
   let listed;
   try {
@@ -16995,7 +16720,12 @@ function withDeterministicFinish(run, inner) {
     ...inner,
     gate: async (ctx) => {
       await finishCloseOut(run).catch((reason) => {
-        console.warn("deterministic-finish close-out failed", reason);
+        pushTrace(run.c, {
+          ts: nowIso(),
+          category: "message",
+          label: "finish.close_out_error",
+          result: `The close-out failed: ${reason instanceof Error ? reason.message : String(reason)}. The finish goes on; its tickets were not moved.`
+        });
       });
       return inner.gate(ctx);
     }
@@ -17188,6 +16918,14 @@ async function call(ports, name, args) {
   ports.step?.(name, { ...args, auto: true, reason: "hand_off" }, out, now() - start);
   return out;
 }
+function filedTicketRef(record2, local) {
+  const { localId, syncId } = entityIdsOf(record2);
+  if (!local) return syncId ?? void 0;
+  if (localId) return localId;
+  if (syncId != null) return syncId;
+  const opaque = record2?.id;
+  return typeof opaque === "string" && opaque.trim() ? opaque : void 0;
+}
 async function fileTickets(plan, ports) {
   const vocabulary = ticketToolVocabulary(ports.toolNames);
   const createTool = vocabulary.createTool;
@@ -17203,8 +16941,7 @@ async function fileTickets(plan, ports) {
     });
     const record2 = toolResultRecord(out);
     const failed4 = isFailed(record2 ?? out);
-    const id = !failed4 ? record2?.id : void 0;
-    ids.push(typeof id === "number" || vocabulary.local && typeof id === "string" && id ? id : void 0);
+    ids.push(failed4 ? void 0 : filedTicketRef(record2, vocabulary.local));
     if (!failed4) await ports.afterCreate?.(createTool, out).catch(() => void 0);
   }
   return ids;
@@ -17435,9 +17172,19 @@ function chatAsksDirective(convo) {
 }
 
 // src/runStore/publishHold.ts
-var ASKS_TO_SHIP = /\b(?:commit|push|ship|merg\w*|land|publish|release)\b/i;
-function asksToShip(text2) {
-  return ASKS_TO_SHIP.test(text2 ?? "");
+var PUBLISH_VERB = String.raw`(?:commit|push|ship|merge|land|publish|release|(?:open|raise|create)\s+(?:a|the)\s+(?:pr|pull\s+request))`;
+var PUBLISH_TAIL = String.raw`(?:it|them|this|that|these|those|everything|all|now|away|up|changes|please|then|too|as\s+well|for\s+me|right\s+away|` + String.raw`(?:the|your|my|our)\s+(?:changes?|code|work|fix(?:es)?|branch|commits?|pr|diff|edits?|updates?|lot)|` + String.raw`and\s+${PUBLISH_VERB}|` + String.raw`to\s+(?:main|master|github|prod(?:uction)?|(?:the\s+)?(?:remote|repo|origin)(?:/[\w./-]+)?|origin/[\w./-]+|the\s+(?:[\w./-]+\s+)?branch|[\w./-]+\s+branch))`;
+var ACKNOWLEDGEMENT = String.raw`(?:(?:ok(?:ay)?|yes|yep|yeah|sure|great|good|perfect|thanks|thank\s+you|lgtm|looks\s+good|all\s+good|validated|verified|approved|done|now|please|so|then|and|alright)\b[\s!–—-]*)*`;
+var GO_AHEAD = String.raw`(?:go\s+ahead\s+(?:and\s+)?|you\s+(?:can|may)\s+(?:now\s+)?(?:go\s+ahead\s+and\s+)?|` + String.raw`(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:now\s+)?|` + String.raw`you(?:['’]re|\s+are)\s+(?:good|clear(?:ed)?|free|ok(?:ay)?|fine)\s+to\s+|` + String.raw`feel\s+free\s+to\s+|(?:it\s+is\s+|it['’]?s\s+)?(?:ok(?:ay)?|fine|safe)\s+to\s+|time\s+to\s+|let['’]?s\s+|please\s+)?`;
+var SHIP_ORDER = new RegExp(String.raw`^${ACKNOWLEDGEMENT}${GO_AHEAD}${PUBLISH_VERB}(?:\s+${PUBLISH_TAIL})*$`, "i");
+var DEFERRAL = /\b(?:not\s+yet|after|when|once|later|tomorrow|tonight|next|until|till|before|wait|hold\s+off|in\s+a\s+(?:bit|minute|moment|while|few))\b/i;
+var ASSISTANT_ASKS_TO_SHIP = /\b(?:shall|should|can|may)\s+I\s+(?:go\s+ahead\s+and\s+)?(?:now\s+)?(?:commit|push|ship|merge|land|publish|open\s+(?:a|the)\s+(?:pr|pull\s+request))\b[^?]*\?|\b(?:do\s+you\s+want|want|would\s+you\s+like)\s+me\s+to\s+(?:go\s+ahead\s+and\s+)?(?:commit|push|ship|merge|land|publish|open\s+(?:a|the)\s+(?:pr|pull\s+request))\b[^?]*\?/i;
+var BARE_AFFIRMATIVE = /^(?:(?:yes|yep|yeah|yup|sure|ok(?:ay)?|go\s+ahead|go\s+for\s+it|do\s+it|please\s+do|please|sounds\s+good|lgtm|approved|absolutely|definitely|thanks|thank\s+you)[\s,.!]*)+$/i;
+function asksToShip(text2, priorAssistant) {
+  const turn = (text2 ?? "").trim();
+  if (!turn || DEFERRAL.test(turn)) return false;
+  if (priorAssistant && BARE_AFFIRMATIVE.test(turn) && ASSISTANT_ASKS_TO_SHIP.test(priorAssistant)) return true;
+  return turn.split(/[.!?;:\n,]+/).some((clause) => SHIP_ORDER.test(clause.trim()));
 }
 var RAW_PUBLISH2 = gitCommandPattern("commit|push");
 function isPublishCall(name, args) {
@@ -17453,14 +17200,21 @@ function publishHoldFromPersonTurns(personTurns2) {
     const text2 = turn.text;
     if (!text2) return;
     if (declinesShipping(text2)) hold = { messageNumber: index + 1, text: text2 };
-    else if (hold && asksToShip(text2)) hold = null;
+    else if (hold && asksToShip(text2, turn.priorAssistant)) hold = null;
   });
   return hold;
 }
 function publishHold(convo) {
   const turns = [];
+  let priorAssistant = "";
   for (const m of convo) {
-    if (m?.role === "user" && personTurns.has(m)) turns.push({ text: userTextOf(m) });
+    if (m?.role === "assistant") {
+      const said = userTextOf(m);
+      if (said) priorAssistant = said;
+    } else if (m?.role === "user" && personTurns.has(m)) {
+      turns.push({ text: userTextOf(m), ...priorAssistant ? { priorAssistant } : {} });
+      priorAssistant = "";
+    }
   }
   return publishHoldFromPersonTurns(turns);
 }
@@ -18047,6 +17801,9 @@ function canCompleteTicket(isOnBaseBranch, userDeclinedShipping, opts) {
 function notOnBaseBranchAdvisory() {
   return "CANNOT MARK DONE \u2014 code is not on the base branch (main/master). Either ship to main/master first, or if you intentionally left the code uncommitted, say so explicitly in your reply so this guard knows to allow it.";
 }
+function markedDoneOffBaseAdvisory() {
+  return "MARKED DONE BEFORE IT SHIPPED \u2014 the ticket is now done, but this run's code is not on the base branch (main/master). Ship it to main/master, or set the ticket back to in_progress and name what blocks it. If you intentionally left the code uncommitted, say so explicitly in your reply.";
+}
 function completionBlockedAdvisory(outgoing) {
   if (outgoing && !outgoing.ok) {
     return `CANNOT MARK DONE \u2014 this run's outgoing changes fail the ship gate: ${outgoing.reason} Mark the ticket done once they pass.`;
@@ -18248,7 +18005,7 @@ function createRunWindowFit(deps) {
       const reused = memo ? reusePack(memo, req.messages, budget2) : null;
       if (reused) return reused;
       const recall = recallFor(req.step);
-      const { messages, pack: pack2 } = await packForModel({
+      const { messages, pack } = await packForModel({
         messages: req.messages,
         to,
         ...lastServed ? { from: lastServed } : {},
@@ -18261,7 +18018,7 @@ function createRunWindowFit(deps) {
           if (differs || t.dropped > 0 || !t.fits) deps.trace(windowFitTrace(deps.now(), req.step, t));
         }
       });
-      if (pack2.fits) packs.set(memoKey, packMemoOf(req.messages, messages));
+      if (pack.fits) packs.set(memoKey, packMemoOf(req.messages, messages));
       else packs.delete(memoKey);
       return messages;
     },
@@ -18767,11 +18524,16 @@ async function prepareBrainRun(chatId, c, req, runKey, reportRunRow) {
   const host = await gatherHostRunContext(c, req, !!evermind?.recall);
   const { recalled, block: recallBlock2, blockTokens: recallBlockTokens } = await recallForRun(c, convo, evermind, host.recallHint);
   let systemPrompt = resolvedSystemPrompt;
+  const turnPartsInPrompt = [];
+  const intoPrompt = (part) => {
+    systemPrompt = `${systemPrompt}
+
+${part}`;
+    turnPartsInPrompt.push(part);
+  };
   if (recallBlock2) {
     if (stablePrefix) turnParts.push(recallBlock2);
-    else systemPrompt = `${systemPrompt}
-
-${recallBlock2}`;
+    else intoPrompt(recallBlock2);
   }
   const priorRecall = { query: latestUserText(convo), result: recalled };
   const memoryReplay = memoryReplayable(latestUserText(convo), { followUp: isFollowUpTurn(convo) });
@@ -18786,9 +18548,7 @@ ${recallBlock2}`;
       const extra = await req.augmentSystemPrompt(latestUserText(convo));
       if (typeof extra === "string" && extra.trim()) {
         if (stablePrefix) turnParts.push(extra);
-        else systemPrompt = `${systemPrompt}
-
-${extra}`;
+        else intoPrompt(extra);
       }
     } catch {
     }
@@ -18817,9 +18577,10 @@ ${turnOptimizationDirective()}`;
 
 ${hold ? publishHoldDirective() : selfReviewShipDirective(serverChatId)}`;
   }
-  if (canReviewInPreview(catalogToolNames)) systemPrompt = `${systemPrompt}
+  const previewReview = canReviewInPreview(catalogToolNames) ? previewReviewDirective(serverChatId, ticketToolVocabulary(catalogToolNames)) : null;
+  if (previewReview) systemPrompt = `${systemPrompt}
 
-${previewReviewDirective(serverChatId, ticketToolVocabulary(catalogToolNames))}`;
+${previewReview}`;
   if (c.priorResearch) systemPrompt = `${systemPrompt}
 
 ${c.priorResearch}`;
@@ -18827,15 +18588,18 @@ ${c.priorResearch}`;
   const { userRequest } = reading;
   for (const directive of reading.directives) {
     if (stablePrefix) turnParts.push(directive);
-    else systemPrompt = `${systemPrompt}
-
-${directive}`;
+    else intoPrompt(directive);
   }
   const turnContext = turnContextBlock2(turnParts);
+  const systemNamed = toolNamesMentionedIn(systemPrompt);
+  const blockNamed = turnContext ? toolNamesMentionedIn(turnContext) : [];
+  const promptTools = {
+    system: systemNamed,
+    turn: [.../* @__PURE__ */ new Set([...blockNamed, ...toolNamesMentionedIn([...turnPartsInPrompt, userRequest].join("\n\n"))])],
+    contract: previewReview ? toolNamesMentionedIn(previewReview) : []
+  };
   const alwaysAdvertised = [
-    ...toolNamesMentionedIn(turnContext ? `${systemPrompt}
-
-${turnContext}` : systemPrompt),
+    .../* @__PURE__ */ new Set([...systemNamed, ...blockNamed]),
     ...localToolsIn(catalogToolNames),
     // The Studio's workspace vocabulary, including the preview review its contract
     // requires — empty everywhere but the Studio (see `studioToolsIn`).
@@ -18871,6 +18635,7 @@ ${turnContext}` : systemPrompt),
     allTools,
     catalogToolNames,
     alwaysAdvertised,
+    promptTools,
     // Tools this run has actually called — pinned into every later turn's selection
     // so a multi-step task never loses a tool it is mid-way through using.
     usedTools: /* @__PURE__ */ new Set(),
@@ -19185,11 +18950,25 @@ function authorModelsOf(run) {
 function policyOf(run) {
   return run.req.evidencePolicy ?? DEFAULT_EVIDENCE_POLICY;
 }
-async function verifyPaths(run, files) {
+function extensionOf(path) {
+  const name = path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(dot).toLowerCase() : "";
+}
+function lacksEvidence(file, ledger, policy) {
+  if (file.deleted) return false;
+  const required = policy.required[extensionOf(file.absPath)] ?? [];
+  const checks = ledger.for(file.absPath, file.hash);
+  return required.some((kind) => !checks.some((r) => r.kind === kind));
+}
+async function verifyPaths(run, files, opts) {
   const verifier = run.req.verifier;
-  if (!verifier || !files.length) return;
-  const byPath = new Map(files.map((f) => [f.absPath, f.hash]));
-  const records = await verifier.full(files.map((f) => f.absPath));
+  if (!verifier) return;
+  const policy = policyOf(run);
+  const pending = files.filter((f) => !f.unavailable && lacksEvidence(f, run.evidence, policy));
+  if (!pending.length) return;
+  const byPath = new Map(pending.map((f) => [f.absPath, f.hash]));
+  const records = await verifier.full(pending.map((f) => f.absPath), opts);
   const now = Date.now();
   for (const [absPath, hash] of byPath) {
     for (const check of records.get(absPath) ?? []) {
@@ -19197,11 +18976,18 @@ async function verifyPaths(run, files) {
     }
   }
 }
-async function runOutgoingGate(run, repo, tool = "git_push") {
+async function runOutgoingGate(run, repo, tool = "git_push", args) {
   const git = run.req.git;
   if (!git) return { verdict: { ok: true, unavailable: [] }, diffHash: null, gated: false };
-  const { files, diffHash, baseBranch, diff } = await git.outgoing(repo);
-  if (!baseBranch && tool !== "open_pull_request") return { verdict: { ok: true, unavailable: [] }, diffHash, gated: false };
+  const pullRequest = tool === "open_pull_request";
+  const base = args?.base;
+  const out = await git.outgoing(repo, pullRequest ? { pullRequest: typeof base === "string" && base.trim() ? { base: base.trim() } : {} } : void 0);
+  const { files, diffHash, baseBranch, diff } = out;
+  if (!baseBranch && !pullRequest) return { verdict: { ok: true, unavailable: [] }, diffHash, gated: false };
+  const unchecked = out.unavailable ?? (files.length === 0 || diff !== void 0 && !diff.trim() ? "no outgoing change to check" : void 0);
+  if (unchecked) {
+    return { verdict: { ok: false, reason: `${tool} refused: not verified \u2014 ${unchecked}. Commit the change on a branch with an upstream (or name the pull request base) and retry.` }, diffHash, gated: true };
+  }
   await verifyPaths(run, files);
   const verdict = outgoingGate(files, run.evidence, policyOf(run));
   if (!verdict.ok) return { verdict, diffHash, gated: true };
@@ -19245,11 +19031,15 @@ function isCompleteReviewRecord(name, args) {
 }
 async function shipGatePreflight(run, name, args) {
   if (!run.req.git) return {};
+  if (isTicketCompletion(name, args)) {
+    const refusal2 = await completionGateRefusal(run);
+    return refusal2 ? { refusal: refusal2 } : {};
+  }
   const publish = isBaseBranchPush(name, args) || name === "open_pull_request";
   if (!publish && !isCompleteReviewRecord(name, args)) return {};
   try {
     if (publish) {
-      const { verdict, diffHash: diffHash2, gated } = await runOutgoingGate(run, repoArgOf(args), name);
+      const { verdict, diffHash: diffHash2, gated } = await runOutgoingGate(run, repoArgOf(args), name, args);
       if (!verdict.ok) return { refusal: { ok: false, error: verdict.reason } };
       return gated ? { evidence: approvalEvidence(run, verdict.unavailable, diffHash2) } : {};
     }
@@ -19270,6 +19060,56 @@ async function shipGatePreflight(run, name, args) {
     const why = e instanceof Error ? e.message : String(e);
     return { refusal: { ok: false, error: `${name} refused: the ship gate could not read the outgoing change (${why}). Fix the repository state and retry.` } };
   }
+}
+var COMPLETION_GATE_BUDGET_MS = 2e4;
+function wroteThisRun(absPath, touched) {
+  const norm = (p) => p.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+  const target = norm(absPath);
+  return touched.some((t) => {
+    const p = norm(t);
+    return !!p && (target === p || target.endsWith(`/${p}`));
+  });
+}
+async function completionGateRefusal(run) {
+  const git = run.req.git;
+  if (!git || !run.c.codeChanged || !run.c.touchedFiles?.length) return null;
+  let timer;
+  const budget2 = new Promise((resolve) => {
+    timer = setTimeout(() => resolve({ kind: "timeout" }), COMPLETION_GATE_BUDGET_MS);
+  });
+  const check = async () => {
+    try {
+      const out = await git.outgoing("");
+      if (out.unavailable) return out.baseBranch ? { kind: "clear", why: out.unavailable } : { kind: "unavailable", why: out.unavailable };
+      const mine = out.files.filter((f) => wroteThisRun(f.absPath, run.c.touchedFiles));
+      if (!mine.length) return { kind: "clear", why: "none of the outgoing files were written by this run" };
+      await verifyPaths(run, mine, { budgetMs: COMPLETION_GATE_BUDGET_MS - 2e3 });
+      return { kind: "verdict", verdict: outgoingGate(mine, run.evidence, policyOf(run)) };
+    } catch (e) {
+      return { kind: "error", why: e instanceof Error ? e.message : String(e) };
+    }
+  };
+  let outcome;
+  try {
+    outcome = await Promise.race([check(), budget2]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+  if (outcome.kind === "verdict" && outcome.verdict.ok) return null;
+  const refusal2 = outcome.kind === "verdict" ? { ok: false, error: completionBlockedAdvisory(outcome.verdict) } : outcome.kind === "clear" ? null : { ok: false, error: completionBlockedAdvisory({ ok: false, reason: completionUncheckedReason(outcome) }) };
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: "tools.completion_gate",
+    args: { outcome: outcome.kind, ..."why" in outcome ? { why: outcome.why } : {} },
+    result: refusal2 ? refusal2.error : "allowed"
+  });
+  return refusal2;
+}
+function completionUncheckedReason(outcome) {
+  if (outcome.kind === "timeout") return `the check did not finish within ${COMPLETION_GATE_BUDGET_MS / 1e3}s, so the change is not verified.`;
+  if (outcome.kind === "unavailable") return `the outgoing change could not be computed (${outcome.why}), so it is not verified.`;
+  return `the ship gate could not read or verify the outgoing change (${outcome.why}). Fix the repository state and retry.`;
 }
 function approvalEvidence(run, unavailable, diffHash) {
   const checks = unavailable.length ? `checks passed \xB7 ${unavailable.length} check${unavailable.length === 1 ? "" : "s"} could not run here (not verified)` : "checks passed";
@@ -19300,8 +19140,9 @@ async function outgoingEvidenceVerdict(run, repo) {
     const { files } = await git.outgoing(repo);
     await verifyPaths(run, files);
     return outgoingGate(files, run.evidence, policyOf(run));
-  } catch {
-    return void 0;
+  } catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    return { ok: false, reason: `the ship gate could not read or verify the outgoing change (${why}). Fix the repository state and retry.` };
   }
 }
 function isFailed2(out) {
@@ -19310,6 +19151,15 @@ function isFailed2(out) {
 }
 
 // src/runStore/callPreflight.ts
+function traceRouted(c, step, via, name) {
+  pushTrace(c, {
+    ts: nowIso(),
+    category: "message",
+    label: "tools.routed",
+    args: { step, via },
+    result: via === "direct" ? `Called ${name} directly (it was not advertised this turn), so it ran as a tool-router call.` : `Called ${name} through the tool router (it was not advertised directly this turn).`
+  });
+}
 function callPreflight(run) {
   const { c, chatId, runKey, req, allTools, catalogToolNames, usedTools, readCoverage, writeLedger, placeholderLedger } = run;
   const { runTool, needsConfirm, persistence } = req;
@@ -19335,13 +19185,7 @@ function callPreflight(run) {
       }
       const routedArgs = routed.dispatch.args ?? {};
       call2 = { ...call2, name: routed.dispatch.name, args: routedArgs, raw: { ...call2.raw, name: routed.dispatch.name, arguments: JSON.stringify(routedArgs) } };
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "message",
-        label: "tools.routed",
-        args: { step: iter, via: rawCall.name },
-        result: `Called ${call2.name} through the tool router (it was not advertised directly this turn).`
-      });
+      traceRouted(c, iter, rawCall.name, call2.name);
     }
     if (call2.name === ASK_USER_TOOL) {
       if (run.redirectAskToDelegation) {
@@ -19545,7 +19389,7 @@ function succeeded5(data) {
 }
 async function postEditDiagnostics(call2, verifier) {
   if (!verifier || !EDIT_TOOLS2.has(call2.name) || !succeeded5(call2.result)) return null;
-  const paths = editedPaths(call2.args);
+  const paths = editedPathsOf(call2.name, call2.args);
   if (!paths.length) return null;
   let record2;
   try {
@@ -19555,11 +19399,6 @@ async function postEditDiagnostics(call2, verifier) {
   }
   if (!record2 || record2.outcome !== "fail") return null;
   return postEditNote2(record2);
-}
-function editedPaths(args) {
-  const a = args ?? {};
-  const raw = [a.path, ...Array.isArray(a.edits) ? a.edits.map((e) => e?.path) : []];
-  return [...new Set(raw.filter((p) => typeof p === "string" && !!p.trim()).map((p) => p.trim()))];
 }
 function postEditNote2(record2) {
   const lines = record2.findings.slice(0, NOTE_ERRORS2).map((f) => `- ${f}`);
@@ -19574,40 +19413,13 @@ var BALANCE_TOOLS = /* @__PURE__ */ new Set(["edit_file"]);
 function succeeded6(data) {
   return !(data && typeof data === "object" && data.ok === false);
 }
-function stringEditOf(raw, fallbackPath = "") {
-  const e = raw ?? {};
-  const path = typeof e.path === "string" && e.path.trim() ? e.path.trim() : fallbackPath;
-  if (!path || typeof e.old_string !== "string" || typeof e.new_string !== "string") return null;
-  return { path, old_string: e.old_string, new_string: e.new_string };
-}
-function stringEditsOf(args) {
-  const a = args ?? {};
-  const fallback = typeof a.path === "string" ? a.path.trim() : "";
-  const out = [];
-  const single = stringEditOf(a);
-  if (single) out.push(single);
-  if (Array.isArray(a.edits)) {
-    for (const raw of a.edits) {
-      const e = stringEditOf(raw, fallback);
-      if (e) out.push(e);
-    }
-  }
-  return out;
-}
-function describeDelta(d) {
-  const parts = [];
-  const sign = (n2) => n2 > 0 ? `+${n2}` : `${n2}`;
-  if (d.curly) parts.push(`\`{}\` ${sign(d.curly)}`);
-  if (d.paren) parts.push(`\`()\` ${sign(d.paren)}`);
-  if (d.square) parts.push(`\`[]\` ${sign(d.square)}`);
-  return parts.join(", ");
-}
 function bracketBalanceNote(call2) {
   if (!BALANCE_TOOLS.has(call2.name) || !succeeded6(call2.result)) return null;
   const lines = [];
-  for (const e of stringEditsOf(call2.args)) {
-    const delta = bracketDelta(e.old_string, e.new_string, e.path);
-    if (changesBalance(delta)) lines.push(`- ${e.path}: ${describeDelta(delta)} (new_string vs old_string)`);
+  for (const e of editedFilesOf(call2.name, call2.args)) {
+    if (e.before === void 0 || e.after === void 0) continue;
+    const delta = bracketDelta(e.before, e.after, e.path);
+    if (changesBalance(delta)) lines.push(`- ${e.path}: ${describeBracketDelta(delta, "glyph")} (new_string vs old_string)`);
   }
   if (!lines.length) return null;
   return `Post-edit check FAILED (bracket balance) \u2014 the replacement changed the bracket balance of the text it replaced, so the file is likely unparseable. Read the edited lines and fix this before building on it:
@@ -19689,11 +19501,10 @@ function callRunner(run) {
         const placeholderWarning = completionAdvisory(placeholderLedger.outstanding());
         const events = c.trace;
         const isOnBaseBranch = shippedToBaseBranch(events);
-        const outgoing = await outgoingEvidenceVerdict(run, repoArgOf(args));
-        const canComplete = canCompleteTicket(isOnBaseBranch, false, { wroteCodeThisRun: c.codeChanged, ...outgoing ? { outgoing } : {} });
+        const canComplete = canCompleteTicket(isOnBaseBranch, false, { wroteCodeThisRun: c.codeChanged });
         if (!canComplete) {
-          const said = completionBlockedAdvisory(outgoing);
-          pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call2.name, isOnBaseBranch, ...outgoing ? { outgoingOk: outgoing.ok } : {} }, result: said });
+          const said = markedDoneOffBaseAdvisory();
+          pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call2.name, isOnBaseBranch }, result: said });
           advisory = said;
         } else if (placeholderWarning) {
           pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call2.name, open: placeholderLedger.outstanding() }, result: placeholderWarning });
@@ -19812,10 +19623,6 @@ function isGlobalTypecheck(label, args) {
 function isTestRunCall(label, args) {
   const text2 = `${label} ${JSON.stringify(args ?? {})}`;
   return /vitest|jest|mocha|\.test\.|\.spec\.|\btest\b|\btests\b/i.test(text2) && !/tsc|typecheck|type-check/i.test(text2);
-}
-function isTestPath(path) {
-  const p = path.replace(/\\/g, "/");
-  return /\.(test|spec)\.[^/]+$/.test(p) || /\/__tests__\//.test(p);
 }
 function baseOf(path) {
   const base = path.replace(/\\/g, "/").split("/").pop() ?? path;
@@ -19943,26 +19750,18 @@ function kernelCall(run, id, name, args, step, rawArguments) {
   const raw = { id, name, arguments: rawArguments ?? JSON.stringify(args) };
   return { call: { id, name, args, raw, malformed: rawArguments !== void 0 }, ctx: { step, messages: run.convo } };
 }
-var TURN_BLOCK = /<turn_context>[\s\S]*?<\/turn_context>/g;
-function namingText(run) {
-  const carrier = turnContextCarrier(run.c);
-  if (carrier) return { system: run.systemPrompt, turn: userTextOf(carrier) };
-  return { system: run.systemPrompt.replace(TURN_BLOCK, ""), turn: (run.systemPrompt.match(TURN_BLOCK) ?? []).join("\n\n") };
-}
 function vocabularyOf(names) {
   return [...localToolsIn(names), ...studioToolsIn(names), ...memoryToolsIn(names), ...skillToolsIn(names)];
 }
 function unnamedVocabulary(run) {
-  const { system, turn } = namingText(run);
-  const named = new Set(toolNamesMentionedIn(`${system}
-
-${turn}`));
+  const named = /* @__PURE__ */ new Set([...run.promptTools.system, ...run.promptTools.turn]);
   return new Set(vocabularyOf(run.catalogToolNames).filter((n2) => !named.has(n2)));
 }
 function promptOnlyNamed(run) {
-  const { system, turn } = namingText(run);
-  const kept = /* @__PURE__ */ new Set([...toolNamesMentionedIn(turn), ...vocabularyOf(run.catalogToolNames), ASK_USER_TOOL, HAND_OFF_TOOL]);
-  return new Set(toolNamesMentionedIn(system).filter((n2) => !kept.has(n2)));
+  if (!canChangeCodeHere(run.catalogToolNames)) return /* @__PURE__ */ new Set();
+  const { system, turn, contract } = run.promptTools;
+  const kept = /* @__PURE__ */ new Set([...turn, ...contract, ...vocabularyOf(run.catalogToolNames), ASK_USER_TOOL, HAND_OFF_TOOL]);
+  return new Set(system.filter((n2) => !kept.has(n2)));
 }
 function surfaceRequired(run, naming) {
   const base = isCappedToolRole(run.policy.phase) ? run.alwaysAdvertised.filter((n2) => !naming().unnamed.has(n2) && !naming().promptOnly.has(n2)) : run.alwaysAdvertised;
@@ -19975,13 +19774,7 @@ function brainPlatformTools(run) {
   const traceUnadvertised = (raw, step) => {
     const name = resolveToolAlias(raw);
     if (!cappedMenu || cappedMenu.step !== step || cappedMenu.names.has(name) || isRouterTool(name) || !run.catalogToolNames.includes(name)) return;
-    pushTrace(run.c, {
-      ts: nowIso(),
-      category: "message",
-      label: "tools.routed",
-      args: { step, via: "direct" },
-      result: `Called ${name} directly; it was not advertised this turn, so it ran as a tool-router call.`
-    });
+    traceRouted(run.c, step, "direct", name);
   };
   const before = callPreflight(run);
   const dispatch = callRunner(run);
@@ -20031,13 +19824,13 @@ function brainPlatformTools(run) {
       // The preflight (router, `ask_user`, `hand_off`, confirm gate, dedupe) runs where the loop runs it: ahead of the dispatch, not raced
       // against the person's Stop. A Stop pressed during a hand-off waits for it to end, so its tickets and children are on the trace.
       async preflight(raw, { step }) {
-        traceUnadvertised(raw.name, step);
         const { call: call2, ctx } = kernelCall(run, raw.id, raw.name, raw.malformed ? {} : raw.args, step, raw.malformed ? raw.arguments : void 0);
         const pre = await before(call2, ctx);
         if (pre && "result" in pre) {
           ran.set(raw.id, { call: call2, result: pre.result, ctx });
           return { result: pre.result };
         }
+        traceUnadvertised(raw.name, step);
         const target = pre && "rewrite" in pre ? pre.rewrite : call2;
         prepared.set(raw.id, { call: target, ctx });
         return pre && "rewrite" in pre ? { rewrite: { name: target.name, args: target.args } } : void 0;
@@ -20048,10 +19841,10 @@ function brainPlatformTools(run) {
         prepared.delete(id);
         let early;
         if (!held) {
-          traceUnadvertised(name, env.step);
           const fresh = kernelCall(run, id, name, args, env.step);
           const pre = await before(fresh.call, fresh.ctx);
           if (pre && "result" in pre) early = pre.result;
+          else traceUnadvertised(name, env.step);
           held = { call: pre && "rewrite" in pre ? pre.rewrite : fresh.call, ctx: fresh.ctx };
         }
         const result = early ?? await dispatch(held.call, held.ctx);
@@ -21394,10 +21187,10 @@ async function startRun(runKey, request, claim) {
       const openPh = openPlaceholders();
       const verification = verificationOf(evidence, c.touchedFiles);
       const hasTicket = view.deltaTicketId != null || localTicketsFiledInRun(trace4).length > 0;
-      const finished = finishConditionMet({ shipped, verified: verification.verified, openPlaceholders: openPh, hasTicket });
       const closeOut = { serverChatId, view, req, needsTicket, shipped, reviewedInPreview, openPlaceholders: openPh, trace: trace4, evidence, verified: verification.verified, hasTicket };
       c.finishClosedOut = true;
       await within(left(), async () => {
+        if (!closeOut.hasTicket && finishConditionMet({ ...closeOut, hasTicket: true })) closeOut.hasTicket = await holdsLinkedTicket(trace4, serverChatId, req);
         await deterministicFinish(closeOut, { c, req, serverChatId, recalled: null });
       }, () => view.note?.({
         ts: nowIso(),
@@ -21413,6 +21206,7 @@ async function startRun(runKey, request, claim) {
         result: "The run's ticket bookkeeping failed; the run is settled without it."
       }));
       c.finishClosedOut = true;
+      const finished = finishConditionMet(closeOut);
       const finalTrace = runTrace(c);
       const requestText = req.userTurn === void 0 ? void 0 : contentText(req.userTurn);
       const wakeTurn = delegatingCells.has(c) && isChildReportText(requestText);
@@ -22999,20 +22793,6 @@ function safeSuffix(s, n2) {
     if (c >= 56320 && c <= 57343) start += 1;
   }
   return s.slice(start);
-}
-function truncateMiddle(text2, max) {
-  if (text2.length <= max) return text2;
-  const marker = `
-\u2026(${formatCount(text2.length)} chars omitted from the middle)\u2026
-`;
-  const room = Math.max(0, max - marker.length);
-  if (room === 0) return safePrefix(text2, max);
-  const head = safePrefix(text2, Math.ceil(room / 2));
-  const tail = safeSuffix(text2, Math.floor(room / 2));
-  const omitted = text2.length - head.length - tail.length;
-  return `${head}
-\u2026(${formatCount(omitted)} chars omitted from the middle)\u2026
-${tail}`;
 }
 function cutMiddleToFit(head, timeline, tail, ceiling) {
   const join = (...parts) => parts.filter((s) => s.length > 0).join("\n");

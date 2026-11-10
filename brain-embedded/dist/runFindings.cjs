@@ -30,6 +30,7 @@ __export(runFindings_exports, {
 module.exports = __toCommonJS(runFindings_exports);
 
 // src/runFindings/policy.ts
+var import_working = require("@seanhogg/builderforce-memory/working");
 var RUN_FINDING_POLICY = Object.freeze({
   /** Read-only turns before the first write that make an analysis overrun. */
   analysisReadTurns: 8,
@@ -48,10 +49,9 @@ var RUN_FINDING_POLICY = Object.freeze({
   sharedArgBytes: 1024,
   /** A turn this slow (ms) is slow. */
   slowTurnMs: 6e4,
-  /** Word-set overlap (|A∩B| / min(|A|,|B|)) of consecutive pre-call texts that repeats narration. */
-  narrationOverlap: 0.8,
-  /** Fewest distinct words a pre-call text needs before its overlap means anything. */
-  narrationMinWords: 3,
+  /** Word-set overlap at which a pre-call text repeats the last kept one: memory's B7 fold threshold, so the
+   *  diagnostic and the fold agree (`NARRATION_OVERLAP`, `@seanhogg/builderforce-memory/working`). */
+  narrationOverlap: import_working.NARRATION_OVERLAP,
   /** Longest excerpt an evidence row quotes. */
   excerptChars: 160
 });
@@ -62,7 +62,17 @@ var SHELL_TOOLS = /* @__PURE__ */ new Set(["run_command", "shell", "bash", "exec
 // src/runFindings/findingParts.ts
 function finding(kind, severity, params, evidence) {
   const first = evidence.reduce((min, e) => Math.min(min, e.step), Number.POSITIVE_INFINITY);
-  return { id: `${kind}:${Number.isFinite(first) ? first : 0}`, kind, severity, params, evidence };
+  const subject = params.path ?? params.tool;
+  const id = `${kind}:${subject !== void 0 ? `${subject}:` : ""}${Number.isFinite(first) ? first : 0}`;
+  return { id, kind, severity, params, evidence };
+}
+function withUniqueIds(findings) {
+  const seen = /* @__PURE__ */ new Map();
+  return findings.map((f) => {
+    const n = (seen.get(f.id) ?? 0) + 1;
+    seen.set(f.id, n);
+    return n === 1 ? f : { ...f, id: `${f.id}#${n}` };
+  });
 }
 function excerpt(text) {
   const flat = text.replace(/\s+/g, " ").trim();
@@ -241,6 +251,42 @@ function applyStringEdit(content, oldString, newString, replaceAll = false) {
     ...nearest ? { nearest } : {}
   };
 }
+var editStr = (v) => typeof v === "string" ? v : void 0;
+function editPathOf(a) {
+  const p = a.path ?? a.file_path ?? a.filePath;
+  return typeof p === "string" && p.trim() ? p.trim().replace(/\\/g, "/").replace(/^\.\//, "") : null;
+}
+function editedFilesOf(toolName, args) {
+  const a = args && typeof args === "object" && !Array.isArray(args) ? args : {};
+  const top = editPathOf(a);
+  const out = [];
+  if (toolName === "edit_file") {
+    const replacement = (e, fallback) => {
+      const path2 = editPathOf(e) ?? fallback;
+      const before = editStr(e.old_string);
+      const after = editStr(e.new_string);
+      if (path2 && (before !== void 0 || after !== void 0)) {
+        out.push({ path: path2, ...before !== void 0 ? { before } : {}, ...after !== void 0 ? { after } : {} });
+      } else if (path2 && e !== a) {
+        out.push({ path: path2 });
+      }
+    };
+    if ("old_string" in a || "new_string" in a) replacement(a, null);
+    if (Array.isArray(a.edits)) {
+      for (const raw of a.edits) {
+        if (raw && typeof raw === "object") replacement(raw, top);
+      }
+    }
+  } else if (toolName === "write_file" && top) {
+    const after = editStr(a.content);
+    out.push({ path: top, ...after !== void 0 ? { after } : {} });
+  }
+  if (out.length === 0 && top) out.push({ path: top });
+  return out;
+}
+function editedPathsOf(toolName, args) {
+  return [...new Set(editedFilesOf(toolName, args).map((f) => f.path))];
+}
 var EDIT_BATCH_MAX = 20;
 function entryProblem(e) {
   if (typeof e.path !== "string" || e.path.trim() === "") return "path is required";
@@ -309,17 +355,212 @@ var LEXED_EXTENSIONS = /* @__PURE__ */ new Set([
   "json",
   "jsonc"
 ]);
+var JSX_EXTENSIONS = /* @__PURE__ */ new Set(["jsx", "tsx"]);
+var EXPRESSION_KEYWORDS = /* @__PURE__ */ new Set([
+  "return",
+  "typeof",
+  "instanceof",
+  "in",
+  "of",
+  "new",
+  "delete",
+  "void",
+  "throw",
+  "case",
+  "do",
+  "else",
+  "yield",
+  "await"
+]);
 var ZERO = Object.freeze({ curly: 0, paren: 0, square: 0 });
+var WORD_START = /[A-Za-z_$]/;
+var WORD_CHAR = /[\w$]/;
+var JSX_NAME = /^[A-Za-z_$][\w$.:-]*/;
 function extensionOf(ext) {
   const dot = ext.lastIndexOf(".");
   return (dot >= 0 ? ext.slice(dot + 1) : ext).toLowerCase();
 }
-function bracketBalance(text) {
+function bracketBalance(text, options = {}) {
+  const jsx = options.jsx === true;
   const out = { curly: 0, paren: 0, square: 0 };
-  const braces = [];
-  let i = 0;
   const n = text.length;
-  const template = () => {
+  let i = 0;
+  let expr = true;
+  const skipQuoted = (quote, multiline) => {
+    i += 1;
+    while (i < n && text[i] !== quote && (multiline || text[i] !== "\n")) i += !multiline && text[i] === "\\" ? 2 : 1;
+    i += 1;
+  };
+  const tryRegex = () => {
+    let j = i + 1;
+    let inClass = false;
+    while (j < n) {
+      const c = text[j];
+      if (c === "\n") return false;
+      if (c === "\\") {
+        j += 2;
+        continue;
+      }
+      if (c === "[") inClass = true;
+      else if (c === "]") inClass = false;
+      else if (c === "/" && !inClass) {
+        j += 1;
+        while (j < n && /[a-z]/i.test(text[j])) j += 1;
+        i = j;
+        return true;
+      }
+      j += 1;
+    }
+    return false;
+  };
+  const container = () => {
+    out.curly += 1;
+    i += 1;
+    code(true);
+    if (text[i] === "}") {
+      out.curly -= 1;
+      i += 1;
+    }
+  };
+  const skipSpace = () => {
+    while (i < n && /\s/.test(text[i])) i += 1;
+  };
+  const jsxChildren = () => {
+    while (i < n) {
+      const c = text[i];
+      if (c === "{") {
+        container();
+        continue;
+      }
+      if (c === "<") {
+        if (text[i + 1] === "/") {
+          const end = text.indexOf(">", i);
+          i = end < 0 ? n : end + 1;
+          return;
+        }
+        if (tryJsxElement()) continue;
+      }
+      i += 1;
+    }
+  };
+  const tryJsxElement = () => {
+    const start = i;
+    i += 1;
+    if (text[i] === ">") {
+      i += 1;
+      jsxChildren();
+      return true;
+    }
+    const name = JSX_NAME.exec(text.slice(i, i + 200));
+    if (!name) {
+      i = start;
+      return false;
+    }
+    i += name[0].length;
+    let first = true;
+    while (i < n) {
+      skipSpace();
+      if (i >= n) return true;
+      const c = text[i];
+      if (c === "/" && text[i + 1] === ">") {
+        i += 2;
+        return true;
+      }
+      if (c === ">") {
+        i += 1;
+        jsxChildren();
+        return true;
+      }
+      if (c === "{") {
+        container();
+        first = false;
+        continue;
+      }
+      const attr = JSX_NAME.exec(text.slice(i, i + 200));
+      if (!attr || first && attr[0] === "extends") {
+        i = start;
+        return false;
+      }
+      first = false;
+      i += attr[0].length;
+      skipSpace();
+      if (text[i] !== "=") continue;
+      i += 1;
+      skipSpace();
+      if (text[i] === '"' || text[i] === "'") skipQuoted(text[i], true);
+      else if (text[i] === "{") container();
+    }
+    return true;
+  };
+  function code(nested) {
+    let depth = 0;
+    while (i < n) {
+      const ch = text[i];
+      const next = text[i + 1];
+      if (ch === "\n") {
+        expr = true;
+        i += 1;
+        continue;
+      }
+      if (/\s/.test(ch)) {
+        i += 1;
+        continue;
+      }
+      if (ch === "/" && next === "/") {
+        const end = text.indexOf("\n", i);
+        i = end < 0 ? n : end;
+        continue;
+      }
+      if (ch === "/" && next === "*") {
+        const end = text.indexOf("*/", i + 2);
+        i = end < 0 ? n : end + 2;
+        continue;
+      }
+      if (ch === "/" && expr && tryRegex()) {
+        expr = false;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        skipQuoted(ch, false);
+        expr = false;
+        continue;
+      }
+      if (ch === "`") {
+        i += 1;
+        template();
+        expr = false;
+        continue;
+      }
+      if (ch === "<" && jsx && expr && tryJsxElement()) {
+        expr = false;
+        continue;
+      }
+      if (WORD_START.test(ch) || /\d/.test(ch)) {
+        const start = i;
+        while (i < n && WORD_CHAR.test(text[i])) i += 1;
+        expr = EXPRESSION_KEYWORDS.has(text.slice(start, i));
+        continue;
+      }
+      if (ch === "{") {
+        out.curly += 1;
+        depth += 1;
+        expr = true;
+      } else if (ch === "}") {
+        if (nested && depth === 0) return;
+        out.curly -= 1;
+        if (depth > 0) depth -= 1;
+        expr = true;
+      } else if (ch === "(" || ch === "[") {
+        out[ch === "(" ? "paren" : "square"] += 1;
+        expr = true;
+      } else if (ch === ")" || ch === "]") {
+        out[ch === ")" ? "paren" : "square"] -= 1;
+        expr = false;
+      } else expr = ch !== ".";
+      i += 1;
+    }
+  }
+  function template() {
     while (i < n) {
       const ch = text[i];
       if (ch === "\\") {
@@ -331,57 +572,32 @@ function bracketBalance(text) {
         return;
       }
       if (ch === "$" && text[i + 1] === "{") {
-        braces.push(true);
         i += 2;
-        return;
+        expr = true;
+        code(true);
+        if (text[i] === "}") i += 1;
+        continue;
       }
       i += 1;
     }
-  };
-  while (i < n) {
-    const ch = text[i];
-    const next = text[i + 1];
-    if (ch === "/" && next === "/") {
-      const end = text.indexOf("\n", i);
-      i = end < 0 ? n : end + 1;
-    } else if (ch === "/" && next === "*") {
-      const end = text.indexOf("*/", i + 2);
-      i = end < 0 ? n : end + 2;
-    } else if (ch === '"' || ch === "'") {
-      i += 1;
-      while (i < n && text[i] !== ch && text[i] !== "\n") i += text[i] === "\\" ? 2 : 1;
-      i += 1;
-    } else if (ch === "`") {
-      i += 1;
-      template();
-    } else {
-      if (ch === "{") {
-        out.curly += 1;
-        braces.push(false);
-      } else if (ch === "}") {
-        if (braces.pop() === true) {
-          i += 1;
-          template();
-          continue;
-        }
-        out.curly -= 1;
-      } else if (ch === "(") out.paren += 1;
-      else if (ch === ")") out.paren -= 1;
-      else if (ch === "[") out.square += 1;
-      else if (ch === "]") out.square -= 1;
-      i += 1;
-    }
   }
+  code(false);
   return out;
 }
 function bracketDelta(before, after, ext) {
-  if (!LEXED_EXTENSIONS.has(extensionOf(ext))) return { ...ZERO };
-  const b = bracketBalance(before);
-  const a = bracketBalance(after);
+  const e = extensionOf(ext);
+  if (!LEXED_EXTENSIONS.has(e)) return { ...ZERO };
+  const options = { jsx: JSX_EXTENSIONS.has(e) };
+  const b = bracketBalance(before, options);
+  const a = bracketBalance(after, options);
   return { curly: a.curly - b.curly, paren: a.paren - b.paren, square: a.square - b.square };
 }
 function changesBalance(delta) {
   return delta.curly !== 0 || delta.paren !== 0 || delta.square !== 0;
+}
+function describeBracketDelta(d, style = "name") {
+  const glyph = { curly: "`{}`", paren: "`()`", square: "`[]`" };
+  return ["curly", "paren", "square"].filter((k) => d[k] !== 0).map((k) => `${style === "glyph" ? glyph[k] : k} ${d[k] > 0 ? "+" : ""}${d[k]}`).join(style === "glyph" ? ", " : " \xB7 ");
 }
 
 // ../packages/agent-tools/src/jsonKeyRead.ts
@@ -975,7 +1191,7 @@ async function compressWebFetchResult(r, ctx) {
 
 // ../packages/agent-tools/src/git-repo-scope.ts
 function safeGitArg(v) {
-  return typeof v === "string" && /^[\w./@-]+$/.test(v) ? v : null;
+  return typeof v === "string" && /^[\w./@-]+$/.test(v) && !v.startsWith("-") ? v : null;
 }
 function shellQuote(v) {
   return `'${v.replace(/'/g, `'\\''`)}'`;
@@ -1457,7 +1673,7 @@ function buildCommitCommand(opts) {
   const branch = safeGitArg(opts.branch);
   const resolveLines = opts.paths.map((p, i) => {
     const candidates = commitPathCandidates(p, opts.repo).map(shellQuote).join(" ");
-    return `P${i}="$(pick ${candidates})" || MISSING="$MISSING ${shellQuote(p).slice(1, -1)}"`;
+    return `P${i}="$(pick ${candidates})" || MISSING="$MISSING "${shellQuote(p)}`;
   });
   const paths = opts.paths.map((_, i) => `"$P${i}"`).join(" ");
   return [
@@ -1591,6 +1807,21 @@ function publishToolResult(action, r) {
   }
   return { data: { ok: r.ok, action, output: out.slice(0, 2e4), ...r.error ? { error: r.error } : {} } };
 }
+function invalidRefResult(action, refs) {
+  for (const [name, value] of Object.entries(refs)) {
+    for (const v of Array.isArray(value) ? value : [value]) {
+      if (typeof v !== "string" || v === "" || safeGitArg(v) !== null) continue;
+      return {
+        data: {
+          ok: false,
+          action,
+          error: `${name} '${v}' is not a valid name \u2014 use only letters, digits and . _ / @ - (no spaces, no shell characters, not starting with '-'), so nothing was run`
+        }
+      };
+    }
+  }
+  return null;
+}
 async function runPublishTool(action, command, repo, ctx) {
   const refused = invalidRepoResult(action, repo);
   if (refused) return refused;
@@ -1623,6 +1854,8 @@ var gitCommitTool = defineTool({
     if (paths.length === 0) {
       return Promise.resolve({ data: { ok: false, action: "commit", error: "paths is required \u2014 list the exact files you changed. Run git_status to see them. Do not pass '.' or '-A': the working tree may hold changes that are not yours." } });
     }
+    const badRef = invalidRefResult("commit", { branch: args.branch });
+    if (badRef) return Promise.resolve(badRef);
     const repo = typeof args.repo === "string" ? args.repo : void 0;
     return runPublishTool(
       "commit",
@@ -1669,6 +1902,8 @@ var openPullRequestTool = defineTool({
     if (!title) return Promise.resolve({ data: { ok: false, action: "pull_request", error: "title is required" } });
     const repo = typeof args.repo === "string" ? args.repo : void 0;
     const reviewers = Array.isArray(args.reviewers) ? args.reviewers.filter((r) => typeof r === "string") : void 0;
+    const badRef = invalidRefResult("pull_request", { base: args.base, reviewers });
+    if (badRef) return Promise.resolve(badRef);
     return runPublishTool(
       "pull_request",
       buildPullRequestCommand({ title, body, base: typeof args.base === "string" ? args.base : void 0, reviewers }),
@@ -1691,6 +1926,8 @@ var gitCleanupMergedTool = defineTool({
   },
   requires: ["git.write"],
   execute: (args, ctx) => {
+    const badRef = invalidRefResult("cleanup", { branch: args.branch, baseBranch: args.baseBranch });
+    if (badRef) return Promise.resolve(badRef);
     const repo = typeof args.repo === "string" ? args.repo : void 0;
     return runPublishTool(
       "cleanup",
@@ -2339,18 +2576,18 @@ function normalizeAnalysis(dependencies, duplicates, unused, scope = ".") {
     }
   }
   const issues = [];
-  for (const clone of list(record(duplicates).duplicates)) {
-    const locations = [clone.firstFile, clone.secondFile].map((raw) => {
+  for (const clone2 of list(record(duplicates).duplicates)) {
+    const locations = [clone2.firstFile, clone2.secondFile].map((raw) => {
       const file = record(raw);
       return { path: path(file.name), startLine: line(file.start), endLine: line(file.end) };
     });
     locations.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : a.startLine - b.startLine);
-    const identity = typeof clone.fragment === "string" ? clone.fragment.replace(/\r\n/g, "\n") : locations.map((l) => `${l.path}:${l.startLine}-${l.endLine}`).sort().join("|");
+    const identity = typeof clone2.fragment === "string" ? clone2.fragment.replace(/\r\n/g, "\n") : locations.map((l) => `${l.path}:${l.startLine}-${l.endLine}`).sort().join("|");
     issues.push({
       id: `duplicate:${hash(JSON.stringify([locations.map((l) => l.path).sort(), identity]))}`,
       kind: "duplicate",
       locations,
-      ...typeof clone.fragment === "string" ? { snippet: clone.fragment.slice(0, 4e3) } : {}
+      ...typeof clone2.fragment === "string" ? { snippet: clone2.fragment.slice(0, 4e3) } : {}
     });
   }
   for (const file of list(record(unused).files)) issues.push({ id: `unused-file:${unusedPath(file)}`, kind: "unused-file", locations: [{ path: unusedPath(file), startLine: 1, endLine: 1 }] });
@@ -3304,10 +3541,10 @@ var CORE_TOOLS = [
 ];
 
 // ../packages/agent-tools/src/knowledge-notes.ts
-var import_working = require("@seanhogg/builderforce-memory/working");
+var import_working2 = require("@seanhogg/builderforce-memory/working");
 
 // ../packages/agent-tools/src/run-knowledge.ts
-var import_working2 = require("@seanhogg/builderforce-memory/working");
+var import_working3 = require("@seanhogg/builderforce-memory/working");
 
 // ../packages/agent-tools/src/skill-tools.ts
 var skillProposeTool = defineTool({
@@ -3338,15 +3575,15 @@ var skillProposeTool = defineTool({
   },
   requires: ["skill.author"],
   async execute(args, ctx) {
-    const str2 = (v) => typeof v === "string" ? v.trim() : "";
-    const slug = str2(args.slug);
-    const name = str2(args.name);
-    const description = str2(args.description);
-    const body = str2(args.body);
+    const str = (v) => typeof v === "string" ? v.trim() : "";
+    const slug = str(args.slug);
+    const name = str(args.name);
+    const description = str(args.description);
+    const body = str(args.body);
     if (!slug || !name || !description || !body) {
       return { data: { ok: false, error: "slug, name, description and body are all required" } };
     }
-    const evidence = str2(args.evidence);
+    const evidence = str(args.evidence);
     const r = await ctx.caps.skillAuthor.propose({
       slug,
       name,
@@ -3489,12 +3726,12 @@ var spawnAgentTool = withDelegationNote(defineTool({
   },
   requires: ["orchestrate"],
   async execute(args, ctx) {
-    const str2 = (v) => typeof v === "string" ? v.trim() : "";
-    const label = str2(args.label);
-    const task = str2(args.task);
+    const str = (v) => typeof v === "string" ? v.trim() : "";
+    const label = str(args.label);
+    const task = str(args.task);
     if (!task) return { data: { ok: false, error: "task is required \u2014 the child sees none of your conversation" } };
     const role = delegationRole(args.role);
-    const asAgent = str2(args.as_agent);
+    const asAgent = str(args.as_agent);
     const r = await ctx.caps.orchestration.spawn({
       label: label || task.slice(0, 60),
       task,
@@ -3512,20 +3749,20 @@ function parseWorkstreams(raw) {
   if (raw.length > MAX_WORKSTREAMS) {
     return `at most ${MAX_WORKSTREAMS} workstreams per call \u2014 run the rest in a second call once these are back`;
   }
-  const str2 = (v) => typeof v === "string" ? v.trim() : "";
+  const str = (v) => typeof v === "string" ? v.trim() : "";
   const out = [];
   for (const [i, item] of raw.entries()) {
     const w = item ?? {};
-    const task = str2(w.task);
+    const task = str(w.task);
     if (!task) return `workstream ${i + 1} has no task \u2014 each child sees none of your conversation`;
-    const ticket = str2(w.ticket);
-    const role = str2(w.role);
+    const ticket = str(w.ticket);
+    const role = str(w.role);
     out.push({
-      label: str2(w.label) || task.slice(0, 60),
+      label: str(w.label) || task.slice(0, 60),
       task,
       ...ticket ? { ticket } : {},
       ...role ? { role } : {},
-      asAgent: str2(w.as_agent)
+      asAgent: str(w.as_agent)
     });
   }
   return out;
@@ -3594,7 +3831,7 @@ var OO_DECISIONS = new RegExp(String.raw`\b(?:if|for|foreach|while|case|catch)\b
 
 // ../packages/agent-tools/src/knowledge/codeNodes.ts
 var import_knowledge5 = require("@seanhogg/builderforce-memory/knowledge");
-var import_working3 = require("@seanhogg/builderforce-memory/working");
+var import_working4 = require("@seanhogg/builderforce-memory/working");
 var import_ingest2 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/codePatterns.ts
@@ -3735,18 +3972,21 @@ var import_knowledge23 = require("@seanhogg/builderforce-memory/knowledge");
 var import_knowledge24 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/replicaQueue.ts
+var import_knowledge25 = require("@seanhogg/builderforce-memory/knowledge");
 var import_pack = require("@seanhogg/builderforce-memory/knowledge/pack");
 
 // ../packages/agent-tools/src/knowledge/replicatedStore.ts
-var import_pack3 = require("@seanhogg/builderforce-memory/knowledge/pack");
-
-// ../packages/agent-tools/src/knowledge/replicaPack.ts
-var import_knowledge25 = require("@seanhogg/builderforce-memory/knowledge");
 var import_pack2 = require("@seanhogg/builderforce-memory/knowledge/pack");
-var DEFAULT_MAX_DECODED = 16 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/replicaPump.ts
 var import_pack5 = require("@seanhogg/builderforce-memory/knowledge/pack");
+
+// ../packages/agent-tools/src/knowledge/replicaPack.ts
+var import_knowledge26 = require("@seanhogg/builderforce-memory/knowledge");
+var import_pack3 = require("@seanhogg/builderforce-memory/knowledge/pack");
+var DEFAULT_MAX_DECODED = 16 * 1024 * 1024;
+var EMPTY_PACK = { rootId: "", baseGeneration: 0, targetDigest: import_pack3.ZERO_DIGEST };
+var EMPTY_EXTRACTED_BYTES = (0, import_pack3.jsonBytesOf)({ ...EMPTY_PACK, extracted: [] });
 
 // ../packages/agent-tools/src/knowledge/replicaGenerationCheck.ts
 var GENERATION_CHECK_INTERVAL_MS = 10 * 6e4;
@@ -3760,20 +4000,20 @@ var MAX_ANALYSIS_BYTES = 2 * 1024 * 1024;
 var MAX_SYNC_PACK_BYTES = 24 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/replicaFirstSync.ts
-var import_knowledge26 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/claimSimilarity.ts
 var import_knowledge27 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/portablePack.ts
+// ../packages/agent-tools/src/knowledge/claimSimilarity.ts
 var import_knowledge28 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/packGraph.ts
+// ../packages/agent-tools/src/knowledge/portablePack.ts
 var import_knowledge29 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/packGraph.ts
+var import_knowledge30 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest7 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/pinpointMatch.ts
-var import_knowledge30 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge31 = require("@seanhogg/builderforce-memory/knowledge");
 var MAX_PINPOINT_IMAGE_BYTES = 8 * 1024 * 1024;
 var MAX_DATA_URL_CHARS = Math.ceil(MAX_PINPOINT_IMAGE_BYTES * 4 / 3) + 64;
 var PINPOINT_VISION_SYSTEM = [
@@ -3782,34 +4022,24 @@ var PINPOINT_VISION_SYSTEM = [
   '"texts": the exact visible strings (labels, headings, buttons, status text, error messages), at most 12, verbatim}.'
 ].join(" ");
 
+// ../packages/agent-tools/src/knowledge/replicaLock.ts
+var LOCK_REFRESH_MS = 3e4;
+var LOCK_STALE_MS = 12e4;
+var LOCK_FRESH_MS = LOCK_STALE_MS - LOCK_REFRESH_MS;
+
 // src/runFindings/detectors/bracketBreak.ts
-var str = (v) => typeof v === "string" ? v : "";
-function describeDelta(d) {
-  return ["curly", "paren", "square"].filter((k) => d[k] !== 0).map((k) => `${k} ${d[k] > 0 ? "+" : ""}${d[k]}`).join(" \xB7 ");
-}
-function replacements(c) {
-  const pathOf = (a) => str(a.path ?? a.file_path ?? a.filePath);
-  if (Array.isArray(c.args.edits)) {
-    return c.args.edits.map((e) => {
-      const a = e ?? {};
-      return { path: pathOf(a), before: str(a.old_string), after: str(a.new_string) };
-    });
-  }
-  if ("new_string" in c.args) return [{ path: pathOf(c.args), before: str(c.args.old_string), after: str(c.args.new_string) }];
-  if ("content" in c.args) return [{ path: pathOf(c.args), before: "", after: str(c.args.content) }];
-  return [];
-}
 function bracketBreak(view) {
   const out = [];
   for (const c of view.calls) {
     if (!c.write) continue;
-    for (const r of replacements(c)) {
+    for (const r of editedFilesOf(c.name, c.args)) {
+      if (r.before === void 0 || r.after === void 0) continue;
       const delta = bracketDelta(r.before, r.after, r.path);
       if (!changesBalance(delta)) continue;
       out.push(finding(
         "bracket_break",
         "error",
-        { path: r.path, delta: describeDelta(delta) },
+        { path: r.path, delta: describeBracketDelta(delta) },
         [callEvidence(c, r.path, r.after)]
       ));
     }
@@ -3964,10 +4194,197 @@ var UNCALLED_TOOL_CLAIM = new RegExp(
 );
 
 // src/modelReply.ts
-var import_working4 = require("@seanhogg/builderforce-memory/working");
+var import_working5 = require("@seanhogg/builderforce-memory/working");
 
 // src/stoppedTurn.ts
 var STOPPED_TURN_STEP = "agent.stopped";
+
+// ../packages/local-first/src/policy.ts
+var LOCAL_FIRST_POLICY = Object.freeze({
+  synchronize: false,
+  gatewayInference: false,
+  connectedFeatures: false,
+  authenticate: false,
+  modelDownloads: false,
+  directProviders: false,
+  externalMcp: false,
+  gitRemotes: false
+});
+
+// ../packages/local-first/src/inferenceMode.ts
+var INFERENCE_MODES = Object.freeze(["hybrid", "local-only", "specific"]);
+
+// ../packages/local-first/src/platformRoutes.ts
+var PLATFORM_ROUTE_RULES = Object.freeze([
+  { path: "/api/auth", match: "contains", capability: "authenticate", note: "token exchange and session" },
+  { path: "/api/vscode/tenants/*/token", capability: "authenticate", note: "the editor's tenant token exchange" },
+  { path: "/chat/completions", match: "contains", capability: "gateway-inference", content: true, note: "a gateway completion \u2014 the prompt" },
+  { path: "/api/brain/stream", capability: "gateway-inference", content: true, note: "the Brain's streamed turn \u2014 the prompt" },
+  { path: "/llm/v1/models", capability: "connected-feature", note: "the model catalog" },
+  { path: "/api/llm/models", capability: "connected-feature", note: "the model catalog" },
+  { path: "/api/limbic/block", capability: "connected-feature", content: true, note: "personality block \u2014 once per session; the per-turn affect is appraised on the device" },
+  { path: "/api/limbic", match: "prefix", capability: "connected-feature", content: true, note: "the personality / affect store" },
+  { path: "/api/projects/*/evermind/recall", capability: "connected-feature", content: true, note: "memory recall \u2014 a read that sends the prompt" },
+  { path: "/api/projects/*/evermind", match: "contains", capability: "connected-feature", content: true, note: "a project's Evermind memory" },
+  { path: "/api/evermind", match: "contains", capability: "connected-feature", content: true, note: "Evermind memory" },
+  { path: "/api/sync", match: "prefix", capability: "synchronize", content: true, note: "the local-first sync transport \u2014 the records themselves" },
+  // PRD 36: a signed-in editor BINDS its local chat to a server chat so the chat's
+  // tickets, usage and memory land on it. The bind sends a title and a project — never
+  // the transcript (that is `/messages`, below, and the sync transport above).
+  { path: "/api/brain/chats", capability: "connected-feature", note: "binding a chat to the account \u2014 its title and project only" },
+  { path: "/api/brain/chats/*/messages", content: true, note: "a Brain chat's transcript" },
+  { path: "/api/chats/*/messages", content: true, note: "a chat's transcript" },
+  { path: "/api/brain/upload", content: true, note: "an uploaded file" },
+  { path: "/api/brain/fetch-url", content: true, note: "a page fetched for the Brain \u2014 the URL the person gave" },
+  { path: "/product-report", match: "suffix", content: true, note: "an error report \u2014 what was on screen" },
+  // Sockets that carry the person's content (an upgrade is a GET, so these keep the
+  // read default): live canvas sync, rooms and meetings, an execution's stream, an
+  // agent host's chat. A socket that only says "something changed" is not tagged.
+  { path: "/api/creation-sessions/*/ws", content: true, note: "a canvas session's live sync" },
+  { path: "/api/guest/rooms/*/ws", content: true, note: "a guest room's shared transcript and meeting" },
+  { path: "/api/agile/ceremonies/rooms/*/ws", content: true, note: "a ceremony room's live conversation" },
+  { path: "/api/meetings/rooms/*/ws", content: true, note: "a meeting room's signalling" },
+  { path: "/api/runtime/executions/*/stream", content: true, note: "an execution's live stream \u2014 messages, tool results, file changes" },
+  { path: "/api/agent-hosts/*/ws", content: true, note: "an agent host's chat" },
+  { path: "/api/guest/research", match: "prefix", content: true, note: "a guest canvas's research call \u2014 the query" },
+  { path: "/api/guest/career", match: "prefix", content: true, note: "a guest canvas's career tool \u2014 the r\xE9sum\xE9 / job text" },
+  { path: "/search", match: "suffix", capability: "connected-feature", note: "a search \u2014 a read" },
+  { path: "/api/dashboards/query", capability: "connected-feature", note: "a dashboard query \u2014 a read" },
+  { path: "/api/data-sources/*/query", capability: "connected-feature", note: "a data-source query \u2014 a read" },
+  { path: "/api/vscode/connect", capability: "connected-feature", note: "the editor presence beat" }
+]);
+
+// ../packages/local-first/src/domainToolClass.ts
+var LOCAL_DOMAIN_TOOL_NAMES = Object.freeze([
+  "project-create",
+  "project-update",
+  "project-move",
+  "project-archive",
+  "ticket-create",
+  "ticket-update",
+  "ticket-move",
+  "ticket-archive",
+  "ticket-delete",
+  "memory-recall",
+  "local-memory-recall",
+  "audit-finding",
+  "local-audit-finding"
+]);
+var CONNECTED_ONLY_DOMAIN_TOOL_NAMES = Object.freeze([
+  "cloud-execution",
+  "meeting-join",
+  "remote-session-read"
+]);
+var LOCAL = new Set(LOCAL_DOMAIN_TOOL_NAMES);
+var CONNECTED = new Set(CONNECTED_ONLY_DOMAIN_TOOL_NAMES);
+var LOCAL_CLASS = Object.freeze({ mode: "local" });
+var CONNECTED_CLASS = Object.freeze({ mode: "connected-only" });
+var UNKNOWN_CLASS = Object.freeze({ mode: "unknown" });
+
+// ../packages/local-first/src/journalCodec.ts
+var MAGIC_BYTES = 5;
+var JOURNAL_HEADER_BYTES = MAGIC_BYTES + 8;
+var RESET_PREFIX = new TextEncoder().encode('{"reset":true');
+var TABLES = (() => {
+  const tables = new Int32Array(8 * 256);
+  for (let n = 0; n < 256; n += 1) {
+    let c = n;
+    for (let bit = 0; bit < 8; bit += 1) c = c & 1 ? c >>> 1 ^ 3988292384 : c >>> 1;
+    tables[n] = c;
+  }
+  for (let n = 0; n < 256; n += 1) {
+    let c = tables[n];
+    for (let k = 1; k < 8; k += 1) {
+      c = tables[c & 255] ^ c >>> 8;
+      tables[k * 256 + n] = c;
+    }
+  }
+  return tables;
+})();
+
+// ../packages/local-first/src/journalCompaction.ts
+var DEFAULT_JOURNAL_COMPACTION = Object.freeze({
+  maxFrames: 8192,
+  maxBytes: 64 * 1024 * 1024
+});
+var DEFAULT_COMPACTION_FRAME = Object.freeze({
+  maxBytes: 256 * 1024,
+  maxRows: 500
+});
+var encoder = new TextEncoder();
+
+// ../packages/local-first/src/creationDestination.ts
+var LOCAL_CREATE_PATHS = Object.freeze([
+  Object.freeze({
+    id: "localWork.createProject",
+    module: "localWork.ts",
+    entry: "createLocalWork(store).createProject",
+    writes: Object.freeze(["project"])
+  }),
+  Object.freeze({
+    id: "localWork.createTicket",
+    module: "localWork.ts",
+    entry: "createLocalWork(store).createTicket",
+    writes: Object.freeze(["ticket"])
+  }),
+  Object.freeze({
+    id: "transactionalRecord.commit",
+    module: "transactionalRecord.ts",
+    entry: "createTransactionalRecordStore(options).commit",
+    writes: Object.freeze(["project", "ticket", "chat", "audit-run", "execution"])
+  }),
+  Object.freeze({
+    id: "hostChatRecord.ensureChat",
+    module: "hostChatRecord.ts",
+    entry: "createHostChatLog(store).appendTurn/appendRun/appendStep/appendApproval",
+    writes: Object.freeze(["chat"])
+  }),
+  Object.freeze({
+    id: "hostChatRecord.appendRun",
+    module: "hostChatRecord.ts",
+    entry: "createHostChatLog(store).appendRun",
+    writes: Object.freeze(["execution"])
+  }),
+  Object.freeze({
+    id: "localAudit.createLocalAuditFinding",
+    module: "localAudit.ts",
+    entry: "createLocalAuditFinding(store, input)",
+    writes: Object.freeze(["audit-finding"])
+  }),
+  Object.freeze({
+    id: "factProvenance.remember",
+    module: "factProvenance.ts",
+    entry: "createFactStore(store).remember",
+    writes: Object.freeze(["memory-fact"])
+  })
+]);
+
+// ../packages/local-first/src/holdLimits.ts
+var SYNC_EVENT_RETENTION_DAYS = 90;
+var DAY_MS = 24 * 60 * 60 * 1e3;
+var HOLD_MAX_AGE_MS = 7 * DAY_MS;
+var DEPENDENCY_PENDING_MAX_AGE_MS = SYNC_EVENT_RETENTION_DAYS * DAY_MS;
+var HOLD_BACKOFF_CAP_MS = 60 * 60 * 1e3;
+
+// ../packages/local-first/src/syncLease.ts
+var DEFAULT_COORDINATOR_WORK_TIMEOUT_MS = 5 * 6e4;
+
+// ../packages/local-first/src/redaction.ts
+var INDEXEDDB_REDACTED_KEYS = [
+  "token",
+  "password",
+  "authorization",
+  "cookie",
+  "apikey",
+  "clientsecret"
+];
+var INDEXEDDB_REDACTION_RULE = `Only exportForUploadOrLog() output may be uploaded or logged. It strips every secret-shaped key at every depth \u2014 a key whose lowercase name is one of ${INDEXEDDB_REDACTED_KEYS.join(", ")} or contains token, secret, password, authorization, cookie, or apikey \u2014 so accessToken, client_secret and sessionCookie are stripped too. The strip is recursive through arrays and nested objects, the input is not mutated, and a dropped key is absent rather than blanked. export() is the unfiltered local record and must not leave the device.`;
+
+// ../packages/local-first/src/tombstone.ts
+var RESNAPSHOT = Object.freeze({ action: "resnapshot" });
+
+// ../packages/local-first/src/applyServerCursor.ts
+var RESNAPSHOT2 = Object.freeze({ resnapshotRequired: true });
 
 // src/types.ts
 var STEP_MESSAGE_ROLE = "tool";
@@ -4049,12 +4466,6 @@ var CODE_CHANGE_TOOLS = /* @__PURE__ */ new Set([
 ]);
 function isCodeChangeTool(name) {
   return CODE_CHANGE_TOOLS.has(name);
-}
-
-// src/runActivity.ts
-function formatBytes(bytes) {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  return bytes < 1024 ? `${Math.round(bytes)} B` : `${(bytes / 1024).toFixed(1)} KB`;
 }
 
 // ../packages/run-guards/src/readinessClaim.ts
@@ -4366,8 +4777,8 @@ var PAGED_READ_TOOLS = {
 var READ_FILE_RESULT_CHARS = TOOL_OUTPUT_CAPS.read_file ?? 16e3;
 
 // src/brainTriage.ts
-var import_working5 = require("@seanhogg/builderforce-memory/working");
-var CONTEXT_PROMPT_PEAK = Math.round(import_working5.HISTORY_TOKEN_BUDGET * 1.5);
+var import_working6 = require("@seanhogg/builderforce-memory/working");
+var CONTEXT_PROMPT_PEAK = Math.round(import_working6.HISTORY_TOKEN_BUDGET * 1.5);
 function isFailedToolResult(result) {
   if (result == null) return false;
   if (typeof result === "object") {
@@ -4448,7 +4859,11 @@ function oversizedArgs(view) {
     const shared = sharingCalls(calls);
     const flagged = calls.filter((c) => c.argBytes >= RUN_FINDING_POLICY.oversizedArgBytes || shared.has(c));
     if (flagged.length === 0) continue;
-    const evidence = flagged.map((c) => callEvidence(c, void 0, `${c.argBytes} B of arguments${shared.has(c) ? " \xB7 repeats a block another call carries" : ""}`));
+    const evidence = flagged.map((c) => ({
+      ...callEvidence(c),
+      note: shared.has(c) ? "argBytesShared" : "argBytes",
+      params: { bytes: c.argBytes }
+    }));
     out.push(finding("oversized_args", "warn", { tool, bytes: Math.max(...flagged.map((c) => c.argBytes)), calls: flagged.length }, evidence));
   }
   for (const t of view.turns) {
@@ -4457,7 +4872,7 @@ function oversizedArgs(view) {
       "oversized_args",
       "warn",
       { tool: t.handOffVia, bytes: t.argBytes, calls: 1 },
-      [turnEvidence(t, t.handOffVia, `${t.argBytes} B of arguments`)]
+      [{ ...turnEvidence(t, t.handOffVia), note: "argBytes", params: { bytes: t.argBytes } }]
     ));
   }
   return out;
@@ -4480,24 +4895,25 @@ function promptBloat(view) {
 }
 
 // src/runFindings/detectors/repeatedNarration.ts
-function wordsOf(text) {
-  return new Set(text.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? []);
+var import_working7 = require("@seanhogg/builderforce-memory/working");
+function asNarration(t) {
+  return { role: "assistant", content: t.text, tool_calls: t.calls.map(() => ({})) };
 }
-function overlap(a, b) {
-  const small = a.size <= b.size ? a : b;
-  const large = small === a ? b : a;
-  if (small.size === 0) return 0;
-  let shared = 0;
-  for (const w of small) if (large.has(w)) shared += 1;
-  return shared / small.size;
-}
+var isCandidate = (t) => t.calls.length > 0 && t.text.trim().length > 0;
 function repeatedNarration(view) {
-  const narrated = view.turns.filter((t) => t.calls.length > 0 && t.text.trim()).map((t) => ({ t, words: wordsOf(t.text) })).filter((n) => n.words.size >= RUN_FINDING_POLICY.narrationMinWords);
+  const msgs = view.turns.map(asNarration);
+  const folded = (0, import_working7.foldRepeatedNarration)(msgs, RUN_FINDING_POLICY.narrationOverlap);
   const repeats = /* @__PURE__ */ new Set();
-  for (let i = 1; i < narrated.length; i++) {
-    if (overlap(narrated[i - 1].words, narrated[i].words) < RUN_FINDING_POLICY.narrationOverlap) continue;
-    repeats.add(narrated[i - 1].t);
-    repeats.add(narrated[i].t);
+  let lastKept = null;
+  for (let i = 0; i < view.turns.length; i++) {
+    const t = view.turns[i];
+    if (!isCandidate(t)) continue;
+    if (folded[i] === msgs[i]) {
+      lastKept = t;
+      continue;
+    }
+    if (lastKept) repeats.add(lastKept);
+    repeats.add(t);
   }
   if (repeats.size === 0) return [];
   const turns = [...repeats].sort((a, b) => a.index - b.index);
@@ -4548,7 +4964,7 @@ function slowTurns(view) {
   const slow = view.turns.filter((t) => t.durationMs >= RUN_FINDING_POLICY.slowTurnMs);
   if (slow.length === 0) return [];
   const slowestMs = Math.max(...slow.map((t) => t.durationMs));
-  return [finding("slow_turns", "warn", { turns: slow.length, slowestMs }, slow.map((t) => turnEvidence(t, "llm.complete", `${t.durationMs} ms \xB7 ${t.completionTokens} completion tok \xB7 ${formatBytes(t.argBytes)} of arguments`)))];
+  return [finding("slow_turns", "warn", { turns: slow.length, slowestMs }, slow.map((t) => ({ ...turnEvidence(t), note: "slowTurn", params: { ms: t.durationMs, completionTokens: t.completionTokens, argBytes: t.argBytes } })))];
 }
 
 // src/runFindings/detectors/stoppedUnverified.ts
@@ -4638,14 +5054,6 @@ function jsonBytes(v) {
     return 0;
   }
 }
-function changedPaths(args) {
-  const one = (a) => {
-    const p = a.path ?? a.file_path ?? a.filePath;
-    return typeof p === "string" && p.trim() ? p.trim().replace(/\\/g, "/").replace(/^\.\//, "") : null;
-  };
-  const paths = Array.isArray(args.edits) ? args.edits.map((e) => one(record2(e))) : [one(args)];
-  return [...new Set(paths.filter((p) => p !== null))];
-}
 function isCheck(ev) {
   if (CHECK_TOOL.test(ev.label)) return true;
   return SHELL_TOOLS.has(ev.label) && CHECK_COMMAND.test(commandOf(ev));
@@ -4663,7 +5071,7 @@ function callOf(ev, step, turn) {
     argBytes: jsonBytes(ev.args),
     write,
     check: ok && isCheck(ev),
-    paths: write ? changedPaths(args) : []
+    paths: write ? editedPathsOf(ev.label, args) : []
   };
 }
 function kindOf(t, failed) {
@@ -4760,7 +5168,7 @@ function summaryOf(view, findings, identity) {
 }
 function detectRunFindings(events, messages = [], identity = {}) {
   const view = buildRunView(events, messages);
-  const findings = RUN_FINDING_REGISTRY.flatMap((d) => d.detect(view)).sort(compareFindings);
+  const findings = withUniqueIds(RUN_FINDING_REGISTRY.flatMap((d) => d.detect(view)).sort(compareFindings));
   return {
     summary: summaryOf(view, findings, identity),
     turns: view.turns.map((t) => ({

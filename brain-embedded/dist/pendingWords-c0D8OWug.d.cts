@@ -1,5 +1,5 @@
-import { B as BrainTraceEvent, x as StreamFailureDetail, U as UsageSurface, a as BrainMessage } from './brainTriage-RveFqfcR.cjs';
-import { L as LocalRuntimeId, b as LocalEndpoint, a as LocalRuntimeProbe, c as LocalModel } from './probe-DkPrGnWT.cjs';
+import { B as BrainTraceEvent, U as UsageSurface, a as BrainMessage } from './brainTriage-0eq1J6lS.cjs';
+import { L as LocalRuntimeId, a as LocalEndpoint, b as LocalRuntimeProbe, c as LocalModel } from './probe-BGCNrsPi.cjs';
 import { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import { ConsolidateOptions, ConsolidatedMemory } from '@seanhogg/builderforce-memory/working';
 
@@ -238,16 +238,41 @@ interface EvidencePolicy {
     required: Readonly<Record<string, readonly CheckKind[]>>;
     /** A NEW source file must ship with a test in the same push. */
     newSourceNeedsTest: boolean;
+    /**
+     * New source files the test rule does not apply to — regex sources matched against the
+     * normalised path (barrels, type-only modules, declarations, config, scripts, label
+     * catalogs, fixtures). Absent ⇒ none exempt.
+     */
+    newSourceTestExempt?: readonly string[];
+    /**
+     * What counts as a new file's test in the same push. `stem`: `x.test.ts` / `x.foo.test.ts`
+     * named after the file; `directory`: any test in the file's directory, or a test named
+     * after the directory beside it (`detectors.write.test.ts` next to `detectors/`);
+     * `import`: a test whose host-read imports resolve to the file. Absent ⇒ `["stem"]`.
+     */
+    newSourceTestCoverage?: readonly NewSourceTestCoverage[];
     /** Per check; a timeout records "unavailable", never "pass" (OD-3). */
     checkTimeoutMs: number;
 }
+type NewSourceTestCoverage = "stem" | "directory" | "import";
 interface OutgoingFile {
     /** Key the ledger was recorded under (repo-relative with forward slashes, or absolute). */
     absPath: string;
-    /** Hash of the file's CURRENT bytes, computed by the host at gate time. */
+    /** Hash of the file's bytes AT HEAD (what is pushed), computed by the host at gate time. */
     hash: string;
     isNew: boolean;
     deleted: boolean;
+    /**
+     * Set when the host could not verify the pushed bytes (e.g. the file is also modified
+     * in the working tree, so on-disk checks would test other bytes). The gate reports it
+     * "unavailable" with this reason and never passes it on working-tree evidence (OD-3).
+     */
+    unavailable?: string;
+    /**
+     * For a test file: the paths its relative imports resolve to (same key space as
+     * `absPath`, extension optional). Read by the host from the pushed bytes.
+     */
+    imports?: readonly string[];
 }
 /** OD-1: an independent review verdict, produced by a different model over the diff. */
 interface ReviewVerdict {
@@ -688,72 +713,6 @@ interface StreamChatResult {
     localFirst?: LocalFirstAttemptSummary[];
 }
 /**
- * The stream broke AFTER the gateway committed to a model: an in-band `error` frame, or
- * the connection dropping mid-answer. The gateway can only fail over before it sends
- * headers, so from here the caller is the only one who can route around the model —
- * `model` is what it needs to do that (`excludeModels` on a retry). Before this, both
- * cases ended the stream as a clean, empty `stop`, and the agent run simply ended.
- */
-declare class StreamInterruptedError extends Error {
-    readonly model: string | undefined;
-    /** What the failed request looked like (destination, phase, elapsed, size) - for logs and triage. */
-    readonly detail?: StreamFailureDetail;
-    /**
-     * The model was PICKED (named and held strictly) and stayed silent or dropped the connection - the only interruption
-     * where "choose another model" is the right offer. Never set for an in-band provider error.
-     */
-    readonly pinned: boolean;
-    constructor(message: string, model: string | undefined, detail?: StreamFailureDetail, options?: {
-        pinned?: boolean;
-    });
-}
-/**
- * A transport-level failure: the fetch itself threw (network error, DNS failure,
- * connection refused, timeout before response). This is distinct from the gateway
- * returning an HTTP error — that reaches us as a non-OK Response and maps through
- * `transport.mapError`. This catches the case where NO response was ever received.
- *
- * The caller retries these the same way as `StreamInterruptedError`: under auto-routing,
- * the turn is retried on another connected model. The model is unknown because the
- * failure happened BEFORE the gateway could commit to one.
- */
-declare class TransportError extends Error {
-    readonly model: string | undefined;
-    /**
-     * The gateway could not be reached at all, and stayed unreachable through every
-     * backoff retry. Another model cannot help — none was ever asked — so the caller
-     * reports the outage instead of retrying.
-     */
-    readonly unreachable: boolean;
-    /** As {@link StreamInterruptedError.pinned}. */
-    readonly pinned: boolean;
-    constructor(message: string, model?: string | undefined, options?: {
-        cause?: unknown;
-        unreachable?: boolean;
-        pinned?: boolean;
-    });
-}
-/**
- * The model fell into a decoding loop — the same block of prose, verbatim, over and over
- * (`repetitionLoop.ts`). The stream is cut the moment it is seen instead of running to the
- * output ceiling while the reader watches one sentence repeat.
- *
- * An interruption like any other: the model is still answering, just uselessly, and only
- * the caller can route around it — so a caller that retries interrupted turns on another
- * model (the Brain run) does so here without knowing the difference. `kept` is what the
- * model said before it looped, for a caller that would rather show that than retry.
- */
-declare class RepetitionLoopError extends StreamInterruptedError {
-    readonly kept: string;
-    readonly block: string;
-    readonly copies: number;
-    constructor(loop: {
-        block: string;
-        copies: number;
-        kept: string;
-    }, model: string | undefined);
-}
-/**
  * Stream a chat completion. Resolves once the stream ends with the stitched
  * final text and any tool calls the model requested.
  */
@@ -1116,6 +1075,7 @@ declare function parseSubagentOrigin(msg: {
  * them keeps its own list of names. A surface that cannot say what it advertises gets the
  * SERVER vocabulary, which is what every surface used before the editor filed locally.
  */
+
 declare const SERVER_TICKET_CREATE_TOOL = "builtin_tasks_create";
 declare const LOCAL_TICKET_CREATE_TOOL = "ticket-create";
 interface TicketToolVocabulary {
@@ -1814,7 +1774,11 @@ interface VerifierPort {
     /** Fast tier, ≤ 3 s: language-server diagnostics for exactly these files. Null = unavailable. */
     diagnostics(absPaths: readonly string[]): Promise<CheckRecord | null>;
     /** Full tier for these files: owning packages' typecheck + targeted tests + repo guards. Cached by (path, hash, check). */
-    full(absPaths: readonly string[]): Promise<ReadonlyMap<string, readonly CheckRecord[]>>;
+    full(absPaths: readonly string[], 
+    /** `budgetMs` bounds the whole call: a check that cannot finish inside it is recorded "unavailable", never waited on. */
+    opts?: {
+        budgetMs?: number;
+    }): Promise<ReadonlyMap<string, readonly CheckRecord[]>>;
 }
 /** The git port: the host reads the REAL commits, never the model's claims. */
 interface GitPort {
@@ -1823,11 +1787,19 @@ interface GitPort {
      * `diff` is the text `diffHash` hashes — what the reviewer reads (OD-1); a reviewer
      * handed no diff hashes the empty string and can never match `diffHash`.
      */
-    outgoing(repo: string): Promise<{
+    outgoing(repo: string, 
+    /** `pullRequest` ⇒ compare against the PR's base (merge-base with it), not `@{u}`. */
+    opts?: {
+        pullRequest?: {
+            base?: string;
+        };
+    }): Promise<{
         files: OutgoingFile[];
         diffHash: string;
         baseBranch: boolean;
         diff?: string;
+        /** Why the outgoing change could not be computed (no upstream, empty set): reported "unavailable", never a pass, never reviewed. */
+        unavailable?: string;
     }>;
 }
 /** The reviewer port: OD-1, one review sub-run by a model that did not author the change. */
@@ -2225,4 +2197,4 @@ declare function replayPendingWords(chatId: number, persistence: Pick<BrainRunPe
 /** The app started: replay every chat this person left words in, not only the one that happens to be opened. */
 declare function replayAllPendingWords(persistence: Pick<BrainRunPersistence, 'sendMessages'>): Promise<number>;
 
-export { LOCAL_TICKET_CREATE_TOOL as $, ASK_USER_TOOL as A, type BrainRunPersistence as B, type ChatCompletionMessage as C, type DetectedLanguage as D, type Effort as E, type AskUserMessageLike as F, type AskUserOption as G, type AskUserPayload as H, type AskUserToolSpec as I, type JsonTaskOptions as J, type AssembledToolCall as K, type LocalFirstAccount as L, type AvoidedRunCall as M, type BrainRunOutcome as N, type OnDeviceTasks as O, type ProjectMemoryRequest as P, CHAT_MODES as Q, type RunKey as R, type StreamChatOptions as S, type TranslateOptions as T, CHAT_MODE_ICON as U, type ChatWorkDirectiveOptions as V, type WriteOptions as W, type CompletionMetadata as X, type EffortProfile as Y, type GitPort as Z, type ImageUrlContentPart as _, type BrainRunRequest as a, registerPendingWordsReplay as a$, type LocalFirstAttemptSummary as a0, MAX_STOP_HOOK_ROUNDS as a1, type MemoryAnswerOptions as a2, type MemoryFirstAnswer as a3, type MemorySurface as a4, type ModelPreflightResult as a5, type ModelWindowSources as a6, NEW_CHAT_MODE as a7, type OnDeviceEngine as a8, type OnDeviceTaskEvent as a9, chatConversationDirective as aA, chatModeDirective as aB, chatRosterFromParticipants as aC, chatWorkDirective as aD, clearPendingWords as aE, coerceAskUserPayload as aF, contextWindowOf as aG, effortProfile as aH, isChatMode as aI, isEffort as aJ, localFallbackTrace as aK, normalizeChatMode as aL, parseAskUser as aM, parseSubagentOrigin as aN, projectMemoryHooks as aO, reasoningForRun as aP, resolveContextWindow as aQ, savedChatOf as aR, selectPendingAskUser as aS, serializeAskUser as aT, setPendingWordsOwner as aU, streamChatCompletion as aV, stripAskUser as aW, summarizeLocalFirstAttempt as aX, ticketToolVocabulary as aY, forgetPendingWords as aZ, markPendingWordsRead as a_, type PendingAskUser as aa, type PrefetchResult as ab, RESTING_CHAT_MODE as ac, type ReasoningLevel as ad, RepetitionLoopError as ae, type ReviewerPort as af, type RunLineage as ag, type RunOutcomeReport as ah, type RunPipelineSettings as ai, type RunStageModels as aj, type RunStopHook as ak, type RunStopInput as al, SERVER_TICKET_CREATE_TOOL as am, SERVER_TICKET_TOOLS as an, SUBAGENT_OF_META_KEY as ao, type ServedOption as ap, type ServedRead as aq, StreamInterruptedError as ar, type SubagentOrigin as as, type TextContentPart as at, TransportError as au, type UpstreamTurnEvidence as av, type VerifierPort as aw, askStopHook as ax, askUserAnchorId as ay, askUserBlock as az, type BrainTransport as b, rememberPendingWords as b0, replayAllPendingWords as b1, replayPendingWords as b2, type BrainStreamFn as c, type RunEndOutcome as d, type CompletionUsage as e, type StreamHandlers as f, type StreamChatResult as g, type LocalFirstAttemptRecord as h, type LocalFirstAttempt as i, type LocalFirstWorkload as j, type OnDeviceObserver as k, type OnDeviceTaskKind as l, type ServedBy as m, type SummarizeOptions as n, type RewriteOptions as o, type JsonSchema as p, type EvermindRunHooks as q, type BrainToolSpec as r, type ChatMode as s, type RunWindowSources as t, type ReasoningIntent as u, type ChatRosterAgent as v, type ContentPart as w, type TicketToolVocabulary as x, ASK_USER_TOOL_SPEC as y, type AnswerOriginCost as z };
+export { LOCAL_TICKET_CREATE_TOOL as $, ASK_USER_TOOL as A, type BrainRunPersistence as B, type ChatCompletionMessage as C, type DetectedLanguage as D, type Effort as E, type AskUserMessageLike as F, type AskUserOption as G, type AskUserPayload as H, type AskUserToolSpec as I, type JsonTaskOptions as J, type AssembledToolCall as K, type LocalFirstAccount as L, type AvoidedRunCall as M, type BrainRunOutcome as N, type OnDeviceTasks as O, type ProjectMemoryRequest as P, CHAT_MODES as Q, type RunKey as R, type StreamChatOptions as S, type TranslateOptions as T, CHAT_MODE_ICON as U, type ChatWorkDirectiveOptions as V, type WriteOptions as W, type CompletionMetadata as X, type EffortProfile as Y, type GitPort as Z, type ImageUrlContentPart as _, type BrainRunRequest as a, replayPendingWords as a$, type LocalFirstAttemptSummary as a0, MAX_STOP_HOOK_ROUNDS as a1, type MemoryAnswerOptions as a2, type MemoryFirstAnswer as a3, type MemorySurface as a4, type ModelPreflightResult as a5, type ModelWindowSources as a6, NEW_CHAT_MODE as a7, type OnDeviceEngine as a8, type OnDeviceTaskEvent as a9, chatWorkDirective as aA, clearPendingWords as aB, coerceAskUserPayload as aC, contextWindowOf as aD, effortProfile as aE, isChatMode as aF, isEffort as aG, localFallbackTrace as aH, normalizeChatMode as aI, parseAskUser as aJ, parseSubagentOrigin as aK, projectMemoryHooks as aL, reasoningForRun as aM, resolveContextWindow as aN, savedChatOf as aO, selectPendingAskUser as aP, serializeAskUser as aQ, setPendingWordsOwner as aR, streamChatCompletion as aS, stripAskUser as aT, summarizeLocalFirstAttempt as aU, ticketToolVocabulary as aV, forgetPendingWords as aW, markPendingWordsRead as aX, registerPendingWordsReplay as aY, rememberPendingWords as aZ, replayAllPendingWords as a_, type PendingAskUser as aa, type PrefetchResult as ab, RESTING_CHAT_MODE as ac, type ReasoningLevel as ad, type ReviewerPort as ae, type RunLineage as af, type RunOutcomeReport as ag, type RunPipelineSettings as ah, type RunStageModels as ai, type RunStopHook as aj, type RunStopInput as ak, SERVER_TICKET_CREATE_TOOL as al, SERVER_TICKET_TOOLS as am, SUBAGENT_OF_META_KEY as an, type ServedOption as ao, type ServedRead as ap, type SubagentOrigin as aq, type TextContentPart as ar, type UpstreamTurnEvidence as as, type VerifierPort as at, askStopHook as au, askUserAnchorId as av, askUserBlock as aw, chatConversationDirective as ax, chatModeDirective as ay, chatRosterFromParticipants as az, type BrainTransport as b, type BrainStreamFn as c, type RunEndOutcome as d, type CompletionUsage as e, type StreamHandlers as f, type StreamChatResult as g, type LocalFirstAttemptRecord as h, type LocalFirstAttempt as i, type LocalFirstWorkload as j, type OnDeviceTaskKind as k, type SummarizeOptions as l, type RewriteOptions as m, type OnDeviceObserver as n, type ServedBy as o, type JsonSchema as p, type EvermindRunHooks as q, type BrainToolSpec as r, type ChatMode as s, type RunWindowSources as t, type ReasoningIntent as u, type ChatRosterAgent as v, type ContentPart as w, type TicketToolVocabulary as x, ASK_USER_TOOL_SPEC as y, type AnswerOriginCost as z };

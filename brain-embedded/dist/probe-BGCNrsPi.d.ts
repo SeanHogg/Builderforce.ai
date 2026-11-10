@@ -80,4 +80,4 @@ interface LocalRuntimeProbe {
     models: LocalModel[];
 }
 
-export type { LocalRuntimeId as L, LocalRuntimeProbe as a, LocalEndpoint as b, LocalModel as c };
+export type { LocalRuntimeId as L, LocalEndpoint as a, LocalRuntimeProbe as b, LocalModel as c };

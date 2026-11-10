@@ -21,6 +21,382 @@ function describeStreamFailure(d) {
   return parts.join(" \xB7 ");
 }
 
+// ../packages/local-first/src/policy.ts
+var LOCAL_FIRST_POLICY = Object.freeze({
+  synchronize: false,
+  gatewayInference: false,
+  connectedFeatures: false,
+  authenticate: false,
+  modelDownloads: false,
+  directProviders: false,
+  externalMcp: false,
+  gitRemotes: false
+});
+
+// ../packages/local-first/src/inferenceMode.ts
+var INFERENCE_MODES = Object.freeze(["hybrid", "local-only", "specific"]);
+function isInferenceMode(value) {
+  return typeof value === "string" && INFERENCE_MODES.includes(value);
+}
+function defaultInferenceMode(context) {
+  return context.signedIn ? "hybrid" : "local-only";
+}
+
+// ../packages/local-first/src/platformRoutes.ts
+var PLATFORM_ROUTE_RULES = Object.freeze([
+  { path: "/api/auth", match: "contains", capability: "authenticate", note: "token exchange and session" },
+  { path: "/api/vscode/tenants/*/token", capability: "authenticate", note: "the editor's tenant token exchange" },
+  { path: "/chat/completions", match: "contains", capability: "gateway-inference", content: true, note: "a gateway completion \u2014 the prompt" },
+  { path: "/api/brain/stream", capability: "gateway-inference", content: true, note: "the Brain's streamed turn \u2014 the prompt" },
+  { path: "/llm/v1/models", capability: "connected-feature", note: "the model catalog" },
+  { path: "/api/llm/models", capability: "connected-feature", note: "the model catalog" },
+  { path: "/api/limbic/block", capability: "connected-feature", content: true, note: "personality block \u2014 once per session; the per-turn affect is appraised on the device" },
+  { path: "/api/limbic", match: "prefix", capability: "connected-feature", content: true, note: "the personality / affect store" },
+  { path: "/api/projects/*/evermind/recall", capability: "connected-feature", content: true, note: "memory recall \u2014 a read that sends the prompt" },
+  { path: "/api/projects/*/evermind", match: "contains", capability: "connected-feature", content: true, note: "a project's Evermind memory" },
+  { path: "/api/evermind", match: "contains", capability: "connected-feature", content: true, note: "Evermind memory" },
+  { path: "/api/sync", match: "prefix", capability: "synchronize", content: true, note: "the local-first sync transport \u2014 the records themselves" },
+  // PRD 36: a signed-in editor BINDS its local chat to a server chat so the chat's
+  // tickets, usage and memory land on it. The bind sends a title and a project — never
+  // the transcript (that is `/messages`, below, and the sync transport above).
+  { path: "/api/brain/chats", capability: "connected-feature", note: "binding a chat to the account \u2014 its title and project only" },
+  { path: "/api/brain/chats/*/messages", content: true, note: "a Brain chat's transcript" },
+  { path: "/api/chats/*/messages", content: true, note: "a chat's transcript" },
+  { path: "/api/brain/upload", content: true, note: "an uploaded file" },
+  { path: "/api/brain/fetch-url", content: true, note: "a page fetched for the Brain \u2014 the URL the person gave" },
+  { path: "/product-report", match: "suffix", content: true, note: "an error report \u2014 what was on screen" },
+  // Sockets that carry the person's content (an upgrade is a GET, so these keep the
+  // read default): live canvas sync, rooms and meetings, an execution's stream, an
+  // agent host's chat. A socket that only says "something changed" is not tagged.
+  { path: "/api/creation-sessions/*/ws", content: true, note: "a canvas session's live sync" },
+  { path: "/api/guest/rooms/*/ws", content: true, note: "a guest room's shared transcript and meeting" },
+  { path: "/api/agile/ceremonies/rooms/*/ws", content: true, note: "a ceremony room's live conversation" },
+  { path: "/api/meetings/rooms/*/ws", content: true, note: "a meeting room's signalling" },
+  { path: "/api/runtime/executions/*/stream", content: true, note: "an execution's live stream \u2014 messages, tool results, file changes" },
+  { path: "/api/agent-hosts/*/ws", content: true, note: "an agent host's chat" },
+  { path: "/api/guest/research", match: "prefix", content: true, note: "a guest canvas's research call \u2014 the query" },
+  { path: "/api/guest/career", match: "prefix", content: true, note: "a guest canvas's career tool \u2014 the r\xE9sum\xE9 / job text" },
+  { path: "/search", match: "suffix", capability: "connected-feature", note: "a search \u2014 a read" },
+  { path: "/api/dashboards/query", capability: "connected-feature", note: "a dashboard query \u2014 a read" },
+  { path: "/api/data-sources/*/query", capability: "connected-feature", note: "a data-source query \u2014 a read" },
+  { path: "/api/vscode/connect", capability: "connected-feature", note: "the editor presence beat" }
+]);
+
+// ../packages/local-first/src/entityId.ts
+var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var SYNC_ID_TEXT_RE = /^[1-9]\d*$/;
+var TIER_REF_RE = /^([A-Za-z][\w-]*):(\S.*)$/;
+function isLocalId(v) {
+  return typeof v === "string" && UUID_RE.test(v);
+}
+function parseSyncId(v) {
+  if (typeof v === "number") return Number.isSafeInteger(v) && v > 0 ? v : null;
+  if (typeof v !== "string" || !SYNC_ID_TEXT_RE.test(v)) return null;
+  const n = Number(v);
+  return Number.isSafeInteger(n) ? n : null;
+}
+function syncIdText(id) {
+  return String(id);
+}
+function parseEntityRef(v) {
+  if (typeof v === "number") {
+    const sync = parseSyncId(v);
+    return sync === null ? null : { sync };
+  }
+  if (typeof v === "string") {
+    if (isLocalId(v)) return { local: v };
+    const sync = parseSyncId(v);
+    if (sync !== null) return { sync };
+    const tier = TIER_REF_RE.exec(v);
+    return tier ? { tier: { kind: tier[1], ref: tier[2] } } : null;
+  }
+  if (typeof v === "object" && v !== null) {
+    const ref = v;
+    if ("local" in ref) return isLocalId(ref.local) ? { local: ref.local } : null;
+    if ("sync" in ref) {
+      const sync = parseSyncId(ref.sync);
+      return sync === null ? null : { sync };
+    }
+    if ("tier" in ref && typeof ref.tier === "object" && ref.tier !== null) {
+      const { kind, ref: tierRef } = ref.tier;
+      if (typeof kind === "string" && kind !== "" && typeof tierRef === "string" && tierRef !== "") {
+        return { tier: { kind, ref: tierRef } };
+      }
+    }
+  }
+  return null;
+}
+
+// ../packages/local-first/src/records.ts
+var UNBOUND_DESTINATION = { kind: "unbound" };
+
+// ../packages/local-first/src/storeContract.ts
+var SCAN_STOP = /* @__PURE__ */ Symbol.for("builderforce.local-first.scan-stop");
+
+// ../packages/local-first/src/clone.ts
+function clone(value) {
+  return structuredClone(value);
+}
+
+// ../packages/local-first/src/payloadHash.ts
+function fnv1a32(text, seed = 2166136261) {
+  let hash2 = seed >>> 0;
+  for (let index = 0; index < text.length; index += 1) {
+    hash2 ^= text.charCodeAt(index);
+    hash2 = Math.imul(hash2, 16777619);
+  }
+  return hash2 >>> 0;
+}
+function hashPayload(payload) {
+  const text = JSON.stringify(payload) ?? "null";
+  return `fnv1a:${fnv1a32(text).toString(16).padStart(8, "0")}`;
+}
+
+// ../packages/local-first/src/store.ts
+async function selectRecords(tx, type, where) {
+  const matches = [];
+  await tx.scan(type, (row) => {
+    if (!where || where(row)) matches.push(row);
+  });
+  return clone(matches);
+}
+async function selectPending(tx, where, destination) {
+  const matches = [];
+  await tx.scanPending((event) => {
+    if (event.deadLetter) return;
+    if (!where || where(event)) matches.push(event);
+  }, destination);
+  matches.sort((a, b) => a.localSequence - b.localSequence);
+  return clone(matches);
+}
+function newLocalRecord(input) {
+  const at2 = input.occurredAt ?? (/* @__PURE__ */ new Date()).toISOString();
+  return {
+    id: input.id,
+    entityType: input.entityType,
+    schemaVersion: input.schemaVersion ?? 1,
+    version: 1,
+    destination: input.destination ?? UNBOUND_DESTINATION,
+    occurredAt: at2,
+    updatedAt: at2,
+    payload: input.payload,
+    provenance: { deviceId: input.deviceId, source: "local" }
+  };
+}
+
+// ../packages/local-first/src/domainToolClass.ts
+var LOCAL_DOMAIN_TOOL_NAMES = Object.freeze([
+  "project-create",
+  "project-update",
+  "project-move",
+  "project-archive",
+  "ticket-create",
+  "ticket-update",
+  "ticket-move",
+  "ticket-archive",
+  "ticket-delete",
+  "memory-recall",
+  "local-memory-recall",
+  "audit-finding",
+  "local-audit-finding"
+]);
+var CONNECTED_ONLY_DOMAIN_TOOL_NAMES = Object.freeze([
+  "cloud-execution",
+  "meeting-join",
+  "remote-session-read"
+]);
+var LOCAL = new Set(LOCAL_DOMAIN_TOOL_NAMES);
+var CONNECTED = new Set(CONNECTED_ONLY_DOMAIN_TOOL_NAMES);
+var LOCAL_CLASS = Object.freeze({ mode: "local" });
+var CONNECTED_CLASS = Object.freeze({ mode: "connected-only" });
+var UNKNOWN_CLASS = Object.freeze({ mode: "unknown" });
+
+// ../packages/local-first/src/journalCodec.ts
+var MAGIC_BYTES = 5;
+var JOURNAL_HEADER_BYTES = MAGIC_BYTES + 8;
+var RESET_PREFIX = new TextEncoder().encode('{"reset":true');
+var TABLES = (() => {
+  const tables = new Int32Array(8 * 256);
+  for (let n = 0; n < 256; n += 1) {
+    let c = n;
+    for (let bit = 0; bit < 8; bit += 1) c = c & 1 ? c >>> 1 ^ 3988292384 : c >>> 1;
+    tables[n] = c;
+  }
+  for (let n = 0; n < 256; n += 1) {
+    let c = tables[n];
+    for (let k = 1; k < 8; k += 1) {
+      c = tables[c & 255] ^ c >>> 8;
+      tables[k * 256 + n] = c;
+    }
+  }
+  return tables;
+})();
+
+// ../packages/local-first/src/journalCompaction.ts
+var DEFAULT_JOURNAL_COMPACTION = Object.freeze({
+  maxFrames: 8192,
+  maxBytes: 64 * 1024 * 1024
+});
+var DEFAULT_COMPACTION_FRAME = Object.freeze({
+  maxBytes: 256 * 1024,
+  maxRows: 500
+});
+var encoder = new TextEncoder();
+
+// ../packages/local-first/src/creationDestination.ts
+var LOCAL_CREATE_PATHS = Object.freeze([
+  Object.freeze({
+    id: "localWork.createProject",
+    module: "localWork.ts",
+    entry: "createLocalWork(store).createProject",
+    writes: Object.freeze(["project"])
+  }),
+  Object.freeze({
+    id: "localWork.createTicket",
+    module: "localWork.ts",
+    entry: "createLocalWork(store).createTicket",
+    writes: Object.freeze(["ticket"])
+  }),
+  Object.freeze({
+    id: "transactionalRecord.commit",
+    module: "transactionalRecord.ts",
+    entry: "createTransactionalRecordStore(options).commit",
+    writes: Object.freeze(["project", "ticket", "chat", "audit-run", "execution"])
+  }),
+  Object.freeze({
+    id: "hostChatRecord.ensureChat",
+    module: "hostChatRecord.ts",
+    entry: "createHostChatLog(store).appendTurn/appendRun/appendStep/appendApproval",
+    writes: Object.freeze(["chat"])
+  }),
+  Object.freeze({
+    id: "hostChatRecord.appendRun",
+    module: "hostChatRecord.ts",
+    entry: "createHostChatLog(store).appendRun",
+    writes: Object.freeze(["execution"])
+  }),
+  Object.freeze({
+    id: "localAudit.createLocalAuditFinding",
+    module: "localAudit.ts",
+    entry: "createLocalAuditFinding(store, input)",
+    writes: Object.freeze(["audit-finding"])
+  }),
+  Object.freeze({
+    id: "factProvenance.remember",
+    module: "factProvenance.ts",
+    entry: "createFactStore(store).remember",
+    writes: Object.freeze(["memory-fact"])
+  })
+]);
+
+// ../packages/local-first/src/journalRules.ts
+var BOUND_ONLY_VERSION = 0;
+var PAYLOAD_ON_DELETE = /* @__PURE__ */ new Set(["chat-ticket-link"]);
+var importKey = (type, id) => `${type}:${id}:import`;
+function isOwnRecord(row, deviceId) {
+  return row.provenance?.source !== "imported" || row.provenance.deviceId === deviceId;
+}
+function isImported(mapping) {
+  return mapping !== void 0 && mapping.serverVersion > BOUND_ONLY_VERSION;
+}
+function unboundMarker(record2, operation) {
+  const text = JSON.stringify(record2.payload) ?? "null";
+  return {
+    operation,
+    payloadSize: text.length,
+    payloadHash: hashPayload(record2.payload),
+    payload: null
+  };
+}
+async function dropPending(tx, record2) {
+  const stale = await selectPending(tx, (event) => event.clientEntityId === record2.id && event.entityType === record2.entityType);
+  if (stale.length > 0) await tx.acknowledge(stale.map((event) => event.eventId));
+}
+function importPayload(record2, mapping) {
+  if (record2.entityType !== "chat" || mapping?.serverVersion !== BOUND_ONLY_VERSION) return record2.payload;
+  const serverId = parseSyncId(mapping.syncId);
+  return serverId !== null ? { ...record2.payload, serverId } : record2.payload;
+}
+async function queueImport(tx, record2, chatClientId, waitsOn = []) {
+  await dropPending(tx, record2);
+  if (record2.deletedAt) return;
+  const mapping = await tx.mapping(record2.entityType, record2.id, record2.destination);
+  await tx.append({
+    idempotencyKey: importKey(record2.entityType, record2.id),
+    clientEntityId: record2.id,
+    entityType: record2.entityType,
+    operation: "import",
+    schemaVersion: record2.schemaVersion,
+    occurredAt: record2.occurredAt,
+    dependsOn: [...chatClientId && record2.entityType !== "chat" ? [importKey("chat", chatClientId)] : [], ...waitsOn],
+    destination: record2.destination,
+    payload: importPayload(record2, mapping)
+  });
+}
+async function journalWrite(tx, record2, operation, options) {
+  if (record2.destination.kind === "unbound") {
+    await tx.append({
+      idempotencyKey: options.key,
+      clientEntityId: record2.id,
+      entityType: record2.entityType,
+      schemaVersion: record2.schemaVersion,
+      occurredAt: record2.occurredAt,
+      ...record2.baseVersion !== void 0 ? { baseVersion: record2.baseVersion } : {},
+      dependsOn: options.dependsOn ?? [],
+      destination: record2.destination,
+      // The marker carries size + a content hash of the real payload, never the
+      // payload itself; the record is the only copy while unbound (module comment).
+      ...unboundMarker(record2, operation)
+    });
+    return;
+  }
+  const mapping = await tx.mapping(record2.entityType, record2.id, record2.destination);
+  if (!isImported(mapping)) {
+    await queueImport(tx, record2, options.chatClientId);
+    return;
+  }
+  await dropPending(tx, record2);
+  await tx.append({
+    idempotencyKey: `${options.key}:server`,
+    clientEntityId: record2.id,
+    entityType: record2.entityType,
+    operation,
+    schemaVersion: record2.schemaVersion,
+    occurredAt: record2.occurredAt,
+    baseVersion: mapping.serverVersion,
+    dependsOn: [],
+    destination: record2.destination,
+    payload: operation === "delete" && !PAYLOAD_ON_DELETE.has(record2.entityType) ? null : record2.payload
+  });
+}
+
+// ../packages/local-first/src/holdLimits.ts
+var SYNC_EVENT_RETENTION_DAYS = 90;
+var DAY_MS = 24 * 60 * 60 * 1e3;
+var HOLD_MAX_AGE_MS = 7 * DAY_MS;
+var DEPENDENCY_PENDING_MAX_AGE_MS = SYNC_EVENT_RETENTION_DAYS * DAY_MS;
+var HOLD_BACKOFF_CAP_MS = 60 * 60 * 1e3;
+
+// ../packages/local-first/src/syncLease.ts
+var DEFAULT_COORDINATOR_WORK_TIMEOUT_MS = 5 * 6e4;
+
+// ../packages/local-first/src/redaction.ts
+var INDEXEDDB_REDACTED_KEYS = [
+  "token",
+  "password",
+  "authorization",
+  "cookie",
+  "apikey",
+  "clientsecret"
+];
+var INDEXEDDB_REDACTION_RULE = `Only exportForUploadOrLog() output may be uploaded or logged. It strips every secret-shaped key at every depth \u2014 a key whose lowercase name is one of ${INDEXEDDB_REDACTED_KEYS.join(", ")} or contains token, secret, password, authorization, cookie, or apikey \u2014 so accessToken, client_secret and sessionCookie are stripped too. The strip is recursive through arrays and nested objects, the input is not mutated, and a dropped key is absent rather than blanked. export() is the unfiltered local record and must not leave the device.`;
+
+// ../packages/local-first/src/tombstone.ts
+var RESNAPSHOT = Object.freeze({ action: "resnapshot" });
+
+// ../packages/local-first/src/applyServerCursor.ts
+var RESNAPSHOT2 = Object.freeze({ resnapshotRequired: true });
+
 // src/provenance.ts
 var PROVENANCE_META_KEY = "provenance";
 function asProvenanceAccount(value) {
@@ -99,7 +475,8 @@ function stoppedBeforeStartRow() {
 // src/types.ts
 function serverChatIdOf(chat) {
   if (!chat) return null;
-  if (chat.serverId != null) return chat.serverId;
+  const bound = parseSyncId(chat.serverId);
+  if (bound != null) return bound;
   return chat.origin === "local" ? null : chat.id;
 }
 var STEP_MESSAGE_ROLE = "tool";
@@ -667,6 +1044,42 @@ function applyStringEdit(content, oldString, newString, replaceAll = false) {
     ...nearest ? { nearest } : {}
   };
 }
+var editStr = (v) => typeof v === "string" ? v : void 0;
+function editPathOf(a) {
+  const p = a.path ?? a.file_path ?? a.filePath;
+  return typeof p === "string" && p.trim() ? p.trim().replace(/\\/g, "/").replace(/^\.\//, "") : null;
+}
+function editedFilesOf(toolName, args) {
+  const a = args && typeof args === "object" && !Array.isArray(args) ? args : {};
+  const top = editPathOf(a);
+  const out = [];
+  if (toolName === "edit_file") {
+    const replacement = (e, fallback) => {
+      const path2 = editPathOf(e) ?? fallback;
+      const before = editStr(e.old_string);
+      const after = editStr(e.new_string);
+      if (path2 && (before !== void 0 || after !== void 0)) {
+        out.push({ path: path2, ...before !== void 0 ? { before } : {}, ...after !== void 0 ? { after } : {} });
+      } else if (path2 && e !== a) {
+        out.push({ path: path2 });
+      }
+    };
+    if ("old_string" in a || "new_string" in a) replacement(a, null);
+    if (Array.isArray(a.edits)) {
+      for (const raw of a.edits) {
+        if (raw && typeof raw === "object") replacement(raw, top);
+      }
+    }
+  } else if (toolName === "write_file" && top) {
+    const after = editStr(a.content);
+    out.push({ path: top, ...after !== void 0 ? { after } : {} });
+  }
+  if (out.length === 0 && top) out.push({ path: top });
+  return out;
+}
+function editedPathsOf(toolName, args) {
+  return [...new Set(editedFilesOf(toolName, args).map((f) => f.path))];
+}
 var EDIT_BATCH_MAX = 20;
 function entryProblem(e) {
   if (typeof e.path !== "string" || e.path.trim() === "") return "path is required";
@@ -735,17 +1148,212 @@ var LEXED_EXTENSIONS = /* @__PURE__ */ new Set([
   "json",
   "jsonc"
 ]);
+var JSX_EXTENSIONS = /* @__PURE__ */ new Set(["jsx", "tsx"]);
+var EXPRESSION_KEYWORDS = /* @__PURE__ */ new Set([
+  "return",
+  "typeof",
+  "instanceof",
+  "in",
+  "of",
+  "new",
+  "delete",
+  "void",
+  "throw",
+  "case",
+  "do",
+  "else",
+  "yield",
+  "await"
+]);
 var ZERO = Object.freeze({ curly: 0, paren: 0, square: 0 });
+var WORD_START = /[A-Za-z_$]/;
+var WORD_CHAR = /[\w$]/;
+var JSX_NAME = /^[A-Za-z_$][\w$.:-]*/;
 function extensionOf(ext) {
   const dot = ext.lastIndexOf(".");
   return (dot >= 0 ? ext.slice(dot + 1) : ext).toLowerCase();
 }
-function bracketBalance(text) {
+function bracketBalance(text, options = {}) {
+  const jsx = options.jsx === true;
   const out = { curly: 0, paren: 0, square: 0 };
-  const braces = [];
-  let i = 0;
   const n = text.length;
-  const template = () => {
+  let i = 0;
+  let expr = true;
+  const skipQuoted = (quote, multiline) => {
+    i += 1;
+    while (i < n && text[i] !== quote && (multiline || text[i] !== "\n")) i += !multiline && text[i] === "\\" ? 2 : 1;
+    i += 1;
+  };
+  const tryRegex = () => {
+    let j = i + 1;
+    let inClass = false;
+    while (j < n) {
+      const c = text[j];
+      if (c === "\n") return false;
+      if (c === "\\") {
+        j += 2;
+        continue;
+      }
+      if (c === "[") inClass = true;
+      else if (c === "]") inClass = false;
+      else if (c === "/" && !inClass) {
+        j += 1;
+        while (j < n && /[a-z]/i.test(text[j])) j += 1;
+        i = j;
+        return true;
+      }
+      j += 1;
+    }
+    return false;
+  };
+  const container = () => {
+    out.curly += 1;
+    i += 1;
+    code(true);
+    if (text[i] === "}") {
+      out.curly -= 1;
+      i += 1;
+    }
+  };
+  const skipSpace = () => {
+    while (i < n && /\s/.test(text[i])) i += 1;
+  };
+  const jsxChildren = () => {
+    while (i < n) {
+      const c = text[i];
+      if (c === "{") {
+        container();
+        continue;
+      }
+      if (c === "<") {
+        if (text[i + 1] === "/") {
+          const end = text.indexOf(">", i);
+          i = end < 0 ? n : end + 1;
+          return;
+        }
+        if (tryJsxElement()) continue;
+      }
+      i += 1;
+    }
+  };
+  const tryJsxElement = () => {
+    const start = i;
+    i += 1;
+    if (text[i] === ">") {
+      i += 1;
+      jsxChildren();
+      return true;
+    }
+    const name = JSX_NAME.exec(text.slice(i, i + 200));
+    if (!name) {
+      i = start;
+      return false;
+    }
+    i += name[0].length;
+    let first = true;
+    while (i < n) {
+      skipSpace();
+      if (i >= n) return true;
+      const c = text[i];
+      if (c === "/" && text[i + 1] === ">") {
+        i += 2;
+        return true;
+      }
+      if (c === ">") {
+        i += 1;
+        jsxChildren();
+        return true;
+      }
+      if (c === "{") {
+        container();
+        first = false;
+        continue;
+      }
+      const attr = JSX_NAME.exec(text.slice(i, i + 200));
+      if (!attr || first && attr[0] === "extends") {
+        i = start;
+        return false;
+      }
+      first = false;
+      i += attr[0].length;
+      skipSpace();
+      if (text[i] !== "=") continue;
+      i += 1;
+      skipSpace();
+      if (text[i] === '"' || text[i] === "'") skipQuoted(text[i], true);
+      else if (text[i] === "{") container();
+    }
+    return true;
+  };
+  function code(nested) {
+    let depth = 0;
+    while (i < n) {
+      const ch = text[i];
+      const next = text[i + 1];
+      if (ch === "\n") {
+        expr = true;
+        i += 1;
+        continue;
+      }
+      if (/\s/.test(ch)) {
+        i += 1;
+        continue;
+      }
+      if (ch === "/" && next === "/") {
+        const end = text.indexOf("\n", i);
+        i = end < 0 ? n : end;
+        continue;
+      }
+      if (ch === "/" && next === "*") {
+        const end = text.indexOf("*/", i + 2);
+        i = end < 0 ? n : end + 2;
+        continue;
+      }
+      if (ch === "/" && expr && tryRegex()) {
+        expr = false;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        skipQuoted(ch, false);
+        expr = false;
+        continue;
+      }
+      if (ch === "`") {
+        i += 1;
+        template();
+        expr = false;
+        continue;
+      }
+      if (ch === "<" && jsx && expr && tryJsxElement()) {
+        expr = false;
+        continue;
+      }
+      if (WORD_START.test(ch) || /\d/.test(ch)) {
+        const start = i;
+        while (i < n && WORD_CHAR.test(text[i])) i += 1;
+        expr = EXPRESSION_KEYWORDS.has(text.slice(start, i));
+        continue;
+      }
+      if (ch === "{") {
+        out.curly += 1;
+        depth += 1;
+        expr = true;
+      } else if (ch === "}") {
+        if (nested && depth === 0) return;
+        out.curly -= 1;
+        if (depth > 0) depth -= 1;
+        expr = true;
+      } else if (ch === "(" || ch === "[") {
+        out[ch === "(" ? "paren" : "square"] += 1;
+        expr = true;
+      } else if (ch === ")" || ch === "]") {
+        out[ch === ")" ? "paren" : "square"] -= 1;
+        expr = false;
+      } else expr = ch !== ".";
+      i += 1;
+    }
+  }
+  function template() {
     while (i < n) {
       const ch = text[i];
       if (ch === "\\") {
@@ -757,57 +1365,32 @@ function bracketBalance(text) {
         return;
       }
       if (ch === "$" && text[i + 1] === "{") {
-        braces.push(true);
         i += 2;
-        return;
+        expr = true;
+        code(true);
+        if (text[i] === "}") i += 1;
+        continue;
       }
       i += 1;
     }
-  };
-  while (i < n) {
-    const ch = text[i];
-    const next = text[i + 1];
-    if (ch === "/" && next === "/") {
-      const end = text.indexOf("\n", i);
-      i = end < 0 ? n : end + 1;
-    } else if (ch === "/" && next === "*") {
-      const end = text.indexOf("*/", i + 2);
-      i = end < 0 ? n : end + 2;
-    } else if (ch === '"' || ch === "'") {
-      i += 1;
-      while (i < n && text[i] !== ch && text[i] !== "\n") i += text[i] === "\\" ? 2 : 1;
-      i += 1;
-    } else if (ch === "`") {
-      i += 1;
-      template();
-    } else {
-      if (ch === "{") {
-        out.curly += 1;
-        braces.push(false);
-      } else if (ch === "}") {
-        if (braces.pop() === true) {
-          i += 1;
-          template();
-          continue;
-        }
-        out.curly -= 1;
-      } else if (ch === "(") out.paren += 1;
-      else if (ch === ")") out.paren -= 1;
-      else if (ch === "[") out.square += 1;
-      else if (ch === "]") out.square -= 1;
-      i += 1;
-    }
   }
+  code(false);
   return out;
 }
 function bracketDelta(before, after, ext) {
-  if (!LEXED_EXTENSIONS.has(extensionOf(ext))) return { ...ZERO };
-  const b = bracketBalance(before);
-  const a = bracketBalance(after);
+  const e = extensionOf(ext);
+  if (!LEXED_EXTENSIONS.has(e)) return { ...ZERO };
+  const options = { jsx: JSX_EXTENSIONS.has(e) };
+  const b = bracketBalance(before, options);
+  const a = bracketBalance(after, options);
   return { curly: a.curly - b.curly, paren: a.paren - b.paren, square: a.square - b.square };
 }
 function changesBalance(delta) {
   return delta.curly !== 0 || delta.paren !== 0 || delta.square !== 0;
+}
+function describeBracketDelta(d, style = "name") {
+  const glyph = { curly: "`{}`", paren: "`()`", square: "`[]`" };
+  return ["curly", "paren", "square"].filter((k) => d[k] !== 0).map((k) => `${style === "glyph" ? glyph[k] : k} ${d[k] > 0 ? "+" : ""}${d[k]}`).join(style === "glyph" ? ", " : " \xB7 ");
 }
 
 // ../packages/agent-tools/src/workstreamScope.ts
@@ -1824,7 +2407,7 @@ async function compressWebFetchResult(r, ctx) {
 
 // ../packages/agent-tools/src/git-repo-scope.ts
 function safeGitArg(v) {
-  return typeof v === "string" && /^[\w./@-]+$/.test(v) ? v : null;
+  return typeof v === "string" && /^[\w./@-]+$/.test(v) && !v.startsWith("-") ? v : null;
 }
 function shellQuote(v) {
   return `'${v.replace(/'/g, `'\\''`)}'`;
@@ -2306,7 +2889,7 @@ function buildCommitCommand(opts) {
   const branch = safeGitArg(opts.branch);
   const resolveLines = opts.paths.map((p, i) => {
     const candidates = commitPathCandidates(p, opts.repo).map(shellQuote).join(" ");
-    return `P${i}="$(pick ${candidates})" || MISSING="$MISSING ${shellQuote(p).slice(1, -1)}"`;
+    return `P${i}="$(pick ${candidates})" || MISSING="$MISSING "${shellQuote(p)}`;
   });
   const paths = opts.paths.map((_, i) => `"$P${i}"`).join(" ");
   return [
@@ -2440,6 +3023,21 @@ function publishToolResult(action, r) {
   }
   return { data: { ok: r.ok, action, output: out.slice(0, 2e4), ...r.error ? { error: r.error } : {} } };
 }
+function invalidRefResult(action, refs) {
+  for (const [name, value] of Object.entries(refs)) {
+    for (const v of Array.isArray(value) ? value : [value]) {
+      if (typeof v !== "string" || v === "" || safeGitArg(v) !== null) continue;
+      return {
+        data: {
+          ok: false,
+          action,
+          error: `${name} '${v}' is not a valid name \u2014 use only letters, digits and . _ / @ - (no spaces, no shell characters, not starting with '-'), so nothing was run`
+        }
+      };
+    }
+  }
+  return null;
+}
 async function runPublishTool(action, command, repo, ctx) {
   const refused = invalidRepoResult(action, repo);
   if (refused) return refused;
@@ -2472,6 +3070,8 @@ var gitCommitTool = defineTool({
     if (paths.length === 0) {
       return Promise.resolve({ data: { ok: false, action: "commit", error: "paths is required \u2014 list the exact files you changed. Run git_status to see them. Do not pass '.' or '-A': the working tree may hold changes that are not yours." } });
     }
+    const badRef = invalidRefResult("commit", { branch: args.branch });
+    if (badRef) return Promise.resolve(badRef);
     const repo = typeof args.repo === "string" ? args.repo : void 0;
     return runPublishTool(
       "commit",
@@ -2518,6 +3118,8 @@ var openPullRequestTool = defineTool({
     if (!title) return Promise.resolve({ data: { ok: false, action: "pull_request", error: "title is required" } });
     const repo = typeof args.repo === "string" ? args.repo : void 0;
     const reviewers = Array.isArray(args.reviewers) ? args.reviewers.filter((r) => typeof r === "string") : void 0;
+    const badRef = invalidRefResult("pull_request", { base: args.base, reviewers });
+    if (badRef) return Promise.resolve(badRef);
     return runPublishTool(
       "pull_request",
       buildPullRequestCommand({ title, body, base: typeof args.base === "string" ? args.base : void 0, reviewers }),
@@ -2540,6 +3142,8 @@ var gitCleanupMergedTool = defineTool({
   },
   requires: ["git.write"],
   execute: (args, ctx) => {
+    const badRef = invalidRefResult("cleanup", { branch: args.branch, baseBranch: args.baseBranch });
+    if (badRef) return Promise.resolve(badRef);
     const repo = typeof args.repo === "string" ? args.repo : void 0;
     return runPublishTool(
       "cleanup",
@@ -3188,18 +3792,18 @@ function normalizeAnalysis(dependencies, duplicates, unused, scope = ".") {
     }
   }
   const issues = [];
-  for (const clone of list(record(duplicates).duplicates)) {
-    const locations = [clone.firstFile, clone.secondFile].map((raw) => {
+  for (const clone2 of list(record(duplicates).duplicates)) {
+    const locations = [clone2.firstFile, clone2.secondFile].map((raw) => {
       const file = record(raw);
       return { path: path(file.name), startLine: line(file.start), endLine: line(file.end) };
     });
     locations.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : a.startLine - b.startLine);
-    const identity = typeof clone.fragment === "string" ? clone.fragment.replace(/\r\n/g, "\n") : locations.map((l) => `${l.path}:${l.startLine}-${l.endLine}`).sort().join("|");
+    const identity = typeof clone2.fragment === "string" ? clone2.fragment.replace(/\r\n/g, "\n") : locations.map((l) => `${l.path}:${l.startLine}-${l.endLine}`).sort().join("|");
     issues.push({
       id: `duplicate:${hash(JSON.stringify([locations.map((l) => l.path).sort(), identity]))}`,
       kind: "duplicate",
       locations,
-      ...typeof clone.fragment === "string" ? { snippet: clone.fragment.slice(0, 4e3) } : {}
+      ...typeof clone2.fragment === "string" ? { snippet: clone2.fragment.slice(0, 4e3) } : {}
     });
   }
   for (const file of list(record(unused).files)) issues.push({ id: `unused-file:${unusedPath(file)}`, kind: "unused-file", locations: [{ path: unusedPath(file), startLine: 1, endLine: 1 }] });
@@ -4736,7 +5340,7 @@ import {
 } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/rootId.ts
-import { sha256Hex as sha256Hex2 } from "@seanhogg/builderforce-memory/knowledge";
+import { sha256Hex as sha256Hex2, splitSourceRef } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/codeRootSignals.ts
 import { canonicalJson as canonicalJson2, compareStr as compareStr6 } from "@seanhogg/builderforce-memory/knowledge";
@@ -4836,10 +5440,14 @@ import { isDocumentPath as isDocumentPath2, mediaTypeOfPath as mediaTypeOfPath3 
 import { loadKnowledgeIndex, sha256Hex as sha256Hex5 } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/replicaQueue.ts
+import { splitSourceRef as splitSourceRef2 } from "@seanhogg/builderforce-memory/knowledge";
 import { factLeafKey, fileLeafKey, relationLeafKey } from "@seanhogg/builderforce-memory/knowledge/pack";
 
 // ../packages/agent-tools/src/knowledge/replicatedStore.ts
 import { factDigest, relationDigest } from "@seanhogg/builderforce-memory/knowledge/pack";
+
+// ../packages/agent-tools/src/knowledge/replicaPump.ts
+import { MAX_PART_BYTES, splitParts } from "@seanhogg/builderforce-memory/knowledge/pack";
 
 // ../packages/agent-tools/src/knowledge/replicaPack.ts
 import { srcRef as srcRef5 } from "@seanhogg/builderforce-memory/knowledge";
@@ -4854,9 +5462,8 @@ import {
   fileLeafKey as fileLeafKey2
 } from "@seanhogg/builderforce-memory/knowledge/pack";
 var DEFAULT_MAX_DECODED = 16 * 1024 * 1024;
-
-// ../packages/agent-tools/src/knowledge/replicaPump.ts
-import { MAX_PART_BYTES, splitParts } from "@seanhogg/builderforce-memory/knowledge/pack";
+var EMPTY_PACK = { rootId: "", baseGeneration: 0, targetDigest: ZERO_DIGEST };
+var EMPTY_EXTRACTED_BYTES = jsonBytesOf({ ...EMPTY_PACK, extracted: [] });
 
 // ../packages/agent-tools/src/knowledge/replicaGenerationCheck.ts
 var GENERATION_CHECK_INTERVAL_MS = 10 * 6e4;
@@ -4880,7 +5487,7 @@ import {
   canonicalJson as canonicalJson3,
   compareStr as compareStr7,
   factRef as factRef2,
-  pathOfRef as pathOfRef4
+  pathOfRef as pathOfRef3
 } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/packGraph.ts
@@ -4901,6 +5508,11 @@ var PINPOINT_VISION_SYSTEM = [
   'Reply with JSON only: {"description": one line saying what the screen shows and, if it looks stuck or broken, how,',
   '"texts": the exact visible strings (labels, headings, buttons, status text, error messages), at most 12, verbatim}.'
 ].join(" ");
+
+// ../packages/agent-tools/src/knowledge/replicaLock.ts
+var LOCK_REFRESH_MS = 3e4;
+var LOCK_STALE_MS = 12e4;
+var LOCK_FRESH_MS = LOCK_STALE_MS - LOCK_REFRESH_MS;
 
 // ../packages/agent-tools/src/toolSearch.ts
 var STOP_WORDS = /* @__PURE__ */ new Set([
@@ -6155,6 +6767,65 @@ function turnCallsOf(calls, isReadOnly) {
   return calls.map((c) => ({ readOnly: isReadOnly?.(c.tool, c.args) === true }));
 }
 
+// ../packages/run-guards/src/reverifyTracker.ts
+var MAX_REVERIFY_PATHS = 200;
+function addBounded(set, path2) {
+  set.delete(path2);
+  set.add(path2);
+  while (set.size > MAX_REVERIFY_PATHS) {
+    const oldest = set.values().next().value;
+    if (oldest === void 0) break;
+    set.delete(oldest);
+  }
+}
+function restoreBounded(paths) {
+  return new Set((paths ?? []).slice(-MAX_REVERIFY_PATHS));
+}
+var ReverifyTracker = class {
+  writtenPaths;
+  readBackSinceWrite;
+  /** Read-only targets seen this turn, to tell an all-written re-read turn from real work. */
+  readsThisTurn = 0;
+  /** Whether every read this turn was a repeat read-back of an unchanged written path. */
+  allRepeatReadBacks = true;
+  constructor(state = {}) {
+    this.writtenPaths = restoreBounded(state.writtenPaths);
+    this.readBackSinceWrite = restoreBounded(state.readBackSinceWrite);
+  }
+  /** A call that may have changed ANY file wrote: no read-back is a look at unchanged bytes. */
+  wroteAnything() {
+    this.readBackSinceWrite.clear();
+  }
+  /** `path` was written: its next read-back inspects the edit again. */
+  wrote(path2) {
+    addBounded(this.writtenPaths, path2);
+    this.readBackSinceWrite.delete(path2);
+  }
+  /** A successful read-only call visited `target`. */
+  read(target) {
+    this.readsThisTurn += 1;
+    if (this.writtenPaths.has(target)) {
+      if (!this.readBackSinceWrite.has(target)) this.allRepeatReadBacks = false;
+      addBounded(this.readBackSinceWrite, target);
+    } else {
+      this.allRepeatReadBacks = false;
+    }
+  }
+  /** The turn ended: how many reads it made when ALL were repeat read-backs (else 0). Starts the next turn. */
+  endTurn() {
+    const count = this.readsThisTurn > 0 && this.allRepeatReadBacks ? this.readsThisTurn : 0;
+    this.readsThisTurn = 0;
+    this.allRepeatReadBacks = true;
+    return count;
+  }
+  snapshot() {
+    return {
+      ...this.writtenPaths.size ? { writtenPaths: [...this.writtenPaths] } : {},
+      ...this.readBackSinceWrite.size ? { readBackSinceWrite: [...this.readBackSinceWrite] } : {}
+    };
+  }
+};
+
 // ../packages/run-guards/src/progressDetector.ts
 var LADDER_RESET_TURNS = 8;
 var SIGNAL_RANK = {
@@ -6193,10 +6864,7 @@ var ProgressDetector = class {
     this.steer = state.steer;
     this.readiness = new ReadinessAdvisory(state.advisory);
     this.batching = new BatchingNudge(state.batching);
-    this.writtenPaths = /* @__PURE__ */ new Set();
-    this.readBackSinceWrite = /* @__PURE__ */ new Set();
-    this.readThisTurn = [];
-    this.allReadsRepeatReadBacks = true;
+    this.reverify = new ReverifyTracker(state);
     this.turnCalls = [];
   }
   ports;
@@ -6216,16 +6884,8 @@ var ProgressDetector = class {
    *  turns, never a trip and never touching UNKEPT_READY_AT or any other signal. */
   batching;
   turnSignal = null;
-  /** Every path this run has written, so a repeat read-back of one is re-verification, not discovery. */
-  writtenPaths;
-  /** Read targets on written paths already read back since that path's last write: the
-   *  first read-back after a write inspects the edit (it may have half-applied); only a
-   *  later look at the same unchanged bytes is re-verification. Cleared per path on write. */
-  readBackSinceWrite;
-  /** Read-only targets seen this turn, to tell an all-written re-read turn from real work. */
-  readThisTurn;
-  /** Whether every read this turn was a repeat read-back of an unchanged written path. */
-  allReadsRepeatReadBacks;
+  /** `reverifying`: written paths and their read-backs (persisted, bounded). */
+  reverify;
   /** Every call of the current turn, for the B4 batching nudge's read-only count. */
   turnCalls;
   raise(signal) {
@@ -6245,7 +6905,7 @@ var ProgressDetector = class {
     if (unscoped) {
       this.visits.markAllMayHaveChanged();
       this.edits.reset();
-      if (wrote) this.readBackSinceWrite.clear();
+      if (wrote) this.reverify.wroteAnything();
     } else if ((this.ports.isDelete ?? ((t) => t === "delete_file"))(tool)) {
       this.edits.record(tool, args, { ok, deleted: ok });
       this.forgetVisitsOf(pathArgOf(args));
@@ -6255,21 +6915,12 @@ var ProgressDetector = class {
       if (ok) {
         const path2 = pathArgOf(args);
         this.forgetVisitsOf(path2);
-        if (path2) {
-          this.writtenPaths.add(path2);
-          this.readBackSinceWrite.delete(path2);
-        }
+        if (path2) this.reverify.wrote(path2);
       }
     } else if (ok && this.ports.isReadOnly?.(tool, args)) {
       const target = visitTargetOf(args);
       if (target) {
-        this.readThisTurn.push(target);
-        if (this.writtenPaths.has(target)) {
-          if (!this.readBackSinceWrite.has(target)) this.allReadsRepeatReadBacks = false;
-          this.readBackSinceWrite.add(target);
-        } else {
-          this.allReadsRepeatReadBacks = false;
-        }
+        this.reverify.read(target);
         const visit = this.visits.record(`${tool}:${target}`, args);
         if (visit.count >= REVISIT_HARD_AT && !visit.mayHaveChanged) this.raise({ kind: "circling_read", tool, target, count: visit.count });
       }
@@ -6297,13 +6948,10 @@ var ProgressDetector = class {
     const batchNote = this.batching.observe(turnCallsOf(turnCalls, this.ports.isReadOnly));
     this.steer = void 0;
     const idle = this.progress.endTurn();
-    if (!this.turnSignal && this.readThisTurn.length > 0 && this.allReadsRepeatReadBacks) {
-      if (!this.progress.lastTurnGround && idle > 0) {
-        this.raise({ kind: "reverifying", count: this.readThisTurn.length });
-      }
+    const rereads = this.reverify.endTurn();
+    if (!this.turnSignal && rereads > 0 && !this.progress.lastTurnGround && idle > 0) {
+      this.raise({ kind: "reverifying", count: rereads });
     }
-    this.readThisTurn = [];
-    this.allReadsRepeatReadBacks = true;
     const unkeptBefore = this.claims.snapshot().unkept;
     const unkept = this.claims.endTurn();
     if (unkept > unkeptBefore) this.unkeptTurns += 1;
@@ -6346,10 +6994,6 @@ var ProgressDetector = class {
   setSteer(note) {
     this.steer = note;
   }
-  /** B1: the readiness advisory awaiting its one turn ("" when none). */
-  readinessNote() {
-    return this.readiness.snapshot().note;
-  }
   /** The note the current turn's request carries ("" when none). */
   steerNote() {
     return this.steer ?? "";
@@ -6369,11 +7013,16 @@ var ProgressDetector = class {
       ...this.unkeptTurns ? { unkeptTurns: this.unkeptTurns } : {},
       ...this.quietTurns ? { quietTurns: this.quietTurns } : {},
       ...this.steer ? { steer: this.steer } : {},
-      ...this.readiness.snapshot().note ? { advisory: this.readiness.snapshot() } : {},
+      // `fired` persists on its own: a consumed one-off advisory must not re-fire on resume.
+      ...(() => {
+        const a = this.readiness.snapshot();
+        return a.note || a.fired ? { advisory: a } : {};
+      })(),
       ...(() => {
         const b = this.batching.snapshot();
         return b.streak || b.fired ? { batching: b } : {};
-      })()
+      })(),
+      ...this.reverify.snapshot()
     };
   }
 };
@@ -6703,6 +7352,26 @@ var DEFAULT_EVIDENCE_POLICY = {
     ".cjs": ["typecheck", "test"]
   },
   newSourceNeedsTest: true,
+  newSourceTestExempt: [
+    // Barrels / re-export entry points.
+    "(^|/)index\\.[cm]?[jt]sx?$",
+    // Type-only modules and declarations.
+    "(^|/)types\\.[cm]?tsx?$",
+    "\\.d\\.[cm]?ts$",
+    // Tool / build configuration.
+    "\\.config\\.[cm]?[jt]s$",
+    // Node scripts.
+    "\\.[cm]js$",
+    // Label / copy catalogs.
+    "(^|/)labels?/",
+    "(^|/)[^/]*(labels?|catalog)(\\.[^/]*)?\\.[cm]?[jt]sx?$",
+    // Fixtures and test helpers.
+    "(^|/)(__fixtures__|fixtures?|__mocks__|test-?utils|test-?helpers|testing)/",
+    "\\.(fixtures?|mocks?|helpers?)\\.[cm]?[jt]sx?$",
+    "(^|/)(test|spec)[-_.]?(helpers?|utils?|setup)\\.[cm]?[jt]sx?$",
+    "(^|/)(setupTests|vitest\\.setup|jest\\.setup)\\.[cm]?[jt]sx?$"
+  ],
+  newSourceTestCoverage: ["stem", "directory", "import"],
   checkTimeoutMs: 12e4
 };
 function basenameOf2(path2) {
@@ -6723,8 +7392,32 @@ var SOURCE_EXTENSIONS = /* @__PURE__ */ new Set([".ts", ".tsx", ".mts", ".cts", 
 function isSourceFile(path2) {
   return SOURCE_EXTENSIONS.has(extOf(path2));
 }
-function isTestPath2(path2) {
-  return /\.test\.tsx?$/.test(basenameOf2(path2));
+function dirOf2(path2) {
+  const normalized = normalizeEvidencePath(path2);
+  const slash2 = normalized.lastIndexOf("/");
+  return slash2 >= 0 ? normalized.slice(0, slash2) : "";
+}
+function moduleKey(path2) {
+  return normalizeEvidencePath(path2).replace(/\.[cm]?[jt]sx?$/i, "");
+}
+function isExemptFromTestRule(path2, policy) {
+  const normalized = normalizeEvidencePath(path2);
+  return (policy.newSourceTestExempt ?? []).some((source) => new RegExp(source, "i").test(normalized));
+}
+function covers(test, file, policy) {
+  const coverage = policy.newSourceTestCoverage ?? ["stem"];
+  if (coverage.includes("stem") && basenameOf2(test.absPath).startsWith(stemOf(file.absPath) + ".")) return true;
+  if (coverage.includes("directory")) {
+    const dir = dirOf2(file.absPath);
+    if (dirOf2(test.absPath) === dir) return true;
+    const dirName = dir.slice(dir.lastIndexOf("/") + 1);
+    if (dirName && dirOf2(test.absPath) === dirOf2(dir) && basenameOf2(test.absPath).startsWith(dirName + ".")) return true;
+  }
+  if (coverage.includes("import") && test.imports?.length) {
+    const target = moduleKey(file.absPath);
+    if (test.imports.some((i) => moduleKey(i) === target)) return true;
+  }
+  return false;
 }
 function isErrorFinding(finding) {
   const tokens2 = finding.trim().split(/\s+/);
@@ -6749,7 +7442,8 @@ function outgoingGate(files, ledger, policy) {
   for (const file of files) {
     if (file.deleted) continue;
     const checks = ledger.for(file.absPath, file.hash);
-    const required = policy.required[extOf(file.absPath)] ?? [];
+    const required = file.unavailable ? [] : policy.required[extOf(file.absPath)] ?? [];
+    if (file.unavailable) unavailable2.push(`${file.absPath}: ${file.unavailable}`);
     for (const kind of required) {
       const records = checks.filter((c) => c.kind === kind);
       if (records.length === 0) {
@@ -6770,11 +7464,9 @@ function outgoingGate(files, ledger, policy) {
         if (failing) return refuse(checkFailureReason(file.absPath, failing, " (LSP error)"));
       }
     }
-    if (policy.newSourceNeedsTest && file.isNew && isSourceFile(file.absPath) && !isTestPath2(file.absPath)) {
+    if (policy.newSourceNeedsTest && file.isNew && isSourceFile(file.absPath) && !isTestPath(file.absPath) && !isExemptFromTestRule(file.absPath, policy)) {
       const stem = stemOf(file.absPath);
-      const hasTest = files.some(
-        (t) => t !== file && !t.deleted && isTestPath2(t.absPath) && basenameOf2(t.absPath).startsWith(stem + ".")
-      );
+      const hasTest = files.some((t) => t !== file && !t.deleted && isTestPath(t.absPath) && covers(t, file, policy));
       if (!hasTest) {
         return refuse(
           `git_push refused: ${file.absPath} is new and has no test in this push. Add ${stem}.test.ts covering it, commit, and push again \u2014 the host runs the checks.`
@@ -6861,17 +7553,504 @@ function isLocalTicketCreateLabel(label) {
 }
 var SERVER_TICKET_MOVE_TOOL = "builtin_tasks_update";
 var LOCAL_TICKET_MOVE_TOOL = "ticket-move";
-function serverTicketId(raw) {
-  const id = typeof raw === "number" ? raw : typeof raw === "string" && /^\d+$/.test(raw.trim()) ? Number(raw.trim()) : NaN;
-  return Number.isInteger(id) && id > 0 ? id : null;
-}
 function ticketStatusMove(ref, status, vocabulary) {
-  if (vocabulary.local) {
-    const id2 = String(ref).trim();
-    return id2 ? { tool: LOCAL_TICKET_MOVE_TOOL, args: { id: id2, status } } : null;
+  const text = typeof ref === "string" ? ref.trim() : null;
+  const parsed = parseEntityRef(text ?? ref);
+  if (parsed && "local" in parsed) return { tool: LOCAL_TICKET_MOVE_TOOL, args: { id: parsed.local, status } };
+  if (parsed && "sync" in parsed) {
+    return vocabulary.local ? { tool: LOCAL_TICKET_MOVE_TOOL, args: { id: syncIdText(parsed.sync), status } } : { tool: SERVER_TICKET_MOVE_TOOL, args: { id: parsed.sync, status } };
   }
-  const id = serverTicketId(ref);
-  return id != null ? { tool: SERVER_TICKET_MOVE_TOOL, args: { id, status } } : null;
+  if (parsed) return null;
+  return vocabulary.local && text ? { tool: LOCAL_TICKET_MOVE_TOOL, args: { id: text, status } } : null;
+}
+
+// ../packages/tool-output-policy/src/textCut.ts
+function keepTail(text, max) {
+  if (text.length <= max) return text;
+  return text.slice(text.length - max);
+}
+var DEFAULT_TRUNCATION_SUFFIX = "\n\n\u26A0\uFE0F [Content truncated \u2014 original was too large for the model's context window. The content above is a partial view. If you need more, request specific sections or use offset/limit parameters to read smaller chunks.]";
+function cutHead(text, maxChars, opts = {}) {
+  if (text.length <= maxChars) return text;
+  const suffix = opts.suffix ?? DEFAULT_TRUNCATION_SUFFIX;
+  const snap = opts.snap ?? 0.8;
+  const keep = Math.max(opts.minKeep ?? 0, maxChars - suffix.length);
+  if (keep <= 0) return opts.emptyNotice ?? suffix.trim();
+  let cutPoint = keep;
+  const lastNewline = text.lastIndexOf("\n", keep);
+  if (lastNewline > keep * snap) cutPoint = lastNewline;
+  return text.slice(0, cutPoint) + suffix;
+}
+var MARKER_RESERVE = 160;
+function countLines(text) {
+  let n = 0;
+  for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) === 10) n++;
+  return n;
+}
+function cutHeadTail(text, maxChars, opts = {}) {
+  if (text.length <= maxChars) return text;
+  const budget = maxChars - MARKER_RESERVE;
+  if (budget <= 0) return keepTail(text, Math.max(0, maxChars));
+  const headShare = Math.min(1, Math.max(0, opts.headShare ?? 0.25));
+  const headBudget = Math.floor(budget * headShare);
+  const tailBudget = budget - headBudget;
+  let headEnd = headBudget;
+  const nl = text.lastIndexOf("\n", headBudget);
+  if (nl > headBudget * 0.8) headEnd = nl;
+  let tailStart = text.length - tailBudget;
+  const nextNl = text.indexOf("\n", tailStart);
+  if (nextNl >= 0 && nextNl - tailStart < tailBudget * 0.2) tailStart = nextNl + 1;
+  const head = text.slice(0, headEnd);
+  const tail = text.slice(tailStart);
+  const elided = text.slice(headEnd, tailStart);
+  const marker = `
+\u2026[${elided.length.toLocaleString("en-US")} chars (${countLines(elided).toLocaleString("en-US")} lines) elided \u2014 showing the first ${head.length.toLocaleString("en-US")} and the last ${tail.length.toLocaleString("en-US")} of ${text.length.toLocaleString("en-US")} chars]\u2026
+`;
+  return `${head}${marker}${tail}`;
+}
+var defaultMiddleMarker = (omitted) => `
+\u2026(${omitted.toLocaleString("en-US")} chars omitted from the middle)\u2026
+`;
+var isHighSurrogate = (c) => c >= 55296 && c <= 56319;
+var isLowSurrogate = (c) => c >= 56320 && c <= 57343;
+function safePrefix(s, n) {
+  let end = Math.max(0, Math.min(n, s.length));
+  if (end > 0 && end < s.length && isHighSurrogate(s.charCodeAt(end - 1))) end -= 1;
+  return s.slice(0, end);
+}
+function safeSuffix(s, n) {
+  if (n <= 0) return "";
+  let start = Math.max(0, s.length - n);
+  if (start > 0 && isLowSurrogate(s.charCodeAt(start))) start += 1;
+  return s.slice(start);
+}
+function truncateMiddle(text, max, opts = {}) {
+  if (text.length <= max) return text;
+  const { marker = defaultMiddleMarker, symmetric = false } = opts;
+  const markerFor = typeof marker === "string" ? () => marker : marker;
+  const room = Math.max(0, max - markerFor(text.length).length);
+  if (room === 0) return safePrefix(text, max);
+  const tailShare = Math.floor(room / 2);
+  const head = safePrefix(text, symmetric ? tailShare : room - tailShare);
+  const tail = safeSuffix(text, tailShare);
+  return `${head}${markerFor(text.length - head.length - tail.length)}${tail}`;
+}
+
+// ../packages/tool-output-policy/src/caps.ts
+var DEFAULT_TOOL_OUTPUT_CHARS = 6e3;
+var TOOL_OUTPUT_CAPS = {
+  read_file: 16e3,
+  run_command: 2e4,
+  exec: 2e4,
+  bash: 2e4,
+  git_status: 2e4,
+  git_diff: 2e4,
+  git_history: 2e4,
+  git_sync_latest: 2e4,
+  git_undo: 2e4,
+  git_redo: 2e4,
+  // Up to four children's reports in one result, each capped by agent-tools'
+  // `SUBAGENT_REPORT_CHARS`. A research child's report IS its deliverable: under the 6K
+  // default a wait on four left the owner ~1.5K of each, and it re-spawned researchers
+  // to recover what was cut (VS Code chat #6). Four full reports plus each one's header
+  // and cut marker; `subagentReportBudget.test.ts` (brain-embedded) holds the two together.
+  wait_agents: 34e3,
+  // The Creation Canvas's reads. A board snapshot is the whole board as JSON and a real
+  // board runs to tens of KB; under the 6K default the model was handed a sliver of it and
+  // asked the user to re-select objects that were already there. A build file is paged
+  // like `read_file` (see {@link PAGED_READ_TOOLS}).
+  canvas_read_snapshot: 64e3,
+  canvas_read_object: 32e3,
+  canvas_read_build_file: 16e3
+};
+var READ_FILE_TOOL = "read_file";
+var PAGED_READ_TOOLS = {
+  // `read_file`'s `offset` applies to each path of a `paths[]` read (agent-tools core-tools).
+  [READ_FILE_TOOL]: { search: "search_code", perPathOffset: true },
+  // The canvas's `offset` is honoured for a SINGLE path only.
+  canvas_read_build_file: { search: "canvas_search_build_files", perPathOffset: false }
+};
+function isPagedReadTool(tool) {
+  return Object.prototype.hasOwnProperty.call(PAGED_READ_TOOLS, tool);
+}
+function pagedReadSearchTool(tool) {
+  return PAGED_READ_TOOLS[tool]?.search ?? "search_code";
+}
+function pagedReadOffsetsPerPath(tool) {
+  return PAGED_READ_TOOLS[tool]?.perPathOffset ?? true;
+}
+var SHELL_TOOLS = /* @__PURE__ */ new Set(["run_command", "exec", "bash", "shell", "process"]);
+var HARD_MAX_TOOL_RESULT_CHARS = 4e5;
+var TOOL_RESULT_WINDOW_SHARE = 0.3;
+var TOOL_RESULT_CHARS_PER_TOKEN = 4;
+function toolOutputCap(tool, caps = TOOL_OUTPUT_CAPS) {
+  return caps[tool] ?? DEFAULT_TOOL_OUTPUT_CHARS;
+}
+function windowToolResultCap(contextWindowTokens) {
+  const maxTokens = Math.floor(contextWindowTokens * TOOL_RESULT_WINDOW_SHARE);
+  return Math.min(maxTokens * TOOL_RESULT_CHARS_PER_TOKEN, HARD_MAX_TOOL_RESULT_CHARS);
+}
+var READ_FILE_MAX_CHARS = 64e3;
+function windowedCap(tool, tableCap, contextWindowTokens) {
+  if (typeof contextWindowTokens !== "number" || !Number.isFinite(contextWindowTokens) || contextWindowTokens <= 0) return tableCap;
+  const share = windowToolResultCap(contextWindowTokens);
+  if (isPagedReadTool(tool)) return Math.min(READ_FILE_MAX_CHARS, Math.max(tableCap, share));
+  return Math.min(tableCap, share);
+}
+function isShellTool(tool) {
+  return SHELL_TOOLS.has(tool);
+}
+
+// ../packages/tool-output-policy/src/shellSummary.ts
+var DEFAULT_TAIL_LINES = 40;
+var MAX_DIFF_LINES = 24;
+var ANSI = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
+function stripAnsi(text) {
+  return text.replace(ANSI, "");
+}
+var RUNNER_SIGNATURES = [
+  ["vitest", /\bvitest\b|^\s*(?:Test Files|Tests)\s+\d+\s+(?:failed|passed)|^\s*[❯›]\s+\S+\.(?:test|spec)\.[cm]?[jt]sx?/m],
+  ["jest", /^\s*(?:PASS|FAIL)\s+\S+\.(?:test|spec)\.[cm]?[jt]sx?|^Test Suites:\s+\d+/m],
+  ["pytest", /=+ test session starts =+|^(?:FAILED|ERROR) \S+::|=+ .*\b(?:passed|failed)\b.* in [\d.]+s =+/m],
+  ["cargo", /^\s*(?:Compiling|Finished|Running) .*|^test result: (?:ok|FAILED)\.|^error(?:\[E\d+\])?: /m],
+  ["tsc", /\berror TS\d+:/],
+  ["go", /^(?:---|===) (?:FAIL|RUN|PASS):|^(?:ok|FAIL)\s+\S+\s+[\d.]+s/m]
+];
+function detectRunner(text) {
+  for (const [runner, re] of RUNNER_SIGNATURES) if (re.test(text)) return runner;
+  return "unknown";
+}
+var NOISE = [
+  /^\s*[✓√✔]\s/,
+  /^\s*PASS\s/,
+  /^\s*PASSED\b/,
+  /\bPASSED\s*(?:\[\s*\d+%\])?$/,
+  /^test .* \.\.\. ok$/,
+  /^ok\s+\S+\s+[\d.]+s/,
+  /^=== RUN\s/,
+  /^--- PASS:/,
+  /^\s*Compiling\s/,
+  /^\s*Downloaded?\s/,
+  /^\s*$/
+];
+var ERROR_LINE = [
+  /\berror\b|\bERROR\b|\bError\b/,
+  /\bFAIL(?:ED|URE)?\b|\bfailed\b/,
+  /^\s*[✗×✕❌]\s/,
+  /\bpanic(?:ked)?\b|^Traceback \(most recent call last\)/,
+  /\bAssertion(?:Error)?\b|\bassert(?:ion)?\b/,
+  /^E\s{2,}/,
+  // pytest assertion detail
+  /^\s*●\s/,
+  // jest failing test header
+  /\berror TS\d+:/,
+  /^\s*-->\s.+:\d+:\d+$/
+  // cargo error location
+];
+var DIFF_HEADER = /^\s*(?:[-+]\s*Expected|[-+]\s*Received|Expected:|Received:|expected:|actual:|Difference:|- expected|\+ actual|assert .* ==)/;
+var DIFF_BODY = /^\s*[-+](?!-)|^\s{2,}\S/;
+var FAILING_TEST = [
+  /^\s*(?:FAIL|×|✕|✗)\s+(\S+\.(?:test|spec)\.[cm]?[jt]sx?(?:\s+>\s+.+?)?)(?:\s+\d+ms)?$/,
+  // vitest/jest file (+ test path)
+  /^\s*●\s+(.+?)\s*$/,
+  // jest
+  /^\s*[×✕✗]\s+(.+?)(?:\s+\d+ms)?$/,
+  // vitest/jest test line
+  /^FAILED\s+(\S+::\S+)/,
+  // pytest
+  /^test\s+(\S+)\s+\.\.\.\s+FAILED$/,
+  // cargo
+  /^---\s+FAIL:\s+(\S+)/
+  // go
+];
+function isNoise(line2) {
+  return NOISE.some((re) => re.test(line2));
+}
+function isErrorLine(line2) {
+  return ERROR_LINE.some((re) => re.test(line2));
+}
+function failingTestName(line2) {
+  for (const re of FAILING_TEST) {
+    const m = re.exec(line2);
+    if (m && m[1]) return m[1].trim();
+  }
+  return null;
+}
+function summarizeShellOutput(raw, opts) {
+  const tailLines = opts.tailLines ?? DEFAULT_TAIL_LINES;
+  if (raw.length <= opts.maxChars) {
+    return { text: raw, runner: detectRunner(raw), failingTests: [], droppedNoise: 0 };
+  }
+  const text = stripAnsi(raw).replace(/\r\n?/g, "\n");
+  const runner = detectRunner(text);
+  const lines = text.split("\n");
+  const tailFrom = Math.max(0, lines.length - tailLines);
+  const tail = lines.slice(tailFrom);
+  const failing = [];
+  const seenFailing = /* @__PURE__ */ new Set();
+  const kept = [];
+  const seenKept = /* @__PURE__ */ new Set();
+  let droppedNoise = 0;
+  let diffLeft = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line2 = lines[i];
+    const name = failingTestName(line2);
+    if (name && !seenFailing.has(name)) {
+      seenFailing.add(name);
+      failing.push(name);
+    }
+    if (i >= tailFrom) continue;
+    if (DIFF_HEADER.test(line2)) {
+      diffLeft = MAX_DIFF_LINES;
+      kept.push(line2);
+      continue;
+    }
+    if (diffLeft > 0) {
+      if (DIFF_BODY.test(line2) && !isNoise(line2)) {
+        kept.push(line2);
+        diffLeft--;
+        continue;
+      }
+      diffLeft = 0;
+    }
+    if (isNoise(line2)) {
+      droppedNoise++;
+      continue;
+    }
+    if (isErrorLine(line2)) {
+      const key = line2.trim();
+      if (seenKept.has(key)) continue;
+      seenKept.add(key);
+      kept.push(line2);
+    }
+  }
+  const header = `[output summarised${runner === "unknown" ? "" : ` (${runner})`}: ${lines.length.toLocaleString("en-US")} lines / ${raw.length.toLocaleString("en-US")} chars \u2192 failing tests, error lines, assertion diffs and the last ${tail.length} lines; ${droppedNoise.toLocaleString("en-US")} passing/progress lines dropped. Re-run a narrower command (one test file, grep) for more.]`;
+  const failingBlock = failing.length > 0 ? `Failing tests (${failing.length}):
+${failing.slice(0, 50).map((n) => `  - ${n}`).join("\n")}${failing.length > 50 ? `
+  \u2026 +${failing.length - 50} more` : ""}` : "";
+  const tailBlock = `--- last ${tail.length} lines ---
+${tail.join("\n")}`;
+  const fixed = [header, failingBlock, tailBlock].filter(Boolean).join("\n\n");
+  const room = opts.maxChars - fixed.length - 40;
+  let errorsBlock = "";
+  if (kept.length > 0 && room > 200) {
+    const body = `--- errors (${kept.length} lines) ---
+${kept.join("\n")}`;
+    errorsBlock = body.length <= room ? body : cutHead(body, room, { suffix: "\n\u2026[more error lines elided]" });
+  }
+  const assembled = [header, failingBlock, errorsBlock, tailBlock].filter(Boolean).join("\n\n");
+  const fitted = assembled.length <= opts.maxChars ? assembled : cutHeadTail(assembled, opts.maxChars, { headShare: 0.5 });
+  return { text: fitted, runner, failingTests: failing, droppedNoise };
+}
+
+// ../packages/tool-output-policy/src/jsonProjection.ts
+var STEPS = [
+  { depth: 4, arrayItems: 10, stringChars: 400 },
+  { depth: 3, arrayItems: 5, stringChars: 200 },
+  { depth: 2, arrayItems: 3, stringChars: 120 },
+  { depth: 2, arrayItems: 1, stringChars: 80 },
+  { depth: 1, arrayItems: 1, stringChars: 60 }
+];
+function describe(value) {
+  if (Array.isArray(value)) return `[array: ${value.length} items]`;
+  if (value && typeof value === "object") return `{object: ${Object.keys(value).length} keys}`;
+  return String(value);
+}
+function projectValue(value, step, depth) {
+  if (typeof value === "string") {
+    return value.length > step.stringChars ? `${value.slice(0, step.stringChars)}\u2026(+${value.length - step.stringChars} chars)` : value;
+  }
+  if (value === null || typeof value !== "object") return value;
+  if (depth >= step.depth) return describe(value);
+  if (Array.isArray(value)) {
+    const head = value.slice(0, step.arrayItems).map((v) => projectValue(v, step, depth + 1));
+    if (value.length > step.arrayItems) head.push(`\u2026(+${value.length - step.arrayItems} more of ${value.length} items)`);
+    return head;
+  }
+  const out = {};
+  for (const [k, v] of Object.entries(value)) out[k] = projectValue(v, step, depth + 1);
+  return out;
+}
+function projectJson(value, maxChars) {
+  let last = { value: void 0, json: "", fits: false };
+  for (const step of STEPS) {
+    const projected = projectValue(value, step, 0);
+    const json = JSON.stringify(projected);
+    last = { value: projected, json, fits: json.length <= maxChars };
+    if (last.fits) return last;
+  }
+  return last;
+}
+
+// ../packages/tool-output-policy/src/readFileWindow.ts
+var READ_FILE_RESULT_CHARS = TOOL_OUTPUT_CAPS.read_file ?? 16e3;
+function isReadFileResult(out) {
+  return !!out && typeof out === "object" && !Array.isArray(out) && out.ok !== false && typeof out.content === "string";
+}
+function windowReadFile(out, opts = {}) {
+  const maxChars = opts.maxChars ?? READ_FILE_RESULT_CHARS;
+  const tool = opts.tool ?? "read_file";
+  const withNote = (result) => opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(result, opts.advisory) : result;
+  const done = (served2, truncated) => ({ value: withNote(served2), served: served2, truncated });
+  const lines = out.content.split("\n");
+  const offset = typeof out.offset === "number" && out.offset > 0 ? Math.floor(out.offset) : 1;
+  const totalLines = typeof out.totalLines === "number" && out.totalLines > 0 ? Math.floor(out.totalLines) : offset + lines.length - 1;
+  const alreadyPartial = out.truncated === true;
+  const served = (kept, note) => {
+    const lastLine = offset + kept.length - 1;
+    return { ...out, content: kept.join("\n"), offset, totalLines, truncated: lastLine < totalLines || alreadyPartial, note };
+  };
+  const build = (kept, note) => withNote(served(kept, note));
+  const fits = (value) => JSON.stringify(value).length <= maxChars;
+  if (fits(withNote({ ...out }))) return done({ ...out }, false);
+  const how = (next) => opts.alone !== void 0 ? `call ${tool} again with ONLY the path ${JSON.stringify(opts.alone)} (offset applies to a single file) and offset ${next}` : `call ${tool} again with offset ${next}`;
+  const continuation = (lastLine) => `Showing lines ${offset}\u2013${lastLine} of ${totalLines}. This surface returns at most ~${maxChars.toLocaleString("en-US")} chars per read, so a large file arrives in several windows \u2014 ${how(lastLine + 1)} to continue from exactly where this one stopped. Do not re-request lines you already have.`;
+  let lo = 1;
+  let hi = lines.length;
+  let best = 0;
+  while (lo <= hi) {
+    const mid = lo + hi >> 1;
+    if (fits(build(lines.slice(0, mid), continuation(offset + mid - 1)))) {
+      best = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  if (best === 0) {
+    const first = lines[0] ?? "";
+    const room = maxChars - 600;
+    const head = room >= 200 ? first.slice(0, room) : "";
+    const more = lines.length > 1 ? ` The lines AFTER it continue at offset ${offset + 1}: ${how(offset + 1)}.` : "";
+    const note = head ? `Line ${offset} of ${totalLines} is longer than the ~${maxChars.toLocaleString("en-US")}-char read budget; the first ${head.length.toLocaleString("en-US")} of its ${first.length.toLocaleString("en-US")} chars are shown. Paging by offset cannot reach the rest of this line \u2014 use ${pagedReadSearchTool(tool)} for the specific symbol instead.${more}` : `Skipped: this file's share of the read budget (~${Math.max(0, maxChars).toLocaleString("en-US")} chars) is too small for even its first line (${first.length.toLocaleString("en-US")} chars). Read it ${opts.alone !== void 0 ? "on its own" : "again with a larger budget"}: ${how(offset)}, or use ${pagedReadSearchTool(tool)} for the specific symbol.`;
+    return done({ ...out, content: head, offset, totalLines, truncated: true, note }, true);
+  }
+  return done(served(lines.slice(0, best), continuation(offset + best - 1)), true);
+}
+function isReadFilesResult(out) {
+  return !!out && typeof out === "object" && !Array.isArray(out) && out.ok !== false && Array.isArray(out.files);
+}
+function windowReadFiles(out, opts = {}) {
+  const maxChars = opts.maxChars ?? READ_FILE_RESULT_CHARS;
+  const files = out.files;
+  const overhead = JSON.stringify({ ...out, files: [] }).length + files.length + (opts.advisory ? opts.advisory.length + 16 : 0);
+  const order = files.map((f, i) => ({ i, size: JSON.stringify(f ?? null).length })).sort((a, b) => a.size - b.size);
+  const servedFiles = files.slice();
+  let remaining = Math.max(0, maxChars - overhead);
+  let truncated = false;
+  order.forEach(({ i, size }, n) => {
+    const file = files[i];
+    const alone = !pagedReadOffsetsPerPath(opts.tool ?? "read_file") && isReadFileResult(file) && typeof file.path === "string" ? file.path : void 0;
+    const share = Math.floor(remaining / (order.length - n));
+    if (isReadFileResult(file) && size > share) {
+      const windowed = windowReadFile(file, { ...opts.tool ? { tool: opts.tool } : {}, ...alone ? { alone } : {}, maxChars: share });
+      servedFiles[i] = windowed.served;
+      truncated = truncated || windowed.truncated;
+    }
+    remaining -= JSON.stringify(servedFiles[i] ?? null).length;
+  });
+  const served = { ...out, files: servedFiles };
+  const value = opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(served, opts.advisory) : served;
+  return { value, served, truncated };
+}
+function sliceReadFile(out, start, end) {
+  const lines = out.content.split("\n");
+  const first = typeof out.offset === "number" && out.offset > 0 ? Math.floor(out.offset) : 1;
+  const from = Math.max(first, Math.floor(start));
+  const kept = lines.slice(from - first, Math.max(from - first, Math.floor(end) - first + 1));
+  const lastLine = from + kept.length - 1;
+  const totalLines = typeof out.totalLines === "number" && out.totalLines > 0 ? Math.floor(out.totalLines) : void 0;
+  const truncated = totalLines !== void 0 ? lastLine < totalLines : out.truncated === true;
+  const { note: _coveringNote, ...rest } = out;
+  return {
+    ...rest,
+    content: kept.join("\n"),
+    offset: from,
+    ...totalLines !== void 0 ? { totalLines } : {},
+    truncated,
+    ...truncated ? { note: `Showing lines ${from}\u2013${lastLine}${totalLines !== void 0 ? ` of ${totalLines}` : ""}. To continue, call read_file again with offset ${lastLine + 1}.` } : {}
+  };
+}
+
+// ../packages/tool-output-policy/src/policy.ts
+var LOG_FIELDS = ["output", "stdout", "stderr"];
+function isLogLike(text, tool) {
+  return tool !== void 0 && isShellTool(tool) || detectRunner(text) !== "unknown";
+}
+function fitToolText(text, maxChars, opts = {}) {
+  if (text.length <= maxChars) return text;
+  if (opts.summarize && isLogLike(text, opts.tool)) return summarizeShellOutput(text, { maxChars }).text;
+  return (opts.fallback ?? cutHeadTail)(text, maxChars);
+}
+function attach(value, opts) {
+  return opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(value, opts.advisory) : value;
+}
+function capFor(tool, opts) {
+  if (opts.maxChars !== void 0) return opts.maxChars;
+  const tableCap = !opts.summarize && !isPagedReadTool(tool) ? DEFAULT_TOOL_OUTPUT_CHARS : toolOutputCap(tool, opts.caps);
+  return windowedCap(tool, tableCap, opts.contextWindowTokens);
+}
+function shrinkLogFields(tool, out, cap2, overhead) {
+  const fields = LOG_FIELDS.filter((f) => typeof out[f] === "string" && out[f].length > 0);
+  if (fields.length === 0) return null;
+  const logChars = fields.reduce((n, f) => n + out[f].length, 0);
+  const rest = JSON.stringify({ ...out, ...Object.fromEntries(fields.map((f) => [f, ""])) }).length;
+  const escapedLog = fields.reduce((n, f) => n + JSON.stringify(out[f]).length - 2, 0);
+  const inflation = logChars > 0 ? escapedLog / logChars : 1;
+  const budget = Math.floor((cap2 - rest - overhead) / inflation);
+  if (budget < 500) return null;
+  const shrunk = { ...out };
+  for (const f of fields) {
+    const text = out[f];
+    const share = Math.max(200, Math.floor(budget * (text.length / logChars)));
+    shrunk[f] = fitToolText(text, share, { tool, summarize: true });
+  }
+  return shrunk;
+}
+function truncatedResultNote(originalChars, maxChars) {
+  if (maxChars < 600) return "Truncated: NOT the whole result \u2014 do not treat it as complete.";
+  return `Truncated: the full result was ${originalChars.toLocaleString("en-US")} chars and this surface returns at most ~${maxChars.toLocaleString("en-US")}. \`output\` is only a cut of it, NOT the whole \u2014 never treat it as complete or write it back as if it were. Re-call with a narrower query, id or filter to see the rest.`;
+}
+function shapeToolResult(tool, out, opts = {}) {
+  const bytes = JSON.stringify(out ?? null).length;
+  if (isPagedReadTool(tool) && (isReadFileResult(out) || isReadFilesResult(out))) {
+    const maxChars = opts.maxChars ?? windowedCap(tool, toolOutputCap(tool), opts.contextWindowTokens);
+    const windowOpts = { tool, maxChars, advisory: opts.advisory, attachAdvisory: opts.attachAdvisory };
+    const windowed = isReadFileResult(out) ? windowReadFile(out, windowOpts) : windowReadFiles(out, windowOpts);
+    return { content: JSON.stringify(windowed.value), bytes, truncated: windowed.truncated, served: windowed.served };
+  }
+  const cap2 = capFor(tool, opts);
+  const full = JSON.stringify(attach(out ?? null, opts));
+  if (full.length <= cap2) return { content: full, bytes, truncated: false };
+  const advisoryChars = opts.advisory ? opts.advisory.length + 16 : 0;
+  if (opts.summarize) {
+    if (typeof out === "string") {
+      const inflation = out.length > 0 ? (bytes - 2) / out.length : 1;
+      const shaped = fitToolText(out, Math.max(500, Math.floor((cap2 - advisoryChars - 32) / Math.max(1, inflation))), { tool, summarize: true });
+      const content2 = JSON.stringify(attach(shaped, opts));
+      if (content2.length <= cap2) return { content: content2, bytes, truncated: true };
+    } else if (out && typeof out === "object" && !Array.isArray(out)) {
+      const shrunk = shrinkLogFields(tool, out, cap2, advisoryChars + 64);
+      if (shrunk) {
+        const content2 = JSON.stringify(attach(shrunk, opts));
+        if (content2.length <= cap2) return { content: content2, bytes, truncated: true };
+      }
+    }
+    const marker2 = `
+[projected to fit the ~${cap2.toLocaleString("en-US")}-char tool-result budget (original ${bytes.toLocaleString("en-US")} chars): every top-level key is kept; arrays show their first items with a count of the rest and long strings are clipped. Re-call with a narrower filter, limit or id to see specific items.]`;
+    const projection = projectJson(out ?? null, cap2 - marker2.length - advisoryChars);
+    if (projection.fits) {
+      return { content: `${projection.json}${marker2}${opts.advisory ? `
+${opts.advisory}` : ""}`, bytes, truncated: true };
+    }
+  }
+  const itemNote = Array.isArray(out) ? ` The full result had ${out.length} items; re-call this tool with a narrower filter (e.g. status, projectId, or limit) to see specific ones.` : " The full result was large; re-call with a narrower query if you need the elided fields.";
+  const head = JSON.stringify(out ?? null).slice(0, cap2);
+  const marker = `\u2026[truncated ${bytes - cap2} of ${bytes} chars to protect the context window.${itemNote}]`;
+  const content = `${head}
+${marker}${opts.advisory ? `
+${opts.advisory}` : ""}`;
+  return { content, bytes, truncated: true };
 }
 
 // src/runActivity.ts
@@ -7643,6 +8822,14 @@ function toolResultRecord(result) {
   }
   return result && typeof result === "object" ? result : null;
 }
+function entityIdsOf(result) {
+  const record2 = toolResultRecord(result);
+  if (!record2) return { localId: null, syncId: null };
+  const idRef = parseEntityRef(record2.id);
+  const syncId = parseSyncId(record2.syncId) ?? parseSyncId(record2.taskId) ?? (idRef && "sync" in idRef ? idRef.sync : null);
+  const localId = isLocalId(record2.localId) ? record2.localId : idRef && "local" in idRef ? idRef.local : null;
+  return { localId, syncId };
+}
 
 // src/staffingSummary.ts
 var DISPATCH_TOOL = /chats[._](dispatch_agent|execute_as_agent)|kanban[._](coordinate|materialize_work_items|assess_resource|assign_participant)|executions[._]submit|run[._-]?now/i;
@@ -7804,468 +8991,6 @@ function isCostLeverOn(env, id, tenantId) {
   if (rollout <= 0) return false;
   if (tenantId === null || tenantId === void 0 || tenantId === "") return false;
   return costLeverBucket(id, tenantId) < rollout;
-}
-
-// ../packages/tool-output-policy/src/caps.ts
-var DEFAULT_TOOL_OUTPUT_CHARS = 6e3;
-var TOOL_OUTPUT_CAPS = {
-  read_file: 16e3,
-  run_command: 2e4,
-  exec: 2e4,
-  bash: 2e4,
-  git_status: 2e4,
-  git_diff: 2e4,
-  git_history: 2e4,
-  git_sync_latest: 2e4,
-  git_undo: 2e4,
-  git_redo: 2e4,
-  // Up to four children's reports in one result, each capped by agent-tools'
-  // `SUBAGENT_REPORT_CHARS`. A research child's report IS its deliverable: under the 6K
-  // default a wait on four left the owner ~1.5K of each, and it re-spawned researchers
-  // to recover what was cut (VS Code chat #6). Four full reports plus each one's header
-  // and cut marker; `subagentReportBudget.test.ts` (brain-embedded) holds the two together.
-  wait_agents: 34e3,
-  // The Creation Canvas's reads. A board snapshot is the whole board as JSON and a real
-  // board runs to tens of KB; under the 6K default the model was handed a sliver of it and
-  // asked the user to re-select objects that were already there. A build file is paged
-  // like `read_file` (see {@link PAGED_READ_TOOLS}).
-  canvas_read_snapshot: 64e3,
-  canvas_read_object: 32e3,
-  canvas_read_build_file: 16e3
-};
-var READ_FILE_TOOL = "read_file";
-var PAGED_READ_TOOLS = {
-  // `read_file`'s `offset` applies to each path of a `paths[]` read (agent-tools core-tools).
-  [READ_FILE_TOOL]: { search: "search_code", perPathOffset: true },
-  // The canvas's `offset` is honoured for a SINGLE path only.
-  canvas_read_build_file: { search: "canvas_search_build_files", perPathOffset: false }
-};
-function isPagedReadTool(tool) {
-  return Object.prototype.hasOwnProperty.call(PAGED_READ_TOOLS, tool);
-}
-function pagedReadSearchTool(tool) {
-  return PAGED_READ_TOOLS[tool]?.search ?? "search_code";
-}
-function pagedReadOffsetsPerPath(tool) {
-  return PAGED_READ_TOOLS[tool]?.perPathOffset ?? true;
-}
-var SHELL_TOOLS = /* @__PURE__ */ new Set(["run_command", "exec", "bash", "shell", "process"]);
-var HARD_MAX_TOOL_RESULT_CHARS = 4e5;
-var TOOL_RESULT_WINDOW_SHARE = 0.3;
-var TOOL_RESULT_CHARS_PER_TOKEN = 4;
-function toolOutputCap(tool, caps = TOOL_OUTPUT_CAPS) {
-  return caps[tool] ?? DEFAULT_TOOL_OUTPUT_CHARS;
-}
-function windowToolResultCap(contextWindowTokens) {
-  const maxTokens = Math.floor(contextWindowTokens * TOOL_RESULT_WINDOW_SHARE);
-  return Math.min(maxTokens * TOOL_RESULT_CHARS_PER_TOKEN, HARD_MAX_TOOL_RESULT_CHARS);
-}
-var READ_FILE_MAX_CHARS = 64e3;
-function windowedCap(tool, tableCap, contextWindowTokens) {
-  if (typeof contextWindowTokens !== "number" || !Number.isFinite(contextWindowTokens) || contextWindowTokens <= 0) return tableCap;
-  const share = windowToolResultCap(contextWindowTokens);
-  if (isPagedReadTool(tool)) return Math.min(READ_FILE_MAX_CHARS, Math.max(tableCap, share));
-  return Math.min(tableCap, share);
-}
-function isShellTool(tool) {
-  return SHELL_TOOLS.has(tool);
-}
-
-// ../packages/tool-output-policy/src/textCut.ts
-function keepTail(text, max) {
-  if (text.length <= max) return text;
-  return text.slice(text.length - max);
-}
-var DEFAULT_TRUNCATION_SUFFIX = "\n\n\u26A0\uFE0F [Content truncated \u2014 original was too large for the model's context window. The content above is a partial view. If you need more, request specific sections or use offset/limit parameters to read smaller chunks.]";
-function cutHead(text, maxChars, opts = {}) {
-  if (text.length <= maxChars) return text;
-  const suffix = opts.suffix ?? DEFAULT_TRUNCATION_SUFFIX;
-  const snap = opts.snap ?? 0.8;
-  const keep = Math.max(opts.minKeep ?? 0, maxChars - suffix.length);
-  if (keep <= 0) return opts.emptyNotice ?? suffix.trim();
-  let cutPoint = keep;
-  const lastNewline = text.lastIndexOf("\n", keep);
-  if (lastNewline > keep * snap) cutPoint = lastNewline;
-  return text.slice(0, cutPoint) + suffix;
-}
-var MARKER_RESERVE = 160;
-function countLines(text) {
-  let n = 0;
-  for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) === 10) n++;
-  return n;
-}
-function cutHeadTail(text, maxChars, opts = {}) {
-  if (text.length <= maxChars) return text;
-  const budget = maxChars - MARKER_RESERVE;
-  if (budget <= 0) return keepTail(text, Math.max(0, maxChars));
-  const headShare = Math.min(1, Math.max(0, opts.headShare ?? 0.25));
-  const headBudget = Math.floor(budget * headShare);
-  const tailBudget = budget - headBudget;
-  let headEnd = headBudget;
-  const nl = text.lastIndexOf("\n", headBudget);
-  if (nl > headBudget * 0.8) headEnd = nl;
-  let tailStart = text.length - tailBudget;
-  const nextNl = text.indexOf("\n", tailStart);
-  if (nextNl >= 0 && nextNl - tailStart < tailBudget * 0.2) tailStart = nextNl + 1;
-  const head = text.slice(0, headEnd);
-  const tail = text.slice(tailStart);
-  const elided = text.slice(headEnd, tailStart);
-  const marker = `
-\u2026[${elided.length.toLocaleString("en-US")} chars (${countLines(elided).toLocaleString("en-US")} lines) elided \u2014 showing the first ${head.length.toLocaleString("en-US")} and the last ${tail.length.toLocaleString("en-US")} of ${text.length.toLocaleString("en-US")} chars]\u2026
-`;
-  return `${head}${marker}${tail}`;
-}
-
-// ../packages/tool-output-policy/src/shellSummary.ts
-var DEFAULT_TAIL_LINES = 40;
-var MAX_DIFF_LINES = 24;
-var ANSI = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
-function stripAnsi(text) {
-  return text.replace(ANSI, "");
-}
-var RUNNER_SIGNATURES = [
-  ["vitest", /\bvitest\b|^\s*(?:Test Files|Tests)\s+\d+\s+(?:failed|passed)|^\s*[❯›]\s+\S+\.(?:test|spec)\.[cm]?[jt]sx?/m],
-  ["jest", /^\s*(?:PASS|FAIL)\s+\S+\.(?:test|spec)\.[cm]?[jt]sx?|^Test Suites:\s+\d+/m],
-  ["pytest", /=+ test session starts =+|^(?:FAILED|ERROR) \S+::|=+ .*\b(?:passed|failed)\b.* in [\d.]+s =+/m],
-  ["cargo", /^\s*(?:Compiling|Finished|Running) .*|^test result: (?:ok|FAILED)\.|^error(?:\[E\d+\])?: /m],
-  ["tsc", /\berror TS\d+:/],
-  ["go", /^(?:---|===) (?:FAIL|RUN|PASS):|^(?:ok|FAIL)\s+\S+\s+[\d.]+s/m]
-];
-function detectRunner(text) {
-  for (const [runner, re] of RUNNER_SIGNATURES) if (re.test(text)) return runner;
-  return "unknown";
-}
-var NOISE = [
-  /^\s*[✓√✔]\s/,
-  /^\s*PASS\s/,
-  /^\s*PASSED\b/,
-  /\bPASSED\s*(?:\[\s*\d+%\])?$/,
-  /^test .* \.\.\. ok$/,
-  /^ok\s+\S+\s+[\d.]+s/,
-  /^=== RUN\s/,
-  /^--- PASS:/,
-  /^\s*Compiling\s/,
-  /^\s*Downloaded?\s/,
-  /^\s*$/
-];
-var ERROR_LINE = [
-  /\berror\b|\bERROR\b|\bError\b/,
-  /\bFAIL(?:ED|URE)?\b|\bfailed\b/,
-  /^\s*[✗×✕❌]\s/,
-  /\bpanic(?:ked)?\b|^Traceback \(most recent call last\)/,
-  /\bAssertion(?:Error)?\b|\bassert(?:ion)?\b/,
-  /^E\s{2,}/,
-  // pytest assertion detail
-  /^\s*●\s/,
-  // jest failing test header
-  /\berror TS\d+:/,
-  /^\s*-->\s.+:\d+:\d+$/
-  // cargo error location
-];
-var DIFF_HEADER = /^\s*(?:[-+]\s*Expected|[-+]\s*Received|Expected:|Received:|expected:|actual:|Difference:|- expected|\+ actual|assert .* ==)/;
-var DIFF_BODY = /^\s*[-+](?!-)|^\s{2,}\S/;
-var FAILING_TEST = [
-  /^\s*(?:FAIL|×|✕|✗)\s+(\S+\.(?:test|spec)\.[cm]?[jt]sx?(?:\s+>\s+.+?)?)(?:\s+\d+ms)?$/,
-  // vitest/jest file (+ test path)
-  /^\s*●\s+(.+?)\s*$/,
-  // jest
-  /^\s*[×✕✗]\s+(.+?)(?:\s+\d+ms)?$/,
-  // vitest/jest test line
-  /^FAILED\s+(\S+::\S+)/,
-  // pytest
-  /^test\s+(\S+)\s+\.\.\.\s+FAILED$/,
-  // cargo
-  /^---\s+FAIL:\s+(\S+)/
-  // go
-];
-function isNoise(line2) {
-  return NOISE.some((re) => re.test(line2));
-}
-function isErrorLine(line2) {
-  return ERROR_LINE.some((re) => re.test(line2));
-}
-function failingTestName(line2) {
-  for (const re of FAILING_TEST) {
-    const m = re.exec(line2);
-    if (m && m[1]) return m[1].trim();
-  }
-  return null;
-}
-function summarizeShellOutput(raw, opts) {
-  const tailLines = opts.tailLines ?? DEFAULT_TAIL_LINES;
-  if (raw.length <= opts.maxChars) {
-    return { text: raw, runner: detectRunner(raw), failingTests: [], droppedNoise: 0 };
-  }
-  const text = stripAnsi(raw).replace(/\r\n?/g, "\n");
-  const runner = detectRunner(text);
-  const lines = text.split("\n");
-  const tailFrom = Math.max(0, lines.length - tailLines);
-  const tail = lines.slice(tailFrom);
-  const failing = [];
-  const seenFailing = /* @__PURE__ */ new Set();
-  const kept = [];
-  const seenKept = /* @__PURE__ */ new Set();
-  let droppedNoise = 0;
-  let diffLeft = 0;
-  for (let i = 0; i < lines.length; i++) {
-    const line2 = lines[i];
-    const name = failingTestName(line2);
-    if (name && !seenFailing.has(name)) {
-      seenFailing.add(name);
-      failing.push(name);
-    }
-    if (i >= tailFrom) continue;
-    if (DIFF_HEADER.test(line2)) {
-      diffLeft = MAX_DIFF_LINES;
-      kept.push(line2);
-      continue;
-    }
-    if (diffLeft > 0) {
-      if (DIFF_BODY.test(line2) && !isNoise(line2)) {
-        kept.push(line2);
-        diffLeft--;
-        continue;
-      }
-      diffLeft = 0;
-    }
-    if (isNoise(line2)) {
-      droppedNoise++;
-      continue;
-    }
-    if (isErrorLine(line2)) {
-      const key = line2.trim();
-      if (seenKept.has(key)) continue;
-      seenKept.add(key);
-      kept.push(line2);
-    }
-  }
-  const header = `[output summarised${runner === "unknown" ? "" : ` (${runner})`}: ${lines.length.toLocaleString("en-US")} lines / ${raw.length.toLocaleString("en-US")} chars \u2192 failing tests, error lines, assertion diffs and the last ${tail.length} lines; ${droppedNoise.toLocaleString("en-US")} passing/progress lines dropped. Re-run a narrower command (one test file, grep) for more.]`;
-  const failingBlock = failing.length > 0 ? `Failing tests (${failing.length}):
-${failing.slice(0, 50).map((n) => `  - ${n}`).join("\n")}${failing.length > 50 ? `
-  \u2026 +${failing.length - 50} more` : ""}` : "";
-  const tailBlock = `--- last ${tail.length} lines ---
-${tail.join("\n")}`;
-  const fixed = [header, failingBlock, tailBlock].filter(Boolean).join("\n\n");
-  const room = opts.maxChars - fixed.length - 40;
-  let errorsBlock = "";
-  if (kept.length > 0 && room > 200) {
-    const body = `--- errors (${kept.length} lines) ---
-${kept.join("\n")}`;
-    errorsBlock = body.length <= room ? body : cutHead(body, room, { suffix: "\n\u2026[more error lines elided]" });
-  }
-  const assembled = [header, failingBlock, errorsBlock, tailBlock].filter(Boolean).join("\n\n");
-  const fitted = assembled.length <= opts.maxChars ? assembled : cutHeadTail(assembled, opts.maxChars, { headShare: 0.5 });
-  return { text: fitted, runner, failingTests: failing, droppedNoise };
-}
-
-// ../packages/tool-output-policy/src/jsonProjection.ts
-var STEPS = [
-  { depth: 4, arrayItems: 10, stringChars: 400 },
-  { depth: 3, arrayItems: 5, stringChars: 200 },
-  { depth: 2, arrayItems: 3, stringChars: 120 },
-  { depth: 2, arrayItems: 1, stringChars: 80 },
-  { depth: 1, arrayItems: 1, stringChars: 60 }
-];
-function describe(value) {
-  if (Array.isArray(value)) return `[array: ${value.length} items]`;
-  if (value && typeof value === "object") return `{object: ${Object.keys(value).length} keys}`;
-  return String(value);
-}
-function projectValue(value, step, depth) {
-  if (typeof value === "string") {
-    return value.length > step.stringChars ? `${value.slice(0, step.stringChars)}\u2026(+${value.length - step.stringChars} chars)` : value;
-  }
-  if (value === null || typeof value !== "object") return value;
-  if (depth >= step.depth) return describe(value);
-  if (Array.isArray(value)) {
-    const head = value.slice(0, step.arrayItems).map((v) => projectValue(v, step, depth + 1));
-    if (value.length > step.arrayItems) head.push(`\u2026(+${value.length - step.arrayItems} more of ${value.length} items)`);
-    return head;
-  }
-  const out = {};
-  for (const [k, v] of Object.entries(value)) out[k] = projectValue(v, step, depth + 1);
-  return out;
-}
-function projectJson(value, maxChars) {
-  let last = { value: void 0, json: "", fits: false };
-  for (const step of STEPS) {
-    const projected = projectValue(value, step, 0);
-    const json = JSON.stringify(projected);
-    last = { value: projected, json, fits: json.length <= maxChars };
-    if (last.fits) return last;
-  }
-  return last;
-}
-
-// ../packages/tool-output-policy/src/readFileWindow.ts
-var READ_FILE_RESULT_CHARS = TOOL_OUTPUT_CAPS.read_file ?? 16e3;
-function isReadFileResult(out) {
-  return !!out && typeof out === "object" && !Array.isArray(out) && out.ok !== false && typeof out.content === "string";
-}
-function windowReadFile(out, opts = {}) {
-  const maxChars = opts.maxChars ?? READ_FILE_RESULT_CHARS;
-  const tool = opts.tool ?? "read_file";
-  const withNote = (result) => opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(result, opts.advisory) : result;
-  const done = (served2, truncated) => ({ value: withNote(served2), served: served2, truncated });
-  const lines = out.content.split("\n");
-  const offset = typeof out.offset === "number" && out.offset > 0 ? Math.floor(out.offset) : 1;
-  const totalLines = typeof out.totalLines === "number" && out.totalLines > 0 ? Math.floor(out.totalLines) : offset + lines.length - 1;
-  const alreadyPartial = out.truncated === true;
-  const served = (kept, note) => {
-    const lastLine = offset + kept.length - 1;
-    return { ...out, content: kept.join("\n"), offset, totalLines, truncated: lastLine < totalLines || alreadyPartial, note };
-  };
-  const build = (kept, note) => withNote(served(kept, note));
-  const fits = (value) => JSON.stringify(value).length <= maxChars;
-  if (fits(withNote({ ...out }))) return done({ ...out }, false);
-  const how = (next) => opts.alone !== void 0 ? `call ${tool} again with ONLY the path ${JSON.stringify(opts.alone)} (offset applies to a single file) and offset ${next}` : `call ${tool} again with offset ${next}`;
-  const continuation = (lastLine) => `Showing lines ${offset}\u2013${lastLine} of ${totalLines}. This surface returns at most ~${maxChars.toLocaleString("en-US")} chars per read, so a large file arrives in several windows \u2014 ${how(lastLine + 1)} to continue from exactly where this one stopped. Do not re-request lines you already have.`;
-  let lo = 1;
-  let hi = lines.length;
-  let best = 0;
-  while (lo <= hi) {
-    const mid = lo + hi >> 1;
-    if (fits(build(lines.slice(0, mid), continuation(offset + mid - 1)))) {
-      best = mid;
-      lo = mid + 1;
-    } else {
-      hi = mid - 1;
-    }
-  }
-  if (best === 0) {
-    const first = lines[0] ?? "";
-    const room = maxChars - 600;
-    const head = room >= 200 ? first.slice(0, room) : "";
-    const more = lines.length > 1 ? ` The lines AFTER it continue at offset ${offset + 1}: ${how(offset + 1)}.` : "";
-    const note = head ? `Line ${offset} of ${totalLines} is longer than the ~${maxChars.toLocaleString("en-US")}-char read budget; the first ${head.length.toLocaleString("en-US")} of its ${first.length.toLocaleString("en-US")} chars are shown. Paging by offset cannot reach the rest of this line \u2014 use ${pagedReadSearchTool(tool)} for the specific symbol instead.${more}` : `Skipped: this file's share of the read budget (~${Math.max(0, maxChars).toLocaleString("en-US")} chars) is too small for even its first line (${first.length.toLocaleString("en-US")} chars). Read it ${opts.alone !== void 0 ? "on its own" : "again with a larger budget"}: ${how(offset)}, or use ${pagedReadSearchTool(tool)} for the specific symbol.`;
-    return done({ ...out, content: head, offset, totalLines, truncated: true, note }, true);
-  }
-  return done(served(lines.slice(0, best), continuation(offset + best - 1)), true);
-}
-function isReadFilesResult(out) {
-  return !!out && typeof out === "object" && !Array.isArray(out) && out.ok !== false && Array.isArray(out.files);
-}
-function windowReadFiles(out, opts = {}) {
-  const maxChars = opts.maxChars ?? READ_FILE_RESULT_CHARS;
-  const files = out.files;
-  const overhead = JSON.stringify({ ...out, files: [] }).length + files.length + (opts.advisory ? opts.advisory.length + 16 : 0);
-  const order = files.map((f, i) => ({ i, size: JSON.stringify(f ?? null).length })).sort((a, b) => a.size - b.size);
-  const servedFiles = files.slice();
-  let remaining = Math.max(0, maxChars - overhead);
-  let truncated = false;
-  order.forEach(({ i, size }, n) => {
-    const file = files[i];
-    const alone = !pagedReadOffsetsPerPath(opts.tool ?? "read_file") && isReadFileResult(file) && typeof file.path === "string" ? file.path : void 0;
-    const share = Math.floor(remaining / (order.length - n));
-    if (isReadFileResult(file) && size > share) {
-      const windowed = windowReadFile(file, { ...opts.tool ? { tool: opts.tool } : {}, ...alone ? { alone } : {}, maxChars: share });
-      servedFiles[i] = windowed.served;
-      truncated = truncated || windowed.truncated;
-    }
-    remaining -= JSON.stringify(servedFiles[i] ?? null).length;
-  });
-  const served = { ...out, files: servedFiles };
-  const value = opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(served, opts.advisory) : served;
-  return { value, served, truncated };
-}
-function sliceReadFile(out, start, end) {
-  const lines = out.content.split("\n");
-  const first = typeof out.offset === "number" && out.offset > 0 ? Math.floor(out.offset) : 1;
-  const from = Math.max(first, Math.floor(start));
-  const kept = lines.slice(from - first, Math.max(from - first, Math.floor(end) - first + 1));
-  const lastLine = from + kept.length - 1;
-  const totalLines = typeof out.totalLines === "number" && out.totalLines > 0 ? Math.floor(out.totalLines) : void 0;
-  const truncated = totalLines !== void 0 ? lastLine < totalLines : out.truncated === true;
-  const { note: _coveringNote, ...rest } = out;
-  return {
-    ...rest,
-    content: kept.join("\n"),
-    offset: from,
-    ...totalLines !== void 0 ? { totalLines } : {},
-    truncated,
-    ...truncated ? { note: `Showing lines ${from}\u2013${lastLine}${totalLines !== void 0 ? ` of ${totalLines}` : ""}. To continue, call read_file again with offset ${lastLine + 1}.` } : {}
-  };
-}
-
-// ../packages/tool-output-policy/src/policy.ts
-var LOG_FIELDS = ["output", "stdout", "stderr"];
-function isLogLike(text, tool) {
-  return tool !== void 0 && isShellTool(tool) || detectRunner(text) !== "unknown";
-}
-function fitToolText(text, maxChars, opts = {}) {
-  if (text.length <= maxChars) return text;
-  if (opts.summarize && isLogLike(text, opts.tool)) return summarizeShellOutput(text, { maxChars }).text;
-  return (opts.fallback ?? cutHeadTail)(text, maxChars);
-}
-function attach(value, opts) {
-  return opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(value, opts.advisory) : value;
-}
-function capFor(tool, opts) {
-  if (opts.maxChars !== void 0) return opts.maxChars;
-  const tableCap = !opts.summarize && !isPagedReadTool(tool) ? DEFAULT_TOOL_OUTPUT_CHARS : toolOutputCap(tool, opts.caps);
-  return windowedCap(tool, tableCap, opts.contextWindowTokens);
-}
-function shrinkLogFields(tool, out, cap2, overhead) {
-  const fields = LOG_FIELDS.filter((f) => typeof out[f] === "string" && out[f].length > 0);
-  if (fields.length === 0) return null;
-  const logChars = fields.reduce((n, f) => n + out[f].length, 0);
-  const rest = JSON.stringify({ ...out, ...Object.fromEntries(fields.map((f) => [f, ""])) }).length;
-  const escapedLog = fields.reduce((n, f) => n + JSON.stringify(out[f]).length - 2, 0);
-  const inflation = logChars > 0 ? escapedLog / logChars : 1;
-  const budget = Math.floor((cap2 - rest - overhead) / inflation);
-  if (budget < 500) return null;
-  const shrunk = { ...out };
-  for (const f of fields) {
-    const text = out[f];
-    const share = Math.max(200, Math.floor(budget * (text.length / logChars)));
-    shrunk[f] = fitToolText(text, share, { tool, summarize: true });
-  }
-  return shrunk;
-}
-function truncatedResultNote(originalChars, maxChars) {
-  if (maxChars < 600) return "Truncated: NOT the whole result \u2014 do not treat it as complete.";
-  return `Truncated: the full result was ${originalChars.toLocaleString("en-US")} chars and this surface returns at most ~${maxChars.toLocaleString("en-US")}. \`output\` is only a cut of it, NOT the whole \u2014 never treat it as complete or write it back as if it were. Re-call with a narrower query, id or filter to see the rest.`;
-}
-function shapeToolResult(tool, out, opts = {}) {
-  const bytes = JSON.stringify(out ?? null).length;
-  if (isPagedReadTool(tool) && (isReadFileResult(out) || isReadFilesResult(out))) {
-    const maxChars = opts.maxChars ?? windowedCap(tool, toolOutputCap(tool), opts.contextWindowTokens);
-    const windowOpts = { tool, maxChars, advisory: opts.advisory, attachAdvisory: opts.attachAdvisory };
-    const windowed = isReadFileResult(out) ? windowReadFile(out, windowOpts) : windowReadFiles(out, windowOpts);
-    return { content: JSON.stringify(windowed.value), bytes, truncated: windowed.truncated, served: windowed.served };
-  }
-  const cap2 = capFor(tool, opts);
-  const full = JSON.stringify(attach(out ?? null, opts));
-  if (full.length <= cap2) return { content: full, bytes, truncated: false };
-  const advisoryChars = opts.advisory ? opts.advisory.length + 16 : 0;
-  if (opts.summarize) {
-    if (typeof out === "string") {
-      const inflation = out.length > 0 ? (bytes - 2) / out.length : 1;
-      const shaped = fitToolText(out, Math.max(500, Math.floor((cap2 - advisoryChars - 32) / Math.max(1, inflation))), { tool, summarize: true });
-      const content2 = JSON.stringify(attach(shaped, opts));
-      if (content2.length <= cap2) return { content: content2, bytes, truncated: true };
-    } else if (out && typeof out === "object" && !Array.isArray(out)) {
-      const shrunk = shrinkLogFields(tool, out, cap2, advisoryChars + 64);
-      if (shrunk) {
-        const content2 = JSON.stringify(attach(shrunk, opts));
-        if (content2.length <= cap2) return { content: content2, bytes, truncated: true };
-      }
-    }
-    const marker2 = `
-[projected to fit the ~${cap2.toLocaleString("en-US")}-char tool-result budget (original ${bytes.toLocaleString("en-US")} chars): every top-level key is kept; arrays show their first items with a count of the rest and long strings are clipped. Re-call with a narrower filter, limit or id to see specific items.]`;
-    const projection = projectJson(out ?? null, cap2 - marker2.length - advisoryChars);
-    if (projection.fits) {
-      return { content: `${projection.json}${marker2}${opts.advisory ? `
-${opts.advisory}` : ""}`, bytes, truncated: true };
-    }
-  }
-  const itemNote = Array.isArray(out) ? ` The full result had ${out.length} items; re-call this tool with a narrower filter (e.g. status, projectId, or limit) to see specific ones.` : " The full result was large; re-call with a narrower query if you need the elided fields.";
-  const head = JSON.stringify(out ?? null).slice(0, cap2);
-  const marker = `\u2026[truncated ${bytes - cap2} of ${bytes} chars to protect the context window.${itemNote}]`;
-  const content = `${head}
-${marker}${opts.advisory ? `
-${opts.advisory}` : ""}`;
-  return { content, bytes, truncated: true };
 }
 
 // src/toolResultBudget.ts
@@ -9215,6 +9940,20 @@ function createComposingActivity(sink, opts) {
 export {
   hostOf,
   describeStreamFailure,
+  INFERENCE_MODES,
+  isInferenceMode,
+  defaultInferenceMode,
+  parseSyncId,
+  syncIdText,
+  UNBOUND_DESTINATION,
+  SCAN_STOP,
+  selectRecords,
+  newLocalRecord,
+  BOUND_ONLY_VERSION,
+  isOwnRecord,
+  isImported,
+  queueImport,
+  journalWrite,
   PROVENANCE_META_KEY,
   asProvenanceAccount,
   isConnectedAccountUnused,
@@ -9254,8 +9993,11 @@ export {
   MAX_MODEL_FAILOVERS,
   chooseStallFailover,
   isModelRole,
+  editedFilesOf,
+  editedPathsOf,
   bracketDelta,
   changesBalance,
+  describeBracketDelta,
   normalizeToolName,
   resolveToolAlias,
   toolCallPaths,
@@ -9302,6 +10044,7 @@ export {
   repeatedFailureAdvisory,
   WriteLedger,
   repeatedWriteNote,
+  isTestPath,
   claimsReady,
   ProgressDetector,
   progressAdvice,
@@ -9330,10 +10073,12 @@ export {
   SERVER_TICKET_TOOLS,
   ticketToolVocabulary,
   isLocalTicketCreateLabel,
-  serverTicketId,
   ticketStatusMove,
+  toolResultRecord,
+  entityIdsOf,
   toolOutputCap,
   windowedCap,
+  truncateMiddle,
   isReadFileResult,
   sliceReadFile,
   truncatedResultNote,
@@ -9397,7 +10142,6 @@ export {
   splitLayoutLine,
   scopeClashCorrective,
   routingByRole,
-  toolResultRecord,
   isDispatchTool,
   staffingSummaryInTrace,
   formatDispatchRefusals,
@@ -9443,4 +10187,4 @@ export {
   toolCallArgBytes,
   createComposingActivity
 };
-//# sourceMappingURL=chunk-HUXONYGK.mjs.map
+//# sourceMappingURL=chunk-C5BODSXM.mjs.map

@@ -9,6 +9,67 @@
 - **Guard.** `scripts/check-entity-id-parsing.mjs` (`check:entity-id-parsing`) refuses new hand-rolled id parsing outside the allowlist.
 - The contract push (drop `server_id`, read `sync_id` first, stop sending `serverId` text) stays in ROADMAP.md. It is blocked until push telemetry shows no client below the version that reads `syncId`.
 
+## ✅ RESOLVED 2026-11-10: code review of commits d5e75e5e..ea57946e: every finding fixed (Platform · Security · Code health)
+
+- **Context.** A 5-day review (251 Builderforce.ai + 40 builderforce-memory commits) found 2 security findings, a migration that could never apply, and defects across 12 areas. Every fix had an Opus review and its targeted tests run before commit. Only the three god files that other sessions are editing stay open in ROADMAP.md.
+- **Security** (details in the gitignored security findings file):
+  - The host-OIDC seam path now checks scope and binds segment admin routes to the token's own segment. It also requires `exp` and a matching `aud`.
+  - The `git_commit` path argument is quoted; `safeGitArg` rejects option injection.
+- **Migrations.**
+  - `1337_prd20_projects_id_bigint` had never applied: its unnest of a 2-D array errored, which blocked every later migration. It is fixed in place to:
+    - capture the FK children correctly
+    - widen `projects_id_seq`
+    - set `lock_timeout`
+  - Idempotent completers bring every `project_id` column to bigint on all three tracks: `1340`, `transactional-migrations/0031`, `apps-migrations/0002`. A PGlite test covers this.
+- **run-guards / agent-run.**
+  - Advisory notes reach the cloud host through `setSteer`.
+  - `fired` and the reverifying state survive durable resume, capped at 200 paths.
+  - There is one `isTestPath`.
+  - `reverifyTracker.ts` and the guards' `ports.ts` are split out.
+- **agent-runtime.** The governance-audit tool is split into `governance-audit/` (walker, matchers, prefilter, api-client, pipeline), registered, and given to the governance-auditor role. Globs compile as globs, bad rules are reported, and skipped files are listed.
+- **brain-embedded.**
+  - Holds and gates:
+    - The publish-hold matcher was rewritten.
+    - The ship and completion gates fail closed.
+    - The outgoing-change gate refuses when the change is unavailable.
+  - The on-device translator downloads the language pairs it needs.
+  - `localFirstTransport` is split four ways, and 403 handling no longer misreports quota errors.
+  - Narration detection now uses memory `/working`.
+- **VS Code.**
+  - A 403 parks workspace writes, so they cannot replay into another tenant.
+  - The child ledger flushes on deactivate.
+  - The verify runner kills the whole process tree on timeout, and `targetedTests` finds changed and `x.*.test.ts` files; both now have tests.
+  - `modelRouting` is split.
+- **agent-tools.**
+  - Replica lock:
+    - The owner is stamped with pid+nonce, and exclusive create is the only arbiter.
+    - The lock counts as lost after 90 s and is checked before every send.
+  - A refused fact is skipped, never tombstoned.
+  - `a2a.ts` is a barrel over `a2a/{types,sse,client,server}`, with the SSE UTF-8, event-name and last-frame fixes. It is exported and aliased.
+  - The `documentText` pdf.js leak is fixed.
+- **builderforce-memory 2026.10.66/.67.**
+  - The pack decoder checks the diff count, frame flags and EXTR kind, and wire strings handle lone surrogates.
+  - The extract cache evicts.
+  - `reviewRun` is split.
+  - The missing `regression:` tests are added.
+  - New exports: `splitSourceRef`, `isRepeatedNarration`, `chunkText`, `chunkedTextSummary`.
+- **Frontend.**
+  - Fixed: AnimationPaintStage frame race, the DSR erase confirm and stale plan, RunScanPanel head SHA, KnowledgeAnalyzePanel i18n keys, AssigneeProfiles silent catch, and the `/people` canonical.
+  - 3 blog posts translated into zh/es/fr/de.
+  - The silent-catch baseline was lowered to 74.
+- **Knowledge view / local-first.**
+  - `themeColors` repaints only on a real change.
+  - `useSyncStatus` backs off offline and reads once on visibility.
+  - `sync.ts` is split (holdLimits, syncBatch, syncSummary).
+  - The red frontend CI tests were stale after the Reviews panel stopped planning on open; they now follow the one-press Start.
+- **DRY / layering.**
+  - Ref parsing goes through memory's ref helpers.
+  - `liveExecutionStatus` uses one `liveRunOfTask`.
+  - Rate-limit responses are one middleware.
+  - `vscodeRoutes` goes through application use cases.
+  - Files that grew past their old size were split back: `cronSweeps`, `StripeProvider`, `webSurface`, `studioVoiceClone`.
+  - The builderforce-inference lockfile drift was fixed in `1172c91`.
+
 ## ✅ RESOLVED 2026-11-10: PRD 46: the Visualizer names what went wrong in an agent run, and the editor's gates check real work (Agents · Visualizer)
 
 - **Context.** Editor run #70776 used 3.06M prompt tokens over 42 turns. It spent 21 turns reading and 13 turns making one write each, never ran a check, and left `labels.ts` unparseable. Chat diagnostics called it "Inconclusive". Spec: [PRD 46](./docs/specs/46-prd-agent-run-findings.md).

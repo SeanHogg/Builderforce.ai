@@ -1,5 +1,5 @@
-import { B as BrainTraceEvent, a as BrainMessage, av as RoutingByRole, h as StaffingSummary } from './brainTriage-RveFqfcR.cjs';
-export { t as traceWithPersistedSteps } from './persistedSteps-BcN3pTpj.cjs';
+import { B as BrainTraceEvent, a as BrainMessage, aw as RoutingByRole, i as StaffingSummary } from './brainTriage-0eq1J6lS.cjs';
+export { t as traceWithPersistedSteps } from './persistedSteps-CVRK8Ymk.cjs';
 
 /**
  * Run findings (PRD 46 §3.1/§3.3): what a recorded agent run did wrong, named deterministically from its trace.
@@ -30,12 +30,19 @@ interface RunFindingsTurn {
     completionTokens: number;
     durationMs: number;
 }
+/** A note a host renders in its own words on an evidence row (`agentRuns.evidenceNotes[note]`, holes = `params`). */
+type RunFindingEvidenceNote = 'argBytes' | 'argBytesShared' | 'slowTurn';
 interface RunFindingEvidence {
     step: number;
     turn?: number;
     label: string;
     path?: string;
+    /** Text the run itself carried (a message, a title, an edit's new text) — never words of ours. */
     excerpt?: string;
+    /** What this row measured, rendered by the host from its labels with {@link RunFindingEvidence.params}. */
+    note?: RunFindingEvidenceNote;
+    /** The note's numbers. */
+    params?: Readonly<Record<string, number>>;
 }
 interface RunFinding {
     id: string;
@@ -128,16 +135,6 @@ interface RunIdentity {
 declare function compareFindings(a: RunFinding, b: RunFinding): number;
 declare function detectRunFindings(events: BrainTraceEvent[], messages?: BrainMessage[], identity?: RunIdentity): RunFindingsReport;
 
-/**
- * The run, read ONCE (PRD 46 §3.1): ordered turns — each `llm.complete` plus the tool steps that follow it
- * (`category === 'tool'` only; bookkeeping such as `agent.message`, `steer.applied` or `run.budget_*` never counts)
- * — with each turn's role, model, usage, duration, argument bytes and text, and each call's written paths and
- * whether it checked the workspace. Every detector reads this view and nothing else.
- *
- * The per-turn numbers come from {@link modelTurnLog}, the role/hand-off picture from {@link routingByRole}, the
- * ticket/dispatch picture from {@link staffingSummaryInTrace} — no second copy of any of them. Pure.
- */
-
 /** Build the view of a recorded run. `events` is the merged trace (`traceWithPersistedSteps`). */
 declare function buildRunView(events: readonly BrainTraceEvent[], messages?: readonly BrainMessage[]): RunView;
 
@@ -146,10 +143,6 @@ declare const RUN_FINDING_REGISTRY: ReadonlyArray<{
     detect: RunFindingDetector;
 }>;
 
-/**
- * Every threshold the run-findings detectors use, as data (PRD 46 §3.1). A detector reads its numbers here and
- * nowhere else, so tuning one is a one-line change that every surface sees.
- */
 declare const RUN_FINDING_POLICY: Readonly<{
     /** Read-only turns before the first write that make an analysis overrun. */
     analysisReadTurns: 8;
@@ -168,12 +161,11 @@ declare const RUN_FINDING_POLICY: Readonly<{
     sharedArgBytes: 1024;
     /** A turn this slow (ms) is slow. */
     slowTurnMs: 60000;
-    /** Word-set overlap (|A∩B| / min(|A|,|B|)) of consecutive pre-call texts that repeats narration. */
+    /** Word-set overlap at which a pre-call text repeats the last kept one: memory's B7 fold threshold, so the
+     *  diagnostic and the fold agree (`NARRATION_OVERLAP`, `@seanhogg/builderforce-memory/working`). */
     narrationOverlap: 0.8;
-    /** Fewest distinct words a pre-call text needs before its overlap means anything. */
-    narrationMinWords: 3;
     /** Longest excerpt an evidence row quotes. */
     excerptChars: 160;
 }>;
 
-export { RUN_FINDING_POLICY, RUN_FINDING_REGISTRY, type RunFinding, type RunFindingEvidence, type RunFindingKind, type RunFindingSeverity, type RunFindingsFile, type RunFindingsReport, type RunFindingsSummary, type RunFindingsTurn, type RunIdentity, type RunTurnKind, type RunView, buildRunView, compareFindings, detectRunFindings };
+export { RUN_FINDING_POLICY, RUN_FINDING_REGISTRY, type RunFinding, type RunFindingEvidence, type RunFindingEvidenceNote, type RunFindingKind, type RunFindingSeverity, type RunFindingsFile, type RunFindingsReport, type RunFindingsSummary, type RunFindingsTurn, type RunIdentity, type RunTurnKind, type RunView, buildRunView, compareFindings, detectRunFindings };

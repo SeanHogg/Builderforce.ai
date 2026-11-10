@@ -27,8 +27,7 @@
  * analyzers) is its own source object, named by `~<tag>|<path>`, so it never displaces the
  * file's own entry. The bundle is a cache keyed by content hash: a lost race re-fetches.
  */
-import { splitSourceRef } from '@builderforce/agent-tools';
-import { sha256Hex, type Extracted, type NodeRef } from '@seanhogg/builderforce-memory/knowledge';
+import { sha256Hex, splitSourceRef, type Extracted, type NodeRef } from '@seanhogg/builderforce-memory/knowledge';
 import { fileLeafKey } from '@seanhogg/builderforce-memory/knowledge/pack';
 import type { Env } from '../../env';
 import { reportCaughtError, reportedFallback } from '../observability/caughtErrorReporter';

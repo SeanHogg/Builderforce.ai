@@ -56,8 +56,8 @@ __export(src_exports, {
   CHAT_STAMPED_CREATE_TOOLS: () => CHAT_STAMPED_CREATE_TOOLS,
   CODE_CHANGE_TOOLS: () => CODE_CHANGE_TOOLS,
   CONNECT_RETRY_DELAYS_MS: () => CONNECT_RETRY_DELAYS_MS,
-  CONSOLIDATION_MARKER_PREFIX: () => import_working20.CONSOLIDATION_MARKER_PREFIX,
-  CONSOLIDATION_META: () => import_working20.CONSOLIDATION_META,
+  CONSOLIDATION_MARKER_PREFIX: () => import_working21.CONSOLIDATION_MARKER_PREFIX,
+  CONSOLIDATION_META: () => import_working21.CONSOLIDATION_META,
   DEFAULT_AGENT_MODEL_SENTINEL: () => DEFAULT_AGENT_MODEL_SENTINEL,
   DEFAULT_CHAT_ACTIVITY_LABELS: () => DEFAULT_CHAT_ACTIVITY_LABELS,
   DEFAULT_CHAT_TITLE: () => DEFAULT_CHAT_TITLE,
@@ -79,7 +79,7 @@ __export(src_exports, {
   FailureTally: () => FailureTally,
   HAND_OFF_TOOL: () => HAND_OFF_TOOL,
   HAND_OFF_TOOL_SPEC: () => HAND_OFF_TOOL_SPEC,
-  HISTORY_TOKEN_BUDGET: () => import_working19.HISTORY_TOKEN_BUDGET,
+  HISTORY_TOKEN_BUDGET: () => import_working20.HISTORY_TOKEN_BUDGET,
   INFERENCE_MODES: () => INFERENCE_MODES,
   JUDGEMENT_SCHEMAS: () => JUDGEMENT_SCHEMAS,
   LOCAL_ENGINE_FAILURE_CODES: () => LOCAL_ENGINE_FAILURE_CODES,
@@ -210,9 +210,9 @@ __export(src_exports, {
   composeEvermindHooks: () => composeEvermindHooks,
   computeBrainDiagnostics: () => computeBrainDiagnostics,
   computeRunProgress: () => computeRunProgress,
-  consolidationMarkerContent: () => import_working20.consolidationMarkerContent,
-  consolidationMarkerOf: () => import_working20.consolidationMarkerOf,
-  consolidationMetadata: () => import_working20.consolidationMetadata,
+  consolidationMarkerContent: () => import_working21.consolidationMarkerContent,
+  consolidationMarkerOf: () => import_working21.consolidationMarkerOf,
+  consolidationMetadata: () => import_working21.consolidationMetadata,
   contextUsageOf: () => contextUsageOf,
   contextWindowOf: () => contextWindowOf,
   countReconciledMemories: () => import_evermind3.countReconciledMemories,
@@ -308,7 +308,7 @@ __export(src_exports, {
   isCoderReask: () => isCoderReask,
   isConnectFailure: () => isConnectFailure,
   isConnectedAccountUnused: () => isConnectedAccountUnused,
-  isConsolidationMarker: () => import_working20.isConsolidationMarker,
+  isConsolidationMarker: () => import_working21.isConsolidationMarker,
   isDirectedToParticipant: () => isDirectedToParticipant,
   isDispatchTool: () => isDispatchTool,
   isEffort: () => isEffort,
@@ -343,7 +343,7 @@ __export(src_exports, {
   joinRestorableTurns: () => joinRestorableTurns,
   jsonClientResult: () => jsonClientResult,
   judgeClientFirstFor: () => judgeClientFirstFor,
-  lastConsolidationIndex: () => import_working20.lastConsolidationIndex,
+  lastConsolidationIndex: () => import_working21.lastConsolidationIndex,
   lastServedModel: () => lastServedModel,
   leftChangeUnreviewed: () => leftChangeUnreviewed,
   leftChangeUnshipped: () => leftChangeUnshipped,
@@ -465,7 +465,7 @@ __export(src_exports, {
   runProgressVerdict: () => runProgressVerdict,
   savePendingPrompt: () => savePendingPrompt,
   savedChatOf: () => savedChatOf,
-  scopeToConsolidation: () => import_working20.scopeToConsolidation,
+  scopeToConsolidation: () => import_working21.scopeToConsolidation,
   selectPendingAskUser: () => selectPendingAskUser,
   selfReviewShipDirective: () => selfReviewShipDirective,
   serializeAskUser: () => serializeAskUser,
@@ -2285,32 +2285,7 @@ function describeStreamFailure(d) {
   return parts.join(" \xB7 ");
 }
 
-// src/streamChatCompletion.ts
-var UPSTREAM_EVIDENCE_FIELD = "x_builderforce_upstream";
-function readUpstreamEvidence(frame) {
-  const raw = frame?.[UPSTREAM_EVIDENCE_FIELD];
-  if (!raw || typeof raw.functionCalls !== "number") return void 0;
-  return {
-    items: raw.items && typeof raw.items === "object" ? raw.items : {},
-    functionCalls: raw.functionCalls,
-    recovered: typeof raw.recovered === "number" ? raw.recovered : 0
-  };
-}
-var GATEWAY_ROUTING_FIELD = "_builderforce";
-function readGatewayRouting(frame) {
-  const raw = frame?.[GATEWAY_ROUTING_FIELD];
-  if (!raw || !Array.isArray(raw.failovers)) return void 0;
-  const failovers = raw.failovers.flatMap((f) => {
-    const o = f;
-    return o && typeof o.model === "string" ? [{ model: o.model, vendor: String(o.vendor ?? ""), code: Number.isFinite(Number(o.code)) ? Number(o.code) : 0, ...o.kind ? { kind: String(o.kind) } : {} }] : [];
-  });
-  const candidates = Array.isArray(raw.candidates) ? raw.candidates.filter((c) => typeof c === "string") : void 0;
-  return {
-    failovers,
-    ...candidates?.length ? { candidates } : {},
-    ...typeof raw.traceId === "string" ? { traceId: raw.traceId } : {}
-  };
-}
+// src/streamErrors.ts
 var StreamInterruptedError = class extends Error {
   model;
   /** What the failed request looked like (destination, phase, elapsed, size) - for logs and triage. */
@@ -2363,6 +2338,33 @@ var RepetitionLoopError = class extends StreamInterruptedError {
     this.copies = loop.copies;
   }
 };
+
+// src/streamChatCompletion.ts
+var UPSTREAM_EVIDENCE_FIELD = "x_builderforce_upstream";
+function readUpstreamEvidence(frame) {
+  const raw = frame?.[UPSTREAM_EVIDENCE_FIELD];
+  if (!raw || typeof raw.functionCalls !== "number") return void 0;
+  return {
+    items: raw.items && typeof raw.items === "object" ? raw.items : {},
+    functionCalls: raw.functionCalls,
+    recovered: typeof raw.recovered === "number" ? raw.recovered : 0
+  };
+}
+var GATEWAY_ROUTING_FIELD = "_builderforce";
+function readGatewayRouting(frame) {
+  const raw = frame?.[GATEWAY_ROUTING_FIELD];
+  if (!raw || !Array.isArray(raw.failovers)) return void 0;
+  const failovers = raw.failovers.flatMap((f) => {
+    const o = f;
+    return o && typeof o.model === "string" ? [{ model: o.model, vendor: String(o.vendor ?? ""), code: Number.isFinite(Number(o.code)) ? Number(o.code) : 0, ...o.kind ? { kind: String(o.kind) } : {} }] : [];
+  });
+  const candidates = Array.isArray(raw.candidates) ? raw.candidates.filter((c) => typeof c === "string") : void 0;
+  return {
+    failovers,
+    ...candidates?.length ? { candidates } : {},
+    ...typeof raw.traceId === "string" ? { traceId: raw.traceId } : {}
+  };
+}
 async function defaultMapError(res) {
   return brainRequestError(res.status, await readErrorBody(res), res.statusText);
 }
@@ -2753,6 +2755,51 @@ var PLATFORM_ROUTE_RULES = Object.freeze([
   { path: "/api/vscode/connect", capability: "connected-feature", note: "the editor presence beat" }
 ]);
 
+// ../packages/local-first/src/entityId.ts
+var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var SYNC_ID_TEXT_RE = /^[1-9]\d*$/;
+var TIER_REF_RE = /^([A-Za-z][\w-]*):(\S.*)$/;
+function isLocalId(v) {
+  return typeof v === "string" && UUID_RE.test(v);
+}
+function parseSyncId(v) {
+  if (typeof v === "number") return Number.isSafeInteger(v) && v > 0 ? v : null;
+  if (typeof v !== "string" || !SYNC_ID_TEXT_RE.test(v)) return null;
+  const n2 = Number(v);
+  return Number.isSafeInteger(n2) ? n2 : null;
+}
+function syncIdText(id) {
+  return String(id);
+}
+function parseEntityRef(v) {
+  if (typeof v === "number") {
+    const sync = parseSyncId(v);
+    return sync === null ? null : { sync };
+  }
+  if (typeof v === "string") {
+    if (isLocalId(v)) return { local: v };
+    const sync = parseSyncId(v);
+    if (sync !== null) return { sync };
+    const tier2 = TIER_REF_RE.exec(v);
+    return tier2 ? { tier: { kind: tier2[1], ref: tier2[2] } } : null;
+  }
+  if (typeof v === "object" && v !== null) {
+    const ref = v;
+    if ("local" in ref) return isLocalId(ref.local) ? { local: ref.local } : null;
+    if ("sync" in ref) {
+      const sync = parseSyncId(ref.sync);
+      return sync === null ? null : { sync };
+    }
+    if ("tier" in ref && typeof ref.tier === "object" && ref.tier !== null) {
+      const { kind, ref: tierRef } = ref.tier;
+      if (typeof kind === "string" && kind !== "" && typeof tierRef === "string" && tierRef !== "") {
+        return { tier: { kind, ref: tierRef } };
+      }
+    }
+  }
+  return null;
+}
+
 // ../packages/local-first/src/records.ts
 var UNBOUND_DESTINATION = { kind: "unbound" };
 
@@ -2940,8 +2987,8 @@ async function dropPending(tx, record3) {
 }
 function importPayload(record3, mapping) {
   if (record3.entityType !== "chat" || mapping?.serverVersion !== BOUND_ONLY_VERSION) return record3.payload;
-  const serverId = Number(mapping.serverId);
-  return Number.isSafeInteger(serverId) && serverId > 0 ? { ...record3.payload, serverId } : record3.payload;
+  const serverId = parseSyncId(mapping.syncId);
+  return serverId !== null ? { ...record3.payload, serverId } : record3.payload;
 }
 async function queueImport(tx, record3, chatClientId, waitsOn = []) {
   await dropPending(tx, record3);
@@ -3001,8 +3048,6 @@ var SYNC_EVENT_RETENTION_DAYS = 90;
 var DAY_MS = 24 * 60 * 60 * 1e3;
 var HOLD_MAX_AGE_MS = 7 * DAY_MS;
 var DEPENDENCY_PENDING_MAX_AGE_MS = SYNC_EVENT_RETENTION_DAYS * DAY_MS;
-
-// ../packages/local-first/src/sync.ts
 var HOLD_BACKOFF_CAP_MS = 60 * 60 * 1e3;
 
 // ../packages/local-first/src/syncLease.ts
@@ -6003,7 +6048,8 @@ function stoppedBeforeStartRow() {
 // src/types.ts
 function serverChatIdOf(chat) {
   if (!chat) return null;
-  if (chat.serverId != null) return chat.serverId;
+  const bound = parseSyncId(chat.serverId);
+  if (bound != null) return bound;
   return chat.origin === "local" ? null : chat.id;
 }
 var STEP_MESSAGE_ROLE = "tool";
@@ -6081,8 +6127,7 @@ async function chatRecordById(tx, deviceId, id) {
 async function boundServerId(tx, clientId, destination) {
   if (!destination || destination.kind !== "bound") return void 0;
   const mapping = await tx.mapping("chat", clientId, destination);
-  const id = mapping ? Number(mapping.serverId) : NaN;
-  return Number.isSafeInteger(id) && id > 0 ? id : void 0;
+  return (mapping ? parseSyncId(mapping.syncId ?? mapping.serverId) : null) ?? void 0;
 }
 function createLocalChatIdentity(options) {
   const { store, deviceId, port } = options;
@@ -6092,9 +6137,11 @@ function createLocalChatIdentity(options) {
     return chat ? { chat, serverId: await boundServerId(tx, chat.id, port.destination()) } : void 0;
   });
   const map = async (clientId, destination, serverId) => {
+    const syncId = parseSyncId(serverId);
+    if (syncId == null) return;
     await store.transact(async (tx) => {
       if (await tx.mapping("chat", clientId, destination)) return;
-      await tx.putMapping({ destination, entityType: "chat", clientEntityId: clientId, serverId: String(serverId), serverVersion: BOUND_ONLY_VERSION });
+      await tx.putMapping({ destination, entityType: "chat", clientEntityId: clientId, syncId, serverId: syncIdText(syncId), serverVersion: BOUND_ONLY_VERSION });
       let queued = false;
       await tx.scanPending((event) => {
         if (event.entityType === "chat" && event.clientEntityId === clientId && event.operation === "import") {
@@ -9273,6 +9320,42 @@ function applyStringEdit(content, oldString, newString, replaceAll = false) {
     ...nearest ? { nearest } : {}
   };
 }
+var editStr = (v) => typeof v === "string" ? v : void 0;
+function editPathOf(a) {
+  const p = a.path ?? a.file_path ?? a.filePath;
+  return typeof p === "string" && p.trim() ? p.trim().replace(/\\/g, "/").replace(/^\.\//, "") : null;
+}
+function editedFilesOf(toolName, args) {
+  const a = args && typeof args === "object" && !Array.isArray(args) ? args : {};
+  const top = editPathOf(a);
+  const out = [];
+  if (toolName === "edit_file") {
+    const replacement = (e, fallback) => {
+      const path2 = editPathOf(e) ?? fallback;
+      const before = editStr(e.old_string);
+      const after = editStr(e.new_string);
+      if (path2 && (before !== void 0 || after !== void 0)) {
+        out.push({ path: path2, ...before !== void 0 ? { before } : {}, ...after !== void 0 ? { after } : {} });
+      } else if (path2 && e !== a) {
+        out.push({ path: path2 });
+      }
+    };
+    if ("old_string" in a || "new_string" in a) replacement(a, null);
+    if (Array.isArray(a.edits)) {
+      for (const raw of a.edits) {
+        if (raw && typeof raw === "object") replacement(raw, top);
+      }
+    }
+  } else if (toolName === "write_file" && top) {
+    const after = editStr(a.content);
+    out.push({ path: top, ...after !== void 0 ? { after } : {} });
+  }
+  if (out.length === 0 && top) out.push({ path: top });
+  return out;
+}
+function editedPathsOf(toolName, args) {
+  return [...new Set(editedFilesOf(toolName, args).map((f) => f.path))];
+}
 var EDIT_BATCH_MAX = 20;
 function entryProblem(e) {
   if (typeof e.path !== "string" || e.path.trim() === "") return "path is required";
@@ -9341,17 +9424,212 @@ var LEXED_EXTENSIONS = /* @__PURE__ */ new Set([
   "json",
   "jsonc"
 ]);
+var JSX_EXTENSIONS = /* @__PURE__ */ new Set(["jsx", "tsx"]);
+var EXPRESSION_KEYWORDS = /* @__PURE__ */ new Set([
+  "return",
+  "typeof",
+  "instanceof",
+  "in",
+  "of",
+  "new",
+  "delete",
+  "void",
+  "throw",
+  "case",
+  "do",
+  "else",
+  "yield",
+  "await"
+]);
 var ZERO = Object.freeze({ curly: 0, paren: 0, square: 0 });
+var WORD_START = /[A-Za-z_$]/;
+var WORD_CHAR = /[\w$]/;
+var JSX_NAME = /^[A-Za-z_$][\w$.:-]*/;
 function extensionOf(ext) {
   const dot = ext.lastIndexOf(".");
   return (dot >= 0 ? ext.slice(dot + 1) : ext).toLowerCase();
 }
-function bracketBalance(text2) {
+function bracketBalance(text2, options = {}) {
+  const jsx5 = options.jsx === true;
   const out = { curly: 0, paren: 0, square: 0 };
-  const braces = [];
-  let i = 0;
   const n2 = text2.length;
-  const template = () => {
+  let i = 0;
+  let expr = true;
+  const skipQuoted = (quote, multiline) => {
+    i += 1;
+    while (i < n2 && text2[i] !== quote && (multiline || text2[i] !== "\n")) i += !multiline && text2[i] === "\\" ? 2 : 1;
+    i += 1;
+  };
+  const tryRegex = () => {
+    let j = i + 1;
+    let inClass = false;
+    while (j < n2) {
+      const c = text2[j];
+      if (c === "\n") return false;
+      if (c === "\\") {
+        j += 2;
+        continue;
+      }
+      if (c === "[") inClass = true;
+      else if (c === "]") inClass = false;
+      else if (c === "/" && !inClass) {
+        j += 1;
+        while (j < n2 && /[a-z]/i.test(text2[j])) j += 1;
+        i = j;
+        return true;
+      }
+      j += 1;
+    }
+    return false;
+  };
+  const container = () => {
+    out.curly += 1;
+    i += 1;
+    code(true);
+    if (text2[i] === "}") {
+      out.curly -= 1;
+      i += 1;
+    }
+  };
+  const skipSpace2 = () => {
+    while (i < n2 && /\s/.test(text2[i])) i += 1;
+  };
+  const jsxChildren = () => {
+    while (i < n2) {
+      const c = text2[i];
+      if (c === "{") {
+        container();
+        continue;
+      }
+      if (c === "<") {
+        if (text2[i + 1] === "/") {
+          const end = text2.indexOf(">", i);
+          i = end < 0 ? n2 : end + 1;
+          return;
+        }
+        if (tryJsxElement()) continue;
+      }
+      i += 1;
+    }
+  };
+  const tryJsxElement = () => {
+    const start = i;
+    i += 1;
+    if (text2[i] === ">") {
+      i += 1;
+      jsxChildren();
+      return true;
+    }
+    const name = JSX_NAME.exec(text2.slice(i, i + 200));
+    if (!name) {
+      i = start;
+      return false;
+    }
+    i += name[0].length;
+    let first = true;
+    while (i < n2) {
+      skipSpace2();
+      if (i >= n2) return true;
+      const c = text2[i];
+      if (c === "/" && text2[i + 1] === ">") {
+        i += 2;
+        return true;
+      }
+      if (c === ">") {
+        i += 1;
+        jsxChildren();
+        return true;
+      }
+      if (c === "{") {
+        container();
+        first = false;
+        continue;
+      }
+      const attr = JSX_NAME.exec(text2.slice(i, i + 200));
+      if (!attr || first && attr[0] === "extends") {
+        i = start;
+        return false;
+      }
+      first = false;
+      i += attr[0].length;
+      skipSpace2();
+      if (text2[i] !== "=") continue;
+      i += 1;
+      skipSpace2();
+      if (text2[i] === '"' || text2[i] === "'") skipQuoted(text2[i], true);
+      else if (text2[i] === "{") container();
+    }
+    return true;
+  };
+  function code(nested) {
+    let depth2 = 0;
+    while (i < n2) {
+      const ch = text2[i];
+      const next = text2[i + 1];
+      if (ch === "\n") {
+        expr = true;
+        i += 1;
+        continue;
+      }
+      if (/\s/.test(ch)) {
+        i += 1;
+        continue;
+      }
+      if (ch === "/" && next === "/") {
+        const end = text2.indexOf("\n", i);
+        i = end < 0 ? n2 : end;
+        continue;
+      }
+      if (ch === "/" && next === "*") {
+        const end = text2.indexOf("*/", i + 2);
+        i = end < 0 ? n2 : end + 2;
+        continue;
+      }
+      if (ch === "/" && expr && tryRegex()) {
+        expr = false;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        skipQuoted(ch, false);
+        expr = false;
+        continue;
+      }
+      if (ch === "`") {
+        i += 1;
+        template();
+        expr = false;
+        continue;
+      }
+      if (ch === "<" && jsx5 && expr && tryJsxElement()) {
+        expr = false;
+        continue;
+      }
+      if (WORD_START.test(ch) || /\d/.test(ch)) {
+        const start = i;
+        while (i < n2 && WORD_CHAR.test(text2[i])) i += 1;
+        expr = EXPRESSION_KEYWORDS.has(text2.slice(start, i));
+        continue;
+      }
+      if (ch === "{") {
+        out.curly += 1;
+        depth2 += 1;
+        expr = true;
+      } else if (ch === "}") {
+        if (nested && depth2 === 0) return;
+        out.curly -= 1;
+        if (depth2 > 0) depth2 -= 1;
+        expr = true;
+      } else if (ch === "(" || ch === "[") {
+        out[ch === "(" ? "paren" : "square"] += 1;
+        expr = true;
+      } else if (ch === ")" || ch === "]") {
+        out[ch === ")" ? "paren" : "square"] -= 1;
+        expr = false;
+      } else expr = ch !== ".";
+      i += 1;
+    }
+  }
+  function template() {
     while (i < n2) {
       const ch = text2[i];
       if (ch === "\\") {
@@ -9363,57 +9641,32 @@ function bracketBalance(text2) {
         return;
       }
       if (ch === "$" && text2[i + 1] === "{") {
-        braces.push(true);
         i += 2;
-        return;
+        expr = true;
+        code(true);
+        if (text2[i] === "}") i += 1;
+        continue;
       }
       i += 1;
     }
-  };
-  while (i < n2) {
-    const ch = text2[i];
-    const next = text2[i + 1];
-    if (ch === "/" && next === "/") {
-      const end = text2.indexOf("\n", i);
-      i = end < 0 ? n2 : end + 1;
-    } else if (ch === "/" && next === "*") {
-      const end = text2.indexOf("*/", i + 2);
-      i = end < 0 ? n2 : end + 2;
-    } else if (ch === '"' || ch === "'") {
-      i += 1;
-      while (i < n2 && text2[i] !== ch && text2[i] !== "\n") i += text2[i] === "\\" ? 2 : 1;
-      i += 1;
-    } else if (ch === "`") {
-      i += 1;
-      template();
-    } else {
-      if (ch === "{") {
-        out.curly += 1;
-        braces.push(false);
-      } else if (ch === "}") {
-        if (braces.pop() === true) {
-          i += 1;
-          template();
-          continue;
-        }
-        out.curly -= 1;
-      } else if (ch === "(") out.paren += 1;
-      else if (ch === ")") out.paren -= 1;
-      else if (ch === "[") out.square += 1;
-      else if (ch === "]") out.square -= 1;
-      i += 1;
-    }
   }
+  code(false);
   return out;
 }
 function bracketDelta(before, after, ext) {
-  if (!LEXED_EXTENSIONS.has(extensionOf(ext))) return { ...ZERO };
-  const b = bracketBalance(before);
-  const a = bracketBalance(after);
+  const e = extensionOf(ext);
+  if (!LEXED_EXTENSIONS.has(e)) return { ...ZERO };
+  const options = { jsx: JSX_EXTENSIONS.has(e) };
+  const b = bracketBalance(before, options);
+  const a = bracketBalance(after, options);
   return { curly: a.curly - b.curly, paren: a.paren - b.paren, square: a.square - b.square };
 }
 function changesBalance(delta) {
   return delta.curly !== 0 || delta.paren !== 0 || delta.square !== 0;
+}
+function describeBracketDelta(d, style = "name") {
+  const glyph = { curly: "`{}`", paren: "`()`", square: "`[]`" };
+  return ["curly", "paren", "square"].filter((k) => d[k] !== 0).map((k) => `${style === "glyph" ? glyph[k] : k} ${d[k] > 0 ? "+" : ""}${d[k]}`).join(style === "glyph" ? ", " : " \xB7 ");
 }
 
 // ../packages/agent-tools/src/workstreamScope.ts
@@ -10448,7 +10701,7 @@ async function compressWebFetchResult(r, ctx) {
 
 // ../packages/agent-tools/src/git-repo-scope.ts
 function safeGitArg(v) {
-  return typeof v === "string" && /^[\w./@-]+$/.test(v) ? v : null;
+  return typeof v === "string" && /^[\w./@-]+$/.test(v) && !v.startsWith("-") ? v : null;
 }
 function shellQuote(v) {
   return `'${v.replace(/'/g, `'\\''`)}'`;
@@ -10930,7 +11183,7 @@ function buildCommitCommand(opts) {
   const branch = safeGitArg(opts.branch);
   const resolveLines = opts.paths.map((p, i) => {
     const candidates = commitPathCandidates(p, opts.repo).map(shellQuote).join(" ");
-    return `P${i}="$(pick ${candidates})" || MISSING="$MISSING ${shellQuote(p).slice(1, -1)}"`;
+    return `P${i}="$(pick ${candidates})" || MISSING="$MISSING "${shellQuote(p)}`;
   });
   const paths = opts.paths.map((_, i) => `"$P${i}"`).join(" ");
   return [
@@ -11064,6 +11317,21 @@ function publishToolResult(action, r) {
   }
   return { data: { ok: r.ok, action, output: out.slice(0, 2e4), ...r.error ? { error: r.error } : {} } };
 }
+function invalidRefResult(action, refs) {
+  for (const [name, value] of Object.entries(refs)) {
+    for (const v of Array.isArray(value) ? value : [value]) {
+      if (typeof v !== "string" || v === "" || safeGitArg(v) !== null) continue;
+      return {
+        data: {
+          ok: false,
+          action,
+          error: `${name} '${v}' is not a valid name \u2014 use only letters, digits and . _ / @ - (no spaces, no shell characters, not starting with '-'), so nothing was run`
+        }
+      };
+    }
+  }
+  return null;
+}
 async function runPublishTool(action, command, repo, ctx) {
   const refused = invalidRepoResult(action, repo);
   if (refused) return refused;
@@ -11096,6 +11364,8 @@ var gitCommitTool = defineTool({
     if (paths.length === 0) {
       return Promise.resolve({ data: { ok: false, action: "commit", error: "paths is required \u2014 list the exact files you changed. Run git_status to see them. Do not pass '.' or '-A': the working tree may hold changes that are not yours." } });
     }
+    const badRef = invalidRefResult("commit", { branch: args.branch });
+    if (badRef) return Promise.resolve(badRef);
     const repo = typeof args.repo === "string" ? args.repo : void 0;
     return runPublishTool(
       "commit",
@@ -11142,6 +11412,8 @@ var openPullRequestTool = defineTool({
     if (!title) return Promise.resolve({ data: { ok: false, action: "pull_request", error: "title is required" } });
     const repo = typeof args.repo === "string" ? args.repo : void 0;
     const reviewers = Array.isArray(args.reviewers) ? args.reviewers.filter((r) => typeof r === "string") : void 0;
+    const badRef = invalidRefResult("pull_request", { base: args.base, reviewers });
+    if (badRef) return Promise.resolve(badRef);
     return runPublishTool(
       "pull_request",
       buildPullRequestCommand({ title, body, base: typeof args.base === "string" ? args.base : void 0, reviewers }),
@@ -11164,6 +11436,8 @@ var gitCleanupMergedTool = defineTool({
   },
   requires: ["git.write"],
   execute: (args, ctx) => {
+    const badRef = invalidRefResult("cleanup", { branch: args.branch, baseBranch: args.baseBranch });
+    if (badRef) return Promise.resolve(badRef);
     const repo = typeof args.repo === "string" ? args.repo : void 0;
     return runPublishTool(
       "cleanup",
@@ -13419,18 +13693,21 @@ var import_knowledge23 = require("@seanhogg/builderforce-memory/knowledge");
 var import_knowledge24 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/replicaQueue.ts
+var import_knowledge25 = require("@seanhogg/builderforce-memory/knowledge");
 var import_pack = require("@seanhogg/builderforce-memory/knowledge/pack");
 
 // ../packages/agent-tools/src/knowledge/replicatedStore.ts
-var import_pack3 = require("@seanhogg/builderforce-memory/knowledge/pack");
-
-// ../packages/agent-tools/src/knowledge/replicaPack.ts
-var import_knowledge25 = require("@seanhogg/builderforce-memory/knowledge");
 var import_pack2 = require("@seanhogg/builderforce-memory/knowledge/pack");
-var DEFAULT_MAX_DECODED = 16 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/replicaPump.ts
 var import_pack5 = require("@seanhogg/builderforce-memory/knowledge/pack");
+
+// ../packages/agent-tools/src/knowledge/replicaPack.ts
+var import_knowledge26 = require("@seanhogg/builderforce-memory/knowledge");
+var import_pack3 = require("@seanhogg/builderforce-memory/knowledge/pack");
+var DEFAULT_MAX_DECODED = 16 * 1024 * 1024;
+var EMPTY_PACK = { rootId: "", baseGeneration: 0, targetDigest: import_pack3.ZERO_DIGEST };
+var EMPTY_EXTRACTED_BYTES = (0, import_pack3.jsonBytesOf)({ ...EMPTY_PACK, extracted: [] });
 
 // ../packages/agent-tools/src/knowledge/replicaGenerationCheck.ts
 var GENERATION_CHECK_INTERVAL_MS = 10 * 6e4;
@@ -13444,20 +13721,20 @@ var MAX_ANALYSIS_BYTES = 2 * 1024 * 1024;
 var MAX_SYNC_PACK_BYTES = 24 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/replicaFirstSync.ts
-var import_knowledge26 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/claimSimilarity.ts
 var import_knowledge27 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/portablePack.ts
+// ../packages/agent-tools/src/knowledge/claimSimilarity.ts
 var import_knowledge28 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/packGraph.ts
+// ../packages/agent-tools/src/knowledge/portablePack.ts
 var import_knowledge29 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/packGraph.ts
+var import_knowledge30 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest7 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/pinpointMatch.ts
-var import_knowledge30 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge31 = require("@seanhogg/builderforce-memory/knowledge");
 var MAX_PINPOINT_IMAGE_BYTES = 8 * 1024 * 1024;
 var MAX_DATA_URL_CHARS = Math.ceil(MAX_PINPOINT_IMAGE_BYTES * 4 / 3) + 64;
 var PINPOINT_VISION_SYSTEM = [
@@ -13465,6 +13742,11 @@ var PINPOINT_VISION_SYSTEM = [
   'Reply with JSON only: {"description": one line saying what the screen shows and, if it looks stuck or broken, how,',
   '"texts": the exact visible strings (labels, headings, buttons, status text, error messages), at most 12, verbatim}.'
 ].join(" ");
+
+// ../packages/agent-tools/src/knowledge/replicaLock.ts
+var LOCK_REFRESH_MS = 3e4;
+var LOCK_STALE_MS = 12e4;
+var LOCK_FRESH_MS = LOCK_STALE_MS - LOCK_REFRESH_MS;
 
 // ../packages/agent-tools/src/toolSearch.ts
 var STOP_WORDS = /* @__PURE__ */ new Set([
@@ -13628,6 +13910,143 @@ function localFallbackTrace(ts, step, attempts) {
   };
 }
 
+// src/localFirstErrors.ts
+var AUTH_CODE = /^(?:invalid_api_key|invalid_key|invalid_token|token_expired|expired_token|invalid_grant|invalid_credentials?|authentication_error|authentication_failed|unauthori[sz]ed|unauthenticated|not_authenticated|key_revoked|revoked_key)$/i;
+var AUTH_PHRASE = new RegExp(
+  [
+    String.raw`\bunauthori[sz]ed\b`,
+    String.raw`\bunauthenticated\b`,
+    String.raw`\bnot\s+authenticated\b`,
+    String.raw`\bauthentication\s+(?:failed|required|error)\b`,
+    String.raw`\b(?:invalid|bad|wrong|incorrect|revoked|expired|missing|unknown|malformed)\s+(?:api[_ -]?key|key|access\s+token|token|credentials?|bearer)\b`,
+    String.raw`\b(?:api[_ -]?key|access\s+token|token|credentials?|session)\s+(?:is\s+|has\s+|was\s+)?(?:invalid|expired|revoked|not\s+valid|been\s+revoked)\b`,
+    String.raw`\bsign\s*in\s+again\b`
+  ].join("|"),
+  "i"
+);
+function codesOf(body) {
+  const err = typeof body.error === "object" && body.error !== null ? body.error : void 0;
+  return [body.code, err?.code, err?.type].filter((v) => typeof v === "string" && v.length > 0);
+}
+function refusesCredential(body) {
+  const b = body ?? {};
+  const codes = codesOf(b);
+  if (codes.some((c) => AUTH_CODE.test(c))) return true;
+  const text2 = [typeof b.error === "string" ? b.error : b.error?.message, b.message].filter((v) => typeof v === "string").join(" ");
+  return AUTH_PHRASE.test(text2);
+}
+function providerErrorMapper(provider, label) {
+  return async (res) => {
+    const body = await readErrorBody(res);
+    const mapped = brainRequestError(res.status, body, res.statusText);
+    if (res.status !== 401 && !(res.status === 403 && refusesCredential(body))) return mapped;
+    return new BrainRequestError(`${label} rejected the sign-in (${res.status}). ${mapped.message}`, {
+      status: res.status,
+      code: PROVIDER_AUTH_REQUIRED,
+      provider,
+      providerLabel: label
+    });
+  };
+}
+function withModelRef(e, ref) {
+  if (e instanceof RepetitionLoopError || !(e instanceof StreamInterruptedError || e instanceof TransportError)) return e;
+  if (e.model === ref) return e;
+  const out = e instanceof StreamInterruptedError ? new StreamInterruptedError(e.message, ref, e.detail, { pinned: e.pinned }) : new TransportError(e.message, ref, { cause: e.cause, unreachable: e.unreachable, pinned: e.pinned });
+  out.name = e.name;
+  if (e.stack) out.stack = e.stack;
+  if (e instanceof StreamInterruptedError && e.cause !== void 0) out.cause = e.cause;
+  return out;
+}
+function withFailedAccounts(e, failed4) {
+  if (!(e instanceof BrainRequestError) || failed4.length === 0) return e;
+  const prefix = failed4.map((r) => `${r.attempt.kind === "local" ? r.attempt.ref : "account"} could not take this turn (${r.detail ?? r.outcome}). `).join("");
+  const out = Object.create(Object.getPrototypeOf(e));
+  Object.defineProperties(out, Object.getOwnPropertyDescriptors(e));
+  Object.defineProperty(out, "message", { value: prefix + e.message, writable: true, configurable: true, enumerable: false });
+  if (typeof e.stack === "string") {
+    const nl = e.stack.indexOf("\n");
+    const first = nl < 0 ? e.stack : e.stack.slice(0, nl);
+    const frames = nl < 0 ? "" : e.stack.slice(nl);
+    const stack = first.endsWith(e.message) ? `${e.name}: ${out.message}${frames}` : `${e.name}: ${out.message}
+${e.stack}`;
+    Object.defineProperty(out, "stack", { value: stack, writable: true, configurable: true, enumerable: false });
+  }
+  if (!Object.prototype.hasOwnProperty.call(e, "cause")) {
+    Object.defineProperty(out, "cause", { value: e, writable: true, configurable: true, enumerable: false });
+  }
+  return out;
+}
+
+// src/localCredentialState.ts
+function createCredentialTracker() {
+  const states = /* @__PURE__ */ new WeakMap();
+  return {
+    stateOf: (signal) => (signal ? states.get(signal) : void 0) ?? "none",
+    track: (endpoint, signal) => {
+      const mark = (state) => {
+        if (signal) states.set(signal, state);
+      };
+      mark(endpoint.credential ? "pending" : "none");
+      if (!endpoint.credential) return endpoint;
+      const lookup = endpoint.credential;
+      return {
+        ...endpoint,
+        credential: async (stale) => {
+          mark("pending");
+          try {
+            return await lookup(stale);
+          } finally {
+            mark("resolved");
+          }
+        }
+      };
+    }
+  };
+}
+
+// src/localTransport.ts
+var globalFetch = (input, init) => fetch(input, init);
+function localTransport(endpoint, fetchImpl = globalFetch, options = {}) {
+  const baseUrl = normalizeLocalBaseUrl(endpoint.baseUrl);
+  const runtime = options.runtime ? localRuntime(options.runtime) : void 0;
+  const credentials = createCredentialTracker();
+  return {
+    baseUrl,
+    getToken: () => endpoint.token ?? null,
+    wire: "openai",
+    ...runtime?.providerSampling ? { providerSampling: true } : {},
+    // A hosted runtime reached directly (Kimi Code) is named in a silence error; an on-device engine keeps the neutral default.
+    ...runtime && !runtime.onDevice ? { destination: { label: runtime.label, host: hostOf(baseUrl) } } : {},
+    credentialState: (signal) => credentials.stateOf(signal),
+    // A hosted runtime backed by the person's OWN account (registry `accountProvider`) that refuses the credential is a
+    // PROVIDER sign-in problem; mapped to the generic 401 it would be read as a BuilderForce session error.
+    ...runtime?.accountProvider ? { mapError: providerErrorMapper(runtime.accountProvider, runtime.label) } : {},
+    fetch: async (input, init) => {
+      const tracked = credentials.track(endpoint, init.signal ?? void 0);
+      try {
+        return await fetchLocal(tracked, fetchImpl, rewriteToLocalUrl(input), init);
+      } catch (e) {
+        if (!options.failFast || init.signal?.aborted) throw e;
+        throw new Error(`local_runtime_unreachable: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+  };
+}
+async function completeLocal(endpoint, model, messages, signal, fetchImpl = globalFetch) {
+  const res = await fetchLocal(endpoint, fetchImpl, localChatCompletionsUrl(endpoint.baseUrl), {
+    method: "POST",
+    headers: { "content-type": "application/json", ...localAuthHeaders(endpoint) },
+    body: JSON.stringify({ model, messages, stream: false }),
+    ...signal ? { signal } : {}
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch((e) => `(body unreadable: ${e instanceof Error ? e.message : String(e)})`);
+    throw new Error(`local_complete_failed_${res.status}: ${txt.slice(0, 200)}`);
+  }
+  const json = await res.json();
+  return json.choices?.[0]?.message?.content ?? "";
+}
+
 // src/windowFit/modelWindow.ts
 var positive = (n2) => typeof n2 === "number" && Number.isFinite(n2) && n2 > 0 ? Math.floor(n2) : void 0;
 function contextWindowOf(modelRef, sources = {}) {
@@ -13651,69 +14070,7 @@ async function resolveContextWindow(modelRef, sources = {}) {
   return contextWindowOf(modelRef, { ...sources.cloud ? { cloud: sources.cloud } : {}, ...probes ? { probes } : {} });
 }
 
-// src/localFirstTransport.ts
-var globalFetch = (input, init) => fetch(input, init);
-var AUTH_REFUSAL = /unauthori[sz]ed|unauthenticated|expired|token|credential|authenticat|\bapi[_ ]?key\b|\bkey\b/i;
-function refusesCredential(body) {
-  const b = body ?? {};
-  const text2 = [b.code, typeof b.error === "string" ? b.error : b.error?.message, b.message].filter((v) => typeof v === "string").join(" ");
-  return AUTH_REFUSAL.test(text2);
-}
-function providerErrorMapper(provider, label) {
-  return async (res) => {
-    const body = await readErrorBody(res);
-    const mapped = brainRequestError(res.status, body, res.statusText);
-    if (res.status !== 401 && !(res.status === 403 && refusesCredential(body))) return mapped;
-    return new BrainRequestError(`${label} rejected the sign-in (${res.status}). ${mapped.message}`, {
-      status: res.status,
-      code: PROVIDER_AUTH_REQUIRED,
-      provider,
-      providerLabel: label
-    });
-  };
-}
-function localTransport(endpoint, fetchImpl = globalFetch, options = {}) {
-  const baseUrl = normalizeLocalBaseUrl(endpoint.baseUrl);
-  const runtime = options.runtime ? localRuntime(options.runtime) : void 0;
-  const credentialStates = /* @__PURE__ */ new WeakMap();
-  const stateOf2 = (signal) => (signal ? credentialStates.get(signal) : void 0) ?? "none";
-  return {
-    baseUrl,
-    getToken: () => endpoint.token ?? null,
-    wire: "openai",
-    ...runtime?.providerSampling ? { providerSampling: true } : {},
-    // A hosted runtime reached directly (Kimi Code) is named in a silence error; an on-device engine keeps the neutral default.
-    ...runtime && !runtime.onDevice ? { destination: { label: runtime.label, host: hostOf(baseUrl) } } : {},
-    credentialState: (signal) => stateOf2(signal),
-    // A hosted runtime backed by the person's OWN account (registry `accountProvider`) that refuses the credential is a
-    // PROVIDER sign-in problem; mapped to the generic 401 it would be read as a BuilderForce session error.
-    ...runtime?.accountProvider ? { mapError: providerErrorMapper(runtime.accountProvider, runtime.label) } : {},
-    fetch: async (input, init) => {
-      const signal = init.signal ?? void 0;
-      const mark = (state) => {
-        if (signal) credentialStates.set(signal, state);
-      };
-      mark(endpoint.credential ? "pending" : "none");
-      const tracked = endpoint.credential ? {
-        ...endpoint,
-        credential: async (stale) => {
-          mark("pending");
-          try {
-            return await endpoint.credential(stale);
-          } finally {
-            mark("resolved");
-          }
-        }
-      } : endpoint;
-      try {
-        return await fetchLocal(tracked, fetchImpl, rewriteToLocalUrl(input), init);
-      } catch (e) {
-        if (!options.failFast || init.signal?.aborted) throw e;
-        throw new Error(`local_runtime_unreachable: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    }
-  };
-}
+// src/localTargetStream.ts
 function probedTarget(ref, probes) {
   for (const p of probes) {
     if (!p.reachable) continue;
@@ -13744,14 +14101,20 @@ async function streamOnLocal(target, opts, handlers, transport, messages, picked
   }
   return { ...served, resolvedModel: target.ref, resolvedVendor: `local/${target.provider}`, ...account ? { account } : {} };
 }
-function withModelRef(e, ref) {
-  if (e instanceof RepetitionLoopError || !(e instanceof StreamInterruptedError || e instanceof TransportError)) return e;
-  if (e.model === ref) return e;
-  const out = e instanceof StreamInterruptedError ? new StreamInterruptedError(e.message, ref, e.detail, { pinned: e.pinned }) : new TransportError(e.message, ref, { cause: e.cause, unreachable: e.unreachable, pinned: e.pinned });
-  out.name = e.name;
-  if (e.stack) out.stack = e.stack;
-  if (e instanceof StreamInterruptedError && e.cause !== void 0) out.cause = e.cause;
-  return out;
+function committingHandlers(handlers, commit, servedAs) {
+  if (servedAs) handlers.onModel?.(servedAs, void 0);
+  return {
+    ...handlers,
+    onTextDelta: (delta) => {
+      commit();
+      handlers.onTextDelta?.(delta);
+    },
+    onToolCallDelta: (index, partial) => {
+      commit();
+      handlers.onToolCallDelta?.(index, partial);
+    },
+    ...servedAs ? { onModel: () => void 0 } : {}
+  };
 }
 function createLocalStream(endpoint, model, fetchImpl, route = {}) {
   const pin = parseLocalModelRef(route.ref);
@@ -13781,6 +14144,8 @@ function createLocalStream(endpoint, model, fetchImpl, route = {}) {
     return streamOnLocal(pinned, opts, committingHandlers(handlers, () => void 0, pinned.ref), transport, messages, true);
   };
 }
+
+// src/localFirstTransport.ts
 function localFirstWorkload(call2) {
   const chars = JSON.stringify(call2.messages).length + (call2.tools ? JSON.stringify(call2.tools).length : 0);
   return profileWorkload({
@@ -13801,37 +14166,6 @@ function coreMessages(messages) {
   const system = messages.filter((m) => m.role === "system");
   const lastUser = [...messages].reverse().find((m) => m.role === "user" && !(0, import_handoff3.isVolatileTail)(m));
   return lastUser ? [...system, lastUser] : system;
-}
-function committingHandlers(handlers, commit, servedAs) {
-  if (servedAs) handlers.onModel?.(servedAs, void 0);
-  return {
-    ...handlers,
-    onTextDelta: (delta) => {
-      commit();
-      handlers.onTextDelta?.(delta);
-    },
-    onToolCallDelta: (index, partial) => {
-      commit();
-      handlers.onToolCallDelta?.(index, partial);
-    },
-    ...servedAs ? { onModel: () => void 0 } : {}
-  };
-}
-function withFailedAccounts(e, failed4) {
-  if (!(e instanceof BrainRequestError) || failed4.length === 0) return e;
-  const prefix = failed4.map((r) => `${r.attempt.kind === "local" ? r.attempt.ref : "account"} could not take this turn (${r.detail ?? r.outcome}). `).join("");
-  const out = new BrainRequestError(prefix + e.message, {
-    status: e.status,
-    ...e.code ? { code: e.code } : {},
-    ...e.reason ? { reason: e.reason } : {},
-    ...e.unlock ? { unlock: e.unlock } : {},
-    ...e.requiredPlan ? { requiredPlan: e.requiredPlan } : {},
-    ...e.feature ? { feature: e.feature } : {},
-    ...e.provider ? { provider: e.provider } : {},
-    ...e.providerLabel ? { providerLabel: e.providerLabel } : {}
-  });
-  if (e.stack) out.stack = e.stack;
-  return out;
 }
 var answered = (r) => r.text.trim().length > 0 || r.toolCalls.length > 0;
 function createLocalFirstStream(input) {
@@ -13889,20 +14223,6 @@ function createLocalFirstStream(input) {
     return { ...result, localFirst: summaries };
   };
 }
-async function completeLocal(endpoint, model, messages, signal, fetchImpl = globalFetch) {
-  const res = await fetchLocal(endpoint, fetchImpl, localChatCompletionsUrl(endpoint.baseUrl), {
-    method: "POST",
-    headers: { "content-type": "application/json", ...localAuthHeaders(endpoint) },
-    body: JSON.stringify({ model, messages, stream: false }),
-    ...signal ? { signal } : {}
-  });
-  if (!res.ok) {
-    const txt = await res.text().catch((e) => `(body unreadable: ${e instanceof Error ? e.message : String(e)})`);
-    throw new Error(`local_complete_failed_${res.status}: ${txt.slice(0, 200)}`);
-  }
-  const json = await res.json();
-  return json.choices?.[0]?.message?.content ?? "";
-}
 async function completeLocalFirst(input) {
   const plan = localFirstPlan({
     probes: input.probes,
@@ -13920,6 +14240,34 @@ async function completeLocalFirst(input) {
     }
   );
   return result;
+}
+
+// src/hostPickFallback.ts
+function isFallbackFailure(err, local) {
+  if (local) return true;
+  if (err instanceof BrainRequestError) return err.status >= 500;
+  return err instanceof TransportError || err instanceof StreamInterruptedError;
+}
+async function pickThenAuto(pinned, fallback, handlers, signal, pick2) {
+  let committed = false;
+  const watched = {
+    ...handlers,
+    onTextDelta: (delta) => {
+      committed = true;
+      handlers.onTextDelta?.(delta);
+    },
+    onToolCallDelta: (index, partial) => {
+      committed = true;
+      handlers.onToolCallDelta?.(index, partial);
+    }
+  };
+  try {
+    return await pinned(watched);
+  } catch (err) {
+    if (committed || signal?.aborted || !isFallbackFailure(err, pick2.local)) throw err;
+    pick2.onFallback?.({ from: pick2.from, reason: err instanceof Error ? err.message : String(err) });
+    return fallback();
+  }
 }
 
 // src/windowFit/packForModel.ts
@@ -14092,7 +14440,7 @@ function recallBlock(recall) {
 async function packForModel(input) {
   const summarizer = input.summarizer;
   const reserve = handoffReserveTokens(input.maxTokens);
-  const pack2 = await (0, import_handoff5.packHandoff)({
+  const pack = await (0, import_handoff5.packHandoff)({
     messages: input.messages,
     targetContextTokens: packTargetTokens(input.to, input.contextTokens, reserve),
     reserveOutputTokens: reserve,
@@ -14108,13 +14456,13 @@ async function packForModel(input) {
   input.onTrace?.({
     ...input.from ? { from: input.from } : {},
     to: input.to,
-    dropped: pack2.dropped,
-    summarized: pack2.summarized,
-    recalled: pack2.recalled,
-    estimatedTokens: pack2.estimatedTokens,
-    fits: pack2.fits
+    dropped: pack.dropped,
+    summarized: pack.summarized,
+    recalled: pack.recalled,
+    estimatedTokens: pack.estimatedTokens,
+    fits: pack.fits
   });
-  return { messages: pack2.messages, pack: pack2 };
+  return { messages: pack.messages, pack };
 }
 var HANDOFF_FIT_MEMOS = 16;
 function createHandoffFit(options = {}) {
@@ -14139,8 +14487,8 @@ function createHandoffFit(options = {}) {
       remember(key, memo);
       return reused;
     }
-    const { messages: packed, pack: pack2 } = await packForModel({ messages, ...fitInput, ...options });
-    if (pack2.fits) remember(key, packMemoOf(messages, packed));
+    const { messages: packed, pack } = await packForModel({ messages, ...fitInput, ...options });
+    if (pack.fits) remember(key, packMemoOf(messages, packed));
     else packs.delete(key);
     return packed;
   };
@@ -14778,32 +15126,6 @@ function createHostModelStream(input) {
     });
   };
 }
-function isFallbackFailure(err, local) {
-  if (local) return true;
-  if (err instanceof BrainRequestError) return err.status >= 500;
-  return err instanceof TransportError || err instanceof StreamInterruptedError;
-}
-async function pickThenAuto(pinned, fallback, handlers, signal, pick2) {
-  let committed = false;
-  const watched = {
-    ...handlers,
-    onTextDelta: (delta) => {
-      committed = true;
-      handlers.onTextDelta?.(delta);
-    },
-    onToolCallDelta: (index, partial) => {
-      committed = true;
-      handlers.onToolCallDelta?.(index, partial);
-    }
-  };
-  try {
-    return await pinned(watched);
-  } catch (err) {
-    if (committed || signal?.aborted || !isFallbackFailure(err, pick2.local)) throw err;
-    pick2.onFallback?.({ from: pick2.from, reason: err instanceof Error ? err.message : String(err) });
-    return fallback();
-  }
-}
 function unpicked(opts) {
   const { modelStrict: _strict, model: _model, routingMode: _routing, ...rest } = opts;
   return rest;
@@ -15233,21 +15555,69 @@ function translatorFactory() {
   if (typeof globalThis === "undefined") return null;
   return globalThis.Translator ?? null;
 }
+var MAX_NEEDED_PAIRS = 8;
+var neededPairs = /* @__PURE__ */ new Map();
+var pairKey = (p) => `${p.from.toLowerCase()}>${p.to.toLowerCase()}`;
+function noteTranslatorPairNeeded(pair) {
+  const key = pairKey(pair);
+  neededPairs.delete(key);
+  neededPairs.set(key, pair);
+  while (neededPairs.size > MAX_NEEDED_PAIRS) neededPairs.delete(neededPairs.keys().next().value);
+}
+function neededTranslatorPairs() {
+  return [...neededPairs.values()];
+}
+function translatorPairsToDownload(o) {
+  const viewer = o.locale?.split("-")[0]?.toLowerCase();
+  const candidates = [
+    ...neededTranslatorPairs(),
+    ...o.translatorPairs ?? [],
+    ...viewer ? [{ from: "en", to: viewer }] : []
+  ];
+  const out = /* @__PURE__ */ new Map();
+  for (const p of candidates) {
+    if (!p.from || !p.to || p.from.toLowerCase() === p.to.toLowerCase()) continue;
+    if (!out.has(pairKey(p))) out.set(pairKey(p), p);
+  }
+  return [...out.values()];
+}
+function recordingFactory(factory, pair) {
+  if (!factory) return null;
+  return {
+    availability: async (options) => {
+      const state = await factory.availability(options);
+      if (state === "downloadable" || state === "downloading") noteTranslatorPairNeeded(pair);
+      else neededPairs.delete(pairKey(pair));
+      return state;
+    },
+    create: (options) => factory.create(options)
+  };
+}
 var translatorAdapter = {
   id: "translator",
   kinds: ["translate"],
   // The API's presence; whether a pair's pack is ready is asked per translate.
   ready: async () => translatorFactory() !== null,
-  // The pack is per pair: English → the viewer's language (none when they read English).
+  // One pack per pair a translation needs; every `create()` starts in this synchronous run
+  // (inside the click's activation). Combined progress is the mean over the pairs.
   download: (o) => {
-    const target = o.locale?.split("-")[0]?.toLowerCase();
-    if (!target || target === "en") return Promise.resolve();
-    return downloadTaskModel(translatorFactory(), { sourceLanguage: "en", targetLanguage: target }, o);
+    const factory = translatorFactory();
+    const pairs = translatorPairsToDownload(o);
+    if (!factory || pairs.length === 0) return Promise.resolve();
+    const fractions = new Array(pairs.length).fill(0);
+    const report = (i, f) => {
+      fractions[i] = Math.max(fractions[i] ?? 0, f);
+      o.onProgress(fractions.reduce((a, b) => a + b, 0) / fractions.length);
+    };
+    const downloads = pairs.map(
+      (p, i) => downloadTaskModel(factory, { sourceLanguage: p.from, targetLanguage: p.to }, { ...o, onProgress: (f) => report(i, f) })
+    );
+    return Promise.all(downloads).then(() => void 0);
   },
   translate: (text2, o) => {
     if (!o.from) return Promise.resolve(null);
     return withTaskSession(
-      translatorFactory(),
+      recordingFactory(translatorFactory(), { from: o.from, to: o.to }),
       { sourceLanguage: o.from, targetLanguage: o.to },
       o.signal,
       async (session) => {
@@ -15291,7 +15661,8 @@ async function downloadBuiltInModel(options = {}) {
     (adapter, i) => adapter.download({
       onProgress: (f) => report(i + 1, f),
       ...signal ? { signal } : {},
-      ...locale ? { locale } : {}
+      ...locale ? { locale } : {},
+      ...options.translatorPairs ? { translatorPairs: options.translatorPairs } : {}
     }).then(() => report(i + 1, 1))
   );
   const [mainResult, ...taskResults] = await Promise.allSettled([main, ...tasks]);
@@ -15368,6 +15739,9 @@ var ON_DEVICE_TASK_ROUTES = {
 var MAX_SUMMARY_CHUNKS = 8;
 var CHUNK_BUDGET_SHARE = 0.8;
 
+// src/onDevice/chunkedSummary.ts
+var import_working7 = require("@seanhogg/builderforce-memory/working");
+
 // src/onDevice/taskPrompts.ts
 var WORDS = { short: "a few sentences", medium: "a short paragraph", long: "several paragraphs" };
 function summarizePrompt(text2, o) {
@@ -15427,83 +15801,23 @@ function parseJsonReply(reply) {
 }
 
 // src/onDevice/chunkedSummary.ts
-var MAX_MERGE_DEPTH = 3;
-var MAX_REFIT_ATTEMPTS = 3;
-var SEPARATORS = ["\n\n", "\n"];
-function pieces(text2, maxChars, level = 0) {
-  if (text2.length <= maxChars) return [text2];
-  const separator = SEPARATORS[level];
-  if (separator === void 0) {
-    const out = [];
-    for (let i = 0; i < text2.length; i += maxChars) out.push(text2.slice(i, i + maxChars));
-    return out;
-  }
-  const parts = text2.split(separator);
-  if (parts.length === 1) return pieces(text2, maxChars, level + 1);
-  return parts.flatMap((p, i) => pieces(i < parts.length - 1 ? p + separator : p, maxChars, level + 1));
-}
-function pack(text2, maxChars) {
-  const chunks = [];
-  let current = "";
-  for (const piece of pieces(text2, maxChars)) {
-    if (current && current.length + piece.length > maxChars) {
-      chunks.push(current);
-      current = "";
-    }
-    current += piece;
-  }
-  if (current.trim()) chunks.push(current);
-  return chunks;
-}
 var DEFAULT_OUTPUT_TOKENS2 = 512;
 function summaryReserveTokens(o) {
   const expectedOutput = o.maxWords ? Math.ceil(o.maxWords * 1.5) : DEFAULT_OUTPUT_TOKENS2;
   return approxTokens(summarizePrompt("", o).system) + expectedOutput;
 }
-async function fitChunks(chunks, limit, input) {
-  const out = [];
-  for (const chunk2 of chunks) {
-    let parts = [chunk2];
-    for (let attempt = 0; attempt < MAX_REFIT_ATTEMPTS; attempt++) {
-      const next = [];
-      let over = false;
-      for (const part of parts) {
-        throwIfAborted(input.signal);
-        const tokens2 = await input.budget.measure(part, input.signal);
-        if (tokens2 <= limit || part.length <= 1) {
-          next.push(part);
-          continue;
-        }
-        over = true;
-        next.push(...pack(part, Math.max(1, Math.floor(part.length / tokens2 * limit * 0.9))));
-      }
-      parts = next;
-      if (!over) break;
-    }
-    out.push(...parts);
-  }
-  return out;
-}
-async function chunkedSummary(input, depth2 = 0) {
-  const { text: text2, budget: budget2, signal } = input;
-  throwIfAborted(signal);
-  const room = Math.max(Math.floor(budget2.limit / 2), budget2.limit - (input.reserveTokens ?? 0));
-  const limit = Math.max(1, Math.floor(room * CHUNK_BUDGET_SHARE));
-  const tokens2 = await budget2.measure(text2, signal);
-  if (tokens2 <= limit) return input.summarizeChunk(text2);
-  if (depth2 >= MAX_MERGE_DEPTH) return null;
-  const chunks = await fitChunks(pack(text2, Math.max(1, Math.floor(text2.length / tokens2 * limit))), limit, input);
-  if (chunks.length > MAX_SUMMARY_CHUNKS) return null;
-  const summaries = [];
-  for (const chunk2 of chunks) {
-    throwIfAborted(signal);
-    const summary = await input.summarizeChunk(chunk2);
-    if (summary === null) return null;
-    summaries.push(summary);
-  }
-  const merged = summaries.join("\n\n");
-  if (merged.length >= text2.length) return null;
-  return chunkedSummary({ ...input, text: merged }, depth2 + 1);
+function chunkedSummary(input) {
+  const { text: text2, budget: budget2, summarizeChunk, reserveTokens, signal } = input;
+  return (0, import_working7.chunkedTextSummary)({
+    text: text2,
+    limit: budget2.limit,
+    measure: (t, s) => budget2.measure(t, s),
+    summarizeChunk: (chunk2) => summarizeChunk(chunk2),
+    maxChunks: MAX_SUMMARY_CHUNKS,
+    budgetShare: CHUNK_BUDGET_SHARE,
+    reserveTokens,
+    signal
+  });
 }
 
 // ../packages/json-schema/src/index.ts
@@ -16043,7 +16357,7 @@ function judgeClientFirstFor(host) {
 }
 
 // src/onDevice/clientFirstSummary.ts
-var import_working7 = require("@seanhogg/builderforce-memory/working");
+var import_working8 = require("@seanhogg/builderforce-memory/working");
 async function onDeviceTranscriptSummary(host, seed, signal) {
   if (seed.length < 2 || !(await host.tasks.available()).has("summarize")) return null;
   const capture = capturingServed();
@@ -16051,7 +16365,7 @@ async function onDeviceTranscriptSummary(host, seed, signal) {
     req.signal || !signal ? req : { ...req, signal },
     { onServed: capture.onServed }
   )) ?? "";
-  return textClientResult(await (0, import_working7.summarizeTranscript)(completion, seed, signal), host, capture.served());
+  return textClientResult(await (0, import_working8.summarizeTranscript)(completion, seed, signal), host, capture.served());
 }
 
 // src/pageEngines/fetchShim.ts
@@ -18502,6 +18816,65 @@ function turnCallsOf(calls, isReadOnly) {
   return calls.map((c) => ({ readOnly: isReadOnly?.(c.tool, c.args) === true }));
 }
 
+// ../packages/run-guards/src/reverifyTracker.ts
+var MAX_REVERIFY_PATHS = 200;
+function addBounded(set, path2) {
+  set.delete(path2);
+  set.add(path2);
+  while (set.size > MAX_REVERIFY_PATHS) {
+    const oldest = set.values().next().value;
+    if (oldest === void 0) break;
+    set.delete(oldest);
+  }
+}
+function restoreBounded(paths) {
+  return new Set((paths ?? []).slice(-MAX_REVERIFY_PATHS));
+}
+var ReverifyTracker = class {
+  writtenPaths;
+  readBackSinceWrite;
+  /** Read-only targets seen this turn, to tell an all-written re-read turn from real work. */
+  readsThisTurn = 0;
+  /** Whether every read this turn was a repeat read-back of an unchanged written path. */
+  allRepeatReadBacks = true;
+  constructor(state = {}) {
+    this.writtenPaths = restoreBounded(state.writtenPaths);
+    this.readBackSinceWrite = restoreBounded(state.readBackSinceWrite);
+  }
+  /** A call that may have changed ANY file wrote: no read-back is a look at unchanged bytes. */
+  wroteAnything() {
+    this.readBackSinceWrite.clear();
+  }
+  /** `path` was written: its next read-back inspects the edit again. */
+  wrote(path2) {
+    addBounded(this.writtenPaths, path2);
+    this.readBackSinceWrite.delete(path2);
+  }
+  /** A successful read-only call visited `target`. */
+  read(target) {
+    this.readsThisTurn += 1;
+    if (this.writtenPaths.has(target)) {
+      if (!this.readBackSinceWrite.has(target)) this.allRepeatReadBacks = false;
+      addBounded(this.readBackSinceWrite, target);
+    } else {
+      this.allRepeatReadBacks = false;
+    }
+  }
+  /** The turn ended: how many reads it made when ALL were repeat read-backs (else 0). Starts the next turn. */
+  endTurn() {
+    const count2 = this.readsThisTurn > 0 && this.allRepeatReadBacks ? this.readsThisTurn : 0;
+    this.readsThisTurn = 0;
+    this.allRepeatReadBacks = true;
+    return count2;
+  }
+  snapshot() {
+    return {
+      ...this.writtenPaths.size ? { writtenPaths: [...this.writtenPaths] } : {},
+      ...this.readBackSinceWrite.size ? { readBackSinceWrite: [...this.readBackSinceWrite] } : {}
+    };
+  }
+};
+
 // ../packages/run-guards/src/progressDetector.ts
 var LADDER_RESET_TURNS = 8;
 var SIGNAL_RANK = {
@@ -18540,10 +18913,7 @@ var ProgressDetector = class {
     this.steer = state.steer;
     this.readiness = new ReadinessAdvisory(state.advisory);
     this.batching = new BatchingNudge(state.batching);
-    this.writtenPaths = /* @__PURE__ */ new Set();
-    this.readBackSinceWrite = /* @__PURE__ */ new Set();
-    this.readThisTurn = [];
-    this.allReadsRepeatReadBacks = true;
+    this.reverify = new ReverifyTracker(state);
     this.turnCalls = [];
   }
   ports;
@@ -18563,16 +18933,8 @@ var ProgressDetector = class {
    *  turns, never a trip and never touching UNKEPT_READY_AT or any other signal. */
   batching;
   turnSignal = null;
-  /** Every path this run has written, so a repeat read-back of one is re-verification, not discovery. */
-  writtenPaths;
-  /** Read targets on written paths already read back since that path's last write: the
-   *  first read-back after a write inspects the edit (it may have half-applied); only a
-   *  later look at the same unchanged bytes is re-verification. Cleared per path on write. */
-  readBackSinceWrite;
-  /** Read-only targets seen this turn, to tell an all-written re-read turn from real work. */
-  readThisTurn;
-  /** Whether every read this turn was a repeat read-back of an unchanged written path. */
-  allReadsRepeatReadBacks;
+  /** `reverifying`: written paths and their read-backs (persisted, bounded). */
+  reverify;
   /** Every call of the current turn, for the B4 batching nudge's read-only count. */
   turnCalls;
   raise(signal) {
@@ -18592,7 +18954,7 @@ var ProgressDetector = class {
     if (unscoped) {
       this.visits.markAllMayHaveChanged();
       this.edits.reset();
-      if (wrote) this.readBackSinceWrite.clear();
+      if (wrote) this.reverify.wroteAnything();
     } else if ((this.ports.isDelete ?? ((t) => t === "delete_file"))(tool)) {
       this.edits.record(tool, args, { ok, deleted: ok });
       this.forgetVisitsOf(pathArgOf(args));
@@ -18602,21 +18964,12 @@ var ProgressDetector = class {
       if (ok) {
         const path2 = pathArgOf(args);
         this.forgetVisitsOf(path2);
-        if (path2) {
-          this.writtenPaths.add(path2);
-          this.readBackSinceWrite.delete(path2);
-        }
+        if (path2) this.reverify.wrote(path2);
       }
     } else if (ok && this.ports.isReadOnly?.(tool, args)) {
       const target = visitTargetOf(args);
       if (target) {
-        this.readThisTurn.push(target);
-        if (this.writtenPaths.has(target)) {
-          if (!this.readBackSinceWrite.has(target)) this.allReadsRepeatReadBacks = false;
-          this.readBackSinceWrite.add(target);
-        } else {
-          this.allReadsRepeatReadBacks = false;
-        }
+        this.reverify.read(target);
         const visit = this.visits.record(`${tool}:${target}`, args);
         if (visit.count >= REVISIT_HARD_AT && !visit.mayHaveChanged) this.raise({ kind: "circling_read", tool, target, count: visit.count });
       }
@@ -18644,13 +18997,10 @@ var ProgressDetector = class {
     const batchNote = this.batching.observe(turnCallsOf(turnCalls, this.ports.isReadOnly));
     this.steer = void 0;
     const idle = this.progress.endTurn();
-    if (!this.turnSignal && this.readThisTurn.length > 0 && this.allReadsRepeatReadBacks) {
-      if (!this.progress.lastTurnGround && idle > 0) {
-        this.raise({ kind: "reverifying", count: this.readThisTurn.length });
-      }
+    const rereads = this.reverify.endTurn();
+    if (!this.turnSignal && rereads > 0 && !this.progress.lastTurnGround && idle > 0) {
+      this.raise({ kind: "reverifying", count: rereads });
     }
-    this.readThisTurn = [];
-    this.allReadsRepeatReadBacks = true;
     const unkeptBefore = this.claims.snapshot().unkept;
     const unkept = this.claims.endTurn();
     if (unkept > unkeptBefore) this.unkeptTurns += 1;
@@ -18693,10 +19043,6 @@ var ProgressDetector = class {
   setSteer(note) {
     this.steer = note;
   }
-  /** B1: the readiness advisory awaiting its one turn ("" when none). */
-  readinessNote() {
-    return this.readiness.snapshot().note;
-  }
   /** The note the current turn's request carries ("" when none). */
   steerNote() {
     return this.steer ?? "";
@@ -18716,11 +19062,16 @@ var ProgressDetector = class {
       ...this.unkeptTurns ? { unkeptTurns: this.unkeptTurns } : {},
       ...this.quietTurns ? { quietTurns: this.quietTurns } : {},
       ...this.steer ? { steer: this.steer } : {},
-      ...this.readiness.snapshot().note ? { advisory: this.readiness.snapshot() } : {},
+      // `fired` persists on its own: a consumed one-off advisory must not re-fire on resume.
+      ...(() => {
+        const a = this.readiness.snapshot();
+        return a.note || a.fired ? { advisory: a } : {};
+      })(),
       ...(() => {
         const b = this.batching.snapshot();
         return b.streak || b.fired ? { batching: b } : {};
-      })()
+      })(),
+      ...this.reverify.snapshot()
     };
   }
 };
@@ -19053,6 +19404,26 @@ var DEFAULT_EVIDENCE_POLICY = {
     ".cjs": ["typecheck", "test"]
   },
   newSourceNeedsTest: true,
+  newSourceTestExempt: [
+    // Barrels / re-export entry points.
+    "(^|/)index\\.[cm]?[jt]sx?$",
+    // Type-only modules and declarations.
+    "(^|/)types\\.[cm]?tsx?$",
+    "\\.d\\.[cm]?ts$",
+    // Tool / build configuration.
+    "\\.config\\.[cm]?[jt]s$",
+    // Node scripts.
+    "\\.[cm]js$",
+    // Label / copy catalogs.
+    "(^|/)labels?/",
+    "(^|/)[^/]*(labels?|catalog)(\\.[^/]*)?\\.[cm]?[jt]sx?$",
+    // Fixtures and test helpers.
+    "(^|/)(__fixtures__|fixtures?|__mocks__|test-?utils|test-?helpers|testing)/",
+    "\\.(fixtures?|mocks?|helpers?)\\.[cm]?[jt]sx?$",
+    "(^|/)(test|spec)[-_.]?(helpers?|utils?|setup)\\.[cm]?[jt]sx?$",
+    "(^|/)(setupTests|vitest\\.setup|jest\\.setup)\\.[cm]?[jt]sx?$"
+  ],
+  newSourceTestCoverage: ["stem", "directory", "import"],
   checkTimeoutMs: 12e4
 };
 function basenameOf2(path2) {
@@ -19073,8 +19444,32 @@ var SOURCE_EXTENSIONS = /* @__PURE__ */ new Set([".ts", ".tsx", ".mts", ".cts", 
 function isSourceFile(path2) {
   return SOURCE_EXTENSIONS.has(extOf(path2));
 }
-function isTestPath2(path2) {
-  return /\.test\.tsx?$/.test(basenameOf2(path2));
+function dirOf2(path2) {
+  const normalized = normalizeEvidencePath(path2);
+  const slash2 = normalized.lastIndexOf("/");
+  return slash2 >= 0 ? normalized.slice(0, slash2) : "";
+}
+function moduleKey(path2) {
+  return normalizeEvidencePath(path2).replace(/\.[cm]?[jt]sx?$/i, "");
+}
+function isExemptFromTestRule(path2, policy) {
+  const normalized = normalizeEvidencePath(path2);
+  return (policy.newSourceTestExempt ?? []).some((source) => new RegExp(source, "i").test(normalized));
+}
+function covers(test, file, policy) {
+  const coverage = policy.newSourceTestCoverage ?? ["stem"];
+  if (coverage.includes("stem") && basenameOf2(test.absPath).startsWith(stemOf(file.absPath) + ".")) return true;
+  if (coverage.includes("directory")) {
+    const dir = dirOf2(file.absPath);
+    if (dirOf2(test.absPath) === dir) return true;
+    const dirName = dir.slice(dir.lastIndexOf("/") + 1);
+    if (dirName && dirOf2(test.absPath) === dirOf2(dir) && basenameOf2(test.absPath).startsWith(dirName + ".")) return true;
+  }
+  if (coverage.includes("import") && test.imports?.length) {
+    const target = moduleKey(file.absPath);
+    if (test.imports.some((i) => moduleKey(i) === target)) return true;
+  }
+  return false;
 }
 function isErrorFinding(finding) {
   const tokens2 = finding.trim().split(/\s+/);
@@ -19099,7 +19494,8 @@ function outgoingGate(files, ledger, policy) {
   for (const file of files) {
     if (file.deleted) continue;
     const checks = ledger.for(file.absPath, file.hash);
-    const required = policy.required[extOf(file.absPath)] ?? [];
+    const required = file.unavailable ? [] : policy.required[extOf(file.absPath)] ?? [];
+    if (file.unavailable) unavailable2.push(`${file.absPath}: ${file.unavailable}`);
     for (const kind of required) {
       const records = checks.filter((c) => c.kind === kind);
       if (records.length === 0) {
@@ -19120,11 +19516,9 @@ function outgoingGate(files, ledger, policy) {
         if (failing) return refuse(checkFailureReason(file.absPath, failing, " (LSP error)"));
       }
     }
-    if (policy.newSourceNeedsTest && file.isNew && isSourceFile(file.absPath) && !isTestPath2(file.absPath)) {
+    if (policy.newSourceNeedsTest && file.isNew && isSourceFile(file.absPath) && !isTestPath(file.absPath) && !isExemptFromTestRule(file.absPath, policy)) {
       const stem = stemOf(file.absPath);
-      const hasTest = files.some(
-        (t) => t !== file && !t.deleted && isTestPath2(t.absPath) && basenameOf2(t.absPath).startsWith(stem + ".")
-      );
+      const hasTest = files.some((t) => t !== file && !t.deleted && isTestPath(t.absPath) && covers(t, file, policy));
       if (!hasTest) {
         return refuse(
           `git_push refused: ${file.absPath} is new and has no test in this push. Add ${stem}.test.ts covering it, commit, and push again \u2014 the host runs the checks.`
@@ -19768,17 +20162,36 @@ function isLocalTicketCreateLabel(label) {
 }
 var SERVER_TICKET_MOVE_TOOL = "builtin_tasks_update";
 var LOCAL_TICKET_MOVE_TOOL = "ticket-move";
-function serverTicketId(raw) {
-  const id = typeof raw === "number" ? raw : typeof raw === "string" && /^\d+$/.test(raw.trim()) ? Number(raw.trim()) : NaN;
-  return Number.isInteger(id) && id > 0 ? id : null;
-}
 function ticketStatusMove(ref, status2, vocabulary) {
-  if (vocabulary.local) {
-    const id2 = String(ref).trim();
-    return id2 ? { tool: LOCAL_TICKET_MOVE_TOOL, args: { id: id2, status: status2 } } : null;
+  const text2 = typeof ref === "string" ? ref.trim() : null;
+  const parsed = parseEntityRef(text2 ?? ref);
+  if (parsed && "local" in parsed) return { tool: LOCAL_TICKET_MOVE_TOOL, args: { id: parsed.local, status: status2 } };
+  if (parsed && "sync" in parsed) {
+    return vocabulary.local ? { tool: LOCAL_TICKET_MOVE_TOOL, args: { id: syncIdText(parsed.sync), status: status2 } } : { tool: SERVER_TICKET_MOVE_TOOL, args: { id: parsed.sync, status: status2 } };
   }
-  const id = serverTicketId(ref);
-  return id != null ? { tool: SERVER_TICKET_MOVE_TOOL, args: { id, status: status2 } } : null;
+  if (parsed) return null;
+  return vocabulary.local && text2 ? { tool: LOCAL_TICKET_MOVE_TOOL, args: { id: text2, status: status2 } } : null;
+}
+
+// src/toolResultRecord.ts
+function toolResultRecord(result) {
+  if (typeof result === "string") {
+    try {
+      const parsed = JSON.parse(result);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return result && typeof result === "object" ? result : null;
+}
+function entityIdsOf(result) {
+  const record3 = toolResultRecord(result);
+  if (!record3) return { localId: null, syncId: null };
+  const idRef = parseEntityRef(record3.id);
+  const syncId = parseSyncId(record3.syncId) ?? parseSyncId(record3.taskId) ?? (idRef && "sync" in idRef ? idRef.sync : null);
+  const localId = isLocalId(record3.localId) ? record3.localId : idRef && "local" in idRef ? idRef.local : null;
+  return { localId, syncId };
 }
 
 // src/chatWorkLinking.ts
@@ -19914,8 +20327,9 @@ function selectLinkedTasks(listResult, statuses) {
     const row = r;
     if (typeof row.kind !== "string" || !TASK_TIER_KINDS.has(row.kind)) continue;
     if (row.exists === false) continue;
-    const ref = typeof row.ref === "number" ? String(row.ref) : typeof row.ref === "string" && row.ref.trim() ? row.ref : null;
-    if (!ref) continue;
+    const { syncId } = entityIdsOf({ syncId: row.syncId, id: row.ref });
+    if (syncId == null) continue;
+    const ref = syncIdText(syncId);
     if (typeof row.status !== "string" || !statuses.has(row.status.toLowerCase())) continue;
     out.push({ kind: row.kind, ref });
   }
@@ -20153,7 +20567,7 @@ async function compactMessages(messages, opts = CLOUD_COMPACT_DEFAULTS, summariz
   }
   const briefIdx = opts.pinTaskBrief ? taskRowIndex(source) : -1;
   const brief = briefIdx >= 0 ? source[briefIdx] : void 0;
-  const pack2 = await (0, import_handoff8.packHandoff)({
+  const pack = await (0, import_handoff8.packHandoff)({
     messages: source,
     ...brief ? { pinned: (_m, i) => i === briefIdx } : {},
     targetContextTokens: budget2,
@@ -20170,18 +20584,18 @@ ${summary.trim()}` : "";
     ...opts.recall ? { recall: opts.recall } : {},
     ...opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}
   });
-  const packed = pack2.dropped > 0 ? pack2.messages : [...source];
+  const packed = pack.dropped > 0 ? pack.messages : [...source];
   const messageBudget = Math.max(0, budget2 - toolsTokens);
-  const out = !pack2.fits || messagesTokens(packed) > messageBudget ? elideToFit(packed, messageBudget) : packed;
+  const out = !pack.fits || messagesTokens(packed) > messageBudget ? elideToFit(packed, messageBudget) : packed;
   const elided = out.some((m, i) => m !== packed[i]);
-  if (pack2.dropped === 0 && !elided && mask.masked === 0) return untouched();
+  if (pack.dropped === 0 && !elided && mask.masked === 0) return untouched();
   return {
     messages: out,
     compacted: true,
-    summarized: pack2.summarized && pack2.dropped > 0,
+    summarized: pack.summarized && pack.dropped > 0,
     beforeTokens,
     afterTokens: messagesTokens(out) + toolsTokens,
-    droppedMessages: pack2.dropped,
+    droppedMessages: pack.dropped,
     ...mask.masked > 0 ? { maskedObservations: mask.masked } : {}
   };
 }
@@ -20615,7 +21029,7 @@ async function packForModelHandoff(input, access) {
   const all = [system, ...mapped];
   const beforeTokens = (0, import_handoff9.tokensOf)(all, import_handoff9.defaultEstimateTokens);
   const reserve = handoffReserveTokens(input.maxTokens);
-  const pack2 = await (0, import_handoff9.packHandoff)({
+  const pack = await (0, import_handoff9.packHandoff)({
     messages: all,
     targetContextTokens: packTargetTokens2(input.contextWindow, input.priceTierBoundary, reserve),
     reserveOutputTokens: reserve,
@@ -20627,10 +21041,10 @@ async function packForModelHandoff(input, access) {
       return row !== void 0 && input.pinned(row);
     } } : {}
   });
-  if (pack2.dropped === 0) return { messages: [...input.messages], dropped: 0, noted: false, fits: pack2.fits, beforeTokens, afterTokens: beforeTokens };
+  if (pack.dropped === 0) return { messages: [...input.messages], dropped: 0, noted: false, fits: pack.fits, beforeTokens, afterTokens: beforeTokens };
   const messages = [];
   let noted = false;
-  for (const view of pack2.messages) {
+  for (const view of pack.messages) {
     if (view === system) continue;
     const original = back.get(view);
     if (original) {
@@ -20640,7 +21054,7 @@ async function packForModelHandoff(input, access) {
     messages.push(access.summary(typeof view.content === "string" ? view.content : JSON.stringify(view.content), view.role));
     noted = true;
   }
-  return { messages, dropped: pack2.dropped, noted, fits: pack2.fits, beforeTokens, afterTokens: pack2.estimatedTokens };
+  return { messages, dropped: pack.dropped, noted, fits: pack.fits, beforeTokens, afterTokens: pack.estimatedTokens };
 }
 var WIDEST_DROPPED = 99999;
 function noteText(from, to, dropped) {
@@ -21810,7 +22224,7 @@ function withPostEditNote(data, v) {
   return v && !v.ok ? withAdvisory(data, postEditNote(v)) : data;
 }
 
-// ../packages/agent-run/src/policy/guards/index.ts
+// ../packages/agent-run/src/policy/guards/ports.ts
 function guardLeversOf(levers) {
   const on = new Set(levers);
   return {
@@ -21820,6 +22234,8 @@ function guardLeversOf(levers) {
     d8_parallel_tool_calls: on.has("d8_parallel_tool_calls")
   };
 }
+
+// ../packages/agent-run/src/policy/guards/index.ts
 var RunGuards = class {
   cascade;
   progress;
@@ -21933,6 +22349,7 @@ var RunGuards = class {
   async onTrip(action, ports) {
     let outcome = action.kind;
     if (action.kind === "advisory") {
+      this.progress?.setSteer(action.note);
       const s2 = progressTraceStep(action);
       await ports.onEvent?.({ tool: s2.label, detail: s2.args, result: s2.result });
       return;
@@ -22414,8 +22831,8 @@ function focusTerms(entry) {
   const heads = (entry.outline ?? []).map((h) => h.heading).filter(Boolean);
   return [path2, ...heads].join(" ");
 }
-function focusHint(pack2) {
-  return pack2.focus.map(focusTerms).filter(Boolean).join("\n");
+function focusHint(pack) {
+  return pack.focus.map(focusTerms).filter(Boolean).join("\n");
 }
 
 // ../packages/agent-run/src/policy/context/index.ts
@@ -22850,6 +23267,33 @@ function cutHeadTail(text2, maxChars, opts = {}) {
 \u2026[${elided.length.toLocaleString("en-US")} chars (${countLines(elided).toLocaleString("en-US")} lines) elided \u2014 showing the first ${head.length.toLocaleString("en-US")} and the last ${tail.length.toLocaleString("en-US")} of ${text2.length.toLocaleString("en-US")} chars]\u2026
 `;
   return `${head}${marker}${tail}`;
+}
+var defaultMiddleMarker = (omitted) => `
+\u2026(${omitted.toLocaleString("en-US")} chars omitted from the middle)\u2026
+`;
+var isHighSurrogate = (c) => c >= 55296 && c <= 56319;
+var isLowSurrogate = (c) => c >= 56320 && c <= 57343;
+function safePrefix(s, n2) {
+  let end = Math.max(0, Math.min(n2, s.length));
+  if (end > 0 && end < s.length && isHighSurrogate(s.charCodeAt(end - 1))) end -= 1;
+  return s.slice(0, end);
+}
+function safeSuffix(s, n2) {
+  if (n2 <= 0) return "";
+  let start = Math.max(0, s.length - n2);
+  if (start > 0 && isLowSurrogate(s.charCodeAt(start))) start += 1;
+  return s.slice(start);
+}
+function truncateMiddle(text2, max, opts = {}) {
+  if (text2.length <= max) return text2;
+  const { marker = defaultMiddleMarker, symmetric = false } = opts;
+  const markerFor = typeof marker === "string" ? () => marker : marker;
+  const room = Math.max(0, max - markerFor(text2.length).length);
+  if (room === 0) return safePrefix(text2, max);
+  const tailShare = Math.floor(room / 2);
+  const head = safePrefix(text2, symmetric ? tailShare : room - tailShare);
+  const tail = safeSuffix(text2, tailShare);
+  return `${head}${markerFor(text2.length - head.length - tail.length)}${tail}`;
 }
 
 // ../packages/tool-output-policy/src/shellSummary.ts
@@ -23882,15 +24326,15 @@ function reaskAsCoder(state, policy, completion, asked) {
 
 // ../packages/agent-run/src/turnContext.ts
 var import_handoff11 = require("@seanhogg/builderforce-memory/handoff");
-var EMPTY_PACK = { focus: [], facts: [], recall: [] };
+var EMPTY_PACK2 = { focus: [], facts: [], recall: [] };
 async function buildContextPack(input, hooks, state, offered) {
-  let pack2;
+  let pack;
   try {
-    pack2 = await input.ports.context.pack(input.task);
+    pack = await input.ports.context.pack(input.task);
   } catch {
-    pack2 = EMPTY_PACK;
+    pack = EMPTY_PACK2;
   }
-  const built = pack2;
+  const built = pack;
   const once = { ...input, ports: { ...input.ports, context: { pack: () => built } } };
   let recalled = void 0;
   try {
@@ -23898,7 +24342,7 @@ async function buildContextPack(input, hooks, state, offered) {
   } catch {
     recalled = void 0;
   }
-  return recalled && recalled.length > 0 ? { ...pack2, recall: [...pack2.recall, ...recalled] } : pack2;
+  return recalled && recalled.length > 0 ? { ...pack, recall: [...pack.recall, ...recalled] } : pack;
 }
 function openingRows(task, gates) {
   const system = [];
@@ -23910,9 +24354,9 @@ function openingRows(task, gates) {
     { role: "user", content: task.prompt }
   ];
 }
-function turnContextBlock(pack2, brief, sections = []) {
+function turnContextBlock(pack, brief, sections = []) {
   const lines = [];
-  for (const file of pack2.focus) {
+  for (const file of pack.focus) {
     if (file.content !== void 0) {
       lines.push(`## ${file.path}`, file.content);
     } else if (file.outline && file.outline.length > 0) {
@@ -23920,21 +24364,21 @@ function turnContextBlock(pack2, brief, sections = []) {
       for (const entry of file.outline) lines.push(`- ${entry.heading} (line ${entry.line})`);
     }
   }
-  if (pack2.chat) {
-    lines.push(`## chat`, `${pack2.chat.tickets.length} linked tickets, ${pack2.chat.runs.length} runs`);
+  if (pack.chat) {
+    lines.push(`## chat`, `${pack.chat.tickets.length} linked tickets, ${pack.chat.runs.length} runs`);
   }
-  for (const repo of pack2.repos ?? []) {
+  for (const repo of pack.repos ?? []) {
     lines.push(`## repo ${repo.repo}`, `branch ${repo.branch}`, repo.dirty.length > 0 ? `dirty: ${repo.dirty.join(", ")}` : "clean");
   }
-  for (const fact of pack2.facts) lines.push(`## ${fact.key}`, fact.content);
-  if (pack2.recall.length > 0) lines.push("## recall", ...pack2.recall);
+  for (const fact of pack.facts) lines.push(`## ${fact.key}`, fact.content);
+  if (pack.recall.length > 0) lines.push("## recall", ...pack.recall);
   if (brief && brief.trim()) lines.push("## brief", brief.trim());
   for (const section of sections) if (section.trim()) lines.push(section.trim());
   if (lines.length === 0) return null;
   return lines.join("\n");
 }
-function withVolatileTail(transcript, pack2, brief, sections = []) {
-  const tail = (0, import_handoff11.volatileTail)([turnContextBlock(pack2, brief, sections)]);
+function withVolatileTail(transcript, pack, brief, sections = []) {
+  const tail = (0, import_handoff11.volatileTail)([turnContextBlock(pack, brief, sections)]);
   return tail ? [...transcript, tail] : [...transcript];
 }
 
@@ -23962,7 +24406,7 @@ function askFields(ask2) {
     ...ask2.excludeModels && ask2.excludeModels.length > 0 ? { excludeModels: ask2.excludeModels } : {}
   };
 }
-async function completeTurn(input, state, hooks, ctx, offered, transcript, pack2, made) {
+async function completeTurn(input, state, hooks, ctx, offered, transcript, pack, made) {
   const view = currentView(transcript, offered);
   const pctx = policyContext(input, state, view, ctx.step, ctx.stepInCall);
   const selected = made ? made.tools : await hooks.tools.select(pctx, offered);
@@ -23986,7 +24430,7 @@ async function completeTurn(input, state, hooks, ctx, offered, transcript, pack2
     ...fields ?? {}
   };
   const requestFor = (askedModel, ask2, extra = []) => ({
-    messages: measureTurnTail(state, withVolatileTail(extra.length > 0 ? [...transcript, ...extra] : transcript, pack2, brief ?? null, sections)),
+    messages: measureTurnTail(state, withVolatileTail(extra.length > 0 ? [...transcript, ...extra] : transcript, pack, brief ?? null, sections)),
     ...askedModel ? { model: askedModel, strict: ask2?.strict ?? false } : {},
     ...tools.length > 0 ? { tools } : {},
     ...decision?.maxTokens !== void 0 ? { maxTokens: decision.maxTokens } : {},
@@ -24047,7 +24491,7 @@ async function completeTurn(input, state, hooks, ctx, offered, transcript, pack2
     meta: { model: completion.model, usage: completion.usage, interrupted: completion.interrupted, ...completion.parts ? { parts: completion.parts } : {}, ...completion.meta ? { native: completion.meta } : {} }
   };
 }
-async function synthesizeFinal(input, state, hooks, transcript, pack2, tally) {
+async function synthesizeFinal(input, state, hooks, transcript, pack, tally) {
   if (input.signal?.aborted) return null;
   const pctx = policyContext(input, state, currentView(transcript, []), state.step, 0);
   const prompt = hooks.stall.synthesis?.(pctx);
@@ -24060,7 +24504,7 @@ async function synthesizeFinal(input, state, hooks, transcript, pack2, tally) {
   try {
     completion = await input.ports.model.complete(
       {
-        messages: [...withVolatileTail(transcript, pack2, null, input.ports.context.turnSections?.() ?? []), ask2],
+        messages: [...withVolatileTail(transcript, pack, null, input.ports.context.turnSections?.() ?? []), ask2],
         ...model ? { model, strict: decision?.strict ?? false } : {},
         maxTokens: SYNTHESIS_MAX_TOKENS,
         ...askFields(fields)
@@ -24716,12 +25160,12 @@ async function runAgent(input) {
   const tally = state.telemetry ??= freshTally();
   const offered = offeredSchemas(ports);
   const transcript = asMessages(state.messages);
-  let pack2 = state.context ?? EMPTY_PACK;
+  let pack = state.context ?? EMPTY_PACK2;
   if (!resumed) {
     transcript.splice(0, transcript.length, ...task.transcript ?? openingRows(task, policy.approvalGates));
     state.messages = transcript;
-    pack2 = await buildContextPack(input, hooks, state, offered);
-    state.context = pack2;
+    pack = await buildContextPack(input, hooks, state, offered);
+    state.context = pack;
   }
   ports.attach?.({
     policy: () => state.model,
@@ -24729,10 +25173,10 @@ async function runAgent(input) {
   });
   if (!resumed) {
     await emit(ports.events, { kind: "run.started", step: state.step });
-    if (pack2.answer) {
-      appendRows(input, transcript, { role: "assistant", content: pack2.answer });
+    if (pack.answer) {
+      appendRows(input, transcript, { role: "assistant", content: pack.answer });
       state.messages = transcript;
-      return settle(input, hooks, state, transcript, "finished", { output: pack2.answer });
+      return settle(input, hooks, state, transcript, "finished", { output: pack.answer });
     }
     const preflight = await hooks.model.preflight?.(policyContext(input, state, currentView(transcript, offered), state.step, 0));
     if (preflight) await emit(ports.events, preflight);
@@ -24772,7 +25216,7 @@ async function runAgent(input) {
         tool: (call2, result) => announceRow(input, toolRow(call2.id, result, ports.platform?.verbatimText === true))
       },
       ports: {
-        complete: (ctx) => completeTurn(input, state, hooks, ctx, offered, transcript, pack2, run.selection),
+        complete: (ctx) => completeTurn(input, state, hooks, ctx, offered, transcript, pack, run.selection),
         dispatch: (call2, ctx) => dispatchCall(input, state, call2, run.watch, run.facts, ctx.step),
         ...isReadOnly ? { isReadOnly } : {}
       },
@@ -24798,7 +25242,7 @@ async function runAgent(input) {
   if (loopResult.exhausted || loopResult.finished && loopResult.ok && !loopResult.output.trim()) {
     let output;
     try {
-      output = await synthesizeFinal(input, state, hooks, transcript, pack2, tally);
+      output = await synthesizeFinal(input, state, hooks, transcript, pack, tally);
     } catch (err) {
       return settle(input, hooks, state, transcript, "failed", { reason: err instanceof Error ? err.message : String(err), ...isResumable(input, err) ? { cause: err } : {} });
     }
@@ -26870,7 +27314,7 @@ function busiestModel(trace4) {
 }
 
 // src/modelReply.ts
-var import_working8 = require("@seanhogg/builderforce-memory/working");
+var import_working9 = require("@seanhogg/builderforce-memory/working");
 
 // src/chatActivity.ts
 var PHASES = ["started", "completed", "failed", "paused", "resumed", "cancelled"];
@@ -26982,7 +27426,7 @@ function chatActivityText(activity, labels) {
 
 // src/modelReply.ts
 function isModelReply(m) {
-  return m.role === "assistant" && !isStepMessage(m) && !(0, import_working8.isConsolidationMarker)(m) && !isActivityMessage(m) && !isStoppedBeforeStart(m);
+  return m.role === "assistant" && !isStepMessage(m) && !(0, import_working9.isConsolidationMarker)(m) && !isActivityMessage(m) && !isStoppedBeforeStart(m);
 }
 
 // src/persistedSteps.ts
@@ -27591,19 +28035,6 @@ function formatRoutingByRole(r) {
   return lines;
 }
 
-// src/toolResultRecord.ts
-function toolResultRecord(result) {
-  if (typeof result === "string") {
-    try {
-      const parsed = JSON.parse(result);
-      return parsed && typeof parsed === "object" ? parsed : null;
-    } catch {
-      return null;
-    }
-  }
-  return result && typeof result === "object" ? result : null;
-}
-
 // src/staffingSummary.ts
 var DISPATCH_TOOL = /chats[._](dispatch_agent|execute_as_agent)|kanban[._](coordinate|materialize_work_items|assess_resource|assign_participant)|executions[._]submit|run[._-]?now/i;
 function isDispatchTool(label) {
@@ -27707,7 +28138,7 @@ function requestedReadWindow2(out, start, end) {
 }
 
 // src/brainTriage.ts
-var import_working9 = require("@seanhogg/builderforce-memory/working");
+var import_working10 = require("@seanhogg/builderforce-memory/working");
 
 // src/toolExposure.ts
 function toolExposureInTrace(events) {
@@ -27739,7 +28170,7 @@ function formatAdvertised(tools, defaultToolLimit) {
 }
 
 // src/brainTriage.ts
-var CONTEXT_PROMPT_PEAK = Math.round(import_working9.HISTORY_TOKEN_BUDGET * 1.5);
+var CONTEXT_PROMPT_PEAK = Math.round(import_working10.HISTORY_TOKEN_BUDGET * 1.5);
 var LARGE_LOSSY_RESULT_BYTES = 2e4;
 function isFailedToolResult(result) {
   if (result == null) return false;
@@ -28174,7 +28605,7 @@ function contextPressureLine(d) {
   if (d.tokensMeasured && d.promptTokenPeak > 0) parts.push(`prompt peaked at ${d.promptTokenPeak.toLocaleString("en-US")} tokens`);
   if (d.truncatedToolResults > 0) parts.push(`${d.truncatedToolResults} tool result(s) trimmed to the ${toolResultBudgetText()} budget by design`);
   if (!parts.length && d.largestToolResult) parts.push(`one ${d.largestToolResult.label} result was ${kb(d.largestToolResult.bytes)}`);
-  return `Context: pressure noted (${parts.join("; ")}) \u2014 no turn was cut short by it. The working transcript is held to a ${import_working9.HISTORY_TOKEN_BUDGET.toLocaleString("en-US")}-token budget on purpose, so a prompt above that figure is the design working, not a fault.`;
+  return `Context: pressure noted (${parts.join("; ")}) \u2014 no turn was cut short by it. The working transcript is held to a ${import_working10.HISTORY_TOKEN_BUDGET.toLocaleString("en-US")}-token budget on purpose, so a prompt above that figure is the design working, not a fault.`;
 }
 function formatBrainDiagnostics(d) {
   const evermindAnswers = d.memoryAnswers?.filter((m) => m.source === "evermind") ?? [];
@@ -28419,8 +28850,7 @@ function completeReviewTaskId(event) {
   const args = event.args ?? {};
   const recorded = event.result?.verdict ?? args.verdict;
   if (recorded !== "complete") return null;
-  const taskId = Number(args.taskId);
-  return Number.isInteger(taskId) && taskId > 0 ? taskId : null;
+  return parseSyncId(args.taskId);
 }
 function ticketsReviewedInPreview(events) {
   const tools = toolEvents(events);
@@ -28515,8 +28945,7 @@ async function recordCodeChangeTicket(serverChatId, c, req, phase) {
   if (!isFailedToolResult(out)) {
     c.deltaRecordedFiles = [...c.deltaRecordedFiles, ...files];
     if (files.length) c.deltaTitleCount = files.length;
-    const record3 = toolResultRecord(out);
-    const id = serverTicketId(record3?.taskId ?? record3?.id);
+    const id = entityIdsOf(out).syncId;
     if (c.deltaTicketId == null && id != null) c.deltaTicketId = id;
     c.ticketRecorded = true;
   } else if (isRoleRefusal(out)) {
@@ -28562,7 +28991,7 @@ async function moveTicket(c, req, move, reason) {
     category: "tool",
     label: move.tool,
     durationMs: nowMs2() - toolStart,
-    args: reason ? { ...move.args, auto: true, reason } : { ...move.args },
+    args: { ...move.args, auto: true, reason },
     result: out ?? null,
     isError: failed4
   });
@@ -28576,8 +29005,8 @@ function localTicketsFiledInRun(trace4) {
   for (const ev of trace4) {
     if (!succeeded6(ev) || !isLocalTicketCreateLabel(ev.label)) continue;
     if (ev.args?.reason !== "hand_off") continue;
-    const id = toolResultRecord(ev.result)?.id;
-    const ref = typeof id === "string" ? id.trim() : typeof id === "number" ? String(id) : "";
+    const { localId, syncId } = entityIdsOf(ev.result);
+    const ref = localId ?? (syncId != null ? syncIdText(syncId) : null);
     if (ref && !ids2.includes(ref)) ids2.push(ref);
   }
   return ids2;
@@ -28645,11 +29074,11 @@ function verificationOf(evidence, touchedFiles) {
   if (failed4.length) return { verified: false, reason: `failing checks: ${failed4.slice(0, 5).join("; ")}` };
   const passing = entries.filter((e) => e.checks.some((c) => c.outcome === "pass"));
   if (!passing.length) return { verified: false, reason: "no check passed (only unavailable checks were recorded)" };
-  const covers = (file) => {
+  const covers2 = (file) => {
     const rel2 = normalizeEvidencePath(file).replace(/^\.\//, "");
     return passing.some((e) => e.path === rel2 || e.path.endsWith(`/${rel2}`));
   };
-  const unverified = touchedFiles.filter((f) => !covers(f));
+  const unverified = touchedFiles.filter((f) => !covers2(f));
   if (unverified.length) return { verified: false, reason: `no passing check for: ${unverified.slice(0, 10).join(", ")}` };
   return {
     verified: true,
@@ -28660,8 +29089,8 @@ function reviewedThisRun(trace4) {
   const ids2 = /* @__PURE__ */ new Set();
   for (const ev of trace4) {
     if (ev.category !== "tool" || ev.label !== REVIEW_RECORD_TOOL2 || ev.isError || isFailedToolResult(ev.result)) continue;
-    const id = Number(ev.args?.taskId);
-    if (Number.isInteger(id)) ids2.add(id);
+    const id = parseSyncId(ev.args?.taskId);
+    if (id !== null) ids2.add(id);
   }
   return ids2;
 }
@@ -28735,7 +29164,7 @@ async function deterministicFinish(input, run) {
       }
     }
   }
-  if (finishing && await updateLinkedTickets(run.serverChatId, view, req, linkedTicketsToComplete, "done", null) > 0) result.ticketClosed = true;
+  if (finishing && await updateLinkedTickets(run.serverChatId, view, req, linkedTicketsToComplete, "done", "shipped-to-base-branch") > 0) result.ticketClosed = true;
   const unlistedDelta = run.serverChatId == null ? view.deltaTicketId : null;
   if (finishing && await updateRunLocalTickets(input.trace, view, fullReq, "done", "shipped-to-base-branch", unlistedDelta) > 0) result.ticketClosed = true;
   if (reviewedInPreview.length && req.projectId != null) {
@@ -28748,9 +29177,11 @@ function shippedOf(run) {
   return run.c.codeChanged && run.c.touchedFiles.length > 0 && shippedToBaseBranch(runTrace(run.c), { touchedFiles: run.c.touchedFiles });
 }
 async function hasLinkedTicket(run) {
-  const { req, serverChatId } = run;
+  return holdsLinkedTicket(runTrace(run.c), run.serverChatId, run.req);
+}
+async function holdsLinkedTicket(trace4, serverChatId, req) {
   if (!req.runTool) return false;
-  if (localTicketsFiledInRun(runTrace(run.c)).length > 0) return true;
+  if (localTicketsFiledInRun(trace4).length > 0) return true;
   if (serverChatId == null) return false;
   let listed;
   try {
@@ -28788,7 +29219,12 @@ function withDeterministicFinish(run, inner) {
     ...inner,
     gate: async (ctx) => {
       await finishCloseOut(run).catch((reason) => {
-        console.warn("deterministic-finish close-out failed", reason);
+        pushTrace(run.c, {
+          ts: nowIso(),
+          category: "message",
+          label: "finish.close_out_error",
+          result: `The close-out failed: ${reason instanceof Error ? reason.message : String(reason)}. The finish goes on; its tickets were not moved.`
+        });
       });
       return inner.gate(ctx);
     }
@@ -28981,6 +29417,14 @@ async function call(ports, name, args) {
   ports.step?.(name, { ...args, auto: true, reason: "hand_off" }, out, now() - start);
   return out;
 }
+function filedTicketRef(record3, local) {
+  const { localId, syncId } = entityIdsOf(record3);
+  if (!local) return syncId ?? void 0;
+  if (localId) return localId;
+  if (syncId != null) return syncId;
+  const opaque = record3?.id;
+  return typeof opaque === "string" && opaque.trim() ? opaque : void 0;
+}
 async function fileTickets(plan, ports) {
   const vocabulary = ticketToolVocabulary(ports.toolNames);
   const createTool = vocabulary.createTool;
@@ -28996,8 +29440,7 @@ async function fileTickets(plan, ports) {
     });
     const record3 = toolResultRecord(out);
     const failed4 = isFailed(record3 ?? out);
-    const id = !failed4 ? record3?.id : void 0;
-    ids2.push(typeof id === "number" || vocabulary.local && typeof id === "string" && id ? id : void 0);
+    ids2.push(failed4 ? void 0 : filedTicketRef(record3, vocabulary.local));
     if (!failed4) await ports.afterCreate?.(createTool, out).catch(() => void 0);
   }
   return ids2;
@@ -29228,9 +29671,19 @@ function chatAsksDirective(convo) {
 }
 
 // src/runStore/publishHold.ts
-var ASKS_TO_SHIP = /\b(?:commit|push|ship|merg\w*|land|publish|release)\b/i;
-function asksToShip(text2) {
-  return ASKS_TO_SHIP.test(text2 ?? "");
+var PUBLISH_VERB = String.raw`(?:commit|push|ship|merge|land|publish|release|(?:open|raise|create)\s+(?:a|the)\s+(?:pr|pull\s+request))`;
+var PUBLISH_TAIL = String.raw`(?:it|them|this|that|these|those|everything|all|now|away|up|changes|please|then|too|as\s+well|for\s+me|right\s+away|` + String.raw`(?:the|your|my|our)\s+(?:changes?|code|work|fix(?:es)?|branch|commits?|pr|diff|edits?|updates?|lot)|` + String.raw`and\s+${PUBLISH_VERB}|` + String.raw`to\s+(?:main|master|github|prod(?:uction)?|(?:the\s+)?(?:remote|repo|origin)(?:/[\w./-]+)?|origin/[\w./-]+|the\s+(?:[\w./-]+\s+)?branch|[\w./-]+\s+branch))`;
+var ACKNOWLEDGEMENT = String.raw`(?:(?:ok(?:ay)?|yes|yep|yeah|sure|great|good|perfect|thanks|thank\s+you|lgtm|looks\s+good|all\s+good|validated|verified|approved|done|now|please|so|then|and|alright)\b[\s!–—-]*)*`;
+var GO_AHEAD = String.raw`(?:go\s+ahead\s+(?:and\s+)?|you\s+(?:can|may)\s+(?:now\s+)?(?:go\s+ahead\s+and\s+)?|` + String.raw`(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:now\s+)?|` + String.raw`you(?:['’]re|\s+are)\s+(?:good|clear(?:ed)?|free|ok(?:ay)?|fine)\s+to\s+|` + String.raw`feel\s+free\s+to\s+|(?:it\s+is\s+|it['’]?s\s+)?(?:ok(?:ay)?|fine|safe)\s+to\s+|time\s+to\s+|let['’]?s\s+|please\s+)?`;
+var SHIP_ORDER = new RegExp(String.raw`^${ACKNOWLEDGEMENT}${GO_AHEAD}${PUBLISH_VERB}(?:\s+${PUBLISH_TAIL})*$`, "i");
+var DEFERRAL = /\b(?:not\s+yet|after|when|once|later|tomorrow|tonight|next|until|till|before|wait|hold\s+off|in\s+a\s+(?:bit|minute|moment|while|few))\b/i;
+var ASSISTANT_ASKS_TO_SHIP = /\b(?:shall|should|can|may)\s+I\s+(?:go\s+ahead\s+and\s+)?(?:now\s+)?(?:commit|push|ship|merge|land|publish|open\s+(?:a|the)\s+(?:pr|pull\s+request))\b[^?]*\?|\b(?:do\s+you\s+want|want|would\s+you\s+like)\s+me\s+to\s+(?:go\s+ahead\s+and\s+)?(?:commit|push|ship|merge|land|publish|open\s+(?:a|the)\s+(?:pr|pull\s+request))\b[^?]*\?/i;
+var BARE_AFFIRMATIVE = /^(?:(?:yes|yep|yeah|yup|sure|ok(?:ay)?|go\s+ahead|go\s+for\s+it|do\s+it|please\s+do|please|sounds\s+good|lgtm|approved|absolutely|definitely|thanks|thank\s+you)[\s,.!]*)+$/i;
+function asksToShip(text2, priorAssistant) {
+  const turn = (text2 ?? "").trim();
+  if (!turn || DEFERRAL.test(turn)) return false;
+  if (priorAssistant && BARE_AFFIRMATIVE.test(turn) && ASSISTANT_ASKS_TO_SHIP.test(priorAssistant)) return true;
+  return turn.split(/[.!?;:\n,]+/).some((clause) => SHIP_ORDER.test(clause.trim()));
 }
 var RAW_PUBLISH2 = gitCommandPattern("commit|push");
 function isPublishCall(name, args) {
@@ -29246,14 +29699,21 @@ function publishHoldFromPersonTurns(personTurns2) {
     const text2 = turn.text;
     if (!text2) return;
     if (declinesShipping(text2)) hold = { messageNumber: index + 1, text: text2 };
-    else if (hold && asksToShip(text2)) hold = null;
+    else if (hold && asksToShip(text2, turn.priorAssistant)) hold = null;
   });
   return hold;
 }
 function publishHold(convo) {
   const turns = [];
+  let priorAssistant = "";
   for (const m of convo) {
-    if (m?.role === "user" && personTurns.has(m)) turns.push({ text: userTextOf(m) });
+    if (m?.role === "assistant") {
+      const said = userTextOf(m);
+      if (said) priorAssistant = said;
+    } else if (m?.role === "user" && personTurns.has(m)) {
+      turns.push({ text: userTextOf(m), ...priorAssistant ? { priorAssistant } : {} });
+      priorAssistant = "";
+    }
   }
   return publishHoldFromPersonTurns(turns);
 }
@@ -29840,6 +30300,9 @@ function canCompleteTicket(isOnBaseBranch, userDeclinedShipping, opts) {
 function notOnBaseBranchAdvisory() {
   return "CANNOT MARK DONE \u2014 code is not on the base branch (main/master). Either ship to main/master first, or if you intentionally left the code uncommitted, say so explicitly in your reply so this guard knows to allow it.";
 }
+function markedDoneOffBaseAdvisory() {
+  return "MARKED DONE BEFORE IT SHIPPED \u2014 the ticket is now done, but this run's code is not on the base branch (main/master). Ship it to main/master, or set the ticket back to in_progress and name what blocks it. If you intentionally left the code uncommitted, say so explicitly in your reply.";
+}
 function completionBlockedAdvisory(outgoing) {
   if (outgoing && !outgoing.ok) {
     return `CANNOT MARK DONE \u2014 this run's outgoing changes fail the ship gate: ${outgoing.reason} Mark the ticket done once they pass.`;
@@ -29892,10 +30355,10 @@ function completionAdvisory(open2) {
 }
 
 // src/runStore/runPreamble.ts
-var import_working12 = require("@seanhogg/builderforce-memory/working");
+var import_working13 = require("@seanhogg/builderforce-memory/working");
 
 // src/runStore/runFoldMarker.ts
-var import_working10 = require("@seanhogg/builderforce-memory/working");
+var import_working11 = require("@seanhogg/builderforce-memory/working");
 function entryKey(m) {
   return `${m.role}\0${m.role === "assistant" ? replayTextOf(contentText(m.content ?? "")) : contentText(m.content ?? "")}`;
 }
@@ -29939,14 +30402,14 @@ function recordTranscriptAnchors(c, req) {
   }
 }
 async function persistFoldMarker(c, chatId, persistence, fold) {
-  const covered = (0, import_working10.foldKeepFromId)(c.transcriptAnchors, fold.coveredEnd);
+  const covered = (0, import_working11.foldKeepFromId)(c.transcriptAnchors, fold.coveredEnd);
   if (covered === void 0) return;
   const keepFromId = c.unseenFromId === void 0 ? covered : Math.min(covered, c.unseenFromId);
   try {
     const [msg] = await persistence.sendMessages(chatId, [{
       role: "assistant",
-      content: (0, import_working10.consolidationMarkerContent)(fold.note),
-      metadata: (0, import_working10.consolidationMetadata)({ keepFromId, folded: fold.droppedMessages })
+      content: (0, import_working11.consolidationMarkerContent)(fold.note),
+      metadata: (0, import_working11.consolidationMetadata)({ keepFromId, folded: fold.droppedMessages })
     }]);
     if (msg) {
       recordAppended(c, msg);
@@ -30037,7 +30500,7 @@ function createRunWindowFit(deps) {
       const reused = memo ? reusePack(memo, req.messages, budget2) : null;
       if (reused) return reused;
       const recall = recallFor(req.step);
-      const { messages, pack: pack2 } = await packForModel({
+      const { messages, pack } = await packForModel({
         messages: req.messages,
         to,
         ...lastServed ? { from: lastServed } : {},
@@ -30050,7 +30513,7 @@ function createRunWindowFit(deps) {
           if (differs || t.dropped > 0 || !t.fits) deps.trace(windowFitTrace(deps.now(), req.step, t));
         }
       });
-      if (pack2.fits) packs.set(memoKey, packMemoOf(req.messages, messages));
+      if (pack.fits) packs.set(memoKey, packMemoOf(req.messages, messages));
       else packs.delete(memoKey);
       return messages;
     },
@@ -30075,7 +30538,7 @@ function createRunWindowFit(deps) {
 
 // src/runStore/runMemory.ts
 var import_evermind2 = require("@seanhogg/builderforce-memory/evermind");
-var import_working11 = require("@seanhogg/builderforce-memory/working");
+var import_working12 = require("@seanhogg/builderforce-memory/working");
 
 // src/runStore/answerAnchors.ts
 var FILE_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "view_file", "open_file", "read_files"]);
@@ -30139,7 +30602,7 @@ async function recallForRun(c, convo, evermind, hint) {
   if (recalled?.seeded && recalled.items.length > 0) {
     const block = (0, import_evermind2.formatEvermindMemoryBlock)(recalled.items);
     if (block) {
-      const blockTokens = (0, import_working11.transcriptTokens)([{ role: "system", content: block }]);
+      const blockTokens = (0, import_working12.transcriptTokens)([{ role: "system", content: block }]);
       pushTrace(c, {
         ts: nowIso(),
         category: "recall",
@@ -30556,11 +31019,16 @@ async function prepareBrainRun(chatId, c, req, runKey, reportRunRow) {
   const host = await gatherHostRunContext(c, req, !!evermind?.recall);
   const { recalled, block: recallBlock2, blockTokens: recallBlockTokens } = await recallForRun(c, convo, evermind, host.recallHint);
   let systemPrompt = resolvedSystemPrompt;
+  const turnPartsInPrompt = [];
+  const intoPrompt = (part) => {
+    systemPrompt = `${systemPrompt}
+
+${part}`;
+    turnPartsInPrompt.push(part);
+  };
   if (recallBlock2) {
     if (stablePrefix) turnParts.push(recallBlock2);
-    else systemPrompt = `${systemPrompt}
-
-${recallBlock2}`;
+    else intoPrompt(recallBlock2);
   }
   const priorRecall = { query: latestUserText(convo), result: recalled };
   const memoryReplay = memoryReplayable(latestUserText(convo), { followUp: isFollowUpTurn(convo) });
@@ -30575,9 +31043,7 @@ ${recallBlock2}`;
       const extra = await req.augmentSystemPrompt(latestUserText(convo));
       if (typeof extra === "string" && extra.trim()) {
         if (stablePrefix) turnParts.push(extra);
-        else systemPrompt = `${systemPrompt}
-
-${extra}`;
+        else intoPrompt(extra);
       }
     } catch {
     }
@@ -30606,9 +31072,10 @@ ${turnOptimizationDirective()}`;
 
 ${hold ? publishHoldDirective() : selfReviewShipDirective(serverChatId)}`;
   }
-  if (canReviewInPreview(catalogToolNames)) systemPrompt = `${systemPrompt}
+  const previewReview = canReviewInPreview(catalogToolNames) ? previewReviewDirective(serverChatId, ticketToolVocabulary(catalogToolNames)) : null;
+  if (previewReview) systemPrompt = `${systemPrompt}
 
-${previewReviewDirective(serverChatId, ticketToolVocabulary(catalogToolNames))}`;
+${previewReview}`;
   if (c.priorResearch) systemPrompt = `${systemPrompt}
 
 ${c.priorResearch}`;
@@ -30616,15 +31083,18 @@ ${c.priorResearch}`;
   const { userRequest } = reading;
   for (const directive of reading.directives) {
     if (stablePrefix) turnParts.push(directive);
-    else systemPrompt = `${systemPrompt}
-
-${directive}`;
+    else intoPrompt(directive);
   }
   const turnContext = turnContextBlock2(turnParts);
+  const systemNamed = toolNamesMentionedIn(systemPrompt);
+  const blockNamed = turnContext ? toolNamesMentionedIn(turnContext) : [];
+  const promptTools = {
+    system: systemNamed,
+    turn: [.../* @__PURE__ */ new Set([...blockNamed, ...toolNamesMentionedIn([...turnPartsInPrompt, userRequest].join("\n\n"))])],
+    contract: previewReview ? toolNamesMentionedIn(previewReview) : []
+  };
   const alwaysAdvertised = [
-    ...toolNamesMentionedIn(turnContext ? `${systemPrompt}
-
-${turnContext}` : systemPrompt),
+    .../* @__PURE__ */ new Set([...systemNamed, ...blockNamed]),
     ...localToolsIn(catalogToolNames),
     // The Studio's workspace vocabulary, including the preview review its contract
     // requires — empty everywhere but the Studio (see `studioToolsIn`).
@@ -30641,7 +31111,7 @@ ${turnContext}` : systemPrompt),
     ...canAskUser ? [ASK_USER_TOOL] : []
   ];
   const windowFit = createRunWindowFit({
-    workingBudgetTokens: import_working12.HISTORY_TOKEN_BUDGET,
+    workingBudgetTokens: import_working13.HISTORY_TOKEN_BUDGET,
     summarizer: () => ({ stream, model: run.policy.model, signal: c.abort?.signal, ...req.onDeviceTasks ? { onDeviceTasks: req.onDeviceTasks } : {} }),
     ...evermind?.recall ? { recall: (q) => evermind.recall(q), priorRecall } : {},
     ...req.windowSources ? { windowSources: req.windowSources } : {},
@@ -30660,6 +31130,7 @@ ${turnContext}` : systemPrompt),
     allTools,
     catalogToolNames,
     alwaysAdvertised,
+    promptTools,
     // Tools this run has actually called — pinned into every later turn's selection
     // so a multi-step task never loses a tool it is mid-way through using.
     usedTools: /* @__PURE__ */ new Set(),
@@ -30965,7 +31436,7 @@ function relevantTools(tools, query) {
 }
 
 // src/runStore/callPreflight.ts
-var import_working13 = require("@seanhogg/builderforce-memory/working");
+var import_working14 = require("@seanhogg/builderforce-memory/working");
 
 // src/runStore/shipGates.ts
 function authorModelsOf(run) {
@@ -30974,11 +31445,25 @@ function authorModelsOf(run) {
 function policyOf(run) {
   return run.req.evidencePolicy ?? DEFAULT_EVIDENCE_POLICY;
 }
-async function verifyPaths(run, files) {
+function extensionOf3(path2) {
+  const name = path2.slice(Math.max(path2.lastIndexOf("/"), path2.lastIndexOf("\\")) + 1);
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(dot).toLowerCase() : "";
+}
+function lacksEvidence(file, ledger, policy) {
+  if (file.deleted) return false;
+  const required = policy.required[extensionOf3(file.absPath)] ?? [];
+  const checks = ledger.for(file.absPath, file.hash);
+  return required.some((kind) => !checks.some((r) => r.kind === kind));
+}
+async function verifyPaths(run, files, opts) {
   const verifier = run.req.verifier;
-  if (!verifier || !files.length) return;
-  const byPath = new Map(files.map((f) => [f.absPath, f.hash]));
-  const records = await verifier.full(files.map((f) => f.absPath));
+  if (!verifier) return;
+  const policy = policyOf(run);
+  const pending = files.filter((f) => !f.unavailable && lacksEvidence(f, run.evidence, policy));
+  if (!pending.length) return;
+  const byPath = new Map(pending.map((f) => [f.absPath, f.hash]));
+  const records = await verifier.full(pending.map((f) => f.absPath), opts);
   const now = Date.now();
   for (const [absPath, hash2] of byPath) {
     for (const check of records.get(absPath) ?? []) {
@@ -30986,11 +31471,18 @@ async function verifyPaths(run, files) {
     }
   }
 }
-async function runOutgoingGate(run, repo, tool = "git_push") {
+async function runOutgoingGate(run, repo, tool = "git_push", args) {
   const git = run.req.git;
   if (!git) return { verdict: { ok: true, unavailable: [] }, diffHash: null, gated: false };
-  const { files, diffHash, baseBranch, diff } = await git.outgoing(repo);
-  if (!baseBranch && tool !== "open_pull_request") return { verdict: { ok: true, unavailable: [] }, diffHash, gated: false };
+  const pullRequest = tool === "open_pull_request";
+  const base = args?.base;
+  const out = await git.outgoing(repo, pullRequest ? { pullRequest: typeof base === "string" && base.trim() ? { base: base.trim() } : {} } : void 0);
+  const { files, diffHash, baseBranch, diff } = out;
+  if (!baseBranch && !pullRequest) return { verdict: { ok: true, unavailable: [] }, diffHash, gated: false };
+  const unchecked = out.unavailable ?? (files.length === 0 || diff !== void 0 && !diff.trim() ? "no outgoing change to check" : void 0);
+  if (unchecked) {
+    return { verdict: { ok: false, reason: `${tool} refused: not verified \u2014 ${unchecked}. Commit the change on a branch with an upstream (or name the pull request base) and retry.` }, diffHash, gated: true };
+  }
   await verifyPaths(run, files);
   const verdict = outgoingGate(files, run.evidence, policyOf(run));
   if (!verdict.ok) return { verdict, diffHash, gated: true };
@@ -31034,11 +31526,15 @@ function isCompleteReviewRecord(name, args) {
 }
 async function shipGatePreflight(run, name, args) {
   if (!run.req.git) return {};
+  if (isTicketCompletion(name, args)) {
+    const refusal2 = await completionGateRefusal(run);
+    return refusal2 ? { refusal: refusal2 } : {};
+  }
   const publish = isBaseBranchPush(name, args) || name === "open_pull_request";
   if (!publish && !isCompleteReviewRecord(name, args)) return {};
   try {
     if (publish) {
-      const { verdict, diffHash: diffHash2, gated } = await runOutgoingGate(run, repoArgOf(args), name);
+      const { verdict, diffHash: diffHash2, gated } = await runOutgoingGate(run, repoArgOf(args), name, args);
       if (!verdict.ok) return { refusal: { ok: false, error: verdict.reason } };
       return gated ? { evidence: approvalEvidence(run, verdict.unavailable, diffHash2) } : {};
     }
@@ -31059,6 +31555,56 @@ async function shipGatePreflight(run, name, args) {
     const why = e instanceof Error ? e.message : String(e);
     return { refusal: { ok: false, error: `${name} refused: the ship gate could not read the outgoing change (${why}). Fix the repository state and retry.` } };
   }
+}
+var COMPLETION_GATE_BUDGET_MS = 2e4;
+function wroteThisRun(absPath, touched) {
+  const norm = (p) => p.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+  const target = norm(absPath);
+  return touched.some((t) => {
+    const p = norm(t);
+    return !!p && (target === p || target.endsWith(`/${p}`));
+  });
+}
+async function completionGateRefusal(run) {
+  const git = run.req.git;
+  if (!git || !run.c.codeChanged || !run.c.touchedFiles?.length) return null;
+  let timer;
+  const budget2 = new Promise((resolve) => {
+    timer = setTimeout(() => resolve({ kind: "timeout" }), COMPLETION_GATE_BUDGET_MS);
+  });
+  const check = async () => {
+    try {
+      const out = await git.outgoing("");
+      if (out.unavailable) return out.baseBranch ? { kind: "clear", why: out.unavailable } : { kind: "unavailable", why: out.unavailable };
+      const mine = out.files.filter((f) => wroteThisRun(f.absPath, run.c.touchedFiles));
+      if (!mine.length) return { kind: "clear", why: "none of the outgoing files were written by this run" };
+      await verifyPaths(run, mine, { budgetMs: COMPLETION_GATE_BUDGET_MS - 2e3 });
+      return { kind: "verdict", verdict: outgoingGate(mine, run.evidence, policyOf(run)) };
+    } catch (e) {
+      return { kind: "error", why: e instanceof Error ? e.message : String(e) };
+    }
+  };
+  let outcome;
+  try {
+    outcome = await Promise.race([check(), budget2]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+  if (outcome.kind === "verdict" && outcome.verdict.ok) return null;
+  const refusal2 = outcome.kind === "verdict" ? { ok: false, error: completionBlockedAdvisory(outcome.verdict) } : outcome.kind === "clear" ? null : { ok: false, error: completionBlockedAdvisory({ ok: false, reason: completionUncheckedReason(outcome) }) };
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: "tools.completion_gate",
+    args: { outcome: outcome.kind, ..."why" in outcome ? { why: outcome.why } : {} },
+    result: refusal2 ? refusal2.error : "allowed"
+  });
+  return refusal2;
+}
+function completionUncheckedReason(outcome) {
+  if (outcome.kind === "timeout") return `the check did not finish within ${COMPLETION_GATE_BUDGET_MS / 1e3}s, so the change is not verified.`;
+  if (outcome.kind === "unavailable") return `the outgoing change could not be computed (${outcome.why}), so it is not verified.`;
+  return `the ship gate could not read or verify the outgoing change (${outcome.why}). Fix the repository state and retry.`;
 }
 function approvalEvidence(run, unavailable2, diffHash) {
   const checks = unavailable2.length ? `checks passed \xB7 ${unavailable2.length} check${unavailable2.length === 1 ? "" : "s"} could not run here (not verified)` : "checks passed";
@@ -31089,8 +31635,9 @@ async function outgoingEvidenceVerdict(run, repo) {
     const { files } = await git.outgoing(repo);
     await verifyPaths(run, files);
     return outgoingGate(files, run.evidence, policyOf(run));
-  } catch {
-    return void 0;
+  } catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    return { ok: false, reason: `the ship gate could not read or verify the outgoing change (${why}). Fix the repository state and retry.` };
   }
 }
 function isFailed2(out) {
@@ -31099,6 +31646,15 @@ function isFailed2(out) {
 }
 
 // src/runStore/callPreflight.ts
+function traceRouted(c, step, via, name) {
+  pushTrace(c, {
+    ts: nowIso(),
+    category: "message",
+    label: "tools.routed",
+    args: { step, via },
+    result: via === "direct" ? `Called ${name} directly (it was not advertised this turn), so it ran as a tool-router call.` : `Called ${name} through the tool router (it was not advertised directly this turn).`
+  });
+}
 function callPreflight(run) {
   const { c, chatId, runKey, req, allTools, catalogToolNames, usedTools, readCoverage: readCoverage2, writeLedger, placeholderLedger } = run;
   const { runTool, needsConfirm, persistence } = req;
@@ -31124,13 +31680,7 @@ function callPreflight(run) {
       }
       const routedArgs = routed.dispatch.args ?? {};
       call2 = { ...call2, name: routed.dispatch.name, args: routedArgs, raw: { ...call2.raw, name: routed.dispatch.name, arguments: JSON.stringify(routedArgs) } };
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "message",
-        label: "tools.routed",
-        args: { step: iter, via: rawCall.name },
-        result: `Called ${call2.name} through the tool router (it was not advertised directly this turn).`
-      });
+      traceRouted(c, iter, rawCall.name, call2.name);
     }
     if (call2.name === ASK_USER_TOOL) {
       if (run.redirectAskToDelegation) {
@@ -31234,7 +31784,7 @@ function callPreflight(run) {
     if (isDedupableRead(call2.name)) {
       if (readCoverage2.isRepeat(call2.name, args)) {
         const cached2 = readCoverage2.cachedResult(call2.name, args);
-        if (cached2 && !(0, import_working13.stillInWorkingContext)(c, cached2.anchor)) {
+        if (cached2 && !(0, import_working14.stillInWorkingContext)(c, cached2.anchor)) {
           const replayNote = `Replayed from this run's read cache: this exact ${call2.name} call succeeded earlier in the run, but its result was compressed out of the working context, so here it is again \u2014 served from memory, not re-read. Act on it now; do not request it again.`;
           const visit = readCoverage2.record(call2.name, args);
           const target = visit ? visitTarget(args) : void 0;
@@ -31273,7 +31823,7 @@ ${revisit}` : replayNote,
         const note = revisit ? `${covered.note}
 
 ${revisit}` : covered.note;
-        if (covered.cached && !(0, import_working13.stillInWorkingContext)(c, covered.cached.anchor)) {
+        if (covered.cached && !(0, import_working14.stillInWorkingContext)(c, covered.cached.anchor)) {
           const requested = requestedReadWindow2(covered.cached.result ?? null, covered.start, covered.end);
           const replayed = trimToolResult(call2.name, requested, { advisory: note, contextWindowTokens: await run.windowFit.contextWindow?.() });
           run.pending.replayed(call2.id, { name: call2.name, args, result: requested, served: replayed.served });
@@ -31334,7 +31884,7 @@ function succeeded7(data) {
 }
 async function postEditDiagnostics(call2, verifier) {
   if (!verifier || !EDIT_TOOLS2.has(call2.name) || !succeeded7(call2.result)) return null;
-  const paths = editedPaths(call2.args);
+  const paths = editedPathsOf(call2.name, call2.args);
   if (!paths.length) return null;
   let record3;
   try {
@@ -31344,11 +31894,6 @@ async function postEditDiagnostics(call2, verifier) {
   }
   if (!record3 || record3.outcome !== "fail") return null;
   return postEditNote2(record3);
-}
-function editedPaths(args) {
-  const a = args ?? {};
-  const raw = [a.path, ...Array.isArray(a.edits) ? a.edits.map((e) => e?.path) : []];
-  return [...new Set(raw.filter((p) => typeof p === "string" && !!p.trim()).map((p) => p.trim()))];
 }
 function postEditNote2(record3) {
   const lines = record3.findings.slice(0, NOTE_ERRORS2).map((f) => `- ${f}`);
@@ -31363,40 +31908,13 @@ var BALANCE_TOOLS = /* @__PURE__ */ new Set(["edit_file"]);
 function succeeded8(data) {
   return !(data && typeof data === "object" && data.ok === false);
 }
-function stringEditOf(raw, fallbackPath = "") {
-  const e = raw ?? {};
-  const path2 = typeof e.path === "string" && e.path.trim() ? e.path.trim() : fallbackPath;
-  if (!path2 || typeof e.old_string !== "string" || typeof e.new_string !== "string") return null;
-  return { path: path2, old_string: e.old_string, new_string: e.new_string };
-}
-function stringEditsOf(args) {
-  const a = args ?? {};
-  const fallback = typeof a.path === "string" ? a.path.trim() : "";
-  const out = [];
-  const single = stringEditOf(a);
-  if (single) out.push(single);
-  if (Array.isArray(a.edits)) {
-    for (const raw of a.edits) {
-      const e = stringEditOf(raw, fallback);
-      if (e) out.push(e);
-    }
-  }
-  return out;
-}
-function describeDelta(d) {
-  const parts = [];
-  const sign = (n2) => n2 > 0 ? `+${n2}` : `${n2}`;
-  if (d.curly) parts.push(`\`{}\` ${sign(d.curly)}`);
-  if (d.paren) parts.push(`\`()\` ${sign(d.paren)}`);
-  if (d.square) parts.push(`\`[]\` ${sign(d.square)}`);
-  return parts.join(", ");
-}
 function bracketBalanceNote(call2) {
   if (!BALANCE_TOOLS.has(call2.name) || !succeeded8(call2.result)) return null;
   const lines = [];
-  for (const e of stringEditsOf(call2.args)) {
-    const delta = bracketDelta(e.old_string, e.new_string, e.path);
-    if (changesBalance(delta)) lines.push(`- ${e.path}: ${describeDelta(delta)} (new_string vs old_string)`);
+  for (const e of editedFilesOf(call2.name, call2.args)) {
+    if (e.before === void 0 || e.after === void 0) continue;
+    const delta = bracketDelta(e.before, e.after, e.path);
+    if (changesBalance(delta)) lines.push(`- ${e.path}: ${describeBracketDelta(delta, "glyph")} (new_string vs old_string)`);
   }
   if (!lines.length) return null;
   return `Post-edit check FAILED (bracket balance) \u2014 the replacement changed the bracket balance of the text it replaced, so the file is likely unparseable. Read the edited lines and fix this before building on it:
@@ -31478,11 +31996,10 @@ function callRunner(run) {
         const placeholderWarning = completionAdvisory(placeholderLedger.outstanding());
         const events = c.trace;
         const isOnBaseBranch = shippedToBaseBranch(events);
-        const outgoing = await outgoingEvidenceVerdict(run, repoArgOf(args));
-        const canComplete = canCompleteTicket(isOnBaseBranch, false, { wroteCodeThisRun: c.codeChanged, ...outgoing ? { outgoing } : {} });
+        const canComplete = canCompleteTicket(isOnBaseBranch, false, { wroteCodeThisRun: c.codeChanged });
         if (!canComplete) {
-          const said = completionBlockedAdvisory(outgoing);
-          pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call2.name, isOnBaseBranch, ...outgoing ? { outgoingOk: outgoing.ok } : {} }, result: said });
+          const said = markedDoneOffBaseAdvisory();
+          pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call2.name, isOnBaseBranch }, result: said });
           advisory = said;
         } else if (placeholderWarning) {
           pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call2.name, open: placeholderLedger.outstanding() }, result: placeholderWarning });
@@ -31602,10 +32119,6 @@ function isTestRunCall(label, args) {
   const text2 = `${label} ${JSON.stringify(args ?? {})}`;
   return /vitest|jest|mocha|\.test\.|\.spec\.|\btest\b|\btests\b/i.test(text2) && !/tsc|typecheck|type-check/i.test(text2);
 }
-function isTestPath3(path2) {
-  const p = path2.replace(/\\/g, "/");
-  return /\.(test|spec)\.[^/]+$/.test(p) || /\/__tests__\//.test(p);
-}
 function baseOf2(path2) {
   const base = path2.replace(/\\/g, "/").split("/").pop() ?? path2;
   const dot = base.lastIndexOf(".");
@@ -31654,7 +32167,7 @@ function computeProgressLine(trace4) {
   const testNeeds = [];
   for (const st of [...changed2].sort((a, b) => a.path.localeCompare(b.path))) {
     if (!hasTypecheck(st)) typecheckNeeds.push(`${st.path} not typechecked`);
-    if (st.kind === "create" && isSourceLike(st.path) && !isTestPath3(st.path) && !hasTestRunMention(st)) {
+    if (st.kind === "create" && isSourceLike(st.path) && !isTestPath(st.path) && !hasTestRunMention(st)) {
       testNeeds.push(`test for ${st.path.split(/[\\/]/).pop()}`);
     }
   }
@@ -31732,26 +32245,18 @@ function kernelCall(run, id, name, args, step, rawArguments) {
   const raw = { id, name, arguments: rawArguments ?? JSON.stringify(args) };
   return { call: { id, name, args, raw, malformed: rawArguments !== void 0 }, ctx: { step, messages: run.convo } };
 }
-var TURN_BLOCK = /<turn_context>[\s\S]*?<\/turn_context>/g;
-function namingText(run) {
-  const carrier = turnContextCarrier(run.c);
-  if (carrier) return { system: run.systemPrompt, turn: userTextOf(carrier) };
-  return { system: run.systemPrompt.replace(TURN_BLOCK, ""), turn: (run.systemPrompt.match(TURN_BLOCK) ?? []).join("\n\n") };
-}
 function vocabularyOf(names) {
   return [...localToolsIn(names), ...studioToolsIn(names), ...memoryToolsIn(names), ...skillToolsIn(names)];
 }
 function unnamedVocabulary(run) {
-  const { system, turn } = namingText(run);
-  const named = new Set(toolNamesMentionedIn(`${system}
-
-${turn}`));
+  const named = /* @__PURE__ */ new Set([...run.promptTools.system, ...run.promptTools.turn]);
   return new Set(vocabularyOf(run.catalogToolNames).filter((n2) => !named.has(n2)));
 }
 function promptOnlyNamed(run) {
-  const { system, turn } = namingText(run);
-  const kept = /* @__PURE__ */ new Set([...toolNamesMentionedIn(turn), ...vocabularyOf(run.catalogToolNames), ASK_USER_TOOL, HAND_OFF_TOOL]);
-  return new Set(toolNamesMentionedIn(system).filter((n2) => !kept.has(n2)));
+  if (!canChangeCodeHere(run.catalogToolNames)) return /* @__PURE__ */ new Set();
+  const { system, turn, contract } = run.promptTools;
+  const kept = /* @__PURE__ */ new Set([...turn, ...contract, ...vocabularyOf(run.catalogToolNames), ASK_USER_TOOL, HAND_OFF_TOOL]);
+  return new Set(system.filter((n2) => !kept.has(n2)));
 }
 function surfaceRequired(run, naming) {
   const base = isCappedToolRole(run.policy.phase) ? run.alwaysAdvertised.filter((n2) => !naming().unnamed.has(n2) && !naming().promptOnly.has(n2)) : run.alwaysAdvertised;
@@ -31764,13 +32269,7 @@ function brainPlatformTools(run) {
   const traceUnadvertised = (raw, step) => {
     const name = resolveToolAlias(raw);
     if (!cappedMenu || cappedMenu.step !== step || cappedMenu.names.has(name) || isRouterTool(name) || !run.catalogToolNames.includes(name)) return;
-    pushTrace(run.c, {
-      ts: nowIso(),
-      category: "message",
-      label: "tools.routed",
-      args: { step, via: "direct" },
-      result: `Called ${name} directly; it was not advertised this turn, so it ran as a tool-router call.`
-    });
+    traceRouted(run.c, step, "direct", name);
   };
   const before = callPreflight(run);
   const dispatch = callRunner(run);
@@ -31820,13 +32319,13 @@ function brainPlatformTools(run) {
       // The preflight (router, `ask_user`, `hand_off`, confirm gate, dedupe) runs where the loop runs it: ahead of the dispatch, not raced
       // against the person's Stop. A Stop pressed during a hand-off waits for it to end, so its tickets and children are on the trace.
       async preflight(raw, { step }) {
-        traceUnadvertised(raw.name, step);
         const { call: call2, ctx } = kernelCall(run, raw.id, raw.name, raw.malformed ? {} : raw.args, step, raw.malformed ? raw.arguments : void 0);
         const pre = await before(call2, ctx);
         if (pre && "result" in pre) {
           ran.set(raw.id, { call: call2, result: pre.result, ctx });
           return { result: pre.result };
         }
+        traceUnadvertised(raw.name, step);
         const target = pre && "rewrite" in pre ? pre.rewrite : call2;
         prepared.set(raw.id, { call: target, ctx });
         return pre && "rewrite" in pre ? { rewrite: { name: target.name, args: target.args } } : void 0;
@@ -31837,10 +32336,10 @@ function brainPlatformTools(run) {
         prepared.delete(id);
         let early;
         if (!held) {
-          traceUnadvertised(name, env.step);
           const fresh = kernelCall(run, id, name, args, env.step);
           const pre = await before(fresh.call, fresh.ctx);
           if (pre && "result" in pre) early = pre.result;
+          else traceUnadvertised(name, env.step);
           held = { call: pre && "rewrite" in pre ? pre.rewrite : fresh.call, ctx: fresh.ctx };
         }
         const result = early ?? await dispatch(held.call, held.ctx);
@@ -31864,13 +32363,13 @@ function brainPlatformTools(run) {
 }
 
 // src/run/brainFold.ts
-var import_working15 = require("@seanhogg/builderforce-memory/working");
+var import_working16 = require("@seanhogg/builderforce-memory/working");
 
 // src/runStore/compactionSaved.ts
-var import_working14 = require("@seanhogg/builderforce-memory/working");
-function compactionSavedTokens(full, working, historyBudgetTokens = import_working14.HISTORY_TOKEN_BUDGET) {
-  const withoutCompaction = Math.min((0, import_working14.transcriptTokens)(full), historyBudgetTokens);
-  return Math.max(0, withoutCompaction - (0, import_working14.transcriptTokens)(working));
+var import_working15 = require("@seanhogg/builderforce-memory/working");
+function compactionSavedTokens(full, working, historyBudgetTokens = import_working15.HISTORY_TOKEN_BUDGET) {
+  const withoutCompaction = Math.min((0, import_working15.transcriptTokens)(full), historyBudgetTokens);
+  return Math.max(0, withoutCompaction - (0, import_working15.transcriptTokens)(working));
 }
 function stampOncePerCall(stamped2, plain2) {
   let used = false;
@@ -31954,7 +32453,7 @@ function brainCompaction(run) {
     hook: {
       async compact(ctx) {
         let folded = false;
-        const working = await (0, import_working15.buildWorkingTranscript)(
+        const working = await (0, import_working16.buildWorkingTranscript)(
           c,
           systemPrompt,
           (msgs) => {
@@ -31994,7 +32493,7 @@ function brainCompaction(run) {
           }
         );
         saved = c.compactMemo ? compactionSavedTokens([{ role: "system", content: systemPrompt }, ...c.transcript], working) : 0;
-        const rows = (0, import_working15.foldWorkingTranscript)(working).map(toRunMessage);
+        const rows = (0, import_working16.foldWorkingTranscript)(working).map(toRunMessage);
         if (sameRows(ctx.messages, rows)) return void 0;
         return { messages: rows, dropped: Math.max(0, ctx.messages.length - rows.length), ...folded ? {} : { reused: true } };
       }
@@ -32283,7 +32782,7 @@ function brainSteeringSource(run, people) {
 }
 
 // src/runStore/failureClose.ts
-var import_working16 = require("@seanhogg/builderforce-memory/working");
+var import_working17 = require("@seanhogg/builderforce-memory/working");
 async function closeAfterFailureStreak(run, streak, step) {
   const { c, chatId, req, convo, systemPrompt, metadata } = run;
   const { routingMode, stream, persistence, onActivity, maxTokens, reasoning } = req;
@@ -32293,7 +32792,7 @@ async function closeAfterFailureStreak(run, streak, step) {
     try {
       const working = [
         { role: "system", content: systemPrompt },
-        ...(0, import_working16.windowed)(convo),
+        ...(0, import_working17.windowed)(convo),
         {
           role: "user",
           content: `This turn was stopped because your last ${streak} tool calls all failed. Do NOT call any more tools. Answer the user now, in prose, using what you have already gathered \u2014 say what you completed, quote what the failing calls answered, and state plainly what is blocking you and what you need (a different argument, a permission, a decision) so the next turn can succeed.`
@@ -33241,10 +33740,10 @@ async function startRun(runKey, request, claim) {
       const openPh = openPlaceholders();
       const verification = verificationOf(evidence, c.touchedFiles);
       const hasTicket = view.deltaTicketId != null || localTicketsFiledInRun(trace4).length > 0;
-      const finished = finishConditionMet({ shipped, verified: verification.verified, openPlaceholders: openPh, hasTicket });
       const closeOut = { serverChatId, view, req, needsTicket, shipped, reviewedInPreview, openPlaceholders: openPh, trace: trace4, evidence, verified: verification.verified, hasTicket };
       c.finishClosedOut = true;
       await within(left(), async () => {
+        if (!closeOut.hasTicket && finishConditionMet({ ...closeOut, hasTicket: true })) closeOut.hasTicket = await holdsLinkedTicket(trace4, serverChatId, req);
         await deterministicFinish(closeOut, { c, req, serverChatId, recalled: null });
       }, () => view.note?.({
         ts: nowIso(),
@@ -33260,6 +33759,7 @@ async function startRun(runKey, request, claim) {
         result: "The run's ticket bookkeeping failed; the run is settled without it."
       }));
       c.finishClosedOut = true;
+      const finished = finishConditionMet(closeOut);
       const finalTrace = runTrace(c);
       const requestText = req.userTurn === void 0 ? void 0 : contentText(req.userTurn);
       const wakeTurn = delegatingCells.has(c) && isChildReportText(requestText);
@@ -33938,14 +34438,14 @@ function usePendingTurns(chatId, messages, options) {
 var import_react11 = require("react");
 
 // src/userTurnRuns.ts
-var import_working17 = require("@seanhogg/builderforce-memory/working");
+var import_working18 = require("@seanhogg/builderforce-memory/working");
 function startsRun(text2) {
   return !stopIntent(text2);
 }
 function unansweredTurnIndex(messages) {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message2 = messages[i];
-    if (isStepMessage(message2) || (0, import_working17.isConsolidationMarker)(message2)) continue;
+    if (isStepMessage(message2) || (0, import_working18.isConsolidationMarker)(message2)) continue;
     return message2.role === "user" && !isMidTurnMetadata(message2.metadata) && startsRun(message2.content) ? i : -1;
   }
   return -1;
@@ -34027,7 +34527,7 @@ function useContinuation(persistence, prepareRun) {
 }
 
 // src/useBrainConversation.ts
-var import_working18 = require("@seanhogg/builderforce-memory/working");
+var import_working19 = require("@seanhogg/builderforce-memory/working");
 
 // src/contextUsage.ts
 var LLM_COMPLETE = "llm.complete";
@@ -34286,7 +34786,7 @@ ${extraSystem}` : resolvedSystemPrompt;
         augmentSystemPrompt,
         seed: seed.messages,
         seedIds: seed.ids,
-        priorResearch: priorResearchDigest((0, import_working18.scopeToConsolidation)(researchFrom)),
+        priorResearch: priorResearchDigest((0, import_working19.scopeToConsolidation)(researchFrom)),
         userTurn,
         ...userTurnMessageId != null ? { userTurnMessageId } : {},
         projectId,
@@ -34831,7 +35331,7 @@ function createPayloadBudget(opts) {
 var PASTE_SAFE_REPORT_CHARS = 48e3;
 var PASTE_LIMIT_CHARS = 5e4;
 var formatCount = (n2) => n2.toLocaleString("en-US");
-function safePrefix(s, n2) {
+function safePrefix2(s, n2) {
   let end = Math.max(0, Math.min(n2, s.length));
   if (end > 0 && end < s.length) {
     const c = s.charCodeAt(end - 1);
@@ -34839,27 +35339,13 @@ function safePrefix(s, n2) {
   }
   return s.slice(0, end);
 }
-function safeSuffix(s, n2) {
+function safeSuffix2(s, n2) {
   let start = Math.max(0, s.length - Math.max(0, n2));
   if (start > 0 && start < s.length) {
     const c = s.charCodeAt(start);
     if (c >= 56320 && c <= 57343) start += 1;
   }
   return s.slice(start);
-}
-function truncateMiddle(text2, max) {
-  if (text2.length <= max) return text2;
-  const marker = `
-\u2026(${formatCount(text2.length)} chars omitted from the middle)\u2026
-`;
-  const room = Math.max(0, max - marker.length);
-  if (room === 0) return safePrefix(text2, max);
-  const head = safePrefix(text2, Math.ceil(room / 2));
-  const tail = safeSuffix(text2, Math.floor(room / 2));
-  const omitted = text2.length - head.length - tail.length;
-  return `${head}
-\u2026(${formatCount(omitted)} chars omitted from the middle)\u2026
-${tail}`;
 }
 function cutMiddleToFit(head, timeline, tail, ceiling) {
   const join = (...parts) => parts.filter((s) => s.length > 0).join("\n");
@@ -34872,18 +35358,18 @@ function cutMiddleToFit(head, timeline, tail, ceiling) {
   if (room < 0) {
     const headNote = "\u2026(diagnostics header truncated to keep this report within the paste limit)";
     const headRoom = Math.max(0, ceiling - tail.length - marker(timeline.length).length - headNote.length - 3 - 2);
-    let h = safePrefix(head, headRoom);
+    let h = safePrefix2(head, headRoom);
     const nl = h.lastIndexOf("\n");
     if (nl > 0 && h.length < head.length) h = h.slice(0, nl);
     const out = join(h, headNote, marker(timeline.length), tail);
-    return out.length <= ceiling ? out : safeSuffix(out, ceiling);
+    return out.length <= ceiling ? out : safeSuffix2(out, ceiling);
   }
   const front = Math.floor(room / 3);
   const back = room - front;
-  let start = safePrefix(timeline, front);
+  let start = safePrefix2(timeline, front);
   const startNl = start.lastIndexOf("\n");
   if (startNl > 0) start = start.slice(0, startNl);
-  let end = back > 0 ? safeSuffix(timeline, back) : "";
+  let end = back > 0 ? safeSuffix2(timeline, back) : "";
   const endNl = end.indexOf("\n");
   if (endNl >= 0 && endNl < end.length - 1) end = end.slice(endNl + 1);
   const omitted = Math.max(0, timeline.length - start.length - end.length);
@@ -34905,7 +35391,7 @@ function ordinalWord(n2) {
 }
 
 // src/index.ts
-var import_working19 = require("@seanhogg/builderforce-memory/working");
+var import_working20 = require("@seanhogg/builderforce-memory/working");
 
 // src/apiVersion.ts
 var API_VERSION_TTL_MS = 6e4;
@@ -34974,7 +35460,7 @@ function takePendingPrompt() {
 }
 
 // src/index.ts
-var import_working20 = require("@seanhogg/builderforce-memory/working");
+var import_working21 = require("@seanhogg/builderforce-memory/working");
 
 // src/agentPool.ts
 var DEFAULT_AGENT_MODEL_SENTINEL = "builderforce-default";

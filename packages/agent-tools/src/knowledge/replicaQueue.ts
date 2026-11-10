@@ -22,8 +22,8 @@
  * (`legacy.remove`).
  */
 
+import { splitSourceRef } from '@seanhogg/builderforce-memory/knowledge';
 import { factLeafKey, fileLeafKey, relationLeafKey } from '@seanhogg/builderforce-memory/knowledge/pack';
-import { splitSourceRef } from './rootId.js';
 
 /** The server's last acknowledged state for the root. */
 export interface ReplicaAck { generation: number; digest: string }

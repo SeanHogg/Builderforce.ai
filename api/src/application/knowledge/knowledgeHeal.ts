@@ -20,8 +20,7 @@
  * roots row) is skipped: its next sync is a full pack, which clears its leaves, so nothing is lost by leaving them.
  */
 import { bucketOf, fileLeafKey } from '@seanhogg/builderforce-memory/knowledge/pack';
-import type { Extracted } from '@seanhogg/builderforce-memory/knowledge';
-import { splitSourceRef } from '@builderforce/agent-tools';
+import { splitSourceRef, type Extracted } from '@seanhogg/builderforce-memory/knowledge';
 import { commitLeaves, ensureBuckets } from './knowledgeBuckets';
 import { ENTRYLESS_PREFIX, type ExtractedLoc, type KnowledgeLedgerPort } from './knowledgeLedger';
 
