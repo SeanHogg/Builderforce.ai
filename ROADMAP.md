@@ -160,13 +160,7 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
     - `packages/run-delta`, `packages/agent-tools/src/{delta,knowledge/facts}`;
     - `clients/vscode/src/{runDelta,knowledge}`, `packages/knowledge-graph-view/src/delta`, `frontend/src/components/runDelta`;
     - `api/src/{application,domain}/runDelta`, migrations 1342/1344/1345 and transactional 0032/0033.
-  - **Built and passed review (now on main):**
-    - WS10: web card, history and trend.
-    - WS11: SARIF, `run_deltas` persistence, and the mirror importer with its revise path.
-    - WS12: the dynamic tier (tmpdir copies, shared `src/process/killTree.ts`, per-kind hold extensions of 60 s for dynamic and 15 s for L3).
-    - WS16: run outcomes, SZZ/revert/CI/review labels, and the rotating label sweep.
-    - WS19: project trigram naturalness and `PredictedLine`.
-    - WS20: the SPRT with Wald stopping, and the Thompson check scheduler.
+  - **Built, reviewed and on main:** WS10, WS11, WS12, WS16, WS19 and WS20; see DONE.md 2026-11-10. Open: the main typecheck below.
   - **WS4 (FileFacts v3, `FactIndex`, SQLite fact store):** three review rounds are closed. The agent was stopped while re-deciding restored mount candidates after `FactIndex.restore()` (`factIndex.restoreCandidates.test.ts`). Still to do:
     - finish that fix;
     - run `factFindings.test.ts` and the vscode tsc against memory .80;
