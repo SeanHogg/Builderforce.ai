@@ -7,7 +7,7 @@
  * Regenerate with `node scripts/gen-container-shared.mjs` (from `api/`).
  * `--check` fails the build when the source no longer matches the hash below.
  *
- * @source-sha256 64ddbd1dba7a97d9372a62a82ecf4dc62724a024307499d90685fadf065ce32e
+ * @source-sha256 c6f4d4c2eff2bd3cac7e8f62edd0f606844ca4d71912d9228135732856ae5bde
  */
 // ── caps.ts ──
 /**
@@ -138,12 +138,14 @@ function isShellTool(tool) {
 
 // ── textCut.ts ──
 /**
- * Plain-text cuts. Three shapes, each owned once:
+ * Plain-text cuts. Four shapes, each owned once:
  *
- *   • {@link keepTail}    — a capture BUFFER for a live process (the verdict prints last);
- *   • {@link cutHead}     — a result whose beginning is what matters, snapped to a line;
- *   • {@link cutHeadTail} — a log: the command's start AND its end (where test/build
- *                           summaries live), with an explicit elision marker between.
+ *   • {@link keepTail}       — a capture BUFFER for a live process (the verdict prints last);
+ *   • {@link cutHead}        — a result whose beginning is what matters, snapped to a line;
+ *   • {@link cutHeadTail}    — a log: the command's start AND its end (where test/build
+ *                              summaries live), with an explicit elision marker between;
+ *   • {@link truncateMiddle} — a short free-text value (a label, a title, an error) cut at
+ *                              its middle, never splitting a surrogate pair.
  */
 /** Keep the last `max` chars — a rolling capture buffer. */
 function keepTail(text, max) {
@@ -205,6 +207,43 @@ function cutHeadTail(text, maxChars, opts = {}) {
     const elided = text.slice(headEnd, tailStart);
     const marker = `\n…[${elided.length.toLocaleString('en-US')} chars (${countLines(elided).toLocaleString('en-US')} lines) elided — showing the first ${head.length.toLocaleString('en-US')} and the last ${tail.length.toLocaleString('en-US')} of ${text.length.toLocaleString('en-US')} chars]…\n`;
     return `${head}${marker}${tail}`;
+}
+const defaultMiddleMarker = (omitted) => `\n…(${omitted.toLocaleString('en-US')} chars omitted from the middle)…\n`;
+const isHighSurrogate = (c) => c >= 0xd800 && c <= 0xdbff;
+const isLowSurrogate = (c) => c >= 0xdc00 && c <= 0xdfff;
+/** The first `n` chars of `s`, never ending on a lone high surrogate. */
+function safePrefix(s, n) {
+    let end = Math.max(0, Math.min(n, s.length));
+    if (end > 0 && end < s.length && isHighSurrogate(s.charCodeAt(end - 1)))
+        end -= 1;
+    return s.slice(0, end);
+}
+/** The last `n` chars of `s`, never starting on a lone low surrogate. */
+function safeSuffix(s, n) {
+    if (n <= 0)
+        return '';
+    let start = Math.max(0, s.length - n);
+    if (start > 0 && isLowSurrogate(s.charCodeAt(start)))
+        start += 1;
+    return s.slice(start);
+}
+/**
+ * Bound `text` to `max` characters by cutting its MIDDLE: head and tail kept, one marker
+ * between. Cuts never split a surrogate pair (so a cut may keep one char fewer). When the
+ * budget cannot hold even the marker, the head alone is returned.
+ */
+function truncateMiddle(text, max, opts = {}) {
+    if (text.length <= max)
+        return text;
+    const { marker = defaultMiddleMarker, symmetric = false } = opts;
+    const markerFor = typeof marker === 'string' ? () => marker : marker;
+    const room = Math.max(0, max - markerFor(text.length).length);
+    if (room === 0)
+        return safePrefix(text, max);
+    const tailShare = Math.floor(room / 2);
+    const head = safePrefix(text, symmetric ? tailShare : room - tailShare);
+    const tail = safeSuffix(text, tailShare);
+    return `${head}${markerFor(text.length - head.length - tail.length)}${tail}`;
 }
 
 // ── shellSummary.ts ──
