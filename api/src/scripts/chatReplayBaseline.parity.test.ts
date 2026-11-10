@@ -17,7 +17,7 @@ const script = require('../../scripts/chat-replay-baseline.cjs') as {
   claimsReady: (text: string) => boolean;
 };
 
-const guardSource = readFileSync(fileURLToPath(new URL('../../../packages/run-guards/src/readinessClaim.ts', import.meta.url)), 'utf8');
+const guardSource = readFileSync(fileURLToPath(new URL('../../../packages/run-guards/src/readinessClaim.ts', import.meta.url).href), 'utf8');
 
 /** The regex literals the guard writes between `start` and `end`, as `RegExp#source` reads them. */
 function literalsBetween(start: string, end: string): string[] {
