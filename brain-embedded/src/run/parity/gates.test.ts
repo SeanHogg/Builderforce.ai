@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { createEvidenceLedger } from '@builderforce/run-guards';
 import { runScenario } from './harness';
 import { gates, assertGates } from './scenarios/gates';
+import { makeCell } from '../../runStore/runCell';
 import type { BrainRunContext } from '../../runStore/brainRunContext';
 import type { GitPort, ReviewerPort, VerifierPort } from '../../runStore/runTypes';
 
@@ -40,7 +41,7 @@ describe('PRD 45 A4: chat #214 through the ship gates', () => {
     const run = {
       req: { git, verifier, reviewer },
       evidence: createEvidenceLedger(),
-      c: { authorModels: new Set<string>(), shipReviews: [], codeChanged: true, touchedFiles: ['src/inbound.ts'] },
+      c: { ...makeCell(), codeChanged: true, touchedFiles: ['src/inbound.ts'] },
     } as unknown as BrainRunContext;
     expect(await assertGates(run)).toEqual([]);
   });
