@@ -39,6 +39,30 @@ SET LOCAL lock_timeout = '5s';
 -- as they take. lock_timeout is what protects traffic.
 SET LOCAL statement_timeout = 0;
 
+-- Same helper as 1337 (pg_temp functions live for the session only, so each file
+-- that retypes columns declares it): retype with the table's triggers kept.
+CREATE OR REPLACE FUNCTION pg_temp.bf_alter_keeping_triggers(tbl regclass, clauses text)
+RETURNS void LANGUAGE plpgsql AS $fn$
+DECLARE
+  saved RECORD;
+  defs  text[] := '{}';
+  off   text[] := '{}';
+BEGIN
+  FOR saved IN
+    SELECT tgname, pg_get_triggerdef(oid) AS def, tgenabled
+    FROM pg_trigger WHERE tgrelid = tbl AND NOT tgisinternal
+  LOOP
+    defs := defs || saved.def;
+    IF saved.tgenabled = 'D' THEN off := off || saved.tgname::text; END IF;
+    EXECUTE format('DROP TRIGGER %I ON %s', saved.tgname, tbl);
+  END LOOP;
+  EXECUTE format('ALTER TABLE %s %s', tbl, clauses);
+  FOR i IN 1 .. coalesce(array_length(defs, 1), 0) LOOP EXECUTE defs[i]; END LOOP;
+  FOR i IN 1 .. coalesce(array_length(off, 1), 0) LOOP
+    EXECUTE format('ALTER TABLE %s DISABLE TRIGGER %I', tbl, off[i]);
+  END LOOP;
+END $fn$;
+
 DO $$
 DECLARE
   seq TEXT := pg_get_serial_sequence('public.projects', 'id');
@@ -107,6 +131,6 @@ BEGIN
     GROUP BY t.rel
     ORDER BY 1
   LOOP
-    EXECUTE format('ALTER TABLE %s %s', r.tbl, r.clauses);
+    PERFORM pg_temp.bf_alter_keeping_triggers(r.tbl::regclass, r.clauses);
   END LOOP;
 END $$;

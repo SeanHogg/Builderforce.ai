@@ -28,8 +28,13 @@ const OPS_0031 = read('../../../transactional-migrations/0031_project_id_bigint.
 const PRIMARY_BASE = `
 CREATE TABLE projects (id serial PRIMARY KEY, tenant_id integer NOT NULL, name text);
 CREATE UNIQUE INDEX projects_tenant_id_id ON projects (tenant_id, id);
-CREATE TABLE tasks (id serial PRIMARY KEY, project_id integer NOT NULL REFERENCES projects(id) ON DELETE CASCADE);
+CREATE TABLE tasks (id serial PRIMARY KEY, status text, lane text, project_id integer NOT NULL REFERENCES projects(id) ON DELETE CASCADE);
 CREATE INDEX idx_tasks_project ON tasks (project_id);
+-- 1115's trg_tasks_swimlane fires on UPDATE OF project_id, which blocks a plain ALTER COLUMN TYPE.
+CREATE FUNCTION set_tasks_lane() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.lane := 'lane-' || NEW.project_id; RETURN NEW; END $$;
+CREATE TRIGGER trg_tasks_swimlane BEFORE INSERT OR UPDATE OF status, project_id ON tasks FOR EACH ROW EXECUTE FUNCTION set_tasks_lane();
+CREATE TRIGGER trg_tasks_off BEFORE UPDATE OF project_id ON tasks FOR EACH ROW EXECUTE FUNCTION set_tasks_lane();
+ALTER TABLE tasks DISABLE TRIGGER trg_tasks_off;
 CREATE TABLE ide_projects (
   id serial PRIMARY KEY,
   container_project_id integer REFERENCES projects(id) ON DELETE SET NULL,
@@ -110,7 +115,7 @@ describe('1337 + 1340 projects(id) references → bigint', () => {
         expect(await columnType(fresh, table, column), `${table}.${column}`).toBe('bigint');
       }
       // 1340 still completes a DB left in the first 1337's shape: parent bigint, children int4.
-      await fresh.exec('ALTER TABLE tasks ALTER COLUMN project_id TYPE integer');
+      await fresh.exec("SELECT pg_temp.bf_alter_keeping_triggers('tasks', 'ALTER COLUMN project_id TYPE integer')");
       await fresh.exec(M1340);
       expect(await columnType(fresh, 'tasks', 'project_id')).toBe('bigint');
     } finally {
@@ -157,6 +162,15 @@ describe('1337 + 1340 projects(id) references → bigint', () => {
     const id = inserted.rows[0]?.id;
     expect(id).toBe('3000000001');
     await primary.query('INSERT INTO tasks (project_id) VALUES ($1)', [id]);
+  });
+
+  it('regression: retypes a column a trigger depends on, keeping the trigger (and its disabled state)', async () => {
+    const triggers = await primary.query<{ tgname: string; tgenabled: string }>(
+      "SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'tasks'::regclass AND NOT tgisinternal ORDER BY tgname",
+    );
+    expect(triggers.rows).toEqual([{ tgname: 'trg_tasks_off', tgenabled: 'D' }, { tgname: 'trg_tasks_swimlane', tgenabled: 'O' }]);
+    const row = await primary.query<{ lane: string }>("INSERT INTO tasks (project_id) VALUES (1) RETURNING lane");
+    expect(row.rows[0]?.lane).toBe('lane-1');
   });
 
   it('re-applies as a no-op', async () => {

@@ -33,13 +33,39 @@ SET LOCAL lock_timeout = '5s';
 -- as they take. lock_timeout is what protects traffic.
 SET LOCAL statement_timeout = 0;
 
+-- Postgres refuses to retype a column a trigger depends on (`UPDATE OF col`, or a
+-- WHEN clause — e.g. trg_tasks_swimlane on tasks.project_id, mig 1115). This
+-- session-local helper runs one ALTER TABLE with that table's user triggers dropped
+-- and recreated verbatim around it (disabled ones stay disabled). Shared with 1340.
+CREATE OR REPLACE FUNCTION pg_temp.bf_alter_keeping_triggers(tbl regclass, clauses text)
+RETURNS void LANGUAGE plpgsql AS $fn$
+DECLARE
+  saved RECORD;
+  defs  text[] := '{}';
+  off   text[] := '{}';
+BEGIN
+  FOR saved IN
+    SELECT tgname, pg_get_triggerdef(oid) AS def, tgenabled
+    FROM pg_trigger WHERE tgrelid = tbl AND NOT tgisinternal
+  LOOP
+    defs := defs || saved.def;
+    IF saved.tgenabled = 'D' THEN off := off || saved.tgname::text; END IF;
+    EXECUTE format('DROP TRIGGER %I ON %s', saved.tgname, tbl);
+  END LOOP;
+  EXECUTE format('ALTER TABLE %s %s', tbl, clauses);
+  FOR i IN 1 .. coalesce(array_length(defs, 1), 0) LOOP EXECUTE defs[i]; END LOOP;
+  FOR i IN 1 .. coalesce(array_length(off, 1), 0) LOOP
+    EXECUTE format('ALTER TABLE %s DISABLE TRIGGER %I', tbl, off[i]);
+  END LOOP;
+END $fn$;
+
 DO $$
 DECLARE
   seq TEXT;
   r   RECORD;
 BEGIN
   -- ── 1 · projects.id → BIGINT, and its sequence with it ─────────────────
-  ALTER TABLE projects ALTER COLUMN id TYPE BIGINT;
+  PERFORM pg_temp.bf_alter_keeping_triggers('public.projects'::regclass, 'ALTER COLUMN id TYPE BIGINT');
   seq := pg_get_serial_sequence('public.projects', 'id');
   IF seq IS NOT NULL THEN
     EXECUTE format('ALTER SEQUENCE %s AS BIGINT', seq);
@@ -84,7 +110,7 @@ BEGIN
     GROUP BY t.rel
     ORDER BY 1
   LOOP
-    EXECUTE format('ALTER TABLE %s %s', r.tbl, r.clauses);
+    PERFORM pg_temp.bf_alter_keeping_triggers(r.tbl::regclass, r.clauses);
   END LOOP;
 
   -- ── 3 · Unblock migration 1336's deferred governance FKs ───────────────
