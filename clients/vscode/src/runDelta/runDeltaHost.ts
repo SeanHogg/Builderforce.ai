@@ -25,6 +25,7 @@ import { buildLocalCapabilityProvider } from "../localCapabilities";
 import { folderKnowledge } from "../knowledge/folderKnowledge";
 import { openRoot, workspaceFolders } from "../knowledge/knowledgeService";
 import { rootForPath } from "../knowledge/knowledgeRoots";
+import { emitProductEvent } from "../telemetry/productEvents";
 import type { PreimageSink, StatHashHint } from "../runChangeBaseline";
 import type { DeltaComputedEvent, RepoHostSources } from "./finalizeRunDelta";
 import { repoGit } from "./gitSide";
@@ -143,7 +144,10 @@ export async function releaseRun(runId: string): Promise<void> {
   for (const folder of folders) await unpinPreimages(persistenceOf(folder), runId, Date.now());
 }
 
-/** `delta.computed`: the VSIX has no named-event telemetry channel (its activity signals are billable time), so it is logged. */
+/** `delta.computed`: logged, and sent through the editor's named product-event channel (`telemetry/productEvents.ts`). */
 export function deltaTelemetry(log: (line: string) => void): (event: DeltaComputedEvent) => void {
-  return (event) => log(`[telemetry] ${event.name} ${JSON.stringify(event)}`);
+  return (event) => {
+    log(`[telemetry] ${event.name} ${JSON.stringify(event)}`);
+    emitProductEvent(event.name, { ...event });
+  };
 }
