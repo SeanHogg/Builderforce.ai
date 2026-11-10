@@ -1,5 +1,5 @@
 /**
- * Documents on the map. A station made of docs-pack files is a document station (drawn square),
+ * Documents on the map. A station made of docs-pack files is a document station (drawn in the doc type's silhouette),
  * and a link, mention or claim between a document station and a code station is a "describes"
  * link (drawn dashed from the document to the code). The Claims question lights them. Pure.
  */

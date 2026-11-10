@@ -16,12 +16,10 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { ChangedFileInput, SideText, UnresolvedFile } from "@builderforce/run-delta";
+import { isBinaryBytes } from "@seanhogg/builderforce-memory/knowledge";
 import { nodeContentHash } from "../knowledge/nodeSha256";
 import { fingerprintHash, type ChangeSetRepoBaseline } from "../runChangeBaseline";
 import type { RepoGit } from "./gitSide";
-
-/** Memory's binary rule: a NUL among the first 8192 bytes. */
-const BINARY_SNIFF = 8192;
 
 export interface ChangeSetFileView {
   path: string;
@@ -37,11 +35,9 @@ export type PreimageReader = (hashes: readonly string[]) => Promise<Map<string, 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8");
 
-const isBinary = (bytes: Uint8Array): boolean => bytes.subarray(0, BINARY_SNIFF).indexOf(0) >= 0;
-
 function sideText(file: string, bytes: Uint8Array): SideText {
   const hash = nodeContentHash(bytes);
-  return isBinary(bytes) ? { path: file, hash } : { path: file, hash, text: decoder.decode(bytes) };
+  return isBinaryBytes(bytes) ? { path: file, hash } : { path: file, hash, text: decoder.decode(bytes) };
 }
 
 /**

@@ -11,7 +11,8 @@
 import { destinationKey, normalizeServerMapping, type JournalEvent, type LocalEntityType, type LocalRecord, type ServerMapping, type SyncConflict, type SyncReceipt } from './records.js';
 import { ChangeBuilder, type LocalFirstChange, type LocalFirstDelta } from './localFirstDelta.js';
 import type { LocalFirstSnapshot } from './storeContract.js';
-import { RecordGroups, type RecordIndex, type RecordIndexKey } from './recordIndex.js';
+import { isRecordPayloadFence } from './recordPayloadMarker.js';
+import { RecordGroups, recordIndexId, sameRecordIndex, type RecordIndex, type RecordIndexKey } from './recordIndex.js';
 
 export const recordKey = (type: LocalEntityType, id: string): string => `${type}:${id}`;
 export const mappingKey = (mapping: Pick<ServerMapping, 'entityType' | 'clientEntityId' | 'destination'>): string =>
@@ -42,6 +43,11 @@ export class PendingKeyIndex {
     if (list.length === 0) this.byKey.delete(event.idempotencyKey);
   }
 
+  /** Every event filed under this key (read-only to the caller). */
+  all(key: string): readonly JournalEvent[] {
+    return this.byKey.get(key) ?? [];
+  }
+
   /** The latest event with this key that `live` still accepts. */
   latest(key: string, live?: (event: JournalEvent) => boolean): JournalEvent | undefined {
     const list = this.byKey.get(key);
@@ -58,9 +64,104 @@ export class PendingKeyIndex {
   }
 }
 
+/**
+ * Pending event ids by the row they write (`clientEntityId`), so "this row's pending events"
+ * costs that row, not the whole journal. Every bind and bound write drops a row's older
+ * pending events (`journalRules.ts`); walking every event for each row made a bind of a
+ * long-offline history O(rows × events) — 75k messages × 92k events, about an hour inside
+ * one transaction — so the bind never finished and nothing was ever sent or acknowledged.
+ * An id set, not event objects: the caller reads the event itself through its own view, so
+ * a held / dead-lettered replacement under the same id is seen as it is now.
+ */
+export class PendingEntityIndex {
+  private readonly byEntity = new Map<string, Set<string>>();
+
+  add(event: Pick<JournalEvent, 'eventId' | 'clientEntityId'>): void {
+    const ids = this.byEntity.get(event.clientEntityId);
+    if (ids) ids.add(event.eventId);
+    else this.byEntity.set(event.clientEntityId, new Set([event.eventId]));
+  }
+
+  remove(event: Pick<JournalEvent, 'eventId' | 'clientEntityId'>): void {
+    const ids = this.byEntity.get(event.clientEntityId);
+    if (!ids) return;
+    ids.delete(event.eventId);
+    if (ids.size === 0) this.byEntity.delete(event.clientEntityId);
+  }
+
+  /** The ids of the row's events. Read-only to the caller. */
+  of(clientEntityId: string): ReadonlySet<string> | undefined {
+    return this.byEntity.get(clientEntityId);
+  }
+
+  clear(): void {
+    this.byEntity.clear();
+  }
+}
+
+/**
+ * Running counts of the committed events per partition (`destinationKey`): how many, and how
+ * many of them are dead-lettered. Kept by the same `applyDelta` path as the events, so "how much
+ * work is left" is a lookup instead of a walk of the journal (`countPending`).
+ */
+export class PendingCounts {
+  private readonly byPartition = new Map<string, { total: number; dead: number }>();
+  private deadTotal = 0;
+
+  add(event: Pick<JournalEvent, 'destination' | 'deadLetter' | 'idempotencyKey'>): void {
+    this.bump(event, 1);
+  }
+
+  remove(event: Pick<JournalEvent, 'destination' | 'deadLetter' | 'idempotencyKey'>): void {
+    this.bump(event, -1);
+  }
+
+  /** Events in `partition` that are not dead-lettered. */
+  live(partition: string): number {
+    const row = this.byPartition.get(partition);
+    return row ? row.total - row.dead : 0;
+  }
+
+  /** Live events across every partition. */
+  liveTotal(): number {
+    let live = 0;
+    for (const row of this.byPartition.values()) live += row.total - row.dead;
+    return live;
+  }
+
+  /** Dead-lettered events across every partition. */
+  dead(): number {
+    return this.deadTotal;
+  }
+
+  clear(): void {
+    this.byPartition.clear();
+    this.deadTotal = 0;
+  }
+
+  private bump(event: Pick<JournalEvent, 'destination' | 'deadLetter' | 'idempotencyKey'>, by: 1 | -1): void {
+    // The record-payload fence is no work and no failure: it only holds older builds off markers.
+    if (isRecordPayloadFence(event)) return;
+    const key = destinationKey(event.destination);
+    const row = this.byPartition.get(key) ?? { total: 0, dead: 0 };
+    row.total += by;
+    if (event.deadLetter) {
+      row.dead += by;
+      this.deadTotal += by;
+    }
+    // A draft's adjustments may go negative (it acknowledges committed events): only zero is empty.
+    if (row.total === 0 && row.dead === 0) this.byPartition.delete(key);
+    else this.byPartition.set(key, row);
+  }
+}
+
 export class CommittedState {
   readonly records = new Map<string, LocalRecord>();
   readonly events = new Map<string, JournalEvent>();
+  /** The committed events by the row they write (`PendingEntityIndex`). */
+  readonly pendingEntities = new PendingEntityIndex();
+  /** The committed events counted per partition (`PendingCounts`). */
+  readonly pendingCounts = new PendingCounts();
   readonly mappings = new Map<string, ServerMapping>();
   readonly receipts = new Map<string, SyncReceipt>();
   readonly conflicts = new Map<string, SyncConflict>();
@@ -75,6 +176,8 @@ export class CommittedState {
   readonly recordTypes = new Map<string, Map<string, LocalRecord>>();
   /** The secondary indexes built so far (`recordIndex.ts`), by the entity type they group. */
   private readonly indexes = new Map<string, RecordGroups[]>();
+  /** The same built indexes by `entityType:name` (`recordIndexId`): one per declaration, however many copies of it load. */
+  private readonly indexById = new Map<string, RecordGroups>();
   nextSequence = 1;
   /** The highest `mappedSeq` any committed mapping carries: a new mapping takes the next one. */
   maxMappedSeq = 0;
@@ -118,8 +221,8 @@ export class CommittedState {
   }
 
   /**
-   * The committed rows of one group of `index`, in committed order. The first read through
-   * an index builds it from the type's rows (once, O(rows of the type)); every later
+   * The committed live rows of one group of `index` (order unspecified). The first read
+   * through an index builds it from the type's rows (once, O(rows of the type)); every later
    * `applyDelta` keeps it current, so a read costs the group, never the type.
    */
   indexGroup(index: RecordIndex, key: RecordIndexKey): ReadonlyMap<string, LocalRecord> | undefined {
@@ -127,13 +230,19 @@ export class CommittedState {
   }
 
   private groupsOf(index: RecordIndex): RecordGroups {
-    const built = this.indexes.get(index.entityType);
-    const found = built?.find((groups) => groups.index === index);
-    if (found) return found;
+    const id = recordIndexId(index);
+    const found = this.indexById.get(id);
+    if (found) {
+      // A second declaration under a taken name would silently read the first one's groups.
+      if (!sameRecordIndex(found.index, index)) throw new Error(`local_first_index_conflict: ${id} is declared with two different keyOf functions`);
+      return found;
+    }
     const groups = new RecordGroups(index);
     for (const record of this.recordTypes.get(index.entityType)?.values() ?? []) groups.put(record);
+    const built = this.indexes.get(index.entityType);
     if (built) built.push(groups);
     else this.indexes.set(index.entityType, [groups]);
+    this.indexById.set(id, groups);
     return groups;
   }
 
@@ -150,7 +259,11 @@ export class CommittedState {
     for (const receipt of initial?.receipts ?? []) state.receipts.set(receipt.eventId, receipt);
     for (const conflict of initial?.conflicts ?? []) state.conflicts.set(conflict.id, conflict);
     for (const [key, cursor] of Object.entries(initial?.cursors ?? {})) state.cursors.set(key, cursor);
-    for (const event of state.events.values()) state.pendingKeys.add(event);
+    for (const event of state.events.values()) {
+      state.pendingKeys.add(event);
+      state.pendingEntities.add(event);
+      state.pendingCounts.add(event);
+    }
     state.nextSequence = initial?.nextSequence ?? 1;
     return state;
   }
@@ -172,6 +285,8 @@ export class CommittedState {
       if (!event) continue;
       this.events.delete(id);
       this.pendingKeys.remove(event);
+      this.pendingEntities.remove(event);
+      this.pendingCounts.remove(event);
       change.event();
     }
     for (const key of delta.unsetCursors ?? []) {
@@ -184,9 +299,15 @@ export class CommittedState {
     }
     for (const event of delta.events ?? []) {
       const replaced = this.events.get(event.eventId);
-      if (replaced) this.pendingKeys.remove(replaced);
+      if (replaced) {
+        this.pendingKeys.remove(replaced);
+        this.pendingEntities.remove(replaced);
+        this.pendingCounts.remove(replaced);
+      }
       this.events.set(event.eventId, event);
       this.pendingKeys.add(event);
+      this.pendingEntities.add(event);
+      this.pendingCounts.add(event);
       change.event();
     }
     for (const raw of delta.mappings ?? []) {
@@ -233,6 +354,8 @@ export class CommittedState {
     this.conflicts.clear();
     this.cursors.clear();
     this.pendingKeys.clear();
+    this.pendingEntities.clear();
+    this.pendingCounts.clear();
     this.nextSequence = 1;
     this.maxMappedSeq = 0;
   }

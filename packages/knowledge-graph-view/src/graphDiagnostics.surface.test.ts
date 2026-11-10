@@ -37,9 +37,16 @@ describe('surface diagnostics', () => {
         expect(lines).toContain(`map source: outline (files=5, stations=${buildStations(truncatedFixture(true)).stations.length}, capped=no)`);
         expect(lines).toContain('  complexity: 1/5 files');
         expect(lines.find((l) => l.startsWith('  churn:'))).toContain('not collected');
-        expect(lines).toContain('partitions: files without a partition=0/5 (0%)');
+        expect(lines).toContain('partitions: files without a placement=0/5 (0%) · placed by community=0');
+        expect(lines.find((l) => l.startsWith('communities:'))).toBeUndefined();
         expect(lines.find((l) => l.startsWith('stations by tier:'))).toBeTruthy();
         expect(lines.find((l) => l.startsWith('lines: drawn='))).toContain('entry points found=2');
+    });
+
+    it('prints the community modularity Q and its method from the graph stats (PRD 38 P1)', () => {
+        const g = truncatedFixture(true);
+        const lines = out({ ...g, stats: { ...g.stats, modularity: 0.412345, communityMethod: 'louvain' } });
+        expect(lines).toContain('communities: modularity Q=0.412345 (louvain)');
     });
 
     it('explains "0 here" as a server-only review and keeps the existing lines', () => {

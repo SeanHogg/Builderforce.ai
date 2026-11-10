@@ -16,6 +16,7 @@ import type { StationStyle } from '../overlays';
 import type { Point } from './geometry';
 import type { Box } from './labelPlacement';
 import type { StationMarkProps } from './StationMark';
+import { towerHeight } from './towerHeight';
 
 export const TOWER_WIDTH = 18;
 const BASE_DROP = 6;
@@ -23,16 +24,8 @@ const BASE_DROP = 6;
 const SHADOW_RX = 12;
 const SHADOW_RY = 5;
 const TOP_RY = 4;
-const MIN_H = 14;
-const STEP_H = 16;
-/** The size channel with nothing to say reads the station's complexity level (the design's `level5('cx')`), else draws a middling tower, never a flat one. */
-const NEUTRAL_LEVEL = 2;
-const levelOf = (cx: number | undefined): number => (cx !== undefined && cx >= 1 && cx <= 5 ? cx : NEUTRAL_LEVEL);
-/** `StationStyle.size` is `5 + level * 2` (1..5) when the channel is ready, else the neutral 8. */
-const READY_LEVEL = (size: number): number | null => { const l = (size - 5) / 2; return Number.isInteger(l) && l >= 1 && l <= 5 ? l : null; };
 
-/** `14 + level * 16`: 30px for the lowest level, 94px for the highest. `cx`: the station's complexity level, read only when the size channel has no reading. */
-export const towerHeight = (size: number, cx?: number): number => MIN_H + (READY_LEVEL(size) ?? levelOf(cx)) * STEP_H;
+export { towerHeight };
 
 export interface TowerGeometry {
     /** The foot of the tower (its shadow's centre). */

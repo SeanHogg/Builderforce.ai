@@ -39,9 +39,12 @@ describe('StationMark', () => {
         expect(onActivate).toHaveBeenCalledTimes(2);
     });
 
-    it('draws a square for a document and a disc otherwise', () => {
-        expect(mark({ doc: true }).container.querySelector('rect')).not.toBeNull();
-        expect(mark().container.querySelector('rect')).toBeNull();
+    it('draws the plain disc without a type, a document or not (the type, not the doc flag, picks the silhouette)', () => {
+        for (const doc of [true, false]) {
+            const { container } = mark({ doc });
+            expect(container.querySelector('rect')).toBeNull();
+            expect(container.querySelector('circle[r="10"]')).not.toBeNull();
+        }
     });
 
     it('draws the station\'s mark-type silhouette in its tone when it has one (dashed and hollow for the outside)', () => {
@@ -49,7 +52,7 @@ describe('StationMark', () => {
         expect(drum.getAttribute('d')).toBe(SHAPE_PATHS.drum);
         expect(drum.getAttribute('fill')).toBe(cssVar('sev3'));
         expect(mark({ shape: 'drum' }).container.querySelector('circle[r="10"]')).toBeNull();
-        const outside = mark({ shape: 'octagon' }).container.querySelector('[data-shape="octagon"]')!;
+        const outside = mark({ shape: 'cross' }).container.querySelector('[data-shape="cross"]')!;
         expect(outside.getAttribute('stroke-dasharray')).toBe('3 2');
         expect(outside.getAttribute('stroke')).toBe(cssVar('sev3'));
     });

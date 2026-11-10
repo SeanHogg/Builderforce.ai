@@ -40,18 +40,69 @@ export function errorReport(source: WebviewErrorReport['source'], thrown: unknow
 
 type ErrorTarget = Pick<Window, 'addEventListener' | 'removeEventListener'>;
 
-/** Install the two window listeners. Returns the uninstaller (for tests). */
+/** The same error (source + message) is relayed at most once in this window. */
+export const REPEAT_WINDOW_MS = 5_000;
+/** At most this many reports a minute, whatever they say. */
+export const REPORTS_PER_MINUTE = 10;
+const MINUTE_MS = 60_000;
+
+/**
+ * Wraps `report` so a throw that repeats every frame cannot flood the bridge and the log: each
+ * source + message passes once per {@link REPEAT_WINDOW_MS}, at most {@link REPORTS_PER_MINUTE}
+ * pass a minute, and what was held back is said in one "suppressed N" line when the window closes.
+ * Returns the throttled reporter and its disposer (clears the pending summary timer).
+ */
+export function throttledReporter(report: (r: WebviewErrorReport) => void): { report: (r: WebviewErrorReport) => void; dispose: () => void } {
+  const lastSent = new Map<string, number>();
+  const suppressed = new Map<string, { source: WebviewErrorReport['source']; message: string; count: number }>();
+  let sentAt: number[] = [];
+  let flush: ReturnType<typeof setTimeout> | undefined;
+  const summarize = () => {
+    flush = undefined;
+    if (suppressed.size === 0) return;
+    const held = [...suppressed.values()];
+    suppressed.clear();
+    const total = held.reduce((n, h) => n + h.count, 0);
+    const first = held[0]!;
+    const message = `suppressed ${total} repeated webview error report${total === 1 ? '' : 's'}: ${held.map((h) => `${h.count}× ${h.message}`).join('; ')}`.slice(0, STACK_LIMIT);
+    report({ source: first.source, message });
+  };
+  return {
+    report: (r) => {
+      const now = Date.now();
+      const key = `${r.source}\u0000${r.message}`;
+      sentAt = sentAt.filter((t) => now - t < MINUTE_MS);
+      const last = lastSent.get(key);
+      if ((last !== undefined && now - last < REPEAT_WINDOW_MS) || sentAt.length >= REPORTS_PER_MINUTE) {
+        const held = suppressed.get(key);
+        if (held) held.count += 1;
+        else suppressed.set(key, { source: r.source, message: r.message, count: 1 });
+        flush ??= setTimeout(summarize, REPEAT_WINDOW_MS);
+        return;
+      }
+      if (lastSent.size >= 200) for (const [k, t] of lastSent) if (now - t >= REPEAT_WINDOW_MS) lastSent.delete(k);
+      lastSent.set(key, now);
+      sentAt.push(now);
+      report(r);
+    },
+    dispose: () => { clearTimeout(flush); flush = undefined; },
+  };
+}
+
+/** Install the two window listeners, relaying through {@link throttledReporter}. Returns the uninstaller (for tests). */
 export function installUncaughtErrorRelay(report: (r: WebviewErrorReport) => void, target: ErrorTarget = window): () => void {
+  const relay = throttledReporter(report);
   const onError = (event: Event) => {
     const e = event as ErrorEvent;
     // A failed <img>/<script> load fires `error` with no `error` value and no message.
     if (!e.error && !e.message) return;
-    report(errorReport('error', e.error ?? e.message));
+    relay.report(errorReport('error', e.error ?? e.message));
   };
-  const onRejection = (event: Event) => report(errorReport('unhandledrejection', (event as PromiseRejectionEvent).reason));
+  const onRejection = (event: Event) => relay.report(errorReport('unhandledrejection', (event as PromiseRejectionEvent).reason));
   target.addEventListener('error', onError);
   target.addEventListener('unhandledrejection', onRejection);
   return () => {
+    relay.dispose();
     target.removeEventListener('error', onError);
     target.removeEventListener('unhandledrejection', onRejection);
   };

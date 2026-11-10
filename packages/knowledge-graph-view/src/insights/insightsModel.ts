@@ -8,6 +8,7 @@
 
 import type { KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { cmp } from '../order';
+import { planeKeyOf } from '../placement';
 import { labelFor, nodeIndex, partitionMatrix } from '../graphModel';
 import { hotspotsOf, type Hotspot } from './hotspots';
 import type { LensId } from '../types';
@@ -35,7 +36,7 @@ export interface Bar { id: string; text?: string; value: number; refs: string[] 
 export interface Insights {
     metrics: Metric[];
     kinds: Bar[];
-    /** `partition` when any file is partitioned, else `area`. Ids are `''` for none. */
+    /** `partition` when any file has a placement (a partition, else a community: placement keys), else `area`. Ids are `''` for none. */
     composition: { by: 'partition' | 'area'; bars: Bar[] };
     fanIn: Bar[];
     fanOut: Bar[];
@@ -97,10 +98,12 @@ export function insightsOf(graph: KnowledgeGraph): Insights {
     };
     const metrics = (Object.keys(values) as MetricId[]).map((id) => ({ id, value: values[id], ...(METRIC_LENS[id] ? { lens: METRIC_LENS[id] } : {}) }));
 
-    const partitioned = files.some((n) => n.partition !== undefined);
+    // Placements (a partition, else a community): a repo the packs left unpartitioned still composes by cohesion.
+    const placed = files.map((n) => planeKeyOf(n, files));
+    const partitioned = placed.some((k) => k !== undefined);
     const composition = {
         by: partitioned ? 'partition' as const : 'area' as const,
-        bars: tally(files.map((n) => ({ id: (partitioned ? n.partition : n.area) ?? '', ref: n.ref }))).map((b) =>
+        bars: tally(files.map((n, i) => ({ id: (partitioned ? placed[i] : n.area) ?? '', ref: n.ref }))).map((b) =>
             (partitioned || b.id === '' ? b : { ...b, text: labelFor(index, b.id) })),
     };
 
@@ -113,7 +116,7 @@ export function insightsOf(graph: KnowledgeGraph): Insights {
         .map(([key, cell]) => { const [from = '', to = ''] = key.split('\u0000'); return { id: key, from, to, value: cell.count }; })
         .filter((c) => c.from !== c.to)
         .sort(byValue).slice(0, COUPLING_PAIRS)
-        .map((c) => ({ ...c, refs: nodes.filter((n) => n.partition === c.from || n.partition === c.to).map((n) => n.ref).sort() }));
+        .map((c) => ({ ...c, refs: nodes.filter((n) => n.partition === c.from || n.partition === c.to) /* SEMANTIC: the matrix's pack partitions */.map((n) => n.ref).sort() }));
 
     return {
         metrics,

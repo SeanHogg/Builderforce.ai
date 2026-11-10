@@ -4,22 +4,11 @@
  */
 
 import type { KnowledgeGraphLabels } from '../../labels';
-import { cssVar, type ThemeTone } from '../../scene/themeColors';
+import { cssVar } from '../../scene/themeColors';
+import { BAND_TONE, bandTitle } from '../bands';
 import type { Band } from '../transitLayout';
 import { FONT_UI, TYPE } from '../ui/type';
 import type { Wall } from './wall';
-
-/** The title colour of each band; the System camera's tier labels read the same table. */
-export const BAND_TONE: Record<string, ThemeTone> = {
-    entry: 'bandEntry', presentation: 'bandPresentation', application: 'bandApplication', domain: 'bandDomain',
-    infrastructure: 'bandInfrastructure', symbol: 'nodeSymbol', methods: 'nodeFile', errors: 'nodeEntity', body: 'l2', callees: 'nodeFile', leaves: 'muted',
-};
-
-/** A band's title: an architecture layer's, else the drilled level's. */
-export function bandTitle(layer: string, labels: KnowledgeGraphLabels): string {
-    const s = labels.surface;
-    return (s.layers as Record<string, string | undefined>)[layer] ?? (s.map.bands as Record<string, string | undefined>)[layer] ?? s.layers.other;
-}
 
 export function TransitBands({ bands, width, walls, labels }: { bands: readonly Band[]; width: number; walls: readonly Wall[]; labels: KnowledgeGraphLabels }) {
     return (

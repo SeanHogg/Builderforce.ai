@@ -1,0 +1,222 @@
+/**
+ * The stage's main-thread interaction state, outside React (PRD 43 B5, B3 Cards): the current camera projection (pushed
+ * by the frame loop every frame), the placement it projects, whether a tween is running, and the pick grid rebuilt when
+ * the camera SETTLES. Hover, select, card anchors and the a11y proxies read it directly, so a pointer move or a camera
+ * frame never waits on the worker and never commits React.
+ *
+ * Settling: a projection that has not changed for {@link SETTLE_MS}, a tween landing, or the rig saying so
+ * ({@link StageBus.settle}). Picking is OFF during a tween (B1a rule 5): the grid would be where the marks were.
+ *
+ * One bus per renderer ({@link stageBus}), so the canvas side (the frame tap) and the DOM side (proxies, cards) meet
+ * without threading a prop through the stage.
+ */
+
+import { createContext, useContext } from 'react';
+import { PickIndex, type PickOptions, type Projector, type StageHit } from '../pick';
+import type { SlotIncident } from '../overlay/incident';
+import type { MarkSet, Placement } from '../types';
+
+export const SETTLE_MS = 120;
+
+type Fn<T extends unknown[] = []> = (...args: T) => void;
+
+/** What the camera's owner adds to the stage's interaction (set with {@link StageBus.setOptions}; data and callbacks). */
+export interface StageOptions {
+    /** The ranked incident index (`stageIncident`): a selection draws its best neighbours. */
+    incident?: SlotIncident | null;
+    /** The highlighted path's stops, by key, in order (the path strip). */
+    path?: readonly string[] | null;
+    /** A line was picked (a route): its batch, segment, polyline and slot. */
+    onLink?: ((hit: Extract<StageHit, { kind: 'link' }>) => void) | null;
+}
+
+/**
+ * What the bus reads of the renderer at a settle: the depth (towers are measured at their drawn height), the MarkSet
+ * (its `importance` is picking's tie-break, the same reading `nearestHit` uses) and, once the port has it, the LIVE keys
+ * (the MarkSet's plus every slot a drill appended).
+ */
+export interface StageSource {
+    readonly depth: number;
+    readonly marks: MarkSet | null;
+    keys?(): readonly string[];
+}
+
+/** Where the bus moves keyboard focus once the next settle has rebuilt the proxies: a slot's key, or the first stop. */
+export type FocusRequest = { key: string } | { first: true };
+
+export class StageBus {
+    options: StageOptions = {};
+    private readonly optionFns = new Set<Fn>();
+    projector: Projector | null = null;
+    placement: Placement | null = null;
+    tweening = false;
+    /** The renderer, read at settle time (see {@link StageSource}). */
+    source: StageSource | null = null;
+    /** A focus move waiting for the proxies of the next settle (`StageProxies` performs it). */
+    focusRequest: FocusRequest | null = null;
+    private stored: readonly string[] = [];
+    private live: { from: readonly string[]; p: Placement | null; keys: readonly string[] } | null = null;
+    /** The slot under the pointer (-1 none). */
+    hover = -1;
+    /** True once a real camera pushed a projection: the fitted-frame fallback stops being used. */
+    private camera = false;
+    private index: PickIndex | null = null;
+    /** The last dropped grid, whose buffers the next settle reuses. */
+    private spare: PickIndex | null = null;
+    private byKey: { of: readonly string[]; at: Map<string, number> } | null = null;
+    private timer: ReturnType<typeof setTimeout> | null = null;
+    private lastKey = '';
+    private readonly frameFns = new Set<Fn<[Projector]>>();
+    private readonly settleFns = new Set<Fn>();
+    private readonly revealFns = new Set<Fn<[number]>>();
+    private readonly hoverFns = new Set<Fn<[number]>>();
+    private readonly tweenFns = new Set<Fn<[boolean]>>();
+
+    /**
+     * The depth control's extrude multiplier (the renderer's `depth`, the shader's `uDepth`): picking and the card anchors
+     * measure a tower at the height it is drawn. The projection itself (tilt) comes from the camera / rig.
+     */
+    extrudeScale(): number { return this.source ? this.source.depth : 1; }
+
+    /**
+     * The LIVE key of every slot: the renderer's when its port offers them; else the stored keys with the slots the
+     * current placement appends (a drilled level's symbols, `Placement.append`) — so an appended symbol is selectable,
+     * focusable and anchorable. Stable while its inputs are.
+     */
+    get keys(): readonly string[] {
+        const fromSource = this.source?.keys?.();
+        if (fromSource) return fromSource;
+        const marks = this.source?.marks?.keys;
+        const from = marks && marks.length > this.stored.length ? marks : this.stored;
+        const p = this.placement, run = p?.append;
+        if (!run || run.base + run.keys.length <= from.length) return from;
+        if (this.live && this.live.from === from && this.live.p === p) return this.live.keys;
+        const keys = [...from.slice(0, run.base), ...run.keys];
+        this.live = { from, p, keys };
+        return keys;
+    }
+    /** The a11y proxies' container (focus return reads it). */
+    proxyRoot: HTMLElement | null = null;
+    /** Asks the canvas for a frame (R3F's `invalidate`); a no-op without one. */
+    invalidate: () => void = () => {};
+
+    /** The current camera, once per rendered frame. `fromCamera` false = the fitted frame (no canvas: jsdom, no WebGL). */
+    frame(projector: Projector, fromCamera = true): void {
+        if (fromCamera) this.camera = true;
+        else if (this.camera) return;
+        this.projector = projector;
+        for (const fn of this.frameFns) fn(projector);
+        if (projector.key === this.lastKey) return;
+        this.lastKey = projector.key;
+        this.dropIndex();
+        this.schedule();
+    }
+
+    /** The placement on show and the MarkSet's keys (the live keys add what the placement appends, {@link keys}). */
+    setPlacement(p: Placement, keys: readonly string[]): void {
+        if (p === this.placement && keys === this.stored) return;
+        this.placement = p; this.stored = keys;
+        this.dropIndex();
+        this.schedule();
+    }
+
+    setTweening(on: boolean): void {
+        if (on === this.tweening) return;
+        this.tweening = on;
+        this.dropIndex();
+        if (on) this.setHover(-1);
+        for (const fn of this.tweenFns) fn(on);
+        if (!on) this.settle();
+    }
+
+    /** Moves keyboard focus once the next settle's proxies exist (after Out: the station drilled out of; after Go inside: the first stop). */
+    requestFocus(request: FocusRequest): void { this.focusRequest = request; }
+
+    /** Rebuilds the pick grid from the current projection and tells the settle listeners (proxies, card visibility). */
+    settle(): void {
+        if (this.timer !== null) { clearTimeout(this.timer); this.timer = null; }
+        if (this.tweening || !this.projector || !this.placement) return;
+        this.index = PickIndex.build(this.placement, this.projector, this.pickOptions(), this.index ?? this.spare);
+        this.spare = null;
+        for (const fn of this.settleFns) fn();
+    }
+
+    /** The settled grid; null while a tween runs or before the first settle. */
+    get pickIndex(): PickIndex | null { return this.tweening ? null : this.index; }
+
+    /** What is under (`sx`, `sy`); null during a tween. Never waits on the worker. */
+    pick(sx: number, sy: number): StageHit | null {
+        if (this.tweening) return null;
+        if (!this.index && this.projector && this.placement) this.settle();
+        return this.index?.pick(sx, sy) ?? null;
+    }
+
+    slotOf(key: string | null): number {
+        if (!key) return -1;
+        const keys = this.keys;
+        if (this.byKey?.of !== keys) { const at = new Map<string, number>(); keys.forEach((k, i) => at.set(k, i)); this.byKey = { of: keys, at }; }
+        return this.byKey.at.get(key) ?? -1;
+    }
+
+    setHover(slot: number): void {
+        if (slot === this.hover) return;
+        this.hover = slot;
+        for (const fn of this.hoverFns) fn(slot);
+    }
+
+    /** Asks the rig to bring slot `s` into view (a focused off-screen proxy). */
+    reveal(slot: number): void { for (const fn of this.revealFns) fn(slot); }
+
+    setOptions(options: StageOptions): void {
+        this.options = options;
+        for (const fn of this.optionFns) fn();
+    }
+
+    onOptions(fn: Fn): () => void { this.optionFns.add(fn); return () => this.optionFns.delete(fn); }
+
+    onFrame(fn: Fn<[Projector]>): () => void { this.frameFns.add(fn); return () => this.frameFns.delete(fn); }
+    onSettle(fn: Fn): () => void { this.settleFns.add(fn); return () => this.settleFns.delete(fn); }
+    onReveal(fn: Fn<[number]>): () => void { this.revealFns.add(fn); return () => this.revealFns.delete(fn); }
+    onHover(fn: Fn<[number]>): () => void { this.hoverFns.add(fn); return () => this.hoverFns.delete(fn); }
+    /** A tween started (true) or landed (false): cards hide for its length (they would be over where the marks were). */
+    onTween(fn: Fn<[boolean]>): () => void { this.tweenFns.add(fn); return () => this.tweenFns.delete(fn); }
+
+    dispose(): void {
+        if (this.timer !== null) clearTimeout(this.timer);
+        this.timer = null;
+        this.frameFns.clear(); this.settleFns.clear(); this.revealFns.clear(); this.hoverFns.clear(); this.optionFns.clear(); this.tweenFns.clear();
+    }
+
+    /** The grid is stale (camera, placement or tween changed): kept as the next settle's buffers, never queried again. */
+    private dropIndex(): void {
+        if (this.index) this.spare = this.index;
+        this.index = null;
+    }
+
+    private pickOptions(): PickOptions {
+        const p = this.placement!;
+        return { keys: this.keys, importance: this.source?.marks?.importance ?? null, links: p.links, extrudeScale: this.extrudeScale() };
+    }
+
+    private schedule(): void {
+        if (this.timer !== null) clearTimeout(this.timer);
+        this.timer = setTimeout(() => { this.timer = null; this.settle(); }, SETTLE_MS);
+    }
+}
+
+const BUSES = new WeakMap<object, StageBus>();
+
+/** The bus of a stage, keyed by its renderer (one per `KnowledgeGraphView`'s stage). */
+export function stageBus(owner: object): StageBus {
+    let bus = BUSES.get(owner);
+    if (!bus) { bus = new StageBus(); BUSES.set(owner, bus); }
+    return bus;
+}
+
+export const StageBusContext = createContext<StageBus | null>(null);
+
+export function useStageBus(): StageBus {
+    const bus = useContext(StageBusContext);
+    if (!bus) throw new Error('stage: useStageBus outside a StageBusContext');
+    return bus;
+}

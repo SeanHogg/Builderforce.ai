@@ -5,7 +5,9 @@ import type { Codec } from './codec';
 import { edgeBuffers, edgePaths, rankEdges } from './edges';
 import { antiPatterns, focus, insights, mindMap, partitionMatrix, path, surface, transitLayout } from './graph';
 import { layout2d, layout3d } from './layout';
+import { markPaint, markSet, placement, stageIncident } from './stage';
 
 export const CODECS: { [K in TaskKind]: Codec<K> } = {
     layout2d, layout3d, rankEdges, edgePaths, edgeBuffers, mindMap, surface, transitLayout, path, insights, partitionMatrix, antiPatterns, focus,
+    markSet, markPaint, placement, stageIncident,
 };

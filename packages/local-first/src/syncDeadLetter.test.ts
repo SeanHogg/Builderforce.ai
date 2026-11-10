@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createPlatformPolicy } from './policy.js';
 import type { JournalEvent, SyncReceipt } from './records.js';
-import { countPending, createMemoryLocalFirstStore, newLocalRecord, selectPending, type LocalFirstStore } from './store.js';
+import { createMemoryLocalFirstStore, newLocalRecord, type LocalFirstStore } from './store.js';
+import { countPending, selectPending } from './pendingQueries.js';
 import { wireDependencies } from './sync.js';
 import { loadMappedEntities } from './dependencyGraph.js';
 import { createSyncCoordinator, type SyncPushBatch } from './sync.js';

@@ -242,3 +242,30 @@ describe('createHttpSyncTransport', () => {
     expect(source).not.toMatch(/from ['"]\.\.\/\.\.\/api/);
   });
 });
+
+describe('createHttpSyncTransport — the tenant rate limit', () => {
+  const withHeaders = (response: HttpSyncResponse, headers: Record<string, string>): HttpSyncResponse =>
+    ({ ...response, headers: { get: (name: string) => headers[name.toLowerCase()] ?? null } });
+
+  it('reports the limiter\'s X-RateLimit-* headers on every response', async () => {
+    const seen: unknown[] = [];
+    const { fetch } = install(() => withHeaders(jsonResponse({ receipts: [receipt] }), {
+      'x-ratelimit-limit': '300', 'x-ratelimit-remaining': '120', 'x-ratelimit-reset': '2026-11-10T00:01:00.000Z',
+    }));
+    const client = createHttpSyncTransport({ fetch, baseUrl: BASE, onRateLimit: (limit) => seen.push(limit) });
+    await client.push(batch);
+    expect(seen).toEqual([{ limit: 300, remaining: 120, resetAt: '2026-11-10T00:01:00.000Z' }]);
+  });
+
+  it('a 429 carries the server\'s Retry-After', async () => {
+    const { fetch } = install(() => withHeaders(jsonResponse({ error: 'Rate limit exceeded. Please slow down.' }, 429), { 'retry-after': '17' }));
+    await expect(transport(fetch).push(batch)).rejects.toMatchObject({ status: 429, retryAfterMs: 17_000 });
+  });
+
+  it('a response without the headers reports nothing (an older server, a test fake)', async () => {
+    const seen: unknown[] = [];
+    const { fetch } = install(() => jsonResponse({ receipts: [receipt] }));
+    await createHttpSyncTransport({ fetch, baseUrl: BASE, onRateLimit: (limit) => seen.push(limit) }).push(batch);
+    expect(seen).toEqual([]);
+  });
+});

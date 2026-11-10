@@ -37478,6 +37478,8 @@
     "couplingTitle": "分区之间耦合最强",
     "chartFindings": "按类型统计发现",
     "partitionNone": "无分区",
+    "communityFallback": "社区 {n}",
+    "communityOther": "其他社区",
     "edgeKinds": {
       "references": "引用",
       "contains": "包含",
@@ -37491,7 +37493,11 @@
       "nearDuplicate": "近似重复",
       "coChanged": "同时变更",
       "imports": "导入",
-      "calls": "调用"
+      "calls": "调用",
+      "extends": "继承",
+      "implements": "实现",
+      "composes": "组合了",
+      "uses": "使用"
     },
     "packs": {
       "code": "代码",
@@ -37559,6 +37565,7 @@
     "nodeKind": "类型",
     "nodePack": "包",
     "nodePartition": "分区",
+    "nodeCommunity": "{name} · 内部引用占 {percent}%",
     "nodeOrigin": "来源",
     "nodeMediaType": "媒体类型",
     "nodeSize": "大小",
@@ -38216,7 +38223,8 @@
         "layingOut": "正在布局…",
         "errorTitle": "此视图出错了",
         "errorRetry": "重试",
-        "errorBack": "返回"
+        "errorBack": "返回",
+        "depth": "深度"
       },
       "mind": {
         "moreFoldersOne": "另有 {count} 个文件夹",

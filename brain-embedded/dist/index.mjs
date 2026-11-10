@@ -203,6 +203,7 @@ import {
   detectUnbackedTicketClaim,
   detectUnbackedWriteClaim,
   dirtyPathsOf,
+  dropPending,
   editedFilesOf,
   editedPathsOf,
   entityIdsOf,
@@ -354,7 +355,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-33RLOAXP.mjs";
+} from "./chunk-6AJTQ2M6.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useEffect, useMemo } from "react";
@@ -4228,6 +4229,12 @@ function scanChatMessages(tx, deviceId, chatId, visit) {
     if (isLiveOwn(row, deviceId)) visit(row);
   });
 }
+var USAGE_BY_CHAT = defineRecordIndex("usage", "brain.usage.clientChatId", (row) => row.payload.clientChatId);
+function scanChatUsage(tx, deviceId, clientChatId, visit) {
+  return scanByIndex(tx, USAGE_BY_CHAT, clientChatId, (row) => {
+    if (isLiveOwn(row, deviceId)) visit(row);
+  });
+}
 async function chatMessageRecords(tx, deviceId, chatId) {
   const rows = [];
   await scanChatMessages(tx, deviceId, chatId, (row) => {
@@ -4242,6 +4249,37 @@ async function chatMessagesInOrder(tx, deviceId, chatId, limit) {
   });
   messages.sort((a, b) => a.seq - b.seq);
   return structuredClone(limit != null ? messages.slice(-limit) : messages);
+}
+async function chatsMessagesInOrder(tx, deviceId, chatIds) {
+  const out = /* @__PURE__ */ new Map();
+  const scans = [];
+  for (const chatId of chatIds) {
+    if (out.has(chatId)) continue;
+    const messages = [];
+    out.set(chatId, messages);
+    scans.push(scanChatMessages(tx, deviceId, chatId, (row) => {
+      messages.push(row.payload.message);
+    }));
+  }
+  await Promise.all(scans);
+  for (const [chatId, messages] of out) out.set(chatId, structuredClone(messages.sort((a, b) => a.seq - b.seq)));
+  return out;
+}
+async function messageRecordById(tx, deviceId, messageId, chatId) {
+  let found;
+  if (chatId !== void 0) {
+    await scanChatMessages(tx, deviceId, chatId, (row) => {
+      if (row.payload.message.id === messageId) found = row;
+    });
+  }
+  if (!found) {
+    await tx.scan("message", (row) => {
+      if (row.payload.message.id !== messageId || !isLiveOwn(row, deviceId)) return void 0;
+      found = row;
+      return SCAN_STOP;
+    });
+  }
+  return found ? structuredClone(found) : void 0;
 }
 async function chatRecordById(tx, deviceId, id) {
   return (await liveRecords(tx, "chat", deviceId, (row) => row.payload.chat.id === id))[0];
@@ -4413,12 +4451,17 @@ async function importedUsageIds(tx, rows, destination) {
 }
 async function usageRowsByChat(tx, deviceId, clientIds) {
   const byChat2 = /* @__PURE__ */ new Map();
-  await scanLive(tx, "usage", deviceId, (row) => {
-    if (clientIds && !clientIds.has(row.payload.clientChatId)) return;
+  const keep2 = (row) => {
     const list2 = byChat2.get(row.payload.clientChatId) ?? [];
     list2.push(structuredClone(row.payload));
     byChat2.set(row.payload.clientChatId, list2);
-  });
+  };
+  if (clientIds) {
+    for (const clientId of clientIds) await scanChatUsage(tx, deviceId, clientId, keep2);
+  } else {
+    await scanLive(tx, "usage", deviceId, keep2);
+  }
+  for (const list2 of byChat2.values()) list2.sort((a, b) => a.at.localeCompare(b.at));
   return byChat2;
 }
 
@@ -4624,15 +4667,7 @@ function createLocalBrainPersistence(options) {
     ...options.bindChat ? { bindChat: options.bindChat } : {},
     getMessages: (chatId, limit) => options.store.read((tx) => chatMessagesInOrder(tx, options.deviceId, chatId, limit)),
     /** Several chats' messages in ONE store read (one journal refresh), each through the chat index. */
-    async getMessagesForChats(chatIds) {
-      return options.store.read(async (tx) => {
-        const out = /* @__PURE__ */ new Map();
-        for (const chatId of chatIds) {
-          if (!out.has(chatId)) out.set(chatId, await chatMessagesInOrder(tx, options.deviceId, chatId));
-        }
-        return out;
-      });
-    },
+    getMessagesForChats: (chatIds) => options.store.read((tx) => chatsMessagesInOrder(tx, options.deviceId, chatIds)),
     // Only a commit that touched THIS chat's message rows (or whose change is unknown) is
     // worth a reload: a step row in another chat, a usage row, a sync receipt is not.
     subscribeMessages: (chatId, onChanged) => options.store.subscribe((change) => {
@@ -4653,7 +4688,8 @@ function createLocalBrainPersistence(options) {
         let existing = 0;
         await scanChatMessages(tx, options.deviceId, chatId, (row) => {
           existing += 1;
-          known.set(row.payload.eventKey, row.payload.message);
+          const prior = known.get(row.payload.eventKey);
+          if (!prior || row.payload.message.seq >= prior.seq) known.set(row.payload.eventKey, row.payload.message);
         });
         const results = [];
         const added = [];
@@ -4703,7 +4739,7 @@ function createLocalBrainPersistence(options) {
     },
     async setMessageFeedback(messageId, feedback, context) {
       return options.store.transact(async (tx) => {
-        const row = (await liveRecords(tx, "message", options.deviceId, (candidate) => candidate.payload.message.id === messageId))[0];
+        const row = await messageRecordById(tx, options.deviceId, messageId, context?.chatId ?? void 0);
         if (!row) return {};
         const metadata = JSON.parse(row.payload.message.metadata ?? "{}");
         metadata.feedback = feedback;
@@ -4755,7 +4791,11 @@ function paidRouteOf(rows, book2) {
   return fallback ? { prompt: fallback.input, completion: fallback.output } : void 0;
 }
 async function usageRowsOf(tx, deviceId, clientChatId) {
-  return (await liveRecords(tx, "usage", deviceId, (row) => row.payload.clientChatId === clientChatId)).map((row) => row.payload).sort((a, b) => a.at.localeCompare(b.at));
+  const rows = [];
+  await scanChatUsage(tx, deviceId, clientChatId, (row) => {
+    rows.push(row.payload);
+  });
+  return structuredClone(rows).sort((a, b) => a.at.localeCompare(b.at));
 }
 
 // src/localChat/gateLedger.ts
@@ -5562,23 +5602,42 @@ async function bindChatHistoryForSync(store, deviceId, destination) {
     return found;
   });
   if (!anything) return 0;
-  return store.transact(async (tx) => {
-    const rebind = async (row) => {
-      const moved = { ...row, destination };
-      await tx.put(moved);
-      return moved;
-    };
-    const chats = await selectRecords(tx, "chat", unbound);
-    for (const chat of chats) await queueImport(tx, await rebind(chat));
-    for (const message of await selectRecords(tx, "message", unbound)) {
-      await queueImport(tx, await rebind(message), message.payload.chatClientId);
-    }
-    for (const usage of await selectRecords(tx, "usage", unbound)) {
-      const moved = await rebind(usage);
-      if (syncsToPlatform(usage.payload)) await queueImport(tx, moved, usage.payload.clientChatId);
-    }
-    return chats.filter((chat) => !chat.deletedAt).length;
+  const rebind = async (tx, row) => {
+    const moved = { ...row, destination };
+    await tx.put(moved);
+    return moved;
+  };
+  const chats = await bindInSlices(store, "chat", unbound, async (tx, chat) => {
+    await queueImport(tx, await rebind(tx, chat));
   });
+  await bindInSlices(store, "message", unbound, async (tx, message) => {
+    await queueImport(tx, await rebind(tx, message), message.payload.chatClientId);
+  });
+  await bindInSlices(store, "usage", unbound, async (tx, usage) => {
+    const moved = await rebind(tx, usage);
+    if (syncsToPlatform(usage.payload)) await queueImport(tx, moved, usage.payload.clientChatId);
+    else await dropPending(tx, moved);
+  });
+  return chats.filter((chat) => !chat.deletedAt).length;
+}
+var BIND_SLICE = 1e3;
+async function bindInSlices(store, type, select, bind) {
+  const bound = [];
+  for (; ; ) {
+    const slice = await store.transact(async (tx) => {
+      const rows = [];
+      await tx.scan(type, (row) => {
+        if (!select(row)) return;
+        rows.push(row);
+        if (rows.length >= BIND_SLICE) return SCAN_STOP;
+      });
+      const copies = structuredClone(rows);
+      for (const row of copies) await bind(tx, row);
+      return copies;
+    });
+    bound.push(...slice);
+    if (slice.length < BIND_SLICE) return bound;
+  }
 }
 
 // ../packages/run-policy/src/latencyGuard.ts
@@ -22417,7 +22476,7 @@ ${extraSystem}` : resolvedSystemPrompt;
       await persistence.setMessageFeedback(
         msg.id,
         rating === 1 ? "up" : rating === -1 ? "down" : null,
-        { toolName: context.toolName, ...localVerdict ? { localVerdict } : {} }
+        { toolName: context.toolName, chatId, ...localVerdict ? { localVerdict } : {} }
       );
     } catch {
     }

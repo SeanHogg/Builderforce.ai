@@ -9,6 +9,8 @@
 import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { layoutTask, type Layout3D, type LayoutOptions } from '../scene/layout3d';
 import { cmp, finiteImportance, round } from '../order';
+import { planeKeyOf } from '../placement';
+import { NONE_PARTITION } from '../scene/planeOrder';
 import type { ViewBox } from '../usePanZoom';
 
 export interface Bounds { minX: number; maxX: number; minY: number; maxY: number }
@@ -63,7 +65,7 @@ function project(nodes: readonly KNode[], l3: Layout3D): Layout2D {
     // Canonical order: the output never depends on the order the nodes arrived in.
     for (const n of [...nodes].sort((a, b) => cmp(a.ref, b.ref))) {
         if (!l3.positions.has(n.ref)) continue;
-        const key = n.partition ?? '';
+        const key = planeKeyOf(n, nodes) ?? NONE_PARTITION;
         (byPlane.get(key) ?? byPlane.set(key, []).get(key)!).push(n);
     }
     let minX = Infinity, maxX = -Infinity;

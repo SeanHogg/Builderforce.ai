@@ -74,14 +74,27 @@ export function inEntityScope(destination: EntityDestination, scope: EntityScope
 
 export function destinationKey(destination: EntityDestination): string {
   if (destination.kind === 'unbound') return 'unbound';
-  return [
+  const parts = [
     destination.platformInstance ?? '',
     destination.accountId ?? '',
     destination.tenantId ?? '',
     destination.projectId ?? '',
     destination.repository ?? '',
-  ].map(encodeURIComponent).join(':');
+  ];
+  // Every pending event names its destination, and a sync round keys tens of thousands of them:
+  // the five `encodeURIComponent`s are computed once per distinct destination, not per call.
+  const raw = parts.join('\u0000');
+  let key = DESTINATION_KEYS.get(raw);
+  if (key === undefined) {
+    key = parts.map(encodeURIComponent).join(':');
+    if (DESTINATION_KEYS.size >= 1024) DESTINATION_KEYS.clear();
+    DESTINATION_KEYS.set(raw, key);
+  }
+  return key;
 }
+
+/** `destinationKey` by its raw parts (bounded: a store names a handful of destinations). */
+const DESTINATION_KEYS = new Map<string, string>();
 
 export interface LocalRecord<T = unknown> {
   id: ClientEntityId;
@@ -133,6 +146,16 @@ export interface JournalEvent<T = unknown> {
   destination: EntityDestination;
   payload: T;
   payloadHash: string;
+  /**
+   * `'record'`: a bound marker — `payload` is null and is read from the record when the event is
+   * sent (`recordPayloadMarker.ts`). Absent: `payload` is the event's own.
+   */
+  payloadFrom?: 'record';
+  /**
+   * When a record-payload marker was filled for its first push (ISO). The payload then IS what the
+   * server hashed: it is resent as is and never turned back into a marker.
+   */
+  materializedAt?: string;
   deadLetter?: { reason: string; at: string };
   /** How many times the server held this event (not dependency-met, conflict, a non-permanent refusal). Absent = never. */
   holdAttempts?: number;

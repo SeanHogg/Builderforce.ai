@@ -9,6 +9,7 @@ import type { LensDef } from './lenses';
 import { devFreeze, weakMemo } from './memo';
 import { linkEdge } from './scene/incident';
 import { cmp } from './order';
+import { comparePlacementKeys, planeKeyOf } from './placement';
 
 /** Nodes at a phone's width (PRD 38 §4.6: "the view opens focused, top 60"). */
 export const PHONE_FOCUS_NODES = 60;
@@ -140,9 +141,13 @@ function computePartitionMatrix(graph: Pick<KnowledgeGraph, 'nodes' | 'edges'>):
     const names: string[] = [];
     const part = new Map<string, number>();
     for (const n of graph.nodes) {
-        if (n.partition === undefined) { part.set(n.ref, -1); continue; }
-        let slot = slots.get(n.partition);
-        if (slot === undefined) { slot = names.length; slots.set(n.partition, slot); names.push(n.partition); }
+        // SEMANTIC: the matrix is the layer rule's reading. Memory sets a verdict only when both ends carry a pack
+        // partition, so rows and columns are pack partitions only — never communities (which would also blow the
+        // width² table up on a repo with thousands of them).
+        const key = n.partition;
+        if (key === undefined) { part.set(n.ref, -1); continue; }
+        let slot = slots.get(key);
+        if (slot === undefined) { slot = names.length; slots.set(key, slot); names.push(key); }
         part.set(n.ref, slot);
     }
     const width = names.length;
@@ -166,7 +171,7 @@ function computePartitionMatrix(graph: Pick<KnowledgeGraph, 'nodes' | 'edges'>):
     }
     const cells = new Map<string, PartitionCell>();
     touched.forEach((at, i) => cells.set(`${names[Math.floor(at / width)]}\u0000${names[at % width]}`, cellsAt[i]!));
-    return { partitions: names.filter((_, i) => seen[i]).sort(), cells };
+    return { partitions: names.filter((_, i) => seen[i]).sort(comparePlacementKeys), cells };
 }
 
 const matrixMemo = weakMemo((g: Pick<KnowledgeGraph, 'nodes' | 'edges'>) => devFreeze(computePartitionMatrix(g)), (g) => g.edges, (g) => g.nodes);
@@ -203,11 +208,18 @@ export function compareGraphs(before: KnowledgeGraph, after: KnowledgeGraph): Gr
     };
 }
 
-/** Nodes grouped by partition (the list fallback), partitions sorted, nodes by importance. */
+/**
+ * Nodes grouped by placement (the list fallback, the Partition picker): `partition` is the placement key
+ * ({@link planeKeyOf}: the partition, else `community:<id>` — the smaller communities folded into one —, else undefined), in {@link comparePlacementKeys}
+ * order; nodes by importance.
+ */
 export function byPartition(nodes: readonly KNode[]): Array<{ partition: string | undefined; nodes: KNode[] }> {
     const groups = new Map<string | undefined, KNode[]>();
-    for (const n of nodes) (groups.get(n.partition) ?? groups.set(n.partition, []).get(n.partition)!).push(n);
+    for (const n of nodes) {
+        const key = planeKeyOf(n, nodes);
+        (groups.get(key) ?? groups.set(key, []).get(key)!).push(n);
+    }
     return [...groups.entries()]
-        .sort(([a], [b]) => (a === undefined ? 1 : b === undefined ? -1 : cmp(a, b)))
+        .sort(([a], [b]) => comparePlacementKeys(a, b))
         .map(([partition, list]) => ({ partition, nodes: list.sort(byImportance) }));
 }

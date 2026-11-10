@@ -26,6 +26,7 @@ import {
 import { isDefaultLayers, placeLayers, placedLayerRegistry, type LayerPlacement } from './codeLayers.js';
 import { CODE_BADGES, CODE_PACK_ID, ROOT_OUTPUT_HASH_PREFIX, ROOT_SIGNALS_REF } from './codeNodes.js';
 import { sourcePathOf } from './rootId.js';
+import { repointRollupEdges } from './codeRollup.js';
 
 const isCodeFile = (n: KNode): boolean => n.pack === CODE_PACK_ID && n.kind === 'file';
 
@@ -81,17 +82,26 @@ function placeExtracted(rootId: string, extracted: readonly Extracted[], placed:
     });
 }
 
+/** The root-relative paths of the code files the Extracted name. */
+function codePaths(rootId: string, extracted: readonly Extracted[]): Set<string> {
+    const paths = new Set<string>();
+    for (const e of extracted) for (const n of e.nodes) { const p = isCodeFile(n) ? sourcePathOf(n.ref, rootId) : undefined; if (p) paths.add(p); }
+    return paths;
+}
+
 export function buildCodeGraph(input: BuildGraphInput, opts?: BuildGraphOptions): KnowledgeGraph {
-    const code = input.packs.find((p) => p.id === CODE_PACK_ID);
-    if (!code) return buildGraph(input, opts);
-    const extracted = withoutOrphanSignals(input.extracted);
-    if (!isDefaultLayers(code.partitions)) return buildGraph({ ...input, extracted }, opts);
+    const pack = input.packs.find((p) => p.id === CODE_PACK_ID);
+    if (!pack) return buildGraph(input, opts);
+    // The symbol-edge rollup names its target by the import as written; only here is the set of files known (codeRollup.ts).
+    const signalsFree = withoutOrphanSignals(input.extracted);
+    const extracted = repointRollupEdges(input.rootId, signalsFree, codePaths(input.rootId, signalsFree));
+    if (!isDefaultLayers(pack.partitions)) return buildGraph({ ...input, extracted }, opts);
     const placed = placeLayers(placementInput(input.rootId, extracted));
     return buildGraph(
         {
             ...input,
             extracted: placeExtracted(input.rootId, extracted, placed),
-            packs: input.packs.map((p) => (p === code ? { ...p, partitions: placedLayerRegistry(code.partitions!) } : p)),
+            packs: input.packs.map((p) => (p === pack ? { ...p, partitions: placedLayerRegistry(pack.partitions!) } : p)),
         },
         opts,
     );

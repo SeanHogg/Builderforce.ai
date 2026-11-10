@@ -1,24 +1,18 @@
-/** The top-level words of the view (title, states, lenses, findings, review, requests): the interface and its English defaults. */
+/**
+ * The top-level words of the view (title, states, lenses, findings, requests): the interface and its
+ * English defaults. The first read's words are `core.load.ts`, the review run's `core.review.ts`.
+ */
 
 import type { LensId, ReviewTarget } from '../types';
+import { LOAD_DEFAULTS, type LoadLabels } from './core.load';
+import { REVIEW_RUN_DEFAULTS, type ReviewRunLabels } from './core.review';
+import { COMMUNITY_FALLBACK_DEFAULT } from '../placement';
 
 export type FindingKindLabels = Record<string, string>;
 
-export interface CoreLabels {
+export interface CoreLabels extends LoadLabels, ReviewRunLabels {
     title: string;
     regionLabel: string;
-    loading: string;
-    /** The loading line once it has run a second: `{elapsed}` is a span ("1 min 12 s"). */
-    loadingElapsed: string;
-    /** The host's step the load is in now: `{phase}` is one of `loadPhases`. */
-    loadingPhase: string;
-    /** Under a load that has run past ten seconds, beside Copy diagnostics. */
-    loadingSlow: string;
-    loadPhases: Record<'partitions' | 'index' | 'nearDuplicates' | 'build' | 'pack' | 'server' | 'notHere', string>;
-    /** Shown in the scene's corner while a fresh read replaces the graph on screen. */
-    refreshing: string;
-    /** The fresh read failed; the last graph stays drawn and this offers Retry. */
-    refreshFailed: string;
     errorTitle: string;
     errorBody: string;
     retry: string;
@@ -97,6 +91,10 @@ export interface CoreLabels {
     couplingTitle: string;
     chartFindings: string;
     partitionNone: string;
+    /** A community the reference graph grouped files into, when it has no name of its own: `{n}` is its number (PRD 38 P1). */
+    communityFallback: string;
+    /** The one plane or group the smaller communities share on the map (PRD 38 P1). */
+    communityOther: string;
     /** An edge kind in a trace step (`references` → "references"), keyed by the camelCased kind. Unknown kinds show raw. */
     edgeKinds: Record<string, string>;
     /** A pack's name (`code`, `docs`). Unknown packs show raw. */
@@ -128,6 +126,8 @@ export interface CoreLabels {
     nodeKind: string;
     nodePack: string;
     nodePartition: string;
+    /** The Partition row of a file placed by its community: `{name}` the community, `{percent}` the share of its references that stay inside it. */
+    nodeCommunity: string;
     nodeOrigin: string;
     /** An asset file's rows: its media type and size. */
     nodeMediaType: string;
@@ -182,49 +182,15 @@ export interface CoreLabels {
     compareIncomparable: string;
     /** The Before/After control's group name (shown when the host keeps a baseline). */
     revisionLabel: string;
-    // Review
-    reviewPlanCost: string;
-    /** Shown in the confirm chip while the host cannot price the judgement pass. */
-    reviewPlanCostPending: string;
-    /** Shown in the confirm chip when the judgement pass runs on the person's own local model. */
-    reviewPlanCostLocal: string;
-    reviewPlanning: string;
-    reviewStop: string;
-    /** Shown from Stop until the host settles. */
-    reviewCancelled: string;
-    reviewDoneTitle: string;
-    reviewDoneBody: string;
-    reviewContinue: string;
-    reviewAborted: string;
-    reviewFailed: string;
-    /** The failure's own reason, under the sentence. `{message}`. */
-    reviewFailedReason: string;
-    /** Copies the failure's diagnostics (phase, message, detail, host, time) as plain text. */
-    reviewCopyDetails: string;
     /** The always-available capture: copies the view + run state for a bug/improvement report. */
     copyDiagnostics: string;
-    reviewProgress: string;
-    phases: Record<'plan' | 'extract' | 'resolve' | 'mapped' | 'judge' | 'compare' | 'write' | 'analyse' | 'index' | 'done', string>;
 }
 
 export const CORE_DEFAULTS: CoreLabels = {
+...LOAD_DEFAULTS,
+...REVIEW_RUN_DEFAULTS,
 title: 'Knowledge',
 regionLabel: 'Knowledge graph',
-loading: 'Loading the knowledge graph…',
-loadingElapsed: 'Loading the knowledge graph… {elapsed}',
-loadingPhase: 'Now: {phase}',
-loadingSlow: 'This is taking longer than usual. Copy the diagnostics to report it.',
-loadPhases: {
-    partitions: 'reading the project layout',
-    index: 'opening the search index',
-    nearDuplicates: 'finding near-duplicates',
-    build: 'building the graph',
-    pack: 'reading the knowledge pack',
-    server: 'fetching the server’s graph',
-    notHere: 'checking for a review on this machine',
-},
-refreshing: 'Updating…',
-refreshFailed: 'Couldn’t update — showing the last graph. Retry',
 errorTitle: 'The knowledge graph could not load',
 errorBody: 'Something went wrong reading this folder’s knowledge. Try again.',
 retry: 'Try again',
@@ -317,10 +283,13 @@ hotspotsOut: 'Depends on the most',
 couplingTitle: 'Strongest coupling between partitions',
 chartFindings: 'Findings by kind',
 partitionNone: 'No partition',
+communityFallback: COMMUNITY_FALLBACK_DEFAULT,
+communityOther: 'Other communities',
 edgeKinds: {
     references: 'references', contains: 'contains', links: 'links to', about: 'is about', mentions: 'mentions',
     supersedes: 'supersedes', contradicts: 'contradicts', agrees: 'agrees with', duplicate: 'duplicates',
     nearDuplicate: 'nearly duplicates', coChanged: 'changes with', imports: 'imports', calls: 'calls',
+    extends: 'extends', implements: 'implements', composes: 'is composed of', uses: 'uses',
 },
 packs: { code: 'Code', docs: 'Documents' },
 findingsTitle: 'Findings',
@@ -366,6 +335,7 @@ nodePanelTitle: 'Details',
 nodeKind: 'Kind',
 nodePack: 'Pack',
 nodePartition: 'Partition',
+nodeCommunity: '{name} · {percent}% of references inside',
 nodeOrigin: 'Origin',
 nodeMediaType: 'Media type',
 nodeSize: 'Size',
@@ -414,22 +384,5 @@ compareAdded: 'Appeared',
 compareResolved: 'Resolved',
 compareIncomparable: 'Before and after were measured differently, so a missing finding is not counted as resolved.',
 revisionLabel: 'Revision',
-reviewPlanCost: '≈ {cost}',
-reviewPlanCostPending: 'Cost is shown after routing.',
-reviewPlanCostLocal: 'Runs on your local model — no cost.',
-reviewPlanning: 'Walking the folder…',
-reviewStop: 'Stop',
-reviewCancelled: 'Review cancelled. Nothing was written.',
-reviewDoneTitle: 'Review finished',
-reviewDoneBody: '{extracted} files read · {judged} sections judged · {facts} facts written',
-reviewContinue: 'Continue',
-reviewAborted: 'Review stopped. What was written stays.',
-reviewFailed: 'The review failed. Nothing more was written.',
-reviewFailedReason: 'Reason: {message}',
-reviewCopyDetails: 'Copy details',
 copyDiagnostics: 'Copy diagnostics',
-reviewProgress: '{phase} · {done} of {total}',
-phases: {
-    plan: 'Planning', extract: 'Reading', resolve: 'Resolving', mapped: 'Map complete', judge: 'Judging', compare: 'Comparing', write: 'Writing', analyse: 'Mapping the code', index: 'Indexing', done: 'Done',
-},
 };

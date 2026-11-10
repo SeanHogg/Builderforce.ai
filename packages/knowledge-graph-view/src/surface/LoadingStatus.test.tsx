@@ -15,11 +15,22 @@ describe('LoadingStatus', () => {
         expect(screen.getByTestId('kg-loading-phase').textContent).toBe('Now: building the graph');
         expect(screen.queryByText(L.copyDiagnostics)).toBeNull();
         act(() => { vi.advanceTimersByTime(3_000); });
-        expect(screen.getByRole('status').textContent).toBe('Loading the knowledge graph… 3 s');
+        expect(screen.getByTestId('kg-loading-elapsed').textContent).toBe('Loading the knowledge graph… 3 s');
         act(() => { vi.advanceTimersByTime(69_000); });
-        expect(screen.getByRole('status').textContent).toBe('Loading the knowledge graph… 1 min 12 s');
+        expect(screen.getByTestId('kg-loading-elapsed').textContent).toBe('Loading the knowledge graph… 1 min 12 s');
         expect(screen.getByText(L.copyDiagnostics)).toBeTruthy();
         expect(screen.getByText(L.loadingSlow)).toBeTruthy();
+    });
+
+    it('keeps the seconds counter out of every live region: the status says only the static words', () => {
+        render(<LoadingStatus labels={L} progress={{ phase: 'build' }} />);
+        act(() => { vi.advanceTimersByTime(5_000); });
+        const status = screen.getByRole('status');
+        expect(status.textContent).toBe(L.loading);
+        const counter = screen.getByTestId('kg-loading-elapsed');
+        expect(counter.getAttribute('aria-hidden')).toBe('true');
+        expect(counter.closest('[role="status"], [aria-live]')).toBeNull();
+        expect(screen.getByTestId('kg-loading-phase').closest('[aria-live]')).not.toBeNull();
     });
 
     it('shows an unknown phase by its id, and no phase line without one', () => {

@@ -5,7 +5,8 @@ import {
 } from './holdLimits.js';
 import { createPlatformPolicy } from './policy.js';
 import type { JournalEvent, SyncReceipt } from './records.js';
-import { countPending, createMemoryLocalFirstStore, type LocalFirstStore } from './store.js';
+import { createMemoryLocalFirstStore, type LocalFirstStore } from './store.js';
+import { countPending } from './pendingQueries.js';
 import { isRequeueableReason, listJournalDeadLetters, requeueJournalDeadLetter } from './requeueJournalDeadLetter.js';
 import { blockedEventIds } from './dependencyGraph.js';
 import { createSyncCoordinator, wireDependencies, type SyncPushBatch } from './sync.js';

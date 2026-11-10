@@ -7,9 +7,9 @@ import { layoutTransit } from '../../surface/transitLayout';
 import { modelOf } from '../stationLookup';
 import { once, type Handler } from './handler';
 
-export const surface: Handler<'surface'> = (store, { graph, changed, repoConfigName }) => once(() => {
+export const surface: Handler<'surface'> = (store, { graph, changed, repoConfigName, communityFallback }) => once(() => {
     const g = store.graph(graph);
-    const stations = buildStations(g, { changed: new Set(changed), ...(repoConfigName ? { repoConfigName } : {}) });
+    const stations = buildStations(g, { changed: new Set(changed), ...(repoConfigName ? { repoConfigName } : {}), ...(communityFallback ? { communityFallback } : {}) });
     return { stations, lines: buildLines(g, stations) };
 });
 

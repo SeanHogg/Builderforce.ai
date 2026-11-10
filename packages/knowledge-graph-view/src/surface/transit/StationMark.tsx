@@ -1,7 +1,7 @@
 /**
  * One station: a real button (a 40px target) holding the mark and its label. The mark is a
- * size-scaled silhouette of the station's mark type (`shapes.ts`; a plain disc, or a square for a
- * document, when no type is known) on a back-disc in the background colour, with an
+ * size-scaled silhouette of the station's mark type (`shapes.ts`; a plain disc when no type is
+ * known: the map reads a type for every station of a graph) on a back-disc in the background colour, with an
  * interchange backing, the coverage arc, a pulse ring, a dashed violation outline and the
  * selection ring; the label sits on the side the placer chose, with the 10px note under it.
  */
@@ -30,7 +30,7 @@ export interface StationMarkProps {
     reducedMotion: boolean;
     /** The station's complexity level (1-5); the tower reads it for its height while the size channel has no reading. */
     complexity?: number | undefined;
-    /** The station's mark type silhouette (`stationTypes` → `typeShape`); absent ⇒ the plain disc (a square for a document). */
+    /** The station's mark type silhouette (`stationTypes` → `typeShape`; a document station's is the doc type's); absent ⇒ the plain disc. */
     shape?: NodeShape | undefined;
     onActivate(): void;
 }
@@ -44,8 +44,6 @@ export function StationMark(p: StationMarkProps) {
     const circ = 2 * Math.PI * ring;
     const mark = p.shape
         ? <ShapePath shape={p.shape} x={at.x} y={at.y} r={r} fill={tone(st.tone)} strokeWidth={2} />
-        : p.doc
-        ? <rect x={at.x - r} y={at.y - r} width={r * 2} height={r * 2} rx={2} fill={tone(st.tone)} stroke={cssVar('bg')} strokeWidth={2} />
         : <circle cx={at.x} cy={at.y} r={r} fill={tone(st.tone)} stroke={cssVar('bg')} strokeWidth={2} />;
     return (
         <g

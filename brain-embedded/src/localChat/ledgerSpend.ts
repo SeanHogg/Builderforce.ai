@@ -5,11 +5,11 @@
  * device and the api's ledger run the same arithmetic.
  */
 
-import { isImported, type EntityDestination, type LocalFirstTransaction } from '@builderforce/local-first';
+import { isImported, type EntityDestination, type LocalFirstTransaction, type LocalRecord } from '@builderforce/local-first';
 import { pricedId } from '@builderforce/local-inference';
 import { snapshotPriceBook, type PriceBook } from '@builderforce/model-catalog';
 import { foldSpendSavings, type SpendSavingsSummary, type UsageSlice } from '@builderforce/spend-contract';
-import { scanLive } from './records';
+import { scanChatUsage, scanLive } from './records';
 import { callCostOrUnknown, isOwnKeySpend } from './callCost';
 import type { RunUsageValue } from './usageLedger';
 
@@ -97,16 +97,22 @@ export async function importedUsageIds(
 
 /**
  * The ledger rows of the chats `clientIds` names (every chat's when omitted), by chat client
- * id — one read for a whole page of the chat list. Rows of other chats are skipped uncopied.
+ * id, each chat's oldest first — one read for a whole page of the chat list. Named chats are
+ * read through the chat's usage index (`USAGE_BY_CHAT`): other chats' rows are never visited.
  */
 export async function usageRowsByChat(tx: LocalFirstTransaction, deviceId: string, clientIds?: ReadonlySet<string>): Promise<Map<string, RunUsageValue[]>> {
   const byChat = new Map<string, RunUsageValue[]>();
-  // Scanned, and only each kept row's payload is copied (the caller owns what it gets back).
-  await scanLive<RunUsageValue>(tx, 'usage', deviceId, (row) => {
-    if (clientIds && !clientIds.has(row.payload.clientChatId)) return;
+  // Only each kept row's payload is copied (the caller owns what it gets back).
+  const keep = (row: Readonly<LocalRecord<RunUsageValue>>): void => {
     const list = byChat.get(row.payload.clientChatId) ?? [];
     list.push(structuredClone(row.payload));
     byChat.set(row.payload.clientChatId, list);
-  });
+  };
+  if (clientIds) {
+    for (const clientId of clientIds) await scanChatUsage(tx, deviceId, clientId, keep);
+  } else {
+    await scanLive<RunUsageValue>(tx, 'usage', deviceId, keep);
+  }
+  for (const list of byChat.values()) list.sort((a, b) => a.at.localeCompare(b.at));
   return byChat;
 }

@@ -90,7 +90,9 @@ function syncLines(sync: SyncStatus | null): string[] {
 export function surfaceDiagnosticSections(i: SurfaceDiagnosticsInput): DiagnosticSection[] {
     const { stations: model, lines: lm, coverage: c } = i;
     const coverage: string[] = [...mapSourceLines(c, model.stations.length, i.mapFrom), ...coverageLines(c), ...systemDiagnosticLines(i.graph)];
-    if (c) coverage.push(`partitions: files without a partition=${c.noPartition}/${c.files} (${pct(c.noPartition, c.files)})`);
+    if (c) coverage.push(`partitions: files without a placement=${c.noPartition}/${c.files} (${pct(c.noPartition, c.files)}) · placed by community=${c.byCommunity}`);
+    const { modularity, communityMethod } = i.graph.stats;
+    if (modularity !== undefined) coverage.push(`communities: modularity Q=${modularity}${communityMethod ? ` (${communityMethod})` : ''}`);
 
     const lines: string[] = [];
     const tiers = buildTiers(model.stations);

@@ -13,9 +13,9 @@ export const mindMap: Codec<'mindMap'> = {
 };
 
 export const surface: Codec<'surface'> = {
-    encode: ({ graph, changed, repoConfigName }, residency) => {
+    encode: ({ graph, changed, repoConfigName, communityFallback }, residency) => {
         const id = residency.graphId(graph);
-        return { graph: id, req: { graph: id, changed: [...changed], ...(repoConfigName ? { repoConfigName } : {}) } };
+        return { graph: id, req: { graph: id, changed: [...changed], ...(repoConfigName ? { repoConfigName } : {}), ...(communityFallback ? { communityFallback } : {}) } };
     },
     decode: (raw) => raw,
 };

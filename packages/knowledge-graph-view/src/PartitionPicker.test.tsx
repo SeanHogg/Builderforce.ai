@@ -25,6 +25,20 @@ describe('PartitionPicker', () => {
         expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['domain2', 'entry1', `${LABELS.partitionNone}1`]);
     });
 
+    it('lists community-placed files under their community label after the partitions, a lone one under "other communities" (PRD 38 P1)', () => {
+        const c = (path: string, id: number) => ({ ...f(path), badges: { communityId: id, communityConfidence: 0.6 } }) as KNode;
+        const g = { ...graph, nodes: [...graph.nodes, c('lib/e.ts', 2), c('lib/g.ts', 2), c('solo/s.ts', 7)] } as KnowledgeGraph;
+        const onShow = vi.fn();
+        render(<PartitionPicker graph={g} value="community:7" labels={LABELS} onShow={onShow} />);
+        fireEvent.click(screen.getByRole('button', { name: /solo/ }));
+        expect(screen.getAllByRole('menuitem').map((i) => i.textContent))
+            .toEqual(['domain2', 'entry1', 'lib2', `${LABELS.communityOther}1`, `${LABELS.partitionNone}1`]);
+        // The folded community selects the shared item.
+        expect(screen.getByRole('menuitem', { name: new RegExp(LABELS.communityOther) }).getAttribute('data-selected')).toBe('true');
+        fireEvent.click(screen.getByRole('menuitem', { name: /lib/ }));
+        expect(onShow).toHaveBeenCalledWith(['src:r::lib/e.ts', 'src:r::lib/g.ts']);
+    });
+
     it('closes on an outside press and on Escape', () => {
         open();
         fireEvent.pointerDown(screen.getByText('outside'));

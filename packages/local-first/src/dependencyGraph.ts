@@ -27,7 +27,11 @@
  */
 
 import { destinationKey, type JournalEvent, type LocalEntityType } from './records.js';
-import type { LocalFirstTransaction } from './storeContract.js';
+import type { LocalFirstTransaction, PendingLookup } from './storeContract.js';
+import { RECORD_PAYLOAD_FENCE_KEY, isRecordPayloadFence } from './recordPayloadMarker.js';
+
+/** A dead letter that can block something: the record-payload fence only fences older builds. */
+const blocking = (event: JournalEvent): boolean => !!event.deadLetter && !isRecordPayloadFence(event);
 
 /**
  * The entity types a sync pass moves out of the unbound partition: the chat history
@@ -45,7 +49,8 @@ const KNOWN_TYPES: ReadonlySet<string> = new Set<LocalEntityType>([
   'usage', 'run-outcome', 'chat-ticket-link', 'run-delta',
 ]);
 
-const bySequence = (a: JournalEvent, b: JournalEvent): number => a.localSequence - b.localSequence;
+/** Journal order: oldest write first. */
+export const bySequence = (a: Pick<JournalEvent, 'localSequence'>, b: Pick<JournalEvent, 'localSequence'>): number => a.localSequence - b.localSequence;
 const entityKey = (type: string, id: string): string => `${type}\u0000${id}`;
 /** Key of "this destination holds this entity" in the `mapped` set. */
 const mappedKey = (destination: JournalEvent['destination'], type: string, id: string): string =>
@@ -54,10 +59,16 @@ const mappedKey = (destination: JournalEvent['destination'], type: string, id: s
 const AWAITING_BIND = '\u0002';
 const awaitingBindKey = (type: string, id: string): string => `${AWAITING_BIND}${type}\u0000${id}`;
 
+/**
+ * Lookups over EVERY journal event (live and dead-lettered). Built from an event list
+ * (`dependencyIndex`) or backed by the store's own indexes (`storeDependencyIndex`), which costs
+ * nothing per round — what the sync coordinator uses, so a round over a queue of tens of thousands
+ * of events does not rebuild an index of all of them.
+ */
 export interface DependencyIndex {
-  readonly byId: ReadonlyMap<string, JournalEvent>;
-  readonly byKey: ReadonlyMap<string, readonly JournalEvent[]>;
-  readonly byEntity: ReadonlyMap<string, readonly JournalEvent[]>;
+  byId(eventId: string): JournalEvent | undefined;
+  byKey(idempotencyKey: string): readonly JournalEvent[];
+  byEntity(entityType: string, clientEntityId: string): readonly JournalEvent[];
   /**
    * The store facts `loadMappedEntities` read: entities the server already holds, per destination
    * (`mappedKey`), and entities whose record awaits a sync-pass bind (`awaitingBindKey`).
@@ -88,12 +99,27 @@ export function dependencyIndex(all: readonly JournalEvent[], mapped: ReadonlySe
     list.push(event);
     byEntity.set(key, list);
   }
-  return { byId, byKey, byEntity, mapped };
+  return {
+    byId: (eventId) => byId.get(eventId),
+    byKey: (key) => byKey.get(key) ?? [],
+    byEntity: (type, id) => byEntity.get(entityKey(type, id)) ?? [],
+    mapped,
+  };
+}
+
+/** The same lookups over the store's own indexes (`LocalFirstTransaction.pendingLookup`): no build. */
+export function storeDependencyIndex(lookup: PendingLookup, mapped: ReadonlySet<string>): DependencyIndex {
+  return {
+    byId: (eventId) => lookup.byId(eventId),
+    byKey: (key) => lookup.byKey(key),
+    byEntity: (type, id) => lookup.byEntity(id).filter((event) => event.entityType === type),
+    mapped,
+  };
 }
 
 /** The entity a dependency names, when it names one. */
 function dependencyEntity(dependency: string, index: DependencyIndex): { type: string; id: string } | undefined {
-  const referenced = index.byId.get(dependency);
+  const referenced = index.byId(dependency);
   if (referenced) return { type: referenced.entityType, id: referenced.clientEntityId };
   const parts = dependency.split(':');
   const [type, id] = parts;
@@ -105,11 +131,14 @@ const isCreating = (event: JournalEvent): boolean => event.operation === 'import
 
 /** What a dependency of `dependent` means RIGHT NOW (see the module comment). */
 export function resolveDependency(dependency: string, index: DependencyIndex, dependent: JournalEvent): ResolvedDependency {
+  // The record-payload fence holds OLDER builds off a marker; this build fills the marker from
+  // its record, so the fence is no dependency here (`recordPayloadMarker.ts`).
+  if (dependency === RECORD_PAYLOAD_FENCE_KEY) return { kind: 'satisfied' };
   const entity = dependencyEntity(dependency, index);
   if (entity && index.mapped.has(mappedKey(dependent.destination, entity.type, entity.id))) return { kind: 'satisfied' };
   const home = destinationKey(dependent.destination);
-  const pool = new Set<JournalEvent>(index.byKey.get(dependency) ?? []);
-  const referenced = index.byId.get(dependency);
+  const pool = new Set<JournalEvent>(index.byKey(dependency));
+  const referenced = index.byId(dependency);
   if (referenced) {
     pool.add(referenced);
     // A dependency named by WIRE ID follows its logical write: a requeued dead letter
@@ -117,11 +146,11 @@ export function resolveDependency(dependency: string, index: DependencyIndex, de
     // so an UPDATE/DELETE dependency (not a creating write, which the entity pass below finds) is
     // satisfied by its live successor instead of staying blocked behind the dead letter.
     if (referenced.idempotencyKey !== undefined) {
-      for (const successor of index.byKey.get(referenced.idempotencyKey) ?? []) pool.add(successor);
+      for (const successor of index.byKey(referenced.idempotencyKey)) pool.add(successor);
     }
   }
   if (entity) {
-    for (const event of index.byEntity.get(entityKey(entity.type, entity.id)) ?? []) {
+    for (const event of index.byEntity(entity.type, entity.id)) {
       if (isCreating(event)) pool.add(event);
     }
   }
@@ -142,33 +171,46 @@ export function resolveDependency(dependency: string, index: DependencyIndex, de
  * result to `dependencyIndex`.
  */
 export async function loadMappedEntities(tx: LocalFirstTransaction, all: readonly JournalEvent[]): Promise<Set<string>> {
-  const index = dependencyIndex(all);
-  const mapped = new Set<string>();
-  const seen = new Set<string>();
-  const checkedBind = new Set<string>();
-  for (const event of all) {
-    for (const dependency of event.dependsOn) {
-      const entity = dependencyEntity(dependency, index);
-      if (!entity) continue;
-      const key = mappedKey(event.destination, entity.type, entity.id);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const mapping = await tx.mapping(entity.type as LocalEntityType, entity.id, event.destination);
-      if (mapping && mapping.serverVersion > 0) {
-        mapped.add(key);
-        continue;
-      }
-      const bindKey = awaitingBindKey(entity.type, entity.id);
-      if (event.destination.kind !== 'bound' || checkedBind.has(bindKey)) continue;
-      checkedBind.add(bindKey);
-      if (!SYNC_PASS_BIND_TYPES.has(entity.type as LocalEntityType)) continue;
-      const record = await tx.get(entity.type as LocalEntityType, entity.id);
-      if (record && record.destination.kind === 'unbound' && !record.deletedAt && record.provenance?.source !== 'imported') {
-        mapped.add(bindKey);
+  const facts = new MappedFacts();
+  await facts.load(tx, all, dependencyIndex(all));
+  return facts.mapped;
+}
+
+/**
+ * The store facts of `loadMappedEntities`, loaded INCREMENTALLY: `load` reads the facts for the
+ * dependencies of the events it is handed and remembers what it has read, so a caller that
+ * walks events one batch at a time (the sync coordinator) reads facts only for the events it
+ * actually considers. `mapped` is the set `dependencyIndex` / `storeDependencyIndex` take.
+ */
+export class MappedFacts {
+  readonly mapped = new Set<string>();
+  private readonly seen = new Set<string>();
+  private readonly checkedBind = new Set<string>();
+
+  async load(tx: LocalFirstTransaction, events: Iterable<JournalEvent>, index: DependencyIndex): Promise<void> {
+    for (const event of events) {
+      for (const dependency of event.dependsOn) {
+        const entity = dependencyEntity(dependency, index);
+        if (!entity) continue;
+        const key = mappedKey(event.destination, entity.type, entity.id);
+        if (this.seen.has(key)) continue;
+        this.seen.add(key);
+        const mapping = await tx.mapping(entity.type as LocalEntityType, entity.id, event.destination);
+        if (mapping && mapping.serverVersion > 0) {
+          this.mapped.add(key);
+          continue;
+        }
+        const bindKey = awaitingBindKey(entity.type, entity.id);
+        if (event.destination.kind !== 'bound' || this.checkedBind.has(bindKey)) continue;
+        this.checkedBind.add(bindKey);
+        if (!SYNC_PASS_BIND_TYPES.has(entity.type as LocalEntityType)) continue;
+        const record = await tx.get(entity.type as LocalEntityType, entity.id);
+        if (record && record.destination.kind === 'unbound' && !record.deletedAt && record.provenance?.source !== 'imported') {
+          this.mapped.add(bindKey);
+        }
       }
     }
   }
-  return mapped;
 }
 
 /**
@@ -205,7 +247,7 @@ function stuckEventIds(
  * DEAD-LETTERED and no live creating write has replaced it. They are blocked, not dead-lettered.
  */
 export function blockedEventIds(all: readonly JournalEvent[], mapped: ReadonlySet<string> = new Set()): Set<string> {
-  if (!all.some((event) => event.deadLetter)) return new Set();
+  if (!all.some(blocking)) return new Set();
   return stuckEventIds(all, mapped, (resolved) => resolved.kind === 'blocked');
 }
 
@@ -215,7 +257,7 @@ export function blockedEventIds(all: readonly JournalEvent[], mapped: ReadonlySe
  * replacement of the dead letter) releases them with no state change of their own.
  */
 export function unsendableEventIds(all: readonly JournalEvent[], mapped: ReadonlySet<string> = new Set()): Set<string> {
-  const anyDead = all.some((event) => event.deadLetter);
+  const anyDead = all.some(blocking);
   const anyAwaiting = [...mapped].some((key) => key.startsWith(AWAITING_BIND));
   if (!anyDead && !anyAwaiting) return new Set();
   return stuckEventIds(all, mapped, (resolved) => resolved.kind === 'blocked' || resolved.kind === 'awaiting-bind');

@@ -37478,6 +37478,8 @@
     "couplingTitle": "Mayor acoplamiento entre particiones",
     "chartFindings": "Hallazgos por tipo",
     "partitionNone": "Sin partición",
+    "communityFallback": "Comunidad {n}",
+    "communityOther": "Otras comunidades",
     "edgeKinds": {
       "references": "hace referencia a",
       "contains": "contiene",
@@ -37491,7 +37493,11 @@
       "nearDuplicate": "casi duplica a",
       "coChanged": "cambia junto con",
       "imports": "importa",
-      "calls": "llama a"
+      "calls": "llama a",
+      "extends": "extiende",
+      "implements": "implementa",
+      "composes": "se compone de",
+      "uses": "usa"
     },
     "packs": {
       "code": "Código",
@@ -37559,6 +37565,7 @@
     "nodeKind": "Tipo",
     "nodePack": "Paquete",
     "nodePartition": "Partición",
+    "nodeCommunity": "{name} · {percent}% de referencias internas",
     "nodeOrigin": "Origen",
     "nodeMediaType": "Tipo de medio",
     "nodeSize": "Tamaño",
@@ -38216,7 +38223,8 @@
         "layingOut": "Distribuyendo…",
         "errorTitle": "Esta vista ha tenido un error",
         "errorRetry": "Reintentar",
-        "errorBack": "Volver"
+        "errorBack": "Volver",
+        "depth": "Profundidad"
       },
       "mind": {
         "moreFoldersOne": "+{count} carpeta",

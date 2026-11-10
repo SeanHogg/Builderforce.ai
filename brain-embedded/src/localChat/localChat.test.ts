@@ -5,7 +5,10 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { createMemoryLocalFirstStore, newLocalRecord, type EntityDestination } from '@builderforce/local-first';
-import { journalWrite } from '@builderforce/local-first';
+import { journalWrite, sendablePayload, type JournalEvent, type LocalFirstStore } from '@builderforce/local-first';
+
+/** What sync sends for `event` (a queued import is read from its record when it is sent). */
+const sent = (store: LocalFirstStore, event: JournalEvent): Promise<unknown> => store.read((tx) => sendablePayload(tx, event));
 import { priceBookFromPrices } from '@builderforce/model-catalog';
 import { combineSpendSavings, foldSpendSavings } from '@builderforce/spend-contract';
 import { createLocalBrainPersistence } from '../localFirstPersistence';
@@ -152,7 +155,7 @@ describe('sync on enable — the chat history goes to the account once', () => {
     expect(pending.map((e) => e.entityType).sort()).toEqual(['chat', 'message', 'message', 'usage']);
     // The chat's import carries its CURRENT state, not a replay of its edits.
     const chatImport = pending.find((e) => e.entityType === 'chat')!;
-    expect((chatImport.payload as { chat: { title: string } }).chat.title).toBe('Renamed offline');
+    expect((await sent(store, chatImport) as { chat: { title: string } }).chat.title).toBe('Renamed offline');
     // Every message and usage import waits on the chat's.
     for (const event of pending.filter((e) => e.entityType !== 'chat')) expect(event.dependsOn).toEqual([chatImport.idempotencyKey]);
   });
@@ -163,7 +166,7 @@ describe('sync on enable — the chat history goes to the account once', () => {
     await identity.bind(chat.id);
     await bindChatHistoryForSync(store, DEVICE, ACCOUNT);
     const chatImport = (await store.read((tx) => tx.pending())).find((e) => e.entityType === 'chat')!;
-    expect((chatImport.payload as { serverId?: number }).serverId).toBe(4242);
+    expect((await sent(store, chatImport) as { serverId?: number }).serverId).toBe(4242);
   });
 
   it('a chat bound after the sync pass queued it still imports naming its server chat', async () => {
@@ -175,7 +178,7 @@ describe('sync on enable — the chat history goes to the account once', () => {
     await identity.bind(chat.id);
     const chatImports = (await store.read((tx) => tx.pending())).filter((e) => e.entityType === 'chat');
     expect(chatImports).toHaveLength(1);
-    expect((chatImports[0]!.payload as { serverId?: number }).serverId).toBe(4242);
+    expect((await sent(store, chatImports[0]!) as { serverId?: number }).serverId).toBe(4242);
   });
 
   it('a second pass finds nothing and writes nothing', async () => {
@@ -252,6 +255,8 @@ describe('unbound journalWrite — no full-payload copy while unbound', () => {
     expect(importEvent?.operation).toBe('import');
     expect(importEvent?.destination).toEqual(ACCOUNT);
     // The authoritative send path rebuilt the payload from the record, not the marker.
-    expect((importEvent?.payload as { chat: { title: string } }).chat.title).toBe('the real payload, still on the record');
+    expect((await sent(store, importEvent!) as { chat: { title: string } }).chat.title).toBe('the real payload, still on the record');
+    // And the queued import holds no copy of it: it is read from the record when sent.
+    expect(importEvent?.payload).toBeNull();
   });
 });

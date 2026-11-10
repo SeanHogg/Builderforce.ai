@@ -18,7 +18,7 @@
  */
 
 import type { PinpointMatchResult, ReplicaState } from "@builderforce/agent-tools/knowledge";
-import type { Finding, KnowledgeGraph, ReviewPlan, ReviewFailure, ReviewProgress, ReviewReport, ReviewRun } from "@seanhogg/builderforce-memory/knowledge";
+import type { CallSite, Finding, KnowledgeGraph, ReviewPlan, ReviewFailure, ReviewProgress, ReviewReport, ReviewRun } from "@seanhogg/builderforce-memory/knowledge";
 
 export const KNOWLEDGE_CALL = "knowledge.call";
 export const KNOWLEDGE_EVENT = "knowledge.event";
@@ -167,7 +167,26 @@ export type KnowledgeStoredRun = Omit<ReviewRun, "outcome" | "failures"> & {
 export type KnowledgeRunSummary = Omit<KnowledgeStoredRun, "steps" | "lanes" | "failures"> & { failureCount: number };
 
 /** One definition, as the view's `SymbolRecord` (restated: the host cannot import that package). */
-export interface KnowledgeSymbolRecord { ref: string; name: string; kind: string; parent: string; line: number; exported: boolean }
+export interface KnowledgeSymbolRecord {
+  ref: string; name: string; kind: string; parent: string; line: number; exported: boolean;
+  /** The symbol-level edges that START at this definition (PRD 43 P0b); absent when it has none. */
+  relations?: KnowledgeSymbolRelation[];
+}
+
+/**
+ * One symbol-level edge (memory's `SYMBOL_EDGE_KINDS`: extends · implements · composes · uses · calls). `to` is, in order:
+ *   - the exact `ref` of a record in the same answer (`<file ref>#<Container.>name@<line>`);
+ *   - `<file ref>#<Container.>name` (no `@line`) for a definition in a file of the root this answer did not load — the view
+ *     matches it by file ref + qualified name once that file's records arrive;
+ *   - `src:<root>::node_modules/<package>#<name>` for a package, or the as-written path for a relative import the root does not
+ *     hold: no file, so the view draws it as a `missing` terminus.
+ * `sites` (calls only): every call site, `order` = its position among ALL calls in the caller's body.
+ */
+export interface KnowledgeSymbolRelation {
+  kind: string;
+  to: string;
+  sites?: CallSite[];
+}
 
 /** The view's `TryRequest` / `TryResponse`, restated for the host (it cannot import that package). */
 export interface KnowledgeTryRequest { method: string; url: string; headers?: Record<string, string>; body?: string }

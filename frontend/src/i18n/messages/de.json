@@ -37478,6 +37478,8 @@
     "couplingTitle": "Stärkste Kopplung zwischen Partitionen",
     "chartFindings": "Befunde nach Art",
     "partitionNone": "Keine Partition",
+    "communityFallback": "Cluster {n}",
+    "communityOther": "Weitere Cluster",
     "edgeKinds": {
       "references": "verweist auf",
       "contains": "enthält",
@@ -37491,7 +37493,11 @@
       "nearDuplicate": "dupliziert nahezu",
       "coChanged": "ändert sich mit",
       "imports": "importiert",
-      "calls": "ruft auf"
+      "calls": "ruft auf",
+      "extends": "erweitert",
+      "implements": "implementiert",
+      "composes": "besteht aus",
+      "uses": "verwendet"
     },
     "packs": {
       "code": "Code",
@@ -37559,6 +37565,7 @@
     "nodeKind": "Art",
     "nodePack": "Paket",
     "nodePartition": "Partition",
+    "nodeCommunity": "{name} · {percent} % der Verweise innerhalb",
     "nodeOrigin": "Herkunft",
     "nodeMediaType": "Medientyp",
     "nodeSize": "Größe",
@@ -38216,7 +38223,8 @@
         "layingOut": "Wird angeordnet…",
         "errorTitle": "In dieser Ansicht ist ein Fehler aufgetreten",
         "errorRetry": "Erneut versuchen",
-        "errorBack": "Zurück"
+        "errorBack": "Zurück",
+        "depth": "Tiefe"
       },
       "mind": {
         "moreFoldersOne": "+{count} Ordner",

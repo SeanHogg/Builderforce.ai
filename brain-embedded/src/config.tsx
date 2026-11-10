@@ -51,7 +51,8 @@ export interface BrainPersistenceAdapter {
   getMessages(chatId: number, limit?: number): Promise<BrainMessage[]>;
   /**
    * Several chats' messages in one read, by chat id (an unknown chat maps to `[]`), each
-   * as `getMessages` would return it. Optional: an adapter without it is read chat by chat.
+   * as `getMessages` would return it. The local store reads them all from ONE snapshot (no
+   * commit lands between two chats). Optional: an adapter without it is read chat by chat.
    */
   getMessagesForChats?(chatIds: readonly number[]): Promise<ReadonlyMap<number, BrainMessage[]>>;
   /**
@@ -87,6 +88,8 @@ export interface BrainPersistenceAdapter {
     feedback: 'up' | 'down' | null,
     context?: {
       toolName?: string | null;
+      /** The chat the message is in, when the caller knows it: a local store finds the row through that chat's index. */
+      chatId?: number | null;
       /** E5: set only when the press judges the chat's LATEST reply. A host whose model
        *  stream runs in another realm (the VS Code extension host) hands it to
        *  `submitLocalTurnVerdict` there; servers ignore it. */

@@ -4,9 +4,10 @@
  * coordinator (`sync.ts`) reads the store and hands the events in.
  */
 import type { JournalEvent } from './records.js';
-import { dependencyIndex, resolveDependency } from './dependencyGraph.js';
+import { dependencyIndex, resolveDependency, type DependencyIndex } from './dependencyGraph.js';
+import { isRecordPayloadMarker } from './recordPayloadMarker.js';
 
-const jsonBytes = (value: unknown): number => new TextEncoder().encode(JSON.stringify(value)).length;
+export const jsonBytes =(value: unknown): number => new TextEncoder().encode(JSON.stringify(value)).length;
 
 /**
  * Put `dependsOn` on the wire as event ids, resolved NOW. A dependency is a logical write's
@@ -23,17 +24,24 @@ export function wireDependencies(
   mapped: ReadonlySet<string> = new Set(),
 ): JournalEvent[] {
   const index = dependencyIndex(allPending, mapped);
-  return events.map((event) => {
-    const dependsOn: string[] = [];
-    for (const dependency of event.dependsOn) {
-      const resolved = resolveDependency(dependency, index, event);
-      if (resolved.kind !== 'event') continue;
-      const wire = resolved.event.eventId;
-      if (wire !== event.eventId && !dependsOn.includes(wire)) dependsOn.push(wire);
-    }
-    return { ...event, dependsOn };
-  });
+  return events.map((event) => wireEvent(event, index));
 }
+
+/** One event's `dependsOn` on the wire (`wireDependencies`), against an index built once. */
+export function wireEvent(event: JournalEvent, index: DependencyIndex): JournalEvent {
+  const dependsOn: string[] = [];
+  for (const dependency of event.dependsOn) {
+    const resolved = resolveDependency(dependency, index, event);
+    if (resolved.kind !== 'event') continue;
+    const wire = resolved.event.eventId;
+    if (wire !== event.eventId && !dependsOn.includes(wire)) dependsOn.push(wire);
+  }
+  return { ...event, dependsOn };
+}
+
+/** Not to be sent before its backoff — except a record-payload marker, whose backoff only keeps OLDER builds off it. */
+export const backingOff = (event: JournalEvent, at: number): boolean =>
+  event.nextAttemptAt !== undefined && !isRecordPayloadMarker(event) && Date.parse(event.nextAttemptAt) > at;
 
 /**
  * Pick the next batch. A HELD event (`holdAttempts` > 0: the server answered `dependency_pending`,
@@ -65,7 +73,7 @@ export function batchEvents(
   for (const event of ordered) {
     if (selected.length >= maxEvents) break;
     if (event.deadLetter || behindHeld.has(event.eventId)) continue;
-    if (event.nextAttemptAt !== undefined && Date.parse(event.nextAttemptAt) > at) continue;
+    if (backingOff(event, at)) continue;
     if (event.dependsOn.some((id) => pending.has(id) && !selectedIds.has(id))) continue;
     const size = jsonBytes(event);
     if (selected.length > 0 && bytes + size > maxBytes) break;

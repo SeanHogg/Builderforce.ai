@@ -32,11 +32,12 @@ import { HopPath } from './transit/HopPath';
 import { StationCard } from './transit/StationCard';
 import { StationMark } from './transit/StationMark';
 import { stationTypes } from './transit/stationType';
-import { typeShape } from '../shapes';
+import { typeShape, type MarkType } from '../shapes';
 import { terminusText } from './transit/termini';
 import { byDepth, TowerMark, towerPinY } from './transit/TowerMark';
 import { TerminusMark } from './transit/TerminusMark';
-import { bandTitle, TransitBands } from './transit/TransitBands';
+import { bandTitle } from './bands';
+import { TransitBands } from './transit/TransitBands';
 import { satelliteBoxes, satellitePlaces, satellitesOf } from './transit/unfold';
 import type { EnterCheck } from './transit/useDrill';
 import { useCardAnchor } from './transit/useCardAnchor';
@@ -85,6 +86,8 @@ export interface TransitMapProps {
     variant?: 'map' | 'tower' | undefined;
     /** An anti-pattern highlight by station: an offender takes the violation tone, a partner the partner tone, every other station is dimmed. */
     roles?: ReadonlyMap<string, TowerRole> | undefined;
+    /** Each station's mark type when the caller already read it for these stations (`SurfaceModel.types`); absent ⇒ read here. */
+    types?: ReadonlyMap<string, MarkType> | undefined;
 }
 
 const NO_ENTER: EnterCheck = { can: false, reason: 'deepest' };
@@ -148,8 +151,10 @@ export function TransitMap(p: TransitMapProps) {
     const claims = p.question === 'claims';
     const tower = p.variant === 'tower';
     const Mark = tower ? TowerMark : StationMark;
-    // Each station's mark type (its members' dominant type), so a station keeps the shape its files have in every view.
-    const types = useMemo(() => stationTypes(p.graph ?? null, stations), [p.graph, stations]);
+    // Each station's mark type (its members' dominant type), so a station keeps the shape its files have in every view:
+    // the surface's (read once for the world map), else this level's, off the index the model already holds.
+    const given = p.types;
+    const types = useMemo(() => given ?? stationTypes(p.graph ?? null, stations, model.index), [given, p.graph, stations, model.index]);
     const marked = useMemo(() => (tower ? byDepth(model.drawn, layout.positions) : model.drawn), [tower, model.drawn, layout.positions]);
 
     // Unfold: the satellites of the unfolded station, which labels and the card keep clear of.

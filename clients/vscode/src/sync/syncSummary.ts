@@ -11,7 +11,7 @@
  * takes its facts and its last-pull time from ports. No `vscode`, no network.
  */
 
-import type { EntityDestination, InferenceMode } from "@builderforce/local-first";
+import { isRecordPayloadFence, type EntityDestination, type InferenceMode } from "@builderforce/local-first";
 import type { LocalFirstView } from "../localFirstView";
 
 export type SyncSummaryDestination =
@@ -62,6 +62,8 @@ export function buildSyncSummary(facts: SyncSummaryFacts, context: SyncSummaryCo
   let bytes = 0;
   let deadLetters = 0;
   for (const event of facts.events) {
+    // The record-payload fence is no failed write: it only holds older builds off markers.
+    if (isRecordPayloadFence(event)) continue;
     if (event.deadLetter) {
       deadLetters += 1;
       continue;

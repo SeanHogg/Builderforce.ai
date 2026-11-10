@@ -12,8 +12,10 @@ import { destinationKey, earliestMapping, normalizeServerMapping, type EntityDes
 import { parseEntityRef, parseSyncId, syncIdText, tierRefText } from './entityId.js';
 import type { LocalFirstDelta } from './localFirstDelta.js';
 import { DraftMap } from './draftMap.js';
-import { CommittedState, PendingKeyIndex, mappingKey, recordKey } from './storeState.js';
-import { isJournalEventId, SCAN_STOP, type AppendJournalEvent, type LocalFirstTransaction, type ScanPendingVisit, type ScanVisit } from './storeContract.js';
+import { CommittedState, PendingCounts, PendingEntityIndex, PendingKeyIndex, mappingKey, recordKey } from './storeState.js';
+import { isJournalEventId, SCAN_STOP, type AppendJournalEvent, type LocalFirstTransaction, type PendingCount, type PendingLookup, type ScanPendingVisit, type ScanVisit } from './storeContract.js';
+import { isRecordPayloadMarker, materializedEvent } from './recordPayloadMarker.js';
+import { draftPendingCount, draftPendingLookup, visitPendingOf, type DraftPendingSources } from './draftPending.js';
 import { clone } from './clone.js';
 import { hashPayload } from './payloadHash.js';
 import { indexKeyOf, type RecordIndex, type RecordIndexKey } from './recordIndex.js';
@@ -36,6 +38,10 @@ export class Transaction implements LocalFirstTransaction {
   private readonly cursors: DraftMap<string>;
   /** Events THIS transaction appended, by key. Committed events are found in `base.pendingKeys`. */
   private readonly addedKeys = new PendingKeyIndex();
+  /** Events THIS transaction appended, by row. Committed ones are in `base.pendingEntities`. */
+  private readonly addedEntities = new PendingEntityIndex();
+  /** What this draft changed in the per-partition counts (may be negative). */
+  private readonly draftCounts = new PendingCounts();
   private nextSequence: number;
   /** The highest `mappedSeq` as of this transaction (committed, plus what it wrote). */
   private maxMappedSeq: number;
@@ -49,7 +55,15 @@ export class Transaction implements LocalFirstTransaction {
     this.conflictRows = new DraftMap(base.conflicts);
     this.cursors = new DraftMap(base.cursors);
     this.nextSequence = base.nextSequence;
+    // The pending events through the store's indexes, as this draft sees them (`draftPending.ts`).
+    this.pendingSources = {
+      current: (eventId) => this.events.get(eventId),
+      committed: base,
+      added: { entities: this.addedEntities, keys: this.addedKeys, counts: this.draftCounts },
+    };
   }
+
+  private readonly pendingSources: DraftPendingSources;
 
   async get<T>(entityType: LocalEntityType, id: string): Promise<LocalRecord<T> | undefined> {
     return clone(this.records.get(recordKey(entityType, id))) as LocalRecord<T> | undefined;
@@ -106,7 +120,7 @@ export class Transaction implements LocalFirstTransaction {
     }
     // The committed group as this draft sees it: rows it deleted, re-filed elsewhere or moved
     // to its tail are skipped here; rows it ADDED to the group (new, relocated, or updated
-    // into it) follow, in the order the draft wrote them.
+    // into it) follow. Order is unspecified by contract.
     const matches = (record: LocalRecord): boolean => indexKeyOf(index as RecordIndex, record) === key;
     if (group) {
       for (const [id, committed] of group) {
@@ -161,6 +175,8 @@ export class Transaction implements LocalFirstTransaction {
     this.nextSequence += 1;
     this.events.set(stored.eventId, stored);
     this.addedKeys.add(stored);
+    this.addedEntities.add(stored);
+    this.draftCounts.add(stored);
     return clone(stored);
   }
 
@@ -186,6 +202,18 @@ export class Transaction implements LocalFirstTransaction {
     }
   }
 
+  async scanPendingOf(clientEntityId: string, visit: ScanPendingVisit, destination?: EntityDestination): Promise<void> {
+    visitPendingOf(this.pendingSources, clientEntityId, visit, destination ? destinationKey(destination) : undefined);
+  }
+
+  pendingCount(destination?: EntityDestination): PendingCount {
+    return draftPendingCount(this.pendingSources, destination);
+  }
+
+  pendingLookup(): PendingLookup {
+    return draftPendingLookup(this.pendingSources);
+  }
+
   async acknowledge(eventIds: readonly string[]): Promise<void> {
     this.assertMutable();
     for (const id of eventIds) {
@@ -193,6 +221,7 @@ export class Transaction implements LocalFirstTransaction {
       if (!event) continue;
       this.events.delete(id);
       this.addedKeys.remove(event);
+      this.draftCounts.remove(event);
     }
   }
 
@@ -200,7 +229,20 @@ export class Transaction implements LocalFirstTransaction {
     this.assertMutable();
     const event = this.events.get(eventId);
     if (!event || event.deadLetter) return;
-    this.events.set(eventId, { ...event, deadLetter: { reason, at } });
+    const dead = { ...event, deadLetter: { reason, at } };
+    this.events.set(eventId, dead);
+    this.draftCounts.remove(event);
+    this.draftCounts.add(dead);
+  }
+
+  async materializeEvent(eventId: string, payload: unknown): Promise<JournalEvent | undefined> {
+    this.assertMutable();
+    const event = this.events.get(eventId);
+    if (!event || !isRecordPayloadMarker(event)) return undefined;
+    const materialized = materializedEvent(event, payload);
+    this.events.set(eventId, materialized);
+    if (materialized.idempotencyKey !== undefined) this.addedKeys.add(materialized);
+    return clone(materialized);
   }
 
   async hold(eventId: string, hold: { holdKind?: string; holdAttempts: number; heldSince: string; nextAttemptAt: string }): Promise<void> {

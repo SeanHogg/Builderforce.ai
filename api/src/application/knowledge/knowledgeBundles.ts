@@ -24,12 +24,21 @@ export const bundlePrefix = (tenantId: number): string => `knowledge/${tenantId}
 export const bundleKey = (tenantId: number, digest: string): string => `${bundlePrefix(tenantId)}${digest}`;
 
 /**
- * A hash's stored body is the UNION by `sourceRef` of what is stored and what arrived (the arrival wins for the same
- * ref), so two roots that share a content hash never evict each other's entries. Used by `mergeBody`, which pack sync calls.
+ * A hash's stored body is the UNION by `sourceRef` of what is stored and what arrived, so two roots that share a content
+ * hash never evict each other's entries. For the same ref the arrival wins — unless the stored entry was made by a NEWER
+ * extractor (`extractorVersion`): a client still on an older memory never evicts what a newer one extracted from the same
+ * bytes, so mixed-version clients of one root converge on the newest output instead of overwriting each other on every
+ * first sight of a hash. An entry without a version counts as the oldest. Used by `mergeBody`, which pack sync calls.
  */
 function mergeBodies(stored: readonly Extracted[] | undefined, arrival: readonly Extracted[]): Extracted[] {
+  const version = (e: Extracted): number => e.extractorVersion ?? 0;
+  const storedByRef = new Map((stored ?? []).map((e) => [e.sourceRef, e] as const));
+  const winners = arrival.map((a) => {
+    const prior = storedByRef.get(a.sourceRef);
+    return prior && version(prior) > version(a) ? prior : a;
+  });
   const arrived = new Set(arrival.map((e) => e.sourceRef));
-  return [...(stored ?? []).filter((e) => !arrived.has(e.sourceRef)), ...arrival];
+  return [...(stored ?? []).filter((e) => !arrived.has(e.sourceRef)), ...winners];
 }
 
 /** The entry-less sources a located body names (see {@link entrylessRef}). */

@@ -1,6 +1,7 @@
 /**
  * Stations: the graph folded to the size a person can read (PRD 38, Option B+). One station
- * per `area` node; files without an area are grouped by their top folder. A mixed station
+ * per `area` node; files without an area stand in their reference community (PRD 38 P1), else
+ * are grouped by their top folder (see `communityGroups.ts`). A mixed station
  * (entry files beside other layers) splits its entry files into their own station, so an
  * entry point stands on the map where a request begins.
  *
@@ -14,7 +15,8 @@ import { nodeIndex, pathOf } from '../graphModel';
 import { cmp } from '../order';
 import { dataCoverage, hasMeasuredCoverage } from './dataCoverage';
 import { LAYER_ORDER, layerRank, type Provenance } from './layers';
-import { rollUpAreas, type Group } from './areaRollup';
+import type { Group } from './areaRollup';
+import { communityGroupOf, communityNamer, foldGroups, REPO_CONFIG_STATION_ID, type CommunityName } from './communityGroups';
 import { fileNodesOf, outlineView } from './outlineGraph';
 import { reachOf, staticReach } from './staticReach';
 import { isRepoConfigFile, REPO_CONFIG_NAME, stationNames } from './stationName';
@@ -26,7 +28,8 @@ export interface Station {
     name: string;
     /** The full path or label the name was cut from: the tooltip and the accessible name. */
     path?: string;
-    kind: 'area' | 'folder';
+    /** `community`: files with no area grouped by their reference community (PRD 38 P1). */
+    kind: Group['kind'];
     /** Holds (or is made of) files of the `entry` partition. */
     entry: boolean;
     /** The member file refs. */
@@ -84,6 +87,8 @@ export interface StationOptions {
     changed?: ReadonlySet<string>;
     /** What the top-level config station is called (the host's `surface.repoConfig` label); absent ⇒ the English {@link REPO_CONFIG_NAME}. */
     repoConfigName?: string;
+    /** What a community with no label is called (the host's `labels.communityFallback`, `{n}`); absent ⇒ English. */
+    communityFallback?: string;
 }
 
 const SEVERITY_WEIGHT = { error: 3, warn: 2, info: 1 } as const;
@@ -127,16 +132,20 @@ const tail = (ref: string): string => {
 };
 
 
-function baseGroups(files: KNode[], index: ReadonlyMap<string, KNode>, repoConfigName: string): Map<string, Group> {
+function baseGroups(files: KNode[], index: ReadonlyMap<string, KNode>, repoConfigName: string, communityName: CommunityName): Map<string, Group> {
     const groups = new Map<string, Group>();
     for (const n of files) {
         let id: string, name: string, kind: Station['kind'];
         const own = pathOf(n.ref) ?? n.label;
+        const community = n.area ? undefined : communityGroupOf(n, communityName);
         if (isRepoConfigFile(own)) {
             // LICENSE, Dockerfile, dotfiles, root docs: ONE station, not one per file.
-            id = 'folder:repo-config'; name = repoConfigName; kind = 'folder';
+            id = REPO_CONFIG_STATION_ID; name = repoConfigName; kind = 'folder';
         } else if (n.area) {
             id = n.area; name = index.get(n.area)?.label ?? tail(n.area); kind = 'area';
+        } else if (community) {
+            // No area: its community (PRD 38 P1), grouped by cohesion rather than by top folder.
+            ({ id, name } = community); kind = 'community';
         } else {
             const path = pathOf(n.ref) ?? n.label;
             const slash = path.indexOf('/');
@@ -207,8 +216,9 @@ export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}):
     const index = nodeIndex(graph);
     // A truncated graph's stations come from its outline (every file of the full graph), badges limited to the outline's keys.
     const files = fileNodesOf(graph);
-    // Past MAX_STATIONS, areas fold into their parent directory so the map stays readable.
-    const groups = splitEntry(rollUpAreas(baseGroups(files, index, opts.repoConfigName ?? REPO_CONFIG_NAME),(id) => index.get(id)?.label ?? tail(id)));
+    // Past MAX_STATIONS, files group by community when those fit, else areas fold into their parent directory.
+    const communityName = communityNamer(graph, opts.communityFallback);
+    const groups = splitEntry(foldGroups(baseGroups(files, index, opts.repoConfigName ?? REPO_CONFIG_NAME, communityName), (id) => index.get(id)?.label ?? tail(id), communityName));
     const groupIds = new Set(groups.map((g) => g.id));
     const stationOf = new Map<string, string>();
     for (const g of groups) for (const n of g.nodes) stationOf.set(n.ref, g.id);

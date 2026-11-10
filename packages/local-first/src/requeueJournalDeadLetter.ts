@@ -15,6 +15,7 @@
 
 import { DEPENDENCY_UNRESOLVABLE } from './holdLimits.js';
 import type { JournalEvent } from './records.js';
+import { isRecordPayloadFence } from './recordPayloadMarker.js';
 import type { LocalFirstStore } from './store.js';
 
 /** Whether a dead-letter reason can be retried (see the module comment). */
@@ -27,7 +28,8 @@ export async function listJournalDeadLetters(store: LocalFirstStore): Promise<Jo
   return store.read(async (tx) => {
     const found: JournalEvent[] = [];
     await tx.scanPending((event) => {
-      if (event.deadLetter) found.push(event as JournalEvent);
+      // The record-payload fence is no failed write: it only holds older builds off markers.
+      if (event.deadLetter && !isRecordPayloadFence(event)) found.push(event as JournalEvent);
     });
     return found.map((event) => structuredClone(event)).sort((a, b) => a.localSequence - b.localSequence);
   });

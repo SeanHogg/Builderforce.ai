@@ -27,10 +27,11 @@ import {
   SCAN_STOP,
   SYNC_PASS_BIND_TYPES,
   bindWorkForSync,
-  countPending,
+  countLivePending,
   createDeviceStoreCoordinatorLease,
   createHttpSyncTransport,
   type LocalFirstChange,
+  type SyncRateLimit,
 } from "@builderforce/local-first";
 import { bindChatHistoryForSync } from "@seanhogg/builderforce-brain-embedded";
 import { getTenantJwt } from "./bfApi";
@@ -51,6 +52,8 @@ export function installChatSync(ctx: vscode.ExtensionContext): vscode.Disposable
   const local = localBrainApplication(ctx);
   const policy = platformPolicy();
   const lease = createDeviceStoreCoordinatorLease({ deviceStore: `vscode:${local.deviceId}`, now: Date.now, ttlMs: 30_000 });
+  // The tenant's request budget as the server last reported it: the drain paces itself on it.
+  let rateLimit: SyncRateLimit | undefined;
   const transport = createHttpSyncTransport({
     baseUrl: getBaseUrl(),
     fetch: (url, init) => platformFetch(url, init, "synchronize"),
@@ -58,13 +61,19 @@ export function installChatSync(ctx: vscode.ExtensionContext): vscode.Disposable
       const jwt = await getTenantJwt(ctx.secrets);
       return jwt ? { authorization: `Bearer ${jwt}` } : {};
     },
+    onRateLimit: (limit) => { rateLimit = limit; },
   });
+  /** Set when a pass stopped with work left: when the next one may start (ms epoch). */
+  let resumeAt: number | undefined;
+  /** The last pass stopped short of an empty queue: the next one continues its drain. */
+  let continuing = false;
 
   let running = false;
   let again = false;
   let disposed = false;
 
   const pass = async (): Promise<void> => {
+    resumeAt = undefined;
     const destination = chatAccountDestination();
     if (!destination) return;
     const installed = installSyncCoordinator({
@@ -79,11 +88,17 @@ export function installChatSync(ctx: vscode.ExtensionContext): vscode.Disposable
     // Chats first: a ticket's import waits on the import of the chat it was created in.
     await bindChatHistoryForSync(local.store, local.deviceId, destination);
     await bindWorkForSync(local.store, local.deviceId, destination);
-    // One synchronize pushes one batch; drain so a big program of tickets goes up in this pass.
-    await drainSync({
-      round: () => installed.coordinator.synchronize(destination),
-      pending: () => local.store.read((tx) => countPending(tx, destination)),
-    });
+    // One synchronize pushes one batch; drain while there is work and budget (`syncDrain.ts`).
+    const drained = await drainSync({
+      round: ({ pull }) => installed.coordinator.synchronize(destination, { pull }),
+      pending: () => local.store.read((tx) => countLivePending(tx, destination)),
+      rateLimit: () => rateLimit,
+    }, { pullFirst: !continuing });
+    // Work left (the pass's time ran out, or the shared request bucket is at its reserve):
+    // the next pass follows as soon as allowed, not at the 5-minute heartbeat — and continues
+    // this drain rather than starting one (no second pull).
+    continuing = drained.more;
+    resumeAt = drained.more ? Date.now() + (drained.resumeAfterMs ?? 0) : undefined;
     // A receipt moved usage onto the platform: re-read its figure rather than serve the
     // cached one, which the device's own estimate no longer covers for those rows.
     invalidateServerChatSpend();
@@ -106,16 +121,19 @@ export function installChatSync(ctx: vscode.ExtensionContext): vscode.Disposable
     } finally {
       running = false;
     }
+    if (resumeAt !== undefined) schedule();
   };
 
   let timer: ReturnType<typeof setTimeout> | undefined;
+  /** Debounced — and never before a rate-limited pass said the next may start. */
   const schedule = (): void => {
     if (disposed || policy.allows("synchronize") !== true) return;
     if (timer) clearTimeout(timer);
+    const delay = Math.max(DEBOUNCE_MS, (resumeAt ?? 0) - Date.now());
     timer = setTimeout(() => {
       timer = undefined;
       void run();
-    }, DEBOUNCE_MS);
+    }, delay);
   };
 
   // A write that left nothing to send (a pull's cursor, a receipt) triggers nothing — so

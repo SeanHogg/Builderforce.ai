@@ -4,8 +4,9 @@
  *
  *   • parser — accepts source code (the ONE symbol extractor's language families, prose and
  *     DDL excluded); its `extract` emits the `file` node (area from memory's `/working`
- *     `areaOfPath`, language/symbol/export counts as badges) and the file's exported
- *     symbols as exact keys. No symbol nodes. Cross-file `references` cannot be seen from
+ *     `areaOfPath`, language/symbol/export counts as badges), the file's exported
+ *     symbols as exact keys, and the file → file rollup of its symbol-level edges
+ *     (`codeRollup`: extends/implements/composes/uses/calls). No symbol nodes. Cross-file `references` cannot be seen from
  *     one file, so they come root-level from the analyzers ({@link repoGraphToExtracted});
  *   • partitions — {@link CODE_LAYERS}, the N-layer default, overridable by
  *     `.builderforce/partitions.json` through {@link loadCodePartitions};
@@ -25,6 +26,7 @@ import { CONTENT_HASH_FIELD, hashText, type SourceDocument } from '@seanhogg/bui
 import { extractSymbols, symbolLanguageOf, type CodeSymbol, type SymbolLanguage } from '../symbols.js';
 import { contentBadges } from './codeFileBadges.js';
 import { CODE_FINDING_RULES } from './codeFindings.js';
+import { fileRollup } from './codeRollup.js';
 import { codeLanguageOf, isShellPath } from './codeMask.js';
 import { basenameOf, CODE_BADGES, CODE_PACK_ID, codeFileNode } from './codeNodes.js';
 
@@ -60,7 +62,7 @@ function keysOf(path: string, exported: readonly string[]): string[] {
     return [...new Set(keys.filter(Boolean))];
 }
 
-export function codeParser(symbolsOf: SymbolSource = extractSymbols): KnowledgeParser {
+export function codeParser(symbolsOf: SymbolSource = extractSymbols, modules?: ModuleResolution): KnowledgeParser {
     return {
         id: CODE_PACK_ID,
         accepts: (source) => source.content.kind === 'text' && isCodePath(source.id),
@@ -84,7 +86,7 @@ export function codeParser(symbolsOf: SymbolSource = extractSymbols): KnowledgeP
                 },
             });
             return {
-                sourceRef: node.ref, sourceHash, nodes: [node], edges: [],
+                sourceRef: node.ref, sourceHash, nodes: [node], edges: fileRollup(ctx.rootId, path, text, symbols, ctx.resolvePath),
                 keys: keysOf(path, exported).map((key) => ({ ref: node.ref, key })),
             };
         },

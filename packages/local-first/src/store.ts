@@ -12,12 +12,9 @@
  * learns of another window's commit calls `applyDelta` instead of rebuilding.
  */
 
-import { loadMappedEntities, unsendableEventIds } from './dependencyGraph.js';
 import {
   UNBOUND_DESTINATION,
-  destinationKey,
   type EntityDestination,
-  type JournalEvent,
   type LocalEntityType,
   type LocalRecord,
 } from './records.js';
@@ -57,8 +54,10 @@ export async function selectRecords<T = unknown>(
 
 /**
  * Visit one group of a secondary index WITHOUT cloning (`LocalFirstTransaction.scanIndex`):
- * the group's rows only. A transaction without `scanIndex` (a hand-rolled fake) is read by
- * a filtered `scan` — same rows, same order, just not indexed.
+ * the group's live rows only, handed over as the store's own committed rows — never mutate
+ * or retain one (`selectByIndex` clones). Order is UNSPECIFIED: sort if it matters. A
+ * transaction without `scanIndex` (a hand-rolled fake) is read by a filtered `scan` — the
+ * same rows, not indexed.
  */
 export async function scanByIndex<T = unknown>(
   tx: LocalFirstTransaction,
@@ -82,42 +81,6 @@ export async function selectByIndex<T = unknown>(
     if (!where || where(row)) matches.push(row as LocalRecord<T>);
   });
   return clone(matches);
-}
-
-/**
- * Pending events for which `where` holds, in sequence order, cloned — only the matches.
- * A dead-lettered event (a permanent refusal the server will never accept) is NOT pending
- * work: it stays in the journal for audit and status, but is skipped here so it can neither
- * be re-sent nor starve the events behind it.
- */
-export async function selectPending(
-  tx: LocalFirstTransaction,
-  where?: (event: Readonly<JournalEvent>) => boolean,
-  destination?: EntityDestination,
-): Promise<JournalEvent[]> {
-  const matches: JournalEvent[] = [];
-  await tx.scanPending((event) => {
-    if (event.deadLetter) return;
-    if (!where || where(event)) matches.push(event as JournalEvent);
-  }, destination);
-  matches.sort((a, b) => a.localSequence - b.localSequence);
-  return clone(matches);
-}
-
-/**
- * How many events still have work to do for `destination` (all when omitted): the pending
- * journal minus the dead-lettered. What a drain loop compares to know it is finished.
- */
-export async function countPending(tx: LocalFirstTransaction, destination?: EntityDestination): Promise<number> {
-  // Blocked events (behind a dead-lettered write that nothing replaced) are not work either:
-  // they cannot be sent until the user supersedes that write, so they must not hold a drain open.
-  // Nor are events waiting on an entity the next sync pass binds: only that bind releases them.
-  const every: JournalEvent[] = [];
-  await tx.scanPending((event) => { every.push(event as JournalEvent); });
-  const blocked = unsendableEventIds(every, await loadMappedEntities(tx, every));
-  const key = destination ? destinationKey(destination) : undefined;
-  return every.filter((event) => !event.deadLetter && !blocked.has(event.eventId)
-    && (key === undefined || destinationKey(event.destination) === key)).length;
 }
 
 export interface MemoryLocalFirstStoreOptions {

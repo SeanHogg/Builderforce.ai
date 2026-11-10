@@ -140,6 +140,65 @@ describe("container: the type a member belongs to", () => {
     expect(owner("x.ts", src)).toEqual({ "A@1": null, "run@2": "A", "B@5": null, "run@6": "B" });
   });
 
+  // regression: hired.video (2026-11-10) — a method whose parameter list breaks after `(` was no method at all, so the
+  // method band and the sequence diagram lost it (one in four repository methods there).
+  it("maps a JS method whose parameters sit on the lines below its name, and not a call statement shaped like one", () => {
+    const src = [
+      "export class Repo {",
+      "  async respond(",
+      "    id: string,",
+      "  ): Promise<void> {",
+      "    configure(",
+      "      id,",
+      "    );",
+      "  }",
+      "  filter<T extends { email: string }>(",
+      "    rows: T[],",
+      "  ) {",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    expect(owner("r.ts", src)).toEqual({ "Repo@1": null, "respond@2": "Repo", "filter@9": "Repo" });
+  });
+
+  // regression: hired.video (2026-11-10) — a Hono route handler or a message listener is an inline callback of a top-level
+  // statement: no definition owned it, so its calls were dropped and the API's entry points could start no sequence.
+  it("regression: names a top-level statement's inline callback as a callback owner, never in a test or a nested body", () => {
+    const src = [
+      'import { Hono } from "hono";',
+      "export const routes = new Hono();",
+      'routes.get("/me", async (c) => {',
+      "  return c.json(load());",
+      "});",
+      'routes.post("/me", validate(schema), async (c) => {',
+      "  return c.json(save());",
+      "});",
+      'routes.get("/me", (c) => {',
+      "});",
+      "if (!window.__installed) {",
+      "  chrome.runtime.onMessage.addListener((msg, _sender, reply) => {",
+      "    reply(fill(msg));",
+      "    items.forEach((x) => {",
+      "    });",
+      "  });",
+      "}",
+      'describe("routes", () => {',
+      "});",
+      "export function after() {}",
+      "",
+    ].join("\n");
+    expect(names("src/routes.ts", src)).toEqual([
+      "2:const:routes*",
+      '3:function:routes.get "/me"',
+      '6:function:routes.post "/me"',
+      '9:function:routes.get "/me" #2',
+      "12:function:chrome.runtime.onMessage.addListener",
+      "20:function:after*",
+    ]);
+    expect(names("src/routes.test.ts", src)).toEqual(["2:const:routes*", "20:function:after*"]);
+  });
+
   it("attributes Python methods to the top-level class, and emits a closure as nothing", () => {
     const src = [
       "class Repo:",

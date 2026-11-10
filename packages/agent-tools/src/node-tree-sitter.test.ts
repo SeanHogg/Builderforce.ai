@@ -5,11 +5,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { treeSitterSymbolExtractor, TREE_SITTER_GRAMMAR_WASMS } from "./node-tree-sitter.js";
 import { extractSymbols } from "./symbols.js";
 
-// A method whose parameter list wraps: invisible to the line-anchored regex extractor
-// (no `{` on the line that names it), plain to a parse tree.
+// A method whose parameter list wraps after nested type arguments: invisible to the line-anchored regex
+// extractor (it reads a wrapped signature only with flat `<…>`), plain to a parse tree.
 const TS_SOURCE = [
   "export class Billing {",
-  "  async charge(",
+  "  async charge<T extends Record<string, number>>(",
   "    card: string,",
   "    cents: number,",
   "  ): Promise<void> {",

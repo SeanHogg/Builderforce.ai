@@ -63,6 +63,27 @@ describe("knowledgeLoadTrace", () => {
     expect(trace.snapshot().entries[0]!.phases).toEqual([{ phase: "index", ms: 0 }]);
   });
 
+  it("a phase that settles after its call finished (a rejected Promise.all sibling) is not appended to the entry", async () => {
+    const c = clock();
+    const lines: string[] = [];
+    const trace = createLoadTrace({ now: c.now, log: (l) => lines.push(l) });
+    let release: () => void = () => undefined;
+    const slow = new Promise<void>((resolve) => { release = resolve; });
+    await expect(trace.run("load", "r", async (call) => Promise.all([
+      call.timer.phase("partitions", () => slow),
+      call.timer.phase("index", async () => { c.advance(5); throw new Error("no index"); }),
+    ]))).rejects.toThrow("no index");
+    const before = trace.snapshot().entries[0]!;
+    expect(before.phases).toEqual([{ phase: "index", ms: 5 }]);
+    c.advance(100);
+    release();
+    await slow;
+    await Promise.resolve();
+    expect(trace.snapshot().entries[0]!.phases).toEqual([{ phase: "index", ms: 5 }]);
+    expect(trace.snapshot().inFlight).toEqual([]);
+    expect(lines).toHaveLength(1);
+  });
+
   it("keeps only the latest entries", async () => {
     const trace = createLoadTrace({ now: clock().now, capacity: 3 });
     for (let i = 0; i < 5; i += 1) await trace.run("scopes", `r${i}`, async () => [i]);

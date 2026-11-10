@@ -83,6 +83,7 @@ export {
   SYNC_PROTOCOL_VERSION,
   createSyncCoordinator,
   type SyncLease,
+  type SyncRoundOptions,
   type SyncPullResult,
   type SyncPushBatch,
   type SyncTransport,
@@ -135,10 +136,12 @@ export {
   type HttpSyncHeaders,
   type HttpSyncRequest,
   type HttpSyncResponse,
+  type SyncRateLimit,
   type HttpSyncTransportOptions,
 } from './httpSyncTransport.js';
 export {
   BOUND_ONLY_VERSION,
+  dropPending,
   importKey,
   isImported,
   isOwnRecord,
@@ -147,6 +150,22 @@ export {
   type JournalWriteOptions,
 } from './journalRules.js';
 export { bindWorkForSync, ticketWaitsOn } from './workBinding.js';
+export {
+  MARKER_NOT_BEFORE,
+  RECORD_PAYLOAD_FENCE_KEY,
+  isRecordPayloadFence,
+  isRecordPayloadMarker,
+  recordPayloadMarker,
+} from './recordPayloadMarker.js';
+export { sendablePayload } from './syncRound.js';
+export {
+  MARKER_WRITTEN_TYPES,
+  EVENT_BACKLOG_MIGRATED,
+  EVENT_MIGRATION_SLICE,
+  eventBacklogMigrated,
+  planEventBacklogMigration,
+  type EventBacklogMigrationPlan,
+} from './eventBacklogMigration.js';
 export { SYNC_PASS_BIND_TYPES } from './dependencyGraph.js';
 export {
   TASK_TABLE_KINDS,

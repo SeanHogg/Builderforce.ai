@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 /** The Tower highlight ends when what it was made on ends: a new question, a new family, a different graph, or leaving both Tower cameras. */
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { surfaceFixture } from '../testing';
 import type { ViewMode } from '../types';
 import { highlightForRef } from './towerHighlight';
-import { useClearHighlightOutsideTower, useLegacyTowerMode } from './useShowInTower';
+import { useClearHighlightOutsideTower } from './useShowInTower';
 import { useSurface } from './useSurface';
 
 const graph = surfaceFixture();
@@ -59,15 +59,5 @@ describe('Tower highlight lifetime', () => {
         // The Map's flat look is not a tower picture.
         rerender({ mode: 'transit', towers: false });
         expect(highlight).toBeNull();
-    });
-
-    it('lands a retired `tower` camera id on the Map with its towers look on', () => {
-        const setMode = vi.fn(), setTowers = vi.fn();
-        renderHook(() => useLegacyTowerMode('tower', setMode, setTowers));
-        expect(setTowers).toHaveBeenCalledWith(true);
-        expect(setMode).toHaveBeenCalledWith('transit');
-        const other = vi.fn();
-        renderHook(() => useLegacyTowerMode('graph', other, other));
-        expect(other).not.toHaveBeenCalled();
     });
 });

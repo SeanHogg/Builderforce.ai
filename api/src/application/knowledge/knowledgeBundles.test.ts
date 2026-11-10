@@ -103,3 +103,14 @@ describe('mergeBody keeps entry-less sources apart from entries', () => {
     expect(buildBundle(1, [{ hash: 'h', ...merged }]).locs[0]!.sourceRefs).toEqual(['src:r::f1.ts', 'entryless:src:r::bin.png']);
   });
 });
+
+describe('mergeBody: a newer extractor wins (PRD 43 P0b, mixed-version clients)', () => {
+  const at = (version: number | undefined, tag: string): Extracted => ({ ...body(1)[0]!, ...(version !== undefined ? { extractorVersion: version } : {}), keys: [{ ref: 'src:r::f1.ts' as never, key: tag }] });
+
+  it('regression: an older client\'s entry never evicts a newer one for the same source; a same-or-newer arrival replaces it', () => {
+    expect(mergeBody(undefined, [at(5, 'new')], [at(4, 'old')]).entries).toEqual([at(5, 'new')]);
+    expect(mergeBody(undefined, [at(5, 'a')], [at(5, 'b')]).entries).toEqual([at(5, 'b')]);
+    expect(mergeBody(undefined, [at(4, 'old')], [at(5, 'new')]).entries).toEqual([at(5, 'new')]);
+    expect(mergeBody(undefined, [at(5, 'new')], [at(undefined, 'unversioned')]).entries).toEqual([at(5, 'new')]);
+  });
+});

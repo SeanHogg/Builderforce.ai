@@ -9,7 +9,7 @@ import type { CSSProperties } from 'react';
 import { fillTemplate } from '../../labels';
 import { cssVar } from '../../scene/themeColors';
 import { TYPE } from '../ui/type';
-import { BAND_TONE } from '../transit/TransitBands';
+import { BAND_TONE } from '../bands';
 import { SystemCard, cardBox } from './SystemCard';
 import type { TierRow } from './systemModel';
 import type { SystemCardProps } from './SystemCard';

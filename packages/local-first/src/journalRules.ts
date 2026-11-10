@@ -30,10 +30,12 @@
  * second one.
  */
 
-import { selectPending, type LocalFirstTransaction } from './store.js';
+import type { LocalFirstTransaction } from './storeContract.js';
+import { selectPendingOf } from './pendingQueries.js';
 import { hashPayload } from './payloadHash.js';
-import type { EntityDestination, JournalOperation, LocalEntityType, LocalRecord, ServerMapping } from './records.js';
+import type { EntityDestination, JournalEvent, JournalOperation, LocalEntityType, LocalRecord, ServerMapping } from './records.js';
 import { parseSyncId } from './entityId.js';
+import { ensureRecordPayloadFence, fencedDependsOn, isRecordPayloadMarker, recordPayloadMarker } from './recordPayloadMarker.js';
 
 /** The version a sign-in binding records: a server chat exists, nothing was imported. */
 export const BOUND_ONLY_VERSION = 0;
@@ -80,13 +82,13 @@ function unboundMarker(record: LocalRecord, operation: JournalOperation): {
   payloadHash: string;
   payload: null;
 } {
-  const text = JSON.stringify(record.payload) ?? 'null';
-  return {
-    operation,
-    payloadSize: text.length,
-    payloadHash: hashPayload(record.payload),
-    payload: null,
-  };
+  return { operation, ...unboundMarkerFields(record.payload) };
+}
+
+/** The payload half of an unbound marker: a size and a content hash of `payload`, never the payload. */
+export function unboundMarkerFields(payload: unknown): { payloadSize: number; payloadHash: string; payload: null } {
+  const text = JSON.stringify(payload) ?? 'null';
+  return { payloadSize: text.length, payloadHash: hashPayload(payload), payload: null };
 }
 
 /**
@@ -94,8 +96,10 @@ function unboundMarker(record: LocalRecord, operation: JournalOperation): {
  * whole state, so an older pending one for the same row would only be applied against a
  * version the newer write supersedes (and then conflict with it).
  */
-async function dropPending(tx: LocalFirstTransaction, record: LocalRecord): Promise<void> {
-  const stale = await selectPending(tx, (event) => event.clientEntityId === record.id && event.entityType === record.entityType);
+export async function dropPending(tx: LocalFirstTransaction, record: Pick<LocalRecord, 'entityType' | 'id'>): Promise<void> {
+  // The row's own events through the per-row index: a bind calls this once per row, so a
+  // walk of every pending event here made binding a long history O(rows × events).
+  const stale = await selectPendingOf(tx, record.entityType, record.id);
   if (stale.length > 0) await tx.acknowledge(stale.map((event) => event.eventId));
 }
 
@@ -114,12 +118,11 @@ export async function rebaseImportsOntoMapping(
   afterSequence: number,
   serverVersion: number,
 ): Promise<void> {
-  const newer = await selectPending(
+  const newer = await selectPendingOf(
     tx,
-    (event) => event.entityType === entityType
-      && event.clientEntityId === clientEntityId
-      && event.operation === 'import'
-      && event.localSequence > afterSequence,
+    entityType,
+    clientEntityId,
+    (event) => event.operation === 'import' && event.localSequence > afterSequence,
     destination,
   );
   for (const event of newer) {
@@ -134,9 +137,14 @@ export async function rebaseImportsOntoMapping(
       baseVersion: serverVersion,
       dependsOn: event.dependsOn,
       destination: event.destination,
-      payload: event.payload,
+      ...samePayload(event),
     });
   }
+}
+
+/** A rebased write keeps its payload — or stays a record-payload marker, read when it is sent. */
+function samePayload(event: JournalEvent): { payload: unknown } {
+  return isRecordPayloadMarker(event) ? recordPayloadMarker() : { payload: event.payload };
 }
 
 /**
@@ -153,11 +161,11 @@ export async function rebaseNewerWrites(
   fromBase: number,
   toVersion: number,
 ): Promise<void> {
-  const newer = await selectPending(
+  const newer = await selectPendingOf(
     tx,
-    (event) => event.entityType === entityType
-      && event.clientEntityId === clientEntityId
-      && (event.operation === 'update' || event.operation === 'delete')
+    entityType,
+    clientEntityId,
+    (event) => (event.operation === 'update' || event.operation === 'delete')
       && event.localSequence > afterSequence
       && event.baseVersion === fromBase,
     destination,
@@ -174,13 +182,17 @@ export async function rebaseNewerWrites(
       baseVersion: toVersion,
       dependsOn: event.dependsOn,
       destination: event.destination,
-      payload: event.payload,
+      ...samePayload(event),
     });
   }
 }
 
-/** The payload a row is imported with: a sign-in-bound chat names its server chat. */
-function importPayload(record: LocalRecord, mapping: ServerMapping | undefined): unknown {
+/**
+ * The payload a row is imported with: a sign-in-bound chat names its server chat. Read when the
+ * import is SENT (the queued import is a record-payload marker, `recordPayloadMarker.ts`), so it
+ * is the row and the binding as they are then.
+ */
+export function importPayload(record: LocalRecord, mapping: ServerMapping | undefined): unknown {
   if (record.entityType !== 'chat' || mapping?.serverVersion !== BOUND_ONLY_VERSION) return record.payload;
   const serverId = parseSyncId(mapping.syncId);
   return serverId !== null ? { ...(record.payload as object), serverId } : record.payload;
@@ -201,7 +213,9 @@ export async function queueImport(
 ): Promise<void> {
   await dropPending(tx, record);
   if (record.deletedAt) return;
-  const mapping = await tx.mapping(record.entityType, record.id, record.destination);
+  // The import is the row as it is when SENT: no copy of the payload waits in the journal. The
+  // marker is fenced so an older build sharing the journal never sends it (`recordPayloadMarker.ts`).
+  if (record.destination.kind === 'bound') await ensureRecordPayloadFence(tx, record.destination);
   await tx.append({
     idempotencyKey: importKey(record.entityType, record.id),
     clientEntityId: record.id,
@@ -209,9 +223,9 @@ export async function queueImport(
     operation: 'import',
     schemaVersion: record.schemaVersion,
     occurredAt: record.occurredAt,
-    dependsOn: [...(chatClientId && record.entityType !== 'chat' ? [importKey('chat', chatClientId)] : []), ...waitsOn],
+    dependsOn: fencedDependsOn([...(chatClientId && record.entityType !== 'chat' ? [importKey('chat', chatClientId)] : []), ...waitsOn]),
     destination: record.destination,
-    payload: importPayload(record, mapping),
+    ...recordPayloadMarker(),
   });
 }
 

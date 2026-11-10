@@ -91,12 +91,18 @@ export function createLoadTrace(opts: LoadTraceOptions = {}): LoadTraceRecorder 
       running.add(live);
       const phases: KnowledgeLoadPhase[] = [];
       let fields: TraceFields = {};
+      // Set once the call's entry is written: a phase that settles later (a sibling of a rejected
+      // `Promise.all`) is not appended to a finished entry.
+      let finished = false;
       const timer: LoadTimer = {
         phase<T>(name: string, runPhase: () => T): T {
           const id = ++phaseSeq;
           const t0 = now();
           live.active.set(id, { phase: name, startedAt: t0 });
-          const end = (): void => { live.active.delete(id); phases.push({ phase: name, ms: Math.max(0, now() - t0) }); };
+          const end = (): void => {
+            live.active.delete(id);
+            if (!finished) phases.push({ phase: name, ms: Math.max(0, now() - t0) });
+          };
           let out: T;
           try {
             out = runPhase();
@@ -109,12 +115,13 @@ export function createLoadTrace(opts: LoadTraceOptions = {}): LoadTraceRecorder 
         },
       };
       const finish = (outcome: KnowledgeLoadTraceEntry["outcome"], error?: string): void => {
+        finished = true;
         running.delete(live);
         const hostLag: KnowledgeHostLag | undefined = live.lag?.read();
         live.lag?.stop();
         keep({
           op, ...(rootId ? { rootId } : {}), startedAt, durationMs: Math.max(0, now() - startedAt), outcome, ...(error ? { error } : {}),
-          phases, ...fields, ...(hostLag ? { hostLag } : {}),
+          phases: [...phases], ...fields, ...(hostLag ? { hostLag } : {}),
         });
       };
       try {

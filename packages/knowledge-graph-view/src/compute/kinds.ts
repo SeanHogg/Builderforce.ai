@@ -17,6 +17,7 @@ import type { LinesModel } from '../surface/lines';
 import type { PathModel } from '../surface/path';
 import type { StationModel } from '../surface/stations';
 import type { TransitLayout } from '../surface/transitLayout';
+import type { TaskTable } from './protocol';
 
 export interface SurfaceResult { stations: StationModel; lines: LinesModel }
 
@@ -29,14 +30,21 @@ export interface Kinds {
     edgePaths: { input: { nodes: readonly KNode[]; edges: readonly KEdge[]; layout: Layout2D }; result: EdgePath[] };
     edgeBuffers: { input: { nodes: readonly KNode[]; edges: readonly KEdge[]; layout: Layout3D; selected: string | null }; result: EdgeBuffer[] };
     mindMap: { input: { nodes: readonly KNode[]; findings: readonly Finding[]; opts: MindOptions }; result: MindMap };
-    surface: { input: { graph: KnowledgeGraph; changed: readonly string[]; repoConfigName?: string | undefined }; result: SurfaceResult };
+    surface: { input: { graph: KnowledgeGraph; changed: readonly string[]; repoConfigName?: string | undefined; communityFallback?: string | undefined }; result: SurfaceResult };
     transitLayout: { input: { stations: StationModel; lines: LinesModel; width: number; order?: readonly string[] | undefined }; result: TransitRoutesResult };
     path: { input: { graph: KnowledgeGraph; refs: readonly string[]; stations: StationModel }; result: PathModel };
     insights: { input: { graph: KnowledgeGraph }; result: Insights };
     partitionMatrix: { input: { graph: KnowledgeGraph }; result: { partitions: string[]; cells: Map<string, PartitionCell> } };
     focus: { input: { graph: KnowledgeGraph; max: number; keep: readonly string[] }; result: VisibleGraph };
     antiPatterns: { input: { graph: KnowledgeGraph; layer: string | null; stations: StationModel }; result: AntiPatternGroup[] };
+    markSet: { input: StageInput<'markSet'>; result: TaskTable['markSet']['raw'] };
+    markPaint: { input: StageInput<'markPaint'>; result: TaskTable['markPaint']['raw'] };
+    placement: { input: StageInput<'placement'>; result: TaskTable['placement']['raw'] };
+    stageIncident: { input: StageInput<'stageIncident'>; result: TaskTable['stageIncident']['raw'] };
 }
+
+/** The stage tasks (PRD 43 B1a) take the request as it crosses, with the real graph in place of its id. */
+type StageInput<K extends 'markSet' | 'markPaint' | 'placement' | 'stageIncident'> = Omit<TaskTable[K]['req'], 'graph'> & { graph: KnowledgeGraph };
 
 export type KindInput<K extends keyof Kinds> = Kinds[K]['input'];
 export type KindResult<K extends keyof Kinds> = Kinds[K]['result'];

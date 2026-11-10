@@ -19,6 +19,7 @@ import { cmp, importanceOf, round } from '../order';
 import { canonicalEdgesTask } from './canonicalEdges';
 import { layoutSpringsTask } from './layoutSprings';
 import { NONE_PARTITION, planeOrderTask } from './planeOrder';
+import { planeKeyOf } from '../placement';
 import { createRelaxation, type Relaxation } from './layoutRelax';
 
 export interface Layout3D {
@@ -95,8 +96,9 @@ export function layoutTask(
     let planeY = new Map<string, number>();
     const random = rng(hash32(rootId));
 
-    // Areas: the node's area, else its partition plane as one area.
-    const areaKeys = nodes.map((n) => `${n.partition ?? NONE}\u0000${n.area ?? n.partition ?? NONE}`);
+    // Planes are placements (a partition, else a community). Areas: the node's area, else its plane as one area.
+    const planeKeys = nodes.map((n) => planeKeyOf(n, nodes) ?? NONE);
+    const areaKeys = nodes.map((n, i) => `${planeKeys[i]!}\u0000${n.area ?? planeKeys[i]!}`);
     const areaWeight = new Map<string, number>();
     nodes.forEach((n, i) => areaWeight.set(areaKeys[i]!, (areaWeight.get(areaKeys[i]!) ?? 0) + importanceOf(n)));
     const byPlane = new Map<string, string[]>();
@@ -164,7 +166,7 @@ export function layoutTask(
             if (!finished) throw new Error('layout3d: result() read before step() returned true');
             if (!built) {
                 const positions = new Map<string, readonly [number, number, number]>();
-                nodes.forEach((n, i) => positions.set(n.ref, [round(x[i]!), planeY.get(n.partition ?? NONE) ?? 0, round(z[i]!)]));
+                nodes.forEach((n, i) => positions.set(n.ref, [round(x[i]!), planeY.get(planeKeys[i]!) ?? 0, round(z[i]!)]));
                 built = { positions, planes: order.map((partition) => ({ partition, y: planeY.get(partition) ?? 0 })) };
             }
             return built;

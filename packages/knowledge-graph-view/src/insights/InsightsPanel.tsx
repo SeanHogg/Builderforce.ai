@@ -9,6 +9,7 @@ import { useComputed } from '../compute/useComputed';
 import { isSmall } from '../compute/size';
 import { camelKind, fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { kindLabel } from '../names';
+import { placementLabel } from '../placement';
 import { cssVar, type ThemeTone } from '../scene/themeColors';
 import { heading } from '../styles';
 import type { LensId } from '../types';
@@ -37,7 +38,7 @@ const rows = (bars: readonly Bar[], word: (b: Bar) => string): ChartRow[] =>
 
 export function InsightsPanel({ graph, labels, lenses, onLens, onShow, findingKinds = true }: InsightsPanelProps) {
     const insights = useComputed('insights', { graph }, [graph], EMPTY_INSIGHTS, { inline: isSmall(graph), scope: [graph] }).value ?? EMPTY_INSIGHTS;
-    const part = (id: string): string => id || labels.partitionNone;
+    const part = (id: string): string => placementLabel(id, graph, labels);
     const tiles = insights.metrics.filter((m) => CORE.has(m.id) || m.value > 0);
     const charts: Array<{ title: string; rows: ChartRow[]; tone: ThemeTone }> = [
         { title: labels.chartKinds, rows: rows(insights.kinds, (b) => kindLabel(labels, b.id)), tone: 'nodeFile' },

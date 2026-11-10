@@ -10,6 +10,7 @@ import { counted } from './plural';
 import { Graph2D } from '../graph2d/Graph2D';
 import { ListFallback } from '../ListFallback';
 import { MindMap } from '../map/MindMap';
+import { placementLabel } from '../placement';
 import { MAX_PIPES, nodeChannels, pipeWidthOf } from '../scene/channels';
 import { edgeCaption } from '../scene/edgeBudget';
 import { cssVar } from '../scene/themeColors';
@@ -69,7 +70,7 @@ function GraphView({ graph, drawn, lens, labels, selected, onSelect }: SceneProp
     return (
         <Graph2D
             rootId={graph.scope.rootId} nodes={drawn.nodes} edges={drawn.edges} lens={lens} selected={selected}
-            onSelect={onSelect} planeLabel={(partition) => partition || labels.partitionNone} labels={labels} label={labels.regionLabel}
+            onSelect={onSelect} planeLabel={(key) => placementLabel(key, graph, labels)} labels={labels} label={labels.regionLabel}
         />
     );
 }
@@ -98,7 +99,7 @@ function Scene3DCamera(p: SceneProps) {
             <Suspense fallback={<GraphView {...p} />}>
                 <GraphScene
                     rootId={graph.scope.rootId} nodes={drawn.nodes} edges={drawn.edges} lens={lens} selected={selected}
-                    focus={p.focus} onSelect={p.onSelect} label={labels.regionLabel} planeLabel={(partition) => partition || labels.partitionNone}
+                    focus={p.focus} onSelect={p.onSelect} label={labels.regionLabel} planeLabel={(key) => placementLabel(key, graph, labels)}
                     reducedMotion={p.reducedMotion} channels={channels} roles={surface.highlight?.roles}
                 />
             </Suspense>
@@ -178,7 +179,7 @@ function TransitCamera({ surface, labels, reducedMotion, graph }: SceneProps) {
         <>
         <MapLook towers={surface.towers} labels={labels} onChange={surface.setTowers} />
         <TransitMap
-            roles={roles}
+            roles={roles} types={view ? undefined : surface.types}
             stations={view?.stations ?? surface.stations} lines={view?.lines ?? surface.lines} overlay={overlay} labels={labels} lit={lit}
             lineId={view ? view.lines.lines[0]?.id ?? null : surface.line?.id ?? null} selectedStation={stationId}
             pins={view ? NO_PINS : surface.pins} noteOf={noteOf} reducedMotion={reducedMotion}

@@ -161,6 +161,8 @@ const nextConfig = {
       three: './node_modules/three/build/three.module.js',
       '@react-three/fiber': './node_modules/@react-three/fiber/dist/react-three-fiber.esm.js',
       '@react-three/drei': './node_modules/@react-three/drei/index.js',
+      // The stage's mono labels (PRD 43 B3): imported directly, never through drei.
+      'troika-three-text': './node_modules/troika-three-text/dist/troika-three-text.esm.js',
       '@seanhogg/builderforce-memory/knowledge': './node_modules/@seanhogg/builderforce-memory/dist/knowledge/index.js',
       '@seanhogg/builderforce-memory/ingest': './node_modules/@seanhogg/builderforce-memory/dist/ingest/index.js',
       // `@builderforce/agent-run` (the canvas's one agent) binds the packer and the fold.

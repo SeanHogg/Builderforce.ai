@@ -21,6 +21,11 @@ import type { EdgeBuffer } from '../scene/buffers';
 import type { Layout3D } from '../scene/layout3d';
 import type { PartitionCell } from '../graphModel';
 import type { EdgePath } from '../graph2d/edgePaths';
+import type { MarkPaint, MarkSet, Placement } from '../stage/types';
+import type { Bindings } from '../surface/overlays';
+import type { TowerRole } from '../scene/highlightRoles';
+import type { PlacementReq } from './tasks/placement/request';
+import type { SlotIncidentRaw } from './tasks/stageIncident';
 
 /** A graph's identity on the wire. Ids are never reused, so the id IS the generation: a reply for an id nobody holds any more is stale. */
 export type GraphId = number;
@@ -94,7 +99,7 @@ export interface TaskTable {
     /** The drawn edges of the 3D scene as line-segment buffers for a selection. */
     edgeBuffers: { req: { refs: Refs; placed: PlacedWire; selected: string | null }; raw: EdgeBuffer[] };
     mindMap: { req: { refs: Refs; opts: MindOptions }; raw: MindMap };
-    surface: { req: { graph: GraphId; changed: string[]; repoConfigName?: string }; raw: SurfaceRaw };
+    surface: { req: { graph: GraphId; changed: string[]; repoConfigName?: string; communityFallback?: string }; raw: SurfaceRaw };
     /** The transit map's layout and hop routes, computed off the main thread from the worker-built stations and lines. */
     transitLayout: { req: { stations: StationModel; lines: LinesModel; width: number; order?: readonly string[] }; raw: TransitRoutesRaw };
     path: { req: { graph: GraphId; refs: string[]; stations: StationLookup }; raw: PathModel };
@@ -102,6 +107,20 @@ export interface TaskTable {
     partitionMatrix: { req: { graph: GraphId }; raw: MatrixRaw };
     focus: { req: { graph: GraphId; max: number; keep: string[] }; raw: FocusRaw };
     antiPatterns: { req: { graph: GraphId; layer: string | null; stations?: StationLookup }; raw: AntiPatternGroupRaw[] };
+    /** PRD 43 B1a: the stage's marks, once per graph. */
+    markSet: { req: { graph: GraphId; changed: string[]; strings: Record<string, string> }; raw: MarkSet };
+    /** The marks' tone / flags from the lens, the question (+ its pattern `family`) and the overlay, as data. */
+    markPaint: {
+        req: {
+            graph: GraphId; generation: number; lensId: string; questionId: string | null; overlay: Bindings;
+            lit: string[] | null; roles: Array<[ref: string, role: TowerRole]> | null; family: string | null;
+        };
+        raw: MarkPaint;
+    };
+    /** One camera's layout of the marks: position / scale / extrude for every slot, plus its links, planes and rig. */
+    placement: { req: PlacementReq; raw: Placement };
+    /** The ranked incident index by slot, once per graph (B5): select slices it on the main thread. */
+    stageIncident: { req: { graph: GraphId; generation: number }; raw: SlotIncidentRaw };
 }
 
 export type TaskKind = keyof TaskTable;

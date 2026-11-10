@@ -163,7 +163,7 @@ function dropWasmAssets(): Plugin {
  * is ONE three.js in the bundle; React and memory are the `dedupe`d copies below. The 3D
  * scene stays a lazy chunk: the view imports it with `lazy(() => import(...))`.
  */
-const KNOWLEDGE_VIEW_PEERS = /^(three|@react-three\/fiber|@react-three\/drei)(\/.*)?$/;
+const KNOWLEDGE_VIEW_PEERS = /^(three|@react-three\/fiber|@react-three\/drei|troika-three-text)(\/.*)?$/;
 
 function knowledgeViewPeers(): Plugin {
   const anchor = path.join(FRONTEND_SRC, 'middleware.ts'); // must EXIST: Vite resolves bare imports from an importer's dir only when the file is on disk

@@ -166,6 +166,46 @@ Worker tasks in `protocol.ts` `TaskTable`: `markSet {graph, changed, strings}`, 
 
 **Interim fixes (2026-11-10)** — Map flicker, Tower tab folded into Map, Graph2D layout, per-renderer type shapes, the Go-inside crash, the error boundary — keep the current cameras usable until their placements land; the renderers they touch retire per B8, and the `shapes.ts` registry becomes rule 2's single source.
 
+#### P1a results (2026-11-10)
+
+**What was built** (P1's foundation, behind the `kg.stage = spike` opt-in — `localStorage` in the VS Code webview, `?kgStage=spike` or `localStorage` on the web; `ViewSurface` mounts `stage/spike/StageSpike.tsx` in place of Transit/Graph only then):
+- worker tasks `markSet`, `markPaint`, `placement` in `TaskTable` (`compute/tasks/stage.ts`; builders `markSet.ts`, `markPaint.ts`, `stageModel.ts`, `placement/{map,graph,anchor,links,request,index}.ts`). `markSet` types every slot with `markTypeOf`; `placement/map.ts` reads `layoutTransit` and `placement/graph.ts` reads `layout2d` unchanged; `anchor.ts` implements rule 4 (hidden aggregate at its visible members' centroid, hidden node at its nearest placed ancestor, scale 0).
+- `src/stage/`: `types.ts` (the contract), `tones.ts`, `slots.ts`, `stats.ts`, `tween.ts`, `marks/{geometry,shader,MarkLayer}.ts` (one `InstancedMesh` per type batch, walls of `shapeGeometry`'s extrusion + one SDF cap quad, A/B sets mixed by `uT`), `links/{shader,LinkLayer}.ts` (the one instanced-quad line shader), `renderer.ts` (`StageRenderer` port: WebGL + no-op), `Stage.tsx` (one `<Canvas frameloop="demand">`), `pick.ts`, `StageProxies.tsx`.
+
+**How it was measured.** A scratch page bundled with esbuild from the package sources, run in headless Chromium 145 (playwright-core) on the **real GPU** — `ANGLE (AMD Radeon(TM) Graphics (0x1681) Direct3D11)`, an integrated GPU — at 1280×800, DPR 1. Frame time = `stage.tick` + `renderer.render` + a 1-px `readPixels` (forces the GPU to finish, so it is CPU + GPU time per frame and pessimistic). Uploads and mesh creations are the stage's own counters (`stats.ts`; every upload goes through `uploadRange`), cross-checked in the unit test by the attributes' `version`. Six alternating Map↔Graph switches per graph, 400 ms tween. The "10k" graph is `buildPerfGraph({ scale: 3.19 })` (9,979 nodes, 505,596 edges, 11,243 slots) with Graph at lod 1 (every node shown, all 11k slots move); its scaled-up outline collapses to 2 stations, so its Map side is small — the switch still moves every slot. Artifacts (PNGs, `results.json`) are in the session scratchpad, `p1a/gpu/`.
+
+| | harness (3,138 nodes, 3,975 slots, Graph shows 2,000) | 10k (9,979 nodes, 11,243 slots, Graph shows 9,979) |
+|---|---|---|
+| Tween frame p50 / p95 / max | 9.2 / 13.7 / 26.4 ms (an earlier run: 5.0 / 6.7) | 18.4 / 22.0 / 25.1 ms; rAF interval p95 33 ms |
+| `setPlacement` (main thread, the swap itself) | 0.1–0.4 ms | 0.4 ms |
+| InstancedMesh created per switch | **0** (6 of 6 switches) | **0** |
+| Attribute uploads per mark batch per switch | **2** (`place` of the stale set + `extrudeAB`) | **2** |
+| Bytes uploaded per switch | 93 KB → Graph; 144 KB → Map (+ 3 link uploads, 72 hops) | 264 KB either way |
+| Draw calls | 2 type batches + 1 route family | same |
+| First frame incl. shader compile | 253 ms | 303 ms |
+| Worker side (once, cached) | stage model 1.23 s (`buildStations` + `buildLines` dominate), paint 30 ms, Map 22 ms, Graph 463 ms | 1.93 s, 68 ms, 11 ms, 5.7 s |
+
+**Shapes at 6 / 8 / 12 px** (13 types, one row per size and DPR; metric = XOR / union of the thresholded silhouettes, < 0.10 counted indistinguishable):
+
+| | DPR 1 | DPR 2 |
+|---|---|---|
+| 6 px | source/data, function/source, function/data | class/source, style/config |
+| 8 px | source/data, function/system, class/data, function/source | class/source, class/data |
+| 12 px | class/source, style/config | class/source, source/data, class/data, style/config, function/system |
+
+(12 px at DPR 1 and 6 px at DPR 2 rasterise to the same device pixels and measured identical — a sanity check of the metric.) Every other pair is distinct at every size. The near-misses are always the same few silhouette pairs, not AA failure: square vs rounded square (corner radius 0.35 of 0.9), triangle vs rounded triangle, circle vs hexagon, drum vs rounded square.
+
+**Line shader vs today's SVG** (harness Map, 72 hops, the same colours; SVG = `HopPath`'s casing + core paths rasterised by the browser): mean absolute difference over inked pixels **6.1 / 255 at DPR 1, 3.5 at DPR 2**; pixels differing by > 32: 6.0 % / 3.8 %. The diff image shows only AA fringes on curves and dash phase on dashed hops (the SVG measures dash length on the true quadratic, the shader on the 6-step sampled corner). Casing, round joins, and later-hop-over-earlier-hop paint order match. **Stations** (36 marks, SDF cap vs `StationMark`'s `ShapePath` + back disc): 22.9 / 255 at DPR 1, 13.2 at DPR 2 — all of it a 1-px ring at the outline: the SVG strokes 2 px of background centred on the outline (insetting the fill 1 px) and backs it with a circle, the cap follows the outline (operator rule 7).
+
+**Found during the spike (fixed):** twelve separate per-instance attributes (`posA`, `scaleA`, … `flags`) plus `InstancedMesh`'s `instanceMatrix` exceed D3D11 ANGLE's 16-attribute limit and **do not link** ("Too many attributes"). The attributes are packed: `placeA`/`placeB` (xyz + scale), `extrudeAB`, `paint` (tone, tone2, fill, flags) — 4 slots + instanceMatrix. Line quads also need `DoubleSide` (their winding depends on segment direction).
+
+**Not measured:** SwiftShader / software GL (the real GPU was available); real browsers' compositor timing (headless); a discrete GPU; text (troika is not in P1a).
+
+**Verdict: PASS, with three B1a revisions.**
+1. **Rule 5 / Contract:** the per-slot A/B pairs are *packed* attributes — `placeA`/`placeB` = (x, y, z, scale), `extrudeAB`, and one `paint` vec4 — and a switch is **2** uploads per batch (done check stays ≤ 3). Name them so in P1.
+2. **Rule 2 vocabulary:** square/rounded square, triangle/rounded triangle and circle/hexagon cannot be told apart at ≤ 12 px. Before P1 ships the legend, change the rounded variants' silhouettes so they differ at 8 px (e.g. `source` = rounded square with radius ≥ 0.6 or a 4:3 rectangle; `style` = triangle pointing down; `system` hexagon with a flat top and ≥ 1.2 radius), and re-run this metric as a unit test over the registry (`shapes.test.ts`, XOR/union ≥ 0.10 at 8 px DPR 1). Below 8 px tone stays the primary cue, as rule 2 says.
+3. **B3 Marks budget:** with every one of 10k marks visible the tween runs 18–22 ms on an integrated GPU (the cap's polygon SDF loop is per fragment). P1 keeps the Graph overview at its 2,000-node LOD cap (hidden slots are culled in the vertex shader for free) and P3's LOD/bundling decides what more is shown; if a camera must show > ~5k marks at once, bake each shape's SDF into a small texture atlas instead of the per-fragment polygon loop.
+
 ### B2. The six cameras
 
 | Camera | Home view | Depth axis | Frame |

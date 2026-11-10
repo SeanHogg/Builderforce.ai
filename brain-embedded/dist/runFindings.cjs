@@ -82,12 +82,12 @@ function excerpt(text) {
 function turnEvidence(t, label = "llm.complete", text) {
   return { step: t.step, turn: t.index, label, ...text ? { excerpt: excerpt(text) } : {} };
 }
-function callEvidence(c, path2, text) {
+function callEvidence(c, path, text) {
   return {
     step: c.step,
     ...c.turn > 0 ? { turn: c.turn } : {},
     label: c.name,
-    ...path2 ? { path: path2 } : {},
+    ...path ? { path } : {},
     ...text ? { excerpt: excerpt(text) } : {}
   };
 }
@@ -95,14 +95,14 @@ function fileLedger(view) {
   const rows = /* @__PURE__ */ new Map();
   for (const c of view.calls) {
     if (c.check) for (const row of rows.values()) row.checked = true;
-    for (const path2 of c.paths) {
-      const row = rows.get(path2);
+    for (const path of c.paths) {
+      const row = rows.get(path);
       if (row) {
         row.writes += 1;
         row.lastWrite = c;
         row.checked = false;
       } else {
-        rows.set(path2, { path: path2, writes: 1, lastWrite: c, checked: false });
+        rows.set(path, { path, writes: 1, lastWrite: c, checked: false });
       }
     }
   }
@@ -262,13 +262,13 @@ function editedFilesOf(toolName, args) {
   const out = [];
   if (toolName === "edit_file") {
     const replacement = (e, fallback) => {
-      const path2 = editPathOf(e) ?? fallback;
+      const path = editPathOf(e) ?? fallback;
       const before = editStr(e.old_string);
       const after = editStr(e.new_string);
-      if (path2 && (before !== void 0 || after !== void 0)) {
-        out.push({ path: path2, ...before !== void 0 ? { before } : {}, ...after !== void 0 ? { after } : {} });
-      } else if (path2 && e !== a) {
-        out.push({ path: path2 });
+      if (path && (before !== void 0 || after !== void 0)) {
+        out.push({ path, ...before !== void 0 ? { before } : {}, ...after !== void 0 ? { after } : {} });
+      } else if (path && e !== a) {
+        out.push({ path });
       }
     };
     if ("old_string" in a || "new_string" in a) replacement(a, null);
@@ -723,13 +723,13 @@ var LANGUAGE_BY_EXT = {
   md: "markdown",
   mdx: "markdown"
 };
-function extensionOf2(path2) {
-  const base = path2.slice(path2.lastIndexOf("/") + 1);
+function extensionOf2(path) {
+  const base = path.slice(path.lastIndexOf("/") + 1);
   const dot = base.lastIndexOf(".");
   return dot > 0 ? base.slice(dot + 1).toLowerCase() : "";
 }
-function languageOf(path2) {
-  return LANGUAGE_BY_EXT[extensionOf2(path2.replace(/\\/g, "/"))];
+function languageOf(path) {
+  return LANGUAGE_BY_EXT[extensionOf2(path.replace(/\\/g, "/"))];
 }
 function group(m, n) {
   return m[n] ?? "";
@@ -757,23 +757,78 @@ var JS_METHOD = new RegExp(
 var JS_ABSTRACT_METHOD = new RegExp(
   `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override)\\s+)*abstract\\s+(?:(?:public|private|protected|static|readonly|override|async)\\s+)*(${ID})\\s*\\??\\s*(?:<[^>]*>)?\\s*\\(`
 );
+var JS_METHOD_OPEN = new RegExp(
+  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|async|get|set)\\s+)*\\*?\\s*(${ID})\\s*(?:<[^>]*>)?\\s*\\(\\s*$`
+);
+var JS_SIGNATURE_CLOSE = /^\s*\)\s*(?::[^;=]*)?\{\s*$/;
+var MAX_SIGNATURE_LINES = 40;
 var JS_KEYWORDS = /* @__PURE__ */ new Set(["if", "for", "while", "switch", "catch", "return", "function", "with", "do", "else", "try"]);
-function extractJs(lines, out) {
+function closesWithBody(lines, at) {
+  for (let i = at + 1; i < Math.min(lines.length, at + MAX_SIGNATURE_LINES); i += 1) {
+    const line = lines[i] ?? "";
+    if (/^\s*\)/.test(line)) return JS_SIGNATURE_CLOSE.test(line);
+  }
+  return false;
+}
+var TEST_SOURCE_PATH = /(?:\.|\/)(?:test|spec)\.[a-z]+$|(?:^|\/)__tests__\//;
+function isTestSourcePath(path) {
+  return TEST_SOURCE_PATH.test(path.replace(/\\/g, "/"));
+}
+var JS_CALLBACK_STATEMENT = new RegExp(`^([ \\t]*)(${ID}(?:\\??\\.${ID})*)\\s*\\((.*)(?:=>|\\bfunction\\b[^{]*\\))\\s*\\{\\s*$`);
+var JS_TOP_BLOCK = /^(?:if\s*\(.*\)|\}?\s*else(?:\s+if\s*\(.*\))?|try|\}?\s*finally|\{)\s*\{\s*$/;
+var NOT_CALLBACK_OWNERS = /* @__PURE__ */ new Set([
+  "describe",
+  "it",
+  "test",
+  "suite",
+  "bench",
+  "beforeEach",
+  "afterEach",
+  "beforeAll",
+  "afterAll",
+  ...JS_KEYWORDS
+]);
+var FIRST_STRING = /(["'`])((?:\\.|(?!\1)[^\\])*)\1/;
+function extractJs(lines, out, path = "") {
   let cls;
-  eachLine(lines, out, (line2, lineNo) => {
-    if (/^\}/.test(line2)) cls = void 0;
+  let topBlock;
+  let inCallback;
+  const callbacks = !isTestSourcePath(path);
+  const named = /* @__PURE__ */ new Map();
+  eachLine(lines, out, (line, lineNo) => {
+    if (/^\}/.test(line)) cls = void 0;
+    if (inCallback !== void 0) {
+      if (line.startsWith(inCallback) && /^[})]/.test(line.slice(inCallback.length))) inCallback = void 0;
+      return;
+    }
+    if (/^\S/.test(line)) topBlock = JS_TOP_BLOCK.test(line) ? "" : void 0;
+    else if (topBlock === "" && line.trim()) topBlock = /^[ \t]*/.exec(line)[0];
     for (const rule of JS_RULES) {
-      const m = rule.re.exec(line2);
+      const m = rule.re.exec(line);
       if (!m) continue;
       const exported = !!m[1];
-      if (!exported && /^\s/.test(line2)) continue;
+      if (!exported && /^\s/.test(line)) continue;
       const name2 = group(m, 2).replace(/^["']|["']$/g, "");
       out.push({ name: name2, kind: rule.kind, line: lineNo, exported });
       if (rule.kind === "class") cls = name2;
       return;
     }
-    if (cls === void 0) return;
-    const method = JS_METHOD.exec(line2) ?? JS_ABSTRACT_METHOD.exec(line2);
+    if (cls === void 0) {
+      const cb = callbacks ? JS_CALLBACK_STATEMENT.exec(line) : null;
+      const indent = cb ? group(cb, 1) : "";
+      const callee = cb ? group(cb, 2) : "";
+      if (cb && (indent === "" || indent === topBlock) && !NOT_CALLBACK_OWNERS.has(callee.split(".")[0])) {
+        const literal = FIRST_STRING.exec(group(cb, 3));
+        const base = literal && !literal[2].includes("${") ? `${callee} "${literal[2]}"` : callee;
+        const n = (named.get(base) ?? 0) + 1;
+        named.set(base, n);
+        out.push({ name: n === 1 ? base : `${base} #${n}`, kind: "function", line: lineNo, exported: false });
+        inCallback = indent;
+      }
+      return;
+    }
+    const open = JS_METHOD_OPEN.exec(line);
+    const method = JS_METHOD.exec(line) ?? JS_ABSTRACT_METHOD.exec(line) ?? (open && closesWithBody(lines, lineNo - 1) ? open : null);
     const name = method ? group(method, 1) : "";
     if (name && !JS_KEYWORDS.has(name)) out.push({ name, kind: "method", line: lineNo, exported: false, container: cls });
   });
@@ -781,10 +836,10 @@ function extractJs(lines, out) {
 function extractPython(lines, out) {
   let cls;
   let memberIndent;
-  eachLine(lines, out, (line2, lineNo) => {
-    const m = /^(\s*)(?:async\s+)?(def|class)\s+([A-Za-z_]\w*)/.exec(line2);
-    const indent = m ? group(m, 1) : /^(\s*)\S/.exec(line2)?.[1] ?? "";
-    if (indent === "" && /^[^\s@#)\]}]/.test(line2) && !(m && group(m, 2) === "class")) {
+  eachLine(lines, out, (line, lineNo) => {
+    const m = /^(\s*)(?:async\s+)?(def|class)\s+([A-Za-z_]\w*)/.exec(line);
+    const indent = m ? group(m, 1) : /^(\s*)\S/.exec(line)?.[1] ?? "";
+    if (indent === "" && /^[^\s@#)\]}]/.test(line) && !(m && group(m, 2) === "class")) {
       cls = void 0;
       memberIndent = void 0;
     }
@@ -814,15 +869,15 @@ function extractPython(lines, out) {
 }
 var goReceiver = (receiver) => /\(\s*(?:[A-Za-z_]\w*\s+)?\*?\s*([A-Za-z_]\w*)/.exec(receiver)?.[1];
 function extractGo(lines, out) {
-  eachLine(lines, out, (line2, lineNo) => {
-    const fn = /^func\s+(\([^)]*\)\s*)?([A-Za-z_]\w*)/.exec(line2);
+  eachLine(lines, out, (line, lineNo) => {
+    const fn = /^func\s+(\([^)]*\)\s*)?([A-Za-z_]\w*)/.exec(line);
     if (fn) {
       const name2 = group(fn, 2);
       const container = fn[1] ? goReceiver(fn[1]) : void 0;
       out.push({ name: name2, kind: fn[1] ? "method" : "function", line: lineNo, exported: /^[A-Z]/.test(name2), ...container ? { container } : {} });
       return;
     }
-    const ty = /^type\s+([A-Za-z_]\w*)\s+(struct|interface)?/.exec(line2);
+    const ty = /^type\s+([A-Za-z_]\w*)\s+(struct|interface)?/.exec(line);
     if (!ty) return;
     const name = group(ty, 1);
     const word = group(ty, 2);
@@ -830,8 +885,8 @@ function extractGo(lines, out) {
     out.push({ name, kind, line: lineNo, exported: /^[A-Z]/.test(name) });
   });
 }
-function rustImplTarget(line2) {
-  const m = /^\s*(?:unsafe\s+)?impl\b(?:\s*<[^>]*>)?\s+([^{]*)/.exec(line2);
+function rustImplTarget(line) {
+  const m = /^\s*(?:unsafe\s+)?impl\b(?:\s*<[^>]*>)?\s+([^{]*)/.exec(line);
   if (!m) return void 0;
   const text = group(m, 1).replace(/\bwhere\b.*$/, "");
   const target = text.includes(" for ") ? text.slice(text.indexOf(" for ") + 5) : text;
@@ -839,14 +894,14 @@ function rustImplTarget(line2) {
 }
 function extractRust(lines, out) {
   let block;
-  eachLine(lines, out, (line2, lineNo) => {
-    if (/^\}/.test(line2)) block = void 0;
-    const target = rustImplTarget(line2);
+  eachLine(lines, out, (line, lineNo) => {
+    if (/^\}/.test(line)) block = void 0;
+    const target = rustImplTarget(line);
     if (target) {
       block = target;
       return;
     }
-    const m = /^(\s*)(pub(?:\([^)]*\))?\s+)?(?:(?:async|unsafe|const|extern(?:\s+"[^"]*")?)\s+)*(fn|struct|enum|trait|mod|type)\s+([A-Za-z_]\w*)/.exec(line2);
+    const m = /^(\s*)(pub(?:\([^)]*\))?\s+)?(?:(?:async|unsafe|const|extern(?:\s+"[^"]*")?)\s+)*(fn|struct|enum|trait|mod|type)\s+([A-Za-z_]\w*)/.exec(line);
     if (!m) return;
     const word = group(m, 3);
     const indented = group(m, 1).length > 0;
@@ -860,34 +915,34 @@ function extractRust(lines, out) {
 var OO_TYPE = /^\s*(?:(?:public|private|protected|internal|static|final|abstract|sealed|open|data|partial|export|inline|value)\s+)*(class|interface|enum|record|object|struct|protocol|trait)\s+([A-Za-z_]\w*)/;
 var OO_FUNC = /^\s*(?:(?:public|private|protected|internal|static|final|override|open|suspend|inline|abstract)\s+)*(?:fun|func|function)\s+([A-Za-z_]\w*)/;
 function extractOo(lines, out) {
-  eachLine(lines, out, (line2, lineNo) => {
-    const exported = !/\bprivate\b/.test(line2);
-    const ty = OO_TYPE.exec(line2);
+  eachLine(lines, out, (line, lineNo) => {
+    const exported = !/\bprivate\b/.test(line);
+    const ty = OO_TYPE.exec(line);
     if (ty) {
       const word = group(ty, 1);
       const kind = word === "interface" || word === "protocol" ? "interface" : word === "enum" ? "enum" : word === "struct" ? "struct" : word === "trait" ? "trait" : "class";
       out.push({ name: group(ty, 2), kind, line: lineNo, exported });
       return;
     }
-    const fn = OO_FUNC.exec(line2);
-    if (fn) out.push({ name: group(fn, 1), kind: /^\s/.test(line2) ? "method" : "function", line: lineNo, exported });
+    const fn = OO_FUNC.exec(line);
+    if (fn) out.push({ name: group(fn, 1), kind: /^\s/.test(line) ? "method" : "function", line: lineNo, exported });
   });
 }
 function extractRuby(lines, out) {
-  eachLine(lines, out, (line2, lineNo) => {
-    const ty = /^\s*(class|module)\s+([A-Z]\w*(?:::\w+)*)/.exec(line2);
+  eachLine(lines, out, (line, lineNo) => {
+    const ty = /^\s*(class|module)\s+([A-Z]\w*(?:::\w+)*)/.exec(line);
     if (ty) {
       out.push({ name: group(ty, 2), kind: group(ty, 1) === "module" ? "module" : "class", line: lineNo, exported: true });
       return;
     }
-    const fn = /^(\s*)def\s+(?:self\.)?([A-Za-z_]\w*[?!=]?)/.exec(line2);
+    const fn = /^(\s*)def\s+(?:self\.)?([A-Za-z_]\w*[?!=]?)/.exec(line);
     if (fn) out.push({ name: group(fn, 2), kind: group(fn, 1).length > 0 ? "method" : "function", line: lineNo, exported: true });
   });
 }
 var SQL_CREATE = /^\s*create\s+(?:or\s+replace\s+)?(?:unique\s+)?(table|view|materialized\s+view|function|procedure|index|type|trigger)\s+(?:concurrently\s+)?(?:if\s+not\s+exists\s+)?([\w."]+)/i;
 function extractSql(lines, out) {
-  eachLine(lines, out, (line2, lineNo) => {
-    const m = SQL_CREATE.exec(line2);
+  eachLine(lines, out, (line, lineNo) => {
+    const m = SQL_CREATE.exec(line);
     if (!m) return;
     const word = group(m, 1).toLowerCase();
     const kind = word === "function" || word === "procedure" || word === "trigger" ? "function" : word === "index" || word === "type" ? "type" : "table";
@@ -896,13 +951,13 @@ function extractSql(lines, out) {
 }
 function extractMarkdown(lines, out) {
   let fenced = false;
-  eachLine(lines, out, (line2, lineNo) => {
-    if (/^\s*(```|~~~)/.test(line2)) {
+  eachLine(lines, out, (line, lineNo) => {
+    if (/^\s*(```|~~~)/.test(line)) {
       fenced = !fenced;
       return;
     }
     if (fenced) return;
-    const m = /^(#{1,4})\s+(.+?)\s*#*\s*$/.exec(line2);
+    const m = /^(#{1,4})\s+(.+?)\s*#*\s*$/.exec(line);
     if (m) out.push({ name: `${group(m, 1)} ${group(m, 2).slice(0, 120)}`, kind: "heading", line: lineNo, exported: true });
   });
 }
@@ -916,14 +971,14 @@ var EXTRACTORS = {
   sql: extractSql,
   markdown: extractMarkdown
 };
-function extractSymbols(path2, content, cap = MAX_SYMBOLS_PER_FILE) {
-  const language = languageOf(path2);
+function extractSymbols(path, content, cap = MAX_SYMBOLS_PER_FILE) {
+  const language = languageOf(path);
   if (!language) return [];
   const out = [];
   const outer = symbolCap;
   symbolCap = cap;
   try {
-    EXTRACTORS[language](content.split(/\r?\n/), out);
+    EXTRACTORS[language](content.split(/\r?\n/), out, path.replace(/\\/g, "/"));
   } finally {
     symbolCap = outer;
   }
@@ -992,23 +1047,23 @@ var fileOutlineTool = defineTool({
   },
   requires: ["repo.read", "repo.symbols"],
   async execute(args, ctx) {
-    const path2 = typeof args.path === "string" ? args.path.trim() : "";
-    if (!path2) return { data: { ok: false, error: "path is required" } };
+    const path = typeof args.path === "string" ? args.path.trim() : "";
+    if (!path) return { data: { ok: false, error: "path is required" } };
     const kind = asKind(args.kind);
-    const file = await ctx.caps.repoRead.readFile(path2);
+    const file = await ctx.caps.repoRead.readFile(path);
     if (!file.ok) return { data: file };
     const content = file.content ?? "";
-    const all = extractSymbols(path2, content).filter((s) => !kind || s.kind === kind);
+    const all = extractSymbols(path, content).filter((s) => !kind || s.kind === kind);
     const shown = all.slice(0, OUTLINE_MAX_ENTRIES);
     const data = {
       ok: true,
-      path: file.path ?? path2,
+      path: file.path ?? path,
       totalLines: content.split("\n").length,
       total: all.length,
       symbols: shown.map(formatSymbol)
     };
     if (all.length === 0) {
-      data.note = kind ? `No ${kind} definitions found in ${path2}.` : `No definitions recognised in ${path2} (unsupported language, or a data/config file) \u2014 read_file it directly.`;
+      data.note = kind ? `No ${kind} definitions found in ${path}.` : `No definitions recognised in ${path} (unsupported language, or a data/config file) \u2014 read_file it directly.`;
     } else if (all.length > shown.length) {
       const lastLine = shown.at(-1)?.line ?? 0;
       data.note = `Showing the first ${shown.length} of ${all.length} definitions (through line ${lastLine}). Pass \`kind\` to list one kind, or find_symbol for a specific name.`;
@@ -1016,8 +1071,8 @@ var fileOutlineTool = defineTool({
     return { data };
   }
 });
-function markdownOutline(path2, content) {
-  return extractSymbols(path2, content).filter((s) => s.kind === "heading").slice(0, OUTLINE_MAX_ENTRIES).map((s) => ({ heading: s.name, line: s.line }));
+function markdownOutline(path, content) {
+  return extractSymbols(path, content).filter((s) => s.kind === "heading").slice(0, OUTLINE_MAX_ENTRIES).map((s) => ({ heading: s.name, line: s.line }));
 }
 var SYMBOL_TOOLS = [findSymbolTool, fileOutlineTool];
 
@@ -1032,35 +1087,35 @@ function outlineFirstApplies(content, leverOn) {
 }
 var READ_FILE_MAX_PATHS = 8;
 var MARKDOWN_OUTLINE_MIN_CHARS = 16e3;
-function readFileKey(path2, file, key) {
+function readFileKey(path, file, key) {
   if (file.truncated === true) {
-    return { ok: false, path: path2, key, error: "the file is too large to load whole, so `key` cannot be used \u2014 page it with offset/limit" };
+    return { ok: false, path, key, error: "the file is too large to load whole, so `key` cannot be used \u2014 page it with offset/limit" };
   }
   const read = readJsonKey(file.content ?? "", key);
-  if (!read.ok) return { path: path2, key, ...read };
+  if (!read.ok) return { path, key, ...read };
   if ("tooLarge" in read) {
     return {
       ok: true,
-      path: path2,
+      path,
       key: read.key,
       childKeys: read.childKeys,
       note: `"${read.key}" is ${read.size} characters \u2014 too large to return whole. Read one of its childKeys, e.g. key "${read.key}.${read.childKeys[0] ?? "\u2026"}".`
     };
   }
-  return { ok: true, path: path2, key: read.key, content: read.content };
+  return { ok: true, path, key: read.key, content: read.content };
 }
-var isMarkdown = (path2) => /\.mdx?$/i.test(path2);
-async function readOneFile(path2, opts, caps, leverOn) {
-  const r = await caps.repoRead.readFile(path2);
+var isMarkdown = (path) => /\.mdx?$/i.test(path);
+async function readOneFile(path, opts, caps, leverOn) {
+  const r = await caps.repoRead.readFile(path);
   if (!r.ok) return r;
-  if (opts.key) return readFileKey(r.path ?? path2, r, opts.key);
+  if (opts.key) return readFileKey(r.path ?? path, r, opts.key);
   const content = r.content ?? "";
   if (opts.offset === void 0 && opts.limit === void 0 && outlineFirstApplies(content, leverOn) && r.truncated !== true) {
-    const symbols = extractSymbols(path2, content).slice(0, 150).map((s) => `L${s.line} ${s.kind} ${s.name}${s.exported && s.kind !== "heading" ? " (export)" : ""}`);
+    const symbols = extractSymbols(path, content).slice(0, 150).map((s) => `L${s.line} ${s.kind} ${s.name}${s.exported && s.kind !== "heading" ? " (export)" : ""}`);
     const head = windowFileContent(content, { offset: 1, limit: OUTLINE_FIRST_PREFIX_LINES });
     return {
       ok: true,
-      path: r.path ?? path2,
+      path: r.path ?? path,
       outline: symbols,
       totalLines: head.totalLines,
       content: head.content,
@@ -1072,15 +1127,15 @@ async function readOneFile(path2, opts, caps, leverOn) {
   const win = windowFileContent(content, { offset: opts.offset, limit: opts.limit });
   const data = {
     ok: true,
-    path: r.path ?? path2,
+    path: r.path ?? path,
     content: win.content,
     truncated: win.truncated || r.truncated === true,
     totalLines: win.totalLines,
     offset: win.offset
   };
   let note = fileWindowNote(win);
-  if (opts.offset === void 0 && isMarkdown(data.path ?? path2) && (content.length > MARKDOWN_OUTLINE_MIN_CHARS || win.truncated)) {
-    const outline = markdownOutline(data.path ?? path2, content);
+  if (opts.offset === void 0 && isMarkdown(data.path ?? path) && (content.length > MARKDOWN_OUTLINE_MIN_CHARS || win.truncated)) {
+    const outline = markdownOutline(data.path ?? path, content);
     if (outline.length > 0) {
       data.outline = outline;
       const pointer = "This document is larger than one read: `outline` lists its headings with their line numbers \u2014 page by heading line with offset (and a small limit) instead of reading it window by window.";
@@ -1093,7 +1148,7 @@ async function readOneFile(path2, opts, caps, leverOn) {
 async function readManyFiles(paths, opts, caps, leverOn) {
   return Promise.all(
     paths.map(
-      (path2) => readOneFile(path2, opts, caps, leverOn).catch((err) => ({ ok: false, path: path2, error: err instanceof Error ? err.message : String(err) }))
+      (path) => readOneFile(path, opts, caps, leverOn).catch((err) => ({ ok: false, path, error: err instanceof Error ? err.message : String(err) }))
     )
   );
 }
@@ -1102,8 +1157,8 @@ async function readManyFiles(paths, opts, caps, leverOn) {
 var DEFAULT_COMPRESS_MIN_CHARS = 4e3;
 var DEFAULT_COMPRESS_RATE = 0.5;
 var FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})/;
-function fenceRun(line2) {
-  return FENCE_OPEN.exec(line2)?.[1] ?? null;
+function fenceRun(line) {
+  return FENCE_OPEN.exec(line)?.[1] ?? null;
 }
 function splitFences(text) {
   const out = [];
@@ -1114,18 +1169,18 @@ function splitFences(text) {
     if (buf) out.push({ kind, text: buf });
     buf = "";
   };
-  for (const line2 of lines) {
-    const bare = line2.replace(/\r?\n$/, "");
+  for (const line of lines) {
+    const bare = line.replace(/\r?\n$/, "");
     if (!fence) {
       const run2 = fenceRun(bare);
       if (run2) {
         flush("prose");
         fence = { ch: run2.charAt(0), len: run2.length };
       }
-      buf += line2;
+      buf += line;
       continue;
     }
-    buf += line2;
+    buf += line;
     const run = fenceRun(bare);
     const open = fence;
     if (run && run.charAt(0) === open.ch && run.length >= open.len && [...bare.trim()].every((c) => c === open.ch)) {
@@ -1204,9 +1259,9 @@ function invalidRepoResult(action, repo) {
   if (typeof repo !== "string" || repo === "" || safeRepoArg(repo) !== null) return null;
   return { data: { ok: false, action, error: `repo '${repo}' must be a directory inside the workspace (no '..', not absolute), so nothing was run` } };
 }
-function inferRepoFromPath(path2) {
-  if (typeof path2 !== "string" || !path2.trim()) return null;
-  const parts = path2.split(/[\\/]/).filter((s) => s.length > 0 && s !== ".");
+function inferRepoFromPath(path) {
+  if (typeof path !== "string" || !path.trim()) return null;
+  const parts = path.split(/[\\/]/).filter((s) => s.length > 0 && s !== ".");
   if (parts.length < 2) return null;
   return safeRepoArg(parts[0]);
 }
@@ -1216,8 +1271,8 @@ function buildListCheckoutsCommand() {
 function parseCheckoutList(stdout) {
   if (!stdout) return [];
   const names = [];
-  for (const line2 of stdout.split(/\r?\n/)) {
-    const name = line2.trim().replace(/\/+$/, "");
+  for (const line of stdout.split(/\r?\n/)) {
+    const name = line.trim().replace(/\/+$/, "");
     if (!name || name === "*" || name === "." || name === "..") continue;
     const safe = safeRepoArg(name);
     if (safe) names.push(safe);
@@ -1244,9 +1299,9 @@ function shellRunWithStop(ctx, command, cwd) {
 function defaultRepoOf(ctx) {
   return safeRepoArg(ctx.caps.shell?.defaultRepo);
 }
-function pathInRepo(path2, repo) {
-  if (!path2) return path2;
-  const inner = commitPathCandidates(path2, repo);
+function pathInRepo(path, repo) {
+  if (!path) return path;
+  const inner = commitPathCandidates(path, repo);
   return inner.length > 0 ? inner[inner.length - 1] : void 0;
 }
 async function notARepoWithCandidates(action, ctx) {
@@ -1257,26 +1312,26 @@ var NOT_A_REPO = /not a git repository/i;
 function isNotARepo(r) {
   return NOT_A_REPO.test(`${r.stdout ?? ""} ${r.error ?? ""}`);
 }
-function commitPathCandidates(path2, repo) {
-  const out = [path2];
+function commitPathCandidates(path, repo) {
+  const out = [path];
   const dir = safeRepoArg(repo);
   if (dir) {
     const prefix = `${dir.replace(/\/+$/, "")}/`;
-    if (path2.startsWith(prefix)) out.push(path2.slice(prefix.length));
+    if (path.startsWith(prefix)) out.push(path.slice(prefix.length));
     const leaf = dir.split("/").filter(Boolean).pop();
-    if (leaf && path2.startsWith(`${leaf}/`)) out.push(path2.slice(leaf.length + 1));
+    if (leaf && path.startsWith(`${leaf}/`)) out.push(path.slice(leaf.length + 1));
   }
   return [...new Set(out)].filter((p) => p.trim() !== "");
 }
 var rootNotARepo = /* @__PURE__ */ new WeakSet();
-function scopeAttempts(ctx, path2) {
+function scopeAttempts(ctx, path) {
   const fallback = defaultRepoOf(ctx);
   const shell = ctx.caps.shell;
   const attempts = [];
-  if (!(fallback && shell && rootNotARepo.has(shell))) attempts.push({ path: path2 });
-  const inferred = inferRepoFromPath(path2);
-  if (inferred) attempts.push({ repo: inferred, path: pathInRepo(path2, inferred) });
-  if (fallback && fallback !== inferred) attempts.push({ repo: fallback, path: pathInRepo(path2, fallback) });
+  if (!(fallback && shell && rootNotARepo.has(shell))) attempts.push({ path });
+  const inferred = inferRepoFromPath(path);
+  if (inferred) attempts.push({ repo: inferred, path: pathInRepo(path, inferred) });
+  if (fallback && fallback !== inferred) attempts.push({ repo: fallback, path: pathInRepo(path, fallback) });
   return attempts;
 }
 async function runInRepoScope(ctx, scope, run) {
@@ -1341,15 +1396,15 @@ function lineCount(v) {
 function matcher(grep, ignoreCase) {
   try {
     const re = new RegExp(grep, ignoreCase ? "i" : "");
-    return (line2) => re.test(line2);
+    return (line) => re.test(line);
   } catch {
     const needle = ignoreCase ? grep.toLowerCase() : grep;
-    return (line2) => (ignoreCase ? line2.toLowerCase() : line2).includes(needle);
+    return (line) => (ignoreCase ? line.toLowerCase() : line).includes(needle);
   }
 }
 function filterShellOutput(text, filter) {
   const all = text.split("\n");
-  const numbered = all.map((line2, i) => ({ n: i + 1, line: line2 }));
+  const numbered = all.map((line, i) => ({ n: i + 1, line }));
   const test = filter.grep ? matcher(filter.grep, filter.ignoreCase === true) : void 0;
   const matched = test ? numbered.filter((l) => test(l.line)) : numbered;
   let head = lineCount(filter.head);
@@ -1364,7 +1419,7 @@ function filterShellOutput(text, filter) {
     const last = tail ? matched.slice(Math.max(first.length, matched.length - tail)) : [];
     kept = [...first, ...last];
   }
-  const cut = (line2) => line2.length > MAX_LINE_CHARS ? `${line2.slice(0, MAX_LINE_CHARS)}\u2026` : line2;
+  const cut = (line) => line.length > MAX_LINE_CHARS ? `${line.slice(0, MAX_LINE_CHARS)}\u2026` : line;
   const output = kept.map((l) => test ? `${l.n}: ${cut(l.line)}` : cut(l.line)).join("\n");
   return { totalLines: all.length, matchedLines: matched.length, output, truncated: kept.length < matched.length };
 }
@@ -1574,10 +1629,10 @@ function unquoteGitPath(s) {
   }
   return new TextDecoder().decode(new Uint8Array(bytes));
 }
-function parseHeader(line2) {
+function parseHeader(line) {
   const header = { branch: null, upstream: null, ahead: 0, behind: 0 };
-  if (!line2) return header;
-  const text = line2.replace(/^##\s*/, "");
+  if (!line) return header;
+  const text = line.replace(/^##\s*/, "");
   const initial = /^(?:No commits yet on|Initial commit on) (.+)$/.exec(text);
   if (initial) return { ...header, branch: initial[1].trim(), noCommits: true };
   if (/^HEAD \(no branch\)/.test(text)) return { ...header, detached: true };
@@ -1593,38 +1648,38 @@ function parseHeader(line2) {
 var CONFLICT = /* @__PURE__ */ new Set(["DD", "AU", "UD", "UA", "DU", "AA", "UU"]);
 function parseEntries(lines) {
   const out = { staged: [], unstaged: [], untracked: [], conflicted: [] };
-  for (const line2 of lines) {
-    if (line2.length < 4 || line2.startsWith("##")) continue;
-    const xy = line2.slice(0, 2);
-    const rest = line2.slice(3);
+  for (const line of lines) {
+    if (line.length < 4 || line.startsWith("##")) continue;
+    const xy = line.slice(0, 2);
+    const rest = line.slice(3);
     if (xy === "!!") continue;
     if (xy === "??") {
       out.untracked.push(unquoteGitPath(rest));
       continue;
     }
     const arrow = rest.indexOf(" -> ");
-    const path2 = unquoteGitPath(arrow === -1 ? rest : rest.slice(arrow + 4));
+    const path = unquoteGitPath(arrow === -1 ? rest : rest.slice(arrow + 4));
     const from = arrow === -1 ? void 0 : unquoteGitPath(rest.slice(0, arrow));
     if (CONFLICT.has(xy)) {
-      out.conflicted.push(path2);
+      out.conflicted.push(path);
       continue;
     }
     const [x, y] = [xy[0], xy[1]];
-    if (x !== " ") out.staged.push({ path: path2, status: x, ...from && (x === "R" || x === "C") ? { from } : {} });
-    if (y !== " ") out.unstaged.push({ path: path2, status: y });
+    if (x !== " ") out.staged.push({ path, status: x, ...from && (x === "R" || x === "C") ? { from } : {} });
+    if (y !== " ") out.unstaged.push({ path, status: y });
   }
   return out;
 }
 function parsePathSections(sections, paths, upstreamUsable) {
-  return paths.map((path2, i) => {
+  return paths.map((path, i) => {
     const lines = sections[i] ?? [];
     const logLine = lines.find((l) => l.includes(US));
-    if (!logLine) return { path: path2, lastCommit: null, onUpstream: null };
+    if (!logLine) return { path, lastCommit: null, onUpstream: null };
     const space = logLine.indexOf(" ");
     const [author = "", email = "", date = "", ...subject] = logLine.slice(space + 1).split(US);
     const pushed = lines.find((l) => l.startsWith(PUSHED_MARK));
     return {
-      path: path2,
+      path,
       lastCommit: { sha: logLine.slice(0, space), subject: subject.join(US), author, email, date },
       onUpstream: upstreamUsable && pushed ? pushed.endsWith(" yes") : null
     };
@@ -1636,22 +1691,22 @@ function parseGitStatusOutput(stdout, paths) {
   const statusLines = firstMark === -1 ? lines : lines.slice(0, firstMark);
   const sections = [];
   if (firstMark !== -1) {
-    for (const line2 of lines.slice(firstMark)) {
-      const mark = new RegExp(`^${PATH_MARK} (\\d+)$`).exec(line2);
+    for (const line of lines.slice(firstMark)) {
+      const mark = new RegExp(`^${PATH_MARK} (\\d+)$`).exec(line);
       if (mark) sections[Number(mark[1])] = [];
-      else sections[sections.length - 1]?.push(line2);
+      else sections[sections.length - 1]?.push(line);
     }
   }
   const header = parseHeader(statusLines.find((l) => l.startsWith("##")));
   const entries = parseEntries(statusLines);
-  const truncated = Object.values(entries).some((list2) => list2.length > MAX_ENTRIES);
+  const truncated = Object.values(entries).some((list) => list.length > MAX_ENTRIES);
   const report = {
     ...header,
     staged: entries.staged.slice(0, MAX_ENTRIES),
     unstaged: entries.unstaged.slice(0, MAX_ENTRIES),
     untracked: entries.untracked.slice(0, MAX_ENTRIES),
     conflicted: entries.conflicted.slice(0, MAX_ENTRIES),
-    clean: Object.values(entries).every((list2) => list2.length === 0),
+    clean: Object.values(entries).every((list) => list.length === 0),
     ...truncated ? { truncated: true } : {}
   };
   const wanted = statusPaths(paths);
@@ -1944,8 +1999,8 @@ var gitCleanupMergedTool = defineTool({
 
 // ../packages/agent-tools/src/git-tools.ts
 function buildGitCommand(action, opts) {
-  const path2 = safeGitArg(opts?.path);
-  const pathArg = path2 ? ` -- "${path2}"` : "";
+  const path = safeGitArg(opts?.path);
+  const pathArg = path ? ` -- "${path}"` : "";
   const tracked = safeGitArg(opts?.trackedBranch);
   const viaSandbox = opts?.remoteViaSandbox === true;
   const fetchTracked = viaSandbox ? "" : `git fetch origin "${tracked}" 2>/dev/null && `;
@@ -2017,10 +2072,10 @@ async function runGitTool(action, opts, ctx) {
     baseBranch = synced.baseBranch ?? baseBranch;
   }
   const scope = { repo: opts.repo, path: opts.path ?? opts.paths?.[0] };
-  const ran = await runInRepoScope(ctx, scope, (repo, path2) => shellRunWithStop(ctx, buildGitCommand(action, {
+  const ran = await runInRepoScope(ctx, scope, (repo, path) => shellRunWithStop(ctx, buildGitCommand(action, {
     baseBranch,
     limit: opts.limit,
-    path: path2,
+    path,
     ...opts.paths?.length ? { paths: opts.paths, ...repo ? { repo } : {} } : {},
     ...trackedBranch ? { trackedBranch } : {},
     ...remote ? { remoteViaSandbox: true } : {}
@@ -2155,8 +2210,8 @@ var PROSE_BY_EXT = {
   log: "log"
 };
 var PROSE_EXTENSIONS = Object.keys(PROSE_BY_EXT).map((e) => `.${e}`);
-function proseKindOf(path2) {
-  const base = path2.replace(/\\/g, "/").split("/").pop() ?? "";
+function proseKindOf(path) {
+  const base = path.replace(/\\/g, "/").split("/").pop() ?? "";
   const dot = base.lastIndexOf(".");
   const ext = dot > 0 ? base.slice(dot + 1).toLowerCase() : "";
   return PROSE_BY_EXT[ext] ?? "code";
@@ -2187,15 +2242,15 @@ var readCompressedTool = defineTool({
   },
   requires: ["repo.read", "repo.compress"],
   async execute(args, ctx) {
-    const path2 = typeof args.path === "string" ? args.path.trim() : "";
-    if (!path2) return { data: { ok: false, error: "path is required" } };
-    const kind = proseKindOf(path2);
+    const path = typeof args.path === "string" ? args.path.trim() : "";
+    if (!path) return { data: { ok: false, error: "path is required" } };
+    const kind = proseKindOf(path);
     if (kind === "code") {
-      return { data: { ok: false, path: path2, error: `read_compressed only reads prose (${PROSE_EXTENSIONS.join(" ")}). Use read_file for code \u2014 an edit needs the exact text.` } };
+      return { data: { ok: false, path, error: `read_compressed only reads prose (${PROSE_EXTENSIONS.join(" ")}). Use read_file for code \u2014 an edit needs the exact text.` } };
     }
     const semantic = ctx.caps.semantic;
-    if (!semantic?.compress) return { data: { ok: false, path: path2, error: "Compression is not available on this surface right now \u2014 use read_file." } };
-    const read = await ctx.caps.repoRead.readFile(path2);
+    if (!semantic?.compress) return { data: { ok: false, path, error: "Compression is not available on this surface right now \u2014 use read_file." } };
+    const read = await ctx.caps.repoRead.readFile(path);
     if (!read.ok || typeof read.content !== "string") return { data: read };
     const rate = typeof args.rate === "number" && Number.isFinite(args.rate) ? Math.min(RATE_MAX, Math.max(RATE_MIN, args.rate)) : void 0;
     const r = await compressProse(read.content, kind, {
@@ -2203,7 +2258,7 @@ var readCompressedTool = defineTool({
       minChars: READ_COMPRESSED_MIN_CHARS,
       ...rate !== void 0 ? { rate } : {}
     });
-    const data = { ok: true, path: path2, content: r.text, compressed: r.compressed };
+    const data = { ok: true, path, content: r.text, compressed: r.compressed };
     if (r.compressed) {
       data.originalTokens = r.originalTokens;
       data.keptTokens = r.keptTokens;
@@ -2382,9 +2437,9 @@ async function preSearch(request, ports, options = {}) {
     const references2 = [];
     for (const m of refs.ok ? refs.matches ?? [] : []) {
       if (references2.length >= o.referencesPerIdentifier) break;
-      const line2 = typeof m.line === "number" ? m.line : Number(m.line);
-      if (!Number.isFinite(line2) || defined.has(`${m.path}:${line2}`)) continue;
-      references2.push({ identifier, path: m.path, line: line2, text: typeof m.text === "string" ? m.text : "" });
+      const line = typeof m.line === "number" ? m.line : Number(m.line);
+      if (!Number.isFinite(line) || defined.has(`${m.path}:${line}`)) continue;
+      references2.push({ identifier, path: m.path, line, text: typeof m.text === "string" ? m.text : "" });
     }
     return { definitions: definitions2, references: references2 };
   }));
@@ -2423,9 +2478,9 @@ function excerptAround(content, lines, budget, radius = HIT_WINDOW_LINES) {
   const all = content.split(/\r?\n/);
   const ranges = [];
   const anchors = lines.length > 0 ? [...lines].sort((a, b) => a - b) : [1];
-  for (const line2 of anchors) {
-    const start = Math.max(1, lines.length > 0 ? line2 - radius : 1);
-    const end = Math.min(all.length, lines.length > 0 ? line2 + radius : radius * 4);
+  for (const line of anchors) {
+    const start = Math.max(1, lines.length > 0 ? line - radius : 1);
+    const end = Math.min(all.length, lines.length > 0 ? line + radius : radius * 4);
     const last = ranges[ranges.length - 1];
     if (last && start <= last[1] + 1) last[1] = Math.max(last[1], end);
     else ranges.push([start, end]);
@@ -2444,17 +2499,17 @@ function excerptAround(content, lines, budget, radius = HIT_WINDOW_LINES) {
   }
   return out.join("\n");
 }
-function hitLinesFor(path2, hits) {
+function hitLinesFor(path, hits) {
   if (!hits) return [];
-  return [...hits.definitions, ...hits.references].filter((h) => h.path === path2).map((h) => h.line);
+  return [...hits.definitions, ...hits.references].filter((h) => h.path === path).map((h) => h.line);
 }
 async function readExcerpts(ctx, files, hits) {
   const out = [];
   const per = Math.floor(EXCERPT_BUDGET_CHARS / Math.max(1, files.length));
-  for (const path2 of files) {
-    const r = await ctx.caps.repoRead.readFile(path2).catch(() => null);
+  for (const path of files) {
+    const r = await ctx.caps.repoRead.readFile(path).catch(() => null);
     if (!r?.ok || typeof r.content !== "string") continue;
-    out.push({ path: path2, text: excerptAround(r.content, hitLinesFor(path2, hits), per) });
+    out.push({ path, text: excerptAround(r.content, hitLinesFor(path, hits), per) });
   }
   return out;
 }
@@ -2546,71 +2601,15 @@ var localResearchTool = defineTool({
 });
 
 // ../packages/agent-tools/src/codeAnalysis.ts
-var record = (v) => v && typeof v === "object" ? v : {};
-var list = (v) => Array.isArray(v) ? v : [];
-var path = (v) => String(v ?? "").replace(/\\/g, "/").replace(/^\.\//, "");
-var line = (v) => Math.max(1, Number(v) || 1);
-var hash = (value) => {
-  let n = BigInt("14695981039346656037");
-  const prime = BigInt("1099511628211");
-  for (let i = 0; i < value.length; i++) n = BigInt.asUintN(64, (n ^ BigInt(value.charCodeAt(i))) * prime);
-  return n.toString(16);
-};
-function normalizeAnalysis(dependencies, duplicates, unused, scope = ".") {
-  const unusedPath = (value) => {
-    const file = path(value);
-    return scope === "." || file.startsWith(`${scope}/`) ? file : `${scope}/${file}`;
-  };
-  const nodes = /* @__PURE__ */ new Set();
-  const edges = /* @__PURE__ */ new Map();
-  for (const module2 of list(record(dependencies).modules)) {
-    const from = path(module2.source);
-    if (!from) continue;
-    nodes.add(from);
-    for (const dependency of list(module2.dependencies)) {
-      if (dependency.couldNotResolve || dependency.coreModule || dependency.dependencyTypes?.some((t) => t.startsWith("npm"))) continue;
-      const to = path(dependency.resolved);
-      if (!to || to.includes("node_modules/")) continue;
-      nodes.add(to);
-      edges.set(JSON.stringify([from, to]), { from, to, circular: !!dependency.circular });
-    }
-  }
-  const issues = [];
-  for (const clone2 of list(record(duplicates).duplicates)) {
-    const locations = [clone2.firstFile, clone2.secondFile].map((raw) => {
-      const file = record(raw);
-      return { path: path(file.name), startLine: line(file.start), endLine: line(file.end) };
-    });
-    locations.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : a.startLine - b.startLine);
-    const identity = typeof clone2.fragment === "string" ? clone2.fragment.replace(/\r\n/g, "\n") : locations.map((l) => `${l.path}:${l.startLine}-${l.endLine}`).sort().join("|");
-    issues.push({
-      id: `duplicate:${hash(JSON.stringify([locations.map((l) => l.path).sort(), identity]))}`,
-      kind: "duplicate",
-      locations,
-      ...typeof clone2.fragment === "string" ? { snippet: clone2.fragment.slice(0, 4e3) } : {}
-    });
-  }
-  for (const file of list(record(unused).files)) issues.push({ id: `unused-file:${unusedPath(file)}`, kind: "unused-file", locations: [{ path: unusedPath(file), startLine: 1, endLine: 1 }] });
-  for (const issue of list(record(unused).issues)) {
-    const file = unusedPath(issue.file);
-    for (const field of ["exports", "types", "dependencies", "devDependencies", "unlisted"]) {
-      for (const raw of list(issue[field])) {
-        const item = typeof raw === "string" ? { name: raw } : record(raw);
-        const kind = field === "exports" || field === "types" ? "unused-export" : "unused-dependency";
-        if (field === "unlisted") continue;
-        issues.push({ id: `${kind}:${file}:${item.name}`, kind, symbol: String(item.name), locations: [{ path: file, startLine: line(item.line), endLine: line(item.line) }] });
-      }
-    }
-  }
-  return { nodes: [...nodes].sort(), edges: [...edges.values()], issues: [...new Map(issues.map((i) => [i.id, i])).values()] };
-}
+var import_knowledge = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge2 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/dependencyCruiserRules.ts
-var import_knowledge = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge3 = require("@seanhogg/builderforce-memory/knowledge");
 var LAYER_RULE_PREFIX = "kg-layer";
 function alternation(globs) {
   if (globs.length === 0) return void 0;
-  return globs.map((g) => `(?:${(0, import_knowledge.globToRegExp)(g).source})`).join("|");
+  return globs.map((g) => `(?:${(0, import_knowledge3.globToRegExp)(g).source})`).join("|");
 }
 function matchOf(rule, earlier) {
   const not = alternation(earlier.flatMap((r) => r.match));
@@ -2619,12 +2618,12 @@ function matchOf(rule, earlier) {
 function toDependencyCruiserRules(reg) {
   if (!reg.allow) return [];
   const ordered = reg.partitions;
-  const named = ordered.filter((r) => r.id !== import_knowledge.TOP_LEVEL_FOLDER && r.match.length > 0);
+  const named = ordered.filter((r) => r.id !== import_knowledge3.TOP_LEVEL_FOLDER && r.match.length > 0);
   const matchById = new Map(named.map((r) => [r.id, matchOf(r, ordered.slice(0, ordered.indexOf(r)))]));
   const rules = [];
   for (const from of named) {
     for (const to of named) {
-      const verdict = (0, import_knowledge.verdictOf)(from.id, to.id, reg);
+      const verdict = (0, import_knowledge3.verdictOf)(from.id, to.id, reg);
       if (verdict !== "upward" && verdict !== "skips") continue;
       rules.push({
         name: `${LAYER_RULE_PREFIX}-${from.id}-to-${to.id}`,
@@ -2650,13 +2649,16 @@ var ANALYZER_VERSIONS = {
 var import_ingest = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/fsDirectorySource.ts
-var import_knowledge4 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge6 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/statManifest.ts
+var RACY_WINDOW_NS = BigInt(2e9);
 
 // ../packages/agent-tools/src/knowledge/documents/withDocumentText.ts
-var import_knowledge3 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge5 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/documents/documentText.ts
-var import_knowledge2 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge4 = require("@seanhogg/builderforce-memory/knowledge");
 var PDF_MEDIA_TYPE = "application/pdf";
 var DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 var XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -2680,8 +2682,8 @@ var MAX_TOTAL_BYTES = 16 * 1024 * 1024;
 // ../packages/agent-tools/src/knowledge/fsDirectorySource.ts
 var BUILDERFORCE_INPUTS = /* @__PURE__ */ new Set([".builderforce/ignore", ".builderforce/partitions.json"]);
 function isBuilderforceState(rel2) {
-  const path2 = rel2.replace(/\\/g, "/");
-  return path2.split("/").includes(".builderforce") && !BUILDERFORCE_INPUTS.has(path2);
+  const path = rel2.replace(/\\/g, "/");
+  return path.split("/").includes(".builderforce") && !BUILDERFORCE_INPUTS.has(path);
 }
 
 // ../packages/agent-tools/src/knowledge/shaCache.ts
@@ -2750,7 +2752,7 @@ async function gitText(ctx, command) {
     return null;
   }
 }
-var pathOfStatusLine = (line2) => line2.slice(3).replace(/^"|"$/g, "");
+var pathOfStatusLine = (line) => line.slice(3).replace(/^"|"$/g, "");
 var OBJECT_ID = /^[0-9a-f]{40,64}$/;
 var WORKING_TREE_SCRIPT = [
   "set -e",
@@ -2777,7 +2779,7 @@ async function readFingerprint(ctx) {
   const branch = (await gitText(ctx, `${GIT} branch --show-current`))?.trim() ?? null;
   const status = await gitText(ctx, `${GIT} status --porcelain --untracked-files=all`);
   if (status === null) return { commit, branch, dirty: null, prefix };
-  const changes = status.split("\n").filter((line2) => line2.trim() && !isBuilderforceState(pathOfStatusLine(line2)));
+  const changes = status.split("\n").filter((line) => line.trim() && !isBuilderforceState(pathOfStatusLine(line)));
   if (changes.length === 0) return { commit, branch, dirty: false, prefix };
   const tree = await workingTreeId(ctx);
   return { commit, branch, dirty: true, prefix, ...tree ? { dirtyHash: (0, import_ingest.hashText)(tree).slice(0, 16) } : {} };
@@ -2925,7 +2927,7 @@ function createAnalyzeCodebaseTool(options = {}) {
         capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
         source: { commit, branch, scope, dirty, ...dirtyHash ? { dirtyHash } : {}, ...repository ? { repository } : {} },
         tools,
-        ...normalizeAnalysis(outputs[0], outputs[1], outputs[2], scope)
+        ...(0, import_knowledge2.normalizeAnalysis)(outputs[0], outputs[1], outputs[2], scope)
       };
       return { data: { snapshot } };
     }
@@ -3053,17 +3055,17 @@ var readFileTool = defineTool({
   },
   requires: ["repo.read"],
   async execute(args, ctx) {
-    const path2 = typeof args.path === "string" ? args.path : "";
-    const paths = !path2 && Array.isArray(args.paths) ? args.paths.filter((p) => typeof p === "string" && p.trim() !== "") : [];
-    if (!path2 && paths.length === 0) return { data: { ok: false, error: "path is required (or paths: a list of up to " + READ_FILE_MAX_PATHS + ")" } };
+    const path = typeof args.path === "string" ? args.path : "";
+    const paths = !path && Array.isArray(args.paths) ? args.paths.filter((p) => typeof p === "string" && p.trim() !== "") : [];
+    if (!path && paths.length === 0) return { data: { ok: false, error: "path is required (or paths: a list of up to " + READ_FILE_MAX_PATHS + ")" } };
     if (paths.length > READ_FILE_MAX_PATHS) return { data: { ok: false, error: `paths takes at most ${READ_FILE_MAX_PATHS} files per call \u2014 split the rest into another read_file` } };
     const opts = {
       offset: typeof args.offset === "number" && args.offset > 0 ? Math.floor(args.offset) : void 0,
       limit: typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : void 0,
       key: typeof args.key === "string" ? args.key.trim() : ""
     };
-    if (!path2) return { data: { ok: true, files: await readManyFiles(paths, opts, ctx.caps, ctx.outlineFirstReads) } };
-    return { data: await readOneFile(path2, opts, ctx.caps, ctx.outlineFirstReads) };
+    if (!path) return { data: { ok: true, files: await readManyFiles(paths, opts, ctx.caps, ctx.outlineFirstReads) } };
+    return { data: await readOneFile(path, opts, ctx.caps, ctx.outlineFirstReads) };
   }
 });
 var writeFileTool = defineTool({
@@ -3080,14 +3082,14 @@ var writeFileTool = defineTool({
   },
   requires: ["repo.write"],
   async execute(args, ctx) {
-    const path2 = typeof args.path === "string" ? args.path : "";
+    const path = typeof args.path === "string" ? args.path : "";
     const content = typeof args.content === "string" ? args.content : "";
     const summary = typeof args.summary === "string" ? args.summary : void 0;
-    if (!path2 || !content) return { data: { ok: false, error: "path and content are both required" } };
+    if (!path || !content) return { data: { ok: false, error: "path and content are both required" } };
     if (ctx.caps.repoRead) {
       let existing;
       try {
-        existing = await ctx.caps.repoRead.readFile(path2);
+        existing = await ctx.caps.repoRead.readFile(path);
       } catch (err) {
         const reason = err instanceof Error ? err.message : "read failed";
         return {
@@ -3100,7 +3102,7 @@ var writeFileTool = defineTool({
       const refusal = refuseWriteOverwrite(probeFromRepoRead(existing), content);
       if (refusal) return { data: { ok: false, error: refusal } };
     }
-    const r = await ctx.caps.repoWrite.writeFile(path2, content, summary);
+    const r = await ctx.caps.repoWrite.writeFile(path, content, summary);
     return { data: r.ok ? { ok: true, branch: r.branch, commitUrl: r.commitUrl } : { ok: false, error: r.error } };
   }
 });
@@ -3117,10 +3119,10 @@ var deleteFileTool = defineTool({
   },
   requires: ["repo.delete"],
   async execute(args, ctx) {
-    const path2 = typeof args.path === "string" ? args.path : "";
-    if (!path2) return { data: { ok: false, error: "path is required" } };
+    const path = typeof args.path === "string" ? args.path : "";
+    if (!path) return { data: { ok: false, error: "path is required" } };
     const reason = typeof args.reason === "string" ? args.reason : void 0;
-    const r = await ctx.caps.repoWrite.deleteFile(path2, reason);
+    const r = await ctx.caps.repoWrite.deleteFile(path, reason);
     if (r.ok && r.deleted === false) return { data: { ok: true, deleted: false, note: r.note } };
     return { data: r.ok ? { ok: true, deleted: true, branch: r.branch, commitUrl: r.commitUrl } : { ok: false, error: r.error } };
   }
@@ -3177,8 +3179,8 @@ var editFileTool = defineTool({
           ok: true,
           batched: true,
           count: batch.files.length,
-          files: batch.files.map(({ content: _c, ok, path: path3, error, nearest, ...facts }) => ({
-            path: path3,
+          files: batch.files.map(({ content: _c, ok, path: path2, error, nearest, ...facts }) => ({
+            path: path2,
             ok,
             ...Object.keys(facts).length ? facts : {},
             ...error ? { error } : {},
@@ -3187,12 +3189,12 @@ var editFileTool = defineTool({
         }
       };
     }
-    const path2 = typeof args.path === "string" ? args.path : "";
+    const path = typeof args.path === "string" ? args.path : "";
     const oldString = typeof args.old_string === "string" ? args.old_string : "";
     const newString = typeof args.new_string === "string" ? args.new_string : "";
     const replaceAll = args.replace_all === true;
-    if (!path2 || !oldString) return { data: { ok: false, error: "path and old_string are required" } };
-    const r = await ctx.caps.repoWrite.editFile(path2, oldString, newString, replaceAll);
+    if (!path || !oldString) return { data: { ok: false, error: "path and old_string are required" } };
+    const r = await ctx.caps.repoWrite.editFile(path, oldString, newString, replaceAll);
     return {
       data: r.ok ? {
         ok: true,
@@ -3820,8 +3822,24 @@ var spawnAgentsTool = withDelegationNote(defineTool({
 }));
 var SUBAGENT_TOOLS = [spawnAgentTool, spawnAgentsTool, ...SUBAGENT_CONTROL_TOOLS];
 
+// ../packages/agent-tools/src/symbolRelations.ts
+var import_knowledge7 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge8 = require("@seanhogg/builderforce-memory/knowledge");
+var ID2 = "[A-Za-z_$][\\w$]*";
+var IMPORT_NAMED = new RegExp(`^\\s*(?:type\\s+)?(${ID2})(?:\\s+as\\s+(${ID2}))?\\s*$`);
+var IMPORT_NAMESPACE = new RegExp(`\\*\\s*as\\s+(${ID2})`);
+var IMPORT_DEFAULT = new RegExp(`^\\s*(${ID2})\\s*(?:,|$)`);
+var LEADING_TYPE = new RegExp(`^\\s*(${ID2}(?:\\s*\\.\\s*${ID2})?)`);
+var FIELD = new RegExp(`^\\s*(?:(?:public|private|protected|readonly|static|declare|override|abstract|accessor)\\s+)*#?(${ID2})\\s*[?!]?\\s*:\\s*([^=;]+)`);
+var FIELD_INIT = new RegExp(`^\\s*(?:(?:public|private|protected|readonly|static|override)\\s+)*#?(${ID2})\\s*=`);
+var NEW = new RegExp(`(?:^|[^\\w$])new\\s+(${ID2}(?:\\.${ID2})?)`);
+var PARAM_PROP = new RegExp(`\\b(?:public|private|protected|readonly)\\s+(?:readonly\\s+)?(${ID2})\\s*\\??\\s*:\\s*(${ID2}(?:\\.${ID2})?)`, "g");
+var LOCAL_DECL = new RegExp(`\\b(?:const|let|var|function\\s*\\*?|class|catch\\s*\\()\\s*(${ID2})`, "g");
+var LAST_ID = new RegExp(`(${ID2})\\s*(?:=[^,]*)?\\s*$`);
+var PARAM_NAME = new RegExp(`^\\s*(?:\\.\\.\\.)?(?:(?:public|private|protected|readonly)\\s+)*(${ID2})`);
+
 // ../packages/agent-tools/src/knowledge/codePack.ts
-var import_knowledge9 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge16 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest3 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/codeComplexity.ts
@@ -3830,12 +3848,52 @@ var JS_DECISIONS = new RegExp(String.raw`\b(?:if|for|while|case|catch)\b|&&|\|\|
 var OO_DECISIONS = new RegExp(String.raw`\b(?:if|for|foreach|while|case|catch)\b|&&|\|\||\?\?|${TERNARY}`, "g");
 
 // ../packages/agent-tools/src/knowledge/codeNodes.ts
-var import_knowledge5 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge9 = require("@seanhogg/builderforce-memory/knowledge");
 var import_working4 = require("@seanhogg/builderforce-memory/working");
 var import_ingest2 = require("@seanhogg/builderforce-memory/ingest");
+var CODE_BADGES = {
+  /** The symbol extractor's language family (`js`, `python`, …). */
+  language: "language",
+  /** Definitions in the file. */
+  symbols: "symbols",
+  /** Exported definitions in the file. */
+  exports: "exports",
+  /** knip: `'file'` when the whole file is unused. */
+  unused: "unused",
+  /** knip: unused exports in the file. */
+  unusedExports: "unusedExports",
+  /** knip: unused dependencies declared by the file (a package manifest). */
+  unusedDependencies: "unusedDependencies",
+  /** knip: the names of the file's unused exports, sorted and comma-joined: one `unused-export` finding each (PRD 41 §C3). */
+  unusedExportNames: "unusedExportNames",
+  /** knip: the names of the manifest's unused dependencies, sorted and comma-joined: one `unused-dependency` finding each. */
+  unusedDependencyNames: "unusedDependencyNames",
+  /** Lines in the file (deterministic): the god-module finding's size measure. */
+  lines: "lines",
+  /** Sum of cyclomatic complexity over the file's functions (deterministic). */
+  complexity: "complexity",
+  /** The worst function's cyclomatic complexity (deterministic). */
+  maxComplexity: "maxComplexity",
+  /** 0..1 line coverage from `coverage-final.json` / `lcov.info` under the root (runtime). */
+  coverage: "coverage",
+  /** Commits touching the file in the last 90 days, from the host's `HistoryPort` (deterministic). */
+  churn: "churn",
+  /** First CODEOWNERS owner of the file (deterministic). */
+  owner: "owner",
+  /** Comma-separated design-pattern ids (heuristic). */
+  patterns: "patterns",
+  /** `METHOD path` route registrations joined by `;`, capped at 50 (deterministic). */
+  routes: "routes",
+  /** The rule that placed the file's layer: `folder`, `name` or `imports`. */
+  layerRule: "layerRule",
+  /** `1` on a package entry point a manifest names (`main` / `bin` / `exports`): layer resolution reads it, never the filesystem. */
+  entry: "entry",
+  /** Comma-joined ids of the known external services the file imports (`postgres,llm`), from `externalServices.ts` (deterministic). */
+  externals: "externals"
+};
 
 // ../packages/agent-tools/src/knowledge/codePatterns.ts
-var import_knowledge6 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge10 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/codeRoutes.ts
 var METHODS = "get|post|put|patch|delete|options|head|all";
@@ -3847,10 +3905,23 @@ var NEXT_WITH_PATH = new RegExp(String.raw`\s*\.\s*(${METHODS})\s*\(\s*(['"` + "
 var NEXT_ANY = new RegExp(String.raw`\s*\.\s*(${METHODS})\s*\(`, "y");
 
 // ../packages/agent-tools/src/knowledge/codeFindings.ts
-var import_knowledge7 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge11 = require("@seanhogg/builderforce-memory/knowledge");
+var UNUSED_ITEMS = [
+  { kind: "unused-export", names: CODE_BADGES.unusedExportNames, count: CODE_BADGES.unusedExports, anchorKind: "symbol" },
+  { kind: "unused-dependency", names: CODE_BADGES.unusedDependencyNames, count: CODE_BADGES.unusedDependencies, anchorKind: "package" }
+];
+
+// ../packages/agent-tools/src/knowledge/codeRollup.ts
+var import_knowledge14 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/moduleAliases.ts
+var import_knowledge12 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/rootId.ts
+var import_knowledge13 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/codeLayers.ts
-var import_knowledge8 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge15 = require("@seanhogg/builderforce-memory/knowledge");
 var FOLDER_LAYERS = {
   presentation: ["routes", "components", "app", "pages", "webview", "views", "hooks", "handlers", "controllers", "ui"],
   application: ["application", "use-cases", "usecases", "services", "lib", "clients", "commands", "queries"],
@@ -3890,10 +3961,10 @@ function defaultLayerRegistry() {
 var CODE_LAYERS = defaultLayerRegistry();
 
 // ../packages/agent-tools/src/knowledge/knowledgePacks.ts
-var import_knowledge11 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge18 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/documents/documentsPack.ts
-var import_knowledge10 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge17 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest4 = require("@seanhogg/builderforce-memory/ingest");
 var DOCUMENTS_PACK_ID = "documents";
 var documentsParser = {
@@ -3904,39 +3975,36 @@ var documentsParser = {
 var DOCUMENTS_PACK = {
   id: DOCUMENTS_PACK_ID,
   parsers: [documentsParser],
-  ...import_knowledge10.DOCS_PACK.judgement ? { judgement: import_knowledge10.DOCS_PACK.judgement } : {}
+  ...import_knowledge17.DOCS_PACK.judgement ? { judgement: import_knowledge17.DOCS_PACK.judgement } : {}
 };
 
 // ../packages/agent-tools/src/knowledge/codeExtracted.ts
-var import_knowledge12 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge19 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/reviewRunner.ts
-var import_knowledge21 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge27 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/codeGraph.ts
-var import_knowledge14 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/rootId.ts
-var import_knowledge13 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge20 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/codeRootSignals.ts
-var import_knowledge16 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge22 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest5 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/codeCoverage.ts
 var MAX_FILE_BYTES = 40 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/codeOwners.ts
-var import_knowledge15 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge21 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/fileEdits.ts
-var import_knowledge17 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge23 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
 var import_ingest6 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/graphIgnore.ts
-var import_knowledge18 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge24 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
 var MAX_GRAPH_FILE_BYTES = 256 * 1024;
@@ -3946,10 +4014,10 @@ var cache = createShaCache({
 });
 
 // ../packages/agent-tools/src/knowledge/reviewJudgePass.ts
-var import_knowledge19 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge25 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/judgement.ts
-var import_knowledge20 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge26 = require("@seanhogg/builderforce-memory/knowledge");
 var KNOWLEDGE_EXTRACT_SYSTEM = [
   "You read one section of a document and list what it asserts.",
   'Reply with JSON only: {"extract":[{"ref":<the ref given>,"claims":[{"subject","predicate","object","quote"}],"entities":[{"name","type"}]}]}.',
@@ -3963,16 +4031,16 @@ var KNOWLEDGE_COMPARE_SYSTEM = [
 ].join("\n");
 
 // ../packages/agent-tools/src/knowledge/humanFact.ts
-var import_knowledge22 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge28 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/documents/documentDoc.ts
-var import_knowledge23 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge29 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/index/persistence.ts
-var import_knowledge24 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge30 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/replicaQueue.ts
-var import_knowledge25 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge31 = require("@seanhogg/builderforce-memory/knowledge");
 var import_pack = require("@seanhogg/builderforce-memory/knowledge/pack");
 
 // ../packages/agent-tools/src/knowledge/replicatedStore.ts
@@ -3982,7 +4050,7 @@ var import_pack2 = require("@seanhogg/builderforce-memory/knowledge/pack");
 var import_pack5 = require("@seanhogg/builderforce-memory/knowledge/pack");
 
 // ../packages/agent-tools/src/knowledge/replicaPack.ts
-var import_knowledge26 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge32 = require("@seanhogg/builderforce-memory/knowledge");
 var import_pack3 = require("@seanhogg/builderforce-memory/knowledge/pack");
 var DEFAULT_MAX_DECODED = 16 * 1024 * 1024;
 var EMPTY_PACK = { rootId: "", baseGeneration: 0, targetDigest: import_pack3.ZERO_DIGEST };
@@ -4000,20 +4068,20 @@ var MAX_ANALYSIS_BYTES = 2 * 1024 * 1024;
 var MAX_SYNC_PACK_BYTES = 24 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/replicaFirstSync.ts
-var import_knowledge27 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge33 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/claimSimilarity.ts
-var import_knowledge28 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge34 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/portablePack.ts
-var import_knowledge29 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge35 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/packGraph.ts
-var import_knowledge30 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge36 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest7 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/pinpointMatch.ts
-var import_knowledge31 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge37 = require("@seanhogg/builderforce-memory/knowledge");
 var MAX_PINPOINT_IMAGE_BYTES = 8 * 1024 * 1024;
 var MAX_DATA_URL_CHARS = Math.ceil(MAX_PINPOINT_IMAGE_BYTES * 4 / 3) + 64;
 var PINPOINT_VISION_SYSTEM = [
@@ -4845,7 +4913,7 @@ function sharingCalls(calls) {
   const holders = /* @__PURE__ */ new Map();
   for (const c of calls) for (const b of blocksOf(c.args)) holders.set(b, [...holders.get(b) ?? [], c]);
   const out = /* @__PURE__ */ new Set();
-  for (const list2 of holders.values()) if (list2.length >= 2) for (const c of list2) out.add(c);
+  for (const list of holders.values()) if (list.length >= 2) for (const c of list) out.add(c);
   return out;
 }
 function oversizedArgs(view) {
@@ -5046,8 +5114,8 @@ var DEFAULT_BRANCH_CMD = gitCommandPattern("remote|symbolic-ref|branch");
 // src/runFindings/runView.ts
 var HAND_OFF_DUE = "loop.hand_off_due";
 var ROLE_HANDOFF = "llm.role_handoff";
-var record2 = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
-function jsonBytes(v) {
+var record = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
+function jsonBytes2(v) {
   try {
     return utf8ByteLength2(JSON.stringify(v ?? null));
   } catch {
@@ -5060,7 +5128,7 @@ function isCheck(ev) {
 }
 function callOf(ev, step, turn) {
   const ok = !ev.isError && !isFailedToolResult(ev.result);
-  const args = record2(ev.args);
+  const args = record(ev.args);
   const write = ok && isCodeChangeTool(ev.label) && !isCacheAnswered(ev);
   return {
     step,
@@ -5068,7 +5136,7 @@ function callOf(ev, step, turn) {
     name: ev.label,
     args,
     ok,
-    argBytes: jsonBytes(ev.args),
+    argBytes: jsonBytes2(ev.args),
     write,
     check: ok && isCheck(ev),
     paths: write ? editedPathsOf(ev.label, args) : []
@@ -5081,12 +5149,12 @@ function kindOf(t, failed) {
   return t.toolCalls > 0 || t.calls.length > 0 ? "read" : "text";
 }
 function buildRunView(events, messages = []) {
-  const list2 = [...events];
+  const list = [...events];
   const turns = [];
   const calls = [];
   let forcedNext = false;
   let stopped = null;
-  for (const [i, ev] of list2.entries()) {
+  for (const [i, ev] of list.entries()) {
     const step = i + 1;
     const current = turns[turns.length - 1];
     if (ev.label === HAND_OFF_DUE) {
@@ -5094,7 +5162,7 @@ function buildRunView(events, messages = []) {
       continue;
     }
     if (ev.label === STOPPED_TURN_STEP) {
-      const model = record2(ev.args).model;
+      const model = record(ev.args).model;
       stopped = { step, ...typeof model === "string" ? { model } : {} };
       continue;
     }
@@ -5126,7 +5194,7 @@ function buildRunView(events, messages = []) {
       continue;
     }
     if (ev.label === "agent.message" && typeof ev.result === "string" && !current.text) current.text = ev.result;
-    else if (ev.label === ROLE_HANDOFF && typeof record2(ev.args).via === "string") current.handOffVia = record2(ev.args).via;
+    else if (ev.label === ROLE_HANDOFF && typeof record(ev.args).via === "string") current.handOffVia = record(ev.args).via;
     else if (ev.category === "tool") {
       const call = callOf(ev, step, current.index);
       current.calls.push(call);
@@ -5135,13 +5203,13 @@ function buildRunView(events, messages = []) {
   }
   for (const t of turns) t.kind = kindOf(t, t.kind === "failed");
   return {
-    events: list2,
+    events: list,
     messages: [...messages],
     turns,
     calls,
     stopped,
-    routing: routingByRole(modelTurnLog(list2), list2),
-    staffing: staffingSummaryInTrace(list2)
+    routing: routingByRole(modelTurnLog(list), list),
+    staffing: staffingSummaryInTrace(list)
   };
 }
 

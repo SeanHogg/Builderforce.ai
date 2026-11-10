@@ -157,6 +157,11 @@ interface JournalEvent<T = unknown> {
     destination: EntityDestination;
     payload: T;
     payloadHash: string;
+    /**
+     * `'record'`: a bound marker — `payload` is null and is read from the record when the event is
+     * sent (`recordPayloadMarker.ts`). Absent: `payload` is the event's own.
+     */
+    payloadFrom?: 'record';
     deadLetter?: {
         reason: string;
         at: string;
@@ -240,24 +245,37 @@ interface SyncConflict {
 }
 
 /**
- * SECONDARY INDEXES over the committed rows: one entity type's rows grouped by a key
+ * SECONDARY INDEXES over the committed rows: one entity type's LIVE rows grouped by a key
  * their payload carries (a message's chat), so a read of one group costs that group —
  * never a walk of every row of the type.
  *
  * An index is DECLARED by the module that owns the payload shape (`defineRecordIndex`, a
- * module-level constant: its object identity is the index) and BUILT lazily by the
- * committed state the first time a transaction reads through it (`scanIndex`). From then
- * on `CommittedState.applyDelta` — the one step every state change goes through (a
- * commit, another window's journal frame, a reload's `reset`) — keeps it current row by
- * row, so it can never drift from the rows it indexes. Nothing here is persisted: the
- * on-disk journal is unchanged, an index is rebuilt from the rows after every open.
+ * module-level constant) and BUILT lazily by the committed state the first time a
+ * transaction reads through it (`scanIndex`). It is registered by `entityType:name`, so
+ * two copies of the same declaration (a package's cjs and mjs builds each inline it) share
+ * ONE built index; the same name with a different `keyOf` throws. From then on
+ * `CommittedState.applyDelta` — the one step every state change goes through (a commit,
+ * another window's journal frame, a reload's `reset`) — keeps it current row by row, so it
+ * can never drift from the rows it indexes. Nothing here is persisted: the on-disk journal
+ * is unchanged, an index is rebuilt from the rows after every open.
+ *
+ * CONTRACT for readers:
+ *   - Groups hold LIVE rows only: a tombstone (`deletedAt`) is in no group.
+ *   - Order within a group is UNSPECIFIED. It depends on history (a live index moves a row
+ *     whose key changed to the end of its new group; a freshly built one uses type order),
+ *     so a caller that needs an order sorts.
+ *   - Visitors get the committed state's own rows, UNCLONED — never mutate or retain one;
+ *     `selectByIndex` is the cloning form.
+ *
+ * Memory: per indexed row, one entry in its group's Map plus one in the id → key Map (two
+ * Map entries, ~100–150 bytes), plus one Map per group — ~10 MB for a 75k-message store.
  */
 
 /** What a row is grouped by. `undefined` from `keyOf`: the row is in no group. */
 type RecordIndexKey = string | number;
 interface RecordIndex<T = unknown> {
     readonly entityType: LocalEntityType;
-    /** For diagnostics only — the index is the object, not the name. */
+    /** The index's identity together with `entityType`: one name, one key function. */
     readonly name: string;
     /** The row's group. Must be a pure function of the row: it is re-run on every upsert. */
     readonly keyOf: (row: Readonly<LocalRecord<T>>) => RecordIndexKey | undefined;
@@ -292,10 +310,11 @@ interface LocalFirstTransaction {
      */
     scan<T = unknown>(entityType: LocalEntityType | undefined, visit: ScanVisit<T>): Promise<void>;
     /**
-     * `scan` of ONE group of a secondary index (`defineRecordIndex`): only the rows of
-     * `index.entityType` whose `keyOf` is `key`, without walking the type's other rows —
-     * reading one chat's messages costs that chat. Same view rules and `SCAN_STOP` as
-     * `scan`; rows come in committed order, then the ones this transaction wrote.
+     * `scan` of ONE group of a secondary index (`defineRecordIndex`): only the LIVE rows of
+     * `index.entityType` whose `keyOf` is `key` (tombstones are in no group), without walking
+     * the type's other rows — reading one chat's messages costs that chat. Same view rules
+     * and `SCAN_STOP` as `scan`: the visitor gets the store's own rows UNCLONED. Order is
+     * UNSPECIFIED (it depends on the index's history): a caller that needs one sorts.
      * Optional so a hand-rolled transaction still fits: callers go through `scanByIndex`,
      * which falls back to a filtered `scan`.
      */
@@ -322,6 +341,31 @@ interface LocalFirstTransaction {
      * `SCAN_STOP` from the callback to stop at the first match instead of walking the rest.
      */
     scanPending(visit: ScanPendingVisit, destination?: EntityDestination): Promise<void>;
+    /**
+     * `scanPending` of ONE row's events (`clientEntityId`), through a per-row index: costs that
+     * row's events, never the whole journal. Same view rules, order and `SCAN_STOP` as
+     * `scanPending`. Optional so a hand-rolled transaction still fits: callers go through
+     * `scanPendingOfRow` / `selectPendingOf`, which fall back to a filtered `scanPending`.
+     */
+    scanPendingOf?(clientEntityId: string, visit: ScanPendingVisit, destination?: EntityDestination): Promise<void>;
+    /**
+     * The pending events counted, without a walk: live (not dead-lettered) in `destination` (every
+     * partition when omitted), and dead-lettered across the store. Optional; `countPending` falls
+     * back to a scan without it.
+     */
+    pendingCount?(destination?: EntityDestination): PendingCount;
+    /**
+     * Synchronous lookups over the pending events (dead-lettered included) as this transaction sees
+     * them, through the store's own indexes: what the sync coordinator resolves dependencies
+     * against without building an index of the whole journal per round. Rows are the store's own.
+     */
+    pendingLookup?(): PendingLookup;
+    /**
+     * Turn a record-payload marker (`payloadFrom: 'record'`, `recordPayloadMarker.ts`) into an event
+     * carrying `payload` and its hash, in place (same id and sequence). Returns the materialized
+     * event, or undefined when `eventId` is not a pending marker. Optional for hand-rolled fakes.
+     */
+    materializeEvent?(eventId: string, payload: unknown): Promise<JournalEvent | undefined>;
     acknowledge(eventIds: readonly string[]): Promise<void>;
     /**
      * Give up on a pending event the server permanently refused: it stays in the journal (audit,
@@ -405,6 +449,21 @@ type ScanStop = symbol & {
 type ScanVisit<T = unknown> = (row: Readonly<LocalRecord<T>>) => void | ScanStop;
 /** What a `scanPending` callback may return: nothing (continue) or `SCAN_STOP`. */
 type ScanPendingVisit = (event: Readonly<JournalEvent>) => void | ScanStop;
+/** `LocalFirstTransaction.pendingCount`. */
+interface PendingCount {
+    /** Events not dead-lettered, in the partition asked for (or every partition). */
+    readonly live: number;
+    /** Dead-lettered events, every partition. */
+    readonly dead: number;
+}
+/** `LocalFirstTransaction.pendingLookup`. */
+interface PendingLookup {
+    byId(eventId: string): JournalEvent | undefined;
+    /** Every pending event filed under this idempotency key. */
+    byKey(idempotencyKey: string): readonly JournalEvent[];
+    /** Every pending event of this row (`clientEntityId`), of any type. */
+    byEntity(clientEntityId: string): readonly JournalEvent[];
+}
 interface LocalFirstSnapshot {
     records: LocalRecord[];
     events: JournalEvent[];
@@ -2098,7 +2157,8 @@ interface BrainPersistenceAdapter {
     getMessages(chatId: number, limit?: number): Promise<BrainMessage[]>;
     /**
      * Several chats' messages in one read, by chat id (an unknown chat maps to `[]`), each
-     * as `getMessages` would return it. Optional: an adapter without it is read chat by chat.
+     * as `getMessages` would return it. The local store reads them all from ONE snapshot (no
+     * commit lands between two chats). Optional: an adapter without it is read chat by chat.
      */
     getMessagesForChats?(chatIds: readonly number[]): Promise<ReadonlyMap<number, BrainMessage[]>>;
     /**
@@ -2133,6 +2193,8 @@ interface BrainPersistenceAdapter {
      */
     setMessageFeedback(messageId: number, feedback: 'up' | 'down' | null, context?: {
         toolName?: string | null;
+        /** The chat the message is in, when the caller knows it: a local store finds the row through that chat's index. */
+        chatId?: number | null;
         /** E5: set only when the press judges the chat's LATEST reply. A host whose model
          *  stream runs in another realm (the VS Code extension host) hands it to
          *  `submitLocalTurnVerdict` there; servers ignore it. */

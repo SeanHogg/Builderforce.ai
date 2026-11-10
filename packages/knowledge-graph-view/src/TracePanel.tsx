@@ -8,11 +8,12 @@
  */
 
 import { useMemo } from 'react';
-import { toMermaid, traceGraph, UNPARTITIONED_LANE, type KnowledgeGraph, type NodeRef, type Trace } from '@seanhogg/builderforce-memory/knowledge';
+import { toMermaid, traceGraph, type KnowledgeGraph, type LanedTrace, type NodeRef, type Trace } from '@seanhogg/builderforce-memory/knowledge';
 import { fillTemplate, type KnowledgeGraphLabels } from './labels';
 import { CopiedNote, CopyFallback, useCopyText } from './copyText';
 import { labelFor, nodeIndex } from './graphModel';
 import { edgeKindLabel } from './names';
+import { relabelTraceLanes, type PlacementWords } from './placement';
 import { cssVar } from './scene/themeColors';
 import { button, muted } from './styles';
 
@@ -26,14 +27,16 @@ export interface TracePanelProps {
     labels: KnowledgeGraphLabels;
 }
 
-/** The trace as drawn: laned when it spans partitions, per-node otherwise. */
-export function drawnTrace(graph: KnowledgeGraph, from: string): { trace: Trace; laned: boolean; laneOf: (ref: string) => string; lanes: string[] } {
-    const laned = traceGraph(graph, from as NodeRef);
+/** The trace as drawn, from memory's walk (`traceGraph(graph, from)`): laned when it spans partitions, per-node otherwise. */
+export function drawnTrace(graph: KnowledgeGraph, laned: LanedTrace, labels: PlacementWords): { trace: Trace; laned: boolean; laneOf: (ref: string) => string; lanes: string[] } {
+    const from = laned.from;
     // Lanes are LAYERS only where the pack rules who may use whom (edges carry verdicts);
     // folder planes (docs) are not a sequence, so there each document is its own lane.
     const layered = graph.edges.some((e) => e.verdict !== undefined);
     if (layered && laned.lanes.length > 1) {
-        return { trace: laned, laned: true, lanes: laned.lanes, laneOf: (r) => laned.laneOf[r] ?? r };
+        // Lanes already carry their human names (a community's label, "No partition"), so the SVG and the copied Mermaid agree.
+        const named = relabelTraceLanes(laned, graph, labels);
+        return { trace: named, laned: true, lanes: named.lanes, laneOf: (r) => named.laneOf[r] ?? r };
     }
     // Without `laneOf`, `toMermaid` draws one participant per node — the same as the SVG.
     const plain: Trace = { from: laned.from, lanes: laned.lanes, steps: laned.steps, truncated: laned.truncated };
@@ -43,11 +46,13 @@ export function drawnTrace(graph: KnowledgeGraph, from: string): { trace: Trace;
 
 export function TracePanel({ graph, from, labels }: TracePanelProps) {
     const index = useMemo(() => nodeIndex(graph), [graph]);
-    const { trace, laned, lanes, laneOf } = useMemo(() => drawnTrace(graph, from), [graph, from]);
+    // The walk depends only on the graph and the start; a labels change only renames the lanes.
+    const walked = useMemo(() => traceGraph(graph, from as NodeRef), [graph, from]);
+    const { trace, laned, lanes, laneOf } = useMemo(() => drawnTrace(graph, walked, labels), [graph, walked, labels]);
     const label = (r: string) => labelFor(index, r);
     const mermaid = useMemo(() => toMermaid(trace, (r) => labelFor(index, r)), [trace, index]);
     const copier = useCopyText();
-    const laneName = (lane: string) => (laned ? (lane === UNPARTITIONED_LANE ? labels.partitionNone : lane) : label(lane));
+    const laneName = (lane: string) => (laned ? lane : label(lane));
 
     if (trace.steps.length === 0) return <p style={muted}>{labels.traceEmpty}</p>;
 

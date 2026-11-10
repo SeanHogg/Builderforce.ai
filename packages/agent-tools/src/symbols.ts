@@ -134,13 +134,83 @@ const JS_METHOD = new RegExp(
 const JS_ABSTRACT_METHOD = new RegExp(
   `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override)\\s+)*abstract\\s+(?:(?:public|private|protected|static|readonly|override|async)\\s+)*(${ID})\\s*\\??\\s*(?:<[^>]*>)?\\s*\\(`,
 );
+/** A member whose parameter list opens a multi-line signature: `  async find(` with the parameters on the lines below. */
+const JS_METHOD_OPEN = new RegExp(
+  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|async|get|set)\\s+)*\\*?\\s*(${ID})\\s*(?:<[^>]*>)?\\s*\\(\\s*$`,
+);
+/** The line closing such a signature with a body brace: `)`, `): Promise<Row> {`. A call statement closes with `);`. */
+const JS_SIGNATURE_CLOSE = /^\s*\)\s*(?::[^;=]*)?\{\s*$/;
+/** How far below its first line a multi-line signature is looked for its close. */
+const MAX_SIGNATURE_LINES = 40;
 const JS_KEYWORDS = new Set(["if", "for", "while", "switch", "catch", "return", "function", "with", "do", "else", "try"]);
 
-function extractJs(lines: string[], out: CodeSymbol[]): void {
+/** Whether the multi-line signature opened on line `at` (0-based) closes with a body brace: its first `)`-led line. */
+function closesWithBody(lines: readonly string[], at: number): boolean {
+  for (let i = at + 1; i < Math.min(lines.length, at + MAX_SIGNATURE_LINES); i += 1) {
+    const line = lines[i] ?? "";
+    if (/^\s*\)/.test(line)) return JS_SIGNATURE_CLOSE.test(line);
+  }
+  return false;
+}
+
+/** Test and spec files: the code pack never reads their registrations as the service's surface (`codeRoutes`). */
+const TEST_SOURCE_PATH = /(?:\.|\/)(?:test|spec)\.[a-z]+$|(?:^|\/)__tests__\//;
+export function isTestSourcePath(path: string): boolean {
+  return TEST_SOURCE_PATH.test(path.replace(/\\/g, "/"));
+}
+
+/**
+ * A top-level statement that hands an inline callback to a call and opens its body on the same line:
+ * `routes.post("/me/youtube", validate(s), async (c) => {` · `chrome.runtime.onMessage.addListener((msg) => {` ·
+ * `app.on("ready", function () {`. Group 1 is its indent, group 2 the callee.
+ *
+ * Such a statement becomes a CALLBACK OWNER: a `function` definition whose body is the callback's, so the calls in a
+ * route handler or a message listener have an owner (PRD 43 P0b — the sequence starts there). It is a statement at
+ * column 0, or a first-level statement of a column-0 block that declares nothing (`if (!window.__x) {`); never in a test
+ * file ({@link isTestSourcePath}), never a test callee (`describe`, `it`, `test`, hooks). Its NAME, one stable format:
+ *   `<callee>` + (when an argument on that line is a string literal) ` "<first literal>"`, + ` #<n>` from the second
+ *   owner of the same name in the file on:  `channelRoutes.post "/me/youtube"` · `chrome.runtime.onMessage.addListener`
+ *   · `app.on "ready" #2`. Never a plain identifier ({@link isCallbackOwnerName}); never exported.
+ */
+const JS_CALLBACK_STATEMENT = new RegExp(`^([ \\t]*)(${ID}(?:\\??\\.${ID})*)\\s*\\((.*)(?:=>|\\bfunction\\b[^{]*\\))\\s*\\{\\s*$`);
+/** A column-0 block that is no declaration — its first-level statements are still top level (`if (!window.__x) {`). */
+const JS_TOP_BLOCK = /^(?:if\s*\(.*\)|\}?\s*else(?:\s+if\s*\(.*\))?|try|\}?\s*finally|\{)\s*\{\s*$/;
+/** Callees whose callback is a test, a hook of one, or plain scheduling: never a callback owner. */
+const NOT_CALLBACK_OWNERS = new Set([
+  "describe", "it", "test", "suite", "bench", "beforeEach", "afterEach", "beforeAll", "afterAll",
+  ...JS_KEYWORDS,
+]);
+/** The first string literal on a line after `from` (no template with substitutions). */
+const FIRST_STRING = /(["'`])((?:\\.|(?!\1)[^\\])*)\1/;
+
+/**
+ * Whether a definition's name is a callback owner's (see {@link extractSymbols}): `callee` or `callee "literal"`, with
+ * an optional `#n` suffix — never a plain identifier.
+ */
+export function isCallbackOwnerName(name: string): boolean {
+  return !new RegExp(`^${ID}$`).test(name);
+}
+
+function extractJs(lines: string[], out: CodeSymbol[], path = ""): void {
   // The class whose body we are in (its closing brace sits at column 0).
   let cls: string | undefined;
+  // The indent of the first-level statements of a column-0 non-declaration block ("" before the first one is seen).
+  let topBlock: string | undefined;
+  // The indent of the callback owner whose body we are in: until a line at that indent closes it.
+  let inCallback: string | undefined;
+  const callbacks = !isTestSourcePath(path);
+  const named = new Map<string, number>();
   eachLine(lines, out, (line, lineNo) => {
     if (/^\}/.test(line)) cls = undefined;
+    if (inCallback !== undefined) {
+      const rest = line.startsWith(inCallback) ? line.slice(inCallback.length) : undefined;
+      if (rest !== undefined && /^[})]/.test(rest)) { inCallback = undefined; return; }
+      // A column-0 statement that closes nothing ends a body whose close was not seen (a definition is never lost to it).
+      if (!/^\S/.test(line) || /^[})\]`]/.test(line)) return;
+      inCallback = undefined;
+    }
+    if (/^\S/.test(line)) topBlock = JS_TOP_BLOCK.test(line) ? "" : undefined;
+    else if (topBlock === "" && line.trim()) topBlock = /^[ \t]*/.exec(line)![0];
     for (const rule of JS_RULES) {
       const m = rule.re.exec(line);
       if (!m) continue;
@@ -152,8 +222,22 @@ function extractJs(lines: string[], out: CodeSymbol[]): void {
       if (rule.kind === "class") cls = name;
       return;
     }
-    if (cls === undefined) return;
-    const method = JS_METHOD.exec(line) ?? JS_ABSTRACT_METHOD.exec(line);
+    if (cls === undefined) {
+      const cb = callbacks ? JS_CALLBACK_STATEMENT.exec(line) : null;
+      const indent = cb ? group(cb, 1) : "";
+      const callee = cb ? group(cb, 2) : "";
+      if (cb && (indent === "" || indent === topBlock) && !NOT_CALLBACK_OWNERS.has(callee.split(".")[0]!)) {
+        const literal = FIRST_STRING.exec(group(cb, 3));
+        const base = literal && !literal[2]!.includes("${") ? `${callee} "${literal[2]}"` : callee;
+        const n = (named.get(base) ?? 0) + 1;
+        named.set(base, n);
+        out.push({ name: n === 1 ? base : `${base} #${n}`, kind: "function", line: lineNo, exported: false });
+        inCallback = indent;
+      }
+      return;
+    }
+    const open = JS_METHOD_OPEN.exec(line);
+    const method = JS_METHOD.exec(line) ?? JS_ABSTRACT_METHOD.exec(line) ?? (open && closesWithBody(lines, lineNo - 1) ? open : null);
     const name = method ? group(method, 1) : "";
     if (name && !JS_KEYWORDS.has(name)) out.push({ name, kind: "method", line: lineNo, exported: false, container: cls });
   });
@@ -304,7 +388,7 @@ function extractMarkdown(lines: string[], out: CodeSymbol[]): void {
   });
 }
 
-const EXTRACTORS: Record<Language, (lines: string[], out: CodeSymbol[]) => void> = {
+const EXTRACTORS: Record<Language, (lines: string[], out: CodeSymbol[], path: string) => void> = {
   js: extractJs,
   python: extractPython,
   go: extractGo,
@@ -326,7 +410,7 @@ export function extractSymbols(path: string, content: string, cap: number = MAX_
   // The cap bounds the symbol INDEX; a caller that needs the true count (the god-module badges) passes a larger one. Synchronous, so the swap cannot interleave.
   const outer = symbolCap;
   symbolCap = cap;
-  try { EXTRACTORS[language](content.split(/\r?\n/), out); } finally { symbolCap = outer; }
+  try { EXTRACTORS[language](content.split(/\r?\n/), out, path.replace(/\\/g, "/")); } finally { symbolCap = outer; }
   return out;
 }
 

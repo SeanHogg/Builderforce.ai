@@ -38,6 +38,8 @@ export interface DrillModel {
     loading: boolean;
     /** The name of a level the map no longer has (the view went back out of it); null once the person moves on. */
     notice: string | null;
+    /** The definitions read so far, append-only (the stage places a drilled level's symbols from them, PRD 43 B7). */
+    symbols: readonly SymbolRecord[];
 }
 
 const NEXT: Record<string, DrillLevel | undefined> = { world: 'package', package: 'class', class: 'function' };
@@ -122,6 +124,6 @@ export function useDrill(graph: KnowledgeGraph | null, world: StationModel, load
     const out = useCallback(() => { setStack((s) => s.slice(0, -1)); setSelected(null); setNotice(null); }, []);
     return {
         stack, view, canOut: stack.length > 0, parent: stack[stack.length - 2] ?? null, selected, select: setSelected, canEnter, enter, out,
-        loading: pending > 0, notice,
+        loading: pending > 0, notice, symbols: records,
     };
 }

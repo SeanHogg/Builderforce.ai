@@ -7,6 +7,7 @@ import { once, type Handler } from './handler';
 import { layout2d, layout3d } from './layout';
 import { antiPatterns, focus, insights, matrix } from './reads';
 import { path, surface, transitLayout } from './surface';
+import { markPaint, markSet, placement, stageIncident } from './stage';
 
 export const HANDLERS: { [K in TaskKind]: Handler<K> } = {
     layout2d,
@@ -22,4 +23,8 @@ export const HANDLERS: { [K in TaskKind]: Handler<K> } = {
     partitionMatrix: matrix,
     antiPatterns,
     focus,
+    markSet,
+    markPaint,
+    placement,
+    stageIncident,
 };

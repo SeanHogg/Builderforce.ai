@@ -15,6 +15,7 @@ import { formatBytes } from './formatBytes';
 import { knowledgeAbout, nodeIndex } from './graphModel';
 import { kindLabel, packLabel } from './names';
 import { PartitionPicker } from './PartitionPicker';
+import { placementKeyOf, placementRowText } from './placement';
 import { cssVar } from './scene/themeColors';
 import { button, input, list, muted, primaryButton, quietButton } from './styles';
 import type { FactActions, KnowledgeConfirm, KnowledgeGraphSource } from './types';
@@ -155,10 +156,10 @@ export function NodePanel({ graph, nodeRef, labels, source, confirm, onTrace, on
                     ? (
                         <div style={{ display: 'flex', gap: 8, fontSize: 12, alignItems: 'center' }}>
                             <dt style={{ ...muted, minWidth: 88 }}>{labels.nodePartition}</dt>
-                            <dd style={{ margin: 0 }}><PartitionPicker graph={graph} value={node.partition} labels={labels} onShow={onShow} /></dd>
+                            <dd style={{ margin: 0 }}><PartitionPicker graph={graph} value={placementKeyOf(node)} caption={placementRowText(node, graph, labels)} labels={labels} onShow={onShow} /></dd>
                         </div>
                     )
-                    : <Row name={labels.nodePartition} value={node.partition ?? labels.partitionNone} />}
+                    : <Row name={labels.nodePartition} value={placementRowText(node, graph, labels)} />}
                 <Row name={labels.nodeOrigin} value={labels.origins[node.origin]} />
                 {asset && typeof node.badges?.mediaType === 'string' && <Row name={labels.nodeMediaType} value={node.badges.mediaType} />}
                 {asset && Number.isFinite(Number(node.badges?.size)) && <Row name={labels.nodeSize} value={formatBytes(Number(node.badges?.size))} />}

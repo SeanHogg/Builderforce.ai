@@ -42,10 +42,11 @@ export interface LocalFirstTransaction {
    */
   scan<T = unknown>(entityType: LocalEntityType | undefined, visit: ScanVisit<T>): Promise<void>;
   /**
-   * `scan` of ONE group of a secondary index (`defineRecordIndex`): only the rows of
-   * `index.entityType` whose `keyOf` is `key`, without walking the type's other rows —
-   * reading one chat's messages costs that chat. Same view rules and `SCAN_STOP` as
-   * `scan`; rows come in committed order, then the ones this transaction wrote.
+   * `scan` of ONE group of a secondary index (`defineRecordIndex`): only the LIVE rows of
+   * `index.entityType` whose `keyOf` is `key` (tombstones are in no group), without walking
+   * the type's other rows — reading one chat's messages costs that chat. Same view rules
+   * and `SCAN_STOP` as `scan`: the visitor gets the store's own rows UNCLONED. Order is
+   * UNSPECIFIED (it depends on the index's history): a caller that needs one sorts.
    * Optional so a hand-rolled transaction still fits: callers go through `scanByIndex`,
    * which falls back to a filtered `scan`.
    */
@@ -72,6 +73,31 @@ export interface LocalFirstTransaction {
    * `SCAN_STOP` from the callback to stop at the first match instead of walking the rest.
    */
   scanPending(visit: ScanPendingVisit, destination?: EntityDestination): Promise<void>;
+  /**
+   * `scanPending` of ONE row's events (`clientEntityId`), through a per-row index: costs that
+   * row's events, never the whole journal. Same view rules, order and `SCAN_STOP` as
+   * `scanPending`. Optional so a hand-rolled transaction still fits: callers go through
+   * `scanPendingOfRow` / `selectPendingOf`, which fall back to a filtered `scanPending`.
+   */
+  scanPendingOf?(clientEntityId: string, visit: ScanPendingVisit, destination?: EntityDestination): Promise<void>;
+  /**
+   * The pending events counted, without a walk: live (not dead-lettered) in `destination` (every
+   * partition when omitted), and dead-lettered across the store. Optional; `countPending` falls
+   * back to a scan without it.
+   */
+  pendingCount?(destination?: EntityDestination): PendingCount;
+  /**
+   * Synchronous lookups over the pending events (dead-lettered included) as this transaction sees
+   * them, through the store's own indexes: what the sync coordinator resolves dependencies
+   * against without building an index of the whole journal per round. Rows are the store's own.
+   */
+  pendingLookup?(): PendingLookup;
+  /**
+   * Turn a record-payload marker (`payloadFrom: 'record'`, `recordPayloadMarker.ts`) into an event
+   * carrying `payload` and its hash, in place (same id and sequence). Returns the materialized
+   * event, or undefined when `eventId` is not a pending marker. Optional for hand-rolled fakes.
+   */
+  materializeEvent?(eventId: string, payload: unknown): Promise<JournalEvent | undefined>;
   acknowledge(eventIds: readonly string[]): Promise<void>;
   /**
    * Give up on a pending event the server permanently refused: it stays in the journal (audit,
@@ -161,6 +187,23 @@ export type ScanStop = symbol & { readonly __builderforceScanStop: true };
 export type ScanVisit<T = unknown> = (row: Readonly<LocalRecord<T>>) => void | ScanStop;
 /** What a `scanPending` callback may return: nothing (continue) or `SCAN_STOP`. */
 export type ScanPendingVisit = (event: Readonly<JournalEvent>) => void | ScanStop;
+
+/** `LocalFirstTransaction.pendingCount`. */
+export interface PendingCount {
+  /** Events not dead-lettered, in the partition asked for (or every partition). */
+  readonly live: number;
+  /** Dead-lettered events, every partition. */
+  readonly dead: number;
+}
+
+/** `LocalFirstTransaction.pendingLookup`. */
+export interface PendingLookup {
+  byId(eventId: string): JournalEvent | undefined;
+  /** Every pending event filed under this idempotency key. */
+  byKey(idempotencyKey: string): readonly JournalEvent[];
+  /** Every pending event of this row (`clientEntityId`), of any type. */
+  byEntity(clientEntityId: string): readonly JournalEvent[];
+}
 
 export interface LocalFirstSnapshot {
   records: LocalRecord[];

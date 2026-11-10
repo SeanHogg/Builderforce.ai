@@ -38,18 +38,36 @@ export const MARK_TYPE_ORDER: readonly MarkType[] = [
 
 /** A silhouette. Each has ONE outline: drawn flat in 2D, extruded in 3D. */
 export type NodeShape =
-    | 'square' | 'circle' | 'roundedSquare' | 'diamond' | 'tile' | 'triangle' | 'roundedTriangle'
-    | 'drum' | 'bookmark' | 'pentagon' | 'smallStar' | 'octagon' | 'hexagon';
+    | 'square' | 'circle' | 'window' | 'diamond' | 'tile' | 'triangle' | 'funnel'
+    | 'drum' | 'banner' | 'pentagon' | 'smallStar' | 'cross' | 'hexagon';
 
-/** type → shape: no two types share a silhouette. */
+/**
+ * type → shape: no two types share a silhouette, and every pair stays apart at 8 px (DPR 1) — XOR / union of the
+ * thresholded silhouettes ≥ 0.15 (`shapes.distinct.test.ts`; PRD 43 P1a revision 2 replaced the rounded square, the
+ * rounded triangle, the bookmark and the octagon, which merged with their sharp twins at ≤ 12 px). Size and aspect
+ * carry the difference as much as the corners do:
+ *   class    — a full square (a type is a solid block);
+ *   function — a small circle (a member, smaller than the class that holds it);
+ *   source   — a landscape window, 2.5 × 1.36 with a title bar (an editor pane);
+ *   test     — a diamond touching the extent (a check mark's rhombus);
+ *   doc      — a tall portrait page with a folded corner;
+ *   config   — a triangle pointing up (a setting / a lever);
+ *   style    — a triangle pointing down (the cascade);
+ *   data     — a narrow, tall drum with a lid (a database cylinder);
+ *   section  — a wide banner with notched ends (a heading);
+ *   entity   — a pentagon (a thing with a name);
+ *   claim    — a five-point star (an assertion);
+ *   external — a dashed cross (outside the folder / not here);
+ *   system   — a flat-topped hexagon at the full extent (the aggregate).
+ */
 export const TYPE_SHAPE: Readonly<Record<MarkType, NodeShape>> = Object.freeze({
-    class: 'square', function: 'circle', source: 'roundedSquare', test: 'diamond', doc: 'tile', config: 'triangle',
-    style: 'roundedTriangle', data: 'drum', section: 'bookmark', entity: 'pentagon', claim: 'smallStar',
-    external: 'octagon', system: 'hexagon',
+    class: 'square', function: 'circle', source: 'window', test: 'diamond', doc: 'tile', config: 'triangle',
+    style: 'funnel', data: 'drum', section: 'banner', entity: 'pentagon', claim: 'smallStar',
+    external: 'cross', system: 'hexagon',
 });
 
 /** Shapes drawn with a dashed outline (the outside: a missing or external target). */
-export const DASHED_SHAPES: ReadonlySet<NodeShape> = new Set<NodeShape>(['octagon']);
+export const DASHED_SHAPES: ReadonlySet<NodeShape> = new Set<NodeShape>(['cross']);
 
 /** The legend key (`labels.legend`) that names a type. */
 export const typeLegendKey = (type: MarkType): string => `type${type.charAt(0).toUpperCase()}${type.slice(1)}`;
@@ -115,23 +133,14 @@ export function typesPresent(types: Iterable<MarkType>): MarkType[] {
 
 type Pt = readonly [number, number];
 
+/**
+ * Every outline stays inside ±SHAPE_EXTENT on each axis: the stage's cap quad (`stage/marks/shader.ts`), the legend's
+ * viewBox and the 2D cull pad are sized from it.
+ */
+export const SHAPE_EXTENT = 1.25;
+
 const regular = (n: number, r: number, rot: number): Pt[] =>
     Array.from({ length: n }, (_, i) => [r * Math.cos(rot + (2 * Math.PI * i) / n), r * Math.sin(rot + (2 * Math.PI * i) / n)] as const);
-
-/** A polygon with each corner replaced by a quadratic curve of `r` (sampled, so 2D and 3D share the points). */
-function rounded(pts: readonly Pt[], r: number, steps = 4): Pt[] {
-    const out: Pt[] = [];
-    pts.forEach((p, i) => {
-        const a = pts[(i + pts.length - 1) % pts.length]!, b = pts[(i + 1) % pts.length]!;
-        const towards = (q: Pt): Pt => { const dx = q[0] - p[0], dy = q[1] - p[1], d = Math.hypot(dx, dy); return [p[0] + (dx / d) * r, p[1] + (dy / d) * r]; };
-        const s = towards(a), e = towards(b);
-        for (let k = 0; k <= steps; k++) {
-            const t = k / steps, u = 1 - t;
-            out.push([u * u * s[0] + 2 * u * t * p[0] + t * t * e[0], u * u * s[1] + 2 * u * t * p[1] + t * t * e[1]]);
-        }
-    });
-    return out;
-}
 
 const arc = (cx: number, cy: number, rx: number, ry: number, from: number, to: number, steps: number): Pt[] =>
     Array.from({ length: steps + 1 }, (_, i) => { const t = from + ((to - from) * i) / steps; return [cx + rx * Math.cos(t), cy + ry * Math.sin(t)] as const; });
@@ -139,27 +148,42 @@ const arc = (cx: number, cy: number, rx: number, ry: number, from: number, to: n
 const star = (outer: number, inner: number): Pt[] =>
     Array.from({ length: 10 }, (_, i) => { const r = i % 2 ? inner : outer, t = -Math.PI / 2 + (Math.PI * i) / 5; return [r * Math.cos(t), r * Math.sin(t)] as const; });
 
-/** Every shape's closed outline. */
+const rect = (hw: number, hh: number): Pt[] => [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]];
+
+/** An ✕: four arms of half-width `half` reaching `reach` along the diagonals (clockwise, y down). */
+function cross(reach: number, half: number): Pt[] {
+    const out: Pt[] = [];
+    for (let k = 0; k < 4; k++) {
+        const t = Math.PI / 4 + (k * Math.PI) / 2, c = Math.cos(t), s = Math.sin(t);
+        out.push([c * reach + s * half, s * reach - c * half], [c * reach - s * half, s * reach + c * half]);
+        const inner = t + Math.PI / 4, d = half * Math.SQRT2;
+        out.push([Math.cos(inner) * d, Math.sin(inner) * d]);
+    }
+    return out;
+}
+
+/** Every shape's closed outline (≤ `MAX_OUTLINE` points each: the stage's cap SDF reads them as a uniform). */
 export const SHAPE_OUTLINES: Readonly<Record<NodeShape, readonly Pt[]>> = Object.freeze({
-    square: [[-0.9, -0.9], [0.9, -0.9], [0.9, 0.9], [-0.9, 0.9]],
-    circle: regular(32, 1, 0),
-    roundedSquare: rounded([[-0.9, -0.9], [0.9, -0.9], [0.9, 0.9], [-0.9, 0.9]], 0.35),
-    diamond: [[0, -1.2], [1.2, 0], [0, 1.2], [-1.2, 0]],
-    tile: [[-0.75, -1], [0.35, -1], [0.75, -0.6], [0.75, 1], [-0.75, 1]],
-    triangle: [[0, -1.1], [1, 0.8], [-1, 0.8]],
-    roundedTriangle: rounded([[0, -1.15], [1.05, 0.85], [-1.05, 0.85]], 0.4),
-    drum: [...arc(0, -0.7, 0.9, 0.32, Math.PI, 2 * Math.PI, 12), ...arc(0, 0.7, 0.9, 0.32, 0, Math.PI, 12)],
-    bookmark: [[-0.7, -1], [0.7, -1], [0.7, 1], [0, 0.5], [-0.7, 1]],
-    pentagon: regular(5, 1.05, -Math.PI / 2),
-    smallStar: star(0.85, 0.36),
-    octagon: regular(8, 1.05, Math.PI / 8),
-    hexagon: regular(6, 1.05, 0),
+    square: rect(0.9, 0.9),
+    circle: regular(32, 0.7, 0),
+    window: rect(1.25, 0.68),
+    diamond: [[0, -1.25], [1.25, 0], [0, 1.25], [-1.25, 0]],
+    tile: [[-0.8, -1.25], [0.25, -1.25], [0.8, -0.7], [0.8, 1.25], [-0.8, 1.25]],
+    triangle: [[0, -1.2], [1.2, 0.85], [-1.2, 0.85]],
+    funnel: [[-1.2, -0.85], [1.2, -0.85], [0, 1.2]],
+    drum: [...arc(0, -0.95, 0.55, 0.3, Math.PI, 2 * Math.PI, 12), ...arc(0, 0.95, 0.55, 0.3, 0, Math.PI, 12)],
+    banner: [[-1.25, -0.55], [1.25, -0.55], [0.6, 0], [1.25, 0.55], [-1.25, 0.55], [-0.6, 0]],
+    pentagon: regular(5, 1.1, -Math.PI / 2),
+    smallStar: star(1, 0.42),
+    cross: cross(1.25, 0.32),
+    hexagon: regular(6, 1.25, 0),
 });
 
-/** 2D-only detail strokes drawn over a shape in the background colour: the drum's lid, the tile's folded corner. */
+/** 2D-only detail strokes drawn over a shape in the background colour: the drum's lid, the page's fold, the window's title bar. */
 const DETAIL: Partial<Record<NodeShape, readonly Pt[]>> = {
-    drum: arc(0, -0.7, 0.9, 0.32, 0, Math.PI, 12),
-    tile: [[0.35, -1], [0.35, -0.6], [0.75, -0.6]],
+    drum: arc(0, -0.95, 0.55, 0.3, 0, Math.PI, 12),
+    tile: [[0.25, -1.25], [0.25, -0.7], [0.8, -0.7]],
+    window: [[-1.25, -0.3], [1.25, -0.3]],
 };
 
 const n3 = (v: number): string => String(Math.round(v * 1000) / 1000);

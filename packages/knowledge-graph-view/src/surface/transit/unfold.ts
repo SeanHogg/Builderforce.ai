@@ -18,7 +18,8 @@ const RADIUS = 52;
 export interface Satellite { id: string; name: string; weight: number }
 
 
-function commonDir(paths: readonly string[]): string[] {
+/** The directory every path shares (the satellites' sub-areas are named one level below it). */
+export function commonDir(paths: readonly string[]): string[] {
     const split = paths.map((p) => p.split('/').slice(0, -1));
     const first = split[0] ?? [];
     let n = 0;

@@ -1,8 +1,9 @@
-/** The order of the 3D layout's planes (partitions), as steps so the edge tally never blocks for the whole edge list. */
+/** The order of the 3D layout's planes (placements: a partition, else a community — `placementKeyOf`), as steps so the edge tally never blocks for the whole edge list. */
 
 import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { cmp } from '../order';
 import { EDGE_SLICE } from './canonicalEdges';
+import { placementRankOf, planeKeyOf } from '../placement';
 
 /** The partition name of a node with none. */
 export const NONE_PARTITION = '';
@@ -13,13 +14,14 @@ export interface PlaneOrderTask {
     result(): string[];
 }
 
-/** Partitions top-down: by explicit order, else by net outgoing cross-partition edges. */
+/** Planes top-down: by explicit order, else pack partitions above communities, each by net outgoing cross-plane edges. */
 export function planeOrderTask(nodes: readonly KNode[], edges: readonly KEdge[], explicit?: readonly string[]): PlaneOrderTask {
-    const present = [...new Set(nodes.map((n) => n.partition ?? NONE_PARTITION))];
+    const keys = nodes.map((n) => planeKeyOf(n, nodes) ?? NONE_PARTITION);
+    const present = [...new Set(keys)];
     // Partitions as small integers, so the edge loop adds to a typed array instead of rewriting a string-keyed map twice per edge.
     const slot = new Map(present.map((p, i) => [p, i] as const));
     const partOf = new Map<string, number>();
-    for (const n of nodes) partOf.set(n.ref, slot.get(n.partition ?? NONE_PARTITION)!);
+    nodes.forEach((n, i) => partOf.set(n.ref, slot.get(keys[i]!)!));
     const tally = new Float64Array(present.length);
     let at = 0;
     let ordered: string[] | null = null;
@@ -37,7 +39,8 @@ export function planeOrderTask(nodes: readonly KNode[], edges: readonly KEdge[],
             if (!Number.isNaN(ra) && !Number.isNaN(rb)) return ra - rb;
             if (!Number.isNaN(ra)) return -1;
             if (!Number.isNaN(rb)) return 1;
-            return (score.get(b) ?? 0) - (score.get(a) ?? 0) || cmp(a, b);
+            // Pack partitions above communities (placementRankOf), then by flow.
+            return placementRankOf(a) - placementRankOf(b) || (score.get(b) ?? 0) - (score.get(a) ?? 0) || cmp(a, b);
         });
     };
 

@@ -29,7 +29,8 @@ import {
   type TicketValue,
 } from './records.js';
 import { resolveCreateDestination } from './creationDestination.js';
-import { createMemoryLocalFirstStore, newLocalRecord, selectPending, selectRecords, type LocalFirstSnapshot, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
+import { createMemoryLocalFirstStore, newLocalRecord, selectRecords, type LocalFirstSnapshot, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
+import { selectPending } from './pendingQueries.js';
 
 export const TRANSACTIONAL_SNAPSHOT_INVALID = 'transactional_record_snapshot_invalid';
 

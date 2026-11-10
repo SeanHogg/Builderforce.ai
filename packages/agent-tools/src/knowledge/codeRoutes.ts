@@ -17,6 +17,7 @@
  * entries joined by `;`, in source order, capped at {@link MAX_ROUTES}. Pure.
  */
 
+import { isTestSourcePath } from '../symbols.js';
 import { maskSource } from './codeMask.js';
 
 export const MAX_ROUTES = 50;
@@ -33,8 +34,6 @@ const ROUTER_FILE = new RegExp(
     String.raw`\bfrom\s*['"](?:hono(?:/[^'"]*)?|@hono/[^'"]*|express|fastify|koa-router|@koa/router|[^'"]*/router(?:\.js)?)['"]`
     + String.raw`|\brequire\s*\(\s*['"](?:express|hono)['"]\s*\)|\bnew\s+Hono\b|\bexpress\.Router\s*\(|\bRouter\s*\(\s*\)`,
 );
-/** Test and spec files register throwaway routes; they are never the service's surface. */
-const TEST_FILE = /(?:\.|\/)(?:test|spec)\.[a-z]+$|(?:^|\/)__tests__\//;
 
 /** `receiver.method('/path'` then an optional `,` (a handler follows). */
 const REGISTRATION = new RegExp(String.raw`([A-Za-z_$][\w$]*)\s*\.\s*(${METHODS}|route)\s*\(\s*(['"` + '`' + String.raw`])(/[^'"` + '`' + String.raw`]*)\3\s*(,)?`, 'g');
@@ -61,7 +60,8 @@ function afterCall(src: string, open: number): number {
     return -1;
 }
 
-const isRouterFile = (path: string, code: string): boolean => !TEST_FILE.test(path) && ROUTER_FILE.test(code);
+// Test and spec files register throwaway routes; they are never the service's surface (`isTestSourcePath`).
+const isRouterFile = (path: string, code: string): boolean => !isTestSourcePath(path) && ROUTER_FILE.test(code);
 
 const entryOf = (method: string, path: string): string => `${method === 'route' ? 'ROUTE' : method.toUpperCase()} ${path}`;
 

@@ -1,14 +1,15 @@
 /**
  * Keeps the number of stations readable on a huge repo: when there are more groups than the cap,
  * area groups fold into their parent directory (one level at a time) until the count is under
- * the cap or no area has a parent left. Folder groups (files without an area) are not folded.
+ * the cap or no area has a parent left. Folder and community groups are not folded. Past the cap,
+ * `foldGroups` (communityGroups.ts) groups by community instead whenever the communities fit.
  */
 
 import type { KNode } from '@seanhogg/builderforce-memory/knowledge';
 
 export const MAX_STATIONS = 400;
 
-export interface Group { id: string; name: string; kind: 'area' | 'folder'; nodes: KNode[] }
+export interface Group { id: string; name: string; kind: 'area' | 'folder' | 'community'; nodes: KNode[] }
 
 /** The ref one directory up (`src:r::a/b` -> `src:r::a`), or null at the top of the area path. */
 export function parentAreaRef(ref: string): string | null {

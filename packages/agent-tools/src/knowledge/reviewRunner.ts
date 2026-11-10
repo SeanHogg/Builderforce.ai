@@ -16,7 +16,7 @@
 
 import {
     DEFAULT_REVIEW_MODEL_CALLS, planDetail, reviewDirectory, srcRef,
-    type AnalyzerPort, type DirectorySource, type Extracted, type ExtractPool, type JudgementPort, type ReviewStep, type KnowledgeGraph,
+    type AnalyzerPort, type DirectorySource, type Extracted, type ExtractJob, type ExtractPool, type JudgementPort, type ReviewStep, type KnowledgeGraph,
     type KnowledgePack, type KnowledgeStore, type LiveOverlay, type NodeRef, type PartitionRegistry, type PlanDetail, type ReviewPlan,
     type ReviewArgs, type ReviewProgress, type ReviewReport, type SimilarPair,
 } from '@seanhogg/builderforce-memory/knowledge';
@@ -24,9 +24,12 @@ import type { IngestManifest } from '@seanhogg/builderforce-memory/ingest';
 import type { CapabilityProvider } from '../capabilities.js';
 import type { CodeAnalysisSnapshot } from '../codeAnalysis.js';
 import { codeAnalyzers } from './codeAnalyzers.js';
-import type { SymbolSource } from './codePack.js';
+import { isCodePath, type SymbolSource } from './codePack.js';
 import { readEntryPaths } from './codeEntryPoints.js';
 import { buildCodeGraph } from './codeGraph.js';
+import { listedModuleResolution } from './codeRollup.js';
+import { loadModuleAliases } from './moduleAliasLoader.js';
+import type { ModuleResolution } from './moduleAliases.js';
 import { withRootSignals } from './codeRootSignals.js';
 import type { CoverageRoot, CoverageSkip } from './codeCoverage.js';
 import { currentFileHashes, pruneEditedFiles } from './fileEdits.js';
@@ -91,6 +94,11 @@ export interface KnowledgeReviewPorts {
     onIndexError?(error: unknown): void;
     /** A failure to record the root's systems is reported, never a failed review. Must not throw. */
     onSystemsError?(error: unknown): void;
+    /**
+     * The root's path aliases and which modules exist, for the code pack's per-file extract (`moduleAliases.ts`). Absent ⇒ a
+     * run reads them ONCE from its `source` over the files it lists ({@link reviewModules}).
+     */
+    modules?: ModuleResolution;
 }
 
 export interface KnowledgeReviewOptions {
@@ -155,7 +163,7 @@ function reviewedPaths(source: DirectorySource | undefined, plan: PlanDetail | u
 
 /** The ONE pack list, with this host's symbols, analyzers and layers. */
 export function reviewPacks(
-    ports: Pick<KnowledgeReviewPorts, 'symbolsOf' | 'analyzers' | 'partitions' | 'history' | 'rootFiles' | 'onSignalsSkipped'> & { source?: DirectorySource },
+    ports: Pick<KnowledgeReviewPorts, 'symbolsOf' | 'analyzers' | 'partitions' | 'history' | 'rootFiles' | 'onSignalsSkipped' | 'modules'> & { source?: DirectorySource },
     manifest?: IngestManifest,
     /** The review's confirmed plan: the files the signals are read for (default: one listing of the source). */
     plan?: PlanDetail,
@@ -174,7 +182,31 @@ export function reviewPacks(
         ...(ports.symbolsOf ? { symbolsOf: ports.symbolsOf } : {}),
         ...(analyzers ? { analyzers } : {}),
         ...(ports.partitions ? { partitions: ports.partitions } : {}),
+        ...(ports.modules ? { modules: ports.modules } : {}),
     });
+}
+
+/**
+ * A root's {@link ModuleResolution} for one run: its alias configs read through `source` (only those among the listed
+ * files), and module existence answered from the same listing. Read once per run, before the first extract.
+ */
+export async function reviewModules(source: DirectorySource, plan?: PlanDetail): Promise<ModuleResolution> {
+    const paths = await reviewedPaths(source, plan)();
+    const listed = new Set(paths);
+    const read = async (path: string): Promise<string | undefined> => {
+        const doc = await source.read(path);
+        return doc.content.kind === 'text' ? doc.content.text : undefined;
+    };
+    return listedModuleResolution(await loadModuleAliases(paths.filter(isCodePath), read, { listed }), listed);
+}
+
+/**
+ * The run's extract pool with the root's aliases on every job: a worker builds its own packs, so it gets the aliases as
+ * data (`aliases`) and answers module existence itself.
+ */
+function poolWithAliases(pool: ExtractPool | undefined, modules: ModuleResolution): ExtractPool | undefined {
+    if (!pool || modules.aliases.scopes.length === 0) return pool;
+    return (job, signal) => pool({ ...job, aliases: modules.aliases } as ExtractJob, signal);
 }
 
 /**
@@ -254,7 +286,11 @@ async function reviewAndIndex(
     const twoPass = opts.judgeFiles !== undefined && !!ports.judgement;
     // Two passes share ONE plan: its manifest hashes are the last review's (what pass 2's "recent" compares against), and neither pass walks again.
     const plan = opts.plan ?? (twoPass ? await planKnowledgeReviewDetail(ports, opts.force ? { force: true } : {}) : undefined);
-    const passOpts: KnowledgeReviewOptions = plan ? { ...opts, plan } : opts;
+    // The root's aliases, once per run: every extract of it (in-thread or pooled, both passes) resolves with the same ones.
+    const modules = ports.modules ?? await reviewModules(ports.source, plan);
+    ports = { ...ports, modules };
+    const pool = poolWithAliases(opts.extractPool, modules);
+    const passOpts: KnowledgeReviewOptions = { ...opts, ...(plan ? { plan } : {}), ...(pool ? { extractPool: pool } : {}) };
     const report = await reviewDirectory(directoryArgsOf(ports, passOpts, progress, twoPass ? { mechanical: true } : {}));
     // What was edited since the last review is superseded by the files this one judged (or dropped).
     await pruneEditedFiles(ports.manifest, report.rootId);

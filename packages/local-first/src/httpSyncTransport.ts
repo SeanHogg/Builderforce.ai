@@ -35,6 +35,20 @@ export interface HttpSyncResponse {
   readonly ok: boolean;
   readonly status: number;
   json(): Promise<unknown>;
+  /** Response headers (a fetch `Response` has them): the rate-limit state and `Retry-After`. */
+  readonly headers?: { get(name: string): string | null };
+}
+
+/**
+ * The tenant's request budget as the server's limiter reported it on the last response
+ * (`X-RateLimit-Limit` / `-Remaining` / `-Reset`). Every sync request spends from the SAME bucket
+ * the person's own tabs use, so a drain paces itself on this.
+ */
+export interface SyncRateLimit {
+  readonly limit: number;
+  readonly remaining: number;
+  /** ISO instant the window resets, when the server said. */
+  readonly resetAt?: string;
 }
 
 export interface HttpSyncRequest {
@@ -62,6 +76,8 @@ export interface HttpSyncTransportOptions {
    */
   readonly baseUrl: string;
   readonly headers?: HttpSyncHeaders;
+  /** Every response that carries the limiter's headers reports them here (a drain's pacing). */
+  readonly onRateLimit?: (limit: SyncRateLimit) => void;
 }
 
 export class HttpSyncTransportError extends Error {
@@ -70,6 +86,8 @@ export class HttpSyncTransportError extends Error {
   readonly url: string;
   /** The server's refusal code (`{ error }` body) when it sent one. */
   readonly detail?: string;
+  /** A 429's `Retry-After`, in ms: do not send again before it. */
+  readonly retryAfterMs?: number;
 
   constructor(code: string, status: number, url: string, detail?: string) {
     super(detail ? `${code}: ${detail}` : code);
@@ -119,6 +137,15 @@ async function resolveHeaders(headers: HttpSyncHeaders | undefined): Promise<Rec
   return merged;
 }
 
+/** The tenant limiter's `X-RateLimit-*` headers (`rateLimitMiddleware.ts`), when the response carries them. */
+function readRateLimit(response: HttpSyncResponse): SyncRateLimit | undefined {
+  const limit = Number(response.headers?.get('x-ratelimit-limit'));
+  const remaining = Number(response.headers?.get('x-ratelimit-remaining'));
+  if (!response.headers || !Number.isFinite(limit) || !Number.isFinite(remaining) || limit <= 0) return undefined;
+  const resetAt = response.headers.get('x-ratelimit-reset') ?? undefined;
+  return { limit, remaining, ...(resetAt ? { resetAt } : {}) };
+}
+
 async function postJson(
   options: HttpSyncTransportOptions,
   path: string,
@@ -132,8 +159,15 @@ async function postJson(
     body: JSON.stringify(body),
     ...(init?.signal ? { signal: init.signal } : {}),
   });
+  const limit = readRateLimit(response);
+  if (limit) options.onRateLimit?.(limit);
   if (!response.ok) {
-    throw new HttpSyncTransportError('sync_http_status', response.status, url, await refusalCode(response));
+    const error = new HttpSyncTransportError('sync_http_status', response.status, url, await refusalCode(response));
+    const retryAfter = Number(response.headers?.get('retry-after'));
+    if (response.status === 429 && Number.isFinite(retryAfter) && retryAfter >= 0) {
+      Object.assign(error, { retryAfterMs: Math.ceil(retryAfter * 1000) });
+    }
+    throw error;
   }
   try {
     return { url, parsed: await response.json() };

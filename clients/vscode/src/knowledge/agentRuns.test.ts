@@ -200,6 +200,28 @@ describe("createAgentRuns", () => {
     }
   });
 
+  it("abandons a timed-out list: a read that lands late is neither analysed nor memoised", async () => {
+    vi.useFakeTimers();
+    try {
+      const messages = new Map<number, BrainMessage[]>([[1, [msg("user", "go"), step("read_file")]]]);
+      const store = fakeStore([chat(1, "One")], messages);
+      let land!: (rows: BrainMessage[]) => void;
+      store.getMessages.mockImplementationOnce(() => new Promise<BrainMessage[]>((resolve) => { land = resolve; }));
+      const runs = createAgentRuns(store, () => undefined, { timeoutMs: 1_000 });
+      const late = expect(runs.list()).rejects.toThrow(AgentRunsTimeoutError);
+      await vi.advanceTimersByTimeAsync(1_000);
+      await late;
+      land(messages.get(1)!); // the hung read finally answers
+      await vi.advanceTimersByTimeAsync(0);
+      expect(detect).not.toHaveBeenCalled();
+      expect((await runs.list()).map((s) => s.id)).toEqual(["1"]); // not a memo hit: read again
+      expect(store.getMessages).toHaveBeenCalledTimes(2);
+      expect(detect).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not share one project's in-flight list with another project", async () => {
     const chats = [chat(1, "One", 1), chat(2, "Two", 2)];
     const messages = new Map<number, BrainMessage[]>(chats.map((c) => [c.id, [msg("user", "go"), step("read_file")]]));

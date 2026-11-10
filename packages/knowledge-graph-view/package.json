@@ -24,7 +24,8 @@
     "@seanhogg/builderforce-memory-engine": "^2026.10.62",
     "react": "~19.3.1",
     "react-dom": "~19.3.1",
-    "three": "^0.185.1"
+    "three": "^0.185.1",
+    "troika-three-text": "^0.52.4"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.2",

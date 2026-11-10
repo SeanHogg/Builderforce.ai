@@ -148,9 +148,67 @@ describe("rootSymbols", () => {
   });
 });
 
+describe("rootSymbols relations (PRD 43 P0b)", () => {
+  const SERVICE = [
+    'import { Repo } from "./repo.js";',
+    'import { Row } from "./row";',
+    'import { z } from "zod";',
+    "export class Service {",
+    "  constructor(private readonly repo: Repo) {}",
+    "  run(id: string): Row {",
+    "    this.repo.get(id);",
+    "    z.parse(id);",
+    "    return this.repo.get(id);",
+    "  }",
+    "}",
+    "",
+  ].join("\n");
+  const REPO = ["export class Repo {", "  get(id: string) {", "    return id;", "  }", "}", ""].join("\n");
+
+  it("attaches each record's edges: exact refs inside the answer, name-level refs for an unloaded root file, a node_modules terminus for a package", async () => {
+    const d = disk({ "src/service.ts": SERVICE, "src/repo.ts": REPO, "src/row.ts": "export interface Row { id: string }\n" });
+    const records = await rootSymbols("/root", "r", [ref("src/service.ts"), ref("src/repo.ts")], d.ports, new SymbolCache());
+    const by = Object.fromEntries(records.map((r) => [r.ref.replace(/^.*#/, ""), r]));
+    expect(by["Service@4"]!.relations).toEqual([{ kind: "composes", to: ref("src/repo.ts#Repo@1") }]);
+    expect(by["Service.run@6"]!.relations).toEqual([
+      { kind: "uses", to: ref("src/row.ts#Row") },
+      { kind: "calls", to: ref("src/repo.ts#Repo.get@2"), sites: [
+        { path: "src/service.ts", line: 7, column: 15, order: 0 }, { path: "src/service.ts", line: 9, column: 22, order: 2 },
+      ] },
+      { kind: "calls", to: ref("node_modules/zod#z.parse"), sites: [{ path: "src/service.ts", line: 8, column: 7, order: 1 }] },
+    ]);
+    expect(by["Repo@1"]!.relations).toBeUndefined();
+  });
+
+  // regression: hired.video (2026-11-10) — `@/lib/…` imports were named as `node_modules/@/…` packages; the nearest tsconfig maps them.
+  it("regression: resolves an import by tsconfig path alias to the root's file, an alias of nothing stays a package", async () => {
+    const PAGE = [
+      'import { Repo } from "@/repo";',
+      'import { gone } from "@/gone";',
+      "export function page() {",
+      "  new Repo().get(1);",
+      "  gone();",
+      "}",
+      "",
+    ].join("\n");
+    const d = disk({
+      "web/tsconfig.json": '{\n  // JSONC\n  "compilerOptions": { "paths": { "@/*": ["./src/*"], }, },\n}',
+      "web/src/page.ts": PAGE, "web/src/repo.ts": REPO,
+    });
+    const records = await rootSymbols("/root", "r", [ref("web/src/page.ts"), ref("web/src/repo.ts")], d.ports, new SymbolCache());
+    const page = records.find((r) => r.name === "page")!;
+    expect(page.relations).toEqual([
+      { kind: "calls", to: ref("web/src/repo.ts#Repo.get@2"), sites: [{ path: "web/src/page.ts", line: 4, column: 14, order: 0 }] },
+      // The construction `new Repo()` is a use of the class.
+      { kind: "uses", to: ref("web/src/repo.ts#Repo@1") },
+      { kind: "calls", to: ref("node_modules/@/gone#gone"), sites: [{ path: "web/src/page.ts", line: 5, column: 3, order: 1 }] },
+    ]);
+  });
+});
+
 describe("SymbolCache", () => {
   it("forgets the least recently used file first", () => {
-    const cache = new SymbolCache(2);
+    const cache = new SymbolCache<KnowledgeSymbolRecord[]>(2);
     const rec: KnowledgeSymbolRecord[] = [];
     cache.set("a", rec); cache.set("b", rec);
     cache.get("a");

@@ -25,26 +25,24 @@ import nodeFs from "node:fs";
 import nodePath from "node:path";
 import {
   EMPTY_LOCAL_FIRST_SNAPSHOT,
-  INDEXEDDB_REDACTION_RULE,
   createMemoryLocalFirstStore,
   encodeDeltaFrame,
   encodeJournalFrame,
   redactSnapshotForUploadOrLog,
   resetDeltaOf,
-  shouldCompactJournal,
-  type JournalCompactionPolicy,
   type LocalFirstDelta,
   type LocalFirstListener,
   type LocalFirstSnapshot,
-  type LocalFirstStore,
   type MemoryLocalFirstStore,
 } from "@builderforce/local-first";
-import { LOCAL_FIRST_OPEN_BUSY_TIMEOUT_MS, createLocalFirstFileLock, type LocalFirstFileLockOptions } from "./localFirstLock";
+import type { DurableLocalFirstStore, DurableLocalFirstStoreOptions } from "./durableLocalFirstStoreContract";
+import { LOCAL_FIRST_OPEN_BUSY_TIMEOUT_MS, createLocalFirstFileLock } from "./localFirstLock";
 import { legacyMoved, readLegacyMerge, writeLegacyBaseline } from "./localFirstLegacyMerge";
 import { createRecovery } from "./durableLocalFirstRecovery";
 import { writeSnapshotCache } from "./localFirstSnapshotCacheWrite";
-import { compactJournal } from "./localFirstCompaction";
-import { createCompactionBackoff, type CompactionBackoff } from "./localFirstCompactionBackoff";
+import { createCompactionScheduler } from "./localFirstCompactionScheduler";
+import { migrateEventBacklog } from "./localFirstEventMigration";
+import { createCompactionBackoff } from "./localFirstCompactionBackoff";
 import { createNodeJournalIo, yieldToEventLoop, type JournalStageTiming, type LoadedJournal, type TailRead } from "./localFirstJournalIo";
 import {
   checkSnapshotCache,
@@ -52,7 +50,6 @@ import {
   removeOrphanedTemporaries,
 } from "./localFirstMigration";
 import { hostLog } from "./hostLog";
-import type { LocalFirstView } from "./localFirstView";
 
 const fs = nodeFs.promises;
 
@@ -71,48 +68,8 @@ const envPerfFlag = (): boolean => {
   return value !== undefined && value !== "0" && value.toLowerCase() !== "false";
 };
 
-/** Journal-backed store. `local-first-v1.json` is a cache written by `flush()`, not the commit. */
-export interface DurableLocalFirstStore extends LocalFirstStore {
-  flush(): Promise<void>;
-  readonly snapshotFile: string;
-  readonly journalFile: string;
-  /**
-   * The committed state WITHOUT cloning its rows (`export` clones every row, megabytes once a store
-   * holds a whole chat history). Read-only and valid until the next commit: derive from it, never
-   * mutate or retain a row. What the rail and the sync summary read their statuses from.
-   */
-  view(): Promise<LocalFirstView>;
-  /**
-   * Only snapshot eligible to be uploaded or logged.
-   * Rule: `VSIX_LOCAL_FIRST_REDACTION_RULE`, which is `INDEXEDDB_REDACTION_RULE`.
-   */
-  exportForUploadOrLog(): Promise<LocalFirstSnapshot>;
-}
-
-/**
- * Stated redaction rule for this surface. Identical to the IndexedDB adapter:
- * only `exportForUploadOrLog()` may leave the device. Not a second policy.
- */
-export const VSIX_LOCAL_FIRST_REDACTION_RULE = INDEXEDDB_REDACTION_RULE;
-
-export interface DurableLocalFirstStoreOptions {
-  /** Awaited before the first commit (the device id becoming durable, G04). */
-  beforeWrite?: Promise<void>;
-  /** Overrides the shared compaction thresholds (tests). */
-  compaction?: Partial<JournalCompactionPolicy>;
-  lock?: LocalFirstFileLockOptions;
-  /** Pause between failed compactions (default: real clock, 30 s doubling to 15 min). Tests inject one. */
-  compactionBackoff?: CompactionBackoff;
-  /** A cache write or a compaction failed after the commit was durable. Default `console.warn`. */
-  onBackgroundError?: (error: unknown) => void;
-  /** A commit took longer than 250 ms: how long, and the size of the frame it appended. */
-  onSlowCommit?: (ms: number, frameBytes: number) => void;
-  /**
-   * Stage timings for the first import and every commit. Off by default (zero overhead);
-   * `localFirstStore.ts` fills it from the `BUILDERFORCE_LOCAL_FIRST_PERF` env flag.
-   */
-  onStageTiming?: (timing: JournalStageTiming) => void;
-}
+// The store's contract (what it returns and takes) lives in `durableLocalFirstStoreContract.ts`.
+export { VSIX_LOCAL_FIRST_REDACTION_RULE, type DurableLocalFirstStore, type DurableLocalFirstStoreOptions } from "./durableLocalFirstStoreContract";
 
 export function createDurableLocalFirstStore(
   directory: string,
@@ -145,7 +102,6 @@ export function createDurableLocalFirstStore(
   let commitGeneration = 0;
   let dirty = false;
   let lastFrameBytes = 0;
-  let compactionPending = false;
 
   /** The delta applied to the memory store's own rows — the state a first frame must hold. */
   const snapshotAfter = (delta: LocalFirstDelta): LocalFirstSnapshot => {
@@ -162,6 +118,7 @@ export function createDurableLocalFirstStore(
       const frame = io.frames() === 0 ? encodeJournalFrame(snapshotAfter(delta)) : encodeDeltaFrame(delta);
       if (onStageTiming) onStageTiming({ stage: "commit.serialize", ms: Date.now() - serializeStart, detail: `${frame.byteLength} bytes` });
       lastFrameBytes = frame.byteLength;
+      compaction.noteCommit(delta);
       await io.append(frame);
     },
   });
@@ -199,21 +156,41 @@ export function createDurableLocalFirstStore(
    */
   const mergeLegacyWrites = async (): Promise<void> => {
     if (!(await legacyMoved(directory))) return;
+    await underOpenLock(async () => {
+      const merge = await readLegacyMerge(directory, memory.view(), yieldToEventLoop);
+      if (!merge) return;
+      if (merge.delta) await commitOpenDelta(merge.delta);
+      await writeLegacyBaseline(directory, merge.baseline);
+      if (merge.delta) onBackgroundError(new Error(`local-first: merged ${merge.rows} rows and ${merge.events} events an older window wrote to the v2 journal`));
+    });
+  };
+
+  /** During the open: hold the cross-window lock, caught up with the journal (still unpublished — see `catchingUp`). */
+  const underOpenLock = async <T,>(work: () => Promise<T>): Promise<T> => {
     await lock.acquire(openWaitMs);
     try {
       await refreshForCommit();
-      const merge = await readLegacyMerge(directory, memory.view(), yieldToEventLoop);
-      if (!merge) return;
-      if (merge.delta) {
-        await io.append(encodeDeltaFrame(merge.delta));
-        memory.applyDelta(merge.delta);
-        dirty = true;
-      }
-      await writeLegacyBaseline(directory, merge.baseline);
-      if (merge.delta) onBackgroundError(new Error(`local-first: merged ${merge.rows} rows and ${merge.events} events an older window wrote to the v2 journal`));
+      return await work();
     } finally {
       await lock.release();
     }
+  };
+
+  /** During the open, under its lock: one frame appended and applied. */
+  const commitOpenDelta = async (delta: LocalFirstDelta): Promise<void> => {
+    await io.append(encodeDeltaFrame(delta));
+    memory.applyDelta(delta);
+    dirty = true;
+  };
+
+  /** Set when the open migrated the event backlog: the slim state is folded into a new base right after. */
+  let compactAfterOpen = false;
+  // The one-time event-backlog migration (`localFirstEventMigration.ts`), as ordinary commits under the lock.
+  const migrateBacklog = async (): Promise<void> => {
+    const plan = await migrateEventBacklog({ journalFile: io.journalFile, view: () => memory.view(), locked: underOpenLock, commit: commitOpenDelta });
+    if (!plan) return;
+    compactAfterOpen = true;
+    hostLog(`local-first: migrated the event backlog — ${plan.stripped} payload copies became markers, ${plan.dropped} dead events dropped, ${plan.kept} kept (payload differs from the row)`);
   };
 
   const openStore = async (): Promise<void> => {
@@ -228,6 +205,7 @@ export function createDurableLocalFirstStore(
       await mergeLegacyWrites().catch(onBackgroundError);
       // v3 is live and healthy: the pre-v3 rollback copy only costs disk now.
       await retirePreV3Snapshot();
+      await migrateBacklog().catch(onBackgroundError);
     } else if (await hasLegacyState(directory, snapshotFile)) {
       await importLegacy();
     } else {
@@ -241,6 +219,11 @@ export function createDurableLocalFirstStore(
     const openedAt = onStageTiming ? Date.now() : 0;
     opened ??= openStore().then(() => {
       if (onStageTiming) onStageTiming({ stage: "import.open", ms: Date.now() - openedAt });
+      // After the open has resolved (the compaction's `exclusive` waits on it), never inside it.
+      if (compactAfterOpen) {
+        compactAfterOpen = false;
+        compaction.compactNow();
+      }
     }).catch((error: unknown) => {
       opened = undefined;
       throw error;
@@ -332,30 +315,13 @@ export function createDurableLocalFirstStore(
     }
   };
 
-  /**
-   * Fold the tail into a new base (`localFirstCompaction.ts`): stream the temp WITHOUT the
-   * cross-window lock, then catch up and rename UNDER it. Queued on the serial queue behind
-   * the commit that tripped the policy, never inside it, so this window's own commits wait for
-   * it; only other windows interleave. `flush()` waits for it.
-   */
-  const scheduleCompaction = (): void => {
-    // One job at a time: a burst of commits queues one, and a failing compaction (a rename or
-    // lock that keeps refusing) backs off rather than re-streaming the store per commit.
-    if (compactionPending || !shouldCompactJournal(io.tail(), options.compaction) || !compactionBackoff.allowed()) return;
-    compactionPending = true;
-    void serialized(async () => {
-      try {
-        if (!compactionBackoff.allowed()) return; // re-checked before the temp is streamed
-        await compactJournal({ io, view: () => memory.view(), exclusive, policy: options.compaction });
-        compactionBackoff.succeeded();
-      } catch (error) {
-        compactionBackoff.failed();
-        throw error;
-      } finally {
-        compactionPending = false;
-      }
-    }).catch(onBackgroundError);
-  };
+  // WHEN the journal compacts (tail policy, a drained queue, a migration): `localFirstCompactionScheduler.ts`.
+  // `flush()` waits for a queued compaction.
+  const compaction = createCompactionScheduler({
+    io, view: () => memory.view(), exclusive, serialized, backoff: compactionBackoff, onBackgroundError,
+    ...(options.compaction ? { policy: options.compaction } : {}),
+    ...(options.compactAfterAcknowledged !== undefined ? { compactAfterAcknowledged: options.compactAfterAcknowledged } : {}),
+  });
 
   const store: DurableLocalFirstStore = {
     snapshotFile,
@@ -374,7 +340,7 @@ export function createDurableLocalFirstStore(
         const elapsed = Date.now() - started;
         if (elapsed > SLOW_COMMIT_MS) options.onSlowCommit?.(elapsed, lastFrameBytes);
         const compactStart = onStageTiming ? Date.now() : 0;
-        scheduleCompaction();
+        compaction.schedule();
         if (onStageTiming) onStageTiming({ stage: "commit.compact-check", ms: Date.now() - compactStart });
         if (onStageTiming) onStageTiming({ stage: "commit.total", ms: elapsed, detail: `${lastFrameBytes} byte frame` });
         return result;

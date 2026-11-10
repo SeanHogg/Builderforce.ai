@@ -9,12 +9,14 @@ import {
 } from './records.js';
 import { partitionUnboundPending, type UnboundSyncRefusal } from './creationDestination.js';
 import { destinationsForSync, readOfflineDestinations } from './destinationRebind.js';
-import { SCAN_STOP, selectPending, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
+import { SCAN_STOP, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
+import { scanPendingOfRow } from './pendingQueries.js';
 import type { CoordinatorLeaseFence } from './syncLease.js';
-import { loadMappedEntities, unsendableEventIds } from './dependencyGraph.js';
 import { rebaseImportsOntoMapping, rebaseNewerWrites } from './journalRules.js';
 import { nextHoldTransition, type HoldStatus } from './holdLimits.js';
-import { batchEvents, wireDependencies } from './syncBatch.js';
+import { jsonBytes } from './syncBatch.js';
+import { materializeRound, pickRound } from './syncRound.js';
+import { isRecordPayloadMarker } from './recordPayloadMarker.js';
 import { addSyncSummary, countReceipt, emptySyncSummary, type SyncSummary } from './syncSummary.js';
 import { parseSyncId, type SyncId } from './entityId.js';
 import { isAlreadySatisfiedDelete, isPermanentRefusal } from './permanentRefusals.js';
@@ -71,6 +73,15 @@ function transportInit(fence: CoordinatorLeaseFence | undefined): SyncTransportI
   return fence ? { signal: fence.signal } : undefined;
 }
 
+/**
+ * One `synchronize` round. `pull: false` pushes ONLY — no pull before or after. A drain sending
+ * a long queue pulls once at the start and once at the end, not twice per batch: every request
+ * counts against the tenant's rate limit, which the person's own tabs share.
+ */
+export interface SyncRoundOptions {
+  readonly pull?: boolean;
+}
+
 export interface SyncCoordinatorOptions {
   store: LocalFirstStore;
   transport: SyncTransport;
@@ -113,9 +124,8 @@ async function mergePulled(
 ): Promise<boolean> {
   const local = await tx.get(remote.entityType, remote.id);
   let hasPending = false;
-  await tx.scanPending((event) => {
-    if (event.clientEntityId === remote.id) { hasPending = true; return SCAN_STOP; }
-  }, destination);
+  // The row's own events (per-row index): a pull of 500 rows must not walk the journal 500 times.
+  await scanPendingOfRow(tx, remote.id, () => { hasPending = true; return SCAN_STOP; }, destination);
   if (local && hasPending) {
     const conflict: SyncConflict = {
       id: `${remote.entityType}:${remote.id}:${local.version}:${remote.version}`,
@@ -205,30 +215,20 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
   const syncPartition = async (
     destination: EntityDestination,
     fence: CoordinatorLeaseFence | undefined,
+    round: SyncRoundOptions = {},
   ): Promise<SyncSummary> => {
-    const pulled = await pull(destination, fence);
-    const pending = await options.store.read(async (tx) => {
-      // The destination's events are what is sent, so they are cloned; the key lookup
-      // that orders them only reads every pending event, so it borrows them uncloned.
-      const every: JournalEvent[] = [];
-      await tx.scanPending((event) => { every.push(event as JournalEvent); });
-      every.sort((a, b) => a.localSequence - b.localSequence);
-      // A dependent of a dead-lettered write is BLOCKED (not sent, not counted) until a new live
-      // event appears under that key; it needs no state change of its own to become sendable.
-      // Likewise a dependent of an entity whose record still awaits the sync pass's bind.
-      const mapped = await loadMappedEntities(tx, every);
-      const blocked = unsendableEventIds(every, mapped);
-      const sendable = (await selectPending(tx, undefined, destination)).filter((event) => !blocked.has(event.eventId));
-      return wireDependencies(sendable, every, mapped);
-    });
-    // G10: an unbound event parked in the bound partition (a record
-    // rebound without its events, or a destination smuggled onto an
-    // unbound value) is refused here, not pushed and not dropped. The
-    // coordinator's own destination argument is already bound, so this is
-    // the per-record check the destination argument cannot express.
-    const { syncable, refused } = partitionUnboundPending(pending);
-    const { batch, bytes } = batchEvents(syncable, maxEvents, maxBytes, now().getTime());
-    const summary: SyncSummary = { ...emptySyncSummary(refused.length), pulled: pulled.count, conflicts: pulled.conflicts, bytes };
+    const pulled = round.pull === false ? { count: 0, conflicts: 0 } : await pull(destination, fence);
+    // PICK (a read that costs the batch, `syncRound.ts`), then MATERIALIZE the picked
+    // record-payload markers in one commit BEFORE the push: a resend after a lost response
+    // must carry the bytes the server already hashed.
+    const picked = await options.store.read((tx) => pickRound(tx, destination, { maxEvents, maxBytes, at: now().getTime() }));
+    const summary: SyncSummary = { ...emptySyncSummary(picked.refused.length), pulled: pulled.count, conflicts: pulled.conflicts, bytes: 0 };
+    if (picked.batch.length === 0) return summary;
+    assertFenceHolds(fence);
+    const { batch, bytes } = picked.batch.some(isRecordPayloadMarker)
+      ? await options.store.transact((tx) => materializeRound(tx, picked.batch, maxBytes))
+      : { batch: picked.batch, bytes: picked.batch.reduce((total, event) => total + jsonBytes(event), 0) };
+    summary.bytes = bytes;
     if (batch.length === 0) return summary;
     assertFenceHolds(fence);
     const receipts = await options.transport.push({
@@ -302,6 +302,7 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
       }
       await tx.acknowledge(acknowledged);
     });
+    if (round.pull === false) return summary;
     const caughtUp = await pull(destination, fence);
     summary.pulled += caughtUp.count;
     summary.conflicts += caughtUp.conflicts;
@@ -309,12 +310,12 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
   };
 
   return {
-    async synchronize(destination: EntityDestination): Promise<SyncSummary | undefined> {
+    async synchronize(destination: EntityDestination, round?: SyncRoundOptions): Promise<SyncSummary | undefined> {
       options.policy.assert('synchronize');
       if (destination.kind === 'unbound') throw new Error('sync_destination_required');
       return options.lease.run(owner, async (fence) => {
         options.policy.assert('synchronize');
-        return syncPartition(destination, fence);
+        return syncPartition(destination, fence, round);
       });
     },
 

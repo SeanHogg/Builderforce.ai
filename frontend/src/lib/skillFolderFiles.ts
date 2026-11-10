@@ -16,17 +16,12 @@
 
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { isBinarySkillPath, type SkillFile } from '@builderforce/agent-skills';
+import { isBinaryBytes } from '@seanhogg/builderforce-memory/knowledge';
 import { base64ToBytes, bytesToBase64 } from './base64Bytes';
 
-/** A NUL byte in the first 8 KB is the usual tell of a binary file. */
-function looksBinary(bytes: Uint8Array): boolean {
-  const n = Math.min(bytes.length, 8192);
-  for (let i = 0; i < n; i++) if (bytes[i] === 0) return true;
-  return false;
-}
-
 function toSkillFile(path: string, bytes: Uint8Array): SkillFile {
-  return isBinarySkillPath(path) || looksBinary(bytes)
+  // Memory's binary rule (a NUL among the first 8192 bytes) — the one every host shares.
+  return isBinarySkillPath(path) || isBinaryBytes(bytes)
     ? { path, content: bytesToBase64(bytes), encoding: 'base64' }
     : { path, content: strFromU8(bytes) };
 }

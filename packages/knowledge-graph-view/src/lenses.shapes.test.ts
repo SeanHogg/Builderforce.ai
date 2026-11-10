@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { KNode } from '@seanhogg/builderforce-memory/knowledge';
-import { kindShape } from './lenses';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as DEFAULT_LABELS } from './labels';
 import {
-    dominantType, FALLBACK_TYPE, KNOWN_NODE_KINDS, MARK_TYPE_ORDER, markTypeOf, NODE_SHAPES, SHAPE_OUTLINES, SHAPE_PATHS,
-    TYPE_SHAPE, typeLegendKey, typesPresent, type MarkType,
+    dominantType, FALLBACK_TYPE, KNOWN_NODE_KINDS, MARK_TYPE_ORDER, markTypeOf, NODE_SHAPES, nodeShape, SHAPE_OUTLINES, SHAPE_PATHS,
+    SHAPE_EXTENT, TYPE_SHAPE, typeLegendKey, typesPresent, type MarkType,
 } from './shapes';
 
 const node = (kind: string, path = 'src/x.ts', extra: Partial<KNode> = {}): KNode => ({
@@ -30,7 +29,7 @@ describe('markTypeOf (PRD 43 B1a rule 2)', () => {
         expect(markTypeOf(node('file', 'prisma/schema.prisma'))).toBe('data');
         expect(markTypeOf(node('file', 'api/migrations/0001_init.ts'))).toBe('data');
         expect(markTypeOf(node('file', 'assets/logo.png'))).toBe(FALLBACK_TYPE);
-        const shapes = ['src/a.ts', 'src/a.test.ts', 'a.md', 'tsconfig.json', 'a.css', 'a.sql'].map((p) => kindShape(node('file', p)));
+        const shapes = ['src/a.ts', 'src/a.test.ts', 'a.md', 'tsconfig.json', 'a.css', 'a.sql'].map((p) => nodeShape(node('file', p)));
         expect(new Set(shapes).size).toBe(shapes.length);
     });
 
@@ -52,9 +51,9 @@ describe('markTypeOf (PRD 43 B1a rule 2)', () => {
 
     it('draws the approved vocabulary', () => {
         expect(TYPE_SHAPE).toEqual({
-            class: 'square', function: 'circle', source: 'roundedSquare', test: 'diamond', doc: 'tile', config: 'triangle',
-            style: 'roundedTriangle', data: 'drum', section: 'bookmark', entity: 'pentagon', claim: 'smallStar',
-            external: 'octagon', system: 'hexagon',
+            class: 'square', function: 'circle', source: 'window', test: 'diamond', doc: 'tile', config: 'triangle',
+            style: 'funnel', data: 'drum', section: 'banner', entity: 'pentagon', claim: 'smallStar',
+            external: 'cross', system: 'hexagon',
         });
         expect(new Set(Object.values(TYPE_SHAPE)).size).toBe(MARK_TYPE_ORDER.length);
     });
@@ -80,7 +79,7 @@ describe('SHAPE_PATHS / SHAPE_OUTLINES', () => {
         for (const s of NODE_SHAPES) {
             const r = Math.max(...SHAPE_OUTLINES[s].map(([x, y]) => Math.hypot(x, y)));
             expect(r, s).toBeGreaterThan(0.6);
-            expect(r, s).toBeLessThan(1.4);
+            expect(r, s).toBeLessThanOrEqual(SHAPE_EXTENT * Math.SQRT2);
         }
     });
 

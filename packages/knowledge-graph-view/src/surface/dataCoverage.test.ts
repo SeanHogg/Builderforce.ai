@@ -31,6 +31,17 @@ describe('dataCoverage', () => {
         expect(c.noPartition).toBe(0);
     });
 
+    it('counts files with no placement (no partition, no community) and files placed by their community', () => {
+        const full: KnowledgeGraph = { ...cut, stats: { ...cut.stats, truncated: false } };
+        const f = (path: string, extra: Partial<KNode>): KNode =>
+            ({ ref: `src:sys::${path}`, kind: 'file', label: path, pack: 'code', importance: 0.5, origin: 'extracted', ...extra }) as KNode;
+        const graph: KnowledgeGraph = {
+            ...full,
+            nodes: [f('a.ts', { partition: 'domain', badges: { communityId: 1 } }), f('b.ts', { badges: { communityId: 1 } }), f('c.ts', { badges: { communityId: 2 } }), f('d.ts', {})],
+        };
+        expect(dataCoverage(graph)).toMatchObject({ files: 4, noPartition: 1, byCommunity: 2 });
+    });
+
     it('says re-review when no file carries any badge', () => {
         expect(dataCoverage(bare).channels.complexity.reason).toBe('no-badges');
     });

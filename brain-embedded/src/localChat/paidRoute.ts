@@ -6,7 +6,7 @@
 
 import type { LocalFirstTransaction } from '@builderforce/local-first';
 import { ANTHROPIC_RELEASES, listPriceOf, type PriceBook } from '@builderforce/model-catalog';
-import { liveRecords } from './records';
+import { scanChatUsage } from './records';
 import type { RunUsageValue } from './usageLedger';
 
 /** The paid route a local call is valued against when the chat never used one: the
@@ -28,9 +28,9 @@ export function paidRouteOf(rows: readonly RunUsageValue[], book: PriceBook): { 
   return fallback ? { prompt: fallback.input, completion: fallback.output } : undefined;
 }
 
-/** A chat's usage rows, oldest first. */
+/** A chat's usage rows, oldest first, cloned — read through the chat's usage index, never every chat's rows. */
 export async function usageRowsOf(tx: LocalFirstTransaction, deviceId: string, clientChatId: string): Promise<RunUsageValue[]> {
-  return (await liveRecords<RunUsageValue>(tx, 'usage', deviceId, (row) => row.payload.clientChatId === clientChatId))
-    .map((row) => row.payload)
-    .sort((a, b) => a.at.localeCompare(b.at));
+  const rows: RunUsageValue[] = [];
+  await scanChatUsage(tx, deviceId, clientChatId, (row) => { rows.push(row.payload); });
+  return structuredClone(rows).sort((a, b) => a.at.localeCompare(b.at));
 }

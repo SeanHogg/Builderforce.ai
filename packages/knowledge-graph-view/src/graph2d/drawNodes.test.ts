@@ -34,7 +34,7 @@ describe('paintQueue', () => {
         const files = ['src/a.ts', 'src/a.test.ts', 'docs/a.md', 'tsconfig.json', 'db/a.sql'];
         const marks = files.map((p) => mark(p, TYPE_SHAPE[markTypeOf({ kind: 'file', ref: `src:r::${p}` as never, label: p })]));
         const buckets = bucketByShape(marks);
-        expect(buckets.map((b) => b.shape)).toEqual(['roundedSquare', 'diamond', 'tile', 'triangle', 'drum']);
+        expect(buckets.map((b) => b.shape)).toEqual(['window', 'diamond', 'tile', 'triangle', 'drum']);
         expect(new Set(buckets.map((b) => SHAPE_PATHS[b.shape])).size).toBe(buckets.length);
     });
 
@@ -66,6 +66,6 @@ describe('drawMark', () => {
     });
 
     it('draws the outside (missing / external) hollow with a dashed outline', () => {
-        expect(calls('octagon')).toEqual(['fillStyle:B', 'strokeStyle:A', 'dash:2', 'fill:path:octagon', 'stroke']);
+        expect(calls('cross')).toEqual(['fillStyle:B', 'strokeStyle:A', 'dash:2', 'fill:path:cross', 'stroke']);
     });
 });

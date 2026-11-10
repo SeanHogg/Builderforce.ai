@@ -6,7 +6,9 @@
  * different box cannot help (the ancestor's scrollbar narrows them all) and `scrollbar-gutter`
  * belongs to an ancestor this package does not own, so the slack lives here. A real resize (a panel
  * dragged, a phone rotated) moves the width by far more and is followed; within the slack the map
- * scales to its box (`maxWidth: 100%`). Floored, so a fractional measurement never lays out a map a
+ * scales to its box (`maxWidth: 100%`). The trade-off, accepted: a REAL shrink of 24px or less (a
+ * small panel drag) is not laid out again either; the map stays laid out for the wider box and is
+ * scaled down by up to the slack (text and marks a few percent smaller) until a larger change. Floored, so a fractional measurement never lays out a map a
  * fraction of a pixel wider than its box (which would add a sideways scrollbar of its own).
  */
 

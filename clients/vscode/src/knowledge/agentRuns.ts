@@ -12,9 +12,11 @@
  * store's chat index — a chat's read costs that chat, never every chat's rows), and the walk stops as soon as
  * {@link AGENT_RUNS_SHOWN} runs are found, so the older windows are never read. Bounds, kept although the index made a
  * read cheap (measured on a 263 MB / 75k-message store: a cold list 2.1 s, ~1.6 s of it run-findings CPU, warm 0.14 s):
- *   - {@link LIST_BUDGET_MS}: past it no new window is read (memo hits are still answered; the next open continues);
+ *   - {@link LIST_BUDGET_MS}: measured from before the chat list read; past it no further chat is read or analysed
+ *     (checked per chat; memo hits are still answered; the next open continues);
  *   - {@link LIST_TIMEOUT_MS}: a list that has not settled by then (a store read that hangs) rejects and is dropped,
- *     so Retry starts a fresh read instead of being handed the stuck one.
+ *     so Retry starts a fresh read instead of being handed the stuck one; the abandoned list stops between windows
+ *     and chats, and a read that lands late is not memoised.
  * A store without the batch read, or a batch that fails, is read chat by chat; a chat whose read fails is skipped
  * rather than failing the list; overlapping list calls for the same project share one read.
  */
@@ -58,6 +60,14 @@ export interface AgentRuns {
 
 type ChatRef = Pick<BrainChat, "id" | "title" | "updatedAt">;
 
+/** One `list()` in flight; `abandoned` once it timed out, so its late reads stop and are not memoised. */
+interface ListRun {
+  abandoned: boolean;
+}
+
+/** The shared-read key of "no linked project" — never equal to a project id's text. */
+const NO_PROJECT = "\u0000all-projects";
+
 export class AgentRunsTimeoutError extends Error {
   constructor(ms: number) {
     super(`agent runs list did not settle in ${ms} ms`);
@@ -88,20 +98,21 @@ export function createAgentRuns(store: AgentRunsStore, projectId: () => number |
     return store.getMessagesForChats(fresh).catch(() => undefined);
   }
 
-  async function listRuns(project: number | string | undefined): Promise<RunFindingsSummary[]> {
-    const chats = await store.listChats({ ...(project !== undefined ? { projectId: String(project) } : {}), limit: CHATS_SCANNED });
+  async function listRuns(project: number | string | undefined, run: ListRun): Promise<RunFindingsSummary[]> {
+    // The budget covers the whole list, the chat list read included.
     const deadline = now() + budgetMs;
+    const chats = await store.listChats({ ...(project !== undefined ? { projectId: String(project) } : {}), limit: CHATS_SCANNED });
     const out: RunFindingsSummary[] = [];
     for (let at = 0; at < chats.length && out.length < AGENT_RUNS_SHOWN; at += READ_WINDOW) {
+      if (run.abandoned) return out; // timed out: nobody is waiting, stop reading
       const window = chats.slice(at, at + READ_WINDOW);
       const batch = now() > deadline ? undefined : await readWindow(window);
       for (const chat of window) {
-        if (out.length >= AGENT_RUNS_SHOWN) break;
-        const read = batch?.get(chat.id);
-        // Out of budget: a memo hit (or a chat already read) is free, a fresh read waits for the next open.
-        if (!memoHit(chat) && !read && now() > deadline) continue;
+        if (out.length >= AGENT_RUNS_SHOWN || run.abandoned) break;
+        // Out of budget (checked per chat): a memo hit is free; anything else waits for the next open.
+        if (!memoHit(chat) && now() > deadline) continue;
         // One chat that cannot be read (deleted meanwhile, a damaged row) is left out, not the whole list.
-        const report = await reportOf(chat, read).catch(() => null);
+        const report = await reportOf(chat, batch?.get(chat.id), run).catch(() => null);
         if (report) out.push(report.summary);
       }
     }
@@ -116,15 +127,17 @@ export function createAgentRuns(store: AgentRunsStore, projectId: () => number |
 
   /**
    * The chat's report, recomputed only when the chat's `updatedAt` moved; null when it ran no tools. `read`: its
-   * messages, when the list already batch-read them.
+   * messages, when the list already batch-read them. `run`: the list asking — once it is abandoned (timed out), a
+   * read that lands late is neither analysed nor memoised.
    */
-  async function reportOf(chat: ChatRef, read?: BrainMessage[]): Promise<RunFindingsReport | null> {
+  async function reportOf(chat: ChatRef, read?: BrainMessage[], run?: ListRun): Promise<RunFindingsReport | null> {
     const hit = memo.get(chat.id);
     if (hit && hit.updatedAt === chat.updatedAt) {
       remember(chat.id, hit);
       return hit.report;
     }
     const messages = read ?? await store.getMessages(chat.id);
+    if (run?.abandoned) return null;
     const report = messages.some(isStepMessage)
       ? detectRunFindings(traceWithPersistedSteps(messages, []), messages, { id: String(chat.id), title: chat.title })
       : null;
@@ -132,27 +145,32 @@ export function createAgentRuns(store: AgentRunsStore, projectId: () => number |
     return report;
   }
 
-  /** `work`, or a rejection once {@link LIST_TIMEOUT_MS} passes without it settling. */
-  function withTimeout<T>(work: Promise<T>): Promise<T> {
+  /** `work`, or a rejection once {@link LIST_TIMEOUT_MS} passes without it settling — which also abandons `run`. */
+  function withTimeout<T>(work: Promise<T>, run: ListRun): Promise<T> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new AgentRunsTimeoutError(timeoutMs)), timeoutMs);
+      timer = setTimeout(() => {
+        run.abandoned = true;
+        reject(new AgentRunsTimeoutError(timeoutMs));
+      }, timeoutMs);
     });
+    work.catch(() => undefined); // a late failure of an abandoned list is nobody's to handle
     return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
   }
 
   return {
     list() {
       const project = projectId();
-      const key = String(project ?? "");
+      const key = project === undefined ? NO_PROJECT : String(project);
       const shared = listing.get(key);
       if (shared) return shared;
-      const run: Promise<RunFindingsSummary[]> = withTimeout(listRuns(project)).finally(() => {
+      const run: ListRun = { abandoned: false };
+      const pending: Promise<RunFindingsSummary[]> = withTimeout(listRuns(project, run), run).finally(() => {
         // Settled or timed out: forget it, so the next list (a Retry) reads afresh.
-        if (listing.get(key) === run) listing.delete(key);
+        if (listing.get(key) === pending) listing.delete(key);
       });
-      listing.set(key, run);
-      return run;
+      listing.set(key, pending);
+      return pending;
     },
     async report(id) {
       const chatId = Number(id);

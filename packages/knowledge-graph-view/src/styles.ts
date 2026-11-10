@@ -65,6 +65,11 @@ export const muted: CSSProperties = { color: cssVar('muted'), fontSize: TYPE.bod
 
 export const heading: CSSProperties = { ...TYPE.title, color: cssVar('text') };
 
+/** Read by assistive tech, not drawn (a live region's static words beside a visible line that changes). */
+export const visuallyHidden: CSSProperties = {
+    position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0,
+};
+
 export const input: CSSProperties = {
     minHeight: TAP, padding: '0 12px', borderRadius: 8, border: `1px solid ${cssVar('border')}`,
     background: cssVar('bg'), color: cssVar('text'), font: 'inherit', fontSize: TYPE.input.fontSize, minWidth: 0,

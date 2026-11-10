@@ -18,13 +18,18 @@ import { EMPTY_GRAPH } from '../emptyGraph';
 import { useComputed } from '../compute/useComputed';
 import type { SurfaceResult } from '../compute/kinds';
 import { isSmall } from '../compute/size';
+import { isCommunityKey } from '../placement';
 import { useDrill, type DrillModel, type SymbolLoader } from './transit/useDrill';
+import { stationTypes } from './transit/stationType';
+import type { MarkType } from '../shapes';
 import type { TowerHighlight } from './towerHighlight';
 
 export interface Pin { stationId: string; count: number }
 
 export interface SurfaceModel {
     stations: StationModel;
+    /** Each station's mark type (`transit/stationType.ts`), read ONCE here: the Map draws it and the legend lists it. */
+    types: ReadonlyMap<string, MarkType>;
     lines: LinesModel;
     /** Where the map's files came from and which per-file data the graph carries (`dataCoverage`): the reasons behind "Not set up". Null with no graph. */
     coverage: DataCoverage | null;
@@ -89,6 +94,8 @@ export interface SurfaceOptions {
     symbols?: SymbolLoader | undefined;
     /** The localized name of the top-level config station (`labels.surface.repoConfig`). */
     repoConfigName?: string | undefined;
+    /** The localized name of a community with no label (`labels.communityFallback`, `{n}`). */
+    communityFallback?: string | undefined;
 }
 
 const MAX_PINS = 12;
@@ -116,20 +123,32 @@ export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGrap
     const historyChanged = opts.changed;
 
     const repoConfigName = opts.repoConfigName;
+    const communityFallback = opts.communityFallback;
     // The stations and the lines drawn over them are built in the compute worker (a big graph takes a second or more), in the
     // same render when the graph is small. The previous model stays until the new one lands.
     const changed = useMemo(() => (graph ? [...new Set([...changedRefs(graph, baseline), ...(historyChanged ?? [])])] : []), [graph, baseline, historyChanged]);
     const inline = !graph || isSmall(graph);
     const { stations, lines } = useComputed(
-        'surface', { graph: graph ?? EMPTY_GRAPH, changed, repoConfigName }, [graph, changed, repoConfigName], EMPTY_SURFACE, { enabled: graph !== null, inline },
+        'surface', { graph: graph ?? EMPTY_GRAPH, changed, repoConfigName, communityFallback }, [graph, changed, repoConfigName, communityFallback], EMPTY_SURFACE, { enabled: graph !== null, inline },
     ).value ?? EMPTY_SURFACE;
+    const types = useMemo(() => stationTypes(graph, stations), [graph, stations]);
     const coverage = useMemo(() => (graph ? dataCoverage(graph) : null), [graph]);
     const overlay = useMemo(() => makeOverlay(bindings, stations.stations), [bindings, stations]);
     const drill = useDrill(graph, stations, opts.symbols);
 
     const chosen = lines.lines.find((l) => l.id === lineId) ?? null;
     const line = chosen ?? lines.lines[0] ?? null;
-    const station = stationId ? stations.byId.get(stationId) ?? null : null;
+    // A community id is per build (PRD 38 P1): a `community:` station kept selected across a rebuild must still be the same
+    // community (same full label). The label is recorded when the pick first resolves; a renumbered community drops the pick.
+    const [picked, setPicked] = useState<{ id: string; path: string } | null>(null);
+    const found = stationId ? stations.byId.get(stationId) ?? null : null;
+    const foundPath = found ? found.path ?? found.name : null;
+    const renumbered = !!found && isCommunityKey(found.id) && picked?.id === found.id && picked.path !== foundPath;
+    useEffect(() => {
+        if (renumbered) { setStationId(null); setPicked(null); }
+        else if (found && foundPath !== null && picked?.id !== found.id) setPicked({ id: found.id, path: foundPath });
+    }, [renumbered, found, foundPath, picked]);
+    const station = renumbered ? null : found;
     const context = useMemo<QuestionContext>(() => ({ lines, line, selected: station, family }), [lines, line, station, family]);
     const focus = opts.focus;
     const lit = useMemo(() => {
@@ -144,11 +163,11 @@ export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGrap
         if (bindings.pins !== 'on') return [];
         const onLine = new Set(line?.stops ?? []);
         return stations.stations
-            .filter((s) => s.findingIds.length > 0 && (lit ? lit.has(s.id) : onLine.has(s.id) || s.id === stationId))
+            .filter((s) => s.findingIds.length > 0 && (lit ? lit.has(s.id) : onLine.has(s.id) || s.id === station?.id))
             .sort((a, b) => b.anti - a.anti || b.findingIds.length - a.findingIds.length)
             .slice(0, MAX_PINS)
             .map((s) => ({ stationId: s.id, count: s.findingIds.length }));
-    }, [bindings.pins, stations, lit, line, stationId]);
+    }, [bindings.pins, stations, lit, line, station]);
 
     // The Act scope follows what is DRAWN: the station, else the drawn path (the line, or a pinned pinpoint), else the whole graph.
     const scope = useMemo(() => (station ? new Set([station.id]) : path.stops.length > 0 ? new Set(path.stops.map((x) => x.id)) : null), [station, path]);
@@ -161,19 +180,20 @@ export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGrap
     const setStep = useCallback((n: number) => {
         setStepIndex(n);
         const stop = path.stops[n];
-        if (stop) setStationId(stop.id);
+        if (stop) { setPicked(null); setStationId(stop.id); }
     }, [path]);
     const selectLine = useCallback((id: string | null) => { setLineId(id); setStationId(null); setStepIndex(0); setPinned(null); }, []);
     const pinPath = useCallback((refs: readonly string[] | null) => { setPinned(refs && refs.length > 0 ? refs : null); setStepIndex(0); }, []);
     const resolve = useCallback((f: Finding | null) => { setResolving(f); setPanel(f ? 'resolve' : null); }, []);
     const selectStation = useCallback((id: string | null) => {
+        setPicked(null);
         setStationId(id);
         const at = id ? path.stops.findIndex((s) => s.id === id) : -1;
         if (at >= 0) setStepIndex(at);
     }, [path]);
 
     return {
-        stations, lines, coverage, overlay, drill, preset: presetOf(bindings), question, family, line, lineChosen: chosen !== null, station, step, path, lit,
+        stations, types, lines, coverage, overlay, drill, preset: presetOf(bindings), question, family, line, lineChosen: chosen !== null, station, step, path, lit,
         context, pins, scope, pinned, panel, resolving, highlight, setHighlight, towers, setTowers, fixFlows, dispatchFix,
         setPreset: (id) => setBindings(PRESETS[id]),
         setChannel: (channel, metric) => setBindings((b) => setChannel(b, channel, metric)),

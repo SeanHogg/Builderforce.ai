@@ -2,7 +2,7 @@
 
 export interface SceneLabels {
     /** The scenes draw only part of the links: `{shown}`, `{total}` (already formatted for the locale). */
-    scene: Record<'edgesCapped' | 'layingOut' | 'errorTitle' | 'errorRetry' | 'errorBack', string>;
+    scene: Record<'edgesCapped' | 'layingOut' | 'errorTitle' | 'errorRetry' | 'errorBack' | 'depth', string>;
     /**
      * The mind map's "+N folders" leaf and its accessible name, in One and Other forms (`{count}`); a language with no
      * plural form repeats the one. Read through `isOne` (surface/plural.ts), like `counted()`.
@@ -18,6 +18,8 @@ export const SCENE_DEFAULTS: SceneLabels = {
         errorTitle: 'This view hit an error',
         errorRetry: 'Try again',
         errorBack: 'Back',
+        /** The stage's depth control (PRD 43 B2): tilts the view into depth; Map's stations rise into towers. */
+        depth: 'Depth',
     },
     mind: {
         moreFoldersOne: '+{count} folder',

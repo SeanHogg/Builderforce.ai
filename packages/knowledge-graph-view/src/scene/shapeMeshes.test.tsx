@@ -44,6 +44,6 @@ describe('shapeBuckets', () => {
         const extra = ['app/page.test.tsx', 'docs/guide.md', 'db/schema.sql'].map((p) => ({ ...g.nodes[0]!, ref: `src:code::${p}` as never, label: p }));
         const nodes = [...g.nodes, ...extra];
         const inst = nodeInstances(nodes, layout3d('code', nodes, g.edges), LENSES.structure);
-        expect([...new Set(inst.shapes)].sort()).toEqual(['diamond', 'drum', 'roundedSquare', 'tile']);
+        expect([...new Set(inst.shapes)].sort()).toEqual(['diamond', 'drum', 'tile', 'window']);
     });
 });

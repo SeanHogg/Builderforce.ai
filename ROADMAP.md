@@ -91,8 +91,20 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 
   *Blocker: no runtime trace recorder exists. It is a new subsystem, a candidate for PRD 41's run delta.*
 - **Predicted measures over the knowledge graph: P4 and P7 not started, P1 not yet consumed.** P1 Louvain partitions shipped in builderforce-memory 2026.10.57 (published as 2026.10.58; every package now pins ^2026.10.59). Builderforce does not read them yet: knowledge-graph-view needs the `placementOf` fallback, and the `kg:v5` / `kg-outline:v1` cache keys must move so old layouts are not served. Still open: P4 co-change impact and P7 Markov transitions for Simulate (graph-only formulas, stored as badges), and P2 (Part D results on the map). The shared maths stays in the builderforce-memory `stats` module (D13) ([PRD 38 › Predicted measures](./docs/specs/38-prd-knowledge-graph.md)).
+- **The local-first store keeps a sync receipt for every row it has already mapped (found 2026-11-10; in flight).**
+  - **Where:** after the 88k-event drain (sync drain/marker pass), open time is still about 9 s. The 88,898 receipts (21.5 MB) say nothing that the row's mapping doesn't already say: a mapped row is a synced row.
+  - **Why they can't just be pruned:** eight or more surfaces read receipts directly (chat rail, entity sync state, sync summary, local-work tree).
+  - **Fix:** one sync-status read port that derives status from the mapping first and the receipt second. Migrate every reader to it, then prune receipts for mapped rows in compaction.
+  - **Unblocks:** open time of about 5 s or less on large stores.
 - **Knowledge view: one stage, cameras are placements, semantic zoom ([PRD 43](./docs/specs/43-prd-knowledge-3d-stage.md) B1a, operator 2026-11-10).** Today every camera re-renders the same data on its own stack: SVG transit/tower/mind map, canvas Graph2D and R3F 3D. The result is flicker, inconsistent shapes, slow switches and no zoom path from system to code. In flight, in this order:
   - **P0b:** the knowledge extractor emits no class/method edges. `EDGE_KINDS` has no `extends`, `implements`, `composes`, `uses` or `calls`. Add them in builderforce-memory and publish.
+  - **P0c, edge coverage on real code (found validating hired.video 2026-11-10; in flight):**
+    - tsconfig `paths` aliases (`@/`, `@shared`) are treated as packages. They cover 86% of hired imports, so most cross-file edges are missing.
+    - Route and listener callbacks (Hono `routes.post(...)`, `chrome.runtime.onMessage.addListener(...)`) have no owning symbol. Their calls are dropped, so a sequence can't start at an API entry point.
+    - `new X(...).m()` produces no call edge.
+    - JSX renders are recorded as `uses` instead of `calls`.
+
+    Fixing these unblocks P1b zoom and the P2 sequences on real code.
   - **P1a:** fidelity spike.
   - **P1:** MarkSet + Placement + Map (Transit + Tower).
   - **P1b:** semantic zoom, system → class → method → code.

@@ -14,6 +14,7 @@ import type { KnowledgeGraph, KNode } from '@seanhogg/builderforce-memory/knowle
 import type { MetricId } from './overlays';
 import { fileNodesOf, outlineView } from './outlineGraph';
 import { staticReach } from './staticReach';
+import { isCommunityKey, placementKeyOf } from '../placement';
 
 /** The per-file badges the channels, questions and lines read. */
 export const COVERAGE_KEYS = ['complexity', 'coverage', 'churn', 'owner', 'patterns', 'routes', 'layerRule', 'externals'] as const;
@@ -51,8 +52,10 @@ export interface DataCoverage {
     sources: number;
     /** Files carrying any extractor badge. */
     badged: number;
-    /** Files with no partition. */
+    /** Files with no placement: no partition and no community (PRD 38 P1 accepts at most 5%). */
     noPartition: number;
+    /** Files placed by their community (no pack partition, a `communityId` badge). */
+    byCommunity: number;
     channels: Record<CoverageKey, ChannelCoverage>;
 }
 
@@ -70,6 +73,17 @@ function mapSourceOf(graph: KnowledgeGraph): MapSource {
     return graph.stats.truncated && !graph.outline ? { kind: 'cut', files, sources: graph.stats.sources } : { kind: 'full', files };
 }
 
+/** Files with no placement, and files placed by their community, in one pass. */
+function placementCounts(files: readonly KNode[]): { noPartition: number; byCommunity: number } {
+    let noPartition = 0, byCommunity = 0;
+    for (const n of files) {
+        const key = placementKeyOf(n);
+        if (!key) noPartition++;
+        else if (isCommunityKey(key)) byCommunity++;
+    }
+    return { noPartition, byCommunity };
+}
+
 export function dataCoverage(graph: KnowledgeGraph): DataCoverage {
     const hit = cache.get(graph);
     if (hit) return hit;
@@ -85,7 +99,7 @@ export function dataCoverage(graph: KnowledgeGraph): DataCoverage {
     })) as Record<CoverageKey, ChannelCoverage>;
     const result: DataCoverage = {
         source, files: files.length, sources: graph.stats.sources, badged,
-        noPartition: files.filter((n) => !n.partition).length, channels,
+        ...placementCounts(files), channels,
     };
     cache.set(graph, result);
     return result;

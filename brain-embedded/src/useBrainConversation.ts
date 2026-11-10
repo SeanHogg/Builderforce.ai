@@ -677,7 +677,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       await persistence.setMessageFeedback(
         msg.id,
         rating === 1 ? 'up' : rating === -1 ? 'down' : null,
-        { toolName: context.toolName, ...(localVerdict ? { localVerdict } : {}) },
+        { toolName: context.toolName, chatId, ...(localVerdict ? { localVerdict } : {}) },
       );
     } catch { /* best-effort */ }
   }, [persistence, chatId]);

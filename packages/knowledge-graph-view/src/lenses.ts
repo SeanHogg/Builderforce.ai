@@ -5,7 +5,7 @@
  * lens is a row here plus its name in `KnowledgeGraphLabels.lenses`.
  */
 
-import type { KEdge, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import { isSymbolEdgeKind, type KEdge, type KNode, type KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { fileCategory, FILE_CATEGORY_ORDER, type FileCategory } from './fileCategory';
 import type { ThemeTone } from './scene/themeColors';
 import { nodeShape, typeShape, type NodeShape } from './shapes';
@@ -67,15 +67,10 @@ export function kindTone(n: KNode): ThemeTone {
     return KIND_TONE[n.kind] ?? 'catSource';
 }
 
-/** The shape a node draws: its role's silhouette (`shapes.ts`); a file's role is what it holds. */
-export function kindShape(n: KNode): NodeShape {
-    return nodeShape(n);
-}
-
 const base = (n: KNode, strong = false): NodeStyle =>
-    ({ tone: kindTone(n), emphasis: strong ? 'strong' : 'normal', shape: kindShape(n) });
+    ({ tone: kindTone(n), emphasis: strong ? 'strong' : 'normal', shape: nodeShape(n) });
 const dimUnless = (hit: boolean, n: KNode, tone?: ThemeTone): NodeStyle =>
-    hit ? { tone: tone ?? kindTone(n), emphasis: 'strong', shape: kindShape(n) } : { tone: kindTone(n), emphasis: 'dim', shape: kindShape(n) };
+    hit ? { tone: tone ?? kindTone(n), emphasis: 'strong', shape: nodeShape(n) } : { tone: kindTone(n), emphasis: 'dim', shape: nodeShape(n) };
 const isJudged = (n: KNode): boolean => n.origin !== 'extracted';
 const isChanged = (n: KNode): boolean => n.badges?.added !== undefined || n.badges?.removed !== undefined || n.badges?.changed !== undefined;
 const isUnused = (n: KNode): boolean =>
@@ -95,7 +90,9 @@ const KIND_LEGEND: ReadonlyArray<{ tone: ThemeTone; key: string; shape?: NodeSha
 export const LENSES: Record<LensId, LensDef> = {
     structure: {
         id: 'structure', packs: 'all',
-        edgeFilter: (e) => e.origin === 'extracted' && e.kind !== 'duplicate' && e.kind !== 'near-duplicate',
+        // The symbol-level kinds (PRD 43 P0b: memory's SYMBOL_EDGE_KINDS, the code pack's file rollup) are the class/method
+        // bands' link families, not the import picture this lens draws.
+        edgeFilter: (e) => e.origin === 'extracted' && e.kind !== 'duplicate' && e.kind !== 'near-duplicate' && !isSymbolEdgeKind(e.kind),
         nodeStyle: (n) => base(n),
         legend: [...CATEGORY_LEGEND, { tone: 'edge', key: 'edge' }],
         insights: ['cycle', 'stale'],
@@ -126,7 +123,7 @@ export const LENSES: Record<LensId, LensDef> = {
     links: {
         id: 'links', packs: ['docs'],
         edgeFilter: (e) => e.kind === 'links',
-        nodeStyle: (n) => (n.kind === 'missing' ? { tone: 'nodeMissing', emphasis: 'strong', shape: kindShape(n) } : base(n)),
+        nodeStyle: (n) => (n.kind === 'missing' ? { tone: 'nodeMissing', emphasis: 'strong', shape: nodeShape(n) } : base(n)),
         legend: [...CATEGORY_LEGEND, { tone: 'nodeMissing', key: 'missing' }, { tone: 'edge', key: 'edge' }],
         insights: ['broken-link', 'orphan'],
     },

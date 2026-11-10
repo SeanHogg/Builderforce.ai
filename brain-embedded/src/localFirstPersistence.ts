@@ -20,7 +20,8 @@ import {
   chatMessageRecords,
   chatMessagesInOrder,
   chatRecordById,
-  liveRecords,
+  chatsMessagesInOrder,
+  messageRecordById,
   scanChatMessages,
   scanLive,
   type ChatValue,
@@ -296,15 +297,7 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
     ...(options.bindChat ? { bindChat: options.bindChat } : {}),
     getMessages: (chatId, limit) => options.store.read((tx) => chatMessagesInOrder(tx, options.deviceId, chatId, limit)),
     /** Several chats' messages in ONE store read (one journal refresh), each through the chat index. */
-    async getMessagesForChats(chatIds) {
-      return options.store.read(async (tx) => {
-        const out = new Map<number, BrainMessage[]>();
-        for (const chatId of chatIds) {
-          if (!out.has(chatId)) out.set(chatId, await chatMessagesInOrder(tx, options.deviceId, chatId));
-        }
-        return out;
-      });
-    },
+    getMessagesForChats: (chatIds) => options.store.read((tx) => chatsMessagesInOrder(tx, options.deviceId, chatIds)),
     // Only a commit that touched THIS chat's message rows (or whose change is unknown) is
     // worth a reload: a step row in another chat, a usage row, a sync receipt is not.
     subscribeMessages: (chatId, onChanged) => options.store.subscribe((change) => {
@@ -328,7 +321,9 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
         let existing = 0;
         await scanChatMessages(tx, options.deviceId, chatId, (row) => {
           existing += 1;
-          known.set(row.payload.eventKey, row.payload.message);
+          // Index order is unspecified: of two rows under one key, the later (`seq`) one is the saved one.
+          const prior = known.get(row.payload.eventKey);
+          if (!prior || row.payload.message.seq >= prior.seq) known.set(row.payload.eventKey, row.payload.message);
         });
         const results: BrainMessage[] = [];
         const added: BrainMessage[] = [];
@@ -378,7 +373,7 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
     },
     async setMessageFeedback(messageId, feedback, context) {
       return options.store.transact(async (tx) => {
-        const row = (await liveRecords<MessageValue>(tx, 'message', options.deviceId, (candidate) => candidate.payload.message.id === messageId))[0];
+        const row = await messageRecordById(tx, options.deviceId, messageId, context?.chatId ?? undefined);
         if (!row) return {};
         const metadata = JSON.parse(row.payload.message.metadata ?? '{}') as Record<string, unknown>;
         metadata.feedback = feedback;

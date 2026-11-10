@@ -25,6 +25,7 @@ import {
   DEFAULT_REPO_MAP_LIMITS, RepoGraph, RepoGraphBuilder, isMapCandidate, renderRepoMap, searchRepoSymbols,
   type RepoMapLimits, type SerializedRepoGraph,
 } from '@builderforce/repo-map';
+import { isBinaryBytes } from '@seanhogg/builderforce-memory/knowledge';
 import { reciprocalRankFusion } from '@seanhogg/builderforce-memory/retrieval';
 import type { Env } from '../../env';
 import type { EmbeddingEnv } from '../memory/memoryEmbedding';
@@ -42,8 +43,6 @@ const SOURCE = 'application/repos/cloudRepoMap.ts';
 const SHA_CACHE_SECONDS = 60;
 /** Wall-clock ceiling on one tarball read; past it the map is built from what was read. */
 const BUILD_DEADLINE_MS = 20_000;
-/** A file with a NUL byte in its first this-many bytes is binary. */
-const BINARY_SNIFF_BYTES = 8_192;
 
 export type CloudRepoMapEnv = Pick<Env, 'UPLOADS' | 'AUTH_CACHE_KV' | 'CACHE_L2_KV'> & EmbeddingEnv;
 
@@ -81,10 +80,6 @@ function stripArchiveRoot(path: string): string {
   return slash < 0 ? '' : path.slice(slash + 1);
 }
 
-function looksBinary(bytes: Uint8Array): boolean {
-  return bytes.subarray(0, BINARY_SNIFF_BYTES).includes(0);
-}
-
 /**
  * Build the serialized graph from a (gzip'd) tarball stream, within `limits`. Stops —
  * and marks the graph truncated — at the file cap, the byte cap or the deadline.
@@ -108,7 +103,7 @@ export async function buildRepoGraphFromTarball(
       break;
     }
     const data = await entry.read();
-    if (looksBinary(data)) continue;
+    if (isBinaryBytes(data)) continue; // memory's binary rule: a NUL among the first 8192 bytes
     bytes += data.length;
     builder.addFile(path, decoder.decode(data));
   }

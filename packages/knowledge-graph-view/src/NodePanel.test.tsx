@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { NodePanel } from './NodePanel';
-import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from './labels';
+import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from './labels';
 import { packLabel } from './names';
 import { docsFixture, fixtureSource } from './testing';
 import type { FactActions, KnowledgeConfirm, KnowledgeGraphSource } from './types';
@@ -33,6 +33,37 @@ describe('NodePanel: what the node is', () => {
     setup();
     expect(screen.getByText(packLabel(L, 'docs'))).toBeTruthy();
     expect(screen.queryByText('docs')).toBeNull();
+  });
+});
+
+describe('NodePanel: the Partition row (PRD 38 P1)', () => {
+  const renderRow = (badges: KNode['badges'], partition?: string, onShow?: (refs: string[]) => void) => {
+    const base = docsFixture();
+    const { partition: _own, ...first } = base.nodes[0]!;
+    const placed: KNode = { ...first, ref: 'src:docs::lib/core/a.ts' as KNode['ref'], label: 'a.ts', kind: 'file', badges, ...(partition ? { partition } : {}) };
+    const g = { ...base, nodes: [...base.nodes.map(({ partition: _p, ...n }) => n as KNode), placed] };
+    render(
+      <NodePanel
+        graph={g} nodeRef={placed.ref} labels={L} source={fixtureSource([g])} onShow={onShow}
+        onTrace={() => undefined} onSelect={() => undefined} onChanged={() => undefined}
+      />,
+    );
+  };
+
+  it('shows the community label and the membership confidence as a percentage when placed by community', () => {
+    renderRow({ communityId: 4, communityConfidence: 0.75 });
+    expect(screen.getByText(fillTemplate(L.nodeCommunity, { name: 'lib/core', percent: 75 }))).toBeTruthy();
+    expect(screen.queryByText(L.partitionNone)).toBeNull();
+  });
+
+  it('the picker trigger carries the same text', () => {
+    renderRow({ communityId: 4, communityConfidence: 0.75 }, undefined, () => undefined);
+    expect(screen.getByRole('button', { name: new RegExp(`${fillTemplate(L.nodeCommunity, { name: 'lib/core', percent: 75 })}`) })).toBeTruthy();
+  });
+
+  it('a pack partition wins, with no percentage', () => {
+    renderRow({ communityId: 4, communityConfidence: 0.75 }, 'domain');
+    expect(screen.getByText('domain')).toBeTruthy();
   });
 });
 

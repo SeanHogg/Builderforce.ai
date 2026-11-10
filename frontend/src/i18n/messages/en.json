@@ -37478,6 +37478,8 @@
     "couplingTitle": "Strongest coupling between partitions",
     "chartFindings": "Findings by kind",
     "partitionNone": "No partition",
+    "communityFallback": "Community {n}",
+    "communityOther": "Other communities",
     "edgeKinds": {
       "references": "references",
       "contains": "contains",
@@ -37491,7 +37493,11 @@
       "nearDuplicate": "nearly duplicates",
       "coChanged": "changes with",
       "imports": "imports",
-      "calls": "calls"
+      "calls": "calls",
+      "extends": "extends",
+      "implements": "implements",
+      "composes": "is composed of",
+      "uses": "uses"
     },
     "packs": {
       "code": "Code",
@@ -37559,6 +37565,7 @@
     "nodeKind": "Kind",
     "nodePack": "Pack",
     "nodePartition": "Partition",
+    "nodeCommunity": "{name} · {percent}% of references inside",
     "nodeOrigin": "Origin",
     "nodeMediaType": "Media type",
     "nodeSize": "Size",
@@ -38216,7 +38223,8 @@
         "layingOut": "Laying out…",
         "errorTitle": "This view hit an error",
         "errorRetry": "Try again",
-        "errorBack": "Back"
+        "errorBack": "Back",
+        "depth": "Depth"
       },
       "mind": {
         "moreFoldersOne": "+{count} folder",
