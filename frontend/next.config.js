@@ -270,9 +270,32 @@ const nextConfig = {
             // edge chunk every function carries — 165 copies, 1.3 GB of the ~2 GB of edge
             // JS `vercel build` reads into memory.
             '@mlc-ai/web-llm',
+            // pdf.js (via `unpdf`, ~1.6 MB): `@builderforce/agent-tools`' document reader
+            // imports it lazily to read an attached PDF in the browser, but the root layout
+            // reaches that module (builderforceApi → agent-tools/knowledge), so it sat in the
+            // shared edge chunk of every function and pushed the Worker past Cloudflare's
+            // 10 MiB ceiling. No server render reads a PDF; the reader already turns a
+            // missing engine into `DocumentEngineUnavailable`.
+            'unpdf',
           ].map((specifier) => [specifier, false]))
         : {}),
     };
+    // Server AND edge only: ONE copy of the default-locale catalog per function.
+    //
+    // `@/i18n/catalog` statically imports `messages/en.json` (~1.9 MB) and is reached
+    // from BOTH App Router layers — the server-component layer (`i18n/request.ts`,
+    // `getTranslations`) and the client/SSR layer (`LocaleProvider`). Webpack keys a
+    // module by layer, so every server-translating route carried the catalog TWICE
+    // (two ~1.5 MB chunks, ~0.5 MiB compressed each) in a Worker that must stay under
+    // 10 MiB. JSON has no imports and no React conditions, so it is layer-agnostic:
+    // pinning it to Next's `shared` layer — what Next itself does for its
+    // AsyncLocalStorage modules — makes both layers resolve the same module.
+    if (isServer) {
+      config.module.rules.push({
+        test: /[\\/]src[\\/]i18n[\\/]messages[\\/]en\.json$/,
+        layer: 'shared',
+      });
+    }
     // Silence unactionable "Critical dependency" warnings emitted from inside
     // third-party deps we don't control: @huggingface/transformers uses a
     // dynamic `require(expr)` and reads `import.meta` directly, and

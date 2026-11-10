@@ -1,7 +1,7 @@
 /*
- * No `'use client'` here on purpose. Imported only by `CanvasSurfaceStage`, which already
- * sits behind the canvas client boundary, so a directive would mark a second entry point
- * that does not exist.
+ * No `'use client'` here on purpose. Reached only through `canvasLazyPanels` (client-only,
+ * `ssr: false`) from `CanvasSurfaceStage`, which already sits behind the canvas client
+ * boundary, so a directive would mark a second entry point that does not exist.
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';

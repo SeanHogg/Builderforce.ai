@@ -1,10 +1,20 @@
 import type { CSSProperties } from 'react';
+import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import type { ToolResult, ToolMetric } from '@/lib/tools';
 import { ticketHref } from '@/lib/ticketHref';
-import { CodeAuditVisualizer } from './CodeAuditVisualizer';
 import { GaugeChart } from '@/components/charts/GaugeChart';
 import { RadarChart } from '@/components/charts/RadarChart';
+
+// The code-analysis report renders in the ONE `KnowledgeGraphView` — real WebGL
+// (three.js + react-three-fiber). Client-only for the same reason as the canvas's 3D
+// panels: an edge function carries every module it can reach while rendering, and this
+// view drew no server-side markup worth the ~1.7 MB of three.js it put in every route
+// that shows a tool result (dashboard, insights, workforce, tools, embeds).
+const CodeAuditVisualizer = dynamic(
+  () => import('./CodeAuditVisualizer').then((module) => module.CodeAuditVisualizer),
+  { ssr: false },
+);
 
 /**
  * Generic VISUALIZER for any diagnostic tool (calculator / questionnaire / quiz).

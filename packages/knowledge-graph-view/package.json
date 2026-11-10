@@ -10,6 +10,9 @@
     "./tokens.css": "./src/tokens.css"
   },
   "types": "./src/index.ts",
+  "sideEffects": [
+    "*.css"
+  ],
   "scripts": {
     "test": "node ../../frontend/node_modules/vitest/vitest.mjs run --config vitest.config.ts"
   },

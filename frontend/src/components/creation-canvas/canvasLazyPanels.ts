@@ -44,6 +44,15 @@ export const CanvasModel3dSurface = dynamic(
   { ssr: false },
 );
 
+// The `knowledge` surface — the ONE `KnowledgeGraphView`, an instanced three.js scene.
+// Real WebGL, so it is split for the same reason as the world and the model: a board
+// that never opens knowledge must not pay for three.js, and no edge route should carry
+// it to server-render a view that draws only in the browser.
+export const CanvasKnowledgeSurface = dynamic(
+  () => import('./CanvasKnowledgeSurface').then((module) => module.CanvasKnowledgeSurface),
+  { ssr: false },
+);
+
 export const VoiceConfigPanel = dynamic(
   () => import('@/components/builder/VoiceConfigPanel').then((module) => module.VoiceConfigPanel),
   { ssr: false },
