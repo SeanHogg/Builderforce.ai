@@ -316,7 +316,7 @@ describe('incomplete spec/roadmap/retro count as one item', () => {
       { progressPct: 0, done: 0, total: 0 },
       { progressPct: 100, done: 1, total: 1 },
     ];
-    expect(rollupChatTicketHealth(mix)).toEqual({ pct: 67, done: 4, total: 6 });
+    expect(rollupChatTicketHealth(mix)).toEqual({ pct: 67, done: 4, total: 6, openTickets: 2, completedTickets: 4 });
   });
 
   it('excludes cancelled so 3 done + 1 cancelled is 100%', () => {
@@ -325,12 +325,12 @@ describe('incomplete spec/roadmap/retro count as one item', () => {
       { progressPct: 100, done: 1, total: 1, status: 'done' },
       { progressPct: 100, done: 1, total: 1, status: 'done' },
       { progressPct: 0, done: 0, total: 1, status: 'cancelled' },
-    ])).toEqual({ pct: 100, done: 3, total: 3 });
+    ])).toEqual({ pct: 100, done: 3, total: 3, openTickets: 0, completedTickets: 3 });
   });
 
   it('treats an all-cancelled list as 100% (nothing left owed)', () => {
     expect(rollupChatTicketHealth([
       { progressPct: 0, done: 0, total: 1, status: 'cancelled' },
-    ])).toEqual({ pct: 100, done: 0, total: 0 });
+    ])).toEqual({ pct: 100, done: 0, total: 0, openTickets: 0, completedTickets: 0 });
   });
 });

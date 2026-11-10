@@ -93,8 +93,27 @@ export const APPROVED_THIS_PUSH = [
     approvedBy: APPROVED_BY,
     cases: 1,
   },
+  {
+    file: 'brain-embedded/src/run/parity/snapshots.ts',
+    changed: "writingSnapshots() is true only when PARITY_SNAPSHOT=write AND an authorized REGENERATE.md (date + 'authorized') sits beside the snapshots (was the env var alone); a gated writeSnapshot() is added.",
+    reason: "Intended change (cb7d0f2be, PRD 45 deterministic run gates): regeneration became a deliberate operator action. The edited line TIGHTENS the gate (env var alone no longer arms it), so 'refuses to write a snapshot' in snapshot.test.ts still holds in CI, where no REGENERATE.md exists (none is checked in).",
+    approvedBy: APPROVED_BY,
+  },
+  ...['chat-mode-tools', 'stop-during-fold'].map((id) => ({
+    file: `brain-embedded/src/run/parity/snapshots/${id}.json`,
+    changed: "Additive only, plus JSON key order: the 'Batch independent reads/searches into ONE turn' operating-contract bullet, a between-turns / context-fold activity status, and the run-outcome row in agentOnly.recorded (was empty).",
+    reason: "Intended change (cb7d0f2be, PRD 45 deterministic run gates): the operator regenerated every parity record behind the REGENERATE.md gate. These two hold no work-linking step, so the chat-link reconciliation below never touched them and they carry only the PRD 45 regeneration.",
+    approvedBy: APPROVED_BY,
+  })),
+  {
+    file: 'packages/agent-loop/src/chatTicketHealth.test.ts',
+    changed: "Three rollupChatTicketHealth toEqual expectations gain openTickets/completedTickets (3 done + 1 cancelled -> 0/3; all-cancelled -> 0/0; in_progress + canceled -> 1/0); pct/done/total are unchanged. Four cases are added.",
+    reason: "Intended change (0b42a0c29, open/completed ticket counts on every chat summary): ChatTicketHealth's shape extended with two ticket counts; every original pct/done/total value is asserted exactly as before.",
+    approvedBy: APPROVED_BY,
+  },
   // The parity snapshots reconciled with the same intended change by
-  // brain-embedded/scripts/apply-intended-snapshot-change-chat-link.mjs (its header names the three edits).
+  // brain-embedded/scripts/apply-intended-snapshot-change-chat-link.mjs (its header names the three edits). In this range they ALSO
+  // carry cb7d0f2be's operator regeneration to PRD 45 behaviour (see the chat-mode-tools / stop-during-fold entries above).
   ...[
     'ask-user-malformed', 'ask-user-terminal', 'big-read-paged', 'budget-warn-stop', 'child-own-transcript', 'child-report-exhausted-stall',
     'child-report-ship-gate', 'child-report-turn-end', 'confirm-approved', 'confirm-declined', 'effort-balanced-thinking', 'effort-quick',
