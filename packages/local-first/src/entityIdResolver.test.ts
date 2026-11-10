@@ -130,3 +130,23 @@ describe('regression: a run step mapping (syncId: null, serverId text) is the sa
     expect(await resolver.syncIdOf('message', STEP, ACCOUNT_A)).toBeNull();
   });
 });
+
+describe('regression: an ingested server row finds its mapping in its own tenant only', () => {
+  const row = (destination: { kind: 'bound'; tenantId: string; projectId?: string }) => ({
+    entityType: 'ticket' as const, serverId: '40', payload: { title: 't' }, updatedAt: '2026-11-10T00:00:00.000Z', destination,
+  });
+
+  it('tenant 8\'s ticket 40 lands on tenant 8\'s LocalId, never on tenant 7\'s older mapping', async () => {
+    const store = await seeded();
+    const result = await ingestServerRecords(store, [row({ kind: 'bound', tenantId: '8', projectId: 'p' })]);
+    expect(result.clientIds).toEqual([TICKET_B]);
+  });
+
+  it('a tenant with no mapping of ticket 40 mints its own LocalId', async () => {
+    const store = await seeded();
+    const result = await ingestServerRecords(store, [row({ kind: 'bound', tenantId: '9' })]);
+    expect(result.clientIds).toHaveLength(1);
+    expect(result.clientIds[0]).not.toBe(TICKET_A);
+    expect(result.clientIds[0]).not.toBe(TICKET_B);
+  });
+});

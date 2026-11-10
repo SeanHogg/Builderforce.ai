@@ -26,7 +26,7 @@ import { chatTicketLinkId, linkServerIds } from './chatTicketLink.js';
 import { clone } from './clone.js';
 import { mintLocalId, parseEntityRef, parseSyncId, tierRefText } from './entityId.js';
 import { canonicalPayloadHash } from './payloadHash.js';
-import type { ChatTicketLinkValue, EntityDestination, LocalEntityType, LocalRecord, ServerMapping } from './records.js';
+import type { ChatTicketLinkValue, EntityDestination, EntityScope, LocalEntityType, LocalRecord, ServerMapping } from './records.js';
 import type { LocalFirstTransaction } from './storeContract.js';
 import type { LocalFirstStore } from './store.js';
 import { tombstoneRecord } from './tombstone.js';
@@ -101,10 +101,6 @@ async function withServerIds(tx: LocalFirstTransaction, row: ServerRecordRow): P
 
 const pendingKey = (entityType: string, id: string): string => `${entityType}\u0000${id}`;
 
-/**
- * The mapping a server row already has, in any destination (earliest wins): a tier ticket's
- * `kind:ref` is its `externalRef`; anything else is its server key (`syncId`, or legacy text).
- */
 /** Whether `mapping` already names the server key `serverId` (its SyncId, tier ref, or text). */
 function sameServerKey(mapping: ServerMapping, serverId: string): boolean {
   const ref = parseEntityRef(serverId);
@@ -113,11 +109,24 @@ function sameServerKey(mapping: ServerMapping, serverId: string): boolean {
   return mapping.serverId === serverId;
 }
 
+/**
+ * Where a server row's existing mapping may be: its own ACCOUNT (the row's tenant's destinations
+ * plus unbound) — a server key is only unique per tenant, so another tenant's ticket 40 is never
+ * this row. A row with no tenant (unbound) has nothing to narrow to and looks everywhere (legacy).
+ */
+const rowScope = (destination: EntityDestination): EntityScope | undefined =>
+  destination.kind === 'bound' && destination.tenantId ? { tenantId: destination.tenantId } : undefined;
+
+/**
+ * The mapping a server row already has, in its account (earliest wins): a tier ticket's
+ * `kind:ref` is its `externalRef`; anything else is its server key (`syncId`, or legacy text).
+ */
 function mappingOfRow(tx: LocalFirstTransaction, row: ServerRecordRow): ReturnType<LocalFirstTransaction['mappingByServerId']> {
   const ref = parseEntityRef(row.serverId);
+  const scope = rowScope(row.destination);
   return ref && 'tier' in ref
-    ? tx.mappingByExternalRef(row.entityType, tierRefText(ref.tier))
-    : tx.mappingByServerId(row.entityType, row.serverId);
+    ? tx.mappingByExternalRef(row.entityType, tierRefText(ref.tier), scope)
+    : tx.mappingByServerId(row.entityType, row.serverId, scope);
 }
 
 export async function ingestServerRecords(

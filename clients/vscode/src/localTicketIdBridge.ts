@@ -11,7 +11,7 @@
  * Pure of `vscode`; the id lookup is a port so it is testable headlessly.
  */
 
-import { entityIdResolver, isLocalId, parseSyncId, syncIdText, type LocalFirstStore, type SyncId } from "@builderforce/local-first";
+import { entityIdResolver, isLocalId, parseSyncId, syncIdText, type EntityScope, type LocalFirstStore, type SyncId } from "@builderforce/local-first";
 import type { ToolDef } from "./fileTools";
 
 /**
@@ -77,12 +77,16 @@ export function ticketIdArgsOf(tool: Pick<ToolDef, "name" | "parameters" | "remo
 /** The account's id (SyncId as text, `syncIdText`) for a local ticket, or undefined while it has not synced. */
 export type TicketServerIdLookup = (localId: string) => Promise<string | undefined>;
 
-/** The lookup over the store: the ONE resolver's `syncIdOf`. No mapping, or a mapping with no SyncId, is "not synced". */
-export function ticketServerIdLookup(store: LocalFirstStore): TicketServerIdLookup {
+/**
+ * The lookup over the store: the ONE resolver's `syncIdOf`. No mapping, or a mapping with no SyncId, is "not synced".
+ * `scope` is the active account, read per call: the account's tools act in that tenant, so another
+ * tenant's mapping is not a server id they can take.
+ */
+export function ticketServerIdLookup(store: LocalFirstStore, scope?: () => EntityScope | undefined): TicketServerIdLookup {
   const resolver = entityIdResolver(store);
   return async (localId) => {
     if (!isLocalId(localId)) return undefined;
-    const sync = await resolver.syncIdOf("ticket", localId);
+    const sync = await resolver.syncIdOf("ticket", localId, scope?.());
     return sync === null ? undefined : syncIdText(sync);
   };
 }

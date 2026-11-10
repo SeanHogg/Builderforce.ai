@@ -41,6 +41,7 @@ import {
   normalizeDomainToolName,
   type DomainToolMode,
   type EntityDestination,
+  type EntityScope,
   type JournalEvent,
   type LocalDomainToolName,
   type LocalEntityType,
@@ -198,6 +199,8 @@ export interface LocalDomainToolsOptions {
   /** Reads back the journal event the repository's transaction appended. */
   store: LocalFirstStore;
   syncQueue: LocalDomainSyncQueue;
+  /** The active account (`activeEntityScope`), read per call: a numeric id resolves in that tenant only. */
+  scope?: () => EntityScope | undefined;
 }
 
 // ── Argument validation (before the store is touched) ─────────────────────────
@@ -265,9 +268,9 @@ type LocalWrite = { entityType: "project" | "ticket"; id: string; record?: Local
  * `resolveLocalReference` (`localEntityRefs.ts`); with no mirror the ticket exists only on the
  * account, which these tools cannot edit — the model is told the tool that can.
  */
-async function localTicketId(store: LocalFirstStore, args: Readonly<Record<string, unknown>>): Promise<string> {
+async function localTicketId(store: LocalFirstStore, args: Readonly<Record<string, unknown>>, scope: EntityScope | undefined): Promise<string> {
   const given = requireString(args, "id");
-  const id = await resolveLocalReference(store, "ticket", given);
+  const id = await resolveLocalReference(store, "ticket", given, scope);
   if (namesServerOnlyRecord(id)) {
     fail(
       "server_only_ticket",
@@ -282,6 +285,7 @@ async function writeLocally(
   repository: LocalWorkRepositoryPort,
   store: LocalFirstStore,
   args: Readonly<Record<string, unknown>>,
+  scope: EntityScope | undefined,
 ): Promise<LocalWrite> {
   switch (tool) {
     case "project-create": {
@@ -322,12 +326,12 @@ async function writeLocally(
       const chatClientId = optionalString(args, "chatClientId");
       const id = optionalString(args, "id");
       const record = await repository.createTicket({
-        projectId: await resolveLocalReference(store, "project", requireString(args, "projectId")),
+        projectId: await resolveLocalReference(store, "project", requireString(args, "projectId"), scope),
         title: requireString(args, "title"),
         status: statusOf(args, DEFAULT_TICKET_STATUS),
         ...(description ? { description } : {}),
         ...(priority ? { priority } : {}),
-        ...(parentTicketId ? { parentTicketId: await resolveLocalReference(store, "ticket", parentTicketId) } : {}),
+        ...(parentTicketId ? { parentTicketId: await resolveLocalReference(store, "ticket", parentTicketId, scope) } : {}),
         ...(chatClientId ? { chatClientId } : {}),
         ...taskTypeOf(args),
         ...(id ? { id } : {}),
@@ -335,7 +339,7 @@ async function writeLocally(
       return { entityType: "ticket", id: record.id, record };
     }
     case "ticket-update": {
-      const id = await localTicketId(store, args);
+      const id = await localTicketId(store, args, scope);
       const patch: LocalTicketPatch = {};
       const title = optionalString(args, "title");
       if (args.title !== undefined && !title) fail("tool_arguments_required", "title must not be blank.");
@@ -354,16 +358,16 @@ async function writeLocally(
       return { entityType: "ticket", id, record: await repository.updateTicket(id, patch) };
     }
     case "ticket-move": {
-      const id = await localTicketId(store, args);
+      const id = await localTicketId(store, args, scope);
       return { entityType: "ticket", id, record: await repository.changeTicketStatus(id, statusOf(args)) };
     }
     case "ticket-archive": {
-      const id = await localTicketId(store, args);
+      const id = await localTicketId(store, args, scope);
       const archived = optionalFlag(args, "archived", true);
       return { entityType: "ticket", id, record: await repository.setTicketArchived(id, archived) };
     }
     case "ticket-delete": {
-      const id = await localTicketId(store, args);
+      const id = await localTicketId(store, args, scope);
       await repository.deleteTicket(id);
       return { entityType: "ticket", id };
     }
@@ -437,7 +441,7 @@ export function createLocalDomainTools(options: LocalDomainToolsOptions) {
     }
     const name = normalizeDomainToolName(tool) as LocalDomainToolName;
 
-    const write = await writeLocally(name, options.repository, options.store, args);
+    const write = await writeLocally(name, options.repository, options.store, args, options.scope?.());
     const syncEvent = await queuedEventFor(options.store, write.entityType, write.id, write.record === undefined);
     if (syncEvent) options.syncQueue.enqueue([syncEvent]);
     const { localId, syncId, serverId } = await writtenEntityIds(options.store, write.record);

@@ -12,6 +12,7 @@ import {
   isLocalId,
   parseSyncId,
   syncIdText,
+  type EntityScope,
   type LocalFirstStore,
   type LocalId,
   type LocalRecord,
@@ -25,17 +26,20 @@ import {
  * mapping row). With no mirror the integer text passes through VERBATIM (trimmed): the repository
  * treats a decimal id as a server reference and the sync importer resolves it as the tenant's
  * own. Any other reference is returned as given — a UUID is validated by the repository.
+ * `scope` is the active account (`activeEntityScope`): SyncIds are per tenant, so another
+ * account's mirror of the same number is never picked.
  */
 export async function resolveLocalReference(
   store: LocalFirstStore,
   entityType: "project" | "ticket",
   reference: string,
+  scope?: EntityScope,
 ): Promise<string> {
   const raw = typeof reference === "string" ? reference.trim() : "";
   if (!isIntegerIdText(raw)) return reference;
   const sync = parseSyncId(raw);
   if (sync === null) return raw;
-  const localId = await entityIdResolver(store).localIdOf(entityType, sync);
+  const localId = await entityIdResolver(store).localIdOf(entityType, sync, scope);
   if (localId) {
     const target = await store.read((tx) => tx.get(entityType, localId));
     if (target && !target.deletedAt) return localId;

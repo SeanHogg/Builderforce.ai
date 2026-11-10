@@ -9,6 +9,7 @@
 import * as vscode from "vscode";
 import { getGlobalRunState, getRunSnapshot, isRunning, type BrainPersistenceAdapter, type BrainStreamFn, type LocalChatIdentity, type ModelFallbackEvent, utilityUsageObserver } from "@seanhogg/builderforce-brain-embedded";
 import { getApiKey, postRunOutcome } from "./gateway";
+import { activeEntityScope } from "./chatAccount";
 import { fetchRunContextSection, projectEvermindHooks } from "./bfApi";
 import { localBrainApplication } from "./localFirstStore";
 import { hostLog } from "./hostLog";
@@ -81,7 +82,7 @@ function workspaceRoot(): string {
 function installHostDomainTools(ctx: vscode.ExtensionContext, store: LocalFirstStore): void {
   const deviceId = ctx.globalState.get<string>(LOCAL_DEVICE_KEY);
   if (typeof deviceId !== "string" || deviceId.length === 0) return;
-  installLocalDomainTools(ctx, { localFirstStore: store, localDeviceId: deviceId });
+  installLocalDomainTools(ctx, { localFirstStore: store, localDeviceId: deviceId, scope: activeEntityScope });
 }
 
 /**
@@ -112,8 +113,9 @@ function routeDomainToolsLocal(
     tools,
     (request) => runInstalledDomainTool(ctx, request),
     chat?.clientChatId,
-    ticketServerIdLookup(store),
-    localChatTicketScope(store, identity, chat),
+    // Ids resolve in the active account only (a SyncId is per tenant), read at call time.
+    ticketServerIdLookup(store, activeEntityScope),
+    localChatTicketScope(store, identity, chat, activeEntityScope),
     {
       // Read at call time: the mode (and with it sync) can change while the run is going.
       syncOn: () => platformCapabilityAllows("synchronize"),

@@ -1,3 +1,14 @@
+## ✅ RESOLVED 2026-11-10: typed entity ids, Phase A (LocalId UUID / SyncId bigint) (Local-first · Sync · Agents)
+
+- **Context.** Chat #61651 filed duplicate tickets: a tool result's ids were read by several hand-rolled regexes and `Number()` guesses, so a client UUID and a server integer were mixed up. Design: [typed-entity-ids.md v2](./docs/design/typed-entity-ids.md).
+- **One primitive, one resolver.** `packages/local-first/src/entityId.ts` owns `LocalId` (UUID), `SyncId` (positive safe integer), `parseSyncId`, `isLocalId`, `parseEntityRef` and `mintLocalId`. `entityIdResolver.ts` is the one lookup (`syncIdOf` / `localIdOf` / `resolve`) over the store's mapping rows. `clientEntityIdentity.ts` is deleted.
+- **Mappings.** `ServerMapping.syncId` is nullable. One normaliser (`normalizeServerMapping`) reads legacy rows and drops none. A run step's receipt says `syncId: null` explicitly, so its step id is never read as a message SyncId. "Earliest mapping" is ordered by a persisted `mappedSeq` (`compareMappingAge`), so the order is the same after a restart.
+- **Account-scoped resolution.** Lookups take an `EntityScope`: a destination, or an account `{ tenantId }` (its destinations plus unbound). The editor passes the active workspace's tenant (`activeEntityScope`) in the domain tools, the ticket-id bridge, the chat ticket scope and the chat rail, so another tenant's SyncId 40 is never picked.
+- **Server (expand push).** Migration 1339 adds `sync_id bigint` to `sync_entity_mappings` with a non-unique index. Receipts and pulled records carry `syncId`. The api re-exports the shared `SyncReceipt` (one definition). `idArg` reads the id arguments of 177 builtin tools through `parseSyncId`, with an error the model can act on.
+- **Tool results.** `brain-embedded/src/toolResultRecord.ts` `entityIdsOf` is the one reader of a tool result's ids, which fixes the chat #61651 duplicate tickets.
+- **Guard.** `scripts/check-entity-id-parsing.mjs` (`check:entity-id-parsing`) refuses new hand-rolled id parsing outside the allowlist.
+- The contract push (drop `server_id`, read `sync_id` first, stop sending `serverId` text) stays in ROADMAP.md. It is blocked until push telemetry shows no client below the version that reads `syncId`.
+
 ## ✅ RESOLVED 2026-11-10: PRD 46: the Visualizer names what went wrong in an agent run, and the editor's gates check real work (Agents · Visualizer)
 
 - **Context.** Editor run #70776 used 3.06M prompt tokens over 42 turns. It spent 21 turns reading and 13 turns making one write each, never ran a check, and left `labels.ts` unparseable. Chat diagnostics called it "Inconclusive". Spec: [PRD 46](./docs/specs/46-prd-agent-run-findings.md).

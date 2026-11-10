@@ -14,7 +14,7 @@
  * the device id the host already holds. This module stays free of `vscode` and of
  * any host import, so the host file is the only place that binds the two.
  */
-import type { LocalFirstStore } from "@builderforce/local-first";
+import type { EntityScope, LocalFirstStore } from "@builderforce/local-first";
 import {
   createInMemoryLocalSyncQueue,
   createLocalDomainToolsWithRepository,
@@ -34,6 +34,8 @@ export interface LocalDomainToolPorts {
   localFirstStore?: LocalFirstStore;
   repository?: LocalWorkRepositoryPort;
   syncQueue?: LocalDomainSyncQueue;
+  /** The active account, read per call (see `LocalDomainToolsOptions.scope`). */
+  scope?: () => EntityScope | undefined;
 }
 
 export interface InstalledLocalDomainTools {
@@ -80,6 +82,7 @@ export function installLocalDomainTools(
     store,
     deviceId,
     syncQueue,
+    ...(ports.scope ? { scope: ports.scope } : {}),
     ...(ports.repository ? { repository: ports.repository } : {}),
   });
   const installed: InstalledLocalDomainTools = {

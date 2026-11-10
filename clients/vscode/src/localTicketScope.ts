@@ -19,6 +19,7 @@ import {
   parseSyncId,
   type EntityDestination,
   type EntityIdResolver,
+  type EntityScope,
   type LocalFirstStore,
   type LocalFirstTransaction,
   type TicketValue,
@@ -77,17 +78,19 @@ export async function scanUnsyncedTickets(
 }
 
 /** The local client id behind a ticket id: a LocalId as given; a SyncId or tier `kind:ref` through the resolver. */
-async function ticketClientId(resolver: EntityIdResolver, ticketId: string): Promise<string | undefined> {
+async function ticketClientId(resolver: EntityIdResolver, ticketId: string, scope: EntityScope | undefined): Promise<string | undefined> {
   const ref = parseEntityRef(ticketId.trim().replace(/^#/, ""));
   if (!ref) return undefined;
   if ("local" in ref) return ref.local;
-  return (await resolver.resolve("ticket", ref)).localId ?? undefined;
+  return (await resolver.resolve("ticket", ref, scope)).localId ?? undefined;
 }
 
+/** `scope` is the active account, read per call: a SyncId or tier ref names that tenant's ticket only. */
 export function localChatTicketScope(
   store: LocalFirstStore,
   identity: Pick<LocalChatIdentity, "localIdFor" | "clientIdFor">,
   current?: RunChat,
+  scope?: () => EntityScope | undefined,
 ): ChatTicketScope {
   const resolver = entityIdResolver(store);
   return {
@@ -116,7 +119,7 @@ export function localChatTicketScope(
     linkedLocally: async (ticketId) => {
       const chat = current?.clientChatId;
       if (!chat) return false;
-      const clientId = await ticketClientId(resolver, ticketId);
+      const clientId = await ticketClientId(resolver, ticketId, scope?.());
       if (!clientId) return false;
       return store.read(async (tx) => {
         const ticket = await tx.get<TicketValue>("ticket", clientId);
