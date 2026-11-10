@@ -16,7 +16,8 @@
 import { createHash } from "node:crypto";
 import * as path from "node:path";
 import { defineRecordIndex, newLocalRecord, scanByIndex, type EntityDestination, type ExecutionValue, type LocalFirstStore } from "@builderforce/local-first";
-import type { RunDelta } from "@builderforce/run-delta";
+import type { ComputedRunDeltaCard, RunDelta } from "@builderforce/run-delta";
+import { droppedOverrides } from "./droppedOverrides";
 
 /** The synced value. */
 export interface RunDeltaRecordValue {
@@ -50,22 +51,15 @@ export interface RunDeltaLocalValue {
   root: string;
   /** The plain repository identity (remote URL, else the root path). */
   repo: string;
+  /** The transcript message the run produced (its last reply, a local message id): the card's anchor. */
+  at?: number;
 }
 
-/** The chat card's payload: what `run-delta/card` carries and `run-delta/get` answers with. Local data, never synced. */
-export interface RunDeltaCard {
-  chatId: number;
-  runId: string;
-  /** The repository identity (its remote URL, else its root path). */
-  repo: string;
-  /** The absolute local repository root: a card path opens under it (`run-delta/openFile`). */
-  root: string;
-  delta: RunDelta;
-  /** The rules that held the run (the record's `blocked`): the card shows the run as held on them. */
-  blocked?: { rules: string[] };
-  /** The held run was released by a person (its execution carries the waiver): the hold no longer stands. */
-  released?: boolean;
-}
+/**
+ * A computed card (the contract's {@link ComputedRunDeltaCard}): what `run-delta/card` carries and `run-delta/get` answers
+ * with once the delta is stored. Local data, never synced.
+ */
+export type RunDeltaCard = ComputedRunDeltaCard;
 
 /** What a delta is stored with: the synced value and the device's side record. */
 export interface StoredRunDelta {
@@ -99,7 +93,10 @@ export function syncedRepository(repo: string): string {
   return path.isAbsolute(repo) || /^[A-Za-z]:[\\/]/.test(repo) ? `local:${sha(repo.replace(/\\/g, "/")).slice(0, 16)}` : repo;
 }
 
-/** `invalid:guards.myGuard` → `invalid:guards#<hash>`: the code and section stay, the repo's own names do not. */
+/**
+ * `invalid:guards.myGuard` → `invalid:guards#<hash>`: the code and section stay, the repo's own names do not. An
+ * `unsafe-regex:<section>.<reason>` keeps its reason: a fixed code (`UnsafeReason`), never the pattern.
+ */
 export function redactDropped(codes: readonly string[]): string[] {
   const out = codes.slice(0, MAX_DROPPED).map((code) => {
     const colon = code.indexOf(":");
@@ -108,6 +105,7 @@ export function redactDropped(codes: readonly string[]): string[] {
     const rest = code.slice(colon + 1);
     const dot = rest.indexOf(".");
     const section = (dot < 0 ? rest : rest.slice(0, dot)).slice(0, 32);
+    if (head === "unsafe-regex" && dot >= 0 && /^[a-z][a-z-]{0,31}$/.test(rest.slice(dot + 1))) return `${head}:${section}.${rest.slice(dot + 1)}`;
     return dot < 0 ? `${head}:${section}` : `${head}:${section}#${sha(rest.slice(dot + 1)).slice(0, 8)}`;
   });
   return codes.length > MAX_DROPPED ? [...out, `truncated:${codes.length - MAX_DROPPED}`] : out;
@@ -122,8 +120,15 @@ export function runDeltaId(changeSetId: string): string {
 
 const localIdOf = (deltaId: string): string => `run-delta-local:${deltaId.slice("run-delta:".length)}`;
 
+function cardExtrasOf({ value, local }: StoredRunDelta): Pick<RunDeltaCard, "at" | "overrides"> {
+  const overrides = droppedOverrides(value.overridesDropped);
+  return { ...(typeof local.at === "number" ? { at: local.at } : {}), ...(overrides ? { overrides } : {}) };
+}
+
+/** A stored delta's card: anchored to its run's reply (`at`), with the overrides it ran without (redacted). */
 export const cardOf = (stored: StoredRunDelta): RunDeltaCard => ({
   chatId: stored.value.chatId, runId: stored.value.runId, repo: stored.local.repo, root: stored.local.root, delta: stored.value.delta,
+  ...cardExtrasOf(stored),
   ...(stored.value.blocked ? { blocked: { rules: [...stored.value.blocked.rules] } } : {}),
 });
 

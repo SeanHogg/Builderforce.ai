@@ -39033,6 +39033,26 @@
       "backreference": "référence arrière",
       "nestedQuantifier": "quantificateur imbriqué",
       "quantifiedAlternation": "alternative quantifiée"
+    },
+    "pendingCard": "Mesure de ce que cette exécution a changé…",
+    "failedCard": "Non mesuré : impossible de mesurer ce que cette exécution a changé.",
+    "held": "Retenue : à examiner",
+    "heldRules": "Bloquée par {rules}",
+    "releaseRun": "Libérer l’exécution",
+    "releaseConfirmTitle": "Libérer cette exécution ?",
+    "releaseConfirmMessage": "Cette exécution a été retenue car ses modifications ont déclenché des règles bloquantes ({rules}). La libérer la marque comme terminée avec votre accord.",
+    "releaseConfirmLabel": "Libérer",
+    "released": "Libérée par vous",
+    "releaseRefused": "Impossible de libérer cette exécution : elle n’est plus retenue.",
+    "overridesHeading": "Remplacements ignorés",
+    "overrides": {
+      "unknownKey": "Paramètre inconnu « {section} »",
+      "invalid": "Valeur non valide dans « {section} »",
+      "invalidRoot": "Le fichier de règles n’est pas un objet JSON",
+      "invalidJson": "Le fichier de règles n’est pas un JSON valide",
+      "unsafeRegex": "Motif dangereux dans « {section} »",
+      "unreadable": "Impossible de lire le fichier de règles[[ ({reason})]]",
+      "truncated": "{count} de plus non affichés"
     }
   }
 }

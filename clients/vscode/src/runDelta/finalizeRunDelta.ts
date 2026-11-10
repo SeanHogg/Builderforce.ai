@@ -98,6 +98,8 @@ export interface RunDeltaRun {
   workspaceRoot?: string;
   /** An autonomous run's finalize gate (§12.5). Absent: nothing this run's delta computes can hold it. */
   hold?: RunHoldPort;
+  /** The transcript message the run produced (its last reply): stored on the side record as the card's anchor. */
+  at?: number;
 }
 
 const nowOf = (deps: Pick<RunDeltaDeps, "now">): Date => deps.now?.() ?? new Date();
@@ -186,7 +188,7 @@ async function repoDelta(
       ...(held ? { blocked: { rules: [...delta.blocking] } } : {}),
       ...(dropped.length > 0 ? { overridesDropped: redactDropped(dropped) } : {}),
     },
-    local: { kind: "local", runId, chatId: run.chatId, root: set.root, repo: cs.repository },
+    local: { kind: "local", runId, chatId: run.chatId, root: set.root, repo: cs.repository, ...(run.at !== undefined ? { at: run.at } : {}) },
   };
 }
 

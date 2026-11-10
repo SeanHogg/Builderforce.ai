@@ -39033,6 +39033,26 @@
       "backreference": "referencia inversa",
       "nestedQuantifier": "cuantificador anidado",
       "quantifiedAlternation": "alternancia cuantificada"
+    },
+    "pendingCard": "Midiendo lo que cambió esta ejecución…",
+    "failedCard": "Sin medir: no se pudo medir lo que cambió esta ejecución.",
+    "held": "Retenida: requiere revisión",
+    "heldRules": "Bloqueada por {rules}",
+    "releaseRun": "Liberar ejecución",
+    "releaseConfirmTitle": "¿Liberar esta ejecución?",
+    "releaseConfirmMessage": "Esta ejecución se retuvo porque sus cambios activaron reglas de bloqueo ({rules}). Al liberarla, se marca como completada con tu aprobación.",
+    "releaseConfirmLabel": "Liberar",
+    "released": "Liberada por ti",
+    "releaseRefused": "No se pudo liberar esta ejecución: ya no está retenida.",
+    "overridesHeading": "Configuraciones ignoradas",
+    "overrides": {
+      "unknownKey": "Ajuste desconocido «{section}»",
+      "invalid": "Valor no válido en «{section}»",
+      "invalidRoot": "El archivo de política no es un objeto JSON",
+      "invalidJson": "El archivo de política no es un JSON válido",
+      "unsafeRegex": "Patrón inseguro en «{section}»",
+      "unreadable": "No se pudo leer el archivo de política[[ ({reason})]]",
+      "truncated": "{count} más sin mostrar"
     }
   }
 }

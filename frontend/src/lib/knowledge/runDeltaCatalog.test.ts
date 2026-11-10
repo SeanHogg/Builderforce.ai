@@ -12,7 +12,9 @@ import {
   labelKey,
   runDeltaLabels,
 } from '@builderforce/knowledge-graph-view';
-import { ALL_DIMENSIONS, BUILT_IN_RULES, DELTA_CONFIG_RULE, FACT_FINDING_KINDS, HEADLINE_ORDER, TEST_INTEGRITY_RULES } from '@builderforce/run-delta';
+import {
+  ALL_DIMENSIONS, BUILT_IN_RULES, DELTA_CONFIG_RULE, DROPPED_OVERRIDE_CODES, FACT_FINDING_KINDS, HEADLINE_ORDER, TEST_INTEGRITY_RULES,
+} from '@builderforce/run-delta';
 import en from '@/i18n/messages/en.json';
 import zh from '@/i18n/messages/zh.json';
 import es from '@/i18n/messages/es.json';
@@ -75,6 +77,23 @@ function requiredKeys(): string[] {
     ...RUN_DELTA_CLAUSE_CODES.map((c) => `clauses.${labelKey(c)}`),
     ...RUN_DELTA_METRIC_IDS.map((m) => `metrics.${labelKey(m)}`),
     ...RUN_DELTA_EXCLUDED_REASONS.map((r) => `excluded.${labelKey(r)}`),
+    ...droppedOverrideKeys(),
+  ];
+}
+
+/**
+ * Every ignored-override code the card's `overrides.dropped` can carry (`DROPPED_OVERRIDE_CODES`), the unsafe-regex
+ * reasons (`UnsafeReason`, read from `safeRegex.ts`) and the `unreadable` causes, as label keys.
+ */
+function droppedOverrideKeys(): string[] {
+  const unsafe = literals(/export type UnsafeReason = ([^;]+);/.exec(engineFile('registry/safeRegex.ts'))![1]!);
+  expect(unsafe).toEqual(expect.arrayContaining(['too-long', 'nested-quantifier']));
+  return [
+    'overridesHeading',
+    ...DROPPED_OVERRIDE_CODES.map((c) => `overrides.${labelKey(c)}`),
+    ...unsafe.map((r) => `unsafeReasons.${labelKey(r)}`),
+    // `unreadable:<cause>` reads the excluded-file label of the same cause.
+    ...['preimage-missing', 'git-unavailable'].map((r) => `excluded.${labelKey(r)}`),
   ];
 }
 
@@ -126,6 +145,12 @@ describe('runDelta catalogs', () => {
     for (const code of found(/(?:code|reason): '([a-z-]+)'/g)) expect(known, `code '${code}'`).toContain(code);
     for (const code of found(/'([a-z]+(?:-[a-z]+)+)'\s*:\s*'[a-z]+(?:-[a-z]+)+'\)/g)) expect(known, `fallback '${code}'`).toContain(code);
     for (const id of found(/metricId: '([^']+)'/g)) expect(RUN_DELTA_METRIC_IDS as readonly string[], `metric '${id}'`).toContain(id);
+
+    // Every drop prefix `withOverrides` writes (`unknown-key:`, `invalid:`, `unsafe-regex:`) is a card override code.
+    const overrides = engineFile('registry/overrides.ts');
+    const prefixes = new Set([...overrides.matchAll(/dropped(?:\.push\(|: \[)\s*[`']([a-z-]+):/g)].map((m) => m[1]!));
+    expect([...prefixes]).toEqual(expect.arrayContaining(['unknown-key', 'invalid', 'unsafe-regex']));
+    for (const prefix of prefixes) expect(DROPPED_OVERRIDE_CODES as readonly string[], `override '${prefix}'`).toContain(prefix);
 
     const memory = readFileSync(join(__dirname, '../../../node_modules/@seanhogg/builderforce-memory/dist/knowledge/comparability.js'), 'utf8');
     for (const [, code] of memory.matchAll(/reasons\.add\('([a-z-]+)'\)/g)) expect(known, `memory reason '${code}'`).toContain(code);

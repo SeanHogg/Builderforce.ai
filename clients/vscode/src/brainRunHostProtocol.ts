@@ -15,7 +15,7 @@ import {
   type ModelFallbackSurface,
   type ReasoningIntent,
 } from "@seanhogg/builderforce-brain-embedded";
-import type { RunDelta } from "@builderforce/run-delta";
+import type { RunDeltaCardPayload } from "@builderforce/run-delta";
 import type { ChildView } from "./childRuns";
 import type { InterruptedRunView } from "./interruptedRunTypes";
 import { listDelta, sentOf, type SentList } from "./listDelta";
@@ -93,13 +93,16 @@ export type RunHostMessage =
    *  the one-line notice for this chat. `reason` is WHY (clamped), shown after the line. */
   | { type: "run.modelFallback"; chatId: number; from: string; reason?: string }
   /**
-   * A finished run's delta for one repository (PRD 41 §C14), posted once it is stored (`runDelta/finalizeRunDelta.ts`).
-   * `repo` is the change set's repository identity (its remote URL, else its root path); `root` is the repository's absolute
-   * local root, where a card path opens (`root + '/' + path`). The panel holding `chatId` shows the card; `run-delta/get`
-   * answers the same payloads for a reopened chat. `blocked`: the rules that held this autonomous run at its finalize gate
-   * (PRD 41 §12.5) — the card shows the run as held on them, not complete.
+   * A run's delta card (PRD 41 §C11.1, §C14; the contract's `RunDeltaCardPayload`). `pending` is posted as soon as the
+   * delta starts computing, one per run; each computed delta for one repository replaces it once stored
+   * (`runDelta/finalizeRunDelta.ts`), and a computation that ends with none posts `failed` (`runDelta/runDeltaProgress.ts`).
+   * `at` is the reply the run produced, where the card sits. A computed card: `repo` is the change set's repository identity
+   * (its remote URL, else its root path); `root` the repository's absolute local root, where a card path opens; `overrides`
+   * the ignored `.builderforce/delta.json` entries (redacted); `blocked` the rules that held this autonomous run at its
+   * finalize gate (§12.5), `released` once the person released it. The panel holding `chatId` shows the card;
+   * `run-delta/get` answers the same payloads for a reopened chat.
    */
-  | { type: "run-delta/card"; chatId: number; runId: string; repo: string; root: string; delta: RunDelta; blocked?: { rules: string[] } };
+  | ({ type: "run-delta/card" } & RunDeltaCardPayload);
 
 /** A webview panel watching the runs — anything that can be posted to. */
 export interface RunSink {

@@ -39033,6 +39033,26 @@
       "backreference": "反向引用",
       "nestedQuantifier": "嵌套量词",
       "quantifiedAlternation": "带量词的分支"
+    },
+    "pendingCard": "正在衡量此次运行带来的变化…",
+    "failedCard": "未衡量：无法衡量此次运行带来的变化。",
+    "held": "已暂停：需要审查",
+    "heldRules": "被以下规则阻止：{rules}",
+    "releaseRun": "放行运行",
+    "releaseConfirmTitle": "放行此次运行？",
+    "releaseConfirmMessage": "此次运行已被暂停，因为其更改触发了阻止规则（{rules}）。放行后，它将在你确认后标记为已完成。",
+    "releaseConfirmLabel": "放行",
+    "released": "已由你放行",
+    "releaseRefused": "无法放行此次运行：它已不再处于暂停状态。",
+    "overridesHeading": "已忽略的覆盖设置",
+    "overrides": {
+      "unknownKey": "未知设置“{section}”",
+      "invalid": "“{section}”中的值无效",
+      "invalidRoot": "策略文件不是 JSON 对象",
+      "invalidJson": "策略文件不是有效的 JSON",
+      "unsafeRegex": "“{section}”中有不安全的模式",
+      "unreadable": "无法读取策略文件[[（{reason}）]]",
+      "truncated": "另有 {count} 项未显示"
     }
   }
 }

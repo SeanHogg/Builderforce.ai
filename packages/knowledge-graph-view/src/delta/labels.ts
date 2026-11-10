@@ -94,6 +94,29 @@ export interface RunDeltaLabels {
     paramValues: Record<string, Record<string, string>>;
     /** `unsafe-regex:<key>.<reason>` reasons. */
     unsafeReasons: Record<string, string>;
+    /** The card while the delta computes (`status: 'pending'`), and when it ended without one (`failed`). */
+    pendingCard: string;
+    failedCard: string;
+    /** §12.5: an autonomous run held at its finalize gate. `{rules}` = the blocking rules, localized and joined. */
+    held: string;
+    heldRules: string;
+    releaseRun: string;
+    releaseConfirmTitle: string;
+    releaseConfirmMessage: string;
+    releaseConfirmLabel: string;
+    released: string;
+    releaseRefused: string;
+    /** The panel's ignored `.builderforce/delta.json` entries, one label per `DroppedOverrideCode` (`unsafe-regex` with a reason reads `reasons.unsafeRegex`). */
+    overridesHeading: string;
+    overrides: {
+        unknownKey: string;
+        invalid: string;
+        invalidRoot: string;
+        invalidJson: string;
+        unsafeRegex: string;
+        unreadable: string;
+        truncated: string;
+    };
 }
 
 export const DEFAULT_RUN_DELTA_LABELS: RunDeltaLabels = {
@@ -265,6 +288,26 @@ export const DEFAULT_RUN_DELTA_LABELS: RunDeltaLabels = {
         backreference: 'backreference',
         nestedQuantifier: 'nested quantifier',
         quantifiedAlternation: 'quantified alternation',
+    },
+    pendingCard: 'Measuring what this run changed…',
+    failedCard: 'Not measured: what this run changed could not be measured.',
+    held: 'Held: needs review',
+    heldRules: 'Blocked by {rules}',
+    releaseRun: 'Release run',
+    releaseConfirmTitle: 'Release this run?',
+    releaseConfirmMessage: 'This run was held because its changes hit blocking rules ({rules}). Releasing it marks it complete with your sign-off.',
+    releaseConfirmLabel: 'Release',
+    released: 'Released by you',
+    releaseRefused: 'This run could not be released: it is no longer held.',
+    overridesHeading: 'Overrides ignored',
+    overrides: {
+        unknownKey: 'Unknown setting “{section}”',
+        invalid: 'Invalid value in “{section}”',
+        invalidRoot: 'The policy file is not a JSON object',
+        invalidJson: 'The policy file is not valid JSON',
+        unsafeRegex: 'Unsafe pattern in “{section}”',
+        unreadable: 'The policy file could not be read[[ ({reason})]]',
+        truncated: '{count} more not shown',
     },
 };
 

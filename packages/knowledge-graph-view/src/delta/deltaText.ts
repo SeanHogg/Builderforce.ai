@@ -4,7 +4,7 @@
  * renders as the code itself rather than blank, and never throws.
  */
 
-import type { DeltaFinding, DimensionId, HeadlineModel, MetricDelta, Verdict } from '@builderforce/run-delta/contract';
+import type { DeltaFinding, DimensionId, DroppedOverride, HeadlineModel, MetricDelta, Verdict } from '@builderforce/run-delta/contract';
 import { fillTemplate } from '../template';
 import { labelKey, type RunDeltaLabels } from './labels';
 import { RUN_DELTA_TOOL_REASON_PREFIXES } from './codes';
@@ -52,6 +52,22 @@ export function reasonLabel(l: RunDeltaLabels, code: string): string {
 
 /** A blocking code (`RunDelta.blocking`): a rule id, `not-comparable:<ruleId>` or `head-switched`. */
 export const blockingLabel = (l: RunDeltaLabels, code: string): string => pick(l.rules, code) ?? reasonLabel(l, code);
+
+/** An ignored override (`RunDeltaOverrides.dropped`): its code's label; an `unsafe-regex` with a reason reads like the reason code. */
+export function overrideLabel(l: RunDeltaLabels, d: DroppedOverride): string {
+    if (d.code === 'unsafe-regex' && d.reason) return reasonLabel(l, `unsafe-regex:${d.section}.${d.reason}`);
+    const reason = d.reason ? (pick(l.excluded, d.reason) ?? d.reason) : undefined;
+    const template = (l.overrides as Record<string, string>)[labelKey(d.code)];
+    return template ? fillTemplate(template, { section: d.section, reason, count: d.count }) : d.code;
+}
+
+/** The rules that held a run, each through {@link ruleLabel} (a `not-comparable:<rule>` / `head-switched` code as a reason). */
+export const heldRulesText = (l: RunDeltaLabels, rules: readonly string[]): string =>
+    rules.map((r) => blockingLabel(l, r)).join(l.headline.listSeparator);
+
+/** The "Release run" confirmation's body, naming the rules that hold the run. */
+export const releaseConfirmText = (l: RunDeltaLabels, rules: readonly string[]): string =>
+    fillTemplate(l.releaseConfirmMessage, { rules: heldRulesText(l, rules) });
 
 /** A finding param's name. */
 export const paramLabel = (l: RunDeltaLabels, key: string): string => pick(l.params, key) ?? key;

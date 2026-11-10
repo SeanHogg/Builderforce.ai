@@ -21,7 +21,7 @@ import type {
   ServedRead,
 } from "@seanhogg/builderforce-brain-embedded";
 import type { LocalRuntimeProbe } from "@builderforce/local-inference";
-import type { RunDelta } from "@builderforce/run-delta";
+import type { RunDeltaCardPayload } from "@builderforce/run-delta";
 import type { PolicyGate, RunKnowledgeLog } from "@builderforce/agent-tools";
 import type { ToolDef } from "./fileTools";
 import type { NativeRunLabels } from "./nativeBrainRun";
@@ -261,10 +261,11 @@ export interface BrainRunHost {
   /** The run list's interrupted rows (`interruptedRunsView.ts`): journal one as acknowledged (dismissed, or resumed by the webview through the composer). Idempotent. Absent on a host without a run journal. */
   acknowledgeInterrupted?(runId: string): Promise<void>;
   /**
-   * The stored run deltas of a run or of a chat (`run-delta/get`, PRD 41 §C14). `blocked`: the rules that held the
-   * autonomous run at its finalize gate (§12.5). Absent on a host that records none.
+   * The run delta cards of a run or of a chat (`run-delta/get`, PRD 41 §C14): the stored deltas, plus the `pending` /
+   * `failed` card of a run this session is still measuring (or failed to). A computed card's `blocked`: the rules that held
+   * the autonomous run at its finalize gate (§12.5). Absent on a host that records none.
    */
-  runDeltas?(query: { runId?: string; chatId?: number }): Promise<Array<{ chatId: number; runId: string; repo: string; root: string; delta: RunDelta; blocked?: { rules: string[] } }>>;
+  runDeltas?(query: { runId?: string; chatId?: number }): Promise<RunDeltaCardPayload[]>;
   /**
    * A person's audited release of a run held at its finalize gate (`run-delta/release`, PRD 41 §12.5): `completed` with a
    * waiver, and its cards re-posted `released`. Rejects `run_delta_release_refused` for any run not held there. Absent on a

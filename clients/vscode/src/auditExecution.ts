@@ -61,7 +61,7 @@ export class AuditExecution implements vscode.Disposable {
    */
   private async reportHeld(runId: string, chatId: number): Promise<boolean> {
     const cards = (await this.host.runDeltas?.({ runId }).catch(() => [])) ?? [];
-    const rules = [...new Set(cards.flatMap((card) => card.blocked?.rules ?? []))];
+    const rules = [...new Set(cards.flatMap((card) => ("blocked" in card ? card.blocked?.rules : undefined) ?? []))];
     if (rules.length === 0) return false;
     await openWorkspace(this.ctx, { kind: 'focus', chatId });
     void vscode.window.showWarningMessage(vscode.l10n.t('The audit is held for review, not complete: its changes hit blocking rules ({0}).', rules.join(', ')));

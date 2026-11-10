@@ -4,8 +4,8 @@
  * the headline, one row per dimension, the blast-radius band and "Open details". Props only:
  * no fetching, no host calls; the same component renders on the web.
  *
- * No "measuring…" row: the `RunDelta` contract (v1) has no pending state — a delta is posted
- * once, final. When the contract grows one, the row belongs in {@link DimensionRow}.
+ * Before the delta exists the chat shows {@link RunDeltaStatusCard} ("Measuring…", or not measured)
+ * instead. A run its delta HELD at the finalize gate (§12.5) shows {@link HeldNotice}.
  */
 
 import type { RunDelta } from '@builderforce/run-delta/contract';
@@ -15,6 +15,7 @@ import { TYPE } from '../surface/ui/type';
 import { fillTemplate } from '../template';
 import { headlineText, reasonLabel } from './deltaText';
 import { DimensionRow } from './DimensionRow';
+import { HeldNotice, type HeldNoticeProps } from './HeldNotice';
 import type { RunDeltaLabels } from './labels';
 import { reasonTag, VERDICT_TONE, VerdictIcon } from './VerdictMark';
 
@@ -24,11 +25,13 @@ export interface RunDeltaCardProps {
     /** The repo the delta covers, shown under the title when a run touched more than one. */
     repoLabel?: string | undefined;
     onOpenDetails(): void;
+    /** The card's hold state (§12.5): the rules that held the run, and the release controls. Absent ⇒ not held. */
+    held?: Omit<HeldNoticeProps, 'labels'> | undefined;
 }
 
 const BAND_TONE = { low: cssVar('sev1'), medium: cssVar('sev3'), high: cssVar('sev5') } as const;
 
-export function RunDeltaCard({ delta, labels, repoLabel, onOpenDetails }: RunDeltaCardProps) {
+export function RunDeltaCard({ delta, labels, repoLabel, onOpenDetails, held }: RunDeltaCardProps) {
     const headline = headlineText(labels, delta.summary);
     const band = delta.blastRadius.band;
     return (
@@ -45,6 +48,7 @@ export function RunDeltaCard({ delta, labels, repoLabel, onOpenDetails }: RunDel
                 <span style={{ color: VERDICT_TONE[delta.headline], paddingTop: 1 }}><VerdictIcon verdict={delta.headline} /></span>
                 <span data-testid="run-delta-headline">{headline}</span>
             </p>
+            {held && held.rules.length > 0 && <HeldNotice {...held} labels={labels} />}
             <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                 {delta.dimensions.map((d) => <DimensionRow key={d.id} dimension={d} labels={labels} />)}
             </ul>

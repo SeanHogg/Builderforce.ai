@@ -1,12 +1,14 @@
 /** The run delta presentation (PRD 41 §C11): props-only card, panel and dimension row, plus their labels. */
 
 export { RunDeltaCard, type RunDeltaCardProps } from './RunDeltaCard';
+export { RunDeltaStatusCard, type RunDeltaStatusCardProps } from './RunDeltaStatusCard';
+export { HeldNotice, type HeldNoticeProps } from './HeldNotice';
 export { RunDeltaPanel, groupFindings, type RunDeltaPanelProps } from './RunDeltaPanel';
 export { DimensionRow, lineageCounts, type DimensionRowProps } from './DimensionRow';
 export { DeltaFindingItem, type RunDeltaCodeTarget } from './DeltaFindingItem';
 export { VerdictMark, VerdictIcon, VERDICT_TONE } from './VerdictMark';
 export {
-    blockingLabel, clauseLabel, dimensionLabel, headlineText, lineageGroup, metricLabel, noteLabel, paramLabel, paramValueLabel, metricValueText, quantizedValue, reasonLabel, ruleLabel, verdictLabel,
+    blockingLabel, clauseLabel, dimensionLabel, headlineText, heldRulesText, overrideLabel, releaseConfirmText, lineageGroup, metricLabel, noteLabel, paramLabel, paramValueLabel, metricValueText, quantizedValue, reasonLabel, ruleLabel, verdictLabel,
 } from './deltaText';
 export { DEFAULT_RUN_DELTA_LABELS, RUN_DELTA_NAMESPACE, labelKey, runDeltaLabels, type RunDeltaLabels } from './labels';
 export {

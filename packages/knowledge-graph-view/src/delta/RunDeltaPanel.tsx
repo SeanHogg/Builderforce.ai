@@ -3,16 +3,18 @@
  * (the host's slide-out when it passes one, else the package `Sheet`). Findings are grouped by
  * dimension, then by lineage; each dimension lists its metrics before → after (quantized values
  * divided back by their `step`), and the files outside the verdicts and the checks that did not
- * run are listed with their reasons. Props only: "Open code" is a callback.
+ * run are listed with their reasons, as are the repository's ignored overrides. Props only: "Open code" is a callback.
  */
 
-import type { DeltaFinding, DimensionResult, RunDelta } from '@builderforce/run-delta/contract';
+import type { DeltaFinding, DimensionResult, RunDelta, RunDeltaOverrides } from '@builderforce/run-delta/contract';
 import { cssVar } from '../scene/themeColors';
 import { Panel } from '../Sheet';
 import { list, muted } from '../styles';
 import { TYPE } from '../surface/ui/type';
 import type { KnowledgePanelRenderer } from '../types';
-import { blockingLabel, dimensionLabel, headlineText, lineageGroup, metricLabel, metricValueText, reasonLabel, type LineageGroup } from './deltaText';
+import {
+    blockingLabel, dimensionLabel, headlineText, lineageGroup, metricLabel, metricValueText, overrideLabel, reasonLabel, type LineageGroup,
+} from './deltaText';
 import { DeltaFindingItem, type RunDeltaCodeTarget } from './DeltaFindingItem';
 import { labelKey, type RunDeltaLabels } from './labels';
 import { VerdictMark } from './VerdictMark';
@@ -86,6 +88,8 @@ function FileList({ heading, files, labels }: { heading: string; files: RunDelta
 export interface RunDeltaPanelProps {
     open: boolean;
     delta: RunDelta;
+    /** The repository's `.builderforce/delta.json` entries this delta ran without (redacted), listed as "Overrides ignored". */
+    overrides?: RunDeltaOverrides | undefined;
     labels: RunDeltaLabels;
     onClose(): void;
     /** Opens a root-relative after-side path in the host's editor. Absent ⇒ locations are plain text. */
@@ -96,7 +100,7 @@ export interface RunDeltaPanelProps {
     renderPanel?: KnowledgePanelRenderer | undefined;
 }
 
-export function RunDeltaPanel({ open, delta, labels, onClose, onOpenCode, compact, renderPanel }: RunDeltaPanelProps) {
+export function RunDeltaPanel({ open, delta, overrides, labels, onClose, onOpenCode, compact, renderPanel }: RunDeltaPanelProps) {
     const failed = delta.dimensions.flatMap((d) => d.measuredBy.filter((m) => m.status === 'failed').map((m) => ({ ...m, dimension: d.id })));
     return (
         <Panel open={open} title={labels.panelTitle} closeLabel={labels.close} onClose={onClose} compact={compact} width={440} render={renderPanel}>
@@ -119,6 +123,16 @@ export function RunDeltaPanel({ open, delta, labels, onClose, onOpenCode, compac
                     <h3 style={TYPE.title}>{labels.blockingHeading}</h3>
                     <ul style={{ ...list, gap: 2 }}>
                         {delta.blocking.map((code) => <li key={code} style={{ ...TYPE.meta, overflowWrap: 'anywhere' }}>{blockingLabel(labels, code)}</li>)}
+                    </ul>
+                </section>
+            )}
+            {overrides && overrides.dropped.length > 0 && (
+                <section data-overrides style={{ display: 'grid', gap: 4 }}>
+                    <h3 style={TYPE.title}>{labels.overridesHeading}</h3>
+                    <ul style={{ ...list, gap: 2 }}>
+                        {overrides.dropped.map((d, i) => (
+                            <li key={`${d.code}:${d.section}:${i}`} data-override={d.code} style={{ ...TYPE.meta, overflowWrap: 'anywhere' }}>{overrideLabel(labels, d)}</li>
+                        ))}
                     </ul>
                 </section>
             )}

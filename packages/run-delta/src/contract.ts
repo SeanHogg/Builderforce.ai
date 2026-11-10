@@ -138,6 +138,67 @@ export interface RunDelta {
     digest: string;
 }
 
+// ─── The chat card (§C11.1) ──────────────────────────────────────────────────
+
+/**
+ * What an ignored `.builderforce/delta.json` entry is reported as. The engine's own drops ({@link OverrideResult}):
+ * `unknown-key`, `invalid` (a section or one of its entries), `invalid-root` (not an object), `unsafe-regex`. The host's:
+ * `invalid-json`, `unreadable` (its before side could not be read), and `truncated` (more were dropped than are kept).
+ */
+export const DROPPED_OVERRIDE_CODES = ['unknown-key', 'invalid', 'invalid-root', 'invalid-json', 'unsafe-regex', 'unreadable', 'truncated'] as const;
+export type DroppedOverrideCode = (typeof DROPPED_OVERRIDE_CODES)[number];
+
+/**
+ * One ignored override, REDACTED: the code and the file section it sat in, never the repo's entry names or patterns.
+ * `reason` is a fixed code: `unsafe-regex` → an {@link UnsafeReason}; `unreadable` → `preimage-missing` | `git-unavailable`.
+ */
+export interface DroppedOverride {
+    code: DroppedOverrideCode;
+    /** The top-level key of the file (`guards`, `io`, …); `''` when the whole file was dropped. */
+    section: string;
+    reason?: string;
+    /** `truncated`: how many more were dropped. */
+    count?: number;
+}
+
+/** The repository's `.builderforce/delta.json` overrides this delta ran without. */
+export interface RunDeltaOverrides {
+    dropped: DroppedOverride[];
+}
+
+/** The card fields every state carries. `at`: the transcript message the run produced (its last reply), the card's anchor. */
+export interface RunDeltaCardBase {
+    chatId: number;
+    runId: string;
+    at?: number;
+}
+
+/** A computed delta for one repository. `status` absent = computed (records written before the field existed). */
+export interface ComputedRunDeltaCard extends RunDeltaCardBase {
+    status?: 'computed';
+    /** The repository identity (its remote URL, else its root path). */
+    repo: string;
+    /** The absolute local repository root: a card path opens under it. */
+    root: string;
+    delta: RunDelta;
+    overrides?: RunDeltaOverrides;
+    /** §12.5: the blocking rule ids that HELD this autonomous run at its finalize gate (it is awaiting review, not complete). */
+    blocked?: { rules: string[] };
+    /** A held run the person released ("Release run"): the hold no longer stands. */
+    released?: boolean;
+}
+
+/**
+ * A run whose delta is not (yet) there, one per run: `pending` while it computes, `failed` when the computation ended
+ * (an error, or its budget ran out) without a delta for any repository. A computed card replaces it.
+ */
+export interface RunDeltaProgressCard extends RunDeltaCardBase {
+    status: 'pending' | 'failed';
+}
+
+/** What `run-delta/card` carries and `run-delta/get` answers with. */
+export type RunDeltaCardPayload = ComputedRunDeltaCard | RunDeltaProgressCard;
+
 /** worse > not_comparable > better > same > not_measured. */
 export const HEADLINE_ORDER: readonly Verdict[] = ['worse', 'not_comparable', 'better', 'same', 'not_measured'];
 

@@ -54,6 +54,8 @@
       // whole import closure to type-check under the editor's stricter options,
       // which is exactly what `exclude` below exists to prevent.
       "@/lib/tokenClaims": ["../../../frontend/src/lib/tokenClaims.ts"],
+      // The confirm primitive's contract (the run delta card's "Release run"); the dialog is the canvas providers'.
+      "@/components/confirmContext": ["../../../frontend/src/components/confirmContext.ts"],
       // The Knowledge view's packages. Its files (`src/knowledgeGraph`) are checked by the
       // canvas project (excluded below); declared here too so the source-package graph
       // states every edge either project can reach.

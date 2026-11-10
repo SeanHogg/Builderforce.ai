@@ -124,7 +124,8 @@ export const BRAIN_HOST_MESSAGES = [
   /** Acknowledge one interrupted run of the run list: dismissed, or resumed by the webview through the composer (`runId`; `interruptedRunsView.ts`). Idempotent. */
   'run.acknowledgeInterrupted',
   /** A run's stored deltas (PRD 41 §C14) — request `{ runId }` or `{ chatId }` → `Array<{ chatId, runId, repo, root, delta }>`,
-   *  the `run-delta/card` payloads, oldest first (empty when none). A reopened chat shows its cards again from it. */
+   *  the `run-delta/card` payloads, oldest first (empty when none), plus the `pending` / `failed` card of a run still being
+   *  measured this session. A reopened chat shows its cards again from it. */
   'run-delta/get',
   /** Open a file a stored run delta names (PRD 41 §C11) — `{ runId, path }`, path repo-relative; answers `true`, or an
    *  error when refused. The HOST resolves the path under that run's repository root, and only for a path its delta names

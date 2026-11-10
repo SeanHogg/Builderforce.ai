@@ -39033,6 +39033,26 @@
       "backreference": "backreference",
       "nestedQuantifier": "nested quantifier",
       "quantifiedAlternation": "quantified alternation"
+    },
+    "pendingCard": "Measuring what this run changed…",
+    "failedCard": "Not measured: what this run changed could not be measured.",
+    "held": "Held: needs review",
+    "heldRules": "Blocked by {rules}",
+    "releaseRun": "Release run",
+    "releaseConfirmTitle": "Release this run?",
+    "releaseConfirmMessage": "This run was held because its changes hit blocking rules ({rules}). Releasing it marks it complete with your sign-off.",
+    "releaseConfirmLabel": "Release",
+    "released": "Released by you",
+    "releaseRefused": "This run could not be released: it is no longer held.",
+    "overridesHeading": "Overrides ignored",
+    "overrides": {
+      "unknownKey": "Unknown setting “{section}”",
+      "invalid": "Invalid value in “{section}”",
+      "invalidRoot": "The policy file is not a JSON object",
+      "invalidJson": "The policy file is not valid JSON",
+      "unsafeRegex": "Unsafe pattern in “{section}”",
+      "unreadable": "The policy file could not be read[[ ({reason})]]",
+      "truncated": "{count} more not shown"
     }
   }
 }

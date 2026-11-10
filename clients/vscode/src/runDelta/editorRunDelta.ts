@@ -9,6 +9,8 @@
  */
 
 import type { LocalFirstStore } from "@builderforce/local-first";
+import type { RunDeltaCardPayload } from "@builderforce/run-delta";
+import { getRunSnapshot } from "@seanhogg/builderforce-brain-embedded";
 import type * as vscode from "vscode";
 import type { RunHostMessage, RunSink } from "../brainRunHostProtocol";
 import { hostLog } from "../hostLog";
@@ -17,7 +19,8 @@ import type { BaselineCaptureOptions } from "../runChangeBaseline";
 import type { FinalizedRunChangeSets } from "../runChangeSets";
 import { RUN_DELTA_BUDGET_MS, startRunDelta } from "./finalizeRunDelta";
 import { runDeltaFile, type OpenCodeRequest } from "./openCode";
-import { readRunDeltas, type RunDeltaCard } from "./runDeltaRecords";
+import { createRunDeltaProgress, lastReplySince } from "./runDeltaProgress";
+import { readRunDeltas } from "./runDeltaRecords";
 import { createRunHoldGate, type RunHoldGate } from "./runHoldGate";
 
 type DeltaHost = typeof import("./runDeltaHost");
@@ -38,7 +41,8 @@ export interface EditorRunDelta {
   onFinalized(run: { chatId: number; mode: "interactive" | "autonomous"; writes?: () => readonly string[] | undefined; workspaceRoot?: string }):
     (closed: FinalizedRunChangeSets) => void;
   attach(sink: RunSink): () => void;
-  runDeltas(query: { runId?: string; chatId?: number }): Promise<RunDeltaCard[]>;
+  /** `run-delta/get`: the stored cards, plus the pending / failed card of a run still measuring (or that failed to). */
+  runDeltas(query: { runId?: string; chatId?: number }): Promise<RunDeltaCardPayload[]>;
   /** A card's Open code: the confined absolute file (`openCode.ts`), or undefined when refused. */
   openFile(request: OpenCodeRequest): Promise<string | undefined>;
   /** Posts a run's stored cards again (after its release, §12.5: they read back `released`). */
@@ -58,12 +62,14 @@ export function editorRunDelta(args: {
   const loadHost = (): Promise<DeltaHost> => (host ??= import("./runDeltaHost"));
   // The `run-delta/card` relay: every attached panel hears a stored delta (it shows it when it holds that chat).
   const sinks = new Set<RunSink>();
-  const post = (card: RunDeltaCard): void => {
+  // Pending → computed (or failed) cards, one lifecycle per run (`runDeltaProgress.ts`).
+  const progress = createRunDeltaProgress((card) => {
     const message: RunHostMessage = { type: "run-delta/card", ...card };
     for (const sink of sinks) {
       try { sink.post(message); } catch { /* a disposed panel; its detach follows */ }
     }
-  };
+  });
+  const post = progress.post;
   const gate = createRunHoldGate({
     budgetMs: RUN_DELTA_BUDGET_MS,
     onTimeout: (runId, ms) => log(`run ${runId}`, new Error(`run_hold_gate: no settled delta within ${ms} ms; the run is not held`)),
@@ -103,6 +109,9 @@ export function editorRunDelta(args: {
       return (closed) => {
         const written = writes?.();
         const hold = run.mode === "autonomous" ? gate.port(closed.runId) : undefined;
+        // The reply the run produced anchors its card; the pending card is posted now, before anything is computed.
+        const at = lastReplySince(getRunSnapshot(run.chatId).appended, closed.baseline.capturedAt);
+        const measured = progress.begin({ chatId: run.chatId, runId: closed.runId, ...(at !== undefined ? { at } : {}), repos: closed.committed.length });
         void loadHost().then((h) => startRunDelta({
           store: args.store,
           deviceId: args.deviceId,
@@ -111,9 +120,10 @@ export function editorRunDelta(args: {
           post,
           telemetry: h.deltaTelemetry(hostLog),
           onError: (error) => log(`run ${closed.runId}`, error),
-        }, { ...run, closed, ...(written ? { writes: written } : {}), ...(hold ? { hold } : {}) }), (error: unknown) => {
+        }, { ...run, closed, ...(at !== undefined ? { at } : {}), ...(written ? { writes: written } : {}), ...(hold ? { hold } : {}) }).finally(measured), (error: unknown) => {
           log("load", error);
           hold?.settled();
+          measured();
         });
       };
     },
@@ -121,7 +131,7 @@ export function editorRunDelta(args: {
       sinks.add(sink);
       return () => { sinks.delete(sink); };
     },
-    runDeltas: (query) => readRunDeltas(args.store, query),
+    runDeltas: async (query) => progress.withProgress(query, await readRunDeltas(args.store, query)),
     openFile: (request) => runDeltaFile(args.store, request),
     async repost(runId) {
       for (const card of await readRunDeltas(args.store, { runId })) post(card);

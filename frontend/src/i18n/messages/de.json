@@ -39033,6 +39033,26 @@
       "backreference": "Rückverweis",
       "nestedQuantifier": "verschachtelter Quantor",
       "quantifiedAlternation": "quantifizierte Alternative"
+    },
+    "pendingCard": "Messe, was dieser Lauf verändert hat …",
+    "failedCard": "Nicht gemessen: Was dieser Lauf verändert hat, konnte nicht gemessen werden.",
+    "held": "Angehalten: Prüfung nötig",
+    "heldRules": "Blockiert durch {rules}",
+    "releaseRun": "Lauf freigeben",
+    "releaseConfirmTitle": "Diesen Lauf freigeben?",
+    "releaseConfirmMessage": "Dieser Lauf wurde angehalten, weil seine Änderungen blockierende Regeln ausgelöst haben ({rules}). Mit der Freigabe wird er mit deiner Zustimmung als abgeschlossen markiert.",
+    "releaseConfirmLabel": "Freigeben",
+    "released": "Von dir freigegeben",
+    "releaseRefused": "Dieser Lauf konnte nicht freigegeben werden: Er ist nicht mehr angehalten.",
+    "overridesHeading": "Ignorierte Überschreibungen",
+    "overrides": {
+      "unknownKey": "Unbekannte Einstellung „{section}“",
+      "invalid": "Ungültiger Wert in „{section}“",
+      "invalidRoot": "Die Richtliniendatei ist kein JSON-Objekt",
+      "invalidJson": "Die Richtliniendatei ist kein gültiges JSON",
+      "unsafeRegex": "Unsicheres Muster in „{section}“",
+      "unreadable": "Die Richtliniendatei konnte nicht gelesen werden[[ ({reason})]]",
+      "truncated": "{count} weitere nicht angezeigt"
     }
   }
 }
