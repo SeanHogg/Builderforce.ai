@@ -24,7 +24,7 @@
 import { isFailedToolResult } from '../brainTriage';
 import type { PolicyContext } from '@builderforce/agent-run';
 import { linkedTicketsToComplete, linkedTicketsReviewedComplete, linkedTicketsToAdvance } from '../chatWorkLinking';
-import { recordCodeChangeTicket, retitleShippedDeltaTicket, updateLinkedTickets } from './runBackstops';
+import { localTicketsFiledInRun, recordCodeChangeTicket, retitleShippedDeltaTicket, updateLinkedTickets, updateRunLocalTickets } from './runBackstops';
 import { recordShipReview, verificationOf, type CloseOutInput } from '../run/brainCloseOut';
 import type { BrainRunContext } from './brainRunContext';
 import type { BrainRunRequest } from './runTypes';
@@ -88,6 +88,8 @@ export async function deterministicFinish(
   // in_progress — after the mint, so a freshly minted review-status ticket is never touched.
   if (needsTicket) {
     await updateLinkedTickets(input.serverChatId, view, fullReq, linkedTicketsToAdvance, 'in_progress', 'worked-ticket-off-backlog');
+    // …and the tickets this run filed on the device, which the account's listing cannot see yet.
+    await updateRunLocalTickets(input.trace, view, fullReq, 'in_progress', 'worked-ticket-off-backlog');
   }
 
   // 1. Shipped: re-title the delta ticket (PRD 45 §4.7 B9), then close it out. The acceptance the
@@ -137,6 +139,8 @@ export async function deterministicFinish(
     input.view.note?.({ ts: nowIso(), category: 'tool', label: 'builtin_tasks_update', durationMs: nowMs() - start, args, result: out ?? null, isError: isFailedToolResult(out) });
     if (!isFailedToolResult(out)) result.ticketClosed = true;
   }
+  // The run's LOCAL tickets close on the same finish: read from its own record, moved with `ticket-move`.
+  if ((await updateRunLocalTickets(input.trace, view, fullReq, 'done', 'shipped-to-base-branch')) > 0) result.ticketClosed = true;
 
   // 3. The Studio's equivalent of a verified push: a "complete" review after a passing preview
   // inspection of THIS run's last change. Closes exactly the tickets that were reviewed.
@@ -167,10 +171,12 @@ function shippedOf(run: BrainRunContext): boolean {
     shippedToBaseBranch(runTrace(run.c), { touchedFiles: run.c.touchedFiles });
 }
 
-/** Does the run hold a LINKED ticket to close out — one the chat carries? */
+/** Does the run hold a LINKED ticket to close out — one the chat carries, or one it filed on the device? */
 async function hasLinkedTicket(run: BrainRunContext): Promise<boolean> {
   const { req, serverChatId } = run;
-  if (serverChatId == null || !req.runTool) return false;
+  if (!req.runTool) return false;
+  if (localTicketsFiledInRun(runTrace(run.c)).length > 0) return true;
+  if (serverChatId == null) return false;
   let listed: unknown;
   try { listed = await req.runTool('builtin_chats_list_tickets', { chatId: serverChatId }); } catch { return false; }
   return linkedTicketsToComplete(listed).length > 0;
@@ -206,7 +212,11 @@ export function withDeterministicFinish<T extends InnerFinishHook>(run: BrainRun
   return {
     ...inner,
     gate: async (ctx: PolicyContext) => {
-      await finishCloseOut(run).catch(() => undefined);
+      // Best-effort: a close-out failure must not refuse the finish (the gate below is the
+      // authority), but the reason is surfaced so a failed close-out is diagnosable, not silent.
+      await finishCloseOut(run).catch((reason: unknown) => {
+        console.warn('deterministic-finish close-out failed', reason);
+      });
       return inner.gate(ctx);
     },
   };

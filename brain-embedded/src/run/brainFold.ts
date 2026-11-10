@@ -47,14 +47,23 @@ function linkedAbort(parent: AbortSignal | undefined): { signal: AbortSignal; ab
 
 /**
  * The summary, or null once `ms` have passed (the call is aborted, `onLate` says so). Null is the summarizer's own "failed"
- * answer, so the caller falls back exactly as it does for any failed summary. The timer is always cleared.
+ * answer, so the caller falls back exactly as it does for any failed summary. The timer is always cleared. A failed summary
+ * is reported through `onError` so a persistently failing summarizer is diagnosable, never silently swallowed.
  */
-async function summaryWithin(ms: number, summarize: (signal: AbortSignal) => Promise<string | null>, parent: AbortSignal | undefined, onLate: () => void): Promise<string | null> {
+async function summaryWithin(ms: number, summarize: (signal: AbortSignal) => Promise<string | null>, parent: AbortSignal | undefined, onLate: () => void, onError?: (reason: unknown) => void): Promise<string | null> {
   const link = linkedAbort(parent);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const late = new Promise<'late'>((resolve) => { timer = setTimeout(() => resolve('late'), ms); });
   try {
-    const out = await Promise.race([summarize(link.signal).catch(() => null), late]);
+    // A failed summary is answered exactly as the caller falls back for any failed summary; the reason is named and
+    // reported (not a bare `() => null` swallow) so it reads as a deliberate refusal, not a silent drop.
+    const out = await Promise.race([
+      summarize(link.signal).catch((reason: unknown): null => {
+        onError?.(reason);
+        return null;
+      }),
+      late,
+    ]);
     if (out !== 'late') return out;
     link.abort();
     onLate();
@@ -111,6 +120,17 @@ export function brainCompaction(run: BrainRunContext): BrainCompaction {
                   label: 'context.fold_timeout',
                   args: { step: ctx.step, waitedMs: limit, messages: msgs.length },
                   result: 'The context summary did not finish in time; this run goes on with the most recent history instead.',
+                });
+              },
+              // A failed summary (not a timeout) is still a `null` fallback, but the reason is traced so a persistently
+              // failing summarizer is diagnosable, never silently dropped.
+              (reason) => {
+                pushTrace(c, {
+                  ts: nowIso(),
+                  category: 'message',
+                  label: 'context.fold_error',
+                  args: { step: ctx.step, messages: msgs.length },
+                  result: `The context summary failed: ${reason instanceof Error ? reason.message : String(reason)}. This run goes on with the most recent history instead.`,
                 });
               },
             );
