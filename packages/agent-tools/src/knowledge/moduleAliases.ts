@@ -23,6 +23,8 @@
  */
 
 import { resolveRelativePath } from '@seanhogg/builderforce-memory/knowledge';
+import { parseJsonc } from './jsonc.js';
+import { dirOf, joinRootPath } from './systemPaths.js';
 
 /** The file names a directory's config is read from, in order (the first one present wins). */
 export const ALIAS_CONFIG_FILES = ['tsconfig.json', 'jsconfig.json'] as const;
@@ -82,51 +84,11 @@ export interface ParsedAliasConfig {
     paths?: Record<string, string[]>;
 }
 
-export const dirOf = (path: string): string => {
-    const i = path.lastIndexOf('/');
-    return i < 0 ? '' : path.slice(0, i);
-};
-
-/** `base` joined with `rel`, `.` and `..` folded; undefined when it leaves the root. */
-export function joinRootPath(base: string, rel: string): string | undefined {
-    const out: string[] = base ? base.split('/').filter(Boolean) : [];
-    for (const seg of rel.replace(/\\/g, '/').split('/')) {
-        if (!seg || seg === '.') continue;
-        if (seg === '..') {
-            if (out.length === 0) return undefined;
-            out.pop();
-        } else out.push(seg);
-    }
-    return out.join('/');
-}
-
-/** JSONC → JSON: comments and trailing commas removed, string contents untouched. */
-function stripJsonc(text: string): string {
-    let out = '';
-    for (let i = 0; i < text.length; i += 1) {
-        const c = text[i]!, n = text[i + 1];
-        if (c === '"') {
-            let j = i + 1;
-            while (j < text.length && text[j] !== '"') j += text[j] === '\\' ? 2 : 1;
-            out += text.slice(i, j + 1);
-            i = j;
-        } else if (c === '/' && n === '/') {
-            while (i < text.length && text[i] !== '\n') i += 1;
-            out += '\n';
-        } else if (c === '/' && n === '*') {
-            const end = text.indexOf('*/', i + 2);
-            i = end < 0 ? text.length : end + 1;
-        } else out += c;
-    }
-    return out.replace(/,(\s*[}\]])/g, '$1');
-}
-
 const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : typeof v === 'string' ? [v] : []);
 
 /** A config's text, parsed; undefined when it is not an object even as JSONC. */
 export function parseConfigText(text: string): ParsedAliasConfig | undefined {
-    let value: unknown;
-    try { value = JSON.parse(stripJsonc(text.replace(/^﻿/, ''))); } catch { return undefined; }
+    const value = parseJsonc(text);
     if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
     const v = value as { extends?: unknown; references?: unknown; compilerOptions?: { baseUrl?: unknown; paths?: unknown } };
     const references = Array.isArray(v.references)

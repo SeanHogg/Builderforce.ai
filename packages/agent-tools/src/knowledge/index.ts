@@ -9,7 +9,7 @@
  */
 
 export {
-    CODE_LAYERS, CODE_PARTITIONS_FILE, codeParser, createCodePack, isCodePath, loadCodePartitions,
+    CODE_LAYERS, CODE_PARTITIONS_FILE, codeParser, createCodePack, isCodePackPath, isCodePath, loadCodePartitions,
     type CodePackDeps, type SymbolSource,
 } from './codePack.js';
 export { knowledgePacks } from './knowledgePacks.js';

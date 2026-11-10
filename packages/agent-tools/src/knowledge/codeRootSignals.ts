@@ -20,7 +20,7 @@ import { hashText } from '@seanhogg/builderforce-memory/ingest';
 import { readCoverage, type CoverageRoot, type CoverageSkip } from './codeCoverage.js';
 import { codeFileNode, CODE_BADGES, ROOT_OUTPUT_HASH_PREFIX, ROOT_SIGNALS_REF } from './codeNodes.js';
 import { CODEOWNERS_LOCATIONS, ownersFor, parseCodeOwners } from './codeOwners.js';
-import { isCodePath } from './codePack.js';
+import { isCodePackPath } from './codePack.js';
 import type { KnowledgeFs } from './fsDirectorySource.js';
 import { CHURN_DAYS, churnOf, HISTORY_DAYS, HISTORY_MAX_COMMITS, type HistoryCommit, type HistoryPort } from './historyPort.js';
 import { slashPath } from './rootRelative.js';
@@ -63,7 +63,8 @@ async function readOwners(fs: KnowledgeFs, rootPath: string, paths: readonly str
 
 /** Reads the signals for `candidates` (root-relative paths the review saw); results for files outside its code files are dropped. */
 export async function readRootSignals(deps: RootSignalsDeps, candidates: readonly string[]): Promise<RootSignals> {
-    const paths = candidates.filter(isCodePath);
+    // Every file the code pack reads gets churn / owner / coverage — deploy descriptors as well as source.
+    const paths = candidates.filter(isCodePackPath);
     const [coverage, commits, owners, entries] = await Promise.all([
         deps.files ? settled(() => readCoverage(deps.files!), { values: new Map<string, number>(), skipped: [] as CoverageSkip[] }) : { values: new Map<string, number>(), skipped: [] as CoverageSkip[] },
         // ONE history read serves churn (its last CHURN_DAYS) and co-change (all of it).

@@ -5,9 +5,10 @@
  */
 
 import {
-    ALIAS_CONFIG_FILES, MAX_CONFIG_HOPS, aliasesOf, dirOf, extendsCandidates, parseConfigText, referenceCandidates,
+    ALIAS_CONFIG_FILES, MAX_CONFIG_HOPS, aliasesOf, extendsCandidates, parseConfigText, referenceCandidates,
     type ModuleAliases, type ParsedAliasConfig,
 } from './moduleAliases.js';
+import { dirOf } from './systemPaths.js';
 
 /** Reads a root-relative file's text; undefined when it is absent or unreadable. */
 export type ReadConfigText = (path: string) => Promise<string | undefined>;

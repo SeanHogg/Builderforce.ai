@@ -1,7 +1,21 @@
 /**
- * knowledge/systemPaths.ts — the root-relative path helpers systems detection and copy
- * detection share (PRD 41 A9). Paths are `/`-separated, with no leading or trailing slash.
+ * knowledge/systemPaths.ts — THE root-relative path helpers of the knowledge package: systems and copy detection
+ * (PRD 41 A9), module-alias resolution and deploy descriptors share them. Paths are `/`-separated, with no leading or
+ * trailing slash.
  */
+
+/** `base` joined with `rel`, `.` and `..` folded; undefined when it leaves the root. */
+export function joinRootPath(base: string, rel: string): string | undefined {
+    const out: string[] = base ? base.split('/').filter(Boolean) : [];
+    for (const seg of rel.replace(/\\/g, '/').split('/')) {
+        if (!seg || seg === '.') continue;
+        if (seg === '..') {
+            if (out.length === 0) return undefined;
+            out.pop();
+        } else out.push(seg);
+    }
+    return out.join('/');
+}
 
 export const slash = (p: string): string => p.replace(/\\/g, '/').replace(/^\.?\/+/, '').replace(/\/+$/, '');
 export const dirOf = (p: string): string => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '');

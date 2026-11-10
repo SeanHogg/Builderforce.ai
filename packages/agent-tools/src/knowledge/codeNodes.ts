@@ -10,6 +10,7 @@
 import { canonicalJson, COCHANGE_BADGE, srcRef, type Extracted, type KEdge, type KNode, type NodeRef } from '@seanhogg/builderforce-memory/knowledge';
 import { areaOfPath } from '@seanhogg/builderforce-memory/working';
 import { hashText } from '@seanhogg/builderforce-memory/ingest';
+import { baseOf } from './systemPaths.js';
 
 export const CODE_PACK_ID = 'code';
 
@@ -55,6 +56,8 @@ export const CODE_BADGES = {
     entry: 'entry',
     /** Comma-joined ids of the known external services the file imports (`postgres,llm`), from `externalServices.ts` (deterministic). */
     externals: 'externals',
+    /** Comma-joined concurrency the file starts (`durable-object:ChatRoom,poller`), from `codeConcurrency.ts` (deterministic). */
+    concurrency: 'concurrency',
 } as const;
 
 /**
@@ -66,7 +69,6 @@ export const CODE_BADGES = {
  */
 export const ROOT_OUTPUT_HASH_PREFIX = '~';
 
-const basenameOf = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
 
 /** A code `file` node. `sourceHash` only from the per-file parser (see {@link ROOT_OUTPUT_HASH_PREFIX}). */
 export function codeFileNode(
@@ -77,7 +79,7 @@ export function codeFileNode(
     const area = areaOfPath(path);
     const badges = opts.badges && Object.keys(opts.badges).length > 0 ? opts.badges : undefined;
     return {
-        ref: srcRef(rootId, path), kind: 'file', label: basenameOf(path) || path, pack: CODE_PACK_ID,
+        ref: srcRef(rootId, path), kind: 'file', label: baseOf(path) || path, pack: CODE_PACK_ID,
         ...(area ? { area: srcRef(rootId, area) } : {}),
         importance: 0, origin: 'extracted',
         ...(opts.sourceHash ? { sourceHash: opts.sourceHash } : {}),
@@ -96,7 +98,6 @@ export function rootLevelExtracted(tag: string, node: KNode, edges: KEdge[]): Ex
     return { sourceRef, sourceHash: `${ROOT_OUTPUT_HASH_PREFIX}${tag}:${hashText(canonicalJson(body))}`, ...body };
 }
 
-export { basenameOf };
 
 /**
  * The `sourceRef` of the ONE root-level Extracted that carries a review's signals (coverage,

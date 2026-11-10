@@ -8,6 +8,8 @@
  *     symbols as exact keys, and the file → file rollup of its symbol-level edges
  *     (`codeRollup`: extends/implements/composes/uses/calls). No symbol nodes. Cross-file `references` cannot be seen from
  *     one file, so they come root-level from the analyzers ({@link repoGraphToExtracted});
+ *   • a second parser, for deploy descriptors (`deploy/deployParser`): Dockerfile, compose, wrangler, k8s, Procfile,
+ *     fly, vercel, serverless, package.json and GitHub workflows become deployable-unit entities (the 4+1 Physical view);
  *   • partitions — {@link CODE_LAYERS}, the N-layer default, overridable by
  *     `.builderforce/partitions.json` through {@link loadCodePartitions};
  *   • findings — memory's generic ones plus {@link CODE_FINDING_RULES};
@@ -29,7 +31,10 @@ import { CODE_FINDING_RULES } from './codeFindings.js';
 import { fileRollup } from './codeRollup.js';
 import type { ModuleResolution } from './moduleAliases.js';
 import { codeLanguageOf, isShellPath } from './codeMask.js';
-import { basenameOf, CODE_BADGES, CODE_PACK_ID, codeFileNode } from './codeNodes.js';
+import { CODE_BADGES, CODE_PACK_ID, codeFileNode } from './codeNodes.js';
+import { baseOf } from './systemPaths.js';
+import { descriptorKindOf } from './deploy/deployModel.js';
+import { deployParser } from './deploy/deployParser.js';
 
 /** Where a project overrides the code layers. */
 export const CODE_PARTITIONS_FILE = '.builderforce/partitions.json';
@@ -51,13 +56,18 @@ export function isCodePath(path: string): boolean {
     return language !== undefined && !NOT_CODE.has(language) && !GENERATED.test(path);
 }
 
+/** True when the code pack reads `path` at all: source code ({@link isCodePath}) or a deploy descriptor. THE count of the pack's files. */
+export function isCodePackPath(path: string): boolean {
+    return isCodePath(path) || descriptorKindOf(path) !== undefined;
+}
+
 /** A file's definitions. Default: the ONE regex extractor; a host with a warm index (tree-sitter) passes its own. */
 export type SymbolSource = (path: string, content: string) => readonly CodeSymbol[];
 
 const textOf = (source: SourceDocument): string => (source.content.kind === 'text' ? source.content.text : '');
 
 function keysOf(path: string, exported: readonly string[]): string[] {
-    const base = basenameOf(path);
+    const base = baseOf(path);
     const keys = [path, base.toLowerCase(), normalizeKey(base.replace(/\.[^.]+$/, ''))];
     for (const name of exported) keys.push(name, normalizeKey(name));
     return [...new Set(keys.filter(Boolean))];
@@ -130,7 +140,8 @@ export interface CodePackDeps {
 export function createCodePack(deps: CodePackDeps = {}): KnowledgePack {
     return {
         id: CODE_PACK_ID,
-        parsers: [codeParser(deps.symbolsOf, deps.modules)],
+        // The source-code parser stays first (`seedCode` takes `parsers[0]`); deploy descriptors are the second.
+        parsers: [codeParser(deps.symbolsOf, deps.modules), deployParser()],
         partitions: deps.partitions ?? CODE_LAYERS,
         findings: [...CODE_FINDING_RULES],
         ...(deps.analyzers ? { analyzers: deps.analyzers } : {}),

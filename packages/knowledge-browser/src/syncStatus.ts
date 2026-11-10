@@ -13,7 +13,7 @@
  *            signals skipped); absent when none was recorded = unknown, not "none".
  */
 
-import { CODE_BADGES, graphCounts, isCodePath, reviewRecordStore, type RecordPersistence, type ReviewRecord } from '@builderforce/agent-tools/knowledge';
+import { CODE_BADGES, graphCounts, isCodePackPath, reviewRecordStore, type RecordPersistence, type ReviewRecord } from '@builderforce/agent-tools/knowledge';
 import { isDocumentPath, type KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { SyncStatus } from '@builderforce/knowledge-graph-view';
 
@@ -56,7 +56,7 @@ export interface BrowserSyncInput {
 
 /** The local store's counts from the reviewed files (root-relative paths) its manifest lists. */
 export function localCountsOf(paths: readonly string[]): Counts {
-  return { files: paths.filter(isCodePath).length, docs: paths.filter(isDocumentPath).length };
+  return { files: paths.filter(isCodePackPath).length, docs: paths.filter(isDocumentPath).length };
 }
 
 export function browserSyncStatus(input: BrowserSyncInput): SyncStatus {

@@ -8,8 +8,10 @@
 
 import { extractSymbols, MAX_SYMBOLS_PER_FILE, type CodeSymbol } from '../symbols.js';
 import { cyclomaticComplexity } from './codeComplexity.js';
+import { concurrencyBadge } from './codeConcurrency.js';
 import { codeLanguageOf, maskSource } from './codeMask.js';
-import { basenameOf, CODE_BADGES } from './codeNodes.js';
+import { CODE_BADGES } from './codeNodes.js';
+import { baseOf } from './systemPaths.js';
 import { importSpecifiers, patternsBadge } from './codePatterns.js';
 import { routesBadge } from './codeRoutes.js';
 import { externalsBadge, runtimeSpecifiers } from './externalServices.js';
@@ -18,7 +20,7 @@ import { externalsBadge, runtimeSpecifiers } from './externalServices.js';
 const ROUTE_LANGUAGES: ReadonlySet<string> = new Set(['js']);
 
 const baseNameOf = (path: string): string => {
-    const base = basenameOf(path);
+    const base = baseOf(path);
     const dot = base.lastIndexOf('.');
     return dot > 0 ? base.slice(0, dot) : base;
 };
@@ -46,6 +48,9 @@ export function contentBadges(path: string, text: string, symbols: readonly Code
     const imports = importSpecifiers(code);
     const externals = externalsBadge(runtimeSpecifiers(code));
     if (externals) badges[CODE_BADGES.externals] = externals;
+    // Strings blanked too: `"new Worker("` in a message is no thread.
+    const concurrency = concurrencyBadge(bare, imports);
+    if (concurrency) badges[CODE_BADGES.concurrency] = concurrency;
     // The detector's own counts, stored so the god-module finding can show what tripped it.
     const lines = lineCountOf(text);
     // The symbol index is capped per file, but the detector needs the TRUE number of exports: rescan uncapped only for a file that hit the cap.

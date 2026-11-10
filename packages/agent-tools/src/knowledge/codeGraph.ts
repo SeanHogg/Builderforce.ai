@@ -27,6 +27,7 @@ import { isDefaultLayers, placeLayers, placedLayerRegistry, type LayerPlacement 
 import { CODE_BADGES, CODE_PACK_ID, ROOT_OUTPUT_HASH_PREFIX, ROOT_SIGNALS_REF } from './codeNodes.js';
 import { sourcePathOf } from './rootId.js';
 import { repointRollupEdges } from './codeRollup.js';
+import { repointDeployEdges } from './deploy/deployGraph.js';
 
 const isCodeFile = (n: KNode): boolean => n.pack === CODE_PACK_ID && n.kind === 'file';
 
@@ -93,8 +94,10 @@ export function buildCodeGraph(input: BuildGraphInput, opts?: BuildGraphOptions)
     const pack = input.packs.find((p) => p.id === CODE_PACK_ID);
     if (!pack) return buildGraph(input, opts);
     // The symbol-edge rollup names its target by the import as written; only here is the set of files known (codeRollup.ts).
+    // So does a deploy unit's edge to the folder or module it ships (deploy/deployGraph.ts).
     const signalsFree = withoutOrphanSignals(input.extracted);
-    const extracted = repointRollupEdges(input.rootId, signalsFree, codePaths(input.rootId, signalsFree));
+    const paths = codePaths(input.rootId, signalsFree);
+    const extracted = repointDeployEdges(input.rootId, repointRollupEdges(input.rootId, signalsFree, paths), paths);
     if (!isDefaultLayers(pack.partitions)) return buildGraph({ ...input, extracted }, opts);
     const placed = placeLayers(placementInput(input.rootId, extracted));
     return buildGraph(
