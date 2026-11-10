@@ -120,8 +120,21 @@ export interface FileEditResult {
     staled: boolean;
 }
 
+/** A {@link FileEditResult} with the reviewed file's content hash NOW (memory `contentHash`; '' = deleted). */
+export interface FileEditOutcome extends FileEditResult {
+    hash?: string;
+}
+
 /** Reviewed files changed on disk: mark their knowledge stale at the new hashes, re-extract them, move the graph's hashes. */
 export async function markFilesEdited(ports: FileEditPorts, rawPaths: readonly string[]): Promise<FileEditResult[]> {
+    return (await markFilesEditedDetailed(ports, rawPaths)).map(({ hash: _hash, ...r }) => r);
+}
+
+/**
+ * {@link markFilesEdited}, with each reviewed file's hash as read for the edit — so a caller that needs it (the fact index)
+ * never reads and hashes the file a second time.
+ */
+export async function markFilesEditedDetailed(ports: FileEditPorts, rawPaths: readonly string[]): Promise<FileEditOutcome[]> {
     const { rootId, store } = ports;
     const paths = [...new Set(rawPaths.map(normalizePath))];
     const reviewed = await reviewedHashes(ports.manifest, rootId);
@@ -129,7 +142,7 @@ export async function markFilesEdited(ports: FileEditPorts, rawPaths: readonly s
     const current = new Map(reviewed);
     for (const [id, edit] of edits) current.set(id, edit.hash);
 
-    const results: FileEditResult[] = [];
+    const results: FileEditOutcome[] = [];
     const changed: Array<{ path: string; hash: string; bytes: Uint8Array | undefined }> = [];
     const root = ports.rootPath.replace(/\\/g, '/').replace(/\/+$/, '');
     for (const path of paths) {
@@ -138,7 +151,7 @@ export async function markFilesEdited(ports: FileEditPorts, rawPaths: readonly s
         // The listing's ONE content hash (EOL-normalized): a CRLF file the editor saved is not "changed" by its line endings alone.
         const hash = bytes ? contentHash(bytes) : '';
         const staled = current.get(path) !== hash;
-        results.push({ path, reviewed: true, staled });
+        results.push({ path, reviewed: true, staled, hash });
         if (staled) changed.push({ path, hash, bytes });
     }
     if (changed.length === 0) return results;

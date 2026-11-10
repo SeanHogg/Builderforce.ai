@@ -45,7 +45,7 @@ import { boundedDelete, type PurgeStatement } from './boundedPurge';
 import { rollUpToolAudit, TOOL_AUDIT_ROLLUP_AFTER_DAYS } from './toolAuditRollup';
 import { rollUpLlmUsage, LLM_USAGE_ROLLUP_AFTER_DAYS } from './llmUsageRollup';
 import { VISITOR_RETENTION_DAYS, purgeVisitorActivity } from '../marketing/visitorActivity';
-import { BOUNDED_TELEMETRY_TABLES, EXPIRED_CREDENTIAL_TABLES, OPERATIONAL } from './sweptTablesBounded';
+import { BOUNDED_TELEMETRY_TABLES, EXPIRED_CREDENTIAL_TABLES, OPERATIONAL, RUN_DELTA_TABLES, RUN_OUTCOME_TABLES } from './sweptTablesBounded';
 import { DAY_MS, MINUTE_MS } from '../../domain/shared/time';
 import { SYNC_CHANGE_RETENTION_DAYS, SYNC_EVENT_RETENTION_DAYS } from '../../domain/sync/syncRetention';
 import {
@@ -622,6 +622,8 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   // Append-only feeds that had no window, and credentials past their expiry — declared in
   // their own module so this file stays the registry's contract, not its inventory.
   ...BOUNDED_TELEMETRY_TABLES,
+  ...RUN_DELTA_TABLES,
+  ...RUN_OUTCOME_TABLES,
   ...EXPIRED_CREDENTIAL_TABLES,
 ];
 

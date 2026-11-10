@@ -275,6 +275,13 @@ export interface SyncNamedImporters {
   importSyncedUsage: SyncMutationImporter;
   importSyncedChatTicketLink: SyncMutationImporter;
   importMirrorRecord: SyncMutationImporter;
+  /**
+   * PRD 41 §D1: a run's features, commit attribution and outcome labels
+   * (`application/runOutcomes/importSyncedRunOutcome`). Optional so a unit of work built
+   * without it answers `run-outcome` events `entity_type_rejected` (the push's own fallback
+   * for a missing importer) rather than failing to compile.
+   */
+  importSyncedRunOutcome?: SyncMutationImporter;
 }
 
 /**

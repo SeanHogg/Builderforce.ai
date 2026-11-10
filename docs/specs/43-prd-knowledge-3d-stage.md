@@ -132,7 +132,14 @@ Operator: "you're rendering the same data using different surfaces — render th
 5. **Tween.** Two attribute pairs `(posA, scaleA, extrudeA) → (posB, scaleB, extrudeB)` mixed by a uniform `t` over ≤ 400 ms; reduced motion jumps. Map → Graph: members grow out of their station while it shrinks into the centroid; the reverse collapses them. LOD band changes, unfold and drill use the same mechanism. Labels fade during a tween and are placed after; picking is off during a tween.
 6. **Cache.** Placements are an LRU keyed by graph digest + camera + drill + unfolded + pathId + viewport band + lod band — never selection. Returning to a camera is a buffer swap with no worker trip. Layout never re-runs on a re-render or a scrollbar wobble; the rig re-fits, re-placement happens only when the width crosses a band.
 7. **Map = Transit + Tower, ONE camera (operator: "Combine the Tower / Map — they are the same thing").** Flat home view; the depth control tilts it and extrudes each station into its tower (height = size channel). A tower is the station's silhouette extruded; the coverage ring follows the outline (operator supersedes the mockup's disc). Graph, Mind map, 3D and Sequence are other placements of the SAME marks.
-8. **Every representation is a 3D modelling surface (operator, 2026-11-10: "Even use the 3D graph visuals for sequencing diagrams; every representation is a 3D modeling surface; the sequencing diagram should be composed of the same artifacts that were drawn on the surface").** Sequence is a placement, not a diagram type: its participants ARE the type-shaped marks already on the stage (the stations/nodes on the path), which tween from where they stood into a row; each lifeline is a decoration hanging from that mark; each message is a link between those same slots, ordered along the time axis, with layer climb as depth. Selecting a participant selects the same slot in every camera. The path strip ("where does it go") shows the same marks. System, Heat, 4+1, Style and Features are placements of the same marks too (System = systems as hexagon aggregates on planes; Heat = the marks on a grid, height/tone = heat; 4+1/Style/Features = the marks grouped into their view's planes). **Only List stays DOM** — the accessible list and the no-WebGL fallback.
+8. **Every representation is a 3D modelling surface (operator, 2026-11-10: "Even use the 3D graph visuals for sequencing diagrams; every representation is a 3D modeling surface; the sequencing diagram should be composed of the same artifacts that were drawn on the surface").** Sequence is a placement, not a diagram type: its participants ARE the type-shaped marks already on the stage (the stations/nodes on the path), which tween from where they stood into a row; each lifeline is a decoration hanging from that mark; each message is a link between those same slots, ordered along the time axis, with layer climb as depth. Selecting a participant selects the same slot in every camera. The path strip ("where does it go") shows the same marks. System, Heat, Style and Features are placements of the same marks too (System = systems as hexagon aggregates on planes; Heat = the marks on a grid, height/tone = heat; Style/Features = the marks grouped into their view's planes). **There is no 4+1 camera** (operator, 2026-11-10). 4+1 is a checklist, not a view: every aspect is covered by an existing camera, as recorded in `src/fourPlusOne.ts` and checked by its test.
+- Logical → Graph and the class band.
+- Development → Map and System.
+- Process → Sequence.
+- Scenarios → Sequence from entry points, and Features.
+- Physical → whatever that coverage map proves, or a gap.
+
+The old 4+1 view retires at make-default. **Only List stays DOM** — the accessible list and the no-WebGL fallback.
 
 9. **Semantic zoom is the navigation (operator, 2026-11-10: "at a macro level you see a system (logical grouping — a directory, or DDD/layer associations); then the user zooms in like on a map: the detail reveals composition and associations with Classes; zoom further: Methods; zoom in to reveal the Code").** One continuous zoom on one surface replaces "Go inside" as the primary way down (the card's Go inside becomes a shortcut that animates the same zoom). Four abstraction bands, each a level of the SAME slot forest, entered by screen size of the parent mark, not by a click:
    - **System** — systems/apps (hexagon aggregates) grouped by directory or by DDD context / layer (the grouping scheme is a choice; layers are the planes). Links = system-to-system dependencies, bundled.
@@ -215,7 +222,7 @@ Worker tasks in `protocol.ts` `TaskTable`: `markSet {graph, changed, strings}`, 
 | Mind map | radial folder tree | folder depth, so the tree becomes a cone | fill |
 | 3D | today's scene | free orbit | fill |
 | Sequence | the path's own marks in a row (tweened from the previous camera), lifelines hanging from them, messages as links top to bottom | each stop's layer, so a hop that skips or climbs a layer moves in depth | document |
-| System · Heat · 4+1 · Style · Features | the same marks placed on that view's planes / grid (B1a rule 8) | plane stack; Heat: height = heat | fill |
+| System · Heat · Style · Features (no 4+1 camera: see rule 8) | the same marks placed on that view's planes / grid (B1a rule 8) | plane stack; Heat: height = heat | fill |
 
 - **Every mark is unlit, in flat token colours.** The 3D camera's lit spheres are the only exception.
 - **Tower.** SUPERSEDED by B1a rule 7 (a tower is the station's silhouette extruded). Historical note: the mockup's tower is not a projection of anything: top ellipse 0.44, shadow 0.42, a 6 px right side face in `towerSide`, a brightened top, and an unforeshortened map plane. So the home view draws each tower as an **unlit, screen-facing SDF quad (`towerSprite`)** that reproduces `TowerMark`'s 2D drawing exactly: body, side face, top, shadow, coverage tint, the 2 px fill line, and the dashed shell. When the user tilts into depth, `towerSprite` swaps to the real-geometry `tower` (the 3D camera's cylinders), with height = size channel and the fill band from `fill`/`tone2`.
@@ -359,6 +366,13 @@ Worker tasks are chunked. The protocol carries **priority and cancel**, so an in
 - **Mockup location.** The mockup is the claude.ai artifact https://claude.ai/artifact/BfKJSBrTVErwTd7w2Xz6fx (page `#page-dcb81aee8d83`). Read it with the Artifact tool's `read` action, never by fetching the URL. It is not on disk.
 - **Retirement.** The B8 files are deleted. `rg "<svg" src/graph2d src/map src/surface/transit` finds no scene SVG (icons and legends are exempt).
 
+## Status (2026-11-10, paused by the operator)
+
+- **Committed:** P0b, P0c, P1a, the P1 stage behind `kg.stage=spike`, the P2–P5 placements, 4+1 Physical (deploy units on the System camera) and the `fourPlusOne.ts` coverage map.
+- **Uncommitted, tests red, in the working tree:** P3 Graph parity (built, its own tests pass); make-default/B8 (GraphScene, Towers, shapeMeshes, the 4+1 views and the DOM System/Style bodies deleted; flag removal, `cameras.tsx`, Graph2D/MindMap/transit SVG/panzoom deletion and test migration left); P1b (`useSemanticZoom`, `CodeLayer`, `zoomBand` written but not wired into `useStageWiring`/`StageCard`).
+- **Open outside this package:** the `extractorKey` wiring (memory 2026.10.72) and `EXTRACTOR_VERSION` 7 (uncommitted in builderforce-memory; it ships in the next memory version after 2026.10.80).
+- The full list lives in ROADMAP.md under this PRD.
+
 ## Phases (each one ships)
 
 - **P0:** Part A (in flight).
@@ -369,7 +383,7 @@ Worker tasks are chunked. The protocol carries **priority and cancel**, so an in
 - **P2:** **Mind map** and **Sequence** placements. Update the design-match memory.
 - **P3:** **Graph** to full parity, with bundling, LOD and the `labelPlacement` grid. Delete `Graph2D` and `MindMap`.
 - **P4:** the **3D** camera port. Delete `GraphScene` and `Towers`.
-- **P5:** **System, Heat, 4+1, Style and Features** placements (B1a rule 8). Delete their DOM/SVG scene bodies; List stays DOM.
+- **P5:** **System, Heat, Style and Features** placements (B1a rule 8), plus the 4+1 coverage map (`src/fourPlusOne.ts`) proving that every 4+1 aspect has a camera. Retire the 4+1 view. Delete their DOM/SVG scene bodies; List stays DOM.
 
 ## Deferred to the editing PRD (not built here)
 

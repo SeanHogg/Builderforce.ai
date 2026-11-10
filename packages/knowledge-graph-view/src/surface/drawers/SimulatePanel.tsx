@@ -13,7 +13,8 @@ import { button, muted, primaryButton } from '../../styles';
 import type { PanelProps } from '../registry';
 import { stationNote } from '../pathNotes';
 import { hopRouteLabels } from '../sequenceText';
-import { StepControls } from '../StepControls';
+import { LikelyWalk, StepControls } from '../StepControls';
+import { transitionTableOf } from '../transitionTable';
 import { simulate, stepAt } from '../simulate/simulateModel';
 import { runRequest, saveTestRequest, testFileName } from '../simulate/simulateRequests';
 import { SimulateInputs } from '../simulate/SimulateInputs';
@@ -35,10 +36,14 @@ export function SimulatePanel({ graph, labels, surface, source, rootId, onCompos
     // Another path is another simulation: its edits, stubs and start belong to the old one.
     useEffect(() => { setEdits({}); setStubs(new Set()); setSent(null); setStartAt(0); }, [pathKey]);
     const index = useMemo(() => nodeIndex(graph), [graph]);
+    const transitions = useMemo(() => transitionTableOf(graph, surface.stations), [graph, surface.stations]);
     const steps = useMemo(() => {
         const notes = new Map(stops.flatMap((s) => { const n = stationNote(surface.stations.byId.get(s.id), labels); return n ? [[s.id, n] as const] : []; }));
-        return simulate({ path: { stops: surface.path.stops.slice(startAt), hops: surface.path.hops.slice(startAt) }, recorded: run, edits, stubs, labels, notes, routeLabels: hopRouteLabels(surface.path, surface.stations.byId, index) });
-    }, [surface.path, surface.stations.byId, stops, run, edits, stubs, labels, index, startAt]);
+        return simulate({
+            path: { stops: surface.path.stops.slice(startAt), hops: surface.path.hops.slice(startAt) }, recorded: run, edits, stubs, labels, notes,
+            routeLabels: hopRouteLabels(surface.path, surface.stations.byId, index), transitions, stations: surface.stations.byId,
+        });
+    }, [surface.path, surface.stations.byId, stops, run, edits, stubs, labels, index, startAt, transitions]);
     if (stops.length === 0) return <p style={{ ...muted, margin: 0 }}>{t.pathEmpty}</p>;
 
     const last = stops.length - 1;
@@ -81,6 +86,7 @@ export function SimulatePanel({ graph, labels, surface, source, rootId, onCompos
                 <SimulateInputs run={run} path={surface.path} labels={labels} edits={edits} stubs={stubs} onEdit={edit} onPreset={(v) => { setEdits(v); setSent(null); }} onStub={toggleStub} />
             </Section>
             <SimulateCode step={current} labels={labels} />
+            <LikelyWalk from={stops[at]!.name} hops={current.walk} labels={labels} />
             <SimulateVariables step={current} labels={labels} />
             <SimulateResult step={current} labels={labels} />
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>

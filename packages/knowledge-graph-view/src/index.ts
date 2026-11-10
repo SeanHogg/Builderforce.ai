@@ -10,6 +10,7 @@ export {
 } from './labels';
 export { labelsFromCatalog } from './catalogLabels';
 export * from './delta';
+export * from './delta/history';
 export { setWorkerFactory } from './compute/sharedClient';
 export { buildStations, changedRefs, type Station, type StationModel } from './surface/stations';
 export { buildLines, type Line, type LinesModel } from './surface/lines';
@@ -29,7 +30,7 @@ export type {
     ReviewEstimate, ReviewRequest, ReviewTarget, FactActions, LensId, KnowledgePanelRenderer,
     KnowledgePanelRenderProps, KnowledgeConfirm, KnowledgeBaseline, KnowledgeSnapshot, EvidenceSide,
     SourceLocation, FindingEvidence, ViewMode, PinpointResult, SyncStatus, SkippedFile, TryRequest, TryResponse, SymbolRecord,
-    NotReviewedHere, ReplicaState, ReviewRunsPort, ReviewRunSummary, StoredReviewRun,
+    SourceRange, SourceText, NotReviewedHere, ReplicaState, ReviewRunsPort, ReviewRunSummary, StoredReviewRun,
     AgentRunSeverity, AgentRunSummary, AgentRunTurnKind, AgentRunTurn, AgentRunEvidence, AgentRunFinding, AgentRunFile,
     AgentRunReport, AgentRunsPort,
 } from './types';

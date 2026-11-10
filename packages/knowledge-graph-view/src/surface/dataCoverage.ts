@@ -17,7 +17,7 @@ import { staticReach } from './staticReach';
 import { isCommunityKey, placementKeyOf } from '../placement';
 
 /** The per-file badges the channels, questions and lines read. */
-export const COVERAGE_KEYS = ['complexity', 'coverage', 'churn', 'owner', 'patterns', 'routes', 'layerRule', 'externals'] as const;
+export const COVERAGE_KEYS = ['complexity', 'coverage', 'churn', 'coChange', 'owner', 'patterns', 'routes', 'layerRule', 'externals'] as const;
 export type CoverageKey = (typeof COVERAGE_KEYS)[number];
 
 /** Badges the per-file extractor writes: a file with none of them predates it. */
@@ -59,8 +59,12 @@ export interface DataCoverage {
     channels: Record<CoverageKey, ChannelCoverage>;
 }
 
-/** The badge a metric reads; anti-patterns, usage and changed are always computable (no badge). */
-export const METRIC_KEY: Partial<Record<MetricId, CoverageKey>> = { cx: 'complexity', cov: 'coverage', churn: 'churn', owner: 'owner' };
+/**
+ * The badge a metric reads; anti-patterns, usage and changed are always computable (no badge). Hidden coupling reads
+ * memory's `coChange` partner list: memory drops `coChangeHidden` on a file whose partners all share a reference, so the
+ * list, not the count, says whether history was collected.
+ */
+export const METRIC_KEY: Partial<Record<MetricId, CoverageKey>> = { cx: 'complexity', cov: 'coverage', churn: 'churn', coupling: 'coChange', owner: 'owner' };
 
 const present = (v: unknown): boolean => v !== undefined && v !== null && v !== '';
 

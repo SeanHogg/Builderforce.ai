@@ -12,7 +12,7 @@
 
 import type { AnalyzerPort, AnalyzerProgress, Extracted, PartitionRegistry } from '@seanhogg/builderforce-memory/knowledge';
 import type { CodeAnalysisSnapshot } from '../codeAnalysis.js';
-import { createAnalyzeCodebaseTool } from '../codeAnalysisTool.js';
+import { createAnalyzeCodebaseTool, type AnalyzeCodebaseOptions } from '../codeAnalysisTool.js';
 import type { ToolContext } from '../tool.js';
 import { analysisToExtracted, repoGraphToExtracted, type SerializedRepoGraphShape } from './codeExtracted.js';
 
@@ -45,11 +45,12 @@ export function codeAnalyzers(deps: CodeAnalyzersDeps): AnalyzerPort {
  */
 export async function runCodeAnalysis(
     ctx: ToolContext,
-    opts: { path?: string; partitions?: PartitionRegistry; onToolSettled?(): void } = {},
+    opts: { path?: string; partitions?: PartitionRegistry; onToolSettled?(): void; l3?: AnalyzeCodebaseOptions['l3'] } = {},
 ): Promise<CodeAnalysisSnapshot | null> {
     const tool = createAnalyzeCodebaseTool({
         ...(opts.partitions ? { partitions: opts.partitions } : {}),
         ...(opts.onToolSettled ? { onToolSettled: opts.onToolSettled } : {}),
+        ...(opts.l3 ? { l3: opts.l3 } : {}),
     });
     const result = await tool.execute(opts.path ? { path: opts.path } : {}, ctx);
     const snapshot = result.data['snapshot'];

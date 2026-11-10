@@ -3,6 +3,7 @@
 import type { KindResult } from '../kinds';
 import { lookupOf } from '../stationLookup';
 import { mapBack, type Codec } from './codec';
+import { COMMUNITY_FALLBACK_DEFAULT } from '../../placement';
 
 export const mindMap: Codec<'mindMap'> = {
     encode: ({ nodes, findings, opts }, residency) => {
@@ -15,7 +16,9 @@ export const mindMap: Codec<'mindMap'> = {
 export const surface: Codec<'surface'> = {
     encode: ({ graph, changed, repoConfigName, communityFallback }, residency) => {
         const id = residency.graphId(graph);
-        return { graph: id, req: { graph: id, changed: [...changed], ...(repoConfigName ? { repoConfigName } : {}), ...(communityFallback ? { communityFallback } : {}) } };
+        // The English fallback is the worker's own default (`communityName`): only a localized one crosses.
+        const fallback = communityFallback && communityFallback !== COMMUNITY_FALLBACK_DEFAULT ? { communityFallback } : {};
+        return { graph: id, req: { graph: id, changed: [...changed], ...(repoConfigName ? { repoConfigName } : {}), ...fallback } };
     },
     decode: (raw) => raw,
 };

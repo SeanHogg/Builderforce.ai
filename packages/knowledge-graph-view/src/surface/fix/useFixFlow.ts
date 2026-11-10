@@ -47,6 +47,8 @@ interface Inputs {
     onCompose?: ((text: string) => void) | undefined;
     /** Reload the graph (after an apply, an undo or a resolve changed the code). */
     onChanged?: (() => void) | undefined;
+    /** The test files of the finding's co-change partners (PRD 38 P4): the checks run them too. */
+    partnerTests?: readonly string[] | undefined;
 }
 
 /** The reason text of a failure: our own codes through the catalog, anything else by its message. */
@@ -55,7 +57,7 @@ export function errorText(error: unknown, labels: KnowledgeGraphLabels): string 
     return error instanceof Error && error.message ? error.message : labels.surface.fix.errors.unknown;
 }
 
-export function useFixFlow({ finding, state, dispatch, source, labels, index, onCompose, onChanged }: Inputs): FixFlow {
+export function useFixFlow({ finding, state, dispatch, source, labels, index, onCompose, onChanged, partnerTests }: Inputs): FixFlow {
     const id = finding.id;
     const controller = useRef<AbortController | null>(null);
     // Leaving the finding (or closing the drawer) stops its running check, and with it the process tree.
@@ -91,7 +93,7 @@ export function useFixFlow({ finding, state, dispatch, source, labels, index, on
             return;
         }
         dispatch({ type: 'start', step });
-        const req = { finding, applied: applied ?? { changed: [] } };
+        const req = { finding, applied: applied ?? { changed: [] }, ...(partnerTests && partnerTests.length > 0 ? { partnerTests: [...partnerTests] } : {}) };
         if (step === 'apply') {
             attempt(step, async () => { dispatch({ type: 'applied', applied: await source!.applyFix!(finding) }); onChanged?.(); });
         } else if (step === 'checks') {
@@ -111,7 +113,7 @@ export function useFixFlow({ finding, state, dispatch, source, labels, index, on
         } else {
             attempt(step, async () => { await source!.undoFix!(req); dispatch({ type: 'undone' }); onChanged?.(); });
         }
-    }, [state.applied, source, finding, title, items, labels, onCompose, onChanged, dispatch, attempt]);
+    }, [state.applied, source, finding, title, items, labels, onCompose, onChanged, dispatch, attempt, partnerTests]);
 
     const step = nextStep(state);
     const how: Primary['how'] = mode === 'prompt' ? 'prompt' : step ? stepMode(step, source, finding) : 'host';

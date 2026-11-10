@@ -24,13 +24,25 @@ import type { StatSet } from "@builderforce/agent-tools/knowledge";
 import { buildLocalCapabilityProvider } from "../localCapabilities";
 import { folderKnowledge } from "../knowledge/folderKnowledge";
 import { openRoot, workspaceFolders } from "../knowledge/knowledgeService";
-import { rootForPath } from "../knowledge/knowledgeRoots";
+import { rootForPath, type KnowledgeRoot } from "../knowledge/knowledgeRoots";
 import { rootModules } from "../knowledge/rootModules";
+import type { ModuleAliases } from "@builderforce/agent-tools/knowledge";
+import { repoModulesRoot } from "./repoModules";
 import { emitProductEvent } from "../telemetry/productEvents";
 import type { PreimageSink, StatHashHint } from "../runChangeBaseline";
 import type { DeltaComputedEvent, RepoHostSources } from "./finalizeRunDelta";
 import { repoGit } from "./gitSide";
+import * as vscodeApi from "vscode";
+import { currentCapabilityInputs } from "../capabilityContext";
+import { networkDenied } from "../capabilityStates";
+import { queueL3Task } from "../knowledge/l3Tasks";
+import { osvDatabaseDir } from "./analyzers/analyzerStorage";
+import { analyzeRepo } from "./analyzers/repoAnalyzers";
+import type { L3Scheduler } from "./finalizeRunDelta";
 import { placeRepo, type RepoPlacement } from "./repoPlacement";
+import { predictionShownEvent } from "./runDeltaPredictions";
+import type { PreimageReader } from "./sideTexts";
+import type { Prediction } from "@builderforce/run-delta/predict";
 
 const HEX64 = /^[0-9a-f]{64}$/;
 
@@ -91,18 +103,43 @@ export function statHashHint(): StatHashHint {
  * A repository's knowledge root, opened for the delta (the knowledge view's own store and manifest): its placement folder's
  * root — the one a review indexes — with the repository's place relative to it.
  */
-async function knowledgeOf(secrets: vscode.SecretStorage, placement: RepoPlacement): Promise<RepoHostSources["knowledge"]> {
+/** The repository's own aliases when it is not the knowledge folder itself (`repoModules.ts`), else the folder's. */
+async function sideAliases(kroot: KnowledgeRoot, placement: RepoPlacement, repoRoot: string, folderAliases: ModuleAliases): Promise<ModuleAliases> {
+  const repo = repoModulesRoot(placement, repoRoot, kroot);
+  return repo ? (await rootModules(repo)).aliases : folderAliases;
+}
+
+async function knowledgeOf(secrets: vscode.SecretStorage, placement: RepoPlacement, repoRoot: string): Promise<RepoHostSources["knowledge"]> {
   const kroot = rootForPath(placement.folder, workspaceFolders());
   if (!kroot) return undefined;
   const open = openRoot(secrets, kroot);
   await open.migrated;
   const partitions = await readPartitions({ caps: buildLocalCapabilityProvider(kroot.folderPath) });
   const persistence = persistenceOf(kroot.folderPath);
+  const modules = await rootModules(kroot);
   return {
-    rootId: kroot.rootId, placement, store: open.local, manifest: open.manifest, packs: reviewPacks({ partitions, modules: await rootModules(kroot) }),
+    rootId: kroot.rootId, placement, store: open.local, manifest: open.manifest, packs: reviewPacks({ partitions, modules }),
     generation: () => persistence.getMeta("generation") ?? "0",
+    // The sides' FileFacts are in REPO space: they resolve with the repository's own aliases (a nested repo's tsconfig paths).
+    aliases: await sideAliases(kroot, placement, repoRoot, modules.aliases),
   };
 }
+
+/**
+ * One run's pre-image reader in a repository's knowledge file (bytes by content hash, after the run's writes settle), or
+ * undefined outside every workspace folder. A released run's rows stay readable for the retention (`PREIMAGE_RETENTION_MS`).
+ */
+export function preimageReaderFor(runId: string, root: string): PreimageReader | undefined {
+  const placement = placementOf(root);
+  if (!placement) return undefined;
+  const db = persistenceOf(placement.folder);
+  return async (hashes) => { await writesSettled(runId); return readPreimages(db, hashes); };
+}
+
+/** The naturalness kill switch (`builderforce.runDelta.predict.naturalness`, PRD 41 §D6), for the repository's folder. */
+export const NATURALNESS_SETTING = "runDelta.predict.naturalness";
+export const naturalnessEnabled = (root: string): boolean =>
+  vscodeApi.workspace.getConfiguration("builderforce", vscodeApi.Uri.file(root)).get<boolean>(NATURALNESS_SETTING, true) !== false;
 
 /** Everything one repository root offers one run's delta, each part degrading on its own. */
 export function editorDeltaSources(
@@ -112,14 +149,12 @@ export function editorDeltaSources(
     const placement = placementOf(root);
     let preimages: RepoHostSources["preimages"];
     try {
-      if (placement) {
-        const db = persistenceOf(placement.folder);
-        preimages = { read: async (hashes) => { await writesSettled(runId); return readPreimages(db, hashes); } };
-      }
+      const read = preimageReaderFor(runId, root);
+      if (read) preimages = { read };
     } catch (error) {
       log("pre-image store", error);
     }
-    const knowledge = placement ? await knowledgeOf(secrets, placement).catch((error: unknown) => { log("knowledge facts", error); return undefined; }) : undefined;
+    const knowledge = placement ? await knowledgeOf(secrets, placement, root).catch((error: unknown) => { log("knowledge facts", error); return undefined; }) : undefined;
     return { git: repoGit(root), ...(preimages ? { preimages } : {}), ...(knowledge ? { knowledge } : {}) };
   };
 }
@@ -152,3 +187,33 @@ export function deltaTelemetry(log: (line: string) => void): (event: DeltaComput
     emitProductEvent(event.name, { ...event });
   };
 }
+
+/**
+ * `prediction.shown` (PRD 41 §4): called by the surface that renders a prediction (the card's Predicted block), once per
+ * rendered prediction. Only an `ok`, non-zero prediction is ever rendered, so only that one is counted.
+ */
+export function predictionShown(prediction: Prediction): void {
+  if (prediction.status !== "ok" || !(prediction.value > 0)) return;
+  const event = predictionShownEvent(prediction);
+  emitProductEvent(event.name, { ...event });
+}
+
+/**
+ * The L3 analyzer tier (PRD 41 §B7, §6 step 4) as phase 2 of the delta: the bundled and present tools on both sides —
+ * none in an untrusted workspace (`skipped` / `untrusted-workspace`) — queued on the background indexer's L3 gate. The
+ * offline vulnerability database lives in the extension's storage and is refreshed only while the network is allowed.
+ */
+export const deltaL3: L3Scheduler = {
+  analyze: (root, prepared, signal) => {
+    const dbDir = osvDatabaseDir();
+    return analyzeRepo(root, prepared, {
+      trusted: () => vscodeApi.workspace.isTrusted,
+      codeql: vscodeApi.workspace.getConfiguration("builderforce", vscodeApi.Uri.file(root)).get<boolean>("runDelta.analyzers.codeql", false) === true,
+      ...(dbDir ? { osv: { dbDir, download: !networkDenied(currentCapabilityInputs()) } } : {}),
+    }, signal);
+  },
+  queue: (root, run) => queueL3Task({ root, run }),
+};
+
+/** The optional dynamic tier of one repository (PRD 41 C6.2/C8.4; `dynamicTierHost.ts`). */
+export { deltaDynamicTier } from "./dynamicTierHost";

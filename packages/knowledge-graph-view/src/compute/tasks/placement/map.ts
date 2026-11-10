@@ -14,17 +14,20 @@ import { lineTone, makeOverlay, segmentUntested } from '../../../surface/overlay
 import { towerHeight } from '../../../surface/transit/towerHeight';
 import { layoutTransit } from '../../../surface/transitLayout';
 import { BG_TONE, toneIndex } from '../../../stage/tones';
-import { DASH_SOLID, DASH_UNTESTED, FLAG, type Caption, type LabelRun, type Placement, type PlaneSpec } from '../../../stage/types';
+import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import { DASH_CYCLE, DASH_SOLID, DASH_UNTESTED, FLAG, type Caption, type LabelRun, type Placement, type PlaneSpec } from '../../../stage/types';
 import type { StageModel } from '../stageModel';
 import { anchorHidden, draftFor, show } from './anchor';
 import { linkBatch, type LinkPath } from './links';
+import { mapDecorations } from './mapDecor';
 import { channelBindings, placementKeyOf, VIEWPORT_BANDS, type PlacementReq } from './request';
 
 const CASING_EXTRA = 4;
 const TEXT = toneIndex('text');
 const BAND_TONES = [toneIndex('panel'), toneIndex('bg')];
 
-export function placeMap(model: StageModel, req: PlacementReq): Placement {
+/** `g`: the graph the stations were folded from — the describes links and HTTP walls read it (`mapDecor.ts`); absent = none. */
+export function placeMap(model: StageModel, req: PlacementReq, g?: Pick<KnowledgeGraph, 'nodes' | 'edges'>): Placement {
     const { stations, lines, marks } = model;
     const width = VIEWPORT_BANDS[req.viewportBand] ?? VIEWPORT_BANDS[2]!;
     const layout = layoutTransit(stations.stations, lines.lines, width, model.order ? { order: model.order } : {});
@@ -57,10 +60,12 @@ export function placeMap(model: StageModel, req: PlacementReq): Placement {
         const from = stations.byId.get(r.from), to = stations.byId.get(r.to);
         const untested = !!from && !!to && segmentUntested(from, to) === true;
         const line = lineIndex.get(r.lineId);
+        // Never colour alone: an untested hop dashes 9/7 in the violation tone, a cycle hop dashes 3/5 (the SVG's HopPath).
+        const cycle = line?.hops[r.index]?.cycle === true;
         return {
             pts: r.pts, width: widths.get(r.lineId) ?? neutralWidth, flags: FLAG.SELECTABLE,
             tone: untested ? toneIndex('violation') : toneIndex(lineTone(line?.colourIndex ?? r.index)),
-            dash: untested ? DASH_UNTESTED : DASH_SOLID,
+            dash: untested ? DASH_UNTESTED : cycle ? DASH_CYCLE : DASH_SOLID,
         };
     });
 
@@ -71,7 +76,7 @@ export function placeMap(model: StageModel, req: PlacementReq): Placement {
         generation: marks.generation, cacheKey: placementKeyOf(marks, req), anchor: 'station',
         position: d.position, scale: d.scale, extrude: d.extrude,
         // Each route polyline (`group`) names its line, so a route pick selects the line (as the SVG map's hop does).
-        links: [{ ...linkBatch('route', paths, 0, { tone: BG_TONE, extra: CASING_EXTRA }), lineIds: layout.routes.map((r) => r.lineId) }],
+        links: [{ ...linkBatch('route', paths, 0, { tone: BG_TONE, extra: CASING_EXTRA }), lineIds: layout.routes.map((r) => r.lineId) }, ...(g ? mapDecorations(g, stations, layout) : [])],
         planes, labels, captions, a11y,
         caption: { shown: layout.drawn.length, total: stations.stations.length, capped: layout.drawn.length < stations.stations.length },
         bounds: { min: [0, 0, 0], max: [layout.width, top, layout.height] },

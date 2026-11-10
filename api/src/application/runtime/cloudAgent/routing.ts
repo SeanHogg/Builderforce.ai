@@ -81,9 +81,10 @@ export function requestedModelForRole(
   return resolveModelForRole(role, parseRoleModelConfig(env));
 }
 
-/** The ONE agent commit-message convention (`<Verb> <path> — task #<id> (<agent>)`),
- *  so every write/edit/delete commit reads identically instead of re-inlining the
- *  template at each call site. `suffix` appends an optional reason (e.g. a delete note). */
+/** The ONE agent commit-message convention is PER RUN —
+ *  `<Verb> <path> — task #<id> · run #<executionId> (<agent>)` — and lives in
+ *  `agentCommitMarker.ts` (`agentCommitSubject` / `runCommitMarker`), so every
+ *  write/edit/delete commit reads identically and is attributable to exactly one run. */
 
 export function isCodingModelDegraded(resolvedModel: string | undefined): boolean {
   if (!resolvedModel || resolvedModel === 'default') return false;

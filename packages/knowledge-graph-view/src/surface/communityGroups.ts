@@ -42,14 +42,15 @@ export function groupByCommunity(groups: ReadonlyMap<string, Group>, nameOf: Com
     let any = false;
     for (const g of groups.values()) {
         for (const n of g.nodes) {
-            const c = g.id === REPO_CONFIG_STATION_ID ? undefined : communityGroupOf(n, nameOf);
-            const id = c?.id ?? g.id;
+            const community = g.id === REPO_CONFIG_STATION_ID ? undefined : communityIdOf(n);
+            const id = community === undefined ? g.id : communityKey(community);
             let into = out.get(id);
             if (!into) {
-                into = c ? { id, name: c.name, kind: 'community', nodes: [] } : { id, name: g.name, kind: g.kind, nodes: [] };
+                // Named once per station, never per file.
+                into = community !== undefined ? { id, name: nameOf(community), kind: 'community', nodes: [] } : { id, name: g.name, kind: g.kind, nodes: [] };
                 out.set(id, into);
             }
-            if (c) any = true;
+            if (community !== undefined) any = true;
             into.nodes.push(n);
         }
     }

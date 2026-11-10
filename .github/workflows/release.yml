@@ -742,6 +742,12 @@ jobs:
 
       - run: pnpm run test
 
+      # run-delta holds compile-time contract tests (`analyzerShape.test.ts`: agent-tools' structural analyzer
+      # types against run-delta's contract) that vitest does not type-check, so its leg also compiles.
+      - name: Typecheck (run-delta)
+        if: ${{ matrix.package == 'run-delta' }}
+        run: pnpm run typecheck
+
   deploy-api:
     name: Deploy API
     runs-on: ubuntu-latest
@@ -804,6 +810,22 @@ jobs:
             if [ "$attempt" -eq 3 ]; then exit 1; fi
             sleep 30
           done
+
+      # PRD 41 §C14: the UPLOADS bucket's object-lifecycle rules as code (infra/uploads/lifecycle.json):
+      # run-delta evidence blobs expire after 730 days, the `run_deltas` row retention. Idempotent and
+      # merged by rule id. Not a deploy blocker: a missing rule only keeps blobs longer. A failure is still LOUD
+      # (a run annotation and a job-summary line), so continue-on-error can never hide a permanent one.
+      - name: Ensure UPLOADS lifecycle rules
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          if ! bash .github/scripts/uploads-lifecycle-ensure.sh; then
+            echo "::warning title=UPLOADS lifecycle not applied::run-delta evidence blobs (run-deltas/) have no 730-day expiry rule; see the step log (likely the CF token lacks Workers R2 Storage: Edit)."
+            echo "- :warning: **UPLOADS lifecycle rules were not applied** — run-delta evidence blobs will not expire until \`uploads-lifecycle-ensure.sh\` succeeds." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
       # The published-site Worker (api/wrangler.sites.toml). AFTER the API, in this
       # order, for two reasons: its `API` service binding needs builderforce-api to

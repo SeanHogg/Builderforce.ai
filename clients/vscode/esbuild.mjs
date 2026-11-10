@@ -180,6 +180,11 @@ const extractWorker = harness || integration ? null : { ...options, entryPoints:
  * `deltaWorkerHost.ts` with `worker_threads` and terminated when the delta's budget runs out. Same options as the extension.
  */
 const deltaWorker = harness || integration ? null : { ...options, entryPoints: ["src/runDelta/deltaWorker.ts"], outfile: "out/runDeltaWorker.js" };
+/**
+ * The run-outcome labellers' worker (`src/runOutcomes/labelWorker.ts`, PRD 41 §D1): SZZ / revert masking and blame
+ * matching run off the extension host's thread. Same options as the extension.
+ */
+const outcomeWorker = harness || integration ? null : { ...options, entryPoints: ["src/runOutcomes/labelWorker.ts"], outfile: "out/runOutcomeWorker.js" };
 async function copyBfiWasm() {
   const wasm = createRequire(import.meta.url).resolve("@seanhogg/bfi-web/bfi_web_bg.wasm");
   fs.mkdirSync("out", { recursive: true });
@@ -295,6 +300,7 @@ if (watch) {
   }
   if (extractWorker) await (await esbuild.context(extractWorker)).watch();
   if (deltaWorker) await (await esbuild.context(deltaWorker)).watch();
+  if (outcomeWorker) await (await esbuild.context(outcomeWorker)).watch();
   console.log("[esbuild] watching…");
 } else {
   await esbuild.build(options);
@@ -304,4 +310,5 @@ if (watch) {
   }
   if (extractWorker) await esbuild.build(extractWorker);
   if (deltaWorker) await esbuild.build(deltaWorker);
+  if (outcomeWorker) await esbuild.build(outcomeWorker);
 }

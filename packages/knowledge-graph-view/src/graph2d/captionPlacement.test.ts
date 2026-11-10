@@ -46,6 +46,14 @@ describe('placeCaptions', () => {
         }
     });
 
+    it('a pinned side is the only side tried: dropped when it is taken, never flipped', () => {
+        const blocker: CaptionCandidate = { ref: 'a', x: 0, y: 0, r: 1, text: 'aaaa' };
+        const right = placeCaptions([blocker, { ref: 'b', x: 0, y: 0, r: 1, text: 'b', side: 'start' }], 1);
+        expect(right.map((c) => c.ref)).toEqual(['a']);
+        const left = placeCaptions([blocker, { ref: 'b', x: 0, y: 0, r: 1, text: 'b', side: 'end' }], 1);
+        expect(left.map((c) => [c.ref, c.anchor])).toEqual([['a', 'start'], ['b', 'end']]);
+    });
+
     it('places nothing at a degenerate font', () => {
         expect(placeCaptions([{ ref: 'a', x: 0, y: 0, r: 1, text: 'a' }], 0)).toEqual([]);
     });

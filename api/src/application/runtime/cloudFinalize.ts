@@ -22,7 +22,10 @@ import { finalizeLearnWeight, runProducedOutput } from './outcomeScore';
 import { recordCloudToolEvent } from './cloudToolEvents';
 import { openOrAdoptRunPr } from './openOrAdoptRunPr';
 import { runPullRequestText } from './runPullRequestText';
-import { recordRunRollbackSnapshot, teardownRunBranch } from './runRollback';
+import { recordRunRollbackSnapshot } from './runRollback';
+import { teardownRunBranch } from './runBranchTeardown';
+import { recordCloudRunAttributions } from '../runOutcomes/cloudAttribution';
+import type { BranchCommit } from '../repos/branchLifecycle';
 import { resolveAppBaseUrl } from '../../env';
 import type { Env } from '../../env';
 import { recordTypedExecutionClaim } from '../provenance/finishClaimService';
@@ -221,17 +224,14 @@ ${ciVerified
   //      the honest response is to make them revertable, NOT to delete them.
   //  (b) The run was CANCELLED → its half-written branch is residue → hand it to
   //      the shared teardown decision, which deletes it only when its rules allow. Rule 7
-  //      (authorship) is per TASK, not per execution, so it does NOT prove the branch is only
-  //      this run's work - see the ROADMAP Consolidated Gap Register entry "A FAILED cloud run's
-  //      branch residue is never swept".
+  //      (authorship) is per RUN (`runCommitMarker(taskId, executionId)`): a branch that also
+  //      carries an earlier run's or a live parent's commits reads as foreign and is kept.
   //
   // A run that lands FAILED does not reach (b) (a failed one that wrote files is snapshotted under
-  // (a)): its branch residue is NOT swept automatically.
-  // Authorship is per TASK (`runCommitMarker(taskId)`), not per execution, so a sweep cannot tell
-  // this run's commits from a live parent run's or an earlier run's work (revertable, finished,
-  // awaiting sign-off, or the partial commits a retry builds on) and would delete them. Until
-  // commit attribution is per execution (ROADMAP Consolidated Gap Register) a failed run's
-  // branch stays. The paths above are best-effort and must never change the run's own outcome.
+  // (a)): its branch residue is NOT swept automatically (ROADMAP Consolidated Gap Register).
+  // Under (a) the snapshot's branch listing is also the run's per-run commit attribution (PRD 41
+  // §D1, `runOutcomes/cloudAttribution`) — one provider listing serves both.
+  // The paths above are best-effort and must never change the run's own outcome.
   if (repoCtx && writtenPaths.size > 0) {
     if (cancelled) {
       await teardownRunBranch(env, db, {
@@ -239,12 +239,18 @@ ${ciVerified
         writtenPaths: [...writtenPaths], cloudAgentRef, agentLabel,
       }).catch((error) => reportCaughtError(error, { source: "application/runtime/cloudFinalize.ts", operation: "finalizeCloudRun", context: { logMessage: '[cloud-finalize] run branch teardown failed', details: { tenantId, executionId, taskId: taskRow.id, error } } }));
     } else {
+      const listing: { commits: BranchCommit[] | null } = { commits: null };
       await recordRunRollbackSnapshot(db, {
         tenantId, executionId, taskId: taskRow.id, repoCtx,
         writtenPaths: [...writtenPaths],
         prNumber: openedPrNumber, prUrl: openedPrUrl, prRowId: openedPrRowId,
         agentLabel,
+        onListed: (commits) => { listing.commits = commits; },
       }).catch(() => null);
+      if (listing.commits) {
+        await recordCloudRunAttributions(db, { tenantId, executionId, taskId: taskRow.id, repoCtx, commits: listing.commits })
+          .catch((error) => reportCaughtError(error, { source: 'application/runtime/cloudFinalize.ts', operation: 'finalizeCloudRun', context: { logMessage: '[cloud-finalize] run commit attribution failed', details: { tenantId, executionId, taskId: taskRow.id, error } } }));
+      }
     }
   }
 

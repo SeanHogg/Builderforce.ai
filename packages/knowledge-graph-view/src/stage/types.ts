@@ -108,6 +108,13 @@ export interface LabelRun {
     note?: { text: string; tone: number };
     priority: number;
     scale: 'world' | 'screen';
+    /** A world-unit offset added before `offsetPx` (a `screen` run beside its mark: the mark's radius, then a px gap). */
+    offsetWorld?: [number, number];
+    /**
+     * The settled zoom (CSS px per world unit) this run is chosen for, `[min, max)` (B4 detail by zoom): a placement
+     * that picks collision-free captions per zoom band (`CAPTION_ZOOM_BANDS`) emits one run per band span. Absent = every zoom.
+     */
+    zoomPx?: [number, number];
 }
 
 /**
@@ -120,6 +127,11 @@ export interface Caption {
     role?: 'band' | 'wall' | 'describes' | 'terminus' | 'plane';
     /** `mono` for a name the SDF font cannot draw (a glyph outside its range): the DOM gives it the i18n glyph fallback. */
     font?: 'ui' | 'mono';
+    /**
+     * A screen offset in CSS px from `position`, applied after the layer's inverse transform (so it stays the same px at
+     * every zoom): text that keeps a fixed px gap from a world corner, as the Graph's band titles do. Absent = none.
+     */
+    offsetPx?: [number, number];
 }
 
 export interface A11yItem { slot: number; label: string; pressed?: boolean; current?: boolean }
@@ -153,7 +165,7 @@ export interface Placement {
     labels: LabelRun[];
     captions: Caption[];
     a11y: A11yItem[];
-    caption: { shown: number; total: number; capped: boolean };
+    caption: { shown: number; total: number; capped: boolean; edges?: { shown: number; total: number; capped: boolean } };
     bounds: { min: Vec3; max: Vec3 };
     rig: CameraRig;
     /**

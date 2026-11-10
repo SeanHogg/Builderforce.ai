@@ -11,7 +11,9 @@ import { layoutTask, type Layout3D, type LayoutOptions } from '../scene/layout3d
 import { cmp, finiteImportance, round } from '../order';
 import { planeKeyOf } from '../placement';
 import { NONE_PARTITION } from '../scene/planeOrder';
-import type { ViewBox } from '../usePanZoom';
+
+/** A rectangle of the layout's own units (what {@link fitView} answers). */
+export interface ViewBox { x: number; y: number; w: number; h: number }
 
 export interface Bounds { minX: number; maxX: number; minY: number; maxY: number }
 

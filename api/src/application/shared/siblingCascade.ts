@@ -8,14 +8,19 @@ import {
   executionClaims,
   executions,
   projectSites,
+  runCommitAttributions,
   runContextState,
+  runFeatures,
   runModelOutcomes,
+  runOutcomeLabels,
+  runOutcomeTrainingConsent,
   toolAuditDaily,
   toolAuditEvents,
   usageSnapshots,
 } from '../../infrastructure/database/schema';
 import { appsDatabaseOf } from '../ide/appsDatabase';
 import { runTelemetryDatabase } from './runTelemetryDatabase';
+import { chunked } from './chunked';
 
 /**
  * THE CASCADES THE SPLIT-OUT DATABASES CANNOT RECEIVE FROM CORE.
@@ -54,19 +59,17 @@ const uncited = notExists(
 
 /** Statements are chunked so an id list never builds an unbounded `IN`. */
 const CHUNK = 1000;
-function chunks<T>(list: readonly T[]): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < list.length; i += CHUNK) out.push(list.slice(i, i + CHUNK));
-  return out;
-}
+const chunks = <T>(list: readonly T[]): T[][] => chunked(list, CHUNK);
 
-/** After projects are deleted: their sites go, their run outcomes lose the project
- *  (the old `ON DELETE SET NULL` — the outcome still teaches the tenant's router). */
+/** After projects are deleted: their sites go, their run outcomes and PRD 41 run features
+ *  lose the project (the `ON DELETE SET NULL` a cross-database key cannot carry — the run
+ *  still teaches the tenant's router and models). */
 export async function cascadeProjectDelete(core: Db, projectIds: readonly number[]): Promise<void> {
   if (projectIds.length === 0) return;
   for (const ids of chunks(projectIds)) {
     await appsDatabaseOf(core).delete(projectSites).where(inArray(projectSites.projectId, ids));
     await runTelemetryDatabase(core).update(runModelOutcomes).set({ projectId: null }).where(inArray(runModelOutcomes.projectId, ids));
+    await runTelemetryDatabase(core).update(runFeatures).set({ projectId: null }).where(inArray(runFeatures.projectId, ids));
   }
 }
 
@@ -83,6 +86,12 @@ export async function cascadeTenantDelete(core: Db, tenantId: number): Promise<v
     telemetry.delete(usageSnapshots).where(eq(usageSnapshots.tenantId, tenantId)),
     telemetry.delete(runContextState).where(eq(runContextState.tenantId, tenantId)),
     telemetry.delete(brainChatSteps).where(eq(brainChatSteps.tenantId, tenantId)),
+    // PRD 41 §D1 run outcomes (same operational endpoint): a workspace's training data,
+    // person ids included, goes with the workspace.
+    telemetry.delete(runFeatures).where(eq(runFeatures.tenantId, tenantId)),
+    telemetry.delete(runCommitAttributions).where(eq(runCommitAttributions.tenantId, tenantId)),
+    telemetry.delete(runOutcomeLabels).where(eq(runOutcomeLabels.tenantId, tenantId)),
+    telemetry.delete(runOutcomeTrainingConsent).where(eq(runOutcomeTrainingConsent.tenantId, tenantId)),
   ]);
   await telemetry.update(runModelOutcomes).set({ tenantId: null, projectId: null }).where(eq(runModelOutcomes.tenantId, tenantId));
 }

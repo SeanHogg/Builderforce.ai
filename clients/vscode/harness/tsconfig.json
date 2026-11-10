@@ -18,6 +18,7 @@
       "@builderforce/agent-skills": ["../../../packages/agent-skills/src/index.ts"],
       "@builderforce/agent-tools": ["../../../packages/agent-tools/src/index.ts"],
       "@builderforce/agent-tools/*": ["../../../packages/agent-tools/src/*"],
+      "@builderforce/sarif": ["../../../packages/sarif/src/index.ts"],
       "@builderforce/cost-levers": ["../../../packages/cost-levers/src/index.ts"],
       "@builderforce/kimi-oauth": ["../../../packages/kimi-oauth/src/index.ts"],
       "@builderforce/learned-routing": ["../../../packages/learned-routing/src/index.ts"],

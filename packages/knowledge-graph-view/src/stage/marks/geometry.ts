@@ -1,5 +1,5 @@
 /**
- * A mark's geometry: the SIDE WALLS of its shape's extruded outline (`scene/shapeMeshes.tsx` `shapeGeometry`, the ONE
+ * A mark's geometry: the SIDE WALLS of its shape's extruded outline (`shapeGeometry.ts`, the ONE
  * extrusion of the `shapes.ts` outlines) plus ONE cap quad on top, tagged by `aPart` (0 wall, 1 cap). The cap is drawn by
  * the silhouette SDF shader (`shader.ts`), so the top face is anti-aliased without MSAA; the walls give depth when the
  * mark is extruded and vanish (zero height) when it is flat. One geometry per shape for the page's lifetime; each batch
@@ -7,7 +7,7 @@
  */
 
 import { BufferAttribute, BufferGeometry } from 'three';
-import { shapeGeometry } from '../../scene/shapeMeshes';
+import { shapeGeometry } from './shapeGeometry';
 import type { NodeShape } from '../../shapes';
 
 /** ExtrudeGeometry's material group of the side walls (0 is the lids). */

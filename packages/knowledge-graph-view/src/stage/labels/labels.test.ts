@@ -35,6 +35,17 @@ function fakePort() {
     return { port, added, created: () => created };
 }
 
+describe('label runs per zoom band (B4 detail by zoom)', () => {
+    it('shows a run only inside its zoomPx span, and adds its world offset before the px offset', () => {
+        const p = placed();
+        const banded = [run(0, 'near', { scale: 'screen', offsetPx: [4, 0], offsetWorld: [5, 0], zoomPx: [1, 2] })];
+        expect(placeLabels(banded, p, { pxPerWorld: 0.99, depth: 0 }, true).sdf).toEqual([]);
+        expect(placeLabels(banded, p, { pxPerWorld: 2, depth: 0 }, true).sdf).toEqual([]);
+        const [l] = placeLabels(banded, p, { pxPerWorld: 1.5, depth: 0 }, true).sdf;
+        expect(l!.position[0]).toBeCloseTo(100 + 5 + 4 / 1.5, 5);
+    });
+});
+
 describe('label runs (slot-relative, B1a rule 4)', () => {
     it('places a run at its slot plus its offset: world offsets in world units, screen offsets in px', () => {
         const { sdf, dom } = placeLabels(placed().labels, placed(), { pxPerWorld: 2, depth: 1 }, true);

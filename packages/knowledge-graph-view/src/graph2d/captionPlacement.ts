@@ -20,6 +20,8 @@ export interface CaptionCandidate {
     text: string;
     /** Placed even with no free side (the selection's name is never dropped); it still claims its box. */
     always?: boolean;
+    /** Only this side is tried (a caption kept on the side it was given at another zoom); absent = right, else left. */
+    side?: 'start' | 'end';
 }
 
 export interface PlacedCaption {
@@ -79,7 +81,8 @@ export function placeCaptions(candidates: readonly CaptionCandidate[], font: num
         const top = c.y - h / 2, baseline = c.y + font * 0.35;
         const right: PlacedCaption = { ref: c.ref, x: c.x + gap, y: baseline, anchor: 'start', box: { x: c.x + gap, y: top, w, h } };
         const left: PlacedCaption = { ref: c.ref, x: c.x - gap, y: baseline, anchor: 'end', box: { x: c.x - gap - w, y: top, w, h } };
-        const spot = !grid.hits(right.box) ? right : !grid.hits(left.box) ? left : c.always ? right : null;
+        const tryRight = c.side !== 'end', tryLeft = c.side !== 'start';
+        const spot = tryRight && !grid.hits(right.box) ? right : tryLeft && !grid.hits(left.box) ? left : c.always ? (tryRight ? right : left) : null;
         if (!spot) continue;
         grid.add(spot.box);
         out.push(spot);

@@ -34,8 +34,8 @@ function styleOf(c: Caption): CSSProperties {
         position: 'absolute', left: c.position[0], top: c.position[2], whiteSpace: 'nowrap', lineHeight: 1,
         color: cssVar(TONE_ORDER[c.tone] ?? 'muted'),
         transformOrigin: '0 0',
-        // Cancel the layer's scale / tilt, then anchor the text on its point.
-        transform: `var(${INVERSE_VAR}, none) translate(${SHIFT[c.anchor]}, -50%)`,
+        // Cancel the layer's scale / tilt, then shift by the caption's px offset, then anchor the text on its point.
+        transform: `var(${INVERSE_VAR}, none)${c.offsetPx ? ` translate(${c.offsetPx[0]}px, ${c.offsetPx[1]}px)` : ''} translate(${SHIFT[c.anchor]}, -50%)`,
     };
 }
 

@@ -1,8 +1,8 @@
 /**
- * The System camera's layout, pure: the tier rows (at most MAX_PER_TIER cards each, the rest
- * folded into a "+N more" card), the stations in no layer (one "Not layered" row, never tiles),
- * and the store cards, built from the same termini model the transit map draws. Also the one
- * colour each finding kind gets on a card's stacked bar.
+ * The System camera's layout, pure (the System placement reads it): the tier rows (at most
+ * MAX_PER_TIER marks each, the rest counted "+N more"), the stations in no layer (never placed),
+ * and the stores, built from the same termini model the Map draws. Also the one colour each
+ * finding kind gets (the lines panel's legend).
  */
 
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
@@ -16,8 +16,6 @@ import { groupTermini, type TerminusInfo } from '../transit/termini';
 
 /** Cards drawn in one tier; the rest sit behind a "+N more" card. */
 export const MAX_PER_TIER = 6;
-/** Files handed to the List when a card or row switches to it (the same bound as the Act rail's Show). */
-export const MAX_LIST_REFS = 400;
 
 export interface TierRow {
     layer: string;
@@ -50,9 +48,6 @@ export function buildSystemLayout(stations: StationModel, lines: LinesModel, gra
     }
     return { tiers, notLayered, stores: groupTermini(lines.lines, stations.byId, graph).filter((t) => t.kind !== 'end') };
 }
-
-/** The file refs of some stations, most important first per station, bounded for the List. */
-export const listRefs = (stations: readonly Station[]): string[] => stations.flatMap((s) => s.refs).slice(0, MAX_LIST_REFS);
 
 const KIND_TONES: readonly ThemeTone[] = ['violation', 'cycle', 'duplicate', 'contradicts', 'changed', 'nodeSymbol', 'nodeEntity', 'unused'];
 

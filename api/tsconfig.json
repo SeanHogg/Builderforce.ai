@@ -55,7 +55,12 @@
       "@builderforce/hono-wildcard-path": ["../packages/hono-wildcard-path/src/index.ts"],
       "@builderforce/interaction-contract": ["../packages/interaction-contract/src/index.ts"],
       "@builderforce/write-outbox/core": ["../packages/write-outbox/src/core.ts"],
-      "@builderforce/local-first": ["../packages/local-first/src/index.ts"]
+      "@builderforce/local-first": ["../packages/local-first/src/index.ts"],
+      "@builderforce/run-delta/predict": ["../packages/run-delta/src/predict/index.ts"],
+      "@builderforce/run-delta": ["../packages/run-delta/src/index.ts"],
+      "@builderforce/run-delta/run-ids": ["../packages/run-delta/src/runIds.ts"],
+      "@builderforce/agent-tools/code-mask": ["../packages/agent-tools/src/knowledge/codeMask.ts"],
+      "@builderforce/sarif": ["../packages/sarif/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts"],

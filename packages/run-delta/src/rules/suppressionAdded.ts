@@ -9,7 +9,7 @@
 
 import type { DeltaRule } from '../contract.js';
 import { escapeRegex, isCodePath } from './support/files.js';
-import { regexHits, stateSides, type Hit } from './support/stateRule.js';
+import { cappedHits, stateSides, type Hit } from './support/stateRule.js';
 
 function markerRegex(marker: string): RegExp {
     const edge = (c: string | undefined) => (c && /\w/.test(c) ? '\\b' : '');
@@ -25,7 +25,8 @@ export const suppressionAdded: DeltaRule = {
         const markers = input.registries.suppressions.map((m) => ({ m, re: markerRegex(m) }));
         return stateSides(suppressionAdded, {
             files: isCodePath,
-            hits: (view): Hit[] => markers.flatMap(({ m, re }) => regexHits(re, view.text).map(({ offset, match }) => ({ offset, length: match[0].length, key: m }))),
+            // Capped: past MAX_HITS_PER_KEY a marker aggregates, so the rest are only counted.
+            hits: (view): Hit[] => markers.flatMap(({ m, re }) => cappedHits(re, view.text, m)),
             severity: 'warn',
         }, input);
     },

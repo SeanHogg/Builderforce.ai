@@ -3,7 +3,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createMemoryLocalFirstStore, newLocalRecord, type ExecutionValue, type LocalFirstStore } from "@builderforce/local-first";
+import { createMemoryLocalFirstStore, newLocalRecord, stableEntityId, type ExecutionValue, type LocalFirstStore } from "@builderforce/local-first";
 import { localSqliteAvailable } from "@builderforce/agent-tools/node-local-sqlite";
 import { nodeKnowledgeStore, putPreimages, readPreimages, sweepPreimages, unpinPreimages, type NodeKnowledgeStore } from "@builderforce/agent-tools/node-knowledge-store";
 
@@ -184,7 +184,10 @@ describe.skipIf(!localSqliteAvailable())("run delta at run finalization (PRD 41 
     const stored = await deltaRows(store);
     expect(stored).toHaveLength(1);
     const value = stored[0]!.payload;
-    expect(stored[0]!.id).toMatch(/^run-delta:run-guard:[0-9a-f]{16}$/);
+    // A UUID (the sync accepts nothing else), derived from the natural key; run and repo key ride in the payload.
+    expect(stored[0]!.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    expect(value.repoKey).toMatch(/^[0-9a-f]{16}$/);
+    expect(stored[0]!.id).toBe(stableEntityId(`run-delta:run-guard:${value.repoKey}`));
     const security = value.delta.dimensions.find((d) => d.id === "security")!;
     expect(security.verdict).toBe("worse");
     expect(security.findings.map((f) => [f.ruleId, f.lineage])).toContainEqual(["guard-removed", "introduced"]);
@@ -199,10 +202,11 @@ describe.skipIf(!localSqliteAvailable())("run delta at run finalization (PRD 41 
     // The reopened chat reads the same card back (`run-delta/get`).
     expect(await readRunDeltas(store, { runId: "run-guard" })).toEqual(cards);
     expect(await readRunDeltas(store, { chatId: 7 })).toEqual(cards);
-    // The delta's journal event depends on its change set's.
+    // The delta's journal event is keyed by the record's UUID and depends on nothing (the server never reads the change set).
     const snapshot = await store.export();
     const event = snapshot.events.find((e) => e.entityType === "run-delta")!;
-    expect(event.dependsOn).toEqual([`change-set:create:${value.changeSetId}`]);
+    expect(event.clientEntityId).toBe(stored[0]!.id);
+    expect(event.dependsOn).toEqual([]);
   });
 
   it("holds an autonomous run whose delta has blocking findings, with its rules, instead of completing it (§12.5)", async () => {
@@ -466,6 +470,32 @@ describe.skipIf(!localSqliteAvailable())("run delta at run finalization (PRD 41 
     await startRunDelta(hung.deps, { chatId: 1, mode: "interactive", closed });
     expect(String(hung.errors[0])).toMatch(/run_delta_budget/);
     expect(await deltaRows(store)).toEqual([]);
+  });
+
+  it("C8.3: a run whose ticket names src/a.ts flags its change to src/b.ts as out of scope; with no plan, scope drift is not measured", async () => {
+    const root = await repo({ "src/a.ts": "export const a = 1;\n", "src/b.ts": "export const b = 1;\n" });
+    const k = knowledgeFile(root);
+    const outOfScope = async (plan?: () => Promise<readonly string[]>) => {
+      const store = createMemoryLocalFirstStore();
+      const { deps, errors } = deltaDeps(store, sourcesFor(k), { release: releaseFor(k) });
+      let delta: Promise<void> | undefined;
+      await recordChangeSetAroundRun({
+        store, deviceId: "device-1", runId: `run-plan-${plan ? "y" : "n"}`, author: "agent:test",
+        capture: { preimages: (_root, items) => putPreimages(k.persistence, "run-plan", items, Date.now()) },
+        onFinalized: (closed) => { delta = startRunDelta(deps, { chatId: 7, mode: "interactive", closed, ...(plan ? { plan } : {}) }); },
+        onError: (error) => errors.push(error),
+      }, () => write(root, "src/b.ts", `export const b = ${plan ? 2 : 3};\n`));
+      await delta;
+      expect(errors).toEqual([]);
+      const quality = (await deltaRows(store))[0]!.payload.delta.dimensions.find((d) => d.id === "quality")!;
+      return quality;
+    };
+    // The ticket's text (title + description) names an existing file; prose and a missing path resolve to nothing.
+    const planned = await outOfScope(async () => ["Fix the billing module", "Ticket: update src/a.ts (not src/missing.ts)"]);
+    expect(planned.findings.filter((f) => f.ruleId === "out-of-scope-change").map((f) => [f.params["file"], f.lineage])).toEqual([["src/b.ts", "introduced"]]);
+    const unplanned = await outOfScope();
+    expect(unplanned.findings.filter((f) => f.ruleId === "out-of-scope-change")).toEqual([]);
+    expect(unplanned.measuredBy.find((m) => m.tool === "out-of-scope-change")).toMatchObject({ status: "skipped", reason: "no-plan" });
   });
 });
 

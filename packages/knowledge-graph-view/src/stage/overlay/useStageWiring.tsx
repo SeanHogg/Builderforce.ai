@@ -11,6 +11,10 @@ import { useComputed } from '../../compute/useComputed';
 import { COMPACT_WIDTH, nodeIndex } from '../../graphModel';
 import type { SceneProps } from '../../surface/registry';
 import { stageBus, StageBusContext } from '../anchor/stageBus';
+import { cssVar } from '../../scene/themeColors';
+import { TYPE } from '../../surface/ui/type';
+import { CodeLayer } from '../drill/CodeLayer';
+import { useSemanticZoom, type SemanticZoom } from '../drill/useSemanticZoom';
 import { useStageMap, type StageMap } from '../drill/useStageMap';
 import type { StageRenderer } from '../renderer';
 import type { MarkSet, Placement } from '../types';
@@ -20,6 +24,8 @@ import { StageCard } from './StageCard';
 
 export interface StageWiring {
     map: StageMap;
+    /** The semantic zoom: the Map's band, the Sequence's `lod`, Go inside as a zoom, the code layer. */
+    zoom: SemanticZoom;
     selected: string | null;
     onSelect(key: string): void;
     onOut: (() => void) | undefined;
@@ -39,6 +45,8 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     }, [bus, marks]);
     const drill = surface.drill;
     const map = useStageMap(surface.stations, drill, index, slotOf);
+    // The semantic zoom (B1a rules 9–10): the zoom enters and leaves the drill's levels; Go inside flies the same zoom.
+    const zoom = useSemanticZoom(bus, drill, map, p.reducedMotion);
     const [selected, setSelected] = useState<string | null>(null);
     const [cardKey, setCardKey] = useState<string | null>(null);
 
@@ -90,23 +98,39 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
         if (key.startsWith('node:')) p.onSelect(key.slice('node:'.length));
     }, [map, drill, surface, p]);
 
-    const patched = useMemo(() => new WeakMap<Placement, Placement>(), [map.patch]);
+    const patched = useMemo(() => new WeakMap<Placement, Placement>(), [map.patch, zoom.nest]);
     const patchMap = useCallback((pl: Placement | null) => {
         if (!pl) return null;
         let out = patched.get(pl);
-        if (!out) { out = map.patch(pl); patched.set(pl, out); }
+        if (!out) { out = zoom.nest(map.patch(pl)); patched.set(pl, out); }
         return out;
-    }, [patched, map]);
+    }, [patched, map, zoom]);
 
     const closeCard = useCallback(() => setCardKey(null), []);
     const card = (
         <StageBusContext.Provider value={bus}>
             <StageCard
                 cardKey={cardKey} map={map} drill={drill} graph={graph} labels={p.labels} compact={width > 0 && width < COMPACT_WIDTH}
-                onClose={closeCard} onQuestion={surface.setQuestion} onOpenPanel={surface.openPanel}
+                onClose={closeCard} onQuestion={surface.setQuestion} onOpenPanel={surface.openPanel} onEnter={zoom.zoomInto}
             />
             {site && <CallSiteCard site={site.site} at={site.at} boxWidth={width} labels={p.labels} onOpenSource={p.onOpenSource} onClose={closeSite} />}
+            {zoom.code && (
+                <CodeLayer
+                    key={zoom.code.key} slotKey={zoom.code.key} target={zoom.code.target} reader={surface.readSource}
+                    labels={p.labels} onOpenSource={p.onOpenSource} onClose={zoom.closeCode}
+                />
+            )}
+            {drill.loading && zoom.band !== 'system' && <ZoomLoading text={p.labels.surface.map.card.loading} />}
         </StageBusContext.Provider>
     );
-    return { map, selected, onSelect, onOut: drill.canOut ? drill.out : undefined, patchMap, card };
+    return { map, zoom, selected, onSelect, onOut: drill.canOut ? drill.out : undefined, patchMap, card };
+}
+
+/** The band's symbols being read (the lazy load on entering the class band), in the existing words. */
+function ZoomLoading({ text }: { text: string }) {
+    return (
+        <div role="status" data-zoom-loading style={{ position: 'absolute', zIndex: 2, left: 8, top: 8, padding: '2px 8px', borderRadius: 6, background: cssVar('panel'), color: cssVar('muted'), ...TYPE.meta }}>
+            {text}
+        </div>
+    );
 }

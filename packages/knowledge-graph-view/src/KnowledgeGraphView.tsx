@@ -41,6 +41,7 @@ import { cssVar } from './scene/themeColors';
 import { muted } from './styles';
 import { CAMERAS } from './surface/cameras';
 import { ActPanel } from './surface/ActPanel';
+import { partnersOf } from './surface/coChange';
 import { SceneOverlay } from './surface/SceneOverlay';
 import { useSyncStatus } from './surface/useSyncStatus';
 import { useReviewsPanel } from './surface/run/useReviewsPanel';
@@ -58,6 +59,7 @@ import { docStations } from './surface/transit/docs';
 import { typesPresent } from './shapes';
 import { groupTermini } from './surface/transit/termini';
 import { PathStrip } from './surface/PathStrip';
+import { transitionTableOf } from './surface/transitionTable';
 import { hopRouteLabels } from './surface/sequenceText';
 import { SurfaceHeader } from './surface/SurfaceHeader';
 import { TimeSlider, useHistory } from './surface/TimeSlider';
@@ -76,7 +78,7 @@ import { SceneState, SceneStatus } from './surface/SceneState';
 import { SurfaceFrame } from './surface/SurfaceStates';
 import { EMPTY_GRAPH } from './emptyGraph';
 import { useSurface } from './surface/useSurface';
-import type { EvidenceSide, KnowledgeConfirm, KnowledgeGraphSource, KnowledgePanelRenderer, LensId, SourceLocation, ViewMode } from './types';
+import type { EvidenceSide, KnowledgeConfirm, KnowledgeGraphSource, KnowledgePanelRenderer, LensId, SourceLocation, SourceRange, ViewMode } from './types';
 
 /** Nodes a desktop view draws at most (instanced geometry is sized for it). */
 const MAX_DRAWN_NODES = 2000;
@@ -142,7 +144,10 @@ export function KnowledgeGraphView({
     useEffect(() => setPicked(null), [kg.rootId]);
     const changed = useMemo(() => new Set(history.commits.find((c) => c.sha === picked)?.refs ?? []), [history, picked]);
     const symbols = useMemo(() => (source.symbolsOf && kg.rootId ? (refs: string[]) => source.symbolsOf!(kg.rootId!, refs) : undefined), [source, kg.rootId]);
-    const surface = useSurface(graph, showingBefore ? null : kg.baseline?.graph ?? null, { question: questionForLens(kg.requested.id), focus: kg.focus, changed, symbols, repoConfigName: labels.surface.repoConfig, communityFallback: labels.communityFallback });
+    const readSource = useMemo(() => (source.readSource && kg.rootId ? (path: string, range: SourceRange) => source.readSource!(kg.rootId!, path, range) : undefined), [source, kg.rootId]);
+    const surface = useSurface(graph, showingBefore ? null : kg.baseline?.graph ?? null, { question: questionForLens(kg.requested.id), focus: kg.focus, changed, symbols, readSource, repoConfigName: labels.surface.repoConfig, communityFallback: labels.communityFallback });
+    // PRD 38 P7: the station transition table, built once per graph (memoised on it in `transitionTableOf`).
+    const transitions = useMemo(() => (real ? transitionTableOf(graph, surface.stations) : null), [real, graph, surface.stations]);
     // The question follows the lens in effect: a requested lens the graph cannot show falls back, and the pills must say which one is on.
     const lensInEffect = lens.id, lensAsked = kg.requested.id, setQuestion = surface.setQuestion;
     useEffect(() => {
@@ -162,6 +167,8 @@ export function KnowledgeGraphView({
     const drawn = useMemo(() => lensGraph(visible, lens), [visible, lens]);
     const index = useMemo(() => nodeIndex(graph), [graph]);
     const canApplyFor = useMemo(() => (source.applyFix ? (kind: string) => canApplyKind(source, kind) : false), [source]);
+    // "What changed?" (PRD 38 P4): the files that usually change with the changed ones and are not touched yet.
+    const changedPartners = useMemo(() => (surface.question === 'changed' ? partnersOf(graph, surface.changedFiles ?? []) : undefined), [surface.question, graph, surface.changedFiles]);
     const resolvedFixes = useMemo(() => new Set(Object.values(surface.fixFlows).filter(isResolved).map((f) => f.findingId)), [surface.fixFlows]);
     const routeLabels = useMemo(() => hopRouteLabels(surface.path, surface.stations.byId, index), [surface.path, surface.stations.byId, index]);
     const diagnostics = () => graphDiagnostics({
@@ -278,7 +285,7 @@ export function KnowledgeGraphView({
                         {hasLines && panels.visibility.bottom && (
                             <PathStrip
                                 path={surface.path} step={surface.step} labels={labels} onStep={surface.setStep} pathTitle={chrome.pathTitle}
-                                stations={surface.stations.byId} routeLabels={routeLabels} onOpenPanel={setPanel} onEnlarge={() => setMode('sequence')} narrow={layout.phone}
+                                stations={surface.stations.byId} routeLabels={routeLabels} onOpenPanel={setPanel} onEnlarge={() => setMode('sequence')} narrow={layout.phone} transitions={transitions}
                             />
                         )}
                     </div>
@@ -287,7 +294,7 @@ export function KnowledgeGraphView({
                     graph={graph} findings={findings} listedFindings={listedFindings} lensName={labels.lenses[lens.id]} labels={labels} station={surface.station} stations={surface.stations.stations} scopeName={chrome.scopeName}
                     compact={layout.actBelow} showFindings={mode !== 'list'} onClearScope={() => surface.selectLine(null)} onShow={show} onCompose={onCompose} onResolve={surface.resolve}
                     evidence={evidenceOf} onOpenSource={onOpenSource} canApply={canApplyFor} resolved={resolvedFixes} onOpenPanel={setPanel} path={surface.path} pathTitle={chrome.pathTitle}
-                    model={surface.stations} copyFix={copyFix} onAskUntested={() => pickQuestion('untested')}
+                    model={surface.stations} copyFix={copyFix} onAskUntested={() => pickQuestion('untested')} changedPartners={changedPartners}
                 >
                     <InsightsPanel graph={graph} labels={labels} lenses={kg.lenses.map((l) => l.id)} onLens={pickLens} onShow={show} findingKinds={mode !== 'list'} />
                     <LensPanel graph={graph} lens={lens} requested={kg.requested} baseline={kg.baseline} current={kg.graph} labels={labels} evidence={evidenceFor} onOpenSource={onOpenSource} />

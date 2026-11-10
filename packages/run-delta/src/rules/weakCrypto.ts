@@ -9,7 +9,8 @@
 
 import type { DeltaRule } from '../contract.js';
 import { isCodePath, isTestPath, squash } from './support/files.js';
-import { perLineHits, stateSides } from './support/stateRule.js';
+import { DEFAULT_REGISTRIES } from '../registry/defaults.js';
+import { registryHits, registryPatterns, stateSides } from './support/stateRule.js';
 
 export const weakCrypto: DeltaRule = {
     id: 'weak-crypto',
@@ -17,10 +18,11 @@ export const weakCrypto: DeltaRule = {
     dimension: 'security',
     reads: ['content'],
     derive(input) {
-        const patterns = input.registries.weakCrypto.map((s) => new RegExp(s, 'gi'));
+        // Built-ins run over the whole text; repo-added patterns line by line, capped (`registryHits`).
+        const patterns = registryPatterns(input.registries.weakCrypto, DEFAULT_REGISTRIES.weakCrypto, 'i');
         return stateSides(weakCrypto, {
             files: (p) => isCodePath(p) && !isTestPath(p),
-            hits: (view) => perLineHits(patterns, view.code)
+            hits: (view) => registryHits(patterns, view.code, view.lineStarts())
                 .map(({ offset, match }) => ({ offset, length: match[0].length, key: squash(match[0]).toLowerCase().slice(0, 60) })),
             severity: 'error',
         }, input);

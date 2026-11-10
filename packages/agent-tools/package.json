@@ -9,6 +9,8 @@
     "./symbols": "./src/symbols.ts",
     "./knowledge": "./src/knowledge/index.ts",
     "./code-mask": "./src/knowledge/codeMask.ts",
+    "./glob": "./src/glob.ts",
+    "./sampling": "./src/sampling.ts",
     "./documents": "./src/documents.ts",
     "./knowledge-index": "./src/knowledge-index.ts",
     "./prefetch": "./src/prefetch/index.ts",
@@ -21,6 +23,7 @@
     "./node-git-history": "./src/node-git-history.ts",
     "./node-desktop": "./src/node-desktop.ts",
     "./node-tree-sitter": "./src/node-tree-sitter.ts",
+    "./node-file-facts": "./src/node-file-facts.ts",
     "./node-research": "./src/node-research.ts",
     "./node-prefetch": "./src/node-prefetch.ts",
     "./node-local-sqlite": "./src/node-local-sqlite.ts",
@@ -32,8 +35,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@seanhogg/builderforce-memory": "^2026.10.73",
-    "@seanhogg/builderforce-memory-engine": "^2026.10.63",
+    "@seanhogg/builderforce-memory": "^2026.10.80",
+    "@seanhogg/builderforce-memory-engine": "^2026.10.65",
     "fflate": "^0.8.2",
     "tree-sitter-wasms": "^0.1.11",
     "unpdf": "^1.9.1",

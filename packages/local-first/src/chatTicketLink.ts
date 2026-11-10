@@ -20,7 +20,7 @@
  */
 
 import { importKey, isImported, journalWrite, queueImport } from './journalRules.js';
-import { fnv1a32 } from './payloadHash.js';
+import { stableEntityId } from './stableEntityId.js';
 import type { ChatTicketLinkType, ChatTicketLinkValue, LocalRecord } from './records.js';
 import { newLocalRecord, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
 import { tombstoneRecord } from './tombstone.js';
@@ -50,12 +50,7 @@ export interface LinkChatTicketInput extends ChatTicketLinkInput {
 
 /** The stable UUID-shaped (custom, version-8 style: not a UUIDv5) id of the pair. */
 export function chatTicketLinkId(chatClientId: string, ticketClientId: string): string {
-  const text = `${chatClientId}:${ticketClientId}`;
-  const hex = [2166136261, 3339675911, 2654435761, 1013904223]
-    .map((seed) => fnv1a32(text, seed).toString(16).padStart(8, '0'))
-    .join('');
-  const variant = ((parseInt(hex[16]!, 16) & 0x3) | 0x8).toString(16);
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-8${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+  return stableEntityId(`${chatClientId}:${ticketClientId}`);
 }
 
 /** The imports a link must follow: its chat's and its ticket's. */

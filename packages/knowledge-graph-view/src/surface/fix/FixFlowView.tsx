@@ -22,6 +22,7 @@ import { initialFlow, isResolved, type FixFlowAction, type FixMode } from './fix
 import { fixQueueCounts, fixQueueText, promptRequest } from './fixModes';
 import { useFixFlow } from './useFixFlow';
 import { canApplyKind } from '../codemods';
+import { partnersOf, partnerTests } from '../coChange';
 
 type Props = Pick<PanelProps, 'graph' | 'labels' | 'source' | 'onCompose' | 'onChanged' | 'revision' | 'surface'> & { finding: Finding; queue: readonly Finding[] };
 
@@ -31,7 +32,10 @@ export function FixFlowView({ finding, graph, labels, source, onCompose, onChang
     const { dispatchFix } = surface;
     const dispatch = useCallback((action: FixFlowAction) => dispatchFix(finding.id, action), [dispatchFix, finding.id]);
     const state = surface.fixFlows[finding.id] ?? initialFlow(finding.id);
-    const flow = useFixFlow({ finding, state, dispatch, source, labels, index, onCompose, onChanged });
+    // The checks also run the tests of the files that usually change with the finding's (PRD 38 P4); null = no history.
+    const partners = useMemo(() => partnersOf(graph, finding.nodes), [graph, finding.nodes]);
+    const partnerTestFiles = useMemo(() => (partners ? partnerTests(graph, partners) : null), [graph, partners]);
+    const flow = useFixFlow({ finding, state, dispatch, source, labels, index, onCompose, onChanged, partnerTests: partnerTestFiles ?? undefined });
     const codemod = canApplyKind(source, finding.kind);
     const resolved = useMemo(() => new Set(Object.values(surface.fixFlows).filter(isResolved).map((f) => f.findingId)), [surface.fixFlows]);
     const counts = fixQueueCounts(queue.length > 0 ? queue : [finding], graph.findings.length, resolved);
@@ -56,7 +60,7 @@ export function FixFlowView({ finding, graph, labels, source, onCompose, onChang
                     )}
             </Section>
             <Section title={t.checksTitle}>
-                <FixChecksList checks={state.checks} details={state.details} labels={labels} />
+                <FixChecksList checks={state.checks} details={state.details} labels={labels} partnerTests={partnerTestFiles} />
                 <FixPrimary flow={flow} labels={labels} hasComposer={!!onCompose} revision={revision} />
             </Section>
             <Section title={`${t.queueTitle} · ${counts.open}`}>

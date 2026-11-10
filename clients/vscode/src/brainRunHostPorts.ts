@@ -29,12 +29,14 @@ import { createChildLedger } from "./childLedger";
 import { persistChildrenTo } from "./childRunJournal";
 import { startedCommandsOf } from "./childRunSpawner";
 import { askedText } from "./runAsked";
+import { runPlanTexts } from "./runDelta/runPlanTexts";
 import { editorChatSessionKey } from "./sessionNotes";
 import { createBrainRunHost, type BrainRunHost } from "./brainRunHost";
 import { editorShipPorts } from "./verify/editorShipPorts";
 import { gateStarts } from "./hostStartGate";
 import { changeSetIdentityForHostRun, recordChangeSetAroundRun } from "./runChangeSets";
 import { editorRunDelta } from "./runDelta/editorRunDelta";
+import { installRunOutcomes } from "./runOutcomes/installRunOutcomes";
 import { authorizeRelease } from "./runDelta/releaseAuthority";
 import { RELEASE_JOURNAL_WAIT_MS, releaseHeldRun } from "./runDelta/releaseHeldRun";
 import { installRunRecovery } from "./installRunRecovery";
@@ -284,6 +286,8 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     deviceId,
     workspaceFolders: () => (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath),
   });
+  // PRD 41 §D1: per-run commit attribution and the git-history outcome labels (`runOutcomes/`).
+  const outcomes = installRunOutcomes({ store: local.store, deviceId, log: hostLog });
   const lifecycle = createHostRunLifecycle({
     recovery,
     snapshot: (chatId) => getRunSnapshot(chatId),
@@ -317,7 +321,9 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     },
     acknowledgeInterrupted: interrupted.acknowledge,
     runDeltas: delta.runDeltas,
+    predictionShown: delta.predictionShown,
     openRunDeltaFile: delta.openFile,
+    runDeltaHistory: delta.history,
     // §12.5: a person's audited release of a run held at its finalize gate (`runDelta/releaseHeldRun.ts`).
     releaseHeldRun: async (runId) => {
       await releaseHeldRun({
@@ -338,8 +344,9 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
       // §12.5: an audit, or a turn started with Auto on (no human approves its writes), is autonomous; only a human-driven
       // turn with approvals is interactive. Sub-agents start through the host's internal start, never through here.
       const mode = payload.audit || payload.autoApprove ? "autonomous" : "interactive";
+      const asked = askedText(payload.userTurn);
       if (!isRunning(payload.chatId)) {
-        lifecycle.started(payload.chatId, runId, askedText(payload.userTurn));
+        lifecycle.started(payload.chatId, runId, asked);
         if (mode === "autonomous") delta.hold.expect(runId);
         runWrites.delete(payload.chatId); // this turn's evidence only
       }
@@ -356,8 +363,11 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
             chatId: payload.chatId,
             mode,
             writes: () => runWrites.get(payload.chatId),
+            // PRD 41 §C8.3: the task and the chat's linked tickets, local-first — their named paths are the run's plan.
+            plan: async () => runPlanTexts(local.store, asked, (await local.identity.clientIdFor(payload.chatId)) ?? undefined),
             ...(workspaceRoot() ? { workspaceRoot: workspaceRoot() } : {}),
             // PRD 41 §C14: the delta syncs with the chat's project, so the web lists it under that project.
+            ...(typeof payload.projectId === "number" ? { projectId: payload.projectId } : {}),
           }),
         },
         start,
@@ -376,6 +386,8 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     }),
     dispose() {
       offBindings();
+      outcomes.dispose();
+      delta.dispose();
       detachLifecycle();
       host.dispose();
     },

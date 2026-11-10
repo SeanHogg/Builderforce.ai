@@ -2,7 +2,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * revertMergedPullRequest — undo work that ALREADY LANDED on the base branch.
  *
- * The rest of the rollback story ({@link ../runtime/runRollback}) only ever closes
+ * The rest of the rollback story ({@link ../runtime/runRevert}) only ever closes
  * a pull request and deletes the run's branch. That is enough while the work is
  * still on a branch, and it is exactly nothing once the PR has been merged: the
  * commits are on `main`, so closing the (already-closed) PR and deleting the branch

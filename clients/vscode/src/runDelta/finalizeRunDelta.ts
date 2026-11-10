@@ -34,17 +34,30 @@ import { fingerprintHash, type ChangeSetRepoBaseline } from "../runChangeBaselin
 import type { FinalizedRunChangeSets, LocalChangeSetValue } from "../runChangeSets";
 import { deltaAttribution, overlappingRun, writesInRepo } from "./attribution";
 import { computeInWorker } from "./deltaWorkerHost";
+import type { DynamicTierRun } from "./dynamicTier";
+import type { PreparedDelta } from "./preparedPorts";
+import { blockingNow, L3_HOLD_WAIT_MS, runL3Phase, waitsForL3 } from "./analyzers/l3Phase";
+import type { PreparedAnalyzers } from "./analyzers/repoAnalyzers";
 import { headSwitched, type RepoGit } from "./gitSide";
+import { plannedPathsFor, type PathKinds } from "./plannedPaths";
 import { prepareDelta } from "./runDeltaPorts";
-import type { RunHoldPort } from "./runHoldGate";
+import { DEFAULT_EXTENSION_CAPS, runExtender, type RunHoldPort } from "./runHoldGate";
 import {
-  cardOf, pastBlastScores, redactDropped, storeRunDelta, syncedRepository, type RunDeltaCard, type StoredRunDelta,
+  cardOf, pastBlastScores, redactDropped, reviseRunDelta, storeRunDelta, syncedRepository, type RunDeltaCard, type StoredRunDelta,
 } from "./runDeltaRecords";
 import type { KnowledgeContext } from "./sideFacts";
 import { SideTexts, type PreimageReader } from "./sideTexts";
 
+/** Phase 2's seams (PRD 41 §6 step 4): the analyzers of one repository, and the L3 gate's queue (`knowledge/l3Tasks.ts`). */
+export interface L3Scheduler {
+  analyze(root: string, prepared: PreparedDelta, signal: AbortSignal): Promise<PreparedAnalyzers>;
+  queue(root: string, run: (signal: AbortSignal) => Promise<void>): void;
+}
+
 /** The budget a run's deltas get before they are abandoned (the static tier's p95 target is 10 s for ≤ 50 files). */
 export const RUN_DELTA_BUDGET_MS = 30_000;
+/** The most ONE run's deltas may be extended in total (the dynamic tier of all its repositories together). */
+export const MAX_RUN_EXTENSION_MS = DEFAULT_EXTENSION_CAPS.dynamic;
 
 /** What one repository root offers the delta. Every member is optional: a missing one degrades that part, never the run. */
 export interface RepoHostSources {
@@ -82,14 +95,37 @@ export interface RunDeltaDeps {
   post(card: RunDeltaCard): void;
   telemetry(event: DeltaComputedEvent): void;
   onError(error: unknown): void;
+  /**
+   * The L3 analyzer tier (PRD 41 §6 "Agent run" step 4), OFF the synchronous path: phase 1 (this budget) stores and posts
+   * the delta with every analyzer `pending`; phase 2 (`analyzers/l3Phase.ts`) is queued on the background indexer's L3
+   * gate and supersedes it with the final revision. Absent: the delta is the static tier alone.
+   */
+  l3?: L3Scheduler;
+  /**
+   * The optional dynamic tier of one repository (`dynamicTier.ts`, PRD 41 C6.2/C8.4): the final delta from the static one —
+   * annotated with what did not run, or recomputed with what did. It extends the budget through `run.extend` when a check
+   * may run. Absent: the delta carries no dynamic-tier statement at all.
+   */
+  dynamic?(run: DynamicTierRun): Promise<RunDelta>;
+  /** The dynamic tier of a run started, for up to `minutes`: the progress card says so ("running dynamic checks…"). */
+  onDynamic?(runId: string, minutes: number): void;
+  /**
+   * Hears each stored delta, after its card was posted (PRD 41 §D1: the run's features are frozen from it). Called
+   * detached; whatever it does must never fail or delay the run.
+   */
+  onStored?(stored: StoredRunDelta): void;
   now?: () => Date;
   /** Default {@link RUN_DELTA_BUDGET_MS}. */
   budgetMs?: number;
+  /** Resolves the plan's candidate paths in a repository (C8.3, `plannedPaths.ts`). Default: a `stat` of each candidate. */
+  pathKinds?: PathKinds;
 }
 
 export interface RunDeltaRun {
   chatId: number;
   mode: "interactive" | "autonomous";
+  /** The server project the run's chat belonged to, when known: synced with the delta (the server re-gates it). */
+  projectId?: number;
   closed: FinalizedRunChangeSets;
   /**
    * The run's own write evidence: the paths its file tools created, edited or deleted (its recorded tool calls), as the tools
@@ -102,6 +138,23 @@ export interface RunDeltaRun {
   hold?: RunHoldPort;
   /** The transcript message the run produced (its last reply): stored on the side record as the card's anchor. */
   at?: number;
+  /**
+   * The run's plan texts — its task and its linked tickets' titles and descriptions (`plannedPaths.ts` `runPlanTexts`):
+   * the source of the C8.3 planned paths. Absent: scope drift is not measured (`no-plan`).
+   */
+  plan?: () => Promise<readonly string[]>;
+}
+
+/** Each run's plan texts, read once for all its repositories; a failure reads as "no plan". */
+const planTexts = new WeakMap<RunDeltaRun, Promise<readonly string[]>>();
+function planTextsOf(deps: Pick<RunDeltaDeps, "onError">, run: RunDeltaRun): Promise<readonly string[]> {
+  if (!run.plan) return Promise.resolve([]);
+  let texts = planTexts.get(run);
+  if (!texts) {
+    texts = run.plan().catch((error: unknown) => { deps.onError(error); return []; });
+    planTexts.set(run, texts);
+  }
+  return texts;
 }
 
 const nowOf = (deps: Pick<RunDeltaDeps, "now">): Date => deps.now?.() ?? new Date();
@@ -141,7 +194,7 @@ async function beforeOverrides(base: Pick<ChangeSetRepoBaseline, "files" | "base
 
 async function registriesOf(
   base: Pick<ChangeSetRepoBaseline, "files" | "baseCommit" | "kind">, sources: RepoHostSources,
-): Promise<{ registries: DeltaRegistries; dropped: string[] }> {
+): Promise<{ registries: DeltaRegistries; dropped: string[]; raw?: unknown }> {
   let raw: unknown;
   try {
     raw = await beforeOverrides(base, sources);
@@ -149,12 +202,14 @@ async function registriesOf(
     const unreadable = error instanceof Error && error.message.startsWith("unreadable:");
     return { registries: DEFAULT_REGISTRIES, dropped: [unreadable ? error.message : "invalid:json"] };
   }
-  return withOverrides(DEFAULT_REGISTRIES, raw);
+  // `raw` (the baseline's file) also carries the dynamic tier's policy (`benchmarks`, `dynamic`).
+  return { ...withOverrides(DEFAULT_REGISTRIES, raw), raw };
 }
 
 /** The delta of ONE committed change set. Undefined when the record is gone. */
 async function repoDelta(
   deps: RunDeltaDeps, run: RunDeltaRun, set: { id: string; root: string }, sources: RepoHostSources, signal: AbortSignal,
+  extend: (ms: number) => number = () => 0,
 ): Promise<StoredRunDelta | undefined> {
   const started = Date.now();
   const record = await deps.store.read((tx) => tx.get<LocalChangeSetValue>("change-set", set.id));
@@ -172,23 +227,76 @@ async function repoDelta(
   const texts = new SideTexts(base, sources.git, sources.preimages?.read);
   const files = await texts.inputs(cs.files.map((f) => ({ ...f, attribution: deltaAttribution(f, { overlap, ...(writes ? { writes } : {}) }) })));
   const switched = sources.git && base.kind !== "folder" ? await headSwitched(sources.git, base) : false;
-  const { registries, dropped } = await registriesOf(base, sources);
+  const { registries, dropped, raw: overrides } = await registriesOf(base, sources);
+  // C8.3: the paths the run's task and tickets name, kept only when they resolve in this repository.
+  const plan = await planTextsOf(deps, run);
+  const plannedPaths = plan.length === 0 ? undefined : await plannedPathsFor({
+    texts: plan, root: set.root, changed: files.filter((f) => f.afterHash !== undefined).map((f) => f.path),
+    ...(deps.pathKinds ? { pathKinds: deps.pathKinds } : {}),
+  });
   const prepared = await prepareDelta({
     root: set.root, texts, registries,
-    input: { runId, mode: run.mode, ...(base.baseCommit ? { baseCommit: base.baseCommit } : {}), ...(switched ? { headSwitched: true } : {}), files },
+    input: {
+      runId, mode: run.mode, ...(base.baseCommit ? { baseCommit: base.baseCommit } : {}), ...(switched ? { headSwitched: true } : {}),
+      ...(plannedPaths ? { plannedPaths } : {}), files,
+    },
     ...(sources.knowledge ? { knowledge: sources.knowledge } : {}), ...(sources.git ? { git: sources.git } : {}),
     pastScores: () => pastBlastScores(deps.store, repository),
     onError: deps.onError,
   });
-  const delta = await computeInWorker(prepared, signal);
-  return {
+  // Phase 1: every L3 analyzer `pending` (phase 2 recomputes from this same `prepared`).
+  if (deps.l3) prepared.options = { analyzers: "pending" };
+  const computed = await computeInWorker(prepared, signal);
+  const delta = deps.dynamic
+    ? await deps.dynamic({
+      root: set.root, prepared, staticDelta: computed, overrides, ...(base.branch ? { branch: base.branch } : {}), repository, signal, extend,
+      announce: (minutes) => deps.onDynamic?.(run.closed.runId, minutes),
+    })
+      .catch((error: unknown) => { deps.onError(error); return computed; })
+    : computed;
+  const out: StoredRunDelta = {
     value: {
       runId, repository, changeSetId: set.id, chatId: run.chatId, mode: run.mode, delta,
       computedMs: Date.now() - started,
       ...(dropped.length > 0 ? { overridesDropped: redactDropped(dropped) } : {}),
+      ...(run.projectId !== undefined ? { projectId: run.projectId } : {}),
     },
     local: { kind: "local", runId, chatId: run.chatId, root: set.root, repo: cs.repository, ...(run.at !== undefined ? { at: run.at } : {}) },
   };
+  if (deps.l3) phaseOneInputs.set(out, prepared);
+  return out;
+}
+
+/** The prepared inputs of each phase-1 delta (phase 2 recomputes from them). */
+const phaseOneInputs = new WeakMap<StoredRunDelta, PreparedDelta>();
+/** Runs whose hold waits for phase 2: how many of their repositories' jobs are still out. */
+const holdsForL3 = new WeakMap<RunDeltaRun, { jobs: number; phaseOneDone: boolean }>();
+
+/** Queues phase 2 of one stored phase-1 delta; when its pending blocking codes certify an autonomous run, the hold waits for it. */
+function queuePhaseTwo(deps: RunDeltaDeps, run: RunDeltaRun, stored: StoredRunDelta): void {
+  const prepared = phaseOneInputs.get(stored);
+  if (!deps.l3 || !prepared) return;
+  let hold: RunHoldPort | undefined;
+  if (run.hold && waitsForL3(stored.value.delta)) {
+    const waiting = holdsForL3.get(run) ?? { jobs: 0, phaseOneDone: false };
+    holdsForL3.set(run, waiting);
+    waiting.jobs++;
+    // Once per run (the `l3` bucket is per run; the gate caps it anyway): the first repository's job extends the wait.
+    if (waiting.jobs === 1) run.hold.extend?.(L3_HOLD_WAIT_MS, "l3");
+    const port = run.hold;
+    hold = {
+      ...port,
+      settled: () => { if (--waiting.jobs === 0 && waiting.phaseOneDone) port.settled(); },
+    };
+  }
+  const l3 = deps.l3;
+  l3.queue(stored.local.root, (signal) => runL3Phase({ root: stored.local.root, prepared, stored, ...(hold ? { hold } : {}) }, {
+    analyze: l3.analyze,
+    compute: (p, s) => computeInWorker(p, s),
+    revise: (s) => reviseRunDelta(deps.store, { at: nowOf(deps).toISOString() }, s),
+    repost: (s) => deps.post(cardOf(s)),
+    onError: deps.onError,
+  }, signal));
 }
 
 /**
@@ -197,6 +305,7 @@ async function repoDelta(
  */
 export async function finalizeRunDelta(
   deps: RunDeltaDeps, run: RunDeltaRun, live: () => boolean = () => true, signal: AbortSignal = new AbortController().signal,
+  extend: (ms: number) => number = () => 0,
 ): Promise<RunDeltaCard[]> {
   const cards: RunDeltaCard[] = [];
   const roots = new Map<string, string>();
@@ -212,7 +321,7 @@ export async function finalizeRunDelta(
   try {
     for (const set of run.closed.committed) {
       try {
-        const value = await repoDelta(deps, run, set, await sourcesOf(set.root), signal);
+        const value = await repoDelta(deps, run, set, await sourcesOf(set.root), signal, extend);
         if (!value || !live()) {
           run.hold?.unmeasured(); // its change set is gone, or the budget ran out: this repository was not measured
           continue;
@@ -224,11 +333,14 @@ export async function finalizeRunDelta(
         }
         if (!stored) continue; // an earlier finalization of this run stored (and reported) it
         // Stored and live: only now may its blocking codes hold the run, so a hold always has the record behind it.
-        if (value.value.delta.blocking.length > 0) run.hold?.block(value.value.delta.blocking);
+        // An analyzer still measuring (`analyzer-pending:<tool>`) does not hold the run yet: phase 2 reports its verdict.
+        if (blockingNow(value.value.delta.blocking).length > 0) run.hold?.block(blockingNow(value.value.delta.blocking));
         const card = cardOf(value);
         cards.push(card);
         deps.post(card);
         deps.telemetry(eventOf(value));
+        deps.onStored?.(value);
+        queuePhaseTwo(deps, run, value);
       } catch (error) {
         deps.onError(error); // this repository's delta is absent (fail-closed: not measured); the others still run
         run.hold?.unmeasured();
@@ -248,24 +360,39 @@ export async function finalizeRunDelta(
  */
 export function startRunDelta(deps: RunDeltaDeps, run: RunDeltaRun): Promise<void> {
   let live = true;
-  const budget = deps.budgetMs ?? RUN_DELTA_BUDGET_MS;
+  let budget = deps.budgetMs ?? RUN_DELTA_BUDGET_MS;
   const abort = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let deadline = Date.now() + budget;
+  let expire!: () => void;
   const timeout = new Promise<void>((resolve) => {
-    timer = setTimeout(() => {
+    expire = () => {
       live = false;
       abort.abort(); // terminates the engine's worker
       deps.onError(new Error(`run_delta_budget: the delta of run ${run.closed.runId} took longer than ${budget} ms and was abandoned`));
       run.hold?.unmeasured();
       resolve();
-    }, budget);
+    };
+    timer = setTimeout(expire, budget);
   });
-  const work = finalizeRunDelta(deps, run, () => live, abort.signal).then(() => undefined, (error: unknown) => {
+  // The dynamic tier (opted in or mandated) runs for minutes: the deadline, and the finalize gate's, move with it — by
+  // min(the run's TOTAL cap left, the gate's grant), so the gate never expires before the delta's own deadline.
+  const extender = runExtender(run.hold, (granted) => {
+    budget += granted;
+    deadline += granted;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(expire, Math.max(0, deadline - Date.now()));
+  });
+  const extend = (ms: number): number => (live ? extender(ms) : 0);
+  const work = finalizeRunDelta(deps, run, () => live, abort.signal, extend).then(() => undefined, (error: unknown) => {
     deps.onError(error);
     run.hold?.unmeasured();
   });
   return Promise.race([work, timeout]).finally(() => {
     if (timer) clearTimeout(timer);
+    // A blocking analyzer still measuring (phase 2): the hold settles when the last of the run's jobs lands.
+    const waiting = holdsForL3.get(run);
+    if (waiting && waiting.jobs > 0) { waiting.phaseOneDone = true; return; }
     run.hold?.settled();
   });
 }

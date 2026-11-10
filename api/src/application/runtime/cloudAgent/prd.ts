@@ -29,6 +29,7 @@ import { listBranchDiff, listRepoFiles } from '../../repos/readRepoContents';
 import { resolveIdeWorkspaceForRun, snapshotIdeWorkspace } from './ideWorkspaceCoding';
 import { recordCloudToolEvent } from '../cloudToolEvents';
 import { notifyExecutionSubscribers } from '../executionEvents';
+import { agentCommitSubject, type AgentCommitRun } from '../agentCommitMarker';
 import { getOrSetCached } from '../../../infrastructure/cache/readThroughCache';
 import { taskFileChanges, tasks } from '../../../infrastructure/database/schema';
 import type { PrdUpdateResult, PrdWriteCapability } from '@builderforce/agent-tools';
@@ -441,9 +442,9 @@ export function buildPrdCapability(
 }
 
 /** The commit subject a run's own write lands under, so a repo history says which
- *  ticket and which agent produced the change. */
-export function agentCommitMessage(verb: string, path: string, taskId: number, agentLabel: string, suffix = ''): string {
-  return `${verb} ${path} — task #${taskId} (${agentLabel})${suffix}`;
+ *  ticket, which RUN and which agent produced the change (`agentCommitMarker.ts`). */
+export function agentCommitMessage(verb: string, path: string, run: AgentCommitRun, agentLabel: string, suffix = ''): string {
+  return agentCommitSubject(verb, path, run, agentLabel, suffix);
 }
 
 /**

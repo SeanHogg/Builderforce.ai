@@ -92,6 +92,11 @@ export interface MemoryQueryVector {
 }
 
 export type MemoryStore = 'agent_memory' | 'project_facts';
+/**
+ * Every relation the bge-m3 keyset sweep fills: the memory stores recall reads, plus the run-delta findings
+ * (PRD 41 §C14, 1344), registered here as one more row of the ONE sweep rather than a copy of it.
+ */
+export type Backfill1024Store = MemoryStore | 'run_delta_findings';
 
 /**
  * Set by the 1024 backfill when a full lap over `store` found no row without a bge-m3

@@ -34,3 +34,7 @@ export * from './schema/search';
 export * from './schema/discovery';
 // Synchronization — the batch push/pull protocol's delivery tables (migration 1247).
 export * from './schema/sync';
+// Run outcomes — PRD 41 §D1 training data on the operational endpoint (1342 / 0032).
+export * from './schema/runOutcomes';
+// Run deltas — PRD 41 §C14 what a run changed, per repository, with finding vectors (1344).
+export * from './schema/runDeltas';

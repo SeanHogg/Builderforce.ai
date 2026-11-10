@@ -16,12 +16,16 @@ import type { RigController } from './rig/rig';
 import { TWEEN_MS } from './tween';
 import type { Placement } from './types';
 
-export function useStageRenderer(create: () => StageRenderer): StageRenderer | null {
-    const [renderer, setRenderer] = useState<StageRenderer | null>(null);
+/**
+ * Null until the effect has run; `false` when the factory declined (no WebGL: the host falls back to the List).
+ */
+export function useStageRenderer(create: () => StageRenderer | null): StageRenderer | null | false {
+    const [renderer, setRenderer] = useState<StageRenderer | null | false>(null);
     const make = useRef(create);
     make.current = create;
     useEffect(() => {
         const r = make.current();
+        if (!r) { setRenderer(false); return undefined; }
         setRenderer(r);
         return () => { r.dispose(); setRenderer((cur) => (cur === r ? null : cur)); };
     }, []);

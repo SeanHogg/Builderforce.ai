@@ -111,6 +111,7 @@ import { runDueCeremonies, runCeremonyReaper } from './application/ceremony/runD
 import { buildScheduledReport } from './application/reports/scheduledReport';
 import { drainExecutionLifecycleOutbox } from './application/runtime/executionLifecycleOutbox';
 import { REPO_DELIVERY_SWEEPS } from './cronSweeps.repoDelivery';
+import { RUN_OUTCOME_SWEEPS } from './cronSweeps.runOutcomes';
 import { runStakeholderDigestSweep, runStakeholderReminderSweep } from './application/stakeholderAlignment/StakeholderMapService';
 import { runTriggerSweep } from './application/canvas/runTriggerSweep';
 import { runSignatureReminderSweep } from './application/signature/runSignatureReminderSweep';
@@ -1177,6 +1178,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
         ? `opened=${opened} resolved=${r.resolved} exportsPurged=${r.exportsPurged}` : null;
     },
   },
+  // PRD 41 §D1 run-outcome labels (own module).
+  ...RUN_OUTCOME_SWEEPS,
   // Repo + pull-request delivery: probes, reconcilers, PR conduct / merge (one concern, own module).
   ...REPO_DELIVERY_SWEEPS,
 ];

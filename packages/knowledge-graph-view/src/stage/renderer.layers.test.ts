@@ -62,10 +62,15 @@ describe('the stage layers (PRD 43 B3)', () => {
         expect(meshes(stage.object!, 'planes')[0]!.count).toBe(map.planes.length);
         // The map's names went to the label pass (a font is available, the fixture's names are latin).
         expect(text.created()).toBeGreaterThan(0);
-        // A switch away and back still creates nothing, links and labels included.
-        const labels = text.created();
-        stage.setPlacement(place('graph'), 0, 400); while (stage.tick(10_000));
+        // A switch away and back still creates no mesh, links included.
+        const graph = place('graph');
+        stage.setPlacement(graph, 0, 400); while (stage.tick(10_000));
         stage.setPlacement(map, 20_000, 400); while (stage.tick(30_000));
+        expect(stage.stats.meshesCreated).toBe(created);
+        // The Graph's own names (P3) are typeset on its first visit; a second round trip creates no text object either.
+        const labels = text.created();
+        stage.setPlacement(graph, 40_000, 400); while (stage.tick(50_000));
+        stage.setPlacement(map, 60_000, 400); while (stage.tick(70_000));
         expect(stage.stats.meshesCreated).toBe(created);
         expect(text.created()).toBe(labels);
     });

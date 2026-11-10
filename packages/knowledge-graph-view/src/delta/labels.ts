@@ -11,6 +11,7 @@
  */
 
 import { labelsFromCatalog } from '../catalogLabels';
+import { ANALYZER_METRIC_LABELS, ANALYZER_PARAM_LABELS, ANALYZER_REASON_LABELS, ANALYZER_RULE_LABELS } from './labelsAnalyzers';
 
 export const RUN_DELTA_NAMESPACE = 'runDelta';
 
@@ -43,6 +44,9 @@ export interface RunDeltaLabels {
     aggregated: string;
     blockingHeading: string;
     failedHeading: string;
+    /** The L3 analyzers a phase-1 delta still waits on (`MeasuredBy.status: 'pending'`): heading, and `{tool}` per row. */
+    measuringHeading: string;
+    measuringTool: string;
     /** `{before}` → `{after}` `{unit}` (a missing side reads {@link notMeasuredValue}). */
     metricValue: string;
     notMeasuredValue: string;
@@ -96,6 +100,8 @@ export interface RunDeltaLabels {
     unsafeReasons: Record<string, string>;
     /** The card while the delta computes (`status: 'pending'`), and when it ended without one (`failed`). */
     pendingCard: string;
+    /** The pending card while the optional dynamic tier runs; `{minutes}` its ceiling. */
+    pendingDynamic: string;
     failedCard: string;
     /** §12.5: an autonomous run held at its finalize gate. `{rules}` = the blocking rules, localized and joined. */
     held: string;
@@ -150,6 +156,8 @@ export const DEFAULT_RUN_DELTA_LABELS: RunDeltaLabels = {
     aggregated: 'aggregated ({count})',
     blockingHeading: 'What blocks an autonomous run',
     failedHeading: 'Checks that did not run',
+    measuringHeading: 'Still measuring',
+    measuringTool: '{tool} — measuring…',
     metricValue: '{before} → {after}[[ {unit}]]',
     notMeasuredValue: 'not measured',
     waived: 'Risk accepted: {reason}',
@@ -206,6 +214,26 @@ export const DEFAULT_RUN_DELTA_LABELS: RunDeltaLabels = {
         truncated: 'Results were truncated',
         insufficientHistory: 'Not enough past runs to rank',
         notComparableRule: '{rule} could not be certified',
+        ...ANALYZER_REASON_LABELS,
+        dynamicNotRun: '{tool} did not run',
+        optInOff: 'Off: not turned on in the settings',
+        notScheduled: 'Not scheduled for this run',
+        notConfigured: 'Not set up for this project',
+        toolUnavailable: 'Tool not installed in the project',
+        noChangedCode: 'No changed code to measure',
+        policyNever: 'Turned off by the project policy',
+        noShell: 'No process available to run it',
+        aborted: 'Stopped before it finished',
+        runnerThrew: 'The run stopped with an error',
+        tooFewPairs: 'Too few before/after measurements',
+        noReport: 'The tool wrote no report',
+        recomputeFailed: 'Measured, but the result could not be applied',
+        untrustedWorkspace: 'Not run: the workspace is not trusted',
+        budgetExhausted: 'Not run: the time allowed for this run is used up',
+        treeUnavailable: 'A temporary copy of the project could not be made',
+        nonFiniteSamples: 'A measurement was not a number',
+        notApplicable: 'Not applicable to this run',
+        noPlan: 'No plan with named files for this run',
         unsafeRegex: '{key}: unsafe pattern dropped ({reason})',
     },
     clauses: { findingsResolved: 'findings resolved', metricsImproved: 'metrics improved', worse: 'got worse' },
@@ -242,15 +270,62 @@ export const DEFAULT_RUN_DELTA_LABELS: RunDeltaLabels = {
         forcePush: 'Force push in a script',
         rmRf: 'Recursive delete in a script',
         deltaConfigChanged: 'Delta policy file changed',
+        unboundedQuery: 'Query without a row limit',
+        cacheBypass: 'Cached read bypasses the cache',
+        nestedIteration: 'Nested loop over a collection (quadratic)',
+        regexRedos: 'Regex prone to catastrophic backtracking',
+        bundleWeight: 'Heavy server package in client code',
+        renderHot: 'Avoidable re-render',
+        untestedChange: 'Code changed with no test touching it',
+        envVarAdded: 'New environment variable required',
+        envVarRemoved: 'The changed files no longer read an environment variable',
+        enginesChanged: 'Runtime requirement (engines) changed',
+        routeSchemaChanged: 'Route request schema changed',
+        a11yViolation: 'Accessibility issue',
+        catchSwallowed: 'Error silently swallowed',
+        floatingPromise: 'Promise left unhandled',
+        errorHandlingRemoved: 'Error handling removed',
+        timeoutRetryChanged: 'Timeout or retry changed',
+        processExit: 'Library code exits the process',
+        platformSpecificApi: 'Platform-specific path or command',
+        nodeOnlyImport: 'Node-only module in browser or Worker code',
+        catchAllAdded: 'Catch-all error handler added',
+        outOfScopeChange: 'File changed outside the planned scope',
+        methodWidened: 'Route accepts more HTTP methods',
+        newUntrustedInput: 'Route reads new untrusted input',
+        taintPath: 'Untrusted input reaches a risky call',
+        tlsVerifyDisabled: 'TLS certificate check disabled',
+        corsPermissive: 'CORS open to any origin',
+        cookieInsecure: 'Cookie missing security flags',
+        cspPermissive: 'Permissive content security policy',
+        debugEnabled: 'Debug mode on in a production config',
+        workflowPermissive: 'Workflow with broad permissions',
+        containerRoot: 'Container runs as root',
+        infraSurfaceAdded: 'New route, binding or port exposed',
+        installScriptAdded: 'Install-time script added',
+        ...ANALYZER_RULE_LABELS,
+        benchmark: 'Benchmarks',
+        diffCoverage: 'Tests with coverage',
+        mutation: 'Mutation testing',
+        benchMetrics: 'Benchmarks',
+        testSlower: 'Test became much slower',
+        mutantSurvived: 'Surviving mutant',
+        mutantSurvivedMetrics: 'Mutation score',
     },
     metrics: {
         complexityMax: 'Highest complexity',
         complexitySum: 'Total complexity',
         todoAdded: 'TODOs added',
         anyCastAdded: '"any" casts added',
+        ...ANALYZER_METRIC_LABELS,
+        couplingEfferent: 'Outgoing dependencies of changed files',
+        couplingAfferent: 'Files depending on the changed files',
+        couplingInstability: 'Instability of the changed files',
+        hotspotTouched: 'Churn × complexity of the riskiest changed file',
+        mutationScore: 'Mutation score of changed files',
     },
     /** A unit with no entry (`count`) is shown bare. */
-    units: { cyclomatic: 'cyclomatic' },
+    units: { cyclomatic: 'cyclomatic', ratio: 'fraction', instructions: 'instructions' },
     excluded: {
         preimageTooLarge: 'Before version too large to keep',
         preimageMissing: 'Before version missing',
@@ -282,12 +357,55 @@ export const DEFAULT_RUN_DELTA_LABELS: RunDeltaLabels = {
         key: 'Match',
         count: 'Count',
         members: 'Members',
+        collection: 'Collection',
+        module: 'Module',
+        name: 'Name',
+        sink: 'Risky call type',
+        source: 'Input source',
+        hops: 'Steps',
+        stride: 'Threat (STRIDE)',
+        missing: 'Missing flags',
+        credentials: 'With credentials',
+        reflected: 'Origin reflected',
+        chain: 'Path taken',
+        script: 'Script',
+        strideSpoofing: 'Spoofing covered by',
+        strideTampering: 'Tampering covered by',
+        strideRepudiation: 'Repudiation covered by',
+        strideInformationDisclosure: 'Information disclosure covered by',
+        strideDenialOfService: 'Denial of service covered by',
+        strideElevationOfPrivilege: 'Elevation of privilege covered by',
+        ...ANALYZER_PARAM_LABELS,
     },
     paramValues: {
         via: { chain: 'Handler chain', middleware: 'Middleware', rekeyed: 'Route renamed', unguardedSibling: 'Unguarded among guarded siblings' },
         change: { added: 'Added', edited: 'Edited', deleted: 'Deleted', removed: 'Removed', changed: 'Changed' },
-        kind: { httpRoute: 'HTTP route', middleware: 'Middleware', vscodeCommand: 'VS Code command', webviewMessage: 'Webview message' },
+        kind: {
+            httpRoute: 'HTTP route', middleware: 'Middleware', vscodeCommand: 'VS Code command', webviewMessage: 'Webview message',
+            workerRoute: 'Worker route', binding: 'Binding', durableObject: 'Durable Object class', port: 'Exposed port',
+        },
         crossed: { '0': 'No', '1': 'Yes' },
+        sink: {
+            commandExec: 'Shell command', dynamicCode: 'Dynamic code (eval)', html: 'HTML markup', sqlRaw: 'Raw SQL',
+            ssrf: 'Server-side request (SSRF)', pathTraversal: 'File path', openRedirect: 'Redirect', deserialization: 'Deserialization',
+            regexInjection: 'Regular expression',
+        },
+        source: {
+            httpRequest: 'HTTP request', webviewMessage: 'Webview message', processArgv: 'Command-line arguments', upload: 'Uploaded file',
+            mcpArgs: 'MCP tool arguments',
+        },
+        stride: {
+            spoofing: 'Spoofing', tampering: 'Tampering', repudiation: 'Repudiation', informationDisclosure: 'Information disclosure',
+            denialOfService: 'Denial of service', elevationOfPrivilege: 'Elevation of privilege',
+        },
+        credentials: { '1': 'Yes' },
+        reflected: { '1': 'Yes' },
+        strideSpoofing: { uncovered: 'Not covered' },
+        strideTampering: { uncovered: 'Not covered' },
+        strideRepudiation: { uncovered: 'Not covered' },
+        strideInformationDisclosure: { uncovered: 'Not covered' },
+        strideDenialOfService: { uncovered: 'Not covered' },
+        strideElevationOfPrivilege: { uncovered: 'Not covered' },
     },
     unsafeReasons: {
         tooLong: 'too long',
@@ -297,6 +415,7 @@ export const DEFAULT_RUN_DELTA_LABELS: RunDeltaLabels = {
         quantifiedAlternation: 'quantified alternation',
     },
     pendingCard: 'Measuring what this run changed…',
+    pendingDynamic: 'Running dynamic checks (tests, benchmarks), up to {minutes} min…',
     failedCard: 'Not measured: what this run changed could not be measured.',
     held: 'Held: needs review',
     heldUnmeasured: 'Not measured: held for review',

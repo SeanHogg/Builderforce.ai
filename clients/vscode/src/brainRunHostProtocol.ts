@@ -15,7 +15,7 @@ import {
   type ModelFallbackSurface,
   type ReasoningIntent,
 } from "@seanhogg/builderforce-brain-embedded";
-import type { RunDeltaCardPayload } from "@builderforce/run-delta";
+import type { PredictedCard } from "./runDelta/runDeltaPredictions";
 import type { ChildView } from "./childRuns";
 import type { InterruptedRunView } from "./interruptedRunTypes";
 import { listDelta, sentOf, type SentList } from "./listDelta";
@@ -100,9 +100,10 @@ export type RunHostMessage =
    * (its remote URL, else its root path); `root` the repository's absolute local root, where a card path opens; `overrides`
    * the ignored `.builderforce/delta.json` entries (redacted); `blocked` the rules that held this autonomous run at its
    * finalize gate (§12.5), `released` once the person released it. The panel holding `chatId` shows the card;
-   * `run-delta/get` answers the same payloads for a reopened chat.
+   * `run-delta/get` answers the same payloads for a reopened chat. `predicted`: the card's predictions to show (PRD 41 §D11,
+   * `ok` and non-zero only; `runDelta/runDeltaPredictions.ts`), advisory and never a verdict.
    */
-  | ({ type: "run-delta/card" } & RunDeltaCardPayload);
+  | ({ type: "run-delta/card" } & PredictedCard);
 
 /** A webview panel watching the runs — anything that can be posted to. */
 export interface RunSink {

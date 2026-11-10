@@ -17,12 +17,15 @@
  */
 
 import {
-  buildStoredGraph, knownKeysCache, storedFileHashes, textDocument,
+  buildStoredGraph, knownKeysCache, storedFileHashes, textDocument, type ModuleAliases,
 } from "@builderforce/agent-tools/knowledge";
+import { fileFactsStamp } from "@builderforce/agent-tools/node-file-facts";
 import {
-  CONTENT_HASH_RULE, EXTRACTOR_VERSION, MAX_NODES_CAP, extractFile, identityOf, merkleTree, outlineOf, outlineRef, pathOfRef, srcRef,
-  type KnowledgeGraph, type KnowledgePack, type KnowledgeStore,
+  CONTENT_HASH_RULE, EXTRACTOR_VERSION, MAX_NODES_CAP, extractFile, extractorStampMeta, identityOf, merkleTree, outlineOf, outlineRef, pathOfRef, srcRef,
+  type FileFacts, type KnowledgeGraph, type KnowledgePack, type KnowledgeStore,
 } from "@seanhogg/builderforce-memory/knowledge";
+import { sideFileFacts } from "./sideFileFacts";
+import { factIndexOf } from "../knowledge/factFindings";
 import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
 import type { SideFacts, SideText } from "@builderforce/run-delta";
 import { toKnowledgePath, toRepoPath, type RepoPlacement } from "./repoPlacement";
@@ -41,6 +44,8 @@ export interface KnowledgeContext {
   packs: KnowledgePack[];
   /** The store's fact generation (`meta.generation`), as text. */
   generation(): string;
+  /** The root's path aliases (`rootModules`), for resolving the sides' FileFacts imports. Absent ⇒ none. */
+  aliases?: ModuleAliases;
 }
 
 /**
@@ -54,13 +59,22 @@ export interface SideFile {
   absent?: true;
 }
 
-const META: SideFacts["meta"] = { extractorVersion: EXTRACTOR_VERSION, contentHashRule: CONTENT_HASH_RULE };
+/**
+ * What the side was measured with: the packs' extractor version and the content-hash rule, plus the FileFacts extractor's
+ * stamp (`extractorStampMeta(fileFactsStamp())`: its family/version and each grammar as a `grammar:<lang>` tool), so a
+ * grammar or extractor change between the sides is not comparable (C9).
+ */
+const FACTS_STAMP = extractorStampMeta(fileFactsStamp());
+const META: SideFacts["meta"] = {
+  extractorVersion: EXTRACTOR_VERSION, contentHashRule: CONTENT_HASH_RULE,
+  ...(FACTS_STAMP.extractor ? { extractor: FACTS_STAMP.extractor } : {}), tools: { ...(FACTS_STAMP.tools ?? {}) },
+};
 
-function emptyFacts(files: readonly SideFile[], generation: string): SideFacts {
+function emptyFacts(files: readonly SideFile[], generation: string, fileFacts?: ReadonlyMap<string, FileFacts>): SideFacts {
   const manifest = files.filter((f) => f.hash).map((f) => ({ path: f.path, hash: f.hash! }));
   return {
     manifestGeneration: generation, merkleRoot: merkleTree(manifest).root,
-    findings: [], imports: new Map(), badges: new Map(), meta: META,
+    findings: [], imports: new Map(), badges: new Map(), meta: META, ...(fileFacts ? { fileFacts } : {}),
   };
 }
 
@@ -99,7 +113,11 @@ function graphShape(graph: KnowledgeGraph, prefix: RepoPlacement): Pick<SideFact
  * keeps no facts on this side); a failure to build the graph rejects.
  */
 export async function sideFacts(ctx: KnowledgeContext | undefined, files: readonly SideFile[], onError?: (error: unknown) => void): Promise<SideFacts> {
-  if (!ctx) return emptyFacts(files, "0");
+  if (!ctx) {
+    // No knowledge root: the side's listing is its changed files.
+    const listing = new Set(files.filter((f) => !f.absent && f.hash !== undefined).map((f) => f.path));
+    return emptyFacts(files, "0", await sideFileFacts({ rootId: "", files, listing, ...(onError ? { onError } : {}) }));
+  }
   const { rootId, store, manifest, packs, placement: prefix } = ctx;
   // Only files inside the knowledge root are swapped; a repo path outside it has no facts there.
   files = files.filter((f) => toKnowledgePath(prefix, f.path) !== undefined);
@@ -124,18 +142,27 @@ export async function sideFacts(ctx: KnowledgeContext | undefined, files: readon
     maxNodes: MAX_NODES_CAP,
   });
   const hashes = await storedFileHashes(manifest, rootId, overrides);
-  const merkleRoot = merkleTree([...hashes].flatMap(([p, hash]) => {
+  const sideManifest = [...hashes].flatMap(([p, hash]) => {
     const path = repoPathOf(prefix, p);
     return path === undefined ? [] : [{ path, hash }];
-  })).root;
+  });
+  const merkleRoot = merkleTree(sideManifest).root;
+  // FileFacts of the changed files, resolved against THIS side's listing (the before listing for the before side).
+  const index = factIndexOf(rootId);
+  const fileFacts = await sideFileFacts({
+    rootId, files, listing: new Set(sideManifest.map((e) => e.path)), ...(ctx.aliases ? { aliases: ctx.aliases } : {}), ...(onError ? { onError } : {}),
+    // A file the run did not change is a router module by the root's current facts (knowledge space).
+    isRouterFile: (repoFile) => { const k = toKnowledgePath(prefix, repoFile); return k !== undefined && !!index?.isRouterFile(k); },
+  });
   const generation = ctx.generation();
-  if (!graph) return { ...emptyFacts(files, generation), merkleRoot };
+  if (!graph) return { ...emptyFacts(files, generation, fileFacts), merkleRoot };
   return {
     manifestGeneration: generation,
     merkleRoot,
     findings: graph.findings.map((f) => ({ identity: identityOf(f), kind: f.kind, severity: f.severity, nodes: f.nodes, params: f.params })),
     ...graphShape(graph, prefix),
     meta: META,
+    fileFacts,
   };
 }
 

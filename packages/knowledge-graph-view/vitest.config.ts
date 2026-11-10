@@ -16,6 +16,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { sourcePackageAliases } from '../../scripts/sourcePackages.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FRONTEND = path.resolve(HERE, '../../frontend');
@@ -65,6 +66,11 @@ export default {
   // No `resolve.dedupe`: it resolves from `root`, which here has no node_modules. The peers'
   // own imports already land on the same (pnpm, realpath) copies the rule above picks.
   plugins: [rawCss, peersFromHost],
+  // The source-only packages (`@builderforce/run-delta` and its subpaths among them: the history reads the engine's
+  // `HEADLINE_ORDER` at runtime) have no install anywhere, the frontend's included, so the rule above cannot find them:
+  // they resolve through the registry's aliases, as every host's do. Aliases run before plugins, so a peer import is
+  // still the host's.
+  resolve: { alias: sourcePackageAliases(path.resolve(HERE, '../..')) },
   test: {
     environment: 'jsdom',
     include: ['src/**/*.test.{ts,tsx}'],

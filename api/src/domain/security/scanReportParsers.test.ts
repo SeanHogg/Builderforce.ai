@@ -6,14 +6,13 @@
  * fingerprint is stable across a re-parse and blind to case.
  */
 import { describe, expect, it } from 'vitest';
+import { normalizeSeverity, sarifToFindings } from '@builderforce/sarif';
 import {
   findingFingerprint,
   isScanReportFormat,
-  normalizeSeverity,
   normalizedFindings,
   npmAuditToFindings,
   parseScanReport,
-  sarifToFindings,
 } from './scanReportParsers';
 
 describe('normalizeSeverity', () => {

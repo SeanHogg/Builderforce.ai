@@ -9,7 +9,7 @@
  */
 
 import type { LocalFirstStore } from "@builderforce/local-first";
-import type { RunDeltaCardPayload } from "@builderforce/run-delta";
+import type { RunDeltaCardPayload, RunDeltaSummary } from "@builderforce/run-delta";
 import { getRunSnapshot } from "@seanhogg/builderforce-brain-embedded";
 import type * as vscode from "vscode";
 import type { RunHostMessage, RunSink } from "../brainRunHostProtocol";
@@ -22,8 +22,13 @@ import { RUN_DELTA_BUDGET_MS, startRunDelta } from "./finalizeRunDelta";
 import { runDeltaFile, type OpenCodeRequest } from "./openCode";
 import { createRunDeltaProgress, lastReplySince } from "./runDeltaProgress";
 import { readRunDeltas } from "./runDeltaRecords";
+import { readRunDeltaHistory } from "./runDeltaHistory";
 import { createRunHoldGate, type RunHoldGate } from "./runHoldGate";
 import { withHolds } from "./runHoldState";
+import type { RunEndDeps } from "./atRunEnd";
+import { readRunPredictions, withPredicted, type PredictedCard } from "./runDeltaPredictions";
+import type { StoredRunDelta } from "./runDeltaRecords";
+import type { Prediction } from "@builderforce/run-delta/predict";
 
 type DeltaHost = typeof import("./runDeltaHost");
 
@@ -50,15 +55,24 @@ export interface EditorRunDelta {
    * The change set's `onFinalized` for one run: starts the delta, detached (an autonomous run's through its hold port).
    * `writes` is read then: the run's own file-tool writes (its write evidence), as recorded by the run host.
    */
-  onFinalized(run: { chatId: number; mode: "interactive" | "autonomous"; writes?: () => readonly string[] | undefined; workspaceRoot?: string }):
-    (closed: FinalizedRunChangeSets) => void;
+  onFinalized(run: {
+    chatId: number; mode: "interactive" | "autonomous"; writes?: () => readonly string[] | undefined; workspaceRoot?: string; projectId?: number;
+    /** The run's plan texts (task + linked tickets), read when the delta computes: the C8.3 planned paths' source. */
+    plan?: () => Promise<readonly string[]>;
+  }): (closed: FinalizedRunChangeSets) => void;
   attach(sink: RunSink): () => void;
   /** `run-delta/get`: the stored cards, plus the pending / failed card of a run still measuring (or that failed to). */
   runDeltas(query: { runId?: string; chatId?: number }): Promise<RunDeltaCardPayload[]>;
   /** A card's Open code: the confined absolute file (`openCode.ts`), or undefined when refused. */
   openFile(request: OpenCodeRequest): Promise<string | undefined>;
+  /** `run-delta/history`: a repository's stored deltas as summaries, newest first (`runDeltaHistory.ts`, PRD 41 §C11.3). */
+  history(query: { repo: string; limit?: number }): Promise<RunDeltaSummary[]>;
   /** Posts a run's stored cards again (after its release, §12.5: they read back `released`). */
   repost(runId: string): Promise<void>;
+  /** `run-delta/prediction-shown`: the card rendered a prediction (PRD 41 §4 `prediction.shown`). */
+  predictionShown(prediction: Prediction): void;
+  /** Extension shutdown: stops the end-of-run recorders. */
+  dispose(): void;
 }
 
 const log = (what: string, error: unknown): void =>
@@ -82,6 +96,9 @@ export function editorRunDelta(args: {
     }
   });
   const post = progress.post;
+  // A delta stored with its analyzers pending lost its L3 phase with the last session: settle it (`interrupted`), re-post.
+  void import("./analyzers/l3Recovery").then((m) => m.settleInterruptedDeltas(args.store, { post, onError: (error) => log("settle interrupted deltas", error) }))
+    .catch((error: unknown) => log("settle interrupted deltas", error));
   const gate = createRunHoldGate({
     budgetMs: RUN_DELTA_BUDGET_MS + HANDOFF_GRACE_MS,
     finalizeCeilingMs: FINALIZE_CEILING_MS,
@@ -89,9 +106,17 @@ export function editorRunDelta(args: {
       `run_hold_gate: ${which === "delta" ? "no settled delta" : "no change-set hand-off"} within ${ms} ms; the run is held unmeasured`,
     )),
   });
-  /** The stored cards (and a run's progress card), each with its run's hold as its execution says it. */
-  const cardsOf = async (query: { runId?: string; chatId?: number }): Promise<RunDeltaCardPayload[]> =>
-    withHolds(args.store, progress.withProgress(query, await readRunDeltas(args.store, query)));
+  /** The stored cards (and a run's progress card), each with its run's hold as its execution says it and its `ok` predictions. */
+  const cardsOf = async (query: { runId?: string; chatId?: number }): Promise<PredictedCard[]> =>
+    withPredicted(await withHolds(args.store, progress.withProgress(query, await readRunDeltas(args.store, query))), await readRunPredictions(args.store, query));
+  // Extension shutdown stops the end-of-run recorders (`dispose`).
+  const shutdown = new AbortController();
+  /** The end-of-run recorders (`atRunEnd.ts`), loaded lazily like the host adapters. */
+  const runEnd = (): Promise<typeof import("./atRunEnd")> => import("./atRunEnd");
+  const endDeps = (h: DeltaHost, runId: string): RunEndDeps => ({
+    store: args.store, deviceId: args.deviceId, log: (what, error) => log(`${what} ${runId}`, error),
+    enabled: h.naturalnessEnabled, preimages: (root) => h.preimageReaderFor(runId, root), signal: shutdown.signal,
+  });
   const repost = async (runId: string): Promise<void> => {
     for (const card of await cardsOf({ runId })) post(card);
   };
@@ -178,6 +203,7 @@ export function editorRunDelta(args: {
           measuring.delete(closed.runId);
           measuredDone();
         };
+        const settled: StoredRunDelta[] = [];
         void loadHost().then((h) => startRunDelta({
           store: args.store,
           deviceId: args.deviceId,
@@ -186,7 +212,24 @@ export function editorRunDelta(args: {
           post,
           telemetry: h.deltaTelemetry(hostLog),
           onError: (error) => log(`run ${closed.runId}`, error),
-        }, { ...run, closed, ...(at !== undefined ? { at } : {}), ...(written ? { writes: written } : {}), ...(hold ? { hold } : {}) }).finally(measured), (error: unknown) => {
+          l3: h.deltaL3,
+          // PRD 41 C6.2/C8.4: the optional dynamic tier (opted in or mandated by the project's policy; off by default).
+          // PRD 41 D9: benchmarks by the sign-test SPRT; the Thompson sampler once the repository's scheduling history allows.
+          dynamic: h.deltaDynamicTier((error) => log(`dynamic tier ${closed.runId}`, error), { store: args.store, deviceId: args.deviceId }),
+          // The pending card names the dynamic tier while it runs ("running dynamic checks, up to N min").
+          onDynamic: (runId, minutes) => progress.dynamic(runId, minutes),
+          // PRD 41 §D1: the run's features are frozen at run end, from its stored delta (detached, never fails the run).
+          onStored: (stored) => {
+            settled.push(stored);
+            void runEnd().then((m) => m.onDeltaStored(endDeps(h, closed.runId), stored), (error: unknown) => log("run outcome load", error));
+          },
+        }, { ...run, closed, ...(at !== undefined ? { at } : {}), ...(written ? { writes: written } : {}), ...(hold ? { hold } : {}) }).finally(() => {
+          measured();
+          // PRD 41 §D6: once the WHOLE delta settled (never inside its budget), naturalness; its cards then re-post with it.
+          if (settled.length === 0) return;
+          void runEnd().then((m) => m.atRunEnd(endDeps(h, closed.runId), settled)).then((shown) => (shown ? repost(closed.runId) : undefined))
+            .catch((error: unknown) => log(`run end ${closed.runId}`, error));
+        }), (error: unknown) => {
           log("load", error);
           if (closed.committed.length > 0) hold?.unmeasured(); // fail-closed: its changes were never measured
           hold?.settled();
@@ -200,6 +243,13 @@ export function editorRunDelta(args: {
     },
     runDeltas: cardsOf,
     openFile: (request) => runDeltaFile(args.store, request),
+    history: (query) => readRunDeltaHistory(args.store, query),
     repost,
+    predictionShown(prediction) {
+      void loadHost().then((h) => h.predictionShown(prediction), (error: unknown) => log("prediction shown", error));
+    },
+    dispose() {
+      shutdown.abort();
+    },
   };
 }

@@ -71,6 +71,9 @@ export function buildCloudProvider(args: {
   blueprint: Awaited<ReturnType<typeof getLatestBlueprint>>;
 }): CapabilityProvider {
   const { env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths, writtenHashes, blueprint } = args;
+  // Every commit names its RUN as well as its task (PRD 41 §D1): the per-run marker is what
+  // teardown/revert authorship and the run's commit attribution at finalize match on.
+  const commitRun = { taskId: taskRow.id, executionId };
   // Read/list against the ticket branch only once it exists (created on the first
   // commit). Before any write, the branch ref 404s — read from `base` instead, so
   // the agent sees the real codebase rather than mistaking the missing branch for
@@ -212,7 +215,7 @@ export function buildCloudProvider(args: {
         if (!inspection.ok) return { ok: false, error: `Outbound content blocked: ${inspection.reasons.join(', ')}. Remove credential material; never commit secrets.` };
         const firstWriteThisRun = !writtenPaths.has(path);
         const target = (await repoFor(path)) ?? repoCtx;
-        const commit = await commitAgentFile(target, path, content, agentCommitMessage(firstWriteThisRun ? 'Add' : 'Update', path, taskRow.id, agentLabel));
+        const commit = await commitAgentFile(target, path, content, agentCommitMessage(firstWriteThisRun ? 'Add' : 'Update', path, commitRun, agentLabel));
         if (!commit.ok) return { ok: false, error: commit.reason };
         writtenPaths.add(path);
         if (writtenHashes) await recordWrittenHash(writtenHashes, path, content);
@@ -249,7 +252,7 @@ export function buildCloudProvider(args: {
         const inspection = await inspectOutboundContent(db, { tenantId, executionId, seam: 'repository_write', target: path, content: updated });
         if (!inspection.ok) return { ok: false, error: `Outbound content blocked: ${inspection.reasons.join(', ')}. Remove credential material; never commit secrets.` };
         const firstWriteThisRun = !writtenPaths.has(path);
-        const commit = await commitAgentFile(target, path, updated, agentCommitMessage(firstWriteThisRun ? 'Edit' : 'Update', path, taskRow.id, agentLabel));
+        const commit = await commitAgentFile(target, path, updated, agentCommitMessage(firstWriteThisRun ? 'Edit' : 'Update', path, commitRun, agentLabel));
         if (!commit.ok) return { ok: false, error: commit.reason };
         writtenPaths.add(path);
         if (writtenHashes) await recordWrittenHash(writtenHashes, path, updated);
@@ -267,7 +270,7 @@ export function buildCloudProvider(args: {
         if (!(await credentialAllowed('repository:write'))) return { ok: false, error: 'repository credential delegation is absent, expired, or revoked' };
         const suffix = reason && reason.trim() ? ` — ${reason.trim()}` : '';
         const target = (await repoFor(path)) ?? repoCtx;
-        const del = await deleteAgentFile(target, path, agentCommitMessage('Remove', path, taskRow.id, agentLabel, suffix));
+        const del = await deleteAgentFile(target, path, agentCommitMessage('Remove', path, commitRun, agentLabel, suffix));
         if (del.ok) {
           writtenPaths.delete(path);
           writtenHashes?.delete(path);

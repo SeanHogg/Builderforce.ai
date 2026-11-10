@@ -11,6 +11,7 @@
 
 import type { DetectedSystem } from './systems.js';
 import { baseOf, joinPath, rel, within } from './systemPaths.js';
+import { strideSample } from '../sampling.js';
 
 /** Files compared per pair of systems: a stride across the whole sorted path list. */
 export const COPY_SAMPLE = 200;
@@ -23,11 +24,8 @@ export type CopyReason = 'no-git' | 'name-mismatch' | 'later-name';
 
 export interface DuplicateCopy { copy: string; original: string; similarity: number; reason: CopyReason }
 
-/** `n` items spread evenly across the whole list (every item when it is no longer than `n`), so a long tree is judged by all of it, not its first folder. */
-export function strideSample<T>(items: readonly T[], n: number): T[] {
-    if (items.length <= n) return [...items];
-    return Array.from({ length: n }, (_, i) => items[Math.floor((i * items.length) / n)]!);
-}
+/** `n` items spread evenly across the whole list, so a long tree is judged by all of it, not its first folder (THE sampler, `sampling.ts`). */
+export { strideSample };
 
 /** The share of a sample of the smaller side (sorted relative paths) whose hash is the same on the other side; undefined when the sample is too small to prove anything. */
 function sampleSimilarity(

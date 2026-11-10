@@ -23,10 +23,12 @@ import { FIX_DEFAULTS, type FixLabels } from './labels/surface.fix';
 import { EXPLAIN_DEFAULTS, type ExplainLabels } from './labels/surface.explain';
 import { SYSTEMS_DEFAULTS, type SystemsLabels } from './labels/surface.systems';
 import { SCENE_DEFAULTS, type SceneLabels } from './labels/surface.scene';
-import { FOUR_PLUS_ONE_DEFAULTS, type FourPlusOneLabels } from './labels/surface.4plus1';
 import { ARCHITECTURE_STYLE_DEFAULTS, type ArchitectureStyleLabels } from './labels/surface.style';
 import { KEY_FEATURES_DEFAULTS, type KeyFeaturesLabels } from './labels/surface.features';
 import { AGENT_RUNS_DEFAULTS, type AgentRunsLabels } from './labels/surface.agentRuns';
+import { PREDICT_DEFAULTS, type PredictLabels } from './labels/surface.predict';
+import { TRANSITION_DEFAULTS, type TransitionLabels } from './labels/surface.transition';
+import { COUPLING_DEFAULTS, type CouplingLabels } from './labels/surface.coupling';
 import { CORE_DEFAULTS, type CoreLabels, type FindingKindLabels } from './labels/core';
 
 export { camelKind, fillTemplate } from './template';
@@ -37,7 +39,7 @@ export type StringLabelKey = { [K in keyof KnowledgeGraphLabels]: KnowledgeGraph
 
 /** The words of the transit-map surface: the per-area modules under `labels/`, composed. */
 export interface SurfaceLabels extends HeaderLabels, MapLabels, ActLabels, SyncLabels, RunLabels, CoverageLabels, PatternsLabels, ApiLabels, ResolveLabels, FixLabels, ExplainLabels, SystemsLabels, SceneLabels,
-    FourPlusOneLabels, ArchitectureStyleLabels, KeyFeaturesLabels, AgentRunsLabels {}
+    ArchitectureStyleLabels, KeyFeaturesLabels, AgentRunsLabels, PredictLabels, TransitionLabels, CouplingLabels {}
 
 export interface KnowledgeGraphLabels extends CoreLabels {
     surface: SurfaceLabels;
@@ -57,10 +59,12 @@ const SURFACE_DEFAULTS: SurfaceLabels = {
     ...EXPLAIN_DEFAULTS,
     ...SYSTEMS_DEFAULTS,
     ...SCENE_DEFAULTS,
-    ...FOUR_PLUS_ONE_DEFAULTS,
     ...ARCHITECTURE_STYLE_DEFAULTS,
     ...KEY_FEATURES_DEFAULTS,
     ...AGENT_RUNS_DEFAULTS,
+    ...PREDICT_DEFAULTS,
+    ...TRANSITION_DEFAULTS,
+    ...COUPLING_DEFAULTS,
 };
 
 export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {

@@ -58,10 +58,12 @@ if (entries.length === 0) {
 }
 // sweptTablesBounded.ts spreads into SWEPT_TABLES but writes connections as the CORE / BOTH
 // constants (CORE = ['primary'], BOTH = ['transactional', 'primary']), so it needs its own parse.
-const boundedConnections = { CORE: ['primary'], BOTH: ['primary', 'transactional'] };
+// OPERATIONAL = ['transactional'] — the operational-endpoint entries were not parsed before, so their
+// tuning went unchecked; they are held to the same rule as every other entry now.
+const boundedConnections = { CORE: ['primary'], BOTH: ['primary', 'transactional'], OPERATIONAL: ['transactional'] };
 const bounded = readFileSync(boundedFile, 'utf8');
 let boundedCount = 0;
-for (const match of bounded.matchAll(/relation:\s*'([a-z0-9_]+)',\s*connections:\s*(CORE|BOTH)/g)) {
+for (const match of bounded.matchAll(/relation:\s*'([a-z0-9_]+)',\s*connections:\s*(CORE|BOTH|OPERATIONAL)/g)) {
   entries.push({ relation: match[1], connections: boundedConnections[match[2]] });
   boundedCount += 1;
 }

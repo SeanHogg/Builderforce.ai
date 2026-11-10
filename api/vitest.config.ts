@@ -25,7 +25,9 @@ const API_ROOT = fileURLToPath(new URL('.', import.meta.url));
  * React-rendering `.test.ts` files failed every API shard on "Cannot find package
  * '@testing-library/react'" — the same failure brain-ui caused before it was excluded.
  */
-const TESTED_BY_THEIR_HOST = new Set(['knowledge-graph-view']);
+// `run-delta` runs in its own `verify-kernel` leg with its own install (its schema test needs ajv-draft-04,
+// which the API never installs).
+const TESTED_BY_THEIR_HOST = new Set(['knowledge-graph-view', 'run-delta']);
 const sourcePackageTests = sourcePackageRoots(REPO_ROOT)
   .filter((root) => !TESTED_BY_THEIR_HOST.has(path.basename(path.dirname(root))))
   .map(

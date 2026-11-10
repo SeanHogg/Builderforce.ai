@@ -20,6 +20,7 @@ import type { SurfaceResult } from '../compute/kinds';
 import { isSmall } from '../compute/size';
 import { isCommunityKey } from '../placement';
 import { useDrill, type DrillModel, type SymbolLoader } from './transit/useDrill';
+import type { SourceReader } from '../types';
 import { stationTypes } from './transit/stationType';
 import type { MarkType } from '../shapes';
 import type { TowerHighlight } from './towerHighlight';
@@ -36,6 +37,8 @@ export interface SurfaceModel {
     overlay: OverlayModel;
     /** The map's drill: package, class and function levels below the world map. */
     drill: DrillModel;
+    /** Reads some lines of a file of the root on show (the code band, PRD 43 B1a rule 9); absent on a host without file contents. */
+    readSource?: SourceReader | undefined;
     preset: PresetId | 'custom';
     question: QuestionId;
     /** The pattern family the patterns question is narrowed to ("Behavioural only"); null = every family. */
@@ -58,6 +61,8 @@ export interface SurfaceModel {
     /** The open drawer (a PANELS id) and the finding Resolve works on. */
     panel: string | null;
     resolving: Finding | null;
+    /** The refs that changed (against the baseline, plus the picked commit's): "What changed?" reads their co-change partners. */
+    changedFiles?: readonly string[];
     /** The anti-pattern lit in the Tower (offenders, partners, the rest dimmed); null = none. */
     highlight: TowerHighlight | null;
     setHighlight(h: TowerHighlight | null): void;
@@ -92,6 +97,8 @@ export interface SurfaceOptions {
     changed?: ReadonlySet<string> | undefined;
     /** Reads the definitions of some files, for the map's class and function levels; absent ⇒ those levels show files. */
     symbols?: SymbolLoader | undefined;
+    /** Reads some lines of a file, for the map's code band; absent ⇒ the band shows `path:line` and "Open at line". */
+    readSource?: SourceReader | undefined;
     /** The localized name of the top-level config station (`labels.surface.repoConfig`). */
     repoConfigName?: string | undefined;
     /** The localized name of a community with no label (`labels.communityFallback`, `{n}`). */
@@ -193,8 +200,8 @@ export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGrap
     }, [path]);
 
     return {
-        stations, types, lines, coverage, overlay, drill, preset: presetOf(bindings), question, family, line, lineChosen: chosen !== null, station, step, path, lit,
-        context, pins, scope, pinned, panel, resolving, highlight, setHighlight, towers, setTowers, fixFlows, dispatchFix,
+        stations, types, lines, coverage, overlay, drill, readSource: opts.readSource, preset: presetOf(bindings), question, family, line, lineChosen: chosen !== null, station, step, path, lit,
+        context, pins, scope, pinned, panel, resolving, changedFiles: changed, highlight, setHighlight, towers, setTowers, fixFlows, dispatchFix,
         setPreset: (id) => setBindings(PRESETS[id]),
         setChannel: (channel, metric) => setBindings((b) => setChannel(b, channel, metric)),
         setPins: (on) => setBindings((b) => ({ ...b, pins: on ? 'on' : 'off' })),

@@ -5,8 +5,7 @@
  * aspect to at least one camera registered in `PLACEMENTS`, and runs each row's `probe` over a graph shaped as the code
  * pack writes it, so a row cannot claim data the graph does not carry.
  *
- * (The DOM `surface/FourPlusOneCamera.tsx` — Logical = System tiers, Development = Mind map, Process = Sequence,
- * Physical = `fourPlusOne/PhysicalView.tsx`, Scenarios = `fourPlusOne/ScenariosView.tsx` — retires at make-default.)
+ * (The DOM 4+1 camera retired at make-default, PRD 43 P1: this map is what replaced it.)
  */
 
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';

@@ -18,6 +18,7 @@ export interface FixtureOptions {
     mode?: RunChangeSetInput['mode'];
     kind?: RunChangeSetInput['kind'];
     headSwitched?: boolean;
+    plannedPaths?: readonly string[];
 }
 
 const encoder = new TextEncoder();
@@ -67,6 +68,7 @@ export function fixture(before: Files, after: Files, opts: FixtureOptions = {}):
         input: {
             runId: 'run-1', mode: opts.mode ?? 'interactive', files,
             ...(opts.headSwitched ? { headSwitched: true } : {}), ...(opts.kind ? { kind: opts.kind } : {}),
+            ...(opts.plannedPaths ? { plannedPaths: opts.plannedPaths } : {}),
         },
         ports,
     };

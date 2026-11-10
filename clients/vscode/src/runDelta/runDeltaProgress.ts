@@ -35,6 +35,8 @@ export interface RunDeltaProgress {
   begin(run: { chatId: number; runId: string; at?: number; repos: number }): () => void;
   /** `run-delta/get`: the stored cards, plus the progress card of each matching run that has none stored. */
   withProgress(query: { runId?: string; chatId?: number }, stored: readonly RunDeltaCardPayload[]): RunDeltaCardPayload[];
+  /** A run still `pending` started its optional dynamic tier: its card says "running dynamic checks, up to N min". */
+  dynamic(runId: string, minutes: number): void;
 }
 
 export function createRunDeltaProgress(relay: (card: RunDeltaCardPayload) => void): RunDeltaProgress {
@@ -69,6 +71,13 @@ export function createRunDeltaProgress(relay: (card: RunDeltaCardPayload) => voi
         runs.set(run.runId, failed);
         relay(failed);
       };
+    },
+    dynamic(runId, minutes) {
+      const card = runs.get(runId);
+      if (!card || card.status !== "pending" || !(minutes > 0)) return;
+      const next: RunDeltaProgressCard = { ...card, dynamicMinutes: Math.max(card.dynamicMinutes ?? 0, Math.ceil(minutes)) };
+      runs.set(runId, next);
+      relay(next);
     },
     withProgress(query, stored) {
       if (query.runId === undefined && query.chatId === undefined) return [...stored];

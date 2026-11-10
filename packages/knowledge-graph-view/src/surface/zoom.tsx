@@ -1,8 +1,8 @@
 /**
  * The zoom contract. The +, − and Fit buttons live in the scene overlay and must work for EVERY
  * camera, so a camera does not draw buttons of its own: the ACTIVE camera registers a
- * {@link ZoomApi} and the overlay calls it. A camera with nothing to zoom (the 3D tower, whose
- * orbit controls own the wheel) registers nothing and the overlay disables the buttons.
+ * {@link ZoomApi} and the overlay calls it: the stage through its rig (`usePanZoomRegistration`),
+ * the List through CSS scale (`ScaleZoom`). A camera that registers nothing gets disabled buttons.
  *
  * The host of the scene owns one registry (`useZoomHost`), wraps the cameras in a
  * `ZoomProvider` and hands the registered api to the overlay. A camera outside a provider (a
@@ -10,7 +10,12 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { PanZoom } from '../usePanZoom';
+
+/** What a camera's own pan/zoom offers the overlay: a zoom about the centre, and back to the fitted view (the stage's rig). */
+export interface PanZoom {
+    zoomBy(factor: number): void;
+    reset(): void;
+}
 
 export interface ZoomApi {
     zoomIn(): void;
@@ -53,8 +58,8 @@ export function useRegisterZoom(api: ZoomApi): void {
 
 export const ZOOM_STEP = 1.4;
 
-/** Registers the SVG pan/zoom of a camera (viewBox based): in, out, and back to the fitted view. */
-export function usePanZoomRegistration(pan: Pick<PanZoom, 'zoomBy' | 'reset'>): void {
+/** Registers a camera's own pan/zoom (the stage's rig, `stage/rig/useRig.ts`): in, out, and back to the fitted view. */
+export function usePanZoomRegistration(pan: PanZoom): void {
     const ref = useRef(pan);
     ref.current = pan;
     const api = useMemo<ZoomApi>(() => ({
@@ -72,7 +77,7 @@ export const MAX_SCALE = 3;
 export const clampScale = (scale: number, factor: number): number => Math.min(MAX_SCALE, Math.max(MIN_SCALE, Math.round(scale * factor * 100) / 100));
 
 /**
- * Zoom for the cameras made of HTML (System, Heat, List, Sequence): the content is scaled with
+ * Zoom for the camera made of HTML (the List): the content is scaled with
  * CSS `zoom` (layout follows, so the scene's own scrollbars reach the enlarged content) and Fit
  * returns to 1. `data-scale` carries the value for tests and assistive inspection.
  */

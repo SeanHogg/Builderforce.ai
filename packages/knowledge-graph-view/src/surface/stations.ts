@@ -10,13 +10,14 @@
  * is not set up shows that state. It never shows invented numbers").
  */
 
-import { fileRefOf as memoryFileRefOf, type Finding, type KnowledgeGraph, type KNode, type NodeRef } from '@seanhogg/builderforce-memory/knowledge';
+import { COCHANGE_HIDDEN_BADGE, fileRefOf as memoryFileRefOf, type Finding, type KnowledgeGraph, type KNode, type NodeRef } from '@seanhogg/builderforce-memory/knowledge';
 import { nodeIndex, pathOf } from '../graphModel';
 import { cmp } from '../order';
 import { dataCoverage, hasMeasuredCoverage } from './dataCoverage';
 import { LAYER_ORDER, layerRank, type Provenance } from './layers';
 import type { Group } from './areaRollup';
-import { communityGroupOf, communityNamer, foldGroups, REPO_CONFIG_STATION_ID, type CommunityName } from './communityGroups';
+import { communityNamer, foldGroups, REPO_CONFIG_STATION_ID, type CommunityName } from './communityGroups';
+import { communityIdOf, communityKey } from '../placement';
 import { fileNodesOf, outlineView } from './outlineGraph';
 import { reachOf, staticReach } from './staticReach';
 import { isRepoConfigFile, REPO_CONFIG_NAME, stationNames } from './stationName';
@@ -54,6 +55,11 @@ export interface Station {
     use: number;
     /** Commits in 90 days relative to the most-changed station, 0–1; undefined = no history. */
     churn?: number;
+    /**
+     * Hidden coupling (PRD 38 P4): its files' `coChangeHidden` (co-change partners no reference explains), summed, relative to
+     * the most-coupled station, 0–1; undefined = no co-change history (no file carries the `coChange` list).
+     */
+    coupling?: number;
     changed: boolean;
     owner?: string;
     patterns: string[];
@@ -137,15 +143,17 @@ function baseGroups(files: KNode[], index: ReadonlyMap<string, KNode>, repoConfi
     for (const n of files) {
         let id: string, name: string, kind: Station['kind'];
         const own = pathOf(n.ref) ?? n.label;
-        const community = n.area ? undefined : communityGroupOf(n, communityName);
+        const community = isRepoConfigFile(own) || n.area ? undefined : communityIdOf(n);
         if (isRepoConfigFile(own)) {
             // LICENSE, Dockerfile, dotfiles, root docs: ONE station, not one per file.
             id = REPO_CONFIG_STATION_ID; name = repoConfigName; kind = 'folder';
         } else if (n.area) {
             id = n.area; name = index.get(n.area)?.label ?? tail(n.area); kind = 'area';
-        } else if (community) {
-            // No area: its community (PRD 38 P1), grouped by cohesion rather than by top folder.
-            ({ id, name } = community); kind = 'community';
+        } else if (community !== undefined) {
+            // No area: its community (PRD 38 P1), grouped by cohesion rather than by top folder; named once per station.
+            id = communityKey(community); kind = 'community';
+            const held = groups.get(id);
+            name = held ? held.name : communityName(community);
         } else {
             const path = pathOf(n.ref) ?? n.label;
             const slash = path.indexOf('/');
@@ -270,6 +278,8 @@ export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}):
         || n.badges?.added !== undefined || n.badges?.removed !== undefined || n.badges?.changed !== undefined;
 
     const anyChurn = files.some((n) => num(n.badges?.churn) !== undefined);
+    // The ONE rule for "history was collected" (the gap reason reads it too): some file carries memory's `coChange` list.
+    const anyCoChange = dataCoverage(graph).channels.coChange.have > 0;
     // No file carries a coverage badge: fall back to the static reach of the test files (a heuristic, said so on the station).
     const reach = hasMeasuredCoverage(dataCoverage(graph)) ? null : staticReach(graph);
     const copies = copyMap(systemsOf(graph));
@@ -285,10 +295,13 @@ export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}):
             cxRaw: complexities.length ? Math.max(...complexities) : undefined,
             cov: covs.length ? covs.reduce((a, b) => a + b, 0) / covs.length : reachOf(reach, g.nodes.map((n) => n.ref)),
             churnRaw: anyChurn ? g.nodes.reduce((a, n) => a + (num(n.badges?.churn) ?? 0), 0) : undefined,
+            // Memory drops the hidden badge on a file whose partners are all explained, so an absent badge with history is 0.
+            couplingRaw: anyCoChange ? g.nodes.reduce((a, n) => a + (num(n.badges?.[COCHANGE_HIDDEN_BADGE]) ?? 0), 0) : undefined,
         };
     });
     const maxUse = Math.max(0, ...raw.map((r) => r.importance));
     const maxChurn = Math.max(0, ...raw.map((r) => r.churnRaw ?? 0));
+    const maxCoupling = Math.max(0, ...raw.map((r) => r.couplingRaw ?? 0));
     const cxLevels = quantileLevels(new Map(raw.filter((r) => r.cxRaw !== undefined).map((r) => [r.g.id, r.cxRaw!] as const)));
 
     const stations: Station[] = raw.map((r) => {
@@ -328,6 +341,7 @@ export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}):
         if (cx !== undefined) station.cx = cx;
         if (r.cov !== undefined) { station.cov = r.cov; station.covProvenance = reach ? 'heuristic' : 'runtime'; }
         if (r.churnRaw !== undefined) station.churn = maxChurn > 0 ? r.churnRaw / maxChurn : 0;
+        if (r.couplingRaw !== undefined) station.coupling = maxCoupling > 0 ? r.couplingRaw / maxCoupling : 0;
         return station;
     }).sort((a, b) => b.use - a.use || cmp(a.name, b.name) || cmp(a.id, b.id));
 

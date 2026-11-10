@@ -26,6 +26,7 @@
     // `--noEmit`. This program never emits — `type-check` is `--noEmit` and the build
     // is tsup, which sets its own `dist` and declaration root (`tsup.config.ts`).
     "paths": {
+      "@builderforce/sarif": ["../packages/sarif/src/index.ts"],
       "@builderforce/agent-loop": ["../packages/agent-loop/src/index.ts"],
       "@builderforce/agent-run": ["../packages/agent-run/src/index.ts"],
 

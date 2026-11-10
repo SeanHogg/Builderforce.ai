@@ -28,6 +28,7 @@ import type { PlanDetail } from "@seanhogg/builderforce-memory/knowledge";
 import { repoMapPort } from "@builderforce/repo-map";
 import { boundedStep } from "../boundedStep";
 import { buildLocalCapabilityProvider } from "../localCapabilities";
+import { indexerL3Binding } from "../runDelta/analyzers/l3Binding";
 import { workspaceSymbolIndex } from "../workspaceSymbols";
 import { getHostKnowledgeIndex } from "./index/hostKnowledgeIndex";
 import { vscodeKnowledgeFs } from "./knowledgeFs";
@@ -78,6 +79,8 @@ export function rootCodeAnalyzers(args: {
   return workspaceCodeAnalyzers({
     caps,
     ...(partitions ? { partitions } : {}),
+    // THE L3 result cache, shared with the run delta (PRD 41 §B7), for a root that is its folder.
+    ...(!root.rel ? { l3: indexerL3Binding(root.rootPath) } : {}),
     ...(recorder ? { repoGraph: measuringRepoMap(recorder) } : {}),
     ...(root.rel ? { path: root.rel } : {}),
     // The analysis is always kept locally (the review stores its output); linked, its snapshot is queued for the project.

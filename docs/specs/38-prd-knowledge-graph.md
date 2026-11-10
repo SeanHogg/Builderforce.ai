@@ -42,7 +42,7 @@ The design match (station cards, levels, termini, fix flow, Try it) shipped in V
    - The server's source count equals the local count.
    - Pasting a screenshot of the review progress card filters to `ReviewProgress.tsx` → `labels.ts` → `useReviewRun.ts` → the review runner.
 
-### Predicted measures: deterministic ML over the graph (planned 2026-11-06, not started)
+### Predicted measures: deterministic ML over the graph (P1/P4/P7 maths shipped 2026-11-10; view shipping; P2 blocked)
 
 The graph already holds what these formulas need: reference edges, file badges (complexity, coverage, churn, owner, clones, unused, layer verdicts) and git history. Each formula below is arithmetic that runs when the graph is built, not a model call. The result is stored as a node badge or an area value. Every prediction then also counts as an answer that skipped the model on the savings ledger.
 
@@ -61,17 +61,20 @@ The graph already holds what these formulas need: reference edges, file badges (
 **What exists today:**
 - PageRank sets node importance (`knowledge/importance.ts`).
 - Retrieval uses BM25, cosine over HNSW, MMR and time decay (`retrieval/`).
-- Nothing predicts a measure yet.
+- P1 communities, P4 co-change (`coChange`, `coChangeHidden`) and P7 station transitions are computed in builderforce-memory.
 
-#### P1. Partitions from community detection (first)
+#### P1, P4, P7: what is left
 
-- **Formula.** Louvain modularity maximisation over the file reference graph:
-  - Q = (1/2m) Σᵢⱼ [Aᵢⱼ − kᵢkⱼ/2m] δ(cᵢ,cⱼ)
-  - Edge weight is the reference count. Order is seeded for determinism.
-  - Label propagation is the fallback above the outline cap.
-- **Predicts.** The partition of every file the packs could not place, plus a membership confidence: the share of a file's edge weight that falls inside its community.
-- **Uses.** It removes "No partition" on the map. It also gives station groupings by cohesion instead of by folder, which replaces the directory roll-up used when stations exceed the cap.
-- **Accept.** At most 5% of files in "No partition" on the `agentic` workspace. This is the open acceptance check above. Modularity Q is reported in the graph stats.
+The maths, the git history and the cache keys are done. DONE.md, 2026-11-10, records them: memory 2026.10.71 and 2026.10.72, plus f54d09619 and 8a93a22f3. The view half is built but uncommitted. ROADMAP.md › Predicted measures lists the steps to ship it.
+
+- **P1 accept.** At most 5% of files are in "No partition" on the `agentic` workspace. This is the open acceptance check above.
+- **P4 accept.** On held-out commits, recall@8 ≥ 0.5 (memory `coChangeRecallAtK`). Not yet measured on the `agentic` history.
+- **P4 uses: shipping.**
+  - "What changed?" shows the not-yet-touched partners.
+  - "Run checks" includes the partners' tests. A host must read `FixStepRequest.partnerTests`.
+  - "This path is done when…" lists the partners.
+  - The Hidden coupling overlay reads `coChangeHidden`.
+- **P7 traces.** P(j|i) reads reference weights only. *Blocker: there is no station-level source of recorded run traces.* Until there is one, `transitionTableOf` is given no sequences.
 
 #### P2. The map shows PRD 41's predictions as badges
 
@@ -86,35 +89,6 @@ PRD 41 Part D computes these. This section only puts them on files and stations 
 | D9 cost estimate | pre-review model-call estimate | The review launcher warns before starting when the estimate exceeds the budget. The `agentic` review planned 17,949 calls against 200. |
 
 **Accept.** Every badge is absent when Part D has no result for that file, and the channel then reads "Not set up". The thresholds that decide whether a model is good enough (AUC, ECE) are PRD 41's.
-
-#### P4. Co-change association (impact prediction)
-
-- **Formula.** For files A and B over commits:
-  - support = P(A∧B)
-  - confidence = P(B|A)
-  - lift = P(A∧B) / (P(A)P(B))
-- **Thresholds and limits.**
-  - Kept pairs need support ≥ 3 commits and lift ≥ 2.
-  - Commits touching more than 50 files are excluded, because they are bulk changes.
-  - At most 8 partners per file.
-- **Predicts.** Which files a change to A will also need, including coupling that has no reference edge (hidden coupling).
-- **Uses.**
-  - "What changed?" shows the predicted, not-yet-touched partners.
-  - The staged fix flow's "Run checks" includes partners' tests.
-  - "This path is done when…" lists them.
-  - A new overlay channel shows hidden coupling.
-- **Accept.** On held-out commits, recall@8 ≥ 0.5 for files changed together with A.
-
-#### P7. Station transition probabilities (Simulate)
-
-- **Formula.** A first-order Markov chain over stations. P(j|i) comes from recorded run traces when present, otherwise from normalised reference weights.
-- **Uses.** Simulate and "Run to end" follow the most likely path and show the probability of each hop. Path strip hops show the probability next to the count.
-
-**Order.**
-1. P1 comes first, because it closes an open acceptance check.
-2. P2's badges land as each PRD 41 Part D result ships, following that PRD's adoption order (D14).
-3. P4 comes with the staged fix flow, which needs impact prediction.
-4. P7 follows.
 
 **Contract.**
 - New badge keys go into `OUTLINE_BADGE_KEYS` so the outline carries them: `risk`, `riskBand`, `ownerEntropy`, `community`, `communityConfidence`, `coChange` (top partner refs).

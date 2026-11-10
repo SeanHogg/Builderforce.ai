@@ -40,6 +40,8 @@ export interface AppliedFix {
 export interface FixStepRequest {
     finding: Finding;
     applied: AppliedFix;
+    /** The test files (paths) of the files that usually change with the finding's (PRD 38 P4): the `tests` check runs them too. Absent ⇒ none known. */
+    partnerTests?: string[];
     /** Aborted when the person leaves the finding or closes the view: a host stops the running check. */
     signal?: AbortSignal;
 }

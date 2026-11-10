@@ -43,6 +43,9 @@ import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
 import { formatUsdSpend } from '@/lib/formatSpend';
 import { RunCostBreakdownButton } from './RunCostBreakdownButton';
+import { RunDeltaForRun } from '@/components/runDelta/RunDeltaForRun';
+import { cloudRunId } from '@/lib/runDeltasApi';
+import { settledRunStatus } from '@/lib/runDeltaSettle';
 /**
  * Live execution view for a task. Queued runs stream their status, output
  * (rendered as markdown in a fixed-height scroll region), file changes, and tool
@@ -764,6 +767,9 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
               <div style={{ fontSize: 13, color: 'var(--danger)', whiteSpace: 'pre-wrap', lineHeight: 1.5, fontFamily: 'var(--font-mono)' }}>{errorMessage}</div>
             </div>
           )}
+
+          {/* What this run changed (PRD 41 §C11.1): looked for once the run settles; nothing until the cloud has a delta. */}
+          {selectedId != null && <RunDeltaForRun runId={cloudRunId(selectedId)} settled={settledRunStatus(status)} />}
 
           {/* Sub-tabs */}
           <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border-subtle)', marginBottom: 10 }}>

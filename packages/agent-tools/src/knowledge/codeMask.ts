@@ -40,6 +40,14 @@ export function codeLanguageOf(path: string): string | undefined {
     return extensionOf(path) === 'ps1' ? 'powershell' : 'shell';
 }
 
+/** Languages {@link codeLanguageOf} names that are prose or markup, not code. */
+const PROSE_LANGUAGES: ReadonlySet<string> = new Set(['markdown']);
+
+/** Whether a {@link codeLanguageOf} language is CODE (a program's text), not prose such as Markdown. */
+export function isCodeLanguage(language: string | undefined): language is string {
+    return language !== undefined && !PROSE_LANGUAGES.has(language);
+}
+
 export function commentFamilyOf(language: string | undefined): CommentFamily {
     return language === 'python' || language === 'ruby' || language === 'shell' || language === 'powershell' ? 'hash' : 'c';
 }
@@ -83,7 +91,11 @@ function startsRegex(out: readonly string[]): boolean {
     return word === '' || REGEX_AFTER_WORD.has(word);
 }
 
-const blankRun = (s: string): string => s.replace(/[^\n\r]/g, ' ');
+const SPACES = ' '.repeat(256);
+/** `len` spaces, sliced from one shared run for the common short case (a line comment, a short string). */
+const spaces = (len: number): string => (len <= SPACES.length ? SPACES.slice(0, len) : ' '.repeat(len));
+/** A run blanked to spaces, line breaks kept. A run without line breaks (most) skips the regex. */
+const blankRun = (s: string): string => (s.indexOf('\n') < 0 && s.indexOf('\r') < 0 ? spaces(s.length) : s.replace(/[^\n\r]/g, ' '));
 
 /** The end index (exclusive) of the regex literal opening at `at`, or -1 when none closes on its line. */
 function regexEnd(text: string, at: number): number {
@@ -152,8 +164,8 @@ export function maskSource(text: string, language?: string): MaskedSource {
         const ch = text[i]!;
         const next = text[i + 1];
         if (family === 'c' && ch === '/' && next === '/') {
-            let e = i;
-            while (e < n && text[e] !== '\n') e++;
+            const nl = text.indexOf('\n', i);
+            const e = nl < 0 ? n : nl;
             blankBoth(i, e);
             i = e;
             continue;
@@ -166,8 +178,8 @@ export function maskSource(text: string, language?: string): MaskedSource {
             continue;
         }
         if (family === 'hash' && ch === '#') {
-            let e = i;
-            while (e < n && text[e] !== '\n') e++;
+            const nl = text.indexOf('\n', i);
+            const e = nl < 0 ? n : nl;
             blankBoth(i, e);
             i = e;
             continue;

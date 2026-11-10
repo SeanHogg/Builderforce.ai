@@ -683,6 +683,244 @@ function fileWindowNote(win) {
   return `Showing lines ${win.offset}\u2013${lastLine} of ${win.totalLines}. To continue, call read_file again with offset ${lastLine + 1}.`;
 }
 
+// ../packages/agent-tools/src/preSearch.ts
+var DEFAULTS = {
+  maxIdentifiers: 6,
+  definitionsPerIdentifier: 3,
+  referencesPerIdentifier: 4,
+  maxChars: 3e3
+};
+var TOKEN = /[A-Za-z_$][\w$]*/g;
+var REFERENCE_TEXT_MAX = 140;
+function looksLikeIdentifier(word) {
+  if (word.length < 3) return false;
+  if (/^_+$/.test(word)) return false;
+  if (word.includes("_") || word.includes("$")) return true;
+  if (/[a-z][A-Z]/.test(word)) return true;
+  if (/[0-9][A-Z]/.test(word) && /[a-z]/.test(word)) return true;
+  if (/^[A-Z][A-Z0-9]*\d$/.test(word)) return true;
+  return false;
+}
+function extractIdentifiers(request, max = DEFAULTS.maxIdentifiers) {
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  const add = (word) => {
+    if (!word || seen.has(word) || out.length >= max) return;
+    seen.add(word);
+    out.push(word);
+  };
+  const text = request ?? "";
+  for (const span of text.matchAll(/`([^`\n]{1,120})`/g)) {
+    const words = span[1].match(TOKEN) ?? [];
+    const last = words[words.length - 1];
+    if (last && last.length >= 2) add(last);
+  }
+  for (const m of text.matchAll(/([A-Za-z_$][\w$]*)(\s*\()?/g)) {
+    const word = m[1];
+    const after = text.charAt((m.index ?? 0) + word.length);
+    if (after === "." && /[A-Za-z]/.test(text.charAt((m.index ?? 0) + word.length + 1)) && !looksLikeIdentifier(word)) continue;
+    if (m[2] && word.length >= 3 && /[a-z]/.test(word)) add(word);
+    else if (looksLikeIdentifier(word)) add(word);
+  }
+  return out;
+}
+function escapeRegex(identifier) {
+  return identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function clip(s, n) {
+  const t = s.replace(/\s+/g, " ").trim();
+  return t.length > n ? `${t.slice(0, n - 1)}\u2026` : t;
+}
+function renderPreSearchBlock(r, maxChars = DEFAULTS.maxChars) {
+  if (r.definitions.length === 0 && r.references.length === 0) return "";
+  const lines = [
+    "## Pre-search (symbol index + text search, gathered before this run with no model call)",
+    `Identifiers in the request: ${r.identifiers.map((i) => `\`${i}\``).join(", ")}`
+  ];
+  for (const id of r.identifiers) {
+    for (const d of r.definitions.filter((x) => x.identifier === id)) {
+      lines.push(`- \`${id}\` defined at ${d.path}:${d.line} (${d.kind}${d.exported ? ", exported" : ""})`);
+    }
+    for (const ref of r.references.filter((x) => x.identifier === id)) {
+      lines.push(`- \`${id}\` at ${ref.path}:${ref.line} \u2014 ${clip(ref.text, REFERENCE_TEXT_MAX)}`);
+    }
+  }
+  lines.push("Start from these locations (read_file with a line range) instead of searching for them again.");
+  let out = lines.join("\n");
+  if (out.length > maxChars) out = `${out.slice(0, maxChars).replace(/\n[^\n]*$/, "")}
+- \u2026`;
+  return out;
+}
+async function preSearch(request, ports, options = {}) {
+  const o = { ...DEFAULTS, ...options };
+  const { signal } = options;
+  const identifiers = extractIdentifiers(request, o.maxIdentifiers);
+  const empty = { identifiers, definitions: [], references: [], block: "" };
+  if (identifiers.length === 0 || signal?.aborted) return empty;
+  const perId = await Promise.all(identifiers.map(async (identifier) => {
+    const [defs, refs] = await Promise.all([
+      ports.findSymbol ? ports.findSymbol(identifier).catch(() => ({ ok: false })) : Promise.resolve({ ok: false }),
+      ports.searchText ? ports.searchText(escapeRegex(identifier), signal).catch(() => ({ ok: false })) : Promise.resolve({ ok: false })
+    ]);
+    const exact = (defs.ok ? defs.matches ?? [] : []).filter((m) => m.name === identifier && m.kind !== "heading");
+    const definitions2 = exact.slice(0, o.definitionsPerIdentifier).map((m) => ({
+      identifier,
+      path: m.path,
+      line: m.line,
+      kind: m.kind,
+      exported: m.exported
+    }));
+    const defined = new Set(definitions2.map((d) => `${d.path}:${d.line}`));
+    const references2 = [];
+    for (const m of refs.ok ? refs.matches ?? [] : []) {
+      if (references2.length >= o.referencesPerIdentifier) break;
+      const line = typeof m.line === "number" ? m.line : Number(m.line);
+      if (!Number.isFinite(line) || defined.has(`${m.path}:${line}`)) continue;
+      references2.push({ identifier, path: m.path, line, text: typeof m.text === "string" ? m.text : "" });
+    }
+    return { definitions: definitions2, references: references2 };
+  }));
+  const definitions = perId.flatMap((p) => p.definitions);
+  const references = perId.flatMap((p) => p.references);
+  const result = { identifiers, definitions, references };
+  return { ...result, block: renderPreSearchBlock(result, o.maxChars) };
+}
+function preSearchFiles(r, max = 6) {
+  const out = [];
+  for (const p of [...r.definitions.map((d) => d.path), ...r.references.map((x) => x.path)]) {
+    if (!out.includes(p)) out.push(p);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+// ../packages/agent-tools/src/knowledge/codeMask.ts
+var SPACES = " ".repeat(256);
+
+// ../packages/agent-tools/src/callScan.ts
+var ID = "[A-Za-z_$][\\w$]*";
+var MAX_SCANNED_LINE = 2048;
+var JSX_TAG = new RegExp(`<(\\/?)([A-Z][\\w$]*(?:\\.${ID})*)(?=[\\s/>]|$)`, "g");
+
+// ../packages/agent-tools/src/testPaths.ts
+var TEST_SOURCE_PATH = /(?:^|\/)(?:__tests__|tests?|spec|e2e)\/|(?:^|\/)(?:test|spec)\.[^/]+$|\.(?:test|spec|e2e|e2e-spec)\.[^/]+$/i;
+function isTestSourcePath(path) {
+  return TEST_SOURCE_PATH.test(path.replace(/\\/g, "/"));
+}
+
+// ../packages/agent-tools/src/callbackOwners.ts
+var MAX_OWNER_LITERAL = 80;
+var STATEMENT = new RegExp(`^([ \\t]*)(${ID}(?:\\??\\.${ID})*)\\s*\\(`);
+var CALLBACK_AT_END = new RegExp(`(?:\\([^()]*\\)(?:\\s*:\\s*[^=()]+)?\\s*=>|\\b${ID}\\s*=>|\\bfunction\\b[^(]*\\([^()]*\\))\\s*\\{\\s*$`);
+var TOP_BLOCK = /^(?:if\s*\(.*\)|\}?\s*else(?:\s+if\s*\(.*\))?|try|\}?\s*finally|\{)\s*\{\s*$/;
+var NOT_OWNERS = /* @__PURE__ */ new Set([
+  "describe",
+  "it",
+  "test",
+  "suite",
+  "bench",
+  "beforeEach",
+  "afterEach",
+  "beforeAll",
+  "afterAll",
+  "setTimeout",
+  "setInterval",
+  "setImmediate",
+  "queueMicrotask",
+  "requestAnimationFrame",
+  "void",
+  "await",
+  "return",
+  "new",
+  "if",
+  "for",
+  "while",
+  "switch",
+  "catch",
+  "function",
+  "with",
+  "do",
+  "else",
+  "try",
+  "typeof",
+  "yield"
+]);
+function owningOpen(line, at) {
+  const open = [];
+  for (let i = 0; i < at; i += 1) {
+    const c = line[i];
+    if (c === '"' || c === "'" || c === "`") {
+      for (i += 1; i < at && line[i] !== c; i += 1) if (line[i] === "\\") i += 1;
+    } else if (c === "(") open.push(i);
+    else if (c === ")") open.pop();
+  }
+  return open.length ? open[open.length - 1] : -1;
+}
+function callbackOwnerName(line) {
+  if (line.length > MAX_SCANNED_LINE) return void 0;
+  const st = STATEMENT.exec(line);
+  const cb = st ? CALLBACK_AT_END.exec(line) : null;
+  if (!st || !cb) return void 0;
+  const lead = st[2].replace(/\?/g, "");
+  const root = lead.split(".")[0];
+  if (NOT_OWNERS.has(root)) return void 0;
+  let open = owningOpen(line, cb.index);
+  if (open < 0) return void 0;
+  const before = line.slice(0, open).trimEnd();
+  const member = /(?:^|[^\w$])([A-Za-z_$][\w$]*)$/.exec(before)?.[1];
+  let callee;
+  if (open === st[0].length - 1) callee = lead;
+  else if (member && /\)\s*\.\s*$/.test(before.slice(0, before.length - member.length))) callee = `${root}.${member}`;
+  else {
+    callee = lead;
+    open = st[0].length - 1;
+  }
+  if (member && NOT_OWNERS.has(member) && callee !== lead) return void 0;
+  const first = /^\s*(["'`])((?:\\.|(?!\1)[^\\])*)\1/.exec(line.slice(open + 1));
+  const literal = first && !first[2].includes("${") ? first[2].slice(0, MAX_OWNER_LITERAL) : void 0;
+  return literal !== void 0 ? `${callee} "${literal}"` : callee;
+}
+var CallbackOwnerScan = class {
+  enabled;
+  /** The indent of the first-level statements of a column-0 non-declaration block ("" before its first one is seen). */
+  topBlock;
+  /** The indent of the owner whose body we are in, until a line at that indent closes it. */
+  inside;
+  named = /* @__PURE__ */ new Map();
+  constructor(path) {
+    this.enabled = !isTestSourcePath(path);
+  }
+  /** True while the line is inside an owner's body (no definition is read there). Call for EVERY line, in order. */
+  inBody(line) {
+    if (this.inside === void 0) return false;
+    const rest = line.startsWith(this.inside) ? line.slice(this.inside.length) : void 0;
+    if (rest !== void 0 && /^[})]/.test(rest)) {
+      this.inside = void 0;
+      return true;
+    }
+    if (!/^\S/.test(line) || /^[})\]`]/.test(line)) return true;
+    this.inside = void 0;
+    return false;
+  }
+  /** Tracks the column-0 blocks; call for every line outside an owner's body, before the definitions are read. */
+  track(line) {
+    if (/^\S/.test(line)) this.topBlock = TOP_BLOCK.test(line) ? "" : void 0;
+    else if (this.topBlock === "" && line.trim()) this.topBlock = /^[ \t]*/.exec(line)[0];
+  }
+  /** The owner a line outside any class declares, if any. */
+  ownerAt(line, lineNo) {
+    if (!this.enabled) return void 0;
+    const indent = /^[ \t]*/.exec(line)[0];
+    if (indent !== "" && indent !== this.topBlock) return void 0;
+    const base = callbackOwnerName(line);
+    if (!base) return void 0;
+    const n = (this.named.get(base) ?? 0) + 1;
+    this.named.set(base, n);
+    this.inside = indent;
+    return { name: n === 1 ? base : `${base} #${n}`, kind: "function", line: lineNo, exported: false, callback: true };
+  }
+};
+
 // ../packages/agent-tools/src/symbols.ts
 var SYMBOL_KINDS = [
   "function",
@@ -740,25 +978,25 @@ function eachLine(lines, out, visit) {
     visit(lines[i] ?? "", i + 1);
   }
 }
-var ID = "[A-Za-z_$][\\w$]*";
+var ID2 = "[A-Za-z_$][\\w$]*";
 var JS_RULES = [
-  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:default\\s+)?(?:async\\s+)?function\\s*\\*?\\s*(${ID})`), kind: "function" },
-  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:default\\s+)?(?:abstract\\s+)?class\\s+(${ID})`), kind: "class" },
-  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?interface\\s+(${ID})`), kind: "interface" },
-  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?type\\s+(${ID})\\s*[<=]`), kind: "type" },
-  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:const\\s+)?enum\\s+(${ID})`), kind: "enum" },
-  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:const|let|var)\\s+(${ID})`), kind: "const" },
+  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:default\\s+)?(?:async\\s+)?function\\s*\\*?\\s*(${ID2})`), kind: "function" },
+  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:default\\s+)?(?:abstract\\s+)?class\\s+(${ID2})`), kind: "class" },
+  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?interface\\s+(${ID2})`), kind: "interface" },
+  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?type\\s+(${ID2})\\s*[<=]`), kind: "type" },
+  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:const\\s+)?enum\\s+(${ID2})`), kind: "enum" },
+  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:const|let|var)\\s+(${ID2})`), kind: "const" },
   // `namespace A.B {`, `declare module "x" {` — the module's name, its quotes dropped.
-  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:namespace|module)\\s+(${ID}(?:\\.${ID})*|"[^"]+"|'[^']+')\\s*\\{`), kind: "module" }
+  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:namespace|module)\\s+(${ID2}(?:\\.${ID2})*|"[^"]+"|'[^']+')\\s*\\{`), kind: "module" }
 ];
 var JS_METHOD = new RegExp(
-  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|abstract|async|get|set)\\s+)*\\*?\\s*(${ID})\\s*(?:<[^>]*>)?\\s*\\(.*\\)?[^;]*\\{\\s*$`
+  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|abstract|async|get|set)\\s+)*\\*?\\s*(${ID2})\\s*(?:<[^>]*>)?\\s*\\(.*\\)?[^;]*\\{\\s*$`
 );
 var JS_ABSTRACT_METHOD = new RegExp(
-  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override)\\s+)*abstract\\s+(?:(?:public|private|protected|static|readonly|override|async)\\s+)*(${ID})\\s*\\??\\s*(?:<[^>]*>)?\\s*\\(`
+  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override)\\s+)*abstract\\s+(?:(?:public|private|protected|static|readonly|override|async)\\s+)*(${ID2})\\s*\\??\\s*(?:<[^>]*>)?\\s*\\(`
 );
 var JS_METHOD_OPEN = new RegExp(
-  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|async|get|set)\\s+)*\\*?\\s*(${ID})\\s*(?:<[^>]*>)?\\s*\\(\\s*$`
+  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|async|get|set)\\s+)*\\*?\\s*(${ID2})\\s*(?:<[^>]*>)?\\s*\\(\\s*$`
 );
 var JS_SIGNATURE_CLOSE = /^\s*\)\s*(?::[^;=]*)?\{\s*$/;
 var MAX_SIGNATURE_LINES = 40;
@@ -770,44 +1008,13 @@ function closesWithBody(lines, at) {
   }
   return false;
 }
-var TEST_SOURCE_PATH = /(?:\.|\/)(?:test|spec)\.[a-z]+$|(?:^|\/)__tests__\//;
-function isTestSourcePath(path) {
-  return TEST_SOURCE_PATH.test(path.replace(/\\/g, "/"));
-}
-var JS_CALLBACK_STATEMENT = new RegExp(`^([ \\t]*)(${ID}(?:\\??\\.${ID})*)\\s*\\((.*)(?:=>|\\bfunction\\b[^{]*\\))\\s*\\{\\s*$`);
-var JS_TOP_BLOCK = /^(?:if\s*\(.*\)|\}?\s*else(?:\s+if\s*\(.*\))?|try|\}?\s*finally|\{)\s*\{\s*$/;
-var NOT_CALLBACK_OWNERS = /* @__PURE__ */ new Set([
-  "describe",
-  "it",
-  "test",
-  "suite",
-  "bench",
-  "beforeEach",
-  "afterEach",
-  "beforeAll",
-  "afterAll",
-  ...JS_KEYWORDS
-]);
-var FIRST_STRING = /(["'`])((?:\\.|(?!\1)[^\\])*)\1/;
 function extractJs(lines, out, path = "") {
   let cls;
-  let topBlock;
-  let inCallback;
-  const callbacks = !isTestSourcePath(path);
-  const named = /* @__PURE__ */ new Map();
+  const owners = new CallbackOwnerScan(path);
   eachLine(lines, out, (line, lineNo) => {
     if (/^\}/.test(line)) cls = void 0;
-    if (inCallback !== void 0) {
-      const rest = line.startsWith(inCallback) ? line.slice(inCallback.length) : void 0;
-      if (rest !== void 0 && /^[})]/.test(rest)) {
-        inCallback = void 0;
-        return;
-      }
-      if (!/^\S/.test(line) || /^[})\]`]/.test(line)) return;
-      inCallback = void 0;
-    }
-    if (/^\S/.test(line)) topBlock = JS_TOP_BLOCK.test(line) ? "" : void 0;
-    else if (topBlock === "" && line.trim()) topBlock = /^[ \t]*/.exec(line)[0];
+    if (owners.inBody(line)) return;
+    owners.track(line);
     for (const rule of JS_RULES) {
       const m = rule.re.exec(line);
       if (!m) continue;
@@ -819,17 +1026,8 @@ function extractJs(lines, out, path = "") {
       return;
     }
     if (cls === void 0) {
-      const cb = callbacks ? JS_CALLBACK_STATEMENT.exec(line) : null;
-      const indent = cb ? group(cb, 1) : "";
-      const callee = cb ? group(cb, 2) : "";
-      if (cb && (indent === "" || indent === topBlock) && !NOT_CALLBACK_OWNERS.has(callee.split(".")[0])) {
-        const literal = FIRST_STRING.exec(group(cb, 3));
-        const base = literal && !literal[2].includes("${") ? `${callee} "${literal[2]}"` : callee;
-        const n = (named.get(base) ?? 0) + 1;
-        named.set(base, n);
-        out.push({ name: n === 1 ? base : `${base} #${n}`, kind: "function", line: lineNo, exported: false });
-        inCallback = indent;
-      }
+      const owner = owners.ownerAt(line, lineNo);
+      if (owner) out.push(owner);
       return;
     }
     const open = JS_METHOD_OPEN.exec(line);
@@ -955,13 +1153,13 @@ function extractSql(lines, out) {
   });
 }
 function extractMarkdown(lines, out) {
-  let fenced = false;
+  let fenced2 = false;
   eachLine(lines, out, (line, lineNo) => {
     if (/^\s*(```|~~~)/.test(line)) {
-      fenced = !fenced;
+      fenced2 = !fenced2;
       return;
     }
-    if (fenced) return;
+    if (fenced2) return;
     const m = /^(#{1,4})\s+(.+?)\s*#*\s*$/.exec(line);
     if (m) out.push({ name: `${group(m, 1)} ${group(m, 2).slice(0, 120)}`, kind: "heading", line: lineNo, exported: true });
   });
@@ -2351,117 +2549,6 @@ var repoMapTool = defineTool({
 });
 var SEMANTIC_TOOLS = [semanticSearchTool, repoMapTool, readCompressedTool];
 
-// ../packages/agent-tools/src/preSearch.ts
-var DEFAULTS = {
-  maxIdentifiers: 6,
-  definitionsPerIdentifier: 3,
-  referencesPerIdentifier: 4,
-  maxChars: 3e3
-};
-var TOKEN = /[A-Za-z_$][\w$]*/g;
-var REFERENCE_TEXT_MAX = 140;
-function looksLikeIdentifier(word) {
-  if (word.length < 3) return false;
-  if (/^_+$/.test(word)) return false;
-  if (word.includes("_") || word.includes("$")) return true;
-  if (/[a-z][A-Z]/.test(word)) return true;
-  if (/[0-9][A-Z]/.test(word) && /[a-z]/.test(word)) return true;
-  if (/^[A-Z][A-Z0-9]*\d$/.test(word)) return true;
-  return false;
-}
-function extractIdentifiers(request, max = DEFAULTS.maxIdentifiers) {
-  const out = [];
-  const seen = /* @__PURE__ */ new Set();
-  const add = (word) => {
-    if (!word || seen.has(word) || out.length >= max) return;
-    seen.add(word);
-    out.push(word);
-  };
-  const text = request ?? "";
-  for (const span of text.matchAll(/`([^`\n]{1,120})`/g)) {
-    const words = span[1].match(TOKEN) ?? [];
-    const last = words[words.length - 1];
-    if (last && last.length >= 2) add(last);
-  }
-  for (const m of text.matchAll(/([A-Za-z_$][\w$]*)(\s*\()?/g)) {
-    const word = m[1];
-    const after = text.charAt((m.index ?? 0) + word.length);
-    if (after === "." && /[A-Za-z]/.test(text.charAt((m.index ?? 0) + word.length + 1)) && !looksLikeIdentifier(word)) continue;
-    if (m[2] && word.length >= 3 && /[a-z]/.test(word)) add(word);
-    else if (looksLikeIdentifier(word)) add(word);
-  }
-  return out;
-}
-function escapeRegex(identifier) {
-  return identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-function clip(s, n) {
-  const t = s.replace(/\s+/g, " ").trim();
-  return t.length > n ? `${t.slice(0, n - 1)}\u2026` : t;
-}
-function renderPreSearchBlock(r, maxChars = DEFAULTS.maxChars) {
-  if (r.definitions.length === 0 && r.references.length === 0) return "";
-  const lines = [
-    "## Pre-search (symbol index + text search, gathered before this run with no model call)",
-    `Identifiers in the request: ${r.identifiers.map((i) => `\`${i}\``).join(", ")}`
-  ];
-  for (const id of r.identifiers) {
-    for (const d of r.definitions.filter((x) => x.identifier === id)) {
-      lines.push(`- \`${id}\` defined at ${d.path}:${d.line} (${d.kind}${d.exported ? ", exported" : ""})`);
-    }
-    for (const ref of r.references.filter((x) => x.identifier === id)) {
-      lines.push(`- \`${id}\` at ${ref.path}:${ref.line} \u2014 ${clip(ref.text, REFERENCE_TEXT_MAX)}`);
-    }
-  }
-  lines.push("Start from these locations (read_file with a line range) instead of searching for them again.");
-  let out = lines.join("\n");
-  if (out.length > maxChars) out = `${out.slice(0, maxChars).replace(/\n[^\n]*$/, "")}
-- \u2026`;
-  return out;
-}
-async function preSearch(request, ports, options = {}) {
-  const o = { ...DEFAULTS, ...options };
-  const { signal } = options;
-  const identifiers = extractIdentifiers(request, o.maxIdentifiers);
-  const empty = { identifiers, definitions: [], references: [], block: "" };
-  if (identifiers.length === 0 || signal?.aborted) return empty;
-  const perId = await Promise.all(identifiers.map(async (identifier) => {
-    const [defs, refs] = await Promise.all([
-      ports.findSymbol ? ports.findSymbol(identifier).catch(() => ({ ok: false })) : Promise.resolve({ ok: false }),
-      ports.searchText ? ports.searchText(escapeRegex(identifier), signal).catch(() => ({ ok: false })) : Promise.resolve({ ok: false })
-    ]);
-    const exact = (defs.ok ? defs.matches ?? [] : []).filter((m) => m.name === identifier && m.kind !== "heading");
-    const definitions2 = exact.slice(0, o.definitionsPerIdentifier).map((m) => ({
-      identifier,
-      path: m.path,
-      line: m.line,
-      kind: m.kind,
-      exported: m.exported
-    }));
-    const defined = new Set(definitions2.map((d) => `${d.path}:${d.line}`));
-    const references2 = [];
-    for (const m of refs.ok ? refs.matches ?? [] : []) {
-      if (references2.length >= o.referencesPerIdentifier) break;
-      const line = typeof m.line === "number" ? m.line : Number(m.line);
-      if (!Number.isFinite(line) || defined.has(`${m.path}:${line}`)) continue;
-      references2.push({ identifier, path: m.path, line, text: typeof m.text === "string" ? m.text : "" });
-    }
-    return { definitions: definitions2, references: references2 };
-  }));
-  const definitions = perId.flatMap((p) => p.definitions);
-  const references = perId.flatMap((p) => p.references);
-  const result = { identifiers, definitions, references };
-  return { ...result, block: renderPreSearchBlock(result, o.maxChars) };
-}
-function preSearchFiles(r, max = 6) {
-  const out = [];
-  for (const p of [...r.definitions.map((d) => d.path), ...r.references.map((x) => x.path)]) {
-    if (!out.includes(p)) out.push(p);
-    if (out.length >= max) break;
-  }
-  return out;
-}
-
 // ../packages/agent-tools/src/researchCache.ts
 function researchCacheKey(question, files) {
   const q = question.replace(/\s+/g, " ").trim();
@@ -2797,6 +2884,14 @@ async function workspaceFingerprint(ctx) {
   return memo.getOrRun("fingerprint", (shared) => readFingerprint({ caps: ctx.caps, ...shared ? { signal: shared } : {} }), ctx.signal);
 }
 
+// ../packages/agent-tools/src/delta/adapters/analyzer.ts
+var ANALYZER_TIMEOUT_MS = 5 * 6e4;
+var ignoredGlobs = (ignored) => (ignored ?? []).map((d) => `${d.replace(/\/+$/, "")}/**`);
+function ignoredRegex(ignored) {
+  const dirs = (ignored ?? []).map((d) => d.replace(/\/+$/, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  return dirs.length > 0 ? `^(?:${dirs.join("|")})(?:/|$)` : void 0;
+}
+
 // ../packages/agent-tools/src/codeAnalysisTool.ts
 function spec(name, version, extraPackages, bin, args) {
   const packages = [`${name}@${version}`, ...extraPackages];
@@ -2843,8 +2938,21 @@ function base64Utf8(text) {
   for (const byte of new TextEncoder().encode(text)) binary += String.fromCharCode(byte);
   return btoa(binary);
 }
+function dependencyCruiserConfigWith(partitions, ignored) {
+  const config = dependencyCruiserConfig(partitions);
+  const extra = ignoredRegex(ignored);
+  if (!extra) return config;
+  const options = config.options ?? {};
+  const base = options.exclude?.path;
+  return { ...config, options: { ...options, exclude: { ...options.exclude ?? {}, path: base ? `${base}|${extra}` : extra } } };
+}
+var jscpdArgsWith = (args, ignored) => {
+  const extra = ignoredGlobs(ignored);
+  return extra.length > 0 ? args.replace(/--ignore=(\S+)/, (_m, list) => `--ignore=${list},${extra.join(",")}`) : args;
+};
 function createAnalyzeCodebaseTool(options = {}) {
-  const configBase64 = base64Utf8(JSON.stringify(dependencyCruiserConfig(options.partitions)));
+  const l3 = options.l3;
+  const configOf = (ignored) => base64Utf8(JSON.stringify(dependencyCruiserConfigWith(options.partitions, ignored)));
   return defineTool({
     name: "analyze_codebase",
     description: "Measure JS/TS dependency edges and cycles with dependency-cruiser, duplicate code with jscpd, and unused-file/export/dependency candidates with Knip. Runs the analyzers bundled with the host when it ships them, else downloads the pinned packages through npm cache on first use; an analyzer that cannot start is reported not_measured, never as zero findings. Writes per-scan artifacts under .builderforce/code-analysis. The audit host saves the full snapshot for the visualizer; cloud images return a bounded summary after upload. Report findings normally after this tool. Preserve failed-tool coverage; do not claim missing results are clean.",
@@ -2857,6 +2965,7 @@ function createAnalyzeCodebaseTool(options = {}) {
       const id = crypto.randomUUID();
       const outputDir = `.builderforce/code-analysis/${id}`;
       const outputs = [];
+      const ignored = l3 ? await l3.ignored().catch(() => []) : void 0;
       const entries = bundledAnalyzers();
       let settledTold = 0;
       const tellSettled = () => {
@@ -2867,6 +2976,13 @@ function createAnalyzeCodebaseTool(options = {}) {
       };
       for (const analyzer of ANALYZERS) {
         tellSettled();
+        const l3Key = l3 ? await l3.keyOf(analyzer.name).catch(() => void 0) : void 0;
+        const l3Hit = l3 && l3Key ? await l3.cache.get(l3Key, analyzer.name).catch(() => void 0) : void 0;
+        if (l3Hit?.raw !== void 0) {
+          outputs.push(l3Hit.raw);
+          tools.push({ name: analyzer.name, version: analyzer.version, status: "complete" });
+          continue;
+        }
         const entry = entries?.[analyzer.name];
         if (entries && !entry) {
           outputs.push(null);
@@ -2881,7 +2997,7 @@ function createAnalyzeCodebaseTool(options = {}) {
           };
           let unavailable2;
           if (analyzer.name === "dependency-cruiser") {
-            const config = await shellRunWithStop(ctx, `node -e "const f=require('fs');f.mkdirSync('${outputDir}',{recursive:true});f.writeFileSync('${outputDir}/dependencies.json',Buffer.from('${configBase64}','base64'))"`);
+            const config = await shellRunWithStop(ctx, `node -e "const f=require('fs');f.mkdirSync('${outputDir}',{recursive:true});f.writeFileSync('${outputDir}/dependencies.json',Buffer.from('${configOf(ignored)}','base64'))"`);
             if (!config.ok) unavailable2 = setupFailed("Could not create dependency analysis configuration");
           }
           if (analyzer.name === "jscpd") {
@@ -2893,7 +3009,8 @@ function createAnalyzeCodebaseTool(options = {}) {
             tools.push({ name: analyzer.name, version: analyzer.version, status: "not_measured", reason: "analyzer-unavailable" });
             continue;
           }
-          const command = analyzerCommand(analyzer, scope, entry);
+          const pinned = analyzerCommand(analyzer, scope, entry);
+          const command = analyzer.name === "jscpd" ? jscpdArgsWith(pinned, ignored) : pinned;
           const result = await shellRunWithStop(ctx, command.replaceAll(".builderforce/code-analysis", outputDir), analyzer.name === "knip" && scope !== "." ? scope : void 0);
           launched = true;
           const artifact = analyzer.name === "jscpd" ? await ctx.caps.repoRead.readFile(`${outputDir}/jscpd-report.json`) : void 0;
@@ -2911,6 +3028,7 @@ function createAnalyzeCodebaseTool(options = {}) {
           const unresolved = analyzer.name === "dependency-cruiser" ? value.modules.flatMap((m) => m.dependencies ?? []).filter((d) => d.couldNotResolve).length : 0;
           outputs.push(value);
           tools.push({ name: analyzer.name, version: analyzer.version, status: unresolved ? "failed" : "complete", ...unresolved ? { error: `${unresolved} imports could not be resolved; graph coverage is incomplete.` } : {} });
+          if (l3 && l3Key && !unresolved) await l3.cache.put(l3Key, { result: l3.toResult(analyzer.name, analyzer.version, value), raw: value }).catch(() => void 0);
         } catch (error) {
           if (entry && !launched) {
             outputs.push(null);
@@ -3175,8 +3293,8 @@ var editFileTool = defineTool({
         }
       });
       if (!batch.ok) {
-        const failed = batch.files[batch.files.length - 1];
-        return { data: { ok: false, error: failed.error ?? "batch failed", files: batch.files.map(({ content: _c, ...rest }) => rest) } };
+        const failed2 = batch.files[batch.files.length - 1];
+        return { data: { ok: false, error: failed2.error ?? "batch failed", files: batch.files.map(({ content: _c, ...rest }) => rest) } };
       }
       return {
         data: {
@@ -3581,15 +3699,15 @@ var skillProposeTool = defineTool({
   },
   requires: ["skill.author"],
   async execute(args, ctx) {
-    const str = (v) => typeof v === "string" ? v.trim() : "";
-    const slug = str(args.slug);
-    const name = str(args.name);
-    const description = str(args.description);
-    const body = str(args.body);
+    const str3 = (v) => typeof v === "string" ? v.trim() : "";
+    const slug = str3(args.slug);
+    const name = str3(args.name);
+    const description = str3(args.description);
+    const body = str3(args.body);
     if (!slug || !name || !description || !body) {
       return { data: { ok: false, error: "slug, name, description and body are all required" } };
     }
-    const evidence = str(args.evidence);
+    const evidence = str3(args.evidence);
     const r = await ctx.caps.skillAuthor.propose({
       slug,
       name,
@@ -3732,12 +3850,12 @@ var spawnAgentTool = withDelegationNote(defineTool({
   },
   requires: ["orchestrate"],
   async execute(args, ctx) {
-    const str = (v) => typeof v === "string" ? v.trim() : "";
-    const label = str(args.label);
-    const task = str(args.task);
+    const str3 = (v) => typeof v === "string" ? v.trim() : "";
+    const label = str3(args.label);
+    const task = str3(args.task);
     if (!task) return { data: { ok: false, error: "task is required \u2014 the child sees none of your conversation" } };
     const role = delegationRole(args.role);
-    const asAgent = str(args.as_agent);
+    const asAgent = str3(args.as_agent);
     const r = await ctx.caps.orchestration.spawn({
       label: label || task.slice(0, 60),
       task,
@@ -3755,20 +3873,20 @@ function parseWorkstreams(raw) {
   if (raw.length > MAX_WORKSTREAMS) {
     return `at most ${MAX_WORKSTREAMS} workstreams per call \u2014 run the rest in a second call once these are back`;
   }
-  const str = (v) => typeof v === "string" ? v.trim() : "";
+  const str3 = (v) => typeof v === "string" ? v.trim() : "";
   const out = [];
   for (const [i, item] of raw.entries()) {
     const w = item ?? {};
-    const task = str(w.task);
+    const task = str3(w.task);
     if (!task) return `workstream ${i + 1} has no task \u2014 each child sees none of your conversation`;
-    const ticket = str(w.ticket);
-    const role = str(w.role);
+    const ticket = str3(w.ticket);
+    const role = str3(w.role);
     out.push({
-      label: str(w.label) || task.slice(0, 60),
+      label: str3(w.label) || task.slice(0, 60),
       task,
       ...ticket ? { ticket } : {},
       ...role ? { role } : {},
-      asAgent: str(w.as_agent)
+      asAgent: str3(w.as_agent)
     });
   }
   return out;
@@ -3828,36 +3946,41 @@ var SUBAGENT_TOOLS = [spawnAgentTool, spawnAgentsTool, ...SUBAGENT_CONTROL_TOOLS
 
 // ../packages/agent-tools/src/symbolRelations.ts
 var import_knowledge6 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/symbolImports.ts
+var IMPORT_NAMED = new RegExp(`^\\s*(?:type\\s+)?(${ID})(?:\\s+as\\s+(${ID}))?\\s*$`);
+var IMPORT_NAMESPACE = new RegExp(`\\*\\s*as\\s+(${ID})`);
+var IMPORT_DEFAULT = new RegExp(`^\\s*(${ID})\\s*(?:,|$)`);
+
+// ../packages/agent-tools/src/symbolRelations.ts
 var import_knowledge7 = require("@seanhogg/builderforce-memory/knowledge");
-var ID2 = "[A-Za-z_$][\\w$]*";
-var IMPORT_NAMED = new RegExp(`^\\s*(?:type\\s+)?(${ID2})(?:\\s+as\\s+(${ID2}))?\\s*$`);
-var IMPORT_NAMESPACE = new RegExp(`\\*\\s*as\\s+(${ID2})`);
-var IMPORT_DEFAULT = new RegExp(`^\\s*(${ID2})\\s*(?:,|$)`);
-var LEADING_TYPE = new RegExp(`^\\s*(${ID2}(?:\\s*\\.\\s*${ID2})?)`);
-var FIELD = new RegExp(`^\\s*(?:(?:public|private|protected|readonly|static|declare|override|abstract|accessor)\\s+)*#?(${ID2})\\s*[?!]?\\s*:\\s*([^=;]+)`);
-var FIELD_INIT = new RegExp(`^\\s*(?:(?:public|private|protected|readonly|static|override)\\s+)*#?(${ID2})\\s*=`);
-var NEW = new RegExp(`(?:^|[^\\w$])new\\s+(${ID2}(?:\\.${ID2})?)`);
-var PARAM_PROP = new RegExp(`\\b(?:public|private|protected|readonly)\\s+(?:readonly\\s+)?(${ID2})\\s*\\??\\s*:\\s*(${ID2}(?:\\.${ID2})?)`, "g");
-var LOCAL_DECL = new RegExp(`\\b(?:const|let|var|function\\s*\\*?|class|catch\\s*\\()\\s*(${ID2})`, "g");
-var LAST_ID = new RegExp(`(${ID2})\\s*(?:=[^,]*)?\\s*$`);
-var CALLBACK_PARAMS = new RegExp(`(?:\\(([^()]*)\\)(?:\\s*:\\s*[^=()]+)?\\s*=>|(${ID2})\\s*=>|\\bfunction\\b[^(]*\\(([^()]*)\\))\\s*\\{\\s*$`);
-var PARAM_NAME = new RegExp(`^\\s*(?:\\.\\.\\.)?(?:(?:public|private|protected|readonly)\\s+)*(${ID2})`);
-var NEW_BEFORE = new RegExp(`\\bnew\\s+(${ID2}(?:\\.${ID2})?)\\s*(?:<[^<>()]*>)?\\s*$`);
-var JSX_TAG = new RegExp(`<(\\/?)([A-Z][\\w$]*(?:\\.${ID2})*)(?=[\\s/>]|$)`, "g");
+var LEADING_TYPE = new RegExp(`^\\s*(${ID}(?:\\s*\\.\\s*${ID})?)`);
+var FIELD = new RegExp(`^\\s*(?:(?:public|private|protected|readonly|static|declare|override|abstract|accessor)\\s+)*#?(${ID})\\s*[?!]?\\s*:\\s*([^=;]+)`);
+var FIELD_INIT = new RegExp(`^\\s*(?:(?:public|private|protected|readonly|static|override)\\s+)*#?(${ID})\\s*=`);
+var NEW = new RegExp(`(?:^|[^\\w$])new\\s+(${ID}(?:\\.${ID})?)`);
+var PARAM_PROP = new RegExp(`\\b(?:public|private|protected|readonly)\\s+(?:readonly\\s+)?(${ID})\\s*\\??\\s*:\\s*(${ID}(?:\\.${ID})?)`, "g");
+var LOCAL_DECL = new RegExp(`\\b(?:const|let|var|function\\s*\\*?|class|catch\\s*\\()\\s*(${ID})`, "g");
+var LAST_ID = new RegExp(`(${ID})\\s*(?:=[^,]*)?\\s*$`);
+var CALLBACK_PARAMS = new RegExp(`(?:\\(([^()]*)\\)(?:\\s*:\\s*[^=()]+)?\\s*=>|(${ID})\\s*=>|\\bfunction\\b[^(]*\\(([^()]*)\\))\\s*\\{\\s*$`);
+var PARAM_NAME = new RegExp(`^\\s*(?:\\.\\.\\.)?(?:(?:public|private|protected|readonly)\\s+)*(${ID})`);
 
 // ../packages/agent-tools/src/knowledge/codePack.ts
-var import_knowledge15 = require("@seanhogg/builderforce-memory/knowledge");
-var import_ingest3 = require("@seanhogg/builderforce-memory/ingest");
+var import_knowledge22 = require("@seanhogg/builderforce-memory/knowledge");
+var import_ingest4 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/codeComplexity.ts
 var TERNARY = String.raw`\?(?![.:,)=]|\(\s*\)\s*:)`;
 var JS_DECISIONS = new RegExp(String.raw`\b(?:if|for|while|case|catch)\b|&&|\|\||\?\?|${TERNARY}`, "g");
 var OO_DECISIONS = new RegExp(String.raw`\b(?:if|for|foreach|while|case|catch)\b|&&|\|\||\?\?|${TERNARY}`, "g");
 
-// ../packages/agent-tools/src/knowledge/codeNodes.ts
+// ../packages/agent-tools/src/knowledge/codeConcurrency.ts
 var import_knowledge8 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/codeNodes.ts
+var import_knowledge9 = require("@seanhogg/builderforce-memory/knowledge");
 var import_working4 = require("@seanhogg/builderforce-memory/working");
 var import_ingest2 = require("@seanhogg/builderforce-memory/ingest");
+var CODE_PACK_ID = "code";
 var CODE_BADGES = {
   /** The symbol extractor's language family (`js`, `python`, …). */
   language: "language",
@@ -3885,6 +4008,8 @@ var CODE_BADGES = {
   coverage: "coverage",
   /** Commits touching the file in the last 90 days, from the host's `HistoryPort` (deterministic). */
   churn: "churn",
+  /** The file's co-change partners over the last year of history (memory's `encodeCoChange`, PRD 38 P4); absent with none. */
+  coChange: import_knowledge9.COCHANGE_BADGE,
   /** First CODEOWNERS owner of the file (deterministic). */
   owner: "owner",
   /** Comma-separated design-pattern ids (heuristic). */
@@ -3896,11 +4021,13 @@ var CODE_BADGES = {
   /** `1` on a package entry point a manifest names (`main` / `bin` / `exports`): layer resolution reads it, never the filesystem. */
   entry: "entry",
   /** Comma-joined ids of the known external services the file imports (`postgres,llm`), from `externalServices.ts` (deterministic). */
-  externals: "externals"
+  externals: "externals",
+  /** Comma-joined concurrency the file starts (`durable-object:ChatRoom,poller`), from `codeConcurrency.ts` (deterministic). */
+  concurrency: "concurrency"
 };
 
 // ../packages/agent-tools/src/knowledge/codePatterns.ts
-var import_knowledge9 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge10 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/codeRoutes.ts
 var METHODS = "get|post|put|patch|delete|options|head|all";
@@ -3912,23 +4039,117 @@ var NEXT_WITH_PATH = new RegExp(String.raw`\s*\.\s*(${METHODS})\s*\(\s*(['"` + "
 var NEXT_ANY = new RegExp(String.raw`\s*\.\s*(${METHODS})\s*\(`, "y");
 
 // ../packages/agent-tools/src/knowledge/codeFindings.ts
-var import_knowledge10 = require("@seanhogg/builderforce-memory/knowledge");
-var UNUSED_ITEMS = [
-  { kind: "unused-export", names: CODE_BADGES.unusedExportNames, count: CODE_BADGES.unusedExports, anchorKind: "symbol" },
-  { kind: "unused-dependency", names: CODE_BADGES.unusedDependencyNames, count: CODE_BADGES.unusedDependencies, anchorKind: "package" }
-];
+var import_knowledge15 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/codeRollup.ts
-var import_knowledge13 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/moduleAliases.ts
-var import_knowledge11 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/rootId.ts
+// ../packages/agent-tools/src/knowledge/rules/unusedDependency.ts
 var import_knowledge12 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/codeLayers.ts
+// ../packages/agent-tools/src/knowledge/rules/unusedItems.ts
+var import_knowledge11 = require("@seanhogg/builderforce-memory/knowledge");
+var codeFiles = (g) => g.nodes.filter((n) => n.pack === CODE_PACK_ID && n.kind === "file").sort((a, b) => (0, import_knowledge11.compareStr)(a.ref, b.ref));
+var namesOf = (n, badge) => [...new Set(String(n.badges?.[badge] ?? "").split(",").filter(Boolean))].sort(import_knowledge11.compareStr);
+function itemFindings(n, item) {
+  const ref = n.ref;
+  const names = namesOf(n, item.names);
+  if (names.length === 0) {
+    const count = Number(n.badges?.[item.count] ?? 0) || 0;
+    return count > 0 ? [(0, import_knowledge11.finding)(item.kind, CODE_PACK_ID, [ref], "info", { count, files: 1 }, void 0, (0, import_knowledge11.refAnchor)(ref))] : [];
+  }
+  return names.map((name) => {
+    const anchor = `${ref}#${name}`;
+    return (0, import_knowledge11.finding)(item.kind, CODE_PACK_ID, [ref], "info", { count: 1, files: 1, name }, [anchor], { anchor, anchorKind: item.anchorKind });
+  });
+}
+
+// ../packages/agent-tools/src/knowledge/rules/unusedDependency.ts
+var ITEM = { kind: "unused-dependency", names: CODE_BADGES.unusedDependencyNames, count: CODE_BADGES.unusedDependencies, anchorKind: "package" };
+var unusedDependencyRule = (0, import_knowledge12.defineRule)({
+  id: "code.unused-dependency",
+  version: 1,
+  reads: [],
+  // the knowledge graph only
+  scope: "global",
+  extraInputs: ["knowledge"],
+  derive: ({ extra: { knowledge: k } }) => codeFiles(k.graph).flatMap((n) => itemFindings(n, ITEM))
+});
+
+// ../packages/agent-tools/src/knowledge/rules/unusedExport.ts
+var import_knowledge13 = require("@seanhogg/builderforce-memory/knowledge");
+var ITEM2 = { kind: "unused-export", names: CODE_BADGES.unusedExportNames, count: CODE_BADGES.unusedExports, anchorKind: "symbol" };
+var unusedExportRule = (0, import_knowledge13.defineRule)({
+  id: "code.unused-export",
+  version: 1,
+  reads: [],
+  // the knowledge graph only
+  scope: "global",
+  extraInputs: ["knowledge"],
+  derive: ({ extra: { knowledge: k } }) => codeFiles(k.graph).flatMap((n) => itemFindings(n, ITEM2))
+});
+
+// ../packages/agent-tools/src/knowledge/rules/unusedFile.ts
 var import_knowledge14 = require("@seanhogg/builderforce-memory/knowledge");
+var unusedFileRule = (0, import_knowledge14.defineRule)({
+  id: "code.unused-file",
+  version: 1,
+  reads: [],
+  // the knowledge graph only
+  scope: "global",
+  extraInputs: ["knowledge"],
+  derive: ({ extra: { knowledge: k } }) => codeFiles(k.graph).filter((n) => n.badges?.[CODE_BADGES.unused] === "file").map((n) => (0, import_knowledge14.finding)("unused-file", CODE_PACK_ID, [n.ref], "info", { count: 1, files: 1 }, void 0, (0, import_knowledge14.refAnchor)(n.ref)))
+});
+
+// ../packages/agent-tools/src/knowledge/codeFindings.ts
+var CODE_FACT_RULES = Object.freeze([unusedFileRule, unusedExportRule, unusedDependencyRule]);
+
+// ../packages/agent-tools/src/knowledge/codeRollup.ts
+var import_knowledge18 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/moduleAliases.ts
+var import_knowledge16 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/rootId.ts
+var import_knowledge17 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/deploy/deployParser.ts
+var import_knowledge20 = require("@seanhogg/builderforce-memory/knowledge");
+var import_ingest3 = require("@seanhogg/builderforce-memory/ingest");
+
+// ../packages/agent-tools/src/knowledge/deploy/deployNodes.ts
+var import_knowledge19 = require("@seanhogg/builderforce-memory/knowledge");
+var DEPLOY_BADGES = {
+  type: "type",
+  unitKind: "unitKind",
+  runtime: "runtime",
+  /** Comma-joined port numbers. */
+  ports: "ports",
+  /** Comma-joined env var NAMES (capped at 40). */
+  env: "env",
+  /** `;`-joined schedules. */
+  cron: "cron",
+  /** Comma-joined root-relative folders / files it builds from ('.' = the root). */
+  source: "source",
+  /** Comma-joined `kind:name` of its bindings. */
+  bindings: "bindings",
+  /** Comma-joined queue names it sends to / consumes. */
+  produces: "produces",
+  consumes: "consumes",
+  externals: CODE_BADGES.externals,
+  /** Binding nodes: what kind of resource it is. */
+  bindingKind: "bindingKind",
+  /** The descriptor's file node: its family (`wrangler`, `compose`, …) and how many units it declares. */
+  deploy: "deploy",
+  units: "units",
+  /** A package.json's `workspaces` globs, comma-joined. */
+  workspaces: "workspaces"
+};
+var UNIT_PREFIX = `ent:${CODE_PACK_ID}:unit:`;
+var BINDING_PREFIX = `ent:${CODE_PACK_ID}:binding:`;
+
+// ../packages/agent-tools/src/knowledge/deploy/parseDescriptor.ts
+var MAX_DESCRIPTOR_CHARS = 256 * 1024;
+
+// ../packages/agent-tools/src/knowledge/codeLayers.ts
+var import_knowledge21 = require("@seanhogg/builderforce-memory/knowledge");
 var FOLDER_LAYERS = {
   presentation: ["routes", "components", "app", "pages", "webview", "views", "hooks", "handlers", "controllers", "ui"],
   application: ["application", "use-cases", "usecases", "services", "lib", "clients", "commands", "queries"],
@@ -3968,50 +4189,62 @@ function defaultLayerRegistry() {
 var CODE_LAYERS = defaultLayerRegistry();
 
 // ../packages/agent-tools/src/knowledge/knowledgePacks.ts
-var import_knowledge17 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge24 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/documents/documentsPack.ts
-var import_knowledge16 = require("@seanhogg/builderforce-memory/knowledge");
-var import_ingest4 = require("@seanhogg/builderforce-memory/ingest");
+var import_knowledge23 = require("@seanhogg/builderforce-memory/knowledge");
+var import_ingest5 = require("@seanhogg/builderforce-memory/ingest");
 var DOCUMENTS_PACK_ID = "documents";
 var documentsParser = {
-  ...import_ingest4.plainTextParser,
+  ...import_ingest5.plainTextParser,
   id: "documents",
   accepts: (source) => source.content.kind === "text" && isExtractableDocumentType(source.content.mediaType ?? "")
 };
 var DOCUMENTS_PACK = {
   id: DOCUMENTS_PACK_ID,
   parsers: [documentsParser],
-  ...import_knowledge16.DOCS_PACK.judgement ? { judgement: import_knowledge16.DOCS_PACK.judgement } : {}
+  ...import_knowledge23.DOCS_PACK.judgement ? { judgement: import_knowledge23.DOCS_PACK.judgement } : {}
 };
 
 // ../packages/agent-tools/src/knowledge/codeExtracted.ts
-var import_knowledge18 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge25 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/reviewRunner.ts
+// ../packages/agent-tools/src/knowledge/facts/fileFactsOf.ts
+var import_knowledge27 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/facts/factsAst.ts
 var import_knowledge26 = require("@seanhogg/builderforce-memory/knowledge");
 
+// ../packages/agent-tools/src/knowledge/reviewRunner.ts
+var import_knowledge38 = require("@seanhogg/builderforce-memory/knowledge");
+
 // ../packages/agent-tools/src/knowledge/codeGraph.ts
-var import_knowledge19 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge29 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/deploy/deployGraph.ts
+var import_knowledge28 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/codeRootSignals.ts
-var import_knowledge21 = require("@seanhogg/builderforce-memory/knowledge");
-var import_ingest5 = require("@seanhogg/builderforce-memory/ingest");
+var import_knowledge32 = require("@seanhogg/builderforce-memory/knowledge");
+var import_ingest6 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/codeCoverage.ts
 var MAX_FILE_BYTES = 40 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/codeOwners.ts
-var import_knowledge20 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge30 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/historyPort.ts
+var import_knowledge31 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/fileEdits.ts
-var import_knowledge22 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge33 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
-var import_ingest6 = require("@seanhogg/builderforce-memory/ingest");
+var import_ingest7 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/graphIgnore.ts
-var import_knowledge23 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge34 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
 var MAX_GRAPH_FILE_BYTES = 256 * 1024;
@@ -4021,10 +4254,10 @@ var cache = createShaCache({
 });
 
 // ../packages/agent-tools/src/knowledge/reviewJudgePass.ts
-var import_knowledge24 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge35 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/judgement.ts
-var import_knowledge25 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge36 = require("@seanhogg/builderforce-memory/knowledge");
 var KNOWLEDGE_EXTRACT_SYSTEM = [
   "You read one section of a document and list what it asserts.",
   'Reply with JSON only: {"extract":[{"ref":<the ref given>,"claims":[{"subject","predicate","object","quote"}],"entities":[{"name","type"}]}]}.',
@@ -4037,17 +4270,21 @@ var KNOWLEDGE_COMPARE_SYSTEM = [
   'Reply with JSON only: {"compare":[{"a":<ref a>,"b":<ref b>,"relation":"contradicts"|"agrees"|"unrelated","confidence":<0..1>}]}.'
 ].join("\n");
 
+// ../packages/agent-tools/src/knowledge/measuredWith.ts
+var import_knowledge37 = require("@seanhogg/builderforce-memory/knowledge");
+var TYPESCRIPT_VERSION = TYPESCRIPT_PIN.slice(TYPESCRIPT_PIN.lastIndexOf("@") + 1);
+
 // ../packages/agent-tools/src/knowledge/humanFact.ts
-var import_knowledge27 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge39 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/documents/documentDoc.ts
-var import_knowledge28 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge40 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/index/persistence.ts
-var import_knowledge29 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge41 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/replicaQueue.ts
-var import_knowledge30 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge42 = require("@seanhogg/builderforce-memory/knowledge");
 var import_pack = require("@seanhogg/builderforce-memory/knowledge/pack");
 
 // ../packages/agent-tools/src/knowledge/replicatedStore.ts
@@ -4057,7 +4294,7 @@ var import_pack2 = require("@seanhogg/builderforce-memory/knowledge/pack");
 var import_pack5 = require("@seanhogg/builderforce-memory/knowledge/pack");
 
 // ../packages/agent-tools/src/knowledge/replicaPack.ts
-var import_knowledge31 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge43 = require("@seanhogg/builderforce-memory/knowledge");
 var import_pack3 = require("@seanhogg/builderforce-memory/knowledge/pack");
 var DEFAULT_MAX_DECODED = 16 * 1024 * 1024;
 var EMPTY_PACK = { rootId: "", baseGeneration: 0, targetDigest: import_pack3.ZERO_DIGEST };
@@ -4075,20 +4312,20 @@ var MAX_ANALYSIS_BYTES = 2 * 1024 * 1024;
 var MAX_SYNC_PACK_BYTES = 24 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/replicaFirstSync.ts
-var import_knowledge32 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge44 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/claimSimilarity.ts
-var import_knowledge33 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge45 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/portablePack.ts
-var import_knowledge34 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge46 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/packGraph.ts
-var import_knowledge35 = require("@seanhogg/builderforce-memory/knowledge");
-var import_ingest7 = require("@seanhogg/builderforce-memory/ingest");
+var import_knowledge47 = require("@seanhogg/builderforce-memory/knowledge");
+var import_ingest8 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/pinpointMatch.ts
-var import_knowledge36 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge48 = require("@seanhogg/builderforce-memory/knowledge");
 var MAX_PINPOINT_IMAGE_BYTES = 8 * 1024 * 1024;
 var MAX_DATA_URL_CHARS = Math.ceil(MAX_PINPOINT_IMAGE_BYTES * 4 / 3) + 64;
 var PINPOINT_VISION_SYSTEM = [
@@ -4101,6 +4338,46 @@ var PINPOINT_VISION_SYSTEM = [
 var LOCK_REFRESH_MS = 3e4;
 var LOCK_STALE_MS = 12e4;
 var LOCK_FRESH_MS = LOCK_STALE_MS - LOCK_REFRESH_MS;
+
+// ../packages/agent-tools/src/delta/adapters/dependencyCruiser.ts
+var import_ingest9 = require("@seanhogg/builderforce-memory/ingest");
+var import_knowledge49 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/delta/adapters/gitleaks.ts
+var import_knowledge50 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/delta/adapters/jscpd.ts
+var import_knowledge51 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/delta/adapters/knip.ts
+var import_knowledge52 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/delta/adapters/osv.ts
+var import_knowledge53 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/delta/adapters/sarifTools.ts
+var import_knowledge54 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/sarif/src/emit.ts
+var SARIF_BASELINE_STATES = ["new", "unchanged", "updated", "absent"];
+
+// ../packages/sarif/src/parse.ts
+var BASELINE = new Set(SARIF_BASELINE_STATES);
+
+// ../packages/agent-tools/src/delta/adapters/sarifTools.ts
+var SEMGREP_TOOL = "semgrep";
+var CODEQL_TOOL = "codeql";
+var SARIF_KINDS = { [SEMGREP_TOOL]: "semgrep-finding", [CODEQL_TOOL]: "codeql-finding" };
+
+// ../packages/agent-tools/src/delta/adapters/l3Cache.ts
+var import_retrieval = require("@seanhogg/builderforce-memory/retrieval");
+
+// ../packages/agent-tools/src/delta/adapters/typescript.ts
+var import_knowledge55 = require("@seanhogg/builderforce-memory/knowledge");
+var TYPESCRIPT_VERSION2 = TYPESCRIPT_PIN.slice(TYPESCRIPT_PIN.lastIndexOf("@") + 1);
+
+// ../packages/agent-tools/src/delta/dynamic/host.ts
+var DYNAMIC_STEP_CAP_MS = 30 * 6e4;
 
 // src/runFindings/detectors/bracketBreak.ts
 function bracketBreak(view) {
@@ -4471,6 +4748,9 @@ var INDEXEDDB_REDACTED_KEYS = [
   "clientsecret"
 ];
 var INDEXEDDB_REDACTION_RULE = `Only exportForUploadOrLog() output may be uploaded or logged. It strips every secret-shaped key at every depth \u2014 a key whose lowercase name is one of ${INDEXEDDB_REDACTED_KEYS.join(", ")} or contains token, secret, password, authorization, cookie, or apikey \u2014 so accessToken, client_secret and sessionCookie are stripped too. The strip is recursive through arrays and nested objects, the input is not mutated, and a dropped key is absent rather than blanked. export() is the unfiltered local record and must not leave the device.`;
+
+// ../packages/local-first/src/httpSyncTransport.ts
+var MAX_RETRY_AFTER_MS = 60 * 60 * 1e3;
 
 // ../packages/local-first/src/tombstone.ts
 var RESNAPSHOT = Object.freeze({ action: "resnapshot" });
@@ -5138,7 +5418,7 @@ var DEFAULT_BRANCH_CMD = gitCommandPattern("remote|symbolic-ref|branch");
 // src/runFindings/runView.ts
 var HAND_OFF_DUE = "loop.hand_off_due";
 var ROLE_HANDOFF = "llm.role_handoff";
-var record = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
+var record2 = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
 function jsonBytes2(v) {
   try {
     return utf8ByteLength2(JSON.stringify(v ?? null));
@@ -5152,7 +5432,7 @@ function isCheck(ev) {
 }
 function callOf(ev, step, turn) {
   const ok = !ev.isError && !isFailedToolResult(ev.result);
-  const args = record(ev.args);
+  const args = record2(ev.args);
   const write = ok && isCodeChangeTool(ev.label) && !isCacheAnswered(ev);
   return {
     step,
@@ -5166,8 +5446,8 @@ function callOf(ev, step, turn) {
     paths: write ? editedPathsOf(ev.label, args) : []
   };
 }
-function kindOf(t, failed) {
-  if (failed) return "failed";
+function kindOf(t, failed2) {
+  if (failed2) return "failed";
   if (t.forced) return "forced";
   if (t.calls.some((c) => c.write)) return "write";
   return t.toolCalls > 0 || t.calls.length > 0 ? "read" : "text";
@@ -5186,30 +5466,30 @@ function buildRunView(events, messages = []) {
       continue;
     }
     if (ev.label === STOPPED_TURN_STEP) {
-      const model = record(ev.args).model;
+      const model = record2(ev.args).model;
       stopped = { step, ...typeof model === "string" ? { model } : {} };
       continue;
     }
     if (ev.label === "llm.complete") {
       const logged = modelTurnLog([ev])[0];
       if (!logged) continue;
-      const failed = logged.failed === true;
+      const failed2 = logged.failed === true;
       turns.push({
         index: turns.length + 1,
         step,
         role: logged.role ?? "",
         model: logged.model,
-        kind: failed ? "failed" : "text",
+        kind: failed2 ? "failed" : "text",
         toolCalls: logged.toolCalls,
         promptTokens: ev.usage?.prompt ?? 0,
         completionTokens: logged.completionTokens ?? 0,
         durationMs: logged.durationMs ?? 0,
         argBytes: logged.argBytes ?? 0,
-        forced: forcedNext && !failed,
+        forced: forcedNext && !failed2,
         text: "",
         calls: []
       });
-      if (!failed) forcedNext = false;
+      if (!failed2) forcedNext = false;
       stopped = null;
       continue;
     }
@@ -5218,7 +5498,7 @@ function buildRunView(events, messages = []) {
       continue;
     }
     if (ev.label === "agent.message" && typeof ev.result === "string" && !current.text) current.text = ev.result;
-    else if (ev.label === ROLE_HANDOFF && typeof record(ev.args).via === "string") current.handOffVia = record(ev.args).via;
+    else if (ev.label === ROLE_HANDOFF && typeof record2(ev.args).via === "string") current.handOffVia = record2(ev.args).via;
     else if (ev.category === "tool") {
       const call = callOf(ev, step, current.index);
       current.calls.push(call);

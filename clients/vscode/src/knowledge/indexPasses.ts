@@ -14,7 +14,8 @@
 
 import type { Clock } from "./indexBudget";
 
-export type PassKind = "map" | "l3";
+/** `facts`: the once-per-session fact-graph sync of a root whose plan found nothing moved (PRD 41 §B1, WS4). */
+export type PassKind = "map" | "l3" | "facts" | "sweep";
 
 export type PassOutcome<T> = { value: T } | { aborted: true };
 

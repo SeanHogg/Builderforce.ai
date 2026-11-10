@@ -11,7 +11,9 @@
 
 import type { LocalEntityType } from '../../../domain/sync/syncProtocol';
 import { hashSyncPayload } from '../../../domain/sync/syncProtocol';
+import type { RunDeltaImportPorts } from '../../runDelta/runDeltaPorts';
 import type { SyncEntityMappingRow, SyncEventInput, SyncImportContext, SyncStoreSet } from '../syncPorts';
+import { importSyncedRunDelta } from './importSyncedRunDelta';
 import {
   appliedExisting,
   appliedNew,
@@ -55,13 +57,19 @@ function historyPayload(event: SyncEventInput): unknown {
 /**
  * Accept one history-only mutation. Ticket and project are always rejected,
  * before any mapping read, so this path cannot update those aggregates.
+ *
+ * `run-delta` additionally lands in the `run_deltas` tables (PRD 41 §C14) when the
+ * composition root binds `runDelta` (`namedSyncImporters`); unbound (unit tests of the
+ * generic mirror), it is mirrored like any other history type.
  */
 export async function importMirrorRecord(
   event: SyncEventInput,
   ctx: SyncImportContext,
   stores: SyncStoreSet,
+  runDelta?: RunDeltaImportPorts,
 ): Promise<BoundedImportOutcome> {
   if (mirrorRefuses(event.entityType)) return rejected('entity_type_rejected');
+  if (event.entityType === 'run-delta' && runDelta) return importSyncedRunDelta(event, ctx, stores, runDelta);
   const prelude = preludeRejection(event, ctx);
   if (prelude) return prelude;
   if (event.operation !== 'create' && event.operation !== 'import' && event.operation !== 'update' && event.operation !== 'delete') {

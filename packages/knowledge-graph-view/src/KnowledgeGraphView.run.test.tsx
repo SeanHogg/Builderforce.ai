@@ -9,7 +9,6 @@ import { openReviews } from './testReviews';
 import { liveRun } from './surface/run/runFixture';
 import type { KnowledgeReviewEvent, ReviewControl, ReviewRunsPort, StoredReviewRun } from './types';
 
-vi.mock('./scene/GraphScene', () => ({ default: () => null }));
 
 afterEach(cleanup);
 

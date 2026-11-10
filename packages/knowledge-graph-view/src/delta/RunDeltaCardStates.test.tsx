@@ -22,6 +22,15 @@ describe('RunDeltaStatusCard', () => {
         expect(failed.container.querySelector('[aria-busy="true"]')).toBeNull();
     });
 
+    it('names the dynamic tier while it runs, with its ceiling in minutes; a failed card never does', () => {
+        const pending = render(<RunDeltaStatusCard status="pending" runId="r1" labels={L} dynamicMinutes={15} />);
+        expect(pending.getByRole('status').textContent).toBe(L.pendingDynamic.replace('{minutes}', '15'));
+        expect(pending.getByRole('status').textContent).toContain('15');
+        pending.unmount();
+        const failed = render(<RunDeltaStatusCard status="failed" runId="r1" labels={L} dynamicMinutes={15} />);
+        expect(failed.getByRole('status').textContent).toBe(L.failedCard);
+    });
+
     it('reads its words from the catalog', () => {
         const labels = runDeltaLabels((key) => (key === 'pendingCard' ? 'Messe …' : undefined));
         expect(render(<RunDeltaStatusCard status="pending" runId="r1" labels={labels} />).getByRole('status').textContent).toBe('Messe …');

@@ -15,7 +15,15 @@ export {
 export { knowledgePacks } from './knowledgePacks.js';
 export { analysisToExtracted, repoGraphToExtracted, type SerializedRepoGraphShape } from './codeExtracted.js';
 export { codeAnalyzers, runCodeAnalysis, type CodeAnalysisRun, type CodeAnalyzersDeps } from './codeAnalyzers.js';
-export { CODE_FINDING_RULES, unusedCodeRule } from './codeFindings.js';
+export { CODE_FACT_RULES, CODE_FINDING_RULES, unusedCodeRule } from './codeFindings.js';
+// PRD 41 §B3: FileFacts v3 from one parse tree (pure; the Node parse is `./node-file-facts`).
+export { fileFactsOf, cappedFileFacts, isCappedFacts, CAPPED_EXTRACTOR, FILE_FACTS_LANGUAGES, type FileFactsInput } from './facts/fileFactsOf.js';
+export type { FactNode, ImportResolver } from './facts/factsAst.js';
+export { importResolver, pythonModuleCandidates } from './facts/importResolver.js';
+export {
+    resolveFileFacts, resolutionKey, resolvedKey, unresolveFileFacts, candidateMount, isRouterFacts, hasCandidateMounts, CANDIDATE_MOUNT, CHAIN_IMPORT,
+    type RouterFiles,
+} from './facts/resolveFacts.js';
 export { CODE_BADGES, CODE_PACK_ID, ROOT_OUTPUT_HASH_PREFIX, codeFileNode } from './codeNodes.js';
 export {
     LAYER_RULE_PREFIX, toDependencyCruiserRules,
@@ -71,8 +79,8 @@ export {
     type RepoGraphPort, type WorkspaceAnalysis, type WorkspaceAnalysisDeps,
 } from './workspaceAnalysis.js';
 export {
-    EDIT_DEBOUNCE_MS, currentFileHashes, editedManifestKey, knownKeysCache, markFileEdited, markFilesEdited, pruneEditedFiles, watchFileEdits,
-    type FileEditPorts, type KnownKeysCache, type FileEditResult, type WatchFileEditsArgs,
+    EDIT_DEBOUNCE_MS, currentFileHashes, editedManifestKey, knownKeysCache, markFileEdited, markFilesEdited, markFilesEditedDetailed, pruneEditedFiles, watchFileEdits,
+    type FileEditPorts, type KnownKeysCache, type FileEditResult, type FileEditOutcome, type WatchFileEditsArgs,
 } from './fileEdits.js';
 export { claimSimilarity, type SimilarIndex } from './claimSimilarity.js';
 export { provenanceLine, type PackProvenanceParts, type ProvenanceLine } from './packProvenance.js';
@@ -83,13 +91,14 @@ export {
 export { mergePacksWithCards, packFromStore, packGraph, reviewHasWork, type PackFromStoreArgs, type PackGraphQuery } from './packGraph.js';
 export { buildCodeGraph } from './codeGraph.js';
 export {
-    NO_MODULE_ALIASES, PACKAGE_MODULE_DIR, aliasCandidates, isAliasSpecifier, resolveImportPath,
+    NO_MODULE_ALIASES, PACKAGE_MODULE_DIR, aliasCandidates, aliasesOf, isAliasSpecifier, parseConfigText, resolveImportPath,
     type ModuleAliases, type ModuleResolution,
 } from './moduleAliases.js';
 export { ModuleAliasCache, type AliasConfigPorts } from './moduleAliasLoader.js';
 export { fileRollup, moduleFileCandidates, moduleFileOf, repointRollupEdges } from './codeRollup.js';
 export { LAYER_IDS, isDefaultLayers, type LayerId, type LayerRule } from './codeLayers.js';
 export { coverageSourceState, type CoverageRoot, type CoverageSkip, type CoverageSourceState } from './codeCoverage.js';
+export { istanbulLineHits, lcovLineHits, type CoverageLineHits } from './codeCoverage.js';
 export { CHURN_DAYS, HISTORY_DAYS, HISTORY_MAX_COMMITS, churnCapWarning, churnOf, type HistoryCommit, type HistoryPort } from './historyPort.js';
 export { isSkippedDirName, isVcsMetadataName, type SkippedFolder, type SkippedFolderReason } from '../skipDirs.js';
 export { CODEOWNERS_LOCATIONS } from './codeOwners.js';

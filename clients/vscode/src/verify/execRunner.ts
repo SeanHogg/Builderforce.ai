@@ -19,6 +19,7 @@
  */
 
 import { execFile, spawn } from "child_process";
+import { killTree } from "../process/killTree";
 
 /** One command: the program and its arguments, never joined into a shell string. */
 export type Argv = readonly string[];
@@ -54,24 +55,6 @@ export function launchPlan(argv: Argv, platform: NodeJS.Platform = process.platf
   return { file: "cmd.exe", args: ["/d", "/v:off", "/s", "/c", `"${line}"`], verbatim: true };
 }
 
-/** Kill the process and everything it started (cmd.exe → pnpm → tsc). */
-function killTree(pid: number | undefined): void {
-  if (!pid) return;
-  if (process.platform === "win32") {
-    execFile("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true }, () => undefined);
-    return;
-  }
-  try {
-    process.kill(-pid, "SIGKILL"); // the detached child leads its own process group
-  } catch {
-    try {
-      process.kill(pid, "SIGKILL");
-    } catch {
-      /* already gone */
-    }
-  }
-}
-
 /** The real process runner: honours the timeout (killing the tree), reports the honest exit code. */
 export const execRunner: Runner = (argv, options) =>
   new Promise((resolve) => {
@@ -100,7 +83,8 @@ export const execRunner: Runner = (argv, options) =>
     }
     const timer = options.timeout
       ? setTimeout(() => {
-          killTree(child.pid);
+          // Kill the process and everything it started (cmd.exe → pnpm → tsc); never started: nothing to kill.
+          if (child.pid !== undefined) killTree(child.pid);
           // Stopped by its time limit: "unavailable", never a fail or a pass. Resolved now —
           // never left waiting on a grandchild that outlives the kill.
           settle(DID_NOT_FINISH);

@@ -74,8 +74,11 @@ type LocalEntityType = 'project' | 'ticket' | 'chat' | 'message' | 'execution' |
  | 'chat-ticket-link'
 /** One model call's token usage on this device (PRD 36 run usage ledger). */
  | 'usage'
-/** How one run ended on this device (succeeded / failed / stopped / budget-contained),
- *  keyed by its run id — read by the pipeline route report. Local only, never synced. */
+/** The run-outcomes context (PRD 41 §D1), two kinds of row:
+ *  - how one run ended on this device (succeeded / failed / stopped / budget-contained), keyed by its bare run id —
+ *    read by the pipeline route report. Local only, never journaled, never synced;
+ *  - one run's outcome per repository (`kind: 'run-outcome'`: frozen `RunFeatures`, commit attribution, labels),
+ *    keyed by `stableEntityId('run-outcome:<runId>:<repoKey>')`, synced as a domain-imported record. */
  | 'run-outcome'
 /** One run's delta per repository (PRD 41 §C14), `run-delta:<runId>:<repoKey>`: immutable, synced as a mirror record. */
  | 'run-delta';
@@ -2554,7 +2557,8 @@ declare function withRunUsage(stream: BrainStreamFn, ledger: RunUsageLedger, con
  * WOULD have done), and the words "full pipeline" in the request force it.
  *
  * PURE — no I/O, no env, no clock. The action type is the caller's (the shared lexical
- * classifier in `@builderforce/workload`), so this package depends on nothing.
+ * classifier in `@builderforce/workload`); the only dependency is the ONE sigmoid in
+ * builderforce-memory's `./stats` (PRD 41 D13).
  */
 type PipelineRoute = 'full' | 'quick';
 /** The default threshold: a coin. */

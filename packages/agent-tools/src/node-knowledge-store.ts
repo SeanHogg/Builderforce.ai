@@ -25,6 +25,8 @@ export { migrateLegacyKnowledge, type MigrationOptions, type MigrationResult } f
 export { knowledgeDbPath, KNOWLEDGE_BUSY_TIMEOUT_MS } from './node-knowledge/openKnowledgeDb.js';
 export { PREIMAGE_RETENTION_MS, putPreimages, readPreimages, sweepPreimages, unpinPreimages, type PreimageWrite } from './node-knowledge/preimageRows.js';
 export type { SqliteKnowledgeDb } from './node-knowledge/sqliteRows.js';
+export { sqliteFactStore } from './node-knowledge/factStoreRows.js';
+export { memoryCandidateRows, sqliteCandidateRows, type CandidateRowsPort, type StoredCandidates } from './node-knowledge/factCandidateRows.js';
 
 export interface NodeKnowledgeStore {
     store: LocalSnapshotStore;

@@ -1,0 +1,10 @@
+{
+  "rules": [
+    {
+      "id": "run-delta-evidence-730d",
+      "enabled": true,
+      "conditions": { "prefix": "run-deltas/" },
+      "deleteObjectsTransition": { "condition": { "type": "Age", "maxAge": 63072000 } }
+    }
+  ]
+}

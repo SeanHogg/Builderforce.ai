@@ -4,22 +4,24 @@
  *     names, under its root (`RUN_DELTA_OPEN_REFUSED` otherwise);
  *   - `run-delta/release { runId }` — a person's audited release of a run held at its finalize gate; any refusal answers
  *     one of `RUN_DELTA_RELEASE_REFUSED` (`releaseHeldRun.ts`);
- *   - `run-delta/get { runId? | chatId? }` — a run's (or a chat's) cards again, for a reopened chat.
+ *   - `run-delta/get { runId? | chatId? }` — a run's (or a chat's) cards again, for a reopened chat;
+ *   - `run-delta/prediction-shown { prediction }` — the card rendered an `ok` prediction (PRD 41 §4 `prediction.shown`).
  * Every request is answered exactly once.
  */
 
 import { RUN_DELTA_OPEN_REFUSED, RUN_DELTA_RELEASE_REFUSED } from "@builderforce/run-delta/contract";
+import type { Prediction } from "@builderforce/run-delta/predict";
 import type { BrainRunHost } from "../brainRunHost";
 
 /** The request types this module answers. */
-export const RUN_DELTA_SURFACE_REQUESTS = ["run-delta/open", "run-delta/release", "run-delta/get"] as const;
+export const RUN_DELTA_SURFACE_REQUESTS = ["run-delta/open", "run-delta/release", "run-delta/get", "run-delta/prediction-shown"] as const;
 export type RunDeltaSurfaceRequest = (typeof RUN_DELTA_SURFACE_REQUESTS)[number];
 
 export const isRunDeltaSurfaceRequest = (type: string): type is RunDeltaSurfaceRequest =>
   (RUN_DELTA_SURFACE_REQUESTS as readonly string[]).includes(type);
 
 export interface RunDeltaSurfaceDeps {
-  runHost?: Pick<BrainRunHost, "openRunDeltaFile" | "releaseHeldRun" | "runDeltas">;
+  runHost?: Pick<BrainRunHost, "openRunDeltaFile" | "releaseHeldRun" | "runDeltas" | "predictionShown">;
   /** Opens a confined absolute file at a line (`canvasHostActions.openCapturedFile`). */
   openFile(file: string, line?: number): Promise<void>;
   respond(ok: boolean, result?: unknown, error?: string): void;
@@ -43,6 +45,13 @@ export async function handleRunDeltaRequest(type: RunDeltaSurfaceRequest, msg: R
       if (typeof msg.runId !== "string" || !deps.runHost?.releaseHeldRun) return deps.respond(false, undefined, RUN_DELTA_RELEASE_REFUSED.notHeld);
       await deps.runHost.releaseHeldRun(msg.runId);
       return deps.respond(true, true);
+    }
+    if (type === "run-delta/prediction-shown") {
+      const p = msg.prediction as Partial<Prediction> | undefined;
+      const valid = !!p && typeof p.id === "string" && typeof p.modelId === "string" && typeof p.modelVersion === "string"
+        && typeof p.value === "number" && p.value > 0 && p.status === "ok";
+      if (valid) deps.runHost?.predictionShown?.(p as Prediction);
+      return deps.respond(true, valid);
     }
     const query = { ...(typeof msg.runId === "string" ? { runId: msg.runId } : {}), ...(typeof msg.chatId === "number" ? { chatId: msg.chatId } : {}) };
     deps.respond(true, (await deps.runHost?.runDeltas?.(query)) ?? []);

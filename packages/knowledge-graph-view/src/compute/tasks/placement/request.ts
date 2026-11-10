@@ -73,5 +73,11 @@ export const placementCacheKey = (build: string, r: PlacementReq): string => {
     return [build, r.camera, r.drill ?? '', r.unfolded ?? '', r.pathId ?? '', r.viewportBand, r.lod, r.depth ?? 0, c.size, c.width, r.drill || r.camera === 'sequence' ? r.symbols?.length ?? 0 : 0].join('|');
 };
 
+/**
+ * The fields of {@link placementCacheKey} a semantic-zoom band step changes (`lod`, and the symbol count a band's lazy
+ * load grows): two keys that differ only there are the SAME view at another band, so the rig keeps the person's zoom.
+ */
+export const ZOOM_STEP_FIELDS: readonly number[] = [6, 10];
+
 /** The key a placement builder stamps on its answer: {@link placementCacheKey} under the MarkSet build it placed. */
 export const placementKeyOf = (marks: { generation: number }, r: PlacementReq): string => placementCacheKey(String(marks.generation), r);

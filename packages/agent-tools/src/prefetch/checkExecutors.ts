@@ -74,11 +74,63 @@ export function typecheckWithTsc(host: PrefetchExecHost): PrefetchRunner {
     };
 }
 
+/** One vulnerable package of an osv-scanner report: where it is declared and its advisory groups (max CVSS score, when given). */
+export interface OsvPackage {
+    source: string;
+    name: string;
+    version: string;
+    ecosystem: string;
+    groups: Array<{ ids: string[]; maxSeverity?: number }>;
+}
+
+/**
+ * The osv-scanner arguments the executors and the delta adapter share (JSON report over a directory). `offline`: match
+ * against the local database (`OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY`) only; `download`: refresh it first. The flags
+ * moved out of "experimental" in osv-scanner 2 (`major`).
+ */
+export function osvScanArgs(dir: string, opts: { offline?: boolean; download?: boolean; major?: number } = {}): string[] {
+    const v1 = (opts.major ?? 1) < 2;
+    const offline = opts.offline ? [v1 ? '--experimental-offline' : '--offline-vulnerabilities'] : [];
+    const download = opts.offline && opts.download ? [v1 ? '--experimental-download-offline-databases' : '--download-offline-databases'] : [];
+    return ['--format', 'json', ...offline, ...download, '--recursive', dir];
+}
+
+/** osv-scanner's JSON report → its vulnerable packages. A package without advisory groups gets one group per vulnerability id. */
+export function osvPackages(report: unknown): OsvPackage[] {
+    type Raw = { source?: { path?: string }; packages?: Array<{ package?: { name?: string; version?: string; ecosystem?: string }; vulnerabilities?: Array<{ id?: string }>; groups?: Array<{ ids?: string[]; max_severity?: string }> }> };
+    const results = (report as { results?: Raw[] } | undefined)?.results ?? [];
+    return results.flatMap((r) => (r.packages ?? []).map((p): OsvPackage => {
+        const groups = (p.groups ?? []).map((g) => {
+            const score = Number(g.max_severity);
+            return { ids: (g.ids ?? []).filter(Boolean), ...(g.max_severity && Number.isFinite(score) ? { maxSeverity: score } : {}) };
+        }).filter((g) => g.ids.length > 0);
+        return {
+            source: r.source?.path ?? '', name: p.package?.name ?? '?', version: p.package?.version ?? '?', ecosystem: p.package?.ecosystem ?? '',
+            groups: groups.length > 0 ? groups : (p.vulnerabilities ?? []).flatMap((v) => (v.id ? [{ ids: [v.id] }] : [])),
+        };
+    }));
+}
+
 /** osv-scanner's JSON: one line per vulnerable package with its advisory ids. */
 function osvLines(report: unknown): string[] {
-    const results = (report as { results?: Array<{ packages?: Array<{ package?: { name?: string; version?: string }; vulnerabilities?: Array<{ id?: string }> }> }> } | undefined)?.results ?? [];
-    return results.flatMap((r) => (r.packages ?? []).map((p) =>
-        `${p.package?.name ?? '?'}@${p.package?.version ?? '?'}: ${(p.vulnerabilities ?? []).map((v) => v.id).filter(Boolean).join(', ')}`));
+    return osvPackages(report).map((p) => `${p.name}@${p.version}: ${p.groups.flatMap((g) => g.ids).join(', ')}`);
+}
+
+/** One gitleaks hit (the report is written with `--redact`: no secret value ever leaves the tool). */
+export interface GitleaksLeak {
+    rule: string;
+    file: string;
+    line: number;
+}
+
+/** The gitleaks `detect` arguments the executor and the delta adapter share: redacted JSON written to `reportPath`. */
+export const gitleaksDetectArgs = (source: string, reportPath: string, extra: readonly string[] = []): string[] =>
+    ['detect', ...extra, '--source', source, '--no-banner', '--redact', '--report-format', 'json', '--report-path', reportPath];
+
+/** gitleaks' JSON report → its hits; undefined when it is not a report. */
+export function gitleaksLeaks(report: unknown): GitleaksLeak[] | undefined {
+    if (!Array.isArray(report)) return undefined;
+    return (report as Array<{ RuleID?: string; File?: string; StartLine?: number }>).map((f) => ({ rule: f.RuleID ?? 'secret', file: f.File ?? '?', line: f.StartLine ?? 0 }));
 }
 
 interface AuditCounts { critical: number; high: number; moderate: number; low: number; total: number }
@@ -96,7 +148,7 @@ export function depsAudit(host: PrefetchExecHost): PrefetchRunner {
             const tool = toolOf(host, 'dependency-audit');
             if (!tool) return undefined;
             if (tool.id === 'osv-scanner') {
-                const r = await runTool(host, tool, '--format json --recursive .', signal);
+                const r = await runTool(host, tool, osvScanArgs('.').join(' '), signal);
                 const lines = r ? osvLines(jsonIn(r.out)) : undefined;
                 if (!r || !lines) return undefined;
                 return out('deps.audit', lines.length === 0
@@ -125,14 +177,13 @@ export function secretsScan(host: PrefetchExecHost): PrefetchRunner {
             const read = host.caps.repoRead;
             if (!tool || !read) return undefined;
             const reportPath = `${PREFETCH_SCRATCH_DIR}/gitleaks.json`;
-            const r = await runTool(host, tool, `detect --source . --no-banner --redact --report-format json --report-path ${reportPath}`, signal);
+            const r = await runTool(host, tool, gitleaksDetectArgs('.', reportPath).join(' '), signal);
             if (!r) return undefined;
             const file = await read.readFile(reportPath).catch(() => undefined);
-            const findings = file?.ok ? jsonIn(file.content ?? '') : undefined;
-            if (!Array.isArray(findings)) return undefined;
+            const findings = file?.ok ? gitleaksLeaks(jsonIn(file.content ?? '')) : undefined;
+            if (!findings) return undefined;
             if (findings.length === 0) return out('secrets.scan', 'Secrets scan (gitleaks): no leaks found.', { leaks: 0 });
-            const lines = (findings as Array<{ RuleID?: string; File?: string; StartLine?: number }>).slice(0, PREFETCH_LIST_CAP * 2)
-                .map((f) => `${f.File ?? '?'}:${f.StartLine ?? 0} ${f.RuleID ?? 'secret'}`);
+            const lines = findings.slice(0, PREFETCH_LIST_CAP * 2).map((f) => `${f.file}:${f.line} ${f.rule}`);
             return out('secrets.scan', `${fenced(`Secrets scan (gitleaks): ${findings.length} possible leak(s), values redacted`, lines.join('\n'))}\n\nRotate any real credential before removing it from history.`, { leaks: findings.length });
         },
     };

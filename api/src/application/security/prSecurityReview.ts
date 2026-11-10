@@ -20,7 +20,7 @@
  */
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import type { NormalizedFinding, FindingSeverity } from '../../domain/security/scanReportParsers';
+import type { NormalizedFinding, FindingSeverity } from '@builderforce/sarif';
 import { isScannablePath, redactSecrets } from '../../domain/security/diffScanRules';
 import type { ActorIdentity } from '../activity/activityLog';
 import { SecurityReviewService, UNREADABLE_REVIEW_SUMMARY, type SecurityFinding } from './SecurityReviewService';

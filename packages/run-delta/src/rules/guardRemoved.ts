@@ -5,10 +5,12 @@
  * among all-guarded siblings (`params.via`). Evidence carries the route key and the guard. Blocks an
  * autonomous run (§12.5).
  *
- * Heuristic: text-level route and guard-chain facts; WS4 tree-sitter entry-point facts replace them.
+ * Measured when both sides' guard chains come from comparable FileFacts (`effectiveGuards`: prior `use`s
+ * by registration order, mounting routers' guards) and the guard was not only inferred (unknown order);
+ * heuristic on the text-scan fallback (`support/factRoutes.ts`).
  */
 
-import type { DeltaRule, Evidence } from '../contract.js';
+import type { DeltaRule, Evidence, RuleFinding } from '../contract.js';
 import { heuristicFinding, ruleIdentity } from './support/identity.js';
 import { routeDelta, type GuardChange } from './support/routeDelta.js';
 
@@ -19,18 +21,21 @@ export function guardEvidence(c: GuardChange): Evidence[] {
     return out;
 }
 
+/** A guard finding at its change's confidence (C5.1: measured from comparable facts, else heuristic). */
+export const withConfidence = (f: RuleFinding, c: GuardChange): RuleFinding => (c.confidence === 'measured' ? { ...f, confidence: 'measured' } : f);
+
 export const guardRemoved: DeltaRule = {
     id: 'guard-removed',
     version: 1,
     dimension: 'security',
     reads: ['content'],
     derive(input) {
-        const after = routeDelta(input).guards.filter((c) => c.kind === 'removed').map((c) => heuristicFinding(
+        const after = routeDelta(input).guards.filter((c) => c.kind === 'removed').map((c) => withConfidence(heuristicFinding(
             ruleIdentity(guardRemoved, 'route', `${c.path}#${c.key}#${c.guard}`, { members: [c.path] }),
             'error',
             { route: c.key, guard: c.guard, via: c.via, file: c.path, ...(c.before && c.before.key !== c.key ? { from: c.before.key } : {}) },
             guardEvidence(c),
-        ));
+        ), c));
         return { before: [], after };
     },
 };

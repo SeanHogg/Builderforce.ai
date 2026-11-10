@@ -29,7 +29,8 @@ vi.mock('./outcomeScore', () => ({ finalizeLearnWeight: () => 1, runProducedOutp
 vi.mock('./cloudToolEvents', () => ({ recordCloudToolEvent: h.toolEvent }));
 vi.mock('./adoptRunDraftPr', () => ({ adoptRunDraftPr: vi.fn(async () => null) }));
 vi.mock('./runPullRequestText', () => ({ runPullRequestText: vi.fn(() => '') }));
-vi.mock('./runRollback', () => ({ recordRunRollbackSnapshot: vi.fn(async () => undefined), teardownRunBranch: vi.fn(async () => undefined) }));
+vi.mock('./runRollback', () => ({ recordRunRollbackSnapshot: vi.fn(async () => undefined) }));
+vi.mock('./runBranchTeardown', () => ({ teardownRunBranch: vi.fn(async () => undefined) }));
 vi.mock('../../env', () => ({ resolveAppBaseUrl: () => 'https://app.test' }));
 vi.mock('../provenance/finishClaimService', () => ({ recordTypedExecutionClaim: vi.fn(async () => ({ ok: true })) }));
 vi.mock('../agentIdentity/agentRunIdentity', () => ({ revokeRunPrincipal: vi.fn(async () => undefined) }));

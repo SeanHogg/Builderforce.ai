@@ -30,11 +30,13 @@ export function communityIdOf(node: Pick<KNode, 'badges'>): number | undefined {
     return typeof id === 'number' ? id : undefined;
 }
 
+/** A placement as its key: the partition id, or `community:<id>`. */
+const keyOfPlacement = (p: NonNullable<ReturnType<typeof placementOf>>): string => (p.kind === 'partition' ? p.id : communityKey(p.id));
+
 /** A node's placement key: its partition, else `community:<id>`, else undefined (no placement). */
 export function placementKeyOf(node: Pick<KNode, 'partition' | 'badges'>): string | undefined {
     const p = placementOf(node);
-    if (p === undefined) return undefined;
-    return p.kind === 'partition' ? p.id : communityKey(p.id);
+    return p === undefined ? undefined : keyOfPlacement(p);
 }
 
 /** Whether a key names a community, or the folded "other communities" (rather than a pack partition). */
@@ -69,22 +71,33 @@ export const COMMUNITY_PLANE_MAX = 12;
 /** A community smaller than this never gets a plane of its own. */
 export const COMMUNITY_PLANE_MIN_SIZE = 2;
 
-const keptBy = new WeakMap<readonly object[], ReadonlySet<number>>();
+/** The plane keys of an array's nodes, and the communities that keep a plane of their own among them. */
+interface PlaneTable { keys: ReadonlyMap<object, string | undefined>; kept: ReadonlySet<number> }
 
-/** The communities that keep their own plane among `among`: the largest {@link COMMUNITY_PLANE_MAX} (size, then id) of at least {@link COMMUNITY_PLANE_MIN_SIZE} members. Once per array. */
-function keptCommunities(among: ReadonlyArray<Pick<KNode, 'partition' | 'badges'>>): ReadonlySet<number> {
-    const held = keptBy.get(among);
+const planesBy = new WeakMap<readonly object[], PlaneTable>();
+
+/**
+ * The plane key of every node in `among`, read ONCE per array (one `placementOf` per node): the layout, its plane order,
+ * the 2D projection, the list and the composition chart all ask per node, and each ask is then a lookup. The kept communities
+ * are the largest {@link COMMUNITY_PLANE_MAX} (size, then id) of at least {@link COMMUNITY_PLANE_MIN_SIZE} members.
+ */
+function planeTable(among: ReadonlyArray<Pick<KNode, 'partition' | 'badges'>>): PlaneTable {
+    const held = planesBy.get(among);
     if (held) return held;
+    const placed = new Map<object, ReturnType<typeof placementOf>>();
     const size = new Map<number, number>();
     for (const n of among) {
-        if (n.partition !== undefined) continue;
-        const id = communityIdOf(n);
-        if (id !== undefined) size.set(id, (size.get(id) ?? 0) + 1);
+        const p = placementOf(n);
+        placed.set(n, p);
+        if (p?.kind === 'community') size.set(p.id, (size.get(p.id) ?? 0) + 1);
     }
     const kept = new Set([...size].filter(([, s]) => s >= COMMUNITY_PLANE_MIN_SIZE)
         .sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, COMMUNITY_PLANE_MAX).map(([id]) => id));
-    keptBy.set(among, kept);
-    return kept;
+    const keys = new Map<object, string | undefined>();
+    for (const [n, p] of placed) keys.set(n, p === undefined ? undefined : p.kind === 'community' && !kept.has(p.id) ? OTHER_COMMUNITIES_KEY : keyOfPlacement(p));
+    const table = { keys, kept };
+    planesBy.set(among, table);
+    return table;
 }
 
 /**
@@ -94,9 +107,12 @@ function keptCommunities(among: ReadonlyArray<Pick<KNode, 'partition' | 'badges'
  * so a repo with hundreds of communities never draws hundreds of planes.
  */
 export function planeKeyOf(node: Pick<KNode, 'partition' | 'badges'>, among: ReadonlyArray<Pick<KNode, 'partition' | 'badges'>>): string | undefined {
+    const table = planeTable(among);
+    if (table.keys.has(node)) return table.keys.get(node);
+    // A node asked about outside the array it is placed among: read it now.
     const key = placementKeyOf(node);
     if (!isCommunityKey(key)) return key;
-    return keptCommunities(among).has(communityIdOf(node)!) ? key : OTHER_COMMUNITIES_KEY;
+    return table.kept.has(communityIdOf(node)!) ? key : OTHER_COMMUNITIES_KEY;
 }
 
 /** A node's community membership confidence (0..1): the share of its reference weight inside its community. Undefined when it has none. */

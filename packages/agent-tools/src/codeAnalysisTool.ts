@@ -5,6 +5,8 @@ import { normalizeAnalysis, type CodeAnalysisSnapshot } from './codeAnalysis.js'
 import { toDependencyCruiserRules } from './knowledge/dependencyCruiserRules.js';
 import { ANALYZER_VERSIONS, TYPESCRIPT_PIN } from './analyzerPins.js';
 import { GIT, gitText, workspaceFingerprint } from './knowledge/workspaceFingerprint.js';
+import { ignoredGlobs, ignoredRegex, type AnalyzerRunResult } from './delta/adapters/analyzer.js';
+import type { L3CacheBinding } from './delta/adapters/l3Cache.js';
 
 /** The ONE place the analyzer versions are pinned (reported in every analysis record; comparability checks them). */
 export { TYPESCRIPT_PIN };
@@ -108,10 +110,33 @@ export interface AnalyzeCodebaseOptions {
   partitions?: PartitionRegistry;
   /** Told each time one analyzer tool has settled (complete, failed or not measured), in order: the run's progress. */
   onToolSettled?(): void;
+  /**
+   * THE L3 result cache shared with the run delta (`delta/adapters/l3Cache.ts`): a tool whose result is stored for this
+   * tree is not run again, and a fresh result is stored. The tools then exclude the folders git ignores, exactly as the
+   * delta's adapters do, so one key names one result. `toResult` normalizes a raw report into the delta's result shape.
+   */
+  l3?: L3CacheBinding & { toResult(tool: AnalyzerName, version: string, raw: unknown): AnalyzerRunResult };
 }
 
+/** dependency-cruiser's config with the git-ignored folders excluded too (one file universe with the run delta's adapter). */
+export function dependencyCruiserConfigWith(partitions: PartitionRegistry | undefined, ignored: readonly string[] | undefined): Record<string, unknown> {
+  const config = dependencyCruiserConfig(partitions);
+  const extra = ignoredRegex(ignored);
+  if (!extra) return config;
+  const options = (config.options ?? {}) as { exclude?: { path?: string } };
+  const base = options.exclude?.path;
+  return { ...config, options: { ...options, exclude: { ...(options.exclude ?? {}), path: base ? `${base}|${extra}` : extra } } };
+}
+
+/** jscpd's `--ignore=` list with the git-ignored folders appended (one file universe with the run delta's adapter). */
+export const jscpdArgsWith = (args: string, ignored: readonly string[] | undefined): string => {
+  const extra = ignoredGlobs(ignored);
+  return extra.length > 0 ? args.replace(/--ignore=(\S+)/, (_m, list: string) => `--ignore=${list},${extra.join(',')}`) : args;
+};
+
 export function createAnalyzeCodebaseTool(options: AnalyzeCodebaseOptions = {}): ToolDefinition {
-  const configBase64 = base64Utf8(JSON.stringify(dependencyCruiserConfig(options.partitions)));
+  const l3 = options.l3;
+  const configOf = (ignored: readonly string[] | undefined): string => base64Utf8(JSON.stringify(dependencyCruiserConfigWith(options.partitions, ignored)));
   return defineTool({
     name: 'analyze_codebase',
     description: 'Measure JS/TS dependency edges and cycles with dependency-cruiser, duplicate code with jscpd, and unused-file/export/dependency candidates with Knip. Runs the analyzers bundled with the host when it ships them, else downloads the pinned packages through npm cache on first use; an analyzer that cannot start is reported not_measured, never as zero findings. Writes per-scan artifacts under .builderforce/code-analysis. The audit host saves the full snapshot for the visualizer; cloud images return a bounded summary after upload. Report findings normally after this tool. Preserve failed-tool coverage; do not claim missing results are clean.',
@@ -124,12 +149,21 @@ export function createAnalyzeCodebaseTool(options: AnalyzeCodebaseOptions = {}):
       const id = crypto.randomUUID();
       const outputDir = `.builderforce/code-analysis/${id}`;
       const outputs: unknown[] = [];
+      // Bound to the shared L3 cache: the tools exclude what git ignores, exactly as the run delta's adapters do.
+      const ignored = l3 ? await l3.ignored().catch(() => [] as readonly string[]) : undefined;
       const entries = bundledAnalyzers();
       // Every analyzer leaves exactly one entry in `tools` (many paths `continue`), so a settled one is seen as the next starts and after the loop.
       let settledTold = 0;
       const tellSettled = () => { while (settledTold < tools.length) { settledTold++; options.onToolSettled?.(); } };
       for (const analyzer of ANALYZERS) {
         tellSettled();
+        // The shared L3 cache: this tree's result of this tool, from the indexer's last pass or a run delta's.
+        const l3Key = l3 ? await l3.keyOf(analyzer.name).catch(() => undefined) : undefined;
+        const l3Hit = l3 && l3Key ? await l3.cache.get(l3Key, analyzer.name).catch(() => undefined) : undefined;
+        if (l3Hit?.raw !== undefined) {
+          outputs.push(l3Hit.raw); tools.push({ name: analyzer.name, version: analyzer.version, status: 'complete' });
+          continue;
+        }
         const entry = entries?.[analyzer.name];
         // A host that bundles its analyzers never downloads one: a missing entry is "not measured", never zero findings.
         if (entries && !entry) {
@@ -145,7 +179,7 @@ export function createAnalyzeCodebaseTool(options: AnalyzeCodebaseOptions = {}):
           };
           let unavailable: 'unavailable' | undefined;
           if (analyzer.name === 'dependency-cruiser') {
-            const config = await shellRunWithStop(ctx, `node -e "const f=require('fs');f.mkdirSync('${outputDir}',{recursive:true});f.writeFileSync('${outputDir}/dependencies.json',Buffer.from('${configBase64}','base64'))"`);
+            const config = await shellRunWithStop(ctx, `node -e "const f=require('fs');f.mkdirSync('${outputDir}',{recursive:true});f.writeFileSync('${outputDir}/dependencies.json',Buffer.from('${configOf(ignored)}','base64'))"`);
             if (!config.ok) unavailable = setupFailed('Could not create dependency analysis configuration');
           }
           // Unique output directories prevent stale artifacts and cross-run interference.
@@ -159,7 +193,8 @@ export function createAnalyzeCodebaseTool(options: AnalyzeCodebaseOptions = {}):
           }
           // Knip analyses the directory it RUNS in, so the scope is its working directory (the shell's
           // `cwd`) rather than a `cd` written into the command; the others take the scope as an argument.
-          const command = analyzerCommand(analyzer, scope, entry);
+          const pinned = analyzerCommand(analyzer, scope, entry);
+          const command = analyzer.name === 'jscpd' ? jscpdArgsWith(pinned, ignored) : pinned;
           const result = await shellRunWithStop(ctx, command.replaceAll('.builderforce/code-analysis', outputDir), analyzer.name === 'knip' && scope !== '.' ? scope : undefined);
           launched = true;
           const artifact = analyzer.name === 'jscpd' ? await ctx.caps.repoRead!.readFile(`${outputDir}/jscpd-report.json`) : undefined;
@@ -176,6 +211,7 @@ export function createAnalyzeCodebaseTool(options: AnalyzeCodebaseOptions = {}):
           if (analyzer.name === 'knip' && (!Array.isArray(value.files) || !Array.isArray(value.issues))) throw new Error('Invalid unused-code report');
           const unresolved = analyzer.name === 'dependency-cruiser' ? value.modules.flatMap((m: { dependencies?: Array<{ couldNotResolve?: boolean }> }) => m.dependencies ?? []).filter((d: { couldNotResolve?: boolean }) => d.couldNotResolve).length : 0;
           outputs.push(value); tools.push({ name: analyzer.name, version: analyzer.version, status: unresolved ? 'failed' : 'complete', ...(unresolved ? { error: `${unresolved} imports could not be resolved; graph coverage is incomplete.` } : {}) });
+          if (l3 && l3Key && !unresolved) await l3.cache.put(l3Key, { result: l3.toResult(analyzer.name, analyzer.version, value), raw: value }).catch(() => undefined);
         } catch (error) {
           // A bundled analyzer whose setup or spawn threw never started: not measured (like one that prints nothing), not failed.
           if (entry && !launched) {

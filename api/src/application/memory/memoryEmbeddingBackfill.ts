@@ -21,7 +21,7 @@
 import { eq } from 'drizzle-orm';
 import { isCostLeverOn } from '@builderforce/cost-levers';
 import type { Db } from '../../infrastructure/database/connection';
-import { agentMemory, projectFacts } from '../../infrastructure/database/schema';
+import { agentMemory, projectFacts, runDeltaFindings } from '../../infrastructure/database/schema';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
@@ -33,7 +33,7 @@ import {
   toVectorLiteral,
   type MemoryVectorSpace,
 } from './memoryEmbedding';
-import { backfill1024DrainedKey, spaceWriteFields, type MemoryStore } from './memoryEmbeddingPolicy';
+import { backfill1024DrainedKey, spaceWriteFields, type Backfill1024Store, type MemoryStore } from './memoryEmbeddingPolicy';
 import { unembeddedInSpace, unembeddedMemories, unembeddedProjectFacts } from './memorySemanticRecall';
 
 /** Rows embedded per store per pass. One vendor call per store, batched. */
@@ -45,10 +45,9 @@ export const BACKFILL_BATCH = 64;
  */
 export const BACKFILL_1024_BATCHES = 8;
 
-type Store = MemoryStore;
 
 /** KV key of the 1024 sweep's keyset cursor, per store. */
-export const backfill1024CursorKey = (store: Store): string => `mem:backfill:1024:cursor:${store}`;
+export const backfill1024CursorKey = (store: Backfill1024Store): string => `mem:backfill:1024:cursor:${store}`;
 const CURSOR_TTL_SECONDS = 30 * 24 * 3600;
 
 interface StoreCounts {
@@ -62,6 +61,8 @@ export interface BackfillResult {
   projectFacts: number;
   /** Per space — `legacy` is the 1536 column, `bge_m3` the 1024 one. */
   bySpace?: { legacy: StoreCounts; bge_m3: StoreCounts };
+  /** Run-delta findings embedded this run (bge-m3 only; PRD 41 §C14). */
+  runDeltaFindings?: number;
   /** Set when the sweep could not run at all (no embedder configured for either space). */
   skipped?: 'no_embedding_key';
 }
@@ -70,9 +71,15 @@ type Row = { id: string; key: string; content: string };
 type WriteVector = (id: string, vector: string, embeddedAt: Date) => Promise<unknown>;
 
 /** Embed one store's slice in `space` and write the vectors back. Returns rows updated. */
-async function backfillStore(env: Env, rows: ReadonlyArray<Row>, space: MemoryVectorSpace, write: WriteVector): Promise<number> {
+async function backfillStore(
+  env: Env,
+  rows: ReadonlyArray<Row>,
+  space: MemoryVectorSpace,
+  write: WriteVector,
+  text: (row: Row) => string = (r) => memoryEmbeddingText(r.key, r.content),
+): Promise<number> {
   if (rows.length === 0) return 0;
-  const vectors = await embedMemoryTexts(env, rows.map((r) => memoryEmbeddingText(r.key, r.content)), space);
+  const vectors = await embedMemoryTexts(env, rows.map(text), space);
   if (!vectors) return 0;
   const now = new Date();
   let written = 0;
@@ -103,19 +110,47 @@ async function backfillStore(env: Env, rows: ReadonlyArray<Row>, space: MemoryVe
  * this pass already read. It sets only `space`'s columns, from the row's own content;
  * the other space's vector is left as it is.
  */
-function writerFor(db: Db, store: Store, space: MemoryVectorSpace): WriteVector {
-  return store === 'agent_memory'
-    ? (id, vector, at) =>
-        db
-          .update(agentMemory)
-          .set(spaceWriteFields(space, vector, at))
-          .where(acrossTenants(agentMemory, 'scheduled_sweep', eq(agentMemory.id, id)))
-    : (id, vector, at) =>
-        db
-          .update(projectFacts)
-          .set(spaceWriteFields(space, vector, at))
-          .where(acrossTenants(projectFacts, 'scheduled_sweep', eq(projectFacts.id, id)));
+function writerFor(db: Db, store: Backfill1024Store, space: MemoryVectorSpace): WriteVector {
+  return STORES[store].write(db, space);
 }
+
+/**
+ * The sweep's descriptor of every {@link Backfill1024Store} (the keyset claim's is `unembeddedInSpace`'s): how a
+ * row is written, the text it is embedded as, and whether its drained flag gates recall's dual read. Adding a
+ * store is a row here, never a branch in the sweep.
+ */
+interface StoreDescriptor {
+  write(db: Db, space: MemoryVectorSpace): WriteVector;
+  text(row: Row): string;
+  /** Only memory stores have recall's dual read, which the drained flag lets skip a paid query embed. */
+  gatesRecall: boolean;
+}
+
+const memoryText = (r: Row): string => memoryEmbeddingText(r.key, r.content);
+
+const STORES: Readonly<Record<Backfill1024Store, StoreDescriptor>> = {
+  agent_memory: {
+    write: (db, space) => (id, vector, at) =>
+      db.update(agentMemory).set(spaceWriteFields(space, vector, at)).where(acrossTenants(agentMemory, 'scheduled_sweep', eq(agentMemory.id, id))),
+    text: memoryText,
+    gatesRecall: true,
+  },
+  project_facts: {
+    write: (db, space) => (id, vector, at) =>
+      db.update(projectFacts).set(spaceWriteFields(space, vector, at)).where(acrossTenants(projectFacts, 'scheduled_sweep', eq(projectFacts.id, id))),
+    text: memoryText,
+    gatesRecall: true,
+  },
+  // PRD 41 §C14 (1344): one space, so its own column names (no `_1024` suffix); embedded as its card text alone,
+  // which already leads with the rule id.
+  run_delta_findings: {
+    write: (db, space) => (id, vector, at) =>
+      db.update(runDeltaFindings).set({ embedding: vector, embeddingModel: space.model, embeddedAt: at })
+        .where(acrossTenants(runDeltaFindings, 'scheduled_sweep', eq(runDeltaFindings.id, id))),
+    text: (r) => r.content,
+    gatesRecall: false,
+  },
+};
 
 /**
  * One run of the bge-m3 sweep over one store: up to {@link BACKFILL_1024_BATCHES}
@@ -123,9 +158,10 @@ function writerFor(db: Db, store: Store, space: MemoryVectorSpace): WriteVector 
  * of the table, so the cursor wraps to the start (rows written since, or whose embed
  * failed, are picked up next lap). Resumable across runs and isolates.
  */
-async function backfill1024Store(env: Env, db: Db, store: Store, batch: number): Promise<number> {
+async function backfill1024Store(env: Env, db: Db, store: Backfill1024Store, batch: number): Promise<number> {
   const space = MEMORY_VECTOR_SPACES.bge_m3;
-  const write = writerFor(db, store, space);
+  const descriptor = STORES[store];
+  const write = descriptor.write(db, space);
   let cursor = (await peekCached<string>(env, backfill1024CursorKey(store))) ?? '';
   let written = 0;
   // Drained = a claim from the very start of the table found nothing; any row found
@@ -140,7 +176,7 @@ async function backfill1024Store(env: Env, db: Db, store: Store, batch: number):
       break;
     }
     drained = false;
-    const n = await backfillStore(env, rows, space, write);
+    const n = await backfillStore(env, rows, space, write, descriptor.text);
     written += n;
     // The vendor answered nothing for a whole batch: stop without advancing, so the
     // next run retries these rows instead of walking the table against a dead endpoint.
@@ -149,7 +185,9 @@ async function backfill1024Store(env: Env, db: Db, store: Store, batch: number):
     if (!cursor) break;
   }
   await setCached(env, backfill1024CursorKey(store), cursor, { kvTtlSeconds: CURSOR_TTL_SECONDS });
-  if (drained !== null) await setCached(env, backfill1024DrainedKey(store), drained, { kvTtlSeconds: CURSOR_TTL_SECONDS });
+  if (drained !== null && descriptor.gatesRecall) {
+    await setCached(env, backfill1024DrainedKey(store as MemoryStore), drained, { kvTtlSeconds: CURSOR_TTL_SECONDS });
+  }
   return written;
 }
 
@@ -171,14 +209,17 @@ export async function runMemoryEmbeddingBackfill(env: Env, db: Db, batch = BACKF
   }
 
   const bgeCounts: StoreCounts = { memories: 0, projectFacts: 0 };
+  let runDeltaFindingCount = 0;
   if (bgeOn) {
     bgeCounts.memories = await backfill1024Store(env, db, 'agent_memory', batch);
     bgeCounts.projectFacts = await backfill1024Store(env, db, 'project_facts', batch);
+    runDeltaFindingCount = await backfill1024Store(env, db, 'run_delta_findings', batch);
   }
 
   return {
     memories: legacyCounts.memories + bgeCounts.memories,
     projectFacts: legacyCounts.projectFacts + bgeCounts.projectFacts,
     bySpace: { legacy: legacyCounts, bge_m3: bgeCounts },
+    runDeltaFindings: runDeltaFindingCount,
   };
 }

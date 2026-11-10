@@ -22,6 +22,7 @@ import { hashText } from '@seanhogg/builderforce-memory/ingest';
 import type { AnalyzerProgress, PartitionRegistry } from '@seanhogg/builderforce-memory/knowledge';
 import type { CapabilityProvider } from '../capabilities.js';
 import type { CodeAnalysisSnapshot } from '../codeAnalysis.js';
+import type { AnalyzeCodebaseOptions } from '../codeAnalysisTool.js';
 import { createAnalysisProgress, type AnalysisProgress } from './analysisProgress.js';
 import { runCodeAnalysis } from './codeAnalyzers.js';
 import type { SerializedRepoGraphShape } from './codeExtracted.js';
@@ -68,6 +69,13 @@ export interface WorkspaceAnalysisDeps {
      * joins a run already in flight (see the cache) gets none.
      */
     onProgress?(progress: AnalyzerProgress): void;
+    /**
+     * THE L3 result cache shared with the run delta (`delta/adapters/l3Cache.ts`): the three analyzers read their result
+     * for this tree from it and write fresh ones to it, under the same key and shape the run delta uses — so a delta reuses
+     * this pass's results for the base commit's tree, and this pass a delta's. The in-memory per-sha cache below remains
+     * only for what that store does not hold: the repo map's graph, and one shared run for concurrent askers.
+     */
+    l3?: AnalyzeCodebaseOptions['l3'];
 }
 
 export interface WorkspaceAnalysis {
@@ -179,6 +187,7 @@ export async function analyseWorkspace(deps: WorkspaceAnalysisDeps, signal?: Abo
             runCodeAnalysis(ctx, {
                 ...(deps.path ? { path: deps.path } : {}),
                 ...(deps.partitions ? { partitions: deps.partitions } : {}),
+                ...(deps.l3 ? { l3: deps.l3 } : {}),
                 onToolSettled: () => progress.toolSettled(),
             }),
             readRepoGraph({ ...deps, progress, onScope, onReads: (reads) => { graphReads = reads; deps.onReads?.(reads); } }, shared),

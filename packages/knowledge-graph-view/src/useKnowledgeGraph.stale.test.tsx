@@ -8,7 +8,6 @@ import { FIXTURE_REPORT, codeFixture, docsFixture } from './testing';
 import { useKnowledgeGraph } from './useKnowledgeGraph';
 import type { KnowledgeGraphSource, KnowledgeReviewEvent, KnowledgeScopeSummary } from './types';
 
-vi.mock('./scene/GraphScene', () => ({ default: () => null }));
 
 function deferred<T>() {
     let resolve!: (v: T) => void;

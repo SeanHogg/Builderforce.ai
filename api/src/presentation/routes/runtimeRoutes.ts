@@ -58,7 +58,7 @@ import { recordAutoRunSkip, clearAutoRunSkip } from '../../application/runtime/a
 import { enforceCloudRunCap, type CloudRunCapResult } from '../../application/runtime/cloudRunLedger';
 import { assessRerunBackoff, AUTO_RUN_REASON_TEXT, type AutoRunReason } from '../../application/swimlane/evaluateAutoRun';
 import { evaluateExecutionApprovalGate } from '../../application/runtime/executionApprovalGate';
-import { revertRun } from '../../application/runtime/runRollback';
+import { revertRun } from '../../application/runtime/runRevert';
 import { resolveActorFromContext } from '../../application/activity/activityLog';
 import { readAttention } from '../../application/runtime/attentionSnapshot';
 import { parseLiveRunsQuery, readActiveRuns } from '../../application/runtime/activeRuns';

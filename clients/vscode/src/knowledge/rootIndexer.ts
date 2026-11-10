@@ -2,41 +2,55 @@
  * One root's background indexing (PRD 41 B6, §6 "Open a folder, offline" and "Edit a file") — pure over ports:
  *
  *   reconcile  — the reconciling plan (L0) → open/visible changed files first (L1, through the edited-file queue when the
- *                root has a manifest) → the whole-tree map pass once the person is quiet (L1) → `onFactsChanged` (L2)
- *                → L3 owed;
+ *                root has a manifest) → the whole-tree map pass once the person is quiet (L1), with the fact graph's sync
+ *                (`syncFacts`) in the same pass → `onFactsChanged` (L2) → L3 owed. A plan that found nothing moved still
+ *                syncs the fact graph ONCE per session (the `facts` long pass): it lives in memory, so a reload starts empty;
  *   edits      — watcher batches go to a priority queue drained in ≤50 ms slices that yield on a keystroke; each slice
  *                re-extracts its files (`extractEdited`: unchanged content is an early cutoff, nothing more runs) and hands
  *                the changed ones to `onFactsChanged` (L2). A batch over {@link BULK_EDIT_FILES} (a branch switch) goes to
  *                the reconcile and its map pass instead. A file the manifest does not know asks for a reconcile — only when
  *                the plan would list it, and at most once per {@link UNKNOWN_RECONCILE_MS};
- *   L3         — the analyzers' pass, only when its gate opens (idle and on mains power, §12.3).
+ *   L3         — the analyzers' pass and queued L3 tasks, only when their gate opens (`l3Gate.ts`, §12.3).
  *
  * Long passes (`indexPasses.ts`) have their own abort signal: a keystroke stops one (it reruns when quiet), a person's
  * review preempts one ({@link RootIndexer.preempt}), and slices and passes never run on the root at the same time.
  *
- * `onFactsChanged(changedPaths, changedKinds)` is the ONE step after facts change: the seam the incremental FactRule
- * evaluator (WS4) plugs into.
+ * `onFactsChanged(changedPaths, changedKinds)` is the ONE step after facts change: the incremental FactRule evaluator
+ * (WS4, `factIndex.ts`) has run in the ports' extract step, and `changedKinds` are the fact kinds that really moved
+ * (a comment edit moves only `content`). Queue priorities: `nearPriority.ts`.
  */
 
 import type { PowerSourcePort } from "../power/powerSource";
-import {
-  BULK_EDIT_FILES, L3_IDLE_MAINS_MS, LONG_PASS_IDLE_MS, mayRunL3, PREEMPT_HOLD_MAX_MS, UNKNOWN_RECONCILE_MS, type ActivityGate, type Clock,
-} from "./indexBudget";
-import { ALL_FACT_KINDS, type FactKind, type IndexLevel, type IndexLevelStatus, type IndexPauseReason, type L3Wait } from "./indexLevels";
+import { BULK_EDIT_FILES, LONG_PASS_IDLE_MS, PREEMPT_HOLD_MAX_MS, UNKNOWN_RECONCILE_MS, type ActivityGate, type Clock } from "./indexBudget";
+import { ALL_FACT_KINDS, type FactKind, type IndexLevel, type IndexLevelStatus, type IndexPauseReason } from "./indexLevels";
 import { PassGuard } from "./indexPasses";
 import type { IndexPlan } from "./indexReconcile";
 import { IndexQueue, PRIORITY, SliceRunner } from "./indexScheduler";
+import { L3Gate } from "./l3Gate";
+import { NearPriority } from "./nearPriority";
+
+/** What one step of the fact graph moved. */
+export interface FactsMoved { changedPaths: readonly string[]; changedKinds: readonly FactKind[] }
 
 export interface IndexRootPorts {
   rootId: string;
   /** The reconciling plan (L0). */
   plan(): Promise<IndexPlan>;
-  /** Re-extracts edited files: `changed` had new content (their facts moved), `unreviewed` are not in the manifest. */
-  extractEdited(paths: readonly string[]): Promise<{ changed: string[]; unreviewed: string[] }>;
-  /** A map-only pass of the review over `plan` (L1); with `analyzers` the bundled analyzers run too (L3). Returns the paths it extracted. */
-  mapPass(plan: IndexPlan, opts: { analyzers: boolean; signal: AbortSignal }): Promise<{ changed: string[] }>;
-  /** The step after facts changed (L2): today the findings path; WS4's incremental FactRule evaluator plugs in here. */
+  /**
+   * Re-extracts edited files: `changed` had new content, `unreviewed` are not in the manifest. `changedKinds` are the
+   * fact kinds that moved (PRD 41 §B1, from the fact graph's kind hashes); absent ⇒ every kind.
+   */
+  extractEdited(paths: readonly string[]): Promise<{ changed: string[]; unreviewed: string[]; changedKinds?: readonly FactKind[] }>;
+  /** A map-only pass of the review over `plan` (L1); with `analyzers` the bundled analyzers run too (L3). Returns the paths it extracted and, when known, the kinds that moved. */
+  mapPass(plan: IndexPlan, opts: { analyzers: boolean; signal: AbortSignal }): Promise<{ changed: string[]; changedKinds?: readonly FactKind[] }>;
+  /** The fact graph catches up with the plan's whole listing (extracts what moved, drops what is gone). Absent ⇒ no fact graph. */
+  syncFacts?(plan: IndexPlan, signal: AbortSignal): Promise<FactsMoved>;
+  /** Sweeps the fact store's unreferenced objects (run from the L3 gate's idle hook, once per session). Absent ⇒ no store. */
+  sweepFacts?(): Promise<number>;
+  /** The step after facts changed (L2): the incremental FactRule evaluator has run; the graph's readers re-read. */
   onFactsChanged(changedPaths: readonly string[], changedKinds: readonly FactKind[]): Promise<void>;
+  /** The files within 2 import hops of these (B6 scheduling 3), by the root's current facts. Absent ⇒ no near level. */
+  near?(seeds: readonly string[]): ReadonlySet<string>;
   /** A review of the root is running (the person's): long passes wait for it. */
   busy?(): boolean;
   /** Files the root's recent commits touched (`git log -n 200`): queued ahead of the rest (B6 scheduling 4). */
@@ -56,6 +70,8 @@ export interface RootIndexerDeps {
   power: PowerSourcePort;
   /** The file's queue priority (open in an editor, visible, …) — {@link PRIORITY}. */
   priorityOf(path: string): number;
+  /** Root-relative paths of the files open in editors: the seeds of the near level. Absent ⇒ no near level. */
+  openPaths?(): readonly string[];
   publish(status: IndexLevelStatus): void;
   telemetry: IndexTelemetry;
   log(what: string, error: unknown): void;
@@ -66,20 +82,24 @@ export interface RootIndexerDeps {
 /** How long `dispose` waits for a plan walk in progress. */
 export const DISPOSE_PLAN_WAIT_MS = 2_000;
 
+const union = (...lists: ReadonlyArray<readonly string[]>): string[] => [...new Set(lists.flat())].sort();
+
 export class RootIndexer {
   private readonly queue = new IndexQueue();
   private readonly runner: SliceRunner;
   private readonly passes: PassGuard;
+  private readonly l3: L3Gate;
+  private readonly near: NearPriority;
   private ready: IndexLevel | null = null;
   private working: IndexLevel | null = null;
   private files: number | undefined;
   private lastPlan: IndexPlan | undefined;
   private reconciling: Promise<void> | undefined;
   private reconcileAgain = false;
-  /** The last map pass was aborted: the next cycle waits for quiet before it plans again. */
+  /** The last long pass was aborted: the next cycle waits for quiet before it plans again. */
   private resumeAfterAbort = false;
-  private l3Owed = true; // the first cycle of a session runs the analyzers once (they cache by input)
-  private l3Waiting: L3Wait | undefined;
+  /** The fact graph caught up with a whole listing this session. */
+  private factsSynced = false;
   private cycleStart = 0;
   private planned = false;
   private recent: ReadonlySet<string> = new Set();
@@ -99,6 +119,18 @@ export class RootIndexer {
       onError: (error) => deps.log("index slice", error),
     });
     this.passes = new PassGuard(deps.clock, () => this.runner.settled(), () => { if (!this.disposed) void this.runner.kick(); });
+    this.near = new NearPriority({
+      priorityOf: (p) => deps.priorityOf(p),
+      ...(deps.openPaths ? { openPaths: () => deps.openPaths!() } : {}),
+      ...(deps.ports.near ? { near: (seeds: readonly string[]) => deps.ports.near!(seeds) } : {}),
+    });
+    this.l3 = new L3Gate({
+      deps, passes: this.passes,
+      disposed: () => this.disposed, reconciling: () => !!this.reconciling, sliceBusy: () => this.runner.busy,
+      ready: () => this.ready, lastPlan: () => this.lastPlan,
+      setWorking: (level) => { this.working = level; }, emit: () => this.emit(), handover: () => this.handover(),
+      factsChanged: (paths, kinds) => this.factsChanged(paths, kinds), levelReady: (level, since) => this.levelReady(level, since),
+    });
   }
 
   get rootId(): string { return this.deps.ports.rootId; }
@@ -147,39 +179,19 @@ export class RootIndexer {
     return this.passes.preempt(PREEMPT_HOLD_MAX_MS);
   }
 
-  /** Runs L3 when it is owed and its gate is open; true when it ran to the end. */
+  /**
+   * The L3 gate's idle check (`l3Gate.ts`): runs L3 when it is owed and its gate is open (true when it ran to the end), then
+   * the once-per-session fact-store sweep when the root is still idle and quiet.
+   */
   async maybeRunL3(): Promise<boolean> {
-    if (!this.mayStartL3()) return false;
-    const idle = this.deps.gate.idleForMs();
-    // Idle first: the power source is asked only when L3 could start on it.
-    if (idle < L3_IDLE_MAINS_MS) return this.waitL3("idle-wait");
-    if (this.deps.ports.busy?.()) return this.waitL3("busy");
-    const power = await this.deps.power.current();
-    // Anything may have started during the power query.
-    if (!this.mayStartL3()) return false;
-    if (!mayRunL3(power, this.deps.gate.idleForMs())) return this.waitL3(power === "battery" ? "battery" : "idle-wait");
-    this.l3Waiting = undefined;
-    this.working = 3;
-    this.emit();
-    const started = this.deps.clock.now();
-    try {
-      const outcome = await this.passes.run("l3", async (signal) => {
-        await this.handover();
-        return this.deps.ports.mapPass(this.lastPlan!, { analyzers: true, signal });
-      });
-      if (this.disposed || "aborted" in outcome) return false; // still owed: it reruns when the gate opens again
-      this.l3Owed = false;
-      // The analysis moved even when no file did: the derived step always reruns.
-      await this.deps.ports.onFactsChanged(outcome.value.changed, ALL_FACT_KINDS);
-      this.levelReady(3, started);
-      return true;
-    } catch (error) {
-      this.deps.log("L3 analyzers", error);
-      return false;
-    } finally {
-      this.working = null;
-      this.emit();
-    }
+    const ran = await this.l3.maybeRunL3();
+    await this.l3.maybeSweep();
+    return ran;
+  }
+
+  /** Runs ONE queued L3 task of this root under the L3 gate; true when one ran to the end (`l3Gate.ts`). */
+  runL3Task(rootPath: string): Promise<boolean> {
+    return this.l3.runL3Task(rootPath);
   }
 
   status(): IndexLevelStatus {
@@ -191,7 +203,7 @@ export class RootIndexer {
       pending: this.queue.size,
       ...(this.files !== undefined ? { files: this.files } : {}),
       ...(paused ? { paused } : {}),
-      ...(this.l3Owed && this.l3Waiting ? { l3Waiting: this.l3Waiting } : {}),
+      ...(this.l3.owed && this.l3.waiting ? { l3Waiting: this.l3.waiting } : {}),
     };
   }
 
@@ -218,24 +230,19 @@ export class RootIndexer {
     return this.deps.gate.pausedBy() ?? (this.passes.running ? "pass" : undefined);
   }
 
-  private mayStartL3(): boolean {
-    return !this.disposed && this.l3Owed && !this.passes.running && !this.passes.held() && !this.reconciling && !this.runner.busy
-      && !!this.lastPlan && this.ready !== null && this.ready >= 2 && !this.deps.gate.pausedBy();
-  }
-
-  private waitL3(reason: L3Wait): false {
-    if (reason !== this.l3Waiting) { this.l3Waiting = reason; this.emit(); }
-    return false;
-  }
-
   private emit(): void {
     if (!this.disposed) this.deps.publish(this.status());
   }
 
-  /** The editor's priority (open, visible), else recently committed, else the rest. */
   private priorityOf(path: string): number {
-    const editor = this.deps.priorityOf(path);
-    return this.recent.has(path) ? Math.min(editor, PRIORITY.recent) : editor;
+    return this.near.priorityOf(path, this.recent);
+  }
+
+  /** The L2 step; the near level re-reads the import graph only when `structure` moved. */
+  private async factsChanged(paths: readonly string[], kinds: readonly FactKind[] | undefined): Promise<void> {
+    const moved = kinds ?? ALL_FACT_KINDS;
+    await this.deps.ports.onFactsChanged(paths, moved);
+    this.near.factsChanged(moved);
   }
 
   /** A level reached. Telemetry only when the level actually changed (a refocus that finds nothing new reports nothing). */
@@ -244,6 +251,12 @@ export class RootIndexer {
     this.ready = level;
     if (changed) this.deps.telemetry("index.level_ready", { level, ms: Math.max(0, this.deps.clock.now() - since), files: this.files ?? 0 });
     this.emit();
+  }
+
+  /** A long pass was stopped: what it did not finish is still owed; the reconcile reruns when quiet. */
+  private passAborted(): void {
+    this.resumeAfterAbort = true;
+    this.reconcileAgain = true;
   }
 
   private async reconcileOnce(): Promise<void> {
@@ -260,8 +273,10 @@ export class RootIndexer {
     if (!this.planned || moved) this.deps.telemetry("index.plan_ms", { ms: plan.ms, files: plan.files, changed: plan.changed.length });
     this.planned = true;
     if (!moved) {
-      // Nothing moved since the manifest: the facts and what is derived from them are current (L3 stays as it was).
+      // Nothing moved since the manifest: the knowledge and what is derived from it are current (L3 stays as it was)…
       if (this.ready === null || this.ready < 2) { this.levelReady(0); this.levelReady(1); this.levelReady(2); }
+      // …but the fact graph lives in memory: once per session it catches up with the listing, as a long pass.
+      if (!this.factsSynced && this.deps.ports.syncFacts) await this.factsPass(plan);
       return;
     }
     this.levelReady(0);
@@ -276,21 +291,35 @@ export class RootIndexer {
     if (!(await this.whenQuiet())) return;
     const outcome = await this.passes.run("map", async (signal) => {
       await this.handover();
-      return this.deps.ports.mapPass(plan, { analyzers: false, signal });
+      const map = await this.deps.ports.mapPass(plan, { analyzers: false, signal });
+      const facts = signal.aborted || !this.deps.ports.syncFacts ? undefined : await this.deps.ports.syncFacts(plan, signal);
+      return { map, facts };
     });
     if (this.disposed) return;
-    if ("aborted" in outcome) {
-      // A keystroke or a person's review stopped it: what it did not finish is still owed; rerun when quiet.
-      this.resumeAfterAbort = true;
-      this.reconcileAgain = true;
-      return;
-    }
+    if ("aborted" in outcome) { this.passAborted(); return; }
     this.levelReady(1);
     this.working = 2;
     this.emit();
-    await this.deps.ports.onFactsChanged([...new Set([...outcome.value.changed, ...plan.removed])].sort(), ALL_FACT_KINDS);
-    this.l3Owed = true;
+    const { map, facts } = outcome.value;
+    if (facts) this.factsSynced = true;
+    // The knowledge graph's sources moved (content); the fact graph says which kinds of facts did.
+    const kinds = facts ? ALL_FACT_KINDS.filter((k) => k === "content" || facts.changedKinds.includes(k)) : map.changedKinds;
+    await this.factsChanged(union(map.changed, plan.removed, facts?.changedPaths ?? []), kinds);
+    this.l3.owed = true;
     this.levelReady(2);
+  }
+
+  /** The once-per-session fact-graph sync of an unchanged tree: a long pass after quiet, reported through the L2 step. */
+  private async factsPass(plan: IndexPlan): Promise<void> {
+    if (!(await this.whenQuiet())) return;
+    this.working = 2;
+    this.emit();
+    const outcome = await this.passes.run("facts", async (signal) => { await this.handover(); return this.deps.ports.syncFacts!(plan, signal); });
+    if (this.disposed) return;
+    if ("aborted" in outcome) { this.passAborted(); return; }
+    this.factsSynced = true;
+    const { changedPaths, changedKinds } = outcome.value;
+    if (changedPaths.length > 0 || changedKinds.length > 0) await this.factsChanged(changedPaths, changedKinds);
   }
 
   /** Resolves true once the person is quiet, no review runs, no preemption holds and no pass (an L3) runs; false when disposed meanwhile. */
@@ -310,15 +339,15 @@ export class RootIndexer {
     this.emit();
     await this.handover();
     if (this.disposed) return;
-    const { changed, unreviewed } = await this.deps.ports.extractEdited(batch);
+    const { changed, unreviewed, changedKinds } = await this.deps.ports.extractEdited(batch);
     if (this.disposed) return;
     if (unreviewed.length > 0) void this.unknownPaths(unreviewed);
     // Early cutoff: content unchanged ⇒ no facts moved ⇒ nothing derived reruns.
     if (changed.length === 0) return;
     this.working = 2;
     this.emit();
-    await this.deps.ports.onFactsChanged(changed, ALL_FACT_KINDS);
-    this.l3Owed = true;
+    await this.factsChanged(changed, changedKinds);
+    this.l3.owed = true;
     if (this.ready === 3) this.ready = 2;
   }
 

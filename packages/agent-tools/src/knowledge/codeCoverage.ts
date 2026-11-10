@@ -77,9 +77,12 @@ interface IstanbulFile {
     l?: Record<string, number>;
 }
 
-/** Line coverage per file of an istanbul `coverage-final.json`. */
-export function parseIstanbul(json: string, rootPath: string, baseRel: string): Map<string, number> {
-    const out = new Map<string, number>();
+/** Per root-relative file: 1-based line → executed. What diff coverage (PRD 41 C8.4) restricts to changed lines. */
+export type CoverageLineHits = Map<string, Map<number, boolean>>;
+
+/** Executed lines per file of an istanbul `coverage-final.json` (its `l` map, else statement starts). */
+export function istanbulLineHits(json: string, rootPath: string, baseRel: string): CoverageLineHits {
+    const out: CoverageLineHits = new Map();
     let data: unknown;
     try { data = JSON.parse(json); } catch { return out; }
     if (!data || typeof data !== 'object') return out;
@@ -95,31 +98,66 @@ export function parseIstanbul(json: string, rootPath: string, baseRel: string): 
                 if (typeof line === 'number') lines.set(line, (lines.get(line) ?? false) || (raw.s[id] ?? 0) > 0);
             }
         }
-        if (lines.size > 0) out.set(path, ratio([...lines.values()].filter(Boolean).length, lines.size));
+        if (lines.size > 0) out.set(path, lines);
     }
+    return out;
+}
+
+/** Line coverage per file of an istanbul `coverage-final.json`. */
+export function parseIstanbul(json: string, rootPath: string, baseRel: string): Map<string, number> {
+    const out = new Map<string, number>();
+    for (const [path, lines] of istanbulLineHits(json, rootPath, baseRel)) out.set(path, ratio([...lines.values()].filter(Boolean).length, lines.size));
+    return out;
+}
+
+/** One `lcov.info` record: its `DA:` lines (line → executed) and its `LF` / `LH` totals. */
+interface LcovRecord {
+    file: string | undefined;
+    lines: Map<number, boolean>;
+    das: number;
+    daHits: number;
+    found: number;
+    hit: number;
+}
+
+/** Every record of an `lcov.info`, in order. */
+function lcovRecords(text: string, rootPath: string, baseRel: string): LcovRecord[] {
+    const out: LcovRecord[] = [];
+    let rec: LcovRecord = { file: undefined, lines: new Map(), das: 0, daHits: 0, found: 0, hit: 0 };
+    for (const raw of text.split(/\r?\n/)) {
+        const line = raw.trim();
+        if (line.startsWith('SF:')) {
+            rec = { file: coveragePathOf(line.slice(3), rootPath, baseRel), lines: new Map(), das: 0, daHits: 0, found: 0, hit: 0 };
+        } else if (line.startsWith('DA:')) {
+            const [n, count] = line.slice(3).split(',');
+            const executed = Number(count) > 0;
+            rec.das++;
+            if (executed) rec.daHits++;
+            const ln = Number(n);
+            if (Number.isInteger(ln) && ln > 0) rec.lines.set(ln, (rec.lines.get(ln) ?? false) || executed);
+        } else if (line.startsWith('LF:')) rec.found = Number(line.slice(3)) || 0;
+        else if (line.startsWith('LH:')) rec.hit = Number(line.slice(3)) || 0;
+        else if (line === 'end_of_record') {
+            out.push(rec);
+            rec = { file: undefined, lines: new Map(), das: 0, daHits: 0, found: 0, hit: 0 };
+        }
+    }
+    return out;
+}
+
+/** Executed lines per file of an `lcov.info` (`DA:` lines). */
+export function lcovLineHits(text: string, rootPath: string, baseRel: string): CoverageLineHits {
+    const out: CoverageLineHits = new Map();
+    for (const r of lcovRecords(text, rootPath, baseRel)) if (r.file && r.lines.size > 0) out.set(r.file, r.lines);
     return out;
 }
 
 /** Line coverage per file of an `lcov.info` (`DA:` lines, else `LH` / `LF`). */
 export function parseLcov(text: string, rootPath: string, baseRel: string): Map<string, number> {
     const out = new Map<string, number>();
-    let file: string | undefined;
-    let found = 0, hit = 0, da = 0, daHit = 0;
-    for (const raw of text.split(/\r?\n/)) {
-        const line = raw.trim();
-        if (line.startsWith('SF:')) {
-            file = coveragePathOf(line.slice(3), rootPath, baseRel);
-            found = hit = da = daHit = 0;
-        } else if (line.startsWith('DA:')) {
-            da++;
-            if (Number(line.slice(3).split(',')[1]) > 0) daHit++;
-        } else if (line.startsWith('LF:')) found = Number(line.slice(3)) || 0;
-        else if (line.startsWith('LH:')) hit = Number(line.slice(3)) || 0;
-        else if (line === 'end_of_record') {
-            const total = da > 0 ? da : found;
-            if (file && total > 0) out.set(file, ratio(da > 0 ? daHit : hit, total));
-            file = undefined;
-        }
+    for (const r of lcovRecords(text, rootPath, baseRel)) {
+        const total = r.das > 0 ? r.das : r.found;
+        if (r.file && total > 0) out.set(r.file, ratio(r.das > 0 ? r.daHits : r.hit, total));
     }
     return out;
 }

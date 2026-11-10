@@ -30,6 +30,13 @@ export const PRODUCT_EVENT_PROPS: Readonly<Record<string, readonly string[]>> = 
   // PRD 41 §4 (WS3): the background indexer's plan time and each level's time to ready, as counts and durations.
   "index.plan_ms": ["surface", "ms", "files", "changed"],
   "index.level_ready": ["surface", "level", "ms", "files"],
+  // PRD 41 §4 (WS19): a prediction the card rendered — which model, its version and status, and its quantized value.
+  "prediction.shown": ["surface", "prediction", "model", "version", "status", "value"],
+  // PRD 41 §10 (WS20): the dynamic-tier scheduler against random scheduling — counts only (`scheduleTelemetry`).
+  "delta.dynamic_scheduled": [
+    "surface", "scheduled", "scheduledChanged", "explored", "exploredChanged", "exploredWouldRun", "exploredChangedWouldRun", "failed", "notScheduled",
+    "budgetSkipped",
+  ],
 };
 
 /** A code: an enum value or identifier, never a path, sentence or token. */

@@ -34,7 +34,7 @@ import { listBranchDiff, listRepoFiles, readRepoFile, type RepoReadContext } fro
 import { ingestScanFindings } from './vulnerabilityFindings';
 import { endPrScan, ensurePrScan, type PrScanScope } from './prScanStore';
 import { isScaManifestPath, OSV_MAX_PACKAGES, parseManifests, queryOsv } from './osvScaScan';
-import type { NormalizedFinding } from '../../domain/security/scanReportParsers';
+import type { NormalizedFinding } from '@builderforce/sarif';
 
 /** Bounds: one finalize must not read an unbounded branch inside a Worker invocation. */
 export const MAX_FILES = 60;

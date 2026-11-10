@@ -17,6 +17,7 @@
     "skipLibCheck": true,
     "noEmit": true,
     "paths": {
+      "@builderforce/sarif": ["../sarif/src/index.ts"],
       "@builderforce/agent-loop": ["../agent-loop/src/index.ts"],
       "@builderforce/agent-stall": ["../agent-stall/src/index.ts"],
       "@builderforce/agent-tools": ["../agent-tools/src/index.ts"],

@@ -50,7 +50,7 @@ export type LensId =
  * the old tower had, so a stored or deep-linked `3d` still opens the WebGL view), the folder mind
  * map, or the accessible list. A new camera is a value here plus a row in `surface/cameras.tsx`.
  */
-export type ViewMode = 'transit' | 'system' | 'graph' | '3d' | 'map' | 'heat' | '4plus1' | 'style' | 'features' | 'sequence' | 'list';
+export type ViewMode = 'transit' | 'system' | 'graph' | '3d' | 'map' | 'heat' | 'style' | 'features' | 'sequence' | 'list';
 
 /** What a screenshot pinpointed: the AI read the image, the host matched the strings deterministically. */
 export type PinpointResult = {
@@ -227,9 +227,25 @@ export interface KnowledgeGraphSource {
      * map's levels below a package show files and say so.
      */
     symbolsOf?(rootId: string, fileRefs: string[]): Promise<SymbolRecord[]>;
+    /**
+     * Some lines of one source file of the root (PRD 43 B1a rule 9, the code band): `path` is root-relative, `range`
+     * 1-based and inclusive. The HOST validates the path (inside the root, a code file) and caps the size; null when it
+     * refuses or the file is gone. The code text is never in the graph. Absent ⇒ the code band shows `path:line` and
+     * "Open at line" only.
+     */
+    readSource?(rootId: string, path: string, range: SourceRange): Promise<SourceText | null>;
     /** The host's timings of the calls the first paint waits on, and the phase a running load is in. Absent ⇒ the view's own timeline only. */
     loadTrace?(): Promise<LoadTrace>;
 }
+
+/** Lines of a file, 1-based and inclusive. */
+export interface SourceRange { startLine: number; endLine: number }
+
+/** What `readSource` answers: the lines from `startLine`, and whether the host cut the range short (its line cap). */
+export interface SourceText { startLine: number; lines: string[]; truncated: boolean }
+
+/** `KnowledgeGraphSource.readSource` bound to the root on show (the view's code band reads through it). */
+export type SourceReader = (path: string, range: SourceRange) => Promise<SourceText | null>;
 
 /** One definition. `ref` names it (`<file ref>#<name>`); `parent` is its file's ref, or its class's ref for a member. */
 export interface SymbolRecord {

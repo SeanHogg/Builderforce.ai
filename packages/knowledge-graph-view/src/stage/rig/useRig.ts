@@ -14,6 +14,7 @@
 
 import { useEffect, useMemo, useRef, type RefObject } from 'react';
 import { usePanZoomRegistration } from '../../surface/zoom';
+import { ZOOM_STEP_FIELDS } from '../../compute/tasks/placement/request';
 import { fitView } from '../projection';
 import { now, TWEEN_MS } from '../tween';
 import type { CameraRig, Placement } from '../types';
@@ -26,9 +27,20 @@ export function homeKeyOf(p: Pick<Placement, 'cacheKey' | 'bounds' | 'rig'>): st
     return `${camera}|${p.rig.frame}|${p.bounds.min.join(',')}|${p.bounds.max.join(',')}`;
 }
 
+/**
+ * True when `next` is `prev` at another semantic-zoom band (B1a rule 10: the Sequence's `lod`, its lazy symbols) — the
+ * same view, so it never re-homes: the zoom that crossed the band is kept (a re-fit would undo it and cross back).
+ */
+export function isZoomStep(prev: string, next: string): boolean {
+    const a = prev.split('|'), b = next.split('|');
+    if (a.length !== b.length || prev === next) return false;
+    return a.every((field, i) => field === b[i] || ZOOM_STEP_FIELDS.includes(i));
+}
+
 export function useRig(placement: Placement | null, width: number, height: number, reducedMotion: boolean, box: RefObject<HTMLElement | null>, onSettle: () => void): RigController {
     const rig = useMemo(() => new RigController(), []);
     const homed = useRef<string | null>(null);
+    const lastKey = useRef<string | null>(null);
     const settle = useRef(onSettle);
     settle.current = onSettle;
     const frame = useRef<CameraRig['frame']>(placement?.rig.frame ?? 'fill');
@@ -38,7 +50,9 @@ export function useRig(placement: Placement | null, width: number, height: numbe
         if (!placement) return;
         const home = fitView(placement.bounds, width, height);
         const key = homeKeyOf(placement);
-        if (homed.current === key) { rig.resize(home, width, height); return; }
+        const step = lastKey.current !== null && isZoomStep(lastKey.current, placement.cacheKey);
+        lastKey.current = placement.cacheKey;
+        if (homed.current === key || step) { homed.current = key; rig.resize(home, width, height); return; }
         const first = homed.current === null;
         homed.current = key;
         rig.setHome(home, placement.rig, width, height, now(), first || reducedMotion ? 0 : TWEEN_MS);

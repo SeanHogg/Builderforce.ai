@@ -12,6 +12,7 @@
 
 import { toneIndex } from '../../../stage/tones';
 import { DASH_DESCRIBES, DASH_SOLID, DASH_UNTESTED, type Vec3 } from '../../../stage/types';
+import { ASSOCIATION_STYLE } from './associations';
 import type { AssociationKind } from './callIndex';
 import type { WorldPath } from './links';
 import { SEQUENCE_MAX_DEPTH, type Flow, type FlowMessage } from './sequenceFlow';
@@ -29,7 +30,8 @@ export interface SequenceRows {
 export const ACTIVATION_WIDTH = 6;
 export const STUB_LENGTH = 28;
 
-const STUB_TONE: Record<AssociationKind, Parameters<typeof toneIndex>[0]> = { extends: 'text', implements: 'muted', composes: 'edge' };
+/** A stub's tone is its kind's in the ONE association style table (the class band's links read it too). */
+const stubTone = (kind: AssociationKind): number => toneIndex(ASSOCIATION_STYLE[kind].tone);
 
 /** The z a call's return (and its activation's end) sits at: under the call's last inner message, deeper calls first. */
 export function returnZ(m: FlowMessage, rows: SequenceRows): number {
@@ -61,6 +63,6 @@ export function stubPaths(stubs: Flow['stubs'], rows: SequenceRows): WorldPath[]
     return stubs.map((s) => {
         const a = rows.column.get(s.from)!, b = rows.column.get(s.to)!;
         const dir = Math.sign(b[0] - a[0]) || 1, z = a[2] + rows.mark + 6;
-        return { pts: [[a[0], a[1], z], [a[0] + dir * STUB_LENGTH, a[1], z]], tone: toneIndex(STUB_TONE[s.kind]), width: 1.5, dash: DASH_DESCRIBES, flags: 0 };
+        return { pts: [[a[0], a[1], z], [a[0] + dir * STUB_LENGTH, a[1], z]], tone: stubTone(s.kind), width: 1.5, dash: DASH_DESCRIBES, flags: 0 };
     });
 }

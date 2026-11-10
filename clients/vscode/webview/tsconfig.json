@@ -71,13 +71,19 @@
       // The run delta: the host protocol names `RunDelta` (`brainRunHostProtocol.ts`), and the chat
       // mounts the view's card and panel (PRD 41 §C11).
       "@builderforce/run-delta": ["../../../packages/run-delta/src/index.ts"],
+      "@builderforce/sarif": ["../../../packages/sarif/src/index.ts"],
       "@builderforce/run-delta/contract": ["../../../packages/run-delta/src/contract.ts"],
+      "@builderforce/run-delta/predict": ["../../../packages/run-delta/src/predict/index.ts"],
       "@builderforce/knowledge-graph-view/delta": ["../../../packages/knowledge-graph-view/src/delta/index.ts"],
+      // The run delta panel's history and trend (PRD 41 §C11.3).
+      "@builderforce/knowledge-graph-view/delta/history": ["../../../packages/knowledge-graph-view/src/delta/history/index.ts"],
       // The view's source has no install of its own: its React is this package's one copy (as in tsconfig.canvas.json).
       "react": ["../node_modules/@types/react/index.d.ts"],
       "react/*": ["../node_modules/@types/react/*"],
       "@builderforce/secret-redaction": ["../../../packages/secret-redaction/src/index.ts"],
       "@builderforce/agent-tools/code-mask": ["../../../packages/agent-tools/src/knowledge/codeMask.ts"],
+      "@builderforce/agent-tools/sampling": ["../../../packages/agent-tools/src/sampling.ts"],
+      "@builderforce/agent-tools/glob": ["../../../packages/agent-tools/src/glob.ts"],
       // The view's and the engine's sources import memory's subpaths and install nothing of their own (as in
       // tsconfig.canvas.json): they resolve to this package's one install.
       "@seanhogg/builderforce-memory/knowledge": ["../node_modules/@seanhogg/builderforce-memory/dist/knowledge/index.d.ts"],

@@ -11,6 +11,7 @@
  */
 
 import { spawn } from "node:child_process";
+import { killTree } from "../process/killTree";
 import { fixText } from "./knowledgeFixText";
 
 export const OUTPUT_TAIL = 64 * 1024;
@@ -51,16 +52,6 @@ export interface ShellOptions {
 
 const DEFAULT_TIMEOUT_MS = 10 * 60_000;
 
-/** Kills `pid` and everything it started. */
-export function killTree(pid: number | undefined): void {
-  if (!pid) return;
-  if (process.platform === "win32") {
-    spawn("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" }).on("error", () => undefined);
-    return;
-  }
-  try { process.kill(-pid, "SIGKILL"); } catch { try { process.kill(pid, "SIGKILL"); } catch { /* already gone */ } }
-}
-
 const clean = (text: string): string => stripAnsi(text).trim().slice(-DETAIL_CAP);
 
 /** Runs `command` through the shell; rejects with a {@link ShellFailure} unless `ok` (default: knip ran). */
@@ -76,7 +67,11 @@ export function runShell(command: string, cwd: string, opts: ShellOptions & { ok
     let end: ShellFailure | undefined;
     child.stdout.on("data", (c: Buffer) => { stdout = tailOf(stdout, c.toString("utf8")); });
     child.stderr.on("data", (c: Buffer) => { stderr = tailOf(stderr, c.toString("utf8")); });
-    const stop = (failure: ShellFailure): void => { end ??= failure; killTree(child.pid); };
+    const stop = (failure: ShellFailure): void => {
+      end ??= failure;
+      if (child.pid === undefined) return; // never started: nothing to kill
+      killTree(child.pid);
+    };
     const timer = setTimeout(() => stop(new ShellFailure("timeout", fixText.timedOut(label, Math.round(timeoutMs / 1000)))), timeoutMs);
     const onAbort = (): void => stop(new ShellFailure("aborted", fixText.cancelled(label)));
     opts.signal?.addEventListener("abort", onAbort, { once: true });

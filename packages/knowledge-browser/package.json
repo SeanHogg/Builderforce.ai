@@ -14,8 +14,8 @@
     "test": "node ../../frontend/node_modules/vitest/vitest.mjs run --config vitest.config.ts"
   },
   "peerDependencies": {
-    "@seanhogg/builderforce-memory": "^2026.10.73",
-    "@seanhogg/builderforce-memory-engine": "^2026.10.63"
+    "@seanhogg/builderforce-memory": "^2026.10.80",
+    "@seanhogg/builderforce-memory-engine": "^2026.10.65"
   },
   "devDependencies": {
     "fake-indexeddb": "^6.2.6",

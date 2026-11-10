@@ -9,7 +9,8 @@
  *  - a run shows "Measuring…" the moment its delta starts, then its computed cards (or not
  *    measured); each renders under the reply its run produced, as the host names it (`at`);
  *  - a run its delta HELD (§12.5) shows the rules and "Release run" (`useRunDeltaRelease.ts`);
- *  - "Open details" opens the `RunDeltaPanel` as a side sheet over the chat (non-modal);
+ *  - "Open details" opens the `RunDeltaPanel` as a side sheet over the chat (non-modal), with the repository's run history
+ *    and trend under its body (`run-delta/history`, `RunDeltaHistorySection`);
  *  - "Open code" asks the HOST (`run-delta/open { runId, path, line }`), which resolves the
  *    path under that delta's repository root; the webview never builds or sends an absolute path.
  *
@@ -19,8 +20,11 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { BrainMessage } from '@seanhogg/builderforce-brain-embedded';
-import { RunDeltaCard, RunDeltaPanel, RunDeltaStatusCard, type RunDeltaCodeTarget, type RunDeltaLabels } from '@builderforce/knowledge-graph-view/delta';
+import { RunDeltaCard, RunDeltaStatusCard, type RunDeltaCodeTarget, type RunDeltaLabels } from '@builderforce/knowledge-graph-view/delta';
+import { repoDisplayName } from '@builderforce/knowledge-graph-view/delta/history';
 import { onHostMessage, request } from '../../vscodeBridge';
+import { RunDeltaOpenPanel } from './RunDeltaOpenPanel';
+import { PredictedLine } from './PredictedLine';
 import {
   RUN_DELTA_CARD, RUN_DELTA_GET, RUN_DELTA_OPEN_FILE, cardKey, cardsFromAnswer, isProgress, mergeCards, placeCards, safeRepoPath,
   type RunDeltaCardPayload,
@@ -30,9 +34,6 @@ import { useRunDeltaRelease, type RunDeltaRelease } from './useRunDeltaRelease';
 
 /** Below this width the panel is a bottom sheet (the chat is a narrow sidebar view). */
 const COMPACT_BELOW_PX = 600;
-
-/** The repo's last path segment, for a run that touched more than one repository. */
-const repoName = (repo: string): string => repo.replace(/[\\/]+$/, '').split(/[\\/:]/).filter(Boolean).pop() ?? repo;
 
 function useCompact(): boolean {
   const query = `(max-width: ${COMPACT_BELOW_PX - 1}px)`;
@@ -85,15 +86,16 @@ function RunDeltaAfter({ messageId }: { messageId: number }) {
   return (
     <div style={{ display: 'grid', gap: 8, marginTop: 8, minWidth: 0 }}>
       {here.map((c) => (isProgress(c)
-        ? <RunDeltaStatusCard key={cardKey(c)} status={c.status} runId={c.runId} labels={ctx.labels} held={heldOf(c, ctx.release)} />
+        ? <RunDeltaStatusCard key={cardKey(c)} status={c.status} runId={c.runId} labels={ctx.labels} held={heldOf(c, ctx.release)} dynamicMinutes={c.dynamicMinutes} />
         : (
           <RunDeltaCard
             key={cardKey(c)}
             delta={c.delta}
             labels={ctx.labels}
-            repoLabel={(ctx.reposPerRun.get(c.runId) ?? 0) > 1 ? repoName(c.repo) : undefined}
+            repoLabel={(ctx.reposPerRun.get(c.runId) ?? 0) > 1 ? repoDisplayName(c.repo) : undefined}
             onOpenDetails={() => ctx.openDetails(cardKey(c))}
             held={heldOf(c, ctx.release)}
+            predicted={<PredictedLine predicted={c.predicted} />}
           />
         )))}
     </div>
@@ -161,14 +163,10 @@ export function useRunDeltaCards(chatId: number | null, messages: readonly Brain
     };
   }, [open]);
 
-  const panel = open ? (
-    // A fixed layer the size of the chat that lets clicks through: the sheet docks to its edge, the transcript stays usable.
-    <div style={{ position: 'fixed', inset: 0, zIndex: 40, pointerEvents: 'none' }}>
-      <div style={{ pointerEvents: 'auto' }}>
-        <RunDeltaPanel open delta={open.delta} overrides={open.overrides} labels={labels} onClose={() => setOpenKey(null)} onOpenCode={openCode} compact={compact} />
-      </div>
-    </div>
-  ) : null;
+  // The panel, with the repository's history and trend under its body (PRD 41 §C11.3).
+  const panel = open
+    ? <RunDeltaOpenPanel card={open} labels={labels} compact={compact} onClose={() => setOpenKey(null)} onOpenCode={openCode} />
+    : null;
 
   return { footers, panel };
 }

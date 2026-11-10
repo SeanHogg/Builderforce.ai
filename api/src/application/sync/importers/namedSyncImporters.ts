@@ -11,7 +11,8 @@
  * The usage importer is the one exception, and it is structural: `llm_usage_log`
  * lives in another database, so it writes through the {@link SyncUsageLedger} port
  * (deduped by idempotency key), not through `tx`. A chat's run steps are the same
- * case — the message importer writes them through {@link SyncStepStore}.
+ * case — the message importer writes them through {@link SyncStepStore}, and so are a
+ * run's outcomes (PRD 41 §D1, operational endpoint) through {@link SyncRunOutcomeStore}.
  *
  * There is no payload-writer fallback: an entity type with no owning importer
  * is rejected by the push before this is reached.
@@ -26,8 +27,19 @@ import { importSyncedProject } from './importSyncedProject';
 import { importSyncedTicket } from './importSyncedTicket';
 import { importSyncedChatTicketLink } from './importSyncedChatTicketLink';
 import { importSyncedUsage } from './importSyncedUsage';
+import { importSyncedRunOutcome, type SyncRunOutcomeStore } from '../../runOutcomes/importSyncedRunOutcome';
+import type { RunDeltaImportPorts } from '../../runDelta/runDeltaPorts';
+import { runDeltaWriter } from '../../runDelta/runDeltaStore';
 
-export function namedSyncImporters(tx: Tx, usage: SyncUsageLedger, steps: SyncStepStore): SyncNamedImporters {
+export function namedSyncImporters(
+  tx: Tx,
+  usage: SyncUsageLedger,
+  steps: SyncStepStore,
+  runOutcomes: SyncRunOutcomeStore,
+  /** PRD 41 §C14: the run-delta mirror's evidence blob store and cache bump; its rows ride `tx`. */
+  runDelta: Omit<RunDeltaImportPorts, 'writer'>,
+): SyncNamedImporters {
+  const runDeltaPorts: RunDeltaImportPorts = { ...runDelta, writer: runDeltaWriter(tx) };
   return {
     importSyncedTicket: (event, ctx, stores) => importSyncedTicket(event, ctx, stores, tx),
     importSyncedProject: (event, ctx, stores) => importSyncedProject(event, ctx, stores, tx),
@@ -35,6 +47,7 @@ export function namedSyncImporters(tx: Tx, usage: SyncUsageLedger, steps: SyncSt
     importSyncedMessage: (event, ctx, stores) => importSyncedMessage(event, ctx, stores, tx, steps),
     importSyncedUsage: (event, ctx, stores) => importSyncedUsage(event, ctx, stores, usage),
     importSyncedChatTicketLink: (event, ctx, stores) => importSyncedChatTicketLink(event, ctx, stores, tx),
-    importMirrorRecord,
+    importSyncedRunOutcome: (event, ctx, stores) => importSyncedRunOutcome(event, ctx, stores, runOutcomes),
+    importMirrorRecord: (event, ctx, stores) => importMirrorRecord(event, ctx, stores, runDeltaPorts),
   };
 }

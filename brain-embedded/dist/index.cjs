@@ -1013,8 +1013,8 @@ async function runAgentLoop(args) {
       ctx.messages.push(row);
       const post = await hooks.afterDispatch?.(call2, result, row, ctx);
       if (!post?.skipRemaining) return false;
-      const skipped = { data: post.skipRemaining.data, isError: post.skipRemaining.isError ?? true };
-      for (const rest of calls.slice(i + 1)) ctx.messages.push(codec.tool(rest, skipped));
+      const skipped2 = { data: post.skipRemaining.data, isError: post.skipRemaining.isError ?? true };
+      for (const rest of calls.slice(i + 1)) ctx.messages.push(codec.tool(rest, skipped2));
       return true;
     };
     for (let i = 0; i < calls.length; ) {
@@ -1913,8 +1913,8 @@ function parseNamedBody(name, body, seq) {
   const jsonStart = body.indexOf("{");
   if (jsonStart >= 0) {
     try {
-      const obj = JSON.parse(body.slice(jsonStart));
-      return { id: `xmltc_${seq}`, name, args: JSON.stringify(obj ?? {}) };
+      const obj2 = JSON.parse(body.slice(jsonStart));
+      return { id: `xmltc_${seq}`, name, args: JSON.stringify(obj2 ?? {}) };
     } catch {
     }
   }
@@ -1947,14 +1947,14 @@ function parseInner(inner, seq) {
   if (jsonStart >= 0) {
     const maybeName = trimmed.slice(0, jsonStart).trim();
     try {
-      const obj = JSON.parse(trimmed.slice(jsonStart));
+      const obj2 = JSON.parse(trimmed.slice(jsonStart));
       if (maybeName) {
-        return { id: `xmltc_${seq}`, name: maybeName, args: JSON.stringify(obj ?? {}) };
+        return { id: `xmltc_${seq}`, name: maybeName, args: JSON.stringify(obj2 ?? {}) };
       }
-      if (obj && typeof obj === "object" && typeof obj.name === "string") {
-        const a = obj.arguments ?? obj.parameters ?? obj.input ?? {};
+      if (obj2 && typeof obj2 === "object" && typeof obj2.name === "string") {
+        const a = obj2.arguments ?? obj2.parameters ?? obj2.input ?? {};
         const argsStr = typeof a === "string" ? a : JSON.stringify(a ?? {});
-        return { id: `xmltc_${seq}`, name: obj.name, args: argsStr };
+        return { id: `xmltc_${seq}`, name: obj2.name, args: argsStr };
       }
     } catch {
       if (maybeName) return { id: `xmltc_${seq}`, name: maybeName, args: "{}" };
@@ -3059,67 +3059,67 @@ function isOwnRecord(row, deviceId) {
 function isImported(mapping) {
   return mapping !== void 0 && mapping.serverVersion > BOUND_ONLY_VERSION;
 }
-function unboundMarker(record2, operation) {
-  return { operation, ...unboundMarkerFields(record2.payload) };
+function unboundMarker(record3, operation) {
+  return { operation, ...unboundMarkerFields(record3.payload) };
 }
 function unboundMarkerFields(payload) {
   const text2 = JSON.stringify(payload) ?? "null";
   return { payloadSize: text2.length, payloadHash: hashPayload(payload), payload: null };
 }
-async function dropPending(tx, record2) {
-  const stale = await selectPendingOf(tx, record2.entityType, record2.id);
+async function dropPending(tx, record3) {
+  const stale = await selectPendingOf(tx, record3.entityType, record3.id);
   if (stale.length > 0) await tx.acknowledge(stale.map((event) => event.eventId));
 }
-async function queueImport(tx, record2, chatClientId, waitsOn = []) {
-  await dropPending(tx, record2);
-  if (record2.deletedAt) return;
-  if (record2.destination.kind === "bound") await ensureRecordPayloadFence(tx, record2.destination);
+async function queueImport(tx, record3, chatClientId, waitsOn = []) {
+  await dropPending(tx, record3);
+  if (record3.deletedAt) return;
+  if (record3.destination.kind === "bound") await ensureRecordPayloadFence(tx, record3.destination);
   await tx.append({
-    idempotencyKey: importKey(record2.entityType, record2.id),
-    clientEntityId: record2.id,
-    entityType: record2.entityType,
+    idempotencyKey: importKey(record3.entityType, record3.id),
+    clientEntityId: record3.id,
+    entityType: record3.entityType,
     operation: "import",
-    schemaVersion: record2.schemaVersion,
-    occurredAt: record2.occurredAt,
-    dependsOn: fencedDependsOn([...chatClientId && record2.entityType !== "chat" ? [importKey("chat", chatClientId)] : [], ...waitsOn]),
-    destination: record2.destination,
+    schemaVersion: record3.schemaVersion,
+    occurredAt: record3.occurredAt,
+    dependsOn: fencedDependsOn([...chatClientId && record3.entityType !== "chat" ? [importKey("chat", chatClientId)] : [], ...waitsOn]),
+    destination: record3.destination,
     ...recordPayloadMarker()
   });
 }
-async function journalWrite(tx, record2, operation, options) {
-  if (record2.destination.kind === "unbound") {
+async function journalWrite(tx, record3, operation, options) {
+  if (record3.destination.kind === "unbound") {
     await tx.append({
       idempotencyKey: options.key,
-      clientEntityId: record2.id,
-      entityType: record2.entityType,
-      schemaVersion: record2.schemaVersion,
-      occurredAt: record2.occurredAt,
-      ...record2.baseVersion !== void 0 ? { baseVersion: record2.baseVersion } : {},
+      clientEntityId: record3.id,
+      entityType: record3.entityType,
+      schemaVersion: record3.schemaVersion,
+      occurredAt: record3.occurredAt,
+      ...record3.baseVersion !== void 0 ? { baseVersion: record3.baseVersion } : {},
       dependsOn: options.dependsOn ?? [],
-      destination: record2.destination,
+      destination: record3.destination,
       // The marker carries size + a content hash of the real payload, never the
       // payload itself; the record is the only copy while unbound (module comment).
-      ...unboundMarker(record2, operation)
+      ...unboundMarker(record3, operation)
     });
     return;
   }
-  const mapping = await tx.mapping(record2.entityType, record2.id, record2.destination);
+  const mapping = await tx.mapping(record3.entityType, record3.id, record3.destination);
   if (!isImported(mapping)) {
-    await queueImport(tx, record2, options.chatClientId);
+    await queueImport(tx, record3, options.chatClientId);
     return;
   }
-  await dropPending(tx, record2);
+  await dropPending(tx, record3);
   await tx.append({
     idempotencyKey: `${options.key}:server`,
-    clientEntityId: record2.id,
-    entityType: record2.entityType,
+    clientEntityId: record3.id,
+    entityType: record3.entityType,
     operation,
-    schemaVersion: record2.schemaVersion,
-    occurredAt: record2.occurredAt,
+    schemaVersion: record3.schemaVersion,
+    occurredAt: record3.occurredAt,
     baseVersion: mapping.serverVersion,
     dependsOn: [],
-    destination: record2.destination,
-    payload: operation === "delete" && !PAYLOAD_ON_DELETE.has(record2.entityType) ? null : record2.payload
+    destination: record3.destination,
+    payload: operation === "delete" && !PAYLOAD_ON_DELETE.has(record3.entityType) ? null : record3.payload
   });
 }
 
@@ -3143,6 +3143,9 @@ var INDEXEDDB_REDACTED_KEYS = [
   "clientsecret"
 ];
 var INDEXEDDB_REDACTION_RULE = `Only exportForUploadOrLog() output may be uploaded or logged. It strips every secret-shaped key at every depth \u2014 a key whose lowercase name is one of ${INDEXEDDB_REDACTED_KEYS.join(", ")} or contains token, secret, password, authorization, cookie, or apikey \u2014 so accessToken, client_secret and sessionCookie are stripped too. The strip is recursive through arrays and nested objects, the input is not mutated, and a dropped key is absent rather than blanked. export() is the unfiltered local record and must not leave the device.`;
+
+// ../packages/local-first/src/httpSyncTransport.ts
+var MAX_RETRY_AFTER_MS = 60 * 60 * 1e3;
 
 // ../packages/local-first/src/tombstone.ts
 var RESNAPSHOT = Object.freeze({ action: "resnapshot" });
@@ -4899,12 +4902,12 @@ function readAdvisoryThreadState(metadata) {
     }
   }
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const record2 = raw;
-  if (record2.marker !== ADVISORY_THREAD_MARKER) return null;
+  const record3 = raw;
+  if (record3.marker !== ADVISORY_THREAD_MARKER) return null;
   return {
-    confidentiality: advisoryThreadConfidentiality(record2.confidentiality),
-    founderInvitedAdvisor: record2.founderInvitedAdvisor === true,
-    hostRef: typeof record2.hostRef === "string" && record2.hostRef ? record2.hostRef : void 0
+    confidentiality: advisoryThreadConfidentiality(record3.confidentiality),
+    founderInvitedAdvisor: record3.founderInvitedAdvisor === true,
+    hostRef: typeof record3.hostRef === "string" && record3.hostRef ? record3.hostRef : void 0
   };
 }
 function advisoryThreadHistoryAdmitted(messages, boundary = "aiContext") {
@@ -6146,10 +6149,10 @@ function formatEvermindLearnStep(outcome) {
   if (targets && targets.length > 0) {
     const label = (t) => `${t.name} (proj #${t.projectId}${t.version ? ` v${t.version}` : ""})`;
     const learned = targets.filter((t) => t.learned);
-    const skipped = targets.filter((t) => !t.learned && t.reason && t.reason !== "too-short");
+    const skipped2 = targets.filter((t) => !t.learned && t.reason && t.reason !== "too-short");
     const parts = [];
     if (learned.length > 0) parts.push(`Contributed this turn to ${learned.map(label).join(", ")}`);
-    for (const t of skipped) {
+    for (const t of skipped2) {
       const why = t.reason === "not-seeded" ? "not set up yet" : t.reason === "frozen" ? "frozen (read-only)" : String(t.reason);
       parts.push(`skipped ${label(t)} \u2014 ${why}`);
     }
@@ -6287,8 +6290,8 @@ function createLocalChatIdentity(options) {
           return SCAN_STOP;
         }
       });
-      const record2 = queued ? (await liveRecords(tx, "chat", deviceId, (row) => row.id === clientId))[0] : void 0;
-      if (record2) await queueImport(tx, record2);
+      const record3 = queued ? (await liveRecords(tx, "chat", deviceId, (row) => row.id === clientId))[0] : void 0;
+      if (record3) await queueImport(tx, record3);
     });
   };
   const bindOnce = async (localId) => {
@@ -6815,7 +6818,7 @@ var LocalFirstUnavailableError = class extends Error {
 async function runLocalFirst(plan, run, options = {}) {
   if (plan.length === 0) throw new LocalFirstUnavailableError();
   const attempts = [];
-  const record2 = (entry) => {
+  const record3 = (entry) => {
     attempts.push(entry);
     options.onAttempt?.(entry);
   };
@@ -6828,13 +6831,13 @@ async function runLocalFirst(plan, run, options = {}) {
         state.committed = true;
       });
       if (state.committed || isLast || (options.accept?.(result) ?? true)) {
-        record2({ attempt, outcome: "served" });
+        record3({ attempt, outcome: "served" });
         return { result, served: attempt, attempts };
       }
-      record2({ attempt, outcome: "refused", detail: "empty_response" });
+      record3({ attempt, outcome: "refused", detail: "empty_response" });
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
-      record2({ attempt, outcome: "failed", detail });
+      record3({ attempt, outcome: "failed", detail });
       if (options.signal?.aborted || state.committed || isLast) throw e;
     }
   }
@@ -6941,7 +6944,7 @@ async function usageRowsByChat(tx, deviceId, clientIds) {
 }
 
 // src/localFirstPersistence.ts
-var chatValue = (record2) => record2.payload.chat;
+var chatValue = (record3) => record3.payload.chat;
 var MESSAGE_ID_CHECK_LIMIT = 64;
 function createLocalBrainPersistence(options) {
   const destination = options.destination ?? UNBOUND_DESTINATION;
@@ -6978,12 +6981,12 @@ function createLocalBrainPersistence(options) {
   };
   const projectionInputs = async (tx, rows) => {
     const account = options.accountDestination?.();
-    const usage = await usageRowsByChat(tx, options.deviceId, new Set(rows.map((record2) => record2.id)));
-    return Promise.all(rows.map(async (record2) => {
-      const serverId = await boundServerId(tx, record2.id, account);
-      const chatUsage = usage.get(record2.id) ?? [];
+    const usage = await usageRowsByChat(tx, options.deviceId, new Set(rows.map((record3) => record3.id)));
+    return Promise.all(rows.map(async (record3) => {
+      const serverId = await boundServerId(tx, record3.id, account);
+      const chatUsage = usage.get(record3.id) ?? [];
       return {
-        record: record2,
+        record: record3,
         serverId,
         usage: chatUsage,
         imported: serverId !== void 0 && account ? await importedUsageIds(tx, chatUsage, account) : /* @__PURE__ */ new Set()
@@ -7000,8 +7003,8 @@ function createLocalBrainPersistence(options) {
         server = null;
       }
     }
-    return inputs.map(({ record: record2, serverId, usage, imported }) => {
-      const chat = chatValue(record2);
+    return inputs.map(({ record: record3, serverId, usage, imported }) => {
+      const chat = chatValue(record3);
       const fromServer = serverId !== void 0 ? server?.get(serverId) ?? null : null;
       const local = ledgerSpend(usage, {
         excludeGateway: fromServer !== null,
@@ -7011,7 +7014,7 @@ function createLocalBrainPersistence(options) {
       const spend = fromServer && local ? combineSpendSavings(fromServer, local) : fromServer ?? local;
       return {
         ...chat,
-        clientId: record2.id,
+        clientId: record3.id,
         ...serverId !== void 0 ? { serverId } : {},
         ...spend ? { spend } : {}
       };
@@ -7059,7 +7062,7 @@ function createLocalBrainPersistence(options) {
           createdAt: stamp,
           updatedAt: stamp
         };
-        const record2 = newLocalRecord({
+        const record3 = newLocalRecord({
           id: clientId,
           entityType: "chat",
           payload: { clientId, chat },
@@ -7067,8 +7070,8 @@ function createLocalBrainPersistence(options) {
           destination,
           occurredAt: stamp
         });
-        await tx.put(record2);
-        await journalWrite(tx, record2, "create", { key: `chat:${clientId}` });
+        await tx.put(record3);
+        await journalWrite(tx, record3, "create", { key: `chat:${clientId}` });
         return chat;
       });
     },
@@ -7194,7 +7197,7 @@ function createLocalBrainPersistence(options) {
         for (const [index, message2] of added.entries()) {
           const eventKey = keys[index];
           const clientId = newId();
-          const record2 = newLocalRecord({
+          const record3 = newLocalRecord({
             id: clientId,
             entityType: "message",
             payload: { clientId, chatId, chatClientId: chat.id, eventKey, message: message2 },
@@ -7202,8 +7205,8 @@ function createLocalBrainPersistence(options) {
             destination: chat.destination,
             occurredAt: stamp
           });
-          await tx.put(record2);
-          await journalWrite(tx, record2, "create", { key: eventKey, dependsOn: [`chat:${chat.id}`], chatClientId: chat.id });
+          await tx.put(record3);
+          await journalWrite(tx, record3, "create", { key: eventKey, dependsOn: [`chat:${chat.id}`], chatClientId: chat.id });
         }
         if (added.length > 0) {
           const nextChat = { ...chat, version: chat.version + 1, updatedAt: stamp, payload: { ...chat.payload, chat: { ...chat.payload.chat, updatedAt: stamp } } };
@@ -7236,15 +7239,15 @@ function createLocalBrainPersistence(options) {
       const url = options.createObjectURL?.(file);
       if (url) blobs.set(key, url);
       await options.store.transact(async (tx) => {
-        const record2 = newLocalRecord({
+        const record3 = newLocalRecord({
           id: key,
           entityType: "attachment-manifest",
           payload: { key, name: file.name, type: file.type, size: file.size },
           deviceId: options.deviceId,
           destination
         });
-        await tx.put(record2);
-        await journalWrite(tx, record2, "create", { key: `attachment:${key}` });
+        await tx.put(record3);
+        await journalWrite(tx, record3, "create", { key: `attachment:${key}` });
       });
       return { key, name: file.name, type: file.type };
     },
@@ -7394,7 +7397,7 @@ function createRunUsageLedger(options) {
             savedCostMc: computeCostMillicents(pricing, { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens })
           };
         }
-        const record2 = newLocalRecord({
+        const record3 = newLocalRecord({
           id,
           entityType: "usage",
           payload: value,
@@ -7402,9 +7405,9 @@ function createRunUsageLedger(options) {
           destination: chat.destination,
           occurredAt: at2
         });
-        await tx.put(record2);
+        await tx.put(record3);
         if (syncsToPlatform(value)) {
-          await journalWrite(tx, record2, "create", { key: `usage:${id}`, dependsOn: [`chat:${chat.id}`], chatClientId: chat.id });
+          await journalWrite(tx, record3, "create", { key: `usage:${id}`, dependsOn: [`chat:${chat.id}`], chatClientId: chat.id });
         }
       });
     },
@@ -7524,6 +7527,7 @@ function summarizeGateRuns(rows, accepted = /* @__PURE__ */ new Map()) {
 }
 
 // ../packages/pipeline-route/src/score.ts
+var import_stats = require("@seanhogg/builderforce-memory/stats");
 var LENGTH_FLOOR_CHARS = 80;
 var MAX_FILE_MENTIONS = 4;
 var DEFAULT_ROUTE_THRESHOLD = 0.5;
@@ -7547,7 +7551,6 @@ var ROUTE_WEIGHTS = {
     docs: -0.6
   }
 };
-var sigmoid = (z) => 1 / (1 + Math.exp(-z));
 var round2 = (n2) => Math.round(n2 * 100) / 100;
 function routeThreshold(raw) {
   return typeof raw === "number" && Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : DEFAULT_ROUTE_THRESHOLD;
@@ -7568,7 +7571,7 @@ function scorePipeline(f, opts = {}) {
   const w = opts.weights ?? ROUTE_WEIGHTS;
   const threshold = routeThreshold(opts.threshold);
   const parts = contributions(f, w);
-  const score2 = round2(sigmoid(parts.reduce((z, [, c]) => z + c, w.bias)));
+  const score2 = round2((0, import_stats.sigmoid)(parts.reduce((z, [, c]) => z + c, w.bias)));
   const strongest = parts.filter(([, c]) => c !== 0).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 3).map(([name]) => name);
   const why = strongest.length ? ` (${strongest.join(", ")})` : "";
   if (f.forceFull) return { score: score2, route: "full", reason: `the request asks for the full pipeline; score ${score2}${why}` };
@@ -7694,6 +7697,9 @@ function offeredActions(registry2, ports) {
   return registry2.filter((a) => a.surfaces.includes(ports.surface) && (!a.requires || !!ports.tools?.has(a.requires.tool)));
 }
 
+// ../packages/prefetch/src/calibrate.ts
+var import_stats2 = require("@seanhogg/builderforce-memory/stats");
+
 // ../packages/prefetch/src/lexical.ts
 var STOP = /* @__PURE__ */ new Set([
   "a",
@@ -7790,16 +7796,9 @@ function headOf(state, id) {
 function thresholdOf(state, id) {
   return state?.thresholds[id] ?? { answer: COLD_START.answer, prefetch: COLD_START.prefetch, n: 0 };
 }
-function sigmoid2(z) {
-  if (z >= 0) return 1 / (1 + Math.exp(-z));
-  const e = Math.exp(z);
-  return e / (1 + e);
-}
 function predict(head, features) {
   if (features.length !== head.weights.length) return 0;
-  let z = head.bias;
-  for (let i = 0; i < features.length; i++) z += head.weights[i] * features[i];
-  return sigmoid2(z);
+  return (0, import_stats2.logisticProbability)(head.weights, head.bias, features);
 }
 
 // ../packages/prefetch/src/deadline.ts
@@ -7925,11 +7924,11 @@ async function classify(request, registry2, ports) {
   const top = scored[0];
   let pNeedsLlm = 1 - top.p;
   const budget2 = ports.budgetMs ?? DEFAULT_GATE_BUDGET_MS;
-  const remaining = budget2 - (clock() - started);
+  const remaining2 = budget2 - (clock() - started);
   const ambiguous = !exact && top.p >= AMBIGUOUS_FLOOR && top.p < thresholdFor(top.action, ports);
-  if (ambiguous && ports.logprob?.warm() && remaining >= TIER3_MIN_MS && !ports.signal?.aborted) {
+  if (ambiguous && ports.logprob?.warm() && remaining2 >= TIER3_MIN_MS && !ports.signal?.aborted) {
     tiersRun.push(3);
-    const needs = await tier3(request, scored, ports, remaining).catch(() => void 0);
+    const needs = await tier3(request, scored, ports, remaining2).catch(() => void 0);
     if (needs !== void 0) {
       pNeedsLlm = needs;
       scored.sort(byP);
@@ -8547,14 +8546,14 @@ function fastestCandidate(candidates, latency) {
 }
 var MAX_GUARDED_PICKS = 32;
 function guardedPick(pick2, skip, input) {
-  const skipped = [...skip];
+  const skipped2 = [...skip];
   const slow = [];
   for (let i = 0; i < MAX_GUARDED_PICKS; i++) {
-    const next = pick2(skipped);
+    const next = pick2(skipped2);
     if (!next) break;
     if (withinLatencyBudget(next, input)) return next;
     slow.push(next);
-    skipped.push(next);
+    skipped2.push(next);
   }
   return fastestCandidate(slow, input.latency);
 }
@@ -9060,6 +9059,9 @@ var ACTION_TYPES = [
 ];
 var DEFAULT_ACTION_TYPE = "other";
 var ACTION_TYPE_SET = new Set(ACTION_TYPES);
+
+// ../packages/learned-routing/src/exploration.ts
+var import_stats3 = require("@seanhogg/builderforce-memory/stats");
 
 // ../packages/learned-routing/src/recencyDecay.ts
 var ROUTING_HALF_LIFE_DAYS = 30;
@@ -9901,6 +9903,7 @@ function readJsonKey(text2, key) {
 // ../packages/agent-tools/src/glob.ts
 var REGEX_SPECIALS = /* @__PURE__ */ new Set([".", "+", "^", "$", "{", "}", "(", ")", "|", "[", "]", "\\", "/"]);
 function globToRegExp(pattern) {
+  pattern = pattern.replace(/\*{3,}/g, "**").replace(/(?:\*\*\/){2,}/g, "**/");
   let re = "";
   for (let i = 0; i < pattern.length; i++) {
     const c = pattern[i];
@@ -9922,7 +9925,15 @@ function globToRegExp(pattern) {
       re += REGEX_SPECIALS.has(c) ? "\\" + c : c;
     }
   }
-  return new RegExp("^" + re + "$", "i");
+  return new RegExp("^" + collapseWildcards(re) + "$", "i");
+}
+function collapseWildcards(re) {
+  let prev;
+  do {
+    prev = re;
+    re = re.replace(/(?:\.\*|\[\^\/\]\*)(?:\.\*|\[\^\/\]\*)+/g, (run) => run.includes(".*") ? ".*" : "[^/]*");
+  } while (re !== prev);
+  return re;
 }
 function matchGlob(pathPosix, pattern) {
   const re = globToRegExp(pattern);
@@ -10329,9 +10340,9 @@ function stableStringify(value) {
     return stableStringify({ type: "Uint8Array", data: Array.from(value) });
   }
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-  const record2 = value;
-  const keys = Object.keys(record2).filter((k) => record2[k] !== void 0).sort();
-  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(record2[k])}`).join(",")}}`;
+  const record3 = value;
+  const keys = Object.keys(record3).filter((k) => record3[k] !== void 0).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(record3[k])}`).join(",")}}`;
 }
 
 // ../packages/agent-tools/src/policyGateCallKey.ts
@@ -10363,6 +10374,244 @@ function fileWindowNote(win) {
   const lastLine = win.offset + win.returnedLines - 1;
   return `Showing lines ${win.offset}\u2013${lastLine} of ${win.totalLines}. To continue, call read_file again with offset ${lastLine + 1}.`;
 }
+
+// ../packages/agent-tools/src/preSearch.ts
+var DEFAULTS = {
+  maxIdentifiers: 6,
+  definitionsPerIdentifier: 3,
+  referencesPerIdentifier: 4,
+  maxChars: 3e3
+};
+var TOKEN = /[A-Za-z_$][\w$]*/g;
+var REFERENCE_TEXT_MAX = 140;
+function looksLikeIdentifier(word) {
+  if (word.length < 3) return false;
+  if (/^_+$/.test(word)) return false;
+  if (word.includes("_") || word.includes("$")) return true;
+  if (/[a-z][A-Z]/.test(word)) return true;
+  if (/[0-9][A-Z]/.test(word) && /[a-z]/.test(word)) return true;
+  if (/^[A-Z][A-Z0-9]*\d$/.test(word)) return true;
+  return false;
+}
+function extractIdentifiers(request, max = DEFAULTS.maxIdentifiers) {
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  const add = (word) => {
+    if (!word || seen.has(word) || out.length >= max) return;
+    seen.add(word);
+    out.push(word);
+  };
+  const text2 = request ?? "";
+  for (const span of text2.matchAll(/`([^`\n]{1,120})`/g)) {
+    const words3 = span[1].match(TOKEN) ?? [];
+    const last = words3[words3.length - 1];
+    if (last && last.length >= 2) add(last);
+  }
+  for (const m of text2.matchAll(/([A-Za-z_$][\w$]*)(\s*\()?/g)) {
+    const word = m[1];
+    const after = text2.charAt((m.index ?? 0) + word.length);
+    if (after === "." && /[A-Za-z]/.test(text2.charAt((m.index ?? 0) + word.length + 1)) && !looksLikeIdentifier(word)) continue;
+    if (m[2] && word.length >= 3 && /[a-z]/.test(word)) add(word);
+    else if (looksLikeIdentifier(word)) add(word);
+  }
+  return out;
+}
+function escapeRegex(identifier) {
+  return identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function clip(s, n2) {
+  const t = s.replace(/\s+/g, " ").trim();
+  return t.length > n2 ? `${t.slice(0, n2 - 1)}\u2026` : t;
+}
+function renderPreSearchBlock(r, maxChars = DEFAULTS.maxChars) {
+  if (r.definitions.length === 0 && r.references.length === 0) return "";
+  const lines = [
+    "## Pre-search (symbol index + text search, gathered before this run with no model call)",
+    `Identifiers in the request: ${r.identifiers.map((i) => `\`${i}\``).join(", ")}`
+  ];
+  for (const id of r.identifiers) {
+    for (const d of r.definitions.filter((x) => x.identifier === id)) {
+      lines.push(`- \`${id}\` defined at ${d.path}:${d.line} (${d.kind}${d.exported ? ", exported" : ""})`);
+    }
+    for (const ref of r.references.filter((x) => x.identifier === id)) {
+      lines.push(`- \`${id}\` at ${ref.path}:${ref.line} \u2014 ${clip(ref.text, REFERENCE_TEXT_MAX)}`);
+    }
+  }
+  lines.push("Start from these locations (read_file with a line range) instead of searching for them again.");
+  let out = lines.join("\n");
+  if (out.length > maxChars) out = `${out.slice(0, maxChars).replace(/\n[^\n]*$/, "")}
+- \u2026`;
+  return out;
+}
+async function preSearch(request, ports, options = {}) {
+  const o = { ...DEFAULTS, ...options };
+  const { signal } = options;
+  const identifiers = extractIdentifiers(request, o.maxIdentifiers);
+  const empty = { identifiers, definitions: [], references: [], block: "" };
+  if (identifiers.length === 0 || signal?.aborted) return empty;
+  const perId = await Promise.all(identifiers.map(async (identifier) => {
+    const [defs, refs] = await Promise.all([
+      ports.findSymbol ? ports.findSymbol(identifier).catch(() => ({ ok: false })) : Promise.resolve({ ok: false }),
+      ports.searchText ? ports.searchText(escapeRegex(identifier), signal).catch(() => ({ ok: false })) : Promise.resolve({ ok: false })
+    ]);
+    const exact = (defs.ok ? defs.matches ?? [] : []).filter((m) => m.name === identifier && m.kind !== "heading");
+    const definitions2 = exact.slice(0, o.definitionsPerIdentifier).map((m) => ({
+      identifier,
+      path: m.path,
+      line: m.line,
+      kind: m.kind,
+      exported: m.exported
+    }));
+    const defined = new Set(definitions2.map((d) => `${d.path}:${d.line}`));
+    const references2 = [];
+    for (const m of refs.ok ? refs.matches ?? [] : []) {
+      if (references2.length >= o.referencesPerIdentifier) break;
+      const line = typeof m.line === "number" ? m.line : Number(m.line);
+      if (!Number.isFinite(line) || defined.has(`${m.path}:${line}`)) continue;
+      references2.push({ identifier, path: m.path, line, text: typeof m.text === "string" ? m.text : "" });
+    }
+    return { definitions: definitions2, references: references2 };
+  }));
+  const definitions = perId.flatMap((p) => p.definitions);
+  const references = perId.flatMap((p) => p.references);
+  const result = { identifiers, definitions, references };
+  return { ...result, block: renderPreSearchBlock(result, o.maxChars) };
+}
+function preSearchFiles(r, max = 6) {
+  const out = [];
+  for (const p of [...r.definitions.map((d) => d.path), ...r.references.map((x) => x.path)]) {
+    if (!out.includes(p)) out.push(p);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+// ../packages/agent-tools/src/knowledge/codeMask.ts
+var SPACES = " ".repeat(256);
+
+// ../packages/agent-tools/src/callScan.ts
+var ID = "[A-Za-z_$][\\w$]*";
+var MAX_SCANNED_LINE = 2048;
+var JSX_TAG = new RegExp(`<(\\/?)([A-Z][\\w$]*(?:\\.${ID})*)(?=[\\s/>]|$)`, "g");
+
+// ../packages/agent-tools/src/testPaths.ts
+var TEST_SOURCE_PATH = /(?:^|\/)(?:__tests__|tests?|spec|e2e)\/|(?:^|\/)(?:test|spec)\.[^/]+$|\.(?:test|spec|e2e|e2e-spec)\.[^/]+$/i;
+function isTestSourcePath(path) {
+  return TEST_SOURCE_PATH.test(path.replace(/\\/g, "/"));
+}
+
+// ../packages/agent-tools/src/callbackOwners.ts
+var MAX_OWNER_LITERAL = 80;
+var STATEMENT = new RegExp(`^([ \\t]*)(${ID}(?:\\??\\.${ID})*)\\s*\\(`);
+var CALLBACK_AT_END = new RegExp(`(?:\\([^()]*\\)(?:\\s*:\\s*[^=()]+)?\\s*=>|\\b${ID}\\s*=>|\\bfunction\\b[^(]*\\([^()]*\\))\\s*\\{\\s*$`);
+var TOP_BLOCK = /^(?:if\s*\(.*\)|\}?\s*else(?:\s+if\s*\(.*\))?|try|\}?\s*finally|\{)\s*\{\s*$/;
+var NOT_OWNERS = /* @__PURE__ */ new Set([
+  "describe",
+  "it",
+  "test",
+  "suite",
+  "bench",
+  "beforeEach",
+  "afterEach",
+  "beforeAll",
+  "afterAll",
+  "setTimeout",
+  "setInterval",
+  "setImmediate",
+  "queueMicrotask",
+  "requestAnimationFrame",
+  "void",
+  "await",
+  "return",
+  "new",
+  "if",
+  "for",
+  "while",
+  "switch",
+  "catch",
+  "function",
+  "with",
+  "do",
+  "else",
+  "try",
+  "typeof",
+  "yield"
+]);
+function owningOpen(line, at2) {
+  const open2 = [];
+  for (let i = 0; i < at2; i += 1) {
+    const c = line[i];
+    if (c === '"' || c === "'" || c === "`") {
+      for (i += 1; i < at2 && line[i] !== c; i += 1) if (line[i] === "\\") i += 1;
+    } else if (c === "(") open2.push(i);
+    else if (c === ")") open2.pop();
+  }
+  return open2.length ? open2[open2.length - 1] : -1;
+}
+function callbackOwnerName(line) {
+  if (line.length > MAX_SCANNED_LINE) return void 0;
+  const st = STATEMENT.exec(line);
+  const cb = st ? CALLBACK_AT_END.exec(line) : null;
+  if (!st || !cb) return void 0;
+  const lead = st[2].replace(/\?/g, "");
+  const root = lead.split(".")[0];
+  if (NOT_OWNERS.has(root)) return void 0;
+  let open2 = owningOpen(line, cb.index);
+  if (open2 < 0) return void 0;
+  const before = line.slice(0, open2).trimEnd();
+  const member = /(?:^|[^\w$])([A-Za-z_$][\w$]*)$/.exec(before)?.[1];
+  let callee;
+  if (open2 === st[0].length - 1) callee = lead;
+  else if (member && /\)\s*\.\s*$/.test(before.slice(0, before.length - member.length))) callee = `${root}.${member}`;
+  else {
+    callee = lead;
+    open2 = st[0].length - 1;
+  }
+  if (member && NOT_OWNERS.has(member) && callee !== lead) return void 0;
+  const first = /^\s*(["'`])((?:\\.|(?!\1)[^\\])*)\1/.exec(line.slice(open2 + 1));
+  const literal = first && !first[2].includes("${") ? first[2].slice(0, MAX_OWNER_LITERAL) : void 0;
+  return literal !== void 0 ? `${callee} "${literal}"` : callee;
+}
+var CallbackOwnerScan = class {
+  enabled;
+  /** The indent of the first-level statements of a column-0 non-declaration block ("" before its first one is seen). */
+  topBlock;
+  /** The indent of the owner whose body we are in, until a line at that indent closes it. */
+  inside;
+  named = /* @__PURE__ */ new Map();
+  constructor(path) {
+    this.enabled = !isTestSourcePath(path);
+  }
+  /** True while the line is inside an owner's body (no definition is read there). Call for EVERY line, in order. */
+  inBody(line) {
+    if (this.inside === void 0) return false;
+    const rest = line.startsWith(this.inside) ? line.slice(this.inside.length) : void 0;
+    if (rest !== void 0 && /^[})]/.test(rest)) {
+      this.inside = void 0;
+      return true;
+    }
+    if (!/^\S/.test(line) || /^[})\]`]/.test(line)) return true;
+    this.inside = void 0;
+    return false;
+  }
+  /** Tracks the column-0 blocks; call for every line outside an owner's body, before the definitions are read. */
+  track(line) {
+    if (/^\S/.test(line)) this.topBlock = TOP_BLOCK.test(line) ? "" : void 0;
+    else if (this.topBlock === "" && line.trim()) this.topBlock = /^[ \t]*/.exec(line)[0];
+  }
+  /** The owner a line outside any class declares, if any. */
+  ownerAt(line, lineNo) {
+    if (!this.enabled) return void 0;
+    const indent = /^[ \t]*/.exec(line)[0];
+    if (indent !== "" && indent !== this.topBlock) return void 0;
+    const base = callbackOwnerName(line);
+    if (!base) return void 0;
+    const n2 = (this.named.get(base) ?? 0) + 1;
+    this.named.set(base, n2);
+    this.inside = indent;
+    return { name: n2 === 1 ? base : `${base} #${n2}`, kind: "function", line: lineNo, exported: false, callback: true };
+  }
+};
 
 // ../packages/agent-tools/src/symbols.ts
 var SYMBOL_KINDS = [
@@ -10421,25 +10670,25 @@ function eachLine(lines, out, visit) {
     visit(lines[i] ?? "", i + 1);
   }
 }
-var ID = "[A-Za-z_$][\\w$]*";
+var ID2 = "[A-Za-z_$][\\w$]*";
 var JS_RULES = [
-  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:default\\s+)?(?:async\\s+)?function\\s*\\*?\\s*(${ID})`), kind: "function" },
-  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:default\\s+)?(?:abstract\\s+)?class\\s+(${ID})`), kind: "class" },
-  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?interface\\s+(${ID})`), kind: "interface" },
-  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?type\\s+(${ID})\\s*[<=]`), kind: "type" },
-  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:const\\s+)?enum\\s+(${ID})`), kind: "enum" },
-  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:const|let|var)\\s+(${ID})`), kind: "const" },
+  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:default\\s+)?(?:async\\s+)?function\\s*\\*?\\s*(${ID2})`), kind: "function" },
+  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:default\\s+)?(?:abstract\\s+)?class\\s+(${ID2})`), kind: "class" },
+  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?interface\\s+(${ID2})`), kind: "interface" },
+  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?type\\s+(${ID2})\\s*[<=]`), kind: "type" },
+  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:const\\s+)?enum\\s+(${ID2})`), kind: "enum" },
+  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:const|let|var)\\s+(${ID2})`), kind: "const" },
   // `namespace A.B {`, `declare module "x" {` — the module's name, its quotes dropped.
-  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:namespace|module)\\s+(${ID}(?:\\.${ID})*|"[^"]+"|'[^']+')\\s*\\{`), kind: "module" }
+  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:namespace|module)\\s+(${ID2}(?:\\.${ID2})*|"[^"]+"|'[^']+')\\s*\\{`), kind: "module" }
 ];
 var JS_METHOD = new RegExp(
-  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|abstract|async|get|set)\\s+)*\\*?\\s*(${ID})\\s*(?:<[^>]*>)?\\s*\\(.*\\)?[^;]*\\{\\s*$`
+  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|abstract|async|get|set)\\s+)*\\*?\\s*(${ID2})\\s*(?:<[^>]*>)?\\s*\\(.*\\)?[^;]*\\{\\s*$`
 );
 var JS_ABSTRACT_METHOD = new RegExp(
-  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override)\\s+)*abstract\\s+(?:(?:public|private|protected|static|readonly|override|async)\\s+)*(${ID})\\s*\\??\\s*(?:<[^>]*>)?\\s*\\(`
+  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override)\\s+)*abstract\\s+(?:(?:public|private|protected|static|readonly|override|async)\\s+)*(${ID2})\\s*\\??\\s*(?:<[^>]*>)?\\s*\\(`
 );
 var JS_METHOD_OPEN = new RegExp(
-  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|async|get|set)\\s+)*\\*?\\s*(${ID})\\s*(?:<[^>]*>)?\\s*\\(\\s*$`
+  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|async|get|set)\\s+)*\\*?\\s*(${ID2})\\s*(?:<[^>]*>)?\\s*\\(\\s*$`
 );
 var JS_SIGNATURE_CLOSE = /^\s*\)\s*(?::[^;=]*)?\{\s*$/;
 var MAX_SIGNATURE_LINES = 40;
@@ -10451,44 +10700,13 @@ function closesWithBody(lines, at2) {
   }
   return false;
 }
-var TEST_SOURCE_PATH = /(?:\.|\/)(?:test|spec)\.[a-z]+$|(?:^|\/)__tests__\//;
-function isTestSourcePath(path) {
-  return TEST_SOURCE_PATH.test(path.replace(/\\/g, "/"));
-}
-var JS_CALLBACK_STATEMENT = new RegExp(`^([ \\t]*)(${ID}(?:\\??\\.${ID})*)\\s*\\((.*)(?:=>|\\bfunction\\b[^{]*\\))\\s*\\{\\s*$`);
-var JS_TOP_BLOCK = /^(?:if\s*\(.*\)|\}?\s*else(?:\s+if\s*\(.*\))?|try|\}?\s*finally|\{)\s*\{\s*$/;
-var NOT_CALLBACK_OWNERS = /* @__PURE__ */ new Set([
-  "describe",
-  "it",
-  "test",
-  "suite",
-  "bench",
-  "beforeEach",
-  "afterEach",
-  "beforeAll",
-  "afterAll",
-  ...JS_KEYWORDS
-]);
-var FIRST_STRING = /(["'`])((?:\\.|(?!\1)[^\\])*)\1/;
 function extractJs(lines, out, path = "") {
   let cls;
-  let topBlock;
-  let inCallback;
-  const callbacks = !isTestSourcePath(path);
-  const named = /* @__PURE__ */ new Map();
+  const owners = new CallbackOwnerScan(path);
   eachLine(lines, out, (line, lineNo) => {
     if (/^\}/.test(line)) cls = void 0;
-    if (inCallback !== void 0) {
-      const rest = line.startsWith(inCallback) ? line.slice(inCallback.length) : void 0;
-      if (rest !== void 0 && /^[})]/.test(rest)) {
-        inCallback = void 0;
-        return;
-      }
-      if (!/^\S/.test(line) || /^[})\]`]/.test(line)) return;
-      inCallback = void 0;
-    }
-    if (/^\S/.test(line)) topBlock = JS_TOP_BLOCK.test(line) ? "" : void 0;
-    else if (topBlock === "" && line.trim()) topBlock = /^[ \t]*/.exec(line)[0];
+    if (owners.inBody(line)) return;
+    owners.track(line);
     for (const rule of JS_RULES) {
       const m = rule.re.exec(line);
       if (!m) continue;
@@ -10500,17 +10718,8 @@ function extractJs(lines, out, path = "") {
       return;
     }
     if (cls === void 0) {
-      const cb = callbacks ? JS_CALLBACK_STATEMENT.exec(line) : null;
-      const indent = cb ? group(cb, 1) : "";
-      const callee = cb ? group(cb, 2) : "";
-      if (cb && (indent === "" || indent === topBlock) && !NOT_CALLBACK_OWNERS.has(callee.split(".")[0])) {
-        const literal = FIRST_STRING.exec(group(cb, 3));
-        const base = literal && !literal[2].includes("${") ? `${callee} "${literal[2]}"` : callee;
-        const n2 = (named.get(base) ?? 0) + 1;
-        named.set(base, n2);
-        out.push({ name: n2 === 1 ? base : `${base} #${n2}`, kind: "function", line: lineNo, exported: false });
-        inCallback = indent;
-      }
+      const owner2 = owners.ownerAt(line, lineNo);
+      if (owner2) out.push(owner2);
       return;
     }
     const open2 = JS_METHOD_OPEN.exec(line);
@@ -10636,13 +10845,13 @@ function extractSql(lines, out) {
   });
 }
 function extractMarkdown(lines, out) {
-  let fenced = false;
+  let fenced2 = false;
   eachLine(lines, out, (line, lineNo) => {
     if (/^\s*(```|~~~)/.test(line)) {
-      fenced = !fenced;
+      fenced2 = !fenced2;
       return;
     }
-    if (fenced) return;
+    if (fenced2) return;
     const m = /^(#{1,4})\s+(.+?)\s*#*\s*$/.exec(line);
     if (m) out.push({ name: `${group(m, 1)} ${group(m, 2).slice(0, 120)}`, kind: "heading", line: lineNo, exported: true });
   });
@@ -12032,117 +12241,6 @@ var repoMapTool = defineTool({
 });
 var SEMANTIC_TOOLS = [semanticSearchTool, repoMapTool, readCompressedTool];
 
-// ../packages/agent-tools/src/preSearch.ts
-var DEFAULTS = {
-  maxIdentifiers: 6,
-  definitionsPerIdentifier: 3,
-  referencesPerIdentifier: 4,
-  maxChars: 3e3
-};
-var TOKEN = /[A-Za-z_$][\w$]*/g;
-var REFERENCE_TEXT_MAX = 140;
-function looksLikeIdentifier(word) {
-  if (word.length < 3) return false;
-  if (/^_+$/.test(word)) return false;
-  if (word.includes("_") || word.includes("$")) return true;
-  if (/[a-z][A-Z]/.test(word)) return true;
-  if (/[0-9][A-Z]/.test(word) && /[a-z]/.test(word)) return true;
-  if (/^[A-Z][A-Z0-9]*\d$/.test(word)) return true;
-  return false;
-}
-function extractIdentifiers(request, max = DEFAULTS.maxIdentifiers) {
-  const out = [];
-  const seen = /* @__PURE__ */ new Set();
-  const add = (word) => {
-    if (!word || seen.has(word) || out.length >= max) return;
-    seen.add(word);
-    out.push(word);
-  };
-  const text2 = request ?? "";
-  for (const span of text2.matchAll(/`([^`\n]{1,120})`/g)) {
-    const words3 = span[1].match(TOKEN) ?? [];
-    const last = words3[words3.length - 1];
-    if (last && last.length >= 2) add(last);
-  }
-  for (const m of text2.matchAll(/([A-Za-z_$][\w$]*)(\s*\()?/g)) {
-    const word = m[1];
-    const after = text2.charAt((m.index ?? 0) + word.length);
-    if (after === "." && /[A-Za-z]/.test(text2.charAt((m.index ?? 0) + word.length + 1)) && !looksLikeIdentifier(word)) continue;
-    if (m[2] && word.length >= 3 && /[a-z]/.test(word)) add(word);
-    else if (looksLikeIdentifier(word)) add(word);
-  }
-  return out;
-}
-function escapeRegex(identifier) {
-  return identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-function clip(s, n2) {
-  const t = s.replace(/\s+/g, " ").trim();
-  return t.length > n2 ? `${t.slice(0, n2 - 1)}\u2026` : t;
-}
-function renderPreSearchBlock(r, maxChars = DEFAULTS.maxChars) {
-  if (r.definitions.length === 0 && r.references.length === 0) return "";
-  const lines = [
-    "## Pre-search (symbol index + text search, gathered before this run with no model call)",
-    `Identifiers in the request: ${r.identifiers.map((i) => `\`${i}\``).join(", ")}`
-  ];
-  for (const id of r.identifiers) {
-    for (const d of r.definitions.filter((x) => x.identifier === id)) {
-      lines.push(`- \`${id}\` defined at ${d.path}:${d.line} (${d.kind}${d.exported ? ", exported" : ""})`);
-    }
-    for (const ref of r.references.filter((x) => x.identifier === id)) {
-      lines.push(`- \`${id}\` at ${ref.path}:${ref.line} \u2014 ${clip(ref.text, REFERENCE_TEXT_MAX)}`);
-    }
-  }
-  lines.push("Start from these locations (read_file with a line range) instead of searching for them again.");
-  let out = lines.join("\n");
-  if (out.length > maxChars) out = `${out.slice(0, maxChars).replace(/\n[^\n]*$/, "")}
-- \u2026`;
-  return out;
-}
-async function preSearch(request, ports, options = {}) {
-  const o = { ...DEFAULTS, ...options };
-  const { signal } = options;
-  const identifiers = extractIdentifiers(request, o.maxIdentifiers);
-  const empty = { identifiers, definitions: [], references: [], block: "" };
-  if (identifiers.length === 0 || signal?.aborted) return empty;
-  const perId = await Promise.all(identifiers.map(async (identifier) => {
-    const [defs, refs] = await Promise.all([
-      ports.findSymbol ? ports.findSymbol(identifier).catch(() => ({ ok: false })) : Promise.resolve({ ok: false }),
-      ports.searchText ? ports.searchText(escapeRegex(identifier), signal).catch(() => ({ ok: false })) : Promise.resolve({ ok: false })
-    ]);
-    const exact = (defs.ok ? defs.matches ?? [] : []).filter((m) => m.name === identifier && m.kind !== "heading");
-    const definitions2 = exact.slice(0, o.definitionsPerIdentifier).map((m) => ({
-      identifier,
-      path: m.path,
-      line: m.line,
-      kind: m.kind,
-      exported: m.exported
-    }));
-    const defined = new Set(definitions2.map((d) => `${d.path}:${d.line}`));
-    const references2 = [];
-    for (const m of refs.ok ? refs.matches ?? [] : []) {
-      if (references2.length >= o.referencesPerIdentifier) break;
-      const line = typeof m.line === "number" ? m.line : Number(m.line);
-      if (!Number.isFinite(line) || defined.has(`${m.path}:${line}`)) continue;
-      references2.push({ identifier, path: m.path, line, text: typeof m.text === "string" ? m.text : "" });
-    }
-    return { definitions: definitions2, references: references2 };
-  }));
-  const definitions = perId.flatMap((p) => p.definitions);
-  const references = perId.flatMap((p) => p.references);
-  const result = { identifiers, definitions, references };
-  return { ...result, block: renderPreSearchBlock(result, o.maxChars) };
-}
-function preSearchFiles(r, max = 6) {
-  const out = [];
-  for (const p of [...r.definitions.map((d) => d.path), ...r.references.map((x) => x.path)]) {
-    if (!out.includes(p)) out.push(p);
-    if (out.length >= max) break;
-  }
-  return out;
-}
-
 // ../packages/agent-tools/src/researchCache.ts
 function researchCacheKey(question, files) {
   const q = question.replace(/\s+/g, " ").trim();
@@ -12478,6 +12576,14 @@ async function workspaceFingerprint(ctx) {
   return memo.getOrRun("fingerprint", (shared) => readFingerprint({ caps: ctx.caps, ...shared ? { signal: shared } : {} }), ctx.signal);
 }
 
+// ../packages/agent-tools/src/delta/adapters/analyzer.ts
+var ANALYZER_TIMEOUT_MS = 5 * 6e4;
+var ignoredGlobs = (ignored) => (ignored ?? []).map((d) => `${d.replace(/\/+$/, "")}/**`);
+function ignoredRegex(ignored) {
+  const dirs = (ignored ?? []).map((d) => d.replace(/\/+$/, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  return dirs.length > 0 ? `^(?:${dirs.join("|")})(?:/|$)` : void 0;
+}
+
 // ../packages/agent-tools/src/codeAnalysisTool.ts
 function spec(name, version2, extraPackages, bin, args) {
   const packages = [`${name}@${version2}`, ...extraPackages];
@@ -12524,8 +12630,21 @@ function base64Utf8(text2) {
   for (const byte of new TextEncoder().encode(text2)) binary += String.fromCharCode(byte);
   return btoa(binary);
 }
+function dependencyCruiserConfigWith(partitions, ignored) {
+  const config = dependencyCruiserConfig(partitions);
+  const extra = ignoredRegex(ignored);
+  if (!extra) return config;
+  const options = config.options ?? {};
+  const base = options.exclude?.path;
+  return { ...config, options: { ...options, exclude: { ...options.exclude ?? {}, path: base ? `${base}|${extra}` : extra } } };
+}
+var jscpdArgsWith = (args, ignored) => {
+  const extra = ignoredGlobs(ignored);
+  return extra.length > 0 ? args.replace(/--ignore=(\S+)/, (_m, list2) => `--ignore=${list2},${extra.join(",")}`) : args;
+};
 function createAnalyzeCodebaseTool(options = {}) {
-  const configBase64 = base64Utf8(JSON.stringify(dependencyCruiserConfig(options.partitions)));
+  const l3 = options.l3;
+  const configOf = (ignored) => base64Utf8(JSON.stringify(dependencyCruiserConfigWith(options.partitions, ignored)));
   return defineTool({
     name: "analyze_codebase",
     description: "Measure JS/TS dependency edges and cycles with dependency-cruiser, duplicate code with jscpd, and unused-file/export/dependency candidates with Knip. Runs the analyzers bundled with the host when it ships them, else downloads the pinned packages through npm cache on first use; an analyzer that cannot start is reported not_measured, never as zero findings. Writes per-scan artifacts under .builderforce/code-analysis. The audit host saves the full snapshot for the visualizer; cloud images return a bounded summary after upload. Report findings normally after this tool. Preserve failed-tool coverage; do not claim missing results are clean.",
@@ -12538,6 +12657,7 @@ function createAnalyzeCodebaseTool(options = {}) {
       const id = crypto.randomUUID();
       const outputDir = `.builderforce/code-analysis/${id}`;
       const outputs = [];
+      const ignored = l3 ? await l3.ignored().catch(() => []) : void 0;
       const entries = bundledAnalyzers();
       let settledTold = 0;
       const tellSettled = () => {
@@ -12548,6 +12668,13 @@ function createAnalyzeCodebaseTool(options = {}) {
       };
       for (const analyzer of ANALYZERS) {
         tellSettled();
+        const l3Key = l3 ? await l3.keyOf(analyzer.name).catch(() => void 0) : void 0;
+        const l3Hit = l3 && l3Key ? await l3.cache.get(l3Key, analyzer.name).catch(() => void 0) : void 0;
+        if (l3Hit?.raw !== void 0) {
+          outputs.push(l3Hit.raw);
+          tools.push({ name: analyzer.name, version: analyzer.version, status: "complete" });
+          continue;
+        }
         const entry = entries?.[analyzer.name];
         if (entries && !entry) {
           outputs.push(null);
@@ -12562,7 +12689,7 @@ function createAnalyzeCodebaseTool(options = {}) {
           };
           let unavailable2;
           if (analyzer.name === "dependency-cruiser") {
-            const config = await shellRunWithStop(ctx, `node -e "const f=require('fs');f.mkdirSync('${outputDir}',{recursive:true});f.writeFileSync('${outputDir}/dependencies.json',Buffer.from('${configBase64}','base64'))"`);
+            const config = await shellRunWithStop(ctx, `node -e "const f=require('fs');f.mkdirSync('${outputDir}',{recursive:true});f.writeFileSync('${outputDir}/dependencies.json',Buffer.from('${configOf(ignored)}','base64'))"`);
             if (!config.ok) unavailable2 = setupFailed("Could not create dependency analysis configuration");
           }
           if (analyzer.name === "jscpd") {
@@ -12574,7 +12701,8 @@ function createAnalyzeCodebaseTool(options = {}) {
             tools.push({ name: analyzer.name, version: analyzer.version, status: "not_measured", reason: "analyzer-unavailable" });
             continue;
           }
-          const command = analyzerCommand(analyzer, scope, entry);
+          const pinned = analyzerCommand(analyzer, scope, entry);
+          const command = analyzer.name === "jscpd" ? jscpdArgsWith(pinned, ignored) : pinned;
           const result = await shellRunWithStop(ctx, command.replaceAll(".builderforce/code-analysis", outputDir), analyzer.name === "knip" && scope !== "." ? scope : void 0);
           launched = true;
           const artifact = analyzer.name === "jscpd" ? await ctx.caps.repoRead.readFile(`${outputDir}/jscpd-report.json`) : void 0;
@@ -12592,6 +12720,7 @@ function createAnalyzeCodebaseTool(options = {}) {
           const unresolved = analyzer.name === "dependency-cruiser" ? value.modules.flatMap((m) => m.dependencies ?? []).filter((d) => d.couldNotResolve).length : 0;
           outputs.push(value);
           tools.push({ name: analyzer.name, version: analyzer.version, status: unresolved ? "failed" : "complete", ...unresolved ? { error: `${unresolved} imports could not be resolved; graph coverage is incomplete.` } : {} });
+          if (l3 && l3Key && !unresolved) await l3.cache.put(l3Key, { result: l3.toResult(analyzer.name, analyzer.version, value), raw: value }).catch(() => void 0);
         } catch (error) {
           if (entry && !launched) {
             outputs.push(null);
@@ -12856,8 +12985,8 @@ var editFileTool = defineTool({
         }
       });
       if (!batch.ok) {
-        const failed4 = batch.files[batch.files.length - 1];
-        return { data: { ok: false, error: failed4.error ?? "batch failed", files: batch.files.map(({ content: _c, ...rest }) => rest) } };
+        const failed5 = batch.files[batch.files.length - 1];
+        return { data: { ok: false, error: failed5.error ?? "batch failed", files: batch.files.map(({ content: _c, ...rest }) => rest) } };
       }
       return {
         data: {
@@ -13444,15 +13573,15 @@ var skillProposeTool = defineTool({
   },
   requires: ["skill.author"],
   async execute(args, ctx) {
-    const str4 = (v) => typeof v === "string" ? v.trim() : "";
-    const slug = str4(args.slug);
-    const name = str4(args.name);
-    const description = str4(args.description);
-    const body = str4(args.body);
+    const str6 = (v) => typeof v === "string" ? v.trim() : "";
+    const slug = str6(args.slug);
+    const name = str6(args.name);
+    const description = str6(args.description);
+    const body = str6(args.body);
     if (!slug || !name || !description || !body) {
       return { data: { ok: false, error: "slug, name, description and body are all required" } };
     }
-    const evidence = str4(args.evidence);
+    const evidence = str6(args.evidence);
     const r = await ctx.caps.skillAuthor.propose({
       slug,
       name,
@@ -13600,12 +13729,12 @@ var spawnAgentTool = withDelegationNote(defineTool({
   },
   requires: ["orchestrate"],
   async execute(args, ctx) {
-    const str4 = (v) => typeof v === "string" ? v.trim() : "";
-    const label = str4(args.label);
-    const task = str4(args.task);
+    const str6 = (v) => typeof v === "string" ? v.trim() : "";
+    const label = str6(args.label);
+    const task = str6(args.task);
     if (!task) return { data: { ok: false, error: "task is required \u2014 the child sees none of your conversation" } };
     const role = delegationRole(args.role);
-    const asAgent = str4(args.as_agent);
+    const asAgent = str6(args.as_agent);
     const r = await ctx.caps.orchestration.spawn({
       label: label || task.slice(0, 60),
       task,
@@ -13623,20 +13752,20 @@ function parseWorkstreams(raw) {
   if (raw.length > MAX_WORKSTREAMS) {
     return `at most ${MAX_WORKSTREAMS} workstreams per call \u2014 run the rest in a second call once these are back`;
   }
-  const str4 = (v) => typeof v === "string" ? v.trim() : "";
+  const str6 = (v) => typeof v === "string" ? v.trim() : "";
   const out = [];
   for (const [i, item] of raw.entries()) {
     const w = item ?? {};
-    const task = str4(w.task);
+    const task = str6(w.task);
     if (!task) return `workstream ${i + 1} has no task \u2014 each child sees none of your conversation`;
-    const ticket = str4(w.ticket);
-    const role = str4(w.role);
+    const ticket = str6(w.ticket);
+    const role = str6(w.role);
     out.push({
-      label: str4(w.label) || task.slice(0, 60),
+      label: str6(w.label) || task.slice(0, 60),
       task,
       ...ticket ? { ticket } : {},
       ...role ? { role } : {},
-      asAgent: str4(w.as_agent)
+      asAgent: str6(w.as_agent)
     });
   }
   return out;
@@ -13696,36 +13825,41 @@ var SUBAGENT_TOOLS = [spawnAgentTool, spawnAgentsTool, ...SUBAGENT_CONTROL_TOOLS
 
 // ../packages/agent-tools/src/symbolRelations.ts
 var import_knowledge6 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/symbolImports.ts
+var IMPORT_NAMED = new RegExp(`^\\s*(?:type\\s+)?(${ID})(?:\\s+as\\s+(${ID}))?\\s*$`);
+var IMPORT_NAMESPACE = new RegExp(`\\*\\s*as\\s+(${ID})`);
+var IMPORT_DEFAULT = new RegExp(`^\\s*(${ID})\\s*(?:,|$)`);
+
+// ../packages/agent-tools/src/symbolRelations.ts
 var import_knowledge7 = require("@seanhogg/builderforce-memory/knowledge");
-var ID2 = "[A-Za-z_$][\\w$]*";
-var IMPORT_NAMED = new RegExp(`^\\s*(?:type\\s+)?(${ID2})(?:\\s+as\\s+(${ID2}))?\\s*$`);
-var IMPORT_NAMESPACE = new RegExp(`\\*\\s*as\\s+(${ID2})`);
-var IMPORT_DEFAULT = new RegExp(`^\\s*(${ID2})\\s*(?:,|$)`);
-var LEADING_TYPE = new RegExp(`^\\s*(${ID2}(?:\\s*\\.\\s*${ID2})?)`);
-var FIELD = new RegExp(`^\\s*(?:(?:public|private|protected|readonly|static|declare|override|abstract|accessor)\\s+)*#?(${ID2})\\s*[?!]?\\s*:\\s*([^=;]+)`);
-var FIELD_INIT = new RegExp(`^\\s*(?:(?:public|private|protected|readonly|static|override)\\s+)*#?(${ID2})\\s*=`);
-var NEW = new RegExp(`(?:^|[^\\w$])new\\s+(${ID2}(?:\\.${ID2})?)`);
-var PARAM_PROP = new RegExp(`\\b(?:public|private|protected|readonly)\\s+(?:readonly\\s+)?(${ID2})\\s*\\??\\s*:\\s*(${ID2}(?:\\.${ID2})?)`, "g");
-var LOCAL_DECL = new RegExp(`\\b(?:const|let|var|function\\s*\\*?|class|catch\\s*\\()\\s*(${ID2})`, "g");
-var LAST_ID = new RegExp(`(${ID2})\\s*(?:=[^,]*)?\\s*$`);
-var CALLBACK_PARAMS = new RegExp(`(?:\\(([^()]*)\\)(?:\\s*:\\s*[^=()]+)?\\s*=>|(${ID2})\\s*=>|\\bfunction\\b[^(]*\\(([^()]*)\\))\\s*\\{\\s*$`);
-var PARAM_NAME = new RegExp(`^\\s*(?:\\.\\.\\.)?(?:(?:public|private|protected|readonly)\\s+)*(${ID2})`);
-var NEW_BEFORE = new RegExp(`\\bnew\\s+(${ID2}(?:\\.${ID2})?)\\s*(?:<[^<>()]*>)?\\s*$`);
-var JSX_TAG = new RegExp(`<(\\/?)([A-Z][\\w$]*(?:\\.${ID2})*)(?=[\\s/>]|$)`, "g");
+var LEADING_TYPE = new RegExp(`^\\s*(${ID}(?:\\s*\\.\\s*${ID})?)`);
+var FIELD = new RegExp(`^\\s*(?:(?:public|private|protected|readonly|static|declare|override|abstract|accessor)\\s+)*#?(${ID})\\s*[?!]?\\s*:\\s*([^=;]+)`);
+var FIELD_INIT = new RegExp(`^\\s*(?:(?:public|private|protected|readonly|static|override)\\s+)*#?(${ID})\\s*=`);
+var NEW = new RegExp(`(?:^|[^\\w$])new\\s+(${ID}(?:\\.${ID})?)`);
+var PARAM_PROP = new RegExp(`\\b(?:public|private|protected|readonly)\\s+(?:readonly\\s+)?(${ID})\\s*\\??\\s*:\\s*(${ID}(?:\\.${ID})?)`, "g");
+var LOCAL_DECL = new RegExp(`\\b(?:const|let|var|function\\s*\\*?|class|catch\\s*\\()\\s*(${ID})`, "g");
+var LAST_ID = new RegExp(`(${ID})\\s*(?:=[^,]*)?\\s*$`);
+var CALLBACK_PARAMS = new RegExp(`(?:\\(([^()]*)\\)(?:\\s*:\\s*[^=()]+)?\\s*=>|(${ID})\\s*=>|\\bfunction\\b[^(]*\\(([^()]*)\\))\\s*\\{\\s*$`);
+var PARAM_NAME = new RegExp(`^\\s*(?:\\.\\.\\.)?(?:(?:public|private|protected|readonly)\\s+)*(${ID})`);
 
 // ../packages/agent-tools/src/knowledge/codePack.ts
-var import_knowledge15 = require("@seanhogg/builderforce-memory/knowledge");
-var import_ingest3 = require("@seanhogg/builderforce-memory/ingest");
+var import_knowledge22 = require("@seanhogg/builderforce-memory/knowledge");
+var import_ingest4 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/codeComplexity.ts
 var TERNARY = String.raw`\?(?![.:,)=]|\(\s*\)\s*:)`;
 var JS_DECISIONS = new RegExp(String.raw`\b(?:if|for|while|case|catch)\b|&&|\|\||\?\?|${TERNARY}`, "g");
 var OO_DECISIONS = new RegExp(String.raw`\b(?:if|for|foreach|while|case|catch)\b|&&|\|\||\?\?|${TERNARY}`, "g");
 
-// ../packages/agent-tools/src/knowledge/codeNodes.ts
+// ../packages/agent-tools/src/knowledge/codeConcurrency.ts
 var import_knowledge8 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/codeNodes.ts
+var import_knowledge9 = require("@seanhogg/builderforce-memory/knowledge");
 var import_working5 = require("@seanhogg/builderforce-memory/working");
 var import_ingest2 = require("@seanhogg/builderforce-memory/ingest");
+var CODE_PACK_ID = "code";
 var CODE_BADGES = {
   /** The symbol extractor's language family (`js`, `python`, …). */
   language: "language",
@@ -13753,6 +13887,8 @@ var CODE_BADGES = {
   coverage: "coverage",
   /** Commits touching the file in the last 90 days, from the host's `HistoryPort` (deterministic). */
   churn: "churn",
+  /** The file's co-change partners over the last year of history (memory's `encodeCoChange`, PRD 38 P4); absent with none. */
+  coChange: import_knowledge9.COCHANGE_BADGE,
   /** First CODEOWNERS owner of the file (deterministic). */
   owner: "owner",
   /** Comma-separated design-pattern ids (heuristic). */
@@ -13764,11 +13900,13 @@ var CODE_BADGES = {
   /** `1` on a package entry point a manifest names (`main` / `bin` / `exports`): layer resolution reads it, never the filesystem. */
   entry: "entry",
   /** Comma-joined ids of the known external services the file imports (`postgres,llm`), from `externalServices.ts` (deterministic). */
-  externals: "externals"
+  externals: "externals",
+  /** Comma-joined concurrency the file starts (`durable-object:ChatRoom,poller`), from `codeConcurrency.ts` (deterministic). */
+  concurrency: "concurrency"
 };
 
 // ../packages/agent-tools/src/knowledge/codePatterns.ts
-var import_knowledge9 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge10 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/codeRoutes.ts
 var METHODS = "get|post|put|patch|delete|options|head|all";
@@ -13780,23 +13918,117 @@ var NEXT_WITH_PATH = new RegExp(String.raw`\s*\.\s*(${METHODS})\s*\(\s*(['"` + "
 var NEXT_ANY = new RegExp(String.raw`\s*\.\s*(${METHODS})\s*\(`, "y");
 
 // ../packages/agent-tools/src/knowledge/codeFindings.ts
-var import_knowledge10 = require("@seanhogg/builderforce-memory/knowledge");
-var UNUSED_ITEMS = [
-  { kind: "unused-export", names: CODE_BADGES.unusedExportNames, count: CODE_BADGES.unusedExports, anchorKind: "symbol" },
-  { kind: "unused-dependency", names: CODE_BADGES.unusedDependencyNames, count: CODE_BADGES.unusedDependencies, anchorKind: "package" }
-];
+var import_knowledge15 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/codeRollup.ts
-var import_knowledge13 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/moduleAliases.ts
-var import_knowledge11 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/rootId.ts
+// ../packages/agent-tools/src/knowledge/rules/unusedDependency.ts
 var import_knowledge12 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/codeLayers.ts
+// ../packages/agent-tools/src/knowledge/rules/unusedItems.ts
+var import_knowledge11 = require("@seanhogg/builderforce-memory/knowledge");
+var codeFiles = (g) => g.nodes.filter((n2) => n2.pack === CODE_PACK_ID && n2.kind === "file").sort((a, b) => (0, import_knowledge11.compareStr)(a.ref, b.ref));
+var namesOf = (n2, badge) => [...new Set(String(n2.badges?.[badge] ?? "").split(",").filter(Boolean))].sort(import_knowledge11.compareStr);
+function itemFindings(n2, item) {
+  const ref = n2.ref;
+  const names = namesOf(n2, item.names);
+  if (names.length === 0) {
+    const count2 = Number(n2.badges?.[item.count] ?? 0) || 0;
+    return count2 > 0 ? [(0, import_knowledge11.finding)(item.kind, CODE_PACK_ID, [ref], "info", { count: count2, files: 1 }, void 0, (0, import_knowledge11.refAnchor)(ref))] : [];
+  }
+  return names.map((name) => {
+    const anchor = `${ref}#${name}`;
+    return (0, import_knowledge11.finding)(item.kind, CODE_PACK_ID, [ref], "info", { count: 1, files: 1, name }, [anchor], { anchor, anchorKind: item.anchorKind });
+  });
+}
+
+// ../packages/agent-tools/src/knowledge/rules/unusedDependency.ts
+var ITEM = { kind: "unused-dependency", names: CODE_BADGES.unusedDependencyNames, count: CODE_BADGES.unusedDependencies, anchorKind: "package" };
+var unusedDependencyRule = (0, import_knowledge12.defineRule)({
+  id: "code.unused-dependency",
+  version: 1,
+  reads: [],
+  // the knowledge graph only
+  scope: "global",
+  extraInputs: ["knowledge"],
+  derive: ({ extra: { knowledge: k } }) => codeFiles(k.graph).flatMap((n2) => itemFindings(n2, ITEM))
+});
+
+// ../packages/agent-tools/src/knowledge/rules/unusedExport.ts
+var import_knowledge13 = require("@seanhogg/builderforce-memory/knowledge");
+var ITEM2 = { kind: "unused-export", names: CODE_BADGES.unusedExportNames, count: CODE_BADGES.unusedExports, anchorKind: "symbol" };
+var unusedExportRule = (0, import_knowledge13.defineRule)({
+  id: "code.unused-export",
+  version: 1,
+  reads: [],
+  // the knowledge graph only
+  scope: "global",
+  extraInputs: ["knowledge"],
+  derive: ({ extra: { knowledge: k } }) => codeFiles(k.graph).flatMap((n2) => itemFindings(n2, ITEM2))
+});
+
+// ../packages/agent-tools/src/knowledge/rules/unusedFile.ts
 var import_knowledge14 = require("@seanhogg/builderforce-memory/knowledge");
+var unusedFileRule = (0, import_knowledge14.defineRule)({
+  id: "code.unused-file",
+  version: 1,
+  reads: [],
+  // the knowledge graph only
+  scope: "global",
+  extraInputs: ["knowledge"],
+  derive: ({ extra: { knowledge: k } }) => codeFiles(k.graph).filter((n2) => n2.badges?.[CODE_BADGES.unused] === "file").map((n2) => (0, import_knowledge14.finding)("unused-file", CODE_PACK_ID, [n2.ref], "info", { count: 1, files: 1 }, void 0, (0, import_knowledge14.refAnchor)(n2.ref)))
+});
+
+// ../packages/agent-tools/src/knowledge/codeFindings.ts
+var CODE_FACT_RULES = Object.freeze([unusedFileRule, unusedExportRule, unusedDependencyRule]);
+
+// ../packages/agent-tools/src/knowledge/codeRollup.ts
+var import_knowledge18 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/moduleAliases.ts
+var import_knowledge16 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/rootId.ts
+var import_knowledge17 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/deploy/deployParser.ts
+var import_knowledge20 = require("@seanhogg/builderforce-memory/knowledge");
+var import_ingest3 = require("@seanhogg/builderforce-memory/ingest");
+
+// ../packages/agent-tools/src/knowledge/deploy/deployNodes.ts
+var import_knowledge19 = require("@seanhogg/builderforce-memory/knowledge");
+var DEPLOY_BADGES = {
+  type: "type",
+  unitKind: "unitKind",
+  runtime: "runtime",
+  /** Comma-joined port numbers. */
+  ports: "ports",
+  /** Comma-joined env var NAMES (capped at 40). */
+  env: "env",
+  /** `;`-joined schedules. */
+  cron: "cron",
+  /** Comma-joined root-relative folders / files it builds from ('.' = the root). */
+  source: "source",
+  /** Comma-joined `kind:name` of its bindings. */
+  bindings: "bindings",
+  /** Comma-joined queue names it sends to / consumes. */
+  produces: "produces",
+  consumes: "consumes",
+  externals: CODE_BADGES.externals,
+  /** Binding nodes: what kind of resource it is. */
+  bindingKind: "bindingKind",
+  /** The descriptor's file node: its family (`wrangler`, `compose`, …) and how many units it declares. */
+  deploy: "deploy",
+  units: "units",
+  /** A package.json's `workspaces` globs, comma-joined. */
+  workspaces: "workspaces"
+};
+var UNIT_PREFIX = `ent:${CODE_PACK_ID}:unit:`;
+var BINDING_PREFIX = `ent:${CODE_PACK_ID}:binding:`;
+
+// ../packages/agent-tools/src/knowledge/deploy/parseDescriptor.ts
+var MAX_DESCRIPTOR_CHARS = 256 * 1024;
+
+// ../packages/agent-tools/src/knowledge/codeLayers.ts
+var import_knowledge21 = require("@seanhogg/builderforce-memory/knowledge");
 var FOLDER_LAYERS = {
   presentation: ["routes", "components", "app", "pages", "webview", "views", "hooks", "handlers", "controllers", "ui"],
   application: ["application", "use-cases", "usecases", "services", "lib", "clients", "commands", "queries"],
@@ -13836,50 +14068,62 @@ function defaultLayerRegistry() {
 var CODE_LAYERS = defaultLayerRegistry();
 
 // ../packages/agent-tools/src/knowledge/knowledgePacks.ts
-var import_knowledge17 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge24 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/documents/documentsPack.ts
-var import_knowledge16 = require("@seanhogg/builderforce-memory/knowledge");
-var import_ingest4 = require("@seanhogg/builderforce-memory/ingest");
+var import_knowledge23 = require("@seanhogg/builderforce-memory/knowledge");
+var import_ingest5 = require("@seanhogg/builderforce-memory/ingest");
 var DOCUMENTS_PACK_ID = "documents";
 var documentsParser = {
-  ...import_ingest4.plainTextParser,
+  ...import_ingest5.plainTextParser,
   id: "documents",
   accepts: (source) => source.content.kind === "text" && isExtractableDocumentType(source.content.mediaType ?? "")
 };
 var DOCUMENTS_PACK = {
   id: DOCUMENTS_PACK_ID,
   parsers: [documentsParser],
-  ...import_knowledge16.DOCS_PACK.judgement ? { judgement: import_knowledge16.DOCS_PACK.judgement } : {}
+  ...import_knowledge23.DOCS_PACK.judgement ? { judgement: import_knowledge23.DOCS_PACK.judgement } : {}
 };
 
 // ../packages/agent-tools/src/knowledge/codeExtracted.ts
-var import_knowledge18 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge25 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/reviewRunner.ts
+// ../packages/agent-tools/src/knowledge/facts/fileFactsOf.ts
+var import_knowledge27 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/facts/factsAst.ts
 var import_knowledge26 = require("@seanhogg/builderforce-memory/knowledge");
 
+// ../packages/agent-tools/src/knowledge/reviewRunner.ts
+var import_knowledge38 = require("@seanhogg/builderforce-memory/knowledge");
+
 // ../packages/agent-tools/src/knowledge/codeGraph.ts
-var import_knowledge19 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge29 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/deploy/deployGraph.ts
+var import_knowledge28 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/codeRootSignals.ts
-var import_knowledge21 = require("@seanhogg/builderforce-memory/knowledge");
-var import_ingest5 = require("@seanhogg/builderforce-memory/ingest");
+var import_knowledge32 = require("@seanhogg/builderforce-memory/knowledge");
+var import_ingest6 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/codeCoverage.ts
 var MAX_FILE_BYTES = 40 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/codeOwners.ts
-var import_knowledge20 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge30 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/historyPort.ts
+var import_knowledge31 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/fileEdits.ts
-var import_knowledge22 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge33 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
-var import_ingest6 = require("@seanhogg/builderforce-memory/ingest");
+var import_ingest7 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/graphIgnore.ts
-var import_knowledge23 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge34 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
 var MAX_GRAPH_FILE_BYTES = 256 * 1024;
@@ -13889,10 +14133,10 @@ var cache = createShaCache({
 });
 
 // ../packages/agent-tools/src/knowledge/reviewJudgePass.ts
-var import_knowledge24 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge35 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/judgement.ts
-var import_knowledge25 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge36 = require("@seanhogg/builderforce-memory/knowledge");
 var MAX_JUDGE_TEXT = 8e3;
 var KNOWLEDGE_EXTRACT_SYSTEM = [
   "You read one section of a document and list what it asserts.",
@@ -13913,7 +14157,7 @@ async function judgeWith(ask2, req) {
       a: { ref: a.ref, claim: a.text.slice(0, MAX_JUDGE_TEXT) },
       b: { ref: b.ref, claim: b.text.slice(0, MAX_JUDGE_TEXT) }
     });
-    const v = (0, import_knowledge25.validateCompare)(out, a.ref, b.ref);
+    const v = (0, import_knowledge36.validateCompare)(out, a.ref, b.ref);
     return {
       compare: v.relation ? [{ a: a.ref, b: b.ref, relation: v.relation, confidence: v.confidence }] : [],
       invalid: v.invalid
@@ -13922,24 +14166,28 @@ async function judgeWith(ask2, req) {
   const result = { extract: [], invalid: 0 };
   for (const item of req.items) {
     const out = await ask2(KNOWLEDGE_EXTRACT_SYSTEM, { ref: item.ref, text: item.text.slice(0, MAX_JUDGE_TEXT) });
-    const v = (0, import_knowledge25.validateExtract)(out, item.ref);
+    const v = (0, import_knowledge36.validateExtract)(out, item.ref);
     result.invalid += v.invalid;
     result.extract.push({ ref: item.ref, claims: v.claims, entities: v.entities });
   }
   return result;
 }
 
+// ../packages/agent-tools/src/knowledge/measuredWith.ts
+var import_knowledge37 = require("@seanhogg/builderforce-memory/knowledge");
+var TYPESCRIPT_VERSION = TYPESCRIPT_PIN.slice(TYPESCRIPT_PIN.lastIndexOf("@") + 1);
+
 // ../packages/agent-tools/src/knowledge/humanFact.ts
-var import_knowledge27 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge39 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/documents/documentDoc.ts
-var import_knowledge28 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge40 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/index/persistence.ts
-var import_knowledge29 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge41 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/replicaQueue.ts
-var import_knowledge30 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge42 = require("@seanhogg/builderforce-memory/knowledge");
 var import_pack = require("@seanhogg/builderforce-memory/knowledge/pack");
 
 // ../packages/agent-tools/src/knowledge/replicatedStore.ts
@@ -13949,7 +14197,7 @@ var import_pack2 = require("@seanhogg/builderforce-memory/knowledge/pack");
 var import_pack5 = require("@seanhogg/builderforce-memory/knowledge/pack");
 
 // ../packages/agent-tools/src/knowledge/replicaPack.ts
-var import_knowledge31 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge43 = require("@seanhogg/builderforce-memory/knowledge");
 var import_pack3 = require("@seanhogg/builderforce-memory/knowledge/pack");
 var DEFAULT_MAX_DECODED = 16 * 1024 * 1024;
 var EMPTY_PACK = { rootId: "", baseGeneration: 0, targetDigest: import_pack3.ZERO_DIGEST };
@@ -13967,20 +14215,20 @@ var MAX_ANALYSIS_BYTES = 2 * 1024 * 1024;
 var MAX_SYNC_PACK_BYTES = 24 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/replicaFirstSync.ts
-var import_knowledge32 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge44 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/claimSimilarity.ts
-var import_knowledge33 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge45 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/portablePack.ts
-var import_knowledge34 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge46 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/packGraph.ts
-var import_knowledge35 = require("@seanhogg/builderforce-memory/knowledge");
-var import_ingest7 = require("@seanhogg/builderforce-memory/ingest");
+var import_knowledge47 = require("@seanhogg/builderforce-memory/knowledge");
+var import_ingest8 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/pinpointMatch.ts
-var import_knowledge36 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge48 = require("@seanhogg/builderforce-memory/knowledge");
 var MAX_PINPOINT_IMAGE_BYTES = 8 * 1024 * 1024;
 var MAX_DATA_URL_CHARS = Math.ceil(MAX_PINPOINT_IMAGE_BYTES * 4 / 3) + 64;
 var PINPOINT_VISION_SYSTEM = [
@@ -14063,8 +14311,8 @@ function lexicalStems(text2) {
 var LEXICAL_WEIGHTS = { name: 10, description: 1, body: 0.25 };
 function lexicalScore(queryStems, fields) {
   let score2 = 0;
-  for (const field of fields) {
-    for (const s of lexicalStems(field.text)) if (queryStems.has(s)) score2 += field.weight;
+  for (const field2 of fields) {
+    for (const s of lexicalStems(field2.text)) if (queryStems.has(s)) score2 += field2.weight;
   }
   return score2;
 }
@@ -14098,6 +14346,46 @@ var TOOL_SEARCH_SCHEMA = {
     }
   }
 };
+
+// ../packages/agent-tools/src/delta/adapters/dependencyCruiser.ts
+var import_ingest9 = require("@seanhogg/builderforce-memory/ingest");
+var import_knowledge49 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/delta/adapters/gitleaks.ts
+var import_knowledge50 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/delta/adapters/jscpd.ts
+var import_knowledge51 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/delta/adapters/knip.ts
+var import_knowledge52 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/delta/adapters/osv.ts
+var import_knowledge53 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/delta/adapters/sarifTools.ts
+var import_knowledge54 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/sarif/src/emit.ts
+var SARIF_BASELINE_STATES = ["new", "unchanged", "updated", "absent"];
+
+// ../packages/sarif/src/parse.ts
+var BASELINE = new Set(SARIF_BASELINE_STATES);
+
+// ../packages/agent-tools/src/delta/adapters/sarifTools.ts
+var SEMGREP_TOOL = "semgrep";
+var CODEQL_TOOL = "codeql";
+var SARIF_KINDS = { [SEMGREP_TOOL]: "semgrep-finding", [CODEQL_TOOL]: "codeql-finding" };
+
+// ../packages/agent-tools/src/delta/adapters/l3Cache.ts
+var import_retrieval = require("@seanhogg/builderforce-memory/retrieval");
+
+// ../packages/agent-tools/src/delta/adapters/typescript.ts
+var import_knowledge55 = require("@seanhogg/builderforce-memory/knowledge");
+var TYPESCRIPT_VERSION2 = TYPESCRIPT_PIN.slice(TYPESCRIPT_PIN.lastIndexOf("@") + 1);
+
+// ../packages/agent-tools/src/delta/dynamic/host.ts
+var DYNAMIC_STEP_CAP_MS = 30 * 6e4;
 
 // ../packages/workload/src/profile.ts
 var TYPICAL_OUTPUT_TOKENS = {
@@ -14133,25 +14421,25 @@ function estimateTokensFromChars(charCount) {
 }
 
 // src/localFirstTraces.ts
-function summarizeLocalFirstAttempt(record2) {
-  const { attempt } = record2;
+function summarizeLocalFirstAttempt(record3) {
+  const { attempt } = record3;
   return {
     target: attempt.kind === "local" ? attempt.ref : attempt.model ?? GATEWAY_ATTEMPT_TARGET,
-    outcome: record2.outcome,
-    ...record2.detail ? { detail: record2.detail } : {}
+    outcome: record3.outcome,
+    ...record3.detail ? { detail: record3.detail } : {}
   };
 }
 function localFallbackTrace(ts, step, attempts) {
   if (!attempts || attempts.length < 2) return null;
   const served = attempts.find((a) => a.outcome === "served");
-  const skipped = attempts.filter((a) => a.outcome !== "served");
-  if (!served || skipped.length === 0) return null;
-  const why = skipped.map((a) => `${a.target} ${a.outcome}${a.detail ? ` (${a.detail})` : ""}`).join("; ");
+  const skipped2 = attempts.filter((a) => a.outcome !== "served");
+  if (!served || skipped2.length === 0) return null;
+  const why = skipped2.map((a) => `${a.target} ${a.outcome}${a.detail ? ` (${a.detail})` : ""}`).join("; ");
   return {
     ts,
     category: "message",
     label: "llm.local_fallback",
-    args: { step, from: skipped[0].target, to: served.target, attempts: attempts.map((a) => ({ ...a })) },
+    args: { step, from: skipped2[0].target, to: served.target, attempts: attempts.map((a) => ({ ...a })) },
     result: `Local-first: ${why} \u2014 this turn was answered by ${served.target}.`
   };
 }
@@ -14203,9 +14491,9 @@ function withModelRef(e, ref) {
   if (e instanceof StreamInterruptedError && e.cause !== void 0) out.cause = e.cause;
   return out;
 }
-function withFailedAccounts(e, failed4) {
-  if (!(e instanceof BrainRequestError) || failed4.length === 0) return e;
-  const prefix = failed4.map((r) => `${r.attempt.kind === "local" ? r.attempt.ref : "account"} could not take this turn (${r.detail ?? r.outcome}). `).join("");
+function withFailedAccounts(e, failed5) {
+  if (!(e instanceof BrainRequestError) || failed5.length === 0) return e;
+  const prefix = failed5.map((r) => `${r.attempt.kind === "local" ? r.attempt.ref : "account"} could not take this turn (${r.detail ?? r.outcome}). `).join("");
   const out = Object.create(Object.getPrototypeOf(e));
   Object.defineProperties(out, Object.getOwnPropertyDescriptors(e));
   Object.defineProperty(out, "message", { value: prefix + e.message, writable: true, configurable: true, enumerable: false });
@@ -14441,9 +14729,9 @@ function createLocalFirstStream(input) {
     });
     const plan = input.gate ? await input.gate(planned, routed) : planned;
     if (plan.length === 0) throw new Error(input.noModel ?? NOT_SIGNED_IN);
-    const onAttempt = (record2) => {
-      if (accountPool && record2.outcome !== "served" && record2.attempt.kind === "local") failedAccounts.push(record2);
-      input.onAttempt?.(record2);
+    const onAttempt = (record3) => {
+      if (accountPool && record3.outcome !== "served" && record3.attempt.kind === "local") failedAccounts.push(record3);
+      input.onAttempt?.(record3);
     };
     let cloudStarted = false;
     let ran;
@@ -14957,8 +15245,8 @@ function hybridLocalSuccessTurn(router, probes, signal, deferred = deferredLocal
         return plan;
       }
     },
-    onAttempt(record2) {
-      records.push(record2);
+    onAttempt(record3) {
+      records.push(record3);
     },
     settle(error) {
       if (!assessed || signal?.aborted) return;
@@ -15326,9 +15614,9 @@ function createHostModelStream(input) {
         probes,
         call2.signal
       ) : null;
-      const onAttempt = learned || input.onAttempt ? (record2) => {
-        learned?.onAttempt(record2);
-        input.onAttempt?.(record2);
+      const onAttempt = learned || input.onAttempt ? (record3) => {
+        learned?.onAttempt(record3);
+        input.onAttempt?.(record3);
       } : void 0;
       const stream = localFirst(probes, accounts, onAttempt, learned?.gate);
       if (!learned) return stream(call2, h);
@@ -16073,10 +16361,10 @@ function conformsToJsonSchema(value, schema) {
 function validateJsonSchema(value, schema, opts = {}) {
   const errors = [];
   const max = opts.maxErrors ?? 12;
-  walk(value, schema ?? {}, "", errors, max);
+  walk2(value, schema ?? {}, "", errors, max);
   return errors;
 }
-function walk(value, schema, path, errs, max) {
+function walk2(value, schema, path, errs, max) {
   if (errs.length >= max) return;
   if (schema.type !== void 0) {
     const expected = Array.isArray(schema.type) ? schema.type : [schema.type];
@@ -16118,38 +16406,38 @@ function walk(value, schema, path, errs, max) {
     }
     if (schema.items) {
       for (let i = 0; i < value.length && errs.length < max; i++) {
-        walk(value[i], schema.items, `${path}[${i}]`, errs, max);
+        walk2(value[i], schema.items, `${path}[${i}]`, errs, max);
       }
     }
   }
   if (isPlainObject(value)) {
-    const obj = value;
+    const obj2 = value;
     if (Array.isArray(schema.required)) {
-      for (const field of schema.required) {
-        if (typeof field === "string" && !(field in obj)) {
-          errs.push({ path: joinPath2(path, field), message: "required field missing" });
+      for (const field2 of schema.required) {
+        if (typeof field2 === "string" && !(field2 in obj2)) {
+          errs.push({ path: joinPath3(path, field2), message: "required field missing" });
           if (errs.length >= max) return;
         }
       }
     }
     if (schema.properties) {
       for (const [k, sub] of Object.entries(schema.properties)) {
-        if (k in obj && errs.length < max) walk(obj[k], sub, joinPath2(path, k), errs, max);
+        if (k in obj2 && errs.length < max) walk2(obj2[k], sub, joinPath3(path, k), errs, max);
       }
     }
     if (schema.additionalProperties === false && schema.properties) {
       const known = new Set(Object.keys(schema.properties));
-      for (const k of Object.keys(obj)) {
+      for (const k of Object.keys(obj2)) {
         if (!known.has(k)) {
-          errs.push({ path: joinPath2(path, k), message: "additional property not allowed" });
+          errs.push({ path: joinPath3(path, k), message: "additional property not allowed" });
           if (errs.length >= max) return;
         }
       }
     } else if (typeof schema.additionalProperties === "object" && schema.additionalProperties !== null) {
       const known = new Set(schema.properties ? Object.keys(schema.properties) : []);
-      for (const k of Object.keys(obj)) {
+      for (const k of Object.keys(obj2)) {
         if (!known.has(k) && errs.length < max) {
-          walk(obj[k], schema.additionalProperties, joinPath2(path, k), errs, max);
+          walk2(obj2[k], schema.additionalProperties, joinPath3(path, k), errs, max);
         }
       }
     }
@@ -16195,7 +16483,7 @@ function describeType(value) {
 function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function joinPath2(base, key) {
+function joinPath3(base, key) {
   if (base.length === 0) return key;
   return `${base}.${key}`;
 }
@@ -16443,7 +16731,7 @@ function pageOnDeviceTasks(options) {
   const routes = options.routes ?? ON_DEVICE_TASK_ROUTES;
   const pageAvailable = options.pageAvailable ?? (async () => options.pageCompletion !== null);
   const page = options.pageCompletion ? completionOnDeviceTasks({ complete: options.pageCompletion, available: pageAvailable }) : null;
-  async function walk2(kind, served, adapterRun, tail) {
+  async function walk3(kind, served, adapterRun, tail) {
     for (const id of routes[kind]) {
       if (id === "pageEngine") {
         const r2 = tail ? await tail(served) : null;
@@ -16460,7 +16748,7 @@ function pageOnDeviceTasks(options) {
     }
     return null;
   }
-  const call2 = (kind, o, input, adapterRun, tail) => observedTask({ kind, observe: options.observe, onServed: o?.onServed, input }, (served) => walk2(kind, served, adapterRun, tail));
+  const call2 = (kind, o, input, adapterRun, tail) => observedTask({ kind, observe: options.observe, onServed: o?.onServed, input }, (served) => walk3(kind, served, adapterRun, tail));
   async function summarizeVia(adapter, text2, o) {
     if (!adapter.summarize) return null;
     const budget2 = adapter.budget ? await adapter.budget(o.signal) : null;
@@ -17011,14 +17299,14 @@ function createEngineWorker(options) {
   const now = options.now ?? (() => Date.now());
   let live2;
   const crashes = /* @__PURE__ */ new Map();
-  const failed4 = /* @__PURE__ */ new Set();
+  const failed5 = /* @__PURE__ */ new Set();
   const recordCrash = (key) => {
     const at2 = now();
     const recent = (crashes.get(key) ?? []).filter((t) => at2 - t < ENGINE_WORKER_CRASH_WINDOW_MS);
     recent.push(at2);
     crashes.set(key, recent);
-    if (recent.length >= ENGINE_WORKER_CRASH_LIMIT && !failed4.has(key)) {
-      failed4.add(key);
+    if (recent.length >= ENGINE_WORKER_CRASH_LIMIT && !failed5.has(key)) {
+      failed5.add(key);
       warn(`engine worker: ${key} crashed ${recent.length}\xD7 in ${ENGINE_WORKER_CRASH_WINDOW_MS / 6e4} min; not loading it again this session`);
     }
   };
@@ -17037,8 +17325,8 @@ function createEngineWorker(options) {
   };
   const withoutFailed = (message2) => {
     const probe = message2.probe;
-    if (!probe || failed4.size === 0) return message2;
-    const models = probe.models.filter((m) => !failed4.has(modelKey(probe.provider, m.model)));
+    if (!probe || failed5.size === 0) return message2;
+    const models = probe.models.filter((m) => !failed5.has(modelKey(probe.provider, m.model)));
     if (models.length === probe.models.length) return message2;
     return { ...message2, probe: models.length > 0 ? { ...probe, models } : null };
   };
@@ -17073,7 +17361,7 @@ function createEngineWorker(options) {
         const m = message2;
         if (m.type === "pageEngine.chat" && typeof m.id === "string") {
           const key = modelKey(m.runtime, m.body?.model);
-          if (failed4.has(key)) {
+          if (failed5.has(key)) {
             const id = m.id;
             queueMicrotask(
               () => options.onMessage({
@@ -17228,8 +17516,8 @@ function restrictBackends(s, backends) {
   };
   return out;
 }
-function withPeerBackends(own, backends, peer) {
-  const local = restrictBackends(own, backends);
+function withPeerBackends(own2, backends, peer) {
+  const local = restrictBackends(own2, backends);
   if (!peer) return local;
   const top = backends.includes("webgpu") ? local : { ...local, ...topLevel(peer) };
   return {
@@ -17383,10 +17671,10 @@ function createBfiWorkerEngine(options) {
     ...options.idleMs !== void 0 ? { idleMs: options.idleMs } : {}
   });
   const anyDownloaded = () => options.store ? anyBfiModelDownloaded(options.store) : Promise.resolve(true);
-  const onceMore = async (ask2, failed4) => {
+  const onceMore = async (ask2, failed5) => {
     const before = threadRestarts;
     const value = await ask2();
-    return failed4(value) && threadRestarts !== before ? ask2() : value;
+    return failed5(value) && threadRestarts !== before ? ask2() : value;
   };
   const ownSupport = () => {
     const id = `s${++seq}`;
@@ -17431,7 +17719,7 @@ function createBfiWorkerEngine(options) {
     // shim answers it with its status, exactly as an in-place engine's would.
     chatCompletions: async (body, signal) => retried(body, signal),
     async support() {
-      const [own, peer] = await Promise.all([
+      const [own2, peer] = await Promise.all([
         (async () => {
           if (!await anyDownloaded()) return bfiSupportWithoutWasm();
           return onceMore(ownSupport, (s) => s === BFI_UNSUPPORTED);
@@ -17442,7 +17730,7 @@ function createBfiWorkerEngine(options) {
           return void 0;
         })
       ]);
-      return withPeerBackends(own, backends, peer);
+      return withPeerBackends(own2, backends, peer);
     },
     dispose() {
       worker.dispose();
@@ -17839,7 +18127,7 @@ function createWebLlmEngine(options = {}) {
       throw new PageEngineError(503, "webllm_engine_unavailable", errorMessage(e));
     }
     const request = { messages, stream: true, stream_options: { include_usage: true } };
-    for (const field of FORWARDED_FIELDS) if (body[field] !== void 0) request[field] = body[field];
+    for (const field2 of FORWARDED_FIELDS) if (body[field2] !== void 0) request[field2] = body[field2];
     if (!hasTools(body)) {
       delete request.tools;
       delete request.tool_choice;
@@ -18605,8 +18893,8 @@ function isReadOnlyShellCommand(command) {
 }
 function isReadOnlyShellCall(tool, args) {
   if (tool !== "run_command" || !args || typeof args !== "object") return false;
-  const record2 = args;
-  const command = typeof record2.command === "string" ? record2.command : typeof record2.cmd === "string" ? record2.cmd : "";
+  const record3 = args;
+  const command = typeof record3.command === "string" ? record3.command : typeof record3.cmd === "string" ? record3.cmd : "";
   return isReadOnlyShellCommand(command);
 }
 
@@ -19672,17 +19960,17 @@ var DEFAULT_EVIDENCE_POLICY = {
   newSourceTestCoverage: ["stem", "directory", "import"],
   checkTimeoutMs: 12e4
 };
-function basenameOf2(path) {
+function basenameOf(path) {
   const normalized = normalizeEvidencePath(path);
   return normalized.slice(normalized.lastIndexOf("/") + 1);
 }
 function extOf(path) {
-  const base = basenameOf2(path);
+  const base = basenameOf(path);
   const dot = base.lastIndexOf(".");
   return dot > 0 ? base.slice(dot).toLowerCase() : "";
 }
 function stemOf(path) {
-  const base = basenameOf2(path);
+  const base = basenameOf(path);
   const dot = base.lastIndexOf(".");
   return dot > 0 ? base.slice(0, dot) : base;
 }
@@ -19690,7 +19978,7 @@ var SOURCE_EXTENSIONS = /* @__PURE__ */ new Set([".ts", ".tsx", ".mts", ".cts", 
 function isSourceFile(path) {
   return SOURCE_EXTENSIONS.has(extOf(path));
 }
-function dirOf3(path) {
+function dirOf2(path) {
   const normalized = normalizeEvidencePath(path);
   const slash2 = normalized.lastIndexOf("/");
   return slash2 >= 0 ? normalized.slice(0, slash2) : "";
@@ -19704,12 +19992,12 @@ function isExemptFromTestRule(path, policy) {
 }
 function covers(test, file, policy) {
   const coverage = policy.newSourceTestCoverage ?? ["stem"];
-  if (coverage.includes("stem") && basenameOf2(test.absPath).startsWith(stemOf(file.absPath) + ".")) return true;
+  if (coverage.includes("stem") && basenameOf(test.absPath).startsWith(stemOf(file.absPath) + ".")) return true;
   if (coverage.includes("directory")) {
-    const dir = dirOf3(file.absPath);
-    if (dirOf3(test.absPath) === dir) return true;
+    const dir = dirOf2(file.absPath);
+    if (dirOf2(test.absPath) === dir) return true;
     const dirName = dir.slice(dir.lastIndexOf("/") + 1);
-    if (dirName && dirOf3(test.absPath) === dirOf3(dir) && basenameOf2(test.absPath).startsWith(dirName + ".")) return true;
+    if (dirName && dirOf2(test.absPath) === dirOf2(dir) && basenameOf(test.absPath).startsWith(dirName + ".")) return true;
   }
   if (coverage.includes("import") && test.imports?.length) {
     const target = moduleKey(file.absPath);
@@ -19717,8 +20005,8 @@ function covers(test, file, policy) {
   }
   return false;
 }
-function isErrorFinding(finding2) {
-  const tokens2 = finding2.trim().split(/\s+/);
+function isErrorFinding(finding3) {
+  const tokens2 = finding3.trim().split(/\s+/);
   return (tokens2[1] ?? "").toLowerCase() === "error";
 }
 function pass() {
@@ -19748,13 +20036,13 @@ function outgoingGate(files, ledger, policy) {
         unavailable2.push(`${file.absPath}: ${kind} (no record \u2014 verifier unavailable)`);
         continue;
       }
-      for (const record2 of records) {
-        if (record2.outcome === "fail") {
-          const detail = record2.exitCode != null ? ` (exit ${record2.exitCode})` : "";
-          return refuse(checkFailureReason(file.absPath, record2, detail));
+      for (const record3 of records) {
+        if (record3.outcome === "fail") {
+          const detail = record3.exitCode != null ? ` (exit ${record3.exitCode})` : "";
+          return refuse(checkFailureReason(file.absPath, record3, detail));
         }
-        if (record2.outcome === "unavailable") {
-          unavailable2.push(`${file.absPath}: ${record2.name} (${kind}) unavailable`);
+        if (record3.outcome === "unavailable") {
+          unavailable2.push(`${file.absPath}: ${record3.name} (${kind}) unavailable`);
         }
       }
       if (kind === "diagnostics") {
@@ -20094,7 +20382,7 @@ function BrainActionsProvider({ children }) {
       bump();
     };
   }, [bump]);
-  const runTool = (0, import_react3.useCallback)(async (name, args) => {
+  const runTool2 = (0, import_react3.useCallback)(async (name, args) => {
     const entry = registry2.current.get(name);
     if (!entry) {
       return { error: `Unknown tool: ${name}` };
@@ -20113,8 +20401,8 @@ function BrainActionsProvider({ children }) {
     return toolSpecsFor([...registry2.current.values()].map((e) => e.action));
   }, [version2]);
   const value = (0, import_react3.useMemo)(
-    () => ({ toolSpecs, runTool, isMutating, register }),
-    [toolSpecs, runTool, isMutating, register]
+    () => ({ toolSpecs, runTool: runTool2, isMutating, register }),
+    [toolSpecs, runTool2, isMutating, register]
   );
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(BrainRegistrarContext.Provider, { value: register, children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(BrainActionsContext.Provider, { value, children }) });
 }
@@ -20432,11 +20720,11 @@ function toolResultRecord(result) {
   return result && typeof result === "object" ? result : null;
 }
 function entityIdsOf(result) {
-  const record2 = toolResultRecord(result);
-  if (!record2) return { localId: null, syncId: null };
-  const idRef = parseEntityRef(record2.id);
-  const syncId = parseSyncId(record2.syncId) ?? parseSyncId(record2.taskId) ?? (idRef && "sync" in idRef ? idRef.sync : null);
-  const localId = isLocalId(record2.localId) ? record2.localId : idRef && "local" in idRef ? idRef.local : null;
+  const record3 = toolResultRecord(result);
+  if (!record3) return { localId: null, syncId: null };
+  const idRef = parseEntityRef(record3.id);
+  const syncId = parseSyncId(record3.syncId) ?? parseSyncId(record3.taskId) ?? (idRef && "sync" in idRef ? idRef.sync : null);
+  const localId = isLocalId(record3.localId) ? record3.localId : idRef && "local" in idRef ? idRef.local : null;
   return { localId, syncId };
 }
 
@@ -20874,12 +21162,12 @@ function resetRungs(state, keep2 = []) {
   if (!spent || Object.keys(spent).length === 0) return;
   save(state, { rungs: Object.fromEntries(Object.entries(spent).filter(([id]) => keep2.includes(id))) });
 }
-function handOffToProven(ctx, ledger, failed4, unavailable2 = false) {
-  const next = reduceRunPolicy(ctx.state.model, { type: "stalled", ...failed4 ? { resolvedModel: failed4 } : {}, ...unavailable2 ? { primaryUnavailable: true } : {} });
+function handOffToProven(ctx, ledger, failed5, unavailable2 = false) {
+  const next = reduceRunPolicy(ctx.state.model, { type: "stalled", ...failed5 ? { resolvedModel: failed5 } : {}, ...unavailable2 ? { primaryUnavailable: true } : {} });
   ctx.state.model = next;
   if (next.outcome.kind !== "failed_over") return void 0;
   resetRungs(ctx.state, ledger?.sticky);
-  ledger?.handedOff?.(failed4, next.outcome.to);
+  ledger?.handedOff?.(failed5, next.outcome.to);
   return next.outcome.to;
 }
 function restatement(ctx, rung, attempt, nudgeRole, quoteEmpty) {
@@ -21716,7 +22004,7 @@ var INTERRUPTED_BY_STEER = "Interrupted by the user's new message: the command d
 var STOPPED_BY_USER = "Stopped by the user: the command was killed before it finished.";
 var WAIT_INTERRUPTED_BY_STEER = "Wait interrupted by the user's new message: the background job is STILL RUNNING. Read the message that follows and do what it asks; check the job later with command_status, or stop it with command_stop.";
 var SKIPPED_BY_STEER = "Not run: the user sent a new message while this turn was running. Read it and decide what to do next.";
-function argsOf(args) {
+function argsOf2(args) {
   return args && typeof args === "object" && !Array.isArray(args) ? args : {};
 }
 function isWaitCall(name, a) {
@@ -21724,7 +22012,7 @@ function isWaitCall(name, a) {
   return name === "command_status" && typeof a.waitMs === "number" && a.waitMs > 0;
 }
 function isInterruptibleCall(name, args) {
-  const a = argsOf(args);
+  const a = argsOf2(args);
   if (isWaitCall(name, a)) return true;
   return name === "run_command" && a.background !== true;
 }
@@ -21746,10 +22034,10 @@ function waitInterruptedResult(out) {
 function cameBackAborted(out) {
   return !!out && typeof out === "object" && out.aborted === true;
 }
-async function runToolWithWatch(runTool, watch, runSignal, name, args, surfaceInterruptible) {
-  if (!isInterruptibleCall(name, args) && !surfaceInterruptible?.(name, argsOf(args))) return runTool(name, args);
+async function runToolWithWatch(runTool2, watch, runSignal, name, args, surfaceInterruptible) {
+  if (!isInterruptibleCall(name, args) && !surfaceInterruptible?.(name, argsOf2(args))) return runTool2(name, args);
   if (watch.hasInterrupt()) return notStartedResult();
-  const wait = isWaitCall(name, argsOf(args));
+  const wait = isWaitCall(name, argsOf2(args));
   const step = new AbortController();
   let interrupted = false;
   const onStop = () => step.abort();
@@ -21760,7 +22048,7 @@ async function runToolWithWatch(runTool, watch, runSignal, name, args, surfaceIn
     step.abort();
   });
   try {
-    const out = await runTool(name, args, step.signal);
+    const out = await runTool2(name, args, step.signal);
     if (!interrupted) return out;
     const restated = () => out.stopped === true ? out : interruptedResult(out);
     if (wait) return cameBackAborted(out) ? restated() : waitInterruptedResult(out);
@@ -21770,8 +22058,8 @@ async function runToolWithWatch(runTool, watch, runSignal, name, args, surfaceIn
     runSignal?.removeEventListener("abort", onStop);
   }
 }
-function runToolInterruptibly(runTool, runKey, runSignal, name, args) {
-  return runToolWithWatch(runTool, runInterruptWatch(runKey), runSignal, name, args);
+function runToolInterruptibly(runTool2, runKey, runSignal, name, args) {
+  return runToolWithWatch(runTool2, runInterruptWatch(runKey), runSignal, name, args);
 }
 function steerSkip(watch) {
   if (!watch.hasInterrupt()) return void 0;
@@ -22025,14 +22313,14 @@ function checkFileContent(path, content) {
 }
 function foldVerifyOutcomes(outcomes) {
   const checked = [];
-  const skipped = [];
+  const skipped2 = [];
   const errors = [];
   for (const o of outcomes) {
     if (o.kind === "errors") errors.push(...o.errors.map((error) => ({ path: o.path, ...error })));
     else if (o.kind === "checked") checked.push(o.path);
-    else skipped.push(o.path);
+    else skipped2.push(o.path);
   }
-  return { ok: errors.length === 0, checked, skipped, errors };
+  return { ok: errors.length === 0, checked, skipped: skipped2, errors };
 }
 async function verifyWrittenFiles(read2, paths) {
   const list2 = [...paths];
@@ -22787,12 +23075,12 @@ function recordVerifyEvents(outcome) {
 function describeVerifyResult(outcome) {
   if (outcome.kind === "skipped") return `verify skipped (${outcome.reason})`;
   if (outcome.commands.length === 0) return `verify ${outcome.kind}, no commands`;
-  const failed4 = outcome.failedCommands.length;
-  return `verify ${outcome.kind}: ${outcome.commands.join("; ")}${failed4 > 0 ? ` \u2014 ${failed4} failed` : ""}`;
+  const failed5 = outcome.failedCommands.length;
+  return `verify ${outcome.kind}: ${outcome.commands.join("; ")}${failed5 > 0 ? ` \u2014 ${failed5} failed` : ""}`;
 }
 
 // ../packages/agent-run/src/policy/verify/index.ts
-async function record(ports, outcome) {
+async function record2(ports, outcome) {
   if (!ports.recordEvents) return;
   const events = recordVerifyEvents(outcome);
   await ports.recordEvents(events.started);
@@ -22817,11 +23105,11 @@ function createVerifyHook(ports = {}) {
           runner: ran.runner,
           results: ran.results
         });
-        await record(ports, outcome2);
+        await record2(ports, outcome2);
         return { ok: outcome2.mayFinish, note: outcome2.note };
       }
       const outcome = runVerifyPhase({ surface: "durable", writtenPaths, results: null });
-      await record(ports, outcome);
+      await record2(ports, outcome);
       return { ok: outcome.mayFinish, note: outcome.note };
     }
   };
@@ -23010,7 +23298,7 @@ async function extractAndWriteLearnedFacts(evidence) {
 
 // ../packages/agent-run/src/policy/memory/index.ts
 var SECTION_BREAK = "\n\n";
-function failed(result) {
+function failed2(result) {
   return !!result && typeof result === "object" && result.ok === false;
 }
 function codeMapOf(ctx) {
@@ -23022,7 +23310,7 @@ function codeMapOf(ctx) {
 var memoryHook = {
   /** Record one dispatched call into the run's memory — successful calls only. */
   observe(ctx, call2, result, isError) {
-    if (isError || failed(result)) return;
+    if (isError || failed2(result)) return;
     const recorder = recorderForState(ctx.state);
     recorder.record(call2.name, call2.args);
     ctx.state.memory = knowledgeState(recorder);
@@ -23777,18 +24065,18 @@ function windowReadFiles(out, opts = {}) {
   const overhead = JSON.stringify({ ...out, files: [] }).length + files.length + (opts.advisory ? opts.advisory.length + 16 : 0);
   const order = files.map((f, i) => ({ i, size: JSON.stringify(f ?? null).length })).sort((a, b) => a.size - b.size);
   const servedFiles = files.slice();
-  let remaining = Math.max(0, maxChars - overhead);
+  let remaining2 = Math.max(0, maxChars - overhead);
   let truncated = false;
   order.forEach(({ i, size }, n2) => {
     const file = files[i];
     const alone = !pagedReadOffsetsPerPath(opts.tool ?? "read_file") && isReadFileResult(file) && typeof file.path === "string" ? file.path : void 0;
-    const share = Math.floor(remaining / (order.length - n2));
+    const share = Math.floor(remaining2 / (order.length - n2));
     if (isReadFileResult(file) && size > share) {
       const windowed2 = windowReadFile(file, { ...opts.tool ? { tool: opts.tool } : {}, ...alone ? { alone } : {}, maxChars: share });
       servedFiles[i] = windowed2.served;
       truncated = truncated || windowed2.truncated;
     }
-    remaining -= JSON.stringify(servedFiles[i] ?? null).length;
+    remaining2 -= JSON.stringify(servedFiles[i] ?? null).length;
   });
   const served = { ...out, files: servedFiles };
   const value = opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(served, opts.advisory) : served;
@@ -23988,7 +24276,7 @@ function servedSpan(served) {
   const start = typeof served.offset === "number" && served.offset > 0 ? Math.floor(served.offset) : 1;
   return { start, end: start + served.content.split("\n").length - 1 };
 }
-function failed2(result) {
+function failed3(result) {
   return !!result && typeof result === "object" && result.ok === false;
 }
 function cutToCap(result) {
@@ -24008,7 +24296,7 @@ function recordServedRead(ctx, call2, served, isError) {
   const coverage = coverageOf(ctx.state);
   const reads = ctx.state.reads;
   if (DEDUPABLE_READS.has(call2.name)) {
-    if (isError || failed2(served)) return;
+    if (isError || failed3(served)) return;
     coverage.record(call2.name, call2.args);
     const cached2 = { result: served, served, anchor: call2.id };
     coverage.cacheResult(call2.name, call2.args, cached2);
@@ -24023,7 +24311,7 @@ function recordServedRead(ctx, call2, served, isError) {
     if (read2 && coverage.isRepeat(read2.tool, read2.args)) kept[key] = entry;
   }
   ctx.state.reads = { ...reads, served: kept };
-  if (!isError && !failed2(served)) recordShellPrint(ctx, coverage, call2, served);
+  if (!isError && !failed3(served)) recordShellPrint(ctx, coverage, call2, served);
 }
 
 // ../packages/agent-run/src/policy/tools/gateToolNames.ts
@@ -24196,9 +24484,9 @@ function failedResult(data) {
   const error = data.error;
   return typeof error === "string" ? { error: error.slice(0, ERROR_CHARS) } : {};
 }
-function fittedText(text2, failed4, maxChars, originalChars) {
+function fittedText(text2, failed5, maxChars, originalChars) {
   const note = truncatedResultNote(originalChars, maxChars);
-  const head = failed4 ? { ok: false, ...failed4 } : {};
+  const head = failed5 ? { ok: false, ...failed5 } : {};
   let body = text2;
   for (; ; ) {
     const result = { ...head, truncated: true, note, output: body };
@@ -24210,17 +24498,17 @@ function fittedText(text2, failed4, maxChars, originalChars) {
 function capToolResult(tool, data, maxChars) {
   const shaped = shapeToolResult(tool, data, { maxChars });
   if (!shaped.truncated) return data;
-  const failed4 = failedResult(data);
+  const failed5 = failedResult(data);
   let parsed;
   try {
     parsed = JSON.parse(shaped.content);
   } catch {
-    return fittedText(shaped.content, failed4, maxChars, shaped.bytes);
+    return fittedText(shaped.content, failed5, maxChars, shaped.bytes);
   }
-  if (failed4 && parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+  if (failed5 && parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
     return { ...parsed, ok: false };
   }
-  return failed4 ? fittedText(shaped.content, failed4, maxChars, shaped.bytes) : parsed;
+  return failed5 ? fittedText(shaped.content, failed5, maxChars, shaped.bytes) : parsed;
 }
 
 // ../packages/agent-run/src/policy/tools/index.ts
@@ -24238,8 +24526,8 @@ function selectedTools(ctx, offered) {
   }
   const required = policy.signoff ? [SIGNOFF_TOOL] : [];
   const pinned = [...pinnedNames(ctx), ...required];
-  const own = selectPlatformCatalog(ctx, pinned);
-  if (own) return own.filter((t) => !isToolWithheld(policy.approvalGates, t.function?.name ?? "", declaredBy(ctx.ports, t.function?.name)));
+  const own2 = selectPlatformCatalog(ctx, pinned);
+  if (own2) return own2.filter((t) => !isToolWithheld(policy.approvalGates, t.function?.name ?? "", declaredBy(ctx.ports, t.function?.name)));
   const prompt = [task.persona, task.prompt].filter(Boolean).join("\n");
   const catalog = selectCatalog(tools, policy.role, catalogCaps(ctx), { pinned, required, prompt });
   const selected = selectToolsForTurn(catalog, { query: task.prompt, pinned });
@@ -24366,8 +24654,8 @@ function errorText(data) {
   if (typeof data === "string") return { error: data };
   if (!data || typeof data !== "object") return {};
   const d = data;
-  const str4 = (v) => typeof v === "string" ? v : "";
-  return { stdout: `${str4(d.stdout)} ${str4(d.stderr)}`, error: str4(d.error) };
+  const str6 = (v) => typeof v === "string" ? v : "";
+  return { stdout: `${str6(d.stdout)} ${str6(d.stderr)}`, error: str6(d.error) };
 }
 
 // ../packages/agent-run/src/runState.ts
@@ -24779,8 +25067,8 @@ async function dispatchCall(input, state, call2, watch, facts = { refused: false
   const { ports, signal } = input;
   if (call2.malformed) return declineMalformedCall(ports, call2, facts, step);
   const platform = ports.platform;
-  const own = ownsCall(ports, call2.name);
-  if (platform && own && platform.handsOff?.(call2.name) && state.model.phase === "plan") {
+  const own2 = ownsCall(ports, call2.name);
+  if (platform && own2 && platform.handsOff?.(call2.name) && state.model.phase === "plan") {
     state.model = reduceRunPolicy(state.model, { type: "hand_off" });
   }
   try {
@@ -24794,7 +25082,7 @@ async function dispatchCall(input, state, call2, watch, facts = { refused: false
         if (ran.control) box.control = ran.control;
         return ran.data;
       }
-      if (platform && own) {
+      if (platform && own2) {
         const result2 = await platform.execute(name, args, { ...run ? { signal: run } : {}, progress: { rungs: state.stall?.rungs ?? {} }, callId: call2.id, step });
         box.failed = result2.isError === true;
         if (result2.parts || result2.meta) box.native = { ...result2.parts ? { parts: result2.parts } : {}, ...result2.meta ? { meta: result2.meta } : {} };
@@ -24810,11 +25098,11 @@ async function dispatchCall(input, state, call2, watch, facts = { refused: false
       box.control = result.control;
       return extension?.shape ? extension.shape(name, result.data) : result.data;
     };
-    const data = own && platform?.watchesItself ? await exec(call2.name, call2.args) : await runToolWithWatch(exec, watch, signal, call2.name, call2.args, own ? platform?.interruptible : void 0);
-    const surfaceCap = own ? platform?.resultCap?.(state.model.model) : void 0;
+    const data = own2 && platform?.watchesItself ? await exec(call2.name, call2.args) : await runToolWithWatch(exec, watch, signal, call2.name, call2.args, own2 ? platform?.interruptible : void 0);
+    const surfaceCap = own2 ? platform?.resultCap?.(state.model.model) : void 0;
     const capped2 = capToolResult(call2.name, data, surfaceCap ?? resultCapFor(call2.name, ports.model, state.model.model));
-    const failed4 = box.failed === true || !own && !!capped2 && capped2.ok === false && capped2.skipped !== true;
-    const dispatched = { data: capped2, ...box.control ? { control: box.control } : {}, ...failed4 ? { isError: true } : {} };
+    const failed5 = box.failed === true || !own2 && !!capped2 && capped2.ok === false && capped2.skipped !== true;
+    const dispatched = { data: capped2, ...box.control ? { control: box.control } : {}, ...failed5 ? { isError: true } : {} };
     if (box.kind) callKinds.set(dispatched, box.kind);
     if (box.native) nativeResults.set(dispatched, box.native);
     if (box.killed) killedResults.add(dispatched);
@@ -25195,9 +25483,9 @@ function kernelHooks(run) {
       const decision = await hooks.guards.beforeDispatch(pctx, pcall);
       if (decision?.skip) {
         const { data, isError, control } = decision.skip;
-        const skipped = { data, isError: isError ?? true, ...control ? { control: asLoopControl(control) } : {} };
-        if (control) held.add(skipped);
-        return { result: skipped };
+        const skipped2 = { data, isError: isError ?? true, ...control ? { control: asLoopControl(control) } : {} };
+        if (control) held.add(skipped2);
+        return { result: skipped2 };
       }
       if (ASK_TOOLS.has(call2.name)) {
         const note = hooks.subagents.backstop(pctx);
@@ -25327,10 +25615,10 @@ function localSpendMeter() {
   };
 }
 function usdBudget(usdCap, meter) {
-  const own = runBudgetCapMillicents(usdCap);
-  if (own == null) return void 0;
+  const own2 = runBudgetCapMillicents(usdCap);
+  if (own2 == null) return void 0;
   const inherited = meter.capMc?.();
-  const capMc = inherited !== void 0 ? Math.min(own, inherited) : own;
+  const capMc = inherited !== void 0 ? Math.min(own2, inherited) : own2;
   const caps = { maxSpendMillicents: capMc };
   let warned = false;
   let unpricedSaid = false;
@@ -25886,12 +26174,12 @@ function nowMs2() {
 function nowIso() {
   return typeof Date !== "undefined" ? (/* @__PURE__ */ new Date()).toISOString() : "";
 }
-function accrueProviders(c, field, raw) {
+function accrueProviders(c, field2, raw) {
   if (!raw) return;
-  const before = c[field].length;
-  const next = new Set(c[field]);
+  const before = c[field2].length;
+  const next = new Set(c[field2]);
   for (const p of raw.split(",").map((s) => s.trim()).filter(Boolean)) next.add(p);
-  if (next.size !== before) c[field] = [...next];
+  if (next.size !== before) c[field2] = [...next];
 }
 function accrueByoUnresolved(c, raw) {
   accrueProviders(c, "byoUnresolved", raw);
@@ -25960,14 +26248,14 @@ function shortenTarget(value, max = MAX_DETAIL) {
 }
 function activityTarget(args) {
   if (!args || typeof args !== "object" || Array.isArray(args)) return void 0;
-  const record2 = args;
+  const record3 = args;
   for (const key of TARGET_KEYS) {
-    const value = record2[key];
+    const value = record3[key];
     if (typeof value === "string" && value.trim()) return shortenTarget(value);
     if (typeof value === "number" && Number.isFinite(value)) return String(value);
   }
-  if (Array.isArray(record2.paths)) {
-    const names = record2.paths.filter((p) => typeof p === "string" && p.trim() !== "");
+  if (Array.isArray(record3.paths)) {
+    const names = record3.paths.filter((p) => typeof p === "string" && p.trim() !== "");
     if (names.length) return shortenTarget(names.join(", "));
   }
   return void 0;
@@ -25977,9 +26265,9 @@ var VISIT_QUESTION_SEPARATOR = " \u220B ";
 function visitTarget(args) {
   const scope = activityTarget(args);
   if (!scope) return void 0;
-  const record2 = args;
+  const record3 = args;
   for (const key of QUESTION_KEYS) {
-    const value = record2[key];
+    const value = record3[key];
     if (typeof value !== "string" || !value.trim()) continue;
     const question = shortenTarget(value);
     return question === scope ? scope : `${scope}${VISIT_QUESTION_SEPARATOR}${question}`;
@@ -27567,7 +27855,7 @@ var PHASES = ["started", "completed", "failed", "paused", "resumed", "cancelled"
 function isPhase(v) {
   return typeof v === "string" && PHASES.includes(v);
 }
-function str2(v) {
+function str4(v) {
   return typeof v === "string" && v.trim() ? v : void 0;
 }
 function parseChatActivity(msg) {
@@ -27580,9 +27868,9 @@ function parseChatActivity(msg) {
   } catch {
     return null;
   }
-  const ticketKind = str2(meta.ticketKind) ?? "task";
-  const ticketRef = str2(meta.ticketRef) ?? "";
-  const agentName = str2(meta.agentName) ?? str2(meta.agentRef) ?? "";
+  const ticketKind = str4(meta.ticketKind) ?? "task";
+  const ticketRef = str4(meta.ticketRef) ?? "";
+  const agentName = str4(meta.agentName) ?? str4(meta.agentRef) ?? "";
   if (meta.runMilestone != null && isPhase(meta.phase)) {
     return {
       kind: "milestone",
@@ -27591,9 +27879,9 @@ function parseChatActivity(msg) {
       ticketKind,
       ticketRef,
       executionId: typeof meta.executionId === "number" ? meta.executionId : null,
-      ...str2(meta.toStatus) ? { toStatus: str2(meta.toStatus) } : {},
-      ...str2(meta.note) ? { note: str2(meta.note) } : {},
-      ...str2(meta.question) ? { question: str2(meta.question) } : {}
+      ...str4(meta.toStatus) ? { toStatus: str4(meta.toStatus) } : {},
+      ...str4(meta.note) ? { note: str4(meta.note) } : {},
+      ...str4(meta.question) ? { question: str4(meta.question) } : {}
     };
   }
   if (meta.agentDispatch === true) {
@@ -27966,7 +28254,7 @@ var IDLE_GAP_MS = 12e4;
 function computeRunProgress(events, messages = []) {
   const slices = splitRuns(events, messages);
   if (slices.length === 1) return { ...progressOf(events, hasEditIntent(messages)), runs: [] };
-  const intentOf = (ask2, own) => hasEditIntent(own) || isContinuationDirective(ask2) && hasEditIntent(messages);
+  const intentOf = (ask2, own2) => hasEditIntent(own2) || isContinuationDirective(ask2) && hasEditIntent(messages);
   const each = slices.map((s) => ({ s, p: progressOf(s.events, intentOf(s.ask, s.messages)) }));
   const runs = each.map(({ s, p }) => ({
     ask: s.ask,
@@ -28000,14 +28288,14 @@ function progressOf(events, editIntent) {
     else seenCalls.set(sig2, subject);
     const cached2 = isCacheAnswered(ev);
     if (cached2) cacheAnswered += 1;
-    const failed4 = Boolean(ev.isError) || isFailedToolResult(ev.result);
+    const failed5 = Boolean(ev.isError) || isFailedToolResult(ev.result);
     if (current && current.sig === sig2) {
       current.streak.count += 1;
-      if (failed4) current.streak.failed += 1;
+      if (failed5) current.streak.failed += 1;
       if (current.streak.count === 2) streaks += 1;
       if (!longestStreak || current.streak.count > longestStreak.count) longestStreak = current.streak;
     } else {
-      current = { sig: sig2, streak: { label: ev.label, count: 1, failed: failed4 ? 1 : 0 } };
+      current = { sig: sig2, streak: { label: ev.label, count: 1, failed: failed5 ? 1 : 0 } };
     }
     const target = targetSignature(ev);
     if (target) {
@@ -28529,8 +28817,8 @@ function memoryAnswersInTrace(events) {
   return out;
 }
 function cap(s, n2 = 2e3) {
-  const str4 = typeof s === "string" ? s : JSON.stringify(s ?? "");
-  return str4.length > n2 ? str4.slice(0, n2) + `\u2026 (+${str4.length - n2} chars)` : str4;
+  const str6 = typeof s === "string" ? s : JSON.stringify(s ?? "");
+  return str6.length > n2 ? str6.slice(0, n2) + `\u2026 (+${str6.length - n2} chars)` : str6;
 }
 function isEvermindModel(model) {
   return /(^|\/)evermind\b|^project_evermind:|^tenant_model:/i.test(model);
@@ -29231,7 +29519,7 @@ async function moveTicket(c, req, move, reason) {
   } catch (e) {
     out = { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
-  const failed4 = isFailedToolResult(out);
+  const failed5 = isFailedToolResult(out);
   noteOf(c)({
     ts: nowIso(),
     category: "tool",
@@ -29239,9 +29527,9 @@ async function moveTicket(c, req, move, reason) {
     durationMs: nowMs2() - toolStart,
     args: { ...move.args, auto: true, reason },
     result: out ?? null,
-    isError: failed4
+    isError: failed5
   });
-  return !failed4;
+  return !failed5;
 }
 var LOCAL_VOCABULARY = ticketToolVocabulary([LOCAL_TICKET_CREATE_TOOL]);
 var MOVE_LABEL = /^(ticket[-_.]move|builtin_tasks_update)$/i;
@@ -29316,8 +29604,8 @@ var REVIEW_RECORD_TOOL2 = "builtin_reviews_record";
 function verificationOf(evidence, touchedFiles) {
   const entries = evidence?.snapshot() ?? [];
   if (!entries.length) return { verified: false, reason: "no verification evidence was recorded for this run" };
-  const failed4 = entries.flatMap((e) => e.checks.filter((c) => c.outcome === "fail").map((c) => `${e.path} ${c.kind} "${c.name}"`));
-  if (failed4.length) return { verified: false, reason: `failing checks: ${failed4.slice(0, 5).join("; ")}` };
+  const failed5 = entries.flatMap((e) => e.checks.filter((c) => c.outcome === "fail").map((c) => `${e.path} ${c.kind} "${c.name}"`));
+  if (failed5.length) return { verified: false, reason: `failing checks: ${failed5.slice(0, 5).join("; ")}` };
   const passing = entries.filter((e) => e.checks.some((c) => c.outcome === "pass"));
   if (!passing.length) return { verified: false, reason: "no check passed (only unavailable checks were recorded)" };
   const covers2 = (file) => {
@@ -29581,10 +29869,10 @@ var HAND_OFF_TOOL_SPEC = {
     }
   }
 };
-var str3 = (v) => typeof v === "string" ? v.trim() : "";
+var str5 = (v) => typeof v === "string" ? v.trim() : "";
 function parseHandOff(args) {
   const a = args ?? {};
-  const summary = str3(a.summary);
+  const summary = str5(a.summary);
   if (!Array.isArray(a.tasks) || a.tasks.length === 0) {
     return "hand_off needs { summary, tasks:[{ title, brief, paths? }] } with at least one task";
   }
@@ -29594,12 +29882,12 @@ function parseHandOff(args) {
   const tasks = [];
   for (const [i, raw] of a.tasks.entries()) {
     const t = raw ?? {};
-    const title = str3(t.title);
-    const brief = str3(t.brief);
+    const title = str5(t.title);
+    const brief = str5(t.brief);
     if (!title || !brief) return `task ${i + 1} needs both a title and a brief`;
-    const paths = Array.isArray(t.paths) ? t.paths.map(str3).filter(Boolean) : [];
-    const acceptance = str3(t.acceptance);
-    const constraints = str3(t.constraints);
+    const paths = Array.isArray(t.paths) ? t.paths.map(str5).filter(Boolean) : [];
+    const acceptance = str5(t.acceptance);
+    const constraints = str5(t.constraints);
     tasks.push({ title, brief, paths, ...acceptance ? { acceptance } : {}, ...constraints ? { constraints } : {} });
   }
   return { summary, tasks };
@@ -29663,12 +29951,12 @@ async function call(ports, name, args) {
   ports.step?.(name, { ...args, auto: true, reason: "hand_off" }, out, now() - start);
   return out;
 }
-function filedTicketRef(record2, local) {
-  const { localId, syncId } = entityIdsOf(record2);
+function filedTicketRef(record3, local) {
+  const { localId, syncId } = entityIdsOf(record3);
   if (!local) return syncId ?? void 0;
   if (localId) return localId;
   if (syncId != null) return syncId;
-  const opaque = record2?.id;
+  const opaque = record3?.id;
   return typeof opaque === "string" && opaque.trim() ? opaque : void 0;
 }
 async function fileTickets(plan, ports) {
@@ -29684,10 +29972,10 @@ async function fileTickets(plan, ports) {
       description: ticketDescription(task, plan.summary),
       taskType: "task"
     });
-    const record2 = toolResultRecord(out);
-    const failed4 = isFailed(record2 ?? out);
-    ids2.push(failed4 ? void 0 : filedTicketRef(record2, vocabulary.local));
-    if (!failed4) await ports.afterCreate?.(createTool, out).catch(() => void 0);
+    const record3 = toolResultRecord(out);
+    const failed5 = isFailed(record3 ?? out);
+    ids2.push(failed5 ? void 0 : filedTicketRef(record3, vocabulary.local));
+    if (!failed5) await ports.afterCreate?.(createTool, out).catch(() => void 0);
   }
   return ids2;
 }
@@ -30515,15 +30803,15 @@ function asHits(raw) {
   });
 }
 function resultField(result, key) {
-  let obj = result;
-  if (typeof obj === "string") {
+  let obj2 = result;
+  if (typeof obj2 === "string") {
     try {
-      obj = JSON.parse(obj);
+      obj2 = JSON.parse(obj2);
     } catch {
       return void 0;
     }
   }
-  return obj && typeof obj === "object" ? obj[key] : void 0;
+  return obj2 && typeof obj2 === "object" ? obj2[key] : void 0;
 }
 
 // src/completionGuard.ts
@@ -31048,8 +31336,8 @@ async function answerDeterministically(chatId, c, req, runId, runKey = chatId) {
 function recordAvoided(c, req, actionId, runId) {
   if (!req.recordAvoidedCall) return;
   const model = routedModel(c, req);
-  const record2 = req.recordAvoidedCall;
-  bestEffort(c, "avoided-call", () => record2({
+  const record3 = req.recordAvoidedCall;
+  bestEffort(c, "avoided-call", () => record3({
     source: "deterministic",
     actionId,
     ...runId ? { runId } : {},
@@ -31232,13 +31520,13 @@ function recorderFor(userRequest, lent) {
   return r;
 }
 async function prepareBrainRun(chatId, c, req, runKey, reportRunRow) {
-  const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, runTool, stream, evermind } = req;
+  const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, runTool: runTool2, stream, evermind } = req;
   const convo = c.transcript;
   restoreTurnContext(c);
   recordTranscriptAnchors(c, req);
   const stablePrefix = stablePrefixOn();
   const turnParts = [];
-  const canAskUser = !!runTool && (toolSpecs?.length ?? 0) > 0;
+  const canAskUser = !!runTool2 && (toolSpecs?.length ?? 0) > 0;
   const catalog = canAskUser ? [...toolSpecs ?? [], ASK_USER_TOOL_SPEC, HAND_OFF_TOOL_SPEC] : toolSpecs;
   const allTools = catalog && catalog.length > 0 ? catalog : void 0;
   const runMode = normalizeChatMode(req.chatMode ?? "work");
@@ -31591,7 +31879,7 @@ function deliveryGates(run) {
 var STOP_HOOK_RUNG = "brain.stop_hook";
 function brainDeliveryLedger(run, last) {
   const { c, req, userRequest, canAskUser } = run;
-  const { runTool } = req;
+  const { runTool: runTool2 } = req;
   const held = [];
   const note = (label, result, args = {}) => {
     const step = { ts: nowIso(), category: "message", label, args: { step: last.step, ...args }, result };
@@ -31605,7 +31893,7 @@ function brainDeliveryLedger(run, last) {
   return {
     // The closing answer after a failure streak is the Brain's own (`runStore/failureClose.ts`, run by the adapter tail). A host that
     // cannot run a tool judges no stall at all (the rungs are none): the turn IS the answer.
-    owns: { settle: true, synthesis: true, ...runTool ? {} : { narration: true } },
+    owns: { settle: true, synthesis: true, ...runTool2 ? {} : { narration: true } },
     // The Brain's stall order and wording (the stall policy's options below): a narrating turn is re-prompted before any rung, a model that
     // spent its budget is failed over (reading the nudge alone) or stopped only once every rung is clear, the rungs' directives are the
     // person's rows, and the stall is judged against the menu the turn advertised.
@@ -31626,7 +31914,7 @@ function brainDeliveryLedger(run, last) {
     },
     accept,
     async rungs(turn) {
-      if (!runTool) return [];
+      if (!runTool2) return [];
       const stopNudge = await askStopHook(req.onStop, { codeChanged: c.codeChanged, touchedFiles: c.touchedFiles, requestText: userRequest, round: run.stopHookRounds });
       const verifiable = c.codeChanged && !skipsVerifyStage(run.pipeline);
       const stopHook = {
@@ -31903,7 +32191,7 @@ function traceRouted(c, step, via, name) {
 }
 function callPreflight(run) {
   const { c, chatId, runKey, req, allTools, catalogToolNames, usedTools, readCoverage: readCoverage2, writeLedger, placeholderLedger } = run;
-  const { runTool, needsConfirm, persistence } = req;
+  const { runTool: runTool2, needsConfirm, persistence } = req;
   return async (rawCall, ctx) => {
     const iter = ctx.step;
     run.pending.forget(rawCall.id);
@@ -31960,7 +32248,7 @@ function callPreflight(run) {
         // A hand-off ticket links to this chat in its create call, stamped like a model's.
         runTool: (name, args2) => {
           stampRunChat(name, args2, run.serverChatId);
-          return runTool(name, args2);
+          return runTool2(name, args2);
         },
         toolNames: new Set(catalogToolNames),
         // The research the coders inherit: what this planning run read and searched.
@@ -32132,20 +32420,20 @@ async function postEditDiagnostics(call2, verifier) {
   if (!verifier || !EDIT_TOOLS2.has(call2.name) || !succeeded7(call2.result)) return null;
   const paths = editedPathsOf(call2.name, call2.args);
   if (!paths.length) return null;
-  let record2;
+  let record3;
   try {
-    record2 = await verifier.diagnostics(paths);
+    record3 = await verifier.diagnostics(paths);
   } catch {
     return null;
   }
-  if (!record2 || record2.outcome !== "fail") return null;
-  return postEditNote2(record2);
+  if (!record3 || record3.outcome !== "fail") return null;
+  return postEditNote2(record3);
 }
-function postEditNote2(record2) {
-  const lines = record2.findings.slice(0, NOTE_ERRORS2).map((f) => `- ${f}`);
-  const more = record2.findings.length > NOTE_ERRORS2 ? `
-- \u2026and ${record2.findings.length - NOTE_ERRORS2} more` : "";
-  return `Post-edit check FAILED (${record2.name}${record2.exitCode != null ? `, exit ${record2.exitCode}` : ""}) \u2014 fix this before building on it:
+function postEditNote2(record3) {
+  const lines = record3.findings.slice(0, NOTE_ERRORS2).map((f) => `- ${f}`);
+  const more = record3.findings.length > NOTE_ERRORS2 ? `
+- \u2026and ${record3.findings.length - NOTE_ERRORS2} more` : "";
+  return `Post-edit check FAILED (${record3.name}${record3.exitCode != null ? `, exit ${record3.exitCode}` : ""}) \u2014 fix this before building on it:
 ${lines.join("\n")}${more}`;
 }
 
@@ -32189,7 +32477,7 @@ function declineMalformedCall2(run, call2) {
 }
 function callRunner(run) {
   const { c, chatId, req, readCoverage: readCoverage2, failures, writeLedger, placeholderLedger } = run;
-  const { runTool } = req;
+  const { runTool: runTool2 } = req;
   return async (call2, ctx) => {
     const iter = ctx.step;
     const args = call2.args;
@@ -32200,10 +32488,10 @@ function callRunner(run) {
     const live2 = toolActivity(call2.name, args, iter, Date.now());
     run.pending.begin(call2.id, live2);
     setActivity(c, live2);
-    if (!runTool) throw new Error("tool call without a tool runner");
+    if (!runTool2) throw new Error("tool call without a tool runner");
     let out;
     try {
-      out = await runToolInterruptibly(runTool, run.runKey, c.abort?.signal, call2.name, withObservedModel(chatId, call2.name, args));
+      out = await runToolInterruptibly(runTool2, run.runKey, c.abort?.signal, call2.name, withObservedModel(chatId, call2.name, args));
     } catch (e) {
       const message2 = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
       out = { ok: false, error: message2 };
@@ -32654,11 +32942,11 @@ function toRunMessage(row) {
 // src/run/brainFold.ts
 var foldLimits = { summaryMs: 15e3 };
 function linkedAbort(parent) {
-  const own = new AbortController();
-  const onParent = () => own.abort();
-  if (parent?.aborted) own.abort();
+  const own2 = new AbortController();
+  const onParent = () => own2.abort();
+  if (parent?.aborted) own2.abort();
   else parent?.addEventListener("abort", onParent, { once: true });
-  return { signal: own.signal, abort: () => own.abort(), release: () => parent?.removeEventListener("abort", onParent) };
+  return { signal: own2.signal, abort: () => own2.abort(), release: () => parent?.removeEventListener("abort", onParent) };
 }
 async function summaryWithin(ms, summarize, parent, onLate, onError) {
   const link = linkedAbort(parent);
@@ -34026,8 +34314,8 @@ async function startRun(runKey, request, claim) {
         void req.reportOutcome(agentRow ? { ...parseRunOutcomeTelemetry({ ...agentRow }), ...outcome } : outcome).catch(() => void 0);
       } else if (agentRow && req.reportRunRecord) {
         const held = agentRow.model?.trim() ? agentRow : { ...agentRow, model: askedModelOf(req.model, trace4) };
-        const record2 = runOutcomeRequestOf(held, { clientRunId: c.runId, stopped: aborted, projectId: req.projectId });
-        if (record2) void req.reportRunRecord({ ...record2, steps: completedTurns(trace4).length, routingSignal: false }).catch((e) => unrecorded2(c, e));
+        const record3 = runOutcomeRequestOf(held, { clientRunId: c.runId, stopped: aborted, projectId: req.projectId });
+        if (record3) void req.reportRunRecord({ ...record3, steps: completedTurns(trace4).length, routingSignal: false }).catch((e) => unrecorded2(c, e));
       }
       reportRunEnd(c, req, { aborted, failed: c.error !== "" });
       c.persistStep = null;
@@ -34949,7 +35237,7 @@ function useBrainConversation(options) {
     maxTokens,
     reasoning,
     toolSpecs,
-    runTool,
+    runTool: runTool2,
     needsConfirm,
     answerQuestion,
     ensureChatId,
@@ -35022,7 +35310,7 @@ ${extraSystem}` : resolvedSystemPrompt;
         ...onDeviceTasks ? { onDeviceTasks } : {},
         maxTokens,
         reasoning,
-        runTool,
+        runTool: runTool2,
         needsConfirm,
         answerQuestion,
         stream,
@@ -35040,7 +35328,7 @@ ${extraSystem}` : resolvedSystemPrompt;
         chatRoster
       };
     },
-    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, onDeviceTasks, maxTokens, reasoning, runTool, needsConfirm, answerQuestion, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster]
+    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, onDeviceTasks, maxTokens, reasoning, runTool2, needsConfirm, answerQuestion, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster]
   );
   const bindContinuation = useContinuation(persistence, prepareRun);
   const launch = (0, import_react15.useCallback)(async (id, request, draftSend = null) => {
@@ -35430,8 +35718,8 @@ function servedModelLabel(model) {
   if (!parsed) return { name: void 0, onDevice: false, hostedFromHere: false };
   const onDevice2 = runsOnDevice(model ?? void 0);
   const catalogued = localCatalogModel(model)?.label;
-  const lastSegment = parsed.model.split("/").filter(Boolean).pop() ?? parsed.model;
-  return { name: catalogued ?? lastSegment, onDevice: onDevice2, hostedFromHere: !onDevice2 };
+  const lastSegment2 = parsed.model.split("/").filter(Boolean).pop() ?? parsed.model;
+  return { name: catalogued ?? lastSegment2, onDevice: onDevice2, hostedFromHere: !onDevice2 };
 }
 
 // src/chatStateReads.ts
@@ -35473,7 +35761,7 @@ var RESUME_STEPS = 6;
 var RESUME_FILES = 40;
 var MAX_ASK = 4e3;
 var TASK_STATE_TOOL = "update_task_state";
-function failed3(ev) {
+function failed4(ev) {
   return ev.isError === true || !!ev.result && typeof ev.result === "object" && ev.result.ok === false;
 }
 function resumeStateOf(ask2, events) {
@@ -35482,7 +35770,7 @@ function resumeStateOf(ask2, events) {
   const files = [];
   for (const ev of tools) {
     const args = ev.args && typeof ev.args === "object" ? ev.args : {};
-    if (ev.label === TASK_STATE_TOOL && !failed3(ev)) {
+    if (ev.label === TASK_STATE_TOOL && !failed4(ev)) {
       const next = applyTaskStateUpdate(task, args);
       if (next.ok) task = next.state;
       continue;
@@ -35491,7 +35779,7 @@ function resumeStateOf(ask2, events) {
   }
   const steps = tools.filter((ev) => ev.label !== TASK_STATE_TOOL).slice(-RESUME_STEPS).map((ev) => {
     const target = activityTarget(ev.args);
-    return `${ev.label}${target ? ` on ${target}` : ""} \u2014 ${failed3(ev) ? "failed" : "ok"}`;
+    return `${ev.label}${target ? ` on ${target}` : ""} \u2014 ${failed4(ev) ? "failed" : "ok"}`;
   });
   const plan = renderTaskState(task);
   const asked = ask2?.trim();
@@ -35522,7 +35810,7 @@ function parseResumeState(value) {
 var DEFAULT_MIN_PAYLOAD = 240;
 function createPayloadBudget(opts) {
   const minPayload = Math.min(opts.minPayload ?? DEFAULT_MIN_PAYLOAD, opts.perPayload);
-  let remaining = Math.max(0, opts.total);
+  let remaining2 = Math.max(0, opts.total);
   let spent = 0;
   let trimmed = 0;
   let deduped = 0;
@@ -35542,18 +35830,18 @@ function createPayloadBudget(opts) {
         return `\u2026(identical to the ${ordinalWord(prior.ordinal)} payload in this report \u2014 ${prior.label}, ${formatCount(payload.length)} chars. Repeated verbatim; not reprinted.)`;
       }
       seen.set(payload, { ordinal, label });
-      const cap2 = Math.max(floor, Math.min(ceiling, remaining));
+      const cap2 = Math.max(floor, Math.min(ceiling, remaining2));
       if (payload.length <= cap2) {
-        remaining -= payload.length;
+        remaining2 -= payload.length;
         spent += payload.length;
         return payload;
       }
-      if (remaining < floor) {
+      if (remaining2 < floor) {
         trimmed += 1;
         return `\u2026(${formatCount(payload.length)} chars omitted \u2014 the report hit its size budget. The full result is on the live timeline.)`;
       }
       trimmed += 1;
-      remaining -= cap2;
+      remaining2 -= cap2;
       spent += cap2;
       return `${payload.slice(0, cap2)}
 \u2026(+${formatCount(payload.length - cap2)} chars truncated \u2014 full result is on the live timeline)`;
@@ -36311,10 +36599,10 @@ function runHistoryLines(runs) {
     const who = run.agentName?.trim() || run.agentRef || "no agent recorded";
     const ticket = `#${run.taskId}${run.taskTitle ? ` "${run.taskTitle}"` : ""}`;
     const produced = run.produced === true ? " \xB7 produced output" : run.produced === false ? " \xB7 produced NOTHING" : "";
-    const failed4 = run.errorMessage ? ` \xB7 ${run.errorMessage}` : "";
+    const failed5 = run.errorMessage ? ` \xB7 ${run.errorMessage}` : "";
     const where = run.hostName ? ` \xB7 on on-prem "${run.hostName}"` : run.executor ? ` \xB7 on ${run.executor}${run.sandbox ? ` (sandbox: ${run.sandbox})` : ""}` : " \xB7 on ? (executor not recorded)";
     out.push(
-      `  - run #${run.executionId} \xB7 ${who} \xB7 ${ticket} \xB7 ${run.status}${produced}${where} \xB7 by ${run.submittedBy}${run.source ? ` via ${run.source}` : ""} \xB7 ${shortTime(run.createdAt)}${run.completedAt ? ` \u2192 ${shortTime(run.completedAt)}` : ""}${failed4}`
+      `  - run #${run.executionId} \xB7 ${who} \xB7 ${ticket} \xB7 ${run.status}${produced}${where} \xB7 by ${run.submittedBy}${run.source ? ` via ${run.source}` : ""} \xB7 ${shortTime(run.createdAt)}${run.completedAt ? ` \u2192 ${shortTime(run.completedAt)}` : ""}${failed5}`
     );
   }
   if (runs.runs.length > MAX_RUNS_LISTED) {
@@ -37065,8 +37353,8 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFl
   runningRef.current = running;
   const remove = (0, import_react18.useCallback)((id) => update((current) => current.filter((item) => item.id !== id)), [update]);
   const clear = (0, import_react18.useCallback)(() => update((current) => {
-    const own = (item) => !item.draft || item.draft.token === shownRef.current;
-    return current.some(own) ? current.filter((item) => !own(item)) : current;
+    const own2 = (item) => !item.draft || item.draft.token === shownRef.current;
+    return current.some(own2) ? current.filter((item) => !own2(item)) : current;
   }), [update]);
   const requeue2 = (0, import_react18.useCallback)((value) => update((current) => [{ id: nextId.current += 1, value }, ...current]), [update]);
   const pushBack = (0, import_react18.useCallback)((value) => update((current) => [...current, { id: nextId.current += 1, value }]), [update]);

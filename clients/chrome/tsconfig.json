@@ -20,8 +20,13 @@
       "@builderforce/knowledge-graph-view/tokens.css": ["../../packages/knowledge-graph-view/src/tokens.css"],
       // The view's run delta card types its props off the engine contract (PRD 41 §C11).
       "@builderforce/run-delta/contract": ["../../packages/run-delta/src/contract.ts"],
+      // …and the history rows off the engine's stored summary (`RunDeltaSummary`, PRD 41 §C11.3).
+      "@builderforce/run-delta": ["../../packages/run-delta/src/index.ts"],
+      "@builderforce/sarif": ["../../packages/sarif/src/index.ts"],
       "@builderforce/secret-redaction": ["../../packages/secret-redaction/src/index.ts"],
       "@builderforce/agent-tools/code-mask": ["../../packages/agent-tools/src/knowledge/codeMask.ts"],
+      "@builderforce/agent-tools/sampling": ["../../packages/agent-tools/src/sampling.ts"],
+      "@builderforce/agent-tools/glob": ["../../packages/agent-tools/src/glob.ts"],
       "@builderforce/device-auth": ["../../packages/device-auth/src/index.ts"],
       "@builderforce/kimi-oauth": ["../../packages/kimi-oauth/src/index.ts"],
       "@builderforce/local-first": ["../../packages/local-first/src/index.ts"],

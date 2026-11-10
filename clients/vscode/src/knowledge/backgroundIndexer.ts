@@ -26,6 +26,7 @@ import { hostIndexPorts } from "./indexHostPorts";
 import { publishIndexLevel, registerBackgroundPreemptor, setIndexerWatching } from "./indexLevels";
 import { PRIORITY } from "./indexScheduler";
 import { PathCoalescer } from "./indexWatcher";
+import { registerL3Runner } from "./l3Tasks";
 import { vscodeKnowledgeFs } from "./knowledgeFs";
 import { pathKey, rootForPath, type KnowledgeRoot } from "./knowledgeRoots";
 import { log, workspaceFolders } from "./knowledgeService";
@@ -67,9 +68,10 @@ export class BackgroundIndexer {
   private readonly gate: ActivityGate;
   private readonly coalescer: PathCoalescer;
   private l3Timer: unknown;
+  private stopL3Runner: (() => void) | undefined;
   private focused = true;
   private lastRefocus = Number.NEGATIVE_INFINITY;
-  private editorKeys: { at: number; open: Set<string>; visible: Set<string> } | undefined;
+  private editorKeys: { at: number; open: Set<string>; visible: Set<string>; openPaths: string[] } | undefined;
   private disposing: Promise<void> | undefined;
 
   constructor(private readonly host: IndexerHost) {
@@ -81,10 +83,12 @@ export class BackgroundIndexer {
     this.focused = focused;
     this.gate.focus(focused);
     const tick = (): void => {
-      for (const h of this.roots.values()) void h.indexer.maybeRunL3();
+      // The analyzers' own pass first; then ONE queued L3 task of the root (the run delta's analyzer phase) on the same gate.
+      for (const h of this.roots.values()) void h.indexer.maybeRunL3().then(() => h.indexer.runL3Task(h.root.rootPath));
       this.l3Timer = this.host.clock.setTimeout(tick, L3_CHECK_MS);
     };
     this.l3Timer = this.host.clock.setTimeout(tick, L3_CHECK_MS);
+    this.stopL3Runner = registerL3Runner(() => [...this.roots.values()].map((h) => h.root.rootPath));
     this.syncFolders();
   }
 
@@ -130,6 +134,7 @@ export class BackgroundIndexer {
     const indexer = new RootIndexer({
       ports, clock: this.host.clock, gate: this.gate, power: this.host.power,
       priorityOf: (rel) => this.priorityOf(`${root.rootPath}/${rel}`),
+      openPaths: () => this.openUnder(root.rootPath),
       publish: publishIndexLevel,
       telemetry: this.host.telemetry(root),
       log: (what, error) => this.host.log(`index ${what}`, error),
@@ -157,15 +162,28 @@ export class BackgroundIndexer {
 
   /** Files open in editors first, then visible ones, then everything else (B6 scheduling 1, 2, 5). */
   private priorityOf(absPath: string): number {
+    const keys = this.editors();
+    const key = pathKey(absPath);
+    if (keys.open.has(key)) return PRIORITY.open;
+    if (keys.visible.has(key)) return PRIORITY.visible;
+    return PRIORITY.rest;
+  }
+
+  /** The editors' paths, re-read at most every {@link PRIORITY_TTL_MS} (or after an editor event): ONE read serves every lookup. */
+  private editors(): NonNullable<BackgroundIndexer["editorKeys"]> {
     const now = this.host.clock.now();
     if (!this.editorKeys || now - this.editorKeys.at > PRIORITY_TTL_MS) {
       const { visible, open } = this.host.editors();
-      this.editorKeys = { at: now, open: new Set(open.map((p) => pathKey(p))), visible: new Set(visible.map((p) => pathKey(p))) };
+      this.editorKeys = { at: now, open: new Set(open.map((p) => pathKey(p))), visible: new Set(visible.map((p) => pathKey(p))), openPaths: open.map((p) => p.replace(/\\/g, "/")) };
     }
-    const key = pathKey(absPath);
-    if (this.editorKeys.open.has(key)) return PRIORITY.open;
-    if (this.editorKeys.visible.has(key)) return PRIORITY.visible;
-    return PRIORITY.rest;
+    return this.editorKeys;
+  }
+
+  /** The files open in editors under `rootPath`, root-relative (the near level's seeds, B6 scheduling 3). */
+  private openUnder(rootPath: string): string[] {
+    const base = `${rootPath.replace(/\\/g, "/").replace(/\/+$/, "")}/`;
+    const baseKey = `${pathKey(base)}/`; // `pathKey` drops the trailing slash: put it back, so `/root2` is not under `/root`
+    return this.editors().openPaths.filter((p) => pathKey(p).startsWith(baseKey)).map((p) => p.slice(base.length));
   }
 
   /** Stops every root and resolves once all are quiet: no reconcile, no long pass, no slice in flight. */
@@ -173,6 +191,8 @@ export class BackgroundIndexer {
     this.disposing ??= (async () => {
       if (this.l3Timer !== undefined) this.host.clock.clearTimeout(this.l3Timer);
       this.l3Timer = undefined;
+      this.stopL3Runner?.(); // what is still queued runs now, ungated: it is never lost
+      this.stopL3Runner = undefined;
       this.coalescer.dispose();
       this.gate.dispose();
       await Promise.all([...this.roots].map(([rootId, held]) => this.stopRoot(rootId, held)));

@@ -18,7 +18,7 @@ import {
     DEFAULT_REVIEW_MODEL_CALLS, planDetail, reviewDirectory, srcRef,
     type AnalyzerPort, type DirectorySource, type Extracted, type ExtractJob, type ExtractPool, type JudgementPort, type ReviewStep, type KnowledgeGraph,
     type KnowledgePack, type KnowledgeStore, type LiveOverlay, type NodeRef, type PartitionRegistry, type PlanDetail, type ReviewPlan,
-    type ReviewArgs, type ReviewProgress, type ReviewReport, type SimilarPair,
+    type ReviewArgs, type ReviewProgress, type ReviewReport, type SimilarPair, type FindingsProvider,
 } from '@seanhogg/builderforce-memory/knowledge';
 import type { IngestManifest } from '@seanhogg/builderforce-memory/ingest';
 import type { CapabilityProvider } from '../capabilities.js';
@@ -40,7 +40,7 @@ import { noteGraphReads } from './graphReads.js';
 import { repoGraphUnder, snapshotUnder } from './rootRelative.js';
 import { runPreemptingJudge, type RunHandoff } from './reviewRunLock.js';
 import { readSystems, recordSystems } from './systemsRecord.js';
-import { analyseWorkspace, type RepoGraphPort } from './workspaceAnalysis.js';
+import { analyseWorkspace, type RepoGraphPort, type WorkspaceAnalysisDeps } from './workspaceAnalysis.js';
 import { fingerprintSha } from './workspaceFingerprint.js';
 import { runJudgePass } from './reviewJudgePass.js';
 import { directoryArgs } from './reviewDirectoryArgs.js';
@@ -354,6 +354,8 @@ export interface StoredGraphArgs {
      * to their before (or after) extracts, which the caller has put in the store's extract cache under those hashes.
      */
     hashOverrides?: ReadonlyMap<string, string | null>;
+    /** The host's findings for the kinds it owns (PRD 41 §B5: the fact index), over the WHOLE graph (memory `BuildGraphOptions.findings`). */
+    findings?: FindingsProvider;
 }
 
 /** The content hash of every file a stored graph reads: the review's (or a newer edit's), with `overrides` applied. */
@@ -402,6 +404,7 @@ export async function buildStoredGraph(args: StoredGraphArgs): Promise<Knowledge
         {
             ...(args.maxNodes ? { maxNodes: args.maxNodes } : {}),
             ...(args.focus?.length ? { focus: args.focus as NodeRef[] } : {}),
+            ...(args.findings ? { findings: args.findings } : {}),
         },
     );
 }
@@ -418,6 +421,8 @@ export function analysisSha(snapshot: CodeAnalysisSnapshot): string {
 export interface WorkspaceAnalyzersDeps {
     /** The surface's capabilities — `shell` runs dependency-cruiser, jscpd and knip; `repoRead` feeds the repo map. */
     caps: CapabilityProvider;
+    /** THE L3 result cache shared with the run delta (`delta/adapters/l3Cache.ts`). Absent: none. */
+    l3?: WorkspaceAnalysisDeps['l3'];
     partitions?: PartitionRegistry;
     /** Workspace-relative folder to analyse (a reviewed sub-folder); absent ⇒ the whole tree. */
     path?: string;
@@ -444,6 +449,7 @@ export function workspaceCodeAnalyzers(deps: WorkspaceAnalyzersDeps): AnalyzerPo
                     ...(deps.partitions ? { partitions: deps.partitions } : {}),
                     ...(deps.repoGraph ? { repoGraph: deps.repoGraph } : {}),
                     ...(onProgress ? { onProgress } : {}),
+                    ...(deps.l3 ? { l3: deps.l3 } : {}),
                 },
                 signal,
             );

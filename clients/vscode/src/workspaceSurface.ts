@@ -307,11 +307,24 @@ export class WorkspaceSurface implements vscode.Disposable {
       case "run-delta/open":
       case "run-delta/release":
       case "run-delta/get":
+      case "run-delta/prediction-shown":
         await handleRunDeltaRequest(msg.type, msg as unknown as Record<string, unknown>, {
           ...(hooks.runHost ? { runHost: hooks.runHost } : {}),
           openFile: (file, line) => openCapturedFile(file, line ? { startLine: line, startColumn: 1, endLine: line, endColumn: 1 } : undefined),
           respond: (ok, result, error) => this.respond(msg.id, ok, result, error),
         });
+        break;
+      // A repository's run delta history for the panel's history and trend (PRD 41 §C11.3).
+      case "run-delta/history":
+        try {
+          const req = msg as BrainInbound & { repo?: unknown; limit?: unknown };
+          const rows = typeof req.repo === "string" && req.repo
+            ? await hooks.runHost?.runDeltaHistory?.({ repo: req.repo, ...(typeof req.limit === "number" ? { limit: req.limit } : {}) })
+            : undefined;
+          this.respond(msg.id, true, rows ?? []);
+        } catch (error) {
+          this.respond(msg.id, false, undefined, error instanceof Error ? error.message : String(error));
+        }
         break;
       // Scoped to the chat the surface is showing: several chats run at once out in the
       // host, and a switch flipped in one must not answer a confirm parked in another.

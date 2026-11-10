@@ -73,10 +73,20 @@ export interface BranchTeardownFacts {
     commitShas: string[];
   };
   /** Substring EVERY commit this run made carries in its message. Produced by
-   *  `agentCommitMessage`, which appends `— task #<id> (<agent>)`, so the marker
-   *  is task-scoped and a commit for a different task on the same branch reads as
-   *  foreign. Supplied by the caller so this module stays free of message format. */
+   *  `agentCommitMessage`, which appends `— task #<id> · run #<executionId> (<agent>)`,
+   *  so the marker is RUN-scoped (`runCommitMarker(taskId, executionId)`): a commit of
+   *  another task, another run of this task, or one written before per-run subjects
+   *  reads as foreign. Supplied by the caller so this rule stays free of message format. */
   runCommitMarker: string;
+  /** REVERT ONLY: the legacy per-TASK marker (`runCommitMarker(taskId)`, `— task #12 (`) a
+   *  run snapshotted before per-run subjects wrote. A commit carrying it counts as this run's
+   *  only when the run is ENTIRELY legacy (no listed commit carries `runCommitMarker`) and its
+   *  sha is EXACTLY one of `run.commitShas`. That is NOT proof of authorship: the snapshot's
+   *  shas are every commit ahead of base on the shared task branch, so an entirely-legacy run's
+   *  commits cannot be told apart from an earlier legacy run's on the same branch — rule 8
+   *  (the branch has not moved past the recorded shas) is the only guard. A per-run run never
+   *  accepts a legacy commit. Ignored in teardown (no sha set). */
+  legacyRunCommitMarker?: string;
 }
 
 export type TeardownDecision =
@@ -111,7 +121,8 @@ function normalizeRef(ref: string): string {
  *  5. NEVER while a PR is open (teardown) — a teardown must not orphan a review.
  *  6. NEVER once the PR is merged (both modes) — the work is on the base branch,
  *     and deleting the branch would not undo it while closing the PR is impossible.
- *  7. NEVER when a commit on the branch was not authored by this run.
+ *  7. NEVER when a commit on the branch was not authored by this run (per-run marker; in
+ *     revert mode also the legacy per-task marker on a sha the snapshot recorded).
  *  8. (revert) NEVER when the branch head advanced past the run's last commit.
  *  9. (revert) NEVER when the branch touched a path outside what the run wrote.
  */
@@ -161,8 +172,19 @@ export function decideBranchTeardown(facts: BranchTeardownFacts): TeardownDecisi
   }
 
   // 7 — authorship. Every commit ahead of base must carry this run's marker.
-  //     Anything else is somebody's (or another task's) work.
-  const foreign = commits.filter((c) => !c.message.includes(facts.runCommitMarker));
+  //     Anything else is somebody's (or another task's) work. In revert mode a commit
+  //     carrying the LEGACY per-task marker is the run's own only when the snapshot recorded
+  //     its exact sha (rule 8 then also proves the branch did not move past it) AND the run
+  //     itself is legacy — no listed commit carries the per-run marker. A per-run run never
+  //     wrote a legacy subject, so a legacy commit beside its per-run commits is an earlier
+  //     run's work that the snapshot swept up (commitShas = every commit ahead of base on the
+  //     shared task branch) and stays foreign.
+  const recordedShas = new Set(facts.run.commitShas);
+  const runIsLegacy = !commits.some((c) => c.message.includes(facts.runCommitMarker));
+  const legacy = facts.mode === 'revert' && runIsLegacy && facts.legacyRunCommitMarker ? facts.legacyRunCommitMarker : null;
+  const isOwn = (c: BranchCommit): boolean => c.message.includes(facts.runCommitMarker)
+    || (legacy !== null && recordedShas.has(c.sha) && c.message.includes(legacy));
+  const foreign = commits.filter((c) => !isOwn(c));
   if (foreign.length > 0) {
     const sample = foreign.slice(0, 3).map((c) => `${c.sha.slice(0, 7)} "${(c.message.split('\n')[0] ?? '').slice(0, 60)}"`).join(', ');
     return refuse('foreign_commits', `'${branch}' carries ${foreign.length} commit(s) this run did not author (${sample}) — refusing to delete someone else's work`);
@@ -203,9 +225,7 @@ export function decideBranchTeardown(facts: BranchTeardownFacts): TeardownDecisi
   };
 }
 
-/** The commit-message marker every commit of a given task's run carries. Mirrors
- *  `agentCommitMessage` in cloudAgentEngine (`<verb> <path> — task #<id> (<agent>)`).
- *  Kept beside the rule that consumes it so the two cannot drift apart silently. */
-export function runCommitMarker(taskId: number): string {
-  return `— task #${taskId} (`;
-}
+/** The commit-message marker a run's commits carry — per RUN when given the execution id
+ *  (`— task #12 · run #345 (`), else the legacy per-task form. Defined beside the subject
+ *  it matches (`agentCommitMarker.ts`), so the two cannot drift apart silently. */
+export { runCommitMarker } from './agentCommitMarker';

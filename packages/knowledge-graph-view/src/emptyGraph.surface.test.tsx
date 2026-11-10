@@ -13,7 +13,6 @@ import { PANELS } from './surface/panels';
 import { useSurface } from './surface/useSurface';
 import type { KnowledgeGraphSource } from './types';
 
-vi.mock('./scene/GraphScene', () => ({ default: () => null }));
 
 const pending = (): KnowledgeGraphSource => ({ scopes: () => new Promise(() => undefined), load: () => new Promise(() => undefined) });
 

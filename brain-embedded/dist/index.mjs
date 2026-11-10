@@ -355,7 +355,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-IC7AQZ4K.mjs";
+} from "./chunk-3H7PKONZ.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useEffect, useMemo } from "react";
@@ -5049,6 +5049,7 @@ function summarizeGateRuns(rows, accepted = /* @__PURE__ */ new Map()) {
 }
 
 // ../packages/pipeline-route/src/score.ts
+import { sigmoid } from "@seanhogg/builderforce-memory/stats";
 var LENGTH_FLOOR_CHARS = 80;
 var MAX_FILE_MENTIONS = 4;
 var DEFAULT_ROUTE_THRESHOLD = 0.5;
@@ -5072,7 +5073,6 @@ var ROUTE_WEIGHTS = {
     docs: -0.6
   }
 };
-var sigmoid = (z) => 1 / (1 + Math.exp(-z));
 var round2 = (n2) => Math.round(n2 * 100) / 100;
 function routeThreshold(raw) {
   return typeof raw === "number" && Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : DEFAULT_ROUTE_THRESHOLD;
@@ -5219,6 +5219,9 @@ function offeredActions(registry2, ports) {
   return registry2.filter((a) => a.surfaces.includes(ports.surface) && (!a.requires || !!ports.tools?.has(a.requires.tool)));
 }
 
+// ../packages/prefetch/src/calibrate.ts
+import { logisticProbability, onlineLogisticStep } from "@seanhogg/builderforce-memory/stats";
+
 // ../packages/prefetch/src/lexical.ts
 var STOP = /* @__PURE__ */ new Set([
   "a",
@@ -5315,16 +5318,9 @@ function headOf(state, id) {
 function thresholdOf(state, id) {
   return state?.thresholds[id] ?? { answer: COLD_START.answer, prefetch: COLD_START.prefetch, n: 0 };
 }
-function sigmoid2(z) {
-  if (z >= 0) return 1 / (1 + Math.exp(-z));
-  const e = Math.exp(z);
-  return e / (1 + e);
-}
 function predict(head, features) {
   if (features.length !== head.weights.length) return 0;
-  let z = head.bias;
-  for (let i = 0; i < features.length; i++) z += head.weights[i] * features[i];
-  return sigmoid2(z);
+  return logisticProbability(head.weights, head.bias, features);
 }
 
 // ../packages/prefetch/src/deadline.ts
@@ -6191,6 +6187,9 @@ var ACTION_TYPES = [
 ];
 var DEFAULT_ACTION_TYPE = "other";
 var ACTION_TYPE_SET = new Set(ACTION_TYPES);
+
+// ../packages/learned-routing/src/exploration.ts
+import { betaMoments, normalDraw } from "@seanhogg/builderforce-memory/stats";
 
 // ../packages/learned-routing/src/recencyDecay.ts
 var ROUTING_HALF_LIFE_DAYS = 30;

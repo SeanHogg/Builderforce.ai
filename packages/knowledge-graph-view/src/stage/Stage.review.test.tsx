@@ -103,7 +103,7 @@ describe('Strict Mode', () => {
     it('the renderer survives the double mount: created and disposed in one effect, planes and labels still render', () => {
         const disposed = new Set<StageRenderer>();
         const created = { n: 0 };
-        let live: StageRenderer | null = null;
+        let live: StageRenderer | null | false = null;
         function Probe() {
             const r = useStageRenderer(() => {
                 const stage = createWebGLStage({ text: textPort(created), fonts: fixedFontPort({ 500: 'https://host/jbm.woff' }) });
@@ -116,8 +116,8 @@ describe('Strict Mode', () => {
         }
         render(<StrictMode><Probe /></StrictMode>);
         expect(live).not.toBeNull();
-        expect(disposed.has(live!)).toBe(false);
-        const stage = live!;
+        const stage = live as unknown as StageRenderer;
+        expect(disposed.has(stage)).toBe(false);
         stage.setMarks(model.marks);
         stage.setPlacement(map, 0, 0);
         const planes: InstancedMesh[] = [];

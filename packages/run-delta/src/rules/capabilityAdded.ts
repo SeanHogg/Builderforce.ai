@@ -11,54 +11,30 @@
  */
 
 import type { DeltaRule } from '../contract.js';
-import { escapeRegex, isCodePath, isTestPath, type TextView } from './support/files.js';
-import { regexHits, stateSides, type Hit } from './support/stateRule.js';
+import { compileEntries, type EntryScanner } from './support/entryForms.js';
+import { isCodePath, isTestPath, type TextView } from './support/files.js';
+import { importsOf } from './support/imports.js';
+import { stateSides, type Hit } from './support/stateRule.js';
+import { strideCoverageOf, strideRows, type StrideCoverage } from './support/strideRows.js';
 
-const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|\bimport\s+)(['"])([^'"\n]+)\1/g;
-const MEMBER = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/;
-
-interface Compiled {
-    /** ONE alternation over every call and member entry (one scan of the masked text), entry by group index. */
-    scan?: RegExp;
-    scanEntries: Array<{ cap: string; entry: string }>;
-    specifiers: Array<{ cap: string; entry: string }>;
-}
-
-function compile(capabilities: Readonly<Record<string, readonly string[]>>): Compiled {
-    const scanEntries: Compiled['scanEntries'] = [], specifiers: Compiled['specifiers'] = [], parts: string[] = [];
-    for (const cap of Object.keys(capabilities).sort()) {
-        for (const entry of capabilities[cap]!) {
-            if (entry.endsWith('(')) {
-                parts.push(`(${escapeRegex(entry.slice(0, -1).trim()).replace(/\s+/g, '\\s+')}\\s*\\()`);
-                scanEntries.push({ cap, entry });
-            } else if (MEMBER.test(entry)) {
-                parts.push(`(${escapeRegex(entry)}(?![\\w$]))`);
-                scanEntries.push({ cap, entry });
-            } else specifiers.push({ cap, entry });
-        }
-    }
-    return { ...(parts.length > 0 ? { scan: new RegExp(`(?<![\\w$])(?:${parts.join('|')})`, 'g') } : {}), scanEntries, specifiers };
-}
-
-function hitsOf(view: TextView, c: Compiled): Hit[] {
+function hitsOf(view: TextView, c: EntryScanner): Hit[] {
     const hits: Hit[] = [];
-    if (c.scan) {
-        for (const { offset, match } of regexHits(c.scan, view.bare)) {
-            const i = match.findIndex((g, k) => k > 0 && g !== undefined) - 1;
-            const e = c.scanEntries[i];
-            if (e) hits.push({ offset, length: match[0].length, key: e.cap, params: { via: e.entry } });
-        }
-    }
-    if (c.specifiers.length > 0) {
-        for (const { offset, match } of regexHits(SPECIFIER, view.code)) {
-            const spec = match[2]!;
+    // One finding per (file, capability): only each capability's first use is needed.
+    for (const h of c.firstPerKey(view.bare)) hits.push({ offset: h.offset, length: h.length, key: h.key, params: { via: h.entry } });
+    // A module specifier needs an `import` or a `require`: a file with neither skips the import scan.
+    if (c.specifiers.length > 0 && (view.code.includes('import') || view.code.includes('require'))) {
+        // The shared, memoized import scan (one pass per view for every import-reading rule).
+        for (const { offset, length, specifier: spec } of importsOf(view)) {
             for (const e of c.specifiers) {
-                if (e.entry.startsWith('*') ? spec.endsWith(e.entry.slice(1)) : spec === e.entry) hits.push({ offset, length: match[0].length, key: e.cap, params: { via: e.entry } });
+                if (e.entry.startsWith('*') ? spec.endsWith(e.entry.slice(1)) : spec === e.entry) hits.push({ offset, length, key: e.key, params: { via: e.entry } });
             }
         }
     }
     return hits;
 }
+
+/** C5.7: the file's STRIDE checklist, from the coverage names it uses (a capability has no route chain). */
+const strideParams = (coverage: StrideCoverage) => (view: TextView): Record<string, string> => strideRows(coverage.namesIn(view), coverage);
 
 export const capabilityAdded: DeltaRule = {
     id: 'capability-added',
@@ -66,10 +42,12 @@ export const capabilityAdded: DeltaRule = {
     dimension: 'security',
     reads: ['content'],
     derive(input) {
-        const compiled = compile(input.registries.capabilities);
+        const compiled = compileEntries(input.registries.capabilities, 'any');
+        const coverage = strideCoverageOf(input);
         return stateSides(capabilityAdded, {
             files: (p) => isCodePath(p) && !isTestPath(p),
             hits: (view) => hitsOf(view, compiled),
+            fileParams: strideParams(coverage),
             severity: 'warn',
             granularity: 'file',
         }, input);

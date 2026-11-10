@@ -22,7 +22,7 @@ import { placeSystem } from './system';
 export type PlacementBuilder = (g: KnowledgeGraph, model: StageModel, req: PlacementReq) => IdleTask<Placement>;
 
 export const PLACEMENTS: Readonly<Record<PlacementCamera, PlacementBuilder>> = {
-    map: (_g, model, req) => once(() => placeMap(model, req)),
+    map: (g, model, req) => once(() => placeMap(model, req, g)),
     graph: placeGraph,
     '3d': placeScene3d,
     mind: (g, model, req) => once(() => placeMind(g, model, req)),

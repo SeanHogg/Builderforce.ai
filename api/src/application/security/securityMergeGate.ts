@@ -20,7 +20,7 @@
  * `VULNERABILITY_FINDING_STATUSES`). That is the human override path and it is audited like any
  * other tracker mutation.
  */
-import type { FindingSeverity } from '../../domain/security/scanReportParsers';
+import type { FindingSeverity } from '@builderforce/sarif';
 
 /** The severities that hold a merge. ONE definition — the gate, the incident rule and the UI read it here. */
 export const BLOCKING_SEVERITIES: readonly FindingSeverity[] = ['CRITICAL', 'HIGH'];

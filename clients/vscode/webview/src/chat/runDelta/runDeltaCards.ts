@@ -9,9 +9,11 @@
  * before the field existed), or whose reply is gone, follows the chat's last reply.
  */
 
-import type { RunDeltaCardPayload, RunDeltaProgressCard } from '@builderforce/run-delta/contract';
+import type { RunDeltaCardPayload as ContractCard, RunDeltaProgressCard } from '@builderforce/run-delta/contract';
+import type { Prediction } from '@builderforce/run-delta/predict';
 
-export type { RunDeltaCardPayload };
+/** A card as the host posts it: the contract's payload plus `predicted`, the predictions it shows (PRD 41 §D11; advisory). */
+export type RunDeltaCardPayload = ContractCard & { predicted?: Prediction[] };
 /** The host's refusal codes, from the contract (never spelled here). */
 export { RUN_DELTA_OPEN_REFUSED, RUN_DELTA_RELEASE_REFUSED, releaseRefusalOf, type RunDeltaReleaseRefusal } from '@builderforce/run-delta/contract';
 export type ComputedCard = Exclude<RunDeltaCardPayload, RunDeltaProgressCard>;

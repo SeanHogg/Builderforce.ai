@@ -58,7 +58,7 @@ vi.mock('../repos/revertMergedPullRequest', () => ({
   revertBranchName: (taskId: number, pr: number) => `revert/task-7-pr-${pr}`,
 }));
 
-const { revertRun } = await import('./runRollback');
+const { revertRun } = await import('./runRevert');
 const { revertMergedPullRequest } = await import('../repos/revertMergedPullRequest');
 const revertMock = revertMergedPullRequest as unknown as ReturnType<typeof vi.fn>;
 

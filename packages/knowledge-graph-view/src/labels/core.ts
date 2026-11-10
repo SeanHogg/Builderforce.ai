@@ -63,8 +63,7 @@ export interface CoreLabels extends LoadLabels, ReviewRunLabels {
     viewMap: string;
     /** The transit map: lines from the entry points through the layers. */
     viewTransit: string;
-    /** The architecture cameras: Kruchten's 4+1 views, the architecture style, the key features. */
-    viewFourPlusOne: string;
+    /** The architecture cameras: the architecture style, the key features. */
     viewStyle: string;
     viewFeatures: string;
     /** The view-mode group's name. */
@@ -277,7 +276,6 @@ panelAgentRuns: 'Agent runs',
 viewGraph: 'Graph',
 viewMap: 'Mind map',
 viewTransit: 'Map',
-viewFourPlusOne: '4+1',
 viewStyle: 'Style',
 viewFeatures: 'Features',
 viewModesLabel: 'View',

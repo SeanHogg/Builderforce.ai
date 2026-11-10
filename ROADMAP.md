@@ -90,43 +90,115 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
   - a `payloadBytes` badge.
 
   *Blocker: no runtime trace recorder exists. It is a new subsystem, a candidate for PRD 41's run delta.*
-- **Predicted measures over the knowledge graph: P4 and P7 not started, P1 not yet consumed.** P1 Louvain partitions shipped in builderforce-memory 2026.10.57 (published as 2026.10.58; every package now pins ^2026.10.59). Builderforce does not read them yet: knowledge-graph-view needs the `placementOf` fallback, and the `kg:v5` / `kg-outline:v1` cache keys must move so old layouts are not served. Still open: P4 co-change impact and P7 Markov transitions for Simulate (graph-only formulas, stored as badges), and P2 (Part D results on the map). The shared maths stays in the builderforce-memory `stats` module (D13) ([PRD 38 › Predicted measures](./docs/specs/38-prd-knowledge-graph.md)).
-- **The local-first store keeps a sync receipt for every row it has already mapped (found 2026-11-10; in flight).**
-  - **Where:** after the 88k-event drain (sync drain/marker pass), open time is still about 9 s. The 88,898 receipts (21.5 MB) say nothing that the row's mapping doesn't already say: a mapped row is a synced row.
-  - **Why they can't just be pruned:** eight or more surfaces read receipts directly (chat rail, entity sync state, sync summary, local-work tree).
-  - **Fix:** one sync-status read port that derives status from the mapping first and the receipt second. Migrate every reader to it, then prune receipts for mapped rows in compaction.
-  - **Unblocks:** open time of about 5 s or less on large stores.
-- **Knowledge view: one stage, cameras are placements, semantic zoom ([PRD 43](./docs/specs/43-prd-knowledge-3d-stage.md) B1a, operator 2026-11-10).** Today every camera re-renders the same data on its own stack: SVG transit/tower/mind map, canvas Graph2D and R3F 3D. The result is flicker, inconsistent shapes, slow switches and no zoom path from system to code. In flight, in this order:
-  - **P0b:** the knowledge extractor emits no class/method edges. `EDGE_KINDS` has no `extends`, `implements`, `composes`, `uses` or `calls`. Add them in builderforce-memory and publish.
-  - **P0c, edge coverage on real code (found validating hired.video 2026-11-10; in flight):**
-    - tsconfig `paths` aliases (`@/`, `@shared`) are treated as packages. They cover 86% of hired imports, so most cross-file edges are missing.
-    - Route and listener callbacks (Hono `routes.post(...)`, `chrome.runtime.onMessage.addListener(...)`) have no owning symbol. Their calls are dropped, so a sequence can't start at an API entry point.
-    - `new X(...).m()` produces no call edge.
-    - JSX renders are recorded as `uses` instead of `calls`.
-
-    Fixing these unblocks P1b zoom and the P2 sequences on real code.
-  - **P1a:** fidelity spike.
-  - **P1:** MarkSet + Placement + Map (Transit + Tower).
-  - **P1b:** semantic zoom, system → class → method → code.
-  - **P2–P5:** the remaining placements (Mind map, Sequence, Graph, 3D, System/Heat/4+1/Style/Features). Only List stays DOM.
-- **Run delta: the rest of PRD 41 is open ([PRD 41](./docs/specs/41-prd-offline-understanding-and-run-delta.md)).** WS1, WS2, WS6 and the VS Code run delta (WS7 engine, host, card) shipped (see DONE.md, 2026-11-10). Still open, by workstream:
-  - **WS3:** background indexer.
-  - **WS4:** tree-sitter extraction v3 and the rules that need it.
-  - **WS5:** consolidation runs. `kind: 'consolidation'` is in the contract; nothing produces it yet.
-  - **WS8:** full security: taint-lite, STRIDE, osv/gitleaks adapters, config rules.
-  - **WS9:** remaining perf, -ilities and quality rules.
-  - **WS10:** web/canvas card, plus delta history and trend.
-  - **WS11:** SARIF export and server persistence (`run_deltas` tables).
-  - **WS12:** dynamic tier.
-  - **WS13:** packaged offline acceptance and the cloud delta.
-  - **WS15–22:** Part D.
-  - **The L3 analyzer tier in the delta.** The `analyze` port was removed from `DeltaPorts`; re-adding it needs WS4's extractor.
-- **Run delta: blocked items ([PRD 41](./docs/specs/41-prd-offline-understanding-and-run-delta.md) §12.5, C9, C14).**
-  - **No finalize gate for autonomous runs in the VSIX.** An audit / auto-approve / sub-agent run writes its completion during the run, so a blocking delta is only flagged (`blocked`) on the run-delta record and the card; it cannot hold the run. *Blocker: the run kernel needs a finalize hook that runs before completion is written.*
-  - **No named-event telemetry channel in the VSIX.** `delta.computed` goes to the output log only. *Blocker: a decision on which telemetry channel the VSIX uses for named product events.*
-  - **No extractor/tool versions on platform-stored graphs.** The VSIX baseline cannot apply the C9 extractor-version and tool-version comparability rules to a platform graph. *Blocker: the platform graph rows need those version columns, which is a migration.*
-  - **No "measuring…" pending state in the contract.** The card appears only once the delta is computed. *Blocker: a contract change (`RunDelta.status: 'pending'`) shared by engine, host and UI.*
-  - **knip `--fix` on one unused-export finding fixes the whole file.** *Blocker: knip has no per-export fix; a per-finding fix needs our own export remover.*
+- **Predicted measures over the knowledge graph: the view half of P1/P4/P7 is built but uncommitted; P2 is blocked.** The memory maths, git history and cache keys are done (DONE.md, 2026-11-10). Still open ([PRD 38 › Predicted measures](./docs/specs/38-prd-knowledge-graph.md)):
+  - **Ship the uncommitted knowledge-graph-view work.** These are built and pass their targeted tests, but they are not reviewed or committed. They sit in the working tree next to other sessions' edits:
+    - P1 placement perf fixes: `placement.ts` planeTable, `communityGroups.ts`, `stations.ts`, and `compute/codecs/graph.ts`, which drops the default `communityFallback` from the wire.
+    - P4 partner surfaces: `surface/{rateFormat,coChange,PartnerList}`, `labels/surface.predict.ts`, `ActPanel`, `ActFooter`, `useSurface`, `fix/{FixFlowView,FixChecksList,useFixFlow}` and `fixPorts.ts`.
+    - The Hidden coupling overlay: `surface/{coupling,HiddenPartners}`, `labels/surface.coupling.ts`, `overlays.ts`, `dataCoverage.ts` and `NodePanel`.
+    - P7 hop probability and the Simulate / Run to end walk: `surface/{transitionTable,path,PathStrip,StepControls}`, `simulate/simulateModel.ts`, `drawers/SimulatePanel.tsx` and `labels/surface.transition.ts`.
+    - The catalog hunks `knowledgeGraph.surface.{predict,coupling,transition}` in all five locales.
+  - **Before committing that work:**
+    1. One Opus review of the diff above.
+    2. Wire `FixStepRequest.partnerTests` into the host's Run checks step. `useFixFlow` sends it, but no host reads it. If no host implements the fix ports yet, drop the field.
+    3. Find the +12 DOM nodes per view in the perf gate. Check whether `PartnerList` or `LikelyWalk` renders when it has no data.
+    4. Re-baseline `src/perf/deterministic/deterministic.test.ts` with `KG_PERF_UPDATE=1` (the user approved this). The intended feature costs are: surface reads +598 from the community fold past `MAX_STATIONS`, insights reads +88, and list mount reads +456.
+    5. Commit and push.
+  - **`EXTRACTOR_VERSION` 7 is not released.** The bump to 7 sits uncommitted in `builderforce-memory/packages/memory/src/knowledge/sources.ts`. PRD 43 asked for it because deploy units and the `concurrency` badge change the code-pack extract. Remaining steps:
+    - update the `regression:` test in `regression.assets.test.ts` to expect 7;
+    - add a CHANGELOG line;
+    - release it as the next memory version (main is at 2026.10.80);
+    - tell the PRD 43 session the tag, so it can bump consumers.
+  - **P7 has no trace rows.** `transitionTableOf(graph, model, sequences?)` accepts run traces, but no caller passes any, so every hop reads from reference weights. *Blocker: there is no station-level source of recorded run traces. `RecordedRun` is fetched for one path, along that path, so feeding it in would turn each hop into an invented 1-of-1 trace.*
+  - **P4 acceptance (recall@8 ≥ 0.5) has not been measured.** Run memory's `coChangeRecallAtK` on the `agentic` repo history.
+  - **`runDeltaPorts.churnAt` drops history warnings.** It builds its git port without an `onWarn`, so the commit-cap and timeout warnings are never shown on that path (`clients/vscode/src/runDelta/runDeltaPorts.ts`).
+  - **P2 is blocked.** *Blocker: PRD 41 Part D has produced no `risk`, `ownerEntropy` or `busFactor` result yet.*
+  - **The shared maths stays in the builderforce-memory `stats` module** (D13).
+- **Large local-first store: open and drain times not yet confirmed on an idle machine (2026-11-10).**
+  - **What shipped (ad02c2efe):** receipt pruning. The compacted base went from 221.8 MB to 199.8 MB.
+  - **What is unconfirmed:**
+    - The re-measure ran with the CPU at 100% from parallel agents.
+    - Reopen took 11.7–16.2 s, against 8.3–9.4 s before.
+    - The drain took 1,665 s, against 232 s before.
+    - Bind, which this change did not touch, also slowed by 4–6×, so this is probably machine load. A regression from pruning inside drain-triggered compactions is not ruled out.
+  - **Blocker:** an idle machine to re-run `scratchpad/drain-probe` on the 263 MB store copy.
+  - **Fix:** if the drain is still slow when idle, prune only at heartbeat compactions, not at drain-triggered ones.
+- **Knowledge view: one stage, cameras are placements, semantic zoom ([PRD 43](./docs/specs/43-prd-knowledge-3d-stage.md) B1a, operator 2026-11-10).** Today every camera re-renders the same data on its own stack: SVG transit/tower/mind map, canvas Graph2D and R3F 3D. The result is flicker, inconsistent shapes, slow switches and no zoom path from system to code.
+  - **Done and committed:** P0b, P0c, P1a, the P1 stage, the P2–P5 placements and the 4+1 Physical view (see DONE.md 2026-11-10).
+  - **Paused mid-edit (operator stop, 2026-11-10).** The working tree in `packages/knowledge-graph-view` is uncommitted and does not pass its tests. Nothing below is reviewed or committed. Known red: `scene3d.parity.test.ts` (`verdict` of undefined), `shapeGeometry.test.ts` (capsule size), `callSite.test.tsx` and `routeLine.test.tsx` (missing names in `useStageWiring.tsx`), `Graph2D.test.tsx` (`useSvgScale` exports removed), and a `mapParity.test.ts` type error. Resuming means: finish each item, run one targeted typecheck and test pass over the package, one Opus review, then commit.
+  - **P3 Graph parity — built, not committed.** Edge bundling (`compute/tasks/bundle.ts`), LOD bands, `graphEdges.ts`, `graphCaptions.ts` (band titles follow their boxes) and caption pixel offsets; `graphParity.test.ts` and `graphPlacement.perf.test.ts` pass (13/13). Left: review and commit.
+  - **Make the stage the default (P1/B8) — partly done.**
+    - Done in the tree: `GraphScene`, `Towers`, `shapeMeshes`, the 4+1 `PhysicalView`/`ScenariosView`, `surface.4plus1` labels and the DOM System/Style bodies (`SystemCard`, `TierRowView`, `StoreRow`, `StyleCard`) are deleted.
+    - Left: drop the `kg.stage=spike` flag and mount the stage for every camera in `cameras.tsx`; delete the SVG transit/tower marks, `Graph2D`, `MindMap`/`MindBranches`, `usePanZoom` and the remaining `useSvgScale` uses (keep `captionPlacement.ts` and `layout2d.ts`); delete the DOM Heat/Features bodies; migrate their tests per B8 (same fact as a spec-builder assertion); fix the view tests and the +DOM-node perf baseline the retirement changes.
+  - **P1b semantic zoom on real data — partly built.**
+    - In the tree: `stage/drill/useSemanticZoom.ts`, `nest.ts`, `CodeLayer.tsx`, `codeText.ts`, `rig/zoomBand.ts`, `rig/rigOfBus.ts`, `stage/host/`.
+    - Left: wire `useSemanticZoom` and `CodeLayer` into `useStageWiring` and `StageCard`; the continuous zoom-driven member tween across system → class → method bands; the code layer anchored at the method slot through host `readSource`; "Go inside" as the zoom shortcut; tests.
+  - **Re-extraction after a config change — unblocked, not started.** Memory 2026.10.72 carries the caller `extractorKey` (commit 45db29c). Wire `moduleAliasesDigest()` (`packages/agent-tools/src/knowledge/moduleAliases.ts`) as the key on every run, including Continue (empty string = no key). The extract pool must echo the key it extracted under through `extractJob(job, packs, workerKey)` (`clients/vscode/src/knowledge/review/extractJobHandler.ts`); a mismatch is rejected and the file stays owed. Bump consumers to ^2026.10.72 and refresh every lockfile.
+  - **Deploy units and concurrency in cached extracts (`EXTRACTOR_VERSION` 7).** Not released; the memory side is logged under "Predicted measures" (the bump sits uncommitted in `builderforce-memory/packages/memory/src/knowledge/sources.ts`). Once a memory version after 2026.10.80 carries it, bump the consumers here.
+  - **Descriptor redaction (decision).** Deploy-descriptor section text uses an allow-list blank-out, not `@builderforce/secret-redaction`. Layer the package's patterns on top once agent-tools resolves it as a source package.
+  - **Ship.** After the above: rebuild the brain-embedded dist, package VSIX 2026.10.155 (bumped in `clients/vscode/package.json`, never packaged), install it by absolute path, and verify with `--list-extensions`.
+- **Run delta: follow-ups from the 2026-11-10 pass ([PRD 41](./docs/specs/41-prd-offline-understanding-and-run-delta.md) §7, WS7).** The VS Code run delta, the §12.5 hold/release and C9 shipped (see DONE.md, 2026-11-10). Open:
+  - **Change-set records never sync.** `runChangeSetId` (clients/vscode/src/runChangeSets.ts) produces `changeset:<runId>:<repo>`, but the push envelope only accepts UUID ids (api `syncEnvelope.ts` `isJournalEventId`), so every change set is refused with `event_id_invalid`. Fix: `stableEntityId('changeset:<runId>:<repoKey>')`, the same fix agentic-3d's WS11 made for `run-delta` records. Every local reader moves to the new id, and old-id records stay readable. Check whether the lifecycle record ids have the same defect. Fixing this lets change sets reach the server and the cloud-side delta.
+  - **The server does not normalise repository identity on write.** The client strips credentials and hashes local paths before sync (590728fb1), but an older VSIX still sends raw remotes. Fix: move `clients/vscode/src/repoIdentity.ts` into one shared source-only package, and normalise `repository`, lifecycle `root` and `repos[]` in the API sync-apply path for the run-delta, change-set and lifecycle kinds. The user decided on 2026-11-10 that this covers the write path only, with no rewrite of stored rows.
+  - **The VSIX with the run delta is not packaged or installed yet.**
+    - Bump clients/vscode, package it and install it by absolute path.
+    - Check that `out/runDeltaWorker.js` is inside the .vsix.
+    - Release note migration `1341_release_note_run_delta_card.sql` names version 2026.10.144; make it match the packaged version.
+    - The blog post `know-what-an-agent-run-did` has no OG image.
+  - **Verification gaps.**
+    - 209c2b835 and f5a82a41f were never typechecked in a clean export of the committed tree; the local tree is missing `brain-embedded/dist/*.d.ts`.
+    - `knowledge-graph-view` `RunDeltaCardStates.test.tsx` did not run (jsdom not found).
+    - `runDelta.test.ts` is `skipIf(!node:sqlite)`, so confirm CI runs it (`NODE_OPTIONS=--experimental-sqlite`).
+  - **Release authority treats every board as managed.** The device has no lifecycle-managed flag, so `runDelta/releaseAuthority.ts` asks for approver authority on any board. Fix: sync the board's managed flag to the device and use it.
+  - **Nothing lists local audit runs.** `listLocalAuditRuns` has no consumers, so a held audit shows only through the `auditExecution` warning. Fix: wire an audit-runs view, or delete the function if nothing should list them.
+  - **Binary sniffing still disagrees in four places.** `changedExcerpt.ts`, `contextPack/buildContextPack.ts` and two agent-runtime files scan the whole buffer with `includes(0)`, and `webview/src/attachmentUpload.ts` sniffs 8,000 bytes. Moving them to memory's `isBinaryBytes` changes their behaviour, so decide per caller.
+- **Run delta: the rest of PRD 41 ([PRD 41](./docs/specs/41-prd-offline-understanding-and-run-delta.md) §7); paused 2026-11-10 by the operator, mid-pass.**
+  - **Shipped:**
+    - WS3 background indexer (0df16cbf9).
+    - In builderforce-memory 2026.10.74–.80: the WS15 stats module (Wilcoxon exact p, HL bootstrap, `meanAndSd`, the `createRng` shift fix), `FactStorePort` with epoch/generation CAS, the `check_scheduler` model card (engine .64–.65) and the `saveFactGraph` fast path.
+    - All 17 package.json files pin memory ^2026.10.80 and engine ^2026.10.65, and all 16 lockfiles are refreshed (frozen installs pass).
+  - **Everything below is uncommitted in the main checkout:** about 480 paths across:
+    - `packages/run-delta`, `packages/agent-tools/src/{delta,knowledge/facts}`;
+    - `clients/vscode/src/{runDelta,knowledge}`, `packages/knowledge-graph-view/src/delta`, `frontend/src/components/runDelta`;
+    - `api/src/{application,domain}/runDelta`, migrations 1342/1344/1345 and transactional 0032/0033.
+  - **Built and passed review, waiting on the group commit:**
+    - WS10: web card, history and trend.
+    - WS11: SARIF, `run_deltas` persistence, and the mirror importer with its revise path.
+    - WS12: the dynamic tier (tmpdir copies, shared `src/process/killTree.ts`, per-kind hold extensions of 60 s for dynamic and 15 s for L3).
+    - WS16: run outcomes, SZZ/revert/CI/review labels, and the rotating label sweep.
+    - WS19: project trigram naturalness and `PredictedLine`.
+    - WS20: the SPRT with Wald stopping, and the Thompson check scheduler.
+  - **WS4 (FileFacts v3, `FactIndex`, SQLite fact store):** three review rounds are closed. The agent was stopped while re-deciding restored mount candidates after `FactIndex.restore()` (`factIndex.restoreCandidates.test.ts`). Still to do:
+    - finish that fix;
+    - run `factFindings.test.ts` and the vscode tsc against memory .80;
+    - an Opus re-review (storage).
+  - **WS8 (security dimension):** the agent was stopped mid-round. Still open:
+    - FileFacts route integration: `routeDelta.ts`, `entryAdded.ts` and `methodWidened.ts` move onto `entryPointsOf`; `guardsInferred` becomes heuristic confidence; guard rules use the change's confidence (in progress).
+    - 3 taint fixes, 5 config false positives, 7 cleanups, `tagStride`, the `unsafeRegex` adjacent-quantifier case and the CORS test.
+    - An Opus re-review.
+  - **WS9 (perf, -ilities, quality; the C8.3 out-of-scope change):** the agent was stopped mid fix-round. Still open:
+    - `namedPaths.ts` token caps (200 chars, 4 stars) and a pure `planSection(text)` (in progress);
+    - H1, M2/M4, the M3 label, extracting `plannedPathsOfRun`, and the LOW findings;
+    - a re-review.
+  - **L3 analyzer tier (`l3Cache.ts`, `sarifTools.ts`, `l3Recovery.ts`, `l3Binding.ts`, `PendingAnalyzers.tsx`):** the agent was stopped at the start of targeted verification for round 3. Still open:
+    - scope jscpd to the packages that hold changed files, and measure it;
+    - a tree-hash equality test;
+    - the `interrupted` label;
+    - check the CodeQL flags against the docs;
+    - a re-review.
+  - **L3 revision contract (agreed with agentic-2c, 2026-11-10):** a superseding revision keeps the same `runId` and `at`, and never sets `blocked`, because hold state comes only from `runHoldState.ts`. L3 codes can block only when they land inside the L3 hold extension, before the verdict. Later findings are advisory.
+  - **Group commit, after WS4, WS8, WS9 and L3 pass review:**
+    - run a full typecheck of exactly what is staged;
+    - split `packages/run-delta/src/contract.ts` (~490 lines);
+    - apply the RunDeltaPanel `PANEL_WIDTH` one-liner (agentic-2c pushed 209c2b835 and 590728fb1, so this is unblocked);
+    - commit by pathspec and push;
+    - ship: a `release_notes` row (`new`), the Idea-to-Real post (Measure act), and DONE.md moves.
+  - **Not started:**
+    - WS5: consolidation; `kind: 'consolidation'` has no producer.
+    - WS13: packaged offline acceptance, and the cloud and on-prem delta.
+    - WS17: rule precision, calibration and process control.
+    - WS21: ranking, similar runs and the card's Predicted block.
+    - WS22: people scores (Opus review for RBAC and privacy).
+  - **WS18 (run risk model):** *Blocker: needs at least 500 final WS16 labels; the labels pipeline isn't committed yet.*
 - **Cloud run isolation (G1/G2, [PRD 09](./docs/specs/09-prd-cloud-agent-validation.md)): egress allowlist built but off; secret containment under rework (in progress 2026-11-08).**
   - G1 egress: the outbound allowlist and its lifecycle shipped (`sandboxEgressLifecycle.ts`, b55198fc0 / adc99aa42 / e867b3bd1) behind `SANDBOX_EGRESS_ENFORCE`, which stays off. *Blocker: a live probe in a deployed container (raw TCP/DNS blocked, HTTPS through the proxy to an allowed registry, interception installed before start, `ctx.exports.ContainerProxy` resolves) before the flag is turned on.*
   - G2 secret containment: the env scrub, `persist-credentials: false`, the one redaction package and the audit-write guard are on main (3a2c752db, e707549cf). An Opus review found the model shell could still read the runner's environ (same uid) and credentials in `.git/config`. The redesign (a separate `bfagent` user with its own group, all workspace fs/git through a helper running as that user, authenticated git only in a server-owned mirror with bundle handoff) and the redaction-quality fixes are in progress, partly swept unreviewed into local ee2222212. Next: verify, Opus re-review, commit, push.

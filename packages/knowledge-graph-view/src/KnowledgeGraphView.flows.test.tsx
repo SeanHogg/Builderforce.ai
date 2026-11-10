@@ -12,7 +12,6 @@ import { startReviewing } from './testReviews';
 import type { KnowledgeGraphSource, KnowledgeSearchHit } from './types';
 
 
-vi.mock('./scene/GraphScene', () => ({ default: () => null }));
 
 afterEach(() => vi.restoreAllMocks());
 

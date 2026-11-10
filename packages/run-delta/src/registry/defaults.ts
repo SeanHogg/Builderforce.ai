@@ -13,6 +13,7 @@ import type { DeltaRegistries } from '../contract.js';
 export const TEST_INTEGRITY_RULES: readonly string[] = [
     'assertion-edited-with-impl',
     'assertions-reduced',
+    'catch-all-added',
     'matcher-weakened',
     'only-added',
     'snapshot-updated-with-impl',
@@ -65,12 +66,14 @@ export const DEFAULT_REGISTRIES: DeltaRegistries = {
         'native-addon': ['bindings', 'node-gyp-build', '*.node'],
         'env-read': ['process.env'],
     },
-    // Regex sources (compiled `gi`), matched per line over comment-masked source.
+    // Regex sources (compiled `gi`) over comment-masked source; built-ins run over the whole text, repo ones
+    // per line. No top-level alternation, so each has a literal that prefilters it (`mandatoryLiteral`).
     weakCrypto: [
         String.raw`createHash\(\s*['"\x60](?:md5|sha1)['"\x60]`,
         String.raw`createHmac\(\s*['"\x60](?:md5|sha1)['"\x60]`,
         String.raw`['"\x60][a-z0-9]*-(?:\d+-)?ecb['"\x60]`,
-        String.raw`(?:token|secret|password|nonce|salt)[^\n]{0,80}Math\.random\(|Math\.random\([^\n]{0,80}(?:token|secret|password|nonce|salt)`,
+        String.raw`(?:token|secret|password|nonce|salt)[^\n]{0,80}Math\.random\(`,
+        String.raw`Math\.random\([^\n]{0,80}(?:token|secret|password|nonce|salt)`,
     ],
     // Regex sources (compiled without flags) tested against the expression right after an `await`.
     io: [
@@ -99,4 +102,104 @@ export const DEFAULT_REGISTRIES: DeltaRegistries = {
     // §12.5: `guard-removed` and every C8.2 error block finalization of an autonomous run; so does a run
     // that edits its own delta policy.
     blocking: ['guard-removed', DELTA_CONFIG_RULE, ...TEST_INTEGRITY_ERROR_RULES],
+    // C6.1 `cache-bypass`: the repo lists its cacheable repository reads in `.builderforce/delta.json`;
+    // `getOrSetCached` is this repo's read-through helper.
+    cacheable: { reads: [], readThrough: ['getOrSetCached'] },
+    // C5.2 taint-lite, as entry forms (rules/support/entryForms.ts). `process.env` is deliberately not a
+    // source: an operator-set value reaching `fetch` is configuration, and env reads are `capability-added`.
+    taintSources: {
+        'http-request': [
+            'req.body', 'req.query', 'req.params', 'req.headers', 'req.cookies', 'request.body', 'request.query', 'request.headers',
+            'ctx.request.body', 'ctx.query', 'c.req.json(', 'c.req.query(', 'c.req.queries(', 'c.req.param(', 'c.req.header(',
+            'c.req.parseBody(', 'c.req.formData(', 'c.req.text(', 'request.json(', 'request.formData(', 'request.text(', 'searchParams.get(',
+        ],
+        'webview-message': ['message.data', 'msg.data', 'event.data'],
+        'process-argv': ['process.argv'],
+        'upload': ['formData.get(', 'file.text(', 'file.arrayBuffer(', 'file.stream('],
+        'mcp-args': ['params.arguments'],
+    },
+    taintSinks: {
+        'command-exec': [
+            'exec(', 'execSync(', '.execSync(', 'child_process.exec(', 'childProcess.exec(', 'cp.exec(', 'execaCommand(', 'execaCommandSync(',
+            // The argv-taking forms: the program AND its arguments matter (`spawn('sh', ['-c', input])`).
+            'spawn(*', '.spawn(*', 'spawnSync(*', '.spawnSync(*', 'execFile(*', '.execFile(*', 'execFileSync(*', '.execFileSync(*',
+        ],
+        'dynamic-code': [
+            'eval(', 'new Function(', 'Function(', 'vm.runInThisContext(', 'vm.runInNewContext(', 'vm.runInContext(', 'new vm.Script(',
+            'vm.compileFunction(',
+        ],
+        'html': ['.innerHTML=', '.outerHTML=', 'dangerouslySetInnerHTML=', 'document.write(', 'document.writeln(', '.insertAdjacentHTML(*'],
+        'sql-raw': ['.query(', '.execute(', '.prepare(', '.$queryRawUnsafe(', '.$executeRawUnsafe(', '.unsafe(', 'sql.raw(', '.raw('],
+        'ssrf': [
+            'fetch(', 'axios(', 'axios.get(', 'axios.post(', 'axios.put(', 'axios.request(', 'got(', 'http.get(', 'https.get(',
+            'http.request(', 'https.request(', 'undici.request(', 'new WebSocket(',
+        ],
+        'path-traversal': [
+            'readFile(', '.readFile(', 'readFileSync(', '.readFileSync(', 'writeFile(', '.writeFile(', 'writeFileSync(', '.writeFileSync(',
+            'createReadStream(', '.createReadStream(', 'createWriteStream(', '.createWriteStream(', 'unlink(', '.unlink(', '.rm(',
+            'rmSync(', '.rmSync(', 'readdir(', '.readdir(', '.sendFile(',
+        ],
+        'open-redirect': ['redirect(', '.redirect(', 'location.assign(', 'location.replace(', 'location.href=', 'window.location='],
+        'deserialization': ['unserialize(', '.unserialize(', 'deserialize(', '.deserialize(', 'yaml.load(', 'pickle.loads(', 'marshal.loads('],
+        'regex-injection': ['new RegExp(', 'RegExp('],
+    },
+    // Grouped by the sink kind each protects (`*` = every kind: schema validation and numeric coercion).
+    taintSanitizers: {
+        '*': ['.parse(', '.safeParse(', '.parseAsync(', '.safeParseAsync(', 'parseInt(', 'parseFloat(', 'Number('],
+        'html': ['escapeHtml(', 'escapeHTML(', 'encodeHtml(', 'escape(', 'DOMPurify.sanitize(', 'sanitizeHtml(', 'sanitize('],
+        'ssrf': ['isAllowedUrl(', 'assertAllowedUrl(', 'encodeURIComponent('],
+        'open-redirect': ['isAllowedUrl(', 'assertAllowedUrl(', 'isSafeRedirect('],
+        'path-traversal': ['safeJoin(', 'resolveWithin(', 'path.basename(', 'basename('],
+        'command-exec': ['shellQuote(', 'shellescape(', 'quote('],
+        'regex-injection': ['escapeRegex(', 'escapeRegExp('],
+        'sql-raw': ['escapeLiteral(', 'escapeIdentifier(', 'sqlstring.escape('],
+    },
+    // C5.6 regex sources (compiled `g`, line by line, case-sensitive), each passing `unsafeRegex`.
+    insecureConfig: {
+        'tls-verify-disabled': [
+            String.raw`\brejectUnauthorized['"]?\s*:\s*false\b`,
+            String.raw`\bNODE_TLS_REJECT_UNAUTHORIZED['"]?\s*[:=]\s*['"]?0\b`,
+            String.raw`\bstrictSSL['"]?\s*:\s*false\b`,
+            String.raw`\bstrict-ssl\s*=\s*false\b`,
+            String.raw`\binsecureSkipVerify['"]?\s*:\s*true\b`,
+            String.raw`\bverify\s*=\s*False\b`,
+            String.raw`\bcurl\b[^\n]{0,200}\s(?:-k|--insecure)(?![\w-])`,
+        ],
+        'cors-permissive': [
+            String.raw`\borigin['"]?\s*:\s*['"\x60]\*['"\x60]`,
+            String.raw`\borigin['"]?\s*:\s*true\b`,
+            String.raw`Access-Control-Allow-Origin['"\x60]?\s*[,:]\s*['"\x60]?\*`,
+            String.raw`(?<![\w$.])cors\(\s*\)`,
+        ],
+        'cors-credentials': [
+            String.raw`\bcredentials['"]?\s*:\s*true\b`,
+            String.raw`Access-Control-Allow-Credentials['"\x60]?\s*[,:]\s*['"\x60]?true\b`,
+        ],
+        'csp-permissive': [
+            String.raw`'unsafe-(?:inline|eval)'`,
+            String.raw`\b(?:default|script)-src\b[^;\n]{0,200}\s\*(?![\w.])`,
+            String.raw`\bcontentSecurityPolicy['"]?\s*:\s*false\b`,
+        ],
+        'debug-enabled': [
+            String.raw`^\s*['"]?(?:DEBUG|debug)['"]?\s*[:=]\s*['"]?(?:(?:true|True|TRUE|1|yes|on)\b|\*)`,
+            String.raw`\b(?:LOG_LEVEL|LOGLEVEL|logLevel|log_level)['"]?\s*[:=]\s*['"]?(?:debug|trace|verbose|DEBUG|TRACE|VERBOSE)\b`,
+            String.raw`^\s*['"]?(?:verbose|VERBOSE)['"]?\s*[:=]\s*['"]?(?:true|1)\b`,
+        ],
+        'workflow-permissive': [
+            // Anchored to the `on:` trigger (a key under it, an inline list, or a list item), never an `if:` mention.
+            String.raw`^[ \t]*pull_request_target[ \t]*:`,
+            String.raw`^[ \t]*on[ \t]*:[^\n#]*\bpull_request_target\b`,
+            String.raw`^[ \t]*-[ \t]*pull_request_target[ \t]*$`,
+            String.raw`^\s*permissions\s*:\s*write-all\b`,
+        ],
+    },
+    // C5.7 what covers each STRIDE category on a new entry point or capability.
+    strideCoverage: {
+        'spoofing': ['requireAuth', 'bearerAuth', 'basicAuth', 'jwt', 'resolveMembership', 'RoleGate', 'requireSuperadmin', 'verifySignature'],
+        'tampering': ['zValidator', 'validator', 'csrf', 'verifySignature'],
+        'repudiation': ['auditLog', 'recordAudit', 'writeAudit'],
+        'information-disclosure': ['requireAuth', 'bearerAuth', 'basicAuth', 'jwt', 'resolveMembership', 'RoleGate', 'requireSuperadmin'],
+        'denial-of-service': ['rateLimit', 'rateLimiter', 'bodyLimit', 'timeout'],
+        'elevation-of-privilege': ['RoleGate', 'requireSuperadmin', 'resolveMembership'],
+    },
 };

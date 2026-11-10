@@ -24,8 +24,14 @@
  *  escaped when a literal glob character is spliced into the compiled RegExp. */
 const REGEX_SPECIALS = new Set([".", "+", "^", "$", "{", "}", "(", ")", "|", "[", "]", "\\", "/"]);
 
-/** Compile a glob to an anchored, case-insensitive RegExp. */
+/**
+ * Compile a glob to an anchored, case-insensitive RegExp that cannot backtrack catastrophically: a run of three or
+ * more stars is the same as `**`, repeated `**\/` segments are one, and adjacent wildcard tokens collapse into the
+ * widest of them (`.*.*` → `.*`, `[^/]*[^/]*` → `[^/]*`, `.*[^/]*` → `.*`). A pattern of N adjacent stars therefore
+ * compiles to ONE `.*`, never N nested ones (which backtrack exponentially on a non-matching path).
+ */
 export function globToRegExp(pattern: string): RegExp {
+  pattern = pattern.replace(/\*{3,}/g, "**").replace(/(?:\*\*\/){2,}/g, "**/");
   let re = "";
   for (let i = 0; i < pattern.length; i++) {
     const c = pattern[i]!;
@@ -49,7 +55,17 @@ export function globToRegExp(pattern: string): RegExp {
       re += REGEX_SPECIALS.has(c) ? "\\" + c : c; // escape regex specials
     }
   }
-  return new RegExp("^" + re + "$", "i");
+  return new RegExp("^" + collapseWildcards(re) + "$", "i");
+}
+
+/** Adjacent compiled wildcards → the widest one, repeatedly (`[^/]*` ⊂ `.*`); see {@link globToRegExp}. */
+function collapseWildcards(re: string): string {
+  let prev: string;
+  do {
+    prev = re;
+    re = re.replace(/(?:\.\*|\[\^\/\]\*)(?:\.\*|\[\^\/\]\*)+/g, (run) => (run.includes(".*") ? ".*" : "[^/]*"));
+  } while (re !== prev);
+  return re;
 }
 
 /**

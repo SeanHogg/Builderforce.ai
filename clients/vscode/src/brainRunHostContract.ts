@@ -21,7 +21,8 @@ import type {
   ServedRead,
 } from "@seanhogg/builderforce-brain-embedded";
 import type { LocalRuntimeProbe } from "@builderforce/local-inference";
-import type { RunDeltaCardPayload } from "@builderforce/run-delta";
+import type { RunDeltaCardPayload, RunDeltaSummary } from "@builderforce/run-delta";
+import type { Prediction } from "@builderforce/run-delta/predict";
 import type { PolicyGate, RunKnowledgeLog } from "@builderforce/agent-tools";
 import type { ToolDef } from "./fileTools";
 import type { NativeRunLabels } from "./nativeBrainRun";
@@ -266,6 +267,8 @@ export interface BrainRunHost {
    * the autonomous run at its finalize gate (§12.5). Absent on a host that records none.
    */
   runDeltas?(query: { runId?: string; chatId?: number }): Promise<RunDeltaCardPayload[]>;
+  /** A repository's stored run deltas as summaries, newest first (`run-delta/history`, PRD 41 §C11.3). Absent on a host that records none. */
+  runDeltaHistory?(query: { repo: string; limit?: number }): Promise<RunDeltaSummary[]>;
   /**
    * A person's audited release of a run held at its finalize gate (`run-delta/release`, PRD 41 §12.5): `completed` with a
    * waiver, and its cards re-posted `released`. Rejects `run_delta_release_refused` for any run not held there. Absent on a
@@ -274,6 +277,8 @@ export interface BrainRunHost {
   releaseHeldRun?(runId: string): Promise<void>;
   /** A run-delta card's Open code (`run-delta/open`): the confined absolute file, or undefined when refused. */
   openRunDeltaFile?(request: { runId: string; path: string }): Promise<string | undefined>;
+  /** A run-delta card rendered a prediction (`run-delta/prediction-shown`, PRD 41 §4 `prediction.shown`). Absent on a host that predicts nothing. */
+  predictionShown?(prediction: Prediction): void;
   /** Resolves once the durable writes this host queued (its sub-agent journal) have landed or been given up — awaited on deactivate so a child settling during close is not left `running`. */
   flush?(): Promise<void>;
   dispose(): void;

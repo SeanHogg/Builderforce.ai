@@ -13,9 +13,13 @@
     "declaration": true,
     "skipLibCheck": true,
     "noEmit": true,
+    "resolveJsonModule": true,
     "paths": {
       "@builderforce/agent-tools/code-mask": ["../agent-tools/src/knowledge/codeMask.ts"],
-      "@builderforce/secret-redaction": ["../secret-redaction/src/index.ts"]
+      "@builderforce/agent-tools/sampling": ["../agent-tools/src/sampling.ts"],
+      "@builderforce/agent-tools/glob": ["../agent-tools/src/glob.ts"],
+      "@builderforce/secret-redaction": ["../secret-redaction/src/index.ts"],
+      "@builderforce/sarif": ["../sarif/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts"],

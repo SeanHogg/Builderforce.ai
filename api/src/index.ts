@@ -276,6 +276,7 @@ import { createStudioRoutes }          from './presentation/routes/studioWeightR
 import { createEvermindModelRoutes }   from './presentation/routes/evermindModelRoutes';
 import { createProjectEvermindRoutes }  from './presentation/routes/projectEvermindRoutes';
 import { createProjectFactsRoutes }  from './presentation/routes/projectFactsRoutes';
+import { createRunDeltaRoutes } from './presentation/routes/runDeltaRoutes';
 import { createAgentGovernanceRoutes } from './presentation/routes/agentGovernanceRoutes';
 import { createProjectKnowledgeRoutes } from './presentation/routes/projectKnowledgeRoutes';
 import { agentHostDoor } from './presentation/middleware/frontDoor';
@@ -1228,6 +1229,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/projects',  createProjectEvermindRoutes(db));
   app.route('/api/agent/projects', createProjectEvermindRoutes(db, agentHostDoor(db)));
   app.route('/api/projects',  createProjectFactsRoutes(db));
+  // PRD 41 §C14: what each agent run changed, per repository — `/projects/:projectId/run-deltas`
+  // and `/run-deltas/:runId`. Auth is per route (the router is mounted at `/api`).
+  app.route('/api',           createRunDeltaRoutes(db));
   // The images and clips generated for a project — Studio's Media panel.
   app.route('/api/projects',  createProjectMediaRoutes(db));
   app.route('/api/agent/projects', createProjectFactsRoutes(db, agentHostDoor(db)));

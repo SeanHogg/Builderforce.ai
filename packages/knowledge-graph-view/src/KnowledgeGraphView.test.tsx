@@ -8,9 +8,7 @@ import { codeFixture, docsFixture, fixtureSource, mixedFixture, openList } from 
 import { lensIsPicked, openDetails, pickLens } from './testPicks';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 
-// jsdom has no WebGL, so the view stays on the list; the 3D chunk is never requested.
-
-vi.mock('./scene/GraphScene', () => ({ default: () => null }));
+// jsdom has no WebGL: the stage cameras draw with the no-op renderer (`vitest.setup.ts`).
 
 async function mount(graphs: KnowledgeGraph[], props: Partial<Parameters<typeof KnowledgeGraphView>[0]> = {}) {
     const source = fixtureSource(graphs);

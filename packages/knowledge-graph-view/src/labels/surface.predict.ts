@@ -18,10 +18,6 @@ export interface PredictLabels {
         partnerTestsNone: string;
         /** A "This path is done when…" line: `{name}`, `{rate}`. */
         doneAlso: string;
-        /** "Run to end": the most likely walk on from the last stop. */
-        walkTitle: string;
-        /** One hop of it: `{name}`, `{rate}`. */
-        walkHop: string;
     };
 }
 
@@ -36,7 +32,5 @@ export const PREDICT_DEFAULTS: PredictLabels = {
         partnerTests: 'Also runs the tests of files that usually change with these: {tests}',
         partnerTestsNone: 'No test was found for the files that usually change with these.',
         doneAlso: '{name} is updated too · {rate}',
-        walkTitle: 'Most likely next',
-        walkHop: '→ {name} · {rate}',
     },
 };

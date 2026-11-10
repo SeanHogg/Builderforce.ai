@@ -12,11 +12,21 @@ import type { ThemeTone } from '../scene/themeColors';
 import { cmp } from '../order';
 import type { Station } from './stations';
 
-export type MetricId = 'anti' | 'cx' | 'cov' | 'use' | 'churn' | 'changed' | 'owner' | 'none';
+export type MetricId = 'anti' | 'cx' | 'cov' | 'use' | 'churn' | 'coupling' | 'changed' | 'owner' | 'none';
 export type ChannelId = 'colour' | 'size' | 'ring' | 'width' | 'pulse' | 'outline';
 export type PresetId = 'risk' | 'quality' | 'activity' | 'ownership';
 
-export const METRICS: readonly MetricId[] = ['anti', 'cx', 'cov', 'use', 'churn', 'changed', 'owner', 'none'];
+export const METRICS: readonly MetricId[] = ['anti', 'cx', 'cov', 'use', 'churn', 'coupling', 'changed', 'owner', 'none'];
+
+/**
+ * The metrics that read a station field relative to the busiest station (0–1, undefined = no data collected). Each is ONE row:
+ * its status, its level and its fraction all come from the field. `coupling` is PRD 38 P4's hidden coupling (memory's
+ * `coChangeHidden` badge: co-change partners with no reference edge), summed over the station's files.
+ */
+export const RELATIVE_METRICS: Partial<Record<MetricId, (s: Station) => number | undefined>> = {
+    churn: (s) => s.churn,
+    coupling: (s) => s.coupling,
+};
 
 export interface Bindings extends Record<ChannelId, MetricId> {
     pins: 'on' | 'off';
@@ -67,9 +77,8 @@ export function metricStatus(metric: MetricId, stations: readonly Station[]): Me
     switch (metric) {
         case 'cx': return has((s) => s.cx) ? 'ready' : 'not-set-up';
         case 'cov': return has((s) => s.cov) ? 'ready' : 'not-set-up';
-        case 'churn': return has((s) => s.churn) ? 'ready' : 'not-set-up';
         case 'owner': return has((s) => s.owner) ? 'ready' : 'not-set-up';
-        default: return 'ready';
+        default: { const read = RELATIVE_METRICS[metric]; return !read || has(read) ? 'ready' : 'not-set-up'; }
     }
 }
 
@@ -80,9 +89,8 @@ export function level5(metric: MetricId, s: Station): number | undefined {
         case 'cx': return s.cx;
         case 'cov': return s.cov === undefined ? undefined : 5 - Math.round(s.cov * 4);
         case 'use': return Math.round(s.use * 4) + 1;
-        case 'churn': return s.churn === undefined ? undefined : Math.round(s.churn * 4) + 1;
         case 'changed': return s.changed ? 5 : 1;
-        default: return undefined;
+        default: { const f = RELATIVE_METRICS[metric]?.(s); return f === undefined ? undefined : Math.round(f * 4) + 1; }
     }
 }
 
@@ -91,11 +99,10 @@ export function frac(metric: MetricId, s: Station): number | undefined {
     switch (metric) {
         case 'cov': return s.cov;
         case 'use': return s.use;
-        case 'churn': return s.churn;
         case 'anti': return (s.anti - 1) / 4;
         case 'cx': return s.cx === undefined ? undefined : (s.cx - 1) / 4;
         case 'changed': return s.changed ? 1 : 0;
-        default: return undefined;
+        default: return RELATIVE_METRICS[metric]?.(s);
     }
 }
 

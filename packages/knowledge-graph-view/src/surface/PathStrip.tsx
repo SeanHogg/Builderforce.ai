@@ -14,8 +14,9 @@ import { cssVar } from '../scene/themeColors';
 import { CONTROL, muted } from '../styles';
 import { Pill, pillStyle, QuietButton } from './ui';
 import { TYPE } from './ui/type';
-import { Action, StepControls } from './StepControls';
+import { Action, LikelyWalk, StepControls } from './StepControls';
 import type { PathModel } from './path';
+import { hopProbabilityText, hopTransition, likelyWalk, type TransitionTable } from './transitionTable';
 import { stationNote } from './pathNotes';
 import { SequenceView } from './SequenceDiagram';
 import { hopText, pathMermaid } from './sequenceText';
@@ -41,13 +42,18 @@ export interface PathStripProps {
     routeLabels?: readonly (string | null)[] | undefined;
     /** A phone: the stops are a vertical list instead of a row. */
     narrow?: boolean | undefined;
+    /** The station transition table (`transitionTableOf`): each hop shows P(next) and "Run to end" the most likely walk. Absent ⇒ neither. */
+    transitions?: TransitionTable | null | undefined;
 }
 
 const chipStyle = (on: boolean) => ({ ...pillStyle(on), ...TYPE.mono, fontWeight: on ? TYPE.pillOn.fontWeight : TYPE.monoName.fontWeight });
 
-export function PathStrip({ path, step, labels, onStep, pathTitle, onEnlarge, stations, onOpenPanel, routeLabels, narrow = false }: PathStripProps) {
+export function PathStrip({ path, step, labels, onStep, pathTitle, onEnlarge, stations, onOpenPanel, routeLabels, narrow = false, transitions }: PathStripProps) {
     const s = labels.surface;
     const [sequence, setSequence] = useState(false);
+    /** The stop "Run to end" ran from, for this path only (another path drops it). */
+    const [ranFrom, setRanFrom] = useState<{ path: PathModel; id: string } | null>(null);
+    const walkFrom = ranFrom?.path === path ? path.stops.find((x) => x.id === ranFrom.id) ?? null : null;
     const copier = useCopyText();
     const last = path.stops.length - 1;
     // One station has nothing to step through and no sequence to draw.
@@ -69,7 +75,7 @@ export function PathStrip({ path, step, labels, onStep, pathTitle, onEnlarge, st
                 <>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         <strong style={{ ...TYPE.subtitle, marginInlineEnd: 4, overflowWrap: 'anywhere' }}>{title}</strong>
-                        <StepControls at={at} last={last} labels={labels} onStep={onStep} />
+                        <StepControls at={at} last={last} labels={labels} onStep={onStep} onRunToEnd={(from) => { const id = path.stops[from]?.id; setRanFrom(id ? { path, id } : null); }} />
                         {onOpenPanel && <Action onClick={() => onOpenPanel('simulate')}>{s.path.simulate}</Action>}
                         <Pill style={ctl} on={sequence && !single} disabled={single} onClick={() => setSequence((v) => !v)}>{s.path.sequence}</Pill>
                         {sequence && !single && onEnlarge && <Action onClick={onEnlarge}>{s.path.enlarge}</Action>}
@@ -77,6 +83,7 @@ export function PathStrip({ path, step, labels, onStep, pathTitle, onEnlarge, st
                         <CopiedNote status={copier.status} labels={labels} />
                         <span aria-live="polite" style={{ ...muted, ...TYPE.monoValue }}>{fillTemplate(s.pathStep, { n: at + 1, total: path.stops.length })}</span>
                     </div>
+                    {walkFrom && transitions && <LikelyWalk from={walkFrom.name} hops={likelyWalk(transitions, walkFrom.id, stations ?? new Map(path.stops.map((x) => [x.id, x])), labels)} labels={labels} />}
                     {single && <p data-testid="kg-path-one-station" style={{ ...muted, margin: 0 }}>{s.explain.oneStation}</p>}
                     <CopyFallback status={copier.status} text={mermaid} label={labels.copyMermaid} labels={labels} />
                     {sequence && !single ? <SequenceView path={path} step={at} onStep={onStep} labels={labels} copy={false} /> : (
@@ -91,11 +98,13 @@ export function PathStrip({ path, step, labels, onStep, pathTitle, onEnlarge, st
                                 const hop = i > 0 ? path.hops[i - 1] : undefined;
                                 const bad = hop?.verdict === 'skips' || hop?.verdict === 'upward';
                                 const note = stationNote(stations?.get(stop.id), labels);
+                                const p = hop ? hopProbabilityText(labels, hopTransition(transitions, path.stops[i - 1]?.id, stop.id)) : null;
                                 return (
                                     <li key={stop.id} style={{ display: 'flex', flexDirection: narrow ? 'column' : 'row', alignItems: narrow ? 'flex-start' : 'center', gap: 6, flex: 'none' }}>
                                         {hop && (
                                             <span style={{ ...TYPE.monoMeta, color: cssVar(bad ? 'violation' : 'muted') }} data-hop={hop.verdict ?? 'ok'} data-cycle={hop.cycle || undefined}>
                                                 {narrow ? '↓ ' : ''}{hop.cycle && <span aria-hidden="true" data-cycle-mark>⟲ </span>}{hopText(labels, hop)}
+                                                {p ? <span data-hop-p>{` · ${p}`}</span> : null}
                                                 {hop.detail ? ` · ${hop.detail}` : ''}
                                                 {routeLabels?.[i - 1] ? <span data-route={routeLabels[i - 1]}>{` · ${routeLabels[i - 1]}`}</span> : null}
                                                 {hop.verdict === 'skips' ? ` · ${labels.traceSkips}` : hop.verdict === 'upward' ? ` · ${labels.traceUpward}` : ''}

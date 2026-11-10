@@ -51,6 +51,7 @@ export function placeLabels(
     const px = Math.max(view.pxPerWorld, 1e-6);
     const shown = runs
         .filter((r) => {
+            if (r.zoomPx && (px < r.zoomPx[0] || px >= r.zoomPx[1])) return false;
             const scale = p.scale[r.slot] ?? 0;
             return scale > 0 && 2 * scale * px >= minMarkPxFor(r.priority, lod);
         })
@@ -59,9 +60,9 @@ export function placeLabels(
     const sdf: PlacedLabel[] = [], dom: Caption[] = [];
     for (const r of shown) {
         const unit = r.scale === 'world' ? 1 : 1 / px;
-        const x = p.position[r.slot * 3]! + r.offsetPx[0] * unit;
+        const x = p.position[r.slot * 3]! + (r.offsetWorld?.[0] ?? 0) + r.offsetPx[0] * unit;
         const y = (p.extrude[r.slot] ?? 0) * view.depth + LIFT;
-        const z = p.position[r.slot * 3 + 2]! + r.offsetPx[1] * unit;
+        const z = p.position[r.slot * 3 + 2]! + (r.offsetWorld?.[1] ?? 0) + r.offsetPx[1] * unit;
         if (!sdfAvailable || !monoCovers(r.text) || (r.note && !monoCovers(r.note.text))) {
             dom.push({ text: r.text, position: [x, y, z], anchor: r.anchor, tone: r.tone, font: 'mono' });
             if (r.note) dom.push({ text: r.note.text, position: [x, y, z + r.size * LINE_GAP * unit], anchor: r.anchor, tone: r.note.tone, font: 'mono' });

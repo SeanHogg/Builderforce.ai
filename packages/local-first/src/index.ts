@@ -182,6 +182,7 @@ export {
   type ChatTicketLinkInput,
   type LinkChatTicketInput,
 } from './chatTicketLink.js';
+export { stableEntityId } from './stableEntityId.js';
 export {
   ingestServerRecords,
   type IngestServerRecordsOptions,

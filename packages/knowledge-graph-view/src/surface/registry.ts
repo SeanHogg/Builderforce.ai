@@ -17,6 +17,7 @@ import type { HistoryRead } from './TimeSlider';
 import type { Diagnostics } from '../diagnosticSection';
 import type { ReviewsTabState } from './run/useReviewsTab';
 import type { SurfaceModel } from './useSurface';
+import type { PlacementCamera } from '../stage/types';
 
 /** What a row's `available` rule may depend on. */
 export interface SurfaceEnv {
@@ -54,15 +55,24 @@ export interface SceneProps {
     onOpenSource?: ((location: SourceLocation) => void) | undefined;
 }
 
-export interface CameraDef {
+interface CameraBase {
     id: ViewMode;
     /** The `KnowledgeGraphLabels` key holding the button's name. */
     labelKey: StringLabelKey;
-    component: ComponentType<SceneProps>;
     available(graph: KnowledgeGraph, env: SurfaceEnv): boolean;
     /** False = no button in the scene overlay's View group (the camera is drawn by something else, e.g. the path strip). Default true. */
     switcher?: boolean;
 }
+
+/**
+ * A camera is a PLACEMENT of the one stage (PRD 43 B1a: the stage host draws it; switching between two is a buffer swap)
+ * or, only for the List, a DOM component. The DOM row marked `fallback` is what every stage camera shows when the host
+ * cannot draw the stage (no WebGL, a lost context).
+ */
+export type CameraDef = CameraBase & (
+    | { placement: PlacementCamera; component?: never; fallback?: never }
+    | { component: ComponentType<SceneProps>; placement?: never; fallback?: boolean }
+);
 
 /** What a drawer is handed. */
 export interface PanelProps {

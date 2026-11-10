@@ -5,7 +5,7 @@
 
 import type { FixCheckId, FixCheckStatus } from '../../fixPorts';
 import { FIX_CHECK_IDS } from '../../fixPorts';
-import type { KnowledgeGraphLabels } from '../../labels';
+import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { cssVar, type ThemeTone } from '../../scene/themeColors';
 import { muted } from '../../styles';
 import { TYPE } from '../ui/type';
@@ -17,9 +17,18 @@ export interface FixChecksListProps {
     checks: Readonly<Record<FixCheckId, FixCheckStatus>>;
     details: Readonly<Partial<Record<FixCheckId, string>>>;
     labels: KnowledgeGraphLabels;
+    /** The co-change partners' test files the tests check also runs (PRD 38 P4); null = no history ("Not set up"); absent = not shown. */
+    partnerTests?: readonly string[] | null | undefined;
 }
 
-export function FixChecksList({ checks, details, labels }: FixChecksListProps) {
+/** What the tests check says about the partners' tests. */
+function partnerTestsText(labels: KnowledgeGraphLabels, tests: readonly string[] | null): string {
+    const p = labels.surface.predict;
+    if (tests === null) return `${p.partnersTitle} · ${labels.surface.notSetUp}`;
+    return tests.length === 0 ? p.partnerTestsNone : fillTemplate(p.partnerTests, { tests: tests.join(', ') });
+}
+
+export function FixChecksList({ checks, details, labels, partnerTests }: FixChecksListProps) {
     const t = labels.surface.fix;
     return (
         <ul aria-label={t.checksList} style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
@@ -34,6 +43,9 @@ export function FixChecksList({ checks, details, labels }: FixChecksListProps) {
                             <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{t.check[id]}</span>
                             <span style={{ ...muted, color: cssVar(TONE[status]), flex: 'none' }}>{t.checkStatus[status]}</span>
                         </div>
+                        {id === 'tests' && partnerTests !== undefined && (
+                            <p data-partner-tests={partnerTests === null ? 'not-set-up' : partnerTests.length} style={{ ...muted, margin: 0, paddingInlineStart: 22, overflowWrap: 'anywhere' }}>{partnerTestsText(labels, partnerTests)}</p>
+                        )}
                         {bad && why && <p role="alert" data-check-why={id} style={{ ...muted, margin: 0, paddingInlineStart: 22, ...TYPE.mono, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', color: cssVar('violation') }}>{why}</p>}
                     </li>
                 );

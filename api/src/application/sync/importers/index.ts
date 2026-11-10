@@ -42,6 +42,7 @@ export type SyncImporterName =
   | 'importSyncedMessage'
   | 'importSyncedUsage'
   | 'importSyncedChatTicketLink'
+  | 'importSyncedRunOutcome'
   | 'importMirrorRecord';
 
 /** Entity type → its owning importer. Data, not branches: a new owner is a new row. */
@@ -54,6 +55,8 @@ const OWNED_BY: Readonly<Record<string, SyncImporterName>> = {
   usage: 'importSyncedUsage',
   // G21: a device's chat-to-ticket link lands as a real link row.
   'chat-ticket-link': 'importSyncedChatTicketLink',
+  // PRD 41 §D1: a run's features, commit attribution and labels land in the run-outcomes tables.
+  'run-outcome': 'importSyncedRunOutcome',
 };
 
 /**

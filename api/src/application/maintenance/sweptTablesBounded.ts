@@ -66,7 +66,13 @@ import {
   replayReleases,
   replayVisitSummaries,
   resourceLeases,
+  runCommitAttributions,
+  runDeltaDimensions,
+  runDeltaFindings,
+  runDeltas,
+  runFeatures,
   runModelOutcomes,
+  runOutcomeLabels,
   telemetrySpans,
   usageSnapshots,
   webhookDeliveries,
@@ -82,6 +88,11 @@ export const OPERATIONAL: readonly SweptConnection[] = ['transactional'];
  * for a run, so they share the window rather than inventing a third.
  */
 export const AUDIT_RETENTION_DAYS = 90;
+
+/** PRD 41 §D1 run-outcome training data: two years, the rolling-origin training window. */
+export const RUN_OUTCOME_RETENTION_DAYS = 730;
+/** PRD 41 §C14: run deltas, their dimensions and findings are kept 2 years. */
+export const RUN_DELTA_RETENTION_DAYS = 730;
 
 /** Opens the 1238/0018 DELETE gate for the rest of this statement (SET LOCAL equivalent). */
 const retentionGate = sql`set_config('app.retention', 'on', true) = 'on'`;
@@ -202,6 +213,38 @@ export const BOUNDED_TELEMETRY_TABLES: readonly SweptTable[] = [
     rationale: 'The D6 deferred-call queue. Only SETTLED jobs age out — an open job is work that has not happened yet. A settled row has already had its request cleared and its usage metered into llm_usage_log, so past a month it is provenance nobody opens. Not reclaimable: the tick claims rows from it.' }),
   entry({ relation: 'llm_specialist_eval_cases', connections: CORE, table: llmSpecialistEvalCases, tenanted: llmSpecialistEvalCases, column: llmSpecialistEvalCases.capturedAt, days: 180, floor: 90, reclaimable: false,
     rationale: 'The E2 specialist eval catalogue (captured job inputs + the frontier reference output). Capped per job by the registry; ageing a case out after six months lets fresh inputs be captured, so the eval set tracks what the job sees today instead of freezing on its first weeks.' }),
+];
+
+/**
+ * Run deltas (PRD 41 §C14, 1344 — autovacuum stated there): DOMAIN records, not telemetry, so their own
+ * list. 2 years. Children CASCADE from `run_deltas`; their entries age the same rows out (by the parent's
+ * age) and register them for the vacuum.
+ */
+const agedRunDelta = (child: typeof runDeltaDimensions.runDeltaId | typeof runDeltaFindings.runDeltaId, cutoff: Date): SQL =>
+  sql`${child} in (select ${runDeltas.id} from ${runDeltas} where ${runDeltas.createdAt} < ${cutoff.toISOString()}::timestamptz)`;
+
+export const RUN_DELTA_TABLES: readonly SweptTable[] = [
+  entry({ relation: 'run_deltas', connections: CORE, table: runDeltas, tenanted: runDeltas, column: runDeltas.createdAt, days: RUN_DELTA_RETENTION_DAYS, reclaimable: false,
+    rationale: 'What each agent run changed, per repository (headline, blast radius, digest). The history card and Part D trends read two years of runs; the evidence blob in R2 expires on the same 730 days (infra/uploads/lifecycle.json).' }),
+  entry({ relation: 'run_delta_dimensions', connections: CORE, table: runDeltaDimensions, tenanted: runDeltaDimensions, days: RUN_DELTA_RETENTION_DAYS, reclaimable: false,
+    expired: (cutoff) => agedRunDelta(runDeltaDimensions.runDeltaId, cutoff),
+    rationale: 'Per-dimension verdicts of a run delta; aged with their delta (2 years).' }),
+  entry({ relation: 'run_delta_findings', connections: CORE, table: runDeltaFindings, tenanted: runDeltaFindings, days: RUN_DELTA_RETENTION_DAYS, reclaimable: false,
+    expired: (cutoff) => agedRunDelta(runDeltaFindings.runDeltaId, cutoff),
+    rationale: 'Findings of a run delta with their card embeddings (similar findings, past fixes); aged with their delta (2 years).' }),
+];
+
+/**
+ * Run outcomes (PRD 41 §D1, 1342 / 0032 — autovacuum stated in 0032): TRAINING records, not telemetry, so
+ * their own list. Not compressible (no floor) and never rewritten.
+ */
+export const RUN_OUTCOME_TABLES: readonly SweptTable[] = [
+  entry({ relation: 'run_features', connections: OPERATIONAL, table: runFeatures, tenanted: runFeatures, column: runFeatures.finalizedAt, days: RUN_OUTCOME_RETENTION_DAYS, reclaimable: false,
+    rationale: 'Frozen per-run feature vectors. Rolling-origin training and backtests need two years of runs, so 730 days by run end.' }),
+  entry({ relation: 'run_commit_attributions', connections: OPERATIONAL, table: runCommitAttributions, tenanted: runCommitAttributions, column: runCommitAttributions.committedAt, days: RUN_OUTCOME_RETENTION_DAYS, reclaimable: false,
+    rationale: 'Per-run commit attribution — what SZZ blame maps back to a run. Kept as long as the features it labels (730 days).' }),
+  entry({ relation: 'run_outcome_labels', connections: OPERATIONAL, table: runOutcomeLabels, tenanted: runOutcomeLabels, column: runOutcomeLabels.computedAt, days: RUN_OUTCOME_RETENTION_DAYS, reclaimable: false,
+    rationale: 'Run outcome labels (reverted, follow-up fix, CI red, review rejected). Same two-year rolling-origin window as the features they label.' }),
 ];
 
 /** Credentials and leases past their own expiry. Window = expiry + a 7-day grace. */

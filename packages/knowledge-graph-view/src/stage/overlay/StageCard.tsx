@@ -1,8 +1,8 @@
 /**
  * The station card on the stage (PRD 43 B3 Cards, B7): the map's own `StationCard` and `buildCard`, anchored to the
  * station's SLOT with `useSlotAnchor` (its transform written from the frame loop, no React commit per frame), kept
- * clear of the unfolded satellites. Its actions run on the stage: Go inside drills (the level's slots are appended and
- * tweened in), Unfold patches the placement, Who calls / API / Patterns hand over to the surface. Closing it — Escape,
+ * clear of the unfolded satellites. Its actions run on the stage: Go inside is the semantic zoom's shortcut (`onEnter`:
+ * the camera flies into the station and the zoom crossing drills — the level's slots appended and tweened out of it), Unfold patches the placement, Who calls / API / Patterns hand over to the surface. Closing it — Escape,
  * a press outside, an action — returns focus to the station's a11y proxy; a station that leaves the stage closes it.
  * Reads only main-thread data (the stations, the graph's index and findings).
  */
@@ -36,12 +36,14 @@ export interface StageCardProps {
     onClose(): void;
     onQuestion?: ((id: QuestionId) => void) | undefined;
     onOpenPanel?: ((id: string) => void) | undefined;
+    /** Go inside as the semantic zoom's shortcut (B1a rule 9: fly to the station, the zoom enters it); absent = drill directly. */
+    onEnter?: ((stationId: string) => void) | undefined;
 }
 
 const NO_ENTER = { can: false, reason: 'deepest' } as const;
 const SATELLITE_BOX = 14;
 
-export function StageCard({ cardKey, map, drill, graph, labels, compact, onClose, onQuestion, onOpenPanel }: StageCardProps) {
+export function StageCard({ cardKey, map, drill, graph, labels, compact, onClose, onQuestion, onOpenPanel, onEnter }: StageCardProps) {
     const bus = useStageBus();
     const ref = useRef<HTMLDivElement | null>(null);
     const index = useMemo(() => nodeIndex(graph), [graph]);
@@ -83,7 +85,7 @@ export function StageCard({ cardKey, map, drill, graph, labels, compact, onClose
         <StationCard
             key={station.id} card={card} labels={labels} compact={compact} at={{ left: 0, top: 0 }}
             boxRef={ref as MutableRefObject<HTMLDivElement | null>} loading={drill.loading} onClose={close}
-            onEnter={() => { onClose(); focusProxy(bus, cardKey); drill.enter(station.id); }}
+            onEnter={() => { onClose(); focusProxy(bus, cardKey); (onEnter ?? drill.enter)(station.id); }}
             onUnfold={() => map.toggleUnfold(station.id)}
             onCallers={() => act(() => onQuestion?.('callers'))}
             onApi={() => act(() => onOpenPanel?.('api'))}

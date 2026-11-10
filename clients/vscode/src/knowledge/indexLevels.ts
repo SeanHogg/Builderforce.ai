@@ -13,8 +13,9 @@
 export type IndexLevel = 0 | 1 | 2 | 3;
 
 /**
- * The fact kinds of PRD 41 B1 (`structure`, `body`, `content`). Extraction does not split them yet (WS4), so today every
- * change reports all three: a rule reading any kind reruns.
+ * The fact kinds of PRD 41 B1 (`structure`, `body`, `content`) — memory's `FactKind`. An edit reports the kinds whose
+ * hashes really moved (`factIndex.ts`: a comment edit is `content` only); an analyzer pass, or a host without facts,
+ * reports all three.
  */
 export type FactKind = "structure" | "body" | "content";
 export const ALL_FACT_KINDS: readonly FactKind[] = ["structure", "body", "content"];

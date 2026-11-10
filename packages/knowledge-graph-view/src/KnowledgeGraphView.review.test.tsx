@@ -9,7 +9,6 @@ import { openReviews } from './testReviews';
 import type { KnowledgeReviewEvent, ReviewControl, ReviewEstimate, ReviewRequest } from './types';
 
 
-vi.mock('./scene/GraphScene', () => ({ default: () => null }));
 
 interface ScriptOptions {
   estimate?: ReviewEstimate;

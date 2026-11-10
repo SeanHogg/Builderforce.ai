@@ -1,5 +1,6 @@
 /**
- * The `run-delta` local-first record (PRD 41 §C14): one per run and repository, `run-delta:<runId>:<repoKey>`, written once
+ * The `run-delta` local-first record (PRD 41 §C14): one per run and repository, id `stableEntityId('run-delta:<runId>:<repoKey>')`
+ * (a UUID, as every synced client id is; the payload carries `runId`, `repoKey` and `projectId` for the server), written once
  * (a retried finalization keeps the stored one) through the same `newLocalRecord` + `tx.put` + `tx.append` path as the change
  * set it was computed from, so it syncs as a mirror record behind that change set.
  *
@@ -14,11 +15,13 @@
  */
 
 import { createHash } from "node:crypto";
-import { defineRecordIndex, newLocalRecord, scanByIndex, type EntityDestination, type LocalFirstStore, type LocalFirstTransaction } from "@builderforce/local-first";
+import { defineRecordIndex, newLocalRecord, scanByIndex, stableEntityId, type EntityDestination, type LocalFirstStore, type LocalFirstTransaction } from "@builderforce/local-first";
 import type { ComputedRunDeltaCard, RunDelta } from "@builderforce/run-delta";
 import { syncedRepositoryIdentity } from "../repoIdentity";
 import { droppedOverrides } from "./droppedOverrides";
 import { readRunHolds, withHold, type RunHoldState } from "./runHoldState";
+import type { RunPredictionValue } from "./runDeltaPredictions";
+import type { RunDeltaScheduleValue } from "./dynamicSchedule";
 
 /** The synced value. */
 export interface RunDeltaRecordValue {
@@ -40,6 +43,10 @@ export interface RunDeltaRecordValue {
   blocked?: { rules: string[] };
   /** Ignored `.builderforce/delta.json` entries, redacted ({@link redactDropped}). */
   overridesDropped?: string[];
+  /** The run's repository key (the change set's): the server keys the delta by (run, repo key), never by the record id. */
+  repoKey?: string;
+  /** The server project the run's chat belonged to, when the host knew one (the server re-gates it to the tenant). */
+  projectId?: number;
 }
 
 /** The device-only side record: never journaled, so never synced. */
@@ -77,16 +84,17 @@ const isDeltaValue = (p: unknown): p is RunDeltaRecordValue => !!p && typeof p =
 export const RUN_DELTAS_BY_REPOSITORY = defineRecordIndex<RunDeltaRecordValue>(
   "run-delta", "vscode.runDelta.repository", (row) => (isDeltaValue(row.payload) ? row.payload.repository : undefined),
 );
-/** Every run-delta row (synced and side record) of one run. */
-export const RUN_DELTAS_BY_RUN = defineRecordIndex<RunDeltaRecordValue | RunDeltaLocalValue>(
+/** Every run-delta row of one run: synced, side record and prediction row (`runDeltaPredictions.ts`). */
+export const RUN_DELTAS_BY_RUN = defineRecordIndex<RunDeltaRecordValue | RunDeltaLocalValue | RunPredictionValue | RunDeltaScheduleValue>(
   "run-delta", "vscode.runDelta.runId", (row) => row.payload?.runId,
 );
-/** Every run-delta row (synced and side record) of one chat. */
-export const RUN_DELTAS_BY_CHAT = defineRecordIndex<RunDeltaRecordValue | RunDeltaLocalValue>(
+/** Every run-delta row of one chat: synced, side record and prediction row. */
+export const RUN_DELTAS_BY_CHAT = defineRecordIndex<RunDeltaRecordValue | RunDeltaLocalValue | RunPredictionValue>(
   "run-delta", "vscode.runDelta.chatId", (row) => row.payload?.chatId,
 );
 
-const sha = (text: string): string => createHash("sha256").update(text).digest("hex");
+/** sha256 hex of a text (redacted codes, the schedule rows' repository key). */
+export const sha = (text: string): string => createHash("sha256").update(text).digest("hex");
 
 /** The repository identity that may leave the device: a remote URL without credentials, a local path as `local:<hash>` (`repoIdentity.ts`). */
 export function syncedRepository(repo: string): string {
@@ -111,14 +119,21 @@ export function redactDropped(codes: readonly string[]): string[] {
   return codes.length > MAX_DROPPED ? [...out, `truncated:${codes.length - MAX_DROPPED}`] : out;
 }
 
-/** `changeset:<runId>:<repoKey>` → `run-delta:<runId>:<repoKey>`: the same run and repository key. */
-export function runDeltaId(changeSetId: string): string {
+/** `changeset:<runId>:<repoKey>` → the natural key `run-delta:<runId>:<repoKey>`: the same run and repository key. */
+export function runDeltaKey(changeSetId: string): string {
   const repoKey = changeSetId.slice(changeSetId.lastIndexOf(":") + 1);
   const runId = changeSetId.slice("changeset:".length, changeSetId.lastIndexOf(":"));
   return `run-delta:${runId}:${repoKey}`;
 }
 
-const localIdOf = (deltaId: string): string => `run-delta-local:${deltaId.slice("run-delta:".length)}`;
+/** The synced record id: `stableEntityId(runDeltaKey(...))` — every client entity id the sync accepts is a UUID. */
+export function runDeltaId(changeSetId: string): string {
+  return stableEntityId(runDeltaKey(changeSetId));
+}
+
+const repoKeyOf = (key: string): string => key.slice(key.lastIndexOf(":") + 1);
+/** The device-only rows keep the natural key (they are never synced). */
+const localIdOf = (key: string): string => `run-delta-local:${key.slice("run-delta:".length)}`;
 
 function cardExtrasOf({ value, local }: StoredRunDelta): Pick<RunDeltaCard, "at" | "overrides"> {
   const overrides = droppedOverrides(value.overridesDropped);
@@ -152,13 +167,14 @@ export async function storeRunDelta(
   /** False once the computation was abandoned: checked inside the transaction, so nothing lands after that. */
   live: () => boolean = () => true,
 ): Promise<boolean> {
-  const id = runDeltaId(stored.value.changeSetId);
+  const key = runDeltaKey(stored.value.changeSetId);
+  const id = stableEntityId(key);
   let written = false;
   await store.transact(async (tx) => {
     if (!live() || await tx.get("run-delta", id)) return;
     const record = newLocalRecord<RunDeltaRecordValue>({
       id, entityType: "run-delta", deviceId: deps.deviceId, destination: deps.destination ?? { kind: "unbound" },
-      occurredAt: deps.at, schemaVersion: 1, payload: stored.value,
+      occurredAt: deps.at, schemaVersion: 1, payload: { ...stored.value, repoKey: repoKeyOf(key) },
     });
     await tx.put(record);
     await tx.append({
@@ -168,15 +184,50 @@ export async function storeRunDelta(
       operation: "create",
       schemaVersion: record.schemaVersion,
       occurredAt: deps.at,
-      dependsOn: [`change-set:create:${stored.value.changeSetId}`],
+      // No `dependsOn` on the change set: the server importer never reads it, and a change set's id
+      // (`changeset:<runId>:<repoKey>`) is not a UUID, so the push refuses its event; a dependency on it would hold
+      // this delta `dependency_pending` forever.
+      dependsOn: [],
       destination: record.destination,
       payload: record.payload,
     });
     // The side record: put, never appended — no journal event, so the sync never carries it.
     await tx.put(newLocalRecord<RunDeltaLocalValue>({
-      id: localIdOf(id), entityType: "run-delta", deviceId: deps.deviceId, occurredAt: deps.at, schemaVersion: 1, payload: stored.local,
+      id: localIdOf(key), entityType: "run-delta", deviceId: deps.deviceId, occurredAt: deps.at, schemaVersion: 1, payload: stored.local,
     }));
-    await putBlastScore(tx, deps, id, stored.value);
+    await putBlastScore(tx, deps, key, stored.value);
+    written = true;
+  });
+  return written;
+}
+
+/**
+ * Supersedes a stored delta with its FINAL revision (PRD 41 §6 "Agent run": the L3 analyzers settled after the static delta
+ * was stored with them `pending`): the same record, its delta (and so its digest) replaced, version + 1, journaled as an
+ * `update` so the sync carries the revision. False when the record is gone, or already carries this delta.
+ */
+export async function reviseRunDelta(
+  store: LocalFirstStore, deps: { at: string }, stored: StoredRunDelta,
+): Promise<boolean> {
+  const key = runDeltaKey(stored.value.changeSetId);
+  const id = stableEntityId(key);
+  let written = false;
+  await store.transact(async (tx) => {
+    const existing = await tx.get<RunDeltaRecordValue>("run-delta", id);
+    if (!existing || existing.payload.delta.digest === stored.value.delta.digest) return;
+    const payload: RunDeltaRecordValue = { ...existing.payload, delta: stored.value.delta, computedMs: stored.value.computedMs };
+    await tx.put<RunDeltaRecordValue>({ ...existing, version: existing.version + 1, updatedAt: deps.at, payload }, existing.version);
+    await tx.append({
+      eventId: `run-delta:revise:${id}:${stored.value.delta.digest}`,
+      clientEntityId: id,
+      entityType: "run-delta",
+      operation: "update",
+      schemaVersion: existing.schemaVersion,
+      occurredAt: deps.at,
+      dependsOn: [`run-delta:create:${id}`],
+      destination: existing.destination,
+      payload,
+    });
     written = true;
   });
   return written;
@@ -192,11 +243,11 @@ export async function readRunDeltas(store: LocalFirstStore, query: { runId?: str
   const locals = new Map<string, RunDeltaLocalValue>();
   let holds = new Map<string, RunHoldState>();
   await store.read(async (tx) => {
-    const visit = (row: { id: string; occurredAt: string; deletedAt?: string; payload: RunDeltaRecordValue | RunDeltaLocalValue }): void => {
+    const visit = (row: { id: string; occurredAt: string; deletedAt?: string; payload: RunDeltaRecordValue | RunDeltaLocalValue | RunPredictionValue }): void => {
       if (row.deletedAt) return;
       if (query.runId !== undefined && row.payload.runId !== query.runId) return;
       if (query.chatId !== undefined && row.payload.chatId !== query.chatId) return;
-      if (isLocalValue(row.payload)) locals.set(`run-delta:${row.id.slice("run-delta-local:".length)}`, row.payload);
+      if (isLocalValue(row.payload)) locals.set(stableEntityId(`run-delta:${row.id.slice("run-delta-local:".length)}`), row.payload);
       else if (isDeltaValue(row.payload)) values.set(row.id, { at: row.occurredAt, value: row.payload });
     };
     if (query.runId !== undefined) await scanByIndex(tx, RUN_DELTAS_BY_RUN, query.runId, visit);

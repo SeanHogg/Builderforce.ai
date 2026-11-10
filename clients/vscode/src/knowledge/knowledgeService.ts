@@ -47,6 +47,7 @@ import { reviewPortsFor } from "./reviewPortsFor";
 import { reviewRecords, useRecordMemento } from "./knowledgeSyncStatus";
 import { reviewParallelism } from "./review/extractPoolHost";
 import { UNTIMED, type LoadTimer } from "./knowledgeLoadTrace";
+import { factFindingsProvider, factIndexOf } from "./factFindings";
 import { preemptBackground } from "./indexLevels";
 import { untilAborted } from "../boundedStep";
 
@@ -281,10 +282,14 @@ export async function loadGraph(
   ]);
   const nearDuplicates = index ? timer.phase("nearDuplicates", () => index.nearDuplicates()) : undefined;
   if (nearDuplicates) onNearDuplicates?.(nearDuplicates.length);
+  const packs = reviewPacks({ partitions });
+  // The generic and code-pack findings come from the root's fact index (PRD 41 §B5), over the whole graph, once it synced.
+  const findings = factFindingsProvider(factIndexOf(rootId));
   return timer.phase("build", () => buildStoredGraph({
-    rootId, store: open.store, manifest: open.manifest, packs: reviewPacks({ partitions }),
+    rootId, store: open.store, manifest: open.manifest, packs,
     ...(nearDuplicates ? { nearDuplicates } : {}),
     ...(q.focus ? { focus: q.focus } : {}),
     ...(q.maxNodes ? { maxNodes: q.maxNodes } : {}),
+    ...(findings ? { findings } : {}),
   }));
 }

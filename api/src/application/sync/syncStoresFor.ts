@@ -14,6 +14,9 @@ import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { syncUsageLedger } from './syncUsageLedger';
 import { syncStepStore } from './syncStepStore';
+import { syncRunOutcomeStore } from '../runOutcomes/importSyncedRunOutcome';
+import { runDeltaEvidenceStore } from '../runDelta/runDeltaEvidence';
+import { bumpRunDeltaReads } from '../runDelta/runDeltaReads';
 import { taskInTenant } from '../../infrastructure/database/tenantScope';
 import { createSyncRepository } from '../../infrastructure/repositories/SyncRepository';
 import { chatOwnedBy } from '../brain/brainChatGuards';
@@ -34,9 +37,12 @@ export function syncReferenceReader(db: Db): SyncReferenceReader {
 export function syncStoresFor(db: Db, env: Env): SyncStores {
   const usage = syncUsageLedger(db, env);
   const steps = syncStepStore(db);
+  const runOutcomes = syncRunOutcomeStore(db);
+  // PRD 41 §C14: the run-delta evidence blob goes to R2; the read caches are bumped after commit.
+  const runDelta = { evidence: runDeltaEvidenceStore(env), invalidate: (tenantId: number) => bumpRunDeltaReads(env, tenantId) };
   return createSyncRepository(
     db,
-    (tx) => namedSyncImporters(tx, usage, steps),
+    (tx) => namedSyncImporters(tx, usage, steps, runOutcomes, runDelta),
     syncReferenceReader(db),
     // A push batch is ONE transaction: a chat an earlier event created is only visible on it.
     (tx) => syncReferenceReader(tx as unknown as Db),

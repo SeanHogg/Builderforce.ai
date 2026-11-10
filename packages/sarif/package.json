@@ -1,0 +1,17 @@
+{
+  "name": "@builderforce/sarif",
+  "version": "2026.11.1",
+  "private": true,
+  "type": "module",
+  "description": "THE SARIF 2.1.0 interchange (PRD 41 §C12): parse any tool's SARIF (Semgrep, CodeQL, ESLint) into the platform's NormalizedFinding and a richer per-result record (baselineState, partialFingerprints, snippet), and build SARIF logs for export. Pure, dependency-free and I/O-free: the Worker (api), run-delta and agent-tools run the same code. Source-only: its tests run in the API suite (api/vitest.config.ts collects every source-only package's src). The official 2.1.0 JSON schema is vendored under schema/ for run-delta's export test.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

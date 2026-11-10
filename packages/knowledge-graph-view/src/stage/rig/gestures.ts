@@ -2,9 +2,9 @@
  * The stage's gestures (PRD 43 B2), bound to the stage's box:
  *
  * - `fill` frames: the wheel zooms about the pointer; one finger or a mouse drag pans; a pinch zooms.
- * - `document` frames (sized to content, the page scrolls): the wheel is NOT captured — the page scrolls as before —
- *   and zoom comes from +/−/Fit; a mouse drag pans, one finger scrolls the page (`touch-action: pan-x pan-y`), a pinch
- *   zooms.
+ * - `document` frames (sized to content, the page scrolls): the plain wheel is NOT captured — the page scrolls as
+ *   before — and zoom comes from +/−/Fit or Ctrl/⌘ + wheel (a trackpad pinch); a mouse drag pans, one finger scrolls
+ *   the page (`touch-action: pan-x pan-y`), a pinch zooms.
  * - Tilt is never a gesture: the depth control owns it, so it never collides with pinch or page scroll.
  *
  * A drag starts only past a few px, so a click still reaches the mark (proxy) under it, and the click that ends a drag
@@ -91,7 +91,9 @@ export function bindGestures(el: HTMLElement, rig: RigController, frame: () => C
         e.preventDefault();
     };
     const wheel = (e: WheelEvent) => {
-        if (frame() !== 'fill') return;
+        // A document frame leaves the plain wheel to the page; Ctrl/⌘ + wheel (and a trackpad pinch, which the browser
+        // sends as one) zooms it like a map, so the semantic zoom (B1a rule 9) reaches every band there too.
+        if (frame() !== 'fill' && !e.ctrlKey && !e.metaKey) return;
         e.preventDefault();
         const [sx, sy] = local(e);
         rig.zoomBy(Math.exp(-e.deltaY * WHEEL_ZOOM), sx, sy);

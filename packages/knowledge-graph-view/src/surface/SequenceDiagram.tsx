@@ -1,5 +1,6 @@
 /**
- * The Sequence camera (PRD 38, Option B+): a lifeline per stop of the path, a message per hop
+ * The path strip's sequence diagram (PRD 38, Option B+; the Sequence CAMERA is a stage placement, PRD 43
+ * B1a rule 8 — this SVG body retires when the strip shows the path's own stage marks, P2): a lifeline per stop of the path, a message per hop
  * labelled with the edge kind and its reference count, the step highlighted in step with the
  * path strip. A hop that skips or climbs a layer is drawn in the violation colour; a hop with
  * no reference between its two stops is dashed and says so. *Copy as Mermaid* exports exactly
@@ -14,7 +15,6 @@ import { cssVar, type ThemeTone } from '../scene/themeColors';
 import { button, muted } from '../styles';
 import { FONT_MONO, FONT_UI, TYPE } from './ui/type';
 import type { PathHop, PathModel } from './path';
-import type { SceneProps } from './registry';
 import { sequenceOf } from './sequenceModel';
 import { hopText, pathMermaid } from './sequenceText';
 
@@ -22,11 +22,6 @@ const COL_W = 150;
 const HEAD_H = 40;
 const ROW_H = 40;
 const ARROW_TONES: readonly ThemeTone[] = ['edge', 'accent', 'violation'];
-
-/** The Sequence camera: the surface's path, step and stepping. */
-export function SequenceDiagram({ labels, surface }: SceneProps) {
-    return <SequenceView path={surface.path} step={surface.step} onStep={surface.setStep} labels={labels} />;
-}
 
 export interface SequenceViewProps {
     path: PathModel;
@@ -37,7 +32,7 @@ export interface SequenceViewProps {
     copy?: boolean;
 }
 
-/** The diagram itself, free of the surface: the Sequence camera and the path strip's Sequence toggle both draw it. */
+/** The diagram itself, free of the surface: the path strip's Sequence toggle draws it. */
 export function SequenceView({ path, step, onStep: setStep, labels, copy = true }: SequenceViewProps) {
     const s = labels.surface;
     // Arrowheads are markers of an explicit token each; the id is per instance, so two diagrams on a page never share one.

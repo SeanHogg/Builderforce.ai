@@ -40,6 +40,42 @@ export interface RunHoldPort {
   unmeasured(): void;
   /** Every delta of this run is settled (or none will be computed). */
   settled(): void;
+  /**
+   * The run's measurement needs `ms` more (`dynamic`: the optional dynamic tier, PRD 41 C6.2/C8.4; `l3`: the analyzer
+   * phase): the gate's deadline moves by what it GRANTS, within that kind's per-run bucket
+   * ({@link DEFAULT_EXTENSION_CAPS}), so a measurement still under way is not held unmeasured. Answers the ms granted;
+   * a gate that is not waiting on this run (settled, not measuring) does not constrain it and answers `ms`.
+   */
+  extend?(ms: number, kind: ExtensionKind): number;
+}
+
+/** What a hold's extension is for: each has its own per-run bucket. */
+export type ExtensionKind = "dynamic" | "l3";
+
+/**
+ * Per-run extension buckets, each spent ONCE per run (not per repository): the dynamic tier of all the run's repositories
+ * together (60 min), and the L3 analyzer phase's wait (15 min; `analyzers/l3Phase.ts` `L3_HOLD_WAIT_MS` is this value).
+ */
+export const DEFAULT_EXTENSION_CAPS: Readonly<Record<ExtensionKind, number>> = { dynamic: 60 * 60_000, l3: 15 * 60_000 };
+
+/**
+ * A run's `extend` for its deltas' dynamic tier (`startRunDelta`): grants at most what is left of the run's cap AND what
+ * the finalize gate grants (its `dynamic` bucket), so the delta's own deadline never outlives the gate's; `apply` moves
+ * the delta's deadline by exactly what was granted. Answers the ms granted.
+ */
+export function runExtender(hold: RunHoldPort | undefined, apply: (ms: number) => void, cap = DEFAULT_EXTENSION_CAPS.dynamic): (ms: number) => number {
+  let extended = 0;
+  return (ms) => {
+    const runGrant = Math.min(ms, cap - extended);
+    if (!(runGrant > 0)) return 0;
+    const holdGrant = hold?.extend ? hold.extend(runGrant, "dynamic") : runGrant;
+    const granted = Math.max(0, Math.min(runGrant, holdGrant));
+    if (granted > 0) {
+      extended += granted;
+      apply(granted);
+    }
+    return granted;
+  };
 }
 
 export interface RunHoldGate {
@@ -73,6 +109,10 @@ interface Pending {
   settled: boolean;
   /** The change set handed off with changes: the gate's clock is running. */
   measuring: boolean;
+  /** While measuring: when the delta's wait runs out (epoch ms); {@link RunHoldPort.extend} moves it. */
+  deadline?: number;
+  /** What each bucket granted so far (capped per kind by the gate's `caps`). */
+  extended: Record<ExtensionKind, number>;
   timer?: ReturnType<typeof setTimeout>;
   /** Set once the run has completed and waits: gives the verdict. */
   decide?: () => void;
@@ -84,7 +124,10 @@ export function createRunHoldGate(opts: {
   /** From the run's settle until hand-off: how long finalization may take before the run is held unmeasured. */
   finalizeCeilingMs: number;
   onTimeout?(runId: string, ms: number, which: RunHoldTimeout): void;
+  /** Per-run extension buckets; default {@link DEFAULT_EXTENSION_CAPS}. */
+  caps?: Readonly<Record<ExtensionKind, number>>;
 }): RunHoldGate {
+  const caps = opts.caps ?? DEFAULT_EXTENSION_CAPS;
   const pending = new Map<string, Pending>();
   /** The verdicts given or being given, until the owning start reads them (or forgets them). */
   const given = new Map<string, Promise<RunHold | undefined>>();
@@ -103,15 +146,31 @@ export function createRunHoldGate(opts: {
     run.settled = true;
     run.decide?.();
   };
+  const armDelta = (runId: string, run: Pending, budget: number): void => {
+    arm(run, Math.max(0, run.deadline! - Date.now()), () => {
+      opts.onTimeout?.(runId, budget, "delta");
+      run.unmeasured = true;
+      settle(run);
+    });
+  };
   const begin = (runId: string, changes: boolean): void => {
     const run = pending.get(runId);
     if (!run || run.settled || !changes) return;
     run.measuring = true;
-    arm(run, opts.budgetMs, () => {
-      opts.onTimeout?.(runId, opts.budgetMs, "delta");
-      run.unmeasured = true;
-      settle(run);
-    });
+    run.deadline = Date.now() + opts.budgetMs;
+    armDelta(runId, run, opts.budgetMs);
+  };
+  const extend = (runId: string, ms: number, kind: ExtensionKind): number => {
+    const run = pending.get(runId);
+    if (!run || run.settled || !run.measuring || run.deadline === undefined) return Math.max(0, ms);
+    // Each kind's bucket is spent once per run: however many repositories ask, the run is never held open past
+    // budget + dynamic cap + l3 cap.
+    const granted = Math.max(0, Math.min(ms, caps[kind] - run.extended[kind]));
+    if (granted === 0) return 0;
+    run.extended[kind] += granted;
+    run.deadline += granted;
+    armDelta(runId, run, opts.budgetMs + run.extended.dynamic + run.extended.l3);
+    return granted;
   };
   const block = (runId: string, rules: readonly string[]): boolean => {
     const run = pending.get(runId);
@@ -129,13 +188,14 @@ export function createRunHoldGate(opts: {
   };
   return {
     expect(runId) {
-      if (!pending.has(runId)) pending.set(runId, { rules: new Set(), unmeasured: false, settled: false, measuring: false });
+      if (!pending.has(runId)) pending.set(runId, { rules: new Set(), unmeasured: false, settled: false, measuring: false, extended: { dynamic: 0, l3: 0 } });
     },
     port: (runId) => ({
       begin: (changes) => begin(runId, changes),
       block: (rules) => block(runId, rules),
       unmeasured: () => unmeasured(runId),
       settled: () => settled(runId),
+      extend: (ms, kind) => extend(runId, ms, kind),
     }),
     beforeTerminal({ runId, status }) {
       const run = pending.get(runId);

@@ -12,6 +12,8 @@ import { acceptanceChecks, testRequestFor } from './actModel';
 import type { PathModel } from './path';
 import { smallButton } from './ActCards';
 import { Card } from './ui';
+import type { Partners } from './coChange';
+import { PartnerList } from './PartnerList';
 import { TYPE } from './ui/type';
 
 /** A path worth keeping as a test or finishing: it has at least one hop. */
@@ -36,7 +38,7 @@ export function KeepTestCard({ path, pathName, findings, labels, index, onCompos
     );
 }
 
-export function DoneWhen({ findings, labels, index }: Pick<PathPartProps, 'findings' | 'labels' | 'index'>) {
+export function DoneWhen({ findings, labels, index, partners }: Pick<PathPartProps, 'findings' | 'labels' | 'index'> & { partners?: Partners | undefined }) {
     const t = labels.surface.act;
     const done = acceptanceChecks(findings, labels, index);
     return (
@@ -53,6 +55,12 @@ export function DoneWhen({ findings, labels, index }: Pick<PathPartProps, 'findi
                 </ul>
             )}
             {done.more > 0 && <p style={{ ...TYPE.bodyMuted, margin: 0 }}>{counted(labels, 'moreChecks', done.more)}</p>}
+            {partners !== undefined && (
+                <section aria-label={labels.surface.predict.partnersTitle} data-testid="kg-done-partners" style={{ display: 'grid', gap: 4 }}>
+                    <span style={TYPE.meta}>{labels.surface.predict.partnersTitle}</span>
+                    <PartnerList partners={partners} labels={labels} template={labels.surface.predict.doneAlso} none={labels.surface.predict.partnersNone} />
+                </section>
+            )}
         </footer>
     );
 }

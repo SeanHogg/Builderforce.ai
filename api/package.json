@@ -68,8 +68,8 @@
   "dependencies": {
     "@cloudflare/containers": "^0.3.7",
     "@neondatabase/serverless": "^0.10.4",
-    "@seanhogg/builderforce-memory": "^2026.10.73",
-    "@seanhogg/builderforce-memory-engine": "^2026.10.63",
+    "@seanhogg/builderforce-memory": "^2026.10.80",
+    "@seanhogg/builderforce-memory-engine": "^2026.10.65",
     "@seanhogg/builderforce-quality": "^2026.8.0",
     "@seanhogg/builderforce-webcontainers": "^2026.10.12",
     "drizzle-orm": "^0.45.4",

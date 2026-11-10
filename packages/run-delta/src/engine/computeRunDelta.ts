@@ -15,10 +15,12 @@
  */
 
 import type {
-    DeltaFinding, DeltaPorts, DimensionId, DimensionRegistry, DimensionResult, MeasuredBy, MetricDelta, RuleInput,
+    ComputeOptions, DeltaFinding, DeltaPorts, DimensionId, DimensionRegistry, DimensionResult, MeasuredBy, MetricDelta, RuleInput,
     RunChangeSetInput, RunDelta, SideFacts,
 } from '../contract.js';
+import { canonicalFileFacts } from '@seanhogg/builderforce-memory/knowledge';
 import { TEST_INTEGRITY_RULES } from '../registry/defaults.js';
+import { analyzerKindTools, analyzerTier, type AnalyzerTier, type KindStatus } from './analyzers.js';
 import { blastRadius } from './blastRadius.js';
 import { metaReasons, reasonsFor } from './comparability.js';
 import { digestOf } from './digest.js';
@@ -32,6 +34,8 @@ import { dimensionVerdict, worst } from './verdict.js';
 
 interface Bucket {
     ran: number;
+    /** Reasons that are not verdict inputs (`analyzer-not-measured:<tool>`). */
+    extra: string[];
     failed: string[];
     notComparable: string[];
     findings: DeltaFinding[];
@@ -40,8 +44,8 @@ interface Bucket {
     measuredBy: MeasuredBy[];
 }
 
-/** Whether each rule (or metric rule) id could certify the run: ran, and its kind is comparable. */
-type RuleStatus = Map<string, 'ok' | 'not-comparable'>;
+/** Whether each rule (or metric rule, or analyzer kind) id could certify the run: ran, and its kind is comparable; `pending` = phase 1. */
+type RuleStatus = Map<string, KindStatus>;
 
 /** Facts with every path normalized (imports, badges), so a Windows host and a Linux host agree. */
 function normalizedFacts(f: SideFacts): SideFacts {
@@ -49,7 +53,9 @@ function normalizedFacts(f: SideFacts): SideFacts {
     for (const [from, to] of f.imports) imports.set(normalizePath(from), sortedUnique([...(imports.get(normalizePath(from)) ?? []), ...to.map(normalizePath)]));
     const badges = new Map<string, Readonly<Record<string, number | string>>>();
     for (const [p, b] of f.badges) badges.set(normalizePath(p), b);
-    return { ...f, imports, badges };
+    // FileFacts: keys normalized here; their own path fields are normalized by memory's `canonicalFileFacts`.
+    const fileFacts = f.fileFacts ? new Map([...f.fileFacts].map(([p, ff]) => [normalizePath(p), canonicalFileFacts(ff)] as const)) : undefined;
+    return { ...f, imports, badges, ...(fileFacts ? { fileFacts } : {}) };
 }
 
 function compareFinding(a: DeltaFinding, b: DeltaFinding): number {
@@ -60,22 +66,31 @@ function compareFinding(a: DeltaFinding, b: DeltaFinding): number {
 /**
  * §12.5, fail-closed. For an autonomous run: every blocking rule with a fresh ERROR finding (its id);
  * every blocking rule that could not certify the run (`not-comparable:<id>`); `head-switched` when no
- * rule ran at all. Interactive runs never block.
+ * rule ran at all. Interactive runs never block. The registry's analyzer kinds certify like rules, whether or not the
+ * host runs the tier (fail-closed); one still measuring in a phase-1 delta is `analyzer-pending:<tool>` (the hold waits
+ * for the final delta).
  */
 export function blockingCodes(
     input: RunChangeSetInput, registry: DimensionRegistry, findings: readonly DeltaFinding[], status: RuleStatus,
 ): string[] {
     if (input.mode !== 'autonomous') return [];
     const blocking = new Set(registry.registries.blocking);
-    const registered = [...registry.rules, ...registry.metrics].map((r) => r.id).filter((id) => blocking.has(id));
+    const kindTools = analyzerKindTools(registry.analyzers ?? []);
+    const registered = sortedUnique([...registry.rules, ...registry.metrics].map((r) => r.id).concat([...kindTools.keys()])).filter((id) => blocking.has(id));
     if (registered.length === 0) return [];
     if (input.headSwitched) return ['head-switched'];
     const codes = findings.filter((f) => isFresh(f) && f.severity === 'error' && blocking.has(f.ruleId)).map((f) => f.ruleId);
-    for (const id of registered) if (status.get(id) !== 'ok') codes.push(`not-comparable:${id}`);
+    for (const id of registered) {
+        const s = status.get(id);
+        if (s === 'pending') codes.push(`analyzer-pending:${kindTools.get(id)}`);
+        else if (s !== 'ok') codes.push(`not-comparable:${id}`);
+    }
     return sortedUnique(codes);
 }
 
-export async function computeRunDelta(input: RunChangeSetInput, registry: DimensionRegistry, ports: DeltaPorts): Promise<RunDelta> {
+export async function computeRunDelta(
+    input: RunChangeSetInput, registry: DimensionRegistry, ports: DeltaPorts, options: ComputeOptions = {},
+): Promise<RunDelta> {
     const sides = await resolveSides(input, ports);
     const [rawBefore, rawAfter] = await Promise.all([ports.facts('before'), ports.facts('after')]);
     const beforeFacts = normalizedFacts(rawBefore), afterFacts = normalizedFacts(rawAfter);
@@ -94,14 +109,20 @@ export async function computeRunDelta(input: RunChangeSetInput, registry: Dimens
 
     const dimensionIds = sortedUnique(registry.dimensions) as DimensionId[];
     const buckets = new Map<DimensionId, Bucket>(dimensionIds.map((id) => [id, {
-        ran: 0, failed: [], notComparable: [], findings: [], metrics: [], metricsNotComparable: new Set(), measuredBy: [],
+        ran: 0, extra: [], failed: [], notComparable: [], findings: [], metrics: [], metricsNotComparable: new Set(), measuredBy: [],
     }]));
     const status: RuleStatus = new Map();
+    // L3 (B7) first: a kind the tool measured this run supersedes the static-tier rule of the same id (only then).
+    const staticIds = new Set([...registry.rules, ...registry.metrics].map((r) => r.id));
+    const tier: AnalyzerTier | undefined = input.headSwitched || !registry.analyzers?.length ? undefined
+        : await analyzerTier(registry.analyzers, ports, scope, { ...options, staticIds, blocking: new Set(registry.registries.blocking) });
+    const superseded = tier?.superseded ?? new Set<string>();
 
     if (!input.headSwitched) {
         const ruleInput: RuleInput = {
             changed: sides.changed, before: sides.before, after: sides.after, beforeFacts, afterFacts,
-            registries: registry.registries, runKind: input.kind ?? 'standard',
+            registries: registry.registries, runKind: input.kind ?? 'standard', churn,
+            ...(input.plannedPaths ? { plannedPaths: input.plannedPaths.map(normalizePath) } : {}),
         };
         const reasons = metaReasons(beforeFacts.meta, afterFacts.meta);
         const fail = (bucket: Bucket, id: string, version: number) => {
@@ -112,7 +133,12 @@ export async function computeRunDelta(input: RunChangeSetInput, registry: Dimens
         };
         for (const rule of [...registry.rules].sort((a, b) => compareStr(a.id, b.id))) {
             const bucket = buckets.get(rule.dimension);
-            if (!bucket) continue;
+            if (!bucket || superseded.has(rule.id)) continue;
+            if (rule.applies && !rule.applies(ruleInput)) {
+                // Cannot measure this run (e.g. no plan for scope drift): listed, never counted as a measurement.
+                bucket.measuredBy.push({ tool: rule.id, version: String(rule.version), status: 'skipped', reason: rule.skipReason ?? 'not-applicable' });
+                continue;
+            }
             let out: ReturnType<typeof rule.derive>;
             try {
                 out = rule.derive(ruleInput);
@@ -145,22 +171,39 @@ export async function computeRunDelta(input: RunChangeSetInput, registry: Dimens
             bucket.measuredBy.push({ tool: metric.id, version: String(metric.version), status: 'ok' });
             status.set(metric.id, gate.length === 0 ? 'ok' : 'not-comparable');
         }
+        if (tier) {
+            for (const c of tier.contributions) {
+                const bucket = buckets.get(c.dimension);
+                if (!bucket) continue;
+                if (c.ran) bucket.ran++;
+                bucket.findings.push(...c.findings);
+                bucket.metrics.push(...c.metrics);
+                for (const m of c.metricsNotComparable) bucket.metricsNotComparable.add(m);
+                bucket.notComparable.push(...c.notComparable);
+                bucket.extra.push(...c.reasons);
+                bucket.measuredBy.push(...c.measuredBy);
+            }
+            for (const [kind, s] of tier.status) status.set(kind, s);
+        }
     }
 
     const unresolved = sides.unknownBefore.length > 0;
     const nothingResolved = unresolved && sides.changed.every((f) => scope.unknownBefore.has(f.path));
     const integrityRules = new Set(TEST_INTEGRITY_RULES);
+    const blockingRules = new Set(registry.registries.blocking);
 
     const dimensions: DimensionResult[] = dimensionIds.map((id) => {
         const b = buckets.get(id)!;
         const findings = b.findings.sort(compareFinding);
         const metrics = b.metrics.sort((x, y) => compareStr(x.metricId, y.metricId));
-        const measuredBy = b.measuredBy.sort((x, y) => compareStr(x.tool, y.tool));
+        const measuredBy = b.measuredBy.sort((x, y) => compareStr(x.tool, y.tool) || compareStr(x.side ?? '', y.side ?? ''));
         if (input.headSwitched) return { id, verdict: 'not_comparable', reasons: ['head-switched'], findings, metrics, measuredBy };
         let { verdict, reasons } = dimensionVerdict({
             id, ran: b.ran, failed: b.failed, notComparable: sortedUnique(b.notComparable), findings, metrics,
-            metricsNotComparable: b.metricsNotComparable, integrityRules,
+            metricsNotComparable: b.metricsNotComparable, integrityRules, blockingRules,
         });
+        // An analyzer that did not measure says so by name; a dimension it alone covers is not "rule not built".
+        if (b.extra.length > 0) reasons = sortedUnique([...reasons.filter((r) => r !== 'rule-not-built'), ...b.extra]);
         if (unresolved && verdict !== 'not_measured') {
             reasons = sortedUnique([...reasons, 'before-unresolved']);
             if (nothingResolved) verdict = worst([verdict, 'not_comparable']);

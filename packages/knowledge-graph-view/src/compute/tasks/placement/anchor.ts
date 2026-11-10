@@ -64,7 +64,8 @@ export function anchorHidden(marks: Marks, d: Draft, scheme: 'station' | 'folder
     }
 }
 
-function hide(d: Draft, i: number, x: number, y: number, z: number): void {
+/** Hides slot `i` at (x, y, z): scale 0, anchored (a placement may anchor a slot itself before {@link anchorHidden}). */
+export function hide(d: Draft, i: number, x: number, y: number, z: number): void {
     d.position[i * 3] = x; d.position[i * 3 + 1] = y; d.position[i * 3 + 2] = z;
     d.scale[i] = 0; d.extrude[i] = 0; d.placed[i] = ANCHORED;
 }

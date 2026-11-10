@@ -3,8 +3,9 @@
  * ({@link VERDICT_POLICIES}) over one evaluator:
  *
  *  - `attack-surface` (C5, also the default): `worse` when an introduced or changed finding is
- *    error-level, or more than one warn was introduced; heuristic-only errors still give `worse`, with
- *    the `heuristic` reason. `better` when findings were resolved and NOTHING was introduced — C5 says
+ *    error-level, or more than one warn was introduced. In SECURITY, a heuristic error counts as a warn
+ *    unless a measured error there corroborates it (C4: heuristic never alone sets `worse` at error),
+ *    except a §12.5 blocking or C8.2 integrity rule; either way the `heuristic` reason. `better` when findings were resolved and NOTHING was introduced — C5 says
  *    "nothing", so an introduced finding of ANY severity, info included, prevents `better`.
  *  - `static-tier` (C6): `worse` on an introduced/changed error-level static finding or a metric
  *    regression beyond its error threshold; `better` symmetrically (an error-level finding resolved, or
@@ -22,6 +23,7 @@
 import { HEADLINE_ORDER, type DeltaFinding, type DimensionId, type MetricDelta, type Verdict } from '../contract.js';
 import { isFresh, isOpen } from './findingFacts.js';
 import { sortedUnique } from './text.js';
+import { withinNoise } from './noise.js';
 
 export type VerdictPolicy = 'attack-surface' | 'static-tier' | 'integrity';
 
@@ -57,6 +59,8 @@ export interface DimensionEvaluation {
     metricsNotComparable: ReadonlySet<string>;
     /** C8.2 rule ids (test integrity). */
     integrityRules: ReadonlySet<string>;
+    /** §12.5 blocking rule ids (`registries.blocking`): their heuristic errors are never demoted to warns. */
+    blockingRules?: ReadonlySet<string>;
 }
 
 type Level = 'error' | 'warn' | undefined;
@@ -64,7 +68,8 @@ type Level = 'error' | 'warn' | undefined;
 /** How far a metric moved past its thresholds, in the worse and the better direction. */
 export function metricLevels(m: MetricDelta): { regression: Level; improvement: Level } {
     const { before, after } = m;
-    if (before === null || after === null) return { regression: undefined, improvement: undefined };
+    // C6.2: a sampled metric (benchmarks) whose change is not significant is `same (within noise)`.
+    if (before === null || after === null || withinNoise(m)) return { regression: undefined, improvement: undefined };
     const delta = (after - before) * m.step;
     const worseBy = m.betterWhen === 'lower' ? delta : -delta;
     const size = (v: number): number => m.threshold.kind === 'abs' ? v : before === 0 ? (v > 0 ? Infinity : 0) : v / Math.abs(before * m.step);
@@ -79,9 +84,19 @@ export function dimensionVerdict(ev: DimensionEvaluation): { verdict: Verdict; r
     if (ev.ran === 0 && ev.failed.length === 0) return { verdict: 'not_measured', reasons: sortedUnique([...reasons, 'rule-not-built']) };
 
     const open = ev.findings.filter(isOpen);
-    const errors = ev.findings.filter((f) => isFresh(f) && f.severity === 'error');
+    const rawErrors = ev.findings.filter((f) => isFresh(f) && f.severity === 'error');
+    // C4 / C5 verdict: in the SECURITY dimension a heuristic finding never alone sets `worse` at error. A
+    // heuristic error counts as a warn unless a measured error in the dimension corroborates it — except a
+    // §12.5 blocking rule or a C8.2 integrity rule, whose error is the gate itself. (Other dimensions keep
+    // their §8 done-checks: e.g. a text-detected `api-breaking` makes compatibility `worse`.)
+    const corroborated = ev.id !== 'security' || rawErrors.some((f) => f.confidence === 'measured');
+    const keepsError = (f: DeltaFinding) => f.confidence === 'measured' || corroborated
+        || (ev.blockingRules?.has(f.ruleId) ?? false) || ev.integrityRules.has(f.ruleId);
+    const errors = rawErrors.filter(keepsError);
+    const demoted = rawErrors.filter((f) => !keepsError(f));
     const introduced = open.filter((f) => f.lineage === 'introduced');
-    const introducedWarns = introduced.filter((f) => f.severity === 'warn').length;
+    const introducedWarns = introduced.filter((f) => f.severity === 'warn' || demoted.includes(f)).length;
+    if (demoted.length > 0) reasons.push('heuristic');
     const resolved = open.filter((f) => f.lineage === 'resolved');
 
     let metricError = false, metricWarns = 0, metricImproved: Level;

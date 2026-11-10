@@ -217,9 +217,27 @@ function loadGrammar(locator: NonNullable<ReturnType<typeof wasmLocator>>, wasm:
  * parser are freed afterwards. Undefined when the file is not JS/TS or the grammar cannot load.
  */
 export async function parseJsTs<T>(relPath: string, content: string, read: (root: TreeSitterNode) => T, opts: Pick<TreeSitterExtractorOptions, "wasmDir"> = {}): Promise<T | undefined> {
+  if (GRAMMAR_BY_EXT[extOf(relPath)]?.family !== "js") return undefined;
+  return parseSource(relPath, content, (root) => read(root), opts);
+}
+
+/** The tree-sitter language of a path's grammar (`typescript`, `tsx`, `javascript`, `python`, `c_sharp`, …), named by its wasm; undefined without one. */
+export function treeSitterLanguageOf(relPath: string): string | undefined {
+  return GRAMMAR_BY_EXT[extOf(relPath)]?.wasm.replace(/^tree-sitter-/, "").replace(/\.wasm$/, "");
+}
+
+/**
+ * Parses one file with its grammar, any supported language (PRD 41 §B3 fact extraction), and hands the root node and
+ * the language ({@link treeSitterLanguageOf}) to `read`; the tree and parser are freed afterwards. Undefined when the
+ * path has no grammar or it cannot load.
+ */
+export async function parseSource<T>(
+  relPath: string, content: string, read: (root: TreeSitterNode, language: string) => T, opts: Pick<TreeSitterExtractorOptions, "wasmDir"> = {},
+): Promise<T | undefined> {
   const grammar = GRAMMAR_BY_EXT[extOf(relPath)];
+  const language = treeSitterLanguageOf(relPath);
   const locator = wasmLocator(opts.wasmDir);
-  if (!grammar || grammar.family !== "js" || !locator) return undefined;
+  if (!grammar || !language || !locator) return undefined;
   const loaded = await loadGrammar(locator, grammar.wasm);
   if (!loaded) return undefined;
   const parser = new loaded.Parser();
@@ -227,7 +245,7 @@ export async function parseJsTs<T>(relPath: string, content: string, read: (root
   try {
     parser.setLanguage(loaded.lang);
     tree = parser.parse(content);
-    return read(tree.rootNode);
+    return read(tree.rootNode, language);
   } finally {
     tree?.delete();
     parser.delete();

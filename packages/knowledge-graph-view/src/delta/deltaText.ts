@@ -44,7 +44,9 @@ export function reasonLabel(l: RunDeltaLabels, code: string): string {
         }
         if ((RUN_DELTA_TOOL_REASON_PREFIXES as readonly string[]).includes(prefix)) {
             const template = pick(l.reasons, prefix);
-            if (template) return fillTemplate(template, { tool: prefix === 'analyzer-failed' ? ruleLabel(l, subject) : subject });
+            // A rule's or a dynamic check's id reads as its label; a tool's name is a name.
+            const named = prefix === 'analyzer-failed' || prefix === 'dynamic-not-run';
+            if (template) return fillTemplate(template, { tool: named ? ruleLabel(l, subject) : subject });
         }
     }
     return pick(l.reasons, code) ?? code;

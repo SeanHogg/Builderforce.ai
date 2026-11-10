@@ -135,6 +135,12 @@ export const BRAIN_HOST_MESSAGES = [
    *  `run_delta_release_refused` for a run that is not held there. The host writes it `completed` with an audited waiver
    *  and re-posts its cards `released: true`. Never touches auto-approve. */
   'run-delta/release',
+  /** A repository's run delta history (PRD 41 §C11.3) — `{ repo, limit? }` (repo as the card names it) → `RunDeltaSummary[]`,
+   *  newest first (empty when none). The run delta panel's history and trend read it. */
+  'run-delta/history',
+  /** A run delta card rendered a prediction (PRD 41 §D11, §4 `prediction.shown`) — `{ prediction }` (an `ok` `Prediction`);
+   *  answers whether it was counted. Sent once per prediction per card render; the host emits the product event. */
+  'run-delta/prediction-shown',
   'llm.fetch',
   'llm.abort',
   'model.set',

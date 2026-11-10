@@ -11,8 +11,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { CodeSymbol } from "@builderforce/agent-tools";
 import type { KnowledgeReviewOptions, SymbolLookup } from "@builderforce/agent-tools/knowledge";
-import type { ExtractPool } from "@seanhogg/builderforce-memory/knowledge";
-import { handleExtractJob, type HostExtractJob } from "./extractJobHandler";
+import type { ExtractPool, FileFacts } from "@seanhogg/builderforce-memory/knowledge";
+import { handleExtractJob, type HostExtractJob, type HostExtractResult } from "./extractJobHandler";
 import { createExtractPool, defaultExtractPoolSize, type ExtractPoolHandle } from "./extractPool";
 
 /** The bundle entry esbuild writes beside `out/extension.js`. */
@@ -77,6 +77,33 @@ export function reviewParallelism(lookup?: SymbolLookup, rootPath?: string): Pic
   const pool = poolHandle();
   return { judgeConcurrency: JUDGE_CONCURRENCY, ...(pool ? { extractPool: withIndexSymbols(pool.pool, lookup, rootPath), concurrency: pool.size, ...(rootPath ? { deferRead: true } : {}) } : {}) };
 }
+
+/**
+ * One file someone wants FileFacts of (PRD 41 §B3): `hash` is its content hash. With `rootPath` the worker reads it from
+ * disk (and verifies the hash); with `text` (a run delta side, not on disk) the text is extracted as is.
+ */
+export type FactsJobInput = { rootId: string; path: string; hash: string; wasmDir?: string } & ({ rootPath: string; text?: never } | { text: string; rootPath?: never });
+
+/**
+ * The RAW FileFacts of one file (imports as specifiers), through THE extraction pool (a worker thread, WASM tree-sitter)
+ * when there is one, else in this thread through the same handler. Undefined when the file has no fact grammar or is
+ * binary. `signal` reaches the pool, which terminates the worker running an aborted job (a WASM parse cannot be
+ * interrupted from inside; the pool protocol has no cancel message).
+ */
+export async function extractFactsJob(input: FactsJobInput, signal?: AbortSignal): Promise<FileFacts | undefined> {
+  const { rootId, path: file, hash } = input;
+  const job: HostExtractJob = {
+    rootId, path: file, hash, knownKeys: [], readByPool: { path: file, hash }, factsOnly: true,
+    ...(input.text !== undefined ? { factsText: input.text } : { readFrom: { rootPath: input.rootPath!, path: file, hash } }),
+    ...(input.wasmDir ? { wasmDir: input.wasmDir } : {}),
+  };
+  const pool = poolHandle();
+  const result = (pool ? await pool.pool(job, signal) : await handleExtractJob(job, undefined, signal)) as HostExtractResult;
+  return result.fileFacts;
+}
+
+/** How many facts jobs are worth keeping in flight: the pool's width (one when it runs in this thread). */
+export const factsJobWidth = (): number => poolHandle()?.size ?? 1;
 
 /** Creates the pool and starts its workers now, so the first file of a confirmed review meets a loaded worker (PRD 41 A10 rule 8). No pool ⇒ nothing. */
 export function prewarmExtractPool(): void {

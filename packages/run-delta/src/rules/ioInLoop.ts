@@ -11,7 +11,7 @@
 
 import type { DeltaRule } from '../contract.js';
 import { isJsPath, isTestPath, type TextView } from './support/files.js';
-import { loopSpans, type LoopSpan } from './support/loops.js';
+import { loopsOf, type LoopSpan } from './support/loops.js';
 import { stateSides, type Hit } from './support/stateRule.js';
 
 const AWAIT = /(?<![\w$])await\s+/g;
@@ -34,7 +34,7 @@ function innermost(awaits: readonly number[], loops: readonly LoopSpan[]): Map<n
 
 function hitsOf(view: TextView, io: readonly RegExp[]): Hit[] {
     const bare = view.bare;
-    const loops = loopSpans(bare);
+    const loops = loopsOf(view);
     if (loops.length === 0) return [];
     const awaits = [...bare.matchAll(AWAIT)];
     const loopOf = innermost(awaits.map((m) => m.index), loops);

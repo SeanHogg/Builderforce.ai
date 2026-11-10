@@ -15,8 +15,10 @@ import { readFile } from "node:fs/promises";
 import * as nodePath from "node:path";
 import type { CodeSymbol } from "@builderforce/agent-tools";
 import { existsSync } from "node:fs";
-import { documentDoc, moduleFileCandidates, reviewPacks, type ModuleAliases, type ModuleResolution } from "@builderforce/agent-tools/knowledge";
-import { DEFAULT_MAX_FILE_BYTES, ExtractFailed, extractJob, isBinaryText, isDocumentPath, reasonOf, type ExtractJob, type ExtractJobResult } from "@seanhogg/builderforce-memory/knowledge";
+import { cappedFileFacts, documentDoc, moduleFileCandidates, reviewPacks, type ModuleAliases, type ModuleResolution } from "@builderforce/agent-tools/knowledge";
+import { extractFileFacts, FILE_FACTS_REVISION, hasFileFacts } from "@builderforce/agent-tools/node-file-facts";
+import { treeSitterLanguageOf } from "@builderforce/agent-tools/node-tree-sitter";
+import { DEFAULT_MAX_FILE_BYTES, ExtractFailed, extractJob, isBinaryText, isDocumentPath, reasonOf, type ExtractJob, type ExtractJobResult, type FileFacts } from "@seanhogg/builderforce-memory/knowledge";
 import { nodeContentHash } from "../nodeSha256";
 
 /** PRD 41 A10 rule 2: a worker's read of its file gives up after 5 s (a `timeout` failure, never a stalled run). */
@@ -30,8 +32,15 @@ export const DOCUMENT_READ_TIMEOUT_MS = 60_000;
  */
 export interface ReadFrom { rootPath: string; path: string; hash: string }
 
-/** Memory's job plus the index's definitions of the file, when the index holds it, plus an optional read-in-the-worker. */
-export type HostExtractJob = ExtractJob & { symbols?: readonly CodeSymbol[]; readFrom?: ReadFrom; aliases?: ModuleAliases };
+/**
+ * Memory's job plus the index's definitions of the file, when the index holds it, plus an optional read-in-the-worker.
+ * `factsOnly` (PRD 41 §B3): the job wants the file's raw FileFacts v3 and nothing else — the background indexer's and the
+ * run delta's facts ride the SAME pool and worker as the review's extraction: `readFrom` reads the file from disk,
+ * `factsText` carries a side's text instead; `wasmDir` is where the worker loads grammars.
+ */
+export type HostExtractJob = ExtractJob & {
+  symbols?: readonly CodeSymbol[]; readFrom?: ReadFrom; aliases?: ModuleAliases; factsOnly?: true; factsText?: string; wasmDir?: string;
+};
 
 /** Module paths found (or not) on a root's disk, per root: a worker answers `exists` for many jobs of one review. */
 const diskModules = new Map<string, Map<string, boolean>>();
@@ -64,22 +73,50 @@ function jobModules(job: HostExtractJob): ModuleResolution | undefined {
   };
 }
 
-/** What a host job returns: memory's result; `binary` ⇒ the file is binary text and nothing was extracted (the step is `skipped: binary`). */
-export type HostExtractResult = ExtractJobResult & { binary?: true };
+/**
+ * What a host job returns: memory's result; `binary` ⇒ the file is binary text and nothing was extracted (the step is `skipped: binary`).
+ * A `factsOnly` job answers `fileFacts` (absent when the file has no fact grammar) with `extracted: []`.
+ */
+export type HostExtractResult = ExtractJobResult & { binary?: true; fileFacts?: FileFacts };
 
-/** The file of a `readFrom` job as a document (hashed and decoded from the SAME bytes). Throws `timeout`, `too large`, `changed since plan`, or the read's own error; a path outside the root is refused. */
-async function readDocument(job: HostExtractJob, from: ReadFrom, timeoutMs: number, signal?: AbortSignal) {
+/**
+ * A `factsOnly` job: the file's RAW FileFacts (imports as specifiers: the host resolves them against its listing, never the
+ * worker against a disk). Only a path with a fact grammar is read; its RAW bytes (never a pdf/office text extraction) at
+ * the job's hash — verified, then handed on with that hash so nothing is hashed twice. `factsText` (a run delta's side text,
+ * not on disk) is extracted as is. A file past the cap is CAPPED (present, empty), never a failure retried forever.
+ */
+async function factsJob(job: HostExtractJob, readTimeoutMs: number, signal?: AbortSignal): Promise<HostExtractResult> {
+  if (!hasFileFacts(job.path)) return { extracted: [] };
+  const opts = { contentHash: job.hash, ...(job.wasmDir ? { wasmDir: job.wasmDir } : {}) };
+  let bytes: Uint8Array;
+  if (job.factsText !== undefined) bytes = new TextEncoder().encode(job.factsText);
+  else if (job.readFrom) {
+    bytes = await readBytes(job.readFrom, readTimeoutMs, signal);
+    if (nodeContentHash(bytes) !== job.readFrom.hash) throw new Error("changed since plan");
+    if (bytes.byteLength > DEFAULT_MAX_FILE_BYTES) return { extracted: [], fileFacts: cappedFileFacts(treeSitterLanguageOf(job.path)!, job.readFrom.hash, FILE_FACTS_REVISION) };
+  } else throw new Error(`facts job for ${job.path} carries no readFrom and no text`);
+  // `facts_grammar_unavailable` stays a plain (transient) error: the host leaves the file un-applied and retries it.
+  const fileFacts = await extractFileFacts(job.path, bytes, opts);
+  return { extracted: [], ...(fileFacts ? { fileFacts } : {}) };
+}
+
+/** A `readFrom` file's raw bytes. Throws `timeout` or the read's own error; a path outside the root is refused. */
+async function readBytes(from: ReadFrom, timeoutMs: number, signal?: AbortSignal): Promise<Uint8Array> {
   const root = nodePath.resolve(from.rootPath);
   const abs = nodePath.resolve(root, from.path);
   if (abs !== root && !abs.startsWith(root + nodePath.sep)) throw new Error("path outside the review root");
-  let bytes: Uint8Array;
   try {
     const deadline = AbortSignal.timeout(isDocumentPath(from.path) ? Math.max(timeoutMs, DOCUMENT_READ_TIMEOUT_MS) : timeoutMs);
-    bytes = await readFile(abs, { signal: signal ? AbortSignal.any([deadline, signal]) : deadline });
+    return await readFile(abs, { signal: signal ? AbortSignal.any([deadline, signal]) : deadline });
   } catch (error) {
     const name = (error as { name?: string } | undefined)?.name;
     throw name === "TimeoutError" || name === "AbortError" ? new Error("timeout") : error;
   }
+}
+
+/** The file of a `readFrom` job as a document (hashed and decoded from the SAME bytes). Throws `timeout`, `too large`, `changed since plan`, or the read's own error; a path outside the root is refused. */
+async function readDocument(job: HostExtractJob, from: ReadFrom, timeoutMs: number, signal?: AbortSignal) {
+  const bytes = await readBytes(from, timeoutMs, signal);
   if (bytes.byteLength > DEFAULT_MAX_FILE_BYTES) throw new Error("too large");
   // Hash FIRST, with the listing's ONE content hash (memory's EOL-normalized `contentHash`, as `createFsDirectorySource` lists):
   // a stale plan must not store an extract under the wrong hash.
@@ -90,6 +127,7 @@ async function readDocument(job: HostExtractJob, from: ReadFrom, timeoutMs: numb
 }
 
 export async function handleExtractJob(job: HostExtractJob, readTimeoutMs: number = READ_TIMEOUT_MS, signal?: AbortSignal): Promise<HostExtractResult> {
+  if (job.factsOnly) return factsJob(job, readTimeoutMs, signal);
   const symbols = job.sectionsOnly ? undefined : job.symbols;
   let ready: ExtractJob = job;
   if (job.readFrom) {

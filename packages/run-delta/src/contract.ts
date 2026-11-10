@@ -12,6 +12,11 @@
  */
 
 import type { FindingIdentity } from '@seanhogg/builderforce-memory/knowledge';
+import type { AnalyzerResult, AnalyzerRule, AnalyzerStatus } from './contract/analyzers.js';
+import type { DeltaRegistries } from './contract/registries.js';
+
+/** The L3 analyzer half of the contract lives in its own module; it is part of this one. */
+export * from './contract/analyzers.js';
 
 export type Verdict = 'better' | 'worse' | 'same' | 'not_comparable' | 'not_measured';
 /**
@@ -74,14 +79,27 @@ export interface MetricDelta {
     unit: string;
     betterWhen: 'lower' | 'higher';
     threshold: { warn: number; error: number; kind: 'abs' | 'pct' };
-    significance?: { method: 'wilcoxon-signed-rank' | 'sprt-sign' | 'none'; p?: number; ci?: [number, number] };
+    /**
+     * How a sampled metric's change was judged. `decision` is the D9.2 sequential test's (`sprt-sign` only): `reject`
+     * (a decided change; it still needs its CI beyond ±warn) or `accept` (no change: within noise).
+     */
+    significance?: { method: 'wilcoxon-signed-rank' | 'sprt-sign' | 'none'; p?: number; ci?: [number, number]; decision?: 'reject' | 'accept' };
 }
 
+/**
+ * What measured a dimension: a rule (`tool` = its id, `version` = its version) or an L3 analyzer (`tool` = the
+ * analyzer, `version` = the tool's own version; `''` when it never started). `side` names the side a non-`ok`
+ * analyzer entry is about (absent = both, or a rule). `pending`: an analyzer of a phase-1 delta (`ComputeOptions`) whose
+ * run has not settled yet; the final delta replaces it.
+ */
 export interface MeasuredBy {
     tool: string;
     version: string;
-    status: 'ok' | 'failed' | 'skipped';
+    status: AnalyzerStatus | 'pending';
     reason?: string;
+    side?: 'before' | 'after';
+    /** Provenance: the dynamic-tier check that produced what this analyzer measured ({@link AnalyzerResult.producedBy}). */
+    producedBy?: string;
 }
 
 export interface DimensionResult {
@@ -134,8 +152,25 @@ export interface RunDelta {
      */
     blocking: string[];
     narrative?: { text: string; model: string; inputDigest: string };
+    /**
+     * The optional dynamic tier (C6.2, C8.4), one entry per check sorted by check: how it ended and WHO decided it ran
+     * or not (D9.1 `scheduledBy`: policy, and a sampler's `p` and `seed`), so a stored delta replays the decision. In
+     * the digest. Absent: the tier was not considered for this delta.
+     */
+    dynamic?: DynamicTierEntry[];
     /** sha256 of the canonical delta without `narrative` (B8.2: every number quantized). */
     digest: string;
+}
+
+/** One dynamic-tier check of a delta ({@link RunDelta.dynamic}). */
+export interface DynamicTierEntry {
+    check: string;
+    status: 'ok' | 'failed' | 'skipped';
+    reason?: string;
+    tool: string;
+    version: string;
+    /** `dynamic/contract.ts` `DynamicScheduledBy`: who decided, and for a sampler (WS20) its model, `p`, `seed` and `wouldRun`. */
+    scheduledBy: { policy: string; modelId?: string; modelVersion?: string; p?: number; seed?: number; wouldRun?: boolean };
 }
 
 // ─── The chat card (§C11.1) ──────────────────────────────────────────────────
@@ -238,6 +273,8 @@ export interface ComputedRunDeltaCard extends RunDeltaCardBase {
  */
 export interface RunDeltaProgressCard extends RunDeltaCardBase {
     status: 'pending' | 'failed';
+    /** `pending` while the optional dynamic tier runs (C6.2/C8.4): its ceiling in whole minutes ("up to N min"). */
+    dynamicMinutes?: number;
 }
 
 /** What `run-delta/card` carries and `run-delta/get` answers with. */
@@ -296,6 +333,12 @@ export interface RunChangeSetInput {
      * `assertion-edited-with-impl` is an error for them. Absent = `standard`.
      */
     kind?: RunKind;
+    /**
+     * C8.3: the files or areas the run's plan / ticket named (root-relative POSIX: an exact file, a folder
+     * ending in `/`, or a `*` / `**` glob). Absent = the run had no plan with named files, so scope drift is
+     * not measured (never "no drift").
+     */
+    plannedPaths?: readonly string[];
     files: ChangedFileInput[];
 }
 
@@ -320,6 +363,13 @@ export interface SideFacts {
     badges: ReadonlyMap<string, Readonly<Record<string, number | string>>>;
     /** Producer versions for comparability (memory `comparable`). */
     meta: import('@seanhogg/builderforce-memory/knowledge').ComparabilityMeta;
+    /**
+     * Root-relative file → its FileFacts v3 (PRD 41 §B3: exports with signature hashes, calls with awaited/inLoop,
+     * entry points with guard chains, capability imports, test facts), from the host's fact extractor. Optional: a host
+     * without facts omits it and rules fall back to text. A rule reads it through `support/fileFacts.ts`; facts of a
+     * different `extractor` tag on the two sides are not comparable (C9: put the tag in `meta`).
+     */
+    fileFacts?: ReadonlyMap<string, import('@seanhogg/builderforce-memory/knowledge').FileFacts>;
 }
 
 /** What a host supplies. Every method is side-explicit; nothing here touches I/O itself. */
@@ -336,6 +386,13 @@ export interface DeltaPorts {
     churn(paths: readonly string[]): Promise<Map<string, number>>;
     /** Past blast-radius scores of this repo, for the percentile bands (C10). */
     pastScores(): Promise<number[]>;
+    /**
+     * L3 (B7): one analyzer's result on one side — the after side on the working tree, the before side from the
+     * host's cache (by content hash) or the materialized before tree. Asked once per side for every
+     * {@link AnalyzerRule} (the after side only for `sides: 'after'`). Absent = the host has no analyzer tier:
+     * no analyzer row is consulted and the static-tier rules of the same ids stand.
+     */
+    analyze?(side: 'before' | 'after', tool: string): Promise<AnalyzerResult>;
 }
 
 // ─── Registry ────────────────────────────────────────────────────────────────
@@ -357,6 +414,10 @@ export interface RuleInput {
     registries: DeltaRegistries;
     /** {@link RunChangeSetInput.kind}, defaulted to `standard`. */
     runKind: RunKind;
+    /** {@link RunChangeSetInput.plannedPaths}, normalized; absent = no plan (C8.3 not measured). */
+    plannedPaths?: readonly string[];
+    /** 90-day churn per changed file ({@link DeltaPorts.churn}, already fetched for the blast radius); empty = unknown. */
+    churn: ReadonlyMap<string, number>;
 }
 
 /** A rule's raw output on ONE side, before lineage. */
@@ -387,6 +448,14 @@ export interface DeltaRule {
      * impact set, while `introduced`/`resolved` are kept anywhere.
      */
     scope?: 'impact' | 'global';
+    /**
+     * Whether the rule can measure this run at all (e.g. `out-of-scope-change` needs the run's plan). False ⇒
+     * the rule does not run, is listed in `measuredBy` as `skipped` with {@link DeltaRule.skipReason}, and does
+     * not count as a measurement of its dimension. Absent = always applies.
+     */
+    applies?(input: RuleInput): boolean;
+    /** The reason code recorded when {@link applies} is false (default `not-applicable`). */
+    skipReason?: string;
     /** Findings of each side; lineage is computed by the engine, never by the rule. Pure. */
     derive(input: RuleInput): { before: RuleFinding[]; after: RuleFinding[] };
 }
@@ -402,27 +471,8 @@ export interface MetricRule {
     derive(input: RuleInput): MetricDelta[];
 }
 
-/** Data registries (C5–C8). Built-in defaults in `registry/`, extended per repo by `.builderforce/delta.json`. */
-export interface DeltaRegistries {
-    /** Guard names, ranked (higher = stronger), e.g. `{ requireSuperadmin: 40, requireAuth: 10 }`. */
-    guards: Readonly<Record<string, number>>;
-    /** Module specifiers / call names by capability (`process-exec`, `fs-write`, `network`, `dynamic-code`, `native-addon`, `env-read`). */
-    capabilities: Readonly<Record<string, readonly string[]>>;
-    /** Weak-crypto patterns (regex sources). */
-    weakCrypto: readonly string[];
-    /** Awaited I/O call patterns (regex sources) for `io-in-loop`. */
-    io: readonly string[];
-    /** Suppression markers for `suppression-added`. */
-    suppressions: readonly string[];
-    /** Matcher strength classes, strongest first. */
-    matchers: readonly (readonly string[])[];
-    /**
-     * Rule ids that block an autonomous run's finalization (§12.5) when they have an introduced or changed
-     * finding at ERROR severity, or cannot certify the run ({@link RunDelta.blocking}). A warn-level rule
-     * listed here never blocks.
-     */
-    blocking: readonly string[];
-}
+/** The data registries (C5–C8) live in `contract/registries.ts`; re-exported here so every import keeps working. */
+export type { DeltaRegistries, StrideCategory } from './contract/registries.js';
 
 /**
  * The registry a delta runs with. SECURITY: a host merging a repo's `.builderforce/delta.json`
@@ -434,5 +484,7 @@ export interface DimensionRegistry {
     dimensions: readonly DimensionId[];
     rules: readonly DeltaRule[];
     metrics: readonly MetricRule[];
+    /** L3 analyzer rows (B7). Absent = none. */
+    analyzers?: readonly AnalyzerRule[];
     registries: DeltaRegistries;
 }

@@ -19,7 +19,16 @@ export { DEFAULT_REGISTRIES, DELTA_CONFIG_RULE, TEST_INTEGRITY_ERROR_RULES, TEST
 export { withOverrides, type OverrideResult } from './registry/overrides.js';
 export { unsafeRegex, MAX_OVERRIDE_REGEX_LENGTH, type UnsafeReason } from './registry/safeRegex.js';
 export { DELTA_CONFIG_PATH } from './rules/deltaConfigChanged.js';
+export { extractNamedPaths, globBase, listingOf, planSection, pathCandidates, resolveNamedPaths, MAX_NAMED_PATHS, type PathListing } from './rules/quality/namedPaths.js';
 export { isFresh, isOpen } from './engine/findingFacts.js';
 export { ALL_DIMENSIONS, defaultDimensionRegistry } from './registry/dimensions.js';
 export { BUILT_IN_METRICS, BUILT_IN_RULES } from './rules/index.js';
 export { FACT_FINDING_KINDS } from './rules/factFindings.js';
+export { STRIDE_BY_RULE, STRIDE_CATEGORIES, strideOf, withStride, type StrideByParam } from './registry/stride.js';
+export { ANALYZER_RULES, ANALYZER_TOOLS, OSV_MAX_DATA_AGE_DAYS } from './registry/analyzers.js';
+export { analyzerKindTools } from './engine/analyzers.js';
+export { hasPendingAnalyzers, settlePendingAnalyzers } from './engine/settlePending.js';
+export * from './dynamic/index.js';
+export { summarizeRunDelta, type RunDeltaSummary, type RunDeltaSurface, type StoredRunDelta } from './summary.js';
+export { CLOUD_RUN_ID_PREFIX, cloudRunId } from './runIds.js';
+export { baselineStateOf, runDeltaToSarif, RUN_DELTA_TOOL } from './sarifExport.js';

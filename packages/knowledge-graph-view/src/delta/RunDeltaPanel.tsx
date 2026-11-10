@@ -16,6 +16,7 @@ import {
     blockingLabel, dimensionLabel, headlineText, lineageGroup, metricLabel, metricValueText, overrideLabel, reasonLabel, type LineageGroup,
 } from './deltaText';
 import { DeltaFindingItem, type RunDeltaCodeTarget } from './DeltaFindingItem';
+import { PendingAnalyzers } from './PendingAnalyzers';
 import { labelKey, type RunDeltaLabels } from './labels';
 import { VerdictMark } from './VerdictMark';
 
@@ -106,6 +107,7 @@ export function RunDeltaPanel({ open, delta, overrides, labels, onClose, onOpenC
         <Panel open={open} title={labels.panelTitle} closeLabel={labels.close} onClose={onClose} compact={compact} width={440} render={renderPanel}>
             <p style={{ ...TYPE.body, margin: 0, color: cssVar('text'), overflowWrap: 'anywhere' }}>{headlineText(labels, delta.summary)}</p>
             {delta.dimensions.map((d) => <DimensionSection key={d.id} dimension={d} labels={labels} onOpenCode={onOpenCode} />)}
+            <PendingAnalyzers delta={delta} labels={labels} variant="section" />
             {failed.length > 0 && (
                 <section style={{ display: 'grid', gap: 4 }}>
                     <h3 style={TYPE.title}>{labels.failedHeading}</h3>

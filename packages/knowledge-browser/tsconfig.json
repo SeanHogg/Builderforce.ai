@@ -21,8 +21,12 @@
       "@builderforce/knowledge-client": ["../knowledge-client/src/index.ts"],
       "@builderforce/knowledge-graph-view": ["../knowledge-graph-view/src/index.ts"],
       "@builderforce/run-delta/contract": ["../run-delta/src/contract.ts"],
+      "@builderforce/run-delta": ["../run-delta/src/index.ts"],
+      "@builderforce/sarif": ["../sarif/src/index.ts"],
       "@builderforce/secret-redaction": ["../secret-redaction/src/index.ts"],
       "@builderforce/agent-tools/code-mask": ["../agent-tools/src/knowledge/codeMask.ts"],
+      "@builderforce/agent-tools/sampling": ["../agent-tools/src/sampling.ts"],
+      "@builderforce/agent-tools/glob": ["../agent-tools/src/glob.ts"],
       // Source-only: the peers live in the HOST's install, as `vitest.config.ts` resolves
       // them, so `tsc -p .` reads them from `frontend/node_modules` too (react and three
       // through their `@types/*`). Named one by one: no catch-all `*` for a source package.

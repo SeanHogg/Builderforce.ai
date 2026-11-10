@@ -67,7 +67,7 @@ export const HEADER_DEFAULTS: HeaderLabels = {
     presetLabel: '{preset} overlays',
     presets: { risk: 'Risk', quality: 'Quality', activity: 'Activity', ownership: 'Ownership', custom: 'Custom' },
     channels: { colour: 'Colour', size: 'Size · height', ring: 'Ring · fill · bar', width: 'Line width', pulse: 'Pulse', outline: 'Outline', pins: 'Issue pins' },
-    metricNames: { anti: 'Anti-patterns', cx: 'Complexity', cov: 'Coverage gap', use: 'Usage', churn: 'Churn', changed: 'Changed', owner: 'Owner', none: 'Off' },
+    metricNames: { anti: 'Anti-patterns', cx: 'Complexity', cov: 'Coverage gap', use: 'Usage', churn: 'Churn', coupling: 'Hidden coupling', changed: 'Changed', owner: 'Owner', none: 'Off' },
     notSetUp: 'Not set up',
     on: 'On',
     off: 'Off',

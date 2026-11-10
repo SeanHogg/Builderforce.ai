@@ -29,6 +29,7 @@ import { aimCamera } from './rig/aim';
 import { DepthControl } from './rig/DepthControl';
 import { bindOrbitKeys, touchActionFor } from './rig/gestures';
 import type { RigController } from './rig/rig';
+import { bindRig } from './rig/rigOfBus';
 import { useRig } from './rig/useRig';
 import { useDepth, useLiveKeys, useStageMotion, useTweening } from './stageHooks';
 import { now, TWEEN_MS } from './tween';
@@ -53,6 +54,15 @@ export interface StageProps {
     description?: string;
     /** Escape / Backspace on a proxy: out of a drilled level. */
     onOut?: () => void;
+    /**
+     * A tilt asked for from outside (Show in towers: 1; back to the flat map: 0). Applied when it changes and the depth is
+     * not already on that side of flat, so the person's own drag is never snapped back.
+     */
+    tilt?: number;
+    /** The depth control moved (the person's drag). */
+    onTilt?: (depth: number) => void;
+    /** The WebGL context was lost and did not come back: the host falls back to the List. */
+    onContextLost?: () => void;
 }
 
 type Inputs = { marks: MarkSet; paint: MarkPaint | null; placement: Placement | null; colors: ThemeColors | null; reducedMotion: boolean };
@@ -70,12 +80,12 @@ function useRendererInputs(r: StageRenderer, p: Inputs, changed: () => void): vo
     }, [r, p.marks, p.placement]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-interface SceneProps { renderer: StageRenderer; rig: RigController; inputs: Inputs; captions: RefObject<HTMLDivElement | null> }
+interface SceneProps { renderer: StageRenderer; rig: RigController; inputs: Inputs; captions: RefObject<HTMLDivElement | null>; onContextLost?: (() => void) | undefined }
 
 /** A matrix no real transform equals: the first frame always writes. */
 const unwritten = (): Affine2 => ({ a: NaN, b: NaN, c: NaN, d: NaN, e: NaN, f: NaN });
 
-function StageScene({ renderer, rig, inputs, captions, canvasLabel }: SceneProps & { canvasLabel: string }) {
+function StageScene({ renderer, rig, inputs, captions, canvasLabel, onContextLost }: SceneProps & { canvasLabel: string }) {
     const invalidate = useThree((s) => s.invalidate);
     const gl = useThree((s) => s.gl);
     const set = useThree((s) => s.set);
@@ -87,7 +97,9 @@ function StageScene({ renderer, rig, inputs, captions, canvasLabel }: SceneProps
     const persp = useMemo(() => new PerspectiveCamera(35, 1, 1, 1e6), []);
     useRendererInputs(renderer, inputs, invalidate);
     useEffect(() => rig.subscribe(invalidate), [rig, invalidate]);
-    useEffect(() => bindContextLoss(gl.domElement, renderer, invalidate), [gl, renderer, invalidate]);
+    const giveUp = useRef(onContextLost);
+    giveUp.current = onContextLost;
+    useEffect(() => bindContextLoss(gl.domElement, renderer, invalidate, () => giveUp.current?.()), [gl, renderer, invalidate]);
     // Arrow keys orbit only while the canvas itself has focus (never the proxies' roving arrows).
     // The canvas is a tab stop only while there is something for the keys to do (an orbit view).
     useEffect(() => {
@@ -174,7 +186,18 @@ export function Stage(p: StageProps) {
     }, [renderer, bus, dpr]);
     const rig = useRig(placement, width, height, p.reducedMotion, box, settle);
     rigRef.current = rig;
+    // The semantic zoom (outside this component) flies and reads the same rig through the bus.
+    useEffect(() => bindRig(bus, rig), [bus, rig]);
     const { depth, setDepth } = useDepth(renderer, rig, bus);
+    // A tilt asked for from outside lands only when the depth is on the other side of flat (never undoes a drag).
+    const ready = placement !== null;
+    useEffect(() => {
+        const t = p.tilt;
+        if (t === undefined || !ready) return;
+        if (t > 0 ? rig.depth === 0 : rig.depth > 0) setDepth(t);
+    }, [p.tilt, ready]); // eslint-disable-line react-hooks/exhaustive-deps
+    const onTilt = p.onTilt;
+    const dragDepth = useCallback((d: number) => { setDepth(d); onTilt?.(d); }, [setDepth, onTilt]);
 
     useEffect(() => { if (placement) bus.setPlacement(placement, keys); }, [bus, placement, keys]);
     useEffect(() => { bus.setTweening(tweening); }, [bus, tweening]);
@@ -188,7 +211,7 @@ export function Stage(p: StageProps) {
     // An orbit placement (3D) holds the marks' extrude at full; a ground one gives the depth control back.
     useEffect(() => { if (placement) { renderer.setDepth(rig.depthUniform, true); bus.invalidate(); } }, [renderer, rig, bus, placement]);
 
-    const scene: SceneProps = { renderer, rig, inputs: { marks: p.marks, paint: p.paint, placement, colors: p.colors, reducedMotion: p.reducedMotion }, captions };
+    const scene: SceneProps = { renderer, rig, inputs: { marks: p.marks, paint: p.paint, placement, colors: p.colors, reducedMotion: p.reducedMotion }, captions, onContextLost: p.onContextLost };
     const frame = placement?.rig.frame ?? 'fill';
     const [tiltMin, tiltMax] = placement?.rig.depth.tilt ?? [0, 0];
     return (
@@ -206,7 +229,7 @@ export function Stage(p: StageProps) {
                     : <NoCanvas {...scene} bus={bus} />}
                 {placement && <CaptionLayer ref={captions} captions={placement.captions} names={names} hidden={tweening} />}
                 {placement && <StageInteraction bus={bus} renderer={renderer} keys={keys} placement={placement} tweening={tweening} selected={p.selected} description={p.description} onSelect={p.onSelect} onOut={p.onOut} />}
-                {placement && !placement.rig.view && tiltMax > tiltMin && <DepthControl label={p.depthLabel} value={depth} boxHeight={height} onChange={setDepth} />}
+                {placement && !placement.rig.view && tiltMax > tiltMin && <DepthControl label={p.depthLabel} value={depth} boxHeight={height} onChange={dragDepth} />}
             </div>
         </StageBusContext.Provider>
     );

@@ -8,6 +8,7 @@
  * instead. A run its delta HELD at the finalize gate (§12.5) shows {@link HeldNotice}.
  */
 
+import type { ReactNode } from 'react';
 import type { RunDelta } from '@builderforce/run-delta/contract';
 import { cssVar } from '../scene/themeColors';
 import { card, quietButton } from '../styles';
@@ -17,6 +18,7 @@ import { headlineText, reasonLabel } from './deltaText';
 import { DimensionRow } from './DimensionRow';
 import { HeldNotice, type HeldNoticeProps } from './HeldNotice';
 import type { RunDeltaLabels } from './labels';
+import { PendingAnalyzers } from './PendingAnalyzers';
 import { reasonTag, VERDICT_TONE, VerdictIcon } from './VerdictMark';
 
 export interface RunDeltaCardProps {
@@ -27,11 +29,13 @@ export interface RunDeltaCardProps {
     onOpenDetails(): void;
     /** The card's hold state (§12.5): the rules that held the run, and the release controls. Absent ⇒ not held. */
     held?: Omit<HeldNoticeProps, 'labels'> | undefined;
+    /** The Predicted block under the verdict rows (PRD 41 §D11), rendered by the host surface; advisory, never a verdict. */
+    predicted?: ReactNode;
 }
 
 const BAND_TONE = { low: cssVar('sev1'), medium: cssVar('sev3'), high: cssVar('sev5') } as const;
 
-export function RunDeltaCard({ delta, labels, repoLabel, onOpenDetails, held }: RunDeltaCardProps) {
+export function RunDeltaCard({ delta, labels, repoLabel, onOpenDetails, held, predicted }: RunDeltaCardProps) {
     const headline = headlineText(labels, delta.summary);
     const band = delta.blastRadius.band;
     return (
@@ -52,6 +56,8 @@ export function RunDeltaCard({ delta, labels, repoLabel, onOpenDetails, held }: 
             <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                 {delta.dimensions.map((d) => <DimensionRow key={d.id} dimension={d} labels={labels} />)}
             </ul>
+            <PendingAnalyzers delta={delta} labels={labels} variant="line" />
+            {predicted}
             <footer style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, minWidth: 0 }}>
                 <span data-band={band} style={{ ...TYPE.status, display: 'inline-flex', alignItems: 'center', gap: 6, color: cssVar('text') }}>
                     <span aria-hidden="true" style={{ display: 'inline-block', width: 4, height: 14, borderRadius: 2, background: BAND_TONE[band] }} />

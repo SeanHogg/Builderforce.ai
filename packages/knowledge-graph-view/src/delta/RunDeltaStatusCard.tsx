@@ -9,6 +9,7 @@ import type { RunDeltaProgressCard } from '@builderforce/run-delta/contract';
 import { cssVar } from '../scene/themeColors';
 import { card } from '../styles';
 import { TYPE } from '../surface/ui/type';
+import { fillTemplate } from '../template';
 import { HeldNotice, type HeldNoticeProps } from './HeldNotice';
 import type { RunDeltaLabels } from './labels';
 import { VERDICT_TONE, VerdictIcon } from './VerdictMark';
@@ -19,9 +20,11 @@ export interface RunDeltaStatusCardProps {
     labels: RunDeltaLabels;
     /** The run is held for review (only ever with `failed`). Absent ⇒ not held. */
     held?: Omit<HeldNoticeProps, 'labels'> | undefined;
+    /** `pending` while the optional dynamic tier runs: its ceiling in minutes ("Running dynamic checks, up to N min…"). */
+    dynamicMinutes?: number | undefined;
 }
 
-export function RunDeltaStatusCard({ status, runId, labels, held }: RunDeltaStatusCardProps) {
+export function RunDeltaStatusCard({ status, runId, labels, held, dynamicMinutes }: RunDeltaStatusCardProps) {
     const pending = status === 'pending';
     return (
         <section
@@ -34,7 +37,9 @@ export function RunDeltaStatusCard({ status, runId, labels, held }: RunDeltaStat
             <h3 style={TYPE.sectionHeading}>{labels.cardTitle}</h3>
             <p role="status" style={{ ...TYPE.body, margin: 0, display: 'flex', gap: 6, alignItems: 'flex-start', overflowWrap: 'anywhere', color: cssVar(pending ? 'text' : 'muted') }}>
                 <span style={{ color: VERDICT_TONE.not_measured, paddingTop: 1 }}><VerdictIcon verdict="not_measured" /></span>
-                <span>{pending ? labels.pendingCard : labels.failedCard}</span>
+                <span>{pending
+                    ? (dynamicMinutes ? fillTemplate(labels.pendingDynamic, { minutes: dynamicMinutes }) : labels.pendingCard)
+                    : labels.failedCard}</span>
             </p>
             {!pending && held && <HeldNotice {...held} labels={labels} />}
         </section>

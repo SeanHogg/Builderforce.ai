@@ -9,7 +9,13 @@ export interface SceneLabels {
      */
     mind: Record<`${'moreFolders' | 'moreFoldersAria'}${'One' | 'Other'}`, string>;
     /** The semantic-zoom bands (PRD 43 B1a rules 9–10): the control's group name and one word per band. */
-    zoom: Record<'group' | 'system' | 'class' | 'method', string>;
+    zoom: Record<'group' | 'system' | 'class' | 'method' | 'code', string>;
+    /**
+     * The code band's panel (B1a rule 9): its accessible name (`{name}`, `{from}`, `{to}`), the read in progress, the
+     * note when the host has no file contents (the panel then shows `path:line` and "Open at line"), and the note when
+     * the host cut the range short (`{count}` lines shown).
+     */
+    code: Record<'aria' | 'loading' | 'unavailable' | 'truncated', string>;
 }
 
 export const SCENE_DEFAULTS: SceneLabels = {
@@ -34,5 +40,12 @@ export const SCENE_DEFAULTS: SceneLabels = {
         system: 'Systems',
         class: 'Classes',
         method: 'Methods',
+        code: 'Code',
+    },
+    code: {
+        aria: 'Code of {name}, lines {from} to {to}',
+        loading: 'Reading the code…',
+        unavailable: 'The code is not available here.',
+        truncated: 'Showing the first {count} lines',
     },
 };

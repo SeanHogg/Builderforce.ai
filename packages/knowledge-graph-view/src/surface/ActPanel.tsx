@@ -14,7 +14,7 @@
  */
 
 import { useId, useMemo, useState, type ReactNode } from 'react';
-import type { Finding, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import { COCHANGE_MAX_PARTNERS, type Finding, type KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { FindingsPanel } from '../FindingsPanel';
 import { nodeIndex } from '../graphModel';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
@@ -31,7 +31,9 @@ import type { PathModel } from './path';
 import { pinNumbers } from './pinNumbers';
 import { findingProvenance } from './scope';
 import { systemWideFindings, type Station, type StationModel } from './stations';
-import { pillStyle, ProvenanceBadge } from './ui';
+import { Card, pillStyle, ProvenanceBadge } from './ui';
+import { partnersOf, type Partners } from './coChange';
+import { PartnerList } from './PartnerList';
 import { TYPE } from './ui/type';
 
 export { SourceChip } from './ActCards';
@@ -78,6 +80,8 @@ export interface ActPanelProps {
     pathTitle?: string | null | undefined;
     /** Stray-copy cards' Exclude from review (`source.folders`); absent ⇒ the host cannot exclude a folder and those cards are drawn as ordinary ones. */
     copyFix?: CopyFix | undefined;
+    /** "What changed?" (PRD 38 P4): the not-yet-touched files that usually change with the changed ones; null = no history ("Not set up"); absent = not asked. */
+    changedPartners?: Partners | undefined;
     /** The Insights and view panels: held in the collapsed "Details" section. */
     children?: ReactNode;
 }
@@ -106,6 +110,10 @@ export function ActPanel(p: ActPanelProps) {
     const queueCounts = fixQueueText(fixQueueCounts(p.findings, p.graph.findings.length, p.resolved ?? new Set()), labels);
     const emptyRefs = (): string[] => (station ? station.refs : p.stations.filter((x) => path?.stops.some((stop) => stop.id === x.id)).flatMap((x) => x.refs)).slice(0, 200);
     const hasDetails = p.showFindings !== false || !!p.children;
+    // "This path is done when…" lists the files that usually change with the path's own (PRD 38 P4), memory's top partners.
+    const pathPartners = useMemo(() => (hasHops(path)
+        ? partnersOf(p.graph, p.stations.filter((x) => path.stops.some((stop) => stop.id === x.id)).flatMap((x) => x.refs), COCHANGE_MAX_PARTNERS)
+        : undefined), [p.graph, p.stations, path]);
 
     return (
         <aside
@@ -140,6 +148,13 @@ export function ActPanel(p: ActPanelProps) {
                     ? <EmptyCard labels={labels} atStation={!!station} onAsk={() => p.onAskUntested?.()} onShow={() => p.onShow(emptyRefs())} />
                     : cards.length > 0 && <Cards cards={cards} labels={labels} index={index} pins={pins} onShow={p.onShow} onCompose={p.onCompose} onResolve={p.onResolve} />}
 
+                {p.changedPartners !== undefined && (
+                    <Card as="section" label={labels.surface.predict.partnersTitle} style={{ display: 'grid', gap: 6 }}>
+                        <strong data-testid="kg-changed-partners" style={TYPE.bodyLarge}>{labels.surface.predict.partnersTitle}</strong>
+                        <PartnerList partners={p.changedPartners} labels={labels} template={labels.surface.predict.partner} none={labels.surface.predict.partnersNone} />
+                    </Card>
+                )}
+
                 {hasHops(path) && p.onCompose && <KeepTestCard path={path} pathName={pathName} findings={p.findings} labels={labels} index={index} onCompose={p.onCompose} />}
 
                 {hasDetails && (
@@ -164,7 +179,7 @@ export function ActPanel(p: ActPanelProps) {
                 )}
             </div>
 
-            {hasHops(path) && <DoneWhen findings={p.findings} labels={labels} index={index} />}
+            {hasHops(path) && <DoneWhen findings={p.findings} labels={labels} index={index} partners={pathPartners} />}
         </aside>
     );
 }

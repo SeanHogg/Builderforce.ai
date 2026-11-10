@@ -24,6 +24,7 @@
     "target": "es2023",
     "useDefineForClassFields": false,
     "paths": {
+      "@builderforce/sarif": ["../packages/sarif/src/index.ts"],
       "@seanhogg/builderforce-agents/plugin-sdk": ["./src/plugin-sdk/index.ts"],
       "@seanhogg/builderforce-agents/plugin-sdk/*": ["./src/plugin-sdk/*.ts"],
       "@seanhogg/builderforce-agents/plugin-sdk/account-id": ["./src/plugin-sdk/account-id.ts"],

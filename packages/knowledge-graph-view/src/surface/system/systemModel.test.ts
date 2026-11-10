@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { surfaceFixture } from '../../testing';
 import { buildLines, type Line, type LinesModel } from '../lines';
 import { buildStations, type Station, type StationModel } from '../stations';
-import { buildSystemLayout, kindTones, listRefs, MAX_LIST_REFS, MAX_PER_TIER } from './systemModel';
+import { buildSystemLayout, kindTones, MAX_PER_TIER } from './systemModel';
 
 const station = (id: string, layer: string | undefined, use: number): Station => ({
     id, name: id, kind: 'area', entry: false, refs: [`ref:${id}`], files: 1, ...(layer ? { layer } : {}), anti: 1, findingIds: [], use,
@@ -52,13 +52,7 @@ describe('buildSystemLayout', () => {
     });
 });
 
-describe('listRefs and kindTones', () => {
-    it('hands the List the files of the stations, bounded', () => {
-        const many = Array.from({ length: MAX_LIST_REFS + 10 }, (_, i) => ({ ...station(`s${i}`, 'domain', 0), refs: [`r${i}`] }));
-        expect(listRefs(many)).toHaveLength(MAX_LIST_REFS);
-        expect(listRefs([station('a', 'domain', 0)])).toEqual(['ref:a']);
-    });
-
+describe('kindTones', () => {
     it('gives each finding kind one colour by sorted order, the same for every caller', () => {
         const tones = kindTones(['b', 'a', 'b']);
         expect([...tones.keys()]).toEqual(['a', 'b']);

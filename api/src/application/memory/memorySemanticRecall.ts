@@ -10,11 +10,12 @@
  */
 
 import { and, asc, eq, gt, isNull, or, sql, type SQL } from 'drizzle-orm';
-import type { PgColumn } from 'drizzle-orm/pg-core';
+import type { PgColumn, PgTable } from 'drizzle-orm/pg-core';
 import type { Db } from '../../infrastructure/database/connection';
-import { agentMemory, projectFacts } from '../../infrastructure/database/schema';
-import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { agentMemory, projectFacts, runDeltaFindings } from '../../infrastructure/database/schema';
+import { acrossTenants, scopedToTenant, type TenantOwnedTable } from '../../infrastructure/database/tenantScope';
 import { MEMORY_VECTOR_SPACES, type MemoryVectorSpace, type MemoryVectorSpaceId } from './memoryEmbedding';
+import type { Backfill1024Store } from './memoryEmbeddingPolicy';
 
 /**
  * Which column (and model stamp) holds each vector space, per store (1256). The ANN
@@ -204,26 +205,47 @@ export async function unembeddedProjectFacts(db: Db, limit: number): Promise<Arr
  */
 export async function unembeddedInSpace(
   db: Db,
-  store: 'agent_memory' | 'project_facts',
+  store: Backfill1024Store,
   space: MemoryVectorSpaceId,
   afterId: string,
   limit: number,
 ): Promise<Array<{ id: string; key: string; content: string }>> {
-  if (store === 'agent_memory') {
-    const col = AGENT_MEMORY_SPACE_COLUMNS[space];
-    return db
-      .select({ id: agentMemory.id, key: agentMemory.key, content: agentMemory.content })
-      .from(agentMemory)
-      // Same DECLARED platform sweep as `unembeddedMemories`.
-      .where(acrossTenants(agentMemory, 'scheduled_sweep', isNull(col.vector), afterId ? gt(agentMemory.id, afterId) : undefined))
-      .orderBy(asc(agentMemory.id))
-      .limit(limit);
-  }
-  const col = PROJECT_FACTS_SPACE_COLUMNS[space];
+  const s = KEYSET_STORES[store];
+  const vector = s.vectors[space];
+  if (!vector) return []; // the store has no column in this space
   return db
-    .select({ id: projectFacts.id, key: projectFacts.key, content: projectFacts.content })
-    .from(projectFacts)
-    .where(acrossTenants(projectFacts, 'scheduled_sweep', isNull(col.vector), afterId ? gt(projectFacts.id, afterId) : undefined))
-    .orderBy(asc(projectFacts.id))
-    .limit(limit);
+    .select({ id: s.id, key: s.key, content: s.content })
+    .from(s.table)
+    // Same DECLARED platform sweep as `unembeddedMemories`.
+    .where(acrossTenants(s.table, 'scheduled_sweep', isNull(vector), afterId ? gt(s.id, afterId) : undefined))
+    .orderBy(asc(s.id))
+    .limit(limit) as unknown as Promise<Array<{ id: string; key: string; content: string }>>;
 }
+
+/** One relation the keyset claim walks: its id, the text it embeds, and its vector column per space. */
+interface KeysetStore {
+  table: PgTable & TenantOwnedTable;
+  id: PgColumn;
+  key: PgColumn;
+  content: PgColumn;
+  vectors: Partial<Record<MemoryVectorSpaceId, PgColumn>>;
+}
+
+/**
+ * The keyset-claim descriptor of every {@link Backfill1024Store}: adding a store is a row here. Run-delta findings
+ * (PRD 41 §C14, 1344) live in the bge-m3 space only; their `key` is the rule and `content` the card text.
+ */
+const KEYSET_STORES: Readonly<Record<Backfill1024Store, KeysetStore>> = {
+  agent_memory: {
+    table: agentMemory, id: agentMemory.id, key: agentMemory.key, content: agentMemory.content,
+    vectors: { legacy: AGENT_MEMORY_SPACE_COLUMNS.legacy.vector, bge_m3: AGENT_MEMORY_SPACE_COLUMNS.bge_m3.vector },
+  },
+  project_facts: {
+    table: projectFacts, id: projectFacts.id, key: projectFacts.key, content: projectFacts.content,
+    vectors: { legacy: PROJECT_FACTS_SPACE_COLUMNS.legacy.vector, bge_m3: PROJECT_FACTS_SPACE_COLUMNS.bge_m3.vector },
+  },
+  run_delta_findings: {
+    table: runDeltaFindings, id: runDeltaFindings.id, key: runDeltaFindings.ruleId, content: runDeltaFindings.cardText,
+    vectors: { bge_m3: runDeltaFindings.embedding },
+  },
+};

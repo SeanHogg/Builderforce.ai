@@ -11,13 +11,18 @@
 import { SECRET_SHAPES } from '@builderforce/secret-redaction';
 import type { DeltaRule } from '../contract.js';
 import { isSnapshotPath, type TextView } from './support/files.js';
-import { regexHits, stateSides, type Hit } from './support/stateRule.js';
+import { regexHits, stateSides, whichMatch, type Hit } from './support/stateRule.js';
+
+const SHAPE_RES = SECRET_SHAPES.map((s) => s.re);
 
 function hitsOf(view: TextView): Hit[] {
     const hits: Hit[] = [];
-    for (const shape of SECRET_SHAPES) {
+    // One combined pass finds which shapes occur at all; only those run on their own (exact, overlapping hits).
+    const present = whichMatch(SHAPE_RES, view.text);
+    SECRET_SHAPES.forEach((shape, i) => {
+        if (!present.has(i)) return;
         for (const { offset, match } of regexHits(shape.re, view.text)) hits.push({ offset, length: Math.min(match[0].length, 120), key: shape.id });
-    }
+    });
     return hits;
 }
 

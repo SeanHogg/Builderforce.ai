@@ -15,6 +15,7 @@ import { formatBytes } from './formatBytes';
 import { knowledgeAbout, nodeIndex } from './graphModel';
 import { kindLabel, packLabel } from './names';
 import { PartitionPicker } from './PartitionPicker';
+import { HiddenPartners } from './surface/HiddenPartners';
 import { placementKeyOf, placementRowText } from './placement';
 import { cssVar } from './scene/themeColors';
 import { button, input, list, muted, primaryButton, quietButton } from './styles';
@@ -174,6 +175,7 @@ export function NodePanel({ graph, nodeRef, labels, source, confirm, onTrace, on
                 {arming && <button type="button" style={quietButton} onClick={() => setArming(false)}>{labels.cancel}</button>}
             </div>
             {failure === 'delete' && <p role="alert" style={{ margin: 0, fontSize: 12, color: cssVar('errorText') }}>{labels.factDeleteFailed}</p>}
+            <HiddenPartners graph={graph} nodeRef={nodeRef} labels={labels} onSelect={onSelect} />
             <KnowledgeList title={labels.factsTitle} nodes={about.facts} labels={labels} onSelect={onSelect} />
             <KnowledgeList title={labels.claimsTitle} nodes={about.claims} labels={labels} onSelect={onSelect} />
             {about.facts.length === 0 && about.claims.length === 0 && <p style={{ ...muted, margin: 0 }}>{asset ? labels.assetNoFacts : labels.noFacts}</p>}

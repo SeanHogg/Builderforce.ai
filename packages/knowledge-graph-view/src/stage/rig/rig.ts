@@ -36,7 +36,8 @@ export interface RigPose {
 export type OrbitState = Omit<OrbitPose, 'width' | 'height'>;
 
 export const MIN_ZOOM_FACTOR = 0.2;
-export const MAX_ZOOM_FACTOR = 8;
+/** Deep: the semantic zoom (B1a rule 9) nests each band inside its parent mark, down to a method's code. */
+export const MAX_ZOOM_FACTOR = 4096;
 /** The ortho camera's distance from its target: far enough that a tilted, tall placement stays inside near/far. */
 export const CAMERA_DISTANCE = 4000;
 /** The fov a cross-projection tween uses when neither end names one. */
@@ -56,6 +57,10 @@ export class RigController {
     private view: RigView = { cx: 0, cz: 0, zoom: 1 };
     private home: RigView = { cx: 0, cz: 0, zoom: 1 };
     private from: RigView = this.view;
+    /** Where the running ground tween lands: the home (a fit) or a {@link flyTo} target. */
+    private target: RigView = this.view;
+    /** The screen point the last zoom was about (the semantic zoom's focus); null = the box centre. */
+    focusPoint: readonly [number, number] | null = null;
     private readonly tween = new Tween();
     private depthNow = 0;
     private tiltRange: readonly [number, number] = [0, 0];
@@ -120,7 +125,7 @@ export class RigController {
         this.kind = 'ground';
         if (wasOrbit && ms > 0) {
             // Orbit → ground: tween in orbit space to the ground home's perspective twin, then land orthographic.
-            this.view = home;
+            this.view = home; this.target = home;
             this.goOrbit(fromOrbit, this.groundTwin(home, fromOrbit.fov), now, ms);
             return;
         }
@@ -132,7 +137,7 @@ export class RigController {
     resize(home: RigView, width: number, height: number): void {
         this.width = width; this.height = height;
         this.home = home;
-        if (!this.moved && this.kind === 'ground') { this.tween.finish(); this.blend = null; this.view = home; }
+        if (!this.moved && this.kind === 'ground') { this.tween.finish(); this.blend = null; this.view = home; this.target = home; }
         this.changed();
     }
 
@@ -153,6 +158,7 @@ export class RigController {
             return;
         }
         const v = this.view, h = this.home;
+        this.focusPoint = [sx, sy];
         const zoom = Math.min(h.zoom * MAX_ZOOM_FACTOR, Math.max(h.zoom * MIN_ZOOM_FACTOR, v.zoom * factor));
         const cos = Math.cos((this.tilt * Math.PI) / 180) || 1;
         // Keep the ground point under (sx, sy) where it is.
@@ -160,6 +166,20 @@ export class RigController {
         this.view = { zoom, cx: wx - (sx - this.width / 2) / zoom, cz: wz - (sy - this.height / 2) / (zoom * cos) };
         this.moved = true;
         this.changed();
+    }
+
+    /**
+     * Flies the ground view to centre (x, z) at `zoom` px per world unit (clamped like {@link zoomBy}), tweened like a
+     * re-home (`ms` 0 jumps) — the "Go inside" shortcut animates the SAME zoom the wheel makes. The focus returns to the
+     * centre. In orbit it only centres.
+     */
+    flyTo(x: number, z: number, zoom: number, now: number, ms: number = TWEEN_MS): void {
+        if (this.kind === 'orbit') { this.centreOn(x, z); return; }
+        this.stop();
+        const h = this.home;
+        this.moved = true;
+        this.focusPoint = null;
+        this.go({ cx: x, cz: z, zoom: clamp(zoom, h.zoom * MIN_ZOOM_FACTOR, h.zoom * MAX_ZOOM_FACTOR) }, now, ms);
     }
 
     /** Pan by a screen delta in CSS px (ground view). */
@@ -212,7 +232,7 @@ export class RigController {
             if (!this.tween.active) this.blend = null; // landed: a ground destination is orthographic again
             return this.tween.active;
         }
-        const a = this.from, b = this.home;
+        const a = this.from, b = this.target;
         this.view = { cx: lerp(a.cx, b.cx, t), cz: lerp(a.cz, b.cz, t), zoom: a.zoom * Math.pow(b.zoom / a.zoom, t) };
         return this.tween.active;
     }
@@ -301,7 +321,7 @@ export class RigController {
     private stop(): void {
         if (!this.tween.active) return;
         this.tween.finish();
-        if (this.blend) { this.orbit = this.blend.to; this.blend = null; } else this.view = this.home;
+        if (this.blend) { this.orbit = this.blend.to; this.blend = null; } else this.view = this.target;
     }
 
     private goOrbit(from: OrbitState, to: OrbitState, now: number, ms: number): void {
@@ -311,6 +331,7 @@ export class RigController {
     }
 
     private go(to: RigView, now: number, ms: number): void {
+        this.target = to;
         if (ms <= 0 || (this.view.zoom === to.zoom && this.view.cx === to.cx && this.view.cz === to.cz)) {
             this.tween.finish();
             this.view = to;

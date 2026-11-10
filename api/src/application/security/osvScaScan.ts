@@ -24,8 +24,7 @@
  * (`findingFingerprint`) hashes the rule id, so the same advisory against the same package version is
  * one finding across re-scans.
  */
-import type { FindingSeverity, NormalizedFinding } from '../../domain/security/scanReportParsers';
-import { normalizeSeverity } from '../../domain/security/scanReportParsers';
+import { normalizeSeverity, type FindingSeverity, type NormalizedFinding } from '@builderforce/sarif';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 export const OSV_BASE = 'https://api.osv.dev';

@@ -1,7 +1,8 @@
 /**
  * The background indexer's priority queue and its slice runner (PRD 41 B6 "Scheduling") — pure over a clock and a gate.
  *
- * Priorities, lowest first: files open in editors, visible files, recently committed files, everything else. A path
+ * Priorities, lowest first: files open in editors, visible files, files within 2 import hops of an open one (`near`, by
+ * the root's fact graph), recently committed files, everything else. A path
  * queued twice keeps its best priority (a promoted one joins the end of its better bucket). The runner drains the queue in
  * slices sized to `SLICE_MS` from the measured cost per file, hands the event loop back between slices, and stops
  * at a slice boundary whenever the gate reports a pause (a keystroke, a long-unfocused window); {@link SliceRunner.kick}
@@ -11,7 +12,7 @@
 import { nextSliceSize, type Clock } from "./indexBudget";
 import type { IndexPauseReason } from "./indexLevels";
 
-export const PRIORITY = { open: 0, visible: 1, recent: 2, rest: 3 } as const;
+export const PRIORITY = { open: 0, visible: 1, near: 2, recent: 3, rest: 4 } as const;
 export type Priority = (typeof PRIORITY)[keyof typeof PRIORITY];
 
 /** One insertion-ordered bucket per priority: a push and a take cost O(1) per path, never a sort of the queue. */

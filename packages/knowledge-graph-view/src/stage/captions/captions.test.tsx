@@ -6,7 +6,7 @@ import { surfaceFixture } from '../../testing';
 import { ZoomProvider, type ZoomApi } from '../../surface/zoom';
 import { createNoopStage } from '../renderer';
 import { Stage } from '../Stage';
-import { CAPTION_MAX } from './CaptionLayer';
+import { CAPTION_MAX, CaptionLayer } from './CaptionLayer';
 import { applyCaptionTransform, cssMatrix, groundAffine, inverseLinear } from './transform';
 
 const graph = surfaceFixture();
@@ -52,5 +52,15 @@ describe('the caption layer\'s ONE transform', () => {
         // Only the container moved: no caption was re-rendered or restyled.
         expect(spans.map((s) => s.getAttribute('style'))).toEqual(childStyles);
         expect(layer.style.getPropertyValue('--kg-caption-inverse')).toMatch(/^matrix\(/);
+    });
+
+    it('shifts a caption by its px offset after the inverse transform, so the offset stays the same px at every zoom', () => {
+        const { container } = render(<CaptionLayer hidden={false} captions={[
+            { text: 'Domain', position: [24, 0, 40], anchor: 'start', tone: 0, role: 'band', offsetPx: [11, 13.2] },
+            { text: 'Plain', position: [0, 0, 0], anchor: 'start', tone: 0 },
+        ]} />);
+        const [band, plain] = [...container.querySelectorAll('span')];
+        expect(band!.style.transform).toBe('var(--kg-caption-inverse, none) translate(11px, 13.2px) translate(0, -50%)');
+        expect(plain!.style.transform).toBe('var(--kg-caption-inverse, none) translate(0, -50%)');
     });
 });

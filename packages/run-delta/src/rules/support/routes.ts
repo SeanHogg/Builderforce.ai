@@ -17,6 +17,7 @@
  */
 
 import { escapeRegex, matchClose, matchOpen, type TextView } from './files.js';
+import { topLevelArgs } from './statements.js';
 
 export interface RouteFact {
     /** e.g. `POST /api/projects/:id`, `use app /api/*`, `command builderforce.open`, `webview-message #2`. */
@@ -28,6 +29,12 @@ export interface RouteFact {
     guards: string[];
     /** The handler, when the call's last argument is a plain identifier (`h`, `handlers.list`). */
     handler?: string;
+    /** Set when the route came from extracted FileFacts (`effectiveGuards`), not the text scan: `offset` is then -1. */
+    fromFacts?: boolean;
+    /** Guards that apply only because the registration order is unknown (`guardsInferred`): heuristic. */
+    guardsInferred?: string[];
+    /** Untrusted input accessors the handler uses (facts only; the text path scans the call span). */
+    inputs?: string[];
 }
 
 const HTTP = /\.\s*(get|post|put|delete|patch|all|options|head)\s*\(\s*(['"`])(\/[^'"`\n]*)\2\s*,/g;
@@ -89,14 +96,11 @@ function covers(prefix: string | undefined, path: string): boolean {
 
 /** The last top-level argument of the call spanning `(open, close)`, when it is a plain (dotted) identifier. */
 function handlerOf(code: string, bare: string, open: number, close: number): string | undefined {
-    let depth = 0, lastComma = open;
-    for (let i = open + 1; i < close; i++) {
-        const ch = bare[i]!;
-        if (ch === '(' || ch === '[' || ch === '{') depth++;
-        else if (ch === ')' || ch === ']' || ch === '}') depth--;
-        else if (ch === ',' && depth === 0) lastComma = i;
-    }
-    const last = code.slice(lastComma + 1, close).trim();
+    const args = topLevelArgs(bare, open, close);
+    const span = args[args.length - 1];
+    // A trailing comma leaves an empty last argument: no handler.
+    if (!span || bare.slice(span[1], close).includes(',')) return undefined;
+    const last = code.slice(span[0], span[1]).trim();
     return /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(last) ? last : undefined;
 }
 

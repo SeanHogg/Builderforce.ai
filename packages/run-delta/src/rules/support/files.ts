@@ -26,6 +26,8 @@ export interface TextView {
     readonly code: string;
     readonly bare: string;
     lineAt(offset: number): number;
+    /** Offsets where each line starts (shared by `text`, `code` and `bare`: masking keeps the line layout). Computed once. */
+    lineStarts(): readonly number[];
     /** The line holding `offset`, cut from `source` (default the text; `code`/`bare` share its line layout). */
     lineText(offset: number, source?: string): string;
     memo<T>(key: string, compute: () => T): T;
@@ -45,7 +47,11 @@ class View implements TextView {
     get bare(): string { return this.masked.bare; }
 
     lineAt(offset: number): number {
-        return lineOf((this.starts ??= lineStarts(this.text)), offset);
+        return lineOf(this.lineStarts(), offset);
+    }
+
+    lineStarts(): readonly number[] {
+        return (this.starts ??= lineStarts(this.text));
     }
 
     lineText(offset: number, source: string = this.text): string {

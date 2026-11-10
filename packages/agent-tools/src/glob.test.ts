@@ -234,3 +234,21 @@ describe("dirMayContainGlobMatch", () => {
     expect(dirMayContainGlobMatch("anywhere", "*.test.ts")).toBe(true);
   });
 });
+
+describe("globToRegExp cannot backtrack catastrophically (regression: run-delta review M2/M4)", () => {
+  it("32 stars then a literal against a 60-character non-matching path finishes in under 50 ms", () => {
+    const path = `${"a/".repeat(29)}bb`; // 60 chars, no "x"
+    const t0 = performance.now();
+    expect(matchGlob(path, `${"*".repeat(32)}x`)).toBe(false);
+    expect(matchGlob(path, `src/${"*".repeat(32)}x`)).toBe(false);
+    expect(matchGlob(path, `${"**/".repeat(12)}x`)).toBe(false);
+    expect(performance.now() - t0).toBeLessThan(50);
+  });
+
+  it("keeps the meaning of a star run: three or more stars cross folders like **", () => {
+    expect(matchGlob("src/a/b/c.ts", "src/***.ts")).toBe(true);
+    expect(matchGlob("src/a/b/c.ts", "src/**/**/c.ts")).toBe(true);
+    expect(matchGlob("src/c.ts", "src/**/**/c.ts")).toBe(true);
+    expect(matchGlob("src/a/c.ts", "src/*.ts")).toBe(false);
+  });
+});

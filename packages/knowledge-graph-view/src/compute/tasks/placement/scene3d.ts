@@ -1,6 +1,6 @@
 /**
  * The 3D placement (PRD 43 B2, the 3D row; P4) from the EXISTING `layout3d` output — the layout is not rewritten, only
- * read, so the stage's 3D camera stands every node exactly where the R3F scene (`scene/GraphScene.tsx`) stands it:
+ * read, so the stage's 3D camera stands every node exactly where the retired R3F scene stood it:
  *
  *   - the focused nodes (the same `focusGraph` cut every node camera draws) at their layout positions, scaled into the
  *     viewport band's width — x and z on the ground, y the node's PLANE (its partition / community tier, flow-ordered by

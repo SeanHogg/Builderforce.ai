@@ -27,9 +27,12 @@
       "@testing-library/react": ["../../frontend/node_modules/@testing-library/react"],
       "vitest": ["../../frontend/node_modules/vitest"],
       "@builderforce/run-delta": ["../run-delta/src/index.ts"],
+      "@builderforce/sarif": ["../sarif/src/index.ts"],
       "@builderforce/run-delta/contract": ["../run-delta/src/contract.ts"],
       "@builderforce/secret-redaction": ["../secret-redaction/src/index.ts"],
-      "@builderforce/agent-tools/code-mask": ["../agent-tools/src/knowledge/codeMask.ts"]
+      "@builderforce/agent-tools/code-mask": ["../agent-tools/src/knowledge/codeMask.ts"],
+      "@builderforce/agent-tools/sampling": ["../agent-tools/src/sampling.ts"],
+      "@builderforce/agent-tools/glob": ["../agent-tools/src/glob.ts"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],

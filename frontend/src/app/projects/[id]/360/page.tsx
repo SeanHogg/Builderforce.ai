@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 import { ProjectHealthPanel } from '@/components/project360/ProjectHealthPanel';
 import { ProjectSpendWidget } from '@/components/project360/ProjectSpendWidget';
+import { ProjectRunDeltas } from '@/components/runDelta/ProjectRunDeltas';
 
 export const runtime = 'edge';
 
@@ -23,6 +24,11 @@ export default async function Project360Page({ params }: { params: Promise<{ id:
     <div style={{ minHeight: '100dvh', background: 'var(--bg-base)', display: 'flex', flexDirection: 'column' }}>
       <div style={{ flex: '1 1 auto', minHeight: 0 }}>
         <ProjectHealthPanel projectId={id} />
+      </div>
+      {/* What the project's agent runs changed, over time (PRD 41 §C11.3): the trend and
+          the run list sit beside health because they ARE health, measured per run. */}
+      <div style={{ padding: '16px 16px 0', flex: '0 0 auto' }}>
+        <ProjectRunDeltas projectId={id} />
       </div>
       {/* Cost belongs on the whole-picture view: "is this project healthy" and "what
           is it costing" are the same question asked twice, and the number was

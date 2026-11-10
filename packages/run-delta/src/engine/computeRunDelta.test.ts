@@ -12,10 +12,12 @@ const UNGUARDED = "app.get('/api/x', (c) => c.json(1));\n";
 describe('computeRunDelta', () => {
     it('lists every registered dimension, sorted, with not_measured / rule-not-built where no rule exists', async () => {
         const { input, ports } = fixture({ 'a.ts': 'export const a = 1;\n' }, { 'a.ts': 'export const a = 1; // same api\n' });
-        const delta = await computeRunDelta(input, defaultDimensionRegistry(), ports);
+        const unbuilt: readonly DimensionId[] = ['ilities.functional-suitability', 'ilities.interaction-capability', 'ilities.reliability', 'ilities.flexibility'];
+        const registry = defaultDimensionRegistry();
+        const delta = await computeRunDelta(input, { ...registry, rules: registry.rules.filter((r) => !unbuilt.includes(r.dimension)) }, ports);
         expect(delta.dimensions.map((d) => d.id)).toEqual([...delta.dimensions.map((d) => d.id)].sort());
         expect(delta.dimensions).toHaveLength(10);
-        for (const id of ['ilities.functional-suitability', 'ilities.interaction-capability', 'ilities.reliability', 'ilities.flexibility'] as const) {
+        for (const id of unbuilt) {
             expect(dim(delta, id)).toMatchObject({ verdict: 'not_measured', reasons: ['rule-not-built'] });
         }
         expect(dim(delta, 'security').verdict).toBe('same');

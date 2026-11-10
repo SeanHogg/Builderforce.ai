@@ -1,3 +1,146 @@
+## ✅ RESOLVED 2026-11-10: PRD 41 WS2/WS6/WS7: a folder's changes are detected cheaply, and every editor run shows what it did to the codebase (Knowledge · Run delta · VSIX)
+
+The ROADMAP entry "No run delta yet: PRD 41 WS2 (SQLite fact store) is open" is closed. [PRD 41](./docs/specs/41-prd-offline-understanding-and-run-delta.md) §7 lists what is still open.
+
+- **B2 change detection (WS2).**
+  - Hashing: EOL-normalised `contentHash` (`eol-lf@1`) and Merkle directories in memory 2026.10.68.
+  - Host: a persisted BigInt stat manifest with the 2 s racy rule and git blob hints (3de92d5c6, 6042a8b1e).
+  - Every consumer moved to one content hash (882d57a65).
+- **Finding identity, lineage and comparability (C3, C9 / WS6).**
+  - `identityOf`, `matchLineage` and `comparable` are in memory 2026.10.68. Memory 2026.10.70 adds `truncated` and `isBinaryBytes`, and Builderforce.ai pins memory 2026.10.71 (d03476177).
+  - Platform graphs record the extractor and tool versions they were built with (migration 1343, 4afa57241).
+  - From memory 2026.10.73 those versions are recorded when the review runs and travel in the pack (BFKP `MEAS` section). Not-comparable reasons are shown, and the web compare applies the same rule (75a494ffb).
+- **Run delta engine (C1, C2, C4, C10 / WS7).** `@builderforce/run-delta` (5b3f2becf, 57275b55b):
+  - before side resolved from pre-image, then `git show`;
+  - attribution, verdicts, headline and blast radius;
+  - redaction throughout;
+  - blocking that fails closed.
+- **VS Code host (WS7).** Run-delta host wiring (364afe549), later reworked by the review fixes:
+  - pre-images and the `run-delta` record (364afe549);
+  - conservative attribution when runs overlap, monorepo roots, the engine in a worker with a budget, before sides read byte-exact through one `git cat-file --batch`, record indexes, local-only paths (74681af74, 932fb369d);
+  - repository identity synced without credentials, a bounded overlap read, validated git arguments, symlink-safe Open code (590728fb1).
+- **Autonomous-run block policy (§12.5).** An audit or auto-approve run whose delta holds blocking codes ends `awaiting_input` with a hold. A run that changed files but whose delta errored or timed out is held as `run_delta_unmeasured`. The execution's `hold` is the one source of held state.
+  - The audited release (`run-delta/release`) needs a signed-in identity, plus board approver authority for runs on a board, and records a waiver.
+  - Commits: 722f593f7, 54043da81, 209c2b835.
+- **Card and panel (C11 / WS10).**
+  - Localized in 5 locales, with Open code confined to the run's repo.
+  - "Measuring…" and "Not measured" states, the card anchored to the run's reply, and an "Overrides ignored" list.
+  - A held card with Release, behind `useConfirm` (b835fe641, c3b7ce701, f5a82a41f).
+- **Telemetry.** `delta.computed` goes to `/api/telemetry/spans` through an allowlisted product-event channel (bd809b82a).
+- **Unused-export fix (WS9).** It removes only the named export; knip no longer fixes the whole file (87bd0f6aa).
+- **Ship.** A release note and an Idea-to-Real blog post, `know-what-an-agent-run-did` (9dc8d63e2).
+- **CI repairs along the way.** 05d311a63, 30141895c, 7e7220999 and 57b7ea3a7: test mocks, a frontend tsconfig alias, the `memory/retrieval` mapping, and local-first tests updated to the record-payload marker.
+
+## ✅ RESOLVED 2026-11-10: predicted measures P4 co-change and P7 transitions, memory and history side (PRD 38 › Predicted measures · Knowledge)
+
+- **P1 consumed by the view.** knowledge-graph-view reads `placementOf` through `src/placement.ts`:
+  - a file without a partition is placed by its community (`community:<id>`, "Community {n}");
+  - stations fall back to grouping by community before the directory roll-up;
+  - planes are capped at the top 12 communities, plus "Other communities";
+  - the partition matrix stays on real partitions.
+
+  This shipped in the PRD 43 combined view commits.
+- **P4 / P7 maths: builderforce-memory 2026.10.71.**
+  - `coChangePartners` gives support ≥ 3, lift ≥ 2, at most 8 partners, commits over 50 files excluded as bulk, newest 5000 commits.
+  - `encodeCoChange` / `decodeCoChange` define the `coChange` badge (v1).
+  - `coChangeRecallAtK` is the acceptance measure.
+  - `applyCoChangeHidden` in `buildGraph` gives the `coChangeHidden` badge.
+  - `OUTLINE_BADGE_KEYS` gains `coChange` and `coChangeHidden`.
+  - `stationTransitions`, `transitionOf` and `mostLikelyWalk` work per station: a station with trace hops uses them, otherwise its reference weights; reference hops carry no interval.
+  - `rateInterval` is the 90% Jeffreys interval.
+  - The inverse incomplete beta uses Halley steps inside a bisection bracket, with a relative tolerance.
+  - The encoder drops entries the decoder would reject (241e403).
+- **History and badges.**
+  - `f54d09619`: one `git log` (365 days, at most 5000 commits) feeds both churn (90 days) and co-change. `codeRootSignals` stamps `coChange`. The API cache keys move to `kg:v6` / `kg-outline:v2`.
+  - `8a93a22f3`: the log is streamed with `-z --no-renames`, and a warning fires when the commit cap cuts into the churn window.
+- **`extractorKey`: builderforce-memory 2026.10.72 (45db29c).** It was requested by PRD 43.
+  - A caller key is folded into extract reuse and owed-file state.
+  - The pool echoes the key it actually used.
+  - A key-only change estimates zero model calls.
+  - An aborted run keeps the old key.
+
+## ✅ RESOLVED 2026-11-10: one stage for the knowledge view: every camera is a placement, and the 4+1 Physical view (PRD 43 P1–P5 · Knowledge)
+
+- **Context.** Each camera re-rendered the same data on its own stack (SVG, canvas, R3F). The result was flicker, inconsistent shapes and slow switches. The 4+1 Physical aspect had no data at all.
+- **Fix:**
+  - **c6e9c6c3f, the stage.**
+    - One `MarkSet` per graph, with type-shaped extruded marks.
+    - Placements for Map, Graph, 3D (orbit rig), Mind map, Sequence, System, Heat, Style and Features.
+      - Sequence has system, class and method bands, call-site order, activation bars, returns, external participants, association stubs, a class→method split, and a call-site card that opens the file at the line.
+    - A switch is a buffer swap and tween: 0 meshes, ≤ 3 uploads per batch.
+    - Picking matches `nearestHit`. A 10k-slot settle is ≤ 1.2 ms p95 in Chromium.
+    - Keyboard and screen-reader access through proxies, with focus kept off `<body>`.
+    - A placement LRU keyed by generation and locale; the MarkSet survives worker fail-over.
+    - troika labels with DOM captions; theme tokens; 5 catalogs.
+  - **003f86273, deploy units.** Units and concurrency are extracted from deploy descriptors: Dockerfile, compose, wrangler, k8s, Procfile, fly, vercel, serverless, package.json and workflows. The parsers are hardened against prototype pollution and quadratic input, and only names reach badges; descriptor section text is redacted.
+  - **1228a22b8, units on the System camera.** A `unit` capsule shape and a units row with its bindings.
+  - **4+1.** There is no 4+1 camera. `src/fourPlusOne.ts` maps each aspect to a camera, and the coverage test runs on a real graph.
+- **Proof:**
+  - The view package passes 1607/1608 tests; the remaining one is the perf gate, which belongs to agentic-d1's community work.
+  - Real GPU runs on ANGLE D3D11.
+  - hired.video yields 7 units and 4 concurrency files.
+- **Still open (ROADMAP):**
+  - stage as the default and deletion of the old renderers;
+  - P1b continuous zoom and the code layer;
+  - P3 bundling and LOD;
+  - re-extraction keys.
+
+## ✅ RESOLVED 2026-11-10: a never-synced 263 MB store drains safely, and settled receipts are pruned (Local-first · Sync)
+
+- **Context.**
+  - The store had 88,898 imports that were never synced.
+  - The old drain spent about 5 s per round and stopped after 20 rounds per pass.
+  - Every queued import held a full copy of its payload.
+  - 88,898 receipts duplicated what the row mappings already say.
+- **Fix (13f8b3057, ad02c2efe, plus the earlier sweep commits).**
+  - **Drain speed:**
+    - running per-partition pending counts;
+    - `syncRound` picks a batch in about 15 ms;
+    - the drain loop runs on a time budget, keeps a rate reserve and honours 429s.
+  - **Retry-After:** accepts both delta-seconds and an HTTP-date, capped at 1 h. Scheduler timers are clamped to 2^31-1 ms.
+  - **Payload markers:**
+    - a bound import is queued as a marker and materialized at push time, with the same bytes on a resend;
+    - an empty payload is self-healed;
+    - markers are fenced from old builds. This was proven by running `87e4b88cc`'s own coordinator: it never sends a null payload.
+  - **Backlog migration:**
+    - one-time, flag-guarded and skips materialized events;
+    - takes a backup first;
+    - the backup is kept until the store syncs, with a restore path.
+  - **Settled receipts:**
+    - pruned at compaction, both on disk and in memory;
+    - row status is unchanged, because a mapped row reads as synced (`deriveRecordSyncStatus` is identical in the old build);
+    - the legacy merge guards against re-sending on mapped rows.
+- **Proof (store copy, fake server).**
+  - The 88,898 imports drained with 0 hash mismatches.
+  - The compacted base went from 263 MB to 199.8 MB.
+  - 726 local-first tests pass, plus the vscode sync suites.
+- **Still open (ROADMAP):** an idle-machine re-measure of open and drain time.
+
+## ✅ RESOLVED 2026-11-10: code links on real repos — aliases, route handlers, constructor and JSX calls (PRD 43 P0c · Knowledge)
+
+- **Context.** Validating against hired.video found four gaps:
+  - tsconfig `paths` aliases were treated as packages, which hid 86% of cross-file imports;
+  - route and listener callbacks had no owner, so their calls were dropped;
+  - `new X().m()` produced no edge;
+  - JSX renders were recorded as `uses`.
+- **Fix (a86d976ef plus earlier sweep commits).**
+  - **Aliases:**
+    - Resolved once, at extract time, through one ordered `aliasCandidates` list.
+    - Cached per root and invalidated by the tsconfig/jsconfig watcher.
+    - Every extract path passes them through `rootModuleResolution`: review, live, run delta and on-prem.
+  - **Callback owners:** flagged `function` symbols named `callee "literal"`.
+  - **Calls:** `new X().m()` and JSX renders are now `calls` edges with call sites.
+  - **Extraction:** always uses the regex extractor, with masking through `maskSource`.
+  - **Test paths:** decided by one `isTestSourcePath` rule.
+  - **Size:** `symbolRelations` is split into `callScan`, `symbolImports` and `ownerSpans`.
+- **Proof on hired.video.**
+  - The API-side and VS Code rollups are identical: 23,244 edges each, 0 mismatches.
+  - 21,992 relations resolve through aliases.
+  - 1,560 route/listener owners own 5,790 calls.
+  - Sampled precision was 10/10 for each new family.
+  - Sequences now start at `PATCH /me/profile-mode` and at the `fillComposer` listener.
+- **Still open (ROADMAP):** a config change re-extracting unchanged files; this waits on memory 2026.10.72.
+
 ## ✅ RESOLVED 2026-11-10: typed entity ids, Phase A (LocalId UUID / SyncId bigint) (Local-first · Sync · Agents)
 
 - **Context.** Chat #61651 filed duplicate tickets: a tool result's ids were read by several hand-rolled regexes and `Number()` guesses, so a client UUID and a server integer were mixed up. Design: [typed-entity-ids.md v2](./docs/design/typed-entity-ids.md).

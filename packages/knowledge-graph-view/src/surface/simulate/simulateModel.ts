@@ -10,6 +10,8 @@ import type { RecordedRun, RecordedValue } from '../../fixPorts';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import type { PathModel } from '../path';
 import { hopText } from '../sequenceText';
+import type { Station } from '../stations';
+import { hopProbabilityText, hopTransition, likelyWalk, type TransitionTable, type WalkHop } from '../transitionTable';
 
 export type ValueOrigin = 'recorded' | 'edited';
 
@@ -26,6 +28,8 @@ export interface SimStep {
     vars: SimVar[];
     /** The result at this step: a recorded value, or unknown (an upstream input was edited and the stop is not stubbed). */
     result: SimResult | null;
+    /** The most likely walk out of this stop (PRD 38 P7, memory's `mostLikelyWalk`); null without a transition table. */
+    walk: WalkHop[] | null;
 }
 
 export interface SimInputs {
@@ -40,6 +44,10 @@ export interface SimInputs {
     notes?: ReadonlyMap<string, string>;
     /** The route label per hop (hopRouteLabels), indexed like `path.hops`. */
     routeLabels?: readonly (string | null)[];
+    /** The station transition table (`transitionTableOf`): each call line shows its hop's probability, each step its likely walk. */
+    transitions?: TransitionTable | null;
+    /** The stations by id, to name the walk's stops (a walk may leave the path). */
+    stations?: ReadonlyMap<string, Pick<Station, 'name'>>;
 }
 
 const inputsOf = (run: RecordedRun | null): RecordedValue[] => (run?.values ?? []).filter((v) => v.direction === 'in');
@@ -49,7 +57,8 @@ export function argumentNames(run: RecordedRun | null): string[] {
     return [...new Set(inputsOf(run).map((v) => v.name))];
 }
 
-export function simulate({ path, recorded, edits, stubs, labels, notes, routeLabels }: SimInputs): SimStep[] {
+export function simulate({ path, recorded, edits, stubs, labels, notes, routeLabels, transitions, stations }: SimInputs): SimStep[] {
+    const names = stations ?? new Map(path.stops.map((s) => [s.id, s]));
     const t = labels.surface.simulate;
     const values = recorded?.values ?? [];
     const edited = (name: string) => Object.prototype.hasOwnProperty.call(edits, name) && edits[name] !== (inputsOf(recorded).find((v) => v.name === name)?.value);
@@ -64,7 +73,9 @@ export function simulate({ path, recorded, edits, stubs, labels, notes, routeLab
         const lines: SimLine[] = [{ n: 1, text: fillTemplate(t.lineEnter, { name: stop.name }), ...(notes?.get(stop.id) ? { note: notes.get(stop.id)! } : {}) }];
         if (next && hop) {
             const route = routeLabels?.[i];
-            lines.push({ n: 2, text: fillTemplate(t.lineCall, { name: next.name }), note: route ? `${hopText(labels, hop)} · ${route}` : hopText(labels, hop) });
+            const p = hopProbabilityText(labels, hopTransition(transitions, stop.id, next.id));
+            const note = [hopText(labels, hop), p, route].filter((x): x is string => !!x).join(' · ');
+            lines.push({ n: 2, text: fillTemplate(t.lineCall, { name: next.name }), note });
         } else {
             lines.push({ n: 2, text: fillTemplate(t.lineReturn, { name: stop.name }) });
         }
@@ -81,7 +92,8 @@ export function simulate({ path, recorded, edits, stubs, labels, notes, routeLab
         const out = [...known].reverse().find((v) => v.direction === 'out');
         const stubbed = stubs.has(stop.id);
         const result: SimResult | null = !out ? null : anyEdit(i) && !stubbed ? { value: t.unknownResult, origin: 'unknown' } : { value: out.value, origin: 'recorded' };
-        return { index: i, stopId: stop.id, stubbed, lines, vars, result };
+        const walk = transitions ? likelyWalk(transitions, stop.id, names, labels) : null;
+        return { index: i, stopId: stop.id, stubbed, lines, vars, result, walk };
     });
 }
 

@@ -22,8 +22,11 @@ export type LocalEntityType =
   | 'chat-ticket-link'
   /** One model call's token usage on this device (PRD 36 run usage ledger). */
   | 'usage'
-  /** How one run ended on this device (succeeded / failed / stopped / budget-contained),
-   *  keyed by its run id — read by the pipeline route report. Local only, never synced. */
+  /** The run-outcomes context (PRD 41 §D1), two kinds of row:
+   *  - how one run ended on this device (succeeded / failed / stopped / budget-contained), keyed by its bare run id —
+   *    read by the pipeline route report. Local only, never journaled, never synced;
+   *  - one run's outcome per repository (`kind: 'run-outcome'`: frozen `RunFeatures`, commit attribution, labels),
+   *    keyed by `stableEntityId('run-outcome:<runId>:<repoKey>')`, synced as a domain-imported record. */
   | 'run-outcome'
   /** One run's delta per repository (PRD 41 §C14), `run-delta:<runId>:<repoKey>`: immutable, synced as a mirror record. */
   | 'run-delta';

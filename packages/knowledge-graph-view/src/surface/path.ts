@@ -7,7 +7,7 @@
 import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { fileRefOf, stationOfRef, type Station, type StationModel } from './stations';
 import type { Line } from './lines';
-import { unorderedPairKey } from '../pairKey';
+import { pairKey, PAIR_SPAN, unorderedPairKey } from '../pairKey';
 
 export interface PathStop { id: string; name: string; layer?: string }
 export interface PathHop {
@@ -34,31 +34,42 @@ export function pathOfLine(line: Line | null, byId: ReadonlyMap<string, Station>
 
 type HopCounts = ReadonlyMap<number, number>;
 
-// A station-pair hop count is keyed by `unorderedPairKey` of the two station numbers (a hop counts both directions).
+/** A directed reference weight between two stations: how many file-level `references` run from → to. */
+export interface StationWeight { from: string; to: string; weight: number }
 
+// A station-pair hop count is keyed by `unorderedPairKey` of the two station numbers (a hop counts both directions); the
+// directed weights (the transition table's input, PRD 38 P7) by `pairKey` of the same numbers, in the same pass.
 
-const hopCountsMemo = new WeakMap<readonly Pick<KEdge, 'from' | 'to' | 'kind'>[], { stationOf: StationModel['stationOf']; counts: HopCounts; slots: ReadonlyMap<string, number> }>();
+interface HopCountsBuilt { stationOf: StationModel['stationOf']; counts: HopCounts; slots: ReadonlyMap<string, number>; weights: readonly StationWeight[] }
+
+const hopCountsMemo = new WeakMap<readonly Pick<KEdge, 'from' | 'to' | 'kind'>[], HopCountsBuilt>();
 
 /**
  * The `references` between every pair of stations, counted ONCE per edges array (and station map): a pinpoint then reads
- * each hop in O(1) instead of scanning every outline edge per hop.
+ * each hop in O(1) instead of scanning every outline edge per hop. `weights` keeps the direction (from → to).
  */
-function hopCountsOf(model: Pick<StationModel, 'stationOf'>, edges: readonly Pick<KEdge, 'from' | 'to' | 'kind'>[]): { counts: HopCounts; slots: ReadonlyMap<string, number> } {
+export function hopCountsOf(model: Pick<StationModel, 'stationOf'>, edges: readonly Pick<KEdge, 'from' | 'to' | 'kind'>[]): Omit<HopCountsBuilt, 'stationOf'> {
     const held = hopCountsMemo.get(edges);
     if (held && held.stationOf === model.stationOf) return held;
     const slots = new Map<string, number>();
-    const slotOf = (id: string): number => { let n = slots.get(id); if (n === undefined) { n = slots.size; slots.set(id, n); } return n; };
+    const ids: string[] = [];
+    const slotOf = (id: string): number => { let n = slots.get(id); if (n === undefined) { n = slots.size; slots.set(id, n); ids.push(id); } return n; };
     const counts = new Map<number, number>();
+    const directed = new Map<number, number>();
     for (const e of edges) {
         if (e.kind !== 'references') continue;
         const from = stationOfRef(model, e.from);
         if (from === undefined) continue;
         const to = stationOfRef(model, e.to);
         if (to === undefined || from === to) continue;
-        const key = unorderedPairKey(slotOf(from), slotOf(to));
+        const a = slotOf(from), b = slotOf(to);
+        const key = unorderedPairKey(a, b);
         counts.set(key, (counts.get(key) ?? 0) + 1);
+        const dkey = pairKey(a, b);
+        directed.set(dkey, (directed.get(dkey) ?? 0) + 1);
     }
-    const built = { stationOf: model.stationOf, counts, slots };
+    const weights = [...directed].map(([key, weight]) => ({ from: ids[Math.floor(key / PAIR_SPAN)]!, to: ids[key % PAIR_SPAN]!, weight }));
+    const built = { stationOf: model.stationOf, counts, slots, weights };
     hopCountsMemo.set(edges, built);
     return built;
 }

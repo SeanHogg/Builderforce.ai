@@ -13,7 +13,7 @@
  * only dangerous in context is MEDIUM (informs, never holds a merge).
  */
 import { DEFAULT_SECRET_PATTERNS, redactText } from '@builderforce/secret-redaction';
-import type { FindingSeverity, NormalizedFinding } from './scanReportParsers';
+import type { FindingSeverity, NormalizedFinding } from '@builderforce/sarif';
 
 export type DiffScanKind = 'secret' | 'sast';
 

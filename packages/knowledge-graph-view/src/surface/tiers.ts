@@ -1,12 +1,10 @@
 /**
  * The N-tier reading of the stations: one row per layer (entry to infrastructure, then
- * "other"), the stations of a row busiest first. The System camera draws the rows as cards,
- * the Heat camera as cells; both read this one grouping. Also the two small readings a card
- * carries: its findings by kind. (The data / external termini come from `transit/termini`, the
- * model the transit map draws, so the two cameras cannot disagree.)
+ * "other"), the stations of a row busiest first. The System and Heat placements both read
+ * this one grouping. (The data / external termini come from `transit/termini`, the model the
+ * Map draws, so the cameras cannot disagree.)
  */
 
-import type { Finding } from '@seanhogg/builderforce-memory/knowledge';
 import { cmp } from '../order';
 import { LAYER_ORDER } from './layers';
 import type { Station } from './stations';
@@ -23,16 +21,4 @@ export function buildTiers(stations: readonly Station[]): Tier[] {
     return [...LAYER_ORDER, OTHER_LAYER]
         .filter((layer) => rows.has(layer))
         .map((layer) => ({ layer, stations: rows.get(layer)!.sort((a, b) => b.use - a.use || cmp(a.name, b.name) || cmp(a.id, b.id)) }));
-}
-
-export interface KindCount { kind: string; count: number }
-
-/** The station's findings counted by kind, most first (ties by kind). */
-export function findingKinds(station: Pick<Station, 'findingIds'>, findings: ReadonlyMap<string, Finding>): KindCount[] {
-    const counts = new Map<string, number>();
-    for (const id of station.findingIds) {
-        const f = findings.get(id);
-        if (f) counts.set(f.kind, (counts.get(f.kind) ?? 0) + 1);
-    }
-    return [...counts].map(([kind, count]) => ({ kind, count })).sort((a, b) => b.count - a.count || cmp(a.kind, b.kind));
 }
