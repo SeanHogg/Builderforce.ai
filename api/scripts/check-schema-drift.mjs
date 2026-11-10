@@ -121,6 +121,9 @@ function recordColumns(table, sqlBlock) {
   // "ADD COLUMN [IF NOT EXISTS]" so the multi-action ALTER form parses too.
   for (let part of splitTopLevel(sqlBlock)) {
     part = part.trim().replace(/^ADD COLUMN(?:\s+IF NOT EXISTS)?\s+/i, '');
+    // A quoted identifier ("check") is always a column, never a constraint keyword.
+    const quoted = part.match(/^"([a-z_][a-z_0-9]*)"/i);
+    if (quoted) { cols.add(quoted[1].toLowerCase()); continue; }
     const m = part.match(/^([a-z_][a-z_0-9]*)/i);
     if (m && !isTableConstraint(m[1].toLowerCase(), part.slice(m[1].length))) {
       cols.add(m[1].toLowerCase());
