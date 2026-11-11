@@ -50,6 +50,12 @@ export interface StageRenderer {
     keys(): readonly string[];
     /** Told whenever {@link keys} changes (a new MarkSet, an append). Returns the unsubscribe. */
     onKeys(cb: () => void): () => void;
+    /**
+     * Told when the renderer needs a frame that no input asked for — troika finished typesetting the labels after the
+     * placement landed (the stage draws on demand, so without it a name typeset after the last frame never shows).
+     * Returns the unsubscribe.
+     */
+    onRedraw(cb: () => void): () => void;
     /** Label runs the SDF pass handed to the DOM caption layer (a glyph outside the font, or no host font). */
     readonly labelCaptions: readonly Caption[];
     setMarks(set: MarkSet): void;
@@ -110,7 +116,8 @@ export function createWebGLStage(options: WebGLStageOptions = {}): StageRenderer
     const marksLayer = new MarkLayer(stats, uniforms);
     const links = new LinkLayer(stats, { uPxPerWorld: uniforms.uPxPerWorld, uDpr: uniforms.uDpr, uPalette: uniforms.uPalette, uBg: uniforms.uBg });
     const planes = new PlaneLayer(stats, uniforms.uPalette);
-    const notify = (): void => options.onChange?.();
+    const redraw = new Set<() => void>();
+    const notify = (): void => { options.onChange?.(); for (const cb of redraw) cb(); };
     const labels = new LabelLayer((options.text ?? troikaTextPort)(notify), options.fonts ?? documentFontPort());
     const root = new Group();
     root.add(planes.group, links.group, marksLayer.group);
@@ -146,6 +153,7 @@ export function createWebGLStage(options: WebGLStageOptions = {}): StageRenderer
         get labelCaptions() { return labels.domCaptions; },
         keys: () => live.get(),
         onKeys: (cb) => live.on(cb),
+        onRedraw(cb) { redraw.add(cb); return () => { redraw.delete(cb); }; },
         setMarks(set) { base = set; runs = []; marks = set; marksLayer.setMarks(set); placement = null; appended.reset(); overlay.follow(null); live.reset(set.keys); },
         setPaint(next) { paint = next; marksLayer.setPaint(next); pulsing = hasPulse(next); },
         get overlay() { return overlayState; },
@@ -243,6 +251,7 @@ export function createNoopStage(): StageRenderer {
         get placement() { return placement; },
         keys: () => live.get(),
         onKeys: (cb) => live.on(cb),
+        onRedraw: () => () => {},
         // Nothing draws without WebGL (B8: such a host shows the List camera), so no label is routed anywhere.
         labelCaptions: [],
         get overlay() { return overlayState; },

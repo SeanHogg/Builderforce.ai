@@ -9,6 +9,7 @@
 
 import type { KnowledgeGraphLabels } from '../labels';
 import { kindLabel } from '../names';
+import { cssVar } from '../scene/themeColors';
 import { typeLegendKey, typeShape, type MarkType } from '../shapes';
 import { list, muted } from '../styles';
 import { ShapeGlyph } from './LegendGlyph';
@@ -37,8 +38,8 @@ export function ShapeLegend({ types, labels, describe = false, present }: ShapeL
                             <span style={{ paddingTop: 2 }}><ShapeGlyph shape={typeShape(t)} /></span>
                             <span style={{ display: 'grid', gap: 1, minWidth: 0 }}>
                                 <span style={{ display: 'flex', flexWrap: 'wrap', gap: '0 8px', alignItems: 'baseline' }}>
-                                    <span data-type-name>{kindLabel(labels, typeLegendKey(t))}</span>
-                                    {shown.has(t) && <span data-on-screen style={{ ...TYPE.tag }}>{kindLabel(labels, 'onScreen')}</span>}
+                                    <span data-type-name style={{ ...TYPE.body, color: cssVar('text') }}>{kindLabel(labels, typeLegendKey(t))}</span>
+                                    {shown.has(t) && <span data-on-screen style={{ ...TYPE.tag, color: cssVar('accent') }}>{kindLabel(labels, 'onScreen')}</span>}
                                 </span>
                                 <span style={{ ...muted, overflowWrap: 'anywhere' }}>{kindLabel(labels, `${typeLegendKey(t)}Meaning`)}</span>
                             </span>

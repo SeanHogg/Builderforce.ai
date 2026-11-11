@@ -31,6 +31,24 @@ export interface SurfaceLayout {
     panelsMenu: boolean;
 }
 
+/** The least a stacked scene draws in, CSS px, and its share of the viewport's height when that is more. */
+export const SCENE_MIN_PX = 320;
+export const SCENE_STACKED_VH = 60;
+/** The overlay's fallback height before `SceneOverlay` publishes `--kg-scene-top` (the scene box's own `top`). */
+export const SCENE_TOP_FALLBACK = '88px';
+
+/**
+ * The scene region's `min-height`. Side by side (no `actBelow`) the row's flex gives it the height. Stacked, the region
+ * sizes itself: its DRAWING box (below the floating overlay, which a non-phone layout lays over the region's top) must
+ * get at least {@link SCENE_MIN_PX} or {@link SCENE_STACKED_VH} of the viewport — reserving only 320px for overlay AND
+ * scene left a ~230px strip, and the stage overflowed it.
+ */
+export function sceneMinHeight(l: SurfaceLayout): number | string {
+    if (!l.actBelow) return 0;
+    const draw = `max(${SCENE_MIN_PX}px, ${SCENE_STACKED_VH}vh)`;
+    return l.phone ? draw : `calc(${draw} + var(--kg-scene-top, ${SCENE_TOP_FALLBACK}))`;
+}
+
 /** `width` 0 (not measured yet) reads as the full layout. */
 export function layoutOf(width: number): SurfaceLayout {
     const known = width > 0;

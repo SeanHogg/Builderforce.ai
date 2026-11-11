@@ -32,6 +32,8 @@ export interface CameraBarProps {
     stacked?: boolean | undefined;
     /** The panel show/hide toggles, before the zoom buttons. */
     panelToggles?: ReactNode;
+    /** The Legend button: next to the panel toggles, outside the sideways scroller so its popover is not clipped. */
+    legend?: ReactNode;
 }
 
 export const zoomButton: CSSProperties = {
@@ -51,7 +53,7 @@ function ZoomButtons({ labels, zoom }: { labels: KnowledgeGraphLabels; zoom: Zoo
     );
 }
 
-export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, zoom, tools, stacked = false, panelToggles }: CameraBarProps) {
+export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, zoom, tools, stacked = false, panelToggles, legend }: CameraBarProps) {
     // One line, never wrapped: the scene sits below a MEASURED controls block (`SceneOverlay`), so a bar that wrapped
     // would only grow it. The View group is what scrolls sideways when the row is too narrow.
     return (
@@ -68,6 +70,7 @@ export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, zoom, t
                 {tools && !stacked && <div data-testid="kg-scene-tools" style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flex: 'none', pointerEvents: 'auto' }}>{tools}</div>}
                 {/* The Sequence camera has no button in the View group (the path strip's Enlarge opens it): this is its way back. */}
                 {mode === 'sequence' && <button type="button" data-back-to-map style={zoomButton} onClick={() => onMode('transit')}>{labels.surface.sequence.backToMap}</button>}
+                {legend && <div data-testid="kg-legend-slot" style={{ display: 'inline-flex', flex: 'none', pointerEvents: 'auto' }}>{legend}</div>}
                 {/* No popovers here, so it may scroll sideways when the container is narrow. */}
                 <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flex: '0 1 auto', minWidth: 0, overflowX: 'auto', pointerEvents: 'auto' }}>
                     {outTo && onOut && (

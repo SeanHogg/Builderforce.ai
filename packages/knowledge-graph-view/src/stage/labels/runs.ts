@@ -60,18 +60,21 @@ export function placeLabels(
     const sdf: PlacedLabel[] = [], dom: Caption[] = [];
     for (const r of shown) {
         const unit = r.scale === 'world' ? 1 : 1 / px;
+        // A world run grows with the zoom but never draws under its nominal size in CSS px: zoomed out on a wide Map or
+        // Mind map (≪ 1 px per unit) its names would otherwise shrink to a few px — drawn, but unreadable. Offsets stay world.
+        const textUnit = r.scale === 'world' ? Math.max(1, 1 / px) : unit;
         const x = p.position[r.slot * 3]! + (r.offsetWorld?.[0] ?? 0) + r.offsetPx[0] * unit;
         const y = (p.extrude[r.slot] ?? 0) * view.depth + LIFT;
         const z = p.position[r.slot * 3 + 2]! + (r.offsetWorld?.[1] ?? 0) + r.offsetPx[1] * unit;
         if (!sdfAvailable || !monoCovers(r.text) || (r.note && !monoCovers(r.note.text))) {
             dom.push({ text: r.text, position: [x, y, z], anchor: r.anchor, tone: r.tone, font: 'mono' });
-            if (r.note) dom.push({ text: r.note.text, position: [x, y, z + r.size * LINE_GAP * unit], anchor: r.anchor, tone: r.note.tone, font: 'mono' });
+            if (r.note) dom.push({ text: r.note.text, position: [x, y, z + r.size * LINE_GAP * textUnit], anchor: r.anchor, tone: r.note.tone, font: 'mono' });
             continue;
         }
-        const fontSize = r.size * unit;
+        const fontSize = r.size * textUnit;
         sdf.push({
             id: `${r.slot}:${r.text}`, slot: r.slot, text: r.text, position: [x, y, z], fontSize,
-            outlineWidth: r.halo.px * unit, anchorX: ANCHOR_X[r.anchor], weight: r.weight, tone: r.tone, haloTone: r.halo.tone, priority: r.priority,
+            outlineWidth: r.halo.px * textUnit, anchorX: ANCHOR_X[r.anchor], weight: r.weight, tone: r.tone, haloTone: r.halo.tone, priority: r.priority,
             ...(r.note ? { note: { text: r.note.text, tone: r.note.tone, position: [x, y, z + fontSize * LINE_GAP] as [number, number, number], fontSize: fontSize * NOTE_RATIO } } : {}),
         });
     }

@@ -97,6 +97,8 @@ function StageScene({ renderer, rig, inputs, captions, canvasLabel, onContextLos
     const persp = useMemo(() => new PerspectiveCamera(35, 1, 1, 1e6), []);
     useRendererInputs(renderer, inputs, invalidate);
     useEffect(() => rig.subscribe(invalidate), [rig, invalidate]);
+    // Labels typeset after the last frame (troika is async) need one more frame: the canvas draws on demand.
+    useEffect(() => renderer.onRedraw(invalidate), [renderer, invalidate]);
     const giveUp = useRef(onContextLost);
     giveUp.current = onContextLost;
     useEffect(() => bindContextLoss(gl.domElement, renderer, invalidate, () => giveUp.current?.()), [gl, renderer, invalidate]);
@@ -218,7 +220,7 @@ export function Stage(p: StageProps) {
         <StageBusContext.Provider value={bus}>
             {/* `overflow: clip` (not hidden): it clips without becoming a scroll container, so the sticky depth control
                 sticks to the page's viewport on a tall document frame. */}
-            <div ref={box} style={{ position: 'relative', width, height, overflow: 'clip', touchAction: touchActionFor(frame) }} data-stage={renderer.kind} data-stage-frame={frame} data-stage-ready={placement ? 'true' : 'false'}>
+            <div ref={box} style={{ position: 'relative', display: 'flow-root', width, height, overflow: 'clip', touchAction: touchActionFor(frame) }} data-stage={renderer.kind} data-stage-frame={frame} data-stage-ready={placement ? 'true' : 'false'}>
                 {renderer.kind === 'webgl'
                     ? (
                         <Canvas orthographic frameloop="demand" dpr={[1, 2]} gl={{ antialias: false, alpha: true }} style={{ position: 'absolute', inset: 0 }}>

@@ -42,7 +42,9 @@ export interface StageHostProps extends SceneProps {
 }
 
 const NO_CHANGES: string[] = [];
-const BOX = { position: 'relative', width: '100%', height: '100%', minHeight: 320 } as const;
+// Exactly its scene box (the layout gives that box its minimum, `sceneMinHeight`): a floor here made the stage taller
+// than the box, so a fill camera scrolled inside it and drew only the strip on screen.
+const BOX = { position: 'relative', width: '100%', height: '100%' } as const;
 const UNMEASURED = { width: 960, height: 600 } as const;
 
 export default function StageHost({ fallback: Fallback, ...p }: StageHostProps) {

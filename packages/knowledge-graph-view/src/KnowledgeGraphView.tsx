@@ -29,7 +29,7 @@ import { isSmall } from './compute/size';
 import type { VisibleGraph } from './graphModel';
 import { useStableGraph } from './stableGraph';
 import { useContainerWidth, useRenderEnvironment } from './environment';
-import { layoutOf } from './layout';
+import { layoutOf, sceneMinHeight, SCENE_TOP_FALLBACK } from './layout';
 import type { Revision } from './revision';
 import { useReviewTargets } from './ReviewLauncher';
 import { ViewSurface } from './ViewSurface';
@@ -65,6 +65,7 @@ import { SurfaceHeader } from './surface/SurfaceHeader';
 import { TimeSlider, useHistory } from './surface/TimeSlider';
 import { SceneTools } from './surface/SceneTools';
 import { PanelVisibilityToggles } from './surface/PanelVisibilityToggles';
+import { LegendButton } from './surface/LegendButton';
 import { usePanelVisibility } from './surface/usePanelVisibility';
 import { Pill } from './surface/ui';
 import { questionForLens } from './surface/questions';
@@ -237,6 +238,7 @@ export function KnowledgeGraphView({
             {...chrome.overlayProps}
             tools={real ? <SceneTools graph={graph} env={surfaceEnv} labels={labels} surface={surface} panel={panel} onPanel={setPanel} panelsMenu={layout.panelsMenu} narrow={layout.phone} /> : undefined}
             panelToggles={<PanelVisibilityToggles labels={labels} visibility={panels.visibility} onToggle={panels.toggle} available={{ left: hasLines && !layout.phone, bottom: hasLines, right: !!real }} />}
+            legend={real ? <LegendButton labels={labels} present={legendExtras.types} preset={surface.preset} /> : undefined}
             time={<TimeSlider commits={history.commits} capped={history.total} picked={picked} labels={labels} changedStations={changedStations} onPick={(sha) => { setPicked(sha); if (sha) pickQuestion('changed'); }} />}
         />
     );
@@ -260,9 +262,9 @@ export function KnowledgeGraphView({
                     {showLeft && !layout.linesStacked && linesPanel(true)}
                     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                         {layout.phone && overlay}
-                        <div style={{ position: 'relative', flex: 1, minHeight: layout.actBelow ? 320 : 0 }}>
+                        <div style={{ position: 'relative', flex: 1, minHeight: sceneMinHeight(layout) }}>
                             {/* Below the floating controls in every camera: `--kg-scene-top` is the measured height `SceneOverlay` publishes on this box (a phone stacks them in flow, so 0). */}
-                            <div data-testid="kg-scene-box" style={{ position: 'absolute', top: layout.phone ? 0 : 'var(--kg-scene-top, 88px)', right: 0, bottom: 0, left: 0, overflow: 'auto' }}>
+                            <div data-testid="kg-scene-box" style={{ position: 'absolute', top: layout.phone ? 0 : `var(--kg-scene-top, ${SCENE_TOP_FALLBACK})`, right: 0, bottom: 0, left: 0, overflow: 'auto' }}>
                                 {real ? (
                                     <ZoomProvider host={zoom}>
                                         <ViewSurface

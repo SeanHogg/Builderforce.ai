@@ -2,6 +2,13 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.156] — The knowledge view draws where you look
+
+- **The picture fills the view at any width.** The map, the graph and 3D are sized to the panel you give them, including a narrow editor beside Source Control. No blank bands or cut-off pictures.
+- **Fit brings the whole picture back** instead of pushing it off screen.
+- **Move through 3D.** Pan, tilt, rotate and zoom controls sit in the bottom-right corner, so you can travel up and down a tall stack.
+- **See what every shape means.** A Legend button lists every shape, line style and colour, and the same shapes are used in every view.
+
 ## [2026.10.140] — One folder, many systems; reviews map in minutes; sync sends one small pack
 
 - **A folder of many systems reads as many systems.** Each repository or project in the folder is its own system. Lines are grouped by system and shared out fairly, and the header starts at the system you are in. There is no file-count cap.
