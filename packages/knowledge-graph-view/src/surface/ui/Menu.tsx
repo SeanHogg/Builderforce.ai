@@ -32,6 +32,10 @@ interface MenuBase {
     panelStyle?: CSSProperties;
     /** `pill` (default) is the compact toggle look; `accent` is the 40px accent-soft button with an accent border (Risk overlays). */
     variant?: 'pill' | 'accent';
+    /** Replaces the variant's trigger look (an icon-only trigger drawn like the camera bar's tool buttons). */
+    triggerStyle?: CSSProperties;
+    /** The trigger's accessible name, for a trigger whose visible content is an icon. */
+    triggerLabel?: string;
     /** Arrive open. An items menu moves focus to its entry item, so the first enabled (or selected) action is focused. */
     defaultOpen?: boolean;
     /**
@@ -144,8 +148,8 @@ export function Menu(props: MenuProps) {
     return (
         <div ref={root} style={{ position: container ? 'static' : 'relative', flex: 'none' }} onKeyDown={onKeyDown} onBlur={onBlur}>
             <button
-                ref={button} type="button" title={title} aria-haspopup={props.items ? 'menu' : 'dialog'} aria-expanded={open} aria-controls={open ? panelId : undefined}
-                style={props.variant === 'accent' ? accentStyle(open) : pillStyle(active || open)} onClick={() => setOpen((v) => !v)}
+                ref={button} type="button" title={title} aria-label={props.triggerLabel} aria-haspopup={props.items ? 'menu' : 'dialog'} aria-expanded={open} aria-controls={open ? panelId : undefined}
+                style={props.triggerStyle ?? (props.variant === 'accent' ? accentStyle(open) : pillStyle(active || open))} onClick={() => setOpen((v) => !v)}
             >
                 {trigger}
             </button>

@@ -1,4 +1,4 @@
-import{w as U}from"./index.js";const v={dim:64,order:4,channels:16,maxHistory:50},M=`
+import{t as U}from"./index.js";const v={dim:64,order:4,channels:16,maxHistory:50},M=`
 struct MambaParams {
   dim: u32,
   order: u32,
