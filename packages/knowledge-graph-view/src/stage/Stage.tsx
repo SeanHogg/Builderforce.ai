@@ -13,7 +13,7 @@
  * drei stays out of the stage (B3): the camera is the canvas's own orthographic one, posed by the rig every frame.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { PerspectiveCamera, type OrthographicCamera } from 'three';
 import type { ThemeColors } from '../scene/themeColors';
@@ -27,10 +27,12 @@ import { documentHeight } from './projection';
 import type { StageRenderer, StageView } from './renderer';
 import { aimCamera } from './rig/aim';
 import { DepthControl } from './rig/DepthControl';
+import { NavControl, type NavLabels } from './rig/NavControl';
+import { StageCorner } from './rig/StageCorner';
 import { bindOrbitKeys, touchActionFor } from './rig/gestures';
 import type { RigController } from './rig/rig';
 import { bindRig } from './rig/rigOfBus';
-import { useRig } from './rig/useRig';
+import { panZoomOf, useRig } from './rig/useRig';
 import { useDepth, useLiveKeys, useStageMotion, useTweening } from './stageHooks';
 import { now, TWEEN_MS } from './tween';
 import type { Caption, MarkPaint, MarkSet, Placement } from './types';
@@ -50,6 +52,8 @@ export interface StageProps {
     onSelect(key: string): void;
     /** The depth control's label (`surface.scene.depth`), localized by the host. */
     depthLabel: string;
+    /** The nav control's names (localized by the host); absent ⇒ no nav control. */
+    nav?: NavLabels;
     /** What the view shows, read with the proxies' group. */
     description?: string;
     /** Escape / Backspace on a proxy: out of a drilled level. */
@@ -85,12 +89,19 @@ interface SceneProps { renderer: StageRenderer; rig: RigController; inputs: Inpu
 /** A matrix no real transform equals: the first frame always writes. */
 const unwritten = (): Affine2 => ({ a: NaN, b: NaN, c: NaN, d: NaN, e: NaN, f: NaN });
 
-function StageScene({ renderer, rig, inputs, captions, canvasLabel, onContextLost }: SceneProps & { canvasLabel: string }) {
+function StageScene({ renderer, rig, inputs, captions, canvasLabel, onContextLost, width, height }: SceneProps & { canvasLabel: string; width: number; height: number }) {
     const invalidate = useThree((s) => s.invalidate);
     const gl = useThree((s) => s.gl);
     const set = useThree((s) => s.set);
     const get = useThree((s) => s.get);
     const size = useThree((s) => s.size);
+    const setSize = useThree((s) => s.setSize);
+    // ONE size: the canvas draws at the stage box the rig, the captions and picking project into. R3F measures its own
+    // container with a ResizeObserver, which can lag a box that just grew (a fill camera on a stacked layout) — the
+    // drawing then covered only the old height and the rest of the box stayed blank.
+    useLayoutEffect(() => {
+        if (width > 0 && height > 0 && (size.width !== width || size.height !== height)) setSize(width, height);
+    }, [width, height, size.width, size.height, setSize]);
     // The canvas's own orthographic camera for ground views, ONE perspective camera for orbit (and cross-projection
     // tweens); the rig says which, and the frame loop swaps the store's camera when it changes.
     const ortho = useRef(get().camera as OrthographicCamera).current;
@@ -123,7 +134,7 @@ function StageScene({ renderer, rig, inputs, captions, canvasLabel, onContextLos
         const t = now();
         const rigMoving = rig.tick(t);
         const pose = rig.pose();
-        const camera = aimCamera(pose, rig.currentOrbit.distance, ortho, persp, size);
+        const camera = aimCamera(pose, rig.currentOrbit.distance, ortho, persp, rig);
         if (get().camera !== camera) set({ camera });
         scratch.view.pxPerWorld = rig.pxPerWorld; scratch.view.dpr = gl.getPixelRatio();
         renderer.setView(scratch.view);
@@ -188,6 +199,7 @@ export function Stage(p: StageProps) {
     }, [renderer, bus, dpr]);
     const rig = useRig(placement, width, height, p.reducedMotion, box, settle);
     rigRef.current = rig;
+    const panZoom = useMemo(() => panZoomOf(rig, p.reducedMotion, settle), [rig, p.reducedMotion, settle]);
     // The semantic zoom (outside this component) flies and reads the same rig through the bus.
     useEffect(() => bindRig(bus, rig), [bus, rig]);
     const { depth, setDepth } = useDepth(renderer, rig, bus);
@@ -224,14 +236,19 @@ export function Stage(p: StageProps) {
                 {renderer.kind === 'webgl'
                     ? (
                         <Canvas orthographic frameloop="demand" dpr={[1, 2]} gl={{ antialias: false, alpha: true }} style={{ position: 'absolute', inset: 0 }}>
-                            <StageScene {...scene} canvasLabel={p.description ?? p.depthLabel} />
+                            <StageScene {...scene} canvasLabel={p.description ?? p.depthLabel} width={width} height={height} />
                             <StageFrameTap bus={bus} />
                         </Canvas>
                     )
                     : <NoCanvas {...scene} bus={bus} />}
                 {placement && <CaptionLayer ref={captions} captions={placement.captions} names={names} hidden={tweening} />}
                 {placement && <StageInteraction bus={bus} renderer={renderer} keys={keys} placement={placement} tweening={tweening} selected={p.selected} description={p.description} onSelect={p.onSelect} onOut={p.onOut} />}
-                {placement && !placement.rig.view && tiltMax > tiltMin && <DepthControl label={p.depthLabel} value={depth} boxHeight={height} onChange={dragDepth} />}
+                {placement && (
+                    <StageCorner boxHeight={height}>
+                        {p.nav && <NavControl rig={rig} panZoom={panZoom} labels={p.nav} onSettle={settle} />}
+                        {!placement.rig.view && tiltMax > tiltMin && <DepthControl label={p.depthLabel} value={depth} onChange={dragDepth} />}
+                    </StageCorner>
+                )}
             </div>
         </StageBusContext.Provider>
     );

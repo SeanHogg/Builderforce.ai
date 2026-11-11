@@ -16,6 +16,11 @@ export interface SceneLabels {
      * the host cut the range short (`{count}` lines shown).
      */
     code: Record<'aria' | 'loading' | 'unavailable' | 'truncated', string>;
+    /**
+     * The stage's navigation control (bottom-right): its group name, the pan pad (on 3D, up / down move through the
+     * plane stack) and the orbit buttons shown on the 3D camera. Zoom in / out and Fit reuse `zoomIn`, `zoomOut`, `zoomReset`.
+     */
+    nav: Record<'group' | 'panUp' | 'panDown' | 'panLeft' | 'panRight' | 'rotateLeft' | 'rotateRight' | 'tiltUp' | 'tiltDown', string>;
 }
 
 export const SCENE_DEFAULTS: SceneLabels = {
@@ -47,5 +52,16 @@ export const SCENE_DEFAULTS: SceneLabels = {
         loading: 'Reading the code…',
         unavailable: 'The code is not available here.',
         truncated: 'Showing the first {count} lines',
+    },
+    nav: {
+        group: 'Move the view',
+        panUp: 'Move up',
+        panDown: 'Move down',
+        panLeft: 'Move left',
+        panRight: 'Move right',
+        rotateLeft: 'Rotate left',
+        rotateRight: 'Rotate right',
+        tiltUp: 'Tilt up',
+        tiltDown: 'Tilt down',
     },
 };

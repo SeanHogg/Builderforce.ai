@@ -109,6 +109,7 @@ function StageBody({ renderer, onLost, camera, ...p }: SceneProps & { camera: Pl
     const bus = useMemo(() => stageBus(renderer), [renderer]);
 
     const zoom = labels.surface.zoom;
+    const nav = useMemo(() => ({ nav: labels.surface.nav, zoomIn: labels.zoomIn, zoomOut: labels.zoomOut, zoomReset: labels.zoomReset }), [labels]);
     const drill = surface.drill;
     const levelNote = camera !== 'map' ? null
         : drill.notice ? fillTemplate(labels.surface.map.drillReset, { name: drill.notice }) : drill.view?.noSymbols ? labels.surface.map.noSymbolsNote : null;
@@ -129,7 +130,7 @@ function StageBody({ renderer, onLost, camera, ...p }: SceneProps & { camera: Pl
                 <Stage
                     renderer={renderer} marks={marks} paint={paint} placement={placement ?? null} colors={colors}
                     width={width} height={height} reducedMotion={p.reducedMotion} selected={selected} onSelect={wiring.onSelect}
-                    depthLabel={labels.surface.scene.depth} description={labels.regionLabel} {...(wiring.onOut ? { onOut: wiring.onOut } : {})}
+                    depthLabel={labels.surface.scene.depth} nav={nav} description={labels.regionLabel} {...(wiring.onOut ? { onOut: wiring.onOut } : {})}
                     {...(camera === 'map' ? { tilt: surface.towers ? 1 : 0, onTilt } : {})} onContextLost={onLost}
                 />
             )}

@@ -38284,6 +38284,17 @@
         "errorBack": "Back",
         "depth": "Depth"
       },
+      "nav": {
+        "group": "Move the view",
+        "panUp": "Move up",
+        "panDown": "Move down",
+        "panLeft": "Move left",
+        "panRight": "Move right",
+        "rotateLeft": "Rotate left",
+        "rotateRight": "Rotate right",
+        "tiltUp": "Tilt up",
+        "tiltDown": "Tilt down"
+      },
       "mind": {
         "moreFoldersOne": "+{count} folder",
         "moreFoldersOther": "+{count} folders",

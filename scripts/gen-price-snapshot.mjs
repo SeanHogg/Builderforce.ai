@@ -11,12 +11,17 @@
  *
  *   node scripts/gen-price-snapshot.mjs           regenerate (keeps the old file if offline)
  *   node scripts/gen-price-snapshot.mjs --strict  fail when the catalog cannot be read
+ *   FORCE_PRICE_SNAPSHOT=1 node scripts/...       refresh even when the snapshot is fresh
  *
  * Run by the extension's `vscode:prepublish`, so every release ships the prices of its
- * own day. Long-context tiers are NOT written here: the snapshot's book attaches them on
- * read (`withPriceTiers`), from the one tier table in `priceTiers.ts`.
+ * own day. A snapshot whose OWN timestamp (`PRICE_SNAPSHOT_AT`, not the file's mtime — a
+ * fresh checkout touches every file) is under 24h old is kept without a fetch, so repeat
+ * local packaging does not hit the network; `--strict` and `FORCE_PRICE_SNAPSHOT=1` always
+ * fetch. The fetch gives up after {@link FETCH_TIMEOUT_MS} and keeps the existing snapshot,
+ * exactly like being offline. Long-context tiers are NOT written here: the snapshot's book
+ * attaches them on read (`withPriceTiers`), from the one tier table in `priceTiers.ts`.
  */
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -24,6 +29,17 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const outFile = join(repoRoot, 'packages', 'model-catalog', 'src', 'generated', 'priceSnapshot.ts');
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const strict = process.argv.includes('--strict');
+const force = strict || process.env.FORCE_PRICE_SNAPSHOT === '1';
+const FRESH_FOR_MS = 24 * 60 * 60 * 1000;
+const FETCH_TIMEOUT_MS = 5000;
+
+/** When the snapshot in the tree was generated (its `PRICE_SNAPSHOT_AT`), or null. */
+function snapshotTakenAt() {
+  if (!existsSync(outFile)) return null;
+  const match = /PRICE_SNAPSHOT_AT = "([^"]+)"/.exec(readFileSync(outFile, 'utf8'));
+  const at = match ? Date.parse(match[1]) : Number.NaN;
+  return Number.isFinite(at) ? at : null;
+}
 
 /** An OpenRouter pricing string → a finite, non-negative number (0 when absent). The
  *  same coercion the api's catalog normalizer applies. */
@@ -35,7 +51,8 @@ function num(value) {
 async function readCatalog() {
   const headers = { accept: 'application/json' };
   if (process.env.OPENROUTER_API_KEY) headers.authorization = `Bearer ${process.env.OPENROUTER_API_KEY}`;
-  const res = await fetch(OPENROUTER_MODELS_URL, { headers });
+  // One deadline for the request AND the body: a stalled response must not hang the build.
+  const res = await fetch(OPENROUTER_MODELS_URL, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`OpenRouter models request failed (${res.status})`);
   const json = await res.json();
   const rows = [];
@@ -61,6 +78,12 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
 ${lines.join('\n')}
 };
 `;
+}
+
+const takenAt = snapshotTakenAt();
+if (!force && takenAt !== null && Date.now() - takenAt < FRESH_FOR_MS) {
+  console.log(`price snapshot: taken ${new Date(takenAt).toISOString()} (under 24h) — keeping it; FORCE_PRICE_SNAPSHOT=1 refreshes`);
+  process.exit(0);
 }
 
 try {

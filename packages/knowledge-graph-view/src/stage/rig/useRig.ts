@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useMemo, useRef, type RefObject } from 'react';
-import { usePanZoomRegistration } from '../../surface/zoom';
+import { usePanZoomRegistration, type PanZoom } from '../../surface/zoom';
 import { ZOOM_STEP_FIELDS } from '../../compute/tasks/placement/request';
 import { fitView } from '../projection';
 import { now, TWEEN_MS } from '../tween';
@@ -37,6 +37,14 @@ export function isZoomStep(prev: string, next: string): boolean {
     return a.every((field, i) => field === b[i] || ZOOM_STEP_FIELDS.includes(i));
 }
 
+/** +, − and Fit on the rig — the ONE implementation the overlay's buttons and the stage's nav control both call. */
+export function panZoomOf(rig: RigController, reducedMotion: boolean, settle: () => void): PanZoom {
+    return {
+        zoomBy: (factor: number) => { rig.zoomBy(factor); settle(); },
+        reset: () => { rig.fit(now(), reducedMotion ? 0 : TWEEN_MS); settle(); },
+    };
+}
+
 export function useRig(placement: Placement | null, width: number, height: number, reducedMotion: boolean, box: RefObject<HTMLElement | null>, onSettle: () => void): RigController {
     const rig = useMemo(() => new RigController(), []);
     const homed = useRef<string | null>(null);
@@ -58,10 +66,7 @@ export function useRig(placement: Placement | null, width: number, height: numbe
         rig.setHome(home, placement.rig, width, height, now(), first || reducedMotion ? 0 : TWEEN_MS);
     }, [rig, placement, width, height]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    usePanZoomRegistration({
-        zoomBy: (factor: number) => { rig.zoomBy(factor); settle.current(); },
-        reset: () => { rig.fit(now(), reducedMotion ? 0 : TWEEN_MS); settle.current(); },
-    });
+    usePanZoomRegistration(panZoomOf(rig, reducedMotion, () => settle.current()));
 
     useEffect(() => {
         const el = box.current;

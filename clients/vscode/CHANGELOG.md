@@ -2,6 +2,13 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.157] — Every view fills the panel, and names show
+
+- **Map, Graph and Mind map stay in view.** The picture starts at the top of the panel instead of being pushed a whole screen down, and Fit brings it back.
+- **Names appear.** Station and folder names now draw as soon as they are ready.
+- **Works in a narrow editor.** Beside Source Control, the scene keeps its full height and the controls wrap onto a second row, so Legend, + / − and Fit stay reachable.
+- **Move through the picture.** Pan, rotate, tilt, zoom and Fit buttons sit bottom-right in every view; in 3D, Up and Down travel through the stack. Shift+wheel or a trackpad scroll pans; the wheel zooms.
+
 ## [2026.10.156] — The knowledge view draws where you look
 
 - **The picture fills the view at any width.** The map, the graph and 3D are sized to the panel you give them, including a narrow editor beside Source Control. No blank bands or cut-off pictures.

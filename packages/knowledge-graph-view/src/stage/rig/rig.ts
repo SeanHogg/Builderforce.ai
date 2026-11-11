@@ -192,6 +192,21 @@ export class RigController {
         this.changed();
     }
 
+    /**
+     * Moves the view by a screen delta in CSS px WITHOUT rotating, the way a drag moves the content: on the ground a pan;
+     * in orbit the target slides along the camera's horizontal right (x) and the world's vertical (y) — so up / down
+     * travel through a 3D plane stack. The nav pad and the scroll wheel's pan use it.
+     */
+    slideBy(dx: number, dy: number): void {
+        if (this.kind !== 'orbit') { this.panBy(dx, dy); return; }
+        this.stop();
+        const k = 1 / Math.max(1e-6, this.pxPerWorld), yaw = (this.orbit.yaw * Math.PI) / 180;
+        const o = this.orbit;
+        this.orbit = { ...o, tx: o.tx - dx * k * Math.cos(yaw), tz: o.tz + dx * k * Math.sin(yaw), ty: o.ty + dy * k };
+        this.moved = true;
+        this.changed();
+    }
+
     /** Orbit by a screen delta in CSS px: yaw with x, pitch with y, pitch clamped to the placement's tilt range. */
     orbitBy(dx: number, dy: number): void {
         if (this.kind !== 'orbit') return;

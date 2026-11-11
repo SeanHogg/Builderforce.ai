@@ -5,6 +5,7 @@
  * - `document` frames (sized to content, the page scrolls): the plain wheel is NOT captured — the page scrolls as
  *   before — and zoom comes from +/−/Fit or Ctrl/⌘ + wheel (a trackpad pinch); a mouse drag pans, one finger scrolls
  *   the page (`touch-action: pan-x pan-y`), a pinch zooms.
+ * - On a `fill` frame Shift + wheel or a trackpad scroll pans instead ({@link wheelIntent}); in 3D it moves through the stack.
  * - Tilt is never a gesture: the depth control owns it, so it never collides with pinch or page scroll.
  *
  * A drag starts only past a few px, so a click still reaches the mark (proxy) under it, and the click that ends a drag
@@ -36,7 +37,23 @@ export function bindOrbitKeys(canvas: HTMLElement, rig: RigController, onSettle:
     return () => canvas.removeEventListener('keydown', keydown);
 }
 
-export const touchActionFor = (frame: CameraRig['frame']): string => (frame === 'fill' ? 'none' : 'pan-x pan-y');
+/** What a wheel event does: the page scrolls, the view zooms (dollies in orbit), or the view slides (pans). */
+export type WheelIntent = 'page' | 'zoom' | 'pan';
+
+/**
+ * A `document` frame leaves the plain wheel to the page (only Ctrl/⌘ + wheel — a trackpad pinch — zooms). A `fill`
+ * frame: Ctrl/⌘ zooms; Shift + wheel, or a trackpad's two-finger scroll (pixel deltas with a sideways part or a
+ * fractional step), pans — through a 3D stack, up and down; a plain mouse wheel zooms. Pure.
+ */
+export function wheelIntent(e: Pick<WheelEvent, 'ctrlKey' | 'metaKey' | 'shiftKey' | 'deltaMode' | 'deltaX' | 'deltaY'>, frame: CameraRig['frame']): WheelIntent {
+    if (e.ctrlKey || e.metaKey) return 'zoom';
+    if (frame !== 'fill') return 'page';
+    if (e.shiftKey) return 'pan';
+    const trackpad = e.deltaMode === 0 && (e.deltaX !== 0 || !Number.isInteger(e.deltaY));
+    return trackpad ? 'pan' : 'zoom';
+}
+
+export const touchActionFor =(frame: CameraRig['frame']): string => (frame === 'fill' ? 'none' : 'pan-x pan-y');
 
 export function bindGestures(el: HTMLElement, rig: RigController, frame: () => CameraRig['frame'], onSettle: () => void): () => void {
     const pointers = new Map<number, { x: number; y: number; type: string }>();
@@ -93,10 +110,17 @@ export function bindGestures(el: HTMLElement, rig: RigController, frame: () => C
     const wheel = (e: WheelEvent) => {
         // A document frame leaves the plain wheel to the page; Ctrl/⌘ + wheel (and a trackpad pinch, which the browser
         // sends as one) zooms it like a map, so the semantic zoom (B1a rule 9) reaches every band there too.
-        if (frame() !== 'fill' && !e.ctrlKey && !e.metaKey) return;
+        const intent = wheelIntent(e, frame());
+        if (intent === 'page') return;
         e.preventDefault();
-        const [sx, sy] = local(e);
-        rig.zoomBy(Math.exp(-e.deltaY * WHEEL_ZOOM), sx, sy);
+        if (intent === 'pan') {
+            // Shift + wheel: some systems turn the vertical wheel into deltaX; either way it is the slide's y.
+            const dy = e.shiftKey && e.deltaY === 0 ? e.deltaX : e.deltaY, dx = e.shiftKey ? 0 : e.deltaX;
+            rig.slideBy(-dx, -dy);
+        } else {
+            const [sx, sy] = local(e);
+            rig.zoomBy(Math.exp(-e.deltaY * WHEEL_ZOOM), sx, sy);
+        }
         if (wheelTimer) clearTimeout(wheelTimer);
         wheelTimer = setTimeout(() => { wheelTimer = null; onSettle(); }, WHEEL_SETTLE_MS);
     };

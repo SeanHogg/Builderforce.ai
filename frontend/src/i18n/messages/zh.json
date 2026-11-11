@@ -38284,6 +38284,17 @@
         "errorBack": "返回",
         "depth": "深度"
       },
+      "nav": {
+        "group": "移动视图",
+        "panUp": "上移",
+        "panDown": "下移",
+        "panLeft": "左移",
+        "panRight": "右移",
+        "rotateLeft": "向左旋转",
+        "rotateRight": "向右旋转",
+        "tiltUp": "向上倾斜",
+        "tiltDown": "向下倾斜"
+      },
       "mind": {
         "moreFoldersOne": "另有 {count} 个文件夹",
         "moreFoldersOther": "另有 {count} 个文件夹",

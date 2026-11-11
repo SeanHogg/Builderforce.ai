@@ -22,7 +22,8 @@
  *
  * A failed build FAILS this script: shipping a stale dist is the bug this exists to stop.
  *
- * Usage: `node scripts/ensure-linked-builds.mjs [consumerDir]` (default: cwd).
+ * Usage: `node scripts/ensure-linked-builds.mjs [consumerDir ...]` (default: cwd). Pass
+ * every consumer of one build in a single run so shared links are walked once.
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
@@ -111,14 +112,24 @@ function ensure(dir) {
   (ok ? rebuilt : failed).push(name);
 }
 
-const root = resolve(process.argv[2] ?? process.cwd());
-const rootManifest = readManifest(root);
-if (!rootManifest) {
-  console.error(`[ensure-linked-builds] no package.json at ${root}`);
-  process.exit(1);
+// Several consumers in ONE run share `visited` and `inputsMemo`, so a package linked by
+// more than one of them (the extension and `frontend/` share most of theirs) has its
+// source tree walked, and its build checked, once.
+const roots = (process.argv.length > 2 ? process.argv.slice(2) : [process.cwd()]).map((dir) => resolve(dir));
+const consumers = roots.map((root) => {
+  const manifest = readManifest(root);
+  if (!manifest) {
+    console.error(`[ensure-linked-builds] no package.json at ${root}`);
+    process.exit(1);
+  }
+  return { root, manifest };
+});
+for (const { root, manifest } of consumers) {
+  // A consumer is never built itself — but only from its own turn on, so a consumer that
+  // an EARLIER consumer links is still checked as that one's link, as a separate run would.
+  visited.add(realpathSync(root));
+  for (const target of linkedTargets(root, manifest)) ensure(target);
 }
-visited.add(realpathSync(root));
-for (const target of linkedTargets(root, rootManifest)) ensure(target);
 
 if (rebuilt.length) console.log(`[ensure-linked-builds] rebuilt: ${rebuilt.join(', ')}`);
 if (failed.length) {

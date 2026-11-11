@@ -27,7 +27,13 @@ const integration = process.argv.includes("--integration");
 
 // Clean stale per-file output from the old tsc build so out/ holds only the bundle.
 // Skipped for the harness build, which must not wipe an existing extension bundle.
-if (!harness && !integration) fs.rmSync("out", { recursive: true, force: true });
+// `out/analyzers` survives: it is an npm install guarded by its own stamp
+// (`installBundledAnalyzers`), and wiping it made every build reinstall it from npm.
+if (!harness && !integration && fs.existsSync("out")) {
+  for (const entry of fs.readdirSync("out")) {
+    if (entry !== "analyzers") fs.rmSync(path.join("out", entry), { recursive: true, force: true });
+  }
+}
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "../..");
