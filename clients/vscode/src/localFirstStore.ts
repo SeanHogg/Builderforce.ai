@@ -28,7 +28,7 @@ import {
   type RunUsageLedger,
 } from "@seanhogg/builderforce-brain-embedded";
 import { createDurableLocalFirstStore, type DurableLocalFirstStore } from "./durableLocalFirstStore";
-import { chatAccountDestination, chatBindingPort, serverChatSpend } from "./chatAccount";
+import { chatAccountDestination, chatBindingPort, serverChatSpend, serverChatSpendCache } from "./chatAccount";
 import { gatewaySummaryCompletion } from "./chatSummarizer";
 import { pruneRailReadMarkOnDelete } from "./chatRail/refreshRail";
 import { mergeLocalTicketSummaries } from "./chatRail/localTicketSummary";
@@ -91,6 +91,7 @@ export function localBrainApplication(ctx: vscode.ExtensionContext): LocalApplic
       summarizeFailed: vscode.l10n.t("The chat could not be summarized right now. Try again in a moment."),
       accountDestination: chatAccountDestination,
       serverSpend: serverChatSpend(ctx.secrets),
+      serverSpendSync: serverChatSpendCache,
       bindChat: (chatId) => identity.bind(chatId),
     }), store), store),
     identity,

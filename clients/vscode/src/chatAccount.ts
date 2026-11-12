@@ -84,7 +84,9 @@ export function invalidateServerChatSpend(): void {
 }
 
 /** The platform's spend for the bound chats a list shows. Rejects when it cannot be read,
- *  so the caller keeps its own estimate rather than showing nothing. */
+ *  so the caller keeps its own estimate rather than showing nothing. Never awaited on a
+ *  local read — the caller resolves from {@link serverChatSpendCache} and lets this port
+ *  fill that cache in the background. */
 export function serverChatSpend(secrets: vscode.SecretStorage) {
   // One page answers every id a list asks about, so the ids themselves are not sent.
   return async (_serverIds: readonly number[]): Promise<ReadonlyMap<number, SpendSavingsSummary>> => {
@@ -102,6 +104,18 @@ export function serverChatSpend(secrets: vscode.SecretStorage) {
     spendCache.set(tenantId, byId);
     return byId;
   };
+}
+
+/**
+ * The synchronous spend read a local projection answers from: the cached platform spend
+ * for the active tenant, or null when there is none (signed out, expired, or never
+ * fetched). An offline `listBrainChats` can block for its whole timeout, so a local
+ * read must never wait on it — this is the only value a projection may consult.
+ */
+export function serverChatSpendCache(): ReadonlyMap<number, SpendSavingsSummary> | null {
+  const tenantId = workspaceTenantId();
+  if (tenantId === undefined) return null;
+  return spendCache.get(tenantId)?.value ?? null;
 }
 
 const EMPTY_SPEND: SpendSavingsSummary = {

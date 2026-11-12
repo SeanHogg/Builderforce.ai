@@ -52,8 +52,18 @@ export interface LocalBrainPersistenceOptions {
   /**
    * The platform's spend for bound chats, by server id — the authoritative figure for
    * the calls the gateway served. Omitted, or failing: the device's own estimate stands.
+   * Never awaited on a local read: an offline call can block for its whole timeout, so
+   * the projection resolves from the synchronous {@link serverSpendSync} cache and this
+   * port only seeds that cache (a result it has already cached resolves instantly).
    */
   serverSpend?: (serverIds: readonly number[]) => Promise<ReadonlyMap<number, SpendSavingsSummary>>;
+  /**
+   * The synchronous spend cache the async {@link serverSpend} fills. When it holds a
+   * value the projection answers from it immediately; when it does not, the projection
+   * proceeds from the local ledger and asks the async port to fill the cache for the
+   * next read. Omitted: the projection never reaches for the server at all.
+   */
+  serverSpendSync?: () => ReadonlyMap<number, SpendSavingsSummary> | null;
   /** Bind a chat now (the host's chat identity). Omitted: the adapter offers no `bindChat`. */
   bindChat?: (chatId: number) => Promise<number | undefined>;
   /** The book a chat's own calls are priced with. Defaults to the bundled snapshot. */
@@ -130,19 +140,19 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
   };
 
   /**
-   * The spend each chat shows (§3.2): unbound — the device's fold over every call, the
-   * gateway's priced from the bundled list (≈); bound — the platform's figure for the
-   * gateway's calls plus the device's for the calls the platform never saw.
+   * The spend each chat shows (§3.2), answered from LOCAL state — never waiting on the
+   * network. A spend read that is still in flight (or failed) resolves from the local
+   * ledger; the server figure lands on the next read that arrives after it settles
+   * (its result is cached, so that read is instant and correct).
    */
   const project = async (inputs: readonly ProjectionInput[]): Promise<BrainChat[]> => {
     const bound = inputs.flatMap((input) => (input.serverId !== undefined ? [input.serverId] : []));
     let server: ReadonlyMap<number, SpendSavingsSummary> | null = null;
     if (bound.length > 0 && options.serverSpend) {
-      try {
-        server = await options.serverSpend(bound);
-      } catch {
-        server = null; // offline: the device's own estimate stands
-      }
+      server = options.serverSpendSync?.() ?? null;
+      // Cache miss: seed it in the background. Never awaited — an offline read must
+      // not wait on the network; the next projection picks the figure up.
+      if (!server) void options.serverSpend(bound).catch(() => undefined);
     }
     return inputs.map(({ record, serverId, usage, imported }) => {
       const chat = chatValue(record);

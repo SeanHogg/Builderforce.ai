@@ -3284,7 +3284,7 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-haiku-latest": [1e-7, 5e-7],
   "~anthropic/claude-opus-latest": [4e-6, 2e-5],
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
-  "~deepseek/deepseek-flash-latest": [6e-9, 5e-7],
+  "~deepseek/deepseek-flash-latest": [22e-9, 4e-7],
   "~deepseek/deepseek-pro-latest": [999e-10, 8e-6],
   "~deepseek/deepseek-v4-flash-latest": [434e-10, 3e-7],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
@@ -3345,10 +3345,7 @@ var PRICE_SNAPSHOT = {
   "anthropic/claude-sonnet-5.5:batch": [1e-6, 5e-6],
   "baidu/ernie-5.5-flash-preview:free": [0, 0],
   "baidu/ernie-light-dt-1.0-intl": [113e-8, 394e-8],
-  "bytedance-seed/seed-1.6": [25e-8, 2e-6],
-  "bytedance-seed/seed-1.6-flash": [75e-9, 3e-7],
   "bytedance-seed/seed-2-1-turbo": [5e-7, 25e-7],
-  "bytedance-seed/seed-2.0-code": [5e-7, 3e-6],
   "bytedance-seed/seed-2.0-lite": [25e-8, 2e-6],
   "bytedance-seed/seed-2.0-mini": [1e-7, 4e-7],
   "bytedance/ui-tars-1.5-7b": [1e-7, 2e-7],
@@ -3372,8 +3369,8 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v4-flash-vision-exp": [44e-8, 132e-8],
   "deepseek/deepseek-v4-pro": [95526e-11, 191052e-11],
   "deepseek/deepseek-v4-pro-0813": [111e-9, 444e-8],
-  "deepseek/deepseek-v4.1-flash": [51e-9, 567e-9],
-  "deepseek/deepseek-v4.1-flash-1017": [6e-9, 5e-7],
+  "deepseek/deepseek-v4.1-flash": [22e-9, 4e-7],
+  "deepseek/deepseek-v4.1-flash-1017": [15e-8, 6e-7],
   "deepseek/deepseek-v4.1-flash-1017:batch": [11e-9, 2e-7],
   "deepseek/deepseek-v4.1-flash:batch": [112e-9, 336e-9],
   "dots-studio/dots-3-note-preview:free": [0, 0],
@@ -3416,7 +3413,7 @@ var PRICE_SNAPSHOT = {
   "google/gemini-omni-1.2-flash": [15e-7, 9e-6],
   "google/gemma-2-27b-it": [65e-8, 65e-8],
   "google/gemma-3-12b-it": [5e-8, 15e-8],
-  "google/gemma-3-27b-it": [8e-8, 45e-8],
+  "google/gemma-3-27b-it": [8e-8, 35e-8],
   "google/gemma-3-4b-it": [5e-8, 1e-7],
   "google/gemma-4-26b-a4b-it": [8e-8, 1e-7],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
@@ -3425,7 +3422,7 @@ var PRICE_SNAPSHOT = {
   "google/lyria-3-clip-preview": [0, 0],
   "google/lyria-3-pro-preview": [0, 0],
   "gryphe/mythomax-l2-13b": [8e-8, 11e-8],
-  "ibm-granite/granite-4.2-8b": [6e-8, 25e-8],
+  "ibm-granite/granite-4.2-8b": [6e-8, 15e-8],
   "inclusionai/ling-3.0-flash": [21e-9, 63e-9],
   "inclusionai/ling-3.0-flash-vl": [6e-8, 18e-8],
   "inclusionai/ling-3.0-tiny": [15e-9, 45e-9],
@@ -3459,7 +3456,7 @@ var PRICE_SNAPSHOT = {
   "meta/muse-spark-open": [125e-8, 425e-8],
   "meta/muse-wonder": [4e-6, 2e-5],
   "microsoft/phi-4": [7e-8, 14e-8],
-  "minimax/minimax-m2.5": [3e-7, 12e-7],
+  "minimax/minimax-m2.5": [27e-8, 108e-8],
   "minimax/minimax-m2.7": [21e-8, 84e-8],
   "minimax/minimax-m3": [3e-7, 12e-7],
   "minimax/minimax-m3:batch": [224e-9, 88e-8],
@@ -3495,7 +3492,8 @@ var PRICE_SNAPSHOT = {
   "moonshotai/kimi-k2.7-code": [6e-7, 35e-7],
   "moonshotai/kimi-k3": [192e-9, 16e-6],
   "moonshotai/kimi-k3:batch": [228e-8, 114e-7],
-  "moonshotai/kimi-k3.1-pro": [2e-6, 1e-5],
+  "moonshotai/kimi-k3.1-pro": [2375e-10, 84085e-10],
+  "moonshotai/kimi-k3.1-pro:batch": [7e-7, 6e-6],
   "morph/morph-v3-fast": [8e-7, 12e-7],
   "morph/morph-v3-fast:batch": [4e-7, 6e-7],
   "morph/morph-v3-large": [9e-7, 19e-7],
@@ -3573,7 +3571,7 @@ var PRICE_SNAPSHOT = {
   "openai/gpt-5.6-luna-pro": [2e-7, 12e-7],
   "openai/gpt-5.6-luna-pro:batch": [1e-7, 6e-7],
   "openai/gpt-5.6-luna:batch": [1e-7, 6e-7],
-  "openai/gpt-5.6-sol": [4e-6, 2e-5],
+  "openai/gpt-5.6-sol": [44e-7, 22e-6],
   "openai/gpt-5.6-sol-pro": [4e-6, 2e-5],
   "openai/gpt-5.6-sol-pro:batch": [2e-6, 1e-5],
   "openai/gpt-5.6-sol:batch": [2e-6, 1e-5],
@@ -3635,7 +3633,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen-2.5-coder-32b-instruct": [66e-8, 1e-6],
   "qwen/qwen-plus": [26e-8, 78e-8],
   "qwen/qwen2.5-vl-72b-instruct": [8e-7, 1e-6],
-  "qwen/qwen3-14b": [1e-7, 22e-8],
+  "qwen/qwen3-14b": [12e-8, 24e-8],
   "qwen/qwen3-235b-a22b-2507": [14e-8, 8e-7],
   "qwen/qwen3-235b-a22b-thinking-2507": [45e-8, 35e-7],
   "qwen/qwen3-30b-a3b": [12e-8, 5e-7],
@@ -3654,7 +3652,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3.5-27b": [26e-8, 26e-7],
   "qwen/qwen3.5-35b-a3b": [14e-8, 1e-6],
   "qwen/qwen3.5-397b-a17b": [6e-7, 36e-7],
-  "qwen/qwen3.5-9b": [17e-8, 25e-8],
+  "qwen/qwen3.5-9b": [68e-9, 1e-7],
   "qwen/qwen3.5-flash-02-23": [65e-9, 26e-8],
   "qwen/qwen3.5-plus-02-15": [26e-8, 156e-8],
   "qwen/qwen3.5-plus-20260420": [3e-7, 18e-7],
@@ -3709,6 +3707,7 @@ var PRICE_SNAPSHOT = {
   "thinkingmachines/inkling-small:batch": [36e-8, 96e-8],
   "typesafe/jev-router": [0, 0],
   "unbiased/pareto-26.10": [8e-7, 32e-7],
+  "unbiased/pareto-26.10-preview": [8e-7, 32e-7],
   "unbiased/pareto-26.9": [25e-7, 75e-7],
   "undi95/remm-slerp-l2-13b": [3e-7, 5e-7],
   "upstage/solar-mini4": [5e-8, 2e-7],
@@ -3738,16 +3737,16 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-4.7-flash": [605e-10, 4e-7],
   "z-ai/glm-5": [1e-6, 32e-7],
   "z-ai/glm-5-turbo": [12e-7, 4e-6],
-  "z-ai/glm-5.1": [133e-8, 418e-8],
+  "z-ai/glm-5.1": [14e-7, 44e-7],
   "z-ai/glm-5.2": [7e-9, 68e-7],
-  "z-ai/glm-5.2:batch": [527e-9, 1075e-9],
+  "z-ai/glm-5.2:batch": [322e-9, 989e-9],
   "z-ai/glm-5.3": [699e-10, 14e-7],
   "z-ai/glm-5.3-flash": [399e-10, 784e-10],
-  "z-ai/glm-5.3-flash:batch": [47e-9, 61e-9],
+  "z-ai/glm-5.3-flash:batch": [5e-8, 18e-8],
   "z-ai/glm-5.3-flashx": [37e-8, 125e-8],
   "z-ai/glm-5.3-flashx-legal": [37e-8, 125e-8],
   "z-ai/glm-5.3-prime": [28e-7, 88e-7],
-  "z-ai/glm-5.3:batch": [45e-8, 2e-6],
+  "z-ai/glm-5.3:batch": [322e-9, 989e-9],
   "z-ai/glm-5v-turbo": [12e-7, 4e-6]
 };
 
@@ -7005,11 +7004,8 @@ function createLocalBrainPersistence(options) {
     const bound = inputs.flatMap((input) => input.serverId !== void 0 ? [input.serverId] : []);
     let server = null;
     if (bound.length > 0 && options.serverSpend) {
-      try {
-        server = await options.serverSpend(bound);
-      } catch {
-        server = null;
-      }
+      server = options.serverSpendSync?.() ?? null;
+      if (!server) void options.serverSpend(bound).catch(() => void 0);
     }
     return inputs.map(({ record: record3, serverId, usage, imported }) => {
       const chat = chatValue(record3);

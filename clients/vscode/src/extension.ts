@@ -80,6 +80,7 @@ import { registerLocalWork } from "./localWork/registerLocalWork";
 import { bindOutboxSendPermissionAtActivation } from "./sendPermissionActivation";
 import { installAuditClose } from "./installAuditClose";
 import { bootVsixHost } from "./bootVsixHost";
+import { startStallMonitor } from "./stallMonitor";
 // The SAME bundled-React HTML shell every other React surface here boots (the board,
 // Project 360, the project pages, the Evermind sidebar view) — only its `<title>`
 // differs. Used by the Visualization panel.
@@ -168,6 +169,11 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(installAuditClose());
   const vsixHost = bootVsixHost({ network: "denied", directory: context.globalStorageUri.fsPath });
   context.subscriptions.push({ dispose: () => vsixHost.stop() });
+  // The host's event loop is the bridge to every webview: a multi-second block makes
+  // webview requests time out with no hint why. ONE stall monitor samples the loop and
+  // writes a line to the output channel each time a stall crosses the threshold, so a
+  // slow host is visible where it can actually be read.
+  context.subscriptions.push(startStallMonitor({ log: logLine }));
   // A `local/bfi/…` pin keeps running locally with the chat panel closed: the host's own
   // bfi worker (CPU backend) joins the page-engine bridge while a model file is cached.
   const hostBfi = installHostBfiRuntime({
