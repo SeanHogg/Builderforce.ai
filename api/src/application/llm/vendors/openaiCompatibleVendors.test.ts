@@ -311,16 +311,26 @@ describe('Moonshot regional host resolution', () => {
     // was a flat 401 and the connected Qwen account never ran.
     const PAYG = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions';
     const TOKEN_PLAN = 'https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions';
+    const CODING = 'https://coding-intl.dashscope.aliyuncs.com/v1/chat/completions';
     const urls = stubHosts((url) => (url === PAYG ? rejected() : ok()));
     await getModule('qwen').call({
-      apiKey: 'sk-token-plan', model: 'qwen3.8-max', messages: [{ role: 'user', content: 'hi' }],
+      apiKey: 'sk-token-plan', model: 'qwen3.7-plus', messages: [{ role: 'user', content: 'hi' }],
     });
     expect(urls).toEqual([PAYG, TOKEN_PLAN]);
+
+    // A Coding Plan key is rejected by BOTH dashscope pay-as-you-go and the Token Plan,
+    // so the fallback walks on to the Coding Plan host.
+    const urls2 = stubHosts((url) => (url === CODING ? ok() : rejected()));
+    await getModule('qwen').call({
+      apiKey: 'sk-coding-plan', model: 'qwen3.7-plus', messages: [{ role: 'user', content: 'hi' }],
+    });
+    expect(urls2).toEqual([PAYG, TOKEN_PLAN, CODING]);
   });
 
-  it('leads the Qwen catalog with an id a Token Plan serves', () => {
-    // The health probe dispatches the FIRST entry; `qwen3-max` is not on the plan.
-    expect(getModule('qwen').catalog[0]!.id).toBe('qwen3.8-max');
+  it('leads the Qwen catalog with an id every platform serves', () => {
+    // The health probe dispatches the FIRST entry; it must exist on pay-as-you-go, the
+    // Token Plan, AND the Coding Plan (which only serves qwen3.5/3.6/3.7-plus among Qwen).
+    expect(getModule('qwen').catalog[0]!.id).toBe('qwen3.7-plus');
   });
 
   it('a single-host vendor makes exactly one attempt on an auth rejection', async () => {

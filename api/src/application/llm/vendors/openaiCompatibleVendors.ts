@@ -40,6 +40,10 @@ interface VendorSpec {
   /** Sibling regional host tried when `baseUrl` REJECTS a credential — set only
    *  for providers running two platforms with non-interchangeable keys. */
   altBaseUrl?: string;
+  /** Ordered sibling hosts for a provider running MORE than two platforms with
+   *  non-interchangeable keys (Qwen: Token Plan, then Coding Plan). Tried in order
+   *  after `baseUrl` rejects the credential. */
+  altBaseUrls?: string[];
   /** Default catalog model ids (real, current). */
   models: string[];
   /** Declared shape capabilities per catalog id (see `VendorModelEntry.capabilities`).
@@ -167,23 +171,28 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     flagships: { agentic: 'kimi-for-coding', chat: 'kimi-for-coding', gatedCoders: ['k3', 'k3-256k'] },
   },
   {
-    // Alibaba issues Qwen keys from two platforms that do NOT accept each other's
-    // credentials: Model Studio pay-as-you-go (dashscope-intl) and the Token Plan
-    // subscription (its own `token-plan.*.maas` host). A Token Plan key sent to
-    // dashscope-intl is a flat 401, and nothing in the key says which issued it —
-    // the same shape as Moonshot, so the same regional fallback resolves it.
+    // Alibaba issues Qwen keys from THREE platforms that do NOT accept each other's
+    // credentials: Model Studio pay-as-you-go (dashscope-intl), the Token Plan
+    // subscription (`token-plan.*.maas`), and the Coding Plan subscription
+    // (`coding-intl.dashscope`). A key sent to a platform it was not issued for is a
+    // flat 401, and nothing in the key says which issued it — so on an auth rejection
+    // we walk the sibling hosts in order until one accepts the credential, then
+    // remember that winning host for the key.
     id: 'qwen', brand: 'Qwen', apiKeyEnv: 'QWEN_API_KEY',
     baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
-    altBaseUrl: 'https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions',
-    // Both platforms serve `GET /compatible-mode/v1/models` for a tenant key, so a connected
-    // account can list what it can actually call (a Token Plan serves a subset).
+    altBaseUrls: [
+      'https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions',
+      'https://coding-intl.dashscope.aliyuncs.com/v1/chat/completions',
+    ],
+    // All three platforms serve `GET …/models` for a tenant key, so a connected account
+    // can list what it can actually call (a plan serves a subset).
     listsModels: true,
-    // Ids served on BOTH platforms. The credential health probe uses the FIRST entry,
-    // so it must exist on a Token Plan too — the old `qwen3-max` / `qwen3-coder-plus`
-    // are not on the plan and read back as "your key is broken" on a working account.
-    // Max/Plus are Qwen's premium line (OpenRouter catalogues qwen3.7-plus PREMIUM too);
-    // the flash models are its fast, cheap line.
-    models: ['PREMIUM:qwen3.8-max', 'PREMIUM:qwen3.7-plus', 'qwen3.8-flash', 'PREMIUM:qwen3.7-max', 'qwen3.6-flash'],
+    // The health probe dispatches the FIRST entry, so it must exist on EVERY platform —
+    // pay-as-you-go, Token Plan, AND Coding Plan. The Coding Plan only serves qwen3.5-plus
+    // / qwen3.6-plus / qwen3.7-plus among Qwen, so the lead has to be one of those even
+    // though pay-as-you-go's flagship is the newer qwen3.8-max. Max/Plus are Qwen's
+    // premium line; the flash models are its fast, cheap line.
+    models: ['PREMIUM:qwen3.7-plus', 'PREMIUM:qwen3.8-max', 'qwen3.8-flash', 'PREMIUM:qwen3.7-max', 'qwen3.6-flash'],
     flagships: { agentic: 'qwen3.8-max', chat: 'qwen3.7-plus' },
   },
   {
@@ -339,6 +348,7 @@ export const openAICompatibleModules: ReadonlyArray<VendorModule> = SPECS.map((s
     id: spec.id,
     baseUrl: spec.baseUrl,
     ...(spec.altBaseUrl ? { altBaseUrl: spec.altBaseUrl } : {}),
+    ...(spec.altBaseUrls ? { altBaseUrls: spec.altBaseUrls } : {}),
     apiKeyEnv: spec.apiKeyEnv,
     catalog: spec.models.map((entry) => {
       const { id, tier } = parseModelShorthand(entry);

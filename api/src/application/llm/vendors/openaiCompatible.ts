@@ -60,6 +60,13 @@ export interface OpenAICompatibleVendorOptions {
    *  retried ONCE here, and the winning host is remembered for that key — see
    *  {@link resolveRegionalEndpoint}. Leave unset for single-host vendors. */
   altBaseUrl?: string;
+  /** An ORDERED list of sibling hosts, for a vendor spread across more than two
+   *  platforms (Qwen: pay-as-you-go dashscope, the Token Plan host, and the Coding
+   *  Plan host, whose keys are none of them interchangeable). On an auth rejection
+   *  from `baseUrl`, these are tried in order until one accepts the credential, and
+   *  the winning host is remembered for that key. Mutually exclusive with
+   *  {@link OpenAICompatibleVendorOptions.altBaseUrl}; a caller passes one or the other. */
+  altBaseUrls?: string[];
   /** Typed `VendorEnv` field holding the Bearer key. */
   apiKeyEnv: VendorApiKeyEnv;
   /** Curated catalog. Most factory vendors carry a small static default set of
@@ -129,13 +136,12 @@ export interface OpenAICompatibleVendorOptions {
  * Bounded so a long-lived isolate seeing many tenants cannot grow it without limit.
  */
 /**
- * Which of the vendor's two hosts a key lives on — the SIDE, never a URL. One key is
- * resolved against several endpoints on the same host pair (chat, stream, `/models`);
- * remembering the URL of whichever call ran first would send the next call to the right
- * host but the WRONG path.
+ * Which of the vendor's hosts a key lives on — an INDEX into that vendor's endpoint
+ * list, never a URL. One key is resolved against several endpoints on the same host
+ * set (chat, stream, `/models`); remembering the URL of whichever call ran first would
+ * send the next call to the right host but the WRONG path.
  */
-type RegionSide = 'primary' | 'alt';
-const regionByKeyDigest = new Map<string, RegionSide>();
+const regionByKeyDigest = new Map<string, number>();
 const REGION_MEMO_MAX_ENTRIES = 512;
 
 /** FNV-1a over the key + vendor id. Not cryptographic and does not need to be: a
@@ -150,13 +156,13 @@ function keyDigest(vendorId: string, apiKey: string): string {
   return (hash >>> 0).toString(36);
 }
 
-function rememberRegion(digest: string, side: RegionSide): void {
+function rememberRegion(digest: string, hostIndex: number): void {
   // Cheap FIFO eviction — order of insertion is Map's own iteration order.
   if (regionByKeyDigest.size >= REGION_MEMO_MAX_ENTRIES) {
     const oldest = regionByKeyDigest.keys().next();
     if (!oldest.done) regionByKeyDigest.delete(oldest.value);
   }
-  regionByKeyDigest.set(digest, side);
+  regionByKeyDigest.set(digest, hostIndex);
 }
 
 /** True for the rejections that mean "wrong platform for this key" — the upstream
@@ -168,46 +174,62 @@ function isAuthRejection(error: unknown): boolean {
 
 /**
  * Run `attempt` against the host this key is known to live on, falling back to the
- * sibling regional host exactly once when the credential is REJECTED (never on a
- * transient failure — re-sending a 429 or a 502 to a different platform would just
- * spend the caller's money to learn nothing).
+ * sibling host(s) when the credential is REJECTED (never on a transient failure —
+ * re-sending a 429 or a 502 to a different platform would just spend the caller's
+ * money to learn nothing).
  *
- * When both hosts reject, the PRIMARY error is what propagates: the operator asked
- * for the default platform, and an error naming the sibling would send them to fix
- * an account they never meant to use.
+ * When every host rejects, the PRIMARY error is what propagates: the operator asked
+ * for the default platform, and an error naming a sibling would send them to fix an
+ * account they never meant to use.
  */
 async function resolveRegionalEndpoint<T>(
   vendorId: string,
   apiKey: string,
   primary: string,
-  alt: string | undefined,
+  alternates: string[],
   attempt: (endpoint: string) => Promise<T>,
 ): Promise<T> {
-  if (!alt) return attempt(primary);
+  if (alternates.length === 0) return attempt(primary);
 
   const digest = keyDigest(vendorId, apiKey);
-  const firstSide: RegionSide = regionByKeyDigest.get(digest) ?? 'primary';
-  const secondSide: RegionSide = firstSide === 'primary' ? 'alt' : 'primary';
-  const endpointOn = (side: RegionSide): string => (side === 'primary' ? primary : alt);
+  const endpoints = [primary, ...alternates];
+  // The memo remembers an index into the endpoint list, never a URL — see RegionSide.
+  const firstIndex = regionByKeyDigest.get(digest) ?? 0;
+  const firstEndpoint = endpoints[firstIndex] ?? primary;
+
+  let firstError: unknown;
+  // True when the attempt that just failed hit `primary` — its error is the one worth
+  // reporting when every platform refuses the key.
+  const firstEndpointWasPrimary = firstIndex === 0;
 
   try {
-    const result = await attempt(endpointOn(firstSide));
-    rememberRegion(digest, firstSide);
+    const result = await attempt(firstEndpoint);
+    rememberRegion(digest, firstIndex);
     return result;
   } catch (error) {
     if (!isAuthRejection(error)) throw error;
+    firstError = error;
+  }
+
+  // Walk the remaining hosts in declaration order until one accepts the credential.
+  let lastError: unknown = firstError;
+  for (let i = 0; i < endpoints.length; i += 1) {
+    if (i === firstIndex) continue;
     try {
-      const result = await attempt(endpointOn(secondSide));
-      rememberRegion(digest, secondSide);
+      const result = await attempt(endpoints[i]!);
+      rememberRegion(digest, i);
       return result;
-    } catch (fallbackError) {
-      // Both platforms refused it. Forget the memo so a key that is later fixed on
-      // either side is not pinned to whichever host happened to be tried first.
-      regionByKeyDigest.delete(digest);
-      // Whichever attempt hit `primary` is the one worth reporting.
-      throw firstSide === 'primary' ? error : fallbackError;
+    } catch (error) {
+      if (!isAuthRejection(error)) throw error;
+      lastError = error;
     }
   }
+
+  // Every platform refused it. Forget the memo so a key that is later fixed on any
+  // side is not pinned to whichever host happened to be tried first.
+  regionByKeyDigest.delete(digest);
+  // Whichever attempt hit `primary` is the one worth reporting.
+  throw firstEndpointWasPrimary ? firstError : lastError;
 }
 
 /**
@@ -216,7 +238,7 @@ async function resolveRegionalEndpoint<T>(
  */
 export function createOpenAICompatibleVendor(opts: OpenAICompatibleVendorOptions): VendorModule {
   const {
-    id, baseUrl, altBaseUrl, apiKeyEnv, headers,
+    id, baseUrl, altBaseUrls, altBaseUrl, apiKeyEnv, headers,
     catalog = [],
     defaultTier = 'STANDARD',
     maxTokensField,
@@ -235,6 +257,10 @@ export function createOpenAICompatibleVendor(opts: OpenAICompatibleVendorOptions
     ?? (schemaDialect ? (extra: Record<string, unknown> | undefined) => sanitizeExtraBodyForVendor(id, extra) : undefined);
 
   const catalogById = new Map(catalog.map((m) => [m.id, m]));
+  // The ordered sibling hosts this key can fall back to across platforms. Most vendors
+  // have none (single host); a two-platform vendor passes `altBaseUrl`; Qwen passes an
+  // ordered `altBaseUrls` list across its three platforms.
+  const alternates: string[] = altBaseUrls ?? (altBaseUrl ? [altBaseUrl] : []);
   const bodyOpts = (maxTokensField || transformExtra || providerSampling)
     ? {
         ...(maxTokensField ? { maxTokensField } : {}),
@@ -260,7 +286,7 @@ export function createOpenAICompatibleVendor(opts: OpenAICompatibleVendorOptions
       return (env[apiKeyEnv] as string | null | undefined) ?? null;
     },
     async call(params: VendorCallParams): Promise<VendorCallResult> {
-      return resolveRegionalEndpoint(id, params.apiKey, baseUrl, altBaseUrl, (endpoint) =>
+      return resolveRegionalEndpoint(id, params.apiKey, baseUrl, alternates, (endpoint) =>
         executeChatCompletion({
           vendorId: id,
           endpoint,
@@ -281,7 +307,7 @@ export function createOpenAICompatibleVendor(opts: OpenAICompatibleVendorOptions
       pseudoStreamFromCall(await mod.call(params), params);
   } else if (!noStream) {
     mod.callStream = async (params: VendorCallParams): Promise<VendorStreamResult> =>
-      resolveRegionalEndpoint(id, params.apiKey, baseUrl, altBaseUrl, (endpoint) =>
+      resolveRegionalEndpoint(id, params.apiKey, baseUrl, alternates, (endpoint) =>
         executeChatCompletionStream({
           vendorId: id,
           endpoint,
@@ -297,9 +323,11 @@ export function createOpenAICompatibleVendor(opts: OpenAICompatibleVendorOptions
     // Same host pair and same per-key platform memo as the chat calls: a Token Plan key
     // that chat already learned lives on the alt host lists its models from there too.
     const modelsUrl = modelsEndpoint(baseUrl);
-    const altModelsUrl = altBaseUrl ? modelsEndpoint(altBaseUrl) : undefined;
+    // The sibling /models hosts mirror the chat fallback order: a key that chat already
+    // learned lives on a sibling platform lists its models from that same host.
+    const altModelsUrls = alternates.map((host) => modelsEndpoint(host));
     mod.listModels = (apiKey: string): Promise<string[]> =>
-      resolveRegionalEndpoint(id, apiKey, modelsUrl, altModelsUrl, (endpoint) =>
+      resolveRegionalEndpoint(id, apiKey, modelsUrl, altModelsUrls, (endpoint) =>
         fetchModelIds(id, endpoint, apiKey, headers));
   }
 
