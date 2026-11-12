@@ -86,7 +86,14 @@ function lacksEvidence(
   if (file.deleted) return false;
   const required: readonly CheckRecord['kind'][] = policy.required[extensionOf(file.absPath)] ?? [];
   const checks = ledger.for(file.absPath, file.hash);
-  return required.some((kind) => !checks.some((r) => r.kind === kind));
+  return required.some((kind) => {
+    const records = checks.filter((r) => r.kind === kind);
+    if (records.length === 0) return true;
+    // A check whose LATEST record failed is re-run, not treated as evidenced: a
+    // transient failure must be re-verifiable on retry, never a permanent refusal
+    // the gate can never clear (verifyPaths only re-runs checks that lack records).
+    return records.reduce((a, b) => (b.at >= a.at ? b : a)).outcome === "fail";
+  });
 }
 
 /**

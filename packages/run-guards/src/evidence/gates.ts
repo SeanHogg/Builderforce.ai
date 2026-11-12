@@ -235,20 +235,21 @@ export function outgoingGate(
         unavailable.push(`${file.absPath}: ${kind} (no record — verifier unavailable)`);
         continue;
       }
-      for (const record of records) {
-        if (record.outcome === "fail") {
-          const detail = record.exitCode != null ? ` (exit ${record.exitCode})` : "";
-          return refuse(checkFailureReason(file.absPath, record, detail));
-        }
-        if (record.outcome === "unavailable") {
-          unavailable.push(`${file.absPath}: ${record.name} (${kind}) unavailable`);
-        }
+      // The LATEST record of a kind is the evidence for these bytes: a transient
+      // failure (a check that raced a rebuild or an unsettled environment) which a
+      // fresh passing run already superseded must not refuse the push forever.
+      const record = records.reduce((a, b) => (b.at >= a.at ? b : a));
+      if (record.outcome === "fail") {
+        const detail = record.exitCode != null ? ` (exit ${record.exitCode})` : "";
+        return refuse(checkFailureReason(file.absPath, record, detail));
+      }
+      if (record.outcome === "unavailable") {
+        unavailable.push(`${file.absPath}: ${record.name} (${kind}) unavailable`);
       }
       if (kind === "diagnostics") {
-        // The LSP outranks the exit code: any error-severity finding on this file
+        // The LSP outranks the exit code: an error-severity finding on this file
         // fails the check even when the record's outcome says pass.
-        const failing = records.find((r) => r.findings.some(isErrorFinding));
-        if (failing) return refuse(checkFailureReason(file.absPath, failing, " (LSP error)"));
+        if (record.findings.some(isErrorFinding)) return refuse(checkFailureReason(file.absPath, record, " (LSP error)"));
       }
     }
 
