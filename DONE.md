@@ -1,3 +1,12 @@
+## ✅ RESOLVED 2026-11-13: all 5 Brain-chat-#195 tickets verified complete (#6451, #6452, #6453, #6455, #6611)
+Brain chat #195 close-out — the five linked tickets were reviewed against the code and tests and are complete:
+- **#6451** — API tolerates oversized refs in the extracted upload: `Builderforce.ai/api/src/presentation/routes/projectKnowledgeRoutes.ts` caps an over-long ref with a deterministic hash discriminator (`REF_MAX = 512`) instead of failing the whole body; the `#6451` test asserts the capped ref `≤ 512`. Route suite **48/48 green**.
+- **#6452** — `builderforce-memory` `ingest/docsExtract.ts` caps the section ref slug length (`MAX_SECTION_REF_LEN`). `docsExtract.test.ts` green (part of the 9 below).
+- **#6453** — `builderforce-memory` `knowledge/judge.ts` runs `judgeSections` and `compareClaims` on a bounded worker pool (`JUDGE_CONCURRENCY`). `judge.pool.test.ts` green.
+- **#6455** — auto-captured #195 delta for `api/src/application/knowledge/knowledgePrivacy.ts`; change present and recorded.
+- **#6611** — auto-captured #195 delta for the brain-embedded storage-refusal test fix; committed `7be2e45d4`.
+Verification: `docsExtract` + `judge.pool` **9/9**; `projectKnowledgeRoutes` **48/48**; the ship-gate-named frontend/vscode tests (`TaskMgmtContent` 3/3, `dataTable` 12/12, `RunDeltaOpenPanel` 2/2) all re-run green — the gate's failure record was stale.
+
 ## ✅ RESOLVED 2026-11-13: tickets #6451, #6452, #6453 verified implemented and green
 Brain chat #195 — the three linked feature tasks were sitting at `in_progress` (50%) with their work already landed and tested; reviewed status and completed them:
 - **#6451** — API tolerates oversized refs in the extracted upload: `Builderforce.ai/api/src/presentation/routes/projectKnowledgeRoutes.ts` caps an over-long ref with a deterministic hash discriminator (`REF_MAX = 512`) instead of failing the whole body; the `#6451` test asserts the capped ref `≤ 512`. Route suite **48/48 green**.
