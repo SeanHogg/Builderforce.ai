@@ -51,6 +51,14 @@ export interface GitPort {
     /** Why the outgoing change could not be computed (no upstream, empty set): reported "unavailable", never a pass, never reviewed. */
     unavailable?: string;
   }>;
+  /**
+   * Is the working tree's content for these paths ALREADY on the base branch — i.e. HEAD
+   * is a base branch, `origin/<base>` contains HEAD (nothing unpushed), and none of the
+   * named paths differs between HEAD, the working tree, and `origin/<base>`? The second
+   * "shipped" signal for a change that reached the base branch WITHOUT this run's push
+   * (another session's commit swept it, a later run pushed it, the user pushed).
+   */
+  onBaseBranch?(repo: string, paths: readonly string[]): Promise<boolean>;
 }
 
 /** The reviewer port: OD-1, one review sub-run by a model that did not author the change. */

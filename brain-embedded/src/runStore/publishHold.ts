@@ -87,10 +87,34 @@ export interface PublishHold {
  */
 const PUBLISH_VERB = String.raw`(?:commit|push|ship|merge|land|publish|release|(?:open|raise|create)\s+(?:a|the)\s+(?:pr|pull\s+request))`;
 
+/**
+ * Verbal material that proves the words after a publish verb are NOT a direct
+ * object — copulas, auxiliaries, prepositions, relative/WH words, modals. A true
+ * order ("push the triage doc") has none of these in its object; a complaint
+ * ("push notifications are broken", "merge the two config objects in settings.ts",
+ * "commit the message format is wrong") always does.
+ */
+const OBJECT_STOP = String.raw`(?:is|are|was|were|be|been|being|am|do|does|did|done|doing|have|has|had|having|need|needs|needed|want|wants|wanting|in|on|at|to|into|onto|through|for|with|by|of|when|while|that|which|who|whom|if|because|until|unless|before|after|not|no|also|but|or|nor|as|from|about|over|under|again|further|once|here|there|any|both|each|few|more|most|other|some|such|only|own|same|so|than|too|very|just|should|would|could|must|shall|will|may|might|can|cannot|blue|green|red|yellow|orange|purple|pink|brown|black|white|gray|grey|dark|light|big|small|large|new|old|wrong|broken|ready)`;
+
+/**
+ * A determiner-led noun phrase (1-4 words, none from OBJECT_STOP) acting as the
+ * verb's direct object: "the triage doc", "the fix", "my branch". Because every
+ * word is screened against OBJECT_STOP and the overall pattern is end-anchored, a
+ * trailing predicate/prepositional phrase keeps the clause from matching.
+ */
+const DIRECT_OBJECT =
+  String.raw`(?:the|this|that|my|your|our|a|an|these|those)\s+(?:(?!${OBJECT_STOP}\b)[\w][\w./'-]*\s*){1,4}`;
+
+/**
+ * What may follow the verb, one or more times:
+ *  - the well-known tail (it / the changes / to main / and <verb> / now / …),
+ *  - `and|then` CHAINING another publish verb (with its own tail), so "commit and push"
+ *    and "commit it, then push" lift.
+ */
 const PUBLISH_TAIL =
   String.raw`(?:it|them|this|that|these|those|everything|all|now|away|up|changes|please|then|too|as\s+well|for\s+me|right\s+away|` +
   String.raw`(?:the|your|my|our)\s+(?:changes?|code|work|fix(?:es)?|branch|commits?|pr|diff|edits?|updates?|lot)|` +
-  String.raw`and\s+${PUBLISH_VERB}|` +
+  String.raw`and\s+${PUBLISH_VERB}(?:\s+${DIRECT_OBJECT})?|` +
   String.raw`to\s+(?:main|master|github|prod(?:uction)?|(?:the\s+)?(?:remote|repo|origin)(?:/[\w./-]+)?|origin/[\w./-]+|the\s+(?:[\w./-]+\s+)?branch|[\w./-]+\s+branch))`;
 
 const ACKNOWLEDGEMENT =
@@ -102,7 +126,10 @@ const GO_AHEAD =
   String.raw`you(?:['’]re|\s+are)\s+(?:good|clear(?:ed)?|free|ok(?:ay)?|fine)\s+to\s+|` +
   String.raw`feel\s+free\s+to\s+|(?:it\s+is\s+|it['’]?s\s+)?(?:ok(?:ay)?|fine|safe)\s+to\s+|time\s+to\s+|let['’]?s\s+|please\s+)?`;
 
-const SHIP_ORDER = new RegExp(String.raw`^${ACKNOWLEDGEMENT}${GO_AHEAD}${PUBLISH_VERB}(?:\s+${PUBLISH_TAIL})*$`, 'i');
+const SHIP_ORDER = new RegExp(
+  String.raw`^${ACKNOWLEDGEMENT}${GO_AHEAD}${PUBLISH_VERB}(?:\s+${DIRECT_OBJECT})*?(?:\s+${PUBLISH_TAIL})*$`,
+  'i',
+);
 
 /** A turn that puts the order off: not for now, so the hold stands. */
 const DEFERRAL =

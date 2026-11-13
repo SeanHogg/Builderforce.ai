@@ -28,7 +28,8 @@ import { recordShipReview, verificationOf, type CloseOutInput } from '../run/bra
 import type { BrainRunContext } from './brainRunContext';
 import type { BrainRunRequest } from './runTypes';
 import { nowIso, pushTrace, runTrace } from './runCells';
-import { shippedToBaseBranch } from '../shipVerification';
+import { onBaseBranch, shippedToBaseBranch } from '../shipVerification';
+import { runReviewGate } from './shipGates';
 
 /** The narrow FinishHook the {@link withDeterministicFinish} wrapper composes around. */
 export interface InnerFinishHook {
@@ -158,9 +159,13 @@ export async function runDeterministicFinish(input: CloseOutInput & { verified: 
 }
 
 /** Did this run SHIP its change (commit pushed to a base branch)? */
-function shippedOf(run: BrainRunContext): boolean {
-  return run.c.codeChanged && run.c.touchedFiles.length > 0 &&
-    shippedToBaseBranch(runTrace(run.c), { touchedFiles: run.c.touchedFiles });
+async function shippedOf(run: BrainRunContext): Promise<boolean> {
+  if (run.c.codeChanged && run.c.touchedFiles.length > 0 &&
+    shippedToBaseBranch(runTrace(run.c), { touchedFiles: run.c.touchedFiles })) return true;
+  // The change reached the base branch WITHOUT this run pushing it (another session's commit
+  // swept it, a later run pushed it, the user pushed): the run's own push never counts it,
+  // so read the live repo — the same GitPort the push gate uses, never a new git helper.
+  return onBaseBranch(run.req.git, run.c.touchedFiles, run.c.deltaTicketId);
 }
 
 /** Does the run hold a LINKED ticket to close out — one the chat carries, or one it filed on the device? */
@@ -196,7 +201,26 @@ async function finishCloseOut(run: BrainRunContext): Promise<void> {
   if (c.finishClosedOut) return;
   const { req } = run;
   if (req.projectId == null || !req.runTool || c.abort?.signal.aborted || !c.codeChanged) return;
-  if (!shippedOf(run)) return;
+  if (!(await shippedOf(run))) return;
+  // W4: when the ship signal is "already on the base branch" (not this run's push), there is no
+  // push — and the review sub-run has only ever been triggered by the push gate. Run it HERE, at
+  // settle, over the same ports and the same reviewGate the push gate uses — a change that landed
+  // without this run's push is never left unreviewed and its ticket uncloseable (chat #6539).
+  const reviewer = run.req.reviewer;
+  if (reviewer && run.req.git) {
+    try {
+      const out = await run.req.git.outgoing('');
+      if (!out.unavailable) {
+        const reviewed = await runReviewGate(run, out.diffHash, { repo: '', diff: out.diff ?? '', tool: 'settle-close-out' });
+        if (!reviewed.ok) {
+          pushTrace(run.c, {
+            ts: nowIso(), category: 'message', label: 'finish.review_gate',
+            result: `The independent review did not approve (the change landed without this run pushing it): ${reviewed.reason}`,
+          });
+        }
+      }
+    } catch { /* the close-out is best-effort; the finish gate below is the authority */ }
+  }
   if (!(await hasLinkedTicket(run))) return;
   const openPlaceholders = run.placeholderLedger.outstanding().length;
   const view = settleView(c, c.runId);

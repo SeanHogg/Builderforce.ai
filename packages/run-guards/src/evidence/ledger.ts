@@ -38,10 +38,14 @@ export interface CheckRecord {
   findings: readonly string[];
   /** epoch ms, passed in — the module stays clock-free. */
   at: number;
+  /** Last ~2 KB of the check's combined output, present on a FAILING check — why it failed, not just the exit code. */
+  outputTail?: string;
 }
 
 /** A check's findings are capped at this many lines (PRD §4.2). */
 export const MAX_CHECK_FINDINGS = 20;
+/** A check's carried output tail is capped at this many chars — bounded, never unbounded. */
+export const MAX_CHECK_OUTPUT_TAIL = 2048;
 
 /** Evidence recorded against exactly one content hash of one path. */
 export interface FileEvidence {
@@ -117,6 +121,7 @@ export function createEvidenceLedger(resume?: readonly FileEvidence[]): Evidence
       const capped: CheckRecord = {
         ...check,
         findings: check.findings.slice(0, MAX_CHECK_FINDINGS),
+        ...(check.outputTail ? { outputTail: check.outputTail.slice(-MAX_CHECK_OUTPUT_TAIL) } : {}),
       };
       const list = e.byHash.get(contentHash);
       if (list) list.push(capped);

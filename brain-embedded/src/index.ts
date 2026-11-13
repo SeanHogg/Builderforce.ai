@@ -379,7 +379,7 @@ export { createPayloadBudget, cutMiddleToFit, truncateMiddle, PASTE_SAFE_REPORT_
 
 // Did the run's change actually SHIP? The evidence a run holds first-hand when it
 // pushed straight to the base branch — the case no merge webhook can ever see.
-export { shippedToBaseBranch, parseGitShortStatus, dirtyPathsOf, BASE_BRANCHES } from './shipVerification';
+export { shippedToBaseBranch, onBaseBranch, parseGitShortStatus, dirtyPathsOf, BASE_BRANCHES } from './shipVerification';
 export type { GitShortStatus } from './shipVerification';
 
 // Loop guard: the per-run tally of which targets have been read, and the advisory the

@@ -44,6 +44,22 @@ describe("testsFor", () => {
 });
 
 describe("targetedTestRecords", () => {
+  it("regression: a Windows absolute path is passed RELATIVE to the owning package", async () => {
+    // commit bb4bc9a40: the runner (vitest/jest) matches its file filter against paths
+    // RELATIVE to the cwd it runs in. An absolute Windows path matched nothing → vitest
+    // "No test files found" → exit 1 → the gate recorded `fail` for a test that never ran.
+    const wp = path.win32;
+    const pkg = "C:\\repo\\pkg";
+    const at = (...parts: string[]) => wp.join(pkg, ...parts);
+    const fs = memFs({ [at("package.json")]: pkgJson, [at("src", "a.ts")]: "", [at("src", "a.test.ts")]: "" });
+    const ran: string[][] = [];
+    const records = await targetedTestRecords([at("src", "a.ts")], pkg, fs,
+      { runFor: async (argv) => { ran.push([...argv]); return { exitCode: 0 }; } },
+      { now: () => 1, pathImpl: wp });
+    expect(ran).toEqual([["npx", "--no-install", "vitest", "run", "src\\a.test.ts"]]);
+    expect(records.map((r) => r.outcome)).toEqual(["pass"]);
+  });
+
   it("regression: editing only a test file runs that test", async () => {
     const fs = memFs({ [at("package.json")]: pkgJson, [at("src", "a.test.ts")]: "" });
     const ran: string[][] = [];

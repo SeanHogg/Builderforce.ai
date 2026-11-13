@@ -31,8 +31,17 @@ const LIFTS: readonly string[] = [
   'can you commit?',
   'could you push it',
   "you're good to push",
-  'push up the changes',
-  'push to the feature branch',
+  // regression: two chained publish verbs, an arbitrary direct object, and the
+  // doc-comment's own "commit it, then push" example all LIFT the hold.
+  'commit and push',
+  'commit and push the triage doc',
+  'commit it, then push',
+  'commit it and push',
+  'go ahead and commit and push',
+  'commit and push to main',
+  'push the triage doc',
+  'push the fix',
+  'merge the pull request',
 ];
 
 const KEEPS_HOLD: readonly string[] = [
@@ -58,6 +67,13 @@ const KEEPS_HOLD: readonly string[] = [
   // A bare affirmative with no publish question before it orders nothing.
   'yes',
   'go ahead',
+  // regression: an arbitrary `the`-phrase that is NOT a clean noun object must
+  // still keep the hold (adjective / verb-led / too long / verb + object).
+  'make the publish button blue',
+  'push the button blue',
+  'push the deploy when you are ready',
+  'push the thing that I sent you earlier today',
+  'commit the message format is wrong in the changelog script',
 ];
 
 describe('asksToShip — the publish-hold lift matcher', () => {

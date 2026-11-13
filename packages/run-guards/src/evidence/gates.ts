@@ -203,9 +203,12 @@ function firstFindings(check: CheckRecord, max = 3): string {
 }
 
 function checkFailureReason(path: string, check: CheckRecord, detail: string): string {
+  const tail = check.outputTail?.trim();
   return (
     `git_push refused: ${path} failed ${check.kind} "${check.name}"${detail}. ` +
-    `First findings: ${firstFindings(check)}. Fix the failure and push again — the host runs the checks.`
+    `First findings: ${firstFindings(check)}.` +
+    (tail ? ` Output (tail): ${tail.replace(/\s+/g, ' ').trim().slice(0, 400)}.` : "") +
+    ` Fix the failure and push again — the host runs the checks.`
   );
 }
 

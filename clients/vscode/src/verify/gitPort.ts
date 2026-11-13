@@ -153,5 +153,28 @@ export function createGitPort(runner: GitRunner) {
       // `diff` is the exact text `diffHash` hashes: the reviewer reads it and hashes it the same way.
       return { files, diffHash: sha256(diffText), baseBranch, diff: diffText };
     },
+    async onBaseBranch(repo: string, paths: readonly string[]): Promise<boolean> {
+      // An unborn HEAD (no commits yet) is not on any branch.
+      if (!(await gitExec(runner, repo, ["rev-parse", "--verify", "--quiet", "HEAD"])).trim()) return false;
+      const branch = (await gitExec(runner, repo, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
+      // The repo's default branch (its real base), else the conventional one. feature/x is never a base.
+      const base =
+        (await gitExec(runner, repo, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"])).trim().replace(/^origin\//, "") ||
+        (BASE_BRANCHES.has(branch) ? branch : "main");
+      if (!branch || !BASE_BRANCHES.has(branch) && branch !== base) return false;
+      // The base must actually exist on origin and CONTAIN HEAD (nothing unpushed on the base).
+      const mergeBase = (await gitExec(runner, repo, ["merge-base", `origin/${base}`, "HEAD"])).trim();
+      const head = (await gitExec(runner, repo, ["rev-parse", "HEAD"])).trim();
+      if (!mergeBase || mergeBase !== head) return false;
+      // The touched files must be byte-identical at HEAD, in the working tree, and on origin/<base>:
+      // anything differing anywhere means the change did not fully land, or local edits unpushed it again.
+      const diffTree = await gitExec(runner, repo, ["diff", "--quiet", `origin/${base}`, "HEAD", "--", ...paths]);
+      const diffWt = await gitExec(runner, repo, ["diff", "--quiet", "HEAD", "--", ...paths]);
+      const untracked = await runner(["ls-files", "--others", "--exclude-standard", "--", ...paths], { cwd: repo });
+      return !diffTree && !diffWt && untracked.exitCode === 0 && !untracked.stdout.trim();
+    },
   };
 }
+
+/** The conventional base branches; `main` is the fallback when origin's default is unreadable. */
+const BASE_BRANCHES = new Set(["main", "master"]);

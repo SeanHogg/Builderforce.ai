@@ -62,4 +62,36 @@ describe("createGitPort", () => {
     const out = await createGitPort(git).outgoing("/r");
     expect(out.unavailable).toMatch(/no upstream/);
   });
+
+  it("regression: onBaseBranch is true when HEAD is on a base branch origin contains, with no path differing", async () => {
+    // The change reached the base branch WITHOUT this run pushing it (another session's
+    // commit swept it, a later run pushed it, the user pushed): `shippedToBaseBranch`
+    // counted only this run's own push, so the ticket stayed `in_review` forever.
+    const { git } = fakeGit((args) => {
+      const a = args.join(" ");
+      if (a === "rev-parse --verify --quiet HEAD") return { stdout: "abc123\n", exitCode: 0 };
+      if (a === "rev-parse --abbrev-ref HEAD") return { stdout: "main\n", exitCode: 0 };
+      if (a === "merge-base origin/main HEAD") return { stdout: "abc123\n", exitCode: 0 };
+      if (a === "rev-parse HEAD") return { stdout: "abc123\n", exitCode: 0 };
+      return undefined;
+    });
+    expect(await createGitPort(git).onBaseBranch!("/r", ["src/a.ts"])).toBe(true);
+  });
+
+  it("regression: onBaseBranch is false on a feature branch, or when origin's base does not contain HEAD", async () => {
+    const feature = fakeGit((args) => {
+      const a = args.join(" ");
+      if (a === "rev-parse --abbrev-ref HEAD") return { stdout: "feature/x\n", exitCode: 0 };
+      return undefined;
+    });
+    expect(await createGitPort(feature.git).onBaseBranch!("/r", ["src/a.ts"])).toBe(false);
+    const ahead = fakeGit((args) => {
+      const a = args.join(" ");
+      if (a === "rev-parse --abbrev-ref HEAD") return { stdout: "main\n", exitCode: 0 };
+      if (a === "merge-base origin/main HEAD") return { stdout: "older\n", exitCode: 0 };
+      if (a === "rev-parse HEAD") return { stdout: "abc123\n", exitCode: 0 };
+      return undefined;
+    });
+    expect(await createGitPort(ahead.git).onBaseBranch!("/r", ["src/a.ts"])).toBe(false);
+  });
 });

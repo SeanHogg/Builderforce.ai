@@ -14,8 +14,11 @@
  * (`%`, `"`, a line break) is refused before anything starts. Every other program
  * (`node`, `git`) is spawned directly, no shell.
  *
- * Output is not captured (`stdio: "ignore"`): the records carry the exit code, and a
- * verbose check can never overflow a buffer and be misreported.
+ * Output is capped, not ignored: a ring buffer keeps the last ~2 KB of combined
+ * stdout/stderr, and the shell hands the tail to the CALLER (a failing check record
+ * carries it, so a refusal can quote why the check failed — never just "exit 1").
+ * Pass records need no tail: the caller records it only on a fail. The cap is a ring
+ * buffer, never unbounded: a verbose check can never overflow memory or be misreported.
  */
 
 import { execFile, spawn } from "child_process";
@@ -24,16 +27,21 @@ import { killTree } from "../process/killTree";
 /** One command: the program and its arguments, never joined into a shell string. */
 export type Argv = readonly string[];
 
+/** What ran: the REAL exit code, plus the last of the output — on a fail, why it failed. */
 export interface Runner {
-  (argv: Argv, options: { cwd: string; timeout?: number }): Promise<{ exitCode?: number }>;
+  (argv: Argv, options: { cwd: string; timeout?: number }): Promise<{ exitCode?: number; tail?: string }>;
 }
 
 export interface ExecResult {
   exitCode?: number;
+  tail?: string;
 }
 
 /** The conventional exit code of a command stopped by its time limit. */
 export const DID_NOT_FINISH = 124;
+
+/** The most combined output kept on a check: a bounded ring, never unbounded. */
+export const OUTPUT_TAIL_LIMIT = 2048;
 
 /** The package-manager shims that are `.cmd` batch files on Windows. */
 const WINDOWS_SHIMS = new Set(["pnpm", "npm", "yarn", "npx"]);
@@ -66,21 +74,31 @@ export const execRunner: Runner = (argv, options) =>
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
-      resolve({ exitCode });
+      // The tail rides every result; the CALLER records it on a failing check only.
+      resolve({ exitCode, tail: tail.trim() ? tail : undefined });
     };
     let child: ReturnType<typeof spawn>;
+    // A bounded ring of the last OUTPUT_TAIL_LIMIT chars of combined stdout+stderr:
+    // kept only so a FAILING check can say WHY — the slice (not the accumulation) is
+    // stored, so memory is flat no matter how verbose the command.
+    let tail = "";
     try {
       child = spawn(plan.file, plan.args, {
         cwd: options.cwd,
-        stdio: "ignore",
+        stdio: ["ignore", "pipe", "pipe"],
         windowsHide: true,
         shell: false,
         windowsVerbatimArguments: plan.verbatim,
         detached: process.platform !== "win32",
       });
     } catch {
-      return resolve({ exitCode: 1 }); // failed to start — non-zero, and never a pass
+      return resolve({ exitCode: 1, tail: "" }); // failed to start — non-zero, and never a pass
     }
+    const onData = (chunk: unknown): void => {
+      tail = (tail + String(chunk)).slice(-OUTPUT_TAIL_LIMIT);
+    };
+    child.stdout?.on("data", onData);
+    child.stderr?.on("data", onData);
     const timer = options.timeout
       ? setTimeout(() => {
           // Kill the process and everything it started (cmd.exe → pnpm → tsc); never started: nothing to kill.

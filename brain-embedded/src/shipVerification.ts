@@ -30,6 +30,7 @@
 
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
 import { gitCommandPattern } from '@builderforce/run-guards';
+import type { GitPort } from './runStore/runTypes';
 
 /**
  * Branches whose content is, by definition, shipped: the two conventional defaults,
@@ -183,6 +184,30 @@ export function defaultBranchFromTrace(steps: readonly BrainTraceEvent[]): strin
     if (m?.[1] && m[1] !== 'HEAD' && m[1] !== '(unknown)') return m[1];
   }
   return null;
+}
+
+/**
+ * The SECOND "shipped" signal: the run's change reached the base branch WITHOUT this run
+ * pushing it. `shippedToBaseBranch` counts only THIS run's own push; a change another
+ * session committed and pushed, a later run pushed, or the user pushed never satisfies
+ * it, and its ticket stayed `in_review` forever even with the code already on origin/main.
+ * This reads the live repo (through the host's {@link GitPort} — never a new git helper):
+ * HEAD is a base branch that origin's base contains (nothing unpushed), and none of the
+ * touched files differs between `origin/<base>`, HEAD and the working tree. An unbound or
+ * throwing port is "don't know", never a pass. A run's delta ticket must be a local id
+ * (the account's tickets are not delta tickets), else the ids could not be compared.
+ */
+export async function onBaseBranch(
+  git: Pick<GitPort, 'onBaseBranch'> | undefined,
+  touchedFiles: readonly string[],
+  deltaTicketId: number | null | undefined,
+): Promise<boolean> {
+  if (!git?.onBaseBranch || !touchedFiles.length || deltaTicketId == null) return false;
+  try {
+    return await git.onBaseBranch('', touchedFiles);
+  } catch {
+    return false;
+  }
 }
 
 /**

@@ -26,6 +26,18 @@ export interface TestFileSystem {
   list?(dir: string): Promise<string[]>;
 }
 
+/**
+ * The path semantics a run's file names use. The host passes the platform `path`;
+ * a test passes `path.win32` to exercise Windows-style absolute paths on any OS
+ * (vitest's CI runs on Linux, where a backslash path would otherwise be mangled).
+ */
+export interface TestPathImpl {
+  dirname(p: string): string;
+  basename(p: string): string;
+  relative(from: string, to: string): string;
+  join(...parts: string[]): string;
+}
+
 /** The one verify shell (`typecheck.ts`): an argument array, never a shell string. */
 export type TestShell = VerifyShellLike;
 
@@ -51,17 +63,17 @@ export function coLocatedTestNames(absPath: string): string[] {
  * `x.ts` has `x.test.ts(x)` / `x.spec.ts(x)` and, when the directory can be listed, every
  * `x.<part>.test.ts(x)` beside it (`session.mint.test.ts` tests `session.ts`).
  */
-export async function testsFor(absPath: string, fs: TestFileSystem): Promise<string[]> {
+export async function testsFor(absPath: string, fs: TestFileSystem, pathImpl: TestPathImpl = path): Promise<string[]> {
   if (TEST_FILE_RE.test(absPath)) return (await fs.exists(absPath)) ? [absPath] : [];
   const found: string[] = [];
   for (const candidate of coLocatedTestNames(absPath)) if (await fs.exists(candidate)) found.push(candidate);
-  const m = /^(.+)\.(ts|tsx|mts|cts)$/i.exec(path.basename(absPath));
+  const m = /^(.+)\.(ts|tsx|mts|cts)$/i.exec(pathImpl.basename(absPath));
   if (m && fs.list) {
-    const dir = path.dirname(absPath);
+    const dir = pathImpl.dirname(absPath);
     const prefix = `${m[1]}.`.toLowerCase();
     const names = await fs.list(dir).catch(() => [] as string[]);
     for (const name of names) {
-      const full = path.join(dir, name);
+      const full = pathImpl.join(dir, name);
       if (name.toLowerCase().startsWith(prefix) && TEST_FILE_RE.test(name) && !found.includes(full)) found.push(full);
     }
   }
@@ -92,23 +104,24 @@ export async function targetedTestRecords(
   cwd: string,
   fs: TestFileSystem,
   shell: TestShell,
-  opts?: { now?: () => number; timeoutMs?: number },
+  opts?: { now?: () => number; timeoutMs?: number; pathImpl?: TestPathImpl },
 ): Promise<CheckRecord[]> {
   const now = opts?.now ?? Date.now;
   const timeoutMs = opts?.timeoutMs ?? TEST_TIMEOUT_MS;
+  const p = opts?.pathImpl ?? path;
 
   // Collect the changed files by owning package (the nearest package.json upward).
   const byPkg = new Map<string, string[]>();
   for (const absPath of absPaths) {
     if (!SOURCE_RE.test(absPath)) continue;
-    let dir = path.dirname(absPath);
+    let dir = p.dirname(absPath);
     let pkgDir: string | null = null;
     for (let i = 0; i < 32; i += 1) {
-      if (await fs.exists(path.join(dir, "package.json"))) {
+      if (await fs.exists(p.join(dir, "package.json"))) {
         pkgDir = dir;
         break;
       }
-      const parent = path.dirname(dir);
+      const parent = p.dirname(dir);
       if (parent === dir) break;
       dir = parent;
     }
@@ -120,7 +133,7 @@ export async function targetedTestRecords(
 
   const records: CheckRecord[] = [];
   for (const [pkgDir, files] of byPkg) {
-    const pkgJson = await fs.readFile(path.join(pkgDir, "package.json"));
+    const pkgJson = await fs.readFile(p.join(pkgDir, "package.json"));
     if (pkgJson === null) continue;
     let scripts: { test?: string } = {};
     try {
@@ -141,11 +154,13 @@ export async function targetedTestRecords(
     // ran. Pass paths relative to the owning package (the shell's cwd).
     const command = targetedTestCommand(
       runnerFromTestScript(testScript),
-      tests.map((t) => path.relative(pkgDir, t)),
+      tests.map((t) => p.relative(pkgDir, t)),
     );
     // No budget left (a bounded caller): not started — "unavailable", never a pass.
     const r = timeoutMs > 0 ? await shell.runFor(command, timeoutMs) : { exitCode: DID_NOT_FINISH };
     const exitCode = typeof r.exitCode === "number" ? r.exitCode : 1;
+    // Kept only on a fail: a passing check needs no output, an unavailable one never ran.
+    const tail = typeof r.tail === "string" && r.tail.trim() ? r.tail : undefined;
     records.push({
       kind: "test",
       name: command.join(" "),
@@ -153,6 +168,7 @@ export async function targetedTestRecords(
       exitCode,
       findings: [],
       at: now(),
+      ...(exitCode !== 0 && exitCode !== DID_NOT_FINISH && tail ? { outputTail: tail } : {}),
     });
   }
   return records;

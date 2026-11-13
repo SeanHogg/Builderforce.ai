@@ -74,6 +74,27 @@ describe("outgoingGate", () => {
     }
   });
 
+  it("regression: a failing check's carried output tail is QUOTED in the refusal — never a bare exit code", () => {
+    // chat: an agent spent ~40 turns guessing why a check "failed" because the record
+    // held only an exit code. The tail the host captured rides the refusal.
+    const l = passingLedger("packages/a/src/x.ts");
+    l.record(
+      "packages/a/src/x.ts",
+      "h1",
+      rec({
+        kind: "test",
+        name: "vitest run src/a.test.ts",
+        outcome: "fail",
+        exitCode: 1,
+        findings: [],
+        outputTail: "No test files found\n unmatched filter: C:\\repo\\pkg\\src\\a.test.ts",
+      }),
+    );
+    const v = outgoingGate([file("packages/a/src/x.ts")], l, POLICY);
+    expect(v.ok).toBe(false);
+    if (!v.ok) expect(v.reason).toContain("No test files found");
+  });
+
   it("passes-but-reports when a check is unavailable (OD-3), never reported as verified", () => {
     const l = passingLedger("packages/a/src/x.ts");
     l.record("packages/a/src/x.ts", "h1", rec({ kind: "test", name: "vitest", outcome: "unavailable", exitCode: null }));

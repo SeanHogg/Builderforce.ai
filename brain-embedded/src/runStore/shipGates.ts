@@ -41,6 +41,10 @@ import {
 import { completionBlockedAdvisory, isTicketCompletion } from '../completionGuard';
 import type { BrainRunContext } from './brainRunContext';
 import { nowIso, pushTrace } from './runCells';
+import { parseSyncId } from '@builderforce/local-first';
+import { settleView } from './runBackstops';
+import { verificationOf } from '../run/brainCloseOut';
+import { finishConditionMet } from './deterministicFinish';
 
 /** What a refusal call returns to the model (ordinary tool result, `ok:false`). */
 export interface Refusal {
@@ -241,6 +245,8 @@ export async function shipGatePreflight(run: BrainRunContext, name: string, args
   if (!run.req.git) return {};
   // Ticket → done: refused BEFORE the update runs, so "CANNOT MARK DONE" is true when the model reads it.
   if (isTicketCompletion(name, args)) {
+    const deltaRefusal = await deltaTicketCompletionRefusal(run, args);
+    if (deltaRefusal) return { refusal: deltaRefusal };
     const refusal = await completionGateRefusal(run);
     return refusal ? { refusal } : {};
   }
@@ -258,6 +264,23 @@ export async function shipGatePreflight(run: BrainRunContext, name: string, args
     const { diffHash } = await run.req.git.outgoing(repoArgOf(args));
     const approved = diffHash ? approvedReviewFor(run, diffHash) : null;
     if (!approved) {
+      const authors = authorModelsOf(run);
+      // No model other than the author is available — the review sub-run can never be
+      // independent. Naming the single model is the truth; telling the agent to "push so
+      // the host runs the review" is a lie when pushing cannot help.
+      if (authors.length <= 1) {
+        const only = authors[0] ?? '(unknown)';
+        return {
+          refusal: {
+            ok: false,
+            error:
+              'builtin_reviews_record refused: no reviewGate-approved independent review exists for the current diff, and ' +
+              `only ONE model (${only}) has served this run — the review sub-run must be by a model that did not author the ` +
+              'change (PRD 45 OD-1), so pushing cannot create it. Open a pull request for a human/other-model review, or ' +
+              'finish the task and leave the ticket in review.',
+          },
+        };
+      }
       return {
         refusal: {
           ok: false,
@@ -371,6 +394,37 @@ function approvalEvidence(run: BrainRunContext, unavailable: readonly string[], 
 export function repoArgOf(args: unknown): string {
   const r = (args as { repo?: unknown } | null)?.repo;
   return typeof r === 'string' ? r : '';
+}
+
+/**
+ * W5 — a model-initiated `done` on the RUN'S OWN DELTA TICKET holds the SAME evidence
+ * rule the host close-out uses: the change must be verified ({@link verificationOf}) and
+ * carry no outstanding placeholder ({@link finishConditionMet} reads both). Non-delta
+ * tickets keep current behaviour (the {@link completionGateRefusal} path). A non-local id
+ * can never be the run's own delta, so it is not gated here.
+ */
+async function deltaTicketCompletionRefusal(run: BrainRunContext, args: unknown): Promise<Refusal | null> {
+  const id = parseSyncId((args as { id?: unknown } | null | undefined)?.id);
+  const deltaId = run.c.deltaTicketId;
+  if (id == null || deltaId == null || id !== deltaId) return null;
+  const view = settleView(run.c, run.c.runId);
+  const verification = verificationOf(run.evidence, view.touchedFiles);
+  const open = run.placeholderLedger.outstanding().length;
+  // The host close-out also requires an approved review of the CURRENT diff (reviewGate): a
+  // verified-but-unreviewed change is not done. Same rule here — the model cannot skip the
+  // review by marking its own ticket done.
+  const outgoing = await run.req.git?.outgoing(repoArgOf(args));
+  const diffHash = outgoing && !('unavailable' in outgoing && outgoing.unavailable) ? outgoing.diffHash : null;
+  const reviewed = diffHash ? !!approvedReviewFor(run, diffHash) : false;
+  if (finishConditionMet({ shipped: true, verified: verification.verified && reviewed, openPlaceholders: open, hasTicket: true })) return null;
+  const reason = !verification.verified
+    ? `the run holds no passing verification for its change (${verification.reason})`
+    : !reviewed
+      ? 'no reviewGate-approved review of the current diff'
+      : open > 0
+        ? `${open} placeholder(s) are still outstanding`
+        : 'the run is not verified to have shipped';
+  return { ok: false, error: `CANNOT MARK DONE — this is the run's own delta ticket (#${deltaId}): ${reason}. Finish the work and let the host close it out, or leave it in review.` };
 }
 
 // ── Runner advisory entry point ─────────────────────────────────────────────

@@ -118,8 +118,13 @@ export async function answerFromMemory(
   const { evermind, model } = req;
   const convo = c.transcript;
   if (!(evermind?.answer && memoryReplay && !c.abort?.signal.aborted)) return false;
+  // Only attempted on the run's FIRST turn (no tool results yet) — and never when the ask
+  // is an interrupted-run RESUME: the generic "Continue the task that was interrupted…" ask
+  // is a near-exact repeat of the question the interrupted run already asked and answered,
+  // so the Q&A cache would replay the OLD answer and the resumed run would act on a stale
+  // plan instead of continuing. A resumed run always re-asks the model (chat #48534).
   const query = latestUserText(convo);
-  if (!query) return false;
+  if (!query || query.startsWith('Continue the task that was interrupted when the editor closed')) return false;
   let memAnswer: MemoryFirstAnswer | null = null;
   try {
     memAnswer = await evermind.answer(query, {

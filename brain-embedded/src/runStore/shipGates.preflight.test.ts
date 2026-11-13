@@ -89,6 +89,34 @@ describe('shipGatePreflight', () => {
     expect(await shipGatePreflight(runWith({ git: git() }), 'builtin_reviews_record', { taskId: 1, verdict: 'gaps' })).toEqual({});
   });
 
+  it('regression: a complete review record with only ONE model served names the model — the review can never be independent, so "push" is not the answer (chat #74528)', async () => {
+    // Every turn was served by one model, so the review sub-run could never be by a
+    // different model. Telling the agent to "push so the host runs the review" was a lie.
+    const run = runWith({ git: git(), verifier: verifier('pass') }); // authorModels: ['author-model'] only
+    const gate = await shipGatePreflight(run, 'builtin_reviews_record', { taskId: 1, verdict: 'complete' });
+    expect('refusal' in gate && gate.refusal.error).toMatch(/only ONE model \(author-model\)/);
+    expect('refusal' in gate && gate.refusal.error).toMatch(/pushing cannot create it/);
+  });
+
+  it('regression: a model cannot mark the run\'s OWN delta ticket done with no review / no verification (#6537)', async () => {
+    // `builtin_tasks_update {status:"done"}` succeeded right after the review was refused.
+    // The delta ticket holds the SAME evidence rule the host close-out uses.
+    const run = ({ req: { git: git() }, evidence: createEvidenceLedger(),
+      placeholderLedger: { outstanding: () => [] },
+      c: { authorModels: new Set(['author-model']), shipReviews: [], deltaTicketId: 77, runId: 'r', touchedFiles: [FILE], deltaRecordedFiles: [], trace: [], listeners: new Set(), codeChanged: true } }) as unknown as BrainRunContext;
+    // No verification recorded → refused.
+    let gate = await shipGatePreflight(run, 'builtin_tasks_update', { id: 77, status: 'done' });
+    expect('refusal' in gate && gate.refusal.error).toMatch(/no passing verification/);
+    // Verification passes but there is no reviewGate-approved review of the current diff → still refused.
+    run.evidence.record(FILE, 'h1', { kind: 'typecheck', name: 'tsc', outcome: 'pass', exitCode: 0, findings: [], at: 1 });
+    run.evidence.record(FILE, 'h1', { kind: 'diagnostics', name: 'lsp', outcome: 'pass', exitCode: null, findings: [], at: 2 });
+    run.evidence.record(FILE, 'h1', { kind: 'test', name: 'vitest', outcome: 'pass', exitCode: 0, findings: [], at: 3 });
+    gate = await shipGatePreflight(run, 'builtin_tasks_update', { id: 77, status: 'done' });
+    expect('refusal' in gate && gate.refusal.error).toMatch(/delta ticket/);
+    // A NON-delta ticket id keeps current behaviour (not gated by the delta rule).
+    expect(await shipGatePreflight(run, 'builtin_tasks_update', { id: 1, status: 'done' })).toEqual({});
+  });
+
   it('regression: a pull request is diffed against its base, and an empty outgoing set is REFUSED as not verified (never a pass), never reviewed', async () => {
     const asked: unknown[] = [];
     const reviewer = approving();

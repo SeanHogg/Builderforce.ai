@@ -25,7 +25,7 @@ export interface VerifySandboxLike {
 
 /** The ONE bounded shell every verify tier runs through: an argument array, never a shell string. */
 export interface VerifyShellLike {
-  runFor(argv: Argv, timeoutMs: number): Promise<{ exitCode?: number }>;
+  runFor(argv: Argv, timeoutMs: number): Promise<{ exitCode?: number; tail?: string }>;
 }
 
 /** The whole verify's budget — room for the checks that follow it. */
@@ -103,9 +103,14 @@ export async function runTypecheckVerify(
     const left = deadline - now();
     const argv = argvOf(command);
     // Not started when the budget cannot fit it, or when the script name is not a plain token: "unavailable".
+    let tail: string | undefined;
     const exitCode = left < MIN_COMMAND_MS || !argv
       ? DID_NOT_FINISH
-      : await shell.runFor(argv, left).then((r) => (typeof r.exitCode === "number" ? r.exitCode : 1));
+      : await shell.runFor(argv, left).then((r) => {
+          // Kept only on a fail: a passing check needs no output, an unavailable one never ran.
+          tail = typeof r.tail === "string" && r.tail.trim() ? r.tail : undefined;
+          return typeof r.exitCode === "number" ? r.exitCode : 1;
+        });
     records.push({
       kind: "typecheck",
       name: command,
@@ -113,6 +118,7 @@ export async function runTypecheckVerify(
       exitCode,
       findings: [],
       at: now(),
+      ...(exitCode !== 0 && exitCode !== DID_NOT_FINISH && tail ? { outputTail: tail } : {}),
     });
   }
   return records;
