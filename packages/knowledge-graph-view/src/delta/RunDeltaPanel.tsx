@@ -15,6 +15,7 @@ import type { KnowledgePanelRenderer } from '../types';
 import {
     blockingLabel, dimensionLabel, headlineText, lineageGroup, metricLabel, metricValueText, overrideLabel, reasonLabel, type LineageGroup,
 } from './deltaText';
+import { DeltaIconButton, CopyIcon, ResolveIcon } from './DeltaActionIcons';
 import { DeltaFindingItem, type RunDeltaCodeTarget } from './DeltaFindingItem';
 import { PendingAnalyzers } from './PendingAnalyzers';
 import { labelKey, type RunDeltaLabels } from './labels';
@@ -99,13 +100,31 @@ export interface RunDeltaPanelProps {
     compact: boolean;
     /** The host's slide-out (web: `SlideOutPanel`); absent ⇒ the package sheet. */
     renderPanel?: KnowledgePanelRenderer | undefined;
+    /** Seeds a fix directive for the issues this run found (PRD 41 "Fix with agent"). Absent ⇒ no Resolve button. */
+    onResolve?: (() => void) | undefined;
+    /** Copies the full delta results as a diagnostic. Absent ⇒ no Copy diagnostics button. */
+    onCopyDiagnostics?: (() => void) | undefined;
 }
 
-export function RunDeltaPanel({ open, delta, overrides, labels, onClose, onOpenCode, compact, renderPanel }: RunDeltaPanelProps) {
+export function RunDeltaPanel({ open, delta, overrides, labels, onClose, onOpenCode, compact, renderPanel, onResolve, onCopyDiagnostics }: RunDeltaPanelProps) {
     const failed = delta.dimensions.flatMap((d) => d.measuredBy.filter((m) => m.status === 'failed').map((m) => ({ ...m, dimension: d.id })));
     return (
         <Panel open={open} title={labels.panelTitle} closeLabel={labels.close} onClose={onClose} compact={compact} width={440} render={renderPanel}>
             <p style={{ ...TYPE.body, margin: 0, color: cssVar('text'), overflowWrap: 'anywhere' }}>{headlineText(labels, delta.summary)}</p>
+            {(onResolve || onCopyDiagnostics) && (
+                <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                    {onResolve && (
+                        <DeltaIconButton label={labels.resolve} title={labels.resolveHint} onClick={onResolve}>
+                            <ResolveIcon />
+                        </DeltaIconButton>
+                    )}
+                    {onCopyDiagnostics && (
+                        <DeltaIconButton label={labels.copyDiagnostics} onClick={onCopyDiagnostics}>
+                            <CopyIcon />
+                        </DeltaIconButton>
+                    )}
+                </div>
+            )}
             {delta.dimensions.map((d) => <DimensionSection key={d.id} dimension={d} labels={labels} onOpenCode={onOpenCode} />)}
             <PendingAnalyzers delta={delta} labels={labels} variant="section" />
             {failed.length > 0 && (

@@ -24,14 +24,20 @@ export interface VsCodeChatThreadProps {
   onReplayMessage: TimelineProps['onReplayMessage'];
   revealMessage: TimelineProps['revealMessage'];
   prefetch: TimelineProps['prefetch'];
+  /**
+   * *Resolve* seeds the shared fix directive into the composer draft (the surface's
+   * `pickStarter` → `draftStore.set` — the same seed path the host's `seed` intent uses).
+   * The user reviews and sends; never auto-sends (PRD 41 "Fix with agent").
+   */
+  onResolveDelta: (text: string) => void;
 }
 
-export function VsCodeChatThread({ init, conv, chatId, labels, modelIdentity, onAnswerQuestion, onReplayMessage, revealMessage, prefetch }: VsCodeChatThreadProps) {
+export function VsCodeChatThread({ init, conv, chatId, labels, modelIdentity, onAnswerQuestion, onReplayMessage, revealMessage, prefetch, onResolveDelta }: VsCodeChatThreadProps) {
   // The signed-in user (the token's subject) is the viewer: a teammate's message is offered for translation, the viewer's own never.
   const viewerId = useViewerId();
   const isOwnMessage = useMemo(() => ownMessageOf(viewerId), [viewerId]);
   // The run delta card at the end of each run, and its details panel (PRD 41 §C11).
-  const runDelta = useRunDeltaCards(chatId, conv.messages);
+  const runDelta = useRunDeltaCards(chatId, conv.messages, { onResolve: onResolveDelta });
   return (
     <VsCodeTranslationProvider init={init}>
       <RunDeltaFootersProvider value={runDelta.footers}>

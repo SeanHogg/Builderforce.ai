@@ -14,6 +14,7 @@ import { cssVar } from '../scene/themeColors';
 import { card, quietButton } from '../styles';
 import { TYPE } from '../surface/ui/type';
 import { fillTemplate } from '../template';
+import { DeltaIconButton, CopyIcon, ResolveIcon } from './DeltaActionIcons';
 import { headlineText, reasonLabel } from './deltaText';
 import { DimensionRow } from './DimensionRow';
 import { HeldNotice, type HeldNoticeProps } from './HeldNotice';
@@ -31,11 +32,15 @@ export interface RunDeltaCardProps {
     held?: Omit<HeldNoticeProps, 'labels'> | undefined;
     /** The Predicted block under the verdict rows (PRD 41 §D11), rendered by the host surface; advisory, never a verdict. */
     predicted?: ReactNode;
+    /** Seeds a fix directive for the issues this run found (PRD 41 "Fix with agent"). Absent ⇒ no Resolve button. */
+    onResolve?: (() => void) | undefined;
+    /** Copies the full delta results as a diagnostic. Absent ⇒ no Copy diagnostics button. */
+    onCopyDiagnostics?: (() => void) | undefined;
 }
 
 const BAND_TONE = { low: cssVar('sev1'), medium: cssVar('sev3'), high: cssVar('sev5') } as const;
 
-export function RunDeltaCard({ delta, labels, repoLabel, onOpenDetails, held, predicted }: RunDeltaCardProps) {
+export function RunDeltaCard({ delta, labels, repoLabel, onOpenDetails, held, predicted, onResolve, onCopyDiagnostics }: RunDeltaCardProps) {
     const headline = headlineText(labels, delta.summary);
     const band = delta.blastRadius.band;
     return (
@@ -65,6 +70,16 @@ export function RunDeltaCard({ delta, labels, repoLabel, onOpenDetails, held, pr
                 </span>
                 {delta.blastRadius.reasons.map((r) => <span key={r} data-reason={r} style={reasonTag}>{reasonLabel(labels, r)}</span>)}
                 {delta.blocking.length > 0 && <span style={{ ...reasonTag, color: cssVar('sev5'), borderColor: cssVar('sev5') }}>{labels.blocking}</span>}
+                {onResolve && (
+                    <DeltaIconButton label={labels.resolve} title={labels.resolveHint} onClick={onResolve}>
+                        <ResolveIcon />
+                    </DeltaIconButton>
+                )}
+                {onCopyDiagnostics && (
+                    <DeltaIconButton label={labels.copyDiagnostics} onClick={onCopyDiagnostics}>
+                        <CopyIcon />
+                    </DeltaIconButton>
+                )}
                 <button type="button" onClick={onOpenDetails} style={{ ...quietButton, marginInlineStart: 'auto' }}>
                     {labels.openDetails}
                 </button>

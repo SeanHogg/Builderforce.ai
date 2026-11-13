@@ -150,6 +150,10 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   const [gateApproval, setGateApproval] = useState<Approval | null>(null);
   const [subTab, setSubTab] = useState<SubTab>('output');
   const [draft, setDraft] = useState('');
+  // Resolve-directive seed from the run delta's "Resolve" action (PRD 41 §C11):
+  // pre-fills the composer so the user reviews and sends it as a new run's
+  // directive. Cleared once the seeded message goes out — never auto-dispatches.
+  const [composerSeed, setComposerSeed] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   // Optimistic echoes of steering directions. The execution stream's subscriber
   // map is per-Worker-isolate, so the round-trip `message` event is usually
@@ -476,6 +480,9 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
     if (!text || selectedId == null || sending) return;
     setSending(true);
     setDraft('');
+    // The seeded resolve directive went out — drop it so re-opening the delta
+    // doesn't re-fill a directive the user already acted on.
+    if (composerSeed != null && text === composerSeed) setComposerSeed(null);
     // Steering a LIVE run — or ANSWERING a paused one: render the direction
     // immediately, because we can't wait on the stream's echo (unreliable
     // cross-isolate) and a paused run has no stream at all until it wakes.
@@ -769,7 +776,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
           )}
 
           {/* What this run changed (PRD 41 §C11.1): looked for once the run settles; nothing until the cloud has a delta. */}
-          {selectedId != null && <RunDeltaForRun runId={cloudRunId(selectedId)} settled={settledRunStatus(status)} />}
+          {selectedId != null && <RunDeltaForRun runId={cloudRunId(selectedId)} settled={settledRunStatus(status)} onResolveDelta={(text) => setComposerSeed(text)} />}
 
           {/* Sub-tabs */}
           <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border-subtle)', marginBottom: 10 }}>
@@ -836,8 +843,8 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                   offers Stop — the same cancel as the header's button. */}
               <RoleGate capability="runtime.execute" variant="block" style={{ marginTop: 10 }}>
                 <ChatInput
-                  value={draft}
-                  onChange={setDraft}
+                  value={composerSeed ?? draft}
+                  onChange={(text) => { if (composerSeed != null) setComposerSeed(null); setDraft(text); }}
                   onSubmit={() => { void send(); }}
                   submitOnEnter
                   placeholder={isPaused ? t('answerPlaceholder') : isRunning ? t('steerPlaceholder') : t('followUpPlaceholder')}

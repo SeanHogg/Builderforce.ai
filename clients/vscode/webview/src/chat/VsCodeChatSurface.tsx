@@ -317,6 +317,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           onReplayMessage={replayMessage}
           revealMessage={reveal}
           prefetch={prefetchChips}
+          onResolveDelta={pickStarter}
         />
       )}
       notices={<VsCodeChatNotices conv={conv} chatsError={vsChats.error} onDismissChatsError={vsChats.clearError} bundle={init.labels} init={init} composerId={composerId} />}

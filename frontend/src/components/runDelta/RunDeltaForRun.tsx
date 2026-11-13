@@ -11,7 +11,16 @@
  */
 
 import { useCallback, useState } from 'react';
-import { RunDeltaCard, repoDisplayName } from '@builderforce/knowledge-graph-view';
+import {
+  CopiedNote,
+  CopyFallback,
+  RunDeltaCard,
+  repoDisplayName,
+  resolveDirectiveText,
+  runDeltaDiagnosticsText,
+  useCopyText,
+} from '@builderforce/knowledge-graph-view';
+import type { RunDelta } from '@builderforce/run-delta';
 import { usePolledResource } from '@/hooks/usePolledResource';
 import { getRunDeltas, isRunDeltaUnavailable, type StoredRunDelta } from '@/lib/runDeltasApi';
 import { useRunDeltaLabels } from '@/lib/knowledge/runDeltaLabels';
@@ -29,10 +38,22 @@ export interface RunDeltaForRunProps {
   runId: string;
   /** The run's TERMINAL status (`settledRunStatus`); null while it can still change. */
   settled: string | null;
+  /**
+   * Seeded with the shared resolve directive when the user clicks "Resolve" on a delta
+   * (PRD 41 §C11). The host owns the composer — the directive is only PRE-FILLED; the
+   * user reviews and sends it as a new run's directive. Never auto-dispatches.
+   */
+  onResolveDelta?: ((text: string) => void) | undefined;
 }
 
-export function RunDeltaForRun({ runId, settled }: RunDeltaForRunProps) {
+export function RunDeltaForRun({ runId, settled, onResolveDelta }: RunDeltaForRunProps) {
   const { labels } = useRunDeltaLabels();
+  // The ONE copy behaviour (shared with the knowledge-graph view): clipboard +
+  // Copied / Copy-failed feedback for "Copy diagnostics".
+  const copier = useCopyText();
+  // The last diagnostics text we handed to the clipboard, shown in the select-by-hand
+  // fallback when the clipboard refuses.
+  const [lastCopied, setLastCopied] = useState<{ text: string; key: string } | null>(null);
   const [deltas, setDeltas] = useState<StoredRunDelta[]>([]);
   const [done, setDone] = useState(false);
   const [openRepo, setOpenRepo] = useState<string | null>(null);
@@ -74,16 +95,40 @@ export function RunDeltaForRun({ runId, settled }: RunDeltaForRunProps) {
   const open = deltas.find((d) => d.repoKey === openRepo)?.delta ?? null;
   return (
     <div data-run-delta-for-run={runId} style={{ display: 'grid', gap: 8, marginBottom: 12, minWidth: 0 }}>
-      {deltas.map((d) => (
-        <RunDeltaCard
-          key={d.repoKey}
-          delta={d.delta}
-          labels={labels}
-          repoLabel={deltas.length > 1 ? repoDisplayName(d.repoKey) : undefined}
-          onOpenDetails={() => setOpenRepo(d.repoKey)}
-        />
-      ))}
-      <RunDeltaSlideOut delta={open} labels={labels} onClose={() => setOpenRepo(null)} />
+      {deltas.map((d) => {
+        const handleResolve = (): void => onResolveDelta?.(resolveDirectiveText(labels, d.delta as RunDelta));
+        const handleCopy = (): void => {
+          const text = runDeltaDiagnosticsText(labels, d.delta as RunDelta, new Date().toISOString());
+          setLastCopied({ text, key: d.repoKey });
+          void copier.copy(text);
+        };
+        return (
+          <RunDeltaCard
+            key={d.repoKey}
+            delta={d.delta}
+            labels={labels}
+            repoLabel={deltas.length > 1 ? repoDisplayName(d.repoKey) : undefined}
+            onOpenDetails={() => setOpenRepo(d.repoKey)}
+            onResolve={onResolveDelta ? handleResolve : undefined}
+            onCopyDiagnostics={handleCopy}
+          />
+        );
+      })}
+      <CopiedNote status={copier.status} labels={labels} />
+      {lastCopied && (
+        <CopyFallback status={copier.status} text={lastCopied.text} label={labels.copyDiagnostics} labels={labels} />
+      )}
+      <RunDeltaSlideOut
+        delta={open}
+        labels={labels}
+        onClose={() => setOpenRepo(null)}
+        onResolve={open && onResolveDelta ? () => onResolveDelta(resolveDirectiveText(labels, open as RunDelta)) : undefined}
+        onCopyDiagnostics={open ? () => {
+          const text = runDeltaDiagnosticsText(labels, open as RunDelta, new Date().toISOString());
+          setLastCopied({ text, key: openRepo ?? '' });
+          void copier.copy(text);
+        } : undefined}
+      />
     </div>
   );
 }

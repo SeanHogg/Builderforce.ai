@@ -20,6 +20,15 @@ export interface RunDeltaLabels {
     openDetails: string;
     openCode: string;
     close: string;
+    /** The card/panel footer action that seeds a fix directive for the issues this run found. */
+    resolve: string;
+    /** The resolve button's hover/screen-reader hint. */
+    resolveHint: string;
+    /** The card/panel action that copies the full delta results as a diagnostic. */
+    copyDiagnostics: string;
+    /** Copy feedback, shared with {@link CopiedNote} / {@link CopyFallback}. */
+    copied: string;
+    copyFailed: string;
     panelTitle: string;
     /** Shown beside a `heuristic` finding or reason: the ≈ mark and what it means. */
     heuristicMark: string;
@@ -137,6 +146,11 @@ export const DEFAULT_RUN_DELTA_LABELS: RunDeltaLabels = {
     openDetails: 'Open details',
     openCode: 'Open code',
     close: 'Close',
+    resolve: 'Resolve',
+    resolveHint: 'Fix the issues this run found',
+    copyDiagnostics: 'Copy diagnostics',
+    copied: 'Copied',
+    copyFailed: 'Copy failed',
     panelTitle: 'What this run changed',
     heuristicMark: '≈',
     heuristicHint: 'Estimated by a heuristic, not measured exactly',

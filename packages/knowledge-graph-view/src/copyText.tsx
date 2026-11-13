@@ -24,12 +24,12 @@ export function useCopyText(): { status: CopyStatus; copy(text: string): Promise
 }
 
 /** "Copied" beside the button. */
-export function CopiedNote({ status, labels }: { status: CopyStatus; labels: KnowledgeGraphLabels }) {
+export function CopiedNote({ status, labels }: { status: CopyStatus; labels: Pick<KnowledgeGraphLabels, 'copied' | 'copyFailed'> }) {
     return status === 'copied' ? <span role="status" style={muted}>{labels.copied}</span> : null;
 }
 
 /** The clipboard refused: the text itself, selectable. `label` names the box for assistive tech. */
-export function CopyFallback({ status, text, label, labels }: { status: CopyStatus; text: string; label: string; labels: KnowledgeGraphLabels }) {
+export function CopyFallback({ status, text, label, labels }: { status: CopyStatus; text: string; label: string; labels: Pick<KnowledgeGraphLabels, 'copied' | 'copyFailed'> }) {
     if (status !== 'failed') return null;
     return (
         <>

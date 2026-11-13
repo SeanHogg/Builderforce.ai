@@ -2033,7 +2033,10 @@
       "prev": "Previous page",
       "next": "Next page",
       "pageOf": "Page {page} of {pages}",
-      "pageN": "Page {n}"
+      "pageN": "Page {n}",
+      "perPage": "Results per page",
+      "noResults": "No results",
+      "pageRangeOf": "{start}–{end} of {total, plural, one {# result} other {# results}}"
     },
     "resultCount": "{n, plural, =0 {No results} one {# result} other {# results}}",
     "done": "Done",
@@ -38919,6 +38922,11 @@
     "openDetails": "Open details",
     "openCode": "Open code",
     "close": "Close",
+    "resolve": "Resolve",
+    "resolveHint": "Fix the issues this run found",
+    "copyDiagnostics": "Copy diagnostics",
+    "copied": "Copied",
+    "copyFailed": "Copy failed",
     "panelTitle": "What this run changed",
     "heuristicMark": "≈",
     "heuristicHint": "Estimated by a heuristic, not measured exactly",

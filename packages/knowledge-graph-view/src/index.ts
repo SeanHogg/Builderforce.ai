@@ -11,6 +11,7 @@ export {
 export { labelsFromCatalog } from './catalogLabels';
 export * from './delta';
 export * from './delta/history';
+export { useCopyText, CopiedNote, CopyFallback, type CopyStatus } from './copyText';
 export { setWorkerFactory } from './compute/sharedClient';
 export { buildStations, changedRefs, type Station, type StationModel } from './surface/stations';
 export { buildLines, type Line, type LinesModel } from './surface/lines';

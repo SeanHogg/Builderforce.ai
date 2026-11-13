@@ -16,9 +16,13 @@ export interface RunDeltaOpenPanelProps {
   compact: boolean;
   onClose(): void;
   onOpenCode?: ((target: RunDeltaCodeTarget) => void) | undefined;
+  /** Seeds the shared fix directive into the chat composer (the surface owns the draft). Absent ⇒ no Resolve button. */
+  onResolve?: (() => void) | undefined;
+  /** Copies the full delta results as a diagnostic (the surface owns the clipboard + feedback). Absent ⇒ no Copy button. */
+  onCopyDiagnostics?: (() => void) | undefined;
 }
 
-export function RunDeltaOpenPanel({ card, labels, compact, onClose, onOpenCode }: RunDeltaOpenPanelProps) {
+export function RunDeltaOpenPanel({ card, labels, compact, onClose, onOpenCode, onResolve, onCopyDiagnostics }: RunDeltaOpenPanelProps) {
   const repo = card.repo;
   const renderPanel = useMemo(
     () => footerPanel(<RunDeltaHistorySection repo={repo} labels={labels} />, { closeLabel: labels.close, compact, width: RUN_DELTA_PANEL_WIDTH }),
@@ -35,6 +39,8 @@ export function RunDeltaOpenPanel({ card, labels, compact, onClose, onOpenCode }
           labels={labels}
           onClose={onClose}
           onOpenCode={onOpenCode}
+          onResolve={onResolve}
+          onCopyDiagnostics={onCopyDiagnostics}
           compact={compact}
           renderPanel={renderPanel}
         />

@@ -12,15 +12,31 @@
  *  - "Open details" opens the `RunDeltaPanel` as a side sheet over the chat (non-modal), with the repository's run history
  *    and trend under its body (`run-delta/history`, `RunDeltaHistorySection`);
  *  - "Open code" asks the HOST (`run-delta/open { runId, path, line }`), which resolves the
- *    path under that delta's repository root; the webview never builds or sends an absolute path.
+ *    path under that delta's repository root; the webview never builds or sends an absolute path;
+ *  - "Resolve" seeds the shared fix directive into the chat composer's draft (the chat surface
+ *    owns `draftStore.set` — passed in as `onResolve`); the user reviews and sends it, never
+ *    auto-sent (PRD 41 "Fix with agent" seeds the ONE composer);
+ *  - "Copy diagnostics" writes the shared diagnostics text to the clipboard, with the view's ONE
+ *    Copied / Copy-failed feedback beside the cards.
  *
  * The footer slot is a STABLE module-level function rendering {@link RunDeltaAfter}, which reads the
  * placed cards from context: a new card re-renders the small footers, never the memoized message rows.
  */
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import type { RunDelta } from '@builderforce/run-delta/contract';
 import type { BrainMessage } from '@seanhogg/builderforce-brain-embedded';
-import { RunDeltaCard, RunDeltaStatusCard, type RunDeltaCodeTarget, type RunDeltaLabels } from '@builderforce/knowledge-graph-view/delta';
+import {
+  CopiedNote,
+  CopyFallback,
+  RunDeltaCard,
+  RunDeltaStatusCard,
+  resolveDirectiveText,
+  runDeltaDiagnosticsText,
+  useCopyText,
+  type RunDeltaCodeTarget,
+  type RunDeltaLabels,
+} from '@builderforce/knowledge-graph-view/delta';
 import { repoDisplayName } from '@builderforce/knowledge-graph-view/delta/history';
 import { onHostMessage, request } from '../../vscodeBridge';
 import { RunDeltaOpenPanel } from './RunDeltaOpenPanel';
@@ -54,6 +70,12 @@ export interface RunDeltaFooters {
   labels: RunDeltaLabels;
   openDetails(key: string): void;
   release: RunDeltaRelease;
+  /** The shared fix directive behind *Resolve*, for the user to review and send (never auto-sent). */
+  resolveText(delta: RunDelta): string;
+  /** The chat surface's composer seed (`draftStore.set`): Resolve fills the draft with {@link resolveText}. Absent ⇒ no Resolve button. */
+  onResolve?: ((text: string) => void) | undefined;
+  /** Copies the full delta results as a diagnostic; the host owns the clipboard + Copied/Copy-failed feedback. */
+  copyDiagnostics(delta: RunDelta): void;
 }
 
 const RunDeltaContext = createContext<RunDeltaFooters | null>(null);
@@ -96,6 +118,8 @@ function RunDeltaAfter({ messageId }: { messageId: number }) {
             onOpenDetails={() => ctx.openDetails(cardKey(c))}
             held={heldOf(c, ctx.release)}
             predicted={<PredictedLine predicted={c.predicted} />}
+            onResolve={ctx.onResolve ? () => ctx.onResolve?.(ctx.resolveText(c.delta)) : undefined}
+            onCopyDiagnostics={() => ctx.copyDiagnostics(c.delta)}
           />
         )))}
     </div>
@@ -112,11 +136,20 @@ export interface RunDeltaChat {
   panel: ReactNode;
 }
 
-export function useRunDeltaCards(chatId: number | null, messages: readonly BrainMessage[]): RunDeltaChat {
+export function useRunDeltaCards(
+  chatId: number | null,
+  messages: readonly BrainMessage[],
+  options?: { onResolve?: ((text: string) => void) | undefined },
+): RunDeltaChat {
   const labels = useRunDeltaLabels();
   const compact = useCompact();
   const [cards, setCards] = useState<RunDeltaCardPayload[]>([]);
   const [openKey, setOpenKey] = useState<string | null>(null);
+
+  // The ONE copy behaviour (shared with the knowledge-graph view): clipboard +
+  // Copied / Copy-failed feedback for "Copy diagnostics".
+  const copier = useCopyText();
+  const [lastCopied, setLastCopied] = useState<{ text: string; key: string } | null>(null);
 
   const release = useRunDeltaRelease(labels);
 
@@ -147,8 +180,21 @@ export function useRunDeltaCards(chatId: number | null, messages: readonly Brain
     return counts;
   }, [cards]);
   const footers = useMemo<RunDeltaFooters>(
-    () => ({ placed, reposPerRun, labels, openDetails: setOpenKey, release }),
-    [placed, reposPerRun, labels, release],
+    () => ({
+      placed,
+      reposPerRun,
+      labels,
+      openDetails: setOpenKey,
+      release,
+      resolveText: (delta) => resolveDirectiveText(labels, delta),
+      onResolve: options?.onResolve,
+      copyDiagnostics: (delta) => {
+        const text = runDeltaDiagnosticsText(labels, delta, new Date().toISOString());
+        setLastCopied((cur) => ({ text, key: cur?.key ?? '' }));
+        void copier.copy(text);
+      },
+    }),
+    [placed, reposPerRun, labels, release, copier, options?.onResolve],
   );
 
   const found = openKey ? cards.find((c) => cardKey(c) === openKey) : undefined;
@@ -165,7 +211,27 @@ export function useRunDeltaCards(chatId: number | null, messages: readonly Brain
 
   // The panel, with the repository's history and trend under its body (PRD 41 §C11.3).
   const panel = open
-    ? <RunDeltaOpenPanel card={open} labels={labels} compact={compact} onClose={() => setOpenKey(null)} onOpenCode={openCode} />
+    ? (
+      <>
+        <RunDeltaOpenPanel
+          card={open}
+          labels={labels}
+          compact={compact}
+          onClose={() => setOpenKey(null)}
+          onOpenCode={openCode}
+          onResolve={options?.onResolve ? () => options.onResolve?.(resolveDirectiveText(labels, open.delta)) : undefined}
+          onCopyDiagnostics={() => {
+            const text = runDeltaDiagnosticsText(labels, open.delta, new Date().toISOString());
+            setLastCopied({ text, key: cardKey(open) });
+            void copier.copy(text);
+          }}
+        />
+        <CopiedNote status={copier.status} labels={labels} />
+        {lastCopied && (
+          <CopyFallback status={copier.status} text={lastCopied.text} label={labels.copyDiagnostics} labels={labels} />
+        )}
+      </>
+    )
     : null;
 
   return { footers, panel };
