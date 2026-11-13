@@ -56,6 +56,9 @@ async function owningPackage(file: string, root: string, readText: FullTierDeps[
 function aggregate(kind: CheckKind, records: readonly CheckRecord[]): CheckRecord | null {
   if (!records.length) return null;
   const worst = records.find((r) => r.outcome === "fail") ?? records.find((r) => r.outcome === "unavailable") ?? records[0]!;
+  // The refusal quotes WHY a check failed: the aggregated record must carry the worst check's
+  // own output tail, not drop it — a failing typecheck/test that reaches the gate with no tail
+  // reads as "(no findings recorded)" even though the check said exactly why it failed.
   return {
     kind,
     name: records.map((r) => r.name).join(" && "),
@@ -63,6 +66,7 @@ function aggregate(kind: CheckKind, records: readonly CheckRecord[]): CheckRecor
     exitCode: worst.exitCode,
     findings: records.flatMap((r) => r.findings).slice(0, 20),
     at: Math.max(...records.map((r) => r.at)),
+    ...(worst.outputTail ? { outputTail: worst.outputTail } : {}),
   };
 }
 
