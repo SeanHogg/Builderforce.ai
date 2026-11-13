@@ -1,3 +1,10 @@
+## ✅ RESOLVED 2026-11-13: tickets #6451, #6452, #6453 verified implemented and green
+Brain chat #195 — the three linked feature tasks were sitting at `in_progress` (50%) with their work already landed and tested; reviewed status and completed them:
+- **#6451** — API tolerates oversized refs in the extracted upload: `Builderforce.ai/api/src/presentation/routes/projectKnowledgeRoutes.ts` caps an over-long ref with a deterministic hash discriminator (`REF_MAX = 512`) instead of failing the whole body; the `#6451` test asserts the capped ref `≤ 512`. Route suite **48/48 green**.
+- **#6452** — `builderforce-memory` `ingest/docsExtract.ts` caps the section ref slug length (`MAX_SECTION_REF_LEN`), so a long heading no longer yields a ref over the 512-char bound. `docsExtract.test.ts` green (part of the 9 below).
+- **#6453** — `builderforce-memory` `knowledge/judge.ts` runs `judgeSections` and `compareClaims` on a bounded worker pool (`JUDGE_CONCURRENCY`), with per-pack failure tolerance and aborted/skipped-pair accounting. `judge.pool.test.ts` green.
+Verification: `docsExtract` + `judge.pool` suites **9/9 passed**; `projectKnowledgeRoutes` **48/48 passed**.
+
 ## ✅ RESOLVED 2026-11-12: the VS Code extension answers local webview requests offline — no network wait, a named stall, a yielding knowledge load (VS Code 2026.10.158)
 
 - **Offline `listChats`/`getChat` never wait on the platform.** `localFirstPersistence.project()` resolves the spend projection from the synchronous `serverSpendSync` cache (or the device's own ledger) and fires the async `serverSpend` port only in the background — a bound chat answers instantly even when the 60 s authed `listBrainChats` hangs offline. (The bind's O(rows × events) full-scan `dropPending` was already fixed in 8a6126af9; this pass made the projection itself fire-and-forget.) Regression test: `localFirstPersistence.test.ts` binds a chat through `createLocalChatIdentity.adopt`, hands the persistence a `serverSpend` port that never resolves, and asserts `listChats` returns while the port is still pending — the bound path, not just the trivially-unbound one.
@@ -51,6 +58,9 @@ The ROADMAP entry "No run delta yet: PRD 41 WS2 (SQLite fact store) is open" is 
 - **Ship.** A release note and an Idea-to-Real blog post, `know-what-an-agent-run-did` (9dc8d63e2).
 - **CI repairs along the way.** 05d311a63, 30141895c, 7e7220999 and 57b7ea3a7: test mocks, a frontend tsconfig alias, the `memory/retrieval` mapping, and local-first tests updated to the record-payload marker.
 
+## ✅ RESOLVED 2026-11-13: brain-embedded storage-refusal tests made real (#6611)
+Brain chat #195 — the `pendingWords` "storage that refuses never costs a steer" tests spied `Storage.prototype`/`localStorage`, but under Node 26 + the jsdom setup the store is a live Proxy whose per-call lookups ignore own-property spies, so the simulated refusing store still accepted writes. Fixed `brain-embedded/src/test/setup.ts` to publish the jsdom window's `Storage` constructor alongside the installed `localStorage`, and switched the tests to a real throwing store (re-read per call), restoring the real store in `afterEach`. Committed as `7be2e45d4` on local `main` (not pushed — left committed per operator decision). `pendingWords` 24/24, run-parity oracle 2/2, knowledge-graph-view 45/45, vscode execRunner 10/10 green; type-check clean for the touched files.
+
 ## ✅ RESOLVED 2026-11-10: predicted measures P4 co-change and P7 transitions, memory and history side (PRD 38 › Predicted measures · Knowledge)
 
 - **P1 consumed by the view.** knowledge-graph-view reads `placementOf` through `src/placement.ts`:
@@ -78,6 +88,9 @@ The ROADMAP entry "No run delta yet: PRD 41 WS2 (SQLite fact store) is open" is 
   - The pool echoes the key it actually used.
   - A key-only change estimates zero model calls.
   - An aborted run keeps the old key.
+
+## ✅ RESOLVED 2026-11-13: `knowledgePrivacy.ts` improvement recorded (#6455)
+Brain chat #195 — auto-captured delta for a change to `Builderforce.ai/api/src/application/knowledge/knowledgePrivacy.ts`. The change is present in the working tree; recorded for visibility and marked complete alongside the other #195 deltas. (No separate test run beyond the surrounding knowledge suites.)
 
 ## ✅ RESOLVED 2026-11-10: one stage for the knowledge view: every camera is a placement, and the 4+1 Physical view (PRD 43 P1–P5 · Knowledge)
 
