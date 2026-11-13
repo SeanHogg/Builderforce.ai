@@ -24,8 +24,8 @@ importers:
         specifier: ^1.9.1
         version: 1.9.1
       web-tree-sitter:
-        specifier: ^0.22.6
-        version: 0.22.6
+        specifier: ^0.27.2
+        version: 0.27.2
     devDependencies:
       '@types/node':
         specifier: ^24.19.2
@@ -617,8 +617,8 @@ packages:
       jsdom:
         optional: true
 
-  web-tree-sitter@0.22.6:
-    resolution: {integrity: sha512-hS87TH71Zd6mGAmYCvlgxeGDjqd9GTeqXNqTT+u0Gs51uIozNIaaq/kUAbV/Zf56jb2ZOyG8BxZs2GG9wbLi6Q==}
+  web-tree-sitter@0.27.2:
+    resolution: {integrity: sha512-ZRo86GKI4aOSBAqOrPmCtriExI3xIzu1sNw/V6v3b4QGxrEmO19FGwbMNdyhw3MJLAZIw0xAV0oSpqX361eAyQ==}
 
   why-is-node-running@2.3.0:
     resolution: {integrity: sha512-hUrmaWBdVDcxvYqnyh09zunKzROWjbZTiNy8dBEjkS7ehEDQibXJ7XvlmtbwuTclUiIyN+CyXQD4Vmko8fNm8w==}
@@ -1036,7 +1036,7 @@ snapshots:
     transitivePeerDependencies:
       - msw
 
-  web-tree-sitter@0.22.6: {}
+  web-tree-sitter@0.27.2: {}
 
   why-is-node-running@2.3.0:
     dependencies:
