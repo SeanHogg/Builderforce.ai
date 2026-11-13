@@ -19,6 +19,7 @@ import type { ToolSchema } from "@builderforce/agent-tools";
 import type { PolicyContext } from "../hooks.js";
 import { selectToolsForTurn } from "./selectTools.js";
 import { isCappedToolRole, roleCappedSelection } from "./roleCap.js";
+import { ensureWorkCoreSet } from "./workCore.js";
 
 /** The platform tools this turn advertises, or nothing when the run has no platform port. */
 export function selectPlatformCatalog(ctx: PolicyContext, pinned: readonly string[]): readonly ToolSchema[] | undefined {
@@ -36,5 +37,13 @@ export function selectPlatformCatalog(ctx: PolicyContext, pinned: readonly strin
   const required = capped?.required ?? [...selection.required];
   // The surface knows what it ran: its own pins (a call through its router counts as the tool it reached; a compaction that dropped the
   // call keeps the pin; an earlier run pins nothing) replace the ones read off the transcript.
-  return selectToolsForTurn(catalog, { query, limit, pinned: selection.pinned ? [...selection.pinned] : pinned, required, ...(selection.rank ? { rank: selection.rank } : {}), ...(selection.capRequired ? { capRequired: true } : {}), ...(capped ? { backfill: false } : {}) }).tools;
+  const selected = selectToolsForTurn(catalog, { query, limit, pinned: selection.pinned ? [...selection.pinned] : pinned, required, ...(selection.rank ? { rank: selection.rank } : {}), ...(selection.capRequired ? { capRequired: true } : {}), ...(capped ? { backfill: false } : {}) }).tools;
+  // Work-mode floor: a code/verify (capped) turn never advertises fewer than the core
+  // edit/read/run/search set the catalog holds; a shortfall is traced on the run's event
+  // sink, never silent. A capped (code/verify) turn is a work turn; a chat/plan turn is not.
+  return ensureWorkCoreSet(selected, catalog, {
+    role: selection.role,
+    work: isCappedToolRole(selection.role),
+    onDropped: (name, reason) => ctx.ports.events.emit({ kind: 'context.tools', step: ctx.state.step ?? 0, advertised: selected.length, catalog: catalog.length, toolsTokens: 0, loaded: [`${name}: ${reason}`] }),
+  });
 }

@@ -1,7 +1,9 @@
 "use strict";
+var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
   for (var name in all)
@@ -15,6 +17,14 @@ var __copyProps = (to, from, except, desc) => {
   }
   return to;
 };
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // src/runFindings/index.ts
@@ -82,12 +92,12 @@ function excerpt(text) {
 function turnEvidence(t, label = "llm.complete", text) {
   return { step: t.step, turn: t.index, label, ...text ? { excerpt: excerpt(text) } : {} };
 }
-function callEvidence(c, path, text) {
+function callEvidence(c, path2, text) {
   return {
     step: c.step,
     ...c.turn > 0 ? { turn: c.turn } : {},
     label: c.name,
-    ...path ? { path } : {},
+    ...path2 ? { path: path2 } : {},
     ...text ? { excerpt: excerpt(text) } : {}
   };
 }
@@ -95,14 +105,14 @@ function fileLedger(view) {
   const rows = /* @__PURE__ */ new Map();
   for (const c of view.calls) {
     if (c.check) for (const row of rows.values()) row.checked = true;
-    for (const path of c.paths) {
-      const row = rows.get(path);
+    for (const path2 of c.paths) {
+      const row = rows.get(path2);
       if (row) {
         row.writes += 1;
         row.lastWrite = c;
         row.checked = false;
       } else {
-        rows.set(path, { path, writes: 1, lastWrite: c, checked: false });
+        rows.set(path2, { path: path2, writes: 1, lastWrite: c, checked: false });
       }
     }
   }
@@ -262,13 +272,13 @@ function editedFilesOf(toolName, args) {
   const out = [];
   if (toolName === "edit_file") {
     const replacement = (e, fallback) => {
-      const path = editPathOf(e) ?? fallback;
+      const path2 = editPathOf(e) ?? fallback;
       const before = editStr(e.old_string);
       const after = editStr(e.new_string);
-      if (path && (before !== void 0 || after !== void 0)) {
-        out.push({ path, ...before !== void 0 ? { before } : {}, ...after !== void 0 ? { after } : {} });
-      } else if (path && e !== a) {
-        out.push({ path });
+      if (path2 && (before !== void 0 || after !== void 0)) {
+        out.push({ path: path2, ...before !== void 0 ? { before } : {}, ...after !== void 0 ? { after } : {} });
+      } else if (path2 && e !== a) {
+        out.push({ path: path2 });
       }
     };
     if ("old_string" in a || "new_string" in a) replacement(a, null);
@@ -804,8 +814,8 @@ var JSX_TAG = new RegExp(`<(\\/?)([A-Z][\\w$]*(?:\\.${ID})*)(?=[\\s/>]|$)`, "g")
 
 // ../packages/agent-tools/src/testPaths.ts
 var TEST_SOURCE_PATH = /(?:^|\/)(?:__tests__|tests?|spec|e2e)\/|(?:^|\/)(?:test|spec)\.[^/]+$|\.(?:test|spec|e2e|e2e-spec)\.[^/]+$/i;
-function isTestSourcePath(path) {
-  return TEST_SOURCE_PATH.test(path.replace(/\\/g, "/"));
+function isTestSourcePath(path2) {
+  return TEST_SOURCE_PATH.test(path2.replace(/\\/g, "/"));
 }
 
 // ../packages/agent-tools/src/callbackOwners.ts
@@ -887,8 +897,8 @@ var CallbackOwnerScan = class {
   /** The indent of the owner whose body we are in, until a line at that indent closes it. */
   inside;
   named = /* @__PURE__ */ new Map();
-  constructor(path) {
-    this.enabled = !isTestSourcePath(path);
+  constructor(path2) {
+    this.enabled = !isTestSourcePath(path2);
   }
   /** True while the line is inside an owner's body (no definition is read there). Call for EVERY line, in order. */
   inBody(line) {
@@ -961,13 +971,13 @@ var LANGUAGE_BY_EXT = {
   md: "markdown",
   mdx: "markdown"
 };
-function extensionOf2(path) {
-  const base = path.slice(path.lastIndexOf("/") + 1);
+function extensionOf2(path2) {
+  const base = path2.slice(path2.lastIndexOf("/") + 1);
   const dot = base.lastIndexOf(".");
   return dot > 0 ? base.slice(dot + 1).toLowerCase() : "";
 }
-function languageOf(path) {
-  return LANGUAGE_BY_EXT[extensionOf2(path.replace(/\\/g, "/"))];
+function languageOf(path2) {
+  return LANGUAGE_BY_EXT[extensionOf2(path2.replace(/\\/g, "/"))];
 }
 function group(m, n) {
   return m[n] ?? "";
@@ -1008,9 +1018,9 @@ function closesWithBody(lines, at) {
   }
   return false;
 }
-function extractJs(lines, out, path = "") {
+function extractJs(lines, out, path2 = "") {
   let cls;
-  const owners = new CallbackOwnerScan(path);
+  const owners = new CallbackOwnerScan(path2);
   eachLine(lines, out, (line, lineNo) => {
     if (/^\}/.test(line)) cls = void 0;
     if (owners.inBody(line)) return;
@@ -1174,14 +1184,14 @@ var EXTRACTORS = {
   sql: extractSql,
   markdown: extractMarkdown
 };
-function extractSymbols(path, content, cap = MAX_SYMBOLS_PER_FILE) {
-  const language = languageOf(path);
+function extractSymbols(path2, content, cap = MAX_SYMBOLS_PER_FILE) {
+  const language = languageOf(path2);
   if (!language) return [];
   const out = [];
   const outer = symbolCap;
   symbolCap = cap;
   try {
-    EXTRACTORS[language](content.split(/\r?\n/), out, path.replace(/\\/g, "/"));
+    EXTRACTORS[language](content.split(/\r?\n/), out, path2.replace(/\\/g, "/"));
   } finally {
     symbolCap = outer;
   }
@@ -1250,23 +1260,23 @@ var fileOutlineTool = defineTool({
   },
   requires: ["repo.read", "repo.symbols"],
   async execute(args, ctx) {
-    const path = typeof args.path === "string" ? args.path.trim() : "";
-    if (!path) return { data: { ok: false, error: "path is required" } };
+    const path2 = typeof args.path === "string" ? args.path.trim() : "";
+    if (!path2) return { data: { ok: false, error: "path is required" } };
     const kind = asKind(args.kind);
-    const file = await ctx.caps.repoRead.readFile(path);
+    const file = await ctx.caps.repoRead.readFile(path2);
     if (!file.ok) return { data: file };
     const content = file.content ?? "";
-    const all = extractSymbols(path, content).filter((s) => !kind || s.kind === kind);
+    const all = extractSymbols(path2, content).filter((s) => !kind || s.kind === kind);
     const shown = all.slice(0, OUTLINE_MAX_ENTRIES);
     const data = {
       ok: true,
-      path: file.path ?? path,
+      path: file.path ?? path2,
       totalLines: content.split("\n").length,
       total: all.length,
       symbols: shown.map(formatSymbol)
     };
     if (all.length === 0) {
-      data.note = kind ? `No ${kind} definitions found in ${path}.` : `No definitions recognised in ${path} (unsupported language, or a data/config file) \u2014 read_file it directly.`;
+      data.note = kind ? `No ${kind} definitions found in ${path2}.` : `No definitions recognised in ${path2} (unsupported language, or a data/config file) \u2014 read_file it directly.`;
     } else if (all.length > shown.length) {
       const lastLine = shown.at(-1)?.line ?? 0;
       data.note = `Showing the first ${shown.length} of ${all.length} definitions (through line ${lastLine}). Pass \`kind\` to list one kind, or find_symbol for a specific name.`;
@@ -1274,8 +1284,8 @@ var fileOutlineTool = defineTool({
     return { data };
   }
 });
-function markdownOutline(path, content) {
-  return extractSymbols(path, content).filter((s) => s.kind === "heading").slice(0, OUTLINE_MAX_ENTRIES).map((s) => ({ heading: s.name, line: s.line }));
+function markdownOutline(path2, content) {
+  return extractSymbols(path2, content).filter((s) => s.kind === "heading").slice(0, OUTLINE_MAX_ENTRIES).map((s) => ({ heading: s.name, line: s.line }));
 }
 var SYMBOL_TOOLS = [findSymbolTool, fileOutlineTool];
 
@@ -1290,35 +1300,35 @@ function outlineFirstApplies(content, leverOn) {
 }
 var READ_FILE_MAX_PATHS = 8;
 var MARKDOWN_OUTLINE_MIN_CHARS = 16e3;
-function readFileKey(path, file, key) {
+function readFileKey(path2, file, key) {
   if (file.truncated === true) {
-    return { ok: false, path, key, error: "the file is too large to load whole, so `key` cannot be used \u2014 page it with offset/limit" };
+    return { ok: false, path: path2, key, error: "the file is too large to load whole, so `key` cannot be used \u2014 page it with offset/limit" };
   }
   const read = readJsonKey(file.content ?? "", key);
-  if (!read.ok) return { path, key, ...read };
+  if (!read.ok) return { path: path2, key, ...read };
   if ("tooLarge" in read) {
     return {
       ok: true,
-      path,
+      path: path2,
       key: read.key,
       childKeys: read.childKeys,
       note: `"${read.key}" is ${read.size} characters \u2014 too large to return whole. Read one of its childKeys, e.g. key "${read.key}.${read.childKeys[0] ?? "\u2026"}".`
     };
   }
-  return { ok: true, path, key: read.key, content: read.content };
+  return { ok: true, path: path2, key: read.key, content: read.content };
 }
-var isMarkdown = (path) => /\.mdx?$/i.test(path);
-async function readOneFile(path, opts, caps, leverOn) {
-  const r = await caps.repoRead.readFile(path);
+var isMarkdown = (path2) => /\.mdx?$/i.test(path2);
+async function readOneFile(path2, opts, caps, leverOn) {
+  const r = await caps.repoRead.readFile(path2);
   if (!r.ok) return r;
-  if (opts.key) return readFileKey(r.path ?? path, r, opts.key);
+  if (opts.key) return readFileKey(r.path ?? path2, r, opts.key);
   const content = r.content ?? "";
   if (opts.offset === void 0 && opts.limit === void 0 && outlineFirstApplies(content, leverOn) && r.truncated !== true) {
-    const symbols = extractSymbols(path, content).slice(0, 150).map((s) => `L${s.line} ${s.kind} ${s.name}${s.exported && s.kind !== "heading" ? " (export)" : ""}`);
+    const symbols = extractSymbols(path2, content).slice(0, 150).map((s) => `L${s.line} ${s.kind} ${s.name}${s.exported && s.kind !== "heading" ? " (export)" : ""}`);
     const head = windowFileContent(content, { offset: 1, limit: OUTLINE_FIRST_PREFIX_LINES });
     return {
       ok: true,
-      path: r.path ?? path,
+      path: r.path ?? path2,
       outline: symbols,
       totalLines: head.totalLines,
       content: head.content,
@@ -1330,15 +1340,15 @@ async function readOneFile(path, opts, caps, leverOn) {
   const win = windowFileContent(content, { offset: opts.offset, limit: opts.limit });
   const data = {
     ok: true,
-    path: r.path ?? path,
+    path: r.path ?? path2,
     content: win.content,
     truncated: win.truncated || r.truncated === true,
     totalLines: win.totalLines,
     offset: win.offset
   };
   let note = fileWindowNote(win);
-  if (opts.offset === void 0 && isMarkdown(data.path ?? path) && (content.length > MARKDOWN_OUTLINE_MIN_CHARS || win.truncated)) {
-    const outline = markdownOutline(data.path ?? path, content);
+  if (opts.offset === void 0 && isMarkdown(data.path ?? path2) && (content.length > MARKDOWN_OUTLINE_MIN_CHARS || win.truncated)) {
+    const outline = markdownOutline(data.path ?? path2, content);
     if (outline.length > 0) {
       data.outline = outline;
       const pointer = "This document is larger than one read: `outline` lists its headings with their line numbers \u2014 page by heading line with offset (and a small limit) instead of reading it window by window.";
@@ -1351,7 +1361,7 @@ async function readOneFile(path, opts, caps, leverOn) {
 async function readManyFiles(paths, opts, caps, leverOn) {
   return Promise.all(
     paths.map(
-      (path) => readOneFile(path, opts, caps, leverOn).catch((err) => ({ ok: false, path, error: err instanceof Error ? err.message : String(err) }))
+      (path2) => readOneFile(path2, opts, caps, leverOn).catch((err) => ({ ok: false, path: path2, error: err instanceof Error ? err.message : String(err) }))
     )
   );
 }
@@ -1462,9 +1472,9 @@ function invalidRepoResult(action, repo) {
   if (typeof repo !== "string" || repo === "" || safeRepoArg(repo) !== null) return null;
   return { data: { ok: false, action, error: `repo '${repo}' must be a directory inside the workspace (no '..', not absolute), so nothing was run` } };
 }
-function inferRepoFromPath(path) {
-  if (typeof path !== "string" || !path.trim()) return null;
-  const parts = path.split(/[\\/]/).filter((s) => s.length > 0 && s !== ".");
+function inferRepoFromPath(path2) {
+  if (typeof path2 !== "string" || !path2.trim()) return null;
+  const parts = path2.split(/[\\/]/).filter((s) => s.length > 0 && s !== ".");
   if (parts.length < 2) return null;
   return safeRepoArg(parts[0]);
 }
@@ -1502,9 +1512,9 @@ function shellRunWithStop(ctx, command, cwd) {
 function defaultRepoOf(ctx) {
   return safeRepoArg(ctx.caps.shell?.defaultRepo);
 }
-function pathInRepo(path, repo) {
-  if (!path) return path;
-  const inner = commitPathCandidates(path, repo);
+function pathInRepo(path2, repo) {
+  if (!path2) return path2;
+  const inner = commitPathCandidates(path2, repo);
   return inner.length > 0 ? inner[inner.length - 1] : void 0;
 }
 async function notARepoWithCandidates(action, ctx) {
@@ -1515,26 +1525,26 @@ var NOT_A_REPO = /not a git repository/i;
 function isNotARepo(r) {
   return NOT_A_REPO.test(`${r.stdout ?? ""} ${r.error ?? ""}`);
 }
-function commitPathCandidates(path, repo) {
-  const out = [path];
+function commitPathCandidates(path2, repo) {
+  const out = [path2];
   const dir = safeRepoArg(repo);
   if (dir) {
     const prefix = `${dir.replace(/\/+$/, "")}/`;
-    if (path.startsWith(prefix)) out.push(path.slice(prefix.length));
+    if (path2.startsWith(prefix)) out.push(path2.slice(prefix.length));
     const leaf = dir.split("/").filter(Boolean).pop();
-    if (leaf && path.startsWith(`${leaf}/`)) out.push(path.slice(leaf.length + 1));
+    if (leaf && path2.startsWith(`${leaf}/`)) out.push(path2.slice(leaf.length + 1));
   }
   return [...new Set(out)].filter((p) => p.trim() !== "");
 }
 var rootNotARepo = /* @__PURE__ */ new WeakSet();
-function scopeAttempts(ctx, path) {
+function scopeAttempts(ctx, path2) {
   const fallback = defaultRepoOf(ctx);
   const shell = ctx.caps.shell;
   const attempts = [];
-  if (!(fallback && shell && rootNotARepo.has(shell))) attempts.push({ path });
-  const inferred = inferRepoFromPath(path);
-  if (inferred) attempts.push({ repo: inferred, path: pathInRepo(path, inferred) });
-  if (fallback && fallback !== inferred) attempts.push({ repo: fallback, path: pathInRepo(path, fallback) });
+  if (!(fallback && shell && rootNotARepo.has(shell))) attempts.push({ path: path2 });
+  const inferred = inferRepoFromPath(path2);
+  if (inferred) attempts.push({ repo: inferred, path: pathInRepo(path2, inferred) });
+  if (fallback && fallback !== inferred) attempts.push({ repo: fallback, path: pathInRepo(path2, fallback) });
   return attempts;
 }
 async function runInRepoScope(ctx, scope, run) {
@@ -1861,28 +1871,28 @@ function parseEntries(lines) {
       continue;
     }
     const arrow = rest.indexOf(" -> ");
-    const path = unquoteGitPath(arrow === -1 ? rest : rest.slice(arrow + 4));
+    const path2 = unquoteGitPath(arrow === -1 ? rest : rest.slice(arrow + 4));
     const from = arrow === -1 ? void 0 : unquoteGitPath(rest.slice(0, arrow));
     if (CONFLICT.has(xy)) {
-      out.conflicted.push(path);
+      out.conflicted.push(path2);
       continue;
     }
     const [x, y] = [xy[0], xy[1]];
-    if (x !== " ") out.staged.push({ path, status: x, ...from && (x === "R" || x === "C") ? { from } : {} });
-    if (y !== " ") out.unstaged.push({ path, status: y });
+    if (x !== " ") out.staged.push({ path: path2, status: x, ...from && (x === "R" || x === "C") ? { from } : {} });
+    if (y !== " ") out.unstaged.push({ path: path2, status: y });
   }
   return out;
 }
 function parsePathSections(sections, paths, upstreamUsable) {
-  return paths.map((path, i) => {
+  return paths.map((path2, i) => {
     const lines = sections[i] ?? [];
     const logLine = lines.find((l) => l.includes(US));
-    if (!logLine) return { path, lastCommit: null, onUpstream: null };
+    if (!logLine) return { path: path2, lastCommit: null, onUpstream: null };
     const space = logLine.indexOf(" ");
     const [author = "", email = "", date = "", ...subject] = logLine.slice(space + 1).split(US);
     const pushed = lines.find((l) => l.startsWith(PUSHED_MARK));
     return {
-      path,
+      path: path2,
       lastCommit: { sha: logLine.slice(0, space), subject: subject.join(US), author, email, date },
       onUpstream: upstreamUsable && pushed ? pushed.endsWith(" yes") : null
     };
@@ -2202,8 +2212,8 @@ var gitCleanupMergedTool = defineTool({
 
 // ../packages/agent-tools/src/git-tools.ts
 function buildGitCommand(action, opts) {
-  const path = safeGitArg(opts?.path);
-  const pathArg = path ? ` -- "${path}"` : "";
+  const path2 = safeGitArg(opts?.path);
+  const pathArg = path2 ? ` -- "${path2}"` : "";
   const tracked = safeGitArg(opts?.trackedBranch);
   const viaSandbox = opts?.remoteViaSandbox === true;
   const fetchTracked = viaSandbox ? "" : `git fetch origin "${tracked}" 2>/dev/null && `;
@@ -2275,10 +2285,10 @@ async function runGitTool(action, opts, ctx) {
     baseBranch = synced.baseBranch ?? baseBranch;
   }
   const scope = { repo: opts.repo, path: opts.path ?? opts.paths?.[0] };
-  const ran = await runInRepoScope(ctx, scope, (repo, path) => shellRunWithStop(ctx, buildGitCommand(action, {
+  const ran = await runInRepoScope(ctx, scope, (repo, path2) => shellRunWithStop(ctx, buildGitCommand(action, {
     baseBranch,
     limit: opts.limit,
-    path,
+    path: path2,
     ...opts.paths?.length ? { paths: opts.paths, ...repo ? { repo } : {} } : {},
     ...trackedBranch ? { trackedBranch } : {},
     ...remote ? { remoteViaSandbox: true } : {}
@@ -2413,8 +2423,8 @@ var PROSE_BY_EXT = {
   log: "log"
 };
 var PROSE_EXTENSIONS = Object.keys(PROSE_BY_EXT).map((e) => `.${e}`);
-function proseKindOf(path) {
-  const base = path.replace(/\\/g, "/").split("/").pop() ?? "";
+function proseKindOf(path2) {
+  const base = path2.replace(/\\/g, "/").split("/").pop() ?? "";
   const dot = base.lastIndexOf(".");
   const ext = dot > 0 ? base.slice(dot + 1).toLowerCase() : "";
   return PROSE_BY_EXT[ext] ?? "code";
@@ -2445,15 +2455,15 @@ var readCompressedTool = defineTool({
   },
   requires: ["repo.read", "repo.compress"],
   async execute(args, ctx) {
-    const path = typeof args.path === "string" ? args.path.trim() : "";
-    if (!path) return { data: { ok: false, error: "path is required" } };
-    const kind = proseKindOf(path);
+    const path2 = typeof args.path === "string" ? args.path.trim() : "";
+    if (!path2) return { data: { ok: false, error: "path is required" } };
+    const kind = proseKindOf(path2);
     if (kind === "code") {
-      return { data: { ok: false, path, error: `read_compressed only reads prose (${PROSE_EXTENSIONS.join(" ")}). Use read_file for code \u2014 an edit needs the exact text.` } };
+      return { data: { ok: false, path: path2, error: `read_compressed only reads prose (${PROSE_EXTENSIONS.join(" ")}). Use read_file for code \u2014 an edit needs the exact text.` } };
     }
     const semantic = ctx.caps.semantic;
-    if (!semantic?.compress) return { data: { ok: false, path, error: "Compression is not available on this surface right now \u2014 use read_file." } };
-    const read = await ctx.caps.repoRead.readFile(path);
+    if (!semantic?.compress) return { data: { ok: false, path: path2, error: "Compression is not available on this surface right now \u2014 use read_file." } };
+    const read = await ctx.caps.repoRead.readFile(path2);
     if (!read.ok || typeof read.content !== "string") return { data: read };
     const rate = typeof args.rate === "number" && Number.isFinite(args.rate) ? Math.min(RATE_MAX, Math.max(RATE_MIN, args.rate)) : void 0;
     const r = await compressProse(read.content, kind, {
@@ -2461,7 +2471,7 @@ var readCompressedTool = defineTool({
       minChars: READ_COMPRESSED_MIN_CHARS,
       ...rate !== void 0 ? { rate } : {}
     });
-    const data = { ok: true, path, content: r.text, compressed: r.compressed };
+    const data = { ok: true, path: path2, content: r.text, compressed: r.compressed };
     if (r.compressed) {
       data.originalTokens = r.originalTokens;
       data.keptTokens = r.keptTokens;
@@ -2591,17 +2601,17 @@ function excerptAround(content, lines, budget, radius = HIT_WINDOW_LINES) {
   }
   return out.join("\n");
 }
-function hitLinesFor(path, hits) {
+function hitLinesFor(path2, hits) {
   if (!hits) return [];
-  return [...hits.definitions, ...hits.references].filter((h) => h.path === path).map((h) => h.line);
+  return [...hits.definitions, ...hits.references].filter((h) => h.path === path2).map((h) => h.line);
 }
 async function readExcerpts(ctx, files, hits) {
   const out = [];
   const per = Math.floor(EXCERPT_BUDGET_CHARS / Math.max(1, files.length));
-  for (const path of files) {
-    const r = await ctx.caps.repoRead.readFile(path).catch(() => null);
+  for (const path2 of files) {
+    const r = await ctx.caps.repoRead.readFile(path2).catch(() => null);
     if (!r?.ok || typeof r.content !== "string") continue;
-    out.push({ path, text: excerptAround(r.content, hitLinesFor(path, hits), per) });
+    out.push({ path: path2, text: excerptAround(r.content, hitLinesFor(path2, hits), per) });
   }
   return out;
 }
@@ -2773,8 +2783,8 @@ var MAX_TOTAL_BYTES = 16 * 1024 * 1024;
 // ../packages/agent-tools/src/knowledge/fsDirectorySource.ts
 var BUILDERFORCE_INPUTS = /* @__PURE__ */ new Set([".builderforce/ignore", ".builderforce/partitions.json"]);
 function isBuilderforceState(rel2) {
-  const path = rel2.replace(/\\/g, "/");
-  return path.split("/").includes(".builderforce") && !BUILDERFORCE_INPUTS.has(path);
+  const path2 = rel2.replace(/\\/g, "/");
+  return path2.split("/").includes(".builderforce") && !BUILDERFORCE_INPUTS.has(path2);
 }
 
 // ../packages/agent-tools/src/knowledge/shaCache.ts
@@ -3177,17 +3187,17 @@ var readFileTool = defineTool({
   },
   requires: ["repo.read"],
   async execute(args, ctx) {
-    const path = typeof args.path === "string" ? args.path : "";
-    const paths = !path && Array.isArray(args.paths) ? args.paths.filter((p) => typeof p === "string" && p.trim() !== "") : [];
-    if (!path && paths.length === 0) return { data: { ok: false, error: "path is required (or paths: a list of up to " + READ_FILE_MAX_PATHS + ")" } };
+    const path2 = typeof args.path === "string" ? args.path : "";
+    const paths = !path2 && Array.isArray(args.paths) ? args.paths.filter((p) => typeof p === "string" && p.trim() !== "") : [];
+    if (!path2 && paths.length === 0) return { data: { ok: false, error: "path is required (or paths: a list of up to " + READ_FILE_MAX_PATHS + ")" } };
     if (paths.length > READ_FILE_MAX_PATHS) return { data: { ok: false, error: `paths takes at most ${READ_FILE_MAX_PATHS} files per call \u2014 split the rest into another read_file` } };
     const opts = {
       offset: typeof args.offset === "number" && args.offset > 0 ? Math.floor(args.offset) : void 0,
       limit: typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : void 0,
       key: typeof args.key === "string" ? args.key.trim() : ""
     };
-    if (!path) return { data: { ok: true, files: await readManyFiles(paths, opts, ctx.caps, ctx.outlineFirstReads) } };
-    return { data: await readOneFile(path, opts, ctx.caps, ctx.outlineFirstReads) };
+    if (!path2) return { data: { ok: true, files: await readManyFiles(paths, opts, ctx.caps, ctx.outlineFirstReads) } };
+    return { data: await readOneFile(path2, opts, ctx.caps, ctx.outlineFirstReads) };
   }
 });
 var writeFileTool = defineTool({
@@ -3204,14 +3214,14 @@ var writeFileTool = defineTool({
   },
   requires: ["repo.write"],
   async execute(args, ctx) {
-    const path = typeof args.path === "string" ? args.path : "";
+    const path2 = typeof args.path === "string" ? args.path : "";
     const content = typeof args.content === "string" ? args.content : "";
     const summary = typeof args.summary === "string" ? args.summary : void 0;
-    if (!path || !content) return { data: { ok: false, error: "path and content are both required" } };
+    if (!path2 || !content) return { data: { ok: false, error: "path and content are both required" } };
     if (ctx.caps.repoRead) {
       let existing;
       try {
-        existing = await ctx.caps.repoRead.readFile(path);
+        existing = await ctx.caps.repoRead.readFile(path2);
       } catch (err) {
         const reason = err instanceof Error ? err.message : "read failed";
         return {
@@ -3224,7 +3234,7 @@ var writeFileTool = defineTool({
       const refusal = refuseWriteOverwrite(probeFromRepoRead(existing), content);
       if (refusal) return { data: { ok: false, error: refusal } };
     }
-    const r = await ctx.caps.repoWrite.writeFile(path, content, summary);
+    const r = await ctx.caps.repoWrite.writeFile(path2, content, summary);
     return { data: r.ok ? { ok: true, branch: r.branch, commitUrl: r.commitUrl } : { ok: false, error: r.error } };
   }
 });
@@ -3241,10 +3251,10 @@ var deleteFileTool = defineTool({
   },
   requires: ["repo.delete"],
   async execute(args, ctx) {
-    const path = typeof args.path === "string" ? args.path : "";
-    if (!path) return { data: { ok: false, error: "path is required" } };
+    const path2 = typeof args.path === "string" ? args.path : "";
+    if (!path2) return { data: { ok: false, error: "path is required" } };
     const reason = typeof args.reason === "string" ? args.reason : void 0;
-    const r = await ctx.caps.repoWrite.deleteFile(path, reason);
+    const r = await ctx.caps.repoWrite.deleteFile(path2, reason);
     if (r.ok && r.deleted === false) return { data: { ok: true, deleted: false, note: r.note } };
     return { data: r.ok ? { ok: true, deleted: true, branch: r.branch, commitUrl: r.commitUrl } : { ok: false, error: r.error } };
   }
@@ -3301,8 +3311,8 @@ var editFileTool = defineTool({
           ok: true,
           batched: true,
           count: batch.files.length,
-          files: batch.files.map(({ content: _c, ok, path: path2, error, nearest, ...facts }) => ({
-            path: path2,
+          files: batch.files.map(({ content: _c, ok, path: path3, error, nearest, ...facts }) => ({
+            path: path3,
             ok,
             ...Object.keys(facts).length ? facts : {},
             ...error ? { error } : {},
@@ -3311,12 +3321,12 @@ var editFileTool = defineTool({
         }
       };
     }
-    const path = typeof args.path === "string" ? args.path : "";
+    const path2 = typeof args.path === "string" ? args.path : "";
     const oldString = typeof args.old_string === "string" ? args.old_string : "";
     const newString = typeof args.new_string === "string" ? args.new_string : "";
     const replaceAll = args.replace_all === true;
-    if (!path || !oldString) return { data: { ok: false, error: "path and old_string are required" } };
-    const r = await ctx.caps.repoWrite.editFile(path, oldString, newString, replaceAll);
+    if (!path2 || !oldString) return { data: { ok: false, error: "path and old_string are required" } };
+    const r = await ctx.caps.repoWrite.editFile(path2, oldString, newString, replaceAll);
     return {
       data: r.ok ? {
         ok: true,
@@ -4944,6 +4954,9 @@ function modelTurnLog(events) {
 var FAILOVER_SEPARATOR = ", ";
 
 // src/handOffParallelism.ts
+var import_node_fs = require("fs");
+var import_node_path = __toESM(require("path"), 1);
+var import_node_url = require("url");
 var HAND_OFF_MODE_LABEL = "hand_off.mode";
 var HAND_OFF_CLASH_LABEL = "hand_off.scope_clash";
 

@@ -39,6 +39,12 @@ import { emit, getCell, nowIso, onStoreReset, pushTrace, recordAppended } from '
 import { claimRun, claimStopped, releaseClaim, type RunClaim } from './runClaim';
 import { bounded, budget, continuationLimits, settledWithin, within } from './deadline';
 import { stopBeforeStart } from './runControl';
+import {
+  MAX_NO_PROGRESS_CONTINUATIONS,
+  mayAutoContinue,
+  notePersonTurn,
+  resetContinuationProgress,
+} from './autoContinueGuard';
 import type { BrainRunRequest, RunKey } from './runTypes';
 
 /** What a user turn's files need to be linked and made model-readable - the conversation's adapter. */
@@ -93,6 +99,7 @@ export function resetContinuations(): void {
   depth.clear();
 }
 onStoreReset(resetContinuations);
+onStoreReset(resetContinuationProgress);
 
 /** Was this run opted in? Reading consumes the mark: it is per run. */
 export function takeContinueOnSettle(runKey: RunKey): boolean {
@@ -229,11 +236,22 @@ async function endStopped(end: StoppedContinuation, ms: number, saving: Promise<
  * taken: made the next turn, or dropped because a Stop landed (the Stop ends the conversation's work).
  * `left` is the ONE allowance the whole continuation shares (reading, saving, preparing). `progress` says whether a
  * save was started, and which: a caller that sees this throw must know whether a user row may exist.
+ *
+ * R4 — the auto-continue no-progress guard: a continuation the chat started on its own (no person's
+ * words among the steers) is allowed only while the no-progress streak is under its cap; and after
+ * this continuation's run settles, its progress is recorded from the run's own evidence (a file
+ * changed or a check passed). Keeps the original ask as the turn's label (chat #80006).
  */
 export async function continueChat(runKey: number, c: RunCell, steers: readonly RunSteerMessage[], start: StartRun, claim: RunClaim, left: () => number, progress: ContinueProgress = { saving: null }): Promise<boolean> {
   const request = c.lastRequest;
   const binding = bindings.get(runKey);
   if (!request || !binding || steers.length === 0) return false;
+  const personSpoke = steers.some((m) => m.fromPerson);
+  if (!personSpoke && !mayAutoContinue(runKey)) {
+    trace(c, 'steer.continue_no_progress', { streak: MAX_NO_PROGRESS_CONTINUATIONS },
+      'The run kept continuing without changing a file or passing a check; it stops here so the chat can settle, and waits for your next turn.');
+    return false;
+  }
   const links = depth.get(runKey) ?? 0;
   if (links >= MAX_CONTINUATIONS) {
     trace(c, 'steer.continue_limit', { continuations: links }, 'The run was continued as often as it may be without a new message; the direction waits for your next turn.');
@@ -300,10 +318,23 @@ export async function continueChat(runKey: number, c: RunCell, steers: readonly 
   continuing.add(runKey);
   const row = rows[rows.length - 1];
   // Started UNDER the claim, synchronously: the run consumes it, and nothing can have taken the chat.
+  // A continuation whose composed steer content is EMPTY (an auto-continuation with no new words) keeps
+  // the chat's ORIGINAL request as its ask, so the diagnostics' Runs line names what the chat is still
+  // working on — never a blank `ask: ""` (chat #80006: 24 runs, all empty asks). The empty-ask
+  // suppressor above already dropped the no-direction case; reaching here means there IS direction to
+  // continue, so the original ask is the honest label.
+  const turnText = recordedModelText(content).trim();
+  const userTurn = turnText ? content : (request.userTurn ?? content);
+  // A continuation the chat started on its own (no person's words among the steers) flags its run:
+  // `startRun`'s settle records the no-progress guard from the run's own evidence BEFORE it decides
+  // the next continuation (the streak can never lag a run behind). A person's turn resets the chain
+  // (`notePersonTurn` in `wakeChat`) and never carries the flag, so their words may continue freely.
+  const recordProgress = !personSpoke;
   start(runKey, {
     ...request,
     ...fresher,
-    userTurn: content,
+    userTurn,
+    ...(recordProgress ? { continuationProgress: true } : {}),
     ...(row ? { userTurnMessageId: row.id } : {}),
   }, claim).catch((e: unknown) => {
     continuing.delete(runKey);
@@ -388,6 +419,7 @@ export function wakeChat(runKey: number, turns: readonly HandedTurn[], start: St
   const claim = claimRun(runKey);
   if (!claim) return false;
   depth.set(runKey, 0); // a person's turn: the chain starts over
+  notePersonTurn(runKey);
   // Each turn keyed once and journaled on the device like any other words the run will save, then handed to the continuation.
   const steers: RunSteerMessage[] = words.map((t) => ({
     text: t.text.trim(),

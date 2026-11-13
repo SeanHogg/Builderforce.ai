@@ -599,7 +599,8 @@ declare function formatModelTurnLog(turns: ModelTurn[]): string[];
  *     each task's paths to what it actually changes ({@link scopeClashCorrective});
  *   • the split of a plan that still overlaps ({@link splitForParallel}): the leading tasks that
  *     own paths and are mutually disjoint run side by side; from the first task that overlaps
- *     (or owns none) onward, the coder runs them inline in plan order — order beats parallelism.
+ *     (or owns none, or consumes an earlier task's package) onward, the coder runs them inline
+ *     in plan order — order beats parallelism.
  *
  * Every child is a clone of its owner and nothing downstream restricts it, so this is where
  * slices are kept apart. Pure.
@@ -607,7 +608,19 @@ declare function formatModelTurnLog(turns: ModelTurn[]): string[];
 /** What the split reads of a task. */
 interface ScopedTask {
     title: string;
+    /** Free text the planner wrote — the brief counts, not just the title. */
+    brief?: string;
     paths: readonly string[];
+}
+/**
+ * An ORDER dependency between two path-disjoint tasks (chat #80006): `consumer`'s title/brief
+ * consumes the package `producer` creates or changes, so the consumer must run AFTER the
+ * producer even though no file overlaps. Indexes into the task array the split was given.
+ */
+interface OrderDependency {
+    producer: number;
+    consumer: number;
+    packageDir: string;
 }
 /** Two tasks that claim the same path: `a` and `b` are titles, `path` the overlap. */
 interface ScopeClash {
@@ -624,6 +637,11 @@ interface ParallelSplit {
     inline: number[];
     /** The first overlap among the tasks that own paths — what kept the plan from running fully parallel. */
     clash: ScopeClash | null;
+    /**
+     * Order dependencies that staged a consumer after its producer (chat #80006). Empty/absent when
+     * no task's brief consumes another task's package.
+     */
+    order?: OrderDependency[];
 }
 /**
  * Whether the WHOLE plan can run side by side: two or more tasks, every one owning paths, and

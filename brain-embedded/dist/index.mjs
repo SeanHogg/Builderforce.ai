@@ -356,7 +356,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-FB4H5JUY.mjs";
+} from "./chunk-IGSJKCQH.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useEffect, useMemo } from "react";
@@ -12944,6 +12944,39 @@ function roleCappedSelection(role, catalogNames, keep2 = [], surfaceRequired2 = 
   return { limit: Math.max(ROLE_TOOL_LIMIT[role], required.length + ROLE_MATCH_ROOM[role]), required, backfill: false };
 }
 
+// ../packages/agent-run/src/policy/tools/workCore.ts
+function workCoreToolNames(role) {
+  return [
+    .../* @__PURE__ */ new Set([
+      ...coreToolNames(role),
+      ...ROLE_COMPANION_TOOLS[role === "verify" ? "verify" : "code"]
+    ])
+  ];
+}
+function ensureWorkCoreSet(selected, catalog, opts) {
+  if (opts.work === false) return [...selected];
+  const core = workCoreToolNames(opts.role ?? "code");
+  const byName = /* @__PURE__ */ new Map();
+  for (const tool of catalog) {
+    const name = tool.function?.name;
+    if (name && !byName.has(name)) byName.set(name, tool);
+  }
+  const have = new Set(selected.map((t) => t.function?.name ?? ""));
+  const capacity = opts.capacity ?? Number.POSITIVE_INFINITY;
+  const out = [...selected];
+  for (const name of core) {
+    const tool = byName.get(name);
+    if (!tool || have.has(name)) continue;
+    if (out.length >= capacity) {
+      opts.onDropped?.(name, `work-mode window could not fit the core tool set (${out.length} of ${out.length + 1} advertised)`);
+      continue;
+    }
+    out.push(tool);
+    have.add(name);
+  }
+  return out;
+}
+
 // ../packages/agent-run/src/policy/tools/platform.ts
 function selectPlatformCatalog(ctx, pinned) {
   const platform = ctx.ports.platform;
@@ -12954,7 +12987,12 @@ function selectPlatformCatalog(ctx, pinned) {
   const capped = isCappedToolRole(selection.role) ? roleCappedSelection(selection.role, catalog.map((t) => t.function?.name ?? ""), selection.roleKeep ?? [], selection.required) : void 0;
   const limit = capped?.limit ?? selection.limit;
   const required = capped?.required ?? [...selection.required];
-  return selectToolsForTurn(catalog, { query, limit, pinned: selection.pinned ? [...selection.pinned] : pinned, required, ...selection.rank ? { rank: selection.rank } : {}, ...selection.capRequired ? { capRequired: true } : {}, ...capped ? { backfill: false } : {} }).tools;
+  const selected = selectToolsForTurn(catalog, { query, limit, pinned: selection.pinned ? [...selection.pinned] : pinned, required, ...selection.rank ? { rank: selection.rank } : {}, ...selection.capRequired ? { capRequired: true } : {}, ...capped ? { backfill: false } : {} }).tools;
+  return ensureWorkCoreSet(selected, catalog, {
+    role: selection.role,
+    work: isCappedToolRole(selection.role),
+    onDropped: (name, reason) => ctx.ports.events.emit({ kind: "context.tools", step: ctx.state.step ?? 0, advertised: selected.length, catalog: catalog.length, toolsTokens: 0, loaded: [`${name}: ${reason}`] })
+  });
 }
 
 // ../packages/agent-run/src/policy/tools/toolset.ts
@@ -15309,6 +15347,15 @@ function releaseClaim(c, claim) {
   emit2(c);
 }
 
+// src/runStore/autoContinueGuard.ts
+var streaks = /* @__PURE__ */ new Map();
+function resetContinuationProgress() {
+  streaks.clear();
+}
+function notePersonTurn(runKey) {
+  streaks.delete(runKey);
+}
+
 // src/runStore/continueChat.ts
 var MAX_CONTINUATIONS = 5;
 var continuing = /* @__PURE__ */ new Set();
@@ -15330,6 +15377,7 @@ function resetContinuations() {
   depth.clear();
 }
 onStoreReset(resetContinuations);
+onStoreReset(resetContinuationProgress);
 function takeContinueOnSettle(runKey) {
   return continuing.delete(runKey);
 }
@@ -15468,10 +15516,12 @@ async function continueChat(runKey, c, steers, start, claim, left, progress = { 
   depth.set(runKey, links + 1);
   continuing.add(runKey);
   const row = rows[rows.length - 1];
+  const turnText = recordedModelText(content).trim();
+  const userTurn = turnText ? content : request.userTurn ?? content;
   start(runKey, {
     ...request,
     ...fresher,
-    userTurn: content,
+    userTurn,
     ...row ? { userTurnMessageId: row.id } : {}
   }, claim).catch((e) => {
     continuing.delete(runKey);
@@ -15527,6 +15577,7 @@ function wakeChat(runKey, turns, start) {
   const claim = claimRun(runKey);
   if (!claim) return false;
   depth.set(runKey, 0);
+  notePersonTurn(runKey);
   const steers = words2.map((t) => ({
     text: t.text.trim(),
     fromPerson: true,
@@ -17349,8 +17400,11 @@ async function deltaTicketCompletionRefusal(run, args) {
   const view = settleView(run.c, run.c.runId);
   const verification = verificationOf(run.evidence, view.touchedFiles);
   const open2 = run.placeholderLedger.outstanding().length;
-  if (finishConditionMet({ shipped: true, verified: verification.verified, openPlaceholders: open2, hasTicket: true })) return null;
-  const reason = !verification.verified ? `the run holds no passing verification for its change (${verification.reason})` : open2 > 0 ? `${open2} placeholder(s) are still outstanding` : "the run is not verified to have shipped";
+  const outgoing = await run.req.git?.outgoing(repoArgOf(args));
+  const diffHash = outgoing && !("unavailable" in outgoing && outgoing.unavailable) ? outgoing.diffHash : null;
+  const reviewed = diffHash ? !!approvedReviewFor(run, diffHash) : false;
+  if (finishConditionMet({ shipped: true, verified: verification.verified && reviewed, openPlaceholders: open2, hasTicket: true })) return null;
+  const reason = !verification.verified ? `the run holds no passing verification for its change (${verification.reason})` : !reviewed ? "no reviewGate-approved review of the current diff" : open2 > 0 ? `${open2} placeholder(s) are still outstanding` : "the run is not verified to have shipped";
   return { ok: false, error: `CANNOT MARK DONE \u2014 this is the run's own delta ticket (#${deltaId}): ${reason}. Finish the work and let the host close it out, or leave it in review.` };
 }
 async function shipGateAdvisory(run, name, args, out) {

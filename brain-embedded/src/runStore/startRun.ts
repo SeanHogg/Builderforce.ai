@@ -29,6 +29,7 @@ import { prepareBrainRun } from './runPreamble';
 import { runPrepared } from '../run/runPrepared';
 import { noteRunId, reportRunEnd, unrecorded } from './runEndOutcome';
 import { beginRun } from './beginRun';
+import { noteContinuationProgress } from './autoContinueGuard';
 import { continueLeftovers, takeContinueOnSettle } from './continueChat';
 import { holdClaim, releaseClaim, type RunClaim } from './runClaim';
 import { budget, continuationLimits, within } from './deadline';
@@ -218,6 +219,11 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
       // stands down on this flag, so the close-out runs exactly once across the two paths.
       c.finishClosedOut = true;
       const finished = finishConditionMet(closeOut);
+      // R4 — the auto-continuation's no-progress guard: a run the chat continued on its own
+      // (flagged `continuationProgress` on its request, no person's words) records its verdict
+      // from THIS run's own evidence — a file changed or a check passed — BEFORE the next
+      // continuation is decided below, so the streak can never lag a run behind (chat #80006).
+      if (req.continuationProgress) noteContinuationProgress(runKey, changed || verification.verified);
       // Teach learned routing how this run's CODER did. Not awaited — a report must
       // never hold the run open or fail it.
       // Every run — top-level or sub-agent — is graded by the same rule, on its own request.

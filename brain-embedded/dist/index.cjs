@@ -9509,13 +9509,13 @@ function editedFilesOf(toolName, args) {
   const out = [];
   if (toolName === "edit_file") {
     const replacement = (e, fallback) => {
-      const path = editPathOf(e) ?? fallback;
+      const path2 = editPathOf(e) ?? fallback;
       const before = editStr(e.old_string);
       const after = editStr(e.new_string);
-      if (path && (before !== void 0 || after !== void 0)) {
-        out.push({ path, ...before !== void 0 ? { before } : {}, ...after !== void 0 ? { after } : {} });
-      } else if (path && e !== a) {
-        out.push({ path });
+      if (path2 && (before !== void 0 || after !== void 0)) {
+        out.push({ path: path2, ...before !== void 0 ? { before } : {}, ...after !== void 0 ? { after } : {} });
+      } else if (path2 && e !== a) {
+        out.push({ path: path2 });
       }
     };
     if ("old_string" in a || "new_string" in a) replacement(a, null);
@@ -9848,11 +9848,11 @@ function describeBracketDelta(d, style = "name") {
 }
 
 // ../packages/agent-tools/src/workstreamScope.ts
-function normalizeScopePath(path) {
-  return path.trim().replace(/\\/g, "/").replace(/^(\.\/)+/, "").replace(/\/+$/, "");
+function normalizeScopePath(path2) {
+  return path2.trim().replace(/\\/g, "/").replace(/^(\.\/)+/, "").replace(/\/+$/, "");
 }
-function inScope(path, scope) {
-  const p = normalizeScopePath(path);
+function inScope(path2, scope) {
+  const p = normalizeScopePath(path2);
   return scope.some((entry) => {
     const s = normalizeScopePath(entry);
     return s === "" || p === s || p.startsWith(`${s}/`);
@@ -9861,9 +9861,9 @@ function inScope(path, scope) {
 function overlappingScopes(scopes) {
   for (let i = 0; i < scopes.length; i++) {
     for (let j = i + 1; j < scopes.length; j++) {
-      for (const path of scopes[i].paths) {
-        if (inScope(path, scopes[j].paths) || scopes[j].paths.some((q) => inScope(q, [path]))) {
-          return { a: scopes[i].label, b: scopes[j].label, path: normalizeScopePath(path) };
+      for (const path2 of scopes[i].paths) {
+        if (inScope(path2, scopes[j].paths) || scopes[j].paths.some((q) => inScope(q, [path2]))) {
+          return { a: scopes[i].label, b: scopes[j].label, path: normalizeScopePath(path2) };
         }
       }
     }
@@ -10127,8 +10127,8 @@ function toolCallPaths(args) {
   for (const p of patchHeaderPaths(args.input)) add(p);
   return out;
 }
-function segmentsOf2(path) {
-  const raw = path.trim().replace(/\\/g, "/");
+function segmentsOf2(path2) {
+  const raw = path2.trim().replace(/\\/g, "/");
   const rooted = raw.startsWith("/") || raw.startsWith("~") || /^[A-Za-z]:\//.test(raw);
   const segments = [];
   let climbs = false;
@@ -10146,9 +10146,9 @@ function segmentsOf2(path) {
   }
   return { segments, rooted, climbs };
 }
-function gatePathCandidates(path, workspaceRoot) {
-  if (!path.trim()) return [];
-  const { segments, rooted, climbs } = segmentsOf2(path);
+function gatePathCandidates(path2, workspaceRoot) {
+  if (!path2.trim()) return [];
+  const { segments, rooted, climbs } = segmentsOf2(path2);
   const resolved = segments.join("/");
   if (!rooted && !climbs) return [resolved];
   if (rooted && workspaceRoot?.trim()) {
@@ -10283,8 +10283,8 @@ var READ_ONLY_ACTIONS = /* @__PURE__ */ new Set([
 var CONTROL_TOOL_NAMES = ["finish", "ask_human", "ask_user"];
 
 // ../packages/agent-tools/src/spec.ts
-function pathHitsPattern(path, pattern) {
-  return matchGlob(path, pattern) || inScope(path, [pattern]);
+function pathHitsPattern(path2, pattern) {
+  return matchGlob(path2, pattern) || inScope(path2, [pattern]);
 }
 function gateMatchesPath(g, callPath, workspaceRoot) {
   const patterns = g.paths;
@@ -10315,10 +10315,10 @@ function renderPolicyDirectives(gates) {
   if (lines.length === 0) return "";
   return bulletBlock("Governance (these gates are binding):", lines);
 }
-function evaluatePolicyGate(gates, toolName, path, workspaceRoot, declared) {
+function evaluatePolicyGate(gates, toolName, path2, workspaceRoot, declared) {
   const called = normalizeToolName(toolName);
   const matches = (gates ?? []).filter(
-    (g) => (!g.tool || g.tool === "*" || normalizeToolName(g.tool) === called) && (!g.sideEffect || classifyTool(called, declared) === g.sideEffect) && gateMatchesPath(g, path, workspaceRoot)
+    (g) => (!g.tool || g.tool === "*" || normalizeToolName(g.tool) === called) && (!g.sideEffect || classifyTool(called, declared) === g.sideEffect) && gateMatchesPath(g, path2, workspaceRoot)
   );
   const blocked = matches.find((g) => g.effect === "block");
   if (blocked) return { action: "block", gateId: blocked.baseGateId ?? blocked.id, reason: blocked.reason ?? "blocked by policy" };
@@ -10501,8 +10501,8 @@ var JSX_TAG = new RegExp(`<(\\/?)([A-Z][\\w$]*(?:\\.${ID})*)(?=[\\s/>]|$)`, "g")
 
 // ../packages/agent-tools/src/testPaths.ts
 var TEST_SOURCE_PATH = /(?:^|\/)(?:__tests__|tests?|spec|e2e)\/|(?:^|\/)(?:test|spec)\.[^/]+$|\.(?:test|spec|e2e|e2e-spec)\.[^/]+$/i;
-function isTestSourcePath(path) {
-  return TEST_SOURCE_PATH.test(path.replace(/\\/g, "/"));
+function isTestSourcePath(path2) {
+  return TEST_SOURCE_PATH.test(path2.replace(/\\/g, "/"));
 }
 
 // ../packages/agent-tools/src/callbackOwners.ts
@@ -10584,8 +10584,8 @@ var CallbackOwnerScan = class {
   /** The indent of the owner whose body we are in, until a line at that indent closes it. */
   inside;
   named = /* @__PURE__ */ new Map();
-  constructor(path) {
-    this.enabled = !isTestSourcePath(path);
+  constructor(path2) {
+    this.enabled = !isTestSourcePath(path2);
   }
   /** True while the line is inside an owner's body (no definition is read there). Call for EVERY line, in order. */
   inBody(line) {
@@ -10658,13 +10658,13 @@ var LANGUAGE_BY_EXT = {
   md: "markdown",
   mdx: "markdown"
 };
-function extensionOf2(path) {
-  const base = path.slice(path.lastIndexOf("/") + 1);
+function extensionOf2(path2) {
+  const base = path2.slice(path2.lastIndexOf("/") + 1);
   const dot = base.lastIndexOf(".");
   return dot > 0 ? base.slice(dot + 1).toLowerCase() : "";
 }
-function languageOf(path) {
-  return LANGUAGE_BY_EXT[extensionOf2(path.replace(/\\/g, "/"))];
+function languageOf(path2) {
+  return LANGUAGE_BY_EXT[extensionOf2(path2.replace(/\\/g, "/"))];
 }
 function group(m, n2) {
   return m[n2] ?? "";
@@ -10705,9 +10705,9 @@ function closesWithBody(lines, at2) {
   }
   return false;
 }
-function extractJs(lines, out, path = "") {
+function extractJs(lines, out, path2 = "") {
   let cls;
-  const owners = new CallbackOwnerScan(path);
+  const owners = new CallbackOwnerScan(path2);
   eachLine(lines, out, (line, lineNo) => {
     if (/^\}/.test(line)) cls = void 0;
     if (owners.inBody(line)) return;
@@ -10871,14 +10871,14 @@ var EXTRACTORS = {
   sql: extractSql,
   markdown: extractMarkdown
 };
-function extractSymbols(path, content, cap2 = MAX_SYMBOLS_PER_FILE) {
-  const language = languageOf(path);
+function extractSymbols(path2, content, cap2 = MAX_SYMBOLS_PER_FILE) {
+  const language = languageOf(path2);
   if (!language) return [];
   const out = [];
   const outer = symbolCap;
   symbolCap = cap2;
   try {
-    EXTRACTORS[language](content.split(/\r?\n/), out, path.replace(/\\/g, "/"));
+    EXTRACTORS[language](content.split(/\r?\n/), out, path2.replace(/\\/g, "/"));
   } finally {
     symbolCap = outer;
   }
@@ -10947,23 +10947,23 @@ var fileOutlineTool = defineTool({
   },
   requires: ["repo.read", "repo.symbols"],
   async execute(args, ctx) {
-    const path = typeof args.path === "string" ? args.path.trim() : "";
-    if (!path) return { data: { ok: false, error: "path is required" } };
+    const path2 = typeof args.path === "string" ? args.path.trim() : "";
+    if (!path2) return { data: { ok: false, error: "path is required" } };
     const kind = asKind(args.kind);
-    const file = await ctx.caps.repoRead.readFile(path);
+    const file = await ctx.caps.repoRead.readFile(path2);
     if (!file.ok) return { data: file };
     const content = file.content ?? "";
-    const all = extractSymbols(path, content).filter((s) => !kind || s.kind === kind);
+    const all = extractSymbols(path2, content).filter((s) => !kind || s.kind === kind);
     const shown = all.slice(0, OUTLINE_MAX_ENTRIES);
     const data = {
       ok: true,
-      path: file.path ?? path,
+      path: file.path ?? path2,
       totalLines: content.split("\n").length,
       total: all.length,
       symbols: shown.map(formatSymbol)
     };
     if (all.length === 0) {
-      data.note = kind ? `No ${kind} definitions found in ${path}.` : `No definitions recognised in ${path} (unsupported language, or a data/config file) \u2014 read_file it directly.`;
+      data.note = kind ? `No ${kind} definitions found in ${path2}.` : `No definitions recognised in ${path2} (unsupported language, or a data/config file) \u2014 read_file it directly.`;
     } else if (all.length > shown.length) {
       const lastLine = shown.at(-1)?.line ?? 0;
       data.note = `Showing the first ${shown.length} of ${all.length} definitions (through line ${lastLine}). Pass \`kind\` to list one kind, or find_symbol for a specific name.`;
@@ -10971,8 +10971,8 @@ var fileOutlineTool = defineTool({
     return { data };
   }
 });
-function markdownOutline(path, content) {
-  return extractSymbols(path, content).filter((s) => s.kind === "heading").slice(0, OUTLINE_MAX_ENTRIES).map((s) => ({ heading: s.name, line: s.line }));
+function markdownOutline(path2, content) {
+  return extractSymbols(path2, content).filter((s) => s.kind === "heading").slice(0, OUTLINE_MAX_ENTRIES).map((s) => ({ heading: s.name, line: s.line }));
 }
 var SYMBOL_TOOLS = [findSymbolTool, fileOutlineTool];
 
@@ -10987,35 +10987,35 @@ function outlineFirstApplies(content, leverOn2) {
 }
 var READ_FILE_MAX_PATHS = 8;
 var MARKDOWN_OUTLINE_MIN_CHARS = 16e3;
-function readFileKey(path, file, key) {
+function readFileKey(path2, file, key) {
   if (file.truncated === true) {
-    return { ok: false, path, key, error: "the file is too large to load whole, so `key` cannot be used \u2014 page it with offset/limit" };
+    return { ok: false, path: path2, key, error: "the file is too large to load whole, so `key` cannot be used \u2014 page it with offset/limit" };
   }
   const read2 = readJsonKey(file.content ?? "", key);
-  if (!read2.ok) return { path, key, ...read2 };
+  if (!read2.ok) return { path: path2, key, ...read2 };
   if ("tooLarge" in read2) {
     return {
       ok: true,
-      path,
+      path: path2,
       key: read2.key,
       childKeys: read2.childKeys,
       note: `"${read2.key}" is ${read2.size} characters \u2014 too large to return whole. Read one of its childKeys, e.g. key "${read2.key}.${read2.childKeys[0] ?? "\u2026"}".`
     };
   }
-  return { ok: true, path, key: read2.key, content: read2.content };
+  return { ok: true, path: path2, key: read2.key, content: read2.content };
 }
-var isMarkdown = (path) => /\.mdx?$/i.test(path);
-async function readOneFile(path, opts, caps, leverOn2) {
-  const r = await caps.repoRead.readFile(path);
+var isMarkdown = (path2) => /\.mdx?$/i.test(path2);
+async function readOneFile(path2, opts, caps, leverOn2) {
+  const r = await caps.repoRead.readFile(path2);
   if (!r.ok) return r;
-  if (opts.key) return readFileKey(r.path ?? path, r, opts.key);
+  if (opts.key) return readFileKey(r.path ?? path2, r, opts.key);
   const content = r.content ?? "";
   if (opts.offset === void 0 && opts.limit === void 0 && outlineFirstApplies(content, leverOn2) && r.truncated !== true) {
-    const symbols = extractSymbols(path, content).slice(0, 150).map((s) => `L${s.line} ${s.kind} ${s.name}${s.exported && s.kind !== "heading" ? " (export)" : ""}`);
+    const symbols = extractSymbols(path2, content).slice(0, 150).map((s) => `L${s.line} ${s.kind} ${s.name}${s.exported && s.kind !== "heading" ? " (export)" : ""}`);
     const head = windowFileContent(content, { offset: 1, limit: OUTLINE_FIRST_PREFIX_LINES });
     return {
       ok: true,
-      path: r.path ?? path,
+      path: r.path ?? path2,
       outline: symbols,
       totalLines: head.totalLines,
       content: head.content,
@@ -11027,15 +11027,15 @@ async function readOneFile(path, opts, caps, leverOn2) {
   const win = windowFileContent(content, { offset: opts.offset, limit: opts.limit });
   const data = {
     ok: true,
-    path: r.path ?? path,
+    path: r.path ?? path2,
     content: win.content,
     truncated: win.truncated || r.truncated === true,
     totalLines: win.totalLines,
     offset: win.offset
   };
   let note = fileWindowNote(win);
-  if (opts.offset === void 0 && isMarkdown(data.path ?? path) && (content.length > MARKDOWN_OUTLINE_MIN_CHARS || win.truncated)) {
-    const outline = markdownOutline(data.path ?? path, content);
+  if (opts.offset === void 0 && isMarkdown(data.path ?? path2) && (content.length > MARKDOWN_OUTLINE_MIN_CHARS || win.truncated)) {
+    const outline = markdownOutline(data.path ?? path2, content);
     if (outline.length > 0) {
       data.outline = outline;
       const pointer = "This document is larger than one read: `outline` lists its headings with their line numbers \u2014 page by heading line with offset (and a small limit) instead of reading it window by window.";
@@ -11048,7 +11048,7 @@ async function readOneFile(path, opts, caps, leverOn2) {
 async function readManyFiles(paths, opts, caps, leverOn2) {
   return Promise.all(
     paths.map(
-      (path) => readOneFile(path, opts, caps, leverOn2).catch((err) => ({ ok: false, path, error: err instanceof Error ? err.message : String(err) }))
+      (path2) => readOneFile(path2, opts, caps, leverOn2).catch((err) => ({ ok: false, path: path2, error: err instanceof Error ? err.message : String(err) }))
     )
   );
 }
@@ -11159,9 +11159,9 @@ function invalidRepoResult(action, repo) {
   if (typeof repo !== "string" || repo === "" || safeRepoArg(repo) !== null) return null;
   return { data: { ok: false, action, error: `repo '${repo}' must be a directory inside the workspace (no '..', not absolute), so nothing was run` } };
 }
-function inferRepoFromPath(path) {
-  if (typeof path !== "string" || !path.trim()) return null;
-  const parts = path.split(/[\\/]/).filter((s) => s.length > 0 && s !== ".");
+function inferRepoFromPath(path2) {
+  if (typeof path2 !== "string" || !path2.trim()) return null;
+  const parts = path2.split(/[\\/]/).filter((s) => s.length > 0 && s !== ".");
   if (parts.length < 2) return null;
   return safeRepoArg(parts[0]);
 }
@@ -11199,9 +11199,9 @@ function shellRunWithStop(ctx, command, cwd) {
 function defaultRepoOf(ctx) {
   return safeRepoArg(ctx.caps.shell?.defaultRepo);
 }
-function pathInRepo(path, repo) {
-  if (!path) return path;
-  const inner = commitPathCandidates(path, repo);
+function pathInRepo(path2, repo) {
+  if (!path2) return path2;
+  const inner = commitPathCandidates(path2, repo);
   return inner.length > 0 ? inner[inner.length - 1] : void 0;
 }
 async function notARepoWithCandidates(action, ctx) {
@@ -11212,26 +11212,26 @@ var NOT_A_REPO = /not a git repository/i;
 function isNotARepo(r) {
   return NOT_A_REPO.test(`${r.stdout ?? ""} ${r.error ?? ""}`);
 }
-function commitPathCandidates(path, repo) {
-  const out = [path];
+function commitPathCandidates(path2, repo) {
+  const out = [path2];
   const dir = safeRepoArg(repo);
   if (dir) {
     const prefix = `${dir.replace(/\/+$/, "")}/`;
-    if (path.startsWith(prefix)) out.push(path.slice(prefix.length));
+    if (path2.startsWith(prefix)) out.push(path2.slice(prefix.length));
     const leaf = dir.split("/").filter(Boolean).pop();
-    if (leaf && path.startsWith(`${leaf}/`)) out.push(path.slice(leaf.length + 1));
+    if (leaf && path2.startsWith(`${leaf}/`)) out.push(path2.slice(leaf.length + 1));
   }
   return [...new Set(out)].filter((p) => p.trim() !== "");
 }
 var rootNotARepo = /* @__PURE__ */ new WeakSet();
-function scopeAttempts(ctx, path) {
+function scopeAttempts(ctx, path2) {
   const fallback = defaultRepoOf(ctx);
   const shell = ctx.caps.shell;
   const attempts = [];
-  if (!(fallback && shell && rootNotARepo.has(shell))) attempts.push({ path });
-  const inferred = inferRepoFromPath(path);
-  if (inferred) attempts.push({ repo: inferred, path: pathInRepo(path, inferred) });
-  if (fallback && fallback !== inferred) attempts.push({ repo: fallback, path: pathInRepo(path, fallback) });
+  if (!(fallback && shell && rootNotARepo.has(shell))) attempts.push({ path: path2 });
+  const inferred = inferRepoFromPath(path2);
+  if (inferred) attempts.push({ repo: inferred, path: pathInRepo(path2, inferred) });
+  if (fallback && fallback !== inferred) attempts.push({ repo: fallback, path: pathInRepo(path2, fallback) });
   return attempts;
 }
 async function runInRepoScope(ctx, scope, run) {
@@ -11558,28 +11558,28 @@ function parseEntries(lines) {
       continue;
     }
     const arrow = rest.indexOf(" -> ");
-    const path = unquoteGitPath(arrow === -1 ? rest : rest.slice(arrow + 4));
+    const path2 = unquoteGitPath(arrow === -1 ? rest : rest.slice(arrow + 4));
     const from = arrow === -1 ? void 0 : unquoteGitPath(rest.slice(0, arrow));
     if (CONFLICT.has(xy)) {
-      out.conflicted.push(path);
+      out.conflicted.push(path2);
       continue;
     }
     const [x, y] = [xy[0], xy[1]];
-    if (x !== " ") out.staged.push({ path, status: x, ...from && (x === "R" || x === "C") ? { from } : {} });
-    if (y !== " ") out.unstaged.push({ path, status: y });
+    if (x !== " ") out.staged.push({ path: path2, status: x, ...from && (x === "R" || x === "C") ? { from } : {} });
+    if (y !== " ") out.unstaged.push({ path: path2, status: y });
   }
   return out;
 }
 function parsePathSections(sections, paths, upstreamUsable) {
-  return paths.map((path, i) => {
+  return paths.map((path2, i) => {
     const lines = sections[i] ?? [];
     const logLine = lines.find((l) => l.includes(US));
-    if (!logLine) return { path, lastCommit: null, onUpstream: null };
+    if (!logLine) return { path: path2, lastCommit: null, onUpstream: null };
     const space = logLine.indexOf(" ");
     const [author = "", email = "", date = "", ...subject] = logLine.slice(space + 1).split(US);
     const pushed = lines.find((l) => l.startsWith(PUSHED_MARK));
     return {
-      path,
+      path: path2,
       lastCommit: { sha: logLine.slice(0, space), subject: subject.join(US), author, email, date },
       onUpstream: upstreamUsable && pushed ? pushed.endsWith(" yes") : null
     };
@@ -11899,8 +11899,8 @@ var gitCleanupMergedTool = defineTool({
 
 // ../packages/agent-tools/src/git-tools.ts
 function buildGitCommand(action, opts) {
-  const path = safeGitArg(opts?.path);
-  const pathArg = path ? ` -- "${path}"` : "";
+  const path2 = safeGitArg(opts?.path);
+  const pathArg = path2 ? ` -- "${path2}"` : "";
   const tracked = safeGitArg(opts?.trackedBranch);
   const viaSandbox = opts?.remoteViaSandbox === true;
   const fetchTracked = viaSandbox ? "" : `git fetch origin "${tracked}" 2>/dev/null && `;
@@ -11972,10 +11972,10 @@ async function runGitTool(action, opts, ctx) {
     baseBranch = synced.baseBranch ?? baseBranch;
   }
   const scope = { repo: opts.repo, path: opts.path ?? opts.paths?.[0] };
-  const ran = await runInRepoScope(ctx, scope, (repo, path) => shellRunWithStop(ctx, buildGitCommand(action, {
+  const ran = await runInRepoScope(ctx, scope, (repo, path2) => shellRunWithStop(ctx, buildGitCommand(action, {
     baseBranch,
     limit: opts.limit,
-    path,
+    path: path2,
     ...opts.paths?.length ? { paths: opts.paths, ...repo ? { repo } : {} } : {},
     ...trackedBranch ? { trackedBranch } : {},
     ...remote ? { remoteViaSandbox: true } : {}
@@ -12110,8 +12110,8 @@ var PROSE_BY_EXT = {
   log: "log"
 };
 var PROSE_EXTENSIONS = Object.keys(PROSE_BY_EXT).map((e) => `.${e}`);
-function proseKindOf(path) {
-  const base = path.replace(/\\/g, "/").split("/").pop() ?? "";
+function proseKindOf(path2) {
+  const base = path2.replace(/\\/g, "/").split("/").pop() ?? "";
   const dot = base.lastIndexOf(".");
   const ext = dot > 0 ? base.slice(dot + 1).toLowerCase() : "";
   return PROSE_BY_EXT[ext] ?? "code";
@@ -12142,15 +12142,15 @@ var readCompressedTool = defineTool({
   },
   requires: ["repo.read", "repo.compress"],
   async execute(args, ctx) {
-    const path = typeof args.path === "string" ? args.path.trim() : "";
-    if (!path) return { data: { ok: false, error: "path is required" } };
-    const kind = proseKindOf(path);
+    const path2 = typeof args.path === "string" ? args.path.trim() : "";
+    if (!path2) return { data: { ok: false, error: "path is required" } };
+    const kind = proseKindOf(path2);
     if (kind === "code") {
-      return { data: { ok: false, path, error: `read_compressed only reads prose (${PROSE_EXTENSIONS.join(" ")}). Use read_file for code \u2014 an edit needs the exact text.` } };
+      return { data: { ok: false, path: path2, error: `read_compressed only reads prose (${PROSE_EXTENSIONS.join(" ")}). Use read_file for code \u2014 an edit needs the exact text.` } };
     }
     const semantic = ctx.caps.semantic;
-    if (!semantic?.compress) return { data: { ok: false, path, error: "Compression is not available on this surface right now \u2014 use read_file." } };
-    const read2 = await ctx.caps.repoRead.readFile(path);
+    if (!semantic?.compress) return { data: { ok: false, path: path2, error: "Compression is not available on this surface right now \u2014 use read_file." } };
+    const read2 = await ctx.caps.repoRead.readFile(path2);
     if (!read2.ok || typeof read2.content !== "string") return { data: read2 };
     const rate = typeof args.rate === "number" && Number.isFinite(args.rate) ? Math.min(RATE_MAX, Math.max(RATE_MIN, args.rate)) : void 0;
     const r = await compressProse(read2.content, kind, {
@@ -12158,7 +12158,7 @@ var readCompressedTool = defineTool({
       minChars: READ_COMPRESSED_MIN_CHARS,
       ...rate !== void 0 ? { rate } : {}
     });
-    const data = { ok: true, path, content: r.text, compressed: r.compressed };
+    const data = { ok: true, path: path2, content: r.text, compressed: r.compressed };
     if (r.compressed) {
       data.originalTokens = r.originalTokens;
       data.keptTokens = r.keptTokens;
@@ -12288,17 +12288,17 @@ function excerptAround(content, lines, budget2, radius = HIT_WINDOW_LINES) {
   }
   return out.join("\n");
 }
-function hitLinesFor(path, hits) {
+function hitLinesFor(path2, hits) {
   if (!hits) return [];
-  return [...hits.definitions, ...hits.references].filter((h) => h.path === path).map((h) => h.line);
+  return [...hits.definitions, ...hits.references].filter((h) => h.path === path2).map((h) => h.line);
 }
 async function readExcerpts(ctx, files, hits) {
   const out = [];
   const per = Math.floor(EXCERPT_BUDGET_CHARS / Math.max(1, files.length));
-  for (const path of files) {
-    const r = await ctx.caps.repoRead.readFile(path).catch(() => null);
+  for (const path2 of files) {
+    const r = await ctx.caps.repoRead.readFile(path2).catch(() => null);
     if (!r?.ok || typeof r.content !== "string") continue;
-    out.push({ path, text: excerptAround(r.content, hitLinesFor(path, hits), per) });
+    out.push({ path: path2, text: excerptAround(r.content, hitLinesFor(path2, hits), per) });
   }
   return out;
 }
@@ -12470,8 +12470,8 @@ var MAX_TOTAL_BYTES = 16 * 1024 * 1024;
 // ../packages/agent-tools/src/knowledge/fsDirectorySource.ts
 var BUILDERFORCE_INPUTS = /* @__PURE__ */ new Set([".builderforce/ignore", ".builderforce/partitions.json"]);
 function isBuilderforceState(rel2) {
-  const path = rel2.replace(/\\/g, "/");
-  return path.split("/").includes(".builderforce") && !BUILDERFORCE_INPUTS.has(path);
+  const path2 = rel2.replace(/\\/g, "/");
+  return path2.split("/").includes(".builderforce") && !BUILDERFORCE_INPUTS.has(path2);
 }
 
 // ../packages/agent-tools/src/knowledge/shaCache.ts
@@ -12874,17 +12874,17 @@ var readFileTool = defineTool({
   },
   requires: ["repo.read"],
   async execute(args, ctx) {
-    const path = typeof args.path === "string" ? args.path : "";
-    const paths = !path && Array.isArray(args.paths) ? args.paths.filter((p) => typeof p === "string" && p.trim() !== "") : [];
-    if (!path && paths.length === 0) return { data: { ok: false, error: "path is required (or paths: a list of up to " + READ_FILE_MAX_PATHS + ")" } };
+    const path2 = typeof args.path === "string" ? args.path : "";
+    const paths = !path2 && Array.isArray(args.paths) ? args.paths.filter((p) => typeof p === "string" && p.trim() !== "") : [];
+    if (!path2 && paths.length === 0) return { data: { ok: false, error: "path is required (or paths: a list of up to " + READ_FILE_MAX_PATHS + ")" } };
     if (paths.length > READ_FILE_MAX_PATHS) return { data: { ok: false, error: `paths takes at most ${READ_FILE_MAX_PATHS} files per call \u2014 split the rest into another read_file` } };
     const opts = {
       offset: typeof args.offset === "number" && args.offset > 0 ? Math.floor(args.offset) : void 0,
       limit: typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : void 0,
       key: typeof args.key === "string" ? args.key.trim() : ""
     };
-    if (!path) return { data: { ok: true, files: await readManyFiles(paths, opts, ctx.caps, ctx.outlineFirstReads) } };
-    return { data: await readOneFile(path, opts, ctx.caps, ctx.outlineFirstReads) };
+    if (!path2) return { data: { ok: true, files: await readManyFiles(paths, opts, ctx.caps, ctx.outlineFirstReads) } };
+    return { data: await readOneFile(path2, opts, ctx.caps, ctx.outlineFirstReads) };
   }
 });
 var writeFileTool = defineTool({
@@ -12901,14 +12901,14 @@ var writeFileTool = defineTool({
   },
   requires: ["repo.write"],
   async execute(args, ctx) {
-    const path = typeof args.path === "string" ? args.path : "";
+    const path2 = typeof args.path === "string" ? args.path : "";
     const content = typeof args.content === "string" ? args.content : "";
     const summary = typeof args.summary === "string" ? args.summary : void 0;
-    if (!path || !content) return { data: { ok: false, error: "path and content are both required" } };
+    if (!path2 || !content) return { data: { ok: false, error: "path and content are both required" } };
     if (ctx.caps.repoRead) {
       let existing;
       try {
-        existing = await ctx.caps.repoRead.readFile(path);
+        existing = await ctx.caps.repoRead.readFile(path2);
       } catch (err) {
         const reason = err instanceof Error ? err.message : "read failed";
         return {
@@ -12921,7 +12921,7 @@ var writeFileTool = defineTool({
       const refusal2 = refuseWriteOverwrite(probeFromRepoRead(existing), content);
       if (refusal2) return { data: { ok: false, error: refusal2 } };
     }
-    const r = await ctx.caps.repoWrite.writeFile(path, content, summary);
+    const r = await ctx.caps.repoWrite.writeFile(path2, content, summary);
     return { data: r.ok ? { ok: true, branch: r.branch, commitUrl: r.commitUrl } : { ok: false, error: r.error } };
   }
 });
@@ -12938,10 +12938,10 @@ var deleteFileTool = defineTool({
   },
   requires: ["repo.delete"],
   async execute(args, ctx) {
-    const path = typeof args.path === "string" ? args.path : "";
-    if (!path) return { data: { ok: false, error: "path is required" } };
+    const path2 = typeof args.path === "string" ? args.path : "";
+    if (!path2) return { data: { ok: false, error: "path is required" } };
     const reason = typeof args.reason === "string" ? args.reason : void 0;
-    const r = await ctx.caps.repoWrite.deleteFile(path, reason);
+    const r = await ctx.caps.repoWrite.deleteFile(path2, reason);
     if (r.ok && r.deleted === false) return { data: { ok: true, deleted: false, note: r.note } };
     return { data: r.ok ? { ok: true, deleted: true, branch: r.branch, commitUrl: r.commitUrl } : { ok: false, error: r.error } };
   }
@@ -12998,8 +12998,8 @@ var editFileTool = defineTool({
           ok: true,
           batched: true,
           count: batch.files.length,
-          files: batch.files.map(({ content: _c, ok, path: path2, error, nearest, ...facts }) => ({
-            path: path2,
+          files: batch.files.map(({ content: _c, ok, path: path3, error, nearest, ...facts }) => ({
+            path: path3,
             ok,
             ...Object.keys(facts).length ? facts : {},
             ...error ? { error } : {},
@@ -13008,12 +13008,12 @@ var editFileTool = defineTool({
         }
       };
     }
-    const path = typeof args.path === "string" ? args.path : "";
+    const path2 = typeof args.path === "string" ? args.path : "";
     const oldString = typeof args.old_string === "string" ? args.old_string : "";
     const newString = typeof args.new_string === "string" ? args.new_string : "";
     const replaceAll = args.replace_all === true;
-    if (!path || !oldString) return { data: { ok: false, error: "path and old_string are required" } };
-    const r = await ctx.caps.repoWrite.editFile(path, oldString, newString, replaceAll);
+    if (!path2 || !oldString) return { data: { ok: false, error: "path and old_string are required" } };
+    const r = await ctx.caps.repoWrite.editFile(path2, oldString, newString, replaceAll);
     return {
       data: r.ok ? {
         ok: true,
@@ -13494,7 +13494,7 @@ var RunKnowledgeRecorder = class _RunKnowledgeRecorder {
     if (!state) return r;
     if (state.memory.task) r.memory.setTask(state.memory.task);
     for (const kind of ["created", "edited", "deleted", "read"]) {
-      for (const path of state.memory[kind] ?? []) r.memory.observe({ kind, path });
+      for (const path2 of state.memory[kind] ?? []) r.memory.observe({ kind, path: path2 });
     }
     for (const query of state.memory.searched ?? []) r.memory.observe({ kind: "searched", query });
     r.tools.push(...state.tools ?? []);
@@ -13519,7 +13519,7 @@ var RunKnowledgeRecorder = class _RunKnowledgeRecorder {
     const rec = args && typeof args === "object" && !Array.isArray(args) ? args : void 0;
     const many = kind === "read" && !!rec && !(typeof rec.path === "string" && rec.path !== "") && Array.isArray(rec.paths);
     if (kind && many) {
-      for (const path of toolCallPaths(args)) this.memory.observe({ kind: OBSERVATION[kind], path });
+      for (const path2 of toolCallPaths(args)) this.memory.observe({ kind: OBSERVATION[kind], path: path2 });
       return;
     }
     const p = kind ? argPath(args) : void 0;
@@ -16369,49 +16369,49 @@ function validateJsonSchema(value, schema, opts = {}) {
   walk2(value, schema ?? {}, "", errors, max);
   return errors;
 }
-function walk2(value, schema, path, errs, max) {
+function walk2(value, schema, path2, errs, max) {
   if (errs.length >= max) return;
   if (schema.type !== void 0) {
     const expected = Array.isArray(schema.type) ? schema.type : [schema.type];
     if (!expected.some((t) => matchesType(value, t))) {
-      errs.push({ path, message: `expected ${expected.join(" | ")}, got ${describeType(value)}` });
+      errs.push({ path: path2, message: `expected ${expected.join(" | ")}, got ${describeType(value)}` });
       return;
     }
   }
   if (Array.isArray(schema.enum)) {
     if (!schema.enum.some((e) => deepEq(e, value))) {
-      errs.push({ path, message: `value not in enum [${schema.enum.map((v) => JSON.stringify(v)).join(", ")}]` });
+      errs.push({ path: path2, message: `value not in enum [${schema.enum.map((v) => JSON.stringify(v)).join(", ")}]` });
     }
   }
   if ("const" in schema && !deepEq(schema.const, value)) {
-    errs.push({ path, message: `value is not the required const ${JSON.stringify(schema.const)}` });
+    errs.push({ path: path2, message: `value is not the required const ${JSON.stringify(schema.const)}` });
   }
   if (typeof value === "string") {
     if (typeof schema.minLength === "number" && value.length < schema.minLength) {
-      errs.push({ path, message: `string shorter than minLength=${schema.minLength}` });
+      errs.push({ path: path2, message: `string shorter than minLength=${schema.minLength}` });
     }
     if (typeof schema.maxLength === "number" && value.length > schema.maxLength) {
-      errs.push({ path, message: `string longer than maxLength=${schema.maxLength}` });
+      errs.push({ path: path2, message: `string longer than maxLength=${schema.maxLength}` });
     }
   }
   if (typeof value === "number") {
     if (typeof schema.minimum === "number" && value < schema.minimum) {
-      errs.push({ path, message: `number below minimum=${schema.minimum}` });
+      errs.push({ path: path2, message: `number below minimum=${schema.minimum}` });
     }
     if (typeof schema.maximum === "number" && value > schema.maximum) {
-      errs.push({ path, message: `number above maximum=${schema.maximum}` });
+      errs.push({ path: path2, message: `number above maximum=${schema.maximum}` });
     }
   }
   if (Array.isArray(value)) {
     if (typeof schema.minItems === "number" && value.length < schema.minItems) {
-      errs.push({ path, message: `array shorter than minItems=${schema.minItems}` });
+      errs.push({ path: path2, message: `array shorter than minItems=${schema.minItems}` });
     }
     if (typeof schema.maxItems === "number" && value.length > schema.maxItems) {
-      errs.push({ path, message: `array longer than maxItems=${schema.maxItems}` });
+      errs.push({ path: path2, message: `array longer than maxItems=${schema.maxItems}` });
     }
     if (schema.items) {
       for (let i = 0; i < value.length && errs.length < max; i++) {
-        walk2(value[i], schema.items, `${path}[${i}]`, errs, max);
+        walk2(value[i], schema.items, `${path2}[${i}]`, errs, max);
       }
     }
   }
@@ -16420,21 +16420,21 @@ function walk2(value, schema, path, errs, max) {
     if (Array.isArray(schema.required)) {
       for (const field2 of schema.required) {
         if (typeof field2 === "string" && !(field2 in obj2)) {
-          errs.push({ path: joinPath3(path, field2), message: "required field missing" });
+          errs.push({ path: joinPath3(path2, field2), message: "required field missing" });
           if (errs.length >= max) return;
         }
       }
     }
     if (schema.properties) {
       for (const [k, sub] of Object.entries(schema.properties)) {
-        if (k in obj2 && errs.length < max) walk2(obj2[k], sub, joinPath3(path, k), errs, max);
+        if (k in obj2 && errs.length < max) walk2(obj2[k], sub, joinPath3(path2, k), errs, max);
       }
     }
     if (schema.additionalProperties === false && schema.properties) {
       const known = new Set(Object.keys(schema.properties));
       for (const k of Object.keys(obj2)) {
         if (!known.has(k)) {
-          errs.push({ path: joinPath3(path, k), message: "additional property not allowed" });
+          errs.push({ path: joinPath3(path2, k), message: "additional property not allowed" });
           if (errs.length >= max) return;
         }
       }
@@ -16442,7 +16442,7 @@ function walk2(value, schema, path, errs, max) {
       const known = new Set(schema.properties ? Object.keys(schema.properties) : []);
       for (const k of Object.keys(obj2)) {
         if (!known.has(k) && errs.length < max) {
-          walk2(obj2[k], schema.additionalProperties, joinPath3(path, k), errs, max);
+          walk2(obj2[k], schema.additionalProperties, joinPath3(path2, k), errs, max);
         }
       }
     }
@@ -16450,13 +16450,13 @@ function walk2(value, schema, path, errs, max) {
   if (Array.isArray(schema.oneOf)) {
     const matchCount = schema.oneOf.reduce((n2, s) => n2 + (validateJsonSchema(value, s, { maxErrors: 1 }).length === 0 ? 1 : 0), 0);
     if (matchCount !== 1) {
-      errs.push({ path, message: `value matched ${matchCount} of ${schema.oneOf.length} oneOf branches (need exactly 1)` });
+      errs.push({ path: path2, message: `value matched ${matchCount} of ${schema.oneOf.length} oneOf branches (need exactly 1)` });
     }
   }
   if (Array.isArray(schema.anyOf)) {
     const anyMatch = schema.anyOf.some((s) => validateJsonSchema(value, s, { maxErrors: 1 }).length === 0);
     if (!anyMatch) {
-      errs.push({ path, message: `value matched none of ${schema.anyOf.length} anyOf branches` });
+      errs.push({ path: path2, message: `value matched none of ${schema.anyOf.length} anyOf branches` });
     }
   }
 }
@@ -18230,8 +18230,8 @@ function contentHash3(text2) {
 }
 function pathArgOf(args) {
   if (!args || typeof args !== "object" || Array.isArray(args)) return null;
-  const path = args.path;
-  return typeof path === "string" && path.trim() ? path.trim() : null;
+  const path2 = args.path;
+  return typeof path2 === "string" && path2.trim() ? path2.trim() : null;
 }
 
 // ../packages/run-guards/src/visitTally.ts
@@ -18308,7 +18308,7 @@ function singleReadsOf(tool, args) {
   if (!Array.isArray(paths) || typeof rest.path === "string" && rest.path !== "") return null;
   const named = paths.filter((p) => typeof p === "string" && p.trim() !== "").slice(0, READ_FILE_MAX_PATHS);
   if (named.length === 0) return null;
-  return named.map((path) => ({ ...rest, path }));
+  return named.map((path2) => ({ ...rest, path: path2 }));
 }
 function perFileResults(result) {
   return result && Array.isArray(result.files) ? result.files : null;
@@ -18350,8 +18350,8 @@ function resultObject(result) {
 }
 function isUnderDir(p, dir) {
   if (!dir) return true;
-  const path = normalizePathArg(p);
-  return path === dir || path.startsWith(`${dir}/`);
+  const path2 = normalizePathArg(p);
+  return path2 === dir || path2.startsWith(`${dir}/`);
 }
 function asPositiveInt(value, fallback) {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
@@ -18493,15 +18493,15 @@ var ReadCoverage = class _ReadCoverage {
   coveredRead(tool, args) {
     if (tool !== "read_file") return null;
     const wanted = canonicalReadArgs(tool, args);
-    const path = typeof wanted.path === "string" ? wanted.path : "";
-    if (!path) return null;
+    const path2 = typeof wanted.path === "string" ? wanted.path : "";
+    if (!path2) return null;
     if (typeof wanted.key === "string") return null;
     const want = requestedReadWindow(wanted);
     for (const read2 of this.exact.values()) {
       if (read2.tool !== "read_file" || !read2.cached) continue;
       if (typeof read2.args.key === "string") continue;
       const earlierPath = typeof read2.args.path === "string" ? read2.args.path : "";
-      if (earlierPath !== path) continue;
+      if (earlierPath !== path2) continue;
       const served = servedCopy(read2.cached);
       const got = servedReadWindow(served);
       if (!got) continue;
@@ -18973,9 +18973,9 @@ function repeatedFailureAdvisory(tool, attempts, reason) {
 // ../packages/run-guards/src/writeLedger.ts
 function contentWriteOf(tool, args) {
   if (!args || typeof args !== "object" || Array.isArray(args)) return null;
-  const { path, content } = args;
-  if (typeof path !== "string" || !path.trim() || typeof content !== "string") return null;
-  return { path: path.trim(), fingerprint: callFingerprint(tool, args) };
+  const { path: path2, content } = args;
+  if (typeof path2 !== "string" || !path2.trim() || typeof content !== "string") return null;
+  return { path: path2.trim(), fingerprint: callFingerprint(tool, args) };
 }
 var WriteLedger = class {
   written = /* @__PURE__ */ new Map();
@@ -19000,12 +19000,12 @@ var WriteLedger = class {
       this.written.set(write2.path, write2.fingerprint);
       return;
     }
-    const path = pathArgOf(args);
-    if (path) this.written.delete(path);
+    const path2 = pathArgOf(args);
+    if (path2) this.written.delete(path2);
   }
 };
-function repeatedWriteNote(tool, path) {
-  return `Not re-run: this exact \`${tool}\` of "${path}" already succeeded earlier in this run and nothing has changed the file since, so it already holds this content \u2014 writing it again cannot change anything. If something still looks broken, the cause is not that the write failed: re-read the error (it may predate your write), look elsewhere for the cause, or tell the user what you see.`;
+function repeatedWriteNote(tool, path2) {
+  return `Not re-run: this exact \`${tool}\` of "${path2}" already succeeded earlier in this run and nothing has changed the file since, so it already holds this content \u2014 writing it again cannot change anything. If something still looks broken, the cause is not that the write failed: re-read the error (it may predate your write), look elsewhere for the cause, or tell the user what you see.`;
 }
 
 // ../packages/run-guards/src/editRevert.ts
@@ -19019,17 +19019,17 @@ function stringArg(args, ...keys) {
   return void 0;
 }
 function changeOf(args) {
-  const path = pathArgOf(args);
-  if (!path) return null;
+  const path2 = pathArgOf(args);
+  if (!path2) return null;
   const a = args;
   const content = stringArg(a, "content");
-  if (content !== void 0) return { path, sig: `w:${contentHash3(content)}` };
+  if (content !== void 0) return { path: path2, sig: `w:${contentHash3(content)}` };
   const from = stringArg(a, "old_string", "oldString", "find");
   const to = stringArg(a, "new_string", "newString", "replace");
   if (from === void 0 || to === void 0 || from === to) return null;
   const f = contentHash3(from);
   const t = contentHash3(to);
-  return { path, sig: `e:${f}>${t}`, inverse: `e:${t}>${f}` };
+  return { path: path2, sig: `e:${f}>${t}`, inverse: `e:${t}>${f}` };
 }
 function changesContent(args) {
   return changeOf(args) !== null;
@@ -19046,8 +19046,8 @@ var EditRevertTracker = class {
    */
   record(tool, args, outcome) {
     if (outcome.deleted) {
-      const path = pathArgOf(args);
-      if (path) this.history.delete(path);
+      const path2 = pathArgOf(args);
+      if (path2) this.history.delete(path2);
       return null;
     }
     const change = changeOf(args);
@@ -19093,8 +19093,8 @@ function isCheckCallDefault(tool, args) {
   const command = args.command;
   return typeof command === "string" && TEST_COMMAND.test(command);
 }
-function isTestPath(path) {
-  return TEST_PATH.test(path.split("\\").join("/"));
+function isTestPath(path2) {
+  return TEST_PATH.test(path2.split("\\").join("/"));
 }
 function resultDigest(result) {
   let text2;
@@ -19139,21 +19139,21 @@ var NoProgressTracker = class {
    * differently each time is the run fixing things, not repeating a failure.
    */
   observe(tool, args, outcome) {
-    const path = this.targetOf(tool, args);
-    if (path) {
-      if (!this.seen.has(path)) {
-        this.seen.add(path);
+    const path2 = this.targetOf(tool, args);
+    if (path2) {
+      if (!this.seen.has(path2)) {
+        this.seen.add(path2);
         if (this.seen.size > MAX_SEEN) this.seen.delete(this.seen.values().next().value);
         this.groundThisTurn = true;
       } else {
-        const last = this.lastSeenAt.get(path);
+        const last = this.lastSeenAt.get(path2);
         if (last === void 0 || this.turn - last >= REGROUND_TURNS) this.groundThisTurn = true;
       }
-      this.lastSeenAt.set(path, this.turn);
+      this.lastSeenAt.set(path2, this.turn);
     }
-    if (outcome.ok && !path && this.isPlatformProgress?.(tool, args)) this.groundThisTurn = true;
+    if (outcome.ok && !path2 && this.isPlatformProgress?.(tool, args)) this.groundThisTurn = true;
     if (outcome.ok && outcome.wrote) {
-      if (path && isTestPath(path)) this.groundThisTurn = true;
+      if (path2 && isTestPath(path2)) this.groundThisTurn = true;
       const fingerprint = contentHash3(callFingerprint(tool, args));
       if (!this.changes.has(fingerprint)) {
         this.changes.add(fingerprint);
@@ -19357,9 +19357,9 @@ function turnCallsOf(calls, isReadOnly) {
 
 // ../packages/run-guards/src/reverifyTracker.ts
 var MAX_REVERIFY_PATHS = 200;
-function addBounded(set, path) {
-  set.delete(path);
-  set.add(path);
+function addBounded(set, path2) {
+  set.delete(path2);
+  set.add(path2);
   while (set.size > MAX_REVERIFY_PATHS) {
     const oldest = set.values().next().value;
     if (oldest === void 0) break;
@@ -19385,9 +19385,9 @@ var ReverifyTracker = class {
     this.readBackSinceWrite.clear();
   }
   /** `path` was written: its next read-back inspects the edit again. */
-  wrote(path) {
-    addBounded(this.writtenPaths, path);
-    this.readBackSinceWrite.delete(path);
+  wrote(path2) {
+    addBounded(this.writtenPaths, path2);
+    this.readBackSinceWrite.delete(path2);
   }
   /** A successful read-only call visited `target`. */
   read(target) {
@@ -19430,12 +19430,12 @@ function succeeded2(result) {
   return !(d && typeof d === "object" && d.ok === false);
 }
 function visitTargetOf(args) {
-  const path = pathArgOf(args);
-  if (!args || typeof args !== "object") return path;
+  const path2 = pathArgOf(args);
+  if (!args || typeof args !== "object") return path2;
   const a = args;
   const question = [a.query, a.pattern, a.symbol, a.name].find((v) => typeof v === "string" && v.trim() !== "");
-  if (path && question) return `${path} \u220B ${question.trim()}`;
-  return path ?? question?.trim() ?? null;
+  if (path2 && question) return `${path2} \u220B ${question.trim()}`;
+  return path2 ?? question?.trim() ?? null;
 }
 var ProgressDetector = class {
   constructor(state = {}, ports = {}) {
@@ -19501,9 +19501,9 @@ var ProgressDetector = class {
       const revert = this.edits.record(tool, args, { ok });
       if (revert) this.raise({ kind: "edit_revert", tool, target: revert.path });
       if (ok) {
-        const path = pathArgOf(args);
-        this.forgetVisitsOf(path);
-        if (path) this.reverify.wrote(path);
+        const path2 = pathArgOf(args);
+        this.forgetVisitsOf(path2);
+        if (path2) this.reverify.wrote(path2);
       }
     } else if (ok && this.ports.isReadOnly?.(tool, args)) {
       const target = visitTargetOf(args);
@@ -19521,11 +19521,11 @@ var ProgressDetector = class {
       if (attempts >= FAILURE_HARD_AT) this.raise({ kind: "repeated_failure", tool, count: attempts, ...reason ? { reason } : {} });
     }
   }
-  forgetVisitsOf(path) {
-    if (!path) return;
+  forgetVisitsOf(path2) {
+    if (!path2) return;
     this.visits.forget((key) => {
       const target = key.slice(key.indexOf(":") + 1);
-      return target === path || target.startsWith(`${path} \u220B `);
+      return target === path2 || target.startsWith(`${path2} \u220B `);
     });
   }
   /** Every call of the turn ran. The trip this turn caused, if any — or, earlier and
@@ -19864,8 +19864,8 @@ var ReadsWithoutSpawn = class {
 // ../packages/run-guards/src/evidence/ledger.ts
 var MAX_CHECK_FINDINGS = 20;
 var MAX_CHECK_OUTPUT_TAIL = 2048;
-function normalizeEvidencePath(path) {
-  return path.replace(/\\/g, "/").replace(/\/+/g, "/");
+function normalizeEvidencePath(path2) {
+  return path2.replace(/\\/g, "/").replace(/\/+/g, "/");
 }
 function createEvidenceLedger(resume) {
   const entries = /* @__PURE__ */ new Map();
@@ -19877,8 +19877,8 @@ function createEvidenceLedger(resume) {
       });
     }
   }
-  const entryFor = (path) => {
-    const key = normalizeEvidencePath(path);
+  const entryFor = (path2) => {
+    const key = normalizeEvidencePath(path2);
     let e = entries.get(key);
     if (!e) {
       e = { latestHash: null, byHash: /* @__PURE__ */ new Map() };
@@ -19887,13 +19887,13 @@ function createEvidenceLedger(resume) {
     return e;
   };
   return {
-    noteWrite(path) {
-      const e = entryFor(path);
+    noteWrite(path2) {
+      const e = entryFor(path2);
       e.latestHash = null;
       e.byHash.clear();
     },
-    record(path, contentHash4, check) {
-      const e = entryFor(path);
+    record(path2, contentHash4, check) {
+      const e = entryFor(path2);
       if (e.latestHash !== null && e.latestHash !== contentHash4) return;
       e.latestHash = contentHash4;
       const capped2 = {
@@ -19905,13 +19905,13 @@ function createEvidenceLedger(resume) {
       if (list2) list2.push(capped2);
       else e.byHash.set(contentHash4, [capped2]);
     },
-    for(path, contentHash4) {
-      const e = entries.get(normalizeEvidencePath(path));
+    for(path2, contentHash4) {
+      const e = entries.get(normalizeEvidencePath(path2));
       if (!e || e.latestHash !== contentHash4) return [];
       return e.byHash.get(contentHash4) ?? [];
     },
-    current(path) {
-      const key = normalizeEvidencePath(path);
+    current(path2) {
+      const key = normalizeEvidencePath(path2);
       const e = entries.get(key);
       if (!e || e.latestHash === null) return null;
       return { path: key, contentHash: e.latestHash, checks: e.byHash.get(e.latestHash) ?? [] };
@@ -19967,34 +19967,34 @@ var DEFAULT_EVIDENCE_POLICY = {
   newSourceTestCoverage: ["stem", "directory", "import"],
   checkTimeoutMs: 12e4
 };
-function basenameOf(path) {
-  const normalized = normalizeEvidencePath(path);
+function basenameOf(path2) {
+  const normalized = normalizeEvidencePath(path2);
   return normalized.slice(normalized.lastIndexOf("/") + 1);
 }
-function extOf(path) {
-  const base = basenameOf(path);
+function extOf(path2) {
+  const base = basenameOf(path2);
   const dot = base.lastIndexOf(".");
   return dot > 0 ? base.slice(dot).toLowerCase() : "";
 }
-function stemOf(path) {
-  const base = basenameOf(path);
+function stemOf(path2) {
+  const base = basenameOf(path2);
   const dot = base.lastIndexOf(".");
   return dot > 0 ? base.slice(0, dot) : base;
 }
 var SOURCE_EXTENSIONS = /* @__PURE__ */ new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"]);
-function isSourceFile(path) {
-  return SOURCE_EXTENSIONS.has(extOf(path));
+function isSourceFile(path2) {
+  return SOURCE_EXTENSIONS.has(extOf(path2));
 }
-function dirOf2(path) {
-  const normalized = normalizeEvidencePath(path);
+function dirOf2(path2) {
+  const normalized = normalizeEvidencePath(path2);
   const slash2 = normalized.lastIndexOf("/");
   return slash2 >= 0 ? normalized.slice(0, slash2) : "";
 }
-function moduleKey(path) {
-  return normalizeEvidencePath(path).replace(/\.[cm]?[jt]sx?$/i, "");
+function moduleKey(path2) {
+  return normalizeEvidencePath(path2).replace(/\.[cm]?[jt]sx?$/i, "");
 }
-function isExemptFromTestRule(path, policy) {
-  const normalized = normalizeEvidencePath(path);
+function isExemptFromTestRule(path2, policy) {
+  const normalized = normalizeEvidencePath(path2);
   return (policy.newSourceTestExempt ?? []).some((source) => new RegExp(source, "i").test(normalized));
 }
 function covers(test, file, policy) {
@@ -20027,9 +20027,9 @@ function firstFindings(check, max = 3) {
   const more = check.findings.length > max ? ` (+${check.findings.length - max} more)` : "";
   return shown.length ? shown.join("; ") + more : "(no findings recorded)";
 }
-function checkFailureReason(path, check, detail) {
+function checkFailureReason(path2, check, detail) {
   const tail = check.outputTail?.trim();
-  return `git_push refused: ${path} failed ${check.kind} "${check.name}"${detail}. First findings: ${firstFindings(check)}.` + (tail ? ` Output (tail): ${tail.replace(/\s+/g, " ").trim().slice(0, 400)}.` : "") + ` Fix the failure and push again \u2014 the host runs the checks.`;
+  return `git_push refused: ${path2} failed ${check.kind} "${check.name}"${detail}. First findings: ${firstFindings(check)}.` + (tail ? ` Output (tail): ${tail.replace(/\s+/g, " ").trim().slice(0, 400)}.` : "") + ` Fix the failure and push again \u2014 the host runs the checks.`;
 }
 function outgoingGate(files, ledger, policy) {
   const unavailable2 = [];
@@ -20198,10 +20198,10 @@ function citedPathAnchors(answer2) {
   const seen = /* @__PURE__ */ new Set();
   const re = /(?:^|[\s`'"(\[])((?:\.{0,2}\/)?(?:[\w@.-]+\/)+[\w@.-]+\.[A-Za-z0-9]{1,8})(?::\d+)?(?=$|[\s`'"),.:;\]])/g;
   for (const m of (answer2 ?? "").matchAll(re)) {
-    const path = m[1].replace(/^\.\/+/, "");
-    if (seen.has(path)) continue;
-    seen.add(path);
-    out.push({ path });
+    const path2 = m[1].replace(/^\.\/+/, "");
+    if (seen.has(path2)) continue;
+    seen.add(path2);
+    out.push({ path: path2 });
     if (out.length >= MAX_CITED_ANCHORS) break;
   }
   return out;
@@ -22211,8 +22211,8 @@ var subagentsHook = {
 var JSON_EXT = /\.json$/i;
 var YAML_EXT = /\.ya?ml$/i;
 var SOURCE_EXT = /\.[cm]?[jt]sx?$/i;
-function isVerifiablePath(path) {
-  return JSON_EXT.test(path) || YAML_EXT.test(path) || SOURCE_EXT.test(path);
+function isVerifiablePath(path2) {
+  return JSON_EXT.test(path2) || YAML_EXT.test(path2) || SOURCE_EXT.test(path2);
 }
 var TS_SOURCE = /\.[cm]?[jt]sx?$/i;
 var CONDITIONAL_JSX_CALLBACK = /\b(on[A-Z][A-Za-z0-9_$]*)\s*=\s*\{[^{}]{0,300}\?\s*(?:async\s*)?\(\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\)\s*=>/g;
@@ -22265,8 +22265,8 @@ function maskNonCode(source) {
   }
   return chars.join("");
 }
-function inspectAgentSource(path, source) {
-  if (!TS_SOURCE.test(path)) return [];
+function inspectAgentSource(path2, source) {
+  if (!TS_SOURCE.test(path2)) return [];
   const findings = [];
   for (const match of maskNonCode(source).matchAll(CONDITIONAL_JSX_CALLBACK)) {
     const prop = match[1];
@@ -22298,16 +22298,16 @@ function checkYamlContent(content) {
   }
   return null;
 }
-function checkFileContent(path, content) {
-  if (!isVerifiablePath(path)) return { kind: "skipped" };
+function checkFileContent(path2, content) {
+  if (!isVerifiablePath(path2)) return { kind: "skipped" };
   try {
-    if (JSON_EXT.test(path)) {
+    if (JSON_EXT.test(path2)) {
       JSON.parse(content);
-    } else if (YAML_EXT.test(path)) {
+    } else if (YAML_EXT.test(path2)) {
       const yamlError = checkYamlContent(content);
       if (yamlError) return { kind: "errors", errors: [{ message: yamlError.slice(0, 240) }] };
     } else {
-      const findings = inspectAgentSource(path, content);
+      const findings = inspectAgentSource(path2, content);
       if (findings.length) {
         return { kind: "errors", errors: findings.map((f) => ({ message: f.message, line: f.line, ruleId: f.ruleId })) };
       }
@@ -22331,11 +22331,11 @@ function foldVerifyOutcomes(outcomes) {
 async function verifyWrittenFiles(read2, paths) {
   const list2 = [...paths];
   const outcomes = await Promise.all(
-    list2.map(async (path) => {
-      if (!isVerifiablePath(path)) return { path, kind: "skipped" };
-      const content = await read2(path).catch(() => null);
-      if (content === null) return { path, kind: "skipped" };
-      return { path, ...checkFileContent(path, content) };
+    list2.map(async (path2) => {
+      if (!isVerifiablePath(path2)) return { path: path2, kind: "skipped" };
+      const content = await read2(path2).catch(() => null);
+      if (content === null) return { path: path2, kind: "skipped" };
+      return { path: path2, ...checkFileContent(path2, content) };
     })
   );
   return foldVerifyOutcomes(outcomes);
@@ -22356,8 +22356,8 @@ var DOCUMENT_EXTENSIONS = /* @__PURE__ */ new Set([
   ".asciidoc",
   ".txt"
 ]);
-function isDocumentationPath(path) {
-  const normalized = path.trim().replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+function isDocumentationPath(path2) {
+  const normalized = path2.trim().replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
   if (!normalized) return false;
   if (normalized.startsWith("docs/") || normalized.startsWith("specs/")) return true;
   const file = normalized.slice(normalized.lastIndexOf("/") + 1);
@@ -22365,9 +22365,9 @@ function isDocumentationPath(path) {
   return dot >= 0 && DOCUMENT_EXTENSIONS.has(file.slice(dot));
 }
 function hasNoCodeDeliverable(writtenPaths) {
-  for (const path of writtenPaths) {
-    if (!path.trim()) continue;
-    if (!isDocumentationPath(path)) return false;
+  for (const path2 of writtenPaths) {
+    if (!path2.trim()) continue;
+    if (!isDocumentationPath(path2)) return false;
   }
   return true;
 }
@@ -22737,19 +22737,19 @@ function succeeded4(data) {
 }
 function verifyAfterEdit(call2, data, opts = {}) {
   if (opts.bound === false || !EDIT_TOOLS.has(call2.name) || !succeeded4(data)) return null;
-  const path = typeof call2.args.path === "string" ? call2.args.path.trim() : "";
-  if (!path || !isVerifiablePath(path)) return null;
+  const path2 = typeof call2.args.path === "string" ? call2.args.path.trim() : "";
+  if (!path2 || !isVerifiablePath(path2)) return null;
   const content = call2.name === "write_file" && typeof call2.args.content === "string" ? call2.args.content : null;
   if (content !== null) {
-    const result = foldVerifyOutcomes([{ path, ...checkFileContent(path, content) }]);
+    const result = foldVerifyOutcomes([{ path: path2, ...checkFileContent(path2, content) }]);
     return result.checked.length || result.errors.length ? result : null;
   }
   const read2 = opts.read;
   if (!read2) return null;
   return (async () => {
-    const committed = await read2(path).catch(() => null);
+    const committed = await read2(path2).catch(() => null);
     if (committed === null) return null;
-    const result = foldVerifyOutcomes([{ path, ...checkFileContent(path, committed) }]);
+    const result = foldVerifyOutcomes([{ path: path2, ...checkFileContent(path2, committed) }]);
     return result.checked.length || result.errors.length ? result : null;
   })();
 }
@@ -23367,9 +23367,9 @@ function recallQuery(userText, hint) {
 ${extra}`;
 }
 function focusTerms(entry) {
-  const path = entry.path;
+  const path2 = entry.path;
   const heads = (entry.outline ?? []).map((h) => h.heading).filter(Boolean);
-  return [path, ...heads].join(" ");
+  return [path2, ...heads].join(" ");
 }
 function focusHint(pack) {
   return pack.focus.map(focusTerms).filter(Boolean).join("\n");
@@ -23665,6 +23665,39 @@ function roleCappedSelection(role, catalogNames, keep2 = [], surfaceRequired2 = 
   return { limit: Math.max(ROLE_TOOL_LIMIT[role], required.length + ROLE_MATCH_ROOM[role]), required, backfill: false };
 }
 
+// ../packages/agent-run/src/policy/tools/workCore.ts
+function workCoreToolNames(role) {
+  return [
+    .../* @__PURE__ */ new Set([
+      ...coreToolNames(role),
+      ...ROLE_COMPANION_TOOLS[role === "verify" ? "verify" : "code"]
+    ])
+  ];
+}
+function ensureWorkCoreSet(selected, catalog, opts) {
+  if (opts.work === false) return [...selected];
+  const core = workCoreToolNames(opts.role ?? "code");
+  const byName = /* @__PURE__ */ new Map();
+  for (const tool of catalog) {
+    const name = tool.function?.name;
+    if (name && !byName.has(name)) byName.set(name, tool);
+  }
+  const have = new Set(selected.map((t) => t.function?.name ?? ""));
+  const capacity = opts.capacity ?? Number.POSITIVE_INFINITY;
+  const out = [...selected];
+  for (const name of core) {
+    const tool = byName.get(name);
+    if (!tool || have.has(name)) continue;
+    if (out.length >= capacity) {
+      opts.onDropped?.(name, `work-mode window could not fit the core tool set (${out.length} of ${out.length + 1} advertised)`);
+      continue;
+    }
+    out.push(tool);
+    have.add(name);
+  }
+  return out;
+}
+
 // ../packages/agent-run/src/policy/tools/platform.ts
 function selectPlatformCatalog(ctx, pinned) {
   const platform = ctx.ports.platform;
@@ -23675,7 +23708,12 @@ function selectPlatformCatalog(ctx, pinned) {
   const capped2 = isCappedToolRole(selection.role) ? roleCappedSelection(selection.role, catalog.map((t) => t.function?.name ?? ""), selection.roleKeep ?? [], selection.required) : void 0;
   const limit = capped2?.limit ?? selection.limit;
   const required = capped2?.required ?? [...selection.required];
-  return selectToolsForTurn(catalog, { query, limit, pinned: selection.pinned ? [...selection.pinned] : pinned, required, ...selection.rank ? { rank: selection.rank } : {}, ...selection.capRequired ? { capRequired: true } : {}, ...capped2 ? { backfill: false } : {} }).tools;
+  const selected = selectToolsForTurn(catalog, { query, limit, pinned: selection.pinned ? [...selection.pinned] : pinned, required, ...selection.rank ? { rank: selection.rank } : {}, ...selection.capRequired ? { capRequired: true } : {}, ...capped2 ? { backfill: false } : {} }).tools;
+  return ensureWorkCoreSet(selected, catalog, {
+    role: selection.role,
+    work: isCappedToolRole(selection.role),
+    onDropped: (name, reason) => ctx.ports.events.emit({ kind: "context.tools", step: ctx.state.step ?? 0, advertised: selected.length, catalog: catalog.length, toolsTokens: 0, loaded: [`${name}: ${reason}`] })
+  });
 }
 
 // ../packages/agent-run/src/policy/tools/toolset.ts
@@ -24197,14 +24235,14 @@ var REPO_STATE_READS = /* @__PURE__ */ new Set(["git_status", "git_log", "git_br
 var SEPARATOR = " \u220B ";
 function pathOf(args) {
   const a = args && typeof args === "object" ? args : {};
-  const path = typeof a.path === "string" ? a.path : typeof a.scope === "string" ? a.scope : void 0;
-  return path?.trim() || void 0;
+  const path2 = typeof a.path === "string" ? a.path : typeof a.scope === "string" ? a.scope : void 0;
+  return path2?.trim() || void 0;
 }
 var AGENT_READ_TRAITS = {
   visitTarget: (args) => {
-    const path = pathOf(args) ?? "";
+    const path2 = pathOf(args) ?? "";
     const query = args && typeof args === "object" ? args.query : void 0;
-    return typeof query === "string" && query.trim() ? `${path}${SEPARATOR}${query.trim()}` : path || void 0;
+    return typeof query === "string" && query.trim() ? `${path2}${SEPARATOR}${query.trim()}` : path2 || void 0;
   },
   activityTarget: pathOf,
   questionSeparator: SEPARATOR,
@@ -24746,8 +24784,8 @@ function rememberWrite(state, call2, ok) {
     return;
   }
   if (call2.name !== "write_file" && call2.name !== "edit_file") return;
-  const path = typeof call2.args.path === "string" ? call2.args.path : void 0;
-  if (path && !state.writtenPaths.includes(path)) state.writtenPaths = [...state.writtenPaths, path];
+  const path2 = typeof call2.args.path === "string" ? call2.args.path : void 0;
+  if (path2 && !state.writtenPaths.includes(path2)) state.writtenPaths = [...state.writtenPaths, path2];
 }
 function newApprovalId(state) {
   return `approval-${state.askedGates.length + 1}`;
@@ -26587,6 +26625,15 @@ function releaseClaim(c, claim) {
   emit2(c);
 }
 
+// src/runStore/autoContinueGuard.ts
+var streaks = /* @__PURE__ */ new Map();
+function resetContinuationProgress() {
+  streaks.clear();
+}
+function notePersonTurn(runKey) {
+  streaks.delete(runKey);
+}
+
 // src/runStore/continueChat.ts
 var MAX_CONTINUATIONS = 5;
 var continuing = /* @__PURE__ */ new Set();
@@ -26608,6 +26655,7 @@ function resetContinuations() {
   depth.clear();
 }
 onStoreReset(resetContinuations);
+onStoreReset(resetContinuationProgress);
 function takeContinueOnSettle(runKey) {
   return continuing.delete(runKey);
 }
@@ -26746,10 +26794,12 @@ async function continueChat(runKey, c, steers, start, claim, left, progress = { 
   depth.set(runKey, links + 1);
   continuing.add(runKey);
   const row = rows[rows.length - 1];
+  const turnText = recordedModelText(content).trim();
+  const userTurn = turnText ? content : request.userTurn ?? content;
   start(runKey, {
     ...request,
     ...fresher,
-    userTurn: content,
+    userTurn,
     ...row ? { userTurnMessageId: row.id } : {}
   }, claim).catch((e) => {
     continuing.delete(runKey);
@@ -26805,6 +26855,7 @@ function wakeChat(runKey, turns, start) {
   const claim = claimRun(runKey);
   if (!claim) return false;
   depth.set(runKey, 0);
+  notePersonTurn(runKey);
   const steers = words3.map((t) => ({
     text: t.text.trim(),
     fromPerson: true,
@@ -27136,10 +27187,10 @@ function createOutbox(opts) {
     if (entry.retention) return entry.retention;
     return durable ? "durable" : "best-effort";
   };
-  const resolveRetention = (work, path) => {
+  const resolveRetention = (work, path2) => {
     const classified2 = classifyQueue(work) ?? classifyQueue(opts.work);
     if (classified2) return classified2.retention;
-    if (path === "enqueueDurable" || durable) return "durable";
+    if (path2 === "enqueueDurable" || durable) return "durable";
     return "best-effort";
   };
   const totalQueued = () => {
@@ -27342,8 +27393,8 @@ function createOutbox(opts) {
     if (discarded.length) drop(key, discarded, permanent ? "rejected" : "failed");
     return keep2.length === 0;
   };
-  const enqueueEntry = (key, item, work, path) => {
-    const retention = resolveRetention(work, path);
+  const enqueueEntry = (key, item, work, path2) => {
+    const retention = resolveRetention(work, path2);
     if (retention === "durable") {
       evictBestEffortWhileOver(Math.max(0, maxEntries - 1));
       if (durableQueued() >= maxEntries) {
@@ -28284,7 +28335,7 @@ function progressOf(events, editIntent) {
   let targetedCalls = 0;
   let mutationsAttempted = 0;
   let mutationsSucceeded = 0;
-  let streaks = 0;
+  let streaks2 = 0;
   let longestStreak = null;
   let current = null;
   for (const ev of tools) {
@@ -28298,7 +28349,7 @@ function progressOf(events, editIntent) {
     if (current && current.sig === sig2) {
       current.streak.count += 1;
       if (failed5) current.streak.failed += 1;
-      if (current.streak.count === 2) streaks += 1;
+      if (current.streak.count === 2) streaks2 += 1;
       if (!longestStreak || current.streak.count > longestStreak.count) longestStreak = current.streak;
     } else {
       current = { sig: sig2, streak: { label: ev.label, count: 1, failed: failed5 ? 1 : 0 } };
@@ -28355,7 +28406,7 @@ function progressOf(events, editIntent) {
     duplicateCalls,
     cacheAnswered,
     longestStreak,
-    streaks,
+    streaks: streaks2,
     stuckOnCall,
     repeatedTargets,
     distinctTargets,
@@ -28465,7 +28516,76 @@ function gatewayRoutingArgs(routing) {
 }
 
 // src/handOffParallelism.ts
-var scopeOf = (t) => ({ label: t.title, paths: t.paths });
+var import_node_fs = require("fs");
+var import_node_path = __toESM(require("path"), 1);
+var import_node_url = require("url");
+var import_meta = {};
+var packageLookRoot;
+function lookRoot() {
+  if (packageLookRoot === void 0) {
+    try {
+      packageLookRoot = import_node_path.default.resolve(import_node_path.default.dirname((0, import_node_url.fileURLToPath)(import_meta.url)), "..", "..");
+    } catch {
+      packageLookRoot = typeof process !== "undefined" && typeof process.cwd === "function" ? process.cwd() : null;
+    }
+  }
+  return packageLookRoot;
+}
+var hasPackageJson = (dir) => {
+  const root = lookRoot();
+  if (root === null) return false;
+  try {
+    return (0, import_node_fs.existsSync)(import_node_path.default.join(root, dir, "package.json"));
+  } catch {
+    return false;
+  }
+};
+function taskPackageDir(task) {
+  const paths = task.paths;
+  if (paths.length === 0) return null;
+  const dirs = paths.map((p) => p.replace(/\\/g, "/").replace(/\/$/, "")).map((p) => p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : ".");
+  const prefix = (a, b) => {
+    if (a === b) return a;
+    let i = 0;
+    while (i < a.length && i < b.length && a[i] === b[i]) i += 1;
+    let end = a.slice(0, i).lastIndexOf("/");
+    if (end < 0) end = 0;
+    return a.slice(0, end);
+  };
+  let common = dirs[0];
+  for (const d of dirs.slice(1)) common = prefix(common, d);
+  let dir = common;
+  for (; ; ) {
+    if (dir === null || dir === "" || dir === ".") return common;
+    if (hasPackageJson(dir)) return dir;
+    const up = dir.includes("/") ? dir.slice(0, dir.lastIndexOf("/")) : ".";
+    if (up === dir || up === ".") return common;
+    dir = up;
+  }
+}
+var normalizeRef = (s) => s.replace(/\\/g, "/").replace(/\/$/, "").toLowerCase();
+function referencesPackage(text2, dir) {
+  const normText = normalizeRef(text2);
+  if (normText === "") return false;
+  const normDir = normalizeRef(dir);
+  return normText.includes(normDir) || normText.includes(import_node_path.default.posix.basename(normDir));
+}
+var refText = (t) => t.brief?.trim() ? `${t.brief} ${t.title}` : t.title;
+var normPaths = (t) => t.paths.map((p) => p.replace(/\\/g, "/"));
+var scopeOf = (t) => ({ label: t.title, paths: normPaths(t) });
+var pathDisjoint = (a, b) => overlappingScopes([scopeOf(a), scopeOf(b)]) === null;
+function computeOrderDependencies(tasks) {
+  const deps = [];
+  const packageOf = tasks.map(taskPackageDir);
+  for (let j = 0; j < tasks.length; j += 1) {
+    for (let i = 0; i < j; i += 1) {
+      const packageDir = packageOf[i];
+      if (packageDir === null || !pathDisjoint(tasks[i], tasks[j])) continue;
+      if (referencesPackage(refText(tasks[j]), packageDir)) deps.push({ producer: i, consumer: j, packageDir });
+    }
+  }
+  return deps;
+}
 function planScopeClash(tasks) {
   return overlappingScopes(tasks.filter((t) => t.paths.length > 0).map(scopeOf));
 }
@@ -28475,10 +28595,14 @@ function canRunInParallel(tasks) {
 }
 function splitForParallel(tasks) {
   const all = tasks.map((_, i) => i);
+  const order = computeOrderDependencies(tasks);
+  const consumedBefore = (index) => order.some((d) => d.consumer === index);
   let lead = 0;
-  while (lead < tasks.length && tasks[lead].paths.length > 0 && overlappingScopes(tasks.slice(0, lead + 1).map(scopeOf)) === null) lead += 1;
+  while (lead < tasks.length && tasks[lead].paths.length > 0 && !consumedBefore(lead) && overlappingScopes(tasks.slice(0, lead + 1).map(scopeOf)) === null) lead += 1;
   const parallel = lead >= 2 ? all.slice(0, lead) : [];
-  return { parallel, inline: all.slice(parallel.length), clash: planScopeClash(tasks) };
+  const result = { parallel, inline: all.slice(parallel.length), clash: planScopeClash(tasks) };
+  if (order.length > 0) result.order = order;
+  return result;
 }
 var HAND_OFF_MODE_LABEL = "hand_off.mode";
 var HAND_OFF_CLASH_LABEL = "hand_off.scope_clash";
@@ -28495,17 +28619,21 @@ function modeOf(split) {
 function describeClash(clash) {
   return `"${clash.a}" and "${clash.b}" both own ${clash.path}`;
 }
+function describeOrder(dep, titles) {
+  return `"${titles[dep.consumer] ?? `#${dep.consumer + 1}`}" consumes ${dep.packageDir}, which "${titles[dep.producer] ?? `#${dep.producer + 1}`}" changes`;
+}
 function taskNumbers(indexes) {
   const n2 = indexes.map((i) => String(i + 1));
   return n2.length <= 1 ? n2.join("") : `${n2.slice(0, -1).join(", ")} and ${n2[n2.length - 1]}`;
 }
-function splitLayoutLine(split) {
+function splitLayoutLine(split, titles = []) {
   const why = split.clash ? ` \u2014 ${describeClash(split.clash)}, so they cannot run at the same time` : "";
+  const after = split.order?.length ? ` \u2014 ${split.order.map((d) => describeOrder(d, titles)).join("; ")}, so the consumer runs after the producer` : "";
   const mode = modeOf(split);
   if (mode === "mixed") {
-    return `Side by side: task${split.parallel.length === 1 ? "" : "s"} ${taskNumbers(split.parallel)}. Then in order, by the coding model: task${split.inline.length === 1 ? "" : "s"} ${taskNumbers(split.inline)}${why}.`;
+    return `Side by side: task${split.parallel.length === 1 ? "" : "s"} ${taskNumbers(split.parallel)}. Then in order, by the coding model: task${split.inline.length === 1 ? "" : "s"} ${taskNumbers(split.inline)}${why || after}.`;
   }
-  return mode === "inline" && split.clash ? `In order, by the coding model${why}.` : "";
+  return mode === "inline" && (split.clash || after) ? `In order, by the coding model${why || after}.` : "";
 }
 function scopeClashCorrective(clash) {
   return `hand_off not filed: the tasks cannot run side by side \u2014 ${describeClash(clash)}. Narrow each task's paths to the files and directories it actually changes: a parent directory that contains another task's paths blocks parallel work. Then call hand_off again with the same tasks. If they genuinely share files, call it again unchanged: every task from the first overlapping one onward then runs inline, in plan order, after any tasks before it.`;
@@ -29310,11 +29438,11 @@ function dirtyPathsOf(output) {
   for (const raw of output.split("\n")) {
     const line = raw.replace(/\r$/, "");
     if (line.length < 4 || line.startsWith("##")) continue;
-    let path = line.slice(3);
-    const arrow = path.indexOf(" -> ");
-    if (arrow >= 0) path = path.slice(arrow + 4);
-    path = path.trim().replace(/^"(.*)"$/, "$1");
-    if (path) out.push(path);
+    let path2 = line.slice(3);
+    const arrow = path2.indexOf(" -> ");
+    if (arrow >= 0) path2 = path2.slice(arrow + 4);
+    path2 = path2.trim().replace(/^"(.*)"$/, "$1");
+    if (path2) out.push(path2);
   }
   return out;
 }
@@ -29981,12 +30109,12 @@ function markedLines(text2) {
 }
 function placeholdersWritten(tool, args) {
   const a = args ?? {};
-  const path = typeof a.path === "string" ? a.path : "";
-  if (!path || !SOURCE_FILE.test(path)) return [];
+  const path2 = typeof a.path === "string" ? a.path : "";
+  if (!path2 || !SOURCE_FILE.test(path2)) return [];
   const added = tool === "write_file" ? a.content : tool === "edit_file" ? a.new_string : void 0;
   if (typeof added !== "string" || !added) return [];
   const before = new Set(typeof a.old_string === "string" ? markedLines(a.old_string) : []);
-  return markedLines(added).filter((text2) => !before.has(text2)).map((text2) => ({ path, text: text2 }));
+  return markedLines(added).filter((text2) => !before.has(text2)).map((text2) => ({ path: path2, text: text2 }));
 }
 function placeholderAdvisory(hits) {
   if (!hits.length) return null;
@@ -30058,22 +30186,22 @@ var PlaceholderLedger = class {
   /** Account for ONE successful write, given the hits the guard found in it. */
   record(tool, args, hits) {
     const a = args ?? {};
-    const path = typeof a.path === "string" ? a.path : "";
-    if (!path) return;
+    const path2 = typeof a.path === "string" ? a.path : "";
+    if (!path2) return;
     if (tool === "write_file") {
-      this.set(path, hits.map((h) => h.text));
+      this.set(path2, hits.map((h) => h.text));
       return;
     }
     if (tool === "edit_file") {
-      const current = new Set(this.open.get(path) ?? []);
+      const current = new Set(this.open.get(path2) ?? []);
       const removed = typeof a.old_string === "string" ? markedLines(a.old_string) : [];
       const kept = new Set(typeof a.new_string === "string" ? markedLines(a.new_string) : []);
       for (const text2 of removed) if (!kept.has(text2)) current.delete(text2);
       for (const h of hits) current.add(h.text);
-      this.set(path, [...current]);
+      this.set(path2, [...current]);
       return;
     }
-    if (tool === "delete_file") this.open.delete(path);
+    if (tool === "delete_file") this.open.delete(path2);
   }
   /** Placeholders a delegated child reported writing. The parent never saw those edits,
    *  so they stay outstanding until the parent rewrites or edits the lines itself. */
@@ -30085,11 +30213,11 @@ var PlaceholderLedger = class {
     }
   }
   outstanding() {
-    return [...this.open.entries()].flatMap(([path, texts]) => [...texts].map((text2) => ({ path, text: text2 })));
+    return [...this.open.entries()].flatMap(([path2, texts]) => [...texts].map((text2) => ({ path: path2, text: text2 })));
   }
-  set(path, texts) {
-    if (texts.length) this.open.set(path, new Set(texts));
-    else this.open.delete(path);
+  set(path2, texts) {
+    if (texts.length) this.open.set(path2, new Set(texts));
+    else this.open.delete(path2);
   }
 };
 function completionAdvisory(open2) {
@@ -30105,8 +30233,8 @@ function authorModelsOf(run) {
 function policyOf(run) {
   return run.req.evidencePolicy ?? DEFAULT_EVIDENCE_POLICY;
 }
-function extensionOf3(path) {
-  const name = path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
+function extensionOf3(path2) {
+  const name = path2.slice(Math.max(path2.lastIndexOf("/"), path2.lastIndexOf("\\")) + 1);
   const dot = name.lastIndexOf(".");
   return dot > 0 ? name.slice(dot).toLowerCase() : "";
 }
@@ -30298,8 +30426,11 @@ async function deltaTicketCompletionRefusal(run, args) {
   const view = settleView(run.c, run.c.runId);
   const verification = verificationOf(run.evidence, view.touchedFiles);
   const open2 = run.placeholderLedger.outstanding().length;
-  if (finishConditionMet({ shipped: true, verified: verification.verified, openPlaceholders: open2, hasTicket: true })) return null;
-  const reason = !verification.verified ? `the run holds no passing verification for its change (${verification.reason})` : open2 > 0 ? `${open2} placeholder(s) are still outstanding` : "the run is not verified to have shipped";
+  const outgoing = await run.req.git?.outgoing(repoArgOf(args));
+  const diffHash = outgoing && !("unavailable" in outgoing && outgoing.unavailable) ? outgoing.diffHash : null;
+  const reviewed = diffHash ? !!approvedReviewFor(run, diffHash) : false;
+  if (finishConditionMet({ shipped: true, verified: verification.verified && reviewed, openPlaceholders: open2, hasTicket: true })) return null;
+  const reason = !verification.verified ? `the run holds no passing verification for its change (${verification.reason})` : !reviewed ? "no reviewGate-approved review of the current diff" : open2 > 0 ? `${open2} placeholder(s) are still outstanding` : "the run is not verified to have shipped";
   return { ok: false, error: `CANNOT MARK DONE \u2014 this is the run's own delta ticket (#${deltaId}): ${reason}. Finish the work and let the host close it out, or leave it in review.` };
 }
 async function shipGateAdvisory(run, name, args, out) {
@@ -31362,10 +31493,10 @@ function readFileAnchors(trace4) {
     const paths = Array.isArray(args.paths) ? args.paths : PATH_KEYS.map((k) => args[k]);
     for (const raw of paths) {
       if (typeof raw !== "string") continue;
-      const path = normalizePath2(raw);
-      if (!path || seen.has(path)) continue;
-      seen.add(path);
-      out.push({ path });
+      const path2 = normalizePath2(raw);
+      if (!path2 || seen.has(path2)) continue;
+      seen.add(path2);
+      out.push({ path: path2 });
       if (out.length >= MAX_ANSWER_ANCHORS) return out;
     }
   }
@@ -32716,8 +32847,8 @@ function isTestRunCall(label, args) {
   const text2 = `${label} ${JSON.stringify(args ?? {})}`;
   return /vitest|jest|mocha|\.test\.|\.spec\.|\btest\b|\btests\b/i.test(text2) && !/tsc|typecheck|type-check/i.test(text2);
 }
-function baseOf2(path) {
-  const base = path.replace(/\\/g, "/").split("/").pop() ?? path;
+function baseOf2(path2) {
+  const base = path2.replace(/\\/g, "/").split("/").pop() ?? path2;
   const dot = base.lastIndexOf(".");
   return dot > 0 ? base.slice(0, dot) : base;
 }
@@ -32732,8 +32863,8 @@ function computeProgressLine(trace4) {
       const kind = WRITE_TOOL_KINDS.get(ev.label);
       if (kind) {
         if (ev.isError) return;
-        const path = pathOf2(ev.args);
-        if (path) files.set(path, { path, kind, at: step });
+        const path2 = pathOf2(ev.args);
+        if (path2) files.set(path2, { path: path2, kind, at: step });
         return;
       }
       if (!ev.isError && isCheckCall(ev.label, ev.args)) {
@@ -32751,7 +32882,7 @@ function computeProgressLine(trace4) {
       }
     }
   });
-  for (const [path, st] of files) if (st.kind === "delete") files.delete(path);
+  for (const [path2, st] of files) if (st.kind === "delete") files.delete(path2);
   const changed2 = [...files.values()];
   if (changed2.length === 0) return "";
   const checksFor = (st) => checkCalls.filter((c) => c.at >= st.at);
@@ -35695,8 +35826,8 @@ function createBrainRestPersistence(opts) {
     archiveChat: (id) => request(`/api/brain/chats/${id}`, { method: "DELETE" }),
     /** Summarize a chat and store the summary on it. */
     summarizeChat: (id) => {
-      const path = `/api/brain/chats/${id}/summarize`;
-      const send = (clientResult) => request(path, {
+      const path2 = `/api/brain/chats/${id}/summarize`;
+      const send = (clientResult) => request(path2, {
         method: "POST",
         ...clientResult ? { body: JSON.stringify({ clientResult }), expectedErrors: [400] } : {}
       });
@@ -37002,8 +37133,8 @@ var JSON_ELISION_ORDER = [
   "run.memoryAnswers",
   "run.streamRetries"
 ];
-function withoutPath(report, path) {
-  const [outer, inner] = path.split(".");
+function withoutPath(report, path2) {
+  const [outer, inner] = path2.split(".");
   const parent = report[outer];
   if (!parent || typeof parent !== "object" || !(inner in parent)) return null;
   const copy = { ...parent };
@@ -37015,11 +37146,11 @@ function compactReportJson(report, maxChars = REPORT_JSON_MAX_CHARS) {
   if (json.length <= maxChars) return json;
   let current = report;
   const elided = [];
-  for (const path of JSON_ELISION_ORDER) {
-    const next = withoutPath(current, path);
+  for (const path2 of JSON_ELISION_ORDER) {
+    const next = withoutPath(current, path2);
     if (!next) continue;
     current = next;
-    elided.push(path);
+    elided.push(path2);
     json = JSON.stringify({ ...current, _elided: elided });
     if (json.length <= maxChars) return json;
   }

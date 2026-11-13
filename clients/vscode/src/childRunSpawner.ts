@@ -32,6 +32,7 @@ import {
   ownerDirectionText as directionText,
   type StartedCommand,
 } from "@builderforce/agent-tools";
+import { childSettledState, realChangedFiles } from "./childDoneEvidence";
 import { MAX_CHILD_DEPTH, type ChildReport, type ChildRuns } from "./childRuns";
 import { createChildLedger, type ChildLedger } from "./childLedger";
 import { createLiveChildrenHold, hungChildrenNote, type HeldChild } from "./liveChildrenFinish";
@@ -241,12 +242,28 @@ function reportOf(key: number, lineage: RunLineage, req: ChildRequest, stopped: 
   const snapshot = getRunSnapshot(key);
   const answer = [...snapshot.appended].reverse().find(isModelReply)?.content?.trim() ?? "";
   const files = new Set<string>();
-  for (const ev of getRunTrace(key)) {
+  const trace = getRunTrace(key);
+  for (const ev of trace) {
     if (ev.category !== "tool") continue;
     for (const f of codeChangesOf(ev.label, ev.args, ev.result) ?? []) files.add(f);
   }
-  const state = stopped ? "stopped" : snapshot.error || !answer ? "failed" : "done";
-  const output = state === "failed" && !answer ? snapshot.error || "it stopped without a report" : answer;
+  // "Done" requires evidence (chat #80006, R2): a child whose final reply only CLAIMS
+  // completion — no real changed file, a failed check after its last edit, or a final
+  // turn that asks / stalls — settles as "incomplete", with the reason in the report.
+  const verdict = childSettledState({
+    stopped,
+    snapshotError: snapshot.error,
+    answer,
+    changedFiles: realChangedFiles([...files]),
+    trace,
+  });
+  const state = verdict.state === "incomplete" ? "failed" : verdict.state;
+  const output =
+    verdict.state === "incomplete" && verdict.reason
+      ? `${answer}\n\n—not done: ${verdict.reason}`
+      : state === "failed" && !answer
+        ? snapshot.error || "it stopped without a report"
+        : answer;
   const { openIssues } = parseSubagentReport(answer);
   return {
     handle: lineage.handle,

@@ -12,18 +12,35 @@
  *     each task's paths to what it actually changes ({@link scopeClashCorrective});
  *   • the split of a plan that still overlaps ({@link splitForParallel}): the leading tasks that
  *     own paths and are mutually disjoint run side by side; from the first task that overlaps
- *     (or owns none) onward, the coder runs them inline in plan order — order beats parallelism.
+ *     (or owns none, or consumes an earlier task's package) onward, the coder runs them inline
+ *     in plan order — order beats parallelism.
  *
  * Every child is a clone of its owner and nothing downstream restricts it, so this is where
  * slices are kept apart. Pure.
  */
 
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { overlappingScopes } from '@builderforce/agent-tools';
 
 /** What the split reads of a task. */
 export interface ScopedTask {
   title: string;
+  /** Free text the planner wrote — the brief counts, not just the title. */
+  brief?: string;
   paths: readonly string[];
+}
+
+/**
+ * An ORDER dependency between two path-disjoint tasks (chat #80006): `consumer`'s title/brief
+ * consumes the package `producer` creates or changes, so the consumer must run AFTER the
+ * producer even though no file overlaps. Indexes into the task array the split was given.
+ */
+export interface OrderDependency {
+  producer: number;
+  consumer: number;
+  packageDir: string;
 }
 
 /** Two tasks that claim the same path: `a` and `b` are titles, `path` the overlap. */
@@ -43,9 +60,111 @@ export interface ParallelSplit {
   inline: number[];
   /** The first overlap among the tasks that own paths — what kept the plan from running fully parallel. */
   clash: ScopeClash | null;
+  /**
+   * Order dependencies that staged a consumer after its producer (chat #80006). Empty/absent when
+   * no task's brief consumes another task's package.
+   */
+  order?: OrderDependency[];
 }
 
-const scopeOf = (t: ScopedTask): { label: string; paths: readonly string[] } => ({ label: t.title, paths: t.paths });
+/**
+ * Where a task's `paths` are looked for a package.json — the checkout root, derived lazily so the
+ * CJS bundle (where `import.meta.url` is empty) and non-node hosts never touch it at load time.
+ */
+let packageLookRoot: string | null | undefined;
+function lookRoot(): string | null {
+  if (packageLookRoot === undefined) {
+    try {
+      packageLookRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+    } catch {
+      packageLookRoot = typeof process !== 'undefined' && typeof process.cwd === 'function' ? process.cwd() : null;
+    }
+  }
+  return packageLookRoot;
+}
+
+const hasPackageJson = (dir: string): boolean => {
+  const root = lookRoot();
+  if (root === null) return false;
+  try {
+    return existsSync(path.join(root, dir, 'package.json'));
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * The package a task works in: the longest common directory prefix of its `paths` whose
+ * directory holds a package.json; the deepest common parent when no prefix is a package.
+ * Null for a task that owns no paths — it produces nothing another task can import.
+ */
+export function taskPackageDir(task: ScopedTask): string | null {
+  const paths = task.paths;
+  if (paths.length === 0) return null;
+  const dirs = paths.map((p) => p.replace(/\\/g, '/').replace(/\/$/, '')).map((p) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '.'));
+  const prefix = (a: string, b: string): string => {
+    if (a === b) return a;
+    let i = 0;
+    while (i < a.length && i < b.length && a[i] === b[i]) i += 1;
+    let end = a.slice(0, i).lastIndexOf('/');
+    if (end < 0) end = 0;
+    return a.slice(0, end);
+  };
+  let common = dirs[0]!;
+  for (const d of dirs.slice(1)) common = prefix(common, d);
+  let dir: string | null = common;
+  for (;;) {
+    if (dir === null || dir === '' || dir === '.') return common;
+    if (hasPackageJson(dir)) return dir;
+    const up: string = dir.includes('/') ? dir.slice(0, dir.lastIndexOf('/')) : '.';
+    if (up === dir || up === '.') return common;
+    dir = up;
+  }
+}
+
+const normalizeRef = (s: string): string => s.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
+
+/**
+ * Whether `text` (a title or brief) consumes the package at `dir`: it names the directory or its
+ * basename, e.g. a brief that says "imports the new RunDelta/CopiedNote exports from
+ * @builderforce/knowledge-graph-view" references `packages/knowledge-graph-view`.
+ */
+export function referencesPackage(text: string, dir: string): boolean {
+  const normText = normalizeRef(text);
+  if (normText === '') return false;
+  const normDir = normalizeRef(dir);
+  return normText.includes(normDir) || normText.includes(path.posix.basename(normDir));
+}
+
+/** Text that can make a task consume another task's package: its brief first, title as fallback. */
+const refText = (t: ScopedTask): string => t.brief?.trim() ? `${t.brief} ${t.title}` : t.title;
+
+/** Slashes for {@link overlappingScopes}, which string-compares paths. */
+const normPaths = (t: ScopedTask): readonly string[] => t.paths.map((p) => p.replace(/\\/g, '/'));
+
+const scopeOf = (t: ScopedTask): { label: string; paths: readonly string[] } => ({ label: t.title, paths: normPaths(t) });
+
+const pathDisjoint = (a: ScopedTask, b: ScopedTask): boolean =>
+  overlappingScopes([scopeOf(a), scopeOf(b)]) === null;
+
+/**
+ * Order dependencies between path-DISJOINT tasks (chat #80006): a1 adds exports to a package and
+ * a2/a3 import them from disjoint directories, so no path overlaps but the consumers typecheck
+ * against exports that do not exist yet. Each pair where `consumer`'s brief names `producer`'s
+ * package yields one dependency; pairs whose paths already overlap are left to the clash.
+ */
+export function computeOrderDependencies(tasks: readonly ScopedTask[]): OrderDependency[] {
+  const deps: OrderDependency[] = [];
+  const packageOf = tasks.map(taskPackageDir);
+  for (let j = 0; j < tasks.length; j += 1) {
+    for (let i = 0; i < j; i += 1) {
+      const packageDir = packageOf[i];
+      if (packageDir === null || !pathDisjoint(tasks[i]!, tasks[j]!)) continue;
+      if (referencesPackage(refText(tasks[j]!), packageDir)) deps.push({ producer: i, consumer: j, packageDir });
+    }
+  }
+  return deps;
+}
 
 /** The first overlap among the tasks that own paths, or null when they are all disjoint. */
 export function planScopeClash(tasks: readonly ScopedTask[]): ScopeClash | null {
@@ -70,17 +189,26 @@ export function canRunInParallel(tasks: readonly ScopedTask[]): boolean {
  *
  * So a parent-directory task FIRST (chat #70776) keeps the whole plan inline — its children must
  * not start before it — and an overlapping task LAST still lets the disjoint ones before it fan out.
+ *
+ * An ORDER dependency (chat #80006) beats parallelism the same way: a task whose brief consumes
+ * the package an earlier task changes cannot run beside it or any task after that earlier one —
+ * it goes inline, after the parallel stage, and everything after it follows in plan order.
  */
 export function splitForParallel(tasks: readonly ScopedTask[]): ParallelSplit {
   const all = tasks.map((_, i) => i);
+  const order = computeOrderDependencies(tasks);
+  const consumedBefore = (index: number): boolean => order.some((d) => d.consumer === index);
   let lead = 0;
   while (
     lead < tasks.length
     && tasks[lead]!.paths.length > 0
+    && !consumedBefore(lead)
     && overlappingScopes(tasks.slice(0, lead + 1).map(scopeOf)) === null
   ) lead += 1;
   const parallel = lead >= 2 ? all.slice(0, lead) : [];
-  return { parallel, inline: all.slice(parallel.length), clash: planScopeClash(tasks) };
+  const result: ParallelSplit = { parallel, inline: all.slice(parallel.length), clash: planScopeClash(tasks) };
+  if (order.length > 0) result.order = order;
+  return result;
 }
 
 /** How a plan was carried out: which tasks ran side by side, which the coder took, and the overlap that decided it. */
@@ -114,6 +242,11 @@ export function describeClash(clash: ScopeClash): string {
   return `"${clash.a}" and "${clash.b}" both own ${clash.path}`;
 }
 
+/** Why a consumer runs after its producer, as a sentence. */
+export function describeOrder(dep: OrderDependency, titles: readonly string[]): string {
+  return `"${titles[dep.consumer] ?? `#${dep.consumer + 1}`}" consumes ${dep.packageDir}, which "${titles[dep.producer] ?? `#${dep.producer + 1}`}" changes`;
+}
+
 /** Task numbers as the plan lists them ("2, 3 and 4"). */
 function taskNumbers(indexes: readonly number[]): string {
   const n = indexes.map((i) => String(i + 1));
@@ -124,14 +257,17 @@ function taskNumbers(indexes: readonly number[]): string {
  * Which tasks run side by side and which in order, and why — the line the chat's plan carries
  * under its header. Empty for a plan that runs wholly one way with nothing to explain.
  */
-export function splitLayoutLine(split: ParallelSplit): string {
+export function splitLayoutLine(split: ParallelSplit, titles: readonly string[] = []): string {
   const why = split.clash ? ` — ${describeClash(split.clash)}, so they cannot run at the same time` : '';
+  const after = split.order?.length
+    ? ` — ${split.order.map((d) => describeOrder(d, titles)).join('; ')}, so the consumer runs after the producer`
+    : '';
   const mode = modeOf(split);
   if (mode === 'mixed') {
     return `Side by side: task${split.parallel.length === 1 ? '' : 's'} ${taskNumbers(split.parallel)}. ` +
-      `Then in order, by the coding model: task${split.inline.length === 1 ? '' : 's'} ${taskNumbers(split.inline)}${why}.`;
+      `Then in order, by the coding model: task${split.inline.length === 1 ? '' : 's'} ${taskNumbers(split.inline)}${why || after}.`;
   }
-  return mode === 'inline' && split.clash ? `In order, by the coding model${why}.` : '';
+  return mode === 'inline' && (split.clash || after) ? `In order, by the coding model${why || after}.` : '';
 }
 
 /**

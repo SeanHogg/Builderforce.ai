@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { handOffModeSentence, modeOf, planScopeClash, scopeClashCorrective, splitForParallel, splitLayoutLine, type ScopedTask } from './handOffParallelism';
+import { handOffModeSentence, modeOf, planScopeClash, referencesPackage, scopeClashCorrective, splitForParallel, splitLayoutLine, taskPackageDir, type ScopedTask } from './handOffParallelism';
 
 const t = (title: string, ...paths: string[]): ScopedTask => ({ title, paths });
 
@@ -46,6 +46,77 @@ describe('splitForParallel — order beats parallelism', () => {
     const nested = splitForParallel([t('A', 'src'), t('B', 'src/b.ts')]);
     expect(nested.parallel).toEqual([]);
     expect(nested.clash).not.toBeNull();
+  });
+});
+
+describe('order dependencies — a consumer runs after its producer (chat #80006)', () => {
+  it('regression: dependent slices are staged, not parallel', () => {
+    const plan = [
+      { title: 'Add RunDelta exports', paths: ['packages/knowledge-graph-view/src/delta'] },
+      {
+        title: 'Wire the web host',
+        brief: 'imports the new RunDelta/CopiedNote exports from @builderforce/knowledge-graph-view',
+        paths: ['frontend/src/components/runDelta'],
+      },
+      { title: 'Wire the VS Code host', paths: ['clients/vscode/webview/src/chat'] },
+    ];
+    const split = splitForParallel(plan);
+    expect(split.parallel).toEqual([]);
+    expect(split.inline).toEqual([0, 1, 2]);
+    expect(split.clash).toBeNull();
+    expect(split.order).toEqual([{ producer: 0, consumer: 1, packageDir: 'packages/knowledge-graph-view' }]);
+    expect(modeOf(split)).toBe('inline');
+  });
+
+  it('lets the consumers that do NOT consume the producer fan out beside each other after it', () => {
+    const plan = [
+      { title: 'Add RunDelta exports', paths: ['packages/knowledge-graph-view/src/delta'] },
+      { title: 'Wire the web host', brief: 'imports the new RunDelta/CopiedNote exports from @builderforce/knowledge-graph-view', paths: ['frontend/src/components/runDelta'] },
+      { title: 'Docs', paths: ['docs/run-delta.md'] },
+    ];
+    const split = splitForParallel(plan);
+    expect(split.parallel).toEqual([]);
+    expect(split.inline).toEqual([0, 1, 2]);
+    expect(split.order).toHaveLength(1);
+    expect(split.order![0]).toMatchObject({ producer: 0, consumer: 1 });
+  });
+
+  it('keeps independent tasks parallel — no order field when nothing is consumed', () => {
+    const split = splitForParallel([t('A', 'a'), t('B', 'b'), t('C', 'c')]);
+    expect(split.parallel).toEqual([0, 1, 2]);
+    expect(split.order).toBeUndefined();
+    expect(splitLayoutLine(split)).toBe('');
+  });
+
+  it('leaves the all-inline plan inline when the brief names an earlier task\'s package', () => {
+    const plan = [
+      { title: 'Kernel exports', paths: ['packages/agent-loop/src/kernel.ts'] },
+      { title: 'Surface', brief: 'render the kernel state exported by the agent-loop package', paths: ['packages/brain-ui/src/kernel.ts'] },
+    ];
+    const split = splitForParallel(plan);
+    expect(split.parallel).toEqual([]);
+    expect(split.inline).toEqual([0, 1]);
+    expect(split.clash).toBeNull();
+    const line = splitLayoutLine(split, plan.map((p) => p.title));
+    expect(line).toContain('In order, by the coding model');
+    expect(line).toContain('"Surface" consumes packages/agent-loop');
+    expect(line).toContain('so the consumer runs after the producer');
+  });
+
+  it('taskPackageDir finds the package root and falls back to the deepest common parent', () => {
+    expect(taskPackageDir({ title: 'A', paths: ['packages/knowledge-graph-view/src/delta'] })).toBe('packages/knowledge-graph-view');
+    expect(taskPackageDir({ title: 'A', paths: ['packages/knowledge-graph-view/src/a.ts', 'packages/knowledge-graph-view/src/b.ts'] })).toBe('packages/knowledge-graph-view');
+    expect(taskPackageDir({ title: 'A', paths: [] })).toBeNull();
+    expect(taskPackageDir({ title: 'A', paths: ['src/surface/style', 'src/surface/features'] })).toBe('src/surface');
+    expect(taskPackageDir({ title: 'A', paths: ['docs/run-delta.md'] })).toBe('docs');
+    expect(taskPackageDir({ title: 'A', paths: ['frontend/src/components/runDelta'] })).toBe('frontend');
+  });
+
+  it('referencesPackage matches the directory or its basename, normalized', () => {
+    expect(referencesPackage('imports the new RunDelta/CopiedNote exports from @builderforce/knowledge-graph-view', 'packages/knowledge-graph-view')).toBe(true);
+    expect(referencesPackage('imports from packages\\knowledge-graph-view', 'packages/knowledge-graph-view')).toBe(true);
+    expect(referencesPackage('touch up the run delta host', 'packages/knowledge-graph-view')).toBe(false);
+    expect(referencesPackage('', 'packages/knowledge-graph-view')).toBe(false);
   });
 });
 

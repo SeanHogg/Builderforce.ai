@@ -342,6 +342,29 @@ Rules:
 | Median tool calls per turn (VSIX, 7-day telemetry) | 2 (measured, 2026-11-03..2026-11-09, 3,788 active turns across 49 chats; replaces narrative ~1.5) | ≥ 2.5 |
 | Readiness claims followed by ≥ 2 read-only turns | #216: 4 (measured, 7 claims) — narrative 3; #214: 0 | ≤ 1 |
 
+### W9 re-measure (recorded 2026-11-13)
+
+**Verdict on the replay path.** The §8 targets are *outcome* targets on **new post-gate runs** of #214/#216
+(prompt ≤ 1.0M, code turns ≤ 5, calls/turn ≥ 2.5, defects-reach-push 0). `chat-replay-baseline.cjs`
+replays each chat's journaled turns, and those journals are the **pre-gate** transcripts — #214 ran
+entirely on 2026-11-08, before any PRD 45 gate existed (the gate set landed 2026-11-09 → 2026-11-12). A
+replay therefore re-derives the W0 baseline, never a post-gate result, so §8's per-chat outcome targets
+**cannot be scored from a replay**. They are scored on a fresh post-gate run of the same task.
+
+**What W9 did measure / verify:**
+
+- **Gating live, not narrated.** Commit `9b76c1575` ("Brain: fix editor-path runs stop/restart + tickets
+  never reaching 100% (PRD 45 ship gates)") shipped the ship-gate wiring and fixed the "tickets never
+  reaching 100%" defect class live — a "defects reaching push" instance caught and repaired. The §8
+  gate row (evidence + different-model review before push) is live in the Brain preflight and VSIX.
+- **Trace reader confirmed.** `chat-replay-baseline.cjs` re-run 2026-11-13 reproduces the §8 W0 numbers
+  from the local-first journal (read-only, no production DB): #214 prompt 3,023,666 / completion
+  33,643 / 70 turns; #216 session prompt 4,109,351 / lifetime 54.8M / 819 turns. The W0 harness is
+  deterministic and re-runnable, so the W0 column is reproducible on demand.
+- **Remaining §8 outcome targets** (#216 prompt ≤ 1.0M, code turns ≤ 5, VSIX calls/turn ≥ 2.5,
+  readiness ≤ 1) are **open** — they require a fresh post-gate run of the same edits/task, not a replay
+  of the pre-gate transcript. Tracked as follow-up; not claimed met.
+
 > **W0 harness** (measured 2026-11-09): `api/scripts/chat-replay-baseline.cjs` — replays the VSIX
 > `local-first-v3.journal` READ-ONLY and prints these §8 baselines. Chats identified by content
 > fingerprint (the "#NNN" display number is not stored locally): **#214** = serverId 55221
