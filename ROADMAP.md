@@ -44,7 +44,6 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 - **hired.video absorption** ([PRD 18](./docs/specs/18-prd-hired-video-port.md)): deprecate to a redirect shell. Every table maps to a primitive (`docs/specs/data-model/source-to-target.tsv`); the rest is application code.
 - **burnrateos.com shutdown** ([PRD 19](./docs/specs/19-prd-burnrateos-consolidation.md)): an unbuilt, unretired capability is lost at shutdown. Held by `check:burnrate-parity`, `check:no-burnrate-runtime`, `check:burnrate-policy`. *Blocker: operator provider actions, identity-cutover comms, redirect verification.*
 
-- **VS Code webview requests wait on the network / a multi-second host stall (2026-11-11).** Offline on VSIX 2026.10.154 the webview showed `Request "knowledge.call" timed out`, `Request "local.persistence" timed out` and "Could not start a chat" — webview → extension-host messages, not network calls. (a) `localFirstPersistence.project()` awaits `serverSpend` (a 60 s authed `listBrainChats`) on the local path, so offline `listChats`/`getChat` can block up to 60 s. (b) No host event-loop-lag monitor: a multi-second host stall is invisible, and the webview timeout message doesn't say the extension was busy. (c) The knowledge load (fact-store parse + layer classification over ~16 K files) runs synchronously on the host thread. *In progress, 2026-11-11. Started (all):*
 
 ---
 

@@ -1,5 +1,6 @@
 import { createMemoryLocalFirstStore } from '@builderforce/local-first';
 import { describe, expect, it } from 'vitest';
+import { createLocalChatIdentity } from './localChat/chatIdentity';
 import { createLocalBrainPersistence } from './localFirstPersistence';
 
 describe('local Brain persistence', () => {
@@ -57,31 +58,37 @@ describe('local Brain persistence', () => {
 
   // Offline (or a slow platform), the platform spend read can block for its whole
   // timeout. `listChats` must answer from local state at once — never awaiting the
-  // async `serverSpend` port. A freshly created local chat is UNBOUND (no server id), so
-  // the projection has no bound ids to ask about; the point is that it returns without
-  // ever reaching for the (here never-resolving) port.
-  it('listChats returns instantly without awaiting the serverSpend port', async () => {
+  // async `serverSpend` port. The chat here IS bound (a server id), so `project` has a
+  // bound id to ask about: the cache misses, the port is invoked, and `listChats` must
+  // still resolve immediately (the port's promise never settles — an offline read).
+  it('listChats returns instantly while the serverSpend port never resolves', async () => {
     const store = createMemoryLocalFirstStore();
+    const account: import('@builderforce/local-first').EntityDestination = { kind: 'bound', platformInstance: 'https://example.test', tenantId: '1' };
     let spendCalled = false;
-    const neverResolvingSpend = (_ids: readonly number[]): Promise<ReadonlyMap<number, never>> => {
-      spendCalled = true;
-      return new Promise(() => undefined); // offline: hangs forever
-    };
     const persistence = createLocalBrainPersistence({
       store,
       deviceId: 'device-a',
       summarizeUnavailable: 'local only',
-      // No `serverSpendSync` cache: a bound projection would miss and must fire-and-forget.
-      serverSpend: neverResolvingSpend,
+      accountDestination: () => account,
+      // No `serverSpendSync` cache: a bound projection misses and must fire-and-forget.
+      serverSpend: (_ids: readonly number[]): Promise<ReadonlyMap<number, never>> => {
+        spendCalled = true;
+        return new Promise(() => undefined); // offline: hangs forever
+      },
     });
     const chat = await persistence.createChat({ title: 'Offline list' });
 
-    // If `project` awaited `serverSpend`, a bound chat would hang for the port's whole
-    // timeout. Here it resolves immediately; the unbound chat never needs the port at all.
+    // Bind the local chat to a server chat, so the projection has a bound id to ask the
+    // platform about (the real offline path: a bound chat whose spend read blocks).
+    const identity = createLocalChatIdentity({ store, deviceId: 'device-a', port: { destination: () => account, allowed: () => true, createServerChat: async () => 321 } });
+    await identity.adopt(chat.id, 321);
+
+    // If `project` awaited `serverSpend`, this would hang for the port's whole timeout.
+    // It must resolve immediately even though the port was invoked and never settles.
     const list = await persistence.listChats();
 
     expect(list.map((c) => c.id)).toEqual([chat.id]);
-    expect(spendCalled).toBe(false); // unbound chat: nothing to ask the platform about
+    expect(spendCalled).toBe(true); // bound chat: the port was asked, but never awaited
   });
 });
 

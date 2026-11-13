@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryIngestManifest } from '@seanhogg/builderforce-memory/ingest';
 import { filesManifestKey, localSnapshotStore } from '@seanhogg/builderforce-memory/knowledge';
 import { buildStoredGraph } from './reviewRunner.js';
-import { memorySource } from './reviewRunner.fixtures.test-util.js';
 
 /**
  * `buildStoredGraph` runs on the VS Code extension host, which is ALSO the webview

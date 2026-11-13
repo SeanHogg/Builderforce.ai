@@ -49,12 +49,15 @@ export function startStallMonitor(opts: StallLogOptions): StallMonitor {
   const tick = (): void => {
     const read = lag.read();
     if (read && read.maxMs >= thresholdMs && read.maxMs > lastLoggedMax) {
-      // Log once per new worst-stall, not every sample, so a sustained block does not
-      // spam the channel — and drop back below the threshold before logging again.
+      // Log once per stall, not every sample, so a sustained block does not spam the
+      // channel. node:perf_hooks' histogram is cumulative since enable(), so without a
+      // reset the monitor would only ever log strictly-larger worst-stalls; restart the
+      // window to arm the next, even smaller, stall.
       lastLoggedMax = read.maxMs;
       opts.log(
         `extension host stalled: ${read.maxMs}ms block (p99 ${read.p99Ms}ms) — the webview may see "Request timed out" while the host is busy`,
       );
+      lag.reset();
     }
     if (read && read.maxMs < thresholdMs) lastLoggedMax = 0;
   };

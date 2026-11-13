@@ -14,6 +14,8 @@ export interface LagHistogram {
   readonly max: number;
   readonly mean: number;
   percentile(p: number): number;
+  /** Restart the sampling window (clear the cumulative counters). Optional — present on node's `IntervalHistogram`. */
+  reset?(): void;
 }
 export type LagSampler = (opts: { resolution: number }) => LagHistogram;
 
@@ -23,6 +25,8 @@ const SAMPLE_RESOLUTION_MS = 20;
 export interface HostLagMonitor {
   /** The stall so far, in whole ms; undefined when nothing was sampled. */
   read(): KnowledgeHostLag | undefined;
+  /** Restart the sampling window, so the next `read` is not polluted by earlier stalls. */
+  reset(): void;
   stop(): void;
 }
 
@@ -35,8 +39,10 @@ export function startHostLag(sampler: LagSampler = monitorEventLoopDelay as LagS
     histogram = undefined;
   }
   const ms = (ns: number): number => (Number.isFinite(ns) ? Math.round(ns / NS_PER_MS) : 0);
+  const reset = (): void => { try { histogram?.reset?.(); } catch { /* sampling is best effort */ } };
   return {
     read: () => (histogram ? { maxMs: ms(histogram.max), p99Ms: ms(histogram.percentile(99)), meanMs: ms(histogram.mean) } : undefined),
+    reset,
     stop: () => { try { histogram?.disable(); } catch { /* sampling is best effort */ } },
   };
 }

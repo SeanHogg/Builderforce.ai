@@ -358,6 +358,7 @@ describe("host thread measurement", () => {
     const histogram: LagHistogram = {
       enable: () => { calls.push("enable"); return true; },
       disable: () => { calls.push("disable"); return true; },
+      reset: () => { calls.push("reset"); },
       max: 31_000 * NS, mean: 12 * NS, percentile: (p) => (p === 99 ? 900 * NS : 0),
     };
     return { histogram, calls };

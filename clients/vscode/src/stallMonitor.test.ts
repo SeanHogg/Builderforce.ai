@@ -16,6 +16,7 @@ describe('extension-host stall monitor', () => {
     const sampler = (_opts: { resolution: number }): LagHistogram => ({
       enable: () => true,
       disable: () => true,
+      reset: () => undefined,
       get max() { return current.max; },
       get mean() { return current.mean; },
       percentile: (p: number) => (p === 99 ? current.p99 : current.mean),
