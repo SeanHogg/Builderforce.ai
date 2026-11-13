@@ -31,6 +31,8 @@ export interface StallLogOptions {
 export interface StallMonitor {
   /** The latest reading (whole ms), or undefined when nothing was sampled. */
   read(): { maxMs: number; p99Ms: number; meanMs: number } | undefined;
+  /** Sample NOW and log if a new worst-stall crossed the threshold (the interval does this on its own; a test calls it directly). */
+  sample(): void;
   dispose(): void;
 }
 
@@ -63,6 +65,7 @@ export function startStallMonitor(opts: StallLogOptions): StallMonitor {
 
   return {
     read: () => lag.read(),
+    sample: tick,
     dispose: () => {
       clearInterval(timer);
       lag.stop();

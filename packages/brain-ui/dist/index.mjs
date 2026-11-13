@@ -3410,7 +3410,12 @@ var DEFAULT_CHAT_HISTORY_LABELS = {
   ticketStatsCountAria: "{pct}% complete across {count} tickets",
   ticketStatsCountOnly: "{count} tickets",
   ticketStatsCountOne: "{count} ticket",
-  ticketStatsNone: "No tickets"
+  ticketStatsNone: "No tickets",
+  interrupted: "Interrupted",
+  openChat: "Open chat",
+  resume: "Resume",
+  dismiss: "Dismiss",
+  resumeFailed: "Couldn't resume"
 };
 function chatHistoryLabelsFrom(lookup) {
   return stringsFrom(DEFAULT_CHAT_HISTORY_LABELS, lookup);

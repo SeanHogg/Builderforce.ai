@@ -281,5 +281,9 @@ export function brainChatLabels(): Record<string, string> {
     "app.byoOtherWorkspace": t("Your {provider} account is connected in a DIFFERENT workspace, so this run used the shared model pool instead of your own model. Switch to that workspace, or connect it in this one under Settings ▸ API Keys."),
     "app.taskSeed": t("Let's work on {task}."),
     "app.taskSeedDispatched": t("I just dispatched {task} to run on the platform. Check the latest execution's status and trace, then help me follow up."),
+    // A webview → host request hit the 300 s bridge timeout because the extension host
+    // was too busy to answer (a heavy local-first bind, a knowledge load). Say so in
+    // the editor's language instead of a raw "Request timed out".
+    "app.hostBusy": t("The extension was busy and could not answer in time — the request timed out. This is usually a heavy local load (chat history or knowledge). Open the BuilderForce output channel to see any stall warnings, then try again."),
   };
 }

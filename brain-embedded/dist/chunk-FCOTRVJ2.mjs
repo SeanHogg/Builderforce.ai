@@ -7911,18 +7911,16 @@ function outgoingGate(files, ledger, policy) {
         unavailable2.push(`${file.absPath}: ${kind} (no record \u2014 verifier unavailable)`);
         continue;
       }
-      for (const record2 of records) {
-        if (record2.outcome === "fail") {
-          const detail = record2.exitCode != null ? ` (exit ${record2.exitCode})` : "";
-          return refuse(checkFailureReason(file.absPath, record2, detail));
-        }
-        if (record2.outcome === "unavailable") {
-          unavailable2.push(`${file.absPath}: ${record2.name} (${kind}) unavailable`);
-        }
+      const record2 = records.reduce((a, b) => b.at >= a.at ? b : a);
+      if (record2.outcome === "fail") {
+        const detail = record2.exitCode != null ? ` (exit ${record2.exitCode})` : "";
+        return refuse(checkFailureReason(file.absPath, record2, detail));
+      }
+      if (record2.outcome === "unavailable") {
+        unavailable2.push(`${file.absPath}: ${record2.name} (${kind}) unavailable`);
       }
       if (kind === "diagnostics") {
-        const failing = records.find((r) => r.findings.some(isErrorFinding));
-        if (failing) return refuse(checkFailureReason(file.absPath, failing, " (LSP error)"));
+        if (record2.findings.some(isErrorFinding)) return refuse(checkFailureReason(file.absPath, record2, " (LSP error)"));
       }
     }
     if (policy.newSourceNeedsTest && file.isNew && isSourceFile(file.absPath) && !isTestPath(file.absPath) && !isExemptFromTestRule(file.absPath, policy)) {
@@ -10651,4 +10649,4 @@ export {
   toolCallArgBytes,
   createComposingActivity
 };
-//# sourceMappingURL=chunk-DHCXDJR3.mjs.map
+//# sourceMappingURL=chunk-FCOTRVJ2.mjs.map

@@ -135,7 +135,14 @@ export async function targetedTestRecords(
     for (const src of files) for (const t of await testsFor(src, fs)) if (!tests.includes(t)) tests.push(t);
     if (tests.length === 0) continue; // no co-located test: the gate's newSourceNeedsTest refuses
 
-    const command = targetedTestCommand(runnerFromTestScript(testScript), tests);
+    // The runner (vitest/jest) matches its file filter against paths RELATIVE to the
+    // cwd it runs in — an absolute Windows path matches nothing and the run exits 1
+    // with "No test files found", recorded as a failing check for a test that never
+    // ran. Pass paths relative to the owning package (the shell's cwd).
+    const command = targetedTestCommand(
+      runnerFromTestScript(testScript),
+      tests.map((t) => path.relative(pkgDir, t)),
+    );
     // No budget left (a bounded caller): not started — "unavailable", never a pass.
     const r = timeoutMs > 0 ? await shell.runFor(command, timeoutMs) : { exitCode: DID_NOT_FINISH };
     const exitCode = typeof r.exitCode === "number" ? r.exitCode : 1;

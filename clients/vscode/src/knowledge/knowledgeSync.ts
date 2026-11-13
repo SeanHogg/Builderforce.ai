@@ -21,15 +21,43 @@ import { replicaStatusOf, retryReplica } from "./knowledgeReplica";
 import type { KnowledgeRoot } from "./knowledgeRoots";
 import { loadGraph, log, openRoot } from "./knowledgeService";
 import { buildSyncStatus, reviewRecords } from "./knowledgeSyncStatus";
+import { EVENT_LOOP_YIELD_EVERY, eventLoopYield } from "./vscodeDirectorySource";
 
 /** The widest graph the platform builds; only its `stats` and a docs split are read. */
 const COUNT_MAX_NODES = 2000;
 
-export async function rootSyncStatus(secrets: vscode.SecretStorage, root: KnowledgeRoot): Promise<KnowledgeSyncStatus> {
+/**
+ * How long a `syncStatus` answer may wait on the linked project's graph fetch. The
+ * status renders fine from LOCAL counts alone — the server graph only enriches it — so
+ * an offline or slow platform must never stall the webview's request (the bridge times
+ * it out after 300 s, and the whole point of this read is "is my knowledge synced?").
+ * When the fetch hasn't settled in time the answer goes out without `server` and the
+ * next read picks the figure up.
+ */
+const SERVER_GRAPH_TIMEOUT_MS = 2_000;
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | undefined> {
+  return new Promise<T | undefined>((resolve) => {
+    const t = setTimeout(() => resolve(undefined), ms);
+    p.then(
+      (v) => { clearTimeout(t); resolve(v); },
+      () => { clearTimeout(t); resolve(undefined); },
+    );
+  });
+}
+
+export async function rootSyncStatus(
+  secrets: vscode.SecretStorage,
+  root: KnowledgeRoot,
+  opts?: { serverTimeoutMs?: number },
+): Promise<KnowledgeSyncStatus> {
   const open = openRoot(secrets, root);
   const record = reviewRecords.get(root.rootId);
+  // The server graph is an ENRICHMENT, never a gate: race it against a short bound so
+  // the answer always goes out on local counts, even offline.
+  const serverTimeoutMs = opts?.serverTimeoutMs ?? SERVER_GRAPH_TIMEOUT_MS;
   const [serverGraph, graph] = await Promise.all([
-    open.client ? open.client.graph(root.rootId, { maxNodes: COUNT_MAX_NODES }).catch(() => null) : null,
+    open.client ? withTimeout(open.client.graph(root.rootId, { maxNodes: COUNT_MAX_NODES }), serverTimeoutMs) : null,
     loadGraph(secrets, root.rootId, { maxNodes: COUNT_MAX_NODES }),
   ]);
   const server = serverGraph ? graphCounts(serverGraph) : undefined;

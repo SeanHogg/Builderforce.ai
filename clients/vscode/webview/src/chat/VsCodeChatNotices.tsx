@@ -40,6 +40,11 @@ export function VsCodeChatNotices({ conv, chatsError, onDismissChatsError, bundl
 }) {
   const t = makeT(bundle);
   const errorLabels = useMemo(() => chatErrorLabels(bundle), [bundle]);
+  // A host request that hit the 300 s bridge timeout because the extension host was too
+  // busy to answer (a heavy local-first bind, a knowledge load): say so in the editor's
+  // language instead of the raw "Request \"<type>\" timed out" the transport rejected with.
+  const hostBusy = (msg: string): string =>
+    /Request "[^"]+" timed out/.test(msg) ? t('app.hostBusy', 'The extension was busy and could not answer in time — the request timed out.') : msg;
   const byo = useDismissibleNotice(conv.byoUnresolved);
   const byoKey = conv.byoUnresolved.join(',');
   const byoEntries = useMemo(() => parseByoUnresolved(conv.byoUnresolved), [byoKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -92,11 +97,12 @@ export function VsCodeChatNotices({ conv, chatsError, onDismissChatsError, bundl
           dismiss: errorLabels.dismiss,
         }}
       />
-      {/* A chat the first send could not create fails the turn too — show that once. */}
-      <ChatErrorBanner className="bf-error" error={chatsError === conv.error ? '' : chatsError} action={null} onDismiss={onDismissChatsError} labels={errorLabels} />
+      {/* A chat the first send could not create fails the turn too — show that once.
+          A host request that timed out because the extension was busy reads as such. */}
+      <ChatErrorBanner className="bf-error" error={hostBusy(chatsError === conv.error ? '' : chatsError)} action={null} onDismiss={onDismissChatsError} labels={errorLabels} />
       <ChatErrorBanner
         className="bf-error"
-        error={conv.error}
+        error={hostBusy(conv.error)}
         action={conv.errorAction}
         // Re-exchange the session, then clear the banner the expired token raised.
         onReconnect={() => { void refreshToken(); conv.clearError(); }}

@@ -50,7 +50,7 @@ describe("targetedTestRecords", () => {
     const records = await targetedTestRecords([at("src", "a.test.ts")], root, fs, {
       runFor: async (argv) => { ran.push([...argv]); return { exitCode: 0 }; },
     }, { now: () => 1 });
-    expect(ran).toEqual([["npx", "--no-install", "vitest", "run", at("src", "a.test.ts")]]);
+    expect(ran).toEqual([["npx", "--no-install", "vitest", "run", path.join("src", "a.test.ts")]]);
     expect(records.map((r) => r.outcome)).toEqual(["pass"]);
   });
 

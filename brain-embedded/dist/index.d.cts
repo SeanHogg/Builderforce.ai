@@ -2323,8 +2323,18 @@ interface LocalBrainPersistenceOptions {
     /**
      * The platform's spend for bound chats, by server id — the authoritative figure for
      * the calls the gateway served. Omitted, or failing: the device's own estimate stands.
+     * Never awaited on a local read: an offline call can block for its whole timeout, so
+     * the projection resolves from the synchronous {@link serverSpendSync} cache and this
+     * port only seeds that cache (a result it has already cached resolves instantly).
      */
     serverSpend?: (serverIds: readonly number[]) => Promise<ReadonlyMap<number, SpendSavingsSummary>>;
+    /**
+     * The synchronous spend cache the async {@link serverSpend} fills. When it holds a
+     * value the projection answers from it immediately; when it does not, the projection
+     * proceeds from the local ledger and asks the async port to fill the cache for the
+     * next read. Omitted: the projection never reaches for the server at all.
+     */
+    serverSpendSync?: () => ReadonlyMap<number, SpendSavingsSummary> | null;
     /** Bind a chat now (the host's chat identity). Omitted: the adapter offers no `bindChat`. */
     bindChat?: (chatId: number) => Promise<number | undefined>;
     /** The book a chat's own calls are priced with. Defaults to the bundled snapshot. */

@@ -20040,18 +20040,16 @@ function outgoingGate(files, ledger, policy) {
         unavailable2.push(`${file.absPath}: ${kind} (no record \u2014 verifier unavailable)`);
         continue;
       }
-      for (const record3 of records) {
-        if (record3.outcome === "fail") {
-          const detail = record3.exitCode != null ? ` (exit ${record3.exitCode})` : "";
-          return refuse(checkFailureReason(file.absPath, record3, detail));
-        }
-        if (record3.outcome === "unavailable") {
-          unavailable2.push(`${file.absPath}: ${record3.name} (${kind}) unavailable`);
-        }
+      const record3 = records.reduce((a, b) => b.at >= a.at ? b : a);
+      if (record3.outcome === "fail") {
+        const detail = record3.exitCode != null ? ` (exit ${record3.exitCode})` : "";
+        return refuse(checkFailureReason(file.absPath, record3, detail));
+      }
+      if (record3.outcome === "unavailable") {
+        unavailable2.push(`${file.absPath}: ${record3.name} (${kind}) unavailable`);
       }
       if (kind === "diagnostics") {
-        const failing = records.find((r) => r.findings.some(isErrorFinding));
-        if (failing) return refuse(checkFailureReason(file.absPath, failing, " (LSP error)"));
+        if (record3.findings.some(isErrorFinding)) return refuse(checkFailureReason(file.absPath, record3, " (LSP error)"));
       }
     }
     if (policy.newSourceNeedsTest && file.isNew && isSourceFile(file.absPath) && !isTestPath(file.absPath) && !isExemptFromTestRule(file.absPath, policy)) {
@@ -31992,7 +31990,11 @@ function lacksEvidence(file, ledger, policy) {
   if (file.deleted) return false;
   const required = policy.required[extensionOf3(file.absPath)] ?? [];
   const checks = ledger.for(file.absPath, file.hash);
-  return required.some((kind) => !checks.some((r) => r.kind === kind));
+  return required.some((kind) => {
+    const records = checks.filter((r) => r.kind === kind);
+    if (records.length === 0) return true;
+    return records.reduce((a, b) => b.at >= a.at ? b : a).outcome === "fail";
+  });
 }
 async function verifyPaths(run, files, opts) {
   const verifier = run.req.verifier;

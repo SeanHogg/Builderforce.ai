@@ -1541,6 +1541,16 @@ interface ChatHistoryLabels extends ChatTicketStatsLabels {
     unarchive: string;
     /** "Chat {id}" — a row whose title is blank. */
     untitled: string;
+    /** An interrupted-run row's status tag (`· Interrupted`). */
+    interrupted: string;
+    /** An interrupted-run row's Open chat action. */
+    openChat: string;
+    /** An interrupted-run row's Resume action. */
+    resume: string;
+    /** An interrupted-run row's Dismiss action. */
+    dismiss: string;
+    /** The interrupted-run row's note when a resume failed. */
+    resumeFailed: string;
 }
 declare const DEFAULT_CHAT_HISTORY_LABELS: ChatHistoryLabels;
 /** THE chat-history copy from a host catalog (canonical keys = the field names). */

@@ -35,7 +35,11 @@ vi.mock("./knowledgeFs", () => ({
     write: async (name: string, text: string) => { mocks.files.set(name, text); },
   }),
 }));
-vi.mock("./vscodeDirectorySource", () => ({ createDirectorySource: () => ({ skippedFolders: () => [] }) }));
+vi.mock("./vscodeDirectorySource", () => ({
+  createDirectorySource: () => ({ skippedFolders: () => [] }),
+  EVENT_LOOP_YIELD_EVERY: 250,
+  eventLoopYield: async () => undefined,
+}));
 vi.mock("./knowledgeJudgement", () => ({ editorJudgement: async () => undefined, judgeConfigured: async () => false }));
 vi.mock("@builderforce/agent-tools/prefetch", () => ({ readPartitions: async () => undefined }));
 vi.mock("@builderforce/agent-tools/node-git-history", () => ({ gitHistoryPort: async () => undefined }));
@@ -107,5 +111,18 @@ describe.skipIf(!localSqliteAvailable())("a linked workspace draws from the loca
     expect(status.server).toBeUndefined();
     expect(status.replica).toMatchObject({ dirty: 0, sending: false, failed: [] });
     expect(status.sources.find((s) => s.id === "code")?.state).toBe("collected");
+  });
+
+  // Regression (offline 2026-11-11): `syncStatus` awaited the linked project's graph
+  // fetch before answering, so an offline platform stalled the webview's request. The
+  // server graph is an enrichment: the answer must go out on local counts even when the
+  // fetch never settles.
+  it("sync status answers on local counts without waiting on a server graph that never resolves", async () => {
+    const root = await reviewedLocally();
+    // A server graph read that hangs forever (offline): no throw, no settle.
+    mocks.fetchAuthed.mockImplementationOnce(async () => new Promise<Response>(() => undefined));
+    const status = await rootSyncStatus(secrets, root, { serverTimeoutMs: 20 });
+    expect(status.local.files).toBe(1);
+    expect(status.server).toBeUndefined();
   });
 });

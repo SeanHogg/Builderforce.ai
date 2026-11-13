@@ -37,7 +37,7 @@ import { buildLocalCapabilityProvider } from "../localCapabilities";
 import { logLine } from "../errorReporter";
 import { getHostKnowledgeIndex } from "./index/hostKnowledgeIndex";
 import { vscodeKnowledgeFs, workspaceKnowledgeFiles } from "./knowledgeFs";
-import { createDirectorySource } from "./vscodeDirectorySource";
+import { createDirectorySource, EVENT_LOOP_YIELD_EVERY, eventLoopYield } from "./vscodeDirectorySource";
 import type { KnowledgeFiles } from "./knowledgeStores";
 import { openRootKnowledge, rootMigration } from "./folderKnowledge";
 import { configureReplicaLog, duringReview, replicatedStoreOf, type PumpSource } from "./knowledgeReplica";
@@ -287,6 +287,12 @@ export async function loadGraph(
   const findings = factFindingsProvider(factIndexOf(rootId));
   return timer.phase("build", () => buildStoredGraph({
     rootId, store: open.store, manifest: open.manifest, packs,
+    // The extension host is the webview bridge: hand its event loop a macrotask every so
+    // many per-file reads, so a large root's load does not starve pending bridge work for
+    // the whole walk (the per-file reads resolve synchronously — node:sqlite + a cached
+    // parse — which otherwise drains only microtasks between iterations).
+    yieldEvery: EVENT_LOOP_YIELD_EVERY,
+    yieldDelay: eventLoopYield,
     ...(nearDuplicates ? { nearDuplicates } : {}),
     ...(q.focus ? { focus: q.focus } : {}),
     ...(q.maxNodes ? { maxNodes: q.maxNodes } : {}),

@@ -355,7 +355,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-DHCXDJR3.mjs";
+} from "./chunk-FCOTRVJ2.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useEffect, useMemo } from "react";
@@ -19056,7 +19056,11 @@ function lacksEvidence(file, ledger, policy) {
   if (file.deleted) return false;
   const required = policy.required[extensionOf(file.absPath)] ?? [];
   const checks = ledger.for(file.absPath, file.hash);
-  return required.some((kind) => !checks.some((r) => r.kind === kind));
+  return required.some((kind) => {
+    const records = checks.filter((r) => r.kind === kind);
+    if (records.length === 0) return true;
+    return records.reduce((a, b) => b.at >= a.at ? b : a).outcome === "fail";
+  });
 }
 async function verifyPaths(run, files, opts) {
   const verifier = run.req.verifier;

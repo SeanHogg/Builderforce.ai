@@ -54,6 +54,35 @@ describe('local Brain persistence', () => {
     // The transcript survives, so a later recall of the summary still has its source.
     expect(await persistence.getMessages(chat.id)).toHaveLength(1);
   });
+
+  // Offline (or a slow platform), the platform spend read can block for its whole
+  // timeout. `listChats` must answer from local state at once — never awaiting the
+  // async `serverSpend` port. A freshly created local chat is UNBOUND (no server id), so
+  // the projection has no bound ids to ask about; the point is that it returns without
+  // ever reaching for the (here never-resolving) port.
+  it('listChats returns instantly without awaiting the serverSpend port', async () => {
+    const store = createMemoryLocalFirstStore();
+    let spendCalled = false;
+    const neverResolvingSpend = (_ids: readonly number[]): Promise<ReadonlyMap<number, never>> => {
+      spendCalled = true;
+      return new Promise(() => undefined); // offline: hangs forever
+    };
+    const persistence = createLocalBrainPersistence({
+      store,
+      deviceId: 'device-a',
+      summarizeUnavailable: 'local only',
+      // No `serverSpendSync` cache: a bound projection would miss and must fire-and-forget.
+      serverSpend: neverResolvingSpend,
+    });
+    const chat = await persistence.createChat({ title: 'Offline list' });
+
+    // If `project` awaited `serverSpend`, a bound chat would hang for the port's whole
+    // timeout. Here it resolves immediately; the unbound chat never needs the port at all.
+    const list = await persistence.listChats();
+
+    expect(list.map((c) => c.id)).toEqual([chat.id]);
+    expect(spendCalled).toBe(false); // unbound chat: nothing to ask the platform about
+  });
 });
 
 describe('local Brain persistence - a row sent again under its key is the same row', () => {

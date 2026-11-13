@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.158] — Offline chat reads answer instantly, and a stalled host says so
+
+- **Signed-out or offline, the chat list and chat open right away.** The local spend projection no longer waits on a platform spend read that can block for its whole timeout when offline — it answers from the cached figure (or the device's own estimate) and lets the server figure land in the background for the next read. No more "Request timed out" or "Could not start a chat" just because the network was down.
+- **A slow extension host names itself.** One event-loop stall monitor runs at activation: whenever the host blocks longer than a second it writes a line to the BuilderForce output channel ("extension host stalled: …ms block"), so a host busy with a heavy load is visible where it can actually be read instead of surfacing only as webview request timeouts.
+
 ## [2026.10.157] — Every view fills the panel, and names show
 
 - **Map, Graph and Mind map stay in view.** The picture starts at the top of the panel instead of being pushed a whole screen down, and Fit brings it back.

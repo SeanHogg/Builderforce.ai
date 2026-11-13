@@ -34,6 +34,16 @@ export interface ChatHistoryLabels extends ChatTicketStatsLabels {
   unarchive: string;
   /** "Chat {id}" — a row whose title is blank. */
   untitled: string;
+  /** An interrupted-run row's status tag (`· Interrupted`). */
+  interrupted: string;
+  /** An interrupted-run row's Open chat action. */
+  openChat: string;
+  /** An interrupted-run row's Resume action. */
+  resume: string;
+  /** An interrupted-run row's Dismiss action. */
+  dismiss: string;
+  /** The interrupted-run row's note when a resume failed. */
+  resumeFailed: string;
 }
 
 export const DEFAULT_CHAT_HISTORY_LABELS: ChatHistoryLabels = {
@@ -55,6 +65,11 @@ export const DEFAULT_CHAT_HISTORY_LABELS: ChatHistoryLabels = {
   ticketStatsCountOnly: '{count} tickets',
   ticketStatsCountOne: '{count} ticket',
   ticketStatsNone: 'No tickets',
+  interrupted: 'Interrupted',
+  openChat: 'Open chat',
+  resume: 'Resume',
+  dismiss: 'Dismiss',
+  resumeFailed: "Couldn't resume",
 };
 
 /** THE chat-history copy from a host catalog (canonical keys = the field names). */
@@ -97,6 +112,89 @@ export interface ChatHistoryListProps {
   labels?: Partial<ChatHistoryLabels>;
   id?: string;
   className?: string;
+}
+
+/**
+ * A chat that has one or more interrupted runs: the history shows THIS row instead of
+ * the normal (completed/live) row, so the person never sees the same chat twice — once
+ * as interrupted, once in the plain list below. The surface that owns the interrupted
+ * runs (the VSIX) folds them in here; surfaces without interrupted runs omit the prop
+ * and render the plain list unchanged.
+ */
+export interface InterruptedChatState {
+  /**
+   * The run's id: the key the host journals an acknowledgement by
+   * (`run.acknowledgeInterrupted`). Each row is one run; a chat with several has several.
+   */
+  runId: string;
+  /**
+   * The interrupt timestamp, rendered in the surface's locale by the host (this component
+   * is data-only and stays locale-free, so every surface shows it the same way).
+   */
+  interruptedAtLabel: string;
+  /** A run with no recoverable chat hides Resume / Open chat (Dismiss still works). */
+  resumable: boolean;
+  /** A pending resume disables every action; the surface tracks it by runId. */
+  pending: boolean;
+  /** The row's note when a resume failed (`Couldn't resume`). */
+  failed: boolean;
+  /** Open the run's chat (the surface's `onOpenChat`). */
+  onOpen?: () => void;
+  /** Resume the run (open its chat and send the continuation). Disabled when not resumable. */
+  onResume?: () => void;
+  /** Acknowledge / dismiss the run so it leaves the list. */
+  onDismiss?: () => void;
+  labels?: Partial<ChatHistoryLabels>;
+}
+
+/**
+ * ONE interrupted run as a history row: the run's chat title, when it was interrupted,
+ * and its Resume / Open chat / Dismiss actions. The host renders one per interrupted
+ * run and places each next to the normal rows, so the history is a single consolidated
+ * list — a chat with an interrupted run appears here, NOT again as a normal row below.
+ */
+export function InterruptedRunRow({ state, className }: { state: InterruptedChatState; className?: string }) {
+  const labels = { ...DEFAULT_CHAT_HISTORY_LABELS, ...state.labels };
+  const disabled = state.pending;
+  return (
+    <div
+      className={['bf-chatrow', 'bf-chatrow--interrupted', className].filter(Boolean).join(' ')}
+      role="listitem"
+      data-run-id={state.runId}
+    >
+      <div className="bf-chatrow__head">
+        <span className="bf-chatrow__marker" aria-hidden>
+          {/* A broken-circle glyph marks an interrupted run the way a dot marks a live one. */}
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+            <path d="M12 2a10 10 0 0 1 10 10" />
+            <path d="M12 22A10 10 0 1 1 22 12" />
+          </svg>
+        </span>
+        <span className="bf-chatrow__title">{state.interruptedAtLabel}</span>
+        <span className="bf-chatrow__meta">· {labels.interrupted ?? 'Interrupted'}</span>
+      </div>
+      {state.failed && !state.pending && (
+        <div className="bf-chatrow__meta" role="alert">{labels.resumeFailed ?? "Couldn't resume"}</div>
+      )}
+      <div className="bf-chatrow__actions">
+        {state.resumable && state.onOpen && (
+          <button type="button" className="bf-chatrow__action" disabled={disabled} onClick={state.onOpen}>
+            {labels.openChat ?? 'Open chat'}
+          </button>
+        )}
+        {state.resumable && state.onResume && (
+          <button type="button" className="bf-chatrow__action" disabled={disabled} onClick={state.onResume}>
+            {labels.resume ?? 'Resume'}
+          </button>
+        )}
+        {state.onDismiss && (
+          <button type="button" className="bf-chatrow__action" disabled={disabled} onClick={state.onDismiss}>
+            {labels.dismiss ?? 'Dismiss'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function ChatHistoryList({ loading, total, children, filter, labels: overrides, id, className }: ChatHistoryListProps) {
