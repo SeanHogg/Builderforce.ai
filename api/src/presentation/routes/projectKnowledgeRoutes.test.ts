@@ -226,6 +226,21 @@ describe('project knowledge routes', () => {
     expect(await res.json()).toMatchObject({ ok: true, relationsWritten: 1 });
   });
 
+  it('caps an over-long ref with a hash discriminator instead of failing the whole body (#6451)', async () => {
+    const longRef = `fact:${'x'.repeat(600)}`;
+    const res = await routes().request('/42/knowledge/write', post({ relations: [{ ...relation(1), from: longRef }] }), {});
+    expect(res.status).toBe(200);
+    const rows = mocks.upsertRelations.mock.calls
+      .flat()
+      .find((a: unknown) => Array.isArray(a) && typeof (a as Array<{ from?: unknown }>)[0]?.from === 'string') as Array<{ from: string }> | undefined;
+    expect(rows).toBeDefined();
+    const from = rows?.[0]?.from ?? '';
+    expect(from.length).toBeLessThanOrEqual(512);
+    expect(from.startsWith('fact:')).toBe(true);
+    expect(from).not.toBe(longRef);
+    expect(from).toContain('~');
+  });
+
   it('answers an analysis snapshot over 2 MB with 413, storing nothing', async () => {
     const snapshot = {
       version: 1, id: 's', capturedAt: '2026-10-28T00:00:00Z', source: {}, tools: [], edges: [], issues: [],

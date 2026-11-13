@@ -65,7 +65,16 @@ const DIGEST_PATTERN = /^[0-9a-f]{8,64}$/i;
 const MAX_SEARCH_K = 50;
 
 // ── Schemas ──────────────────────────────────────────────────────────────────
-const zRef = z.string().min(5).max(512).regex(/^(src|ent|fact):/, 'a NodeRef (src: | ent: | fact:)');
+const REF_MAX = 512;
+/** An over-long ref is capped with a hash discriminator rather than failing the whole upload body (#6451). */
+function capRef(ref: string): string {
+  if (ref.length <= REF_MAX) return ref;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < ref.length; i++) { h ^= ref.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  const discriminator = h.toString(36);
+  return `${ref.slice(0, Math.max(1, REF_MAX - discriminator.length - 1))}~${discriminator}`;
+}
+const zRef = z.string().min(5).regex(/^(src|ent|fact):/, 'a NodeRef (src: | ent: | fact:)').transform(capRef);
 /** The origin is admitted as any of the four so the WRITER answers `extracted` (400), not zod. */
 const zOrigin = z.enum(['extracted', 'model', 'human', 'agent']);
 const zAnchor = z.object({
