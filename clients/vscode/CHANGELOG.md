@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.159] — Targeted tests: relative paths, x.<part>.test.ts found
+
+- **Targeted verify tests actually run.** The verifier now passes co-located test paths relative to the owning package, so `vitest run`/`jest` no longer exit "No test files found" on an absolute Windows path that matches nothing — a test that never ran was being recorded as a failure.
+- **More co-located tests found.** A changed `x.ts` now also finds `x.<part>.test.ts(x)` beside it (e.g. `session.mint.test.ts` for `session.ts`), not just the four direct `x.test/spec.ts(x)` candidates.
+
 ## [2026.10.158] — Offline chat reads answer instantly, and a stalled host says so
 
 - **Signed-out or offline, the chat list and chat open right away.** The local spend projection no longer waits on a platform spend read that can block for its whole timeout when offline — it answers from the cached figure (or the device's own estimate) and lets the server figure land in the background for the next read. No more "Request timed out" or "Could not start a chat" just because the network was down.
