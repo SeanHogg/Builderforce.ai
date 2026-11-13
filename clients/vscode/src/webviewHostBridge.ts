@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { boundToken, refreshTenantJwt } from "./bfApi";
+import type { LocalFirstChange } from "@builderforce/local-first";
 import { logLine } from "./errorReporter";
 import { getBaseUrl, getWebBaseUrl } from "./gateway";
 import { localBrainApplication } from "./localFirstStore";
@@ -68,6 +69,41 @@ function publishPlatformPolicy(webview: vscode.Webview, frame: ReturnType<typeof
     logLine(`[webview] policy push dropped: ${error instanceof Error ? error.message : String(error)}`);
     forgetWebview(webview);
   }
+}
+
+/**
+ * A commit touched the tickets a chat row's % rolls up from (or the links that bind
+ * them): every history row is re-derived from these at list-read time, so a change
+ * here means a row may be stale.
+ */
+export function ticketProgressChangeTouches(change: LocalFirstChange | undefined): boolean {
+  return !!change && (change.records.has("ticket") || change.records.has("chat-ticket-link"));
+}
+
+/**
+ * The store's ticket / link writes reach the open chat's rail as a pushed frame, which
+ * re-reads the list — but a chat that is NOT open has no rail watch, so its row sat on
+ * the old % until you opened it (and forced a rail read → list reload). Watch the store
+ * once and push `refresh` to every live webview when a ticket or chat-ticket-link
+ * write lands, so the history re-reads for whichever chat actually moved. `refresh`
+ * is cheap and idempotent: the panel reloads its list, and identical rows render the same.
+ */
+let ticketProgressPushInstalled = false;
+
+function watchTicketProgress(ctx: vscode.ExtensionContext): void {
+  if (ticketProgressPushInstalled) return;
+  ticketProgressPushInstalled = true;
+  localBrainApplication(ctx).store.subscribe((change) => {
+    if (!ticketProgressChangeTouches(change)) return;
+    for (const view of [...watchedWebviews.keys()]) {
+      try {
+        void view.postMessage({ type: "refresh" });
+      } catch (error) {
+        logLine(`[webview] ticket-progress refresh dropped: ${error instanceof Error ? error.message : String(error)}`);
+        forgetWebview(view);
+      }
+    }
+  });
 }
 
 function forgetWebview(webview: vscode.Webview): void {
@@ -199,6 +235,7 @@ export async function handleSharedHostMessage(
 ): Promise<boolean> {
   // First message from this webview subscribes it; every later one is a no-op here.
   watchPlatformPolicy(webview, owner);
+  watchTicketProgress(ctx);
   const socket = platformSocketUrl(msg);
   if (socket) {
     try {

@@ -23,9 +23,24 @@ const jwt = vi.hoisted(() => ({
 vi.mock("./bfApi", () => jwt);
 vi.mock("./errorReporter", () => ({ logLine: vi.fn() }));
 vi.mock("./gateway", () => ({ getBaseUrl: () => "https://api.example", getWebBaseUrl: () => "https://web.example" }));
-vi.mock("./localFirstStore", () => ({ localBrainApplication: () => ({ persistence: {}, store: {}, deviceId: "device-test" }) }));
 const workRepo = vi.hoisted(() => ({ createLocalWorkRepository: vi.fn() }));
 vi.mock("./localWorkRepository", () => workRepo);
+// The store the bridge subscribes to for ticket/link writes; the test drives its listener.
+const storeState = vi.hoisted(() => ({
+  listener: undefined as undefined | ((change?: unknown) => void),
+}));
+vi.mock("./localFirstStore", () => ({
+  localBrainApplication: () => ({
+    persistence: {},
+    store: {
+      subscribe: (listener: (change?: unknown) => void) => {
+        storeState.listener = listener;
+        return () => { storeState.listener = undefined; };
+      },
+    },
+    deviceId: "device-test",
+  }),
+}));
 vi.mock("./platformPolicy", () => ({
   platformInferenceMode: () => "hybrid",
   platformPolicy: () => ({
@@ -159,7 +174,9 @@ describe("local.tickets dispatch", () => {
     workRepo.createLocalWorkRepository.mockReturnValue({ listTickets: vi.fn(async () => ticketRows) });
     const view = surface();
     await handleSharedHostMessage(ctx, view.webview, { type: "local.tickets", id: "lt1" } as never, view.owner);
-    expect(workRepo.createLocalWorkRepository).toHaveBeenCalledWith({ store: {}, deviceId: "device-test" });
+    expect(workRepo.createLocalWorkRepository).toHaveBeenCalledWith(
+      expect.objectContaining({ deviceId: "device-test" }),
+    );
     expect(view.posted).toContainEqual({
       type: "response",
       id: "lt1",
@@ -179,6 +196,37 @@ describe("local.tickets dispatch", () => {
     const view = surface();
     await handleSharedHostMessage(ctx, view.webview, { type: "local.tickets", id: "lt2" } as never, view.owner);
     expect(view.posted).toContainEqual({ type: "response", id: "lt2", ok: true, result: [] });
+    view.dispose();
+  });
+});
+
+describe("ticket-progress refresh push", () => {
+  const ctx = {} as never;
+  const changeWith = (type: string): unknown => ({ records: new Map([[type, new Set(["x"])]]) });
+
+  it("pushes refresh to a live webview when a ticket or chat-ticket-link write lands", async () => {
+    const view = surface();
+    // First contact installs the store watch.
+    await handleSharedHostMessage(ctx, view.webview, { type: "local.tickets", id: "tp1" } as never, view.owner);
+    expect(storeState.listener).toBeTypeOf("function");
+    view.posted.length = 0;
+
+    storeState.listener?.(changeWith("ticket"));
+    expect(view.posted).toContainEqual({ type: "refresh" });
+    view.posted.length = 0;
+
+    storeState.listener?.(changeWith("chat-ticket-link"));
+    expect(view.posted).toContainEqual({ type: "refresh" });
+    view.dispose();
+  });
+
+  it("does not push refresh for unrelated writes", async () => {
+    const view = surface();
+    await handleSharedHostMessage(ctx, view.webview, { type: "local.tickets", id: "tp2" } as never, view.owner);
+    view.posted.length = 0;
+
+    storeState.listener?.(changeWith("chat"));
+    expect(view.posted).not.toContainEqual({ type: "refresh" });
     view.dispose();
   });
 });
