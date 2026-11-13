@@ -55,11 +55,19 @@ export interface RailTicketProgress {
 /**
  * The ONE mapping from a ticket record to its progress. A ticket the platform listed carries the
  * rail's progress; a locally authored one carries none, so its status stands in (done = 100).
+ *
+ * The status is always present: a ticket the server listed carries its own lane, and a locally
+ * filed one whose record has no status yet (undefined, or an empty string before a refresh fills
+ * it) is drawn as `backlog` — the not-started lane the board shows — so the rail never renders an
+ * empty or undefined status chip.
  */
 export function railTicketProgress(payload: TicketValue & Partial<Pick<RailTicketPayload, "progressPct" | "done" | "total">>): RailTicketProgress {
+  // An empty or whitespace-only status is the same "not started yet" as undefined: the record has
+  // not been assigned a lane. Only a real lane (a non-blank string) is drawn verbatim.
+  const status = typeof payload.status === "string" && payload.status.trim() !== "" ? payload.status : "backlog";
   return {
-    status: payload.status,
-    progressPct: payload.progressPct ?? (payload.status === "done" ? 100 : 0),
+    status,
+    progressPct: payload.progressPct ?? (status === "done" ? 100 : 0),
     done: payload.done ?? 0,
     total: payload.total ?? 0,
   };

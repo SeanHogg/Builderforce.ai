@@ -106,4 +106,16 @@ describe("withLocalTickets", () => {
     expect(railPct).toBe(15);
     expect(row).toMatchObject({ ticketCount: rail.tickets.length, ticketProgressPct: railPct, ticketDoneCount: 2, ticketOpenCount: 22 });
   });
+
+  it("regression: a ticket whose record has no status yet is drawn as backlog (not-started), not an empty status", async () => {
+    // 2026-11-13: two tasks under an epic in the chat rail showed a blank / "not started" meta line
+    // because their device-filed records carried no `status`. The rail must always present a lane:
+    // the record's own status when present, the not-started lane otherwise.
+    const noStatus = { id: "n1", status: "", chatClientId: CHAT, linkedTo: CHAT };
+    const withStatus = { id: "n2", status: "in_progress", chatClientId: CHAT, linkedTo: CHAT };
+    const store = await storeWith([noStatus, withStatus]);
+    const rail = readRailFromFacts(await store.export(), CHAT);
+    expect(rail.tickets.find((tk) => tk.clientId === "n1")?.status).toBe("backlog");
+    expect(rail.tickets.find((tk) => tk.clientId === "n2")?.status).toBe("in_progress");
+  });
 });

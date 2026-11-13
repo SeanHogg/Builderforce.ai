@@ -19,9 +19,14 @@
  * slices are kept apart. Pure.
  */
 
-import { existsSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+// The package.json probe below is Node-only, but this module ALSO ships inside the browser
+// webview bundle (the frontend's canvas closure imports brain-embedded's index). A static
+// `import from 'node:…'` breaks THAT build: Vite externalizes the builtins for the browser and
+// Rollup rejects the named export ("fileURLToPath is not exported by __vite-browser-external").
+// So the builtins are reached lazily through createRequire, the import below is a DEFAULT import
+// on purpose (defaults survive Vite's browser externalization; named imports fail the build), and
+// every use sits behind a try/catch that falls back to the directory-only answers.
+import nodeModule from 'node:module';
 import { overlappingScopes } from '@builderforce/agent-tools';
 
 /** What the split reads of a task. */
@@ -74,7 +79,14 @@ export interface ParallelSplit {
 let packageLookRoot: string | null | undefined;
 function lookRoot(): string | null {
   if (packageLookRoot === undefined) {
+    packageLookRoot = null;
     try {
+      // Node only: resolve fs/path/url through createRequire so the module also loads in a browser
+      // (where `node:module` is externalized and `require` is undefined — the try/catch leaves the
+      // root null and the probe below answers false).
+      const require = nodeModule.createRequire(import.meta.url ?? 'file:///');
+      const path = require('node:path') as typeof import('node:path');
+      const { fileURLToPath } = require('node:url') as typeof import('node:url');
       packageLookRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
     } catch {
       packageLookRoot = typeof process !== 'undefined' && typeof process.cwd === 'function' ? process.cwd() : null;
@@ -87,6 +99,9 @@ const hasPackageJson = (dir: string): boolean => {
   const root = lookRoot();
   if (root === null) return false;
   try {
+    const require = nodeModule.createRequire(import.meta.url ?? 'file:///');
+    const { existsSync } = require('node:fs') as typeof import('node:fs');
+    const path = require('node:path') as typeof import('node:path');
     return existsSync(path.join(root, dir, 'package.json'));
   } catch {
     return false;
@@ -133,7 +148,11 @@ export function referencesPackage(text: string, dir: string): boolean {
   const normText = normalizeRef(text);
   if (normText === '') return false;
   const normDir = normalizeRef(dir);
-  return normText.includes(normDir) || normText.includes(path.posix.basename(normDir));
+  // basename without the node:path module (the module also loads in the browser webview, where the
+  // builtin is externalized): after normalization the separator is always '/', so the basename is
+  // the segment after the last '/'.
+  const base = normDir.slice(normDir.lastIndexOf('/') + 1);
+  return normText.includes(normDir) || (base !== '' && normText.includes(base));
 }
 
 /** Text that can make a task consume another task's package: its brief first, title as fallback. */
