@@ -152,9 +152,16 @@ export async function targetedTestRecords(
     // cwd it runs in — an absolute Windows path matches nothing and the run exits 1
     // with "No test files found", recorded as a failing check for a test that never
     // ran. Pass paths relative to the owning package (the shell's cwd).
+    //
+    // Forward slashes are REQUIRED, not cosmetic: `path.relative` yields backslashes
+    // on Windows (`src\a.test.ts`), and the runner's filter matcher does not normalize
+    // the argument's separators — it matches the literal string, so the backslash is
+    // dropped and the glob becomes `srca.test.ts`, matching zero files → exit 1 → the
+    // gate records `fail` for a test that never ran (the webviewHostBridge regression).
+    // Repo-relative paths always use `/`, so this is a no-op off Windows.
     const command = targetedTestCommand(
       runnerFromTestScript(testScript),
-      tests.map((t) => p.relative(pkgDir, t)),
+      tests.map((t) => p.relative(pkgDir, t).replace(/\\/g, "/")),
     );
     // No budget left (a bounded caller): not started — "unavailable", never a pass.
     const r = timeoutMs > 0 ? await shell.runFor(command, timeoutMs) : { exitCode: DID_NOT_FINISH };
