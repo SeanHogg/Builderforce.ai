@@ -64,6 +64,7 @@
   "scripts": {
     "postinstall": "node ../scripts/ensure-linked-deps.mjs",
     "build": "tsup --config tsup.config.ts",
+    "prebuild": "echo \"[brain-embedded] rebuilding dist from src — frontend typecheck depends on fresh dist/*.d.ts\"",
     "type-check": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "prepare": "npm run build",
