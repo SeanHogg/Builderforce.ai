@@ -47,7 +47,9 @@ describe("execRunner (real processes)", () => {
 
   it("regression: large output (far over the old 1 MB maxBuffer) does not flip a passing run to fail", async () => {
     const script = "process.stdout.write('x'.repeat(8*1024*1024)); process.stderr.write('y'.repeat(2*1024*1024)); process.exitCode = 0;";
-    expect(await execRunner([node, "-e", script], { cwd: dir, timeout: 60_000 })).toEqual({ exitCode: 0 });
+    const r = await execRunner([node, "-e", script], { cwd: dir, timeout: 60_000 });
+    expect(r.exitCode).toBe(0);
+    expect(r.tail).toContain("y"); // the tail rides every result (a failing check quotes WHY)
   });
 
   it("regression: a timeout is 124 and kills the WHOLE tree (the grandchild too)", async () => {

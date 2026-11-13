@@ -22,6 +22,9 @@
  */
 
 import { execFile, spawn } from "child_process";
+import { existsSync } from "fs";
+import { createRequire } from "module";
+import * as path from "path";
 import { killTree } from "../process/killTree";
 
 /** One command: the program and its arguments, never joined into a shell string. */
@@ -50,14 +53,48 @@ const WINDOWS_SHIMS = new Set(["pnpm", "npm", "yarn", "npx"]);
 const CMD_UNSAFE = /["%\r\n\0]/;
 
 /**
- * The spawn plan for one argv on this platform, or null when it cannot be launched safely.
- * Windows: ONLY a package-manager shim goes through `cmd.exe` as `<name>.cmd`; every other
- * program keeps its name and is spawned directly (`node` stays `node` — `node.cmd` does not exist).
+ * The absolute path to the npm CLI entry a shim would run — `npx-cli.js` / `npm-cli.js` —
+ * resolved from the package that owns the command's cwd (its `node_modules`), so the
+ * pnpm-managed `npm` dep is found even when it is not linked at the workspace root.
  */
-export function launchPlan(argv: Argv, platform: NodeJS.Platform = process.platform): { file: string; args: string[]; verbatim: boolean } | null {
+function resolveNpmCli(cwd: string, cli: "npx-cli.js" | "npm-cli.js"): string | null {
+  // A package-managed `npm` dep first (its own node_modules), else the install that owns
+  // the running node — the npm CLI entry sits in `<node-dir>/node_modules/npm/bin`.
+  try {
+    const p = createRequire(path.join(cwd, "package.json")).resolve(`npm/bin/${cli}`);
+    if (existsSync(p)) return p;
+  } catch {
+    /* fall through to the node's own npm */
+  }
+  const alongsideNode = path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", cli);
+  return existsSync(alongsideNode) ? alongsideNode : null;
+}
+
+/**
+ * The spawn plan for one argv on this platform, or null when it cannot be launched safely.
+ * Windows: a package-manager shim is a `.cmd` batch file, which cannot be spawned without a
+ * shell — EXCEPT `npx`/`npm`, which under `cmd.exe /d /v:off /s /c` with verbatim quoting
+ * mis-resolve their own location and die with `Cannot find module …/npm/bin/npx-cli.js`
+ * (exit 1, no findings). They are spawned directly instead: the `node` executable plus the
+ * resolved CLI entry, no shell. Every non-shim program (`node`, `git`) keeps its name and
+ * is spawned directly too. `resolveCli` is injectable for tests; it defaults to {@link resolveNpmCli}.
+ */
+export function launchPlan(
+  argv: Argv,
+  platform: NodeJS.Platform = process.platform,
+  cwd?: string,
+  resolveCli: (cwd: string, cli: "npx-cli.js" | "npm-cli.js") => string | null = resolveNpmCli,
+): { file: string; args: string[]; verbatim: boolean } | null {
   const [program, ...args] = argv;
   if (!program) return null;
   if (platform !== "win32" || !WINDOWS_SHIMS.has(program.toLowerCase())) return { file: program, args: [...args], verbatim: false };
+  const shim = program.toLowerCase();
+  if (shim === "npx" || shim === "npm") {
+    const cli = resolveCli(cwd ?? process.cwd(), shim === "npx" ? "npx-cli.js" : "npm-cli.js");
+    if (cli) return { file: process.execPath, args: [cli, ...args], verbatim: false };
+    // The CLI could not be resolved: fall through to the cmd shim (may still work when the
+    // shim's own directory resolution succeeds).
+  }
   if ([program, ...args].some((a) => CMD_UNSAFE.test(a))) return null;
   const line = [`${program}.cmd`, ...args].map((a) => `"${a}"`).join(" ");
   return { file: "cmd.exe", args: ["/d", "/v:off", "/s", "/c", `"${line}"`], verbatim: true };
@@ -66,7 +103,7 @@ export function launchPlan(argv: Argv, platform: NodeJS.Platform = process.platf
 /** The real process runner: honours the timeout (killing the tree), reports the honest exit code. */
 export const execRunner: Runner = (argv, options) =>
   new Promise((resolve) => {
-    const plan = launchPlan(argv);
+    const plan = launchPlan(argv, process.platform, options.cwd);
     // Refused before launch (an argument cmd would expand): nothing ran, so nothing is claimed.
     if (!plan) return resolve({ exitCode: DID_NOT_FINISH });
     let settled = false;
