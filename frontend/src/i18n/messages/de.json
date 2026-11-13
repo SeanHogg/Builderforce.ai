@@ -2033,7 +2033,11 @@
       "prev": "Vorherige Seite",
       "next": "Nächste Seite",
       "pageOf": "Seite {page} von {pages}",
-      "pageN": "Seite {n}"
+      "pageN": "Seite {n}",
+      "perPage": "Ergebnisse pro Seite",
+      "noResults": "Keine Ergebnisse",
+      "resultCount": "{n, plural, =0 {Keine Ergebnisse} one {# Ergebnis} other {# Ergebnisse}}",
+      "pageRangeOf": "{start}–{end} von {total, plural, one {# Ergebnis} other {# Ergebnissen}}"
     },
     "resultCount": "{n, plural, =0 {Keine Ergebnisse} one {# Ergebnis} other {# Ergebnisse}}",
     "done": "Fertig",

@@ -2036,6 +2036,7 @@
       "pageN": "Page {n}",
       "perPage": "Results per page",
       "noResults": "No results",
+      "resultCount": "{n, plural, =0 {No results} one {# result} other {# results}}",
       "pageRangeOf": "{start}–{end} of {total, plural, one {# result} other {# results}}"
     },
     "resultCount": "{n, plural, =0 {No results} one {# result} other {# results}}",

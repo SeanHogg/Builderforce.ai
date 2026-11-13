@@ -85,7 +85,7 @@ import { WorkspaceAllowanceBanner } from '@/components/board/WorkspaceAllowanceB
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
 import { PanelCloseButton } from '@/components/PanelCloseButton';
-import { DataTable } from '@/components/dataTable/DataTable';
+import { DataList } from '@/components/dataTable/DataList';
 import { usePageSize } from '@/components/dataTable/usePageSize';
 type TaskView = 'board' | 'table' | 'calendar' | 'gantt';
 
@@ -1679,8 +1679,16 @@ export function TaskMgmtContent({
                   />
                 </div>
               )}
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <DataList
+                rows={filtered}
+                page={tablePage}
+                onPageChange={setTablePage}
+                pageSize={tablePageSize}
+                onPageSizeChange={setTablePageSize}
+                empty={tTask('noTasks')}
+                renderBody={(pageRows) => (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                       <th style={{ padding: '8px 12px' }}>
@@ -1714,7 +1722,7 @@ export function TaskMgmtContent({
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((task) => {
+                  {pageRows.map((task) => {
                     const exec = latestExecByTask.get(task.id);
                     return (
                     <tr
@@ -1850,9 +1858,11 @@ export function TaskMgmtContent({
                     );
                   })}
                 </tbody>
-              </table>
-            </div>
-          </>  
+                    </table>
+                  </div>
+                )}
+              />
+            </>
           )}
         </div>
       )}

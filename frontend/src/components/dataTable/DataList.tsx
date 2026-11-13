@@ -36,7 +36,15 @@ export interface DataListProps<Row> {
   /** Header content: filter controls, column labels, bulk-action bar, … */
   header?: React.ReactNode;
   /** Render a single row (or row group). Receives the item and its absolute index. */
-  renderRow: (row: Row, index: number) => React.ReactNode;
+  renderRow?: (row: Row, index: number) => React.ReactNode;
+  /**
+   * Take over the ENTIRE scrolling body instead of per-row rendering — for
+   * surfaces that already have their own complex markup (an interactive
+   * <table>, grouped sections) and only want the chrome: pinned header slot,
+   * client-side pagination, pinned footer with the pager + page-size control.
+   * Receives the current page's rows and the absolute index of the first one.
+   */
+  renderBody?: (pageRows: Row[], startIndex: number) => React.ReactNode;
   /** Row key — defaults to the item's `id`. */
   rowKey?: (row: Row, index: number) => React.Key;
   /** Current page, 1-based. */
@@ -90,6 +98,7 @@ export function DataList<Row>({
   rows,
   header,
   renderRow,
+  renderBody,
   rowKey,
   page,
   onPageChange,
@@ -122,11 +131,15 @@ export function DataList<Row>({
             {empty ?? t('noResults')}
           </div>
         ) : (
-          pageRows.map((row, i) => (
-            <React.Fragment key={rowKey ? rowKey(row, i) : (row as { id?: React.Key })?.id ?? i}>
-              {renderRow(row, (current - 1) * pageSize + i)}
-            </React.Fragment>
-          ))
+          renderBody ? (
+            renderBody(pageRows, (current - 1) * pageSize)
+          ) : (
+            pageRows.map((row, i) => (
+              <React.Fragment key={rowKey ? rowKey(row, i) : (row as { id?: React.Key })?.id ?? i}>
+                {renderRow?.(row, (current - 1) * pageSize + i)}
+              </React.Fragment>
+            ))
+          )
         )}
       </div>
 

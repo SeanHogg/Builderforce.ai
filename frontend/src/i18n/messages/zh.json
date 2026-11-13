@@ -2033,7 +2033,11 @@
       "prev": "上一页",
       "next": "下一页",
       "pageOf": "第 {page} 页，共 {pages} 页",
-      "pageN": "第 {n} 页"
+      "pageN": "第 {n} 页",
+      "perPage": "每页结果数",
+      "noResults": "无结果",
+      "resultCount": "{n, plural, =0 {无结果} other {# 条结果}}",
+      "pageRangeOf": "{total, plural, other {# 条结果}}中的第 {start}–{end} 条"
     },
     "resultCount": "{n, plural, =0 {无结果} other {# 条结果}}",
     "done": "完成",
