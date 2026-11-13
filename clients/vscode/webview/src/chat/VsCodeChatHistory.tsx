@@ -11,11 +11,12 @@
 
 import { useMemo } from 'react';
 import type { BrainChat } from '@seanhogg/builderforce-brain-embedded';
-import { ChatHistoryList, ChatHistoryRow, type ChatRowActions } from '@seanhogg/builderforce-brain-ui';
+import { ChatHistoryList, ChatHistoryRow, InterruptedRunRow, type ChatRowActions, type InterruptedChatState } from '@seanhogg/builderforce-brain-ui';
 import type { LabelBundle } from '../vscodeBridge';
 import { chatHistoryLabels, makeT } from './chatLabels';
 import { useChatChildrenCount } from './chatChildren';
-import { InterruptedRuns } from './InterruptedRuns';
+import { acknowledgeInterruptedRun, useInterruptedRuns } from './interruptedRunsStore';
+import { interruptedWhen } from './interruptedWhen';
 import type { InterruptedResume } from './useInterruptedResume';
 import type { ChatRunStatus } from './useVsCodeChats';
 
@@ -93,9 +94,44 @@ function RunMarker({ status, label }: { status: Exclude<ChatRunStatus, null>; la
 export function VsCodeChatHistory({ id, chats, total, loading, activeId, titleOf, runStatus, rows, query, onQueryChange, showArchived, onToggleArchived, onOpenChat, locale, chatTitleOf, interrupted, bundle }: VsCodeChatHistoryProps) {
   const labels = useMemo(() => chatHistoryLabels(bundle), [bundle]);
   const t = makeT(bundle);
+  const interruptedRuns = useInterruptedRuns();
+
+  // The ids of chats that have an interrupted run: they render as interrupted rows
+  // (folded into the one list), NOT again as normal rows below — that was the double-listing.
+  const interruptedChatIds = useMemo(
+    () => new Set(interruptedRuns.map((r) => r.chatId).filter((c): c is string => c != null).map(Number)),
+    [interruptedRuns],
+  );
+  // One resume per chat at a time (`interruptedResume.ts`): another run's pending resume blocks this chat's Resume.
+  const pendingChats = useMemo(
+    () => new Set(interruptedRuns.filter((r) => interrupted.pending.has(r.runId)).map((r) => Number(r.chatId))),
+    [interruptedRuns, interrupted.pending],
+  );
+
+  const interruptedStates: InterruptedChatState[] = useMemo(() => interruptedRuns.map((run) => {
+    const chatId = run.chatId != null ? Number(run.chatId) : NaN;
+    const hasChat = Number.isInteger(chatId);
+    const pending = interrupted.pending.has(run.runId);
+    const running = hasChat && interrupted.isRunning(chatId);
+    const chatPending = hasChat && !pending && pendingChats.has(chatId);
+    const disabled = pending || running || chatPending;
+    return {
+      runId: run.runId,
+      // Titled by its chat (the title the history list uses) + when it was interrupted;
+      // the run's short id when the chat is unknown. `interruptedWhen` renders the ISO in
+      // the editor's locale; the shared row stays locale-free and shows this verbatim.
+      interruptedAtLabel: `${(hasChat ? chatTitleOf(chatId) : undefined) ?? run.runId.slice(0, 8)} · ${interruptedWhen(run.interruptedAt, locale)}`,
+      resumable: hasChat && !running && !chatPending,
+      pending,
+      failed: interrupted.failed.has(run.runId),
+      onOpen: hasChat ? () => onOpenChat(chatId) : undefined,
+      onResume: hasChat && !disabled ? () => interrupted.resume({ runId: run.runId, chatId }) : undefined,
+      onDismiss: () => acknowledgeInterruptedRun(run.runId),
+      labels,
+    };
+  }), [interruptedRuns, interrupted, pendingChats, chatTitleOf, onOpenChat, locale, labels]);
 
   const filter = (
-    <>
     <div className="bf-history__controls">
       <input
         type="search"
@@ -114,13 +150,14 @@ export function VsCodeChatHistory({ id, chats, total, loading, activeId, titleOf
         {showArchived ? t('app.historyShowLive', 'Live') : t('app.historyShowArchived', 'Archived')}
       </button>
     </div>
-    <InterruptedRuns bundle={bundle} locale={locale} titleOf={chatTitleOf} onOpenChat={onOpenChat} resume={interrupted} />
-    </>
   );
 
   return (
     <ChatHistoryList id={id} loading={loading} total={total} filter={filter} labels={labels}>
-      {chats.map((chat) => (
+      {interruptedStates.map((state) => (
+        <InterruptedRunRow key={state.runId} state={state} />
+      ))}
+      {chats.filter((chat) => !interruptedChatIds.has(chat.id)).map((chat) => (
         <VsCodeChatHistoryRow
           key={chat.id}
           chat={chat}

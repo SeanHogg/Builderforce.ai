@@ -6,7 +6,6 @@
  */
 
 /* Feature partials: inlined into THIS sheet by the bundler (@import must precede every rule). */
-@import './chat/interruptedRuns.css';
 
 /*
  * Map the shared <BrainTimeline> theme variables onto VS Code's theme tokens, so

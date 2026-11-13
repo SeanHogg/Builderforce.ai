@@ -100,8 +100,8 @@ export { SurfaceEmptyState } from './surface/SurfaceEmptyState';
 export type { SurfaceEmptyStateProps } from './surface/SurfaceEmptyState';
 export { StarterGroup, StarterTile } from './surface/StarterTiles';
 export type { StarterTileProps } from './surface/StarterTiles';
-export { ChatHistoryList, ChatHistoryRow, DEFAULT_CHAT_HISTORY_LABELS } from './surface/ChatHistory';
-export type { ChatHistoryListProps, ChatHistoryRowProps, ChatHistoryLabels, ChatHistoryChat } from './surface/ChatHistory';
+export { ChatHistoryList, ChatHistoryRow, InterruptedRunRow, DEFAULT_CHAT_HISTORY_LABELS } from './surface/ChatHistory';
+export type { ChatHistoryListProps, ChatHistoryRowProps, ChatHistoryLabels, ChatHistoryChat, InterruptedChatState } from './surface/ChatHistory';
 export { ChatTicketStats, chatTicketStatsText } from './surface/ChatTicketStats';
 export type { ChatTicketStatsLabels, ChatTicketStatsInput, ChatTicketStatsText } from './surface/ChatTicketStats';
 // THE row state + actions every host's history rows bind through (held above the list).

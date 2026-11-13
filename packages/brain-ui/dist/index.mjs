@@ -3420,6 +3420,37 @@ var DEFAULT_CHAT_HISTORY_LABELS = {
 function chatHistoryLabelsFrom(lookup) {
   return stringsFrom(DEFAULT_CHAT_HISTORY_LABELS, lookup);
 }
+function InterruptedRunRow({ state, className }) {
+  const labels = { ...DEFAULT_CHAT_HISTORY_LABELS, ...state.labels };
+  const disabled = state.pending;
+  return /* @__PURE__ */ jsxs27(
+    "div",
+    {
+      className: ["bf-chatrow", "bf-chatrow--interrupted", className].filter(Boolean).join(" "),
+      role: "listitem",
+      "data-run-id": state.runId,
+      children: [
+        /* @__PURE__ */ jsxs27("div", { className: "bf-chatrow__head", children: [
+          /* @__PURE__ */ jsx30("span", { className: "bf-chatrow__marker", "aria-hidden": true, children: /* @__PURE__ */ jsxs27("svg", { width: "12", height: "12", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2.2", strokeLinecap: "round", children: [
+            /* @__PURE__ */ jsx30("path", { d: "M12 2a10 10 0 0 1 10 10" }),
+            /* @__PURE__ */ jsx30("path", { d: "M12 22A10 10 0 1 1 22 12" })
+          ] }) }),
+          /* @__PURE__ */ jsx30("span", { className: "bf-chatrow__title", children: state.interruptedAtLabel }),
+          /* @__PURE__ */ jsxs27("span", { className: "bf-chatrow__meta", children: [
+            "\xB7 ",
+            labels.interrupted ?? "Interrupted"
+          ] })
+        ] }),
+        state.failed && !state.pending && /* @__PURE__ */ jsx30("div", { className: "bf-chatrow__meta", role: "alert", children: labels.resumeFailed ?? "Couldn't resume" }),
+        /* @__PURE__ */ jsxs27("div", { className: "bf-chatrow__actions", children: [
+          state.resumable && state.onOpen && /* @__PURE__ */ jsx30("button", { type: "button", className: "bf-chatrow__action", disabled, onClick: state.onOpen, children: labels.openChat ?? "Open chat" }),
+          state.resumable && state.onResume && /* @__PURE__ */ jsx30("button", { type: "button", className: "bf-chatrow__action", disabled, onClick: state.onResume, children: labels.resume ?? "Resume" }),
+          state.onDismiss && /* @__PURE__ */ jsx30("button", { type: "button", className: "bf-chatrow__action", disabled, onClick: state.onDismiss, children: labels.dismiss ?? "Dismiss" })
+        ] })
+      ]
+    }
+  );
+}
 function ChatHistoryList({ loading, total, children, filter, labels: overrides, id, className }) {
   const labels = { ...DEFAULT_CHAT_HISTORY_LABELS, ...overrides };
   const hasRows = Array.isArray(children) ? children.length > 0 : children != null && children !== false;
@@ -10801,6 +10832,7 @@ export {
   InferenceModeControl,
   InferenceModeFirstRun,
   InlineChatTitle,
+  InterruptedRunRow,
   LOCAL_BACKEND_LABEL,
   LOCAL_MODEL_LABEL_FIELDS,
   LOCAL_UNSUPPORTED_LABEL,

@@ -126,6 +126,11 @@ const CHAT_HISTORY_KEY: Readonly<Record<string, string>> = {
   ticketStatsCountOne: 'app.chatTicketStatsCountOne',
   untitled: 'app.chatUntitled',
   ticketStatsNone: 'app.chatTicketStatsNone',
+  interrupted: 'ir.title',
+  openChat: 'ir.openChat',
+  resume: 'ir.resume',
+  dismiss: 'ir.dismiss',
+  resumeFailed: 'ir.failed',
 };
 const TOOL_CONFIRM_KEY: Readonly<Record<string, string>> = {
   prompt: 'app.confirmRun',

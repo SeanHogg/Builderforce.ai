@@ -2659,6 +2659,13 @@
 .bf-chatrow__action--danger { color: var(--bf-error, #e5534b); }
 @media (pointer: coarse) { .bf-chatrow__more, .bf-chatrow__action { min-height: 40px; min-width: 40px; } }
 
+/* <InterruptedRunRow>: an interrupted run folded into the one history list. The broken-circle
+   marker turns the accent warn colour and the row is tinted so it reads as "needs attention"
+   against the normal (completed/live) rows it now sits beside — not a separate section. */
+.bf-chatrow--interrupted { border-left: 2px solid var(--bf-warn, var(--bf-accent)); padding-left: 8px; }
+.bf-chatrow--interrupted .bf-chatrow__marker { color: var(--bf-warn, var(--bf-accent)); }
+.bf-chatrow--interrupted .bf-chatrow__title { font-weight: 600; }
+
 /* ── Inference mode — the Model tab's Hybrid · Local only · Specific control and the
    first-run question the composer asks before a signed-in person's first turn. ── */
 .bf-imode__tag {
