@@ -7733,6 +7733,7 @@ var ReadsWithoutSpawn = class {
 
 // ../packages/run-guards/src/evidence/ledger.ts
 var MAX_CHECK_FINDINGS = 20;
+var MAX_CHECK_OUTPUT_TAIL = 2048;
 function normalizeEvidencePath(path) {
   return path.replace(/\\/g, "/").replace(/\/+/g, "/");
 }
@@ -7767,7 +7768,8 @@ function createEvidenceLedger(resume) {
       e.latestHash = contentHash4;
       const capped = {
         ...check,
-        findings: check.findings.slice(0, MAX_CHECK_FINDINGS)
+        findings: check.findings.slice(0, MAX_CHECK_FINDINGS),
+        ...check.outputTail ? { outputTail: check.outputTail.slice(-MAX_CHECK_OUTPUT_TAIL) } : {}
       };
       const list = e.byHash.get(contentHash4);
       if (list) list.push(capped);
@@ -7896,7 +7898,8 @@ function firstFindings(check, max = 3) {
   return shown.length ? shown.join("; ") + more : "(no findings recorded)";
 }
 function checkFailureReason(path, check, detail) {
-  return `git_push refused: ${path} failed ${check.kind} "${check.name}"${detail}. First findings: ${firstFindings(check)}. Fix the failure and push again \u2014 the host runs the checks.`;
+  const tail = check.outputTail?.trim();
+  return `git_push refused: ${path} failed ${check.kind} "${check.name}"${detail}. First findings: ${firstFindings(check)}.` + (tail ? ` Output (tail): ${tail.replace(/\s+/g, " ").trim().slice(0, 400)}.` : "") + ` Fix the failure and push again \u2014 the host runs the checks.`;
 }
 function outgoingGate(files, ledger, policy) {
   const unavailable2 = [];
@@ -10313,6 +10316,14 @@ function defaultBranchFromTrace(steps) {
   }
   return null;
 }
+async function onBaseBranch(git, touchedFiles, deltaTicketId) {
+  if (!git?.onBaseBranch || !touchedFiles.length || deltaTicketId == null) return false;
+  try {
+    return await git.onBaseBranch("", touchedFiles);
+  } catch {
+    return false;
+  }
+}
 function shippedToBaseBranch(events, opts) {
   const steps = events.filter((e) => e.category === "tool");
   const defaultBranch = opts?.defaultBranch?.trim() || defaultBranchFromTrace(steps);
@@ -10644,9 +10655,10 @@ export {
   parseGitShortStatus,
   commandOf,
   dirtyPathsOf,
+  onBaseBranch,
   shippedToBaseBranch,
   utf8ByteLength2 as utf8ByteLength,
   toolCallArgBytes,
   createComposingActivity
 };
-//# sourceMappingURL=chunk-BCONVVD2.mjs.map
+//# sourceMappingURL=chunk-FB4H5JUY.mjs.map

@@ -377,6 +377,7 @@ __export(src_exports, {
   normalizeChatMode: () => normalizeChatMode,
   noteRunStep: () => noteRunStep,
   observedTask: () => observedTask,
+  onBaseBranch: () => onBaseBranch,
   onDeviceJudgement: () => onDeviceJudgement,
   onDeviceMemoryHooks: () => onDeviceMemoryHooks,
   onDeviceTranscriptSummary: () => onDeviceTranscriptSummary,
@@ -19862,6 +19863,7 @@ var ReadsWithoutSpawn = class {
 
 // ../packages/run-guards/src/evidence/ledger.ts
 var MAX_CHECK_FINDINGS = 20;
+var MAX_CHECK_OUTPUT_TAIL = 2048;
 function normalizeEvidencePath(path) {
   return path.replace(/\\/g, "/").replace(/\/+/g, "/");
 }
@@ -19896,7 +19898,8 @@ function createEvidenceLedger(resume) {
       e.latestHash = contentHash4;
       const capped2 = {
         ...check,
-        findings: check.findings.slice(0, MAX_CHECK_FINDINGS)
+        findings: check.findings.slice(0, MAX_CHECK_FINDINGS),
+        ...check.outputTail ? { outputTail: check.outputTail.slice(-MAX_CHECK_OUTPUT_TAIL) } : {}
       };
       const list2 = e.byHash.get(contentHash4);
       if (list2) list2.push(capped2);
@@ -20025,7 +20028,8 @@ function firstFindings(check, max = 3) {
   return shown.length ? shown.join("; ") + more : "(no findings recorded)";
 }
 function checkFailureReason(path, check, detail) {
-  return `git_push refused: ${path} failed ${check.kind} "${check.name}"${detail}. First findings: ${firstFindings(check)}. Fix the failure and push again \u2014 the host runs the checks.`;
+  const tail = check.outputTail?.trim();
+  return `git_push refused: ${path} failed ${check.kind} "${check.name}"${detail}. First findings: ${firstFindings(check)}.` + (tail ? ` Output (tail): ${tail.replace(/\s+/g, " ").trim().slice(0, 400)}.` : "") + ` Fix the failure and push again \u2014 the host runs the checks.`;
 }
 function outgoingGate(files, ledger, policy) {
   const unavailable2 = [];
@@ -29330,6 +29334,14 @@ function defaultBranchFromTrace(steps) {
   }
   return null;
 }
+async function onBaseBranch(git, touchedFiles, deltaTicketId) {
+  if (!git?.onBaseBranch || !touchedFiles.length || deltaTicketId == null) return false;
+  try {
+    return await git.onBaseBranch("", touchedFiles);
+  } catch {
+    return false;
+  }
+}
 function shippedToBaseBranch(events, opts) {
   const steps = events.filter((e) => e.category === "tool");
   const defaultBranch = opts?.defaultBranch?.trim() || defaultBranchFromTrace(steps);
@@ -29656,128 +29668,6 @@ async function recordShipReview(input, taskId, checks) {
   });
 }
 
-// src/runStore/deterministicFinish.ts
-function finishConditionMet(input) {
-  return input.shipped && input.verified && input.openPlaceholders === 0 && input.hasTicket;
-}
-async function deterministicFinish(input, run) {
-  const result = { finished: false, reviewRecorded: false, ticketClosed: false, factWritten: false };
-  const finishing = finishConditionMet(input);
-  const req = input.req;
-  if (req.projectId == null || !req.runTool) return result;
-  const { view, needsTicket, shipped, reviewedInPreview } = input;
-  const fullReq = req;
-  if (needsTicket && (!view.ticketRecorded || view.deltaTicketId != null)) {
-    await recordCodeChangeTicket(input.serverChatId, view, fullReq, "settle");
-  }
-  if (needsTicket) {
-    await updateLinkedTickets(input.serverChatId, view, fullReq, linkedTicketsToAdvance, "in_progress", "worked-ticket-off-backlog");
-    await updateRunLocalTickets(input.trace, view, fullReq, "in_progress", "worked-ticket-off-backlog");
-  }
-  if (shipped && req.projectId != null) {
-    await retitleShippedDeltaTicket(view, fullReq);
-    if (input.openPlaceholders > 0) {
-      view.note?.({
-        ts: nowIso(),
-        category: "message",
-        label: "run.close_out_held",
-        args: { reason: "placeholders", open: input.openPlaceholders },
-        result: "The change shipped, but this run left placeholders in the code: its ticket stays open until they are finished."
-      });
-    } else {
-      const verification = verificationOf(input.evidence, view.touchedFiles);
-      if (!verification.verified) {
-        view.note?.({
-          ts: nowIso(),
-          category: "message",
-          label: "run.close_out_held",
-          args: { reason: "unverified", detail: verification.reason },
-          result: `The change shipped, but this run holds no passing verification for it (${verification.reason}): no review was recorded and its ticket stays in review.`
-        });
-      } else if (finishing && view.deltaTicketId != null) {
-        await recordShipReview(input, view.deltaTicketId, verification.checks);
-        result.reviewRecorded = true;
-      }
-    }
-  }
-  if (finishing && await updateLinkedTickets(run.serverChatId, view, req, linkedTicketsToComplete, "done", "shipped-to-base-branch") > 0) result.ticketClosed = true;
-  const unlistedDelta = run.serverChatId == null ? view.deltaTicketId : null;
-  if (finishing && await updateRunLocalTickets(input.trace, view, fullReq, "done", "shipped-to-base-branch", unlistedDelta) > 0) result.ticketClosed = true;
-  if (reviewedInPreview.length && req.projectId != null) {
-    await updateLinkedTickets(input.serverChatId, view, fullReq, (l) => linkedTicketsReviewedComplete(l, reviewedInPreview), "done", "reviewed-in-preview");
-  }
-  result.finished = finishing;
-  return result;
-}
-function shippedOf(run) {
-  return run.c.codeChanged && run.c.touchedFiles.length > 0 && shippedToBaseBranch(runTrace(run.c), { touchedFiles: run.c.touchedFiles });
-}
-async function hasLinkedTicket(run) {
-  return holdsLinkedTicket(runTrace(run.c), run.serverChatId, run.req);
-}
-async function holdsLinkedTicket(trace4, serverChatId, req) {
-  if (!req.runTool) return false;
-  if (localTicketsFiledInRun(trace4).length > 0) return true;
-  if (serverChatId == null) return false;
-  let listed;
-  try {
-    listed = await req.runTool("builtin_chats_list_tickets", { chatId: serverChatId });
-  } catch {
-    return false;
-  }
-  return linkedTicketsToComplete(listed).length > 0;
-}
-async function finishCloseOut(run) {
-  const c = run.c;
-  if (c.finishClosedOut) return;
-  const { req } = run;
-  if (req.projectId == null || !req.runTool || c.abort?.signal.aborted || !c.codeChanged) return;
-  if (!shippedOf(run)) return;
-  if (!await hasLinkedTicket(run)) return;
-  const openPlaceholders = run.placeholderLedger.outstanding().length;
-  const view = settleView(c, c.runId);
-  const input = {
-    serverChatId: run.serverChatId,
-    view,
-    req,
-    needsTicket: true,
-    shipped: true,
-    reviewedInPreview: [],
-    openPlaceholders,
-    trace: runTrace(c),
-    evidence: run.evidence
-  };
-  const verified = verificationOf(run.evidence, view.touchedFiles).verified;
-  await deterministicFinish({ ...input, verified, hasTicket: true }, run);
-}
-function withDeterministicFinish(run, inner) {
-  return {
-    ...inner,
-    gate: async (ctx) => {
-      await finishCloseOut(run).catch((reason) => {
-        pushTrace(run.c, {
-          ts: nowIso(),
-          category: "message",
-          label: "finish.close_out_error",
-          result: `The close-out failed: ${reason instanceof Error ? reason.message : String(reason)}. The finish goes on; its tickets were not moved.`
-        });
-      });
-      return inner.gate(ctx);
-    }
-  };
-}
-
-// src/runStore/serverChat.ts
-function resolveServerChatId(chatId, req) {
-  return req.serverChatId === void 0 ? chatId : req.serverChatId;
-}
-
-// src/runStore/deviceLevers.ts
-function deviceLeverOn(id) {
-  const env = globalThis.process?.env;
-  return isCostLeverOn(env, id, null);
-}
-
 // src/handOffNext.ts
 var INLINE_NEXT = `HAND-OFF: the analysis is complete and you are the coding model. Implement the tasks below in order \u2014 do not re-plan or re-read what the planner already read. When all are done, check them. ${VERIFY_STEP} Then commit and push, and report per ticket.`;
 var RESOLVE_REPORTS = `Each report ends with its Open issues \u2014 ${RESOLVE_OPEN_ISSUES}. Fix what the slices broke between them, and implement any task that failed.`;
@@ -30036,6 +29926,553 @@ ${inlineTaskList(plan, all, ids2, brief)}`
   };
 }
 
+// src/codeChanges.ts
+var DELEGATION_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents", "wait_agents", HAND_OFF_TOOL]);
+function isDelegationTool(name) {
+  return DELEGATION_TOOLS.has(name);
+}
+function codeChangesOf(name, args, out) {
+  if (isCodeChangeTool(name)) {
+    if (isFailedToolResult(out)) return null;
+    const file = codeChangeFile(args);
+    return file ? [file] : [];
+  }
+  if (isDelegationTool(name)) {
+    const files = out?.changedFiles;
+    if (!Array.isArray(files)) return null;
+    const named = files.filter((f) => typeof f === "string" && f.trim().length > 0);
+    return named.length ? named : null;
+  }
+  return null;
+}
+
+// src/placeholderGuard.ts
+var PLACEHOLDER_GUARD_LABEL = "tools.placeholder_guard";
+var SOURCE_FILE = /\.(?:[cm]?[jt]sx?|py|go|rs|java|kt|swift|cs|rb|php|sql|sh|ps1|vue|svelte)$/i;
+var COMMENT_MARKERS = [
+  /\bTODO\b/,
+  /\bFIXME\b/,
+  /\bXXX\b/,
+  /\bfor now\b/i,
+  /\b(?:a|the) (?:proper|real|full) implementation (?:would|should|will)\b/i,
+  /\bnot (?:yet )?(?:implemented|wired)\b/i,
+  // The model's own reasoning left in the source — it was talking to itself, not
+  // documenting the code.
+  /\blet me\b/i,
+  /\bI'll\b/
+];
+var STUB_THROW = /throw new Error\(\s*["'`]\s*(?:not (?:yet )?implemented|todo)/i;
+function commentOf(line) {
+  const t = line.trim();
+  if (t.startsWith("//") || t.startsWith("#") || t.startsWith("*") || t.startsWith("/*")) return t;
+  const slash2 = line.indexOf("//");
+  if (slash2 > 0 && line[slash2 - 1] !== ":") return line.slice(slash2);
+  return null;
+}
+function markedLines(text2) {
+  const out = [];
+  for (const line of text2.split(/\r?\n/)) {
+    const comment = commentOf(line);
+    if (comment && COMMENT_MARKERS.some((re) => re.test(comment)) || STUB_THROW.test(line)) {
+      out.push(line.trim().slice(0, 160));
+    }
+  }
+  return out;
+}
+function placeholdersWritten(tool, args) {
+  const a = args ?? {};
+  const path = typeof a.path === "string" ? a.path : "";
+  if (!path || !SOURCE_FILE.test(path)) return [];
+  const added = tool === "write_file" ? a.content : tool === "edit_file" ? a.new_string : void 0;
+  if (typeof added !== "string" || !added) return [];
+  const before = new Set(typeof a.old_string === "string" ? markedLines(a.old_string) : []);
+  return markedLines(added).filter((text2) => !before.has(text2)).map((text2) => ({ path, text: text2 }));
+}
+function placeholderAdvisory(hits) {
+  if (!hits.length) return null;
+  const shown = hits.slice(0, 3).map((h) => `\`${h.text}\``).join(", ");
+  return `PLACEHOLDER WRITTEN in ${hits[0].path}: ${shown}${hits.length > 3 ? ` (+${hits.length - 3} more)` : ""}. This is unfinished work, and comments that narrate your own reasoning do not belong in the source. Finish it in this run \u2014 or, if it is genuinely blocked, say so plainly in your reply and name the blocker. Never report work that contains a placeholder as done or fixed.`;
+}
+function placeholderTraceEvent(tool, hits, ts) {
+  return {
+    ts,
+    category: "message",
+    label: PLACEHOLDER_GUARD_LABEL,
+    args: { tool, hits },
+    result: placeholderAdvisory(hits) ?? ""
+  };
+}
+function delegationPlaceholders(result) {
+  return asHits(resultField(result, "placeholders"));
+}
+function asHits(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((x) => {
+    const hit = x;
+    return typeof hit.path === "string" && typeof hit.text === "string" ? [{ path: hit.path, text: hit.text }] : [];
+  });
+}
+function resultField(result, key) {
+  let obj2 = result;
+  if (typeof obj2 === "string") {
+    try {
+      obj2 = JSON.parse(obj2);
+    } catch {
+      return void 0;
+    }
+  }
+  return obj2 && typeof obj2 === "object" ? obj2[key] : void 0;
+}
+
+// src/completionGuard.ts
+var TICKET_UPDATE = /tasks[._]update/i;
+var DONE_STATUSES = /* @__PURE__ */ new Set(["done", "completed", "complete"]);
+function isTicketCompletion(tool, args) {
+  if (!TICKET_UPDATE.test(tool)) return false;
+  const status2 = args?.status;
+  return typeof status2 === "string" && DONE_STATUSES.has(status2.toLowerCase());
+}
+function canCompleteTicket(isOnBaseBranch, userDeclinedShipping, opts) {
+  if (opts?.outgoing && !opts.outgoing.ok) return false;
+  if (isOnBaseBranch) return true;
+  if (userDeclinedShipping) return true;
+  const branch = (opts?.ticketGitBranch ?? "").trim();
+  if (branch && branch !== "main" && branch !== "master") return false;
+  if (opts?.wroteCodeThisRun === false) return true;
+  return false;
+}
+function notOnBaseBranchAdvisory() {
+  return "CANNOT MARK DONE \u2014 code is not on the base branch (main/master). Either ship to main/master first, or if you intentionally left the code uncommitted, say so explicitly in your reply so this guard knows to allow it.";
+}
+function markedDoneOffBaseAdvisory() {
+  return "MARKED DONE BEFORE IT SHIPPED \u2014 the ticket is now done, but this run's code is not on the base branch (main/master). Ship it to main/master, or set the ticket back to in_progress and name what blocks it. If you intentionally left the code uncommitted, say so explicitly in your reply.";
+}
+function completionBlockedAdvisory(outgoing) {
+  if (outgoing && !outgoing.ok) {
+    return `CANNOT MARK DONE \u2014 this run's outgoing changes fail the ship gate: ${outgoing.reason} Mark the ticket done once they pass.`;
+  }
+  return notOnBaseBranchAdvisory();
+}
+var PlaceholderLedger = class {
+  open = /* @__PURE__ */ new Map();
+  /** Account for ONE successful write, given the hits the guard found in it. */
+  record(tool, args, hits) {
+    const a = args ?? {};
+    const path = typeof a.path === "string" ? a.path : "";
+    if (!path) return;
+    if (tool === "write_file") {
+      this.set(path, hits.map((h) => h.text));
+      return;
+    }
+    if (tool === "edit_file") {
+      const current = new Set(this.open.get(path) ?? []);
+      const removed = typeof a.old_string === "string" ? markedLines(a.old_string) : [];
+      const kept = new Set(typeof a.new_string === "string" ? markedLines(a.new_string) : []);
+      for (const text2 of removed) if (!kept.has(text2)) current.delete(text2);
+      for (const h of hits) current.add(h.text);
+      this.set(path, [...current]);
+      return;
+    }
+    if (tool === "delete_file") this.open.delete(path);
+  }
+  /** Placeholders a delegated child reported writing. The parent never saw those edits,
+   *  so they stay outstanding until the parent rewrites or edits the lines itself. */
+  add(hits) {
+    for (const h of hits) {
+      const texts = this.open.get(h.path) ?? /* @__PURE__ */ new Set();
+      texts.add(h.text);
+      this.open.set(h.path, texts);
+    }
+  }
+  outstanding() {
+    return [...this.open.entries()].flatMap(([path, texts]) => [...texts].map((text2) => ({ path, text: text2 })));
+  }
+  set(path, texts) {
+    if (texts.length) this.open.set(path, new Set(texts));
+    else this.open.delete(path);
+  }
+};
+function completionAdvisory(open2) {
+  if (!open2.length) return null;
+  const shown = open2.slice(0, 3).map((h) => `${h.path}: \`${h.text}\``).join("; ");
+  return `MARKED DONE OVER A PLACEHOLDER. This run wrote ${open2.length} placeholder(s) it has not removed \u2014 ${shown}${open2.length > 3 ? ` (+${open2.length - 3} more)` : ""}. A ticket is done when its code works in the product, not when a stub compiles. Finish the placeholder and keep the ticket done, or set it back to in_progress and name what blocks it.`;
+}
+
+// src/runStore/shipGates.ts
+function authorModelsOf(run) {
+  return [...run.c.authorModels];
+}
+function policyOf(run) {
+  return run.req.evidencePolicy ?? DEFAULT_EVIDENCE_POLICY;
+}
+function extensionOf3(path) {
+  const name = path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(dot).toLowerCase() : "";
+}
+function lacksEvidence(file, ledger, policy) {
+  if (file.deleted) return false;
+  const required = policy.required[extensionOf3(file.absPath)] ?? [];
+  const checks = ledger.for(file.absPath, file.hash);
+  return required.some((kind) => {
+    const records = checks.filter((r) => r.kind === kind);
+    if (records.length === 0) return true;
+    return records.reduce((a, b) => b.at >= a.at ? b : a).outcome === "fail";
+  });
+}
+async function verifyPaths(run, files, opts) {
+  const verifier = run.req.verifier;
+  if (!verifier) return;
+  const policy = policyOf(run);
+  const pending = files.filter((f) => !f.unavailable && lacksEvidence(f, run.evidence, policy));
+  if (!pending.length) return;
+  const byPath = new Map(pending.map((f) => [f.absPath, f.hash]));
+  const records = await verifier.full(pending.map((f) => f.absPath), opts);
+  const now = Date.now();
+  for (const [absPath, hash] of byPath) {
+    for (const check of records.get(absPath) ?? []) {
+      run.evidence.record(absPath, hash, { ...check, at: check.at || now });
+    }
+  }
+}
+async function runOutgoingGate(run, repo, tool = "git_push", args) {
+  const git = run.req.git;
+  if (!git) return { verdict: { ok: true, unavailable: [] }, diffHash: null, gated: false };
+  const pullRequest = tool === "open_pull_request";
+  const base = args?.base;
+  const out = await git.outgoing(repo, pullRequest ? { pullRequest: typeof base === "string" && base.trim() ? { base: base.trim() } : {} } : void 0);
+  const { files, diffHash, baseBranch, diff } = out;
+  if (!baseBranch && !pullRequest) return { verdict: { ok: true, unavailable: [] }, diffHash, gated: false };
+  const unchecked = out.unavailable ?? (files.length === 0 || diff !== void 0 && !diff.trim() ? "no outgoing change to check" : void 0);
+  if (unchecked) {
+    return { verdict: { ok: false, reason: `${tool} refused: not verified \u2014 ${unchecked}. Commit the change on a branch with an upstream (or name the pull request base) and retry.` }, diffHash, gated: true };
+  }
+  await verifyPaths(run, files);
+  const verdict = outgoingGate(files, run.evidence, policyOf(run));
+  if (!verdict.ok) return { verdict, diffHash, gated: true };
+  const reviewed = await runReviewGate(run, diffHash, { repo, diff: diff ?? "", tool });
+  if (!reviewed.ok) return { verdict: reviewed, diffHash, gated: true };
+  return { verdict, diffHash, gated: true };
+}
+function approvedReviewFor(run, currentDiffHash) {
+  for (const review of run.c.shipReviews) {
+    if (reviewGate(review, authorModelsOf(run), currentDiffHash).ok) return review;
+  }
+  return null;
+}
+async function runReviewGate(run, currentDiffHash, change = { repo: "", diff: "", tool: "git_push" }) {
+  const reviewer = run.req.reviewer;
+  if (!reviewer) return { ok: true, unavailable: [] };
+  if (approvedReviewFor(run, currentDiffHash)) return { ok: true, unavailable: [] };
+  const authors = authorModelsOf(run);
+  const evidence = evidenceSummary(run);
+  const res = await reviewer.review({ repo: change.repo, diff: change.diff, evidence, authorModels: authors });
+  if ("refused" in res) {
+    return { ok: false, reason: `${change.tool} refused: ${res.refused}` };
+  }
+  const verdict = reviewGate(res, authors, currentDiffHash);
+  if (verdict.ok) run.c.shipReviews.push(res);
+  return verdict;
+}
+function evidenceSummary(run) {
+  const lines = [];
+  for (const ev of run.evidence.snapshot()) {
+    for (const check of ev.checks) {
+      lines.push(`${ev.path} ${check.kind} "${check.name}": ${check.outcome}`);
+    }
+  }
+  return lines.join("\n") || "(no evidence recorded yet)";
+}
+var isBaseBranchPush = (name, args) => name === "git_push" && args?.allowBaseBranch === true;
+function isCompleteReviewRecord(name, args) {
+  if (name !== "builtin_reviews_record") return false;
+  return args?.verdict === "complete";
+}
+async function shipGatePreflight(run, name, args) {
+  if (!run.req.git) return {};
+  if (isTicketCompletion(name, args)) {
+    const deltaRefusal = await deltaTicketCompletionRefusal(run, args);
+    if (deltaRefusal) return { refusal: deltaRefusal };
+    const refusal2 = await completionGateRefusal(run);
+    return refusal2 ? { refusal: refusal2 } : {};
+  }
+  const publish = isBaseBranchPush(name, args) || name === "open_pull_request";
+  if (!publish && !isCompleteReviewRecord(name, args)) return {};
+  try {
+    if (publish) {
+      const { verdict, diffHash: diffHash2, gated } = await runOutgoingGate(run, repoArgOf(args), name, args);
+      if (!verdict.ok) return { refusal: { ok: false, error: verdict.reason } };
+      return gated ? { evidence: approvalEvidence(run, verdict.unavailable, diffHash2) } : {};
+    }
+    const { diffHash } = await run.req.git.outgoing(repoArgOf(args));
+    const approved = diffHash ? approvedReviewFor(run, diffHash) : null;
+    if (!approved) {
+      const authors = authorModelsOf(run);
+      if (authors.length <= 1) {
+        const only = authors[0] ?? "(unknown)";
+        return {
+          refusal: {
+            ok: false,
+            error: `builtin_reviews_record refused: no reviewGate-approved independent review exists for the current diff, and only ONE model (${only}) has served this run \u2014 the review sub-run must be by a model that did not author the change (PRD 45 OD-1), so pushing cannot create it. Open a pull request for a human/other-model review, or finish the task and leave the ticket in review.`
+          }
+        };
+      }
+      return {
+        refusal: {
+          ok: false,
+          error: "builtin_reviews_record refused: no reviewGate-approved independent review exists for the current diff. The push gate runs one review sub-run by a model that did not author the change (PRD 45 OD-1) \u2014 push (or open a pull request) so the host records the review, then record complete again."
+        }
+      };
+    }
+    args.reviewerRef = approved.reviewerModel;
+    args.evidence = evidenceSummary(run);
+    return {};
+  } catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    return { refusal: { ok: false, error: `${name} refused: the ship gate could not read the outgoing change (${why}). Fix the repository state and retry.` } };
+  }
+}
+var COMPLETION_GATE_BUDGET_MS = 2e4;
+function wroteThisRun(absPath, touched) {
+  const norm = (p) => p.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+  const target = norm(absPath);
+  return touched.some((t) => {
+    const p = norm(t);
+    return !!p && (target === p || target.endsWith(`/${p}`));
+  });
+}
+async function completionGateRefusal(run) {
+  const git = run.req.git;
+  if (!git || !run.c.codeChanged || !run.c.touchedFiles?.length) return null;
+  let timer;
+  const budget2 = new Promise((resolve) => {
+    timer = setTimeout(() => resolve({ kind: "timeout" }), COMPLETION_GATE_BUDGET_MS);
+  });
+  const check = async () => {
+    try {
+      const out = await git.outgoing("");
+      if (out.unavailable) return out.baseBranch ? { kind: "clear", why: out.unavailable } : { kind: "unavailable", why: out.unavailable };
+      const mine = out.files.filter((f) => wroteThisRun(f.absPath, run.c.touchedFiles));
+      if (!mine.length) return { kind: "clear", why: "none of the outgoing files were written by this run" };
+      await verifyPaths(run, mine, { budgetMs: COMPLETION_GATE_BUDGET_MS - 2e3 });
+      return { kind: "verdict", verdict: outgoingGate(mine, run.evidence, policyOf(run)) };
+    } catch (e) {
+      return { kind: "error", why: e instanceof Error ? e.message : String(e) };
+    }
+  };
+  let outcome;
+  try {
+    outcome = await Promise.race([check(), budget2]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+  if (outcome.kind === "verdict" && outcome.verdict.ok) return null;
+  const refusal2 = outcome.kind === "verdict" ? { ok: false, error: completionBlockedAdvisory(outcome.verdict) } : outcome.kind === "clear" ? null : { ok: false, error: completionBlockedAdvisory({ ok: false, reason: completionUncheckedReason(outcome) }) };
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: "tools.completion_gate",
+    args: { outcome: outcome.kind, ..."why" in outcome ? { why: outcome.why } : {} },
+    result: refusal2 ? refusal2.error : "allowed"
+  });
+  return refusal2;
+}
+function completionUncheckedReason(outcome) {
+  if (outcome.kind === "timeout") return `the check did not finish within ${COMPLETION_GATE_BUDGET_MS / 1e3}s, so the change is not verified.`;
+  if (outcome.kind === "unavailable") return `the outgoing change could not be computed (${outcome.why}), so it is not verified.`;
+  return `the ship gate could not read or verify the outgoing change (${outcome.why}). Fix the repository state and retry.`;
+}
+function approvalEvidence(run, unavailable2, diffHash) {
+  const checks = unavailable2.length ? `checks passed \xB7 ${unavailable2.length} check${unavailable2.length === 1 ? "" : "s"} could not run here (not verified)` : "checks passed";
+  const reviewer = diffHash ? approvedReviewFor(run, diffHash)?.reviewerModel : void 0;
+  return reviewer ? `${checks} \xB7 reviewed by ${reviewer}` : checks;
+}
+function repoArgOf(args) {
+  const r = args?.repo;
+  return typeof r === "string" ? r : "";
+}
+async function deltaTicketCompletionRefusal(run, args) {
+  const id = parseSyncId(args?.id);
+  const deltaId = run.c.deltaTicketId;
+  if (id == null || deltaId == null || id !== deltaId) return null;
+  const view = settleView(run.c, run.c.runId);
+  const verification = verificationOf(run.evidence, view.touchedFiles);
+  const open2 = run.placeholderLedger.outstanding().length;
+  if (finishConditionMet({ shipped: true, verified: verification.verified, openPlaceholders: open2, hasTicket: true })) return null;
+  const reason = !verification.verified ? `the run holds no passing verification for its change (${verification.reason})` : open2 > 0 ? `${open2} placeholder(s) are still outstanding` : "the run is not verified to have shipped";
+  return { ok: false, error: `CANNOT MARK DONE \u2014 this is the run's own delta ticket (#${deltaId}): ${reason}. Finish the work and let the host close it out, or leave it in review.` };
+}
+async function shipGateAdvisory(run, name, args, out) {
+  if (!run.req.git) return null;
+  if (name === "run_command") {
+    const command = args?.command;
+    if (typeof command === "string") return shellPublishHint(command);
+    return null;
+  }
+  if (name === "git_commit" && run.req.verifier && !isFailed2(out)) {
+    const verdict = await outgoingEvidenceVerdict(run, repoArgOf(args));
+    return verdict && !verdict.ok ? `ADVISORY (commit not refused): ${verdict.reason}` : null;
+  }
+  return null;
+}
+async function outgoingEvidenceVerdict(run, repo) {
+  const git = run.req.git;
+  if (!git) return void 0;
+  try {
+    const { files } = await git.outgoing(repo);
+    await verifyPaths(run, files);
+    return outgoingGate(files, run.evidence, policyOf(run));
+  } catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    return { ok: false, reason: `the ship gate could not read or verify the outgoing change (${why}). Fix the repository state and retry.` };
+  }
+}
+function isFailed2(out) {
+  const o = out;
+  return o != null && typeof o === "object" && o.ok === false;
+}
+
+// src/runStore/deterministicFinish.ts
+function finishConditionMet(input) {
+  return input.shipped && input.verified && input.openPlaceholders === 0 && input.hasTicket;
+}
+async function deterministicFinish(input, run) {
+  const result = { finished: false, reviewRecorded: false, ticketClosed: false, factWritten: false };
+  const finishing = finishConditionMet(input);
+  const req = input.req;
+  if (req.projectId == null || !req.runTool) return result;
+  const { view, needsTicket, shipped, reviewedInPreview } = input;
+  const fullReq = req;
+  if (needsTicket && (!view.ticketRecorded || view.deltaTicketId != null)) {
+    await recordCodeChangeTicket(input.serverChatId, view, fullReq, "settle");
+  }
+  if (needsTicket) {
+    await updateLinkedTickets(input.serverChatId, view, fullReq, linkedTicketsToAdvance, "in_progress", "worked-ticket-off-backlog");
+    await updateRunLocalTickets(input.trace, view, fullReq, "in_progress", "worked-ticket-off-backlog");
+  }
+  if (shipped && req.projectId != null) {
+    await retitleShippedDeltaTicket(view, fullReq);
+    if (input.openPlaceholders > 0) {
+      view.note?.({
+        ts: nowIso(),
+        category: "message",
+        label: "run.close_out_held",
+        args: { reason: "placeholders", open: input.openPlaceholders },
+        result: "The change shipped, but this run left placeholders in the code: its ticket stays open until they are finished."
+      });
+    } else {
+      const verification = verificationOf(input.evidence, view.touchedFiles);
+      if (!verification.verified) {
+        view.note?.({
+          ts: nowIso(),
+          category: "message",
+          label: "run.close_out_held",
+          args: { reason: "unverified", detail: verification.reason },
+          result: `The change shipped, but this run holds no passing verification for it (${verification.reason}): no review was recorded and its ticket stays in review.`
+        });
+      } else if (finishing && view.deltaTicketId != null) {
+        await recordShipReview(input, view.deltaTicketId, verification.checks);
+        result.reviewRecorded = true;
+      }
+    }
+  }
+  if (finishing && await updateLinkedTickets(run.serverChatId, view, req, linkedTicketsToComplete, "done", "shipped-to-base-branch") > 0) result.ticketClosed = true;
+  const unlistedDelta = run.serverChatId == null ? view.deltaTicketId : null;
+  if (finishing && await updateRunLocalTickets(input.trace, view, fullReq, "done", "shipped-to-base-branch", unlistedDelta) > 0) result.ticketClosed = true;
+  if (reviewedInPreview.length && req.projectId != null) {
+    await updateLinkedTickets(input.serverChatId, view, fullReq, (l) => linkedTicketsReviewedComplete(l, reviewedInPreview), "done", "reviewed-in-preview");
+  }
+  result.finished = finishing;
+  return result;
+}
+async function shippedOf(run) {
+  if (run.c.codeChanged && run.c.touchedFiles.length > 0 && shippedToBaseBranch(runTrace(run.c), { touchedFiles: run.c.touchedFiles })) return true;
+  return onBaseBranch(run.req.git, run.c.touchedFiles, run.c.deltaTicketId);
+}
+async function hasLinkedTicket(run) {
+  return holdsLinkedTicket(runTrace(run.c), run.serverChatId, run.req);
+}
+async function holdsLinkedTicket(trace4, serverChatId, req) {
+  if (!req.runTool) return false;
+  if (localTicketsFiledInRun(trace4).length > 0) return true;
+  if (serverChatId == null) return false;
+  let listed;
+  try {
+    listed = await req.runTool("builtin_chats_list_tickets", { chatId: serverChatId });
+  } catch {
+    return false;
+  }
+  return linkedTicketsToComplete(listed).length > 0;
+}
+async function finishCloseOut(run) {
+  const c = run.c;
+  if (c.finishClosedOut) return;
+  const { req } = run;
+  if (req.projectId == null || !req.runTool || c.abort?.signal.aborted || !c.codeChanged) return;
+  if (!await shippedOf(run)) return;
+  const reviewer = run.req.reviewer;
+  if (reviewer && run.req.git) {
+    try {
+      const out = await run.req.git.outgoing("");
+      if (!out.unavailable) {
+        const reviewed = await runReviewGate(run, out.diffHash, { repo: "", diff: out.diff ?? "", tool: "settle-close-out" });
+        if (!reviewed.ok) {
+          pushTrace(run.c, {
+            ts: nowIso(),
+            category: "message",
+            label: "finish.review_gate",
+            result: `The independent review did not approve (the change landed without this run pushing it): ${reviewed.reason}`
+          });
+        }
+      }
+    } catch {
+    }
+  }
+  if (!await hasLinkedTicket(run)) return;
+  const openPlaceholders = run.placeholderLedger.outstanding().length;
+  const view = settleView(c, c.runId);
+  const input = {
+    serverChatId: run.serverChatId,
+    view,
+    req,
+    needsTicket: true,
+    shipped: true,
+    reviewedInPreview: [],
+    openPlaceholders,
+    trace: runTrace(c),
+    evidence: run.evidence
+  };
+  const verified = verificationOf(run.evidence, view.touchedFiles).verified;
+  await deterministicFinish({ ...input, verified, hasTicket: true }, run);
+}
+function withDeterministicFinish(run, inner) {
+  return {
+    ...inner,
+    gate: async (ctx) => {
+      await finishCloseOut(run).catch((reason) => {
+        pushTrace(run.c, {
+          ts: nowIso(),
+          category: "message",
+          label: "finish.close_out_error",
+          result: `The close-out failed: ${reason instanceof Error ? reason.message : String(reason)}. The finish goes on; its tickets were not moved.`
+        });
+      });
+      return inner.gate(ctx);
+    }
+  };
+}
+
+// src/runStore/serverChat.ts
+function resolveServerChatId(chatId, req) {
+  return req.serverChatId === void 0 ? chatId : req.serverChatId;
+}
+
+// src/runStore/deviceLevers.ts
+function deviceLeverOn(id) {
+  const env = globalThis.process?.env;
+  return isCostLeverOn(env, id, null);
+}
+
 // ../packages/agent-skills/src/spec.ts
 var SPEC_FIELDS = ["name", "description", "license", "compatibility", "metadata", "allowed-tools"];
 var SKILL_BINARY_FILE_MAX_BYTES = 5 * 1024 * 1024;
@@ -30208,10 +30645,15 @@ function chatAsksDirective(convo) {
 
 // src/runStore/publishHold.ts
 var PUBLISH_VERB = String.raw`(?:commit|push|ship|merge|land|publish|release|(?:open|raise|create)\s+(?:a|the)\s+(?:pr|pull\s+request))`;
-var PUBLISH_TAIL = String.raw`(?:it|them|this|that|these|those|everything|all|now|away|up|changes|please|then|too|as\s+well|for\s+me|right\s+away|` + String.raw`(?:the|your|my|our)\s+(?:changes?|code|work|fix(?:es)?|branch|commits?|pr|diff|edits?|updates?|lot)|` + String.raw`and\s+${PUBLISH_VERB}|` + String.raw`to\s+(?:main|master|github|prod(?:uction)?|(?:the\s+)?(?:remote|repo|origin)(?:/[\w./-]+)?|origin/[\w./-]+|the\s+(?:[\w./-]+\s+)?branch|[\w./-]+\s+branch))`;
+var OBJECT_STOP = String.raw`(?:is|are|was|were|be|been|being|am|do|does|did|done|doing|have|has|had|having|need|needs|needed|want|wants|wanting|in|on|at|to|into|onto|through|for|with|by|of|when|while|that|which|who|whom|if|because|until|unless|before|after|not|no|also|but|or|nor|as|from|about|over|under|again|further|once|here|there|any|both|each|few|more|most|other|some|such|only|own|same|so|than|too|very|just|should|would|could|must|shall|will|may|might|can|cannot|blue|green|red|yellow|orange|purple|pink|brown|black|white|gray|grey|dark|light|big|small|large|new|old|wrong|broken|ready)`;
+var DIRECT_OBJECT = String.raw`(?:the|this|that|my|your|our|a|an|these|those)\s+(?:(?!${OBJECT_STOP}\b)[\w][\w./'-]*\s*){1,4}`;
+var PUBLISH_TAIL = String.raw`(?:it|them|this|that|these|those|everything|all|now|away|up|changes|please|then|too|as\s+well|for\s+me|right\s+away|` + String.raw`(?:the|your|my|our)\s+(?:changes?|code|work|fix(?:es)?|branch|commits?|pr|diff|edits?|updates?|lot)|` + String.raw`and\s+${PUBLISH_VERB}(?:\s+${DIRECT_OBJECT})?|` + String.raw`to\s+(?:main|master|github|prod(?:uction)?|(?:the\s+)?(?:remote|repo|origin)(?:/[\w./-]+)?|origin/[\w./-]+|the\s+(?:[\w./-]+\s+)?branch|[\w./-]+\s+branch))`;
 var ACKNOWLEDGEMENT = String.raw`(?:(?:ok(?:ay)?|yes|yep|yeah|sure|great|good|perfect|thanks|thank\s+you|lgtm|looks\s+good|all\s+good|validated|verified|approved|done|now|please|so|then|and|alright)\b[\s!–—-]*)*`;
 var GO_AHEAD = String.raw`(?:go\s+ahead\s+(?:and\s+)?|you\s+(?:can|may)\s+(?:now\s+)?(?:go\s+ahead\s+and\s+)?|` + String.raw`(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:now\s+)?|` + String.raw`you(?:['’]re|\s+are)\s+(?:good|clear(?:ed)?|free|ok(?:ay)?|fine)\s+to\s+|` + String.raw`feel\s+free\s+to\s+|(?:it\s+is\s+|it['’]?s\s+)?(?:ok(?:ay)?|fine|safe)\s+to\s+|time\s+to\s+|let['’]?s\s+|please\s+)?`;
-var SHIP_ORDER = new RegExp(String.raw`^${ACKNOWLEDGEMENT}${GO_AHEAD}${PUBLISH_VERB}(?:\s+${PUBLISH_TAIL})*$`, "i");
+var SHIP_ORDER = new RegExp(
+  String.raw`^${ACKNOWLEDGEMENT}${GO_AHEAD}${PUBLISH_VERB}(?:\s+${DIRECT_OBJECT})*?(?:\s+${PUBLISH_TAIL})*$`,
+  "i"
+);
 var DEFERRAL = /\b(?:not\s+yet|after|when|once|later|tomorrow|tonight|next|until|till|before|wait|hold\s+off|in\s+a\s+(?:bit|minute|moment|while|few))\b/i;
 var ASSISTANT_ASKS_TO_SHIP = /\b(?:shall|should|can|may)\s+I\s+(?:go\s+ahead\s+and\s+)?(?:now\s+)?(?:commit|push|ship|merge|land|publish|open\s+(?:a|the)\s+(?:pr|pull\s+request))\b[^?]*\?|\b(?:do\s+you\s+want|want|would\s+you\s+like)\s+me\s+to\s+(?:go\s+ahead\s+and\s+)?(?:commit|push|ship|merge|land|publish|open\s+(?:a|the)\s+(?:pr|pull\s+request))\b[^?]*\?/i;
 var BARE_AFFIRMATIVE = /^(?:(?:yes|yep|yeah|yup|sure|ok(?:ay)?|go\s+ahead|go\s+for\s+it|do\s+it|please\s+do|please|sounds\s+good|lgtm|approved|absolutely|definitely|thanks|thank\s+you)[\s,.!]*)+$/i;
@@ -30718,178 +31160,6 @@ function readRequest(c, convo, mode) {
   return { userRequest, directives, goal: changeRequest ? chatGoalText(convo) : userRequest };
 }
 
-// src/codeChanges.ts
-var DELEGATION_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents", "wait_agents", HAND_OFF_TOOL]);
-function isDelegationTool(name) {
-  return DELEGATION_TOOLS.has(name);
-}
-function codeChangesOf(name, args, out) {
-  if (isCodeChangeTool(name)) {
-    if (isFailedToolResult(out)) return null;
-    const file = codeChangeFile(args);
-    return file ? [file] : [];
-  }
-  if (isDelegationTool(name)) {
-    const files = out?.changedFiles;
-    if (!Array.isArray(files)) return null;
-    const named = files.filter((f) => typeof f === "string" && f.trim().length > 0);
-    return named.length ? named : null;
-  }
-  return null;
-}
-
-// src/placeholderGuard.ts
-var PLACEHOLDER_GUARD_LABEL = "tools.placeholder_guard";
-var SOURCE_FILE = /\.(?:[cm]?[jt]sx?|py|go|rs|java|kt|swift|cs|rb|php|sql|sh|ps1|vue|svelte)$/i;
-var COMMENT_MARKERS = [
-  /\bTODO\b/,
-  /\bFIXME\b/,
-  /\bXXX\b/,
-  /\bfor now\b/i,
-  /\b(?:a|the) (?:proper|real|full) implementation (?:would|should|will)\b/i,
-  /\bnot (?:yet )?(?:implemented|wired)\b/i,
-  // The model's own reasoning left in the source — it was talking to itself, not
-  // documenting the code.
-  /\blet me\b/i,
-  /\bI'll\b/
-];
-var STUB_THROW = /throw new Error\(\s*["'`]\s*(?:not (?:yet )?implemented|todo)/i;
-function commentOf(line) {
-  const t = line.trim();
-  if (t.startsWith("//") || t.startsWith("#") || t.startsWith("*") || t.startsWith("/*")) return t;
-  const slash2 = line.indexOf("//");
-  if (slash2 > 0 && line[slash2 - 1] !== ":") return line.slice(slash2);
-  return null;
-}
-function markedLines(text2) {
-  const out = [];
-  for (const line of text2.split(/\r?\n/)) {
-    const comment = commentOf(line);
-    if (comment && COMMENT_MARKERS.some((re) => re.test(comment)) || STUB_THROW.test(line)) {
-      out.push(line.trim().slice(0, 160));
-    }
-  }
-  return out;
-}
-function placeholdersWritten(tool, args) {
-  const a = args ?? {};
-  const path = typeof a.path === "string" ? a.path : "";
-  if (!path || !SOURCE_FILE.test(path)) return [];
-  const added = tool === "write_file" ? a.content : tool === "edit_file" ? a.new_string : void 0;
-  if (typeof added !== "string" || !added) return [];
-  const before = new Set(typeof a.old_string === "string" ? markedLines(a.old_string) : []);
-  return markedLines(added).filter((text2) => !before.has(text2)).map((text2) => ({ path, text: text2 }));
-}
-function placeholderAdvisory(hits) {
-  if (!hits.length) return null;
-  const shown = hits.slice(0, 3).map((h) => `\`${h.text}\``).join(", ");
-  return `PLACEHOLDER WRITTEN in ${hits[0].path}: ${shown}${hits.length > 3 ? ` (+${hits.length - 3} more)` : ""}. This is unfinished work, and comments that narrate your own reasoning do not belong in the source. Finish it in this run \u2014 or, if it is genuinely blocked, say so plainly in your reply and name the blocker. Never report work that contains a placeholder as done or fixed.`;
-}
-function placeholderTraceEvent(tool, hits, ts) {
-  return {
-    ts,
-    category: "message",
-    label: PLACEHOLDER_GUARD_LABEL,
-    args: { tool, hits },
-    result: placeholderAdvisory(hits) ?? ""
-  };
-}
-function delegationPlaceholders(result) {
-  return asHits(resultField(result, "placeholders"));
-}
-function asHits(raw) {
-  if (!Array.isArray(raw)) return [];
-  return raw.flatMap((x) => {
-    const hit = x;
-    return typeof hit.path === "string" && typeof hit.text === "string" ? [{ path: hit.path, text: hit.text }] : [];
-  });
-}
-function resultField(result, key) {
-  let obj2 = result;
-  if (typeof obj2 === "string") {
-    try {
-      obj2 = JSON.parse(obj2);
-    } catch {
-      return void 0;
-    }
-  }
-  return obj2 && typeof obj2 === "object" ? obj2[key] : void 0;
-}
-
-// src/completionGuard.ts
-var TICKET_UPDATE = /tasks[._]update/i;
-var DONE_STATUSES = /* @__PURE__ */ new Set(["done", "completed", "complete"]);
-function isTicketCompletion(tool, args) {
-  if (!TICKET_UPDATE.test(tool)) return false;
-  const status2 = args?.status;
-  return typeof status2 === "string" && DONE_STATUSES.has(status2.toLowerCase());
-}
-function canCompleteTicket(isOnBaseBranch, userDeclinedShipping, opts) {
-  if (opts?.outgoing && !opts.outgoing.ok) return false;
-  if (isOnBaseBranch) return true;
-  if (userDeclinedShipping) return true;
-  const branch = (opts?.ticketGitBranch ?? "").trim();
-  if (branch && branch !== "main" && branch !== "master") return false;
-  if (opts?.wroteCodeThisRun === false) return true;
-  return false;
-}
-function notOnBaseBranchAdvisory() {
-  return "CANNOT MARK DONE \u2014 code is not on the base branch (main/master). Either ship to main/master first, or if you intentionally left the code uncommitted, say so explicitly in your reply so this guard knows to allow it.";
-}
-function markedDoneOffBaseAdvisory() {
-  return "MARKED DONE BEFORE IT SHIPPED \u2014 the ticket is now done, but this run's code is not on the base branch (main/master). Ship it to main/master, or set the ticket back to in_progress and name what blocks it. If you intentionally left the code uncommitted, say so explicitly in your reply.";
-}
-function completionBlockedAdvisory(outgoing) {
-  if (outgoing && !outgoing.ok) {
-    return `CANNOT MARK DONE \u2014 this run's outgoing changes fail the ship gate: ${outgoing.reason} Mark the ticket done once they pass.`;
-  }
-  return notOnBaseBranchAdvisory();
-}
-var PlaceholderLedger = class {
-  open = /* @__PURE__ */ new Map();
-  /** Account for ONE successful write, given the hits the guard found in it. */
-  record(tool, args, hits) {
-    const a = args ?? {};
-    const path = typeof a.path === "string" ? a.path : "";
-    if (!path) return;
-    if (tool === "write_file") {
-      this.set(path, hits.map((h) => h.text));
-      return;
-    }
-    if (tool === "edit_file") {
-      const current = new Set(this.open.get(path) ?? []);
-      const removed = typeof a.old_string === "string" ? markedLines(a.old_string) : [];
-      const kept = new Set(typeof a.new_string === "string" ? markedLines(a.new_string) : []);
-      for (const text2 of removed) if (!kept.has(text2)) current.delete(text2);
-      for (const h of hits) current.add(h.text);
-      this.set(path, [...current]);
-      return;
-    }
-    if (tool === "delete_file") this.open.delete(path);
-  }
-  /** Placeholders a delegated child reported writing. The parent never saw those edits,
-   *  so they stay outstanding until the parent rewrites or edits the lines itself. */
-  add(hits) {
-    for (const h of hits) {
-      const texts = this.open.get(h.path) ?? /* @__PURE__ */ new Set();
-      texts.add(h.text);
-      this.open.set(h.path, texts);
-    }
-  }
-  outstanding() {
-    return [...this.open.entries()].flatMap(([path, texts]) => [...texts].map((text2) => ({ path, text: text2 })));
-  }
-  set(path, texts) {
-    if (texts.length) this.open.set(path, new Set(texts));
-    else this.open.delete(path);
-  }
-};
-function completionAdvisory(open2) {
-  if (!open2.length) return null;
-  const shown = open2.slice(0, 3).map((h) => `${h.path}: \`${h.text}\``).join("; ");
-  return `MARKED DONE OVER A PLACEHOLDER. This run wrote ${open2.length} placeholder(s) it has not removed \u2014 ${shown}${open2.length > 3 ? ` (+${open2.length - 3} more)` : ""}. A ticket is done when its code works in the product, not when a stub compiles. Finish the placeholder and keep the ticket done, or set it back to in_progress and name what blocks it.`;
-}
-
 // src/runStore/runPreamble.ts
 var import_working13 = require("@seanhogg/builderforce-memory/working");
 
@@ -31162,7 +31432,7 @@ async function answerFromMemory(chatId, c, req, allTools, memoryReplay) {
   const convo = c.transcript;
   if (!(evermind?.answer && memoryReplay && !c.abort?.signal.aborted)) return false;
   const query = latestUserText(convo);
-  if (!query) return false;
+  if (!query || query.startsWith("Continue the task that was interrupted when the editor closed")) return false;
   let memAnswer = null;
   try {
     memAnswer = await evermind.answer(query, {
@@ -31973,219 +32243,6 @@ function relevantTools(tools, query) {
 
 // src/runStore/callPreflight.ts
 var import_working14 = require("@seanhogg/builderforce-memory/working");
-
-// src/runStore/shipGates.ts
-function authorModelsOf(run) {
-  return [...run.c.authorModels];
-}
-function policyOf(run) {
-  return run.req.evidencePolicy ?? DEFAULT_EVIDENCE_POLICY;
-}
-function extensionOf3(path) {
-  const name = path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
-  const dot = name.lastIndexOf(".");
-  return dot > 0 ? name.slice(dot).toLowerCase() : "";
-}
-function lacksEvidence(file, ledger, policy) {
-  if (file.deleted) return false;
-  const required = policy.required[extensionOf3(file.absPath)] ?? [];
-  const checks = ledger.for(file.absPath, file.hash);
-  return required.some((kind) => {
-    const records = checks.filter((r) => r.kind === kind);
-    if (records.length === 0) return true;
-    return records.reduce((a, b) => b.at >= a.at ? b : a).outcome === "fail";
-  });
-}
-async function verifyPaths(run, files, opts) {
-  const verifier = run.req.verifier;
-  if (!verifier) return;
-  const policy = policyOf(run);
-  const pending = files.filter((f) => !f.unavailable && lacksEvidence(f, run.evidence, policy));
-  if (!pending.length) return;
-  const byPath = new Map(pending.map((f) => [f.absPath, f.hash]));
-  const records = await verifier.full(pending.map((f) => f.absPath), opts);
-  const now = Date.now();
-  for (const [absPath, hash] of byPath) {
-    for (const check of records.get(absPath) ?? []) {
-      run.evidence.record(absPath, hash, { ...check, at: check.at || now });
-    }
-  }
-}
-async function runOutgoingGate(run, repo, tool = "git_push", args) {
-  const git = run.req.git;
-  if (!git) return { verdict: { ok: true, unavailable: [] }, diffHash: null, gated: false };
-  const pullRequest = tool === "open_pull_request";
-  const base = args?.base;
-  const out = await git.outgoing(repo, pullRequest ? { pullRequest: typeof base === "string" && base.trim() ? { base: base.trim() } : {} } : void 0);
-  const { files, diffHash, baseBranch, diff } = out;
-  if (!baseBranch && !pullRequest) return { verdict: { ok: true, unavailable: [] }, diffHash, gated: false };
-  const unchecked = out.unavailable ?? (files.length === 0 || diff !== void 0 && !diff.trim() ? "no outgoing change to check" : void 0);
-  if (unchecked) {
-    return { verdict: { ok: false, reason: `${tool} refused: not verified \u2014 ${unchecked}. Commit the change on a branch with an upstream (or name the pull request base) and retry.` }, diffHash, gated: true };
-  }
-  await verifyPaths(run, files);
-  const verdict = outgoingGate(files, run.evidence, policyOf(run));
-  if (!verdict.ok) return { verdict, diffHash, gated: true };
-  const reviewed = await runReviewGate(run, diffHash, { repo, diff: diff ?? "", tool });
-  if (!reviewed.ok) return { verdict: reviewed, diffHash, gated: true };
-  return { verdict, diffHash, gated: true };
-}
-function approvedReviewFor(run, currentDiffHash) {
-  for (const review of run.c.shipReviews) {
-    if (reviewGate(review, authorModelsOf(run), currentDiffHash).ok) return review;
-  }
-  return null;
-}
-async function runReviewGate(run, currentDiffHash, change = { repo: "", diff: "", tool: "git_push" }) {
-  const reviewer = run.req.reviewer;
-  if (!reviewer) return { ok: true, unavailable: [] };
-  if (approvedReviewFor(run, currentDiffHash)) return { ok: true, unavailable: [] };
-  const authors = authorModelsOf(run);
-  const evidence = evidenceSummary(run);
-  const res = await reviewer.review({ repo: change.repo, diff: change.diff, evidence, authorModels: authors });
-  if ("refused" in res) {
-    return { ok: false, reason: `${change.tool} refused: ${res.refused}` };
-  }
-  const verdict = reviewGate(res, authors, currentDiffHash);
-  if (verdict.ok) run.c.shipReviews.push(res);
-  return verdict;
-}
-function evidenceSummary(run) {
-  const lines = [];
-  for (const ev of run.evidence.snapshot()) {
-    for (const check of ev.checks) {
-      lines.push(`${ev.path} ${check.kind} "${check.name}": ${check.outcome}`);
-    }
-  }
-  return lines.join("\n") || "(no evidence recorded yet)";
-}
-var isBaseBranchPush = (name, args) => name === "git_push" && args?.allowBaseBranch === true;
-function isCompleteReviewRecord(name, args) {
-  if (name !== "builtin_reviews_record") return false;
-  return args?.verdict === "complete";
-}
-async function shipGatePreflight(run, name, args) {
-  if (!run.req.git) return {};
-  if (isTicketCompletion(name, args)) {
-    const refusal2 = await completionGateRefusal(run);
-    return refusal2 ? { refusal: refusal2 } : {};
-  }
-  const publish = isBaseBranchPush(name, args) || name === "open_pull_request";
-  if (!publish && !isCompleteReviewRecord(name, args)) return {};
-  try {
-    if (publish) {
-      const { verdict, diffHash: diffHash2, gated } = await runOutgoingGate(run, repoArgOf(args), name, args);
-      if (!verdict.ok) return { refusal: { ok: false, error: verdict.reason } };
-      return gated ? { evidence: approvalEvidence(run, verdict.unavailable, diffHash2) } : {};
-    }
-    const { diffHash } = await run.req.git.outgoing(repoArgOf(args));
-    const approved = diffHash ? approvedReviewFor(run, diffHash) : null;
-    if (!approved) {
-      return {
-        refusal: {
-          ok: false,
-          error: "builtin_reviews_record refused: no reviewGate-approved independent review exists for the current diff. The push gate runs one review sub-run by a model that did not author the change (PRD 45 OD-1) \u2014 push (or open a pull request) so the host records the review, then record complete again."
-        }
-      };
-    }
-    args.reviewerRef = approved.reviewerModel;
-    args.evidence = evidenceSummary(run);
-    return {};
-  } catch (e) {
-    const why = e instanceof Error ? e.message : String(e);
-    return { refusal: { ok: false, error: `${name} refused: the ship gate could not read the outgoing change (${why}). Fix the repository state and retry.` } };
-  }
-}
-var COMPLETION_GATE_BUDGET_MS = 2e4;
-function wroteThisRun(absPath, touched) {
-  const norm = (p) => p.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
-  const target = norm(absPath);
-  return touched.some((t) => {
-    const p = norm(t);
-    return !!p && (target === p || target.endsWith(`/${p}`));
-  });
-}
-async function completionGateRefusal(run) {
-  const git = run.req.git;
-  if (!git || !run.c.codeChanged || !run.c.touchedFiles?.length) return null;
-  let timer;
-  const budget2 = new Promise((resolve) => {
-    timer = setTimeout(() => resolve({ kind: "timeout" }), COMPLETION_GATE_BUDGET_MS);
-  });
-  const check = async () => {
-    try {
-      const out = await git.outgoing("");
-      if (out.unavailable) return out.baseBranch ? { kind: "clear", why: out.unavailable } : { kind: "unavailable", why: out.unavailable };
-      const mine = out.files.filter((f) => wroteThisRun(f.absPath, run.c.touchedFiles));
-      if (!mine.length) return { kind: "clear", why: "none of the outgoing files were written by this run" };
-      await verifyPaths(run, mine, { budgetMs: COMPLETION_GATE_BUDGET_MS - 2e3 });
-      return { kind: "verdict", verdict: outgoingGate(mine, run.evidence, policyOf(run)) };
-    } catch (e) {
-      return { kind: "error", why: e instanceof Error ? e.message : String(e) };
-    }
-  };
-  let outcome;
-  try {
-    outcome = await Promise.race([check(), budget2]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-  if (outcome.kind === "verdict" && outcome.verdict.ok) return null;
-  const refusal2 = outcome.kind === "verdict" ? { ok: false, error: completionBlockedAdvisory(outcome.verdict) } : outcome.kind === "clear" ? null : { ok: false, error: completionBlockedAdvisory({ ok: false, reason: completionUncheckedReason(outcome) }) };
-  pushTrace(run.c, {
-    ts: nowIso(),
-    category: "message",
-    label: "tools.completion_gate",
-    args: { outcome: outcome.kind, ..."why" in outcome ? { why: outcome.why } : {} },
-    result: refusal2 ? refusal2.error : "allowed"
-  });
-  return refusal2;
-}
-function completionUncheckedReason(outcome) {
-  if (outcome.kind === "timeout") return `the check did not finish within ${COMPLETION_GATE_BUDGET_MS / 1e3}s, so the change is not verified.`;
-  if (outcome.kind === "unavailable") return `the outgoing change could not be computed (${outcome.why}), so it is not verified.`;
-  return `the ship gate could not read or verify the outgoing change (${outcome.why}). Fix the repository state and retry.`;
-}
-function approvalEvidence(run, unavailable2, diffHash) {
-  const checks = unavailable2.length ? `checks passed \xB7 ${unavailable2.length} check${unavailable2.length === 1 ? "" : "s"} could not run here (not verified)` : "checks passed";
-  const reviewer = diffHash ? approvedReviewFor(run, diffHash)?.reviewerModel : void 0;
-  return reviewer ? `${checks} \xB7 reviewed by ${reviewer}` : checks;
-}
-function repoArgOf(args) {
-  const r = args?.repo;
-  return typeof r === "string" ? r : "";
-}
-async function shipGateAdvisory(run, name, args, out) {
-  if (!run.req.git) return null;
-  if (name === "run_command") {
-    const command = args?.command;
-    if (typeof command === "string") return shellPublishHint(command);
-    return null;
-  }
-  if (name === "git_commit" && run.req.verifier && !isFailed2(out)) {
-    const verdict = await outgoingEvidenceVerdict(run, repoArgOf(args));
-    return verdict && !verdict.ok ? `ADVISORY (commit not refused): ${verdict.reason}` : null;
-  }
-  return null;
-}
-async function outgoingEvidenceVerdict(run, repo) {
-  const git = run.req.git;
-  if (!git) return void 0;
-  try {
-    const { files } = await git.outgoing(repo);
-    await verifyPaths(run, files);
-    return outgoingGate(files, run.evidence, policyOf(run));
-  } catch (e) {
-    const why = e instanceof Error ? e.message : String(e);
-    return { ok: false, reason: `the ship gate could not read or verify the outgoing change (${why}). Fix the repository state and retry.` };
-  }
-}
-function isFailed2(out) {
-  const o = out;
-  return o != null && typeof o === "object" && o.ok === false;
-}
-
-// src/runStore/callPreflight.ts
 function traceRouted(c, step, via, name) {
   pushTrace(c, {
     ts: nowIso(),
@@ -38164,6 +38221,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   normalizeChatMode,
   noteRunStep,
   observedTask,
+  onBaseBranch,
   onDeviceJudgement,
   onDeviceMemoryHooks,
   onDeviceTranscriptSummary,

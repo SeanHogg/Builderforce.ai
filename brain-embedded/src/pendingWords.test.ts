@@ -129,7 +129,9 @@ describe('the journal of unsaved words', () => {
 
 describe('storage that refuses never costs a steer', () => {
   it('a write that throws: the words are still in the inbox, and the journal says it could not keep them', () => {
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('QuotaExceededError'); });
+    // Mock the storage object in use, not the global Storage.prototype: under Node 26 + jsdom the
+    // suite's localStorage is a jsdom-realm instance whose prototype chain is not the global one.
+    vi.spyOn(localStorage, 'setItem').mockImplementation(() => { throw new Error('QuotaExceededError'); });
 
     queueRunSteering(9611, 'still sent', { fromPerson: true, persist: true });
 
@@ -138,8 +140,8 @@ describe('storage that refuses never costs a steer', () => {
   });
 
   it('a profile whose storage cannot even be read has no journal and nothing throws', async () => {
-    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('SecurityError'); });
-    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => { throw new Error('SecurityError'); });
+    vi.spyOn(localStorage, 'getItem').mockImplementation(() => { throw new Error('SecurityError'); });
+    vi.spyOn(localStorage, 'removeItem').mockImplementation(() => { throw new Error('SecurityError'); });
 
     expect(rememberPendingWords(9612, 'k', 'x')).toBe(false);
     expect(() => forgetPendingWords(9612, ['k'])).not.toThrow();

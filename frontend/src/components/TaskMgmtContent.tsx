@@ -85,6 +85,8 @@ import { WorkspaceAllowanceBanner } from '@/components/board/WorkspaceAllowanceB
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
 import { PanelCloseButton } from '@/components/PanelCloseButton';
+import { DataTable } from '@/components/dataTable/DataTable';
+import { usePageSize } from '@/components/dataTable/usePageSize';
 type TaskView = 'board' | 'table' | 'calendar' | 'gantt';
 
 /** A rendered kanban column = a swimlane (board column). `status` is the lane key tasks sit in. */
@@ -254,6 +256,12 @@ export function TaskMgmtContent({
   const [dragTaskId, setDragTaskId] = useState<string>('');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [bulkStatus, setBulkStatus] = useState<string>('');
+  // Pagination for the List (table) view. The list can hold thousands of filtered
+  // tasks ("4,453 tasks") — rendering them all in one pass janks the main thread
+  // and pushes the header off screen, so the List view pages through them via the
+  // shared DataTable chrome (sticky header + footer pager + 50/100/200 control).
+  const [tablePage, setTablePage] = useState(1);
+  const { size: tablePageSize, setSize: setTablePageSize } = usePageSize();
   const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
   const [boardConfigOpen, setBoardConfigOpen] = useState(false);
   // Which tab the board-config panel opens on: the cog opens 'lanes'; the

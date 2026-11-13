@@ -58,4 +58,5 @@ clients/chrome/src/host/rovrRunHost.entryPoint.test.ts
 clients/chrome/src/host/rovrRunHost.test.ts
 clients/vscode/src/brainRunHost.entryPoint.test.ts
 clients/vscode/src/brainRunHost.identityTimeout.test.ts
+clients/vscode/src/knowledge/backgroundIndexer.test.ts
 clients/vscode/src/nativeBrainRun.setup.test.ts
