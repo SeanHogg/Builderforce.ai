@@ -66,7 +66,14 @@ const MAX_SEARCH_K = 50;
 
 // ── Schemas ──────────────────────────────────────────────────────────────────
 const REF_MAX = 512;
-/** An over-long ref is capped with a hash discriminator rather than failing the whole upload body (#6451). */
+/**
+ * An over-long ref is capped with a hash discriminator rather than failing the whole upload
+ * body (#6451): the refs land in a 512-bound column, and ONE runaway ref — a deep heading
+ * breadcrumb, a generated id — must never 400 every other node in the pack. The cap runs as a
+ * zod transform, so it applies wherever a ref is admitted (nodes, edges, anchors, keys) and the
+ * stored value is always ≤ REF_MAX. Deterministic (FNV-1a over the full ref): the same input
+ * caps to the same output, so a re-upload of the same pack stays idempotent.
+ */
 function capRef(ref: string): string {
   if (ref.length <= REF_MAX) return ref;
   let h = 0x811c9dc5;

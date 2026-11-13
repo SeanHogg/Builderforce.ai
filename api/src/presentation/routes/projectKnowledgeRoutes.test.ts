@@ -227,6 +227,8 @@ describe('project knowledge routes', () => {
   });
 
   it('caps an over-long ref with a hash discriminator instead of failing the whole body (#6451)', async () => {
+    // The cap is deterministic (FNV-1a over the full ref): the same over-long ref always
+    // caps to the same value, so re-uploading the same pack is idempotent.
     const longRef = `fact:${'x'.repeat(600)}`;
     const res = await routes().request('/42/knowledge/write', post({ relations: [{ ...relation(1), from: longRef }] }), {});
     expect(res.status).toBe(200);
