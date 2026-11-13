@@ -128,10 +128,36 @@ describe('the journal of unsaved words', () => {
 });
 
 describe('storage that refuses never costs a steer', () => {
+  // Swap the whole store, don't spy a method: jsdom's localStorage is a live Proxy whose per-call
+  // lookups ignore own-property spies, so the only reliable way to make it refuse is to replace it.
+  // onStorage re-reads `localStorage` per call, so this is picked up everywhere.
+  const swapStorage = (replacement: Storage | undefined): void => {
+    Object.defineProperty(globalThis, 'localStorage', {
+      value: replacement,
+      writable: true,
+      configurable: true,
+    });
+  };
+  const realStorage = globalThis.localStorage;
+  afterEach(() => {
+    // The file-level beforeEach/afterEach also touch localStorage (clear / journal reads), so a
+    // swapped-out store must be put back the moment the refusal test ends.
+    swapStorage(realStorage);
+  });
+  const throwingStore = (message: string): Storage => {
+    const thrower = () => { throw new Error(message); };
+    return {
+      get length() { return 0; },
+      clear: thrower,
+      getItem: thrower,
+      key: thrower,
+      removeItem: thrower,
+      setItem: thrower,
+    } as Storage;
+  };
+
   it('a write that throws: the words are still in the inbox, and the journal says it could not keep them', () => {
-    // Mock the storage object in use, not the global Storage.prototype: under Node 26 + jsdom the
-    // suite's localStorage is a jsdom-realm instance whose prototype chain is not the global one.
-    vi.spyOn(localStorage, 'setItem').mockImplementation(() => { throw new Error('QuotaExceededError'); });
+    swapStorage({ ...({} as Storage), setItem: () => { throw new Error('QuotaExceededError'); } } as Storage);
 
     queueRunSteering(9611, 'still sent', { fromPerson: true, persist: true });
 
@@ -140,8 +166,7 @@ describe('storage that refuses never costs a steer', () => {
   });
 
   it('a profile whose storage cannot even be read has no journal and nothing throws', async () => {
-    vi.spyOn(localStorage, 'getItem').mockImplementation(() => { throw new Error('SecurityError'); });
-    vi.spyOn(localStorage, 'removeItem').mockImplementation(() => { throw new Error('SecurityError'); });
+    swapStorage(throwingStore('SecurityError'));
 
     expect(rememberPendingWords(9612, 'k', 'x')).toBe(false);
     expect(() => forgetPendingWords(9612, ['k'])).not.toThrow();

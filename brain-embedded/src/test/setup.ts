@@ -20,6 +20,7 @@ import { JSDOM } from 'jsdom';
 
 interface JsdomWindow {
   localStorage?: Storage;
+  Storage?: unknown;
 }
 
 const g = globalThis as Record<string, unknown>;
@@ -32,6 +33,12 @@ if (g.localStorage === undefined || typeof g.localStorage !== 'object') {
       writable: true,
       configurable: true,
     });
+    // The installed store's prototype is THIS window's `Storage`, not the test
+    // environment's — a `vi.spyOn(Storage.prototype, 'setItem')` would patch the
+    // wrong prototype and the simulated refusing store would still accept writes.
+    // Publish the matching constructor alongside the store.
+    const StorageCtor = (dom.window as JsdomWindow).Storage;
+    if (StorageCtor !== undefined) g.Storage = StorageCtor;
   }
 }
 
