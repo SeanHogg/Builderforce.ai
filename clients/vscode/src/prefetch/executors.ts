@@ -33,7 +33,9 @@ import { defineRegistry, type PrefetchAction, type PrefetchExecutors } from "@bu
 import { CONTEXT_PACK_DEADLINE_MS } from "../contextPack/deadline";
 import { preSearchOnce, whereDefinedOnce } from "../contextPack/preSearchSource";
 import { buildLocalCapabilityProvider } from "../localCapabilities";
+import type { PartitionRegistry } from "@seanhogg/builderforce-memory/knowledge";
 import { knowledgeRootId } from "../knowledge/knowledgeRoots";
+import { sharedAnalysis } from "../knowledge/l3SharedAnalysis";
 import { KNOWLEDGE_ASK_ROWS, knowledgeAskExecutors } from "./knowledgeAskRow";
 
 /** The most diagnostic lines `diag.typecheck` carries into a turn. */
@@ -119,6 +121,13 @@ function execHost(options: EditorExecutorOptions): PrefetchExecHost {
     get rootId() {
       return knowledgeRootId(options.root());
     },
+    // The code actions' analysis runs in the L3 worker, off the extension host's thread. An injected provider (a test's) is not
+    // the worker's own local one, so it keeps the in-thread analysis.
+    ...(options.caps ? {} : {
+      // A worker that fails answers undefined, so the executors' in-thread analysis runs instead.
+      analyse: ({ partitions, signal }: { partitions: PartitionRegistry; signal: AbortSignal }) =>
+        sharedAnalysis({ folderPath: options.root(), rootId: knowledgeRootId(options.root()), partitions }, { signal }).catch(() => undefined),
+    }),
     ...(options.focusFiles ? { focusFiles: options.focusFiles } : {}),
     ...(options.templates ? { templates: options.templates } : {}),
   };

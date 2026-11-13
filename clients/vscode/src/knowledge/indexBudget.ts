@@ -23,6 +23,10 @@ export const UNFOCUSED_PAUSE_MS = 10 * 60_000;
 export const LONG_PASS_IDLE_MS = 2_000;
 /** Idle needed before L3 starts on mains power. */
 export const L3_IDLE_MAINS_MS = 30_000;
+/** A new HEAD owes L3 only after it has stood this long (`l3Persist.ts`): a burst of commits (a rebase, a pull) makes ONE pass. */
+export const L3_HEAD_STABLE_MS = 5 * 60_000;
+/** After a failed L3 pass (not an out-of-memory), the sha owes it again only after this long (`l3Persist.ts`); an edit-owed pass is not held back. */
+export const L3_RETRY_BACKOFF_MS = 10 * 60_000;
 /** Idle needed before L3 starts when the power source is unknown (B6). */
 export const L3_IDLE_UNKNOWN_MS = 120_000;
 /** Most files one slice takes, whatever the measured speed. */

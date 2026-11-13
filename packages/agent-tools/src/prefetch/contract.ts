@@ -14,7 +14,9 @@
  */
 
 import type { CapabilityProvider } from '../capabilities.js';
+import type { PartitionRegistry } from '@seanhogg/builderforce-memory/knowledge';
 import type { RepoGraphPort } from '../knowledge/workspaceAnalysis.js';
+import type { WorkspaceExtracted } from '../knowledge/workspaceExtracted.js';
 
 /** A registry row (`PrefetchAction`). */
 export interface PrefetchRow {
@@ -83,6 +85,11 @@ export interface PrefetchExecHost {
     focusFiles?(): readonly string[];
     /** The repo map (`@builderforce/repo-map`'s `repoMapPort`): its `references` edges ride the code-pack analysis. Absent ⇒ none. */
     repoGraph?: RepoGraphPort;
+    /**
+     * Runs the code-pack analysis (analyzers + repo graph + conversion) OFF this thread — the editor's L3 worker. Resolves
+     * undefined when it cannot serve the call; absent ⇒ the executors run `analyseWorkspaceExtracted` in this thread.
+     */
+    analyse?(args: { partitions: PartitionRegistry; signal: AbortSignal }): Promise<WorkspaceExtracted | undefined>;
     /** Starter scaffolds; absent ⇒ `scaffold.template` is not offered. */
     templates?: ScaffoldTemplates;
 }

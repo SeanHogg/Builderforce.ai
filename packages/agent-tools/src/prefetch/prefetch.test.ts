@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CapabilityProvider, ShellResult } from '../capabilities.js';
 import { dependency, duplicates, unused } from '../knowledge/codeFixtures.test-util.js';
+import { analyseWorkspaceExtracted } from '../knowledge/workspaceExtracted.js';
 import type { DetectedTool, PrefetchExecHost } from './contract.js';
 import {
   OPEN_KNOWLEDGE_GRAPH_COMMAND, SHARED_PREFETCH_ROWS, capOutput, detectTools, forgetCodePackFindings, offeredToolIds,
@@ -421,6 +422,28 @@ describe('code-pack actions', () => {
     const analysis = await codePackFindings({ ...host, repoGraph }, signal());
     expect(added).toEqual(['src/a.ts', 'src/c.ts']);
     expect(analysis).not.toBeNull();
+  });
+
+  it('runs the host\'s injected analysis (the editor\'s worker) instead of analysing in this thread, and never touches the shell', async () => {
+    const { host, commands } = analyzers();
+    // What the worker would hand back: the same analysis, computed once here.
+    const computed = await analyseWorkspaceExtracted({ caps: host.caps, rootId: 'r' });
+    forgetCodePackFindings();
+    const before = commands.length;
+    const injected = vi.fn(async (_args: { partitions: unknown; signal: AbortSignal }) => computed);
+    const out = await sharedPrefetchExecutors({ ...host, analyse: injected })['dup.check']!.run('/dup', signal());
+    expect(injected).toHaveBeenCalledTimes(1);
+    expect(injected.mock.calls[0]![0]).toMatchObject({ partitions: expect.anything(), signal: expect.anything() });
+    expect(commands.slice(before).filter((c) => /depcruise|knip|jscpd/.test(c))).toEqual([]);
+    expect(out?.text).toContain('1 duplicate-code group(s)');
+  });
+
+  it('falls back to the in-thread analysis when the injected one cannot serve the call', async () => {
+    const { host } = analyzers();
+    const injected = vi.fn(async (_args: { partitions: unknown; signal: AbortSignal }) => undefined);
+    const out = await sharedPrefetchExecutors({ ...host, analyse: injected })['dup.check']!.run('/dup', signal());
+    expect(injected).toHaveBeenCalledTimes(1);
+    expect(out?.text).toContain('1 duplicate-code group(s)');
   });
 
   it('a failed analyzer answers nothing — missing output is never reported clean', async () => {

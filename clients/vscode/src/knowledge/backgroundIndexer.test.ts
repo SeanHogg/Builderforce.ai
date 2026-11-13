@@ -4,6 +4,7 @@ vi.mock("vscode", () => ({}));
 vi.mock("../telemetry/productEvents", () => ({ emitProductEvent: vi.fn() }));
 vi.mock("../errorReporter", () => ({ logLine: vi.fn() }));
 vi.mock("./indexHostPorts", () => ({ hostIndexPorts: vi.fn() }));
+vi.mock("./activeRuns", () => ({ onRunStarted: vi.fn() }));
 vi.mock("./knowledgeService", () => ({ log: vi.fn(), workspaceFolders: () => [] }));
 vi.mock("./knowledgeFs", () => ({ vscodeKnowledgeFs: () => ({}) }));
 vi.mock("./folderKnowledge", () => ({ beforeKnowledgeShutdown: () => () => undefined }));
@@ -24,6 +25,7 @@ function fakeHost(initial: string[]) {
   const signals: AbortSignal[] = [];
   const ports = new Map<string, ReturnType<typeof portsFor>>();
   let editors = { visible: [] as string[], open: [] as string[] };
+  let runListener: (() => void) | undefined;
   function portsFor(root: KnowledgeRoot) {
     return {
       rootId: root.rootId,
@@ -42,10 +44,13 @@ function fakeHost(initial: string[]) {
     editors: () => editors,
     power: { current: async () => "mains" },
     clock: realClock,
+    runStarted: (listener) => { runListener = listener; return () => { runListener = undefined; }; },
     telemetry: () => vi.fn(),
     log: vi.fn(),
   };
   return {
+    startRun: () => runListener?.(),
+    runWatched: () => runListener !== undefined,
     host, watchers, unwatched, disposed, ports, signals,
     setFolders: (f: string[]) => { folders = f; },
     setEditors: (e: { visible: string[]; open: string[] }) => { editors = e; },
@@ -122,6 +127,46 @@ describe("BackgroundIndexer — keystrokes, preemption and shutdown", () => {
     const disposing = bi.dispose();
     await vi.advanceTimersByTimeAsync(1_000);
     await disposing;
+  });
+
+  // regression: an agent run started mid-L3 (the person is idle while it works) let the analysis hold the extension host.
+  it("regression: an agent run that STARTS stops a running long pass (the pass stays owed), and stops being watched on dispose", async () => {
+    const f = fakeHost(["/a"]);
+    const bi = new BackgroundIndexer(f.host);
+    bi.start(true);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(f.runWatched()).toBe(true);
+    const p = f.ports.get("id:/a")!;
+    p.plan.mockResolvedValue({ files: 3, changed: ["x.ts"], removed: [], reviewed: false, ms: 1, detail: { prior: new Map() } as unknown as PlanDetail });
+    p.mapPass.mockImplementationOnce((_plan, o) => new Promise((resolve) => { f.signals.push(o.signal); o.signal.addEventListener("abort", () => resolve({ changed: [] })); }));
+    bi.windowFocus(false);
+    await vi.advanceTimersByTimeAsync(6_000);
+    bi.windowFocus(true);
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(p.mapPass).toHaveBeenCalled();
+    f.startRun(); // no keystroke: only the run — the MAP pass is not L3 and carries on
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f.signals[0]!.aborted).toBe(false);
+    bi.keystroke();
+    const disposing = bi.dispose();
+    await vi.advanceTimersByTimeAsync(1_000);
+    await disposing;
+    expect(f.runWatched()).toBe(false);
+  });
+
+  it("regression: an agent run that STARTS stops a running L3 pass", async () => {
+    const f = fakeHost(["/a"]);
+    const bi = new BackgroundIndexer(f.host);
+    bi.start(true);
+    await vi.advanceTimersByTimeAsync(10);
+    const p = f.ports.get("id:/a")!;
+    p.mapPass.mockImplementationOnce((_plan, o) => new Promise((resolve) => { f.signals.push(o.signal); o.signal.addEventListener("abort", () => resolve({ changed: [] })); }));
+    await vi.advanceTimersByTimeAsync(L3_CHECK_MS + 100); // idle, mains: the L3 tick starts the analyzers' pass
+    expect(p.mapPass.mock.calls.some(([, o]) => o.analyzers)).toBe(true);
+    f.startRun();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f.signals[0]!.aborted).toBe(true);
+    await bi.dispose();
   });
 
   it("preemptBackground reaches the root's indexer — and the containing folder's for a sub-folder root — and hands back the release", async () => {

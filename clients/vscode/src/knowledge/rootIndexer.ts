@@ -27,6 +27,7 @@ import { PassGuard } from "./indexPasses";
 import type { IndexPlan } from "./indexReconcile";
 import { IndexQueue, PRIORITY, SliceRunner } from "./indexScheduler";
 import { L3Gate } from "./l3Gate";
+import type { L3StatePort } from "./l3Persist";
 import { NearPriority } from "./nearPriority";
 
 /** What one step of the fact graph moved. */
@@ -53,6 +54,10 @@ export interface IndexRootPorts {
   near?(seeds: readonly string[]): ReadonlySet<string>;
   /** A review of the root is running (the person's): long passes wait for it. */
   busy?(): boolean;
+  /** An agent/chat run is executing: only L3 (the analyzers, seconds of CPU) waits for it. */
+  agentBusy?(): boolean;
+  /** What L3 completed, kept across restarts (`l3Persist.ts`). Absent ⇒ L3 is owed afresh every session. */
+  l3State?: L3StatePort;
   /** Files the root's recent commits touched (`git log -n 200`): queued ahead of the rest (B6 scheduling 4). */
   recent?(): Promise<ReadonlySet<string>>;
   /** Of these unknown paths, the ones the plan would list (not ignored, not under a skipped folder). Absent ⇒ all. */
@@ -169,6 +174,11 @@ export class RootIndexer {
   /** A keystroke: the long pass running now stops at once; it reruns when the person is quiet. */
   pauseLongPass(): void {
     this.passes.abort();
+  }
+
+  /** An agent run started: a running L3 pass (and queued L3 task) stops; the map and facts passes carry on. */
+  pauseL3(): void {
+    this.passes.abortKind("l3");
   }
 
   /**

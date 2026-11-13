@@ -46,7 +46,15 @@ const READ_BATCH = 16;
 /** A glob, so the listing returns EVERY file — without one a big repo answers with a folder summary. */
 const ALL_FILES_GLOB = '**/*';
 /** How long a verdict that includes a failed analyzer is kept: its failure is usually the tree's, sometimes the network's. */
-const FAILED_RETAIN_MS = 2 * 60_000;
+export const FAILED_RETAIN_MS = 2 * 60_000;
+
+/** Whether (and how long) a finished analysis is worth keeping: for good when every analyzer completed, briefly when one failed, never with no snapshot. THE policy of every cache of analyses. */
+export function analysisKeep(snapshot: CodeAnalysisSnapshot | null): boolean | number {
+    return !snapshot ? false : snapshot.tools.every((t) => t.status === 'complete') ? true : FAILED_RETAIN_MS;
+}
+
+/** What the repo graph's reads account for: the files the review lists and the repo map would read. ONE definition (the graph's own read, and a host that rebuilds the reads after a thread hop). */
+export const graphAcceptsOf = (port: Pick<RepoGraphPort, 'accepts'>) => (path: string): boolean => !isSkippedPath(path) && port.accepts(path, 0);
 /** How long an analysis of a tree git cannot identify is kept (it may change unseen). */
 const UNIDENTIFIED_RETAIN_MS = 20_000;
 
@@ -130,7 +138,7 @@ export async function readRepoGraph(
         deps.progress?.filesRead(batch.length, rootRel(paths[i + batch.length - 1]!));
     }
     // Which system a file is in is the systems record's to say (it detects them once); files the listing never reached it counts as unlisted.
-    deps.onReads?.(tally.result((p) => !isSkippedPath(p) && port.accepts(p, 0)));
+    deps.onReads?.(tally.result(graphAcceptsOf(port)));
     return builder.build();
 }
 

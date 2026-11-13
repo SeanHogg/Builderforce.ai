@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { analysisToExtracted, repoGraphToExtracted } from './codeExtracted.js';
+import { analysisToExtracted, analysisToExtractedYielding, repoGraphToExtracted } from './codeExtracted.js';
+import { YIELD_EVERY } from './yieldLoop.js';
 import { fixtureSnapshot } from './codeFixtures.test-util.js';
 
 const ROOT = 'r';
@@ -18,8 +19,8 @@ const repoGraph = {
 };
 
 describe('repoGraphToExtracted', () => {
-  it('gives one Extracted per file with its outgoing references weighted by shared identifiers', () => {
-    const out = repoGraphToExtracted(repoGraph, ROOT);
+  it('gives one Extracted per file with its outgoing references weighted by shared identifiers', async () => {
+    const out = await repoGraphToExtracted(repoGraph, ROOT);
     expect(out.map((e) => e.sourceRef)).toEqual([ref('src/db/client.ts'), ref('src/domain/order.ts'), ref('src/routes/orders.ts')]);
     const route = out.find((e) => e.sourceRef === ref('src/routes/orders.ts'))!;
     expect(route.edges).toEqual([
@@ -34,8 +35,35 @@ describe('repoGraphToExtracted', () => {
     expect(out.find((e) => e.sourceRef === ref('src/domain/order.ts'))!.edges).toEqual([]);
   });
 
-  it('is deterministic: equal graphs give equal output and hashes', () => {
-    expect(JSON.stringify(repoGraphToExtracted(repoGraph, ROOT))).toBe(JSON.stringify(repoGraphToExtracted(structuredClone(repoGraph), ROOT)));
+  it('is deterministic: equal graphs give equal output and hashes', async () => {
+    expect(JSON.stringify(await repoGraphToExtracted(repoGraph, ROOT))).toBe(JSON.stringify(await repoGraphToExtracted(structuredClone(repoGraph), ROOT)));
+  });
+
+  // regression: the conversion held the thread for seconds over a large repo; it now yields every YIELD_EVERY files and must not change a byte of output.
+  it('regression: yielding over a graph larger than one slice is byte-identical to the unsliced conversion', async () => {
+    const paths = Array.from({ length: YIELD_EVERY * 2 + 7 }, (_, i) => `src/f${String(i).padStart(5, '0')}.ts`);
+    const big = { graph: { paths, out: paths.map((_, i) => (i + 1 < paths.length ? [[i + 1, 1.25] as const] : [])) } };
+    const sliced = await repoGraphToExtracted(big, ROOT);
+    // A graph shorter than one slice never yields: its rows are the unsliced reference for the same files.
+    const oneShot = await repoGraphToExtracted({ graph: { paths: paths.slice(0, YIELD_EVERY - 1), out: big.graph.out.slice(0, YIELD_EVERY - 1) } }, ROOT);
+    expect(sliced).toHaveLength(paths.length);
+    // The first slice's rows (no yield inside them) equal the matching rows of the sliced run, except the last one's link to a path beyond the slice.
+    expect(JSON.stringify(sliced.slice(0, YIELD_EVERY - 2))).toBe(JSON.stringify(oneShot.slice(0, YIELD_EVERY - 2)));
+  });
+
+  it('regression: an aborted signal abandons the conversion at the next yield (nothing partial comes back)', async () => {
+    const paths = Array.from({ length: YIELD_EVERY * 3 }, (_, i) => `src/f${i}.ts`);
+    const big = { graph: { paths, out: paths.map(() => []) } };
+    const controller = new AbortController();
+    const run = repoGraphToExtracted(big, ROOT, controller.signal);
+    controller.abort();
+    expect(await run).toEqual([]);
+  });
+});
+
+describe('analysisToExtractedYielding', () => {
+  it('is byte-identical to analysisToExtracted', async () => {
+    expect(JSON.stringify(await analysisToExtractedYielding(fixtureSnapshot(), ROOT))).toBe(JSON.stringify(analysisToExtracted(fixtureSnapshot(), ROOT)));
   });
 });
 

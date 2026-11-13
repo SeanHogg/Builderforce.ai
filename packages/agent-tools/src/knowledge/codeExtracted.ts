@@ -19,6 +19,7 @@
 import { CLONE_GROUP_BADGE, compareStr, srcRef, type Extracted, type KEdge } from '@seanhogg/builderforce-memory/knowledge';
 import type { CodeAnalysisSnapshot } from '../codeAnalysis.js';
 import { CODE_BADGES, codeFileNode, rootLevelExtracted } from './codeNodes.js';
+import { mapYielding } from './yieldLoop.js';
 
 /**
  * The part of `@builderforce/repo-map`'s `SerializedRepoGraph` this reads. Structural on
@@ -37,11 +38,16 @@ export interface SerializedRepoGraphShape {
 const round6 = (n: number): number => Math.round(n * 1e6) / 1e6;
 const byPath = <T>(m: Map<string, T>): Array<[string, T]> => [...m].sort((a, b) => compareStr(a[0], b[0]));
 
-export function repoGraphToExtracted(graph: SerializedRepoGraphShape, rootId: string): Extracted[] {
+/**
+ * One Extracted per file of the repo graph. Async only to yield: the per-file edge build and the per-node hash run in
+ * slices of `YIELD_EVERY` files with the event loop in between (`yieldLoop.ts`), and an aborted `signal` abandons the
+ * work (an empty result). The output is identical to the one-shot conversion.
+ */
+export async function repoGraphToExtracted(graph: SerializedRepoGraphShape, rootId: string, signal?: AbortSignal): Promise<Extracted[]> {
     const { paths, out } = graph.graph;
     // FileGraph paths are unique; a malformed duplicate keeps its first row.
     const perFile = new Map<string, KEdge[]>();
-    paths.forEach((path, i) => {
+    const indexed = await mapYielding(paths, (path, i) => {
         if (!path || perFile.has(path)) return;
         const from = srcRef(rootId, path);
         const edges: KEdge[] = [];
@@ -51,9 +57,10 @@ export function repoGraphToExtracted(graph: SerializedRepoGraphShape, rootId: st
             edges.push({ from, to: srcRef(rootId, target), kind: 'references', weight: round6(weight), origin: 'extracted' });
         }
         perFile.set(path, edges);
-    });
-    return byPath(perFile).map(([path, edges]) =>
-        rootLevelExtracted('repo-map', codeFileNode(rootId, path), sortEdges(edges)));
+    }, signal);
+    if (!indexed) return [];
+    return (await mapYielding(byPath(perFile), ([path, edges]) =>
+        rootLevelExtracted('repo-map', codeFileNode(rootId, path), sortEdges(edges)), signal)) ?? [];
 }
 
 interface FileAcc {
@@ -108,8 +115,9 @@ class AnalysisAcc {
         if (prior === undefined || compareStr(String(prior), value) < 0) badges[badge] = value;
     }
 
-    result(): Extracted[] {
-        return byPath(this.files).map(([path, acc]) => {
+    /** One builder per file, in path order: the per-node hash is the cost, so the caller decides whether to yield between them. */
+    rows(): Array<() => Extracted> {
+        return byPath(this.files).map(([path, acc]) => () => {
             for (const [badge, set] of acc.names) acc.badges[badge] = [...set].sort(compareStr).join(',');
             return rootLevelExtracted('code-analysis', codeFileNode(this.rootId, path, { badges: sortedBadges(acc.badges) }),
                 sortEdges([...acc.edges.values()]));
@@ -122,7 +130,17 @@ function cloneLines(locations: CodeAnalysisSnapshot['issues'][number]['locations
     return Math.max(1, ...locations.map((l) => l.endLine - l.startLine + 1));
 }
 
+/** One Extracted per file of the analysis snapshot, in one go (a report's graph in the page, the API's request). */
 export function analysisToExtracted(snapshot: CodeAnalysisSnapshot, rootId: string): Extracted[] {
+    return accumulate(snapshot, rootId).rows().map((row) => row());
+}
+
+/** The same output, yielding to the event loop between files (the code pack's conversion over a whole repo; see {@link repoGraphToExtracted}). */
+export async function analysisToExtractedYielding(snapshot: CodeAnalysisSnapshot, rootId: string, signal?: AbortSignal): Promise<Extracted[]> {
+    return (await mapYielding(accumulate(snapshot, rootId).rows(), (row) => row(), signal)) ?? [];
+}
+
+function accumulate(snapshot: CodeAnalysisSnapshot, rootId: string): AnalysisAcc {
     const acc = new AnalysisAcc(rootId);
     for (const path of snapshot.nodes) if (path) acc.file(path);
 
@@ -156,7 +174,7 @@ export function analysisToExtracted(snapshot: CodeAnalysisSnapshot, rootId: stri
                 break;
         }
     }
-    return acc.result();
+    return acc;
 }
 
 function sortEdges(edges: KEdge[]): KEdge[] {

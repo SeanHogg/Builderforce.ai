@@ -20,6 +20,8 @@ import { readPartitions } from "@builderforce/agent-tools/prefetch";
 import { ignoreSourcesOf, type FactStoreVersion, type PlanDetail } from "@seanhogg/builderforce-memory/knowledge";
 import { buildLocalCapabilityProvider } from "../localCapabilities";
 import { symbolGrammarOptions } from "../workspaceSymbols";
+import { anyRunActive } from "./activeRuns";
+import { l3StateOf } from "./l3Persist";
 import { sqliteCandidateRows, sqliteFactStore } from "@builderforce/agent-tools/node-knowledge-store";
 import { FactIndex } from "./factIndex";
 import { registerFactIndex } from "./factFindings";
@@ -159,6 +161,9 @@ export function hostIndexPorts(secrets: vscode.SecretStorage, root: KnowledgeRoo
     onFactsChanged: (changedPaths, changedKinds) => onFactsChanged(rootId, changedPaths, changedKinds),
     // The folder's own reviews AND its sub-folder roots' (`<rootId>:<rel>`): a folder pass would cover their files too.
     busy: () => isReviewingUnder(rootId),
+    // An agent/chat run: the person is idle while it works, so the idle gate alone would start L3 mid-run. Read by the L3 gate only.
+    agentBusy: anyRunActive,
+    l3State: l3StateOf(root),
     liveIdle: () => liveWatcherIdle(rootId, LIVE_IDLE_WAIT_MS),
     recent: async () => new Set((await recentCommits(root.rootPath, RECENT_COMMITS)).flatMap((c) => c.paths)),
     dispose: () => {

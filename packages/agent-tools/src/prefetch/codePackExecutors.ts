@@ -14,11 +14,11 @@
 import { compareStr, MAX_NODES_CAP, partitionOf, partitionSeverity, pathOfRef, verdictOf, type Finding, type PartitionRegistry } from '@seanhogg/builderforce-memory/knowledge';
 import type { CodeAnalysisSnapshot } from '../codeAnalysis.js';
 import { CODE_PARTITIONS_FILE, loadCodePartitions } from '../knowledge/codePack.js';
-import { codeAnalyzers } from '../knowledge/codeAnalyzers.js';
 import { buildCodeGraph } from '../knowledge/codeGraph.js';
 import { isDefaultLayers, placedLayerRegistry } from '../knowledge/codeLayers.js';
 import { knowledgePacks } from '../knowledge/knowledgePacks.js';
-import { analyseWorkspace, forgetWorkspaceAnalyses } from '../knowledge/workspaceAnalysis.js';
+import { forgetWorkspaceAnalyses } from '../knowledge/workspaceAnalysis.js';
+import { analyseWorkspaceExtracted } from '../knowledge/workspaceExtracted.js';
 import type { PrefetchExecHost, PrefetchRunner } from './contract.js';
 import { PREFETCH_LIST_CAP } from './exec.js';
 import { CHIP_FOCUS_MAX, OPEN_IN_GRAPH_LABEL_KEY, OPEN_KNOWLEDGE_GRAPH_COMMAND, openInGraphChip } from './graphChip.js';
@@ -42,13 +42,14 @@ interface Analysis { snapshot: CodeAnalysisSnapshot; findings: Finding[]; layers
 
 async function analyse(host: PrefetchExecHost, signal: AbortSignal): Promise<Analysis | null> {
     const partitions = await readPartitions(host);
-    const { snapshot, repoGraph } = await analyseWorkspace(
-        { caps: host.caps, rootId: host.rootId, partitions, ...(host.repoGraph ? { repoGraph: host.repoGraph } : {}) },
-        signal,
-    );
+    // The host's runner (the VS Code extension's worker) when it binds one, else this thread — ONE conversion either way.
+    const { snapshot, extracted } = (await host.analyse?.({ partitions, signal }))
+        ?? await analyseWorkspaceExtracted(
+            { caps: host.caps, rootId: host.rootId, partitions, ...(host.repoGraph ? { repoGraph: host.repoGraph } : {}) },
+            signal,
+        );
     if (!snapshot || signal.aborted) return null;
-    const packs = knowledgePacks({ analyzers: codeAnalyzers({ run: async () => ({ analysis: snapshot, repoGraph }) }), partitions });
-    const extracted = await packs[0]!.analyzers!.analyse(host.rootId, signal);
+    const packs = knowledgePacks({ partitions });
     const graph = buildCodeGraph({ rootId: host.rootId, extracted, facts: [], relations: [], packs }, { maxNodes: MAX_NODES_CAP });
     // The graph placed every file (folder, name, import direction); the verdicts below must use THOSE layers, not a second glob match.
     const placed = new Map(graph.nodes.flatMap((n) => { const path = pathOfRef(n.ref); return path !== undefined && n.partition !== undefined ? [[path, n.partition] as const] : []; }));

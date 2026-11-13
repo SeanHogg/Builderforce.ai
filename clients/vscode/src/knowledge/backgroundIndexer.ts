@@ -21,6 +21,7 @@ import { logLine } from "../errorReporter";
 import { osPowerSource, type PowerSourcePort } from "../power/powerSource";
 import { emitProductEvent } from "../telemetry/productEvents";
 import { beforeKnowledgeShutdown } from "./folderKnowledge";
+import { onRunStarted } from "./activeRuns";
 import { ActivityGate, realClock, type Clock } from "./indexBudget";
 import { hostIndexPorts } from "./indexHostPorts";
 import { publishIndexLevel, registerBackgroundPreemptor, setIndexerWatching } from "./indexLevels";
@@ -56,6 +57,8 @@ export interface IndexerHost {
   editors(): { visible: string[]; open: string[] };
   power: PowerSourcePort;
   clock: Clock;
+  /** Calls back when an agent/chat run starts (`activeRuns.ts`); returns the unsubscribe. Absent ⇒ never. */
+  runStarted?(listener: () => void): () => void;
   telemetry(root: KnowledgeRoot): IndexTelemetry;
   log(what: string, error: unknown): void;
 }
@@ -69,6 +72,7 @@ export class BackgroundIndexer {
   private readonly coalescer: PathCoalescer;
   private l3Timer: unknown;
   private stopL3Runner: (() => void) | undefined;
+  private stopRunWatch: (() => void) | undefined;
   private focused = true;
   private lastRefocus = Number.NEGATIVE_INFINITY;
   private editorKeys: { at: number; open: Set<string>; visible: Set<string>; openPaths: string[] } | undefined;
@@ -89,6 +93,8 @@ export class BackgroundIndexer {
     };
     this.l3Timer = this.host.clock.setTimeout(tick, L3_CHECK_MS);
     this.stopL3Runner = registerL3Runner(() => [...this.roots.values()].map((h) => h.root.rootPath));
+    // An agent/chat run that starts mid-pass stops the long pass at once (with the L3 worker, terminating it); it stays owed.
+    this.stopRunWatch = this.host.runStarted?.(() => { for (const h of this.roots.values()) h.indexer.pauseL3(); });
     this.syncFolders();
   }
 
@@ -193,6 +199,8 @@ export class BackgroundIndexer {
       this.l3Timer = undefined;
       this.stopL3Runner?.(); // what is still queued runs now, ungated: it is never lost
       this.stopL3Runner = undefined;
+      this.stopRunWatch?.();
+      this.stopRunWatch = undefined;
       this.coalescer.dispose();
       this.gate.dispose();
       await Promise.all([...this.roots].map(([rootId, held]) => this.stopRoot(rootId, held)));
@@ -215,6 +223,7 @@ function vscodeIndexerHost(secrets: vscode.SecretStorage): IndexerHost {
     }),
     power: osPowerSource(),
     clock: realClock,
+    runStarted: (listener) => onRunStarted(listener),
     telemetry: (root) => (name, props) => {
       emitProductEvent(name, { surface: "vsix", ...props });
       logLine(`[index] ${root.title}: ${name} ${Object.entries(props).map(([k, v]) => `${k}=${v}`).join(" ")}`);

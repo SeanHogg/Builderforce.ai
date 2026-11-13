@@ -18,21 +18,21 @@
 
 import type * as vscode from "vscode";
 import {
-  claimSimilarity, indexedSymbolLookup, indexedSymbolSource, planKnowledgeReviewDetail, repoGraphEdgeCount, reviewIndexPort, workspaceCodeAnalyzers,
-  type FsDirectorySource, type KnowledgeReviewPorts, type RepoGraphPort, type ReviewRecorder, type SymbolLookup,
+  claimSimilarity, indexedSymbolLookup, indexedSymbolSource, planKnowledgeReviewDetail, reviewIndexPort, workspaceCodeAnalyzers,
+  type FsDirectorySource, type KnowledgeReviewPorts, type ReviewRecorder, type SymbolLookup,
 } from "@builderforce/agent-tools/knowledge";
 import { gitHistoryPort } from "@builderforce/agent-tools/node-git-history";
 import { readPartitions } from "@builderforce/agent-tools/prefetch";
 import type { AnalysisSnapshotPayload } from "@builderforce/knowledge-client";
 import type { PlanDetail } from "@seanhogg/builderforce-memory/knowledge";
-import { repoMapPort } from "@builderforce/repo-map";
 import { boundedStep } from "../boundedStep";
 import { buildLocalCapabilityProvider } from "../localCapabilities";
-import { indexerL3Binding } from "../runDelta/analyzers/l3Binding";
 import { workspaceSymbolIndex } from "../workspaceSymbols";
 import { getHostKnowledgeIndex } from "./index/hostKnowledgeIndex";
 import { vscodeKnowledgeFs } from "./knowledgeFs";
 import { replicaQueueFor } from "./knowledgeReplica";
+import { sharedAnalysis } from "./l3SharedAnalysis";
+import { workspaceRunner } from "./l3Worker";
 import { editorJudgement, judgeConfigured } from "./knowledgeJudgement";
 import type { OpenRoot } from "./knowledgeService";
 
@@ -44,24 +44,6 @@ export const RUN_STEP_MS = 120_000;
 const WALK_HEARTBEAT_FILES = 2_500;
 
 type Log = (what: string, error: unknown) => void;
-
-/** The repo map, reporting the import-edge count of each graph it builds to the review's record (the sync panel's local edges). */
-function measuringRepoMap(recorder: ReviewRecorder): RepoGraphPort {
-  return {
-    accepts: (path, size) => repoMapPort.accepts(path, size),
-    create() {
-      const graph = repoMapPort.create();
-      return {
-        addFile: (path, content) => graph.addFile(path, content),
-        build() {
-          const built = graph.build();
-          recorder.edges(repoGraphEdgeCount(built));
-          return built;
-        },
-      };
-    },
-  };
-}
 
 /**
  * The root's code analyzers (the bundled ones, through the local shell): the ONE builder a review and the background
@@ -78,11 +60,15 @@ export function rootCodeAnalyzers(args: {
   const { root, pump } = open;
   return workspaceCodeAnalyzers({
     caps,
-    ...(partitions ? { partitions } : {}),
-    // THE L3 result cache, shared with the run delta (PRD 41 §B7), for a root that is its folder.
-    ...(!root.rel ? { l3: indexerL3Binding(root.rootPath) } : {}),
-    ...(recorder ? { repoGraph: measuringRepoMap(recorder) } : {}),
-    ...(root.rel ? { path: root.rel } : {}),
+    // The analysis itself (analyzers, repo graph, conversion) runs in the L3 worker, off this thread (`l3Worker.ts`); the
+    // repo graph's import-edge count comes back with it, for the review's record (the sync panel's local edges).
+    runner: workspaceRunner({
+      folderPath: root.folderPath,
+      // THE L3 result cache, shared with the run delta (PRD 41 §B7), for a root that is its folder.
+      ...(!root.rel ? { l3RootPath: root.rootPath } : {}),
+      ...(root.rel ? { path: root.rel } : {}),
+      ...(partitions ? { partitions } : {}),
+    }, (result) => { if (recorder && result.edges !== undefined) recorder.edges(result.edges); }, sharedAnalysis),
     // The analysis is always kept locally (the review stores its output); linked, its snapshot is queued for the project.
     ...(pump ? {
       upload: async (sha: string, snapshot: unknown) => {

@@ -128,7 +128,7 @@ describe('code pack in buildGraph', () => {
     const snapshot = fixtureSnapshot();
     const g = buildGraph({
       rootId: ROOT, packs: [createCodePack()], facts: [], relations: [],
-      extracted: [...analysisToExtracted(snapshot, ROOT), ...repoGraphToExtracted(REPO_GRAPH, ROOT)],
+      extracted: [...analysisToExtracted(snapshot, ROOT), ...await repoGraphToExtracted(REPO_GRAPH, ROOT)],
     });
     expect(g.findings.filter((f) => f.kind === 'clone-group')).toHaveLength(snapshot.issues.filter((i) => i.kind === 'duplicate').length);
     expect(g.findings.filter((f) => f.kind === 'cycle')).toHaveLength(1);

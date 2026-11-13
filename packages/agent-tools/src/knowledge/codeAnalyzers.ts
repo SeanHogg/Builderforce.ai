@@ -14,7 +14,7 @@ import type { AnalyzerPort, AnalyzerProgress, Extracted, PartitionRegistry } fro
 import type { CodeAnalysisSnapshot } from '../codeAnalysis.js';
 import { createAnalyzeCodebaseTool, type AnalyzeCodebaseOptions } from '../codeAnalysisTool.js';
 import type { ToolContext } from '../tool.js';
-import { analysisToExtracted, repoGraphToExtracted, type SerializedRepoGraphShape } from './codeExtracted.js';
+import { analysisToExtractedYielding, repoGraphToExtracted, type SerializedRepoGraphShape } from './codeExtracted.js';
 
 /** What one analyzer run hands back. Either part may be absent (no shell, no map). */
 export interface CodeAnalysisRun {
@@ -26,14 +26,18 @@ export interface CodeAnalyzersDeps {
     run(rootId: string, signal?: AbortSignal, onProgress?: (p: AnalyzerProgress) => void): Promise<CodeAnalysisRun>;
 }
 
+/** The root-level `Extracted` of one analyzer run (the repo graph's, then the analyzers'); yields between files. */
+export async function extractedOf(run: CodeAnalysisRun, rootId: string, signal?: AbortSignal): Promise<Extracted[]> {
+    const graph = run.repoGraph && !signal?.aborted ? await repoGraphToExtracted(run.repoGraph, rootId, signal) : [];
+    const analysis = run.analysis && !signal?.aborted ? await analysisToExtractedYielding(run.analysis, rootId, signal) : [];
+    // A stopped conversion is abandoned whole: never half the rows.
+    return signal?.aborted ? [] : [...graph, ...analysis];
+}
+
 export function codeAnalyzers(deps: CodeAnalyzersDeps): AnalyzerPort {
     return {
         async analyse(rootId: string, signal?: AbortSignal, onProgress?: (p: AnalyzerProgress) => void): Promise<Extracted[]> {
-            const run = await deps.run(rootId, signal, onProgress);
-            return [
-                ...(run.repoGraph ? repoGraphToExtracted(run.repoGraph, rootId) : []),
-                ...(run.analysis ? analysisToExtracted(run.analysis, rootId) : []),
-            ];
+            return extractedOf(await deps.run(rootId, signal, onProgress), rootId, signal);
         },
     };
 }

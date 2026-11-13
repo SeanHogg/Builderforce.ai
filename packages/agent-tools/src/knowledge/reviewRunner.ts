@@ -23,7 +23,6 @@ import {
 import type { IngestManifest } from '@seanhogg/builderforce-memory/ingest';
 import type { CapabilityProvider } from '../capabilities.js';
 import type { CodeAnalysisSnapshot } from '../codeAnalysis.js';
-import { codeAnalyzers } from './codeAnalyzers.js';
 import { isCodePath, type SymbolSource } from './codePack.js';
 import { readEntryPaths } from './codeEntryPoints.js';
 import { buildCodeGraph } from './codeGraph.js';
@@ -37,10 +36,10 @@ import type { HistoryPort } from './historyPort.js';
 import type { HostKnowledgeIndex } from './index/contract.js';
 import { knowledgePacks } from './knowledgePacks.js';
 import { noteGraphReads } from './graphReads.js';
-import { repoGraphUnder, snapshotUnder } from './rootRelative.js';
 import { runPreemptingJudge, type RunHandoff } from './reviewRunLock.js';
 import { readSystems, recordSystems } from './systemsRecord.js';
-import { analyseWorkspace, type RepoGraphPort, type WorkspaceAnalysisDeps } from './workspaceAnalysis.js';
+import type { RepoGraphPort, WorkspaceAnalysisDeps } from './workspaceAnalysis.js';
+import { analyseWorkspaceExtracted, type WorkspaceExtractedRunner } from './workspaceExtracted.js';
 import { fingerprintSha } from './workspaceFingerprint.js';
 import { runJudgePass } from './reviewJudgePass.js';
 import { directoryArgs } from './reviewDirectoryArgs.js';
@@ -449,6 +448,8 @@ export interface WorkspaceAnalyzersDeps {
     path?: string;
     /** The repo map (`@builderforce/repo-map`'s `repoMapPort`): its `references` edges ride the analyzer output. */
     repoGraph?: RepoGraphPort;
+    /** Runs the analysis somewhere other than this thread (the VS Code extension's worker). Absent ⇒ in this thread, from the fields above. */
+    runner?: WorkspaceExtractedRunner;
     /** Linked hosts upload the snapshot (`client.putAnalysis`) so the web builds the same graph. */
     upload?(sha: string, snapshot: CodeAnalysisSnapshot): Promise<void>;
     /** A failed upload is reported, never a failed review. */
@@ -459,33 +460,27 @@ export interface WorkspaceAnalyzersDeps {
 
 /** The code pack's analyzers over this host's shell and repo map (cached per sha), uploading the snapshot when asked. */
 export function workspaceCodeAnalyzers(deps: WorkspaceAnalyzersDeps): AnalyzerPort {
-    return codeAnalyzers({
-        async run(rootId, signal, onProgress) {
-            const { snapshot, repoGraph, graphReads } = await analyseWorkspace(
-                {
-                    caps: deps.caps,
-                    rootId,
-                    ...(deps.onWarn ? { onWarn: deps.onWarn } : {}),
-                    ...(deps.path ? { path: deps.path } : {}),
-                    ...(deps.partitions ? { partitions: deps.partitions } : {}),
-                    ...(deps.repoGraph ? { repoGraph: deps.repoGraph } : {}),
-                    ...(onProgress ? { onProgress } : {}),
-                    ...(deps.l3 ? { l3: deps.l3 } : {}),
-                },
-                signal,
-            );
+    // Where the analysis runs is the host's: its runner (a worker), else this thread.
+    const run: WorkspaceExtractedRunner = deps.runner ?? ((rootId, { signal, onProgress, onWarn }) => analyseWorkspaceExtracted({
+        caps: deps.caps,
+        rootId,
+        ...(onWarn ? { onWarn } : {}),
+        ...(deps.path ? { path: deps.path } : {}),
+        ...(deps.partitions ? { partitions: deps.partitions } : {}),
+        ...(deps.repoGraph ? { repoGraph: deps.repoGraph } : {}),
+        ...(onProgress ? { onProgress } : {}),
+        ...(deps.l3 ? { l3: deps.l3 } : {}),
+    }, signal));
+    return {
+        async analyse(rootId, signal, onProgress) {
+            const done = await run(rootId, { ...(signal ? { signal } : {}), ...(onProgress ? { onProgress } : {}), ...(deps.onWarn ? { onWarn: deps.onWarn } : {}) });
             // What the repo graph read of each system goes to the systems record the review writes (see `recordSystems`).
-            noteGraphReads(rootId, graphReads);
-            // The analyzers name files relative to the workspace; this root's files (its manifest,
-            // its refs, the platform's graph of it) are relative to the root itself — the upload too.
-            const scoped = snapshot && deps.path ? snapshotUnder(snapshot, deps.path) : snapshot;
-            if (scoped && deps.upload) {
-                await deps.upload(analysisSha(scoped), scoped).catch((error: unknown) => deps.onUploadError?.(error));
+            noteGraphReads(rootId, done.graphReads);
+            // The snapshot is relative to the root (its manifest, its refs, the platform's graph of it) — the upload too.
+            if (done.snapshot && deps.upload) {
+                await deps.upload(analysisSha(done.snapshot), done.snapshot).catch((error: unknown) => deps.onUploadError?.(error));
             }
-            return {
-                analysis: scoped,
-                repoGraph: repoGraph && deps.path ? repoGraphUnder(repoGraph, deps.path) : repoGraph,
-            };
+            return done.extracted;
         },
-    });
+    };
 }

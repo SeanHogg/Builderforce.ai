@@ -99,7 +99,7 @@ export async function currentPerception(deps: KnowledgeGraphDeps, rootId: string
       const extracted: Extracted[] = [...(await deps.extracted.rootExtracted(rootId))];
       if (repo) {
         const graph = await repo.graph();
-        if (graph) extracted.push(...repoGraphToExtracted(graph, rootId));
+        if (graph) extracted.push(...await repoGraphToExtracted(graph, rootId));
       }
       const analysis = await deps.analysis.latest(rootId);
       if (analysis) extracted.push(...analysisToExtracted(analysis.snapshot as CodeAnalysisSnapshot, rootId));

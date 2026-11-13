@@ -66,6 +66,11 @@ export class PassGuard {
     this.current?.abort.abort();
   }
 
+  /** Stops the running pass only when it is of `kind`. */
+  abortKind(kind: PassKind): void {
+    if (this.current?.kind === kind) this.current.abort.abort();
+  }
+
   /**
    * Stops the running pass and holds new ones off until the returned release is called (the person's review has taken its
    * own hold, or ended). Resolves once the pass has stopped. A release never called expires after `maxHoldMs`, so a caller

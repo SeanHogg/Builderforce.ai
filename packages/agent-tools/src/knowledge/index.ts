@@ -13,7 +13,7 @@ export {
     type CodePackDeps, type SymbolSource,
 } from './codePack.js';
 export { knowledgePacks } from './knowledgePacks.js';
-export { analysisToExtracted, repoGraphToExtracted, type SerializedRepoGraphShape } from './codeExtracted.js';
+export { analysisToExtracted, analysisToExtractedYielding, repoGraphToExtracted, type SerializedRepoGraphShape } from './codeExtracted.js';
 export { codeAnalyzers, runCodeAnalysis, type CodeAnalysisRun, type CodeAnalyzersDeps } from './codeAnalyzers.js';
 export { CODE_FACT_RULES, CODE_FINDING_RULES, unusedCodeRule } from './codeFindings.js';
 // PRD 41 §B3: FileFacts v3 from one parse tree (pure; the Node parse is `./node-file-facts`).
@@ -75,9 +75,13 @@ export {
 export { folderPrefix, repoGraphUnder, snapshotUnder, underFolder } from './rootRelative.js';
 export { forgetRootPorts, rootManifest, rootPorts, rootStore, type RootPorts } from './rootPorts.js';
 export {
-    analyseWorkspace, forgetWorkspaceAnalyses, readRepoGraph, workspaceAnalysisKey,
+    analyseWorkspace, analysisKeep, graphAcceptsOf, forgetWorkspaceAnalyses, readRepoGraph, workspaceAnalysisKey,
     type RepoGraphPort, type WorkspaceAnalysis, type WorkspaceAnalysisDeps,
 } from './workspaceAnalysis.js';
+export {
+    analyseWorkspaceExtracted, type WorkspaceExtracted, type WorkspaceExtractedHooks, type WorkspaceExtractedRunner,
+} from './workspaceExtracted.js';
+export { mapYielding, YIELD_EVERY, yieldToEventLoop } from './yieldLoop.js';
 export {
     EDIT_DEBOUNCE_MS, currentFileHashes, editedManifestKey, knownKeysCache, markFileEdited, markFilesEdited, markFilesEditedDetailed, pruneEditedFiles, watchFileEdits,
     type FileEditPorts, type KnownKeysCache, type FileEditResult, type FileEditOutcome, type WatchFileEditsArgs,

@@ -191,6 +191,12 @@ const deltaWorker = harness || integration ? null : { ...options, entryPoints: [
  * matching run off the extension host's thread. Same options as the extension.
  */
 const outcomeWorker = harness || integration ? null : { ...options, entryPoints: ["src/runOutcomes/labelWorker.ts"], outfile: "out/runOutcomeWorker.js" };
+/**
+ * The L3 analysis worker (`src/knowledge/l3WorkerEntry.ts`): the analyzers, the repo graph's build and the conversion to
+ * `Extracted` run here, off the extension host's thread (`l3Worker.ts`, one worker per job, heap-limited, terminated on Stop).
+ * Same options as the extension; the bundle must not reach `vscode`.
+ */
+const l3Worker = harness || integration ? null : { ...options, entryPoints: ["src/knowledge/l3WorkerEntry.ts"], outfile: "out/knowledgeL3Worker.js" };
 async function copyBfiWasm() {
   const wasm = createRequire(import.meta.url).resolve("@seanhogg/bfi-web/bfi_web_bg.wasm");
   fs.mkdirSync("out", { recursive: true });
@@ -307,6 +313,7 @@ if (watch) {
   if (extractWorker) await (await esbuild.context(extractWorker)).watch();
   if (deltaWorker) await (await esbuild.context(deltaWorker)).watch();
   if (outcomeWorker) await (await esbuild.context(outcomeWorker)).watch();
+  if (l3Worker) await (await esbuild.context(l3Worker)).watch();
   console.log("[esbuild] watching…");
 } else {
   await esbuild.build(options);
@@ -317,4 +324,5 @@ if (watch) {
   if (extractWorker) await esbuild.build(extractWorker);
   if (deltaWorker) await esbuild.build(deltaWorker);
   if (outcomeWorker) await esbuild.build(outcomeWorker);
+  if (l3Worker) await esbuild.build(l3Worker);
 }

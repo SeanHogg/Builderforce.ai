@@ -34,6 +34,9 @@ export function useRecordMemento(m: RecordMemento | undefined): void {
   memento = m;
 }
 
+/** The workspace state memento set at activation (undefined before it, and in tests): per-root facts the indexer persists go here too. */
+export const hostMemento = (): RecordMemento | undefined => memento;
+
 /** The ONE record store of this extension host: memory first, the workspace state behind it. */
 export const reviewRecords = reviewRecordStore({
   read: (key) => memento?.get(key),
