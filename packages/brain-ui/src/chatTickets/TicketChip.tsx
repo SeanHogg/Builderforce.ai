@@ -43,7 +43,7 @@ export function TicketChip(props: TicketChipProps) {
         ) : (
           <span style={S.ticketLabel} title={tk.label}>{tk.label}</span>
         )}
-        <span style={S.ticketMeta}>{labels.kind[tk.kind]} · {tk.status}{tk.linkType === 'created' ? ` · ${labels.spawned}` : ''}</span>
+        <span style={S.ticketMeta}>#{tk.ref} · {labels.kind[tk.kind]} · {tk.status}{tk.linkType === 'created' ? ` · ${labels.spawned}` : ''}</span>
         {/* Which work item this ticket belongs to. Clickable only when the
             parent is ALSO one of this chat's links, so the host is handed a
             real TicketLinkVM rather than a fabricated health row. */}

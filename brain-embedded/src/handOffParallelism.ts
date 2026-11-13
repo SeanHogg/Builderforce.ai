@@ -178,7 +178,10 @@ export function computeOrderDependencies(tasks: readonly ScopedTask[]): OrderDep
   for (let j = 0; j < tasks.length; j += 1) {
     for (let i = 0; i < j; i += 1) {
       const packageDir = packageOf[i];
-      if (packageDir === null || !pathDisjoint(tasks[i]!, tasks[j]!)) continue;
+      // The repo root is not a package: a bare-filename task ('a.ts') resolves its "package" to
+      // '.', whose basename is a period that matches any brief with a dot — a false dependency
+      // that would force the whole plan inline. Only a real package dir can be consumed.
+      if (packageDir === null || packageDir === '.' || !pathDisjoint(tasks[i]!, tasks[j]!)) continue;
       if (referencesPackage(refText(tasks[j]!), packageDir)) deps.push({ producer: i, consumer: j, packageDir });
     }
   }

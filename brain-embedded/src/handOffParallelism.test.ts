@@ -88,6 +88,21 @@ describe('order dependencies — a consumer runs after its producer (chat #80006
     expect(splitLayoutLine(split)).toBe('');
   });
 
+  it('a bare-filename task whose package resolves to the repo root never yields a false dependency', () => {
+    // 'a.ts' has no directory, so taskPackageDir falls back to '.', whose basename is a period
+    // that would match any brief containing a dot — pinning the whole plan inline.
+    const plan = [
+      { title: 'Add file', paths: ['a.ts'] },
+      { title: 'Write notes v1.2', brief: 'capture what we shipped in notes v1.2', paths: ['docs/notes.md'] },
+    ];
+    const split = splitForParallel(plan);
+    expect(split.parallel).toEqual([0, 1]);
+    expect(split.inline).toEqual([]);
+    expect(split.clash).toBeNull();
+    expect(split.order).toBeUndefined();
+    expect(modeOf(split)).toBe('parallel');
+  });
+
   it('leaves the all-inline plan inline when the brief names an earlier task\'s package', () => {
     const plan = [
       { title: 'Kernel exports', paths: ['packages/agent-loop/src/kernel.ts'] },

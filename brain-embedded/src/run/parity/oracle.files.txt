@@ -28,6 +28,7 @@ brain-embedded/src/run/webAdapter.test.ts
 brain-embedded/src/runDriver.test.ts
 brain-embedded/src/runOutcomeCost.test.ts
 brain-embedded/src/runStore/agentRunReport.test.ts
+brain-embedded/src/runStore/autoContinue.test.ts
 brain-embedded/src/runStore/continueChat.test.ts
 brain-embedded/src/runStore/continueClaim.test.ts
 brain-embedded/src/runStore/continueStop.test.ts

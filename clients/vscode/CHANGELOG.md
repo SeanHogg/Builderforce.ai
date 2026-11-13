@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.162] — The chat rail always shows a ticket's lane, never a blank "not started"
+
+- **Fixed: two tasks under an epic showed as "not started" with no lane.** The chat rail's ticket status came straight from the stored record. A task filed on this device — or one whose record had an empty status before a platform refresh filled it — carried no lane, so the chip's meta line rendered an empty status (read as "not started"). The rail now resolves a missing/blank status to the board's not-started lane (`backlog`) and derives the done-percentage from that resolved lane, so every linked ticket shows a real status and correct progress.
+
 ## [2026.10.159] — Targeted tests: relative paths, x.<part>.test.ts found
 
 - **Targeted verify tests actually run.** The verifier now passes co-located test paths relative to the owning package, so `vitest run`/`jest` no longer exit "No test files found" on an absolute Windows path that matches nothing — a test that never ran was being recorded as a failure.
