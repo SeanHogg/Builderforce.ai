@@ -6,11 +6,13 @@
  * run are listed with their reasons, as are the repository's ignored overrides. Props only: "Open code" is a callback.
  */
 
+import { rankFindings } from '@builderforce/run-delta/predict';
 import type { DeltaFinding, DimensionResult, RunDelta, RunDeltaOverrides } from '@builderforce/run-delta/contract';
 import { cssVar } from '../scene/themeColors';
 import { Panel } from '../Sheet';
 import { list, muted } from '../styles';
 import { TYPE } from '../surface/ui/type';
+import { fillTemplate } from '../template';
 import type { KnowledgePanelRenderer } from '../types';
 import {
     blockingLabel, dimensionLabel, headlineText, lineageGroup, metricLabel, metricValueText, overrideLabel, reasonLabel, type LineageGroup,
@@ -32,7 +34,10 @@ export function groupFindings(findings: readonly DeltaFinding[]): Array<{ group:
 const subheading = { ...TYPE.sectionHeading, marginTop: 4 } as const;
 
 function DimensionSection({ dimension, labels, onOpenCode }: { dimension: DimensionResult; labels: RunDeltaLabels; onOpenCode?: ((t: RunDeltaCodeTarget) => void) | undefined }) {
-    const groups = groupFindings(dimension.findings);
+    // §D10.1: findings rank highest-value first; ties break by findingId (the engine's own order is otherwise kept).
+    const ranked = rankFindings(dimension.findings);
+    const groups = groupFindings(ranked);
+    const total = dimension.findings.length;
     return (
         <section data-dimension={dimension.id} style={{ display: 'grid', gap: 6, minWidth: 0 }}>
             <header style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, minWidth: 0 }}>
@@ -42,6 +47,7 @@ function DimensionSection({ dimension, labels, onOpenCode }: { dimension: Dimens
             {dimension.reasons.length > 0 && (
                 <p style={{ ...muted, margin: 0, overflowWrap: 'anywhere' }}>{dimension.reasons.map((r) => reasonLabel(labels, r)).join(' · ')}</p>
             )}
+            {total > 1 && <p data-ranked style={{ ...TYPE.meta, margin: 0 }}>{fillTemplate(labels.rankedNote, { k: total })}</p>}
             {groups.length === 0 && dimension.metrics.length === 0 && <p style={{ ...muted, margin: 0 }}>{labels.noFindings}</p>}
             {groups.map(({ group, findings }) => (
                 <div key={group} data-lineage={group} style={{ display: 'grid', gap: 2, minWidth: 0 }}>

@@ -14,12 +14,14 @@ import { useCallback, useState } from 'react';
 import {
   CopiedNote,
   CopyFallback,
+  PredictedBlock,
   RunDeltaCard,
   repoDisplayName,
   resolveDirectiveText,
   runDeltaDiagnosticsText,
   useCopyText,
 } from '@builderforce/knowledge-graph-view';
+import type { Prediction } from '@builderforce/run-delta/predict';
 import type { RunDelta } from '@builderforce/run-delta';
 import { usePolledResource } from '@/hooks/usePolledResource';
 import { getRunDeltas, isRunDeltaUnavailable, type StoredRunDelta } from '@/lib/runDeltasApi';
@@ -109,6 +111,7 @@ export function RunDeltaForRun({ runId, settled, onResolveDelta }: RunDeltaForRu
             labels={labels}
             repoLabel={deltas.length > 1 ? repoDisplayName(d.repoKey) : undefined}
             onOpenDetails={() => setOpenRepo(d.repoKey)}
+            predicted={<PredictedBlock labels={labels} predicted={(d as { predicted?: Prediction[] }).predicted ?? []} />}
             onResolve={onResolveDelta ? handleResolve : undefined}
             onCopyDiagnostics={handleCopy}
           />

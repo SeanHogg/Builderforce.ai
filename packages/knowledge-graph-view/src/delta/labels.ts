@@ -130,6 +130,21 @@ export interface RunDeltaLabels {
     releaseNotApprover: string;
     /** The panel's ignored `.builderforce/delta.json` entries, one label per `DroppedOverrideCode` (`unsafe-regex` with a reason reads `reasons.unsafeRegex`). */
     overridesHeading: string;
+    /** The §D10 ranked finding order note: "{k} findings, highest-value first (ranked)". */
+    rankedNote: string;
+    /** The §D11 Predicted block: heading and advisory hint. */
+    predictedHeading: string;
+    predictedAdvisory: string;
+    /** Risk: `{probability}` (0–1) and `{band}`, with `{reasons}` the top 3, comma-joined. */
+    predictedRisk: string;
+    /** Similar runs: `{noFollowup}` of `{k}` needed no follow-up; `{reverted}` were reverted (plural forms via the catalog). */
+    predictedSimilar: string;
+    /** ≈ `{count}` undetected problems in `{dimension}` (capture–recapture). */
+    predictedUndetected: string;
+    /** ≈ `{count}` unusual new lines (naturalness); the catalog may use an ICU plural. */
+    predictedUnusualLines: string;
+    /** Unusual-lines hover/screen-reader explanation. */
+    predictedHint: string;
     overrides: {
         unknownKey: string;
         invalid: string;
@@ -434,6 +449,14 @@ export const DEFAULT_RUN_DELTA_LABELS: RunDeltaLabels = {
     held: 'Held: needs review',
     heldUnmeasured: 'Not measured: held for review',
     heldRules: 'Blocked by {rules}',
+    rankedNote: '{k} findings, highest-value first (ranked)',
+    predictedHeading: 'Predicted',
+    predictedAdvisory: 'Estimated, not measured — a place to look, never a verdict.',
+    predictedRisk: '{probability} risk of a follow-up fix ({band}): {reasons}',
+    predictedSimilar: '{noFollowup} of {k} similar runs needed no follow-up; {reverted} were reverted',
+    predictedUndetected: '≈ {count} undetected problems in {dimension}',
+    predictedUnusualLines: '≈ {count} unusual new lines (predicted)',
+    predictedHint: 'Estimated from how unusual the new code is for this repository. A place to look, not a verdict.',
     releaseRun: 'Release run',
     releaseConfirmTitle: 'Release this run?',
     releaseConfirmMessage: 'This run was held because its changes hit blocking rules ({rules}). Releasing it marks it complete with your sign-off.',

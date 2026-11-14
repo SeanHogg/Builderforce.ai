@@ -4595,7 +4595,39 @@
       "errLoadTeams": "加载团队失败",
       "errLoadTeam": "加载团队失败",
       "errCreate": "创建团队失败",
-      "errDelete": "删除团队失败"
+      "errDelete": "删除团队失败",
+      "peopleSection": "人员",
+      "people": {
+        "lede": "按人员和角色统计的质量评分，覆盖最近 {days} 天。每个比率都经过风险调整（实际值 ÷ 所承担工作的预期值），并向团队均值收缩，因此小样本永远不会显示为极端值。只有超出控制限的点才会被标记。",
+        "loading": "正在加载人员…",
+        "empty": "该团队还没有带评分的贡献者。贡献者拥有足够多的最终标记运行后，评分才会出现。",
+        "emptyScoringOff": "该工作空间的人员评分已关闭。",
+        "scoringOffNote": "该工作空间的人工评分已关闭；仅显示智能体评分。",
+        "noRoles": "此时间窗口内没有带评分的运行。",
+        "insufficientData": "数据不足——仅有 {count} 个最终标记的运行；显示评分需要 20 个。",
+        "colRole": "角色",
+        "colMeasure": "指标",
+        "colRatio": "标准比率",
+        "colRuns": "运行次数",
+        "colInterval": "95% 区间",
+        "colFlag": "标记",
+        "outsideLimits": "超出限值",
+        "withinLimits": "—",
+        "errLoad": "加载人员评分失败",
+        "kind": {
+          "human": "人工",
+          "agent": "智能体"
+        },
+        "measure": {
+          "run-quality": "运行质量",
+          "followup-fix-rate": "后续修复率",
+          "revert-rate": "回滚率",
+          "integrity-rate": "完整性率",
+          "security-introductions": "安全引入",
+          "review-rejection-rate": "评审拒绝率",
+          "approval-accuracy": "批准准确率"
+        }
+      }
     },
     "workforceTitle": "团队",
     "consolidateAction": "合并",
@@ -38905,8 +38937,19 @@
     }
   },
   "runDelta": {
-    "predictedUnusualLines": "≈ {count, plural, other {# 行不寻常代码}}（预测）",
+    "resolveHint": "修复本次运行发现的问题",
+    "copyDiagnostics": "复制诊断信息",
+    "copied": "已复制",
+    "copyFailed": "复制失败",
+    "predictedUnusualLines": "≈ {count} 行不寻常代码（预测）",
     "predictedHint": "根据新代码对本仓库而言有多不寻常估算得出。只是值得查看的地方，不是结论。",
+    "rankedNote": "{k} 项发现，按价值从高到低排序（已排序）",
+    "predictedHeading": "预测",
+    "predictedAdvisory": "为估算值，并非实测——仅提示可关注的方向，绝不作为结论。",
+    "predictedRisk": "后续修复风险 {probability}（{band}）：{reasons}",
+    "predictedSimilar": "{k} 个相似运行中 {noFollowup} 个无需后续修复；{reverted} 个被回滚",
+    "predictedUndetected": "{dimension} 中约 {count} 个未检出问题",
+    "resolve": "解决",
     "history": {
       "title": "运行变化记录",
       "listHeading": "最近的运行",
@@ -39306,7 +39349,8 @@
       "invalid": "无效",
       "backreference": "反向引用",
       "nestedQuantifier": "嵌套量词",
-      "quantifiedAlternation": "带量词的分支"
+      "quantifiedAlternation": "带量词的分支",
+      "adjacentQuantifier": "相邻量词"
     },
     "pendingCard": "正在衡量此次运行带来的变化…",
     "pendingDynamic": "正在运行动态检查（测试、基准测试），最长 {minutes} 分钟…",

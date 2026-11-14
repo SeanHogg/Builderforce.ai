@@ -12,6 +12,7 @@ export { runDeltaDiagnosticsText, resolveDirectiveText } from './deltaActionsTex
 export {
     blockingLabel, clauseLabel, dimensionLabel, headlineText, heldRulesText, overrideLabel, releaseConfirmText, lineageGroup, metricLabel, noteLabel, paramLabel, paramValueLabel, metricValueText, quantizedValue, reasonLabel, ruleLabel, verdictLabel,
 } from './deltaText';
+export { PredictedBlock, type PredictedBlockProps } from './PredictedBlock';
 export { DEFAULT_RUN_DELTA_LABELS, RUN_DELTA_NAMESPACE, labelKey, runDeltaLabels, type RunDeltaLabels } from './labels';
 // The view's ONE copy behaviour, reused by the hosts' "Copy diagnostics" (clipboard + Copied / Copy-failed).
 export { useCopyText, CopiedNote, CopyFallback, type CopyStatus } from '../copyText';
