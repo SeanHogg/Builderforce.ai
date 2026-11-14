@@ -28,6 +28,7 @@ import { TeamChatButton } from '@/components/brain/TeamChatButton';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { faultMessage } from '@/lib/apiClient';
 import { initialsOf } from '@/lib/initials';
+import { TeamPeopleView } from './TeamPeopleView';
 /**
  * Workforce → Teams. Groups the workforce (agents AND humans) into named teams
  * and attaches a team to projects. Mirrors the other Workforce collection
@@ -629,6 +630,12 @@ function TeamDetailPanel({
             ))}
           </div>
         )}
+      </div>
+
+      {/* People (PRD 41 §D14, WS22): per-contributor, per-role quality scores, read-only. */}
+      <div>
+        <h3 style={sectionTitle}>{t('peopleSection')}</h3>
+        <TeamPeopleView teamId={detail.id} />
       </div>
     </div>
   );

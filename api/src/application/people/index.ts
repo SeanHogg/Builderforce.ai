@@ -27,3 +27,7 @@ export * from './headcountPlan';
 export * from './performanceReview';
 export * from './teamHealth';
 export * from './rosterReconciliation';
+// WS22 (PRD 41 §D14): the ONE person-score visibility policy and the pure scorer.
+// Pure rows-in/rows-out — safe to export from the barrel (no Db, no Env).
+export * from './mayViewPersonScore';
+export * from './personScore';
