@@ -75,11 +75,11 @@ describe("git_commit", () => {
     const sh = recordingShell();
     await gitCommitTool.execute({ message: "m", paths: ["a.ts"], allowBaseBranch: true }, sh as never);
     expect(sh.scripts[0]).not.toContain("ON_BASE_BRANCH");
-    expect(sh.scripts[0]).toContain("P0=\"$(pick 'a.ts')\"");
+    expect(sh.scripts[0]).toContain("P0=\"\"; for c in 'a.ts'; do");
     // A named ticket branch still wins over the declaration: it says where to commit.
     const withBranch = recordingShell();
     await gitCommitTool.execute({ message: "m", paths: ["a.ts"], allowBaseBranch: true, branch: "ticket/1-x" }, withBranch as never);
-    expect(withBranch.scripts[0]).toContain('git checkout -b "ticket/1-x"');
+    expect(withBranch.scripts[0]).toContain('git worktree add "$WT" -b "ticket/1-x"');
   });
 
   it("names the declared route when refused on the base branch", async () => {
@@ -89,10 +89,14 @@ describe("git_commit", () => {
     expect(data(r).error).toMatch(/allowBaseBranch:true/);
   });
 
-  it("switches to (or creates) the named ticket branch instead", async () => {
+  it("commits the named ticket branch in a dedicated worktree, never switching the checkout", async () => {
+    // The checkout the human is sitting in keeps its branch and working tree: the branch
+    // is created/reused in a worktree one level up (`<branch>-wt`), named for the branch.
     const sh = recordingShell();
     await gitCommitTool.execute({ message: "m", paths: ["a.ts"], branch: "ticket/2394-mobile" }, sh as never);
-    expect(sh.scripts[0]).toContain('git checkout -b "ticket/2394-mobile"');
+    expect(sh.scripts[0]).toContain('git worktree add "$WT" -b "ticket/2394-mobile"');
+    expect(sh.scripts[0]).toContain('cd "$WT"');
+    expect(sh.scripts[0]).not.toContain("git checkout");
   });
 
   it("quotes a commit message containing quotes and shell metacharacters", async () => {
@@ -130,7 +134,7 @@ describe("git_push", () => {
   it("sets the upstream so a new ticket branch pushes on the first try", async () => {
     const sh = recordingShell();
     await gitPushTool.execute({}, sh as never);
-    expect(sh.scripts[0]).toContain('git push -u origin "$CUR"');
+    expect(sh.scripts[0]).toContain('git push -u origin "$PUSHED"');
   });
 
   it("reports where the push LANDED, after pushing, without ever failing the push on it", async () => {
@@ -149,7 +153,7 @@ describe("open_pull_request", () => {
   it("pushes the branch first when it has no upstream", async () => {
     const sh = recordingShell();
     await openPullRequestTool.execute({ title: "t", body: "b" }, sh as never);
-    expect(sh.scripts[0]).toContain('git rev-parse --abbrev-ref "@{upstream}"');
+    expect(sh.scripts[0]).toContain('git rev-parse --verify --quiet "refs/remotes/origin/$HEAD_REF"');
     expect(sh.scripts[0]).toContain("gh pr create");
   });
 
