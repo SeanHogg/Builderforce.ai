@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.2",
+    "jsdom": "^31.0.1",
     "vitest": "^4.0.18"
   }
 }

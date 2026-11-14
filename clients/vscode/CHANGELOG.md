@@ -2,6 +2,16 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.168] — The run-delta card is collapsed by default, and its actions move to the header
+
+- **Changed: the run-delta card now starts collapsed.** The headline and blast-radius band are always visible; the per-dimension verdict rows, pending analyzers and prediction block appear only after clicking **Expand details** (an `aria-expanded` toggle, localized in English and Chinese). The summary is no longer buried under rows you have not asked for.
+- **Changed: the run-delta panel's actions (Resolve, Copy diagnostics) moved from the body into the panel header**, beside the title. The body is findings only.
+
+## [2026.10.167] — The run-delta card is collapsed by default, and its actions move to the header
+
+- **Changed: the run-delta card now starts collapsed.** The headline and blast-radius band are always visible; the per-dimension verdict rows, pending analyzers and prediction block appear only after clicking **Expand details** (an `aria-expanded` toggle, localized in English and Chinese). The summary is no longer buried under rows you have not asked for.
+- **Changed: the run-delta panel's actions (Resolve, Copy diagnostics) moved from the body into the panel header**, beside the title. The body is findings only.
+
 ## [2026.10.166] — The chat history's "% Complete" ticket chip is back
 
 - **Fixed: each chat-history row stopped showing its linked-ticket `% Complete`.** The previous release's idle-age chip change dropped the `ticketProgressPct` field the row feeds into its shared `ChatTicketStats` chip, so the column rendered nothing even though the data was there. Restored the pass-through; the row again shows the linked-ticket completion percent beside the ticket count.
