@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.170] — The run-delta card expands with a chevron, and Open details sits in the header
+
+- **Changed: the run-delta card's "Expand Details" button is now an icon-only chevron**, matching the arrow pattern used elsewhere in the panel, instead of a word button in the body.
+- **Changed: "Open details" moved out of the card body into the panel header**, beside the other header icons, so the body is findings only.
+
 ## [2026.10.169] — A reviewer glitch can no longer block your push
 
 - **Fixed: the ship gate no longer fabricates a blocking "changes requested" when the reviewer model fails to return a parseable verdict.** A non-JSON or malformed reviewer reply is now treated as a transient reviewer failure: the gate retries the review on the next available non-author model and only reports the review as unavailable if every candidate fails. Previously one glitchy reply on the only reviewer model recorded a bogus `changes_requested` that wedged the push.
