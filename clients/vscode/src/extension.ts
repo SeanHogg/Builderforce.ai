@@ -1,5 +1,6 @@
 import * as os from "os";
 import { manageMcpServers } from "./mcpServers";
+import { setShipCatalogSecrets } from "./verify/editorShipPorts";
 import { manageByoConnections } from "./byoConnections";
 import * as vscode from "vscode";
 import { BuilderForceAuthProvider } from "./auth";
@@ -147,6 +148,9 @@ let diagnostics: DiagnosticsController | undefined;
 let meetings: MeetingsTreeProvider | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
+  // The ship-gate reviewer's OD-1 auto-switch reads the model catalog from SecretStorage;
+  // hand it the storage now (logic lives in verify/editorShipPorts.ts).
+  setShipCatalogSecrets(context.secrets);
   // Lever bucketing by install id, the symbol index's grammars, the local research model.
   activateLocalLevers(context);
   // Installs the fetch guard now; the policy RESOLVES after the signed-in read —

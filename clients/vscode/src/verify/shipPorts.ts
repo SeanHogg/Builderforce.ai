@@ -18,6 +18,10 @@ import type { VscodeLike } from "./pathDiagnostics";
 import type { GitRunner } from "./gitPort";
 import { createGit, createReviewer, createVerifierPort, type VerifyHostDeps } from "./index";
 import type { ReviewerDeps, ReviewSubRunResult } from "./reviewerPort";
+// Type-only: gateway.ts has a runtime `import * as vscode`, and this module must stay loadable
+// under a fake (the port header's "no runtime vscode" rule). The live catalog read is INJECTED
+// via `ShipPortsDeps.getCatalog` (wired in `editorShipPorts.ts`), never imported here.
+import type { ModelChoices } from "../gateway";
 
 export type ShipPorts = Required<Pick<BrainRunRequest, "verifier" | "git" | "reviewer">>;
 
@@ -32,6 +36,10 @@ export interface ShipPortsDeps {
   vscode: VscodeLike;
   git: GitRunner;
   readText?: VerifyHostDeps["readText"];
+  /** Read the account's model catalog (BYO + plan pool + premium + configured). Optional —
+   *  the editor binding supplies `getModels(secrets)`; a failure yields `undefined`, which
+   *  just means no auto-switch (the reviewer falls back to its refusal). */
+  getCatalog?: () => Promise<ModelChoices | undefined>;
 }
 
 /** The review sub-run's JSON verdict, or a request for changes when the reply is not one. */
@@ -47,20 +55,50 @@ export function parseReviewReply(text: string): ReviewSubRunResult {
   return { verdict: "changes_requested", findings: ["The reviewer did not return a JSON verdict; review again."] };
 }
 
-/** The reviewer's dependencies for one run: its stream, the review pin, the other stage pins. */
-function reviewerDeps(run: ShipPortsRun): ReviewerDeps {
+/**
+ * The reviewer's dependencies for one run: its stream, the review pin, the other stage pins,
+ * and the account catalog (for the OD-1 auto-switch recovery). The catalog read is ASYNC and
+ * per run (the reviewer is built per run), so it is read lazily inside the port's `review` —
+ * the port is created synchronously, the catalog is awaited only when the gate actually runs.
+ */
+function reviewerDeps(run: ShipPortsRun, deps: ShipPortsDeps): ReviewerDeps {
   const phase = run.settings?.phaseModels;
   const available = [phase?.code, phase?.plan, run.settings?.subagentModel, run.settings?.pipeline?.quickModel]
     .filter((m): m is string => typeof m === "string" && !!m);
+  const getCatalog = deps.getCatalog;
   return {
     ...(phase?.verify ? { verifyStagePin: phase.verify } : {}),
     availableModels: [...new Set(available)],
+    ...(getCatalog
+      ? {
+          getCatalogModels: () =>
+            getCatalog()
+              .then((choices) => (choices ? catalogModelIds(choices) : undefined))
+              .catch(() => undefined),
+        }
+      : {}),
     runReviewSubRun: async ({ model, prompt }) => {
       const result = await run.stream({ messages: [{ role: "user", content: prompt }], model, modelStrict: true, role: "verify" });
       return parseReviewReply(result.text);
     },
     hashDiff: (diff) => createHash("sha256").update(diff, "utf8").digest("hex"),
   };
+}
+
+/**
+ * The full set of models the user's account can reach, de-duplicated and ORDERED for the
+ * reviewer auto-switch: BYO (the tenant's own connected-provider models, cheapest) first,
+ * then the plan pool, then premium, then any configured models. `pickReviewerModelWithFallback`
+ * walks this in order, so a BYO non-author model is preferred over a gateway-pool one.
+ */
+export function catalogModelIds(choices: ModelChoices): string[] {
+  return [
+    ...choices.byo.models.map((m) => m.id),
+    ...choices.models,
+    ...choices.premiumModels,
+    ...choices.configuredModels.map((c) => c.ref),
+  ].filter((id): id is string => typeof id === "string" && !!id)
+    .filter((id, i, all) => all.indexOf(id) === i);
 }
 
 /** One editor's ship-gate ports: call it per run; the verifier and git port are per workspace root. */
@@ -78,6 +116,6 @@ export function createShipPorts(deps: ShipPortsDeps): (run: ShipPortsRun) => Shi
       bound = { verifier: createVerifierPort(host), git: createGit(host) };
       byRoot.set(run.root, bound);
     }
-    return { ...bound, reviewer: createReviewer(reviewerDeps(run)) };
+    return { ...bound, reviewer: createReviewer(reviewerDeps(run, deps)) };
   };
 }

@@ -5,9 +5,10 @@
 import * as path from "path";
 import { describe, expect, it } from "vitest";
 import type { BrainStreamFn } from "@seanhogg/builderforce-brain-embedded";
-import { createShipPorts, parseReviewReply } from "./shipPorts";
+import { createShipPorts, parseReviewReply, catalogModelIds } from "./shipPorts";
 import type { VscodeLike } from "./pathDiagnostics";
 import type { GitRunner } from "./gitPort";
+import type { ModelChoices } from "../gateway";
 
 const ROOT = path.resolve("/ws");
 
@@ -35,6 +36,23 @@ function fakeVscode(opened: string[]): VscodeLike {
 }
 
 const noStream: BrainStreamFn = async () => ({ text: "", toolCalls: [], finishReason: "stop" });
+
+/** A fake model catalog: BYO pool + plan pool + premium + configured. */
+function fakeCatalog(overrides: Partial<ModelChoices> = {}): ModelChoices {
+  return {
+    models: [],
+    freeModels: [],
+    configuredModels: [],
+    canUsePremiumModels: false,
+    premiumModels: [],
+    canChooseModel: true,
+    canUseFrontierModels: false,
+    byo: { providers: [], models: [] },
+    teacherModels: [],
+    identity: { plan: "free" },
+    ...overrides,
+  } as unknown as ModelChoices;
+}
 
 describe("createShipPorts", () => {
   it("resolves a workspace-relative edit path against the root before asking the language server", async () => {
@@ -87,6 +105,76 @@ describe("createShipPorts", () => {
     const verdict = await ports.reviewer.review({ repo: ROOT, diff: "diff", evidence: "", authorModels: ["author-model"] });
     expect(asked).toEqual([{ model: "reviewer-model", modelStrict: true, role: "verify" }]);
     expect(verdict).toMatchObject({ reviewerModel: "reviewer-model", verdict: "approved" });
+  });
+
+  it("auto-switches to a catalog model when only the author is in the run's pins", async () => {
+    const asked: { model?: string }[] = [];
+    const stream: BrainStreamFn = async (opts) => {
+      asked.push({ model: opts.model });
+      return { text: '{"verdict":"approved","findings":[]}', toolCalls: [], finishReason: "stop" };
+    };
+    const catalog = fakeCatalog({ models: ["author-model", "pool-model"] });
+    const ports = createShipPorts({
+      vscode: fakeVscode([]),
+      git: async () => ({ stdout: "", exitCode: 0 }),
+      getCatalog: async () => catalog,
+    })({ root: ROOT, stream, settings: { phaseModels: { code: "author-model" } } });
+    const verdict = await ports.reviewer.review({ repo: ROOT, diff: "diff", evidence: "", authorModels: ["author-model"] });
+    expect(asked).toEqual([{ model: "pool-model" }]);
+    expect(verdict).toMatchObject({ reviewerModel: "pool-model", verdict: "approved" });
+    // The switch is named in the findings so the user sees what happened.
+    if (!("refused" in verdict)) expect(verdict.findings[0]).toContain("pool-model");
+  });
+
+  it("prefers a BYO catalog model over a gateway-pool model for the auto-switch", async () => {
+    const asked: { model?: string }[] = [];
+    const stream: BrainStreamFn = async (opts) => {
+      asked.push({ model: opts.model });
+      return { text: '{"verdict":"approved","findings":[]}', toolCalls: [], finishReason: "stop" };
+    };
+    // BYO listed before the pool model — catalogModelIds keeps that order.
+    const catalog = fakeCatalog({
+      byo: { providers: ["anthropic"], models: [{ id: "byo-model", vendor: "anthropic", tier: "byo" }] },
+      models: ["pool-model"],
+    });
+    const ports = createShipPorts({
+      vscode: fakeVscode([]),
+      git: async () => ({ stdout: "", exitCode: 0 }),
+      getCatalog: async () => catalog,
+    })({ root: ROOT, stream, settings: { phaseModels: { code: "author-model" } } });
+    await ports.reviewer.review({ repo: ROOT, diff: "diff", evidence: "", authorModels: ["author-model"] });
+    expect(asked).toEqual([{ model: "byo-model" }]);
+  });
+
+  it("refuses with an actionable message when the catalog has only the author model", async () => {
+    const stream: BrainStreamFn = async () => ({ text: "", toolCalls: [], finishReason: "stop" });
+    const catalog = fakeCatalog({ models: ["author-model"] });
+    const ports = createShipPorts({
+      vscode: fakeVscode([]),
+      git: async () => ({ stdout: "", exitCode: 0 }),
+      getCatalog: async () => catalog,
+    })({ root: ROOT, stream, settings: { phaseModels: { code: "author-model" } } });
+    const res = await ports.reviewer.review({ repo: ROOT, diff: "diff", evidence: "", authorModels: ["author-model"] });
+    expect("refused" in res).toBe(true);
+    if ("refused" in res) {
+      expect(res.refused).toContain("author-model");
+      expect(res.refused).toContain("non-author");
+      // The path forward: a pool/BYO model or adding a model.
+      expect(res.refused).toMatch(/pool|BYO/i);
+      expect(res.refused).toMatch(/second model|add one/i);
+    }
+  });
+});
+
+describe("catalogModelIds", () => {
+  it("orders BYO before pool before premium before configured, de-duplicated", () => {
+    const ids = catalogModelIds(fakeCatalog({
+      byo: { providers: [], models: [{ id: "dup", vendor: "x", tier: "byo" }, { id: "byo-1", vendor: "x", tier: "byo" }] },
+      models: ["dup", "pool-1"],
+      premiumModels: ["prem-1", "byo-1"],
+      configuredModels: [{ ref: "cfg-1", name: "Custom" }],
+    }));
+    expect(ids).toEqual(["dup", "byo-1", "pool-1", "prem-1", "cfg-1"]);
   });
 });
 
