@@ -179,8 +179,8 @@ describe("catalogModelIds", () => {
 });
 
 describe("parseReviewReply", () => {
-  it("never reads a non-JSON reply as approval", () => {
-    expect(parseReviewReply("Looks good to me!").verdict).toBe("changes_requested");
+  it("never reads a non-JSON reply as approval — it is a failure, not a changes_requested verdict", () => {
+    expect(parseReviewReply("Looks good to me!")).toEqual({ failed: "The reviewer did not return a JSON verdict; review again." });
     expect(parseReviewReply('{"verdict":"changes_requested","findings":["x"]}')).toEqual({ verdict: "changes_requested", findings: ["x"] });
   });
 });

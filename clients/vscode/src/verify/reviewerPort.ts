@@ -32,6 +32,15 @@ export interface ReviewSubRunResult {
   findings: readonly string[];
 }
 
+/**
+ * The outcome of ONE review sub-run: a real verdict, or a note that the reviewer model
+ * FAILED to produce a verdict (parse failure / timeout / sub-run error) — a transient
+ * malfunction, distinct from a genuine "changes requested". A failure must NOT become a
+ * blocking `changes_requested` (that was the reviewer-glitch wedge); the caller retries
+ * on another model or reports unavailability instead.
+ */
+export type ReviewAttempt = ReviewSubRunResult | { failed: string };
+
 export interface ReviewerDeps {
   /** The `builderforce.models.review` stage pin (undefined when unset). */
   verifyStagePin?: string;
@@ -50,7 +59,7 @@ export interface ReviewerDeps {
    *  failure just means no auto-switch (fall back to the refusal). */
   getCatalogModels?: () => Promise<readonly string[] | undefined>;
   /** Run ONE review sub-run on the chosen model with the given prompt. */
-  runReviewSubRun: (input: { model: string; prompt: string }) => Promise<ReviewSubRunResult>;
+  runReviewSubRun: (input: { model: string; prompt: string }) => Promise<ReviewSubRunResult | { failed: string }>;
   /** Compute the diffHash the verdict is recorded against. */
   hashDiff: (diff: string) => string;
   /** Wall-clock budget for the review sub-run; over it the review is unavailable. */
@@ -129,15 +138,22 @@ export function createReviewerPort(deps: ReviewerDeps): ReviewerPort {
   const timeoutMs = deps.reviewTimeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS;
   return {
     async review(input: { repo: string; diff: string; evidence: string; authorModels: readonly string[] }) {
+      const authors = input.authorModels;
+      // Every non-author model the account can reach, in preference order (the review pin
+      // first, then run-available models, then the catalog auto-switch). A reviewer that
+      // FAILS to produce a parseable verdict is retried on the next one, so a transient
+      // glitch on a single model can never wedge the gate into a fabricated blocking
+      // "changes requested" (the reviewer-glitch bug).
       const pick = await pickReviewerModelWithFallback(
         deps.verifyStagePin,
         deps.availableModels ?? [],
         deps.catalogModels,
-        input.authorModels,
+        authors,
         deps.getCatalogModels,
       );
       // No non-author model anywhere: the account has only the author model(s).
-      if (!pick) return { refused: refusalFor(input.authorModels) };
+      if (!pick) return { refused: refusalFor(authors) };
+      const candidates = await reviewerCandidates(deps, pick, authors);
 
       const diffHash = deps.hashDiff(input.diff);
       const prompt =
@@ -147,35 +163,57 @@ export function createReviewerPort(deps: ReviewerDeps): ReviewerPort {
         `Reply with a JSON object: {"verdict": "approved" | "changes_requested", "findings": string[]}. ` +
         `List concrete defects as findings; an empty findings list means approved.`;
 
-      let result: ReviewSubRunResult;
-      try {
-        result = await withTimeout(deps.runReviewSubRun({ model: pick.model, prompt }), timeoutMs);
-      } catch {
-        // The review could not complete (timeout, sub-run failure): OD-3 — unavailable.
-        return { refused: ADD_A_MODEL_TEXT };
+      const failures: string[] = [];
+      for (const candidate of candidates) {
+        let attempt: ReviewSubRunResult | { failed: string };
+        try {
+          attempt = await withTimeout(deps.runReviewSubRun({ model: candidate.model, prompt }), timeoutMs);
+        } catch (e) {
+          // The review could not complete (timeout, sub-run error): a transient failure —
+          // try the next candidate before giving up.
+          failures.push(`${candidate.model}: ${e instanceof Error ? e.message : String(e)}`);
+          continue;
+        }
+        if ("failed" in attempt) {
+          failures.push(`${candidate.model}: ${attempt.failed}`);
+          continue;
+        }
+
+        const verdict: ReviewVerdict = {
+          reviewerModel: candidate.model,
+          verdict: attempt.verdict,
+          diffHash,
+          findings: attempt.findings,
+        };
+        // The SAME gate the push uses: an author model or a stale diffHash is refused here too.
+        const gate = reviewGate(verdict, authors, diffHash);
+        if (!gate.ok) return { refused: gate.reason };
+
+        // Auto-switch: the findings are the one verdict field that reaches the model/user
+        // through runReviewGate (a changes_requested reason, or the pass path), so name the
+        // switched-to reviewer there.
+        if (candidate.switched) {
+          verdict.findings = [
+            `(auto-switched reviewer: the review stage pin and this run's models are all author ` +
+              `models, so the gate reviewed on ${candidate.model} from your model catalog instead.)`,
+            ...verdict.findings,
+          ];
+        }
+        if (failures.length) {
+          verdict.findings = [
+            `(earlier reviewer attempt(s) failed transiently and were retried: ${failures.join("; ")})`,
+            ...verdict.findings,
+          ];
+        }
+        return verdict;
       }
 
-      const verdict: ReviewVerdict = {
-        reviewerModel: pick.model,
-        verdict: result.verdict,
-        diffHash,
-        findings: result.findings,
+      // Every candidate failed to produce a verdict: the review is unavailable (OD-3).
+      return {
+        refused:
+          `No reviewer produced a verdict (each attempt failed: ${failures.join("; ") || "unknown"}). ` +
+          ADD_A_MODEL_TEXT,
       };
-      // The SAME gate the push uses: an author model or a stale diffHash is refused here too.
-      const gate = reviewGate(verdict, input.authorModels, diffHash);
-      if (!gate.ok) return { refused: gate.reason };
-
-      // Auto-switch: the findings are the one verdict field that reaches the model/user
-      // through runReviewGate (a changes_requested reason, or the pass path), so name the
-      // switched-to reviewer there.
-      if (pick.switched) {
-        verdict.findings = [
-          `(auto-switched reviewer: the review stage pin and this run's models are all author ` +
-            `models, so the gate reviewed on ${pick.model} from your model catalog instead.)`,
-          ...verdict.findings,
-        ];
-      }
-      return verdict;
     },
   };
 }
@@ -188,4 +226,26 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
       (e) => { clearTimeout(t); reject(e instanceof Error ? e : new Error(String(e))); },
     );
   });
+}
+
+/**
+ * The full ordered list of non-author models to try as reviewer, starting with the chosen
+ * pick. This lets a parse/timeout failure on one model fall through to the next instead of
+ * becoming a fabricated blocking verdict. De-duplicated, author models excluded.
+ */
+async function reviewerCandidates(
+  deps: ReviewerDeps,
+  pick: { model: string; switched: boolean },
+  authors: readonly string[],
+): Promise<readonly { model: string; switched: boolean }[]> {
+  const out: { model: string; switched: boolean }[] = [];
+  const seen = new Set<string>();
+  const push = (m: string | undefined, switched: boolean) => {
+    if (m && !authors.includes(m) && !seen.has(m)) { seen.add(m); out.push({ model: m, switched }); }
+  };
+  push(pick.model, pick.switched);
+  const catalog = deps.catalogModels ?? (await deps.getCatalogModels?.()) ?? [];
+  for (const m of deps.availableModels ?? []) push(m, false);
+  for (const m of catalog) push(m, true);
+  return out;
 }

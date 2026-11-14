@@ -42,17 +42,24 @@ export interface ShipPortsDeps {
   getCatalog?: () => Promise<ModelChoices | undefined>;
 }
 
-/** The review sub-run's JSON verdict, or a request for changes when the reply is not one. */
-export function parseReviewReply(text: string): ReviewSubRunResult {
+/**
+ * The review sub-run's JSON verdict, or a failure note when the reply is not one.
+ * A reply that is not parseable JSON is a REVIEWER FAILURE, not a real "changes requested"
+ * verdict — returning that here would promote a transient model glitch into a blocking
+ * `changes_requested` that wedges the push gate (the reviewer-glitch bug). Instead it maps
+ * to `{ failed }`, and `createReviewerPort` retries on the next non-author model so the
+ * gate never records a bogus blocking verdict for a transient malfunction.
+ */
+export function parseReviewReply(text: string): ReviewSubRunResult | { failed: string } {
   const json = /\{[\s\S]*\}/.exec(text)?.[0];
   try {
     const parsed = JSON.parse(json ?? "") as { verdict?: unknown; findings?: unknown };
     const findings = Array.isArray(parsed.findings) ? parsed.findings.filter((f): f is string => typeof f === "string") : [];
     if (parsed.verdict === "approved" || parsed.verdict === "changes_requested") return { verdict: parsed.verdict, findings };
   } catch {
-    /* not JSON — falls through */
+    /* not JSON — falls through to the reviewer-failure note below */
   }
-  return { verdict: "changes_requested", findings: ["The reviewer did not return a JSON verdict; review again."] };
+  return { failed: "The reviewer did not return a JSON verdict; review again." };
 }
 
 /**

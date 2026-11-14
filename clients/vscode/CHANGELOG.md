@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.169] — A reviewer glitch can no longer block your push
+
+- **Fixed: the ship gate no longer fabricates a blocking "changes requested" when the reviewer model fails to return a parseable verdict.** A non-JSON or malformed reviewer reply is now treated as a transient reviewer failure: the gate retries the review on the next available non-author model and only reports the review as unavailable if every candidate fails. Previously one glitchy reply on the only reviewer model recorded a bogus `changes_requested` that wedged the push.
+
 ## [2026.10.168] — The run-delta card is collapsed by default, and its actions move to the header
 
 - **Changed: the run-delta card now starts collapsed.** The headline and blast-radius band are always visible; the per-dimension verdict rows, pending analyzers and prediction block appear only after clicking **Expand details** (an `aria-expanded` toggle, localized in English and Chinese). The summary is no longer buried under rows you have not asked for.
