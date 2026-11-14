@@ -305,6 +305,8 @@ export interface ChatTicketsLabels {
   runFailed: string;
   link: string;
   agents: string;
+  /** The info pill's word — opens the drawer showing the host's details (railHeader) in red. */
+  info: string;
   merge: string;
   questions: string;
   noQuestions: string;
@@ -400,6 +402,8 @@ export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
   runFailed: 'Could not start the run.',
   link: 'Link ticket',
   agents: 'Agents',
+  /** The info pill — opens the drawer with the host's sync/details line(s). */
+  info: 'Info',
   merge: 'Merge',
   questions: 'Questions',
   noQuestions: 'No pending questions.',

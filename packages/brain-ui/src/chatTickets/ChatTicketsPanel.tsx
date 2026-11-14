@@ -28,7 +28,6 @@ import type { SpendLabels } from '../spend/labels';
 import type { SpendSavingsSummary } from '@seanhogg/builderforce-brain-embedded';
 import { LinkForm } from './LinkForm';
 import { MergeSection } from './MergeSection';
-import { PeopleSection } from './PeopleSection';
 import { OriginalRequest } from './OriginalRequest';
 import { QuestionsSection } from './QuestionsSection';
 import { S } from './panelStyles';
@@ -90,8 +89,10 @@ export interface ChatTicketsPanelProps {
    * simply has nothing to show.
    */
   originalRequest?: string | null;
-  /** A host's own header row under the original request (the local-first sync summary and the
-   *  freshness line). Omit and nothing is drawn: the web app passes none. */
+  /** A host's own details row under the original request (the local-first sync
+   *  summary and the freshness line). No longer drawn inline: it sits behind the
+   *  "Info" pill in the action row, shown in red when opened. Omit and nothing
+   *  is drawn: the web app passes none. */
   railHeader?: ReactNode;
   /** A host's per-ticket marker drawn under each ticket's meta line (the sync-status badge).
    *  Omit and nothing is drawn: the web app passes none. */
@@ -105,7 +106,7 @@ export interface ChatTicketsPanelProps {
 }
 
 /** The action-row drawers the panel ships with; extension keys must not collide. */
-type BuiltinPanel = 'link' | 'agents' | 'people' | 'merge' | 'questions';
+type BuiltinPanel = 'link' | 'agents' | 'info' | 'merge' | 'questions';
 
 const RUNNABLE = new Set<TicketKind>(RUNNABLE_KINDS);
 
@@ -238,7 +239,6 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
           and the auto-title is only a ~60-char derivation of it. Hidden when absent so
           a pre-1245 chat renders exactly as before. */}
       <OriginalRequest text={originalRequest} labels={labels} />
-      {railHeader}
       {/* Collapsible header — one row summarising the linked tickets so a chat with
           hundreds of them stays compact. Click to expand/collapse the ring grid. */}
       {tickets.length > 0 && (
@@ -322,8 +322,9 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       <div style={S.actionRow}>
         <button type="button" onClick={() => togglePanel('link')} style={S.pill(panel === 'link')}>＋ {labels.link}</button>
         {platformSections && <>
-          <button type="button" onClick={() => togglePanel('agents')} style={S.pill(panel === 'agents')}>👥 {labels.agents}{agents.length + subagents.length ? ` (${agents.length + subagents.length})` : ''}</button>
-          <button type="button" onClick={() => togglePanel('people')} style={S.pill(panel === 'people')}>👤 {labels.people}{members.length ? ` (${members.length})` : ''}</button>
+          {/* One consolidated roster pill — agents AND people live in the same drawer now. */}
+          <button type="button" onClick={() => togglePanel('agents')} style={S.pill(panel === 'agents')}>👥 {labels.agents}{agents.length + subagents.length + members.length ? ` (${agents.length + subagents.length + members.length})` : ''}</button>
+          {railHeader && <button type="button" onClick={() => togglePanel('info')} style={S.pill(panel === 'info')}>ℹ {labels.info}</button>}
           <button type="button" onClick={() => togglePanel('merge')} style={S.pill(panel === 'merge')}>⧉ {labels.merge}</button>
         </>}
         {questions.length > 0 && <button type="button" onClick={() => togglePanel('questions')} style={S.pill(panel === 'questions')}>❓ {labels.questions} ({questions.length})</button>}
@@ -352,16 +353,16 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         catch (e) { flash(e instanceof Error ? e.message : labels.linkFailed); }
       }} />}
 
-      {panel === 'agents' && <AgentsSection agents={agents} subagents={subagents} pool={pool} labels={labels}
-        onInvite={async (ref, kind) => { setBusy(true); try { await adapter.inviteAgent(chatId, { agentRef: ref, agentKind: kind }); await load(); onChanged?.(); } finally { setBusy(false); } }}
-        onRemove={async (id) => { setBusy(true); try { await adapter.removeAgent(chatId, id); await load(); onChanged?.(); } finally { setBusy(false); } }}
+      {panel === 'agents' && <AgentsSection agents={agents} subagents={subagents} pool={pool} members={members} labels={labels}
+        visibility={visibility} onSetVisibility={onSetVisibility}
+        onInviteAgent={async (ref, kind) => { setBusy(true); try { await adapter.inviteAgent(chatId, { agentRef: ref, agentKind: kind }); await load(); onChanged?.(); } finally { setBusy(false); } }}
+        onRemoveAgent={async (id) => { setBusy(true); try { await adapter.removeAgent(chatId, id); await load(); onChanged?.(); } finally { setBusy(false); } }}
+        onInviteMember={async (email) => { setBusy(true); try { const r = await adapter.inviteMember(chatId, email); flash(r.status === 'pending' ? labels.invitePending : labels.inviteSent); await load(); onChanged?.(); } catch (e) { flash(e instanceof Error ? e.message : labels.linkFailed); } finally { setBusy(false); } }}
+        onRemoveMember={async (id) => { setBusy(true); try { await adapter.removeMember(chatId, id); await load(); onChanged?.(); } finally { setBusy(false); } }}
         busy={busy} />}
 
-      {panel === 'people' && <PeopleSection members={members} labels={labels}
-        visibility={visibility} onSetVisibility={onSetVisibility}
-        onInvite={async (email) => { setBusy(true); try { const r = await adapter.inviteMember(chatId, email); flash(r.status === 'pending' ? labels.invitePending : labels.inviteSent); await load(); onChanged?.(); } catch (e) { flash(e instanceof Error ? e.message : labels.linkFailed); } finally { setBusy(false); } }}
-        onRemove={async (id) => { setBusy(true); try { await adapter.removeMember(chatId, id); await load(); onChanged?.(); } finally { setBusy(false); } }}
-        busy={busy} />}
+      {/* The host's details (sync summary + freshness), drawn in red behind the Info pill. */}
+      {panel === 'info' && railHeader && <div style={{ ...S.drawer, color: V.danger }}>{railHeader}</div>}
 
       {panel === 'merge' && <MergeSection chatId={chatId} chatList={chatList} labels={labels}
         onMerge={async (ids) => { setBusy(true); try { await adapter.consolidate(chatId, ids); flash(labels.mergedN(ids.length)); await load(); onChanged?.(); } finally { setBusy(false); } }}
@@ -373,7 +374,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   );
 }
 
-const BUILTIN_PANELS: ReadonlySet<string> = new Set<BuiltinPanel>(['link', 'agents', 'people', 'merge', 'questions']);
+const BUILTIN_PANELS: ReadonlySet<string> = new Set<BuiltinPanel>(['link', 'agents', 'info', 'merge', 'questions']);
 function isBuiltinPanel(key: string): key is BuiltinPanel { return BUILTIN_PANELS.has(key); }
 
 /**

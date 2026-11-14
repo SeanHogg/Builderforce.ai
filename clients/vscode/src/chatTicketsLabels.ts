@@ -35,6 +35,7 @@ export function chatTicketsLabels(): Record<string, string> {
     "ct.runFailed": t("Could not start the run."),
     "ct.link": t("Link ticket"),
     "ct.agents": t("Agents"),
+    "ct.info": t("Info"),
     "ct.merge": t("Merge"),
     "ct.linkFailed": t("Could not link — check the ticket exists."),
     "ct.kindLabel": t("Ticket type"),

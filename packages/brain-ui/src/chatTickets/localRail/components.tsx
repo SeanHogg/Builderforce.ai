@@ -23,10 +23,13 @@ const badge: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, lineHeight: 1.3, color: V.text2,
   padding: '1px 6px', borderRadius: 999, border: `1px solid ${V.border}`, maxWidth: '100%', minWidth: 0,
 };
-const line: React.CSSProperties = { fontSize: 11, color: V.muted, overflowWrap: 'anywhere', minWidth: 0 };
+// `currentColor` (not V.muted) so a wrapping host tone reaches the text: the rail's
+// Info drawer renders these details in red (V.danger on its wrapper), and an explicit
+// muted here would beat that inheritance.
+const line: React.CSSProperties = { fontSize: 11, color: 'currentColor', overflowWrap: 'anywhere', minWidth: 0 };
 const summaryRow: React.CSSProperties = {
   display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 10, rowGap: 2, minWidth: 0,
-  fontSize: 11, color: V.muted, padding: '2px 0',
+  fontSize: 11, color: 'currentColor', padding: '2px 0',
 };
 
 export function statusWord(status: RailSyncStatus, labels: LocalRailLabels): string {

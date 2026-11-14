@@ -427,6 +427,9 @@ interface BrainTimelineLabels extends ToolStepLabels, ModelMoveLabels {
     showNewer: string;
     /** …or go straight back to the newest page. */
     jumpToLatest: string;
+    /** Accessible name on the floating "scroll to latest" toggle that appears while the
+     *  reader is scrolled away from the newest message. */
+    scrollToLatest: string;
     /**
      * RUN-ACTIVITY line templates (run milestones + agent dispatch). Templates, not
      * sentences: the server records only the FACTS, and each surface composes the line in
@@ -3036,6 +3039,8 @@ interface ChatTicketsLabels {
     runFailed: string;
     link: string;
     agents: string;
+    /** The info pill's word — opens the drawer showing the host's details (railHeader) in red. */
+    info: string;
     merge: string;
     questions: string;
     noQuestions: string;
@@ -3189,8 +3194,10 @@ interface ChatTicketsPanelProps {
      * simply has nothing to show.
      */
     originalRequest?: string | null;
-    /** A host's own header row under the original request (the local-first sync summary and the
-     *  freshness line). Omit and nothing is drawn: the web app passes none. */
+    /** A host's own details row under the original request (the local-first sync
+     *  summary and the freshness line). No longer drawn inline: it sits behind the
+     *  "Info" pill in the action row, shown in red when opened. Omit and nothing
+     *  is drawn: the web app passes none. */
     railHeader?: ReactNode;
     /** A host's per-ticket marker drawn under each ticket's meta line (the sync-status badge).
      *  Omit and nothing is drawn: the web app passes none. */
