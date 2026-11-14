@@ -27,6 +27,14 @@ describe("launchPlan", () => {
       .toEqual({ file: process.execPath, args: [fakeNpmCli, "test"], verbatim: false });
   });
 
+  it("regression: an npx-cli.js stub whose sibling npm-prefix.js is missing falls back to the cmd shim (never dies at require-time)", () => {
+    // A partial `npm` package can ship only the CLI entry: `node <stub>/npx-cli.js` then dies
+    // with `Cannot find module …/npm/bin/npm-prefix.js` (exit 1, no findings). The resolver
+    // must reject that entry so launchPlan falls through to the npm beside the running node.
+    expect(launchPlan(["npx", "--no-install", "vitest", "run"], "win32", "C:\\r", () => null))
+      .toEqual({ file: "cmd.exe", args: ["/d", "/v:off", "/s", "/c", '""npx.cmd" "--no-install" "vitest" "run""'], verbatim: true });
+  });
+
   it("npx/npm fall back to the cmd shim only when the CLI entry cannot be resolved", () => {
     expect(launchPlan(["npx", "vitest"], "win32", "C:\\r", () => null))
       .toEqual({ file: "cmd.exe", args: ["/d", "/v:off", "/s", "/c", '""npx.cmd" "vitest""'], verbatim: true });

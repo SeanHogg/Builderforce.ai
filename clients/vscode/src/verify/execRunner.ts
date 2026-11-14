@@ -70,7 +70,13 @@ function resolveNpmCli(cwd: string, cli: "npx-cli.js" | "npm-cli.js"): string | 
   const tryResolve = (fromDir: string): string | null => {
     try {
       const p = createRequire(path.join(fromDir, "package.json")).resolve(`npm/bin/${cli}`);
-      if (existsSync(p)) return p;
+      // The entry must actually LOAD, not merely exist: a partial package can ship the
+      // CLI entry as a stub without its siblings (npm's `npx-cli.js`/`npm-cli.js` both
+      // `require('./npm-prefix.js')` as their first import). Spawning node on such an
+      // entry dies at require-time with `Cannot find module …/npm/bin/npm-prefix.js`
+      // (exit 1, no findings) — so an entry whose sibling prefix module is absent is
+      // treated as unresolvable and falls through to the npm beside the running node.
+      if (existsSync(p) && existsSync(path.join(path.dirname(p), "npm-prefix.js"))) return p;
     } catch {
       /* fall through to the next source */
     }
