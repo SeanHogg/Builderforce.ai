@@ -11,7 +11,7 @@ import { onHostMessage, request } from '../vscodeBridge';
 import {
   KNOWLEDGE_CALL, KNOWLEDGE_EVENT, KNOWLEDGE_FOCUS, type KnowledgeEventFrame, type KnowledgeFocusFrame,
 } from '../../../src/knowledge/knowledgeProtocol';
-import { createHostKnowledgeGraphSource, reviewCount, type KnowledgeTransport } from './hostKnowledgeGraphSource';
+import { composeThrough, createHostKnowledgeGraphSource, reviewCount, type KnowledgeTransport } from './hostKnowledgeGraphSource';
 
 /** `knowledge.call` round-trips and `knowledge.event` frames over the bridge. */
 export const bridgeKnowledgeTransport: KnowledgeTransport = {
@@ -54,11 +54,12 @@ export function useKnowledgeHost(overlay: (graph: KnowledgeGraph, changed: reado
     return onHostMessage<KnowledgeFocusFrame>(KNOWLEDGE_FOCUS, takeFocus);
   }, []);
 
+  // The Agent runs drawer's Fix action composes a prompt into the host's ONE composer (a fresh Brain chat).
   return {
     source,
     focus,
     focusRequests,
     reviewing,
-    compose: (text) => { void bridgeKnowledgeTransport.call({ op: 'compose', text }).catch(() => undefined); },
+    compose: composeThrough(bridgeKnowledgeTransport),
   };
 }

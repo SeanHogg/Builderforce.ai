@@ -125,6 +125,11 @@ async function planOverStream(t: KnowledgeTransport, req: ReviewRequest, signal:
   }
 }
 
+/** The Agent runs drawer's Fix action: a composed prompt seeds the host's ONE composer (a fresh chat). */
+export function composeThrough(t: KnowledgeTransport): (text: string) => void {
+  return (text) => { void t.call({ op: 'compose', text }).catch(() => undefined); };
+}
+
 export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: HostKnowledgeSourceOptions = {}): KnowledgeGraphSource {
   async function* review(req: ReviewRequest, ctl: ReviewControl): AsyncGenerator<KnowledgeReviewEvent> {
     opts.onReviewActive?.(true);

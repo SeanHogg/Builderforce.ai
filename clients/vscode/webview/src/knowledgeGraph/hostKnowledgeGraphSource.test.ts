@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { KnowledgeGraph, ReviewPlan, ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
 import { ReviewFailure, type KnowledgeReviewEvent } from '@builderforce/knowledge-graph-view';
 import type { KnowledgeCall, KnowledgeEvent } from '../../../src/knowledge/knowledgeProtocol';
-import { ABORT_GRACE_MS, createHostKnowledgeGraphSource, reviewCount, type KnowledgeTransport } from './hostKnowledgeGraphSource';
+import { ABORT_GRACE_MS, composeThrough, createHostKnowledgeGraphSource, reviewCount, type KnowledgeTransport } from './hostKnowledgeGraphSource';
 
 const PLAN: ReviewPlan = { rootId: 'ws', files: 2, byPack: { docs: 2 }, unchanged: 0, changed: ['a.md', 'b.md'], removed: [], skipped: [], estimatedModelCalls: 2 };
 const REPORT: ReviewReport = {
@@ -277,13 +277,12 @@ describe('the editor knowledge source — the rest of the port', () => {
     await expect(createHostKnowledgeGraphSource(broken).agentRuns!.list()).rejects.toThrow('timed out');
   });
 
-  // The Agent runs drawer's Fix action composes a prompt into the host's ONE composer (a fresh Brain chat).
+  // The Agent runs drawer's Fix action composes a prompt into the host's ONE composer (a fresh Brain chat):
+  // `composeThrough` sends the `compose` op through the same transport the source answers.
   it('routes a composed prompt through the `compose` op (the host seeds a new chat with it)', async () => {
     const host = fakeHost();
-    await createHostKnowledgeGraphSource(host.t).rememberFact; // touch the source once for readability
-    const compose = createHostKnowledgeGraphSource(host.t);
-    await (compose as unknown as { compose?(text: string): Promise<void> }).compose?.('fix these findings');
-    expect(host.calls.at(-1)).toEqual({ op: 'compose', text: 'fix these findings' });
+    composeThrough(host.t)('fix these findings');
+    await vi.waitFor(() => expect(host.calls.at(-1)).toEqual({ op: 'compose', text: 'fix these findings' }));
   });
 });
 
