@@ -153,7 +153,13 @@ export function createReviewerPort(deps: ReviewerDeps): ReviewerPort {
       );
       // No non-author model anywhere: the account has only the author model(s).
       if (!pick) return { refused: refusalFor(authors) };
-      const candidates = await reviewerCandidates(deps, pick, authors);
+      // The review is capped at ONE candidate (the best pick). The earlier multi-model
+      // fallback retried every non-author catalog model on any transient failure, each
+      // with a 2-minute budget — a slow reviewer chained minutes into a 5+ minute push.
+      // One bounded attempt keeps the OD-1 independent review while making a slow
+      // reviewer fail fast (recorded "unavailable" → the actionable add-a-model refusal)
+      // instead of serially retrying the whole catalog.
+      const candidates = (await reviewerCandidates(deps, pick, authors)).slice(0, 1);
 
       const diffHash = deps.hashDiff(input.diff);
       const prompt =
