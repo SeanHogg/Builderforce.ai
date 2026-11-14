@@ -357,7 +357,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-ABKHZFAE.mjs";
+} from "./chunk-2RRTOB6I.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useEffect, useMemo } from "react";
@@ -14963,6 +14963,7 @@ function makeCell() {
     servedBy: null,
     pendingTurn: null,
     lastRequest: null,
+    configLog: [],
     stopEpoch: 0,
     claim: null,
     stoppedTurn: null,
@@ -18643,6 +18644,23 @@ function createRunWindowFit(deps) {
   };
 }
 
+// src/runStore/configLog.ts
+function lastTo(c, kind) {
+  for (let i = c.configLog.length - 1; i >= 0; i -= 1) {
+    if (c.configLog[i].kind === kind) return c.configLog[i].to;
+  }
+  return void 0;
+}
+function seedConfigLog(c, snap) {
+  const ts = nowIso();
+  if (snap.model != null && lastTo(c, "model") !== snap.model) {
+    c.configLog.push({ ts, kind: "model", to: snap.model });
+  }
+  if (snap.runMode != null && lastTo(c, "runMode") !== snap.runMode) {
+    c.configLog.push({ ts, kind: "runMode", to: snap.runMode });
+  }
+}
+
 // src/runStore/runMemory.ts
 import { formatEvermindMemoryBlock as formatEvermindMemoryBlock2, countReconciledMemories } from "@seanhogg/builderforce-memory/evermind";
 import { transcriptTokens } from "@seanhogg/builderforce-memory/working";
@@ -19074,6 +19092,10 @@ var PendingCalls = class {
     this.running.delete(callId);
     this.running.set(callId, activity);
   }
+  /** How many calls' tools are still running — a narration turn that references pending work is sent back while any are. */
+  pendingCount() {
+    return this.running.size;
+  }
   /** The call's tool returned. The live step of the most recently started sibling still running, or undefined when none is. */
   end(callId) {
     this.running.delete(callId);
@@ -19103,6 +19125,10 @@ async function prepareBrainRun(chatId, c, req, runKey, reportRunRow) {
   const catalog = canAskUser ? [...toolSpecs ?? [], ASK_USER_TOOL_SPEC, HAND_OFF_TOOL_SPEC] : toolSpecs;
   const allTools = catalog && catalog.length > 0 ? catalog : void 0;
   const runMode = normalizeChatMode(req.chatMode ?? "work");
+  try {
+    seedConfigLog(c, { model: req.model, modelStrict: req.modelStrict, routingMode: req.routingMode, runMode });
+  } catch {
+  }
   const serverChatId = resolveServerChatId(chatId, req);
   const pipeline = decideRunPipeline(req, latestUserText(convo), { followUp: isFollowUpTurn(convo) });
   if (pipeline) {
@@ -19330,6 +19356,9 @@ ${c.priorResearch}`;
     // refused on a real result (see `delegationRequest.ts`).
     delegationRecoveryUsed: false,
     restateRecoveryUsed: false,
+    // One redirect per run for a narration turn that ended while a tool call was still running
+    // (see `deliveryGates.ts`): the run is mid-task, not answering.
+    pendingNarrationRecoveryUsed: false,
     stopHookRounds: 0,
     redirectAskToDelegation: false,
     pending: new PendingCalls(),
@@ -19420,6 +19449,21 @@ function deliveryGates(run) {
       trace: { label: "loop.recover_unreviewed_change", args: files, result: "Run changed the app and ended without inspecting the preview and recording a review \u2014 re-prompted to verify and review (this Studio session is the change's only reviewer)." },
       spend: () => {
         run.reviewRecoveryUsed = true;
+      }
+    },
+    {
+      // The turn references work that is STILL IN FLIGHT — "let me wait for the test run to
+      // finish", "both type-checks pass, now self-reviewing" — while a tool call it started
+      // has not returned. That narration is not the answer: the run is mid-task. Sent back once
+      // to keep working; a run that still narrates after the recovery has read the contract twice
+      // and its answer — whatever it is — is the answer.
+      id: "brain.pending_narration",
+      entersVerify: false,
+      applies: () => !run.pendingNarrationRecoveryUsed && run.pending.pendingCount() > 0,
+      nudge: () => "A tool call you started is still running. Do not finish \u2014 continue the task until the pending step resolves and there is a concrete result to report.",
+      trace: { label: "loop.recover_pending_narration", args: () => ({ pending: run.pending.pendingCount() }), result: "The run ended on a narration turn while a tool call it started was still running \u2014 re-prompted to continue until the pending step resolves." },
+      spend: () => {
+        run.pendingNarrationRecoveryUsed = true;
       }
     },
     {

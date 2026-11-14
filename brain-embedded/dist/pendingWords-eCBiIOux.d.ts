@@ -1924,6 +1924,18 @@ interface BrainRunRequest {
     verifier?: VerifierPort;
     git?: GitPort;
     reviewer?: ReviewerPort;
+    /**
+     * The host calls this when the GLOBAL model or run-mode setting changes mid-chat — the
+     * settings are host-level, so the change is a global event attributed to whichever chat
+     * is active when it happens. The run records it on the chat's config log (and the run
+     * trace). Optional: unbound, the feature is inert and hosts that have not adopted it are
+     * unchanged — exactly like the `verifier`/`git`/`reviewer` ports above.
+     */
+    configChange?: (change: {
+        kind: 'model' | 'runMode';
+        from?: string;
+        to: string;
+    }) => void;
     /** The evidence policy the ship gates enforce — policy is data (PRD 45 §4.3). Defaults to DEFAULT_EVIDENCE_POLICY. */
     evidencePolicy?: EvidencePolicy;
     stream: BrainStreamFn;

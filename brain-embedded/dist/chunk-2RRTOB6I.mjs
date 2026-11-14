@@ -3241,7 +3241,13 @@ function buildCommitCommand(opts) {
   const branch = safeGitArg(opts.branch);
   const resolveLines = opts.paths.map((p, i) => {
     const candidates = commitPathCandidates(p, opts.repo).map(shellQuote).join(" ");
-    return `P${i}="$(pick ${candidates})" || MISSING="$MISSING "${shellQuote(p)}`;
+    if (!branch && opts.allowBaseBranch) {
+      return `P${i}=""; for c in ${candidates}; do if [ -e "$c" ] || git ls-files --error-unmatch -- "$c" >/dev/null 2>&1; then P${i}="$c"; break; fi; done; [ -n "$P${i}" ] || MISSING="$MISSING "${shellQuote(p)}`;
+    }
+    if (!branch) {
+      return `P${i}="$(pick ${candidates})" || MISSING="$MISSING "${shellQuote(p)}`;
+    }
+    return `P${i}=""; for c in ${candidates}; do if [ -e "$ORIG/$c" ]; then P${i}="$c"; mkdir -p "$(dirname "$WT/$c")"; cp -R "$ORIG/$c" "$WT/$c"; break; elif [ -e "$c" ]; then P${i}="$c"; rm -f "$WT/$c"; break; fi; done; [ -n "$P${i}" ] || MISSING="$MISSING "${shellQuote(p)}`;
   });
   const paths = opts.paths.map((_, i) => `"$P${i}"`).join(" ");
   return [
@@ -3250,12 +3256,21 @@ function buildCommitCommand(opts) {
     'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"',
     'git config user.name  >/dev/null 2>&1 || git config user.name  "Builderforce Agent"',
     'CUR="$(git rev-parse --abbrev-ref HEAD)"',
-    // A ticket branch was named: switch to it, creating it if new. Otherwise the base
-    // branch is refused — unless the caller DECLARED it, the same declared act `git_push`
-    // takes. Without that declaration "commit and push to main" had no reachable path at
-    // all: push accepted `allowBaseBranch`, but the commit before it could never land on
-    // main, so an explicit human instruction ended in a refusal every time.
-    ...branch ? [`git rev-parse --verify --quiet "${branch}" >/dev/null && git checkout "${branch}" || git checkout -b "${branch}"`] : opts.allowBaseBranch ? [] : ['[ "$CUR" != "$BASE" ] || { echo ON_BASE_BRANCH; exit 5; }'],
+    // A ticket branch was named: do NOT `git checkout` away from the branch the human is
+    // on. Instead create the branch in a dedicated worktree (the "sub graph") and run the
+    // whole commit there — the checkout the person is using keeps its current branch and
+    // its (possibly dirty) working tree. If the branch already exists as a worktree, reuse
+    // it; otherwise make it from the current HEAD. The worktree lives one level up so it
+    // is never inside the checkout being edited, and is named for the branch.
+    ...branch ? [
+      'ORIG="$(git rev-parse --show-toplevel)"',
+      `WT="$ORIG/../$(echo "${branch}" | tr '/' '-')-wt"`,
+      // Reuse the worktree when the branch already has one there; create it from HEAD
+      // otherwise. The last arm tolerates a worktree that is already registered at
+      // that path ("already registered" would otherwise fail the whole commit).
+      `git worktree add "$WT" -b "${branch}" 2>/dev/null || git worktree add "$WT" "${branch}" 2>/dev/null || [ "$(git -C "$WT" rev-parse --abbrev-ref HEAD 2>/dev/null)" = "${branch}" ] || { echo WORKTREE_FAILED; exit 12; }`,
+      'cd "$WT"'
+    ] : opts.allowBaseBranch ? [] : ['[ "$CUR" != "$BASE" ] || { echo ON_BASE_BRANCH; exit 5; }'],
     // A path is "there" if it is on disk OR tracked by git — the second arm is what
     // lets a DELETION be committed, since the file is gone by definition.
     'pick() { for c in "$@"; do if [ -e "$c" ] || git ls-files --error-unmatch -- "$c" >/dev/null 2>&1; then printf %s "$c"; return 0; fi; done; return 1; }',
@@ -3271,14 +3286,18 @@ function buildCommitCommand(opts) {
   ].join("\n");
 }
 function buildPushCommand(opts) {
+  const branch = safeGitArg(opts.branch);
   return [
     "set -e",
     RESOLVE_BASE,
     'CUR="$(git rev-parse --abbrev-ref HEAD)"',
-    ...opts.allowBaseBranch ? [] : ['[ "$CUR" != "$BASE" ] || { echo ON_BASE_BRANCH; exit 5; }'],
+    // A named ticket branch is pushed by REF — the commit landed in its worktree, so the
+    // checkout the human is on is irrelevant here. That is the whole point: the pipeline
+    // never moves the person's checkout off their branch.
+    ...branch ? [`[ "${branch}" != "$BASE" ] || { echo ON_BASE_BRANCH; exit 5; }`, `PUSHED="${branch}"`] : [...opts.allowBaseBranch ? [] : ['[ "$CUR" != "$BASE" ] || { echo ON_BASE_BRANCH; exit 5; }'], 'PUSHED="$CUR"'],
     // `-u` so a brand-new ticket branch gets its upstream on the first push.
-    'git push -u origin "$CUR"',
-    'echo "Pushed $CUR to origin"',
+    'git push -u origin "$PUSHED"',
+    'echo "Pushed $PUSHED to origin"',
     // Report where the push LANDED — the branch header (`## main...origin/main`, with any
     // `[ahead N]` still owed) plus whatever is still uncommitted. That is the evidence a
     // host needs to call the change shipped, so the push verifies itself rather than
@@ -3288,17 +3307,21 @@ function buildPushCommand(opts) {
 }
 function buildPullRequestCommand(opts) {
   const base = safeGitArg(opts.base);
+  const branch = safeGitArg(opts.branch);
   const reviewers = (opts.reviewers ?? []).map((r) => safeGitArg(r)).filter((r) => !!r);
   return [
     "set -e",
     "command -v gh >/dev/null 2>&1 || { echo NO_GH_CLI; exit 7; }",
     ...base ? [`BASE="${base}"`] : [RESOLVE_BASE],
-    'CUR="$(git rev-parse --abbrev-ref HEAD)"',
-    '[ "$CUR" != "$BASE" ] || { echo ON_BASE_BRANCH; exit 5; }',
+    // HEAD_REF is the named ticket branch when one was passed — the branch lives in a
+    // worktree, so the checkout's CURRENT branch is not it. Named-by-ref keeps the PR on
+    // the ticket branch without ever switching the checkout.
+    ...branch ? [`HEAD_REF="${branch}"`] : ['HEAD_REF="$(git rev-parse --abbrev-ref HEAD)"'],
+    '[ "$HEAD_REF" != "$BASE" ] || { echo ON_BASE_BRANCH; exit 5; }',
     // Push first when the branch has no upstream — `gh pr create` fails on an unpushed
     // head, and "open a PR" plainly means the branch has to exist on the remote.
-    'git rev-parse --abbrev-ref "@{upstream}" >/dev/null 2>&1 || git push -u origin "$CUR"',
-    `gh pr create --base "$BASE" --head "$CUR" --title ${shellQuote(opts.title)} --body ${shellQuote(opts.body)}` + reviewers.map((r) => ` --reviewer "${r}"`).join("")
+    'git rev-parse --verify --quiet "refs/remotes/origin/$HEAD_REF" >/dev/null 2>&1 || git push -u origin "$HEAD_REF"',
+    `gh pr create --base "$BASE" --head "$HEAD_REF" --title ${shellQuote(opts.title)} --body ${shellQuote(opts.body)}` + reviewers.map((r) => ` --reviewer "${r}"`).join("")
   ].join("\n");
 }
 function buildCleanupCommand(opts) {
@@ -3327,6 +3350,12 @@ function buildCleanupCommand(opts) {
     '[ "$MERGED" = 1 ] || { [ "$HAD_UPSTREAM" = 1 ] && [ "$REMOTE_EXISTS" = 0 ] && MERGED=1; } || true',
     ...opts.force ? ["MERGED=1"] : [],
     '[ "$MERGED" = 1 ] || { echo NOT_MERGED; exit 10; }',
+    // The ticket branch may live in a worktree (the commit flow never switches the
+    // checkout), and git refuses to delete a branch that is checked out anywhere — so
+    // remove the worktree first. Best-effort: if it is gone the branch delete below is
+    // what matters.
+    'WT="$(git rev-parse --show-toplevel)/../$(echo "$TARGET" | tr / -)-wt"',
+    'if git worktree list --porcelain 2>/dev/null | grep -q "^worktree $WT$"; then git worktree remove --force "$WT" 2>/dev/null || true; fi',
     // `-D`, not `-d`: the merged-ness check above is STRICTER than git's own (it also
     // accepts the squash-merge case git cannot see), so `-d` would refuse exactly the
     // branches this tool exists to remove. Nothing reaches this line unmerged.
@@ -3366,6 +3395,9 @@ function publishToolResult(action, r) {
   }
   if (r.exitCode === 11 || /\bNO_SUCH_BRANCH\b/.test(out)) {
     return fail("no local branch by that name \u2014 it has already been deleted. Nothing to do.");
+  }
+  if (r.exitCode === 12 || /\bWORKTREE_FAILED\b/.test(out)) {
+    return fail("the ticket branch's worktree could not be created or reused \u2014 nothing was committed and the checkout was not switched. Run git_status, then re-try git_commit with the same branch (a stale worktree can be cleared with `git worktree prune`).");
   }
   if (r.exitCode === 4 || /\bDIRTY\b/.test(out)) {
     return fail("you have uncommitted changes \u2014 commit or discard them before cleaning up (this refuses to discard uncommitted work).");
@@ -10957,4 +10989,4 @@ export {
   toolCallArgBytes,
   createComposingActivity
 };
-//# sourceMappingURL=chunk-ABKHZFAE.mjs.map
+//# sourceMappingURL=chunk-2RRTOB6I.mjs.map
