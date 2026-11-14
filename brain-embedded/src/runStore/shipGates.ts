@@ -161,10 +161,19 @@ export async function runOutgoingGate(
   // A push to a non-base branch is not gated — it cannot land on main without a pull
   // request, and the PR itself is gated (PRD §4.5).
   if (!baseBranch && !pullRequest) return { verdict: { ok: true, unavailable: [] }, diffHash, gated: false };
-  // Nothing to check (no upstream / no PR base / no outgoing commits): "unavailable", never a pass, never reviewed.
-  const unchecked = out.unavailable ?? (files.length === 0 || (diff !== undefined && !diff.trim()) ? 'no outgoing change to check' : undefined);
-  if (unchecked) {
-    return { verdict: { ok: false, reason: `${tool} refused: not verified — ${unchecked}. Commit the change on a branch with an upstream (or name the pull request base) and retry.` }, diffHash, gated: true };
+  // EMPTY vs UNCOMPUTABLE are different outcomes and must not share a refusal:
+  //   · uncomputable (`out.unavailable` — no upstream, no PR base) → refuse, never a pass (OD-3);
+  //   · empty but computable (files.length 0 / blank diff on an UP-TO-DATE base branch)
+  //     means the run's commits already reached the base branch — there is NOTHING left to
+  //     verify or review. Passing here is what lets a change that was pushed by another
+  //     session (or a retry after a successful push) settle instead of dead-ending on a
+  //     stale "no outgoing change" refusal (#6632). A still-ahead branch never hits this:
+  //     the port returns its real files/diff, so the full evidence + review gate runs below.
+  if (out.unavailable) {
+    return { verdict: { ok: false, reason: `${tool} refused: not verified — ${out.unavailable}. Commit the change on a branch with an upstream (or name the pull request base) and retry.` }, diffHash, gated: true };
+  }
+  if (files.length === 0 || (diff !== undefined && !diff.trim())) {
+    return { verdict: { ok: true, unavailable: [] }, diffHash, gated: true };
   }
   // Full tier for exactly the files whose bytes changed under it since the last check.
   await verifyPaths(run, files);

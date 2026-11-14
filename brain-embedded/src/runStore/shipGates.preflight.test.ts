@@ -145,6 +145,14 @@ describe('shipGatePreflight', () => {
     expect('refusal' in gate && gate.refusal.error).toMatch(/not verified — the branch has no upstream/);
   });
 
+  it('regression: an EMPTY but COMPUTABLE base-branch outgoing set (work already landed) passes — never the stale "no outgoing change to check" refusal (#6632)', async () => {
+    // Empty + no `unavailable` reason means the port computed a real, up-to-date base branch:
+    // the run's commits already reached origin. There is nothing left to verify or review,
+    // so refusing would dead-end a change that already shipped (or a retry after a push).
+    const gate = await shipGatePreflight(runWith({ git: git({ files: [], diff: '' }), verifier: verifier('pass') }), 'git_push', PUSH);
+    expect(gate).toEqual({ evidence: 'checks passed' });
+  });
+
   it('regression: ticket done is refused BEFORE it runs, only for this run\'s own failing outgoing files', async () => {
     const DONE = { id: 1, status: 'done' };
     const files = [{ absPath: FILE, hash: 'h1', isNew: false, deleted: false }];
