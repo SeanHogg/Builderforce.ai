@@ -29,6 +29,9 @@ import {
   getRunTrace,
   stopRun,
 } from './brainRunStore';
+// `requestRunConfirm` / `resolveRunConfirm` are the run-control confirm gate, not part
+// of the store's public re-export face — import them from runControl directly.
+import { requestRunConfirm, resolveRunConfirm } from './runStore/runControl';
 import type { BrainStreamFn } from './brainRunStore';
 import { StreamInterruptedError } from './streamChatCompletion';
 import { brainRequestError } from './chatError';
@@ -230,6 +233,42 @@ describe('cross-chat run state (the session-list / dropdown indicators)', () => 
     // Touching a cell after unsubscribe must not call the removed listener.
     subscribeRun(1, () => {})();
     expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('reports a chat with a pending confirm as awaiting, not running', () => {
+    // The marker's '?' half: a chat paused on a question/confirm is the actionable
+    // one — it must surface in `awaiting` (and NOT in `running`) so the history row
+    // draws the amber question mark, not the running dot.
+    const p = requestRunConfirm(5, { name: 'write_file', args: { path: 'a.ts' } });
+    expect(getGlobalRunState()).toEqual({ running: [], awaiting: [5] });
+    resolveRunConfirm(5, true);
+    return p;
+  });
+
+  it('a confirmed chat leaves awaiting (clears once the question is answered)', () => {
+    const p = requestRunConfirm(6, { name: 'write_file', args: { path: 'b.ts' } });
+    expect(getGlobalRunState()).toEqual({ running: [], awaiting: [6] });
+    resolveRunConfirm(6, true);
+    // The confirm is resolved: the chat no longer waits on anyone.
+    expect(getGlobalRunState()).toEqual({ running: [], awaiting: [] });
+    return p;
+  });
+
+  it('reports an actively-running chat as running only (the sets stay disjoint)', () => {
+    // A chat mid-run with no pending confirm belongs in `running`, never `awaiting` —
+    // the two lists must stay disjoint or the marker precedence has nothing to rely on.
+    const p = requestRunConfirm(7, { name: 'write_file', args: { path: 'c.ts' } });
+    resolveRunConfirm(7, true);
+    // Now run a real (trivial) run on chat 8 so `running` is set with no pending confirm.
+    return p.then(() => {
+      const done = startRun(8, {
+        resolvedSystemPrompt: 'sys',
+        stream: async () => ({ text: 'ok', toolCalls: [], finishReason: 'stop' }),
+        persistence: { sendMessages: async () => [] },
+      } as never);
+      expect(getGlobalRunState()).toEqual({ running: [8], awaiting: [] });
+      return done;
+    });
   });
 });
 

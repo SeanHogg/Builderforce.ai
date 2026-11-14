@@ -117,7 +117,7 @@ function RunDeltaAfter({ messageId }: { messageId: number }) {
             repoLabel={(ctx.reposPerRun.get(c.runId) ?? 0) > 1 ? repoDisplayName(c.repo) : undefined}
             onOpenDetails={() => ctx.openDetails(cardKey(c))}
             held={heldOf(c, ctx.release)}
-            predicted={<PredictedLine predicted={c.predicted} />}
+            predicted={<PredictedLine predicted={c.predicted} labels={ctx.labels} />}
             onResolve={ctx.onResolve ? () => ctx.onResolve?.(ctx.resolveText(c.delta)) : undefined}
             onCopyDiagnostics={() => ctx.copyDiagnostics(c.delta)}
           />

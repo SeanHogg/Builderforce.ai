@@ -26,13 +26,13 @@ export const BRAIN_AUTO_APPROVE_KEY = 'brain.autoApprove';
  * The guarded read/write pair itself is the SHARED one — a blocked or partitioned
  * `localStorage` must degrade to "not persisted" rather than throw, and that guard has no
  * business existing twice. What stays here is the web app's POLICY: which key, and that a
- * browser with nothing stored defaults ON (see {@link BRAIN_AUTO_APPROVE_DEFAULT}).
+ * browser with nothing stored defaults OFF (see {@link BRAIN_AUTO_APPROVE_DEFAULT}).
  */
 export const brainAutoApprovePersistence: ToolConfirmationPersistence =
   localStorageConfirmationPersistence(BRAIN_AUTO_APPROVE_KEY);
 
-/** New browsers default ON; an explicit off is preserved. */
-export const BRAIN_AUTO_APPROVE_DEFAULT = true;
+/** New browsers default OFF (stop and confirm); an explicit on is preserved. */
+export const BRAIN_AUTO_APPROVE_DEFAULT = false;
 
 /** Whether auto-approve is enabled. For the NON-gate consumers (the IDE artifact tools
  *  and the canvas), which read the flag outside a React render. The gate itself uses

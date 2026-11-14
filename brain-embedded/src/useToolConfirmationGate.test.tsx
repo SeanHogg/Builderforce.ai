@@ -78,6 +78,26 @@ describe('useToolConfirmationGate', () => {
     expect(persistence.value).toBe(false);
   });
 
+  it('answerQuestion is null by default — an ask_user question settles, it is not auto-answered', () => {
+    // The default is STOP AND CONFIRM: a pending question must wait for a human click.
+    const { result } = renderHook(() => useToolConfirmationGate({ isMutating }));
+    const question = {
+      question: 'Which path?',
+      options: [{ label: 'A', recommended: true }, { label: 'B' }],
+    };
+    expect(result.current.answerQuestion(question)).toBeNull();
+  });
+
+  it('answerQuestion resolves only when auto-approve is explicitly ON', () => {
+    const { result } = renderHook(() => useToolConfirmationGate({ isMutating }));
+    act(() => result.current.setAutoApprove(true));
+    const question = {
+      question: 'Which path?',
+      options: [{ label: 'A' }, { label: 'B', recommended: true }],
+    };
+    expect(result.current.answerQuestion(question)).toBe('B');
+  });
+
   it('is session-only when no persistence is supplied', () => {
     const { result, unmount } = renderHook(() => useToolConfirmationGate({ isMutating }));
     act(() => result.current.setAutoApprove(true));

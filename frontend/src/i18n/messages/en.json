@@ -4595,7 +4595,39 @@
       "errLoadTeams": "Failed to load teams",
       "errLoadTeam": "Failed to load team",
       "errCreate": "Failed to create team",
-      "errDelete": "Failed to delete team"
+      "errDelete": "Failed to delete team",
+      "peopleSection": "People",
+      "people": {
+        "lede": "Quality scores per person and role, over the last {days} days. Each rate is risk-adjusted (observed ÷ expected for the work taken) and shrunk toward the team, so a small sample is never shown as an extreme. Only a point outside the control limits is flagged.",
+        "loading": "Loading people…",
+        "empty": "No scored contributors on this team yet. Scores appear once a contributor has enough final-labelled runs.",
+        "emptyScoringOff": "People scoring is off for this workspace.",
+        "scoringOffNote": "Human scoring is off for this workspace; only agent scores are shown.",
+        "noRoles": "No scored runs in this window.",
+        "insufficientData": "Not enough data — {count} final-labelled runs; 20 are needed before a score is shown.",
+        "colRole": "Role",
+        "colMeasure": "Measure",
+        "colRatio": "Std. ratio",
+        "colRuns": "Runs",
+        "colInterval": "95% interval",
+        "colFlag": "Flag",
+        "outsideLimits": "Outside limits",
+        "withinLimits": "—",
+        "errLoad": "Failed to load people scores",
+        "kind": {
+          "human": "Human",
+          "agent": "Agent"
+        },
+        "measure": {
+          "run-quality": "Run quality",
+          "followup-fix-rate": "Follow-up-fix rate",
+          "revert-rate": "Revert rate",
+          "integrity-rate": "Integrity rate",
+          "security-introductions": "Security introductions",
+          "review-rejection-rate": "Review rejection rate",
+          "approval-accuracy": "Approval accuracy"
+        }
+      }
     },
     "workforceTitle": "Workforce",
     "consolidateAction": "Consolidate",
@@ -38905,8 +38937,14 @@
     }
   },
   "runDelta": {
-    "predictedUnusualLines": "≈ {count, plural, one {# unusual line} other {# unusual lines}} (predicted)",
+    "predictedUnusualLines": "≈ {count} unusual new lines (predicted)",
     "predictedHint": "Estimated from how unusual the new code is for this repository. A place to look, not a verdict.",
+    "rankedNote": "{k} findings, highest-value first (ranked)",
+    "predictedHeading": "Predicted",
+    "predictedAdvisory": "Estimated, not measured — a place to look, never a verdict.",
+    "predictedRisk": "{probability} risk of a follow-up fix ({band}): {reasons}",
+    "predictedSimilar": "{noFollowup} of {k} similar runs needed no follow-up; {reverted} were reverted",
+    "predictedUndetected": "≈ {count} undetected problems in {dimension}",
     "history": {
       "title": "Run deltas",
       "listHeading": "Recent runs",
@@ -39311,7 +39349,8 @@
       "invalid": "invalid",
       "backreference": "backreference",
       "nestedQuantifier": "nested quantifier",
-      "quantifiedAlternation": "quantified alternation"
+      "quantifiedAlternation": "quantified alternation",
+      "adjacentQuantifier": "adjacent quantifier"
     },
     "pendingCard": "Measuring what this run changed…",
     "pendingDynamic": "Running dynamic checks (tests, benchmarks), up to {minutes} min…",

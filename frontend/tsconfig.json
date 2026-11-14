@@ -52,6 +52,7 @@
       "@builderforce/knowledge-graph-view": ["../packages/knowledge-graph-view/src/index.ts"],
       "@builderforce/knowledge-graph-view/tokens.css": ["../packages/knowledge-graph-view/src/tokens.css"],
       "@builderforce/run-delta/contract": ["../packages/run-delta/src/contract.ts"],
+      "@builderforce/run-delta/predict": ["../packages/run-delta/src/predict/index.ts"],
       "@builderforce/run-delta/run-ids": ["../packages/run-delta/src/runIds.ts"],
       "@builderforce/agent-tools/code-mask": ["../packages/agent-tools/src/knowledge/codeMask.ts"],
       "@builderforce/agent-tools/sampling": ["../packages/agent-tools/src/sampling.ts"],

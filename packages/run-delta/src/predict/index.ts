@@ -38,3 +38,37 @@ export {
     type BetaCount, type DynamicCheckOutcome, type ScheduleHistory, type ScheduleTelemetry,
 } from './scheduleHistory.js';
 export { decisiveDimensions } from './credit.js';
+// WS21 (§D10): ranking and similar runs. D0: order and counts only — never a verdict.
+export {
+    FINDING_RANK_MODEL_ID, FINDING_RANK_MODEL_VERSION, FINDING_RANK_PREDICTION_ID, FINDING_RANK_SCHEMA_VERSION, FINDING_RANK_STEP,
+    FINDING_RANK_WEIGHTS, findingRankFeatures, findingRankScore, findingRelevance, predictFindingRank, quantizeRankScore, rankFindings,
+    rankNdcgAt5, type FindingRankFeatures, type FindingRankResult,
+} from './ranking.js';
+export {
+    SIMILAR_RUNS_K, SIMILAR_RUNS_MIN_LABELLED, SIMILAR_RUNS_MODEL_ID, SIMILAR_RUNS_MODEL_VERSION, SIMILAR_RUNS_PREDICTION_ID,
+    SIMILAR_RUNS_SCHEMA_VERSION, similarRuns, type SimilarRun, type SimilarRunOutcome, type SimilarRunsResult,
+} from './similarRuns.js';
+// Part D models (WS17): Bayesian rule precision (D3), calibration (D4), trend SPC (D7)
+// and reliability growth (D8). All compose the builderforce-memory `stats` module (D13).
+export {
+    CREDIBLE_MASS, DEFAULT_ALPHA0, DEFAULT_BETA0, DEFAULT_PRIOR_STRENGTH, DEMOTE_BOUND, MIN_VOTES_TO_MOVE, RESTORE_BOUND,
+    RULE_PRECISION_MODEL_ID,
+    RULE_PRECISION_MODEL_VERSION, RULE_PRECISION_PREDICTION_ID, RULE_PRECISION_SCHEMA_VERSION, evaluateRulePrecision,
+    predictRulePrecision, shrinkRepoPosterior, tallyRuleVotes, type RulePrecisionDecision, type RulePrecisionInput,
+    type RulePrecisionPosterior, type RulePrecisionResult, type RuleVote,
+} from './rulePrecision.js';
+export {
+    ECE_BINS, ECE_RECALIBRATE_THRESHOLD, ISOTONIC_MIN_EXAMPLES, RULE_CALIBRATION_MODEL_ID, RULE_CALIBRATION_MODEL_VERSION,
+    RULE_CALIBRATION_PREDICTION_ID, RULE_CALIBRATION_SCHEMA_VERSION, calibrationPrediction, calibrateScores,
+    type CalibrationExample, type CalibrationFit, type CalibrationMethod, type CalibrateScoresInput, type CalibrateScoresResult,
+} from './calibration.js';
+export {
+    CHANGE_POINT_HAZARD, CUSUM_DRIFT, CUSUM_TARGET, CUSUM_THRESHOLD, METRIC_SPC_MODEL_ID, METRIC_SPC_MODEL_VERSION,
+    METRIC_SPC_PREDICTION_ID, METRIC_SPC_SCHEMA_VERSION, SPC_MIN_HISTORY, detectTrendShift, spcPrediction,
+    type SpcInput, type SpcResult, type SpcSignal,
+} from './spc.js';
+export {
+    CHAPMAN_MIN_CAPTURED, GOEL_OKUMOTO_BOOTSTRAP_RESAMPLES, GOEL_OKUMOTO_MIN_POINTS, RELIABILITY_GROWTH_MODEL_ID,
+    RELIABILITY_GROWTH_MODEL_VERSION, RELIABILITY_GROWTH_PREDICTION_ID, RELIABILITY_GROWTH_SCHEMA_VERSION,
+    estimateReliabilityGrowth, estimateUndetected, reliabilityGrowthPrediction, type ReliabilityGrowthInput, type ReliabilityGrowthResult,
+} from './reliabilityGrowth.js';
