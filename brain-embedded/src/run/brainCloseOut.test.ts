@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { BrainTraceEvent } from '../brainTriage';
 import type { BackstopRun } from '../runStore/runBackstops';
 import type { BrainRunContext } from '../runStore/brainRunContext';
-import { createEvidenceLedger } from '@builderforce/run-guards';
+import { createEvidenceLedger, type ReviewVerdict } from '@builderforce/run-guards';
 import { deterministicFinish } from '../runStore/deterministicFinish';
 import { REVIEW_RECORD_TOOL, reviewedThisRun, verificationOf, type CloseOutInput } from './brainCloseOut';
 
@@ -33,7 +33,7 @@ function evidence(path: string, outcomes: Array<'pass' | 'fail' | 'unavailable'>
 }
 
 /** The run context the finish reads the chat id from (the ticket list it closes against). */
-const run = { c: { runUsage: {}, trace: [] }, req: {}, serverChatId: 7, recalled: null } as unknown as BrainRunContext;
+const run = { c: { runUsage: {}, trace: [], authorModels: new Set<string>(), shipReviews: [] }, req: {}, serverChatId: 7, recalled: null } as unknown as BrainRunContext;
 
 type FinishInput = CloseOutInput & { verified: boolean; hasTicket: boolean };
 
@@ -57,17 +57,41 @@ function input(tools: ReturnType<typeof fakeTools>, over: Partial<FinishInput> =
 const reviewed = (tools: ReturnType<typeof fakeTools>) => tools.calls.some((c) => c.name === REVIEW_RECORD_TOOL);
 const movedToDone = (tools: ReturnType<typeof fakeTools>) => tools.calls.some((c) => c.name === 'builtin_tasks_update' && c.args.status === 'done');
 
+/** An approved independent review of `diffHash` (what the push gate remembers on `run.c.shipReviews`). */
+const APPROVED_REVIEW = (diffHash: string): ReviewVerdict => ({ reviewerModel: 'reviewer-model', verdict: 'approved', diffHash, findings: [] });
+
 describe('the host close-out of a shipped run (zero model turns)', () => {
   it('records the review on the ticket THIS run created, then moves the linked in_review ticket to done', async () => {
+    // Regression (chat #230): the review is recorded ONLY when an approved independent review of
+    // the shipped diff is in hand; the move to done follows either way.
     const tools = fakeTools();
-    await deterministicFinish(input(tools), run);
+    await deterministicFinish(input(tools, { reviewedDiffHash: 'diff-1' }), { ...run, c: { ...run.c, shipReviews: [APPROVED_REVIEW('diff-1')] } });
     const names = tools.calls.map((c) => c.name);
     const review = tools.calls.find((c) => c.name === REVIEW_RECORD_TOOL);
     expect(review?.args).toMatchObject({ taskId: 41, verdict: 'complete' });
     expect(String(review?.args.summary)).toContain('src/a.ts');
+    expect(String(review?.args.summary)).toContain('reviewer-model approved');
     // The review comes before the move to done.
     expect(names.indexOf(REVIEW_RECORD_TOOL)).toBeLessThan(names.lastIndexOf('builtin_tasks_update'));
     expect(tools.calls).toContainEqual({ name: 'builtin_tasks_update', args: { id: 41, status: 'done' } });
+  });
+
+  it('records NO review when the host holds no approved review of the shipped diff, but still moves to done (chat #230)', async () => {
+    // The re-record used to be refused by the review gate (no NEW independent review), deadlocking
+    // the finish and leaving the ticket at in_review forever. Now it records nothing instead.
+    const tools = fakeTools();
+    const res = await deterministicFinish(input(tools), run); // no reviewedDiffHash, no shipReviews
+    expect(res).toMatchObject({ finished: true, reviewRecorded: false, ticketClosed: true });
+    expect(reviewed(tools)).toBe(false);
+    expect(movedToDone(tools)).toBe(true);
+  });
+
+  it('records NO review when the only remembered review approved a DIFFERENT diff', async () => {
+    const tools = fakeTools();
+    const res = await deterministicFinish(input(tools, { reviewedDiffHash: 'diff-2' }), { ...run, c: { ...run.c, shipReviews: [APPROVED_REVIEW('diff-1')] } });
+    expect(res.reviewRecorded).toBe(false);
+    expect(reviewed(tools)).toBe(false);
+    expect(movedToDone(tools)).toBe(true);
   });
 
   it('never records a second review when the run recorded its own', async () => {
@@ -130,9 +154,9 @@ describe('the host close-out of a shipped run (zero model turns)', () => {
     }
   });
 
-  it('a verified close-out names the passing checks in the review', async () => {
+  it('a verified close-out names the passing checks and the approving reviewer in the review', async () => {
     const tools = fakeTools();
-    await deterministicFinish(input(tools), run);
+    await deterministicFinish(input(tools, { reviewedDiffHash: 'diff-1' }), { ...run, c: { ...run.c, shipReviews: [APPROVED_REVIEW('diff-1')] } });
     expect(String(tools.calls.find((c) => c.name === REVIEW_RECORD_TOOL)?.args.summary)).toContain('/repo/src/a.ts test "check-0"');
     expect(verificationOf(undefined, ['src/a.ts'])).toMatchObject({ verified: false });
   });

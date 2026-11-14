@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BrainTraceEvent } from '../brainTriage';
 import type { BackstopRun } from './runBackstops';
-import { createEvidenceLedger } from '@builderforce/run-guards';
+import { createEvidenceLedger, type ReviewVerdict } from '@builderforce/run-guards';
 import { deterministicFinish, finishConditionMet, type DeterministicFinishResult } from './deterministicFinish';
 import type { CloseOutInput } from '../run/brainCloseOut';
 import type { BrainRunContext } from './brainRunContext';
@@ -41,7 +41,7 @@ function evidence(path: string, outcomes: Array<'pass' | 'fail' | 'unavailable'>
 }
 
 /** The emitEvermindLearnReconcile seam is satisfied by any object with the fields it reads. */
-const fakeRun = { c: { runUsage: {}, trace: [] }, req: {}, recalled: null } as unknown as BrainRunContext;
+const fakeRun = { c: { runUsage: {}, trace: [], authorModels: new Set<string>(), shipReviews: [] }, req: {}, recalled: null } as unknown as BrainRunContext;
 
 function input(tools: ReturnType<typeof fakeTools>, over: Partial<CloseOutInput & { verified: boolean; hasTicket: boolean }> = {}) {
   return {
@@ -51,13 +51,21 @@ function input(tools: ReturnType<typeof fakeTools>, over: Partial<CloseOutInput 
   };
 }
 
+/** An approved independent review of `diffHash`, as the push gate remembers on `run.c.shipReviews`. */
+const APPROVED_REVIEW = (diffHash: string): ReviewVerdict => ({ reviewerModel: 'reviewer-model', verdict: 'approved', diffHash, findings: [] });
+
 /** The tool calls the close-out is allowed to make — the host actions, never a model turn. */
 const CLOSE_OUT_TOOLS = new Set(['builtin_reviews_record', 'builtin_tasks_update', 'builtin_chats_list_tickets', 'builtin_tickets_from_delta', 'remember_fact']);
 
 describe('deterministicFinish (fix #6, zero model turns)', () => {
   it('records the review and sets the ticket to done — with NO model turn', async () => {
     const tools = fakeTools();
-    const res: DeterministicFinishResult = await deterministicFinish(input(tools), fakeRun);
+    // Regression (chat #230): the review is recorded only over an approved independent review of
+    // the shipped diff; without one in hand the host records nothing but still moves the ticket.
+    const res: DeterministicFinishResult = await deterministicFinish(
+      input(tools, { reviewedDiffHash: 'diff-1' }),
+      { ...fakeRun, c: { ...fakeRun.c, shipReviews: [APPROVED_REVIEW('diff-1')] } },
+    );
     expect(res).toEqual({ finished: true, reviewRecorded: true, ticketClosed: true, factWritten: false });
     const names = tools.calls.map((c) => c.name);
     // Every call is a host action through runTool; none constructs an LLM.

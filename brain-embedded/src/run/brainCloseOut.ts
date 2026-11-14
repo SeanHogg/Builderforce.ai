@@ -7,7 +7,7 @@
  */
 
 import { parseSyncId } from '@builderforce/local-first';
-import { normalizeEvidencePath, createEvidenceLedger, type EvidenceLedger } from '@builderforce/run-guards';
+import { normalizeEvidencePath, createEvidenceLedger, type EvidenceLedger, type ReviewVerdict } from '@builderforce/run-guards';
 import { isFailedToolResult, type BrainTraceEvent } from '../brainTriage';
 import { nowIso, nowMs } from '../runStore/runCells';
 import type { BackstopRun } from '../runStore/runBackstops';
@@ -35,6 +35,14 @@ export interface CloseOutInput {
   trace: readonly BrainTraceEvent[];
   /** THIS run's evidence ledger (`BrainRunContext.evidence`): the checks the host verifier ran. Absent = no evidence. */
   evidence?: Pick<EvidenceLedger, 'snapshot'>;
+  /**
+   * The diff hash the shipped change was reviewed against (PRD 45 OD-1) — what
+   * `approvedReviewFor` matches the run's remembered `shipReviews` against. Absent on a host
+   * that binds no reviewer port. The close-out records its review ONLY when an approved
+   * independent review of THIS diff is in hand, so it never double-books a review the push
+   * gate already ran (chat #230).
+   */
+  reviewedDiffHash?: string | null;
 }
 
 /** Whether the run's evidence verifies its change: the passing checks it holds, or why it does not. */
@@ -80,13 +88,26 @@ export function reviewedThisRun(trace: readonly BrainTraceEvent[]): Set<number> 
  * summary names the files and the PASSING checks the run's evidence ledger holds — nothing it does
  * not (never a rubber stamp).
  */
-export async function recordShipReview(input: CloseOutInput, taskId: number, checks: readonly string[]): Promise<void> {
+export async function recordShipReview(
+  input: CloseOutInput,
+  taskId: number,
+  checks: readonly string[],
+  approvedReview: ReviewVerdict | null = null,
+): Promise<void> {
   const { view, req } = input;
   if (!req.runTool || reviewedThisRun(input.trace).has(taskId)) return;
+  // A review-gated push records the review at the GATE, and remembers it on `run.c.shipReviews`.
+  // The very next settle reads the SAME successful push from the trace and lands here again — so a
+  // self-review recorded now would DOUBLE-BOOK the review the gate already ran, and the review gate
+  // would refuse it (no NEW independent review) and hold the ticket at `in_review` forever (chat
+  // #230: the code shipped, the gate approved, yet the delta ticket sat at 75%). Record the close-out
+  // review ONLY when the caller hands in an approved review of the shipped diff to name as its
+  // reviewer; with none in hand the host records nothing here and the run is left for the model.
+  if (!approvedReview) return;
   const shown = view.touchedFiles.slice(0, 10).join(', ');
   const more = view.touchedFiles.length > 10 ? ` (+${view.touchedFiles.length - 10} more)` : '';
   const passed = checks.slice(0, 10).join('; ') + (checks.length > 10 ? ` (+${checks.length - 10} more)` : '');
-  const summary = `Closed out by the host: this run's change${view.touchedFiles.length ? ` (${view.touchedFiles.length} file${view.touchedFiles.length === 1 ? '' : 's'}: ${shown}${more})` : ''} was pushed to the base branch and verified landed, with no placeholder outstanding. Passing checks on the shipped bytes: ${passed}.`;
+  const summary = `Closed out by the host: this run's change${view.touchedFiles.length ? ` (${view.touchedFiles.length} file${view.touchedFiles.length === 1 ? '' : 's'}: ${shown}${more})` : ''} was pushed to the base branch and verified landed, with no placeholder outstanding. Passing checks on the shipped bytes: ${passed}. Independent review: ${approvedReview.reviewerModel} approved the shipped diff.`;
   const args = { taskId, verdict: 'complete', summary };
   const toolStart = nowMs();
   let out: unknown;

@@ -29,7 +29,7 @@ import type { BrainRunContext } from './brainRunContext';
 import type { BrainRunRequest } from './runTypes';
 import { nowIso, pushTrace, runTrace } from './runCells';
 import { onBaseBranch, shippedToBaseBranch } from '../shipVerification';
-import { runReviewGate } from './shipGates';
+import { approvedReviewFor, runReviewGate } from './shipGates';
 
 /** The narrow FinishHook the {@link withDeterministicFinish} wrapper composes around. */
 export interface InnerFinishHook {
@@ -120,8 +120,18 @@ export async function deterministicFinish(
           result: `The change shipped, but this run holds no passing verification for it (${verification.reason}): no review was recorded and its ticket stays in review.`,
         });
       } else if (finishing && view.deltaTicketId != null) {
-        await recordShipReview(input, view.deltaTicketId, verification.checks);
-        result.reviewRecorded = true;
+        // Record the close-out review ONLY when the host holds an APPROVED independent review of
+        // the shipped diff to name as its reviewer. After a review-gated push the very next settle
+        // reads the SAME successful push from the trace and lands here again; a review recorded now
+        // would double-book the review the push gate already ran, and the review gate would refuse
+        // it (no NEW independent review) — deadlocking the finish and leaving the ticket at
+        // `in_review` forever (chat #230). With no approved review in hand the host records nothing
+        // here; the run is left for the model to review, never a rubber stamp.
+        const approved = input.reviewedDiffHash ? approvedReviewFor(run, input.reviewedDiffHash) : null;
+        if (approved) {
+          await recordShipReview(input, view.deltaTicketId, verification.checks, approved);
+          result.reviewRecorded = true;
+        }
       }
     }
   }
@@ -227,6 +237,10 @@ async function finishCloseOut(run: BrainRunContext): Promise<void> {
   const input: CloseOutInput = {
     serverChatId: run.serverChatId, view, req, needsTicket: true, shipped: true,
     reviewedInPreview: [], openPlaceholders, trace: runTrace(c), evidence: run.evidence,
+    // The diff the change was reviewed against: `approvedReviewFor` matches the run's remembered
+    // `shipReviews` to it, so the close-out records its review only over a review that approved
+    // THESE bytes (chat #230). Best-effort: an uncomputable diff simply means no review in hand.
+    reviewedDiffHash: (await run.req.git?.outgoing('').catch(() => null))?.diffHash ?? null,
   };
   // Verified from the run's own evidence, as the startRun settle does: a driver-run finish
   // with no passing check must not move its tickets to done.
