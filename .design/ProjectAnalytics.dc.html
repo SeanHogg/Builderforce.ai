@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project Analytics — consolidated Analytics + Diagnostics (high-fidelity mockup)</title>
+<style>
+  :root{
+    /* tokens sampled from the live dashboard dark theme */
+    --bg-app:#070b14;
+    --bg-panel:#0b1220;
+    --bg-card:#0d1526;
+    --bg-elevated:#111b30;
+    --surface-interactive:#16223a;
+    --border-subtle:#1c2942;
+    --border-strong:#2a3a5c;
+    --text-primary:#eef3ff;
+    --text-secondary:#a9b4cf;
+    --text-muted:#5f6b8a;
+    --accent:#4d9eff;
+    --accent-soft:rgba(77,158,255,.14);
+    --coral:#ff6b6b;
+    --coral-bright:#ff5a5a;
+    --teal:#22d3ee;
+    --green:#22c55e;
+    --green-bright:#34d399;
+    --amber:#f59e0b;
+    --amber-bright:#fbbf24;
+    --red:#ef4444;
+    --red-bright:#f87171;
+    --radius-md:8px;
+    --radius-lg:12px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg-app);color:var(--text-primary);
+    -webkit-font-smoothing:antialiased;line-height:1.45;
+  }
+  .app{display:flex;min-height:100vh;}
+  /* ── left rail ─────────────────────────────────────────────── */
+  .rail{width:56px;background:#04060d;border-right:1px solid var(--border-subtle);flex-shrink:0;
+        display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:18px;}
+  .rail .logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#4d9eff,#1e40af);
+        display:flex;align-items:center;justify-content:center;font-weight:800;color:#050810;font-size:15px;}
+  .rail .dotnav{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+        color:var(--text-muted);font-size:16px;}
+  .rail .dotnav.active{background:var(--accent-soft);color:var(--accent);}
+  /* ── main column ───────────────────────────────────────────── */
+  .main{flex:1;min-width:0;}
+  .topbar{height:54px;border-bottom:1px solid var(--border-subtle);display:flex;align-items:center;
+        gap:14px;padding:0 20px;background:rgba(7,11,20,.7);}
+  .crumb{font-size:12px;color:var(--text-muted);}
+  .crumb b{color:var(--text-primary);font-weight:600;}
+  .pill{margin-left:auto;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:4px 9px;
+        border-radius:999px;border:1px solid var(--border-strong);color:var(--text-secondary);}
+  .pill .live{color:var(--green-bright);}
+  .iconbtn{width:28px;height:28px;border-radius:6px;border:1px solid var(--border-subtle);background:var(--surface-interactive);
+        color:var(--text-secondary);display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer;}
+  /* ── project header + tabs ─────────────────────────────────── */
+  .phead{padding:18px 24px 0;}
+  .phead h1{font-size:17px;font-weight:700;letter-spacing:-.01em;}
+  .phead .sub{font-size:12px;color:var(--text-muted);margin-top:2px;}
+  .tabs{display:flex;gap:2px;border-bottom:1px solid var(--border-subtle);margin-top:16px;overflow-x:auto;}
+  .tab{padding:9px 14px;font-size:13px;color:var(--text-secondary);border-bottom:2px solid transparent;
+        white-space:nowrap;cursor:pointer;}
+  .tab:hover{color:var(--text-primary);}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600;}
+  .tab .badge{font-size:10px;background:var(--surface-interactive);border:1px solid var(--border-subtle);
+        color:var(--text-muted);border-radius:999px;padding:1px 6px;margin-left:6px;}
+  /* ── content ───────────────────────────────────────────────── */
+  .content{padding:20px 24px 60px;max-width:1180px;}
+  .card{background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);}
+  .card-pad{padding:16px 18px;}
+  .muted{font-size:12px;color:var(--text-muted);}
+  .section-title{font-size:13px;font-weight:700;color:var(--text-primary);}
+  .eyebrow{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);}
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:12px;font-weight:600;
+        border-radius:var(--radius-md);cursor:pointer;white-space:nowrap;border:1px solid transparent;text-decoration:none;}
+  .btn-primary{background:var(--coral-bright);color:#1a0505;border:none;}
+  .btn-ghost{background:transparent;color:var(--accent);border-color:var(--accent);}
+  .btn-subtle{background:var(--surface-interactive);color:var(--text-primary);border-color:var(--border-subtle);}
+  /* in-page sub-nav (Analytics · Diagnostics · Results · Stakeholders) */
+  .subnav{display:flex;align-items:center;gap:4px;background:var(--bg-elevated);border:1px solid var(--border-subtle);
+        border-radius:999px;padding:4px;width:max-content;margin-bottom:18px;}
+  .subnav a{font-size:12px;padding:6px 13px;border-radius:999px;color:var(--text-secondary);text-decoration:none;}
+  .subnav a.on{background:var(--accent-soft);color:var(--accent);font-weight:600;}
+  .subnav .grow{flex:1;}
+  .subnav .all{font-size:12px;color:var(--text-muted);padding:6px 10px;text-decoration:none;}
+  /* overview strip */
+  .ov{display:grid;grid-template-columns:auto auto 1fr;gap:16px;align-items:stretch;margin-bottom:18px;}
+  .gaugecard{display:flex;align-items:center;gap:18px;padding:16px 20px;}
+  .callout{border-color:rgba(251,191,36,.5);}
+  .callout .grade{width:52px;height:52px;border-radius:12px;background:rgba(251,191,36,.14);border:1px solid rgba(251,191,36,.55);
+        display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;}
+  .callout .grade b{font-size:20px;color:var(--amber-bright);line-height:1;}
+  .callout .grade span{font-size:10px;color:var(--amber-bright);margin-top:2px;}
+  /* dimension bars */
+  .dim{padding:14px 18px 6px;}
+  .dimrow{margin-bottom:14px;}
+  .dimhead{display:flex;align-items:baseline;gap:8px;}
+  .dimhead .name{font-size:12.5px;font-weight:600;color:var(--text-primary);}
+  .dimhead .spacer{flex:1;}
+  .chip{font-size:10px;font-weight:700;letter-spacing:.03em;padding:2px 8px;border-radius:999px;border:1px solid;}
+  .chip.strong{color:var(--green-bright);border-color:rgba(52,211,153,.5);background:rgba(52,211,153,.1);}
+  .chip.fair{color:var(--amber-bright);border-color:rgba(251,191,36,.5);background:rgba(251,191,36,.1);}
+  .chip.critical{color:var(--red-bright);border-color:rgba(248,113,113,.55);background:rgba(248,113,113,.12);}
+  .score{font-size:11.5px;font-weight:700;color:var(--text-secondary);min-width:56px;text-align:right;}
+  .bar{display:flex;gap:3px;height:14px;margin-top:6px;border-radius:4px;overflow:hidden;}
+  .bar .seg{display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:700;color:rgba(255,255,255,.85);}
+  .seg.s1{background:rgba(34,197,94,.30);width:26%;}
+  .seg.s2{background:rgba(245,158,11,.30);width:26%;}
+  .seg.s3{background:rgba(245,158,11,.22);width:26%;color:rgba(255,255,255,.4);}
+  .seg.s4{background:rgba(239,68,68,.25);width:22%;color:rgba(255,255,255,.4);}
+  .seg.fill.s1{background:var(--green);}
+  .seg.fill.s2{background:var(--amber);}
+  .seg.fill.s3{background:var(--amber);}
+  .seg.fill.s4{background:var(--red);}
+  .seg.ghost{opacity:0;}
+  .dimnote{font-size:11px;color:var(--text-muted);margin-top:5px;max-width:88ch;}
+  /* maturity row */
+  .maturity{margin-top:4px;}
+  .maturity .track{height:8px;border-radius:999px;background:var(--surface-interactive);overflow:hidden;margin-top:8px;}
+  .maturity .fill{height:100%;width:60%;background:linear-gradient(90deg,var(--amber),var(--amber-bright));}
+  /* diagnostics grid */
+  .dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:12px;}
+  .dtile{background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);
+        padding:14px;display:flex;flex-direction:column;gap:10px;}
+  .dtile .top{display:flex;align-items:center;gap:8px;}
+  .dtile .ic{width:30px;height:30px;border-radius:8px;background:var(--surface-interactive);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+  .dtile .nm{font-size:12.5px;font-weight:600;}
+  .dtile .sub{font-size:11px;color:var(--text-muted);}
+  .dtile .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;}
+  .mini{font-size:10.5px;padding:4px 9px;border-radius:6px;font-weight:600;cursor:pointer;white-space:nowrap;}
+  .mini.run{background:var(--accent-soft);color:var(--accent);border:1px solid rgba(77,158,255,.4);}
+  .mini.res{background:var(--surface-interactive);color:var(--text-secondary);border:1px solid var(--border-subtle);}
+  .spark{margin-left:auto;}
+  /* results table */
+  .table{width:100%;border-collapse:collapse;font-size:12px;}
+  .table th{text-align:left;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);
+        font-weight:600;padding:10px 14px;border-bottom:1px solid var(--border-subtle);}
+  .table td{padding:11px 14px;border-bottom:1px solid var(--border-subtle);vertical-align:middle;}
+  .table tr:last-child td{border-bottom:none;}
+  .table tr:hover td{background:rgba(255,255,255,.015);}
+  .scorebox{display:inline-flex;align-items:center;gap:6px;font-weight:700;}
+  .stars{color:var(--amber-bright);letter-spacing:1px;font-size:11px;}
+  .tag{font-size:10px;padding:2px 7px;border-radius:999px;border:1px solid var(--border-strong);color:var(--text-secondary);}
+  .tag.ok{color:var(--green-bright);border-color:rgba(52,211,153,.4);}
+  /* stakeholders */
+  .stake{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+  .field{padding:7px 9px;border:1px solid var(--border-subtle);border-radius:var(--radius-md);background:var(--surface-interactive);
+        color:var(--text-secondary);font-size:12px;}
+  .qrow{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:12px;color:var(--text-secondary);margin-bottom:8px;}
+  select.field{min-width:92px;color:var(--text-primary);}
+  .kpi{display:flex;gap:16px;font-size:11.5px;color:var(--text-secondary);flex-wrap:wrap;}
+  .kpi b{color:var(--text-primary);font-weight:700;}
+  /* results drawer (open) */
+  .drawer-wrap{position:fixed;inset:0;z-index:50;}
+  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.35);}
+  .drawer{position:absolute;top:0;right:0;bottom:0;width:420px;background:var(--bg-elevated);
+        border-left:1px solid var(--border-subtle);box-shadow:-10px 0 30px rgba(0,0,0,.4);display:flex;flex-direction:column;}
+  .drawer .dhead{display:flex;align-items:center;justify-content:space-between;padding:15px 18px;
+        border-bottom:1px solid var(--border-subtle);font-size:14px;font-weight:700;}
+  .drawer .dbody{flex:1;overflow:auto;padding:16px 18px;}
+  .rescard{border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:12px;margin-bottom:12px;background:var(--bg-card);}
+  .rescard .rh{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+  .rescard .fb{font-size:11.5px;color:var(--text-secondary);line-height:1.5;}
+  .empty{border:1px dashed var(--border-strong);border-radius:var(--radius-md);padding:14px;font-size:12px;color:var(--text-muted);text-align:center;}
+  /* annotation (design-file chrome, not product) */
+  .anno{border-left:3px solid var(--accent);background:rgba(77,158,255,.06);padding:10px 14px;border-radius:0 8px 8px 0;
+        font-size:12px;color:var(--text-secondary);margin:0 0 18px;line-height:1.55;}
+  .anno b{color:var(--text-primary);}
+  .sec-h{display:flex;align-items:baseline;gap:10px;margin:26px 0 12px;}
+  .sec-h .t{font-size:13.5px;font-weight:700;}
+  .sec-h .d{font-size:11.5px;color:var(--text-muted);}
+  .anchor{scroll-margin-top:14px;}
+  @media (max-width:900px){ .ov{grid-template-columns:1fr;} .stake{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ── left rail ────────────────────────────────────────────── -->
+  <aside class="rail">
+    <div class="logo">B</div>
+    <div class="dotnav active" title="Projects">▦</div>
+    <div class="dotnav" title="Canvas">◧</div>
+    <div class="dotnav" title="Insights">📈</div>
+    <div class="dotnav" title="Governance">🛡</div>
+    <div class="dotnav" title="Brain Chat">💬</div>
+  </aside>
+
+  <div class="main">
+    <!-- ── top bar ────────────────────────────────────────────── -->
+    <div class="topbar">
+      <span class="crumb">Projects / <b>1-UNTITLE…25035</b></span>
+      <span class="pill"><span class="live">●</span>&nbsp; Active</span>
+      <button class="iconbtn" title="Archive">🗑</button>
+      <button class="iconbtn" title="Close">✕</button>
+    </div>
+
+    <!-- ── project header + tabs ──────────────────────────────── -->
+    <div class="phead">
+      <h1>BuilderForce.AI</h1>
+      <div class="sub">1-UNTITLED-1773010025035</div>
+      <nav class="tabs">
+        <span class="tab active">Analytics</span>
+        <span class="tab">Details</span>
+        <span class="tab">Integrations</span>
+        <span class="tab">Task Mgmt</span>
+        <span class="tab">PRDs</span>
+        <span class="tab">Agent / Capabilities</span>
+        <span class="tab">Brain Chat</span>
+        <span class="tab">Workspace</span>
+        <!-- The standalone "Diagnostics" tab is REMOVED. Its capabilities now
+             live inside the Analytics tab below. This is the consolidation. -->
+      </nav>
+    </div>
+
+    <!-- ── consolidated Analytics tab ─────────────────────────── -->
+    <div class="content">
+
+      <!-- design-file annotation (not part of the product) -->
+      <div class="anno">
+        <b>Consolidated “Analytics” tab.</b> The former standalone <b>Diagnostics</b> tab is merged in.
+        Everything is still reachable: the overview &amp; inspection report, a new <b>Diagnostics</b> section to
+        <b>run</b> diagnostics, a <b>Results</b> history, and <b>Stakeholders</b>. Use the pill nav to jump.
+        The Diagnostics tab in the tab bar is gone — no capability is lost.
+      </div>
+
+      <!-- in-page sub-nav -->
+      <div class="subnav">
+        <a class="on" href="#overview">Analytics</a>
+        <a href="#diagnostics">Diagnostics</a>
+        <a href="#results">Results</a>
+        <a href="#stakeholders">Stakeholders</a>
+        <a class="all" href="#results">View all results →</a>
+      </div>
+
+      <!-- ═══ OVERVIEW (existing Analytics content, unchanged) ═══ -->
+      <section id="overview" class="anchor">
+        <div class="ov">
+          <!-- health + % done gauges -->
+          <div class="card gaugecard">
+            <!-- health speedometer -->
+            <svg width="120" height="86" viewBox="0 0 120 86">
+              <path d="M14 74 A50 50 0 0 1 106 74" fill="none" stroke="#1c2942" stroke-width="11" stroke-linecap="round"/>
+              <path d="M14 74 A50 50 0 0 1 106 74" fill="none" stroke="url(#hg)" stroke-width="11" stroke-linecap="round"
+                    pathLength="157" stroke-dasharray="157" stroke-dashoffset="128"/>
+              <defs><linearGradient id="hg" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0" stop-color="#34d399"/><stop offset=".55" stop-color="#fbbf24"/><stop offset="1" stop-color="#f87171"/>
+              </linearGradient></defs>
+              <text x="60" y="56" text-anchor="middle" font-size="26" font-weight="800" fill="#eef3ff">18</text>
+              <text x="60" y="80" text-anchor="middle" font-size="9.5" fill="#5f6b8a">Health</text>
+            </svg>
+            <!-- % done ring -->
+            <svg width="86" height="86" viewBox="0 0 86 86">
+              <circle cx="43" cy="43" r="34" fill="none" stroke="#1c2942" stroke-width="9"/>
+              <circle cx="43" cy="43" r="34" fill="none" stroke="#4d9eff" stroke-width="9" stroke-linecap="round"
+                      transform="rotate(-90 43 43)" stroke-dasharray="213.6" stroke-dashoffset="62"/>
+              <text x="43" y="42" text-anchor="middle" font-size="17" font-weight="800" fill="#eef3ff">71%</text>
+              <text x="43" y="56" text-anchor="middle" font-size="8.5" fill="#5f6b8a">Done</text>
+            </svg>
+          </div>
+
+          <!-- project inspection callout (existing) -->
+          <div class="card card-pad callout" style="display:flex;gap:14px;align-items:flex-start;">
+            <div class="grade"><b>C</b><span>69/100</span></div>
+            <div>
+              <div style="font-size:13.5px;font-weight:700;">Project inspection</div>
+              <div class="muted" style="margin-top:3px;max-width:70ch;">
+                A solid start, but a few gaps are holding this project back. Clear the items below to sharpen its direction.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- dimension bars (existing ProjectInspectionReport) -->
+        <div class="card dim">
+          <!-- Direction -->
+          <div class="dimrow">
+            <div class="dimhead">
+              <span class="name">Direction</span><span class="spacer"></span>
+              <span class="chip strong">Strong</span><span class="score">85/100</span>
+            </div>
+            <div class="bar">
+              <div class="seg s1 fill" style="border-radius:3px 0 0 3px;">Strong</div><div class="seg s2"></div><div class="seg s3"></div><div class="seg s4"></div>
+            </div>
+            <div class="dimnote">How clearly the need is defined — vision, goals/OKRs, a deadline and an architecture.</div>
+          </div>
+          <!-- Planning -->
+          <div class="dimrow">
+            <div class="dimhead">
+              <span class="name">Planning</span><span class="spacer"></span>
+              <span class="chip strong">Strong</span><span class="score">100/100</span>
+            </div>
+            <div class="bar">
+              <div class="seg s1 fill" style="border-radius:3px 0 0 3px;width:34%;">Strong</div><div class="seg s2" style="width:22%;"></div><div class="seg s3"></div><div class="seg s4"></div>
+            </div>
+            <div class="dimnote">Whether the work is broken down into tasks and scheduled with start and due dates.</div>
+          </div>
+          <!-- Health -->
+          <div class="dimrow">
+            <div class="dimhead">
+              <span class="name">Health</span><span class="spacer"></span>
+              <span class="chip critical">Critical</span><span class="score">18/100</span>
+            </div>
+            <div class="bar">
+              <div class="seg s1"></div><div class="seg s2"></div><div class="seg s3"></div><div class="seg s4 fill" style="border-radius:0 3px 3px 0;">Critical</div>
+            </div>
+            <div class="dimnote">How well open work is going — eroded by overdue and blocked tasks. Not an engagement score.</div>
+          </div>
+          <!-- Progress -->
+          <div class="dimrow">
+            <div class="dimhead">
+              <span class="name">Progress</span><span class="spacer"></span>
+              <span class="chip fair">Fair</span><span class="score">71/100</span>
+            </div>
+            <div class="bar">
+              <div class="seg s1"></div><div class="seg s2 fill">Fair</div><div class="seg s3"></div><div class="seg s4"></div>
+            </div>
+            <div class="dimnote">How far along the project is — completed tasks as a share of the total.</div>
+          </div>
+          <!-- Execution -->
+          <div class="dimrow">
+            <div class="dimhead">
+              <span class="name">Execution</span><span class="spacer"></span>
+              <span class="chip fair">Fair</span><span class="score">60/100</span>
+            </div>
+            <div class="bar">
+              <div class="seg s1"></div><div class="seg s2 fill">Fair</div><div class="seg s3"></div><div class="seg s4"></div>
+            </div>
+            <div class="dimnote">Whether something is actively driving the work — an owner, wired workflows, momentum.</div>
+          </div>
+
+          <!-- diagnostic maturity (self-/data-assessed, 1–5) -->
+          <div class="maturity" style="padding-bottom:12px;">
+            <div class="dimhead">
+              <span class="name">Diagnostic maturity</span>
+              <span class="chip fair" style="margin-left:8px;">Defined</span>
+              <span class="spacer"></span><span class="score">3/5</span>
+            </div>
+            <div class="track"><div class="fill"></div></div>
+            <div class="dimnote">Self- and data-assessed agentic maturity (1–5), separate from the PM rating above.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ DIAGNOSTICS (merged in from the old Diagnostics tab) ═══ -->
+      <section id="diagnostics" class="anchor">
+        <div class="sec-h">
+          <span class="t">Diagnostics</span>
+          <span class="d">Run any diagnostic against this project — each run is tracked and feeds the project rating.</span>
+        </div>
+
+        <div class="dgrid">
+          <!-- Architecture analysis -->
+          <div class="dtile">
+            <div class="top"><span class="ic">📐</span><span class="nm">Architecture analysis</span>
+              <svg class="spark" width="40" height="20" viewBox="0 0 40 20"><path d="M2 17 L10 12 L18 14 L26 7 L38 3" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round"/></svg>
+            </div>
+            <div class="sub">5.0 / 5 — Optimizing</div>
+            <div class="acts">
+              <span class="mini res">Results</span>
+              <span class="mini run">Retry 2 sections</span>
+              <span class="mini run">Run →</span>
+            </div>
+          </div>
+          <!-- SOC 2 -->
+          <div class="dtile">
+            <div class="top"><span class="ic">🛡</span><span class="nm">SOC 2 Readiness Audit</span>
+              <svg class="spark" width="40" height="20" viewBox="0 0 40 20"><path d="M2 15 L12 16 L22 10 L38 6" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round"/></svg>
+            </div>
+            <div class="sub">1.0 / 5 — Initial · 9 tickets filed</div>
+            <div class="acts">
+              <span class="mini res">Results</span>
+              <span class="mini run">Run →</span>
+            </div>
+          </div>
+          <!-- Quality Audit -->
+          <div class="dtile">
+            <div class="top"><span class="ic">✓</span><span class="nm">Quality Audit</span></div>
+            <div class="sub">Checks testing, CI, and build-integrity signals.</div>
+            <div class="acts"><span class="mini run">Run →</span></div>
+          </div>
+          <!-- Product Vision & Roadmap -->
+          <div class="dtile">
+            <div class="top"><span class="ic">🎯</span><span class="nm">Product Vision &amp; Roadmap</span></div>
+            <div class="sub">Objectives, key results, roadmap, documented vision.</div>
+            <div class="acts"><span class="mini run">Run →</span></div>
+          </div>
+          <!-- Compliance Audit Agent -->
+          <div class="dtile">
+            <div class="top"><span class="ic">⚖️</span><span class="nm">Compliance Audit Agent</span></div>
+            <div class="sub">Privacy, AI, marketing &amp; accessibility readiness.</div>
+            <div class="acts"><span class="mini run">Run →</span></div>
+          </div>
+          <!-- Agentic Maturity -->
+          <div class="dtile">
+            <div class="top"><span class="ic">📊</span><span class="nm">Agentic Maturity</span></div>
+            <div class="sub">Self-/data-assessed maturity (1–5) for the project.</div>
+            <div class="acts">
+              <span class="mini res">Results</span>
+              <span class="mini run">Run →</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ RESULTS HISTORY (prior results retained) ═══ -->
+      <section id="results" class="anchor">
+        <div class="sec-h">
+          <span class="t">Results</span>
+          <span class="d">Every run, newest first. Open a result, or view the combined analysis.</span>
+          <span style="margin-left:auto;"><span class="btn btn-ghost">View all results →</span></span>
+        </div>
+        <div class="card">
+          <table class="table">
+            <thead>
+              <tr><th>Diagnostic</th><th>Latest score</th><th>Rating</th><th>Last run</th><th>Findings</th><th></th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>Architecture analysis</b></td>
+                <td><span class="scorebox"><span class="stars">★★★★★</span> 5.0/5</span></td>
+                <td><span class="tag ok">Optimizing</span></td>
+                <td class="muted">2h ago</td>
+                <td class="muted">—</td>
+                <td><span class="mini res">Results</span></td>
+              </tr>
+              <tr>
+                <td><b>SOC 2 Readiness Audit</b></td>
+                <td><span class="scorebox"><span class="stars" style="color:#f87171;">★☆☆☆☆</span> 1.0/5</span></td>
+                <td><span class="tag">Initial</span></td>
+                <td class="muted">1d ago</td>
+                <td><span class="tag">9 tickets filed</span></td>
+                <td><span class="mini res">Results</span></td>
+              </tr>
+              <tr>
+                <td><b>Agentic Maturity</b></td>
+                <td><span class="scorebox"><span class="stars">★★★★★</span> 5.0/5</span></td>
+                <td><span class="tag ok">Optimizing</span></td>
+                <td class="muted">3d ago</td>
+                <td class="muted">—</td>
+                <td><span class="mini res">Results</span></td>
+              </tr>
+              <tr>
+                <td class="muted">Quality Audit</td>
+                <td class="muted">—</td><td><span class="tag">Not run</span></td><td class="muted">—</td><td class="muted">—</td>
+                <td><span class="mini run">Run →</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ═══ STAKEHOLDER ALIGNMENT (retained from Diagnostics tab) ═══ -->
+      <section id="stakeholders" class="anchor">
+        <div class="sec-h">
+          <span class="t">Stakeholder alignment</span>
+          <span class="d">Agree priorities, collect sign-off, and surface conflicts before delivery drifts.</span>
+          <span style="margin-left:auto;" class="kpi">
+            <span><b>0</b> approved</span><span><b>0</b> pending</span>
+            <span style="color:var(--text-muted);">0 overdue</span><span style="color:var(--text-muted);">0 conflicts</span>
+          </span>
+        </div>
+        <div class="card card-pad">
+          <div class="stake">
+            <div>
+              <div class="section-title" style="margin-bottom:8px;">Stakeholder map</div>
+              <div class="empty">No stakeholders configured.</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
+                <span class="field" style="flex:1;min-width:110px;">Name</span>
+                <span class="field" style="flex:1;min-width:110px;">User ID</span>
+                <span class="field" style="flex:1;min-width:110px;">Team (optional)</span>
+                <span class="field" style="flex:0;min-width:120px;">Required approver ▾</span>
+                <span class="field" style="flex:0;font-weight:700;color:var(--text-primary);cursor:pointer;">Add</span>
+              </div>
+            </div>
+            <div>
+              <div class="section-title" style="margin-bottom:8px;">Alignment health</div>
+              <div class="qrow"><span>Priorities are clear and agreed</span><span class="field">Unknown ▾</span></div>
+              <div class="qrow"><span>Competing P0s are reconciled</span><span class="field">Unknown ▾</span></div>
+              <div class="qrow"><span>Required approvers are current</span><span class="field">Unknown ▾</span></div>
+              <div class="qrow"><span>Conflicts are within the 48-hour SLA</span><span class="field">Unknown ▾</span></div>
+              <div class="qrow"><span>Delivery reflects agreed priorities</span><span class="field">Unknown ▾</span></div>
+              <span class="btn btn-subtle" style="margin-top:6px;">Save health profile</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<!-- ═══ RESULTS DRAWER (open, single-diagnostic filter) ═══ -->
+<div class="drawer-wrap">
+  <div class="scrim"></div>
+  <div class="drawer" role="dialog" aria-label="SOC 2 Readiness Audit results">
+    <div class="dhead">
+      <span>SOC 2 Readiness Audit</span>
+      <span class="iconbtn">✕</span>
+    </div>
+    <div class="dbody">
+      <div class="eyebrow" style="margin-bottom:8px;">Overall</div>
+      <div class="rescard">
+        <div class="rh"><span class="stars" style="color:#f87171;">★☆☆☆☆</span><b style="font-size:13px;">1.0 / 5 — Initial</b></div>
+        <div class="fb">9 findings were filed as tickets. Prioritize the Critical items to move off “Initial”.</div>
+      </div>
+      <div class="rescard">
+        <div class="rh"><b style="font-size:12.5px;">CC1 — Control Environment</b><span class="tag">Gap</span></div>
+        <div class="fb">No documented control environment or ownership of controls.</div>
+      </div>
+      <div class="rescard">
+        <div class="rh"><b style="font-size:12.5px;">Access control</b><span class="tag">Gap</span></div>
+        <div class="fb">Role-based access is not enforced across connected repositories.</div>
+      </div>
+      <div class="empty">Findings are filed to the project board as tickets. Open a ticket to track remediation.</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
