@@ -198,8 +198,8 @@
     "@types/proper-lockfile": "^4.1.4",
     "@types/qrcode-terminal": "^0.12.2",
     "@types/ws": "^8.18.1",
-    "typescript-7": "npm:typescript@^7.0.2",
-    "@vitest/coverage-v8": "^4.0.18",
+    "@vitest/browser": "^4.1.12",
+    "@vitest/coverage-v8": "^4.1.12",
     "lit": "^3.3.2",
     "ollama": "^0.6.3",
     "oxfmt": "0.33.0",
@@ -207,7 +207,8 @@
     "oxlint-tsgolint": "^0.16.0",
     "tsdown": "^0.20.3",
     "tsx": "^4.21.0",
-    "vitest": "^4.0.18"
+    "typescript-7": "npm:typescript@^7.0.2",
+    "vitest": "^4.1.12"
   },
   "peerDependencies": {
     "@huggingface/transformers": "^3.0.0",
@@ -243,7 +244,15 @@
       "tough-cookie": "4.1.3",
       "sharp": "$sharp",
       "morgan": "1.12.1",
-      "esbuild": "^0.28.2"
+      "esbuild": "^0.28.2",
+      "simple-git": "^4.0.1",
+      "protobufjs@7": "7.6.5",
+      "protobufjs@8": "8.0.1",
+      "proxy-addr": "^2.0.8",
+      "tinypool": "^2.1.2",
+      "vitest": "^4.1.12",
+      "@vitest/browser": "^4.1.12",
+      "@vitest/coverage-v8": "^4.1.12"
     },
     "onlyBuiltDependencies": [
       "@lydell/node-pty",

@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.10.166",
+  "version": "2026.10.167",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -1372,7 +1372,10 @@
     "overrides": {
       "sharp": "0.35.4",
       "fast-uri": "3.1.8",
-      "esbuild": "^0.28.2"
+      "esbuild": "^0.28.2",
+      "dompurify": "^3.4.17",
+      "tinypool": "^2.1.2",
+      "vitest": "^4.1.11"
     }
   }
 }

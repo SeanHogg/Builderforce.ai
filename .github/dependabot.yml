@@ -7,7 +7,7 @@
 # instead of one block per package.
 #
 # Noise control is deliberate and matters more than freshness here: without
-# grouping, ~15 npm directories x weekly minor/patch churn would open dozens of
+# grouping, ~60 npm directories x weekly minor/patch churn would open dozens of
 # PRs a week and train everyone to ignore them. So:
 #   - patch + minor are batched into ONE grouped PR per directory
 #   - major bumps stay ungrouped (they need a human to read the changelog)
@@ -15,6 +15,13 @@
 #
 # Security advisories are exempt from the schedule and from the PR limit —
 # GitHub raises those immediately regardless of what is configured here.
+#
+# 2026-11-14: the packages/* list was expanded from 3 entries (agent-tools,
+# brain-ui, tui) to all of packages/*. Those lockfiles were already scanned for
+# the GitHub dependency graph (hence the 776 Dependabot alerts), but with no
+# `updates` entry pointing at them there was no PR path to ever fix them —
+# vulnerabilities in the uncovered packages could only age. Full coverage is
+# the point of the alerts.
 
 version: 2
 
@@ -40,24 +47,74 @@ updates:
   # ---------------------------------------------------------------------------
   # npm — the shipped packages. Deliberately NOT every package.json in the tree:
   # frontend/.next is build output, and webdit/* + brain-embedded are not on a
-  # release path, so bumping them buys risk without buying anything.
+  # release path, so bumping them buys risk without buying anything. Everything
+  # else that ships — every packages/* module, the worker, the chrome client —
+  # is listed so its lockfile actually gets fix PRs.
   # ---------------------------------------------------------------------------
   - package-ecosystem: npm
     directories:
       - /api
       - /frontend
       - /agent-runtime
-      - /packages/agent-tools
-      - /packages/brain-ui
-      - /packages/tui
+      - /worker
+      - /clients/vscode
+      - /clients/chrome
       - /sdk
       - /studio
       - /studio-embedded
       - /browser-sdk
       - /voice
       - /qa-e2e
-      - /clients/vscode
       - /docs-site
+      - /packages/agent-loop
+      - /packages/agent-run
+      - /packages/agent-skills
+      - /packages/agent-stall
+      - /packages/agent-tools
+      - /packages/bfi-node
+      - /packages/bfi-web
+      - /packages/brain-ui
+      - /packages/canvas-widget-protocol
+      - /packages/cost-levers
+      - /packages/creation-canvas-contract
+      - /packages/device-auth
+      - /packages/difficulty-router
+      - /packages/hono-wildcard-path
+      - /packages/hs256-jwt
+      - /packages/ide-file-contract
+      - /packages/ide-templates
+      - /packages/interaction-contract
+      - /packages/json-schema
+      - /packages/kimi-oauth
+      - /packages/knowledge-browser
+      - /packages/knowledge-client
+      - /packages/knowledge-graph-view
+      - /packages/learned-routing
+      - /packages/local-first
+      - /packages/local-inference
+      - /packages/model-catalog
+      - /packages/model-router
+      - /packages/pipeline-route
+      - /packages/prefetch
+      - /packages/provider-connect
+      - /packages/read-through-cache
+      - /packages/repo-map
+      - /packages/resume-ai
+      - /packages/run-context
+      - /packages/run-delta
+      - /packages/run-guards
+      - /packages/run-policy
+      - /packages/sarif
+      - /packages/score-math
+      - /packages/secret-redaction
+      - /packages/session-introspection
+      - /packages/spend-contract
+      - /packages/tool-output-policy
+      - /packages/tui
+      - /packages/voice-provenance
+      - /packages/workload
+      - /packages/workspace-path
+      - /packages/write-outbox
     schedule:
       interval: weekly
       day: monday

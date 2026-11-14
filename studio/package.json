@@ -89,7 +89,8 @@
   "pnpm": {
     "overrides": {
       "sharp": "0.35.4",
-      "esbuild": "^0.28.2"
+      "esbuild": "^0.28.2",
+      "tar": "^7.5.19"
     }
   }
 }

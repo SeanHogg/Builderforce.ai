@@ -31,13 +31,14 @@
     "@mlc-ai/web-llm": "^0.2.0",
     "@webdit/convert": "file:../converter",
     "typescript": "^7.0.2",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.11"
   },
   "packageManager": "pnpm@10.23.0",
   "pnpm": {
     "overrides": {
       "sharp": "0.35.4",
-      "esbuild": "^0.28.2"
+      "esbuild": "^0.28.2",
+      "tinypool": "^2.1.2"
     }
   }
 }
