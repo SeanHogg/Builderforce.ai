@@ -57,6 +57,8 @@ vi.mock("./vscodeDirectorySource", () => ({
       return { id: p, tenantId: "code", title: p, content: { kind: "text", text: mocks.fixture[p] ?? "", mediaType: "text/typescript" } };
     },
   }),
+  EVENT_LOOP_YIELD_EVERY: 250,
+  eventLoopYield: async () => undefined,
 }));
 vi.mock("./knowledgeJudgement", () => ({ editorJudgement: async () => undefined, judgeConfigured: async () => false }));
 vi.mock("@builderforce/agent-tools/prefetch", () => ({ readPartitions: async () => undefined }));
