@@ -13,6 +13,7 @@
     "canvas:release": "playwright test tests/creation-canvas*.spec.ts",
     "canvas:capacity": "tsx src/canvas-capacity.ts",
     "canvas:audit": "tsx src/canvas-release-audit.ts",
+    "a6:offline": "tsx src/a6-offline.ts",
     "type-check": "tsc --noEmit"
   },
   "devDependencies": {
