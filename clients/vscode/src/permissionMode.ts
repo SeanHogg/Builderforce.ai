@@ -19,12 +19,12 @@ import * as vscode from "vscode";
 export type PermissionMode = "ask" | "acceptEdits";
 
 /**
- * The configured mode. `acceptEdits` is the default: the user provides input and the
- * runtime executes without stopping to ask. An explicit `builderforce.permissionMode`
- * of `ask` still opts back into per-mutation confirmation.
+ * The configured mode. `ask` is the default: the runtime stops to confirm before a
+ * mutating tool call or an `ask_user` question. An explicit
+ * `builderforce.permissionMode` of `acceptEdits` opts into auto-execution.
  */
 export function permissionMode(): PermissionMode {
-  return vscode.workspace.getConfiguration("builderforce").get<PermissionMode>("permissionMode") ?? "acceptEdits";
+  return vscode.workspace.getConfiguration("builderforce").get<PermissionMode>("permissionMode") ?? "ask";
 }
 
 /** The same decision as a boolean, for the panel's Auto-mode switch. */

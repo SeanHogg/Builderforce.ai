@@ -1238,7 +1238,7 @@
             "ask",
             "acceptEdits"
           ],
-          "default": "acceptEdits",
+          "default": "ask",
           "markdownEnumDescriptions": [
             "%config.permissionMode.ask%",
             "%config.permissionMode.acceptEdits%"
