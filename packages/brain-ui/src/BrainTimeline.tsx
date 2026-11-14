@@ -183,7 +183,7 @@ function BrainTimelineInner({
   // that turn as a readable reply instead of a muted line the reader cannot see.
   const stranded = useMemo(() => strandedReplyKey(nodes, isRunning), [nodes, isRunning]);
 
-  const { scrollRef, contentRef, onScroll } = useTranscriptScroll(autoScroll, revealMessage);
+  const { scrollRef, contentRef, onScroll } = useTranscriptScroll(autoScroll, revealMessage, conversationKey);
 
   // Stable, so the memoized rows below are not re-rendered on every streamed token.
   const renderMsg = useCallback((msg: BrainMessage, role: 'user' | 'assistant', text: string) =>
@@ -213,7 +213,7 @@ function BrainTimelineInner({
     () => (revealMessage ? nodes.findIndex((n) => (n.kind === 'user' || n.kind === 'assistant') && n.message.id === revealMessage.id) : -1),
     [nodes, revealMessage],
   );
-  const { visible, earlier, newer } = useRenderWindow(
+  const { visible, earlier, newer, atLatest, latest } = useRenderWindow(
     nodes,
     conversationKey ?? nodes[0]?.key ?? null,
     revealMessage && revealIndex >= 0 ? { index: revealIndex, nonce: revealMessage.nonce } : null,
@@ -339,6 +339,19 @@ function BrainTimelineInner({
             {labels.jumpToLatest}
           </button>
         </div>
+      )}
+      {!atLatest && (
+        <button
+          type="button"
+          className="bf-tl-jump"
+          onClick={latest}
+          aria-label={labels.scrollToLatest}
+          title={labels.scrollToLatest}
+        >
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none">
+            <path d="M3 6l5 5 5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
       )}
     </div>
   );

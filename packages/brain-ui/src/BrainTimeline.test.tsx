@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import { BrainTimeline } from './BrainTimeline';
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const msg = (id: number, role: string, content: string, metadata: string | null = null): BrainMessage => ({
   id,
@@ -138,5 +142,84 @@ describe('<BrainTimeline> revealMessage', () => {
     const html = render([msg(1, 'user', 'hi'), msg(2, 'assistant', 'hello', prov)]);
     expect(html).toContain('id="bf-msg-2"');
     expect(html).not.toContain('bf-tl__item--focus');
+  });
+});
+
+describe('<BrainTimeline> scroll-to-latest toggle', () => {
+  it('shows the floating toggle when the window is paged away from the newest message', () => {
+    // Long enough that a page around the revealed message is NOT the newest page —
+    // the window ends before the last node, so the reader is away from the latest.
+    const html = renderToStaticMarkup(
+      <BrainTimeline
+        messages={Array.from({ length: 600 }, (_, i) => msg(i + 1, i % 2 ? 'assistant' : 'user', `m${i + 1}`))}
+        trace={[]}
+        streamingText=""
+        isRunning={false}
+        conversationKey={1}
+        revealMessage={{ id: 2, nonce: 1 }}
+        labels={{ scrollToLatest: 'Scroll to latest' }}
+      />,
+    );
+    expect(html).toContain('bf-tl-jump');
+    expect(html).toContain('aria-label="Scroll to latest"');
+  });
+
+  it('hides the toggle when the newest page is showing', () => {
+    const html = renderToStaticMarkup(
+      <BrainTimeline
+        messages={[msg(1, 'user', 'hi'), msg(2, 'assistant', 'hello', prov)]}
+        trace={[]}
+        streamingText=""
+        isRunning={false}
+        conversationKey={1}
+        labels={{ scrollToLatest: 'Scroll to latest' }}
+      />,
+    );
+    expect(html).not.toContain('bf-tl-jump');
+  });
+});
+
+describe('<BrainTimeline> scroll on chat switch', () => {
+  let host: HTMLDivElement;
+  let root: Root | null = null;
+  let height = 0;
+
+  beforeEach(() => {
+    height = 0;
+    host = document.createElement('div');
+    document.body.appendChild(host);
+  });
+  afterEach(() => {
+    act(() => root?.unmount());
+    root = null;
+    host.remove();
+  });
+
+  it('re-sticks to the bottom when the conversation changes (no stale offset)', () => {
+    const mount = (key: string, text: string) =>
+      act(() =>
+        root!.render(
+          <BrainTimeline
+            messages={[msg(1, 'user', text), msg(2, 'assistant', `${text} reply`, prov)]}
+            trace={[]}
+            streamingText=""
+            isRunning={false}
+            conversationKey={key}
+          />,
+        ),
+      );
+    root = createRoot(host);
+    mount('chat-a', 'a');
+    const el = host.querySelector<HTMLElement>('.bf-tl-scroll')!;
+    // jsdom has no layout: pin a scrollHeight the switch effect can read.
+    Object.defineProperty(el, 'scrollHeight', { configurable: true, get: () => height });
+    height = 2000;
+    act(() => {
+      el.scrollTop = 500; // the reader scrolled up in the previous chat
+    });
+    expect(el.scrollTop).toBe(500);
+    // Switch chats: the scroller node is reused, but the newest message must land in view.
+    mount('chat-b', 'b');
+    expect(el.scrollTop).toBe(2000);
   });
 });

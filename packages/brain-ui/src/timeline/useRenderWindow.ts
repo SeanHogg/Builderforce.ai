@@ -120,7 +120,8 @@ export function useRenderWindow<N extends { key: string }>(
   const earlier = range.start > 0
     ? { count: Math.min(range.start, TIMELINE_PAGE_SIZE), show: () => move({ startKey: keys[Math.max(0, range.start - TIMELINE_PAGE_SIZE)] ?? null, endKey: pinnedEnd }, true) }
     : null;
-  const newer = range.end < keys.length
+  const atLatest = range.end >= keys.length;
+  const newer = !atLatest
     ? {
         count: Math.min(keys.length - range.end, TIMELINE_PAGE_SIZE),
         show: () => {
@@ -130,5 +131,5 @@ export function useRenderWindow<N extends { key: string }>(
         latest: () => move(NEWEST, false),
       }
     : null;
-  return { visible: nodes.slice(range.start, range.end), earlier, newer };
+  return { visible: nodes.slice(range.start, range.end), earlier, newer, atLatest, latest: () => move(NEWEST, false) };
 }

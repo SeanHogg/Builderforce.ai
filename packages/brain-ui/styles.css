@@ -53,6 +53,39 @@
   outline-offset: 2px;
 }
 
+/* Floating "scroll to latest" toggle — pinned to the scroller's bottom-right corner,
+   visible only while the window is paged away from the newest message (or the reader
+   scrolled up). The scroller is the positioning context. */
+.bf-tl-scroll {
+  position: relative;
+}
+.bf-tl-jump {
+  position: sticky;
+  bottom: 10px;
+  float: right;
+  margin-right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.35));
+  background: var(--bf-surface, #1e1e1e);
+  color: var(--bf-accent, #9085e9);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  z-index: 2;
+}
+.bf-tl-jump:hover {
+  background: color-mix(in srgb, var(--bf-accent, #9085e9) 12%, var(--bf-surface, #1e1e1e));
+}
+.bf-tl-jump:focus-visible {
+  outline: 2px solid var(--bf-accent, #9085e9);
+  outline-offset: 2px;
+}
+
 .bf-tl {
   list-style: none;
   margin: 0;

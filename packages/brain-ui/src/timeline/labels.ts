@@ -117,6 +117,9 @@ export interface BrainTimelineLabels extends ToolStepLabels, ModelMoveLabels {
   showNewer: string;
   /** …or go straight back to the newest page. */
   jumpToLatest: string;
+  /** Accessible name on the floating "scroll to latest" toggle that appears while the
+   *  reader is scrolled away from the newest message. */
+  scrollToLatest: string;
   /**
    * RUN-ACTIVITY line templates (run milestones + agent dispatch). Templates, not
    * sentences: the server records only the FACTS, and each surface composes the line in
@@ -192,6 +195,7 @@ export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
   showEarlier: 'Show earlier steps ({count})',
   showNewer: 'Show newer steps ({count})',
   jumpToLatest: 'Jump to latest',
+  scrollToLatest: 'Scroll to latest',
   ...DEFAULT_MODEL_MOVE_LABELS,
   activity: DEFAULT_CHAT_ACTIVITY_LABELS,
 };
