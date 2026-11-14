@@ -73,6 +73,9 @@ function resolveNpmCli(cwd: string, cli: "npx-cli.js" | "npm-cli.js"): string | 
   // …/npm/bin/npm-prefix.js` (exit 1, no findings). Resolve the realpath first and validate —
   // and SPAWN — that, so the target always loads.
   const entryLoads = (p: string): string | null => {
+    // A partial store package can be missing the CLI entry itself, not just its sibling
+    // `npm-prefix.js`: `existsSync` on the realpath catches that (a dangling symlink realpaths
+    // to nothing), so a broken local `npm` never wins over the complete global one below.
     let real: string;
     try {
       real = realpathSync(p);
