@@ -3,6 +3,10 @@
  * (builderforce.ts) and the onboarding prompt (builderforce-onboarding.ts):
  * the HTTP wrapper plus the login -> tenant -> tenant-token -> project-mapping
  * steps. One copy so the two wizards cannot drift.
+ *
+ * The project step LISTS the tenant's projects and lets the user pick one (or
+ * create a new one) instead of silently upserting by folder name — a silent
+ * auto-create was how users ended up attached to the wrong (or no) project.
  */
 import { note, password, select, spinner, text } from "@clack/prompts";
 
@@ -38,6 +42,122 @@ export async function builderforceApiFetch<T>(
   return body as T;
 }
 
+/**
+ * List the tenant's projects, then prompt the user to pick one or create a new
+ * one. This is the "confirm the project" step that pairs with
+ * {@link selectTenantAndToken} ("confirm the tenant"): without it the host was
+ * silently bound to whatever `projects/upsert` guessed from the folder name.
+ * Falls back to the old name-based upsert only when listing is unavailable, so
+ * a legacy server that lacks `GET /api/projects` still links a project.
+ */
+export async function selectProjectMapping(params: {
+  serverUrl: string;
+  tenantJwt: string;
+  projectRoot: string;
+  projectName: string;
+  description?: string;
+  agentNodeId: string;
+}): Promise<{ projectId: string; action: "created" | "updated" | "selected" } | null> {
+  const { serverUrl, tenantJwt, projectRoot, projectName, description, agentNodeId } = params;
+
+  let projects: Array<{ id: string; name: string }> = [];
+  let canList = false;
+  try {
+    const res = await builderforceApiFetch<{ projects: Array<{ id: string; name: string }> }>(
+      `${serverUrl}/api/projects`,
+      { token: tenantJwt },
+    );
+    projects = res.projects;
+    canList = true;
+  } catch {
+    canList = false;
+  }
+
+  let projectId = "";
+  let action: "created" | "updated" | "selected" = "selected";
+
+  if (canList) {
+    const CREATE_NEW = "__create_new__";
+    const picked = await select({
+      message: "Select the project for this agentNode:",
+      options: [
+        ...projects.map((p) => ({ value: String(p.id), label: p.name })),
+        { value: CREATE_NEW, label: "＋ Create a new project" },
+      ],
+    });
+    if (typeof picked === "symbol") {
+      return null;
+    }
+    if (picked === CREATE_NEW) {
+      const nameInput = await text({
+        message: "New project name:",
+        initialValue: projectName,
+      });
+      if (typeof nameInput === "symbol" || !nameInput.trim()) {
+        return null;
+      }
+      try {
+        const created = await builderforceApiFetch<{ project: { id: string; name: string } }>(
+          `${serverUrl}/api/projects/upsert`,
+          {
+            method: "POST",
+            token: tenantJwt,
+            body: JSON.stringify({
+              name: nameInput.trim(),
+              description: description ?? `Managed from ${projectRoot}`,
+            }),
+          },
+        );
+        projectId = created.project.id;
+        action = "created";
+      } catch (err) {
+        note(String(err instanceof Error ? err.message : err), "Error");
+        return null;
+      }
+    } else {
+      projectId = picked;
+      action = "selected";
+    }
+  } else {
+    // Legacy fallback: no listing endpoint — upsert by name as before.
+    try {
+      const upsert = await builderforceApiFetch<{
+        action: "created" | "updated";
+        project: { id: string; name: string };
+      }>(`${serverUrl}/api/projects/upsert`, {
+        method: "POST",
+        token: tenantJwt,
+        body: JSON.stringify({
+          name: projectName,
+          description: description ?? `Managed from ${projectRoot}`,
+        }),
+      });
+      projectId = upsert.project.id;
+      action = upsert.action;
+    } catch (err) {
+      note(String(err instanceof Error ? err.message : err), "Error");
+      return null;
+    }
+  }
+
+  if (!projectId) {
+    return null;
+  }
+
+  try {
+    await builderforceApiFetch(
+      `${serverUrl}/api/agent-hosts/${agentNodeId}/projects/${projectId}`,
+      { method: "PUT", token: tenantJwt },
+    );
+  } catch (err) {
+    note(String(err instanceof Error ? err.message : err), "Error");
+    return null;
+  }
+
+  return { projectId, action };
+}
+
+/** @deprecated Use {@link selectProjectMapping}, which prompts instead of silently upserting. */
 export async function ensureProjectMapping(params: {
   serverUrl: string;
   tenantJwt: string;

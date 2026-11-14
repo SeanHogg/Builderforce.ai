@@ -7,7 +7,7 @@ import { authenticateViaBrowser } from "./browser-auth-server.js";
 import {
   authenticateWithPassword,
   builderforceApiFetch,
-  ensureProjectMapping,
+  selectProjectMapping,
   selectTenantAndToken,
 } from "./builderforce-api.js";
 import { detectBrowserOpenSupport } from "./onboard-helpers.js";
@@ -149,7 +149,7 @@ export async function promptBuilderforceOnboarding(params: {
   let agentNodeSlug = "";
   let apiKey = "";
   let projectId = "";
-  let projectAction: "created" | "updated" | "unknown" = "unknown";
+  let projectAction: "created" | "updated" | "selected" | "unknown" = "unknown";
   const machineProfile = buildLocalMachineProfile({
     workspaceDirectory: params.projectRoot,
     rootInstallDirectory: process.cwd(),
@@ -170,7 +170,7 @@ export async function promptBuilderforceOnboarding(params: {
     agentNodeSlug = res.agentHost.slug;
     apiKey = res.apiKey;
 
-    const mapped = await ensureProjectMapping({
+    const mapped = await selectProjectMapping({
       serverUrl,
       tenantJwt,
       agentNodeId,

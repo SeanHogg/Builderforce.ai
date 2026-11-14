@@ -22,6 +22,7 @@ import {
   authenticateWithPassword,
   builderforceApiFetch,
   ensureProjectMapping,
+  selectProjectMapping,
   selectTenantAndToken,
 } from "./builderforce-api.js";
 import {
@@ -810,7 +811,7 @@ async function ensureProjectMappingFromStoredCreds(params: {
     return;
   }
 
-  const mapped = await ensureProjectMapping({
+  const mapped = await selectProjectMapping({
     serverUrl,
     tenantJwt: tenantJwtRes.token,
     projectRoot: params.projectRoot,
@@ -926,7 +927,7 @@ async function promptBuilderforceSetup(
   let agentNodeSlug = "";
   let apiKey = "";
   let projectId = "";
-  let projectAction: "created" | "updated" | "unknown" = "unknown";
+  let projectAction: "created" | "updated" | "selected" | "unknown" = "unknown";
   try {
     const res = await builderforceApiFetch<{
       agentHost: { id: number; name: string; slug: string };
@@ -940,7 +941,7 @@ async function promptBuilderforceSetup(
     agentNodeSlug = res.agentHost.slug;
     apiKey = res.apiKey;
 
-    const mapped = await ensureProjectMapping({
+    const mapped = await selectProjectMapping({
       serverUrl,
       tenantJwt,
       agentNodeId,
