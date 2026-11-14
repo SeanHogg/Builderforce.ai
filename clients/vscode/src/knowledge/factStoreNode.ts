@@ -20,25 +20,28 @@
 
 import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 
-// node:sqlite is builtin from Node 22.5 / VS Code 1.101. The `localRecordTransaction.ts` pattern
+// node:sqlite is builtin from Node 22.5 / VS Code 1.101. The `node-local-sqlite.ts` pattern
 // tolerates a host without it: a structural `DatabaseSyncLike` (the methods this adapter uses),
-// loaded through `require` in a try/catch, so a host without `node:sqlite` still compiles and the
-// adapter reports unavailable at open time instead of failing to build.
+// loaded through `createRequire(import.meta.url)` in a try/catch, so a host without `node:sqlite`
+// still compiles and the adapter reports unavailable at open time instead of failing to build.
+// `createRequire` (not a bare `require`) is load-bearing: the agent-runtime/vitest module runner
+// resolves a raw `require('node:sqlite')` to a different binding layer whose statement parameter
+// handling differs, while `createRequire` reaches the real builtin (G03, node-local-sqlite.ts).
 interface DatabaseSyncLike {
   prepare(sql: string): { run(...args: unknown[]): { changes: number }; all(...args: unknown[]): unknown[]; get(...args: unknown[]): unknown };
   exec(sql: string): unknown;
   close(): void;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { DatabaseSync: NodeDatabaseSync } = (() => {
+const NodeDatabaseSync: (new (path: string) => DatabaseSyncLike) | undefined = (() => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    return require("node:sqlite");
+    const mod = createRequire(import.meta.url)("node:sqlite") as { DatabaseSync?: new (path: string) => DatabaseSyncLike };
+    return mod.DatabaseSync;
   } catch {
-    return { DatabaseSync: undefined };
+    return undefined;
   }
 })();
 
