@@ -70,6 +70,16 @@ export interface VsCodeChats {
 
 export type ChatRunStatus = 'awaiting' | 'running' | null;
 
+/**
+ * The history-row marker status of one chat, from the global run state's two id sets.
+ * Awaiting (paused on a question/confirm) wins over running — the sets are disjoint
+ * in the store, so precedence only matters for a stale memo — and a chat in neither
+ * shows no marker (null).
+ */
+export function runStatusOf(awaiting: ReadonlySet<number>, running: ReadonlySet<number>, id: number): ChatRunStatus {
+  return awaiting.has(id) ? 'awaiting' : running.has(id) ? 'running' : null;
+}
+
 export function useVsCodeChats(init: InitData, newChatLabel: string): VsCodeChats {
   const [chatId, setActiveId] = useState<number | null>(null);
   const brainChats = useBrainChats({
@@ -153,7 +163,7 @@ export function useVsCodeChats(init: InitData, newChatLabel: string): VsCodeChat
   const runningSet = useMemo(() => new Set(runState.running), [runState]);
   const awaitingSet = useMemo(() => new Set(runState.awaiting), [runState]);
   const runStatus = useCallback(
-    (id: number): ChatRunStatus => (awaitingSet.has(id) ? 'awaiting' : runningSet.has(id) ? 'running' : null),
+    (id: number): ChatRunStatus => runStatusOf(awaitingSet, runningSet, id),
     [awaitingSet, runningSet],
   );
   const titleOf = useCallback(
