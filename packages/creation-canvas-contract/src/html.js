@@ -1,0 +1,39 @@
+/**
+ * HTML escaping — the ONE escape set for every string interpolated into markup.
+ *
+ * Twelve copies of this function existed across the api, the frontend and this
+ * package, with THREE different escape sets: some skipped `"` (unsafe inside an
+ * attribute), some skipped `'` (unsafe inside a single-quoted attribute), and the
+ * mail templates disagreed with each other. An escaper that is correct for text
+ * nodes but not attributes is a bug waiting for the first template that puts a
+ * user-authored string in `title="…"`.
+ *
+ * This set is safe in BOTH positions, so a caller never has to know which one it
+ * is writing into. Everything that reaches markup — creator-authored website
+ * fields, email bodies, game titles, unsubscribe confirmations, print documents —
+ * goes through here.
+ */
+const HTML_ESCAPES = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+};
+/** Escape for text and attribute positions alike. */
+export function escapeHtml(value) {
+    return value.replace(/[&<>"']/g, (char) => HTML_ESCAPES[char] ?? char);
+}
+/**
+ * XML escaping — the same five metacharacters, but `'` becomes `&apos;` (the XML
+ * predefined entity) rather than the HTML numeric `&#39;`. TwiML and SOAP both
+ * pin that spelling in their contract tests, so it is the one variance kept.
+ */
+export function escapeXml(value) {
+    // XML 1.0 forbids these control characters even as character references, so they are
+    // dropped: a feed or envelope holding one is rejected whole by a strict parser.
+    return value
+        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+        .replace(/[&<>"']/g, (char) => (char === "'" ? '&apos;' : (HTML_ESCAPES[char] ?? char)));
+}
+//# sourceMappingURL=html.js.map

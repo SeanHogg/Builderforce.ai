@@ -1,0 +1,125 @@
+/**
+ * The ACCOUNT side of a local chat (PRD 36) — the editor's half of the binding port the
+ * shared chat identity (`createLocalChatIdentity`) and local persistence read:
+ *
+ *   - the destination a chat binds into: this platform + the workspace `/api/*` acts as;
+ *   - whether a bind may be made now (a connected feature: it sends a title and project,
+ *     never the transcript — the route rule says so in `@builderforce/local-first`);
+ *   - the bind itself (`POST /api/brain/chats`);
+ *   - the platform's spend for bound chats — one list read, briefly cached, for every
+ *     chat a list shows (never one request per chat).
+ */
+import { UNBOUND_DESTINATION } from "@builderforce/local-first";
+import { createBrainChat, listBrainChats, workspaceTenantId } from "./bfApi";
+import { getBaseUrl } from "./gateway";
+import { platformPolicy } from "./platformPolicy";
+import { ttlCache } from "./ttlCache";
+/** The workspace's recent chats a spend read covers — the same page the Sessions tree lists. */
+const SPEND_PAGE = 100;
+/**
+ * The platform instance this window talks to: the API base URL's origin. THE value a bound
+ * destination records (`chatAccountDestination`), so a scope built from it matches those rows.
+ * Undefined when the base URL cannot be read.
+ */
+function activePlatformInstance() {
+    try {
+        return new URL(getBaseUrl()).origin;
+    }
+    catch {
+        return undefined;
+    }
+}
+/** The destination a chat binds into now, or undefined when signed out. */
+export function chatAccountDestination() {
+    const tenantId = workspaceTenantId();
+    if (tenantId === undefined)
+        return undefined;
+    const platformInstance = activePlatformInstance();
+    if (platformInstance === undefined)
+        return undefined;
+    return { kind: "bound", platformInstance, tenantId: String(tenantId) };
+}
+/**
+ * The scope an id lookup runs in (typed-entity-ids §3): the active workspace's tenant ON this
+ * platform instance (a tenant id that exists on staging and prod names two accounts). A SyncId is
+ * only unique per tenant, so a tool or rail lookup never resolves another account's entity.
+ * Signed out there is no account: the lookup reads UNBOUND rows only, never any account's.
+ */
+export function activeEntityScope() {
+    const tenantId = workspaceTenantId();
+    if (tenantId === undefined)
+        return UNBOUND_DESTINATION;
+    const platformInstance = activePlatformInstance();
+    const scope = { tenantId: String(tenantId), ...(platformInstance !== undefined ? { platformInstance } : {}) };
+    return scope;
+}
+/** A bind is a connected feature; a policy that cannot be read is a refusal. */
+function bindAllowed() {
+    try {
+        return platformPolicy().allows("connected-feature") === true;
+    }
+    catch {
+        return false;
+    }
+}
+export function chatBindingPort(secrets) {
+    return {
+        destination: chatAccountDestination,
+        allowed: bindAllowed,
+        createServerChat: (input) => createBrainChat(secrets, input),
+    };
+}
+/** Cached per workspace for a short window: a turn's usage lands just after it settles,
+ *  and the panel re-reads its chat list then anyway. */
+const spendCache = ttlCache(30_000);
+/** Drop the cached platform spend — after a sync pass put usage on the platform. */
+export function invalidateServerChatSpend() {
+    spendCache.invalidate();
+}
+/** The platform's spend for the bound chats a list shows. Rejects when it cannot be read,
+ *  so the caller keeps its own estimate rather than showing nothing. Never awaited on a
+ *  local read — the caller resolves from {@link serverChatSpendCache} and lets this port
+ *  fill that cache in the background. */
+export function serverChatSpend(secrets) {
+    // One page answers every id a list asks about, so the ids themselves are not sent.
+    return async (_serverIds) => {
+        const tenantId = workspaceTenantId();
+        if (tenantId === undefined || !bindAllowed())
+            throw new Error("chat_spend_unavailable");
+        const hit = spendCache.get(tenantId)?.value;
+        // A chat older than the page is simply absent: its figure stays the device's own.
+        if (hit)
+            return hit;
+        const chats = await listBrainChats(secrets, SPEND_PAGE);
+        if (chats.length === 0)
+            throw new Error("chat_spend_unavailable");
+        const byId = new Map();
+        for (const chat of chats)
+            if (chat.spend)
+                byId.set(chat.id, chat.spend);
+        // A bound chat the page holds with no usage yet is spend-free, not unknown.
+        for (const chat of chats)
+            if (!chat.spend)
+                byId.set(chat.id, EMPTY_SPEND);
+        spendCache.set(tenantId, byId);
+        return byId;
+    };
+}
+/**
+ * The synchronous spend read a local projection answers from: the cached platform spend
+ * for the active tenant, or null when there is none (signed out, expired, or never
+ * fetched). An offline `listBrainChats` can block for its whole timeout, so a local
+ * read must never wait on it — this is the only value a projection may consult.
+ */
+export function serverChatSpendCache() {
+    const tenantId = workspaceTenantId();
+    if (tenantId === undefined)
+        return null;
+    return spendCache.get(tenantId)?.value ?? null;
+}
+const EMPTY_SPEND = {
+    spend: { platformUsd: 0, yourKeyUsd: 0, totalUsd: 0, promptTokens: 0, completionTokens: 0, cacheReadTokens: 0, totalTokens: 0, unpricedTokens: 0, requests: 0 },
+    saved: { measuredUsd: 0, estimatedUsd: 0, netUsd: 0, tokensSaved: 0, bySource: [] },
+    savedPct: null,
+};
+//# sourceMappingURL=chatAccount.js.map

@@ -1,0 +1,164 @@
+/**
+ * knowledge/judgement.ts — a `JudgementPort` over any text completion (PRD 38 §4.3): the
+ * judgement pass of a review, for hosts that call a model themselves (VS Code: its local
+ * engines first, then the gateway). Browser hosts and on-prem use the API's routed call
+ * (`POST …/knowledge/judge`) instead, which asks the SAME questions with these prompts.
+ *
+ * One completion per item: `extract` asks a section for its claims and entities, `compare`
+ * asks whether two near-duplicate claims contradict or agree. Every reply is validated with
+ * memory's own validators (`validateExtract` / `validateCompare`); invalid output is dropped
+ * and counted, never stored. Pure: the model is reached only through the injected call.
+ */
+import { validateCompare, validateExtract, } from '@seanhogg/builderforce-memory/knowledge';
+/** Characters of section text sent per item — quotes are bounded to 3 lines anyway. */
+export const MAX_JUDGE_TEXT = 8_000;
+export const KNOWLEDGE_EXTRACT_SYSTEM = [
+    'You read one section of a document and list what it asserts.',
+    'Reply with JSON only: {"extract":[{"ref":<the ref given>,"claims":[{"subject","predicate","object","quote"}],"entities":[{"name","type"}]}]}.',
+    'A claim is one factual assertion the text makes. "quote" is the supporting text, at most 3 lines, copied verbatim.',
+    'Entities are the named things the section is about (people, organisations, systems, documents, terms).',
+    'Return empty arrays when the section asserts nothing.',
+].join('\n');
+export const KNOWLEDGE_COMPARE_SYSTEM = [
+    'You compare two claims.',
+    'Reply with JSON only: {"compare":[{"a":<ref a>,"b":<ref b>,"relation":"contradicts"|"agrees"|"unrelated","confidence":<0..1>}]}.',
+].join('\n');
+/** The JSON object in a model's reply (fenced or bare), or undefined when there is none. */
+export function replyJson(text) {
+    const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(text);
+    const body = fenced?.[1] ?? text;
+    const start = body.indexOf('{');
+    const end = body.lastIndexOf('}');
+    if (start < 0 || end <= start)
+        return undefined;
+    try {
+        return JSON.parse(body.slice(start, end + 1));
+    }
+    catch {
+        return undefined;
+    }
+}
+/**
+ * The ONE judgement loop (PRD 38 §4.3): every host — VS Code's local engines, the API's
+ * routed `POST …/knowledge/judge` — asks these prompts through its own `ask`, which returns
+ * the parsed JSON reply (or anything; it is validated here). Same prompts, same bounds,
+ * same validation on every host.
+ */
+export async function judgeWith(ask, req) {
+    if (req.kind === 'compare') {
+        const [a, b] = req.items;
+        if (!a || !b)
+            return { compare: [], invalid: 1 };
+        const out = await ask(KNOWLEDGE_COMPARE_SYSTEM, {
+            a: { ref: a.ref, claim: a.text.slice(0, MAX_JUDGE_TEXT) },
+            b: { ref: b.ref, claim: b.text.slice(0, MAX_JUDGE_TEXT) },
+        });
+        const v = validateCompare(out, a.ref, b.ref);
+        return {
+            compare: v.relation ? [{ a: a.ref, b: b.ref, relation: v.relation, confidence: v.confidence }] : [],
+            invalid: v.invalid,
+        };
+    }
+    const result = { extract: [], invalid: 0 };
+    for (const item of req.items) {
+        const out = await ask(KNOWLEDGE_EXTRACT_SYSTEM, { ref: item.ref, text: item.text.slice(0, MAX_JUDGE_TEXT) });
+        const v = validateExtract(out, item.ref);
+        result.invalid += v.invalid;
+        result.extract.push({ ref: item.ref, claims: v.claims, entities: v.entities });
+    }
+    return result;
+}
+/** A `JudgementPort` over a text completion: {@link judgeWith} with {@link replyJson}. */
+export function completionJudgement(complete) {
+    return {
+        judge: (req) => judgeWith(async (system, payload) => replyJson(await complete({ system, user: JSON.stringify(payload), ...(req.signal ? { signal: req.signal } : {}) })), req),
+    };
+}
+/** Default ceiling for one judgement request before it is treated as unjudged (a stalled engine). */
+export const DEFAULT_JUDGEMENT_TIMEOUT_MS = 60_000;
+/** Extra time granted per {@link JUDGEMENT_CHARS_PER_STEP} characters of request text. */
+export const JUDGEMENT_MS_PER_STEP = 15_000;
+export const JUDGEMENT_CHARS_PER_STEP = 4_000;
+/** Ceiling of the scaled timeout. */
+export const MAX_JUDGEMENT_TIMEOUT_MS = 300_000;
+/** The timeout of one request: the 60 s base plus 15 s per 4,000 characters of its text, capped at 300 s. */
+export function defaultJudgementTimeoutMs(req) {
+    let chars = 0;
+    for (const item of req.items)
+        chars += item.text.length;
+    const scaled = DEFAULT_JUDGEMENT_TIMEOUT_MS + Math.floor(chars / JUDGEMENT_CHARS_PER_STEP) * JUDGEMENT_MS_PER_STEP;
+    return Math.min(MAX_JUDGEMENT_TIMEOUT_MS, scaled);
+}
+/**
+ * The first port that answers: a port that THROWS (no engine running, signed out, a
+ * refused call) hands the request to the next; a stopped review stops here. A port that
+ * answers with invalid output has answered — that output is counted, not retried.
+ */
+export function fallbackJudgement(ports) {
+    return {
+        async judge(req) {
+            let last = new Error('knowledge: no judgement port');
+            for (const port of ports) {
+                try {
+                    return await port.judge(req);
+                }
+                catch (error) {
+                    if (req.signal?.aborted)
+                        throw error;
+                    last = error;
+                }
+            }
+            throw last;
+        },
+    };
+}
+/** After the timer fires the real call is aborted; the wrapper waits up to this long (never more than the timeout itself) for it to end before it gives up on it (a port that ignores its signal). */
+export const JUDGEMENT_ABORT_GRACE_MS = 10_000;
+/** Thrown for a request that did not settle in time: a failed call (the section stays UNJUDGED and owed), never an answer. */
+export class JudgementTimeout extends Error {
+    constructor(ms) { super(`judge: timeout after ${Math.round(ms / 1000)}s`); this.name = "JudgementTimeout"; }
+}
+/**
+ * Wrap a `JudgementPort` with a per-request timeout (PRD 41 A10 rule 9). A request that does not settle
+ * within `ms` is ABORTED through a signal combined with the caller's, and the wrapper settles only once the
+ * real call has ended (or after {@link JUDGEMENT_ABORT_GRACE_MS}), so the review's model limiter keeps its
+ * slot for as long as the call really runs. It then THROWS {@link JudgementTimeout}: memory counts a thrown
+ * call as an error and leaves the section unjudged — not recorded as judged — so a later run judges it again.
+ * (An empty result used to be recorded as a judgement of nothing, and the section was never retried.)
+ * A caller's abort passes through untouched.
+ */
+export function judgementWithTimeout(port, timeout = defaultJudgementTimeoutMs) {
+    return {
+        async judge(req) {
+            const asked = typeof timeout === "function" ? timeout(req) : timeout;
+            // A function-valued timeout that answers NaN, 0 or a negative falls back to the 60 s base.
+            const ms = Number.isFinite(asked) && asked > 0 ? asked : DEFAULT_JUDGEMENT_TIMEOUT_MS;
+            const own = new AbortController();
+            const relay = () => own.abort(req.signal?.reason);
+            if (req.signal?.aborted)
+                relay();
+            else
+                req.signal?.addEventListener("abort", relay, { once: true });
+            const real = port.judge({ ...req, signal: own.signal });
+            const giveUp = new Promise((resolve) => {
+                const t = setTimeout(() => { own.abort(new JudgementTimeout(ms)); const g = setTimeout(() => resolve("gave-up"), Math.min(JUDGEMENT_ABORT_GRACE_MS, ms)); g.unref?.(); }, ms);
+                void real.then(() => clearTimeout(t), () => clearTimeout(t));
+            });
+            try {
+                const out = await Promise.race([real, giveUp]);
+                if (out !== "gave-up")
+                    return out;
+            }
+            catch (error) {
+                // The caller's abort, or the call's own failure, passes through; only OUR abort is a timeout.
+                if (!(own.signal.reason instanceof JudgementTimeout) || req.signal?.aborted)
+                    throw error;
+            }
+            finally {
+                req.signal?.removeEventListener("abort", relay);
+            }
+            throw new JudgementTimeout(ms);
+        },
+    };
+}
+//# sourceMappingURL=judgement.js.map

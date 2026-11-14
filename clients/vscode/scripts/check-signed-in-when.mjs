@@ -6,8 +6,8 @@
  * (`builderforce.capability.<id>`, derived in `src/capabilityStates.ts`) so a signed-out, offline
  * workspace still shows it.
  *
- * Run: `node scripts/check-signed-in-when.mjs` from `clients/vscode` (wired into `pnpm run type-check`,
- * which CI runs as the `type-check` leg of "Verify VS Code extension").
+ * Run: `node scripts/check-signed-in-when.mjs` from `clients/vscode` (also wired as
+ * `check:package-json-guard`; `type-check` runs it).
  */
 
 import { readFileSync } from "node:fs";
@@ -19,7 +19,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
  * (menus, keybindings) or `view` (viewsWelcome). Welcome IS the sign-in surface; Work (tickets) and Inbox are account data
  * (PRD 41 A1 table: "Tickets, inbox, cloud runs, team features").
  */
-export const SIGNED_IN_ALLOWLIST = Object.freeze(["builderforce.welcome", "builderforce.work", "builderforce.inbox"]);
+export const SIGNED_IN_ALLOWLIST = Object.freeze(["builderforce.welcome"]);
 
 const KEY = /\bbuilderforce\.signedIn\b/;
 

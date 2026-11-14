@@ -1,0 +1,282 @@
+/**
+ * Render an authored website to ONE self-contained, framework-free HTML document.
+ *
+ * ── WHY THIS IS SHARED AND NOT RESTATED PER CALLER ───────────────────────────────
+ * Two callers need the exact same string with different framing around it: the site
+ * publisher (`siteLandingPage.ts`, a Worker with no React) wraps it with a door back
+ * into the signed-in app, and the canvas `app` surface (`canvasApp.ts`, a browser lib
+ * with no server) wraps a `website` object's pages in with any `code` objects on the
+ * same board so the two run as one preview. Both need the SAME sections rendered the
+ * SAME way — a section kind one of them forgets is a page the other one shows and this
+ * one silently drops. So the pixels live here once; each caller supplies only what
+ * differs (whether there is a door back to the app, and what to call it).
+ */
+import { WEBSITE_CONTENT_FRAME_SANDBOX, activeWebsitePage, isMarkupSectionBody } from './website';
+import { escapeHtml } from './html';
+/**
+ * A palette per theme style, plus its dark counterpart.
+ *
+ * The creator's own `background` / `foreground` / `accent` override these when set —
+ * this is what a page looks like when they have said nothing. Both modes are defined
+ * for every style, because the document is served to strangers on their own devices
+ * and half of them are in dark mode.
+ */
+const PALETTES = {
+    editorial: {
+        light: { bg: '#fbfaf7', fg: '#1a1917', muted: '#5c5850', accent: '#8c3b20', onAccent: '#ffffff', line: '#e3ded2', panel: '#ffffff' },
+        dark: { bg: '#14130f', fg: '#f2efe8', muted: '#a8a296', accent: '#e0805e', onAccent: '#14130f', line: '#2c2924', panel: '#1c1a16' },
+    },
+    bold: {
+        light: { bg: '#ffffff', fg: '#0a0a0a', muted: '#525252', accent: '#1d4ed8', onAccent: '#ffffff', line: '#e5e5e5', panel: '#f5f5f5' },
+        dark: { bg: '#0a0a0a', fg: '#fafafa', muted: '#a3a3a3', accent: '#7aa2ff', onAccent: '#0a0a0a', line: '#262626', panel: '#161616' },
+    },
+    minimal: {
+        light: { bg: '#ffffff', fg: '#18181b', muted: '#71717a', accent: '#18181b', onAccent: '#ffffff', line: '#e4e4e7', panel: '#fafafa' },
+        dark: { bg: '#101012', fg: '#f4f4f5', muted: '#a1a1aa', accent: '#f4f4f5', onAccent: '#101012', line: '#27272a', panel: '#18181b' },
+    },
+    soft: {
+        light: { bg: '#fdf8f4', fg: '#2b211c', muted: '#6d5d54', accent: '#c2643c', onAccent: '#ffffff', line: '#ecdfd5', panel: '#ffffff' },
+        dark: { bg: '#171210', fg: '#f5ece6', muted: '#ab9a90', accent: '#e8916a', onAccent: '#171210', line: '#2e2521', panel: '#1f1815' },
+    },
+    technical: {
+        light: { bg: '#f7f8fa', fg: '#0f172a', muted: '#556076', accent: '#0f766e', onAccent: '#ffffff', line: '#dfe3ea', panel: '#ffffff' },
+        dark: { bg: '#0b0f16', fg: '#e6edf6', muted: '#93a1b5', accent: '#3fd0c3', onAccent: '#0b0f16', line: '#1d2532', panel: '#131924' },
+    },
+};
+/** A creator-supplied colour, only when it is one we can safely inline. */
+function safeColor(value) {
+    if (!value)
+        return null;
+    const trimmed = value.trim();
+    return /^#[0-9a-f]{3,8}$/i.test(trimmed) || /^[a-z]{3,20}$/i.test(trimmed) ? trimmed : null;
+}
+/**
+ * The colours a site paints in. Exported because the canvas EDITOR draws the same site as
+ * React and must paint it in the same colours — a second palette there is how the editor
+ * came to show a page its preview did not.
+ */
+export function websitePalette(theme, mode) {
+    const base = PALETTES[theme.style][mode];
+    // An authored colour is the author's decision in BOTH modes: a creator who picked
+    // their brand blue did not pick a different blue for dark mode, and silently
+    // substituting one would render their page in colours they never chose.
+    return {
+        ...base,
+        ...(safeColor(theme.background) ? { bg: safeColor(theme.background) } : {}),
+        ...(safeColor(theme.foreground) ? { fg: safeColor(theme.foreground) } : {}),
+        ...(safeColor(theme.accent) ? { accent: safeColor(theme.accent) } : {}),
+    };
+}
+function cssVars(palette) {
+    return Object.entries(palette).map(([key, value]) => `--${key}:${value}`).join(';');
+}
+function renderItems(section, kind) {
+    if (!section.items?.length)
+        return '';
+    const cells = section.items.map((item, index) => (kind === 'stats'
+        ? `<li><b>${escapeHtml(item.value ?? item.title ?? '')}</b><span>${escapeHtml(item.label ?? item.body ?? '')}</span></li>`
+        : `<li><span class="n">${String(index + 1).padStart(2, '0')}</span><h3>${escapeHtml(item.title ?? '')}</h3><p>${escapeHtml(item.body ?? '')}</p></li>`)).join('');
+    return `<ul class="${kind}">${cells}</ul>`;
+}
+/** Links an authored body may carry. Anything else — `javascript:` above all — stays text. */
+const PROSE_LINK = /\[([^\]]+)\]\(((?:https?:\/\/|mailto:|\/|#)[^)\s]*)\)/g;
+/** One line of authored prose: escaped FIRST, so every mark below wraps text that can no
+ *  longer be markup. */
+function proseInline(line) {
+    return escapeHtml(line)
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1<em>$2</em>')
+        .replace(PROSE_LINK, '<a href="$2" rel="noopener noreferrer">$1</a>');
+}
+/**
+ * An authored body as the small markdown it is written in.
+ *
+ * Brain writes section copy in markdown and the canvas editor renders it that way, so a
+ * document that printed it verbatim showed visitors the asterisks the author never saw.
+ * Deliberately small — paragraphs, bullet lists, bold, italic, code and safe links — because
+ * this runs in a Worker with no markdown library and every byte of it is untrusted input.
+ */
+function renderProse(source) {
+    return source.trim().split(/\n\s*\n/).map((block) => {
+        const lines = block.split('\n').map((line) => line.trim()).filter(Boolean);
+        if (!lines.length)
+            return '';
+        if (lines.every((line) => /^[-*]\s+/.test(line))) {
+            return `<ul class="prose">${lines.map((line) => `<li>${proseInline(line.replace(/^[-*]\s+/, ''))}</li>`).join('')}</ul>`;
+        }
+        return `<p class="body">${lines.map(proseInline).join('<br>')}</p>`;
+    }).join('');
+}
+/**
+ * A section's buttons. A preview has no destination to give them — only the published site
+ * does — but they are still part of the page the author is checking, so without one they are
+ * drawn inert rather than dropped: a hero that loses its call to action in the preview is a
+ * different page from the one the editor shows.
+ */
+function renderActions(section, ctaHref) {
+    if (!section.cta)
+        return '';
+    const label = escapeHtml(section.cta);
+    const primary = ctaHref ? `<a class="cta" href="${escapeHtml(ctaHref)}">${label}</a>` : `<span class="cta">${label}</span>`;
+    const secondary = section.secondaryCta ? `<span class="cta2">${escapeHtml(section.secondaryCta)}</span>` : '';
+    return `<p class="actions">${primary}${secondary}</p>`;
+}
+/** One section. The switch is total over the contract's declared vocabulary — a kind
+ *  the contract adds and this does not handle is a compile error, not a blank block. */
+function renderSection(section, ctaHref) {
+    const eyebrow = section.eyebrow ? `<p class="eyebrow">${escapeHtml(section.eyebrow)}</p>` : '';
+    const heading = section.heading ? `<h2>${escapeHtml(section.heading)}</h2>` : '';
+    const body = section.body ? renderProse(section.body) : '';
+    const cta = renderActions(section, ctaHref);
+    switch (section.kind) {
+        case 'hero':
+            // The artwork is decoration in the accent, not content — `aria-hidden`, and the
+            // stylesheet drops it for the `minimal` style exactly as the editor does.
+            return `<section class="s hero"><div class="hero-copy">${eyebrow}${section.heading ? `<h1>${escapeHtml(section.heading)}</h1>` : ''}${body}${cta}</div><div class="hero-art" aria-hidden="true"><i></i><i></i><i></i></div></section>`;
+        case 'features':
+            return `<section class="s">${eyebrow}${heading}${body}${renderItems(section, 'features')}${cta}</section>`;
+        case 'stats':
+            return `<section class="s">${eyebrow}${heading}${renderItems(section, 'stats')}</section>`;
+        case 'testimonial':
+            return `<section class="s quote"><blockquote>“${escapeHtml(section.quote ?? section.body ?? '')}”</blockquote>${section.author ? `<cite>${escapeHtml(section.author)}</cite>` : ''}</section>`;
+        case 'content':
+            // A model-authored section body sometimes carries real markup — a `<form>` plus
+            // its `<script>` — rather than prose. Printing it as `body` shows escaped source
+            // code on the page; a sandboxed frame is the fix, never raw interpolation, because
+            // this is untrusted content from a free-text brief. `escapeHtml` here is
+            // entity-encoding for the `srcdoc` ATTRIBUTE position — the browser decodes it back
+            // to the real markup before handing it to the sandboxed frame's own parser.
+            return isMarkupSectionBody(section)
+                ? `<section class="s">${eyebrow}${heading}<iframe class="content-frame" title="${escapeHtml(section.heading || 'content')}" sandbox="${WEBSITE_CONTENT_FRAME_SANDBOX}" srcdoc="${escapeHtml(section.body ?? '')}"></iframe>${cta}</section>`
+                : `<section class="s">${eyebrow}${heading}${body}${cta}</section>`;
+        case 'cta':
+            return `<section class="s call">${eyebrow}${heading}${body}${cta}</section>`;
+    }
+}
+function renderPage(page, index, ctaHref) {
+    return `<main class="page" data-page="${escapeHtml(page.id)}"${index === 0 ? '' : ' hidden'}>${page.sections.map((section) => renderSection(section, ctaHref)).join('')}</main>`;
+}
+const STYLES = `
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 ui-sans-serif,-apple-system,"Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:960px;margin:0 auto;padding:0 20px 72px}
+nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:16px 0;border-bottom:1px solid var(--line)}
+nav .brand{font-weight:700;letter-spacing:-.02em;margin-right:6px}
+nav button{font:inherit;font-size:.85rem;font-weight:600;color:var(--muted);background:transparent;border:0;border-radius:6px;padding:6px 10px;cursor:pointer}
+nav button[aria-current="true"]{background:var(--panel);color:var(--fg)}
+nav .enter{margin-left:auto;font-size:.85rem;font-weight:650;color:var(--onAccent);background:var(--accent);border-radius:7px;padding:8px 14px;text-decoration:none}
+.s{padding:52px 0;border-bottom:1px solid var(--line)}
+.s:last-child{border-bottom:0}
+h1{font-size:clamp(2rem,6vw,3.2rem);line-height:1.08;letter-spacing:-.035em;margin:0 0 16px;text-wrap:balance}
+h2{font-size:clamp(1.4rem,3.4vw,2rem);line-height:1.15;letter-spacing:-.03em;margin:0 0 14px;text-wrap:balance}
+h3{font-size:1rem;margin:0 0 6px;letter-spacing:-.01em}
+p{margin:0 0 14px}
+.body{color:var(--muted);max-width:60ch;font-size:1.05rem}
+.eyebrow{font-size:.72rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin:0 0 10px}
+.actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:26px}
+.cta{display:inline-block;background:var(--accent);color:var(--onAccent);font-weight:650;border-radius:9px;padding:12px 22px;text-decoration:none}
+.cta2{display:inline-block;border:1px solid color-mix(in srgb,currentColor 28%,transparent);border-radius:9px;padding:11px 20px;font-weight:600;font-size:.95rem}
+.body a{color:var(--accent)}
+code{font:.9em ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--panel);border-radius:4px;padding:1px 5px}
+ul.prose{display:block;list-style:disc;margin:0 0 14px;padding-left:1.2em;color:var(--muted);max-width:60ch}
+ul.prose li{margin:4px 0}
+ul{list-style:none;margin:22px 0 0;padding:0;display:grid;gap:18px}
+ul.features{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+ul.features li{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:18px 20px}
+ul.features .n{display:block;margin-bottom:10px;font:700 .72rem ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--accent)}
+ul.features p{color:var(--muted);font-size:.92rem;margin:0}
+.hero{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);align-items:center;gap:40px;margin:28px 0 8px;padding:56px 44px;border-bottom:0;border-radius:18px;background:linear-gradient(125deg,color-mix(in srgb,var(--bg) 90%,var(--panel)),color-mix(in srgb,var(--bg) 84%,var(--fg)))}
+.hero-copy{min-width:0}
+.hero h1{max-width:16ch}
+.hero-art{min-height:220px;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:12px;transform:rotate(-2deg);color:var(--accent)}
+.hero-art i{display:block;border-radius:28px 10px 22px 10px;background:currentColor;opacity:.78}
+.hero-art i:first-child{grid-row:1/3;border-radius:50% 14px 50% 14px;opacity:.28}
+.hero-art i:last-child{opacity:.48}
+.theme-bold .hero{background:var(--fg);color:var(--bg)}
+.theme-bold .hero .body,.theme-bold .hero .eyebrow{color:color-mix(in srgb,var(--bg) 80%,transparent)}
+.theme-minimal .hero{grid-template-columns:1fr;margin:0;padding:52px 0;border-radius:0;border-bottom:1px solid var(--line);background:none}
+.theme-minimal .hero-art{display:none}
+.theme-soft .hero{border-radius:28px;background:linear-gradient(135deg,color-mix(in srgb,var(--bg) 84%,var(--panel)),color-mix(in srgb,var(--bg) 80%,var(--accent)))}
+.theme-technical h1,.theme-technical h2{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:-.02em}
+@media (max-width:640px){.hero{grid-template-columns:1fr;gap:24px;padding:32px 22px}.hero-art{min-height:140px;order:-1}}
+ul.stats{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+ul.stats b{display:block;font-size:2.1rem;letter-spacing:-.03em;color:var(--accent);font-variant-numeric:tabular-nums}
+ul.stats span{color:var(--muted);font-size:.85rem}
+.content-frame{width:100%;min-height:420px;border:0;border-radius:8px;background:var(--panel)}
+.quote{text-align:center}
+.quote blockquote{max-width:34ch;margin:0 auto;font-size:clamp(1.15rem,2.6vw,1.6rem);line-height:1.4;letter-spacing:-.02em;text-wrap:balance}
+.quote cite{display:block;margin-top:14px;font-style:normal;color:var(--muted);font-size:.88rem}
+.call{text-align:center;margin:28px 0;padding:52px 32px;border-bottom:0;border-radius:18px;background:var(--accent);color:var(--onAccent)}
+.call .body,.call .eyebrow{color:inherit;opacity:.85;margin-inline:auto}
+.call .actions{justify-content:center}
+.call .cta{background:var(--onAccent);color:var(--accent)}
+footer{padding:26px 0;color:var(--muted);font-size:.8rem;border-top:1px solid var(--line)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+@media (prefers-reduced-motion:no-preference){.page{animation:in .2s ease both}@keyframes in{from{opacity:0}}}
+`;
+/**
+ * The page switcher. Inline, tiny, and the only script the document adds itself.
+ *
+ * `messageTag` is what makes the same document usable as a PREVIEW rather than only as a
+ * published page. A canvas card frames this document at device width, so the nav the
+ * reader clicks is inside the frame and the board outside it would otherwise never learn
+ * which page is open — the card and the full-size `site` surface would then disagree
+ * about it, which is exactly the drift `WebsiteBody` was extracted to prevent. Absent
+ * (the published site's case) not a byte of it is emitted.
+ */
+function switchScript(messageTag) {
+    return `
+(function(){var n=document.querySelectorAll('nav button[data-go]');
+function show(id){document.querySelectorAll('.page').forEach(function(p){p.hidden=p.dataset.page!==id});
+n.forEach(function(b){b.setAttribute('aria-current',String(b.dataset.go===id))});${messageTag ? `try{parent.postMessage({tag:${JSON.stringify(messageTag)},pageId:id},'*');}catch(e){}` : ''}}
+n.forEach(function(b){b.addEventListener('click',function(){show(b.dataset.go)})});})();
+`;
+}
+/**
+ * Render the authored website to ONE self-contained HTML document.
+ * Returns null when there is nothing publishable — an object with no parseable page
+ * must not produce an empty shell that replaces whatever was asking for it.
+ */
+export function renderWebsiteDocument(pages, theme, options) {
+    if (!pages.length)
+        return null;
+    const { brand, enterPath, enterLabel, commerceScriptSrc } = options;
+    const first = activeWebsitePage(pages, options.activePageId) ?? pages[0];
+    const ordered = [first, ...pages.filter((page) => page.id !== first.id)];
+    const hero = first.sections.find((section) => section.kind === 'hero');
+    const title = hero?.heading || brand;
+    const description = hero?.body ?? '';
+    // The nav's button: the published site's door into the app, or — with no door, as in a
+    // preview — the hero's own call to action, inert, which is what the editor draws there.
+    const navAction = enterPath
+        ? `<a class="enter" href="${escapeHtml(enterPath)}">${escapeHtml(enterLabel ?? '')}</a>`
+        : hero?.cta ? `<span class="enter">${escapeHtml(hero.cta)}</span>` : '';
+    const nav = `<nav><span class="brand">${escapeHtml(brand)}</span>${ordered.length > 1
+        ? ordered.map((page, index) => `<button type="button" data-go="${escapeHtml(page.id)}" aria-current="${index === 0}">${escapeHtml(page.name)}</button>`).join('')
+        : ''}${navAction}</nav>`;
+    const scheme = options.colorScheme ?? 'auto';
+    const light = websitePalette(theme, 'light');
+    const dark = websitePalette(theme, 'dark');
+    // One `:root`, then the dark override only when the reader is the one deciding. A
+    // pinned preview emits a single palette so nothing on the embedder's device — OS
+    // setting or app theme — can repaint it.
+    const rootVars = scheme === 'dark' ? cssVars(dark) : cssVars(light);
+    const colorScheme = scheme === 'auto' ? 'light dark' : scheme;
+    const darkQuery = scheme === 'auto'
+        ? `@media (prefers-color-scheme:dark){:root{${cssVars(dark)}}}`
+        : '';
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHtml(title)}</title>
+${description ? `<meta name="description" content="${escapeHtml(description.slice(0, 300))}">` : ''}
+<meta property="og:title" content="${escapeHtml(title)}">
+${description ? `<meta property="og:description" content="${escapeHtml(description.slice(0, 300))}">` : ''}
+<style>:root{${rootVars};color-scheme:${colorScheme}}
+${darkQuery}
+${STYLES}</style></head>
+<body class="theme-${escapeHtml(theme.style)}"><div class="wrap">${nav}${ordered.map((page, index) => renderPage(page, index, enterPath ?? null)).join('')}
+<footer>${escapeHtml(brand)}</footer></div>
+${ordered.length > 1 ? `<script>${switchScript(options.pageMessageTag)}</script>` : ''}${commerceScriptSrc ? `<script src="${escapeHtml(commerceScriptSrc)}" defer></script>` : ''}</body></html>`;
+}
+//# sourceMappingURL=websiteDocument.js.map

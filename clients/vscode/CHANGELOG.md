@@ -2,10 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
-## [NEXT] — The chat history shows a chat's idle age and auto-archives stale chats
+## [2026.10.165] — The chat history shows a chat's idle age and auto-archives stale chats
 
 - **Added: each chat-history row shows how long since the chat was last touched or last executed (e.g. `5D`).** The chip appears beside the linked-ticket stats, so a stale chat is obvious at a glance. The age is computed from the chat's `updatedAt` and rendered by the shared `ChatHistoryRow`.
 - **Added: chats idle for longer than a configurable threshold auto-archive.** The sweep runs when the conversation list loads or the threshold changes, archiving any live chat whose idle age meets or exceeds `builderforce.history.autoArchiveAfterDays` (default **5** days, `0` disables it). The open chat and any chat with a live run are never auto-archived. The threshold rides `init`, so an already-open panel follows a settings change without a reload.
+- **Fixed: a ship's close-out no longer records a review over a self-review the review gate refuses.** The close-out step now only records the review on the ticket when an independent reviewer approves it; a self-review path the gate rejects is not written as the run's review.
 
 ## [2026.10.164] — A docs-only epic no longer pins at 75% after every child is done
 

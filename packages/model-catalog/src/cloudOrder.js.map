@@ -1,0 +1,1 @@
+{"version":3,"file":"cloudOrder.js","sourceRoot":"","sources":["cloudOrder.ts"],"names":[],"mappings":"AAAA;;;;;;;;;GASG;AAEH,MAAM,CAAC,MAAM,YAAY,GAAG,CAAC,UAAU,EAAE,YAAY,EAAE,WAAW,CAAU,CAAC;AAG7E,MAAM,UAAU,YAAY,CAAC,KAAc;IACzC,OAAO,OAAO,KAAK,KAAK,QAAQ,IAAK,YAAkC,CAAC,QAAQ,CAAC,KAAK,CAAC,CAAC;AAC1F,CAAC"}

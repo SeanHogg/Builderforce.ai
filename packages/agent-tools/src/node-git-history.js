@@ -1,0 +1,212 @@
+/**
+ * node-git-history.ts — the Node implementation of the review's `HistoryPort` over
+ * `git log` (PRD 38, Option B+ Contract 1: the `churn` badge; P4: `coChange`). Node-only
+ * (`child_process`): the package root and `./knowledge` never import it.
+ *
+ * One `git log -z --no-renames --name-only --full-diff --since=<n>.days --max-count=<m> --format=${HISTORY_FORMAT} -- .`
+ * per call, run in the reviewed folder (so only its commits) and parsed as it streams. `-z`
+ * names are NUL-terminated and never quoted, so every name is its real self. Paths come back
+ * repo-relative (`--full-diff`: every file of the commit, for its `fileCount`) and are made
+ * root-relative by the folder's `--show-prefix`. Not a git repository, no git, a failed run: no
+ * port / an empty list — never a throw into the review. A run that hits the timeout, and a
+ * history that hits the commit cap inside churn's window, are reported through `onWarn`.
+ */
+import { execFile, spawn } from "node:child_process";
+import { churnCapWarning } from "./knowledge/historyPort.js";
+const MAX_BUFFER = 256 * 1024 * 1024;
+const TIMEOUT_MS = 60_000;
+/**
+ * The marker that starts every commit header line of a `git log --name-only` we parse: a RECORD SEPARATOR (U+001E,
+ * `%x1e` in `--format`). A path can never start with it — git C-quotes any path holding a control character, even with
+ * `core.quotepath=false` — so a header is never confused with a file. (A bare `%H` was: a file named with 40–64 hex
+ * characters read as a commit separator, and `@@@` is a legal file name.)
+ */
+export const COMMIT_MARK = "\u001e";
+/** Separates the author name from the subject (a UNIT SEPARATOR, `%x1f`: names and subjects may hold `|`). */
+export const AUTHOR_END = "\u001f";
+/** A control character as a git `--format` escape (`%xNN`), so each `--format` below is spelled from the constants the parsers read. */
+const formatEscape = (char) => `%x${char.charCodeAt(0).toString(16).padStart(2, "0")}`;
+/** THE `--format` of `recentCommits`, read back by `parseRecentCommits`: `<RS>%H|%cI|%an<US>%s`. */
+export const RECENT_COMMITS_FORMAT = `${formatEscape(COMMIT_MARK)}%H|%cI|%an${formatEscape(AUTHOR_END)}%s`;
+/** THE `--format` of the history port's `-z` log, read back by `commitFilesParser`: `<RS><US>%cI` (committer time, what `--since` filters on). */
+export const HISTORY_FORMAT = `${formatEscape(COMMIT_MARK)}${formatEscape(AUTHOR_END)}%cI`;
+/** One line of `git log` output with only its terminator removed — a path may legally begin or end with spaces. */
+const logLines = (log) => log.split(/\r?\n/);
+/**
+ * THE git exec wrapper (history, churn and the knowledge fixes all use it): `git` in `cwd`
+ * with `core.quotepath=false`. `stdout` is set only on success; a failure says why.
+ */
+export function runGit(cwd, args, opts = {}) {
+    return new Promise((resolve) => {
+        try {
+            execFile("git", ["-c", "core.quotepath=false", ...args], { cwd, maxBuffer: MAX_BUFFER, timeout: opts.timeoutMs ?? TIMEOUT_MS, windowsHide: true }, (error, stdout, stderr) => {
+                if (!error)
+                    return resolve({ stdout, stderr });
+                const e = error;
+                resolve({ stderr, failure: e.killed ? "timeout" : e.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" ? "buffer" : "error" });
+            });
+        }
+        catch {
+            resolve({ failure: "error" });
+        }
+    });
+}
+const git = runGit;
+/** `git log --format=${RECENT_COMMITS_FORMAT} --name-only` output as commits (a header with no author separator is the older `%H|%cI|%s`). Pure. */
+export function parseRecentCommits(log) {
+    const commits = [];
+    let current;
+    for (const line of logLines(log)) {
+        if (!line)
+            continue;
+        if (line.startsWith(COMMIT_MARK)) {
+            const body = line.slice(COMMIT_MARK.length);
+            const first = body.indexOf("|");
+            const second = body.indexOf("|", first + 1);
+            if (first < 0 || second < 0) {
+                current = undefined;
+                continue;
+            }
+            const rest = body.slice(second + 1);
+            const split = rest.indexOf(AUTHOR_END);
+            const author = split > 0 ? rest.slice(0, split).trim() : "";
+            current = {
+                sha: body.slice(0, first), at: body.slice(first + 1, second), title: split >= 0 ? rest.slice(split + 1) : rest, paths: [],
+                ...(author ? { author } : {}),
+            };
+            commits.push(current);
+            continue;
+        }
+        current?.paths.push(line.replace(/\\/g, "/"));
+    }
+    return commits;
+}
+/**
+ * The last `count` commits touching the folder at `rootDir` (`-- .`, so a sub-folder root sees
+ * only its own history), paths root-relative. Not a git work tree or a failed run: none, with
+ * the reason through `onWarn` for a run that did not finish.
+ */
+export async function recentCommits(rootDir, count, options = {}) {
+    const run = await git(rootDir, ["log", `-${Math.max(1, Math.floor(count))}`, "--name-only", "--relative", `--format=${RECENT_COMMITS_FORMAT}`, "--", "."]);
+    if (run.stdout === undefined) {
+        if (run.failure === "timeout")
+            options.onWarn?.(`git log did not finish within ${TIMEOUT_MS / 1000}s: history is missing.`);
+        return [];
+    }
+    return parseRecentCommits(run.stdout);
+}
+/** A header token of the `-z` history log: the marker, then the `%cI` time (a leading newline when it follows a commit). */
+const HISTORY_HEADER = new RegExp(`^\\n?${COMMIT_MARK}${AUTHOR_END}(\\d{4}-\\d\\d-\\d\\dT[^\\n]*)$`);
+/**
+ * The streaming reader of the history log. With `-z` every name is NUL-terminated and never quoted, so a name holding `"`,
+ * `\` or a newline is itself. The header token is `<RS><US><time>`; the first name after it carries the newline git puts
+ * after a format line. Paths are repo-relative; `prefix` (the root's `git rev-parse --show-prefix`, `/`-ended or empty) is
+ * stripped from those inside the root and the rest are dropped, while `fileCount` counts every distinct file of the commit.
+ */
+export function commitFilesParser(prefix = "") {
+    const out = [];
+    let current;
+    let afterHeader = false;
+    let pending = "";
+    const token = (raw) => {
+        const header = HISTORY_HEADER.exec(raw);
+        if (header) {
+            current = { at: header[1], all: new Set(), inRoot: new Set() };
+            out.push(current);
+            afterHeader = true;
+            return;
+        }
+        const path = afterHeader && raw.startsWith("\n") ? raw.slice(1) : raw;
+        afterHeader = false;
+        if (!current || !path)
+            return;
+        current.all.add(path);
+        if (path.startsWith(prefix) && path.length > prefix.length)
+            current.inRoot.add(path.slice(prefix.length));
+    };
+    return {
+        push(chunk) {
+            const parts = (pending + chunk).split("\0");
+            pending = parts.pop();
+            for (const part of parts)
+                token(part);
+        },
+        end() {
+            if (pending)
+                token(pending);
+            pending = "";
+            return out.map((c) => ({ at: c.at, paths: [...c.inRoot], fileCount: c.all.size }));
+        },
+    };
+}
+/** {@link commitFilesParser} over a whole log. Pure. */
+export function parseCommitFiles(log, prefix = "") {
+    const parser = commitFilesParser(prefix);
+    parser.push(log);
+    return parser.end();
+}
+/** Runs the history `git log` in `cwd`, parsing stdout as it arrives; never holds the whole output as one string. */
+function streamHistory(cwd, args, prefix) {
+    return new Promise((resolve) => {
+        let done = false;
+        const finish = (r) => { if (!done) {
+            done = true;
+            clearTimeout(timer);
+            resolve(r);
+        } };
+        let child;
+        try {
+            child = spawn("git", ["-c", "core.quotepath=false", ...args], { cwd, windowsHide: true, stdio: ["ignore", "pipe", "ignore"] });
+        }
+        catch {
+            return resolve({ failure: "error" });
+        }
+        const parser = commitFilesParser(prefix);
+        let bytes = 0;
+        const timer = setTimeout(() => { child.kill(); finish({ failure: "timeout" }); }, TIMEOUT_MS);
+        child.stdout.setEncoding("utf8");
+        child.stdout.on("data", (chunk) => {
+            if (done)
+                return;
+            bytes += chunk.length;
+            if (bytes > MAX_BUFFER) {
+                child.kill();
+                finish({ failure: "buffer" });
+                return;
+            }
+            parser.push(chunk);
+        });
+        child.on("error", () => finish({ failure: "error" }));
+        child.on("close", (code) => finish(code === 0 ? { commits: parser.end() } : { failure: "error" }));
+    });
+}
+/** The history port for `rootDir`, or undefined when it is not inside a git work tree. */
+export async function gitHistoryPort(rootDir, options = {}) {
+    const inside = await git(rootDir, ["rev-parse", "--is-inside-work-tree", "--show-prefix"]);
+    const [flag, prefix = ""] = (inside.stdout ?? "").split(/\r?\n/);
+    if (flag?.trim() !== "true")
+        return undefined;
+    return {
+        async commits(sinceDays, maxCommits) {
+            const days = Math.max(1, Math.floor(sinceDays));
+            const max = Math.max(1, Math.floor(maxCommits));
+            // `-- .` picks the root's commits; `--full-diff` lists ALL their files (repo-relative) so the bulk cut sees the whole
+            // commit; `--no-renames` names both sides of a move, as files, never a rename pair.
+            const run = await streamHistory(rootDir, [
+                "log", "-z", "--no-renames", "--name-only", "--full-diff", `--since=${days}.days`, `--max-count=${max}`, `--format=${HISTORY_FORMAT}`, "--", ".",
+            ], prefix);
+            if ("failure" in run) {
+                if (run.failure === "timeout")
+                    options.onWarn?.(`git log did not finish within ${TIMEOUT_MS / 1000}s: history (churn, co-change) is missing, not zero.`);
+                else if (run.failure === "buffer")
+                    options.onWarn?.("git log produced too much output: history (churn, co-change) is missing, not zero.");
+                return [];
+            }
+            const capped = churnCapWarning(run.commits, max);
+            if (capped)
+                options.onWarn?.(capped);
+            return run.commits;
+        },
+    };
+}
+//# sourceMappingURL=node-git-history.js.map

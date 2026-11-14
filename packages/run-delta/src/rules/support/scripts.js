@@ -1,0 +1,13 @@
+/**
+ * rules/support/scripts.ts — what counts as a "script" for the C7 safety rules: shell files, anything
+ * under a `scripts/` directory, GitHub workflows, package manifests, Makefiles and Dockerfiles.
+ */
+import { isShellPath } from './files.js';
+export function isScriptPath(path) {
+    return isShellPath(path)
+        || /(^|\/)scripts\//.test(path)
+        || /(^|\/)\.github\/workflows\//.test(path)
+        || /(^|\/)package\.json$/.test(path)
+        || /(^|\/)(?:Makefile|Dockerfile)(?:\.[\w-]+)?$/.test(path);
+}
+//# sourceMappingURL=scripts.js.map

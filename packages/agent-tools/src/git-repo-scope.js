@@ -1,0 +1,243 @@
+/**
+ * WHERE a git command runs — the repo scope every git tool shares (split from
+ * `git-tools.ts`, which is the tools themselves).
+ *
+ * A workspace root is not always a repository: a folder holding several checkouts side by
+ * side has its `.git` one level down. So a git call with no explicit `repo` is tried, in
+ * order: at the root; in the checkout its `path` starts with; in the run's DEFAULT
+ * checkout (`ShellCapability.defaultRepo`, resolved once per run by the surface — PRD 35
+ * E3). Once a shell has answered "not a git repository" at its root, a run that has a
+ * default goes there directly (the verdict is cached per shell). If nothing is a
+ * repository, the failure names the candidate checkouts instead of git's bare fatal.
+ *
+ * Pure apart from that per-shell verdict; the command TEXT stays in `git-tools.ts`.
+ */
+/** A safe git ref/path token — blocks shell metacharacters so a model-supplied
+ *  branch/path can't inject a second command, and a leading `-` so it can't be read as
+ *  an OPTION (`--upload-pack=…`, `-D`) by git or gh: no valid ref name starts with one. */
+export function safeGitArg(v) {
+    return typeof v === "string" && /^[\w./@-]+$/.test(v) && !v.startsWith("-") ? v : null;
+}
+/** Shell-quote a model-supplied string for a single-quoted POSIX argument. Commit
+ *  messages, PR bodies and paths with spaces are free text — they cannot go through
+ *  `safeGitArg`, which rejects spaces — so they are QUOTED rather than validated. */
+export function shellQuote(v) {
+    return `'${v.replace(/'/g, `'\\''`)}'`;
+}
+/**
+ * The validated `repo` subdirectory, or null.
+ *
+ * Held to a stricter rule than the other args: it becomes a working directory (the shell's
+ * `cwd`), so a `..` segment would walk OUT of the workspace rather than merely widening a diff.
+ * `safeGitArg` permits dots (a directory really can be named `Builderforce.ai`), so
+ * traversal is rejected separately here — the one place it would actually escape.
+ */
+export function safeRepoArg(repo) {
+    // A Windows-style separator is the same directory (`apps\\web` = `apps/web`), so it is
+    // normalised rather than refused with a message about `..` that does not apply.
+    const arg = safeGitArg(typeof repo === "string" ? repo.replace(/\\/g, "/") : repo);
+    return arg && !arg.split("/").includes("..") && !arg.startsWith("/") ? arg : null;
+}
+/**
+ * The refusal for a `repo` the caller NAMED that is not a safe workspace-relative directory, or
+ * null when `repo` is absent or fine. An explicit repo that cannot be honoured must stop the
+ * tool, never fall back to running at the workspace root: for git_undo / git_redo that would reset
+ * a DIFFERENT repository than the one asked for.
+ */
+export function invalidRepoResult(action, repo) {
+    // "" is an absent repo; whitespace-only is a repo that cannot be honoured, so it is refused.
+    if (typeof repo !== "string" || repo === "" || safeRepoArg(repo) !== null)
+        return null;
+    return { data: { ok: false, action, error: `repo '${repo}' must be a directory inside the workspace (no '..', not absolute), so nothing was run` } };
+}
+/**
+ * `command` run inside the workspace-relative directory `dir`, for a host whose exec transport
+ * takes only a command line (the cloud sandbox's remote POSIX sh, the in-browser runtime's `bfsh`)
+ * and so cannot be handed a working directory. Every other host spawns the process with the
+ * directory (`ShellRunOptions.cwd`); this is that rule's fallback, in ONE place.
+ *
+ * Returns the command untouched for no directory (or the root), and `null` when `dir` is not a
+ * safe workspace-relative directory — the caller refuses; a command is never run at the root in
+ * place of the directory that was asked for. The directory goes in as a GUARDED LEADING LINE
+ * (`cd "./dir" || exit 1`): the one-liner `cd "dir" && a; b` would run `b` at the root when the
+ * `cd` fails. There is NO `--`: bfsh's `cd` (the in-browser shell) takes its first argument
+ * literally and would look for a directory named `--`. The `./` prefix plus the refusal of a
+ * leading `-` already keep a directory named like an option from being read as one.
+ */
+export function posixCommandIn(dir, command) {
+    if (!dir || dir === ".")
+        return command;
+    const safe = safeRepoArg(dir);
+    if (!safe || safe.startsWith("-"))
+        return null;
+    return `cd "./${safe}" || exit 1\n${command}`;
+}
+/**
+ * Infer a `repo` subdirectory from a workspace-relative `path`.
+ *
+ * File tools speak in workspace-root paths (`Builderforce.ai/packages/…`). When the
+ * open folder CONTAINS checkouts rather than being one, that first segment is the
+ * checkout — but only when there is a nested path to take a segment FROM (a bare
+ * `README.md` is a file, not a repo). `..` / absolute segments are rejected by
+ * {@link safeRepoArg}.
+ */
+export function inferRepoFromPath(path) {
+    if (typeof path !== "string" || !path.trim())
+        return null;
+    const parts = path.split(/[\\/]/).filter((s) => s.length > 0 && s !== ".");
+    if (parts.length < 2)
+        return null;
+    return safeRepoArg(parts[0]);
+}
+/**
+ * POSIX one-liner that prints top-level checkout directory names, one per line.
+ *
+ * `$d` from a directory glob (`foo/`) so `$d.git` is `foo/.git` (a directory, or a file
+ * for a worktree/submodule). Routed to bash on Windows the same way the other multi-line
+ * git scripts are (`[ … ]` is a POSIX-only form).
+ */
+export function buildListCheckoutsCommand() {
+    return 'for d in */; do [ -e "$d.git" ] && printf "%s\\n" "${d%/}"; done';
+}
+function parseCheckoutList(stdout) {
+    if (!stdout)
+        return [];
+    const names = [];
+    for (const line of stdout.split(/\r?\n/)) {
+        const name = line.trim().replace(/\/+$/, "");
+        if (!name || name === "*" || name === "." || name === "..")
+            continue;
+        const safe = safeRepoArg(name);
+        if (safe)
+            names.push(safe);
+    }
+    return names;
+}
+/**
+ * The remedy for "fatal: not a git repository", shared by every git tool.
+ *
+ * Returning git's raw fatal is what makes this look like the end of the road. It happens
+ * routinely when the OPEN FOLDER holds several checkouts side by side (`/code/`, with
+ * `/code/app` and `/code/api` each a repo): git runs at the root, finds no `.git`, and
+ * the agent — handed a bare fatal with no next step — concludes the tool is unusable and
+ * gives up, or asks the user a question it could have answered itself.
+ *
+ * So the failure carries its own remedy: name the candidate checkouts that ARE sitting
+ * at the top level, and show the exact retry with `repo`. Do not send the model to
+ * `list_files` — that is a round trip it already failed to take (chat #141).
+ */
+export function notARepoResult(action, candidates = []) {
+    const named = candidates.filter(Boolean);
+    const extra = named.length
+        ? `Candidate repositories: ${named.map((c) => `"${c}"`).join(", ")}. Re-run this tool with \`repo\` set to the one holding the code you are working on (e.g. { "repo": "${named[0]}" }).`
+        : "No git checkouts were found at the top level of the open folder. File edits still work; only the git tools need a repository.";
+    return {
+        data: {
+            ok: false,
+            action,
+            error: "not a git repository at the workspace root — this usually means the open folder CONTAINS the repositories rather than being one (several checkouts side by side). "
+                + extra,
+            ...(named.length ? { candidates: named } : {}),
+        },
+    };
+}
+/**
+ * Run one command through the call's shell WITH the call's Stop (`ToolContext.signal`,
+ * PRD 35 E10): a hung `git push`, an analyzer or a build dies with the run instead of
+ * holding it to the shell's timeout. `cwd` is the (validated, workspace-relative) directory the
+ * command runs in — handed to the shell as an option, never prefixed to the command. Neither a
+ * signal nor a cwd ⇒ the shell is called exactly as before.
+ * The one way a tool runs a shell command.
+ */
+export function shellRunWithStop(ctx, command, cwd) {
+    const shell = ctx.caps.shell;
+    const opts = { ...(ctx.signal ? { signal: ctx.signal } : {}), ...(cwd ? { cwd } : {}) };
+    return Object.keys(opts).length > 0 ? shell.run(command, opts) : shell.run(command);
+}
+/** The run's resolved default checkout (`ShellCapability.defaultRepo`), validated — the
+ *  retry a not-a-repo result takes before it falls back to naming the candidates. */
+function defaultRepoOf(ctx) {
+    return safeRepoArg(ctx.caps.shell?.defaultRepo);
+}
+/** A workspace-relative path re-expressed inside `repo` (`app/src/x.ts` → `src/x.ts`). */
+function pathInRepo(path, repo) {
+    if (!path)
+        return path;
+    const inner = commitPathCandidates(path, repo);
+    return inner.length > 0 ? inner[inner.length - 1] : undefined;
+}
+export async function notARepoWithCandidates(action, ctx) {
+    const listed = await shellRunWithStop(ctx, buildListCheckoutsCommand());
+    return notARepoResult(action, parseCheckoutList(listed.stdout));
+}
+/** git's own wording when the working directory has no repository above it. */
+const NOT_A_REPO = /not a git repository/i;
+export function isNotARepo(r) {
+    return NOT_A_REPO.test(`${r.stdout ?? ""} ${r.error ?? ""}`);
+}
+/**
+ * The paths a commit should TRY for one path the model supplied, best guess first.
+ *
+ * `paths` are documented as repo-relative, but the model reads and edits through the
+ * FILE tools, whose paths are relative to the workspace ROOT — and when the workspace
+ * contains checkouts rather than being one, those two are different. A real run passed
+ * `api/src/…` with `repo` scoping git into the `api` directory and git answered
+ * `warning: could not open directory 'api/api/src/…'`, staged nothing, and the commit
+ * was reported as "nothing to commit" — a wrong-path failure wearing an empty-diff
+ * message.
+ *
+ * Rather than rewriting the path and hoping, this hands the SCRIPT an ordered candidate
+ * list and lets it pick the one that exists (see `buildCommitCommand` in `git-tools.ts`): the path
+ * as given always wins, so a repo that really does contain a nested `api/` directory is
+ * never mis-resolved. Pure and exported for the unit tests.
+ */
+export function commitPathCandidates(path, repo) {
+    const out = [path];
+    const dir = safeRepoArg(repo);
+    if (dir) {
+        const prefix = `${dir.replace(/\/+$/, "")}/`;
+        if (path.startsWith(prefix))
+            out.push(path.slice(prefix.length));
+        // `repo: "Builderforce.ai/api"` + `path: "api/src/x.ts"` — the model repeated the
+        // repo's LAST segment, which is the segment it was reading paths through.
+        const leaf = dir.split("/").filter(Boolean).pop();
+        if (leaf && path.startsWith(`${leaf}/`))
+            out.push(path.slice(leaf.length + 1));
+    }
+    return [...new Set(out)].filter((p) => p.trim() !== "");
+}
+/** Shells whose ROOT answered "not a git repository" — a run with a default goes straight there. */
+const rootNotARepo = new WeakSet();
+/** Every scope a call with no explicit `repo` is tried in, in order (see the module note). */
+function scopeAttempts(ctx, path) {
+    const fallback = defaultRepoOf(ctx);
+    const shell = ctx.caps.shell;
+    const attempts = [];
+    if (!(fallback && shell && rootNotARepo.has(shell)))
+        attempts.push({ path });
+    const inferred = inferRepoFromPath(path);
+    if (inferred)
+        attempts.push({ repo: inferred, path: pathInRepo(path, inferred) });
+    if (fallback && fallback !== inferred)
+        attempts.push({ repo: fallback, path: pathInRepo(path, fallback) });
+    return attempts;
+}
+/**
+ * Run a git command where the code lives. `run(repo, path)` executes the command scoped
+ * to `repo` (undefined = the root) with `path` re-expressed inside it. An explicit `repo`
+ * runs once, as the caller chose. Returns the first result that found a repository and
+ * the scope it ran in, or null when none did (the caller names the candidates).
+ */
+export async function runInRepoScope(ctx, scope, run) {
+    if (scope.repo)
+        return { r: await run(scope.repo, scope.path), repo: scope.repo };
+    for (const attempt of scopeAttempts(ctx, scope.path)) {
+        const r = await run(attempt.repo, attempt.path);
+        if (!isNotARepo(r))
+            return attempt.repo ? { r, repo: attempt.repo } : { r };
+        if (!attempt.repo && ctx.caps.shell)
+            rootNotARepo.add(ctx.caps.shell);
+    }
+    return null;
+}
+//# sourceMappingURL=git-repo-scope.js.map

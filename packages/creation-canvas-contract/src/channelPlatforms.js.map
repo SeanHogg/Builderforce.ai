@@ -1,0 +1,1 @@
+{"version":3,"file":"channelPlatforms.js","sourceRoot":"","sources":["channelPlatforms.ts"],"names":[],"mappings":"AAAA;;;;;;;;;;;;;;GAcG;AAEH,MAAM,CAAC,MAAM,iBAAiB,GAAG;IAC/B,OAAO;IACP,SAAS;IACT,UAAU;IACV,UAAU;IACV,OAAO;IACP,aAAa;IACb,QAAQ;IACR,SAAS;CACD,CAAC;AAIX,MAAM,UAAU,iBAAiB,CAAC,KAAc;IAC9C,OAAO,OAAO,KAAK,KAAK,QAAQ,IAAK,iBAAuC,CAAC,QAAQ,CAAC,KAAK,CAAC,CAAC;AAC/F,CAAC"}

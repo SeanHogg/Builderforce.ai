@@ -5,7 +5,7 @@
  * list, as of {@link PRICE_SNAPSHOT_AT}. Read through `snapshotPriceBook()`.
  */
 
-export const PRICE_SNAPSHOT_AT = "2026-11-13T13:24:02.202Z";
+export const PRICE_SNAPSHOT_AT = "2026-11-14T13:51:52.157Z";
 
 export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>> = {
   "~anthropic/claude-fable-latest": [0.000008, 0.00004],
@@ -84,7 +84,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "cohere/command-r-plus-08-2024": [0.0000025, 0.00001],
   "cohere/command-r7b-12-2024": [3.75e-8, 1.5e-7],
   "cohere/north-mini-code:free": [0, 0],
-  "deepseek/deepseek-chat": [3.2e-7, 8.9e-7],
+  "deepseek/deepseek-chat": [2.574e-7, 0.0000010287],
   "deepseek/deepseek-chat-v3-0324": [2.9e-7, 0.00000114],
   "deepseek/deepseek-chat-v3.1": [2.5e-7, 9.5e-7],
   "deepseek/deepseek-r1-0528": [5e-7, 0.00000215],
@@ -145,7 +145,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "google/gemma-3-12b-it": [5e-8, 1.5e-7],
   "google/gemma-3-27b-it": [8e-8, 3.5e-7],
   "google/gemma-3-4b-it": [5e-8, 1e-7],
-  "google/gemma-4-26b-a4b-it": [9e-8, 3e-7],
+  "google/gemma-4-26b-a4b-it": [6.75e-8, 2.25e-7],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
   "google/gemma-4-31b-it": [2e-7, 4e-7],
   "google/gemma-4-31b-it:free": [0, 0],
@@ -157,6 +157,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "inclusionai/ling-3.0-flash-vl": [6e-8, 1.8e-7],
   "inclusionai/ling-3.0-tiny": [1.5e-8, 4.5e-8],
   "inclusionai/ling-3.1-flash": [4.5e-8, 1.35e-7],
+  "inclusionai/ling-3.2-flash:free": [0, 0],
   "inference-net/schematron-v2-small": [5e-8, 2.3e-7],
   "inference-net/schematron-v2-turbo": [3e-8, 1.5e-7],
   "kt/midm-k-3.0-pro": [2e-7, 8e-7],
@@ -168,7 +169,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "meta-llama/llama-3.1-70b-instruct": [7.2e-7, 7.2e-7],
   "meta-llama/llama-3.1-8b-instruct": [2e-8, 4e-8],
   "meta-llama/llama-3.2-1b-instruct": [2.7e-8, 2.01e-7],
-  "meta-llama/llama-3.2-3b-instruct": [5e-8, 3.3e-7],
+  "meta-llama/llama-3.2-3b-instruct": [5.09e-8, 3.35e-7],
   "meta-llama/llama-3.3-70b-instruct": [7.1e-7, 7.1e-7],
   "meta-llama/llama-4-maverick": [3.5e-7, 0.000001],
   "meta-llama/llama-4-scout": [1e-7, 3e-7],
@@ -299,7 +300,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "openai/gpt-5.6-luna-pro": [2e-7, 0.0000012],
   "openai/gpt-5.6-luna-pro:batch": [1e-7, 6e-7],
   "openai/gpt-5.6-luna:batch": [1e-7, 6e-7],
-  "openai/gpt-5.6-sol": [0.0000044, 0.000022],
+  "openai/gpt-5.6-sol": [0.000004, 0.00002],
   "openai/gpt-5.6-sol-pro": [0.000004, 0.00002],
   "openai/gpt-5.6-sol-pro:batch": [0.000002, 0.00001],
   "openai/gpt-5.6-sol:batch": [0.000002, 0.00001],
@@ -381,7 +382,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "qwen/qwen3.5-27b": [2.6e-7, 0.0000026],
   "qwen/qwen3.5-35b-a3b": [1.4e-7, 0.000001],
   "qwen/qwen3.5-397b-a17b": [6e-7, 0.0000036],
-  "qwen/qwen3.5-9b": [2.8e-8, 4.1e-8],
+  "qwen/qwen3.5-9b": [1.58e-7, 2.33e-7],
   "qwen/qwen3.5-flash-02-23": [6.5e-8, 2.6e-7],
   "qwen/qwen3.5-plus-02-15": [2.6e-7, 0.00000156],
   "qwen/qwen3.5-plus-20260420": [3e-7, 0.0000018],
@@ -469,7 +470,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "z-ai/glm-5-turbo": [0.0000012, 0.000004],
   "z-ai/glm-5.1": [0.0000014, 0.0000044],
   "z-ai/glm-5.2": [7e-9, 0.0000068],
-  "z-ai/glm-5.2:batch": [2.98e-7, 9.16e-7],
+  "z-ai/glm-5.2:batch": [3.22e-7, 9.89e-7],
   "z-ai/glm-5.3": [8.4e-8, 0.0000036],
   "z-ai/glm-5.3-flash": [3.99e-8, 7.84e-8],
   "z-ai/glm-5.3-flash:batch": [5e-8, 1.8e-7],

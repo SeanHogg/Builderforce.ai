@@ -1,0 +1,123 @@
+/**
+ * IDE starter templates — the ONE source, for every runtime that touches them.
+ *
+ * Three runtimes need the same answers about the same scaffolds:
+ *
+ *  · the API Worker SEEDS them into R2 at project creation and self-heals a
+ *    missing/empty file on file-list (`api/src/application/project/projectTemplate.ts`);
+ *  · the legacy worker's file router seeds them for its own create path
+ *    (`worker/src/routes/projects.ts`);
+ *  · the Next app MOUNTS them in the in-browser runtime as the Run fallback, and uses
+ *    the same path set to avoid posting a zero-byte write the API would refuse
+ *    (`frontend/src/components/BuilderWorkspace.tsx`, `lib/scaffoldRepair.ts`).
+ *
+ * They used to be two byte-identical copies pinned by a parity test, and they
+ * drifted anyway: `webmobile` reached the frontend's modality map and never the
+ * API's, so every "Web + Mobile" project was created with no files at all. A
+ * test can only report that divergence after someone writes it. This package
+ * makes it unrepresentable — the map below is the only place a modality is
+ * mapped to a scaffold, so a new modality is one edit or it is nothing.
+ *
+ * Source-only, zero runtime deps: consumers alias the bare specifier straight at
+ * this file (tsconfig `paths` for tsc/wrangler/next-on-pages, `resolve.alias` for
+ * vitest), exactly as `@builderforce/creation-canvas-contract` already does
+ * across the same Worker/Next split.
+ */
+export { VANILLA_TEMPLATE, MOBILE_TEMPLATE, RETIRED_SCAFFOLD_CONTENT } from './scaffolds';
+import { VANILLA_TEMPLATE, MOBILE_TEMPLATE, RETIRED_SCAFFOLD_CONTENT } from './scaffolds';
+/** Line endings and surrounding whitespace never make a file someone's own work. */
+function normalizeScaffoldText(content) {
+    return content.replace(/\r\n/g, '\n').trim();
+}
+/**
+ * Is this file still exactly the starter a scaffold path USED to ship? Such content is
+ * untouched starter, so a healer may replace it with the current scaffold.
+ */
+export function isRetiredScaffold(path, content) {
+    const retired = RETIRED_SCAFFOLD_CONTENT[path];
+    if (!retired)
+        return false;
+    const current = normalizeScaffoldText(content);
+    return retired.some((old) => normalizeScaffoldText(old) === current);
+}
+/** Every starter template, keyed by the `template` value that selects it. */
+export const TEMPLATES = {
+    vanilla: VANILLA_TEMPLATE,
+    mobile: MOBILE_TEMPLATE,
+};
+/**
+ * Modalities that run code in the in-browser runtime, mapped to their starter.
+ *
+ * `webmobile` (Web + Mobile) ships ONE react-native-web codebase that renders
+ * full-width as a site and inside the phone simulator, so it takes the mobile
+ * scaffold. The generative modalities (video/evermind/finetune/voice) are absent
+ * on purpose: they never run the Vite app, so they get no scaffold.
+ */
+export const TEMPLATE_BY_MODALITY = {
+    designer: 'vanilla',
+    mobile: 'mobile',
+    webmobile: 'mobile',
+};
+/** The explicitly-named template, if it is one we still ship. */
+export function templateByName(name) {
+    return name ? TEMPLATES[name] : undefined;
+}
+/**
+ * The scaffold a MODALITY runs, or null when that modality never runs code.
+ *
+ * A null/absent modality is treated as `designer` — the default a project gets
+ * before anyone picks one, and the one an older create path may have left blank.
+ */
+export function scaffoldForModality(modality) {
+    const key = TEMPLATE_BY_MODALITY[modality ?? 'designer'];
+    return (key && TEMPLATES[key]) || null;
+}
+/** Every path owned by ANY starter scaffold, across modalities. */
+export const SCAFFOLD_PATHS = new Set(Object.values(TEMPLATES).flatMap((template) => Object.keys(template)));
+/**
+ * Is this workspace-relative path a file a starter scaffold owns?
+ *
+ * A scaffold file may be edited or deleted, but never *emptied*: a 0-byte
+ * `package.json` / `index.html` / `vite.config.js` is never a state a user or an
+ * agent means to reach, and it only ever breaks Run. A Mobile project was once
+ * observed with all five scaffold paths present in R2 at size 0 and the writer
+ * was never identified, so the invariant is enforced where every writer must
+ * pass — the API's write chokepoint (`workspaceStore.validateScaffoldNotEmptied`)
+ * refuses such a write, and the client consults the same set so file-create
+ * seeds the template instead of posting the empty body it would otherwise send.
+ */
+export function isScaffoldPath(path) {
+    return SCAFFOLD_PATHS.has(path);
+}
+/** Extensions an extensionless import (`./App`) can resolve to. Only these can stand in for
+ *  one another — `index.html` does not stand in for `index.js`, nor `App.css` for `App.jsx`. */
+const MODULE_FILE = /\.(?:[cm]?[jt]sx?)$/;
+/** `src/App.jsx` → `src/App`: the path a module import names, before its extension. */
+function moduleStem(path) {
+    const slash = path.lastIndexOf('/');
+    const dot = path.lastIndexOf('.');
+    return dot > slash ? path.slice(0, dot) : path;
+}
+/**
+ * Is a MISSING scaffold file already stood in for by the workspace's own file of the same
+ * module stem — `src/App.tsx` where the scaffold has `src/App.jsx`?
+ *
+ * Every healer (the API backfill, `templateNeedsBackfill`, the client's `repairScaffold`)
+ * restores a missing scaffold file, and that is wrong exactly here: the entry imports
+ * `./App` without an extension, and Vite resolves `.jsx` BEFORE `.tsx`, so a restored
+ * template `App.jsx` would shadow the project's real `App.tsx` and put "Hello World!" back
+ * in its preview. Projects seeded before `src/App.jsx` joined the vanilla scaffold get it
+ * once (unused by their inline entry, harmless); a project whose App lives under another
+ * extension never gets it.
+ */
+export function scaffoldPathStoodInFor(path, existingPaths) {
+    if (!MODULE_FILE.test(path))
+        return false;
+    const stem = moduleStem(path);
+    for (const existing of existingPaths) {
+        if (existing !== path && MODULE_FILE.test(existing) && moduleStem(existing) === stem)
+            return true;
+    }
+    return false;
+}
+//# sourceMappingURL=index.js.map

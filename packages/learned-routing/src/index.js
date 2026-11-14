@@ -1,0 +1,38 @@
+/**
+ * `@builderforce/learned-routing` — Learned Model Routing (PRD 13), the half that
+ * is NOT a Worker.
+ *
+ * Everything here is pure and dependency-free so the cloud router (Worker) and the
+ * on-prem / IDE host (Node) can seed from the same learned ranking, label work with
+ * the same action taxonomy, spell the same scope token, and write back through the
+ * same payload contract — without either side importing the other's runtime.
+ *
+ * What lives here (and therefore lives in exactly ONE place):
+ *   • `actionTypes`        — the closed action-type vocabulary + the kill switch
+ *   • `modelQualityScore`  — outcome/rating blend + the rate-limit availability test
+ *   • `rankModels`         — `rankModelsForAction`, the pure re-ranker
+ *   • `exploration`        — Thompson draws + the capped cold-model slot (D3)
+ *   • `recencyDecay`       — the ONE routing half-life and decayed running means (D3)
+ *   • `roleModels`         — role → catalog model id from config (documented default)
+ *   • `routingScope`       — `project:<id> | tenant:<id> | global` and its token
+ *   • `runOutcomeContract` — the `POST /llm/v1/run-outcome` body + its parser
+ *   • `rateLimitFailure`   — `isRateLimitFailure` / `isTenantBudgetFailure`: the ONE reading of "the
+ *                            provider throttled this run" (vs a tenant spending its own allowance), and the
+ *                            explicit `TENANT_BUDGET_CODES` list behind it
+ *
+ * What does NOT live here: anything that touches KV, a DB, an env binding or the
+ * network. The routing-table blob, its reconcile and its cache stay in the api.
+ * `parseRoleModelConfig` reads an env *bag* the caller already holds — no I/O.
+ */
+export { ACTION_TYPES, DEFAULT_ACTION_TYPE, actionTypeLabel, learnedRoutingEnabled, normalizeActionType, } from './actionTypes.js';
+export { RATE_LIMIT_DEMOTE_THRESHOLD, RATE_LIMIT_MIN_RUNS, blendedQualityScore, isChronicallyRateLimited, qualityEvidence, ratingScore, } from './modelQualityScore.js';
+export { costForTieBreak, hasCostMean, rankWithCostTieBreak } from './costEvidence.js';
+export { DEFAULT_MIN_SAMPLES, rankModelsForAction, scopeHasSignal, } from './rankModels.js';
+export { DEFAULT_COLD_EXPLORATION_SHARE, posteriorEvidence, sampleQuality, shouldExploreCold, } from './exploration.js';
+export { DECAYED_WINDOW_DAYS, ROUTING_HALF_LIFE_DAYS, decaySince, decayWeight, foldDecayedMean, } from './recencyDecay.js';
+export { ROLE_MODELS_ENV, ROLE_MODEL_DEFAULT_ENV, parseRoleModelConfig, resolveModelForRole, } from './roleModels.js';
+export { OWN_TENANT_SCOPE_TOKEN, parseScopeToken, scopeToken, } from './routingScope.js';
+export { MODEL_ANALYTICS_PATH, RUN_OUTCOME_PATH, carriesRoutingSignal, foldsIntoRouting, parseRunOutcomeRequest, } from './runOutcomeContract.js';
+export { ALL_ENTRY_POINTS, CLIENT_ENTRY_POINTS, MODEL_PREFLIGHT_MAX, parseRunOutcomeTelemetry, wireCost, } from './runOutcomeTelemetry.js';
+export { TENANT_BUDGET_CODES, isRateLimitFailure, isTenantBudgetFailure } from './rateLimitFailure.js';
+//# sourceMappingURL=index.js.map

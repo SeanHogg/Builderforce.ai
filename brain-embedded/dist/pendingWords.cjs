@@ -57,20 +57,17 @@ function reportPendingWordsFailure(stage, error) {
   console.warn(`BuilderForce pending words: ${stage} failed (${errorMessage(error)})`);
 }
 
-// ../packages/agent-loop/src/runNarration.ts
-var NARRATION_OPENER = new RegExp(
-  "^(?:(?:now|next|first|then|so|okay|ok|alright|actually|great|good|perfect|but|and|also|finally)[,!.]?\\s+)*(?:let me|let's|i(?:'ll| will| need to| should| want to| am going to|'m going to| think| see| can see| notice| ran)\\b|looking (?:at|back|for)\\b|checking\\b|now the\\b|that was expected\\b)",
-  "i"
-);
+// ../packages/agent-loop/src/runNarration.js
+var NARRATION_OPENER = new RegExp("^(?:(?:now|next|first|then|so|okay|ok|alright|actually|great|good|perfect|but|and|also|finally)[,!.]?\\s+)*(?:let me|let's|i(?:'ll| will| need to| should| want to| am going to|'m going to| think| see| can see| notice| ran)\\b|looking (?:at|back|for)\\b|checking\\b|now the\\b|that was expected\\b)", "i");
 
-// ../packages/agent-loop/src/turnPhase.ts
+// ../packages/agent-loop/src/turnPhase.js
 var MID_TURN_META_KEY = "midTurn";
 
-// ../packages/agent-loop/src/taskClosedState.ts
+// ../packages/agent-loop/src/taskClosedState.js
 var TASK_CLOSED_STATUSES = ["done", "cancelled", "canceled", "completed", "archived"];
 var CLOSED = new Set(TASK_CLOSED_STATUSES);
 
-// ../packages/agent-loop/src/reasoning.ts
+// ../packages/agent-loop/src/reasoning.js
 var REASONING_TAG = "think(?:ing)?|thought|antthinking|scratchpad|reasoning";
 var QUICK_TAG_RE = new RegExp(`<\\s*/?\\s*(?:${REASONING_TAG}|final)\\b`, "i");
 var REASONING_TAG_RE = new RegExp(`<\\s*(/?)\\s*(?:${REASONING_TAG})\\b[^<>]*>`, "gi");

@@ -1,0 +1,197 @@
+import { describe, expect, it, vi } from "vitest";
+import { createHostPageEngineBridge } from "../pageEngineBridge";
+import { installHostBfiRuntime } from "./runtime";
+/**
+ * `bfi` on the host: the worker joins the bridge — for `bfi` only — exactly while its
+ * file cache holds a model, starts only when first asked, follows the downloads and
+ * removals the webview's model store makes in that cache, and its refreshes never race.
+ */
+const BONSAI = "local/bfi/bonsai-1.7b-q1_0";
+const flush = async () => {
+    for (let i = 0; i < 5; i++)
+        await new Promise((resolve) => setTimeout(resolve, 0));
+};
+function fakeStore(initial = []) {
+    const files = new Set(initial);
+    return {
+        files,
+        status: vi.fn(async (ref) => (files.has(ref) ? "ready" : "absent")),
+        anyReady: vi.fn(async (refs) => refs.some((r) => files.has(r))),
+        open: vi.fn(),
+        download: vi.fn(async (ref) => void files.add(ref)),
+        remove: vi.fn(async (ref) => void files.delete(ref)),
+    };
+}
+function fakeSpawn() {
+    const workers = [];
+    const spawn = vi.fn((_script, _data) => {
+        const w = { posted: [], terminate: vi.fn(async () => 0) };
+        workers.push(w);
+        return { postMessage: (m) => w.posted.push(m), on: vi.fn(), terminate: w.terminate };
+    });
+    return { spawn, workers };
+}
+const options = (store, spawn) => ({
+    extensionPath: "/ext",
+    storagePath: "/storage",
+    bridge: createHostPageEngineBridge({ probeTimeoutMs: 20 }),
+    store,
+    spawn,
+});
+describe("installHostBfiRuntime", () => {
+    it("attaches for bfi only once a model is cached, and starts no worker until asked", async () => {
+        const { spawn, workers } = fakeSpawn();
+        const o = options(fakeStore([BONSAI]), spawn);
+        installHostBfiRuntime(o);
+        await flush();
+        expect(o.bridge.connected("bfi")).toBe(true);
+        expect(o.bridge.connected("webllm")).toBe(false);
+        expect(spawn).not.toHaveBeenCalled();
+        void o.bridge.probe({ fresh: true });
+        await flush();
+        expect(spawn).toHaveBeenCalledTimes(1);
+        expect(spawn.mock.calls[0][0]).toMatch(/bfiHostWorker\.js$/);
+        expect(workers[0].posted).toContainEqual(expect.objectContaining({ type: "pageEngine.probe", runtime: "bfi" }));
+    });
+    it("stays detached with an empty cache", async () => {
+        const { spawn } = fakeSpawn();
+        const o = options(fakeStore(), spawn);
+        installHostBfiRuntime(o);
+        await flush();
+        expect(o.bridge.connected("bfi")).toBe(false);
+    });
+    it("re-attaches when the webview's model store downloads into the host cache, and detaches on removal", async () => {
+        const { spawn, workers } = fakeSpawn();
+        const store = fakeStore();
+        const o = options(store, spawn);
+        const runtime = installHostBfiRuntime(o);
+        await flush();
+        expect(o.bridge.connected("bfi")).toBe(false);
+        const io = { respond: vi.fn(), post: vi.fn() };
+        runtime.files.handle({ type: "modelFile.download", id: "r1", ref: BONSAI, handle: "d-1" }, io);
+        await flush();
+        expect(store.download).toHaveBeenCalledWith(BONSAI, expect.any(Function), expect.any(AbortSignal));
+        expect(io.post).toHaveBeenCalledWith(expect.objectContaining({ type: "modelFile.downloaded", ok: true }));
+        expect(o.bridge.connected("bfi")).toBe(true);
+        void o.bridge.probe({ fresh: true });
+        await flush();
+        runtime.files.handle({ type: "modelFile.remove", id: "r2", ref: BONSAI }, io);
+        await flush();
+        expect(store.remove).toHaveBeenCalledWith(BONSAI);
+        expect(o.bridge.connected("bfi")).toBe(false);
+        expect(workers[0].terminate).toHaveBeenCalled();
+    });
+    it("serializes overlapping refreshes: one runs, exactly one follow-up queues, one port attaches", async () => {
+        const { spawn } = fakeSpawn();
+        const store = fakeStore([BONSAI]);
+        let release;
+        const gate = new Promise((resolve) => (release = resolve));
+        let reads = 0;
+        store.anyReady = vi.fn(async (refs) => {
+            reads++;
+            if (reads === 2)
+                await gate;
+            return refs.some((r) => store.files.has(r));
+        });
+        const o = options(store, spawn);
+        const attach = vi.spyOn(o.bridge, "attach");
+        const runtime = installHostBfiRuntime(o);
+        await flush();
+        const a = runtime.refresh(); // read 2, held at the gate
+        const b = runtime.refresh(); // queued
+        const c = runtime.refresh(); // joins the queued one
+        expect(b).toBe(c);
+        release();
+        await Promise.all([a, b, c]);
+        expect(reads).toBe(3);
+        expect(attach).toHaveBeenCalledTimes(1);
+        expect(o.bridge.connected("bfi")).toBe(true);
+    });
+    it("attaches nothing when disposed while a refresh is reading the cache", async () => {
+        const { spawn } = fakeSpawn();
+        const store = fakeStore([BONSAI]);
+        let release;
+        const gate = new Promise((resolve) => (release = resolve));
+        store.anyReady = vi.fn(async () => {
+            await gate;
+            return true;
+        });
+        const o = options(store, spawn);
+        const runtime = installHostBfiRuntime(o);
+        runtime.dispose();
+        release();
+        await flush();
+        expect(o.bridge.connected("bfi")).toBe(false);
+    });
+    it("answers the webview picker's modelFile.support with the host's CPU record, without starting the worker", async () => {
+        const { spawn } = fakeSpawn();
+        const o = options(fakeStore(), spawn);
+        const runtime = installHostBfiRuntime(o);
+        const io = { respond: vi.fn(), post: vi.fn() };
+        runtime.files.handle({ type: "modelFile.support", id: "s1" }, io);
+        await flush();
+        expect(io.respond).toHaveBeenCalledWith("s1", true, expect.objectContaining({ backends: expect.objectContaining({ cpu: expect.objectContaining({ deviceMemoryBytes: expect.any(Number) }) }) }));
+        expect(spawn).not.toHaveBeenCalled();
+    });
+    it("a download of a model only the CPU fits lands in the host cache and attaches the host worker", async () => {
+        const { spawn } = fakeSpawn();
+        const store = fakeStore();
+        const o = options(store, spawn);
+        const runtime = installHostBfiRuntime(o);
+        await flush();
+        const EIGHT = "local/bfi/bonsai-8b-q1_0";
+        runtime.files.handle({ type: "modelFile.download", id: "r1", ref: EIGHT, handle: "d-8" }, { respond: vi.fn(), post: vi.fn() });
+        await flush();
+        expect(store.files.has(EIGHT)).toBe(true);
+        expect(o.bridge.connected("bfi")).toBe(true);
+    });
+    describe("with the native engine shipped", () => {
+        const NATIVE_SUPPORT = { supported: true, f16: true, maxBufferBytes: 2 ** 31, backends: { cpu: { supported: true, simd: false, threads: 16, kvBudgetBytes: 2 ** 31, maxMemoryBytes: 2 ** 34, deviceMemoryBytes: 2 ** 35 } } };
+        const nativeModule = { BfiEngine: { create: vi.fn(), support: vi.fn(async () => NATIVE_SUPPORT), contextFor: vi.fn(() => 0) } };
+        it("hands the worker the addon, PREFERS its port over a webview, and answers the picker from the native record", async () => {
+            const { spawn } = fakeSpawn();
+            const loadNative = vi.fn(() => nativeModule);
+            const o = { ...options(fakeStore([BONSAI]), spawn), nativePath: "/ext/out/bfi_node.node", loadNative };
+            const attach = vi.spyOn(o.bridge, "attach");
+            const runtime = installHostBfiRuntime(o);
+            await flush();
+            expect(runtime.native).toBe(true);
+            expect(attach).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ runtimes: ["bfi"], preferred: true }));
+            expect(await runtime.support()).toBe(NATIVE_SUPPORT);
+            void o.bridge.probe({ fresh: true });
+            await flush();
+            expect(spawn.mock.calls[0][1]).toMatchObject({ nativePath: "/ext/out/bfi_node.node" });
+        });
+        it("does not load the addon at install when nothing is cached — only once something asks", async () => {
+            const { spawn } = fakeSpawn();
+            const loadNative = vi.fn(() => nativeModule);
+            const runtime = installHostBfiRuntime({ ...options(fakeStore(), spawn), nativePath: "/ext/out/bfi_node.node", loadNative });
+            await flush();
+            expect(loadNative).not.toHaveBeenCalled();
+            expect(runtime.native).toBe(true);
+            expect(runtime.native).toBe(true);
+            expect(loadNative).toHaveBeenCalledTimes(1);
+        });
+        it("claims nothing native when the addon will not load: the wasm worker is not preferred", async () => {
+            const { spawn } = fakeSpawn();
+            const o = { ...options(fakeStore([BONSAI]), spawn), nativePath: "/ext/out/bfi_node.node", loadNative: vi.fn(() => null) };
+            const attach = vi.spyOn(o.bridge, "attach");
+            const runtime = installHostBfiRuntime(o);
+            await flush();
+            expect(runtime.native).toBe(false);
+            expect(attach.mock.calls[0][1]).not.toHaveProperty("preferred");
+            void o.bridge.probe({ fresh: true });
+            await flush();
+            expect(spawn.mock.calls[0][1]).not.toHaveProperty("nativePath");
+        });
+    });
+    it("dispose detaches", async () => {
+        const { spawn } = fakeSpawn();
+        const o = options(fakeStore([BONSAI]), spawn);
+        const runtime = installHostBfiRuntime(o);
+        await flush();
+        runtime.dispose();
+        expect(o.bridge.connected("bfi")).toBe(false);
+    });
+});
+//# sourceMappingURL=runtime.test.js.map

@@ -1,0 +1,62 @@
+/**
+ * The engine's inputs for ONE repository root (PRD 41 §C1, §C10), gathered on the extension host and handed to the engine as
+ * PLAIN DATA ({@link PreparedDelta}), so `computeRunDelta` can run in a worker thread (`deltaWorkerHost.ts`) that the budget
+ * can terminate.
+ *
+ *   - texts: {@link SideTexts} — pre-images and the base commit's blobs before, the working tree after — for every in-run file;
+ *   - facts: {@link sideFacts} over the folder's knowledge store, each side built from exactly those texts, the in-run files
+ *     swapped (`outside-run` files keep the stored copy on both sides);
+ *   - churn: ONE 90-day read of agent-tools' `gitHistoryPort` per run, counted by `churnOf`, cached by HEAD;
+ *   - pastScores: the repository's stored deltas.
+ *
+ * `preparedPorts.ts` serves `DeltaPorts` from that data: pure, so it runs the same in a worker and in this thread.
+ */
+import { CHURN_DAYS, churnOf, HISTORY_MAX_COMMITS } from "@builderforce/agent-tools/knowledge";
+import { gitHistoryPort } from "@builderforce/agent-tools/node-git-history";
+import { sideFacts, sideFilesOf } from "./sideFacts";
+const CHURN_CACHE_MAX = 32;
+const churnCache = new Map();
+/** Commits per path in the last {@link CHURN_DAYS} days, one `git log` per (root, HEAD, paths); empty when unknown. */
+export async function churnAt(root, git, paths) {
+    if (!git || paths.length === 0)
+        return new Map();
+    const head = (await git.head()).commit;
+    if (!head)
+        return new Map();
+    const key = `${root}\u0000${head}\u0000${[...paths].sort().join("\u0000")}`;
+    let hit = churnCache.get(key);
+    if (!hit) {
+        hit = gitHistoryPort(root)
+            .then(async (port) => (port ? churnOf(await port.commits(CHURN_DAYS, HISTORY_MAX_COMMITS), paths, CHURN_DAYS) : new Map()))
+            .catch(() => new Map());
+        churnCache.set(key, hit);
+        if (churnCache.size > CHURN_CACHE_MAX)
+            churnCache.delete(churnCache.keys().next().value);
+    }
+    return hit;
+}
+/** Gathers the engine's inputs on this thread: texts first, then each side's facts from them. */
+export async function prepareDelta(src) {
+    const inRun = src.input.files.filter((f) => f.attribution !== "outside-run");
+    const [before, after] = await Promise.all([
+        src.texts.beforeTexts(inRun.filter((f) => f.beforeHash !== undefined).map((f) => ({ path: f.path, beforeHash: f.beforeHash }))),
+        src.texts.afterTexts(inRun.filter((f) => f.afterHash !== undefined).map((f) => f.path)),
+    ]);
+    const files = (side) => inRun.map((f) => {
+        const hash = side === "before" ? f.beforeHash : f.afterHash;
+        return { path: f.path, ...(hash ? { hash } : {}) };
+    });
+    const [beforeFacts, afterFacts, churn, pastScores] = await Promise.all([
+        sideFacts(src.knowledge, sideFilesOf(files("before"), before), src.onError),
+        sideFacts(src.knowledge, sideFilesOf(files("after"), after), src.onError),
+        churnAt(src.root, src.git, inRun.map((f) => f.path)),
+        src.pastScores(),
+    ]);
+    return {
+        input: src.input, registries: src.registries,
+        texts: { before: [...before], after: [...after] },
+        facts: { before: beforeFacts, after: afterFacts },
+        churn: [...churn], pastScores,
+    };
+}
+//# sourceMappingURL=runDeltaPorts.js.map

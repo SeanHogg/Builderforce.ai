@@ -1,0 +1,116 @@
+import { describe, expect, it, vi } from "vitest";
+import { createConnectedAccounts } from "@builderforce/provider-connect/accounts";
+/**
+ * The shared connected accounts (`@builderforce/provider-connect/accounts`) — the ONE client
+ * implementation the editor and Rovr both run. Lives in this suite because its vitest config
+ * aliases every source package.
+ */
+const memoryStore = () => {
+    const data = new Map();
+    return {
+        get: async (key) => data.get(key),
+        set: async (key, value) => void data.set(key, value),
+        delete: async (key) => void data.delete(key),
+    };
+};
+const credential = (now) => ({
+    provider: "kimi",
+    runtime: "kimi-code",
+    accessToken: "kc-token",
+    expiresAt: now + 15 * 60_000,
+    baseUrl: "https://api.kimi.ai/coding/v1",
+    models: [{ model: "k3", displayName: "Kimi K3" }],
+});
+describe("createConnectedAccounts", () => {
+    const now = 1_000_000;
+    it("needs no init step: a store is created on first use and resolves", async () => {
+        const request = vi.fn(async () => ({ status: 200, body: credential(now) }));
+        const accounts = createConnectedAccounts({ request, store: memoryStore(), now: () => now });
+        expect(await accounts.store("kimi").resolve()).toMatchObject({ kind: "credential" });
+        expect(request).toHaveBeenCalledWith("/llm/provider-keys/kimi/local-credential", { method: "POST" });
+    });
+    it("resolves a Kimi pick in either spelling to its endpoint and wire model", async () => {
+        const request = vi.fn(async () => ({ status: 200, body: credential(now) }));
+        const accounts = createConnectedAccounts({ request, store: memoryStore(), now: () => now });
+        for (const ref of ["direct/kimi-code/k3", "local/kimi-code/k3"]) {
+            expect(await accounts.pinFor(ref)).toEqual({
+                kind: "endpoint",
+                provider: "kimi",
+                endpoint: { baseUrl: "https://api.kimi.ai/coding/v1", token: "kc-token", credential: expect.any(Function) },
+                model: "k3",
+            });
+        }
+    });
+    it("asks the host to offer the sign-in when nothing is connected, or the grant is dead", async () => {
+        const notConnected = createConnectedAccounts({
+            request: async () => ({ status: 404, body: { code: "provider_not_connected" } }),
+            store: memoryStore(),
+            now: () => now,
+        });
+        expect(await notConnected.endpointFor("kimi-code")).toEqual({ kind: "connect", provider: "kimi", reason: "not_connected" });
+        const dead = createConnectedAccounts({
+            request: async () => ({ status: 409, body: { code: "provider_reconnect_required", error: "revoked" } }),
+            store: memoryStore(),
+            now: () => now,
+        });
+        expect(await dead.endpointFor("kimi-code")).toMatchObject({ kind: "connect", provider: "kimi", reason: "reconnect" });
+    });
+    // A change listener re-renders the editor's panel, which resolves again: notifying on an
+    // unchanged "not connected" looped it and reset the model pick (VSIX 2026.10.85).
+    it("does not notify when the credential did not change", async () => {
+        const onChange = vi.fn();
+        const accounts = createConnectedAccounts({
+            request: async () => ({ status: 404, body: { code: "provider_not_connected" } }),
+            store: memoryStore(),
+            now: () => now,
+            onChange,
+        });
+        await accounts.store("kimi").resolve();
+        await accounts.store("kimi").resolve();
+        expect(onChange).not.toHaveBeenCalled();
+    });
+    it("credentialFor drops a token the provider refused and fetches the next", async () => {
+        let issued = 0;
+        const request = vi.fn(async () => ({ status: 200, body: { ...credential(now), accessToken: `kc-${++issued}` } }));
+        const accounts = createConnectedAccounts({ request, store: memoryStore(), now: () => now });
+        const token = accounts.credentialFor("kimi");
+        expect(await token()).toBe("kc-1");
+        expect(await token()).toBe("kc-1");
+        expect(await token("kc-1")).toBe("kc-2");
+        expect(request).toHaveBeenCalledTimes(2);
+        // The gateway is told which token was refused, so it rotates the grant instead of
+        // handing the same revoked token back.
+        expect(request).toHaveBeenLastCalledWith("/llm/provider-keys/kimi/local-credential", { method: "POST", json: { rejected: "kc-1" } });
+        // A refusal of a token no longer held is answered by the one held now — no fetch.
+        expect(await token("kc-1")).toBe("kc-2");
+        expect(request).toHaveBeenCalledTimes(2);
+    });
+    it("hybridAccounts lists a connected account on its lead model, with the per-request token", async () => {
+        const request = vi.fn(async () => ({ status: 200, body: credential(now) }));
+        const accounts = createConnectedAccounts({ request, store: memoryStore(), now: () => now });
+        expect(await accounts.hybridAccounts()).toEqual([{
+                ref: "local/kimi-code/k3",
+                provider: "kimi-code",
+                model: "k3",
+                endpoint: { baseUrl: "https://api.kimi.ai/coding/v1", token: "kc-token", credential: expect.any(Function) },
+            }]);
+    });
+    // Read on every Hybrid call: an unconnected workspace must not cost a round trip each time.
+    it("hybridAccounts asks the gateway once per session when nothing is connected, and never prompts", async () => {
+        const request = vi.fn(async () => ({ status: 404, body: { code: "provider_not_connected" } }));
+        const accounts = createConnectedAccounts({ request, store: memoryStore(), now: () => now });
+        expect(await accounts.hybridAccounts()).toEqual([]);
+        expect(await accounts.hybridAccounts()).toEqual([]);
+        expect(request).toHaveBeenCalledTimes(1);
+    });
+    it("leaves every ref and runtime without a connected account alone", async () => {
+        const request = vi.fn();
+        const accounts = createConnectedAccounts({ request, store: memoryStore(), now: () => now });
+        expect(await accounts.pinFor("local/ollama/qwen3:8b")).toBeNull();
+        expect(await accounts.pinFor("direct/minimax/MiniMax-M3.1-Flash-Preview")).toBeNull();
+        expect(await accounts.endpointFor("ollama")).toBeNull();
+        expect(accounts.providers).toEqual(["kimi"]);
+        expect(request).not.toHaveBeenCalled();
+    });
+});
+//# sourceMappingURL=connectedAccounts.test.js.map

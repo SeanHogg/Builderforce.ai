@@ -10,7 +10,7 @@
  * Evermind need no account and no network. `account` and `sync` are the only states that do.
  */
 
-export const CAPABILITY_IDS = ["understand", "visualizer", "health", "evermind", "localRuns", "account", "sync", "network", "connected"] as const;
+export const CAPABILITY_IDS = ["understand", "visualizer", "health", "evermind", "localRuns", "work", "inbox", "account", "sync", "network", "connected"] as const;
 export type CapabilityId = (typeof CAPABILITY_IDS)[number];
 
 /** What the states are derived from: the session, and the platform policy's traffic-carrying grants. */
@@ -36,6 +36,9 @@ export function capabilityStates(inputs: CapabilityInputs): CapabilityStates {
     health: true,
     evermind: true,
     localRuns: true,
+    // Tickets and inbox are account DATA: hidden signed out, never a 401 (A1 table).
+    work: inputs.signedIn,
+    inbox: inputs.signedIn,
     account: inputs.signedIn,
     sync: inputs.signedIn && inputs.synchronize,
     network: !networkDenied(inputs),

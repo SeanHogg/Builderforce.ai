@@ -1,0 +1,183 @@
+import * as vscode from "vscode";
+import { classifyPlatformRequest, createGuardedPlatformFetch, createPlatformPolicy, platformRequestMethod, platformRequestRefusal, platformRequestUrl, platformSendPermission, resolveInferencePolicy, } from "@builderforce/local-first";
+import { bindInferenceMode, inferenceModeState, onDidChangeInferenceMode } from "./inferenceModeSetting";
+const policy = createPlatformPolicy();
+/** The mode in force — refused (`local-only`) until the first signed-in read resolves it. */
+let mode = "local-only";
+/** The inference mode the request gate decides with (carried to the webview realm too). */
+export function platformInferenceMode() {
+    return mode;
+}
+/** Does the CURRENT policy snapshot permit this capability? Synchronous read of the live
+ *  gate state — unlike `platformRequestRefusalFor` (which reads the cached `mode` used at
+ *  request time), this reflects an in-flight or test-set snapshot immediately. The G27
+ *  self-check uses it to decide whether a denial is currently in force. */
+export function platformCapabilityAllows(capability) {
+    return policy.allows(capability);
+}
+const requests = [];
+const nativeFetch = globalThis.fetch.bind(globalThis);
+let restoreFetch;
+export function platformPolicy() {
+    return policy;
+}
+export function platformRequestAccount() {
+    return {
+        attempted: requests.filter((record) => record.outcome === "attempted").length,
+        blocked: requests.filter((record) => record.outcome === "blocked").length,
+        recent: [...requests],
+    };
+}
+function configuredOrigins() {
+    const origins = new Set(["https://builderforce.ai", "https://api.builderforce.ai"]);
+    const config = vscode.workspace.getConfiguration("builderforce");
+    for (const value of [config.get("baseUrl"), config.get("webUrl")]) {
+        if (!value)
+            continue;
+        try {
+            origins.add(new URL(value).origin);
+        }
+        catch {
+            // The request classifier treats an invalid configured URL as non-platform; the
+            // settings UI remains responsible for reporting the invalid value.
+        }
+    }
+    return origins;
+}
+/** The URL when it is this editor's platform (a configured origin), else null. */
+function platformUrl(input) {
+    let url;
+    try {
+        url = new URL(platformRequestUrl(input));
+    }
+    catch {
+        return null;
+    }
+    return configuredOrigins().has(url.origin) ? url : null;
+}
+/** The capability a request needs — the shared route table, for this editor's origins. */
+export function platformCapabilityFor(input, init) {
+    const url = platformUrl(input);
+    return url ? classifyPlatformRequest(url.pathname, platformRequestMethod(input, init)) : null;
+}
+/**
+ * Which capability refuses this request, or null when it may go — THE shared gate
+ * (`platformRequestRefusal`), the same decision the web app and Rovr make for the same
+ * URL in the same mode. Not the platform ⇒ null.
+ */
+export function platformRequestRefusalFor(input, init) {
+    const url = platformUrl(input);
+    if (!url)
+        return null;
+    return platformRequestRefusal({ pathname: url.pathname, method: platformRequestMethod(input, init) }, { mode, snapshot: policy.snapshot() });
+}
+const recordRequest = (record) => {
+    requests.push(record);
+    if (requests.length > 1_000)
+        requests.splice(0, requests.length - 1_000);
+};
+/** An explicit capability call (`platformFetch(…, 'synchronize')`): that capability, strictly. */
+const guarded = createGuardedPlatformFetch({
+    policy,
+    fetch: (input, init) => nativeFetch(input, init),
+    onRequest: recordRequest,
+});
+/** Every other platform request (the global `fetch`): the shared request gate. */
+const gatedGlobal = createGuardedPlatformFetch({
+    policy,
+    fetch: (input, init) => nativeFetch(input, init),
+    onRequest: recordRequest,
+    decide: (_capability, input, init) => platformRequestRefusalFor(input, init),
+});
+export function platformFetch(input, init, capability) {
+    return guarded(input, init, capability);
+}
+export function assertPlatformCapability(capability) {
+    policy.assert(capability);
+}
+export const outboxSendPermission = platformSendPermission(policy);
+/** The advanced `builderforce.platform.*` overrides — the capabilities whose setting the
+ *  person EXPLICITLY set in their USER settings; an unset one follows the inference mode.
+ *  Each is `"scope": "application"` and is read from `globalValue` only: a cloned
+ *  repository's `.vscode/settings.json` must never open a capability (or undo Local only). */
+const OVERRIDABLE = [
+    "synchronize", "gatewayInference", "connectedFeatures", "modelDownloads", "directProviders", "externalMcp", "gitRemotes",
+];
+function explicitOverrides() {
+    const config = vscode.workspace.getConfiguration("builderforce");
+    const overrides = {};
+    for (const field of OVERRIDABLE) {
+        const seen = config.inspect?.(`platform.${field}`);
+        const value = seen?.globalValue;
+        if (typeof value === "boolean")
+            overrides[field] = value;
+    }
+    return overrides;
+}
+/** The mode-derived policy (`resolveInferencePolicy`), then the explicit overrides. The
+ *  scoped `authenticate` grant of a sign-in in flight is left as it stands. */
+function refreshPolicy() {
+    const state = inferenceModeState();
+    const resolved = resolveInferencePolicy({ mode: state.chosen ? state.mode : null, signedIn: state.signedIn, overrides: explicitOverrides() });
+    const { authenticate: _authenticate, ...derived } = resolved.snapshot;
+    mode = resolved.mode;
+    policy.set(derived);
+}
+export async function withPlatformAuthentication(work) {
+    policy.set({ authenticate: true });
+    try {
+        return await work();
+    }
+    finally {
+        policy.set({ authenticate: false });
+    }
+}
+let markResolved = () => undefined;
+const resolved = new Promise((resolve) => {
+    markResolved = resolve;
+});
+/**
+ * Resolves once the policy reflects the person's real state — the first signed-in read
+ * has landed and the mode-derived snapshot is applied. Every platform call activation
+ * starts (the heartbeat, the assigned-work poll, the codebase scan) waits on it: before
+ * it, a signed-in person would read as signed out and be refused as Local only.
+ */
+export function platformPolicyResolved() {
+    return resolved;
+}
+/**
+ * `secretKey`: the editor key's SecretStorage name — signed in decides the default mode.
+ * The fetch guard is installed at once (the snapshot starts refused, so nothing leaks
+ * meanwhile); the policy is resolved — {@link platformPolicyResolved} — only after the
+ * secret read, never computed from a not-yet-read signed-out default.
+ */
+export function bindPlatformPolicy(context, secretKey) {
+    const signedInRead = bindInferenceMode(context, secretKey);
+    void signedInRead.then(() => {
+        refreshPolicy();
+        markResolved();
+    });
+    context.subscriptions.push(onDidChangeInferenceMode(refreshPolicy));
+    context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((event) => {
+        if (event.affectsConfiguration("builderforce.platform"))
+            refreshPolicy();
+    }));
+    if (restoreFetch)
+        return resolved;
+    const guardedGlobal = (input, init) => {
+        const capability = platformCapabilityFor(input, init);
+        if (!capability)
+            return nativeFetch(input, init);
+        const url = platformRequestUrl(input);
+        return gatedGlobal(url, { ...init, redirect: "error" }, capability);
+    };
+    globalThis.fetch = guardedGlobal;
+    restoreFetch = () => {
+        if (globalThis.fetch === guardedGlobal)
+            globalThis.fetch = nativeFetch;
+        restoreFetch = undefined;
+    };
+    context.subscriptions.push({ dispose: () => restoreFetch?.() });
+    return resolved;
+}
+//# sourceMappingURL=platformPolicy.js.map

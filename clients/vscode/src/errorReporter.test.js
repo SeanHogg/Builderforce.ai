@@ -1,0 +1,140 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+import { classifyQueue, createRevokeGate } from "@builderforce/write-outbox";
+import { bindOutboxSendPermission, bindOutboxStorage, createDurableOutbox, setOutboxScope, } from "./outboxStorage";
+/**
+ * G13 for error-reports. The classifier says drop-on-failure. createDurableOutbox
+ * otherwise installs retry-until-ack, which would keep a transient failure. This
+ * file does not import errorReporter.ts: that module pulls the extension host.
+ */
+const here = path.dirname(fileURLToPath(import.meta.url));
+const reporter = readFileSync(path.join(here, "errorReporter.ts"), "utf8");
+class MemoryMemento {
+    values = new Map();
+    get(key) {
+        return this.values.get(key);
+    }
+    async update(key, value) {
+        if (value === undefined)
+            this.values.delete(key);
+        else
+            this.values.set(key, value);
+    }
+}
+const host = () => {
+    bindOutboxStorage({ workspaceState: new MemoryMemento(), secrets: {} });
+    bindOutboxSendPermission(createRevokeGate());
+    setOutboxScope({ workspace: 7 });
+};
+const http = (status) => {
+    throw Object.assign(new Error(`HTTP ${status}`), { status });
+};
+describe("errorReporter skips the parked-workspace refusal", () => {
+    it("returns before enqueueing when the error is a parked workspace", () => {
+        const skip = reporter.indexOf("if (isWorkspaceParked(error)) return;");
+        expect(skip).toBeGreaterThan(-1);
+        expect(skip).toBeLessThan(reporter.indexOf("reports.enqueue(laneOf("));
+    });
+});
+describe("errorReporter drop-on-failure", () => {
+    it("wires error-reports to the classifier's drop-on-failure, and does not register a dead letter", () => {
+        expect(classifyQueue("error-reports")?.onFailure).toBe("drop-on-failure");
+        expect(reporter).toContain("isTelemetryQueue");
+        expect(reporter).toContain("isDurableUserWorkQueue");
+        expect(reporter).toContain('work: classifyQueue("error-reports")?.retention === "durable" ? "history" : "telemetry"');
+        expect(reporter).toContain('classifyQueue("error-reports")?.onFailure === "retain-until-acked" ? "retain-until-acked" : "drop-on-failure"');
+        expect(reporter).toContain('? "drop-on-failure"');
+        expect(reporter).not.toContain("registerDeadLetterQueue");
+        expect(reporter).not.toContain("createOutbox");
+    });
+    it("drops a transient error-report send instead of retaining it until ack", async () => {
+        host();
+        const reports = createDurableOutbox("error-reports-drop", {
+            work: classifyQueue("error-reports")?.retention === "durable" ? "history" : "telemetry",
+            onFailure: classifyQueue("error-reports")?.onFailure === "retain-until-acked" ? "retain-until-acked" : "drop-on-failure",
+            maxItems: 10,
+            maxWaitMs: 60_000,
+            send: async () => http(500),
+        });
+        await reports.ready();
+        reports.enqueue("lane", { n: 1 });
+        await reports.flush();
+        expect(reports.size()).toBe(0);
+        expect(reports.exportDeadLetters()).toHaveLength(0);
+        expect(reports.stats().dropped).toBeGreaterThan(0);
+        reports.close();
+    });
+    it("still retains a transient failure when the caller omits onFailure", async () => {
+        host();
+        const history = createDurableOutbox("error-reports-retain-default", {
+            work: "history",
+            maxItems: 10,
+            maxWaitMs: 60_000,
+            send: async () => http(500),
+        });
+        await history.ready();
+        history.enqueue("lane", { n: 1 });
+        await history.flush();
+        expect(history.size()).toBe(1);
+        expect(history.exportDeadLetters()).toHaveLength(0);
+        history.close();
+    });
+    it("classifies a known user-work name as durable when the caller omits the stamp", async () => {
+        host();
+        expect(classifyQueue("brain-turns")?.retention).toBe("durable");
+        expect(classifyQueue("brain-turns")?.onFailure).toBe("retain-until-acked");
+        const turns = createDurableOutbox("brain-turns", {
+            maxItems: 10,
+            maxWaitMs: 60_000,
+            send: async () => http(422),
+        });
+        await turns.ready();
+        turns.enqueue("lane", { n: 1 });
+        await turns.flush();
+        const letters = turns.exportDeadLetters();
+        expect(letters).toHaveLength(1);
+        expect(letters[0]?.retention).toBe("durable");
+        expect(await turns.repairDeadLetter(letters[0].id)).toBe(true);
+        turns.close();
+    });
+    it("classifies a known telemetry name as drop-on-failure when the caller omits the stamp", async () => {
+        host();
+        const reports = createDurableOutbox("error-reports", {
+            maxItems: 10,
+            maxWaitMs: 60_000,
+            send: async () => http(500),
+        });
+        await reports.ready();
+        reports.enqueue("lane", { n: 1 });
+        await reports.flush();
+        expect(reports.size()).toBe(0);
+        expect(reports.exportDeadLetters()).toHaveLength(0);
+        expect(reports.stats().dropped).toBeGreaterThan(0);
+        reports.close();
+    });
+    it("does not guess a retention for an unclassified name", async () => {
+        host();
+        // `host-persist` is the live unclassified name: it mixes chat messages with host
+        // telemetry, so no single retention fits. `activity` and `run-outcomes` gained
+        // explicit durable rows in G13c (#5941) and are asserted as user work below.
+        expect(classifyQueue("host-persist")).toBeUndefined();
+        expect(classifyQueue("activity")?.retention).toBe("durable");
+        expect(classifyQueue("activity")?.onFailure).toBe("retain-until-acked");
+        expect(classifyQueue("run-outcomes")?.retention).toBe("durable");
+        expect(classifyQueue("run-outcomes")?.onFailure).toBe("retain-until-acked");
+        const activity = createDurableOutbox("activity", {
+            maxItems: 10,
+            maxWaitMs: 60_000,
+            send: async () => http(500),
+        });
+        await activity.ready();
+        activity.enqueue("lane", { n: 1 });
+        await activity.flush();
+        expect(activity.size()).toBe(1);
+        expect(activity.exportDeadLetters()).toHaveLength(0);
+        activity.close();
+    });
+});
+//# sourceMappingURL=errorReporter.test.js.map

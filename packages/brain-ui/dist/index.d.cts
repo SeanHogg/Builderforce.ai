@@ -1541,6 +1541,8 @@ interface ChatHistoryLabels extends ChatTicketStatsLabels {
     unarchive: string;
     /** "Chat {id}" — a row whose title is blank. */
     untitled: string;
+    /** A short idle-age chip label, e.g. `{days}D` → `5D`. */
+    daysIdle: string;
     /** An interrupted-run row's status tag (`· Interrupted`). */
     interrupted: string;
     /** An interrupted-run row's Open chat action. */
@@ -1559,11 +1561,16 @@ interface ChatHistoryChat {
     id: number;
     title: string;
     ticketCount?: number | null;
-    ticketProgressPct?: number | null;
     /** Non-cancelled linked tickets below 100%. Absent (older server) = unknown, not 0. */
     ticketOpenCount?: number | null;
     /** Non-cancelled linked tickets at 100%. Absent (older server) = unknown, not 0. */
     ticketDoneCount?: number | null;
+    /**
+     * Full days since the chat was last touched / last executed (now - `updatedAt`). The
+     * row renders this as a short chip (e.g. `5D`) so a stale chat is obvious at a glance.
+     * Absent/unknown ⇒ no chip.
+     */
+    daysIdle?: number | null;
     /**
      * Per-row cost chips the host wants beside the overflow menu — e.g. the VSIX
      * history's `2 agents · $1.20/$3.40`. Linked-ticket progress is NOT composed here:

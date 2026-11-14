@@ -1,0 +1,71 @@
+/**
+ * Composition root (PRD 45 §4.4 index): bind the tiers — pathDiagnostics, the full tier
+ * (typecheck / targeted tests / repo guards, `fullTier.ts`), the cache, the git port and the
+ * reviewer port — into the three ports the Brain host reads. One concern per file under
+ * `verify/`; this file only WIRES them.
+ *
+ * The three ports are handed to `BrainRunRequest` next to `needsConfirm`
+ * (brain-embedded `runStore/runTypes.ts`) by `editorShipPorts.ts`. All optional there: a host
+ * that binds none leaves every gate inert (§4.1).
+ *
+ * Paths: the Brain hands over what the model wrote — `edit_file` paths are WORKSPACE-RELATIVE,
+ * and a git tool with no `repo` sends `""`. Both are resolved against the workspace root here,
+ * once, so every tier below sees absolute paths.
+ */
+import * as fs from "fs/promises";
+import * as path from "path";
+import { pathDiagnostics } from "./pathDiagnostics";
+import { createVerifyCache } from "./cache";
+import { runFullTier } from "./fullTier";
+import { createGitPort } from "./gitPort";
+import { createReviewerPort } from "./reviewerPort";
+async function readText(abs) {
+    try {
+        return await fs.readFile(abs, "utf8");
+    }
+    catch {
+        return null;
+    }
+}
+/** A path the model named, absolute: workspace-relative paths resolve against `root`. */
+export function absoluteIn(root, p) {
+    return path.isAbsolute(p) ? p : path.join(root, p);
+}
+/**
+ * The VerifierPort: fast tier (LSP diagnostics) + full tier (diagnostics, typecheck, targeted
+ * tests, repo guards), the full tier cached by (absPath, sha-256 of the bytes). A re-check of
+ * unchanged bytes costs nothing. Results are keyed by the path AS REQUESTED, so the caller's
+ * own lookup finds them.
+ */
+export function createVerifierPort(deps) {
+    const read = deps.readText ?? readText;
+    const cache = createVerifyCache();
+    const diagnostics = (absPaths) => pathDiagnostics(absPaths, deps.vscode, { root: deps.root });
+    return {
+        async diagnostics(paths) {
+            // Fast tier, ≤ 3 s: language-server diagnostics for exactly these files.
+            return diagnostics(paths.map((p) => absoluteIn(deps.root, p)));
+        },
+        async full(paths, opts) {
+            const byAbs = new Map(paths.map((p) => [absoluteIn(deps.root, p), p]));
+            const records = await runFullTier([...byAbs.keys()], { root: deps.root, cache, readText: read, diagnostics }, opts);
+            const out = new Map();
+            for (const [abs, asked] of byAbs) {
+                const found = records.get(abs);
+                if (found)
+                    out.set(asked, found);
+            }
+            return out;
+        },
+    };
+}
+/** The GitPort: real commits, real bytes. A repo the call did not name is the workspace root. */
+export function createGit(deps) {
+    const port = createGitPort(deps.git);
+    return { outgoing: (repo, opts) => port.outgoing(absoluteIn(deps.root, repo || "."), opts) };
+}
+/** The ReviewerPort: one independent review sub-run (its deps are per run — see `shipPorts.ts`). */
+export function createReviewer(deps) {
+    return createReviewerPort(deps);
+}
+//# sourceMappingURL=index.js.map

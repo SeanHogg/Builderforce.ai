@@ -1,0 +1,117 @@
+/**
+ * The Node half of the `local.research` capability — everything a disk-backed surface
+ * needs besides its local model: file fingerprints off the working tree (mtime + size,
+ * what the answer cache is keyed on) and the persisted answer cache,
+ * `<root>/.builderforce/research-cache.json`.
+ *
+ * Shared by every Node surface that offers `local_research` (the VS Code extension and
+ * the on-prem runtime), so the cache file, its format and its write discipline are one
+ * implementation. The surface supplies only the model: {@link nodeResearchCapability}.
+ *
+ * The cache QUOTES workspace code, and `.builderforce/` is a folder teams commit
+ * (`rules.md`, `hooks.json`), so the store keeps its file out of git: before the first
+ * write it makes sure a `.gitignore` beside the cache lists it ({@link ensureGitIgnored}).
+ *
+ * Node-only (`fs`), so it rides the `./node-research` export condition.
+ */
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import { ResearchLru } from "./researchCache.js";
+import { resolveInsideRootOrThrow } from "./node-path.js";
+/** The cache file, relative to the workspace root (beside the symbol snapshot). */
+export const RESEARCH_CACHE_FILE = path.join(".builderforce", "research-cache.json");
+const stores = new Map();
+/**
+ * Make sure `<dir>/.gitignore` lists `name` — appended when the file exists without it,
+ * created when there is none; a team's other entries are never touched. A `.gitignore`
+ * inside the folder (rather than the repo root's) travels with the folder and needs no
+ * knowledge of where the repo root is.
+ */
+export async function ensureGitIgnored(dir, name) {
+    const file = path.join(dir, ".gitignore");
+    let current = "";
+    try {
+        current = await fs.readFile(file, "utf-8");
+    }
+    catch {
+        /* none yet */
+    }
+    const listed = current.split(/\r?\n/).some((line) => line.trim().replace(/^\//, "") === name);
+    if (listed)
+        return;
+    const prefix = current && !current.endsWith("\n") ? "\n" : "";
+    await fs.appendFile(file, `${prefix}${name}\n`, "utf-8");
+}
+/**
+ * A store over `file`: loaded once, written back after each new answer (serialized,
+ * best-effort — an unwritable cache only costs a re-ask). The keying and the LRU bound
+ * are the shared, pure {@link ResearchLru}.
+ */
+export function fileResearchStore(file, maxEntries) {
+    let lru = null;
+    let writing = Promise.resolve();
+    let ignored = false;
+    const load = () => {
+        lru ??= fs.readFile(file, "utf-8").then((raw) => ResearchLru.fromJSON(JSON.parse(raw), maxEntries), () => new ResearchLru(maxEntries)).catch(() => new ResearchLru(maxEntries));
+        return lru;
+    };
+    return {
+        async get(key) {
+            return (await load()).get(key);
+        },
+        async set(key, answer) {
+            const cache = await load();
+            cache.set(key, answer);
+            writing = writing.then(async () => {
+                try {
+                    await fs.mkdir(path.dirname(file), { recursive: true });
+                    // Ignored BEFORE the first write, so quoted code never sits untracked-but-addable.
+                    if (!ignored) {
+                        await ensureGitIgnored(path.dirname(file), path.basename(file));
+                        ignored = true;
+                    }
+                    await fs.writeFile(file, JSON.stringify(cache.toJSON()), "utf-8");
+                }
+                catch {
+                    /* best-effort */
+                }
+            });
+            await writing;
+        },
+    };
+}
+/** The process-wide cache for the workspace at `root` (one store per file, so two
+ *  callers never race each other's write-back). */
+export function researchCacheStore(root) {
+    const file = path.join(path.resolve(root), RESEARCH_CACHE_FILE);
+    let store = stores.get(file);
+    if (!store) {
+        store = fileResearchStore(file);
+        stores.set(file, store);
+    }
+    return store;
+}
+/** mtime + size of each readable file under `root`; anything else is left out. */
+export async function workspaceFingerprints(root, paths) {
+    const out = [];
+    for (const p of paths) {
+        try {
+            const stat = await fs.stat(resolveInsideRootOrThrow(root, p));
+            if (stat.isFile())
+                out.push({ path: p, mtimeMs: stat.mtimeMs, size: stat.size });
+        }
+        catch {
+            /* outside the root, missing, unreadable — not part of the answer */
+        }
+    }
+    return out;
+}
+/** The `local.research` backing for the workspace at `root`, over the surface's model. */
+export function nodeResearchCapability(root, model) {
+    return {
+        complete: (messages, signal) => model.complete(messages, signal),
+        fingerprint: (paths) => workspaceFingerprints(root, paths),
+        cache: researchCacheStore(root),
+    };
+}
+//# sourceMappingURL=node-research.js.map
