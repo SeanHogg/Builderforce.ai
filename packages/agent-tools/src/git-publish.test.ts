@@ -12,6 +12,10 @@ import type { ToolResult } from "./tool.js";
  * `run_command`, and shelled `git add -A && git commit && git push` — every file in a
  * shared working tree, unreviewed, onto the base branch. Each assertion below pins one
  * of the three things that went wrong there.
+ *
+ * The file runs standalone: `npx --no-install vitest run src/git-publish.test.ts` from
+ * this package (the pre-push evidence gate re-runs it per content hash, so the run must
+ * not depend on repo-root tooling).
  */
 
 /** A shell that records the script it was handed and reports success. */
