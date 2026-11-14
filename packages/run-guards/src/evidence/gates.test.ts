@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_EVIDENCE_POLICY,
+  fileIsUnchecked,
   outgoingGate,
   reviewGate,
   shellPublishHint,
@@ -43,6 +44,25 @@ function passingLedger(absPath: string, hash = "h1") {
   }
   return l;
 }
+
+describe("fileIsUnchecked", () => {
+  it("is true for files no policy check could ever fail — docs, copy, images, deleted paths", () => {
+    expect(fileIsUnchecked({ absPath: "docs/notes.md", isNew: false }, DEFAULT_EVIDENCE_POLICY)).toBe(true);
+    expect(fileIsUnchecked({ absPath: "clients/vscode/changelog.md", isNew: true }, DEFAULT_EVIDENCE_POLICY)).toBe(true);
+    expect(fileIsUnchecked({ absPath: "media/icon.png", isNew: true }, DEFAULT_EVIDENCE_POLICY)).toBe(true);
+    expect(fileIsUnchecked({ absPath: "src/gone.ts", isNew: false, deleted: true }, DEFAULT_EVIDENCE_POLICY)).toBe(true);
+    // No extension at all (LICENSE, Makefile) is unchecked too.
+    expect(fileIsUnchecked({ absPath: "LICENSE", isNew: false }, DEFAULT_EVIDENCE_POLICY)).toBe(true);
+  });
+
+  it("is false for files a check or the new-source test rule can fail", () => {
+    expect(fileIsUnchecked({ absPath: "src/a.ts", isNew: false }, DEFAULT_EVIDENCE_POLICY)).toBe(false);
+    // A NEW source file needs a test even though its extension maps to no required check.
+    expect(fileIsUnchecked({ absPath: "src/a.ts", isNew: true }, { ...DEFAULT_EVIDENCE_POLICY, required: {} })).toBe(false);
+    // …but an exempt one (a barrel) stays unchecked.
+    expect(fileIsUnchecked({ absPath: "src/index.ts", isNew: true }, { ...DEFAULT_EVIDENCE_POLICY, required: {} })).toBe(true);
+  });
+});
 
 describe("outgoingGate", () => {
   it("passes when every required check has a passing record for the file's hash", () => {

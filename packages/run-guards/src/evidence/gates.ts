@@ -163,6 +163,17 @@ function isExemptFromTestRule(path: string, policy: EvidencePolicy): boolean {
   return (policy.newSourceTestExempt ?? []).some((source) => new RegExp(source, "i").test(normalized));
 }
 
+/** Does the policy's new-source rule demand a test for this file? (A new test file IS its own test.) */
+function needsTest(file: Pick<OutgoingFile, "absPath" | "isNew">, policy: EvidencePolicy): boolean {
+  return (
+    !!policy.newSourceNeedsTest &&
+    file.isNew &&
+    isSourceFile(file.absPath) &&
+    !isTestPath(file.absPath) &&
+    !isExemptFromTestRule(file.absPath, policy)
+  );
+}
+
 /** Does `test` (a test file in the push) count as `file`'s test under the policy? */
 function covers(test: OutgoingFile, file: OutgoingFile, policy: EvidencePolicy): boolean {
   const coverage = policy.newSourceTestCoverage ?? ["stem"];
@@ -193,6 +204,19 @@ function pass(): GateVerdict {
 
 function refuse(reason: string): GateVerdict {
   return { ok: false, reason };
+}
+
+/**
+ * A file NO policy check could ever fail: its extension maps to no required check and it is
+ * not a new source file needing a test — docs, copy, images, and any deleted path. The host
+ * asks this when the outgoing set cannot be computed: a change made only of such files is
+ * CLEAR rather than unverifiable, because the identical files pass this same rule with zero
+ * checks once an upstream exists (a docs-only ticket can close on a branchless checkout).
+ */
+export function fileIsUnchecked(file: Pick<OutgoingFile, "absPath" | "isNew"> & { deleted?: boolean }, policy: EvidencePolicy): boolean {
+  if (file.deleted) return true;
+  if ((policy.required[extOf(file.absPath)] ?? []).length > 0) return false;
+  return !needsTest(file, policy);
 }
 
 /** First findings of a failing check, capped for the refusal text. */
@@ -257,13 +281,7 @@ export function outgoingGate(
     }
 
     // A new test file IS its own test — it does not need a test named after it.
-    if (
-      policy.newSourceNeedsTest &&
-      file.isNew &&
-      isSourceFile(file.absPath) &&
-      !isTestPath(file.absPath) &&
-      !isExemptFromTestRule(file.absPath, policy)
-    ) {
+    if (needsTest(file, policy)) {
       const stem = stemOf(file.absPath);
       const hasTest = files.some((t) => t !== file && !t.deleted && isTestPath(t.absPath) && covers(t, file, policy));
       if (!hasTest) {

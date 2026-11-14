@@ -30,6 +30,7 @@
 
 import {
   DEFAULT_EVIDENCE_POLICY,
+  fileIsUnchecked,
   outgoingGate,
   reviewGate,
   shellPublishHint,
@@ -332,6 +333,11 @@ function wroteThisRun(absPath: string, touched: readonly string[]): boolean {
 async function completionGateRefusal(run: BrainRunContext): Promise<Refusal | null> {
   const git = run.req.git;
   if (!git || !run.c.codeChanged || !run.c.touchedFiles?.length) return null;
+  // A run whose files are all outside every policy check (docs, copy, images) has NOTHING
+  // the evidence gate could ever fail — the identical files pass with zero checks once an
+  // upstream exists, so refusing for an uncomputable outgoing set is a false negative (#6630).
+  const policy = policyOf(run);
+  if (run.c.touchedFiles.every((f) => fileIsUnchecked({ absPath: f, isNew: false }, policy))) return null;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const budget = new Promise<{ kind: 'timeout' }>((resolve) => {
     timer = setTimeout(() => resolve({ kind: 'timeout' }), COMPLETION_GATE_BUDGET_MS);
@@ -340,7 +346,11 @@ async function completionGateRefusal(run: BrainRunContext): Promise<Refusal | nu
   const check = async (): Promise<Outcome> => {
     try {
       const out = await git.outgoing('');
-      if (out.unavailable) return out.baseBranch ? { kind: 'clear', why: out.unavailable } : { kind: 'unavailable', why: out.unavailable };
+      if (out.unavailable) {
+        // Fails closed EXCEPT on the base branch (the run's work already landed — done means
+        // exactly that) or when the run touched only files no check could ever fail (above).
+        return out.baseBranch ? { kind: 'clear', why: out.unavailable } : { kind: 'unavailable', why: out.unavailable };
+      }
       const mine = out.files.filter((f) => wroteThisRun(f.absPath, run.c.touchedFiles));
       if (!mine.length) return { kind: 'clear', why: 'none of the outgoing files were written by this run' };
       await verifyPaths(run, mine, { budgetMs: COMPLETION_GATE_BUDGET_MS - 2_000 });
@@ -377,6 +387,17 @@ function completionUncheckedReason(outcome: { kind: 'timeout' } | { kind: 'unava
   return `the ship gate could not read or verify the outgoing change (${outcome.why}). Fix the repository state and retry.`;
 }
 
+/** Does the ledger hold a FAILING check against any of the run's files? */
+function anyFailingEvidence(run: BrainRunContext): boolean {
+  const failing = new Set(run.evidence.snapshot().flatMap((e) => e.checks.some((c) => c.outcome === 'fail') ? [e.path] : []));
+  if (!failing.size) return false;
+  return (run.c.touchedFiles ?? []).some((f) => {
+    const rel = f.replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();
+    for (const p of failing) if (p === rel || p.endsWith(`/${rel}`)) return true;
+    return false;
+  });
+}
+
 /**
  * The line the approval prompt shows for a gated publish that passed (PRD §4.5, OD-3):
  * what the checks proved, what could not run (never reported as verified), and who reviewed.
@@ -407,6 +428,14 @@ async function deltaTicketCompletionRefusal(run: BrainRunContext, args: unknown)
   const id = parseSyncId((args as { id?: unknown } | null | undefined)?.id);
   const deltaId = run.c.deltaTicketId;
   if (id == null || deltaId == null || id !== deltaId) return null;
+  const touched = run.c.touchedFiles ?? [];
+  const policy = policyOf(run);
+  // A docs/copy-only run's delta ticket: no check could ever fail these files, so there is
+  // nothing to verify and nothing to review — the same files pass the outgoing gate with
+  // zero checks once an upstream exists (#6630).
+  if (touched.length && touched.every((f) => fileIsUnchecked({ absPath: f, isNew: false }, policy))) {
+    if (run.placeholderLedger.outstanding().length === 0 && !anyFailingEvidence(run)) return null;
+  }
   const view = settleView(run.c, run.c.runId);
   const verification = verificationOf(run.evidence, view.touchedFiles);
   const open = run.placeholderLedger.outstanding().length;

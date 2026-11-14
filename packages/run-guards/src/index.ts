@@ -116,6 +116,7 @@ export {
 } from "./evidence/ledger.js";
 export {
   DEFAULT_EVIDENCE_POLICY,
+  fileIsUnchecked,
   outgoingGate,
   reviewGate,
   shellPublishHint,

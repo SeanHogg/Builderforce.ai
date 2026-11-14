@@ -117,6 +117,19 @@ describe('shipGatePreflight', () => {
     expect(await shipGatePreflight(run, 'builtin_tasks_update', { id: 1, status: 'done' })).toEqual({});
   });
 
+  it('regression: a DOC-ONLY run can mark its own delta ticket done with no verification and no review (#6630)', async () => {
+    // No check the policy could ever fail a .md file, so there is nothing to verify or review —
+    // the same files pass the outgoing gate with zero checks once an upstream exists.
+    const run = ({ req: { git: git() }, evidence: createEvidenceLedger(),
+      placeholderLedger: { outstanding: () => [] },
+      c: { authorModels: new Set(['author-model']), shipReviews: [], deltaTicketId: 88, runId: 'r', touchedFiles: ['docs/notes.md'], deltaRecordedFiles: [], trace: [], listeners: new Set(), codeChanged: true } }) as unknown as BrainRunContext;
+    expect(await shipGatePreflight(run, 'builtin_tasks_update', { id: 88, status: 'done' })).toEqual({});
+    // A source file alongside the doc re-imposes the full rule (verification + review).
+    (run.c as { touchedFiles: string[] }).touchedFiles = ['docs/notes.md', FILE];
+    const gate = await shipGatePreflight(run, 'builtin_tasks_update', { id: 88, status: 'done' });
+    expect('refusal' in gate && gate.refusal.error).toMatch(/no passing verification/);
+  });
+
   it('regression: a pull request is diffed against its base, and an empty outgoing set is REFUSED as not verified (never a pass), never reviewed', async () => {
     const asked: unknown[] = [];
     const reviewer = approving();
@@ -182,6 +195,19 @@ describe('shipGatePreflight', () => {
       const run = doneRun({ git: git({ files: [], baseBranch: true, unavailable: 'no outgoing commits against @{u}' }), verifier: verifier('pass') });
       expect(await shipGatePreflight(run, 'builtin_tasks_update', DONE)).toEqual({});
       expect(traced(run).map((e) => e.args?.outcome)).toEqual(['clear']);
+    });
+
+    it('allows a DOC-ONLY run whose outgoing change cannot be computed (#6630) — no check could ever fail it', async () => {
+      // touchedFiles are all .md: the evidence policy maps no required check to them, so the
+      // gate has nothing to verify — refusing "the branch has no upstream" was a false negative.
+      const run = doneRun({ git: git({ files: [], baseBranch: false, unavailable: 'the branch has no upstream' }), verifier: verifier('fail') });
+      (run.c as { touchedFiles: string[] }).touchedFiles = ['docs/notes.md', 'clients/vscode/changelog.md'];
+      expect(await shipGatePreflight(run, 'builtin_tasks_update', DONE)).toEqual({});
+      // …but a run that also touched a source file is still gated and refused.
+      (run.c as { touchedFiles: string[] }).touchedFiles = ['docs/notes.md', FILE];
+      const gate = await shipGatePreflight(run, 'builtin_tasks_update', DONE);
+      expect('refusal' in gate && gate.refusal.error).toMatch(/the branch has no upstream/);
+      expect(traced(run).map((e) => e.args?.outcome)).toEqual(['unavailable']);
     });
 
     it('refuses when the check runs past its budget', async () => {
