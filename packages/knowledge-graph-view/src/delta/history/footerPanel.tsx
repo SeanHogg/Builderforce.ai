@@ -13,9 +13,9 @@ import type { KnowledgePanelRenderer } from '../../types';
 export const RUN_DELTA_PANEL_WIDTH = 440;
 
 export function footerPanel(footer: ReactNode, opts: { closeLabel: string; compact: boolean; width?: number | undefined }): KnowledgePanelRenderer {
-    return function FooterPanel({ open, title, onClose, children }) {
+    return function FooterPanel({ open, title, onClose, headerActions, children }) {
         return (
-            <Sheet open={open} title={title} closeLabel={opts.closeLabel} onClose={onClose} compact={opts.compact} width={opts.width}>
+            <Sheet open={open} title={title} closeLabel={opts.closeLabel} onClose={onClose} compact={opts.compact} width={opts.width} headerActions={headerActions}>
                 {children}
                 {footer}
             </Sheet>

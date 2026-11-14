@@ -340,6 +340,8 @@ export interface KnowledgePanelRenderProps {
     title: string;
     onClose(): void;
     children: ReactNode;
+    /** Actions pinned to the panel header, before its close button (icon buttons: Resolve, Copy diagnostics, …). */
+    headerActions?: ReactNode | undefined;
 }
 
 export type KnowledgePanelRenderer = (props: KnowledgePanelRenderProps) => ReactNode;

@@ -56,14 +56,19 @@ describe('run delta action buttons', () => {
         expect(getByTitle('Die Probleme dieses Runs beheben')).toBeTruthy();
     });
 
-    it('renders the same two buttons at the top of the panel body', () => {
+    it('renders the same two buttons in the panel header, not the body', () => {
         const onResolve = vi.fn();
         const onCopy = vi.fn();
-        const { getByRole, queryByRole, rerender } = render(
+        const { getByRole, queryByRole, rerender, container } = render(
             <RunDeltaPanel open delta={worseDelta()} labels={L} onClose={() => {}} compact={false} onResolve={onResolve} onCopyDiagnostics={onCopy} />,
         );
-        fireEvent.click(getByRole('button', { name: L.resolve }));
-        fireEvent.click(getByRole('button', { name: L.copyDiagnostics }));
+        const resolveButton = getByRole('button', { name: L.resolve });
+        const copyButton = getByRole('button', { name: L.copyDiagnostics });
+        // Beside the title, in the sheet header — the body is findings only.
+        expect(container.querySelector('aside > header')!.contains(resolveButton)).toBe(true);
+        expect(container.querySelector('aside > header')!.contains(copyButton)).toBe(true);
+        fireEvent.click(resolveButton);
+        fireEvent.click(copyButton);
         expect(onResolve).toHaveBeenCalledOnce();
         expect(onCopy).toHaveBeenCalledOnce();
 

@@ -17,6 +17,10 @@ export const RUN_DELTA_NAMESPACE = 'runDelta';
 
 export interface RunDeltaLabels {
     cardTitle: string;
+    /** The card header toggle's label while the detail rows are collapsed (the default). */
+    expandDetails: string;
+    /** The card header toggle's label while the detail rows are expanded. */
+    collapseDetails: string;
     openDetails: string;
     openCode: string;
     close: string;
@@ -158,6 +162,8 @@ export interface RunDeltaLabels {
 
 export const DEFAULT_RUN_DELTA_LABELS: RunDeltaLabels = {
     cardTitle: 'Run delta',
+    expandDetails: 'Expand details',
+    collapseDetails: 'Collapse details',
     openDetails: 'Open details',
     openCode: 'Open code',
     close: 'Close',

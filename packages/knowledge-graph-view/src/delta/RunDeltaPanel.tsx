@@ -114,23 +114,24 @@ export interface RunDeltaPanelProps {
 
 export function RunDeltaPanel({ open, delta, overrides, labels, onClose, onOpenCode, compact, renderPanel, onResolve, onCopyDiagnostics }: RunDeltaPanelProps) {
     const failed = delta.dimensions.flatMap((d) => d.measuredBy.filter((m) => m.status === 'failed').map((m) => ({ ...m, dimension: d.id })));
-    return (
-        <Panel open={open} title={labels.panelTitle} closeLabel={labels.close} onClose={onClose} compact={compact} width={440} render={renderPanel}>
-            <p style={{ ...TYPE.body, margin: 0, color: cssVar('text'), overflowWrap: 'anywhere' }}>{headlineText(labels, delta.summary)}</p>
-            {(onResolve || onCopyDiagnostics) && (
-                <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                    {onResolve && (
-                        <DeltaIconButton label={labels.resolve} title={labels.resolveHint} onClick={onResolve}>
-                            <ResolveIcon />
-                        </DeltaIconButton>
-                    )}
-                    {onCopyDiagnostics && (
-                        <DeltaIconButton label={labels.copyDiagnostics} onClick={onCopyDiagnostics}>
-                            <CopyIcon />
-                        </DeltaIconButton>
-                    )}
-                </div>
+    // The actions live in the panel HEADER (beside the title), not in the body: the body is findings only.
+    const headerActions = (onResolve || onCopyDiagnostics) ? (
+        <>
+            {onResolve && (
+                <DeltaIconButton label={labels.resolve} title={labels.resolveHint} onClick={onResolve}>
+                    <ResolveIcon />
+                </DeltaIconButton>
             )}
+            {onCopyDiagnostics && (
+                <DeltaIconButton label={labels.copyDiagnostics} onClick={onCopyDiagnostics}>
+                    <CopyIcon />
+                </DeltaIconButton>
+            )}
+        </>
+    ) : undefined;
+    return (
+        <Panel open={open} title={labels.panelTitle} closeLabel={labels.close} onClose={onClose} compact={compact} width={440} render={renderPanel} headerActions={headerActions}>
+            <p style={{ ...TYPE.body, margin: 0, color: cssVar('text'), overflowWrap: 'anywhere' }}>{headlineText(labels, delta.summary)}</p>
             {delta.dimensions.map((d) => <DimensionSection key={d.id} dimension={d} labels={labels} onOpenCode={onOpenCode} />)}
             <PendingAnalyzers delta={delta} labels={labels} variant="section" />
             {failed.length > 0 && (

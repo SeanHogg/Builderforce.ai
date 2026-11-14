@@ -38977,6 +38977,8 @@
       }
     },
     "cardTitle": "运行变化",
+    "expandDetails": "展开详情",
+    "collapseDetails": "收起详情",
     "openDetails": "查看详情",
     "openCode": "打开代码",
     "close": "关闭",

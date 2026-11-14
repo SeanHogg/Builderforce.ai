@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /** The L3 analyzers a phase-1 delta still waits on (PRD 41 §6): "<tool> — measuring…" on the card and in the panel, localized; gone when final. */
 import { describe, expect, it } from 'vitest';
-import { render } from '@testing-library/react';
+import { fireEvent, render } from '@testing-library/react';
 import type { RunDelta } from '@builderforce/run-delta/contract';
 import { RunDeltaCard } from './RunDeltaCard';
 import { RunDeltaPanel } from './RunDeltaPanel';
@@ -31,10 +31,12 @@ describe('pending analyzers', () => {
 
     it('the card shows "<tool> — measuring…" per pending tool, localized, and nothing once final', () => {
         const de = runDeltaLabels((key) => ({ measuringTool: '{tool} — wird gemessen…', measuringHeading: 'Wird noch gemessen' } as Record<string, string>)[key]);
-        const { container } = render(<RunDeltaCard delta={pendingDelta()} labels={de} onOpenDetails={() => {}} />);
+        const { container, getByText } = render(<RunDeltaCard delta={pendingDelta()} labels={de} onOpenDetails={() => {}} />);
+        fireEvent.click(getByText(de.expandDetails)); // The rows are collapsed by default.
         const rows = [...container.querySelectorAll('[data-pending]')].map((n) => n.textContent);
         expect(rows).toEqual(['gitleaks — wird gemessen…', 'jscpd — wird gemessen…']);
         const final = render(<RunDeltaCard delta={worseDelta()} labels={L} onOpenDetails={() => {}} />);
+        fireEvent.click(final.getByText(L.expandDetails));
         expect(final.container.querySelectorAll('[data-pending]')).toHaveLength(0);
     });
 

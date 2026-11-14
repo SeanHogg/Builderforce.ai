@@ -38972,6 +38972,8 @@
       }
     },
     "cardTitle": "Run delta",
+    "expandDetails": "Expand details",
+    "collapseDetails": "Collapse details",
     "openDetails": "Open details",
     "openCode": "Open code",
     "close": "Close",

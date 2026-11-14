@@ -8,7 +8,7 @@
  * instead. A run its delta HELD at the finalize gate (§12.5) shows {@link HeldNotice}.
  */
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { RunDelta } from '@builderforce/run-delta/contract';
 import { cssVar } from '../scene/themeColors';
 import { card, quietButton } from '../styles';
@@ -41,6 +41,9 @@ export interface RunDeltaCardProps {
 const BAND_TONE = { low: cssVar('sev1'), medium: cssVar('sev3'), high: cssVar('sev5') } as const;
 
 export function RunDeltaCard({ delta, labels, repoLabel, onOpenDetails, held, predicted, onResolve, onCopyDiagnostics }: RunDeltaCardProps) {
+    // Collapsed by default: the header (headline + blast radius + actions) is the summary; the
+    // per-dimension rows, analyzers and prediction expand on demand.
+    const [expanded, setExpanded] = useState(false);
     const headline = headlineText(labels, delta.summary);
     const band = delta.blastRadius.band;
     return (
@@ -49,27 +52,9 @@ export function RunDeltaCard({ delta, labels, repoLabel, onOpenDetails, held, pr
             data-run-delta={delta.runId}
             style={{ ...card, display: 'grid', gap: 8, minWidth: 0, maxWidth: '100%', boxSizing: 'border-box', color: cssVar('text') }}
         >
-            <header style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
-                <h3 style={{ ...TYPE.sectionHeading, flex: '1 1 auto' }}>{labels.cardTitle}</h3>
+            <header style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                <h3 style={{ ...TYPE.sectionHeading, flex: '1 1 auto', minWidth: 0 }}>{labels.cardTitle}</h3>
                 {repoLabel && <span style={{ ...TYPE.monoMeta, overflowWrap: 'anywhere', minWidth: 0 }}>{repoLabel}</span>}
-            </header>
-            <p style={{ ...TYPE.body, margin: 0, display: 'flex', gap: 6, alignItems: 'flex-start', overflowWrap: 'anywhere' }}>
-                <span style={{ color: VERDICT_TONE[delta.headline], paddingTop: 1 }}><VerdictIcon verdict={delta.headline} /></span>
-                <span data-testid="run-delta-headline">{headline}</span>
-            </p>
-            {held && (held.rules.length > 0 || held.unmeasured) && <HeldNotice {...held} labels={labels} />}
-            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                {delta.dimensions.map((d) => <DimensionRow key={d.id} dimension={d} labels={labels} />)}
-            </ul>
-            <PendingAnalyzers delta={delta} labels={labels} variant="line" />
-            {predicted}
-            <footer style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                <span data-band={band} style={{ ...TYPE.status, display: 'inline-flex', alignItems: 'center', gap: 6, color: cssVar('text') }}>
-                    <span aria-hidden="true" style={{ display: 'inline-block', width: 4, height: 14, borderRadius: 2, background: BAND_TONE[band] }} />
-                    {fillTemplate(labels.blastRadiusValue, { band: labels.bands[band] })}
-                </span>
-                {delta.blastRadius.reasons.map((r) => <span key={r} data-reason={r} style={reasonTag}>{reasonLabel(labels, r)}</span>)}
-                {delta.blocking.length > 0 && <span style={{ ...reasonTag, color: cssVar('sev5'), borderColor: cssVar('sev5') }}>{labels.blocking}</span>}
                 {onResolve && (
                     <DeltaIconButton label={labels.resolve} title={labels.resolveHint} onClick={onResolve}>
                         <ResolveIcon />
@@ -80,6 +65,37 @@ export function RunDeltaCard({ delta, labels, repoLabel, onOpenDetails, held, pr
                         <CopyIcon />
                     </DeltaIconButton>
                 )}
+                <button
+                    type="button"
+                    data-expanded={expanded}
+                    aria-expanded={expanded}
+                    onClick={() => setExpanded((v) => !v)}
+                    style={{ ...quietButton, whiteSpace: 'nowrap' }}
+                >
+                    {expanded ? labels.collapseDetails : labels.expandDetails}
+                </button>
+            </header>
+            <p style={{ ...TYPE.body, margin: 0, display: 'flex', gap: 6, alignItems: 'flex-start', overflowWrap: 'anywhere' }}>
+                <span style={{ color: VERDICT_TONE[delta.headline], paddingTop: 1 }}><VerdictIcon verdict={delta.headline} /></span>
+                <span data-testid="run-delta-headline">{headline}</span>
+            </p>
+            {held && (held.rules.length > 0 || held.unmeasured) && <HeldNotice {...held} labels={labels} />}
+            {expanded && (
+                <>
+                    <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                        {delta.dimensions.map((d) => <DimensionRow key={d.id} dimension={d} labels={labels} />)}
+                    </ul>
+                    <PendingAnalyzers delta={delta} labels={labels} variant="line" />
+                    {predicted}
+                </>
+            )}
+            <footer style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                <span data-band={band} style={{ ...TYPE.status, display: 'inline-flex', alignItems: 'center', gap: 6, color: cssVar('text') }}>
+                    <span aria-hidden="true" style={{ display: 'inline-block', width: 4, height: 14, borderRadius: 2, background: BAND_TONE[band] }} />
+                    {fillTemplate(labels.blastRadiusValue, { band: labels.bands[band] })}
+                </span>
+                {delta.blastRadius.reasons.map((r) => <span key={r} data-reason={r} style={reasonTag}>{reasonLabel(labels, r)}</span>)}
+                {delta.blocking.length > 0 && <span style={{ ...reasonTag, color: cssVar('sev5'), borderColor: cssVar('sev5') }}>{labels.blocking}</span>}
                 <button type="button" onClick={onOpenDetails} style={{ ...quietButton, marginInlineStart: 'auto' }}>
                     {labels.openDetails}
                 </button>

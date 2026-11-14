@@ -23,7 +23,8 @@ const GERMAN: RunDeltaLabels = runDeltaLabels((key) => ({
 
 describe('RunDeltaCard', () => {
     it('renders a worse security / tests-weakened run with localized words and ≈ for heuristic', () => {
-        const { getByTestId, container } = render(<RunDeltaCard delta={worseDelta()} labels={GERMAN} onOpenDetails={() => {}} />);
+        const { getByTestId, getByText, container } = render(<RunDeltaCard delta={worseDelta()} labels={GERMAN} onOpenDetails={() => {}} />);
+        fireEvent.click(getByText(GERMAN.expandDetails));
         const headline = getByTestId('run-delta-headline').textContent!;
         expect(headline).toContain('Schlechter');
         expect(headline).toContain('Sicherheit (1 × Route hat ihren Auth-Guard verloren)');
@@ -38,8 +39,23 @@ describe('RunDeltaCard', () => {
         expect(security.querySelector('[data-verdict="worse"] svg')).toBeTruthy();
     });
 
-    it('shows why a not_measured row was not measured', () => {
-        const { container } = render(<RunDeltaCard delta={worseDelta()} labels={L} onOpenDetails={() => {}} />);
+    it('is collapsed by default: the dimension rows show only after Expand details', () => {
+        const { container, getByText, queryByText } = render(<RunDeltaCard delta={worseDelta()} labels={L} onOpenDetails={() => {}} />);
+        // The summary (headline + blast radius) is always visible; the per-dimension rows are not.
+        expect(container.querySelector('[data-testid="run-delta-headline"]')).toBeTruthy();
+        expect(getByText('Blast radius: high')).toBeTruthy();
+        expect(container.querySelector('[data-dimension="security"]')).toBeNull();
+        const toggle = getByText(L.expandDetails);
+        expect((toggle as HTMLButtonElement).getAttribute('aria-expanded')).toBe('false');
+        fireEvent.click(toggle);
+        expect(getByText(L.collapseDetails)).toBeTruthy();
+        expect(container.querySelector('[data-dimension="security"]')).toBeTruthy();
+        expect(queryByText(L.expandDetails)).toBeNull();
+    });
+
+    it('shows why a not_measured row was not measured (expanded)', () => {
+        const { container, getByText } = render(<RunDeltaCard delta={worseDelta()} labels={L} onOpenDetails={() => {}} />);
+        fireEvent.click(getByText(L.expandDetails));
         const row = container.querySelector('[data-dimension="ilities.reliability"]') as HTMLElement;
         expect(within(row).getByText(L.verdicts.notMeasured)).toBeTruthy();
         expect(within(row).getByText(L.reasons.ruleNotBuilt!)).toBeTruthy();

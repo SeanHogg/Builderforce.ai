@@ -19,13 +19,15 @@ export interface SheetProps {
     children: ReactNode;
     /** A muted line beside the title (a drawer says what it is for). */
     subtitle?: string | undefined;
+    /** Actions pinned to the sheet header, before the close button (icon buttons: Resolve, Copy diagnostics, …). */
+    headerActions?: ReactNode | undefined;
     /** The panel owns its scrolling and pinned footer: the body is a flush, non-scrolling column the content fills (the Reviews panel). */
     fill?: boolean | undefined;
     /** The docked width in px (default 380); never wider than the container. */
     width?: number | undefined;
 }
 
-export function Sheet({ open, title, closeLabel, onClose, compact, children, subtitle, width = 380, fill = false }: SheetProps) {
+export function Sheet({ open, title, closeLabel, onClose, compact, children, subtitle, headerActions, width = 380, fill = false }: SheetProps) {
     if (!open) return null;
     return (
         <aside
@@ -47,6 +49,7 @@ export function Sheet({ open, title, closeLabel, onClose, compact, children, sub
                     {title}
                     {subtitle ? <span style={{ ...muted, fontWeight: 400, marginInlineStart: 10 }}>{subtitle}</span> : null}
                 </h2>
+                {headerActions}
                 <button type="button" onClick={onClose} aria-label={closeLabel} title={closeLabel} style={{ ...quietButton, padding: 0, borderColor: 'transparent' }}>
                     <span aria-hidden="true">×</span>
                 </button>
@@ -62,7 +65,7 @@ export function Panel(props: SheetProps & { render?: KnowledgePanelRenderer | un
     if (render) {
         // The host's panel has a title only, so the subtitle leads the body.
         const body = sheet.subtitle ? <><p style={{ ...muted, margin: 0 }}>{sheet.subtitle}</p>{sheet.children}</> : sheet.children;
-        return <>{render({ open: sheet.open, title: sheet.title, onClose: sheet.onClose, children: body })}</>;
+        return <>{render({ open: sheet.open, title: sheet.title, onClose: sheet.onClose, headerActions: sheet.headerActions, children: body })}</>;
     }
     return <Sheet {...sheet} />;
 }
