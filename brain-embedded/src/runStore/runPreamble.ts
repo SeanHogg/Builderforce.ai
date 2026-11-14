@@ -33,6 +33,7 @@ import { recordTranscriptAnchors } from './runFoldMarker';
 import { createRunWindowFit } from '../windowFit/runWindowFit';
 import type { RunCell } from './runCell';
 import { nowIso, pushTrace } from './runCells';
+import { seedConfigLog } from './configLog';
 import { isFollowUpTurn, latestUserText } from './convoText';
 import { answerFromMemory, recallForRun } from './runMemory';
 import { answerDeterministically } from './prefetchGate';
@@ -103,6 +104,15 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
   // metadata below and the system-prompt directive further down need it, and they must
   // never disagree about which mode this run was.
   const runMode = normalizeChatMode(req.chatMode ?? 'work');
+  // The chat's config log (`configLog.ts`): seed the model + run mode in force as this run
+  // begins. The settings are GLOBAL (host-level), so a later change arrives through the
+  // request's `configChange` hook and is appended mid-run. Best-effort — never throws into
+  // the run.
+  try {
+    seedConfigLog(c, { model: req.model, modelStrict: req.modelStrict, routingMode: req.routingMode, runMode });
+  } catch {
+    // ignore — the config log is advisory
+  }
   // The SERVER chat (PRD 36): on a local-first host `chatId` is a view key that never
   // leaves the machine, so an unbound chat sends no chat id at all — never its own number,
   // which named (and billed) whichever server chat happened to share it.

@@ -25,6 +25,18 @@ export interface LiveTurn {
   account?: string;
 }
 
+/**
+ * One timestamped config entry on a chat's run cell — a value of the model or the run
+ * mode in force at a moment of the chat (`configLog.ts`). Seeded at run start; a change
+ * appended mid-run also lands on the run trace as `run.config_change`.
+ */
+export interface ConfigEntry {
+  ts: string;
+  kind: 'model' | 'runMode';
+  from?: string;
+  to: string;
+}
+
 /** What a user Stop cut off, held until the run unwinds and can persist it. */
 export interface StoppedTurn {
   /** What the model had streamed when Stop was pressed. */
@@ -196,6 +208,13 @@ export interface RunCell {
   /** The request this chat last ran with: what a turn handed to it later runs with (`continueChat.ts`). */
   lastRequest: BrainRunRequest | null;
   /**
+   * The model + run mode in force during this chat, seeded at run start and appended on
+   * change (`configLog.ts`). The settings are GLOBAL (host-level), so a change is a global
+   * event attributed to whichever chat is active when it happens — the host surfaces it
+   * through {@link BrainRunRequest.configChange} and the run records it here.
+   */
+  configLog: ConfigEntry[];
+  /**
    * How many times this chat was told to Stop - counted even when nothing was running. A turn
    * being made from direction (`continueChat.ts`) compares it with the count it started at: a
    * Stop pressed in between must not be outrun by a run that starts after it.
@@ -289,6 +308,7 @@ export function makeCell(): RunCell {
     servedBy: null,
     pendingTurn: null,
     lastRequest: null,
+    configLog: [],
     stopEpoch: 0,
     claim: null,
     stoppedTurn: null,
