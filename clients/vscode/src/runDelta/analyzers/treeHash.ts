@@ -16,7 +16,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
-import { whichOnPath } from "./nodeAnalyzerExec";
+import { whichOnPath } from "../../process/programSearch";
 
 const TIMEOUT_MS = 60_000;
 

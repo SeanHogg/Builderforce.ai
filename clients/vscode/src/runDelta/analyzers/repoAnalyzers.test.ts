@@ -13,7 +13,7 @@ import { cacheKeyOf, type AnalyzerCache } from "./analyzerCache";
 import { l3KeyOf } from "./l3Binding";
 import { ignoredFolders, materializeBeforeTree, sweepOrphanedTrees } from "./beforeTree";
 import { coverageAnalyzer } from "./coverageAnalyzer";
-import { searchPath, whichOnPath } from "./nodeAnalyzerExec";
+import { searchPath, whichOnPath } from "../../process/programSearch";
 import { analyzeRepo } from "./repoAnalyzers";
 import type { RunContext } from "./sideContext";
 

@@ -25,7 +25,7 @@ import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import type { PreparedDelta } from "../preparedPorts";
-import { whichOnPath } from "./nodeAnalyzerExec";
+import { whichOnPath } from "../../process/programSearch";
 import { pool } from "./pool";
 
 export const MAX_TREE_FILES = 60_000;

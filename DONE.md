@@ -1,3 +1,21 @@
+## ✅ RESOLVED 2026-11-14: agent commits no longer open Terminal/CMD windows on Windows (VS Code 2026.10.171)
+
+- **Cause, proven by a live window and process trace:** `cmd.exe /d /s /c vitest run src/brainRunStore.test.ts` ← `Code.exe` running npx-cli.js ← extension host.
+  - Since 54812ae25, `verify/execRunner.ts` `launchPlan` ran npm/npx as `process.execPath`. Inside VS Code that is `Code.exe`, a GUI-subsystem binary, so `windowsHide` gives it no console at all.
+  - npx's unhidden `cmd` child therefore got a new visible console, which Windows Terminal opened.
+  - `runDelta/analyzers/nodeAnalyzerExec.ts` did the same for the bundled analyzers (knip, watskeburt and codeowners call `git` unhidden).
+  - A static scan found every one of our spawns hidden, and replays from a `node.exe` parent did not reproduce it. Only the live trace did.
+- **Fix:** `src/process/consoleNode.ts`, Windows only, so other platforms are unchanged.
+  - JS CLIs and analyzers run under a console `node.exe` found by the hijack-safe PATH search, now in `src/process/programSearch.ts`.
+  - The Node version must be 20 or newer. It is probed per realpath+mtime in `src/process/nodeVersionProbe.ts`, and failures are cached for 60 s.
+  - Otherwise it falls back to `execPath`, logging one warning per reason.
+- **Hardening in the same pass (`verify/execRunner.ts`):**
+  - Bare programs (`node`, `git`) resolve to absolute PATH entries. libuv searches the current folder first, so this stops a planted exe in the verified repo from running.
+  - `.cmd` shims run through the absolute system `cmd.exe` with `NoDefaultCurrentDirectoryInExePath=1`.
+  - The verifier's own `node` uses any PATH node, with no version floor.
+  - `ELECTRON_RUN_AS_NODE` is set only when the Electron binary is spawned.
+- **Tests:** `src/process/{consoleNode,nodeVersionProbe,programSearch}.test.ts` and `src/verify/execRunner.test.ts`.
+
 ## ✅ RESOLVED 2026-11-13: all 5 Brain-chat-#195 tickets verified complete (#6451, #6452, #6453, #6455, #6611)
 Brain chat #195 close-out — the five linked tickets were reviewed against the code and tests and are complete:
 - **#6451** — API tolerates oversized refs in the extracted upload: `Builderforce.ai/api/src/presentation/routes/projectKnowledgeRoutes.ts` caps an over-long ref with a deterministic hash discriminator (`REF_MAX = 512`) instead of failing the whole body; the `#6451` test asserts the capped ref `≤ 512`. Route suite **48/48 green**.

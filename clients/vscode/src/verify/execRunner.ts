@@ -12,7 +12,7 @@
  * which cannot be spawned without a shell. It is launched through `cmd.exe /d /v:off /s /c`
  * with every argument quoted — and an argument cmd could still expand inside quotes
  * (`%`, `"`, a line break) is refused before anything starts. Every other program
- * (`node`, `git`) is spawned directly, no shell.
+ * (`node` — resolved to an absolute console node — and `git`) is spawned directly, no shell.
  *
  * Output is capped, not ignored: a ring buffer keeps the last ~2 KB of combined
  * stdout/stderr, and the shell hands the tail to the CALLER (a failing check record
@@ -24,7 +24,9 @@
 import { execFile, spawn } from "child_process";
 import { existsSync, realpathSync } from "fs";
 import * as path from "path";
+import { anyNodePath, consoleNodePath, needsRunAsNode } from "../process/consoleNode";
 import { killTree } from "../process/killTree";
+import { whichOnPathCached } from "../process/programSearch";
 
 /** One command: the program and its arguments, never joined into a shell string. */
 export type Argv = readonly string[];
@@ -51,6 +53,9 @@ const WINDOWS_SHIMS = new Set(["pnpm", "npm", "yarn", "npx"]);
 /** An argument cmd.exe would still expand or split inside double quotes. */
 const CMD_UNSAFE = /["%\r\n\0]/;
 
+/** The npm CLI entry a shim runs. */
+type NpmCli = "npx-cli.js" | "npm-cli.js";
+
 /**
  * The absolute path to the npm CLI entry a shim would run — `npx-cli.js` / `npm-cli.js` —
  * resolved from the package that owns the command's cwd (its `node_modules`), so the
@@ -58,13 +63,15 @@ const CMD_UNSAFE = /["%\r\n\0]/;
  *
  * `pnpm` never links `npm` into a package's `node_modules`, so the cwd `createRequire`
  * usually resolves nothing for `npm/bin/…` (it does for the runner, e.g. `vitest`, but not
- * for `npm`). When that lookup misses we fall through to the npm that sits beside the running
- * `node` executable — a globally installed npm (nvm, the node installer) always has its CLI
- * entry at `<node-dir>/node_modules/npm/bin`. Without this the verifier's `npx`/`npm` checks
+ * for `npm`). When that lookup misses we fall through to the npm that sits beside the console
+ * `node` executable `nodePath` (the plan's resolved node — never `Code.exe`'s folder, which has no npm). That
+ * `<node-dir>/node_modules/npm/bin` layout holds for the official Windows installer and nvm-windows;
+ * a shim-based install (Chocolatey, Scoop, Volta) puts a shim on PATH rather than node itself, so
+ * there the lookup misses and the cmd shim is tried instead. Without this the verifier's `npx`/`npm` checks
  * fell through to the `.cmd` shim, which cannot resolve its own location and died with
  * `Cannot find module …/npm/bin/npx-cli.js` (exit 1) on every pre-push test check.
  */
-function resolveNpmCli(cwd: string, cli: "npx-cli.js" | "npm-cli.js"): string | null {
+function resolveNpmCli(cwd: string, cli: NpmCli, nodePath: string): string | null {
   // A resolved entry can be a SYMLINK into pnpm's store (`node_modules/.pnpm/<pkg>@<ver>/…`).
   // The CLI's first statement is `require('./npm-prefix.js')`, resolved relative to the entry's
   // OWN REAL DIRECTORY — so the prefix module must exist at the entry's realpath, not beside the
@@ -106,8 +113,8 @@ function resolveNpmCli(cwd: string, cli: "npx-cli.js" | "npm-cli.js"): string | 
     realCwd = cwd;
   }
   return tryResolve(cwd) ?? (realCwd === cwd ? null : tryResolve(realCwd))
-    // 2. The npm that sits beside the running node — `<node-dir>/node_modules/npm/bin`.
-    ?? entryLoads(path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", cli));
+    // 2. The npm that sits beside the console node — `<node-dir>/node_modules/npm/bin`.
+    ?? entryLoads(path.join(path.dirname(nodePath), "node_modules", "npm", "bin", cli));
 }
 
 /**
@@ -115,29 +122,76 @@ function resolveNpmCli(cwd: string, cli: "npx-cli.js" | "npm-cli.js"): string | 
  * Windows: a package-manager shim is a `.cmd` batch file, which cannot be spawned without a
  * shell — EXCEPT `npx`/`npm`, which under `cmd.exe /d /v:off /s /c` with verbatim quoting
  * mis-resolve their own location and die with `Cannot find module …/npm/bin/npx-cli.js`
- * (exit 1, no findings). They are spawned directly instead: the `node` executable plus the
- * resolved CLI entry, no shell. Every non-shim program (`node`, `git`) keeps its name and
- * is spawned directly too. `resolveCli` is injectable for tests; it defaults to {@link resolveNpmCli}.
+ * (exit 1, no findings). They are spawned directly instead: the console `node` executable
+ * ({@link consoleNodePath} — never the GUI-subsystem `Code.exe`, whose console-less children
+ * would open visible windows for npx's own `cmd.exe /c vitest …`) plus the resolved CLI entry,
+ * no shell. The node is resolved ONCE per plan and handed to `resolveCli`, so the "npm beside
+ * node" lookup uses the same node the plan launches.
+ *
+ * Windows, no hijack: a program spawned by bare name is searched by libuv in the cwd — the
+ * verified repository — BEFORE PATH, so a planted `node.exe` / `git.exe` there would run. A bare
+ * `node` is therefore ANY node found on PATH ({@link anyNodePath} — no version floor, that guards
+ * only our npx/npm CLIs), and every other non-shim bare name (`git`, …) is resolved to an absolute
+ * path on PATH ({@link whichOnPathCached}: PATH only, never `.` or a relative entry); only when it
+ * is not found there does the bare name go through unchanged. The cmd shim runs through the
+ * absolute system shell ({@link systemCmdPath}) with {@link spawnEnvFor}'s
+ * `NoDefaultCurrentDirectoryInExePath`. Off Windows every program keeps its name. `resolveCli`,
+ * `nodePath`, `which`, `cmdPath` and `anyNode` are injectable for tests.
  */
 export function launchPlan(
   argv: Argv,
   platform: NodeJS.Platform = process.platform,
   cwd?: string,
-  resolveCli: (cwd: string, cli: "npx-cli.js" | "npm-cli.js") => string | null = resolveNpmCli,
+  resolveCli: (cwd: string, cli: NpmCli, nodePath: string) => string | null = resolveNpmCli,
+  nodePath: () => string = consoleNodePath,
+  which: (program: string) => string | undefined = whichOnPathCached,
+  cmdPath: () => string = () => systemCmdPath(),
+  anyNode: () => string = anyNodePath,
 ): { file: string; args: string[]; verbatim: boolean } | null {
   const [program, ...args] = argv;
   if (!program) return null;
-  if (platform !== "win32" || !WINDOWS_SHIMS.has(program.toLowerCase())) return { file: program, args: [...args], verbatim: false };
-  const shim = program.toLowerCase();
-  if (shim === "npx" || shim === "npm") {
-    const cli = resolveCli(cwd ?? process.cwd(), shim === "npx" ? "npx-cli.js" : "npm-cli.js");
-    if (cli) return { file: process.execPath, args: [cli, ...args], verbatim: false };
+  if (platform !== "win32") return { file: program, args: [...args], verbatim: false };
+  const name = program.toLowerCase();
+  if (name === "node") return { file: anyNode(), args: [...args], verbatim: false };
+  if (!WINDOWS_SHIMS.has(name)) return { file: which(program) ?? program, args: [...args], verbatim: false };
+  if (name === "npx" || name === "npm") {
+    const node = nodePath();
+    const cli = resolveCli(cwd ?? process.cwd(), name === "npx" ? "npx-cli.js" : "npm-cli.js", node);
+    if (cli) return { file: node, args: [cli, ...args], verbatim: false };
     // The CLI could not be resolved: fall through to the cmd shim (may still work when the
     // shim's own directory resolution succeeds).
   }
   if ([program, ...args].some((a) => CMD_UNSAFE.test(a))) return null;
   const line = [`${program}.cmd`, ...args].map((a) => `"${a}"`).join(" ");
-  return { file: "cmd.exe", args: ["/d", "/v:off", "/s", "/c", `"${line}"`], verbatim: true };
+  return { file: cmdPath(), args: ["/d", "/v:off", "/s", "/c", `"${line}"`], verbatim: true };
+}
+
+/**
+ * The absolute system shell for the cmd-shim plan — never a bare `cmd.exe`, which libuv would search
+ * for in the cwd (the verified repository) first. `ComSpec` when it is an absolute drive/UNC path ending
+ * in `\cmd.exe`; otherwise `<SystemRoot>\System32\cmd.exe` (SystemRoot defaulting to `C:\Windows`).
+ */
+export function systemCmdPath(env: NodeJS.ProcessEnv = process.env): string {
+  const comSpec = env.ComSpec ?? env.COMSPEC;
+  if (comSpec && /^([a-z]:\\|\\\\)/i.test(comSpec) && /\\cmd\.exe$/i.test(comSpec)) return comSpec;
+  return path.win32.join(env.SystemRoot ?? env.SYSTEMROOT ?? "C:\\Windows", "System32", "cmd.exe");
+}
+
+/**
+ * The spawn environment for a plan; undefined = inherit unchanged. The cmd-shim plan (the only verbatim
+ * one) gets `NoDefaultCurrentDirectoryInExePath=1`, so cmd.exe never resolves `pnpm.cmd` & co. from the
+ * verified repository's cwd. The host's own non-node executable (the last-resort node) gets
+ * `ELECTRON_RUN_AS_NODE=1`, so it runs as Node instead of opening an editor window.
+ */
+export function spawnEnvFor(
+  plan: { file: string; verbatim: boolean },
+  base: NodeJS.ProcessEnv = process.env,
+  execPath: string = process.execPath,
+  platform: NodeJS.Platform = process.platform,
+): NodeJS.ProcessEnv | undefined {
+  if (plan.verbatim) return { ...base, NoDefaultCurrentDirectoryInExePath: "1" };
+  if (needsRunAsNode(plan.file, execPath, platform)) return { ...base, ELECTRON_RUN_AS_NODE: "1" };
+  return undefined;
 }
 
 /** The real process runner: honours the timeout (killing the tree), reports the honest exit code. */
@@ -159,6 +213,7 @@ export const execRunner: Runner = (argv, options) =>
     // kept only so a FAILING check can say WHY — the slice (not the accumulation) is
     // stored, so memory is flat no matter how verbose the command.
     let tail = "";
+    const env = spawnEnvFor(plan);
     try {
       child = spawn(plan.file, plan.args, {
         cwd: options.cwd,
@@ -167,6 +222,7 @@ export const execRunner: Runner = (argv, options) =>
         shell: false,
         windowsVerbatimArguments: plan.verbatim,
         detached: process.platform !== "win32",
+        ...(env ? { env } : {}),
       });
     } catch {
       return resolve({ exitCode: 1, tail: "" }); // failed to start — non-zero, and never a pass
@@ -194,12 +250,23 @@ const GIT_TIMEOUT_MS = 30_000;
 
 /**
  * The host's git for the GitPort: `execFile` (no shell, no quoting surface — `git.exe` is a
- * real executable on Windows, not a `.cmd` shim), stdout plus the real exit code.
+ * real executable on Windows, not a `.cmd` shim), stdout plus the real exit code. On Windows
+ * git is resolved to an absolute path on PATH first (libuv would search the cwd — the
+ * repository — before PATH); the bare name only when it is not found there. A remembered path
+ * that has since vanished (ENOENT) is forgotten and the query retried ONCE with a fresh lookup.
  */
 export const gitRunner = (args: readonly string[], opts: { cwd: string }): Promise<{ stdout: string; exitCode: number }> =>
   new Promise((resolve) => {
-    execFile("git", ["--no-optional-locks", ...args], { cwd: opts.cwd, windowsHide: true, timeout: GIT_TIMEOUT_MS, maxBuffer: 32 * 1024 * 1024 }, (error, stdout) => {
-      const code = (error as { code?: unknown } | null)?.code;
-      resolve({ stdout: String(stdout ?? ""), exitCode: !error ? 0 : typeof code === "number" ? code : 1 });
-    });
+    const run = (retried: boolean): void => {
+      const git = process.platform === "win32" ? whichOnPathCached("git") ?? "git" : "git";
+      execFile(git, ["--no-optional-locks", ...args], { cwd: opts.cwd, windowsHide: true, timeout: GIT_TIMEOUT_MS, maxBuffer: 32 * 1024 * 1024 }, (error, stdout) => {
+        const code = (error as { code?: unknown } | null)?.code;
+        if (code === "ENOENT" && git !== "git" && !retried) {
+          whichOnPathCached.invalidate("git");
+          return run(true);
+        }
+        resolve({ stdout: String(stdout ?? ""), exitCode: !error ? 0 : typeof code === "number" ? code : 1 });
+      });
+    };
+    run(false);
   });

@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.171] — Agent commits and checks no longer pop up Terminal/CMD windows on Windows
+
+- **Fixed: on Windows, an agent commit (and the pre-push checks and code analyzers) opened a visible Terminal/CMD window.** Their npm/npx and Node tools were launched with VS Code's own `Code.exe`. That program has no console window to share, so the commands it started, such as npx running vitest or the analyzers running git, each got a new, visible window. They now run under your installed Node 20+ (falling back to the editor's own Node only when none is found), so their commands stay hidden.
+- **Fixed: the verifier no longer lets a repository's own files stand in for system tools.** Programs it starts by name (git, node) are looked up on PATH, cmd.exe comes from the Windows folder, and cmd is told not to look in the repository folder first. So a `git.exe`, `node.exe`, `cmd.exe` or `pnpm.cmd` placed inside the repository being checked is never run instead.
+
 ## [2026.10.170] — The run-delta card expands with a chevron, and Open details sits in the header
 
 - **Changed: the run-delta card's "Expand Details" button is now an icon-only chevron**, matching the arrow pattern used elsewhere in the panel, instead of a word button in the body.
