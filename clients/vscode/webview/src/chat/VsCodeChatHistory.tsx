@@ -199,6 +199,7 @@ function VsCodeChatHistoryRow({
         id: chat.id,
         title: titleOf(chat),
         ticketCount: chat.ticketCount,
+        ticketProgressPct: chat.ticketProgressPct,
         ticketOpenCount: chat.ticketOpenCount,
         ticketDoneCount: chat.ticketDoneCount,
         stats: runStatsOf(chat, agents, t),

@@ -1565,6 +1565,8 @@ interface ChatHistoryChat {
     ticketOpenCount?: number | null;
     /** Non-cancelled linked tickets at 100%. Absent (older server) = unknown, not 0. */
     ticketDoneCount?: number | null;
+    /** Linked-ticket completion percent (0–100). Drives the row's `ChatTicketStats` chip. */
+    ticketProgressPct?: number | null;
     /**
      * Full days since the chat was last touched / last executed (now - `updatedAt`). The
      * row renders this as a short chip (e.g. `5D`) so a stale chat is obvious at a glance.

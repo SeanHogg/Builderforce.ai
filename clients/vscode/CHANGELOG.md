@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.166] — The chat history's "% Complete" ticket chip is back
+
+- **Fixed: each chat-history row stopped showing its linked-ticket `% Complete`.** The previous release's idle-age chip change dropped the `ticketProgressPct` field the row feeds into its shared `ChatTicketStats` chip, so the column rendered nothing even though the data was there. Restored the pass-through; the row again shows the linked-ticket completion percent beside the ticket count.
+
 ## [2026.10.165] — The chat history shows a chat's idle age and auto-archives stale chats
 
 - **Added: each chat-history row shows how long since the chat was last touched or last executed (e.g. `5D`).** The chip appears beside the linked-ticket stats, so a stale chat is obvious at a glance. The age is computed from the chat's `updatedAt` and rendered by the shared `ChatHistoryRow`.
