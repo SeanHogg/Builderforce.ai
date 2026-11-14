@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.163] — A docs-only change can close its ticket without a branch
+
+- **Fixed: the ship gate refused to mark a ticket done on a branch with no upstream even when the change was docs/copy only.** The completion gate failed closed whenever the outgoing change could not be computed — but for a run whose files are all outside every check the evidence policy could run (markdown, copy, images), there was nothing to verify: the identical files pass the gate with zero checks once an upstream exists. The gate now treats such a run as clear (still refusing the moment any source file is involved), and the run's own delta ticket closes under the same rule — unless the run's evidence holds a failing check or a placeholder is outstanding.
+
 ## [2026.10.162] — The chat rail always shows a ticket's lane, never a blank "not started"
 
 - **Fixed: two tasks under an epic showed as "not started" with no lane.** The chat rail's ticket status came straight from the stored record. A task filed on this device — or one whose record had an empty status before a platform refresh filled it — carried no lane, so the chip's meta line rendered an empty status (read as "not started"). The rail now resolves a missing/blank status to the board's not-started lane (`backlog`) and derives the done-percentage from that resolved lane, so every linked ticket shows a real status and correct progress.
