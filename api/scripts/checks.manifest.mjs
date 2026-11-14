@@ -43,6 +43,7 @@ export default [
   ['check:conflict-targets', 'check-conflict-targets.mjs'],
   ['check:db-access', 'check-db-access.mjs'],
   ['check:sites-worker-graph', 'check-sites-worker-graph.mjs'],
+  ['check:gateway-worker-graph', 'check-gateway-worker-graph.mjs'],
   ['check:migrations', 'check-migrations.mjs'],
   ['check:swept-tables', 'check-swept-tables.mjs'],
   ['check:usage-counts', 'check-usage-counts.mjs'],

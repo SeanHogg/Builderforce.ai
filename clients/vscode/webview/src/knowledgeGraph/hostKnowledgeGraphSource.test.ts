@@ -276,6 +276,15 @@ describe('the editor knowledge source — the rest of the port', () => {
     const broken: KnowledgeTransport = { call: () => Promise.reject(new Error('Request "knowledge.call" timed out')), onEvent: () => () => undefined };
     await expect(createHostKnowledgeGraphSource(broken).agentRuns!.list()).rejects.toThrow('timed out');
   });
+
+  // The Agent runs drawer's Fix action composes a prompt into the host's ONE composer (a fresh Brain chat).
+  it('routes a composed prompt through the `compose` op (the host seeds a new chat with it)', async () => {
+    const host = fakeHost();
+    await createHostKnowledgeGraphSource(host.t).rememberFact; // touch the source once for readability
+    const compose = createHostKnowledgeGraphSource(host.t);
+    await (compose as unknown as { compose?(text: string): Promise<void> }).compose?.('fix these findings');
+    expect(host.calls.at(-1)).toEqual({ op: 'compose', text: 'fix these findings' });
+  });
 });
 
 describe('the editor knowledge source — the staged fix steps', () => {

@@ -836,6 +836,19 @@ export const otelExporters = pgTable('otel_exporters', {
   headersIv:           varchar('headers_iv', { length: 64 }),
   serviceName:         varchar('service_name', { length: 255 }),
   sampleRate:          real('sample_rate').notNull().default(1),
+  /**
+   * Which signals this exporter ships: `traces`, `audit`, or `both`. Defaults to
+   * `traces`, so existing rows are unchanged (PRD 39 §4a). The audit sweep only
+   * sends to rows whose signals include `audit`.
+   */
+  signals:             varchar('signals', { length: 16 }).notNull().default('traces'),
+  /**
+   * Per-source sweep positions for the audit export (`{source: lastSeenId, sent: n}`).
+   * One JSONB column rather than a cursor table: the cursor and the exporter share
+   * one lifecycle (deleting the exporter deletes the cursor), and advancing several
+   * sources is one row write instead of one row per source. See otelAuditSweep.ts.
+   */
+  auditCursor:         jsonb('audit_cursor'),
   enabled:             boolean('enabled').notNull().default(true),
   lastExportAt:        timestamp('last_export_at'),
   lastError:           text('last_error'),

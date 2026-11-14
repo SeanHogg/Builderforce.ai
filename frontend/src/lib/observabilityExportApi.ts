@@ -16,6 +16,8 @@ export interface OtelExporter {
   serviceName: string | null;
   /** 0–1. Runs are sampled whole, so a trace is never half-exported. */
   sampleRate: number;
+  /** Which signals this exporter ships: 'traces', 'audit', or 'both'. */
+  signals: 'traces' | 'audit' | 'both';
   enabled: boolean;
   hasHeaders: boolean;
   lastExportAt: string | null;
@@ -32,6 +34,7 @@ export interface OtelExporterInput {
   serviceName?: string | null;
   sampleRate?: number;
   enabled?: boolean;
+  signals?: 'traces' | 'audit' | 'both';
 }
 
 const BASE = '/api/observability/exporters';

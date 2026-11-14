@@ -58,6 +58,7 @@ export function OtelExporterSettings() {
   const [endpoint, setEndpoint] = useState('');
   const [headerName, setHeaderName] = useState('');
   const [headerValue, setHeaderValue] = useState('');
+  const [signals, setSignals] = useState<'traces' | 'audit' | 'both'>('traces');
 
   const load = useCallback(async () => {
     if (!allowed) { setLoading(false); return; }
@@ -85,9 +86,10 @@ export function OtelExporterSettings() {
       await observabilityExportApi.create({
         name: name.trim(),
         endpoint: endpoint.trim(),
+        signals,
         ...(headerName.trim() && headerValue.trim() ? { headers: { [headerName.trim()]: headerValue.trim() } } : {}),
       });
-      setName(''); setEndpoint(''); setHeaderName(''); setHeaderValue('');
+      setName(''); setEndpoint(''); setHeaderName(''); setHeaderValue(''); setSignals('traces');
       await load();
     } catch (err) {
       setError(errorMessage(err));
@@ -147,6 +149,9 @@ export function OtelExporterSettings() {
                 <button type="button" style={subtle} disabled={busy} onClick={() => void act(() => observabilityExportApi.update(exporter.id, { enabled: !exporter.enabled }))}>
                   {exporter.enabled ? t('pause') : t('resume')}
                 </button>
+                <button type="button" style={subtle} disabled={busy} onClick={() => void act(() => observabilityExportApi.update(exporter.id, { signals: exporter.signals === 'traces' ? 'both' : 'traces' }))}>
+                  {exporter.signals === 'traces' ? t('enableAudit') : exporter.signals === 'audit' ? t('enableTraces') : t('tracesOnly')}
+                </button>
                 {exporter.hasHeaders && (
                   <button type="button" style={subtle} disabled={busy} onClick={() => void act(() => observabilityExportApi.update(exporter.id, { headers: null }))}>
                     {t('clearHeaders')}
@@ -186,6 +191,15 @@ export function OtelExporterSettings() {
               <label style={label} htmlFor="otel-header-value">{t('form.headerValueLabel')}</label>
               <input id="otel-header-value" style={field} type="password" value={headerValue} onChange={(e) => setHeaderValue(e.target.value)} autoComplete="off" />
             </div>
+          </div>
+          <div>
+            <label style={label} htmlFor="otel-signals">{t('form.signalsLabel')}</label>
+            <select id="otel-signals" style={field} value={signals} onChange={(e) => setSignals(e.target.value as 'traces' | 'audit' | 'both')}>
+              <option value="traces">{t('form.signalsTraces')}</option>
+              <option value="audit">{t('form.signalsAudit')}</option>
+              <option value="both">{t('form.signalsBoth')}</option>
+            </select>
+            <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', margin: '5px 0 0' }}>{t('form.signalsHint')}</p>
           </div>
           <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', margin: 0 }}>{t('form.headerHint')}</p>
           <div>

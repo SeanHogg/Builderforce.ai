@@ -225,7 +225,7 @@ describe('reapStaleExecutions — idle probe', () => {
     const res = await reapStaleExecutions(envWithRunner(true));
 
     expect(script.calls).toEqual(['execute']);
-    expect(res).toEqual({ failedRunning: 0, failedQueued: 0, failedPaused: 0, requeuedCloud: 0, parkAge: { stale: 0, unparked: 0 } });
+    expect(res).toEqual({ failedRunning: 0, failedQueued: 0, failedPaused: 0, requeuedCloud: 0, redispatchedHost: 0, parkAge: { stale: 0, unparked: 0 } });
   });
 
   it('runs only the sweeps the probe flagged', async () => {

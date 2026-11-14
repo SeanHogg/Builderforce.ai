@@ -61,7 +61,9 @@ export interface ToolStepView {
   argsText: string;
   /** Raw result JSON. `''` = the terminal panel already shows all of it. */
   resultText: string;
-  /** Whether the step opens expanded: a command and a failure both exist to be read. */
+  /** Whether the step opens expanded: a failure exists to be read without a click;
+   *  everything else — including a shell step — starts collapsed so a run's tool
+   *  calls stay a skimmable header list (the command line is already the subject). */
   defaultOpen: boolean;
 }
 
@@ -210,8 +212,10 @@ export function toolStepView({ args, result, isError }: { args: unknown; result:
     preview: toolPreview(args),
     argsText: formatPayload(residualArgs(args, commandLine)),
     resultText: command?.outputComplete ? '' : formatPayload(result),
-    // A command is the step a reader opens the transcript to check, and a failure is
-    // the step they need to read at all — neither should cost a click to see.
-    defaultOpen: !!command || isError,
+    // Only a FAILURE opens by default — it is the step nobody should have to click to
+    // read. A command is exactly the opposite: its header already carries the command
+    // line (the subject), so opening it would push the transcript's body down with
+    // terminal noise the reader has not asked for.
+    defaultOpen: isError,
   };
 }

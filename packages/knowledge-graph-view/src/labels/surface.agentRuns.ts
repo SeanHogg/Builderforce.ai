@@ -39,6 +39,16 @@ export interface AgentRunsLabels {
         showOnGraph: string;
         /** "Show on graph" for a file the graph has no node for. */
         notOnGraph: string;
+        /** The run row's two actions. */
+        actionsFix: string;
+        actionsReview: string;
+        /** The actions' accessible names — deliberately no run title: the row button's own name already carries it (a title here would make both names ambiguous). */
+        actionsFixAria: string;
+        actionsReviewAria: string;
+        /** The Fix prompt's first line, handed to a new chat. `{title}`, `{counts}`. */
+        fixPromptHeader: string;
+        /** The Fix prompt's files heading. */
+        fixPromptFiles: string;
         severity: Record<'info' | 'warn' | 'error', string>;
         turnKinds: Record<'read' | 'write' | 'forced' | 'text' | 'failed', string>;
         /** One title and one description per finding kind; the description's `{param}` holes are the finding's params. */
@@ -74,6 +84,12 @@ export const AGENT_RUNS_DEFAULTS: AgentRunsLabels = {
         fileUnchecked: 'Not checked',
         showOnGraph: 'Show on graph',
         notOnGraph: 'Not on this graph',
+        actionsFix: 'Fix',
+        actionsReview: 'Review',
+        actionsFixAria: 'Fix the issues in this run',
+        actionsReviewAria: 'Review this run on the graph',
+        fixPromptHeader: 'The agent run "{title}" finished with {counts}. Resolve and fix each issue below.',
+        fixPromptFiles: 'Files it touched:',
         severity: { info: 'Note', warn: 'Warning', error: 'Error' },
         turnKinds: { read: 'Read', write: 'Write', forced: 'Forced hand-off', text: 'Text only', failed: 'Failed' },
         findings: {

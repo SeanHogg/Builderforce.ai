@@ -5,7 +5,6 @@ import { Task } from '../../domain/task/Task';
 import { ExecutionStatus, TaskStatus, TaskPriority, TaskType } from '../../domain/shared/types';
 import type { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
 import type { ITaskRepository } from '../../domain/task/ITaskRepository';
-import type { IAgentRepository } from '../../domain/agent/IAgentRepository';
 import type { IAuditRepository } from '../../domain/audit/IAuditRepository';
 
 /**
@@ -83,7 +82,6 @@ function makeService(opts: {
     findById: async () => stored,
     update: async (t: Task) => t,
   } as unknown as ITaskRepository;
-  const agents = {} as IAgentRepository;
   const audit = { save: async () => undefined } as unknown as IAuditRepository;
 
   const milestones: MilestoneCall[] = [];
@@ -92,7 +90,7 @@ function makeService(opts: {
     ? async () => ({ managed: true, toStatus: opts.managedToStatus! })
     : undefined;
   const svc = new RuntimeService({
-    executions, tasks, agents, audit,
+    executions, tasks, audit,
     onRunMilestone: onRunMilestone as never, onManagedRunStatus,
   });
   return { svc, milestones, getSavedExec: () => savedExec };
@@ -199,7 +197,6 @@ describe('RuntimeService run-milestone narration (chat awareness)', () => {
     const svc = new RuntimeService({
       executions: { findById: async () => exec, update: async (e: Execution) => e, land: async (_id: unknown, status: string, f: { result?: string | null; errorMessage?: string | null } = {}) => ({ won: true, execution: status === 'completed' ? exec.markCompleted(f.result ?? '') : status === 'failed' ? exec.markFailed(f.errorMessage ?? '') : exec.cancel() }), setProduced: async () => exec } as unknown as IExecutionRepository,
       tasks: { findById: async () => stored, update: async (t: Task) => t } as unknown as ITaskRepository,
-      agents: {} as IAgentRepository,
       audit: { save: async () => undefined } as unknown as IAuditRepository,
       onRunMilestone: (async () => { throw new Error('chat down'); }) as never,
     });

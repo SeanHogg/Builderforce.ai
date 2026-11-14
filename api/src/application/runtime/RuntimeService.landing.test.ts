@@ -10,7 +10,6 @@ import { Task } from '../../domain/task/Task';
 import { ExecutionStatus, TaskPriority, TaskStatus, TaskType } from '../../domain/shared/types';
 import type { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
 import type { ITaskRepository } from '../../domain/task/ITaskRepository';
-import type { IAgentRepository } from '../../domain/agent/IAgentRepository';
 import type { IAuditRepository } from '../../domain/audit/IAuditRepository';
 
 const now = new Date();
@@ -45,7 +44,7 @@ function build(winner?: Execution, opts: { staleWriteRefusedBy?: Execution } = {
   // A non-terminal write is guarded in SQL: when the run already landed, the repository refuses it and hands back the terminal row.
   const executions = { findById: async () => execution(), update: async (e: Execution) => opts.staleWriteRefusedBy ?? e, land, setProduced: async () => execution() } as unknown as IExecutionRepository;
   const tasks = { findById: async () => task(), update: async (t: Task) => t } as unknown as ITaskRepository;
-  const svc = new RuntimeService({ executions, tasks, agents: {} as IAgentRepository, audit: audit as unknown as IAuditRepository, ...ports });
+  const svc = new RuntimeService({ executions, tasks, audit: audit as unknown as IAuditRepository, ...ports });
   return { svc, land, audit, ports };
 }
 

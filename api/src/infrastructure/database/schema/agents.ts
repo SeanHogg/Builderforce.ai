@@ -33,7 +33,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { brainChats, knowledgeDocuments } from './canvas';
-import { agentHostDirectoryStatusEnum, agentHostStatusEnum, agentTypeEnum, artifactTypeEnum, assignmentScopeEnum, executionStatusEnum, managedAgentHostRequestStatusEnum, objects, pricingModelEnum, tsvector, vector, workflowStatusEnum, workflowTypeEnum } from './kernel';
+import { agentHostDirectoryStatusEnum, agentHostStatusEnum, artifactTypeEnum, assignmentScopeEnum, executionStatusEnum, managedAgentHostRequestStatusEnum, objects, pricingModelEnum, tsvector, vector, workflowStatusEnum, workflowTypeEnum } from './kernel';
 import {
   boards,
   projectFacts,
@@ -314,32 +314,21 @@ export const managerSystemicFindings = pgTable('manager_systemic_findings', {
 }));
 
 
-export const agents = pgTable('agents', {
-  id:         serial('id').primaryKey(),
-  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  name:       varchar('name', { length: 255 }).notNull(),
-  type:       agentTypeEnum('type').notNull(),
-  endpoint:   varchar('endpoint', { length: 500 }).notNull(),
-  apiKeyHash: varchar('api_key_hash', { length: 64 }),
-  isActive:   boolean('is_active').notNull().default(true),
-  config:     text('config'),
-  createdAt:  timestamp('created_at').notNull().defaultNow(),
-  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
-});
-
-
 /**
  * Canonical registry for callable agents, independent of their implementation.
  * `framework` describes what built the agent; `protocol` describes how Builderforce
- * communicates with it. The legacy numeric `agents` table is read-only compatibility.
+ * communicates with it. The legacy numeric `agents` table was retired by PRD 39 push 1
+ * (migrations 1347/1348): reads route through `legacy_agent_id` and the inbound FKs were
+ * dropped, so no Drizzle declaration for it remains.
  */
 export const agentRegistrations = pgTable('agent_registrations', {
   id:                     uuid('id').primaryKey().defaultRandom(),
   tenantId:               integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:              uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   agentHostId:            integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
-  legacyAgentId:          integer('legacy_agent_id').unique().references(() => agents.id, { onDelete: 'set null' }),
+  /** The legacy numeric agent id. Kept as a plain integer compatibility reference
+   *  (the FK was dropped in 1347); routes resolve old numeric refs through it. */
+  legacyAgentId:          integer('legacy_agent_id').unique(),
   name:                   varchar('name', { length: 255 }).notNull(),
   framework:              varchar('framework', { length: 64 }).notNull(),
   protocol:               varchar('protocol', { length: 32 }).notNull(),
@@ -464,7 +453,10 @@ export const agentDefinitionPromotions = pgTable('agent_definition_promotions', 
 
 export const skills = pgTable('skills', {
   id:           serial('id').primaryKey(),
-  agentId:      integer('agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
+  /** @deprecated Legacy numeric owner ref; the FK was dropped in 1347. Use
+   *  `agentRegistrationId`, the canonical owner link (backfilled in 1347). */
+  agentId:      integer('agent_id').notNull(),
+  agentRegistrationId: uuid('agent_registration_id').references(() => agentRegistrations.id, { onDelete: 'set null' }),
   name:         varchar('name', { length: 255 }).notNull(),
   description:  text('description'),
   inputSchema:  text('input_schema'),
@@ -511,7 +503,9 @@ export const agentHosts = pgTable('agent_hosts', {
 export const executions = pgTable('executions', {
   id:           serial('id').primaryKey(),
   taskId:       integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
-  agentId:      integer('agent_id').references(() => agents.id),
+  /** @deprecated Legacy numeric agent ref; the FK was dropped in 1347. Use
+   *  `agentRegistrationId`, the canonical link (backfilled in 0394). */
+  agentId:      integer('agent_id'),
   agentRegistrationId: uuid('agent_registration_id').references(() => agentRegistrations.id, { onDelete: 'set null' }),
   agentHostId:       integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id),
@@ -1175,6 +1169,34 @@ export const toolAuditEvents = pgTable('tool_audit_events', {
   createdAt:   timestamp('created_at').notNull().defaultNow(),
 });
 
+// LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0034), resolved through
+// `siblingDatabase(env, db, 'operational')` — run safety telemetry is grouped with the
+// per-call trail it mirrors. References to core entities are plain ids, not foreign keys.
+//
+// PRD 39 §4b write-ahead failover. Before ANY tool runs, a write-ahead-capable host
+// appends an intent here with the next per-run `seq`. Only a NON-allowlisted tool waits
+// for a server ack of that intent; the server deletes the row on ack, so a row left
+// behind is a tool that was about to run (or ran) and never got its ack. The
+// stale-execution reaper reads this table to decide whether a stranded host run may be
+// re-dispatched: no non-allowlisted intent AND a gap-free sequence ⇒ nothing unsafe was
+// attempted ⇒ safe to re-run. A held non-allowlisted intent OR a sequence gap ⇒ the run
+// may have repeated a side effect ⇒ fail and ask a human. Old hosts never write here.
+export const toolIntents = pgTable('tool_intents', {
+  id: serial('id').primaryKey(),
+  tenantId: integer('tenant_id').notNull(),
+  /** The stranded-run trace key — REQUIRED on the wire for write-ahead intents (§4b). */
+  executionId: integer('execution_id').notNull(),
+  agentHostId: integer('agent_host_id').notNull(),
+  /** Monotonic per-run sequence; gap-free when every value 1..max(seq) is present. */
+  seq: integer('seq').notNull(),
+  /** The tool the host is about to run. `category` is free-form and never used to
+   *  classify safety (schema/agents.ts) — only the explicit allowlist decides. */
+  toolName: varchar('tool_name', { length: 255 }).notNull(),
+  /** True ⇒ this tool is NOT on the re-run allowlist, so it awaited a server ack. */
+  requiresAck: boolean('requires_ack').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
 /**
  * DAILY ROLLUP of {@link toolAuditEvents} — the compliance record after the raw
  * events age out.
@@ -1768,7 +1790,9 @@ export const agentDispatches = pgTable('agent_dispatches', {
    *  this link survives — it is the only record of WHICH configured agent a stage ran. */
   assignmentId: uuid('assignment_id').references((): AnyPgColumn => agentAssignments.id, { onDelete: 'set null' }),
   taskId:       integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
-  agentId:      integer('agent_id').references(() => agents.id, { onDelete: 'set null' }),
+  /** @deprecated Legacy numeric agent ref; the FK was dropped in 1347. Use
+   *  `agentRegistrationId`, the canonical link (backfilled in 0394). */
+  agentId:      integer('agent_id'),
   agentRegistrationId: uuid('agent_registration_id').references(() => agentRegistrations.id, { onDelete: 'set null' }),
   agentDefinitionVersionId: uuid('agent_definition_version_id').references(() => agentDefinitionVersions.id, { onDelete: 'restrict' }),
   /** Monotonic per-ticket stage counter so a retried lane is a distinct stage. */

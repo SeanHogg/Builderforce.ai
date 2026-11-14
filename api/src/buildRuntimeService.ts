@@ -16,7 +16,6 @@ import { reportCaughtError } from './application/observability/caughtErrorReport
 import type { Env } from './env';
 import type { Db } from './infrastructure/database/connection';
 import { TaskRepository } from './infrastructure/repositories/TaskRepository';
-import { AgentRepository } from './infrastructure/repositories/AgentRepository';
 import { AuditRepository } from './infrastructure/repositories/AuditRepository';
 import { RuntimeService } from './application/runtime/RuntimeService';
 import { recordRunFailureEvent } from './application/runtime/recordRunFailureEvent';
@@ -49,7 +48,6 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
   runtimeService = new RuntimeService({
     executions: buildExecutionRepository(db),
     tasks: new TaskRepository(db),
-    agents: new AgentRepository(db),
     audit: new AuditRepository(db, env),
     onTerminalFailure: (e) => recordRunFailureEvent(db, e),
     onTaskStatusSync: (info) => syncExecutionTaskLifecycle(env, db, info),
@@ -127,6 +125,15 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
       const [row] = await db.select({ status: agentRegistrations.status })
         .from(agentRegistrations)
         .where(and(eq(agentRegistrations.id, id), eq(agentRegistrations.tenantId, tenantId)))
+        .limit(1);
+      return row ? { active: row.status === 'active' } : null;
+    },
+    // PRD 39 §3 push 1: a NUMERIC agent id is the folded legacy_agent_id; the uuid
+    // resolver above cannot match it, so it resolves through legacy_agent_id instead.
+    resolveLegacyAgent: async (legacyId, tenantId) => {
+      const [row] = await db.select({ status: agentRegistrations.status })
+        .from(agentRegistrations)
+        .where(and(eq(agentRegistrations.legacyAgentId, legacyId), eq(agentRegistrations.tenantId, tenantId)))
         .limit(1);
       return row ? { active: row.status === 'active' } : null;
     },

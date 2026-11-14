@@ -17,7 +17,6 @@ import { parsePolicyGates, stripClientPolicyGates } from './cloudDispatch';
 import type { PolicyGate } from '@builderforce/agent-tools';
 import type { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
 import type { ITaskRepository } from '../../domain/task/ITaskRepository';
-import type { IAgentRepository } from '../../domain/agent/IAgentRepository';
 import type { IAuditRepository } from '../../domain/audit/IAuditRepository';
 
 const PROJECT_ID = 3;
@@ -56,7 +55,6 @@ function makeService(
     },
   } as unknown as IExecutionRepository;
   const tasks = { findById: async () => buildTask() } as unknown as ITaskRepository;
-  const agents = {} as IAgentRepository;
   const audit = { save: async () => undefined } as unknown as IAuditRepository;
 
   const wrapped = resolver
@@ -64,7 +62,7 @@ function makeService(
     : undefined;
 
   const svc = new RuntimeService({
-    executions, tasks, agents, audit,
+    executions, tasks, audit,
     resolvePolicyGates: wrapped,
     resolveAgentRegistration: registrationResolver,
     isAgentExecutionEnabled: executionEnabled,

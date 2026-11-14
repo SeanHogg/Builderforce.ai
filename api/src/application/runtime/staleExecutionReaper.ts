@@ -24,7 +24,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * it every few minutes is safe.
  */
 
-import { and, asc, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, inArray, ne, sql, type SQL } from 'drizzle-orm';
 import type { Env } from '../../env';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { executionPauseState, executions, pullRequests, tasks } from '../../infrastructure/database/schema';
@@ -36,7 +36,7 @@ import type { LandedRun } from './executionLandedEffects';
 import { cloudOrphanReason, cloudSilenceCeilingMs, PAUSED_DEADLINE_MS, PAUSED_ORPHAN_REASON } from './orphanReasons';
 import { buildExecutionRepository } from '../../buildExecutionRepository';
 import type { ExecutionRepository, ReapedExecutionRow } from '../../infrastructure/repositories/ExecutionRepository';
-import { markReaperRequeued, parseCloudAgentRef, parseExecutor } from './cloudDispatch';
+import { markReaperRequeued, wasReaperRequeued, parseCloudAgentRef, parseExecutor } from './cloudDispatch';
 import { isSelfHealEligible, buildDurableStartBody, dispatchDurableStart } from './cloudSelfHeal';
 import { resolveParkAgeTimeoutMs, runParkAgeTimeoutSweep, type ParkAgeTimeoutResult } from '../maintenance/parkAgeTimeout';
 import { anyStale, LIVE_RUN_MAX_AGE_MS, probeStaleWork, REAP_BATCH_LIMIT, stalePredicates } from './staleExecutionProbe';
@@ -44,6 +44,13 @@ import { signalPendingWork } from './cronWorkSignal';
 import { revokeRunPrincipalsForExecutions } from '../agentIdentity/agentRunIdentity';
 import { executionsWithPendingSteers } from './lateSteerStore';
 import { settleLateSteersSafely } from './lateSteerFollowUp';
+import { agentHosts } from '../../infrastructure/database/schema';
+import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
+import { siblingDatabase } from '../../infrastructure/database/connection';
+import { dispatchToAgentHost, type DispatchMessage } from './hostDelivery';
+import { parseWriteAheadSupport } from './writeAheadAllowlist';
+import { assessWriteAheadRunState, loadWriteAheadRunState } from './writeAheadIntents';
+import { HOST_FAILOVER_REDISPATCH_REASON, hostFailoverUnsafeReason } from './orphanReasons';
 
 /** A self-hosted host run executing longer than this is treated as hung. */
 export const RUNNING_DEADLINE_MS = 30 * 60_000; // 30 min
@@ -91,6 +98,9 @@ export interface ReapResult {
   /** Orphaned cloud runs re-queued ONCE on the durable executor (CloudRunnerDO)
    *  instead of being failed — self-healing for a run that died before completing. */
   requeuedCloud: number;
+  /** Stranded SELF-HOSTED runs re-dispatched ONCE onto another online host in the tenant
+   *  (PRD 39 §4b fleet failover), once the write-ahead rule proves nothing unsafe ran. */
+  redispatchedHost: number;
   /** Tickets parked on a never-settling run_workflow that were surfaced to
    *  needs_attention by the park-age timeout (best-effort sibling sweep). */
   parkAge: ParkAgeTimeoutResult;
@@ -127,15 +137,42 @@ export async function reapStaleExecutions(
   // that outlives them anyway (a live heartbeat keeps it from ever going silent) stops counting at
   // LIVE_RUN_MAX_AGE_MS from its start, so it cannot hold the gate open indefinitely.
   if (probe.liveRuns) await signalPendingWork(env);
-  const empty: ReapResult = { failedRunning: 0, failedQueued: 0, failedPaused: 0, requeuedCloud: 0, parkAge: { stale: 0, unparked: 0 } };
+  const empty: ReapResult = { failedRunning: 0, failedQueued: 0, failedPaused: 0, requeuedCloud: 0, redispatchedHost: 0, parkAge: { stale: 0, unparked: 0 } };
   if (!anyStale(probe)) return empty;
 
   // Hung HOST runs: a real long-lived process that went silent (crash / dropped
   // connection). Cloud runs (agent_host_id IS NULL) are handled below on a much
-  // tighter deadline, so scope this to host runs only.
-  const running: ReapedRow[] = probe.hostRunning
-    ? await failStaleBatch(executionRepo, stale.hostRunning, 'Execution timed out — the agent did not report completion (host crash or dropped connection).')
+  // tighter deadline, so scope this to host runs only. Instead of failing the whole
+  // batch blindly (failStaleBatch), pull the rows so each one can first be offered a
+  // §4b fleet-failover re-dispatch; only the leftovers fail (below).
+  const hostCandidates: HostCandidateRow[] = probe.hostRunning
+    ? await db
+        .select({
+          id: executions.id,
+          tenant_id: executions.tenantId,
+          agent_host_id: executions.agentHostId,
+          cloud_agent_ref: executions.cloudAgentRef,
+          payload: executions.payload,
+          error_message: executions.errorMessage,
+          task_id: tasks.id,
+          task_title: tasks.title,
+        })
+        .from(executions)
+        .innerJoin(tasks, eq(tasks.id, executions.taskId))
+        .where(stale.hostRunning)
+        .limit(REAP_BATCH_LIMIT)
     : [];
+
+  const hostFailed: HostCandidateRow[] = [];
+  const hostFailedWithReason: ReapedRow[] = [];
+  let redispatchedHost = 0;
+  for (const row of hostCandidates) {
+    if (await redispatchHostRun(env, db, row)) {
+      redispatchedHost += 1;
+    } else {
+      hostFailed.push(row);
+    }
+  }
 
   // Hung CLOUD runs: the serverless background task was stopped at the ~30s wall
   // (or a container that booted then died) before writing a terminal status.
@@ -221,6 +258,15 @@ export async function reapStaleExecutions(
     cloudRunning.push(...failed);
   }
 
+  // Fleet-failover leftovers: host runs that could not be safely re-dispatched. The
+  // reason is per-row (an old host vs an unacknowledged intent vs a sequence gap), so
+  // fail each with its specific §4b explanation — the human sees exactly why no
+  // automatic re-run happened.
+  for (const row of hostFailed) {
+    const failed = await executionRepo.failWhere(and(eq(executions.id, row.id), eq(executions.status, 'running'))!, failoverReason(row));
+    hostFailedWithReason.push(...failed);
+  }
+
   // Dropped queue: submitted/pending but no agent ever took it.
   const queued: ReapedRow[] = probe.queued
     ? await failStaleBatch(executionRepo, stale.queued, 'Execution was never picked up by an agent within the dispatch window.')
@@ -236,7 +282,7 @@ export async function reapStaleExecutions(
 
   // A full batch means a backlog remains: keep the next tick's gate open so it drains
   // promptly instead of waiting for the floor sweep.
-  if ([running, queued, paused, cloudCandidates].some((rows) => rows.length >= REAP_BATCH_LIMIT)) {
+  if ([hostFailedWithReason, queued, paused, cloudCandidates].some((rows) => rows.length >= REAP_BATCH_LIMIT)) {
     await signalPendingWork(env);
   }
 
@@ -258,14 +304,15 @@ export async function reapStaleExecutions(
       } } }));
   }
 
-  // Mirror each reaped failure onto the Observability Logs/Timeline (derived only
-  // from tool_audit_events). Without this the run just stops at its last
-  // successful tool call and the timeout reason is invisible there — the same gap
-  // RuntimeService.reapIfOrphaned / recordRunFailureEvent close on the read path.
-  // A timed-out QUESTION gets its own tool name so "the ticket was released because
-  // nobody answered the agent" is distinguishable on the timeline from a crashed run.
+  // Mirror each reaped failure onto the Observability Logs/Timeline. A run that was
+  // re-dispatched (host failover) is NOT terminal, so it gets no failure event; a run
+  // that failed because re-dispatch was unsafe gets a dedicated tool name so "the
+  // server refused an automatic re-run, a human must look" is distinguishable from a
+  // plain timeout. Derived only from tool_audit_events.
   const reaped: { row: ReapedRow; toolName: string }[] = [
-    ...[...running, ...cloudRunning, ...queued].map((row) => ({ row, toolName: 'run.failed' })),
+    ...cloudRunning.map((row) => ({ row, toolName: 'run.failed' })),
+    ...queued.map((row) => ({ row, toolName: 'run.failed' })),
+    ...hostFailedWithReason.map((row) => ({ row, toolName: 'run.failed' })),
     ...paused.map((row) => ({ row, toolName: 'run.paused_timeout' })),
   ];
   // One multi-row insert per chunk of REAP_BATCH_LIMIT (was one INSERT per reaped run).
@@ -330,10 +377,11 @@ export async function reapStaleExecutions(
   }
 
   return {
-    failedRunning: running.length + cloudRunning.length,
+    failedRunning: hostFailedWithReason.length + cloudRunning.length,
     failedQueued: queued.length,
     failedPaused: paused.length,
     requeuedCloud,
+    redispatchedHost,
     parkAge,
   };
 }
@@ -375,6 +423,126 @@ interface CloudCandidateRow extends ReapedRow {
   project_id: number;
   cloud_agent_ref: string | null;
   open_pr_count: number | string;
+}
+
+/** A stranded self-hosted run + the task context the failover re-dispatch relays. */
+interface HostCandidateRow extends ReapedRow {
+  task_title: string | null;
+}
+
+/**
+ * PRD 39 §4b — attempt a fleet-failover re-dispatch of ONE stranded self-hosted run
+ * onto another online host in its tenant. Returns true ONLY when a second host was
+ * online, the write-ahead rule proved nothing unsafe ran (advertised support + no
+ * held non-allowlisted intent + a gap-free sequence), and the run was actually
+ * re-marked `submitted` and delivered. Anything else returns false so the caller
+ * fails the run with the recorded reason. ONCE-only: re-dispatch reuses the same
+ * `reaperRequeued` payload flag as the cloud self-heal, so a run is never
+ * re-dispatched twice.
+ */
+async function redispatchHostRun(env: Env, db: Db, row: HostCandidateRow): Promise<boolean> {
+  const advertised = parseWriteAheadSupport(row.payload) != null;
+  // Only a write-ahead host is even a candidate; old hosts are failed exactly as today.
+  if (!advertised) return false;
+
+  // The write-ahead intent log lives on the OPERATIONAL endpoint (tool_audit_events
+  // does), so read it through the sibling handle, never the core one.
+  const opDb = siblingDatabase(env, db, 'operational');
+  const state = await loadWriteAheadRunState(opDb, row.id);
+  const decision = assessWriteAheadRunState(advertised, state);
+  if (!decision.safeToRedispatch) {
+    failoverRefusals.set(row.id, hostFailoverUnsafeReason(decision.reason));
+    return false;
+  }
+
+  // ONCE-only: a run already re-dispatched/re-queued once never is again — the same
+  // payload flag the cloud self-heal uses, so the two paths agree.
+  if (wasReaperRequeued(row.payload)) {
+    failoverRefusals.set(row.id, hostFailoverUnsafeReason('the run was already re-dispatched once'));
+    return false;
+  }
+
+  // Failover target: another ONLINE host in the SAME tenant, never the dead one —
+  // `dispatchCloudRun` finds online hosts through `agentHostOnlineCondition`; reusing it
+  // keeps "online" meaning the same thing everywhere.
+  const deadHostId = row.agent_host_id;
+  const target = await pickFailoverHost(db, row.tenant_id, deadHostId);
+  if (target == null) {
+    failoverRefusals.set(row.id, hostFailoverUnsafeReason(deadHostId == null ? 'the run has no host to fail over from' : 'no other host in the tenant is online'));
+    return false;
+  }
+
+  // Persist the once-only flag BEFORE re-dispatch so a mid-dispatch crash cannot loop.
+  const requeuedPayload = markReaperRequeued(row.payload);
+  await db
+    .update(executions)
+    .set({ payload: requeuedPayload, updatedAt: sql`now()` })
+    .where(and(eq(executions.id, row.id), eq(executions.status, 'running')));
+
+  const delivered = await dispatchToAgentHost(env, target, hostRedispatchMessage(row, requeuedPayload));
+  if (!delivered) return false;
+
+  // Flip the stranded row back to submitted so the failover host can claim and re-run it.
+  await db
+    .update(executions)
+    .set({ status: 'submitted', agentHostId: target, startedAt: sql`null`, updatedAt: sql`now()` })
+    .where(and(eq(executions.id, row.id), eq(executions.status, 'running')));
+
+  // Explain the resurrection on the Observability timeline so it is not silent.
+  try {
+    await insertToolAudit(db, {
+      tenantId: row.tenant_id,
+      agentHostId: target,
+      executionId: row.id,
+      sessionKey: 'exec:' + row.id,
+      toolName: 'runtime.host_redispatch',
+      category: 'planning',
+      result: HOST_FAILOVER_REDISPATCH_REASON,
+      ts: sql`now()`,
+    });
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/runtime/staleExecutionReaper.ts', operation: 'redispatchHostRun', context: { logMessage: '[execution-reaper] host-failover telemetry append failed', details: {
+      tenantId: row.tenant_id,
+      executionId: row.id,
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    } } });
+  }
+  return true;
+}
+
+/** Per-run record of WHY a failover re-dispatch was refused, surfaced as the failure reason. */
+const failoverRefusals = new Map<number, string>();
+
+/** The §4b failure reason for a stranded host run that was not re-dispatched. */
+function failoverReason(row: HostCandidateRow): string {
+  return failoverRefusals.get(row.id) ?? 'Execution timed out — the agent did not report completion (host crash or dropped connection).';
+}
+
+/** Another ONLINE host in the tenant (never the dead one), via the shared predicate. */
+async function pickFailoverHost(db: Db, tenantId: number, deadHostId: number | null): Promise<number | null> {
+  const rows = await db
+    .select({ id: agentHosts.id })
+    .from(agentHosts)
+    .where(
+      and(
+        eq(agentHosts.tenantId, tenantId),
+        agentHostOnlineCondition(),
+        deadHostId == null ? undefined : ne(agentHosts.id, deadHostId),
+      ),
+    )
+    .limit(1);
+  return rows[0]?.id ?? null;
+}
+
+/** The relay frame that offers a stranded run to its failover host (task context joined). */
+function hostRedispatchMessage(row: HostCandidateRow, payload: string): DispatchMessage {
+  return {
+    type: 'task.assign',
+    executionId: row.id,
+    taskId: row.task_id ?? 0,
+    payload,
+    task: { title: row.task_title ?? '' },
+  };
 }
 
 /** Parse a timestamp column (ISO string or null) to epoch ms, or null when absent

@@ -7,7 +7,7 @@ import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { pathOf } from '../../../graphModel';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../../labels';
 import type { ThemeTone } from '../../../scene/themeColors';
-import type { AgentRunEvidence, AgentRunFinding, AgentRunSeverity, AgentRunSummary, AgentRunTurn, AgentRunTurnKind } from '../../../types';
+import type { AgentRunEvidence, AgentRunFile, AgentRunFinding, AgentRunReport, AgentRunSeverity, AgentRunSummary, AgentRunTurn, AgentRunTurnKind } from '../../../types';
 
 type Words = KnowledgeGraphLabels['surface']['agentRuns'];
 
@@ -83,6 +83,49 @@ export function runMeta(run: AgentRunSummary, t: Words): string {
 
 export function runCounts(run: AgentRunSummary, t: Words): string {
     return fillTemplate(t.runCounts, { error: run.counts.error, warn: run.counts.warn, info: run.counts.info });
+}
+
+/**
+ * The Fix prompt handed to a new chat: the header (title and finding counts), one line per finding (worst first:
+ * severity, title, description, evidence), and the files the run touched with their check state. Plain text — it is a
+ * chat message, nothing more.
+ */
+export function runFixPrompt(report: AgentRunReport, t: Words): string {
+    const lines: string[] = [fillTemplate(t.fixPromptHeader, { title: report.summary.title, counts: runCounts(report.summary, t) }), ''];
+    for (const f of sortFindings(report.findings)) {
+        const text = findingText(f, t);
+        lines.push(`- [${t.severity[f.severity]}] ${text.title}`);
+        if (text.description) lines.push(`  ${text.description}`);
+        for (const e of f.evidence) {
+            const row = evidenceText(e, t);
+            const note = evidenceNoteText(e, t);
+            lines.push(`  · ${note ? `${row} — ${note}` : row}`);
+            if (e.path) lines.push(`    ${e.path}`);
+        }
+    }
+    if (report.findings.length > 0) lines.push('');
+    lines.push(t.fixPromptFiles);
+    for (const file of report.files) {
+        lines.push(`- ${file.path} — ${fillTemplate(t.fileWrites, { count: file.writes })} — ${file.checked ? t.fileChecked : t.fileUnchecked}`);
+    }
+    return lines.join('\n');
+}
+
+/**
+ * The graph refs of every file a run touched and every evidence path its findings name — the nodes Review focuses on
+ * the canvas. De-duplicated, files first, evidence paths after (both in the report's own order).
+ */
+export function runFocusRefs(graph: KnowledgeGraph, report: AgentRunReport): string[] {
+    const refs: string[] = [];
+    const seen = new Set<string>();
+    const add = (path: string | undefined): void => {
+        if (!path) return;
+        const ref = fileRefFor(graph, path, report.root);
+        if (ref && !seen.has(ref)) { seen.add(ref); refs.push(ref); }
+    };
+    for (const file of report.files) add(file.path);
+    for (const f of report.findings) for (const e of f.evidence) add(e.path);
+    return refs;
 }
 
 const norm = (p: string): string => p.replace(/\\/g, '/').replace(/^\.\//, '');

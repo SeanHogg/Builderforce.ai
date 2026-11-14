@@ -1,0 +1,73 @@
+# builderforce-gateway — the metered LLM surface (src/gatewayWorker.ts).
+#
+# Split out of the API Worker (PRD 39 §1) so an `/llm` or `/v1` call cold-starts the
+# LLM gateway + video routes + semantic cache, NOT the entire API (~21 MB, ~280
+# mounts, every Durable Object). It serves /llm, /llm/v1/videos and /v1/semantic-cache
+# itself and replays any builtin-MCP `/api/*` route THROUGH the `API` service binding
+# (never by importing the composition root — see application/llm/routeReplay.ts).
+#
+# PUSH 1 — workers.dev ONLY, NO production routes. The API keeps serving everything
+# (its /llm + /v1 mounts are NOT removed in this push); this Worker answers only on its
+# *.workers.dev hostname so the rollout can be proven live before any traffic moves.
+# Deploy with:
+#   npx wrangler deploy --config wrangler.gateway.toml
+# AFTER the API (the binding + script_name DO classes need builderforce-api to exist).
+name = "builderforce-gateway"
+main = "src/gatewayWorker.ts"
+compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# No [[routes]] in push 1 — workers.dev only. Push 2 adds the production routes
+# (api.builderforce.ai/llm/*, api.builderforce.ai/v1/*, builderforce.ai/gateway/llm/*,
+# builderforce.ai/gateway/v1/*) and removes the mounts from src/index.ts.
+
+[placement]
+mode = "smart"
+
+[vars]
+ENVIRONMENT = "production"
+APP_URL     = "https://builderforce.ai"
+
+# Same bucket + cache namespace as the API: the semantic cache and the auth-resolution
+# cache are one store, read here and written by whichever Worker serves the request.
+[[r2_buckets]]
+binding = "UPLOADS"
+bucket_name = "builderforce-uploads"
+
+[[kv_namespaces]]
+binding = "AUTH_CACHE_KV"
+id = "ce66c3418ad64952b6847227962429d0"
+
+[[services]]
+binding = "API"
+service = "builderforce-api"
+
+# Durable Objects the gateway's own routes use, bound BY SCRIPT to builderforce-api's
+# classes so a media job or rate-limit counter is ONE instance whichever Worker
+# advances it. The gateway does NOT define these classes — it borrows the API's.
+[[durable_objects.bindings]]
+name = "MEDIA_JOB"
+class_name = "MediaJobDO"
+script_name = "builderforce-api"
+
+[[durable_objects.bindings]]
+name = "TENANT_RATE_LIMITER"
+class_name = "TenantRateLimiterDO"
+script_name = "builderforce-api"
+
+# Secrets (synced by the release workflow from the GitHub secrets of the same name):
+#   NEON_DATABASE_URL, NEON_TRANSACTIONAL_DATABASE_URL, NEON_APPS_DATABASE_URL,
+#   JWT_SECRET, and the vendor keys the LLM gateway reaches (OPENROUTER_API_KEY,
+#   OPENROUTER_API_KEY_PRO, CLOUDFLARE_AI_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, RESEND_API_KEY).
+# The gateway needs the same credential/env access as the API for the LLM surface.
+
+# Same posture as the API: invocation logs on, sampled traces off.
+[observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true

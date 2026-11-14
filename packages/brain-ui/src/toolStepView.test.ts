@@ -93,8 +93,8 @@ describe('toolStepView', () => {
     expect(view.argsText).toBe('');
     expect(view.resultText).toBe('');
     expect(view.subject).toBe('pnpm -w test');
-    // A command is what a reader opens the transcript to check.
-    expect(view.defaultOpen).toBe(true);
+    // A command starts collapsed — its header already carries the command line.
+    expect(view.defaultOpen).toBe(false);
   });
 
   it('still shows arguments the command line does not account for', () => {

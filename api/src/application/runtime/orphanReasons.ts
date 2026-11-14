@@ -36,6 +36,22 @@ export const CLOUD_ORPHAN_REASON =
 export const CLOUD_LONG_LIVED_ORPHAN_REASON =
   'This run executed on a long-lived cloud runtime (durable Object / container) and went silent mid-run after running well past the ~30s serverless wall — a process crash, a hung tool call, or a lost heartbeat, not a serverless timeout. Only the steps above ran. Re-run the task; if a container run keeps dying here the image is likely unstable, and a self-hosted agent is the most reliable surface for long multi-step work.';
 
+/** A host run that went silent MID-TOOL and can prove (via the write-ahead intent log)
+ *  that no non-allowlisted tool ran unconfirmed. Fleet failover (PRD 39 §4b) re-dispatches
+ *  it once onto another online host in the tenant. Recorded so the re-queue is explained,
+ *  not silently resurrected. */
+export const HOST_FAILOVER_REDISPATCH_REASON =
+  'This self-hosted run lost its host mid-run. The server verified (write-ahead intents) that no unconfirmed mutating tool call was in flight, so it was automatically re-dispatched once onto another online host to finish.';
+
+/**
+ * Why a stranded self-hosted run was NOT automatically re-dispatched, so a human knows
+ * exactly what to check. Fails closed (PRD 39 §4b): any doubt about whether a side effect
+ * already happened means the run is failed for a person to look at, never silently re-run.
+ */
+export function hostFailoverUnsafeReason(detail: string): string {
+  return `This self-hosted run lost its host and could not be safely re-dispatched automatically: ${detail}. It was marked failed for a human to review and re-run — re-dispatching might have repeated a side effect the dead host already performed.`;
+}
+
 /** Cloudflare's `waitUntil` background wall (~30s observed) + margin for the
  *  terminal-status write and clock skew. A cloud run whose last progress
  *  (`updated_at`) is more than this past its start demonstrably survived well beyond

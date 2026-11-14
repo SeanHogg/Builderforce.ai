@@ -38,7 +38,11 @@ export interface ReaperFakeDbScript {
   probe: () => ProbeRow;
   /** Rows the stale cloud-candidate SELECT returns. */
   candidates: Row[];
-  /** Statement kinds issued, in order: execute | candidates | select | update | delete | insert. */
+  /** Rows the stale HOST-candidate SELECT returns (fleet-failover tests). */
+  hostCandidates: Row[];
+  /** Hosts `pickFailoverHost` sees as online failover targets: their ids. */
+  onlineHosts: number[];
+  /** Statement kinds issued, in order: execute | candidates | hosts | select | update | delete | insert. */
   calls: string[];
   /** Rows an UPDATE returns. Default: none. */
   onUpdate: (set: Row, params: unknown[]) => Row[];
@@ -48,8 +52,10 @@ export interface ReaperFakeDbScript {
 
 export function newReaperFakeDbScript(overrides: Partial<ReaperFakeDbScript> = {}): ReaperFakeDbScript {
   const script: ReaperFakeDbScript = {
-    probe: () => ({ host_running: false, cloud_running: script.candidates.length > 0, queued: false, paused: false, park_age: false }),
+    probe: () => ({ host_running: script.hostCandidates.length > 0, cloud_running: script.candidates.length > 0, queued: false, paused: false, park_age: false }),
     candidates: [],
+    hostCandidates: [],
+    onlineHosts: [],
     calls: [],
     onUpdate: () => [],
     onDelete: () => {},
@@ -89,9 +95,15 @@ export function createReaperFakeDb(script: ReaperFakeDbScript) {
       return Promise.resolve({ rows: [script.probe()] });
     },
     select: (fields: Record<string, unknown> = {}) => {
-      const kind = 'open_pr_count' in fields ? 'candidates' : 'select';
+      const kind = 'open_pr_count' in fields ? 'candidates' : 'task_title' in fields ? 'hostCandidates' : 'select';
       script.calls.push(kind);
-      const where = () => (kind === 'candidates' ? selectResult(script.candidates) : selectResult([]));
+      const where = () => {
+        if (kind === 'candidates') return selectResult(script.candidates);
+        if (kind === 'hostCandidates') return selectResult(script.hostCandidates);
+        // 'select': either the failover-host target query (FROM agent_hosts, no fields of
+        // interest beyond id) or an intent/other read — answer onlineHosts for the host probe.
+        return selectResult(script.onlineHosts.map((id) => ({ id })));
+      };
       return { from: () => ({ where, innerJoin: () => ({ where }) }) };
     },
     // Late-steer scan — no reaped run holds a pending steer in these tests.

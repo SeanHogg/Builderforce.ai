@@ -125,6 +125,7 @@ import { describeTrialReminders, runSpawnTrialReminderSweep } from './applicatio
 import { describeSourcingSweep, runSourcingSweep } from './application/sourcing/runSourcingSweep';
 import { describeApplicantImportSweep, runApplicantImportSweep } from './application/hiring/importBoardApplicants';
 import { describeBatchTick, runLlmBatchTick } from './application/llm/batch/runLlmBatchTick';
+import { runOtelAuditSweep } from './application/observability/otelAuditSweep';
 
 /** Both memory stores the embedding backfill covers. */
 const MEMORY_STORES = ['agent_memory', 'project_facts'] as const;
@@ -148,6 +149,15 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       const runner = new AuditRunner(db, new ToolService(db), new TaskService(new TaskRepository(db), new ProjectRepository(db)));
       const completed = await runner.retryPending(env);
       return completed ? `completed=${completed}` : null;
+    },
+  },
+  {
+    key: 'otel-audit-export', cadence: 'frequent',
+    description:
+      "Send each workspace's security and audit events (sign-ins, role and membership changes, API keys, exports, integrations, approvals, agent tool calls) to its audit-enabled OTel collectors as OTLP logs (PRD 39 §4a).",
+    run: async ({ env, db }) => {
+      const r = await runOtelAuditSweep(env, db);
+      return r.tenants > 0 ? `tenants=${r.tenants} sent=${r.sent}${r.failed ? ` failed=${r.failed}` : ''}` : null;
     },
   },
   // ---------------------------------------------------------------------------

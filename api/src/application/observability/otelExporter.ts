@@ -32,6 +32,8 @@ export interface OtelExporterView {
   serviceName: string | null;
   sampleRate: number;
   enabled: boolean;
+  /** Which signals this exporter ships: 'traces', 'audit', or 'both'. */
+  signals: string;
   hasHeaders: boolean;
   lastExportAt: string | null;
   lastError: string | null;
@@ -49,6 +51,7 @@ function toView(row: typeof otelExporters.$inferSelect): OtelExporterView {
     serviceName: row.serviceName,
     sampleRate: row.sampleRate,
     enabled: row.enabled,
+    signals: row.signals,
     hasHeaders: Boolean(row.headersEnc),
     lastExportAt: row.lastExportAt ? new Date(row.lastExportAt).toISOString() : null,
     lastError: row.lastError,
@@ -70,6 +73,8 @@ export interface UpsertExporterInput {
   serviceName?: string | null;
   sampleRate?: number;
   enabled?: boolean;
+  /** Which signals to ship: 'traces', 'audit', or 'both'. Omitted keeps the stored value. */
+  signals?: string;
 }
 
 /** Create an exporter. The endpoint is SSRF-guarded before it is ever stored. */
@@ -97,6 +102,7 @@ export async function createExporter(
       serviceName: input.serviceName?.trim().slice(0, 255) ?? null,
       sampleRate: clampRate(input.sampleRate),
       enabled: input.enabled ?? true,
+      signals: clampSignals(input.signals) ?? 'traces',
       createdBy: userId,
     })
     .returning();
@@ -126,6 +132,11 @@ export async function updateExporter(
   if (input.serviceName !== undefined) patch.serviceName = input.serviceName?.trim().slice(0, 255) ?? null;
   if (input.sampleRate !== undefined) patch.sampleRate = clampRate(input.sampleRate);
   if (input.enabled !== undefined) patch.enabled = input.enabled;
+  if (input.signals !== undefined) {
+    const signals = clampSignals(input.signals);
+    if (!signals) return { ok: false, error: "signals must be 'traces', 'audit', or 'both'" };
+    patch.signals = signals;
+  }
   if (input.headers === null) {
     patch.headersEnc = null;
     patch.headersIv = null;
@@ -175,6 +186,12 @@ function safeEndpoint(raw: string): { ok: true; endpoint: string } | { ok: false
 const clampRate = (rate?: number): number =>
   typeof rate === 'number' && Number.isFinite(rate) ? Math.min(1, Math.max(0, rate)) : 1;
 
+/** The only three shapes `signals` may take; anything else is rejected. */
+const SIGNALS = new Set(['traces', 'audit', 'both']);
+
+const clampSignals = (signals?: string): 'traces' | 'audit' | 'both' | undefined =>
+  signals !== undefined && SIGNALS.has(signals) ? (signals as 'traces' | 'audit' | 'both') : undefined;
+
 /** Enabled exporters for a tenant, cached — this is read on every run event. */
 async function enabledExporters(env: Env, db: Db, tenantId: number) {
   return getOrSetCached(
@@ -218,6 +235,8 @@ export async function exportAgentSpans(
   try {
     const rows = await enabledExporters(env, db, tenantId);
     for (const row of rows) {
+      // An audit-only exporter receives logs from the audit sweep, not spans.
+      if (row.signals === 'audit') continue;
       const sampled = spans.filter((s) => runIsSampled(s.executionId, row.sampleRate));
       if (sampled.length === 0) continue;
       const headers: Record<string, string> = { 'content-type': 'application/json' };

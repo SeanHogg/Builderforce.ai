@@ -19,7 +19,7 @@
 import { signJwt, signOpaqueJwt } from '../../infrastructure/auth/JwtService';
 import { parseMachineSubject } from '../../infrastructure/auth/machineSubject';
 import { TenantRole } from '../../domain/shared/types';
-import { loadReplayApp } from './replayApp';
+import { resolveRouteReplay, type RouteReplay } from './routeReplay';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { ProjectService } from '../project/ProjectService';
@@ -60,7 +60,11 @@ export interface BuiltinCtx {
   /** The caller's raw Bearer token — forwarded on route replay when it's a JWT
    *  (a real user) so the replayed route runs with the caller's exact identity. */
   authToken?: string | null;
-  /** The request's ExecutionContext — passed to `app.request` so replayed routes'
+  /** How a replayed `/api/*` route is served. Bound to the in-process app on
+   *  `builderforce-api`, to `env.API.fetch` on `builderforce-gateway` — this
+   *  context never imports the composition root (see routeReplay.ts). */
+  replay?: RouteReplay;
+  /** The request's ExecutionContext — passed to the replay so replayed routes'
    *  `waitUntil` side-effects don't throw. */
   executionCtx?: ExecutionContext;
   /**
@@ -118,12 +122,12 @@ export async function replayRoute(
   opts?: { rawText?: string },
 ): Promise<unknown> {
   if (!ctx.env) throw new Error('route replay unavailable in this context');
-  // Isolated in presentation/appCache so a unit test can stub the app without
-  // loading index.ts (cycle: index → routes → this module). The isolate-cached
-  // app, NOT a fresh buildApp(): an LLM turn replays many routes, and rebuilding
-  // the whole composition root per tool call was the single largest avoidable
-  // CPU cost in the worker.
-  const app = await loadReplayApp(ctx.env);
+  // The port decides WHERE a replay is served: an explicit per-call binding wins,
+  // else the one this Worker configured at module load (in-process app on the API,
+  // the API service binding on the gateway). This module never imports the
+  // composition root — that is the whole point of the port (routeReplay.ts).
+  const replay = resolveRouteReplay(ctx.replay);
+  if (!replay) throw new Error('route replay unavailable in this context');
   const auth = resolveReplayAuth({
     authToken: ctx.authToken,
     agentRef: ctx.agentRef,
@@ -154,7 +158,7 @@ export async function replayRoute(
     body: rawText !== undefined ? rawText : body !== undefined ? JSON.stringify(body) : undefined,
   });
   const noopCtx = { waitUntil: () => undefined, passThroughOnException: () => undefined } as unknown as ExecutionContext;
-  const res = await app.request(req, {}, ctx.env, ctx.executionCtx ?? noopCtx);
+  const res = await replay(req, ctx.env, ctx.executionCtx ?? noopCtx);
   const text = await res.text();
   let parsed: unknown;
   try { parsed = text ? JSON.parse(text) : null; } catch { parsed = text; }

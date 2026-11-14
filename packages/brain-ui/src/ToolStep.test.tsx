@@ -8,7 +8,7 @@ const labels: ToolStepLabels = DEFAULT_TIMELINE_LABELS;
 const render = (node: ToolStepNode) => renderToStaticMarkup(<ToolStep node={node} labels={labels} />);
 
 describe('<ToolStep> shell steps', () => {
-  it('shows the command and its terminal output, open, without JSON around either', () => {
+  it('shows the command and its terminal output collapsed, without JSON around either', () => {
     const html = render({
       label: 'run_command',
       args: { command: 'pnpm -w test' },
@@ -16,8 +16,10 @@ describe('<ToolStep> shell steps', () => {
       isError: false,
       durationMs: 4200,
     });
-    // Open by default — the answer to "did it really run the tests" is not behind a caret.
-    expect(html).toContain('<details class="bf-tl__tool" open');
+    // Collapsed by default — the header already names the command, so the step reads
+    // without opening it; the terminal exchange is one click away.
+    expect(html).toContain('<details class="bf-tl__tool"');
+    expect(html).not.toContain('open=""');
     expect(html).toContain('bf-tl__cmd-in');
     expect(html).toContain('pnpm -w test');
     expect(html).toContain('2 passed');

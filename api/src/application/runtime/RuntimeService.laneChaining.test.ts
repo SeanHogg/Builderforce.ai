@@ -5,7 +5,6 @@ import { Task } from '../../domain/task/Task';
 import { ExecutionStatus, TaskStatus, TaskPriority, TaskType } from '../../domain/shared/types';
 import type { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
 import type { ITaskRepository } from '../../domain/task/ITaskRepository';
-import type { IAgentRepository } from '../../domain/agent/IAgentRepository';
 import type { IAuditRepository } from '../../domain/audit/IAuditRepository';
 
 /**
@@ -76,7 +75,6 @@ function makeService(opts: {
     findById: async () => stored,
     update: async (t: Task) => { stored = t; return t; },
   } as unknown as ITaskRepository;
-  const agents = {} as IAgentRepository;
   const audit = { save: async () => undefined } as unknown as IAuditRepository;
 
   let captured: Captured = null;
@@ -105,7 +103,7 @@ function makeService(opts: {
       }
     : undefined;
   const svc = new RuntimeService({
-    executions, tasks, agents, audit, onTaskStatusSync, onLaneEntry, resolveNextStatus, onManagedRunStatus,
+    executions, tasks, audit, onTaskStatusSync, onLaneEntry, resolveNextStatus, onManagedRunStatus,
   });
   return {
     svc,

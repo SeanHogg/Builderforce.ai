@@ -31,12 +31,12 @@ const report: AgentRunReport = {
 
 const port = (over: Partial<AgentRunsPort> = {}): AgentRunsPort => ({ list: vi.fn(async () => [summary]), report: vi.fn(async () => report), ...over });
 
-function mount(agentRuns: AgentRunsPort | undefined, labels: KnowledgeGraphLabels = L) {
+function mount(agentRuns: AgentRunsPort | undefined, labels: KnowledgeGraphLabels = L, onCompose?: (text: string) => void) {
     const onShow = vi.fn();
     const source: KnowledgeGraphSource = { scopes: async () => [], load: async () => null, ...(agentRuns ? { agentRuns } : {}) };
     function Harness() {
         const surface = useSurface(graph, null);
-        return <AgentRunsPanel graph={graph} source={source} labels={labels} surface={surface} onShow={onShow} onClose={vi.fn()} />;
+        return <AgentRunsPanel graph={graph} source={source} labels={labels} surface={surface} onShow={onShow} onCompose={onCompose} onClose={vi.fn()} />;
     }
     render(<Harness />);
     return { onShow };
@@ -139,6 +139,77 @@ describe('AgentRunsPanel', () => {
         mount(port({ report: async () => ({ ...report, findings: [] }) }));
         fireEvent.click(await screen.findByRole('button', { name: /Fix the cron job/ }));
         expect(await screen.findByText(t.emptyFindings)).toBeTruthy();
+    });
+
+    it('exposes a Fix and a Review action on each run row, next to (not inside) the select button', async () => {
+        mount(port());
+        const row = (await screen.findByTestId('kg-agent-run-list')).querySelector('[data-run-row="7"]')!;
+        const withinRow = within(row as HTMLElement);
+        expect(withinRow.getByRole('button', { name: t.actionsFixAria })).toBeTruthy();
+        expect(withinRow.getByRole('button', { name: t.actionsReviewAria })).toBeTruthy();
+        // The select button's own name still carries the title, unambiguous (the aria labels deliberately omit it).
+        expect(withinRow.getByRole('button', { name: /Fix the cron job/ })).toBeTruthy();
+        expect(withinRow.getByRole('button', { name: /Fix the cron job/ }).closest('button')?.querySelector('button')).toBeNull();
+    });
+
+    it('Fix reads the report and hands a findings prompt to a new chat through onCompose', async () => {
+        const onCompose = vi.fn();
+        const p = port();
+        mount(p, L, onCompose);
+        fireEvent.click((await screen.findByTestId('kg-agent-run-list')).querySelector('[data-run-fix]')!);
+        await waitFor(() => expect(onCompose).toHaveBeenCalledTimes(1));
+        expect(p.report).toHaveBeenCalledWith('7', graph.scope.rootId);
+        const prompt = onCompose.mock.calls[0]![0] as string;
+        expect(prompt).toContain('Fix the cron job');
+        expect(prompt).toContain('1 errors · 1 warnings · 0 notes');
+        expect(prompt).toContain(t.findings.unverified_writes.title);
+        expect(prompt).toContain('1 files (4 writes) had no successful check afterwards.');
+        expect(prompt).toContain(t.findings.edit_churn.title);
+        expect(prompt).toContain('cron/job.ts was written 4 times.');
+        expect(prompt).toContain('cron/job.ts');
+        expect(prompt).toContain('docs/elsewhere.md');
+    });
+
+    it('Review reads the report, selects the run and focuses its files and evidence on the graph', async () => {
+        const p = port();
+        const { onShow } = mount(p, L, vi.fn());
+        fireEvent.click((await screen.findByTestId('kg-agent-run-list')).querySelector('[data-run-review]')!);
+        await waitFor(() => expect(p.report).toHaveBeenCalledWith('7', graph.scope.rootId));
+        // The run is selected: its detail sections render.
+        expect(await screen.findByTestId('kg-agent-run-findings')).toBeTruthy();
+        // Both the report's file and the finding's evidence path map to the same graph node, de-duplicated.
+        expect(onShow).toHaveBeenCalledWith(['src:sys::cron/job.ts']);
+    });
+
+    it('Fix is disabled when the host has no composer (onCompose absent), Review still works', async () => {
+        const { onShow } = mount(port());
+        const fix = (await screen.findByRole('button', { name: t.actionsFixAria })) as HTMLButtonElement;
+        expect(fix.disabled).toBe(true);
+        const review = screen.getByRole('button', { name: t.actionsReviewAria });
+        fireEvent.click(review);
+        await waitFor(() => expect(onShow).toHaveBeenCalledWith(['src:sys::cron/job.ts']));
+    });
+
+    it('a run with nothing on the graph does not call onShow on Review (and does not throw)', async () => {
+        const local: AgentRunReport = {
+            ...report,
+            files: [{ path: 'elsewhere/never.ts', writes: 1, checked: true }],
+            findings: [],
+        };
+        const { onShow } = mount(port({ report: async () => local }));
+        fireEvent.click((await screen.findByTestId('kg-agent-run-list')).querySelector('[data-run-review]')!);
+        await screen.findByText(t.emptyFindings);
+        expect(onShow).not.toHaveBeenCalled();
+    });
+
+    it('a Fix or Review whose report read fails is spent quietly (no unhandled rejection)', async () => {
+        const onCompose = vi.fn();
+        const { onShow } = mount(port({ report: async () => null }), L, onCompose);
+        fireEvent.click((await screen.findByTestId('kg-agent-run-list')).querySelector('[data-run-fix]')!);
+        fireEvent.click(screen.getAllByRole('button', { name: t.actionsReviewAria })[0]!);
+        await waitFor(() => expect(screen.getByTestId('kg-agent-runs')).toBeTruthy());
+        expect(onCompose).not.toHaveBeenCalled();
+        expect(onShow).not.toHaveBeenCalled();
     });
 
     it('drops a report that answers after another run was selected', async () => {

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { statusOf } from '../../domain/shared/errors';
 import { TenantRole } from '../../domain/shared/types';
 import { replayRoute, ReplayRouteError } from './builtinToolContext';
-import * as replayApp from './replayApp';
+import type { RouteReplay } from './routeReplay';
 
 /**
  * A replayed route's status must reach the caller AS ITSELF.
@@ -17,12 +17,17 @@ import * as replayApp from './replayApp';
  * The MESSAGE text is deliberately unchanged, so the string the model reads (and the
  * assertions elsewhere that match on it) are the same as before.
  *
- * The Worker app is stubbed by spying `loadReplayApp`. A hoisted `vi.mock` of
- * `replayApp` / `index` does not intercept under this package's Vitest 4 + threads
- * pool, and the real composition root then hangs the suite.
+ * The route replay goes through the RouteReplay PORT (routeReplay.ts): the test
+ * passes a stub binding directly on the context, so neither the in-process app
+ * (replayApp.ts → dynamic import of the composition root) nor any Worker entry is
+ * loaded. The port is the seam the Gateway Worker split (PRD 39 §1) cuts the
+ * `index.ts` import cycle at.
  */
 
 const request = vi.fn();
+
+/** The stub RouteReplay binding: captures the replayed request and answers `request`. */
+const replayStub: RouteReplay = (req) => request(req);
 
 function ctx() {
   return {
@@ -32,16 +37,12 @@ function ctx() {
     tasks: {} as never,
     env: { JWT_SECRET: 'secret' } as never,
     role: TenantRole.OWNER,
+    replay: replayStub,
   };
 }
 
 beforeEach(() => {
   request.mockReset();
-  vi.spyOn(replayApp, 'loadReplayApp').mockResolvedValue({ request } as never);
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
 });
 
 describe('replayRoute failure', () => {

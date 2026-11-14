@@ -1,5 +1,19 @@
 [
   {
+    "slug": "your-audit-trail-can-finally-leave-the-platform",
+    "title": "Your audit trail can finally leave the platform",
+    "date": "2026-11-15",
+    "description": "Agent-run spans went to your collector but your audit trail could not. Any OpenTelemetry exporter now also ships sign-ins, role and membership changes, API keys, exports, integrations, approvals and agent tool calls as OTLP logs to your SIEM — at-least-once, with the event id as the dedup key, off the request path, and tenant-scoped by construction.",
+    "tags": [
+      "observability",
+      "security",
+      "audit",
+      "enterprise",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "know-what-an-agent-run-did",
     "title": "You stopped reading the agent's code. Now you can see what its run did",
     "date": "2026-11-10",

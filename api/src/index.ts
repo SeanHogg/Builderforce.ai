@@ -18,7 +18,6 @@ import { ProjectRepository }   from './infrastructure/repositories/ProjectReposi
 import { TaskRepository }       from './infrastructure/repositories/TaskRepository';
 import { TenantRepository }     from './infrastructure/repositories/TenantRepository';
 import { UserRepository }       from './infrastructure/repositories/UserRepository';
-import { AgentRepository }      from './infrastructure/repositories/AgentRepository';
 import { SkillRepository }       from './infrastructure/repositories/SkillRepository';
 import { AuditRepository }      from './infrastructure/repositories/AuditRepository';
 
@@ -31,7 +30,6 @@ import { TaskType }        from './domain/shared/types';
 import { llmEpicDecomposer } from './application/task/EpicDecomposer';
 import { TenantService }   from './application/tenant/TenantService';
 import { AuthService }     from './application/auth/AuthService';
-import { AgentService }    from './application/agent/AgentService';
 import { buildRuntimeService } from './buildRuntimeService';
 import { recommendTopAssignee } from './application/metrics/assigneeRecommender';
 import { addDependency } from './application/task/taskDependencies';
@@ -372,9 +370,19 @@ import {
 } from './application/observability/caughtErrorReporter';
 import { runInRequestScope } from './application/shared/requestScope';
 import { persistCaughtError } from './infrastructure/observability/persistCaughtError';
+import { inProcessRouteReplay } from './application/llm/replayApp';
+import { configureRouteReplay } from './application/llm/routeReplay';
+import { stripGatewayPrefix } from './presentation/gatewayPrefix';
 import { taskCreatedHook } from './application/task/taskCreationHook';
 
 configureCaughtErrorReporter(persistCaughtError);
+
+// Bind the RouteReplay port for THIS Worker: a builtin MCP tool call replays an
+// `/api/*` route IN-PROCESS through the app. The gateway Worker binds the same
+// port to its `API` service binding instead (src/gatewayWorker.ts) — that is the
+// split that keeps it from importing the composition root. Configured once here,
+// at module load, so every route the app mounts shares the one binding.
+configureRouteReplay(inProcessRouteReplay);
 
 // Durable Objects (must be re-exported so the Workers runtime can instantiate them)
 export { AgentHostRelayDO } from './infrastructure/relay/AgentHostRelayDO';
@@ -421,7 +429,6 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   const taskRepo      = new TaskRepository(db);
   const tenantRepo    = new TenantRepository(db);
   const userRepo      = new UserRepository(db);
-  const agentRepo     = new AgentRepository(db);
   const skillRepo      = new SkillRepository(db);
   const auditRepo     = new AuditRepository(db, env);
   const agentHostRepo      = new AgentHostRepository(db);
@@ -478,7 +485,6 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   const guestPromptService = new GuestPromptService(db);
   const platformBroadcastService = new PlatformBroadcastService(db);
   const authService     = new AuthService(userRepo, tenantRepo, auditRepo, env.JWT_SECRET, env);
-  const agentService    = new AgentService(agentRepo, skillRepo);
   // RuntimeService.update is the single canonical execution-status transition;
   // its full wiring (self-heal, lane sync, autonomous chaining, audit) lives in
   // buildRuntimeService so the durable CloudRunnerDO shares the EXACT same instance
@@ -1021,9 +1027,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // server sends the browser back to. Authenticated by the signed `state`, not a
   // session (see mcpExtensionRoutes.ts's module doc).
   app.route('/api/mcp-oauth/callback', createMcpOAuthCallbackRoutes(db));
-  app.route('/api/agents',   createAgentRoutes(agentService));
+  app.route('/api/agents',   createAgentRoutes(db));
   app.route('/api/agent-registrations', createAgentRegistrationRoutes(new AgentRegistrationService(db, auditRepo)));
-  app.route('/api/skills',   createSkillRoutes(agentService));
+  app.route('/api/skills',   createSkillRoutes(db));
   app.route('/api/runtime',  createRuntimeRoutes(runtimeService, db));
   app.route('/api/audit',    createAuditRoutes(auditService));
   app.route('/api/admin',    createAdminRoutes());
@@ -1347,25 +1353,12 @@ interface ForwardableEmailLike {
 /**
  * Same-origin gateway prefix. Requests that arrive via `builderforce.ai/gateway/*`
  * (a Cloudflare route pointing the primary apex at this worker — see wrangler.toml)
- * carry a `/gateway` path prefix that we strip here, BEFORE any routing or CORS
- * handling, so the entire API surface is byte-identical whether a caller reached us
- * on api.builderforce.ai or on the whitelisted primary domain. Corporate firewalls
- * that block the `api.` subdomain but allow the apex use this path. Requests that
- * arrive directly on api.builderforce.ai have no prefix and pass through untouched.
+ * carry a `/gateway` path prefix. The strip itself lives in
+ * {@link ./presentation/gatewayPrefix} so BOTH this Worker and the gateway Worker
+ * (src/gatewayWorker.ts) share it — `gatewayWorker` serves `/gateway/llm/*`, and
+ * without the same strip those paths would not match the `/llm` mounts.
  */
-const GATEWAY_PATH_PREFIX = '/gateway';
-
-function stripGatewayPrefix(request: Request): Request {
-  const url = new URL(request.url);
-  if (url.pathname === GATEWAY_PATH_PREFIX) {
-    url.pathname = '/';
-  } else if (url.pathname.startsWith(`${GATEWAY_PATH_PREFIX}/`)) {
-    url.pathname = url.pathname.slice(GATEWAY_PATH_PREFIX.length);
-  } else {
-    return request;
-  }
-  return new Request(url.toString(), request);
-}
+export { GATEWAY_PATH_PREFIX, stripGatewayPrefix } from './presentation/gatewayPrefix';
 
 export default {
   /**

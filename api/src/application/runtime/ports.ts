@@ -14,7 +14,6 @@
 import type { PolicyGate } from '@builderforce/agent-tools';
 import type { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
 import type { ITaskRepository } from '../../domain/task/ITaskRepository';
-import type { IAgentRepository } from '../../domain/agent/IAgentRepository';
 import type { IAuditRepository } from '../../domain/audit/IAuditRepository';
 import type { Execution } from '../../domain/execution/Execution';
 import type { RunMilestonePhase } from '../brain/ChatTicketService';
@@ -80,7 +79,6 @@ export interface PolicyGateScope {
 export interface RuntimeRepositories {
   executions: IExecutionRepository;
   tasks: ITaskRepository;
-  agents: IAgentRepository;
   audit: IAuditRepository;
 }
 
@@ -164,6 +162,12 @@ export interface RuntimePorts {
   resolvePolicyGates?: (scope: PolicyGateScope) => Promise<PolicyGate[]>;
   /** Canonical agent-registration lookup; null ⇒ not found. */
   resolveAgentRegistration?: (id: string, tenantId: number) => Promise<{ active: boolean } | null>;
+  /**
+   * Validates a NUMERIC legacy agent id (the folded `legacy_agent_id`) at submit,
+   * because `resolveAgentRegistration` matches the uuid id only. Returns whether
+   * the registration is active. PRD 39 §3 push 1.
+   */
+  resolveLegacyAgent?: (legacyId: number, tenantId: number) => Promise<{ active: boolean } | null>;
   /** Authoritative workspace kill switch; production always wires it. */
   isAgentExecutionEnabled?: (tenantId: number) => Promise<boolean>;
   /**

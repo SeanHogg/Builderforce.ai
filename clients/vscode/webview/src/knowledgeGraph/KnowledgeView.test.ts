@@ -21,6 +21,13 @@ describe('the Visualization panel Knowledge view', () => {
     expect(html).toContain('domain/invoice.ts');
   });
 
+  it('forwards onCompose to the graph view (the Agent runs drawer Fix action seeds a new chat through it)', () => {
+    const graph = codeFixture('ws');
+    const source = { ...fixtureSource([graph]), snapshot: { graph, title: 'ws' } };
+    const html = renderToStaticMarkup(createElement(KnowledgeView, { source, labels: DEFAULT_KNOWLEDGE_GRAPH_LABELS, onCompose: () => undefined }));
+    expect(html).toContain('data-testid="viz-knowledge"');
+  });
+
   it('explains itself while the source has not answered (no graph yet)', () => {
     const html = renderToStaticMarkup(createElement(KnowledgeView, { source: fixtureSource([]), labels: DEFAULT_KNOWLEDGE_GRAPH_LABELS }));
     expect(html).toContain(DEFAULT_KNOWLEDGE_GRAPH_LABELS.loading);

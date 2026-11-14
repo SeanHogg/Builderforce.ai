@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildOtlpTracePayload, runIsSampled, spanIdFor, traceIdFor, tracesUrl } from './otelSpans';
+import { buildOtlpLogsPayload, buildOtlpTracePayload, logsUrl, runIsSampled, spanIdFor, traceIdFor, tracesUrl } from './otelSpans';
 
 /**
  * GAP B3 — the OTLP wire shape. A collector rejects a payload that is subtly wrong
@@ -67,6 +67,51 @@ describe('tracesUrl', () => {
 
   it('leaves a per-signal endpoint alone rather than doubling the path', () => {
     expect(tracesUrl('https://collector.test/v1/traces')).toBe('https://collector.test/v1/traces');
+  });
+});
+
+describe('logsUrl', () => {
+  it('appends the logs path to a bare collector base', () => {
+    expect(logsUrl('https://collector.test')).toBe('https://collector.test/v1/logs');
+    expect(logsUrl('https://collector.test/')).toBe('https://collector.test/v1/logs');
+  });
+
+  it('SWAPS any signal suffix for /v1/logs rather than appending', () => {
+    // A per-signal endpoint like /v1/traces would otherwise build
+    // /v1/traces/v1/logs and 404 — the suffix is replaced, not extended.
+    expect(logsUrl('https://collector.test/v1/traces')).toBe('https://collector.test/v1/logs');
+    expect(logsUrl('https://collector.test/v1/metrics')).toBe('https://collector.test/v1/logs');
+    expect(logsUrl('https://collector.test/v1/logs')).toBe('https://collector.test/v1/logs');
+  });
+});
+
+describe('buildOtlpLogsPayload', () => {
+  const payload = buildOtlpLogsPayload({ serviceName: 'agents', tenantId: 7 }, [
+    {
+      id: 'memberships:42',
+      name: 'membership.changed',
+      timeMs: 1_700_000_000_000,
+      attributes: { 'builderforce.audit.role': 'manager' },
+    },
+  ]) as never as {
+    resourceLogs: Array<{
+      resource: { attributes: Array<{ key: string }> };
+      scopeLogs: Array<{ logRecords: Array<{ body: { stringValue: string }; attributes: Array<{ key: string; value: Record<string, unknown> }> }> }>;
+    }>;
+  };
+  const record = payload.resourceLogs[0]!.scopeLogs[0]!.logRecords[0]!;
+
+  it('carries the service and tenant on the resource, like the trace payload', () => {
+    const keys = payload.resourceLogs[0]!.resource.attributes.map((a) => a.key);
+    expect(keys).toContain('service.name');
+    expect(keys).toContain('builderforce.tenant_id');
+  });
+
+  it('names the event in the body and stamps the event id as the dedup key', () => {
+    expect(record.body.stringValue).toBe('membership.changed');
+    const byKey = Object.fromEntries(record.attributes.map((a) => [a.key, a.value]));
+    expect(byKey['builderforce.audit.event_id']).toEqual({ stringValue: 'memberships:42' });
+    expect(byKey['builderforce.audit.role']).toEqual({ stringValue: 'manager' });
   });
 });
 

@@ -100,10 +100,82 @@ export function buildOtlpTracePayload(resource: OtelResource, spans: readonly Ag
 
 /** The traces endpoint for a collector base URL, tolerating a trailing slash. */
 export function tracesUrl(endpoint: string): string {
+  return signalUrl(endpoint, 'traces');
+}
+
+/**
+ * The logs endpoint for a collector base URL (PRD 39 §4a — the audit sweep posts
+ * here). Any existing signal suffix is SWAPPED for `/v1/logs`, never appended:
+ * a collector configured per-signal (`…/v1/traces`) would otherwise receive logs
+ * at `/v1/traces/v1/logs` and 404.
+ */
+export function logsUrl(endpoint: string): string {
+  return signalUrl(endpoint, 'logs');
+}
+
+function signalUrl(endpoint: string, signal: 'traces' | 'logs'): string {
   const base = endpoint.trim().replace(/\/+$/, '');
   // A base that already names a signal path is used as given — some collectors are
-  // configured per-signal, and appending a second `/v1/traces` would 404.
-  return /\/v1\/(traces|metrics|logs)$/.test(base) ? base : `${base}/v1/traces`;
+  // configured per-signal, and appending a second `/v1/<signal>` would 404. For
+  // logs the named signal is swapped (traces|metrics → logs); for traces it is
+  // already right.
+  return /\/v1\/(traces|metrics|logs)$/.test(base)
+    ? base.replace(/\/v1\/(traces|metrics|logs)$/, `/v1/${signal}`)
+    : `${base}/v1/${signal}`;
+}
+
+/**
+ * An audit event the sweep can export (PRD 39 §4a). One row per source table,
+ * normalized here so every source reads the same on the wire. `id` is the at-
+ * least-once dedup key — a collector re-delivers nothing it has already seen
+ * when a failed batch is retried.
+ */
+export interface AuditLogEvent {
+  /** Source table + row id — the dedup key, unique across sources. */
+  id: string;
+  /** The event kind, e.g. `auth.session.created`. */
+  name: string;
+  timeMs: number;
+  attributes?: Record<string, SpanAttributeValue | null | undefined>;
+}
+
+const SEVERITY_INFO = 9;
+
+/**
+ * Build one OTLP/HTTP `ExportLogsServiceRequest` body from audit events. Log
+ * records take the same attribute encoding as spans; `builderforce.audit.event_id`
+ * carries the dedup key the SIEM matches on.
+ */
+export function buildOtlpLogsPayload(resource: OtelResource, events: readonly AuditLogEvent[]): Record<string, unknown> {
+  return {
+    resourceLogs: [
+      {
+        resource: {
+          attributes: attributes({
+            'service.name': resource.serviceName,
+            'service.namespace': 'builderforce',
+            'builderforce.tenant_id': resource.tenantId,
+          }),
+        },
+        scopeLogs: [
+          {
+            scope: { name: 'builderforce.audit' },
+            logRecords: events.map((event) => ({
+              timeUnixNano: String(Math.round(event.timeMs * NS_PER_MS)),
+              severityNumber: SEVERITY_INFO,
+              severityText: 'INFO',
+              body: { stringValue: event.name },
+              attributes: attributes({
+                'builderforce.audit.event_id': event.id,
+                'builderforce.audit.event': event.name,
+                ...event.attributes,
+              }),
+            })),
+          },
+        ],
+      },
+    ],
+  };
 }
 
 /**

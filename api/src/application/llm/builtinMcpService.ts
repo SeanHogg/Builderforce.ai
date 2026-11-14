@@ -172,6 +172,7 @@ type Json = Record<string, unknown>;
 export type { BuiltinCtx, BuiltinTool } from './builtinToolContext';
 export { replayRoute, resolveReplayAuth, ReplayRouteError } from './builtinToolContext';
 import { getTenantTask, resolveTenantTask, replayRoute, requireEnv, type BuiltinCtx, type BuiltinTool } from './builtinToolContext';
+import type { RouteReplay } from './routeReplay';
 import { assertMayRunBuiltinTool } from './builtinToolAuthority';
 import { maskSecurityTasks } from './builtinTaskVisibility';
 import { idArg, syncIdField, withTicketSyncIds } from './builtinToolIds';
@@ -4452,7 +4453,7 @@ export { advertisedName };
 function buildCtx(
   db: Db,
   tenantId: number,
-  opts?: { env?: Env; userId?: string | null; agentRef?: string | null; hostChatId?: number | null; role?: TenantRole; authToken?: string | null; executionCtx?: ExecutionContext; executionId?: number | null; origin?: FactOriginCost | null },
+  opts?: { env?: Env; userId?: string | null; agentRef?: string | null; hostChatId?: number | null; role?: TenantRole; authToken?: string | null; executionCtx?: ExecutionContext; executionId?: number | null; origin?: FactOriginCost | null; replay?: RouteReplay },
 ): BuiltinCtx {
   const projectRepo = new ProjectRepository(db);
   const taskRepo = new TaskRepository(db);
@@ -4479,6 +4480,7 @@ function buildCtx(
     executionCtx: opts?.executionCtx,
     executionId: opts?.executionId ?? null,
     origin: opts?.origin ?? null,
+    replay: opts?.replay,
   };
 }
 
@@ -4620,13 +4622,13 @@ async function emitBuiltinToolActivity(env: Env, db: Db, tenantId: number, userI
 export async function callBuiltinTool(
   db: Db,
   /** `hostChatId`: the chat the HOST put this call in (server state — never read from `arguments`). */
-  args: { tenantId: number; tool: string; arguments: unknown; env?: Env; userId?: string | null; agentRef?: string | null; hostChatId?: number | null; role?: TenantRole; authToken?: string | null; executionCtx?: ExecutionContext; executionId?: number | null; origin?: FactOriginCost | null },
+  args: { tenantId: number; tool: string; arguments: unknown; env?: Env; userId?: string | null; agentRef?: string | null; hostChatId?: number | null; role?: TenantRole; authToken?: string | null; executionCtx?: ExecutionContext; executionId?: number | null; origin?: FactOriginCost | null; replay?: RouteReplay },
 ): Promise<unknown> {
   const entry = CATALOG.find((t) => t.tool === args.tool);
   if (!entry) throw new Error(`Unknown built-in tool '${args.tool}'`);
   // Direct-write rows never pass a route gate — refuse a sub-developer caller here.
   assertMayRunBuiltinTool(entry.tool, entry.mutates, args.role);
-  const ctx = buildCtx(db, args.tenantId, { env: args.env, userId: args.userId, agentRef: args.agentRef, hostChatId: args.hostChatId, role: args.role, authToken: args.authToken, executionCtx: args.executionCtx, executionId: args.executionId, origin: args.origin });
+  const ctx = buildCtx(db, args.tenantId, { env: args.env, userId: args.userId, agentRef: args.agentRef, hostChatId: args.hostChatId, role: args.role, authToken: args.authToken, executionCtx: args.executionCtx, executionId: args.executionId, origin: args.origin, replay: args.replay });
   // A mapped create links its item to the host-stamped chat in the same call (see createdWorkItemChatLink).
   const result = await linkCreatedWorkItemToChat(db, args, await entry.run(ctx, (args.arguments ?? {}) as Json));
   // Unified audit stream: record any mutating tool run (best-effort, off the result).

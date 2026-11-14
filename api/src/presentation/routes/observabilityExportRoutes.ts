@@ -31,6 +31,8 @@ const createSchema = z.object({
   serviceName: z.string().max(255).optional(),
   sampleRate: z.number().min(0).max(1).optional(),
   enabled: z.boolean().optional(),
+  /** Which signals to ship. Defaults to 'traces' so existing clients are unchanged. */
+  signals: z.enum(['traces', 'audit', 'both']).optional(),
 });
 
 /** `headers: null` clears the stored credential; omitting it keeps what is stored. */
@@ -41,6 +43,7 @@ const updateSchema = z.object({
   serviceName: z.string().max(255).nullable().optional(),
   sampleRate: z.number().min(0).max(1).optional(),
   enabled: z.boolean().optional(),
+  signals: z.enum(['traces', 'audit', 'both']).optional(),
 });
 
 export function createObservabilityExportRoutes(db: Db): Hono<HonoEnv> {

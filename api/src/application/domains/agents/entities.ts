@@ -16,6 +16,7 @@ import {
   agentCapabilityGrants,
   agentContextContributions,
   agentCredentialDelegations,
+  agentRegistrations,
   agentDefinitionPromotions,
   agentDefinitionReleases,
   agentDefinitionVersions,
@@ -50,6 +51,7 @@ import { defineDomainEntities, entity } from '../entityDefinition';
 export const AGENTS_ENTITIES = defineDomainEntities('agents', [
   workflowActions,
   aiCompetitors,
+  agentRegistrations,
   /** Cost and token accounting. Read it, chart it, never retype it. */
   entity(aiUsageRecords, { readOnly: true }),
   entity(aiToolCalls, { readOnly: true }),

@@ -14,9 +14,8 @@ import { toolStepView, type CommandRun, type ToolPreview } from './toolStepView'
  *
  * The header is the row you skim: outcome, tool, and the concrete subject — the file,
  * the query, the command line — so a run's steps can be read without opening any of
- * them. A shell step then opens by default onto its terminal exchange, because "did
- * it actually run the tests, and what did they say" is the question a transcript
- * exists to answer, and a caret is a poor place to keep the answer.
+ * them. Every step starts collapsed (a failure is the one exception, since it exists
+ * to be read); opening a shell step reveals its terminal exchange.
  */
 export interface ToolStepLabels extends CopyLabels {
   /** Heading for the raw argument panel. */

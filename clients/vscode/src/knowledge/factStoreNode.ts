@@ -36,6 +36,24 @@ interface DatabaseSyncLike {
   close(): void;
 }
 
+/**
+ * Bind a statement's parameters by NAME (`:1`, `:2`, ...) so the same call works on every
+ * `node:sqlite` variant the host may hand us. Real Node accepts both positional `?` args and
+ * named binds, but the pre-loaded `node:sqlite` instance the vitest/agent-runtime host wires in
+ * rejects positional `?` with SQLITE_RANGE "column index out of range" while accepting named
+ * binds (verified empirically). We therefore always write the SQL with explicit `:k` markers
+ * and pass `{ 1: v1, 2: v2, ... }`. Positional callers would be shorter but non-portable.
+ */
+const bind = (args: readonly unknown[]): Record<string, unknown> =>
+  Object.fromEntries(args.map((v, i) => [String(i + 1), v]));
+
+// Rewrite a SQL string's anonymous `?` markers into named `:k` markers so `bind()` can feed it
+// by name on every node:sqlite variant (see the note above `bind`).
+const nameParams = (sql: string): string => {
+  let i = 0;
+  return sql.replace(/\?/g, () => `:${++i}`);
+};
+
 const NodeDatabaseSync: (new (path: string) => DatabaseSyncLike) | undefined = (() => {
   try {
     const mod = createRequire(import.meta.url)("node:sqlite") as { DatabaseSync?: new (path: string) => DatabaseSyncLike };
@@ -153,14 +171,14 @@ export function openFactStoreNode(
     throw new FactStoreError("sqlite-corrupt", String(error));
   }
   // A fresh store starts at generation 0 with a new epoch; the epoch is minted once and survives sweeps.
-  const row = db.prepare("SELECT epoch, generation FROM version WHERE id = 1").get() as { epoch: string; generation: number } | undefined;
+  const row = db.prepare(nameParams("SELECT epoch, generation FROM version WHERE id = ?")).get(bind([1])) as { epoch: string; generation: number } | undefined;
   if (!row) {
     const epoch = sha256Hex(new TextEncoder().encode(`${rootId}:${opts.now?.() ?? Date.now()}:${Math.random()}`));
-    db.prepare("INSERT INTO version (id, epoch, generation) VALUES (1, ?, ?)").run(epoch, 0);
+    db.prepare(nameParams("INSERT INTO version (id, epoch, generation) VALUES (?, ?, ?)")).run(bind([1, epoch, 0]));
   }
 
   const readVersion = (): { epoch: string; generation: number } => {
-    const r = db.prepare("SELECT epoch, generation FROM version WHERE id = 1").get() as { epoch: string; generation: number };
+    const r = db.prepare(nameParams("SELECT epoch, generation FROM version WHERE id = ?")).get(bind([1])) as { epoch: string; generation: number };
     return { epoch: r.epoch, generation: r.generation };
   };
 
@@ -168,15 +186,16 @@ export function openFactStoreNode(
     store: {
       getObjects(hashes) {
         const out = new Map<string, string>();
+        const sel = db.prepare(nameParams("SELECT json FROM objects WHERE hash = ?"));
         for (const hash of hashes) {
-          const r = db.prepare("SELECT json FROM objects WHERE hash = ?").get(hash) as { json: string } | undefined;
+          const r = sel.get(bind([hash])) as { json: string } | undefined;
           if (r) out.set(hash, r.json);
         }
         return out;
       },
       putObjects(objects) {
-        const insert = db.prepare("INSERT OR IGNORE INTO objects (hash, json) VALUES (?, ?)");
-        for (const [hash, json] of objects) insert.run(hash, json);
+        const insert = db.prepare(nameParams("INSERT OR IGNORE INTO objects (hash, json) VALUES (?, ?)"));
+        for (const [hash, json] of objects) insert.run(bind([hash, json]));
       },
       readVersion,
       readManifest() {
@@ -195,17 +214,17 @@ export function openFactStoreNode(
         // The ONE transaction: objects were put first by the caller; apply the manifest delta + derived puts/deletes atomically.
         db.exec("BEGIN IMMEDIATE");
         try {
-          const upsert = db.prepare(
+          const upsert = db.prepare(nameParams(
             "INSERT INTO manifest (path, factsHash, contentHash, kinds, stat) VALUES (?, ?, ?, ?, ?) ON CONFLICT(path) DO UPDATE SET factsHash=excluded.factsHash, contentHash=excluded.contentHash, kinds=excluded.kinds, stat=excluded.stat",
-          );
-          for (const [path, e] of manifest.puts) upsert.run(path, e.factsHash, e.contentHash, JSON.stringify(e.kinds), null);
-          const del = db.prepare("DELETE FROM manifest WHERE path = ?");
-          for (const path of manifest.deletes) del.run(path);
-          const put = db.prepare("INSERT INTO derived (key, rule, focus, row) VALUES (?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET row=excluded.row");
-          for (const d of derivedPuts) put.run(`${d.rule}:${d.focus}`, d.rule, d.focus, JSON.stringify(d.row));
-          const delD = db.prepare("DELETE FROM derived WHERE key = ?");
-          for (const key of derivedDeletes) delD.run(key);
-          db.prepare("UPDATE version SET generation = ? WHERE id = 1").run(manifest.generation);
+          ));
+          for (const [path, e] of manifest.puts) upsert.run(bind([path, e.factsHash, e.contentHash, JSON.stringify(e.kinds), null]));
+          const del = db.prepare(nameParams("DELETE FROM manifest WHERE path = ?"));
+          for (const path of manifest.deletes) del.run(bind([path]));
+          const put = db.prepare(nameParams("INSERT INTO derived (key, rule, focus, row) VALUES (?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET row=excluded.row"));
+          for (const d of derivedPuts) put.run(bind([`${d.rule}:${d.focus}`, d.rule, d.focus, JSON.stringify(d.row)]));
+          const delD = db.prepare(nameParams("DELETE FROM derived WHERE key = ?"));
+          for (const key of derivedDeletes) delD.run(bind([key]));
+          db.prepare(nameParams("UPDATE version SET generation = ? WHERE id = 1")).run(bind([manifest.generation]));
           db.exec("COMMIT");
         } catch (error) {
           db.exec("ROLLBACK");
@@ -244,7 +263,7 @@ export function openFactStoreNode(
           db.prepare("DELETE FROM manifest").run();
           db.prepare("DELETE FROM derived").run();
           const epoch = sha256Hex(new TextEncoder().encode(`${rootId}:${opts.now?.() ?? Date.now()}:${Math.random()}`));
-          db.prepare("UPDATE version SET epoch = ?, generation = 0 WHERE id = 1").run(epoch);
+          db.prepare(nameParams("UPDATE version SET epoch = ?, generation = 0 WHERE id = 1")).run(bind([epoch]));
           db.exec("COMMIT");
         } catch (error) {
           db.exec("ROLLBACK");

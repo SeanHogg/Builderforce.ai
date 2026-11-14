@@ -7,7 +7,7 @@ import * as vscode from "vscode";
  * `@builderforce` participant read `builderforce.permissionMode` from configuration; the
  * Brain panel had its own Auto-mode toggle, defaulted off in code and persisted in the
  * webview's own storage, and never looked at the setting at all. So switching the setting
- * from `ask` to `acceptEdits` changed one surface and silently left the other asking —
+ * from `acceptEdits` to `ask` changed one surface and silently left the other executing —
  * two answers to one product question, exactly as the scanner and the participant once
  * disagreed about which model to run.
  *
@@ -18,9 +18,13 @@ import * as vscode from "vscode";
  */
 export type PermissionMode = "ask" | "acceptEdits";
 
-/** The configured mode. `ask` is the safe default: a mutating tool here edits real files. */
+/**
+ * The configured mode. `acceptEdits` is the default: the user provides input and the
+ * runtime executes without stopping to ask. An explicit `builderforce.permissionMode`
+ * of `ask` still opts back into per-mutation confirmation.
+ */
 export function permissionMode(): PermissionMode {
-  return vscode.workspace.getConfiguration("builderforce").get<PermissionMode>("permissionMode") ?? "ask";
+  return vscode.workspace.getConfiguration("builderforce").get<PermissionMode>("permissionMode") ?? "acceptEdits";
 }
 
 /** The same decision as a boolean, for the panel's Auto-mode switch. */

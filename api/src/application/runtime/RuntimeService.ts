@@ -5,7 +5,6 @@ import { persistTransition } from './executionLanding';
 import { stampProducedFromLaneMove } from './stampProducedFromLaneMove';
 import type { RunTally } from '@builderforce/agent-run';
 import { ITaskRepository } from '../../domain/task/ITaskRepository';
-import { IAgentRepository } from '../../domain/agent/IAgentRepository';
 import { IAuditRepository } from '../../domain/audit/IAuditRepository';
 import { Execution } from '../../domain/execution/Execution';
 import { AuditEvent } from '../../domain/audit/AuditEvent';
@@ -62,16 +61,14 @@ export class RuntimeService {
 
   private readonly executions: IExecutionRepository;
   private readonly tasks:      ITaskRepository;
-  private readonly agents:     IAgentRepository;
   private readonly audit:      IAuditRepository;
   /** Every optional side-effect / resolver seam — see {@link RuntimePorts}. */
   private readonly ports:      RuntimePorts;
 
   constructor(options: RuntimeServiceOptions) {
-    const { executions, tasks, agents, audit, ...ports } = options;
+    const { executions, tasks, audit, ...ports } = options;
     this.executions = executions;
     this.tasks = tasks;
-    this.agents = agents;
     this.audit = audit;
     this.ports = ports;
   }
@@ -202,9 +199,9 @@ export class RuntimeService {
     if (!task) throw new NotFoundError('Task', dto.taskId);
 
     if (dto.agentId !== undefined) {
-      const agent = await this.agents.findById(asAgentId(dto.agentId));
+      const agent = await this.ports.resolveLegacyAgent?.(dto.agentId, dto.tenantId);
       if (!agent) throw new NotFoundError('Agent', dto.agentId);
-      if (!agent.isActive) throw new ForbiddenError('Agent is not active');
+      if (!agent.active) throw new ForbiddenError('Agent is not active');
     }
     if (dto.agentRegistrationId !== undefined) {
       const registration = await this.ports.resolveAgentRegistration?.(dto.agentRegistrationId, dto.tenantId);
