@@ -82,10 +82,10 @@ describe('useChatRowActions', () => {
     expect(rows().rowProps(7).archived).toBe(false);
   });
 
-  it('reveals the opened row only for a host that keeps the list beside the thread', () => {
-    const { rows, options } = setup({ revealActionsOnOpen: true });
+  it('opens a chat without revealing any actions', () => {
+    const { rows, options } = setup();
     act(() => { rows().openChat(3); });
     expect(options.onOpen).toHaveBeenCalledWith(3);
-    expect(rows().rowProps(3).actionsOpen).toBe(true);
+    expect(rows().rowProps(3).onOpen).toBeTypeOf('function');
   });
 });

@@ -22,11 +22,6 @@ export function useBrainChatRowActions({ chats, isPage, showChatTab }: {
   const confirm = useConfirm();
   const { select, rename, summarize, archive, remove, assignToProject, chats: chatList } = chats;
 
-  /**
-   * Docked, history is a tab beside the conversation, so opening a chat switches back
-   * to it; the page keeps the list permanently beside the thread and instead reveals
-   * that row's actions (`revealActionsOnOpen`).
-   */
   const onOpen = useCallback((id: number) => {
     void select(id);
     if (!isPage) showChatTab();
@@ -46,7 +41,6 @@ export function useBrainChatRowActions({ chats, isPage, showChatTab }: {
 
   return useChatRowActions({
     onOpen,
-    revealActionsOnOpen: isPage,
     rename,
     summarize,
     // The shared hook offers Archive to every host that supplies it — without this

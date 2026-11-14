@@ -39,8 +39,6 @@ afterEach(() => {
 const noActionRows = {
   rowProps: () => ({
     onOpen: () => undefined,
-    actionsOpen: false,
-    onToggleActions: () => undefined,
   }),
 } as never;
 

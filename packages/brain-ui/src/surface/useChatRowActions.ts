@@ -10,9 +10,6 @@ export interface ChatRowRef {
 export interface UseChatRowActionsOptions {
   /** Open the chat (the host switches to it, and closes / leaves its history view). */
   onOpen: (id: number) => void;
-  /** Reveal the opened row's actions — a host that keeps the list beside the thread
-   *  (the web Brain page) instead of leaving it on open. */
-  revealActionsOnOpen?: boolean;
   /** Persist a new title. Only called for a non-blank title that actually changed. */
   rename: (id: number, title: string) => Promise<unknown> | void;
   /** Rows offer Summarize only when the host supplies it. */
@@ -41,7 +38,7 @@ export interface UseChatRowActionsOptions {
 /** The action props a `ChatHistoryRow` takes, bound to one chat. */
 export type ChatRowActionProps = Pick<
   ChatHistoryRowProps,
-  | 'onOpen' | 'actionsOpen' | 'onToggleActions' | 'renaming' | 'renameValue' | 'onStartRename' | 'onRenameChange'
+  | 'onOpen' | 'renaming' | 'renameValue' | 'onStartRename' | 'onRenameChange'
   | 'onSubmitRename' | 'onCancelRename' | 'onSummarize' | 'summarizing' | 'onArchive' | 'archiving' | 'archived'
   | 'onUnarchive' | 'unarchiving'
   | 'onDelete' | 'deleting'
@@ -52,7 +49,7 @@ export type ChatRowActionProps = Pick<
  * summarize, archive, delete, assign) — every host's `ChatHistoryRow`s bind through it
  * (web Brain panel, the editor's chat surface, Rovr), so the rules live once:
  *
- * - one row's actions are revealed at a time, toggled from its "more" button;
+ * - the row's actions are always-visible icons under the title/meta — no "…" toggle;
  * - Rename is inline; a blank or unchanged title just cancels (no needless write), and
  *   Enter commits once — the input unmounts on Enter and its blur would commit again;
  * - Summarize / Archive / Delete / Assign each mark their row busy while in flight;
@@ -71,8 +68,7 @@ export function useChatRowActions(options: UseChatRowActionsOptions) {
   const opts = useRef(options);
   opts.current = options;
 
-  /** Which chat row has its actions revealed. */
-  const [actionsChatId, setActionsChatId] = useState<number | null>(null);
+  /** Which chat row is mid-rename (its actions hide while the title is an input). */
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [summarizingId, setSummarizingId] = useState<number | null>(null);
@@ -87,11 +83,6 @@ export function useChatRowActions(options: UseChatRowActionsOptions) {
 
   const openChat = useCallback((id: number) => {
     opts.current.onOpen(id);
-    if (opts.current.revealActionsOnOpen) setActionsChatId(id);
-  }, []);
-
-  const toggleActions = useCallback((id: number) => {
-    setActionsChatId((cur) => (cur === id ? null : id));
   }, []);
 
   const startRename = useCallback((chat: ChatRowRef) => {
@@ -99,7 +90,6 @@ export function useChatRowActions(options: UseChatRowActionsOptions) {
     renameFrom.current = chat.title;
     setRenamingId(chat.id);
     setRenameValue(chat.title);
-    setActionsChatId(null);
   }, []);
 
   const endRename = useCallback((id: number | null) => {
@@ -132,8 +122,6 @@ export function useChatRowActions(options: UseChatRowActionsOptions) {
     setArchivingId(chat.id);
     try {
       await archive({ id: chat.id, title: chat.title });
-      // Archiving takes the row out of the list, so the revealed menu goes with it.
-      setActionsChatId((cur) => (cur === chat.id ? null : cur));
     } finally {
       setArchivingId((cur) => (cur === chat.id ? null : cur));
     }
@@ -147,8 +135,6 @@ export function useChatRowActions(options: UseChatRowActionsOptions) {
     setUnarchivingId(chat.id);
     try {
       await unarchive({ id: chat.id, title: chat.title });
-      // Un-archiving takes the row out of the ARCHIVED list, so the revealed menu goes with it.
-      setActionsChatId((cur) => (cur === chat.id ? null : cur));
     } finally {
       setUnarchivingId((cur) => (cur === chat.id ? null : cur));
     }
@@ -161,7 +147,6 @@ export function useChatRowActions(options: UseChatRowActionsOptions) {
     setDeletingId(chat.id);
     try {
       await remove({ id: chat.id, title: chat.title });
-      setActionsChatId((cur) => (cur === chat.id ? null : cur));
     } finally {
       setDeletingId((cur) => (cur === chat.id ? null : cur));
     }
@@ -182,8 +167,6 @@ export function useChatRowActions(options: UseChatRowActionsOptions) {
     const archived = options.isArchived?.(id) ?? false;
     return {
       onOpen: openChat,
-      actionsOpen: actionsChatId === id,
-      onToggleActions: toggleActions,
       renaming,
       renameValue: renaming ? renameValue : '',
       onStartRename: startRename,
@@ -204,7 +187,6 @@ export function useChatRowActions(options: UseChatRowActionsOptions) {
   };
 
   return {
-    actionsChatId,
     renamingId,
     renameValue,
     setRenameValue,
@@ -214,7 +196,6 @@ export function useChatRowActions(options: UseChatRowActionsOptions) {
     deletingId,
     busyId,
     openChat,
-    toggleActions,
     startRename,
     cancelRename,
     submitRename,

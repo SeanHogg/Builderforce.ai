@@ -4,17 +4,51 @@ import { fill } from '../spend/format';
 import { ChatTicketStats, type ChatTicketStatsLabels } from './ChatTicketStats';
 
 /**
+ * A 15px inline icon for an always-visible row action — the button's visible glyph.
+ * The button's accessible name comes from its `title` / `aria-label` (the localized
+ * action label), so the glyphs themselves stay language-free.
+ */
+function ActionIcon({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" role="img" aria-label={label}>
+      <title>{label}</title>
+      {children}
+    </svg>
+  );
+}
+
+/** The per-action glyphs (stroke paths over a 24×24 box) by action kind. */
+const ACTION_ICONS = {
+  /** Rename — a pencil. */
+  rename: (<><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></>),
+  /** Summarize — a four-point sparkle. */
+  summarize: <path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8Z" />,
+  /** Archive — a box with a slot. */
+  archive: (<><rect x="3" y="4" width="18" height="4" rx="1" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" /><path d="M10 12h4" /></>),
+  /** Unarchive — a box with an up arrow (the mirror of Archive). */
+  unarchive: (<><rect x="3" y="4" width="18" height="4" rx="1" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" /><path d="M12 11v6" /><path d="m9 13 3-3 3 3" /></>),
+  /** Delete — a trash can. */
+  delete: (<><path d="M3 6h18" /><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M10 11v6" /><path d="M14 11v6" /></>),
+  /** Open chat — a speech bubble. */
+  openChat: <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" />,
+  /** Resume — a play triangle. */
+  resume: <path d="m6 4 14 8-14 8Z" />,
+  /** Dismiss — an ×. */
+  dismiss: (<><path d="M18 6 6 18" /><path d="m6 6 12 12" /></>),
+};
+
+/**
  * The ONE chat-history list every AI surface opens from its header's History lever —
  * moved from the web Brain panel (`BrainChatList` / `BrainChatRow`) so the editor's and
  * Rovr's native `<select>` pickers become the same rows.
  *
  * A row is the title (or its rename input), its linked-ticket column (`ChatTicketStats`,
  * on every row — the host never recomposes it), a meta line the host fills (project tag,
- * time, attention, unread — `meta`), and its revealed actions: Rename / Summarize /
- * Delete, each offered only when the host supplies its handler, plus host extras
- * (`extraActions`, e.g. "Add to project"). Rows reveal actions per-row, not "whatever
- * is selected": opening a chat leaves the history view, so tying actions to the
- * selection put them somewhere nobody can see.
+ * time, attention, unread — `meta`), and its actions as always-visible icon buttons
+ * under the title/meta: Rename / Summarize / Archive / Delete, each offered only when
+ * the host supplies its handler, plus host extras (`extraActions`, e.g. "Add to
+ * project"). The icons replaced the old "…" overflow toggle: the actions are few, so
+ * they live on the row itself instead of hiding behind one.
  */
 
 export interface ChatHistoryLabels extends ChatTicketStatsLabels {
@@ -188,18 +222,18 @@ export function InterruptedRunRow({ state, className }: { state: InterruptedChat
       )}
       <div className="bf-chatrow__actions">
         {state.resumable && state.onOpen && (
-          <button type="button" className="bf-chatrow__action" disabled={disabled} onClick={state.onOpen}>
-            {labels.openChat ?? 'Open chat'}
+          <button type="button" className="bf-chatrow__action" disabled={disabled} title={labels.openChat ?? 'Open chat'} aria-label={labels.openChat ?? 'Open chat'} onClick={state.onOpen}>
+            <ActionIcon label={labels.openChat ?? 'Open chat'}>{ACTION_ICONS.openChat}</ActionIcon>
           </button>
         )}
         {state.resumable && state.onResume && (
-          <button type="button" className="bf-chatrow__action" disabled={disabled} onClick={state.onResume}>
-            {labels.resume ?? 'Resume'}
+          <button type="button" className="bf-chatrow__action" disabled={disabled} title={labels.resume ?? 'Resume'} aria-label={labels.resume ?? 'Resume'} onClick={state.onResume}>
+            <ActionIcon label={labels.resume ?? 'Resume'}>{ACTION_ICONS.resume}</ActionIcon>
           </button>
         )}
         {state.onDismiss && (
-          <button type="button" className="bf-chatrow__action" disabled={disabled} onClick={state.onDismiss}>
-            {labels.dismiss ?? 'Dismiss'}
+          <button type="button" className="bf-chatrow__action" disabled={disabled} title={labels.dismiss ?? 'Dismiss'} aria-label={labels.dismiss ?? 'Dismiss'} onClick={state.onDismiss}>
+            <ActionIcon label={labels.dismiss ?? 'Dismiss'}>{ACTION_ICONS.dismiss}</ActionIcon>
           </button>
         )}
       </div>
@@ -230,8 +264,6 @@ export interface ChatHistoryRowProps {
   meta?: ReactNode;
   /** A glyph before the title (a live run, a question waiting). */
   marker?: ReactNode;
-  actionsOpen?: boolean;
-  onToggleActions?: (id: number) => void;
   renaming?: boolean;
   renameValue?: string;
   onStartRename?: (chat: ChatHistoryChat) => void;
@@ -258,9 +290,9 @@ export interface ChatHistoryRowProps {
   className?: string;
 }
 
-/** One chat-history row: title (or its rename input), meta line, and its revealed actions. */
+/** One chat-history row: title (or its rename input), meta line, and its always-visible icon actions. */
 export const ChatHistoryRow = memo(function ChatHistoryRow({
-  chat, active, onOpen, meta, marker, actionsOpen = false, onToggleActions, renaming = false, renameValue = '',
+  chat, active, onOpen, meta, marker, renaming = false, renameValue = '',
   onStartRename, onRenameChange, onSubmitRename, onCancelRename, onSummarize, summarizing = false,
   onArchive, archiving = false, archived = false, onUnarchive, unarchiving = false, onDelete, deleting = false, extraActions, labels: overrides, className,
 }: ChatHistoryRowProps) {
@@ -270,11 +302,10 @@ export const ChatHistoryRow = memo(function ChatHistoryRow({
     chat.daysIdle != null && Number.isFinite(chat.daysIdle) && chat.daysIdle >= 1
       ? fill(labels.daysIdle, { days: Math.floor(chat.daysIdle) })
       : null;
-  // An archived chat has no Archive to offer — the row would be offering the state it
-  // is already in. `hasActions` ignores it for the same reason, so the "more" menu
-  // still opens for a host that offers nothing else on that row.
+  // Archive takes an already-archived row out of the list (its icons go with it), so
+  // an archived row only ever offers Unarchive — never the state it is already in.
   const canArchive = Boolean(onArchive) && !archived;
-  const hasActions = Boolean(onStartRename || onSummarize || canArchive || onDelete || extraActions);
+  const hasActions = Boolean(onStartRename || onSummarize || canArchive || onUnarchive || onDelete || extraActions);
   return (
     <div
       className={['bf-chatrow', className].filter(Boolean).join(' ')}
@@ -318,44 +349,36 @@ export const ChatHistoryRow = memo(function ChatHistoryRow({
         {!renaming && chat.stats != null && chat.stats !== '' && (
           <span className="bf-chatrow__stats" title={chat.stats}>{chat.stats}</span>
         )}
-        {!renaming && hasActions && onToggleActions && (
-          <button
-            type="button"
-            className="bf-chatrow__more"
-            aria-expanded={actionsOpen}
-            aria-label={labels.actionsAria.replace('{title}', chat.title)}
-            title={labels.actions}
-            onClick={() => onToggleActions(chat.id)}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-              <circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" />
-            </svg>
-          </button>
-        )}
       </div>
       {meta != null && <div className="bf-chatrow__meta">{meta}</div>}
-      {actionsOpen && !renaming && hasActions && (
+      {/* The row's actions are always-visible icons under the title/meta — no "…"
+          overflow: each is offered only when the host supplies its handler. */}
+      {!renaming && hasActions && (
         <div className="bf-chatrow__actions">
-          {onStartRename && <button type="button" className="bf-chatrow__action" onClick={() => onStartRename(chat)}>{labels.rename}</button>}
+          {onStartRename && (
+            <button type="button" className="bf-chatrow__action" title={labels.rename} aria-label={labels.rename} onClick={() => onStartRename(chat)}>
+              <ActionIcon label={labels.rename}>{ACTION_ICONS.rename}</ActionIcon>
+            </button>
+          )}
           {onSummarize && (
-            <button type="button" className="bf-chatrow__action" onClick={() => onSummarize(chat.id)} disabled={summarizing} aria-busy={summarizing || undefined}>
-              {labels.summarize}{summarizing && <span aria-hidden>…</span>}
+            <button type="button" className="bf-chatrow__action" title={labels.summarize} aria-label={labels.summarize} onClick={() => onSummarize(chat.id)} disabled={summarizing} aria-busy={summarizing || undefined}>
+              <ActionIcon label={labels.summarize}>{ACTION_ICONS.summarize}</ActionIcon>
             </button>
           )}
           {canArchive && (
-            <button type="button" className="bf-chatrow__action" onClick={() => onArchive?.(chat)} disabled={archiving} aria-busy={archiving || undefined}>
-              {labels.archive}{archiving && <span aria-hidden>…</span>}
+            <button type="button" className="bf-chatrow__action" title={labels.archive} aria-label={labels.archive} onClick={() => onArchive?.(chat)} disabled={archiving} aria-busy={archiving || undefined}>
+              <ActionIcon label={labels.archive}>{ACTION_ICONS.archive}</ActionIcon>
             </button>
           )}
           {/* The mirror of Archive — restore an already-archived chat to the live list. */}
           {onUnarchive && archived && (
-            <button type="button" className="bf-chatrow__action" onClick={() => onUnarchive(chat)} disabled={unarchiving} aria-busy={unarchiving || undefined}>
-              {labels.unarchive}{unarchiving && <span aria-hidden>…</span>}
+            <button type="button" className="bf-chatrow__action" title={labels.unarchive} aria-label={labels.unarchive} onClick={() => onUnarchive(chat)} disabled={unarchiving} aria-busy={unarchiving || undefined}>
+              <ActionIcon label={labels.unarchive}>{ACTION_ICONS.unarchive}</ActionIcon>
             </button>
           )}
           {onDelete && (
-            <button type="button" className="bf-chatrow__action bf-chatrow__action--danger" onClick={() => onDelete(chat)} disabled={deleting} aria-busy={deleting || undefined}>
-              {labels.delete}{deleting && <span aria-hidden>…</span>}
+            <button type="button" className="bf-chatrow__action bf-chatrow__action--danger" title={labels.delete} aria-label={labels.delete} onClick={() => onDelete(chat)} disabled={deleting} aria-busy={deleting || undefined}>
+              <ActionIcon label={labels.delete}>{ACTION_ICONS.delete}</ActionIcon>
             </button>
           )}
           {extraActions}
