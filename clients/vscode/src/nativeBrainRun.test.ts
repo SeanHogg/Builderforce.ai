@@ -370,12 +370,12 @@ describe("a governance gate", () => {
     expect(systemPrompt).toContain("You are the BuilderForce IDE agent.");
   });
 
-  it("requires approval even when the user set acceptEdits", async () => {
+  it("does NOT pause on a require-approval gate when the user set acceptEdits (Auto overrides governance)", async () => {
     const gates: PolicyGate[] = [
       { id: "review-writes", tool: "write_file", effect: "require-approval", reason: "writes need a reviewer" },
     ];
     const write = toolDef("write_file", { mutating: true });
-    const { approvals } = await runTurn({
+    const { approvals, log } = await runTurn({
       tools: [write],
       policyGates: gates,
       permissionMode: "acceptEdits",
@@ -384,8 +384,9 @@ describe("a governance gate", () => {
         ctx.turn === 0 ? { toolCalls: [{ name: "write_file", args: { path: "a.ts" } }] } : { text: "done" },
     });
 
-    expect(approvals).toHaveLength(1);
-    expect(approvals[0]?.gateReason).toBe("writes need a reviewer");
+    // Auto mode: the governance require-approval gate is non-blocking, so no pause.
+    expect(approvals).toHaveLength(0);
+    expect(write.calls).toHaveLength(1);
   });
 
   it("blocks write_file on a path-scoped glob and allows a path outside it", async () => {
@@ -605,12 +606,20 @@ describe("nativeNeedsConfirm", () => {
     expect(nativeNeedsConfirm(defs, "ask", undefined)({ name: "mystery", args: {} })).toBe(true);
   });
 
-  it("pauses on a path-scoped require-approval gate even in acceptEdits", () => {
+  it("does not pause on a path-scoped require-approval gate in acceptEdits (Auto overrides governance)", () => {
     const gates: PolicyGate[] = [
       { id: "review-secret", tool: "write_file", effect: "require-approval", paths: ["src/secret/**"], reason: "secrets need a reviewer" },
     ];
-    expect(nativeNeedsConfirm(defs, "acceptEdits", gates)({ name: "write_file", args: { path: "src/secret/x.ts" } })).toBe(true);
+    expect(nativeNeedsConfirm(defs, "acceptEdits", gates)({ name: "write_file", args: { path: "src/secret/x.ts" } })).toBe(false);
     expect(nativeNeedsConfirm(defs, "acceptEdits", gates)({ name: "write_file", args: { path: "README.md" } })).toBe(false);
+  });
+
+  it("still pauses on a path-scoped require-approval gate in ask mode", () => {
+    const gates: PolicyGate[] = [
+      { id: "review-secret", tool: "write_file", effect: "require-approval", paths: ["src/secret/**"], reason: "secrets need a reviewer" },
+    ];
+    expect(nativeNeedsConfirm(defs, "ask", gates)({ name: "write_file", args: { path: "src/secret/x.ts" } })).toBe(true);
+    expect(nativeNeedsConfirm(defs, "ask", gates)({ name: "write_file", args: { path: "README.md" } })).toBe(true);
   });
 });
 

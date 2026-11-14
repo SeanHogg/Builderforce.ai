@@ -476,7 +476,7 @@ describe("governance gates in a host-owned run", () => {
     expect(policyGates).toHaveBeenCalledWith(42);
   });
 
-  it("pauses a require-approval gate even with Auto mode on", async () => {
+  it("does NOT pause a require-approval gate when Auto mode is on (Auto overrides governance)", async () => {
     const chatId = freshChatId();
     const write = toolDef("write_file", { mutating: true });
     const host = createBrainRunHost(
@@ -489,10 +489,10 @@ describe("governance gates in a host-owned run", () => {
     const s = sink();
     host.attach(s);
     const done = start(chatId, host, { autoApprove: true });
-    await vi.waitFor(() => expect(getRunSnapshot(chatId).pendingConfirm?.name).toBe("write_file"));
-    expect(write.calls).toHaveLength(0);
-    host.confirm(chatId, true);
     await done;
+    // Auto mode: no pendingConfirm hold — the run completes without a manual release.
+    // The store clears the hold to null once the run settles.
+    expect(getRunSnapshot(chatId).pendingConfirm ?? null).toBeNull();
     expect(write.calls).toHaveLength(1);
   });
 

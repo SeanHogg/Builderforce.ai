@@ -73,9 +73,12 @@ function declaredOf(defs: readonly ToolDef[], name: string): { mutates: boolean 
 }
 
 /**
- * Whether a pending call must pause for a human. TRUE for a governance
- * `require-approval` gate (always — an "acceptEdits" preference cannot waive a
- * compiled policy) and for a mutating tool while the permission mode is `ask`.
+ * Whether a pending call must pause for a human. In `ask` mode a governance
+ * `require-approval` gate pauses the call and a mutating tool pauses too. In
+ * `acceptEdits` (Auto) mode nothing pauses: the governance gates are still evaluated
+ * (for observability / the dispatcher's `block` refusals) but a `require-approval`
+ * verdict is non-blocking — the user's Auto preference overrides it. Only the local
+ * agent reaches this host predicate; cloud agents are bound by governance regardless.
  *
  * Pure, so the loop can consult it synchronously; the actual modal is resolved
  * asynchronously off the run's pending-confirm channel.
@@ -86,8 +89,8 @@ export function nativeNeedsConfirm(
   gates: readonly PolicyGate[] | undefined,
 ): (req: { name: string; args: unknown }) => boolean {
   return ({ name, args }) => {
-    if (evaluatePolicyGate(gates, name, toolCallPaths(argsRecord(args)), undefined, declaredOf(defs, name)).action === "require-approval") return true;
     if (permissionMode === "acceptEdits") return false;
+    if (evaluatePolicyGate(gates, name, toolCallPaths(argsRecord(args)), undefined, declaredOf(defs, name)).action === "require-approval") return true;
     const def = defs.find((candidate) => candidate.name === name);
     // Fail safe: a tool we don't recognise is treated as mutating.
     return def ? def.mutating : true;
