@@ -48,6 +48,13 @@ export async function settleBrainRun(run: BrainRunContext, outcome: RunOutcome, 
     ...(served ? { resolvedModel: served.model, ...(served.account ? { account: served.account } : {}) } : {}),
   } as unknown as StreamChatResult);
   const assistantMsg = last.settled ?? (await settleReply(run, text, result, last.requested));
+  // Only a run that PAUSED on a question leaves the chat blocked on a human. A plain
+  // `finished` reply (the run completed its answer) is NOT pending — marking it would
+  // stick the '?' on every chat that ever settled. The flag rides the 'paused' outcome
+  // specifically, so `getGlobalRunState` surfaces it as `awaiting` and the history row
+  // draws the marker. Cleared when the user answers (`beginRun` resets it on the new run
+  // their answer starts) or a new run otherwise begins.
+  if (outcome.kind === 'paused') c.pendingQuestion = { messageId: assistantMsg.id };
   emit(c);
   emitEvermindLearnReconcile(run, assistantMsg, text);
   req.onActivity?.(chatId);

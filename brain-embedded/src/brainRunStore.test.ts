@@ -32,6 +32,7 @@ import {
 // `requestRunConfirm` / `resolveRunConfirm` are the run-control confirm gate, not part
 // of the store's public re-export face — import them from runControl directly.
 import { requestRunConfirm, resolveRunConfirm } from './runStore/runControl';
+import { getCell } from './runStore/runCells';
 import type { BrainStreamFn } from './brainRunStore';
 import { StreamInterruptedError } from './streamChatCompletion';
 import { brainRequestError } from './chatError';
@@ -243,6 +244,30 @@ describe('cross-chat run state (the session-list / dropdown indicators)', () => 
     expect(getGlobalRunState()).toEqual({ running: [], awaiting: [5] });
     resolveRunConfirm(5, true);
     return p;
+  });
+
+  it('reports a chat whose run PAUSED on a question as awaiting (the settled pendingQuestion)', () => {
+    // A terminal ask_user ends the run: `running` is false and `pendingConfirm` is a
+    // live-run gate, so the ONLY thing the cross-chat marker can key on is the cell's
+    // `pendingQuestion` flag the settle wrote. Drive that flag directly and confirm it
+    // lands the chat in `awaiting` (and not `running`), disjoint from a live run.
+    const c = getCell(5);
+    c.pendingQuestion = { messageId: 101 };
+    expect(getGlobalRunState()).toEqual({ running: [], awaiting: [5] });
+    // The user answers / a new run begins -> the flag clears, the chat leaves awaiting.
+    c.pendingQuestion = null;
+    expect(getGlobalRunState()).toEqual({ running: [], awaiting: [] });
+  });
+
+  it('an unfinished chat with NO pending question is not awaiting (finished ≠ pending)', () => {
+    // The settle bug this guards: marking `pendingQuestion` on every settled reply
+    // would stick '?' on every completed chat. Only a `paused` outcome may set it;
+    // a plain idle cell must report nothing.
+    const c = getCell(5);
+    c.running = false;
+    c.pendingConfirm = null;
+    c.pendingQuestion = null;
+    expect(getGlobalRunState()).toEqual({ running: [], awaiting: [] });
   });
 
   it('a confirmed chat leaves awaiting (clears once the question is answered)', () => {

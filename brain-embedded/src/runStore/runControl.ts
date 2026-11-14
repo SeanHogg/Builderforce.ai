@@ -70,6 +70,10 @@ export function getGlobalRunState(): GlobalRunState {
     if (typeof id !== 'number') continue;
     if (cell.pendingConfirm) awaiting.push(id);
     else if (cell.running) running.push(id);
+    // A terminal ask_user that ended the run but nobody has answered: the run is
+    // over (neither running nor confirm-gated), yet the chat is still BLOCKED on a
+    // human — surface it as awaiting so the history row draws the question marker.
+    else if (cell.pendingQuestion) awaiting.push(id);
   }
   return { running, awaiting };
 }

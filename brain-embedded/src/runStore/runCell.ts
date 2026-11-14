@@ -64,6 +64,13 @@ export interface RunCell {
   errorAction: ChatErrorAction | null;
   /** `evidence`: the ship gate's verdict line for a gated publish (PRD 45 §4.5), shown on the prompt. */
   pendingConfirm: { name: string; args: unknown; evidence?: string } | null;
+  /**
+   * A question the run SETTLED on but nobody has answered yet — the terminal `ask_user`
+   * that ended the run (the chat is then in neither `running` nor `pendingConfirm`, so
+   * without this the cross-chat indicator cannot see it). Cleared the moment the user
+   * answers (the answer posts as the next user turn) or a new run begins.
+   */
+  pendingQuestion: { messageId: number } | null;
   confirmResolver: ((ok: boolean) => void) | null;
   appended: BrainMessage[];
   messagesEpoch: number;
@@ -278,6 +285,7 @@ export function makeCell(): RunCell {
     errorAction: null,
     pendingConfirm: null,
     confirmResolver: null,
+    pendingQuestion: null,
     appended: [],
     messagesEpoch: 0,
     listeners: new Set(),

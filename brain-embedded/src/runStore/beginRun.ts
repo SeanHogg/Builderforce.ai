@@ -35,6 +35,9 @@ export function beginRun(c: RunCell, outcomeKey?: RunKey): void {
   c.pendingTurn = null;
   c.stoppedTurn = null;
   c.turn = null;
+  // A new run begins: any question the previous run settled on is superseded —
+  // the user re-engaged (their turn started this run), so nothing is pending.
+  c.pendingQuestion = null;
   if (typeof outcomeKey === 'number') c.runId = runOutcomeId(outcomeKey, Date.now());
   // Fresh abort handle for this run, so Stop can cancel the LLM stream and unwind
   // the loop (a stale, already-aborted controller never bleeds into a new run).
