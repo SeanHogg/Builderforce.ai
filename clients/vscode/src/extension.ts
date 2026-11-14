@@ -783,7 +783,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // prevent, just delayed.
     vscode.workspace.onDidChangeConfiguration((e) => {
       // The picture caps ride `init` too, so an open panel prepares the next picture with them.
-      if (e.affectsConfiguration(PERMISSION_MODE_SETTING) || e.affectsConfiguration("builderforce.images")) refreshWorkspaceSurfaces();
+      if (e.affectsConfiguration(PERMISSION_MODE_SETTING) || e.affectsConfiguration("builderforce.images") || e.affectsConfiguration("builderforce.history")) refreshWorkspaceSurfaces();
       // Local-model settings changed: re-discover the Kimi Code install on the next read.
       if (e.affectsConfiguration("builderforce.localModels")) invalidateKimiInstallMemo();
     }),

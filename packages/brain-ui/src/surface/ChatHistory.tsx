@@ -34,6 +34,8 @@ export interface ChatHistoryLabels extends ChatTicketStatsLabels {
   unarchive: string;
   /** "Chat {id}" — a row whose title is blank. */
   untitled: string;
+  /** A short idle-age chip label, e.g. `{days}D` → `5D`. */
+  daysIdle: string;
   /** An interrupted-run row's status tag (`· Interrupted`). */
   interrupted: string;
   /** An interrupted-run row's Open chat action. */
@@ -58,6 +60,7 @@ export const DEFAULT_CHAT_HISTORY_LABELS: ChatHistoryLabels = {
   archive: 'Archive',
   unarchive: 'Unarchive',
   untitled: 'Chat {id}',
+  daysIdle: '{days}D',
   ticketStats: '{pct}% · {open} open · {done} done',
   ticketStatsAria: '{pct}% complete: {open} open and {done} done tickets',
   ticketStatsCount: '{pct}% · {count} tickets',
@@ -81,11 +84,16 @@ export interface ChatHistoryChat {
   id: number;
   title: string;
   ticketCount?: number | null;
-  ticketProgressPct?: number | null;
   /** Non-cancelled linked tickets below 100%. Absent (older server) = unknown, not 0. */
   ticketOpenCount?: number | null;
   /** Non-cancelled linked tickets at 100%. Absent (older server) = unknown, not 0. */
   ticketDoneCount?: number | null;
+  /**
+   * Full days since the chat was last touched / last executed (now - `updatedAt`). The
+   * row renders this as a short chip (e.g. `5D`) so a stale chat is obvious at a glance.
+   * Absent/unknown ⇒ no chip.
+   */
+  daysIdle?: number | null;
   /**
    * Per-row cost chips the host wants beside the overflow menu — e.g. the VSIX
    * history's `2 agents · $1.20/$3.40`. Linked-ticket progress is NOT composed here:
@@ -256,6 +264,10 @@ export const ChatHistoryRow = memo(function ChatHistoryRow({
 }: ChatHistoryRowProps) {
   const labels = { ...DEFAULT_CHAT_HISTORY_LABELS, ...overrides };
   const submitRename = () => onSubmitRename?.(chat.id, renameValue);
+  const daysIdle =
+    chat.daysIdle != null && Number.isFinite(chat.daysIdle) && chat.daysIdle >= 1
+      ? fill(labels.daysIdle, { days: Math.floor(chat.daysIdle) })
+      : null;
   // An archived chat has no Archive to offer — the row would be offering the state it
   // is already in. `hasActions` ignores it for the same reason, so the "more" menu
   // still opens for a host that offers nothing else on that row.
@@ -298,6 +310,9 @@ export const ChatHistoryRow = memo(function ChatHistoryRow({
           />
         )}
         {!renaming && <ChatTicketStats chat={chat} labels={labels} />}
+        {!renaming && daysIdle != null && (
+          <span className="bf-chatrow__days" title={daysIdle}>{daysIdle}</span>
+        )}
         {!renaming && chat.stats != null && chat.stats !== '' && (
           <span className="bf-chatrow__stats" title={chat.stats}>{chat.stats}</span>
         )}

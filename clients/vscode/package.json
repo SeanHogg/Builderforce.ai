@@ -97,7 +97,7 @@
         {
           "id": "builderforce.work",
           "name": "%view.work%",
-          "when": "builderforce.signedIn"
+          "when": "builderforce.capability.work"
         },
         {
           "id": "builderforce.localWork",
@@ -106,7 +106,7 @@
         {
           "id": "builderforce.inbox",
           "name": "%view.inbox%",
-          "when": "builderforce.signedIn"
+          "when": "builderforce.capability.inbox"
         },
         {
           "id": "builderforce.changes",
@@ -1044,6 +1044,12 @@
           "default": true,
           "markdownDescription": "%config.runDeltaPredictNaturalness.desc%"
         },
+        "builderforce.history.autoArchiveAfterDays": {
+          "type": "number",
+          "minimum": 0,
+          "default": 5,
+          "markdownDescription": "%config.historyAutoArchiveAfterDays.desc%"
+        },
         "builderforce.runDelta.predict.checkScheduler": {
           "type": "boolean",
           "default": true,
@@ -1299,6 +1305,7 @@
     "watch": "node esbuild.mjs --watch",
     "watch:webview": "node ../../scripts/ensure-linked-deps.mjs ../../frontend && vite build --watch --config webview/vite.config.ts",
     "check:signed-in-when": "node scripts/check-signed-in-when.mjs",
+    "check:package-json-guard": "node scripts/check-signed-in-when.mjs",
     "type-check": "node scripts/check-signed-in-when.mjs && tsc -p ./ && tsc -p webview/tsconfig.json && tsc -p harness/tsconfig.json && tsc -p test-integration/tsconfig.json",
     "typecheck": "pnpm run type-check",
     "package": "node vsce-platform.mjs package",
@@ -1335,9 +1342,12 @@
     "@vscode/vsce": "^3.2.0",
     "@webgpu/types": "^0.1.71",
     "@xyflow/react": "^12.12.1",
+    "dependency-cruiser": "16.10.4",
     "autoprefixer": "^10.6.2",
     "esbuild": "^0.28.2",
     "fflate": "^0.8.2",
+    "jscpd": "4.0.5",
+    "knip": "5.30.0",
     "mermaid": "^11.15.0",
     "mocha": "^11.1.0",
     "onnxruntime-web": "1.22.0-dev.20250409-89f8206ba4",
@@ -1349,6 +1359,7 @@
     "remark-gfm": "^4.0.1",
     "tailwindcss": "^3.4.17",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "typescript5": "npm:typescript@5.6.3",
     "typescript-7": "npm:typescript@^7.0.2",
     "unpdf": "^1.8.1",
     "use-intl": "^4.14.9",

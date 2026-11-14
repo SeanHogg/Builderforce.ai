@@ -2640,7 +2640,14 @@
   flex: 0 1 auto; min-width: 0; margin-left: auto; font-size: 11px; font-variant-numeric: tabular-nums;
   color: var(--bf-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.bf-chatrow__tickets + .bf-chatrow__days,
+.bf-chatrow__days + .bf-chatrow__stats,
 .bf-chatrow__tickets + .bf-chatrow__stats { margin-left: 0; }
+.bf-chatrow__days {
+  flex-shrink: 0; margin-left: auto; padding: 1px 7px; font-size: 11px; font-variant-numeric: tabular-nums;
+  color: var(--bf-text-muted); background: var(--bf-surface-2); border: 1px solid var(--bf-border); border-radius: 999px;
+  white-space: nowrap;
+}
 .bf-chatrow__rename {
   flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 2px 4px;
   border: 1px solid var(--bf-border); border-radius: 6px; background: var(--bf-surface); color: var(--bf-text);

@@ -128,6 +128,10 @@ export interface InitData {
    *  an EXISTING chat belongs to (not just the sidebar's active one). Keys are
    *  stringified ids (JSON). Best-effort — an unknown id falls back to "No project". */
   projectNames?: Record<string, string>;
+  /** How many days a chat must sit idle (last touched / last executed) before the
+   *  history auto-archives it (`builderforce.history.autoArchiveAfterDays`). Absent
+   *  from an older host ⇒ the default. A value ≤ 0 disables the sweep. */
+  autoArchiveAfterDays?: number;
   /** The host's local file tools, forwarded so the model can call them over the bridge. */
   /** Localized UI strings (see {@link LabelBundle}). */
   labels: LabelBundle;

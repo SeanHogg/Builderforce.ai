@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_CHAT_TITLE, useArmedNewChat, useBrainChats, useChatCreation, type BrainChat, type ChatMode, type DraftBinding, type DraftToken } from '@seanhogg/builderforce-brain-embedded';
 import { onHostMessage, onRefresh, post, request, type InitData } from '../vscodeBridge';
+import { daysIdleOf } from './chatIdle';
 import { useGlobalRunState } from './useGlobalRunState';
 
 export interface VsCodeChats {
@@ -111,6 +112,33 @@ export function useVsCodeChats(init: InitData, newChatLabel: string): VsCodeChat
   const archive = useCallback((chat: { id: number; title: string }) => archiveChat(chat.id), [archiveChat]);
   const unarchive = useCallback((chat: { id: number; title: string }) => unarchiveChat(chat.id), [unarchiveChat]);
   const clearError = useCallback(() => setError(''), [setError]);
+
+  // The auto-archive sweep: a live chat idle for at least `autoArchiveAfterDays` (last
+  // touched / last executed) archives itself so the history stays short without a
+  // manual pass. It runs when the list lands or the threshold changes — not on a timer
+  // (a chat cannot go stale while the panel is open and watching it) — and it never
+  // touches the open chat or one with a live run, since a chat that is IN USE is not
+  // idle. A non-positive threshold disables the sweep. Each archive goes through the
+  // store, so the list and the Sessions tree update through the one existing seam.
+  const archiveThresholdDays = init.autoArchiveAfterDays ?? 5;
+  const archiveRef = useRef(archive);
+  archiveRef.current = archive;
+  const chatsRef = useRef(chats);
+  chatsRef.current = chats;
+  // `chatIdRef` (the chat.deleted handler above) is the same truth the sweep reads —
+  // declared once, read by both. A duplicate declaration here shadowed it and broke the build.
+  useEffect(() => {
+    if (archiveThresholdDays <= 0) return;
+    const threshold = archiveThresholdDays;
+    const stale = chatsRef.current.filter(
+      (chat) => chat.id !== chatIdRef.current && (daysIdleOf(chat) ?? 0) >= threshold,
+    );
+    for (const chat of stale) {
+      void archiveRef.current(chat).catch(() => {
+        // One failure must not stop the rest of the sweep; the next list reload retries it.
+      });
+    }
+  }, [archiveThresholdDays, chats]);
 
   const setChatId = useCallback((id: number | null) => { void select(id); }, [select]);
   const reloadChats = useCallback(() => { void reload(); }, [reload]);

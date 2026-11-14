@@ -181,6 +181,9 @@ export async function buildWorkspaceInit(
     colorTheme: isLightTheme() ? "light" : "dark",
     // How an attached picture is prepared for the model (`builderforce.images.*`).
     images: imagePrepSettings(),
+    // How many days a chat must sit idle (last touched / last executed) before the
+    // history auto-archives it (`builderforce.history.autoArchiveAfterDays`).
+    autoArchiveAfterDays: autoArchiveAfterDays(),
   };
 }
 
@@ -221,4 +224,9 @@ async function personalityBlockOf(ctx: vscode.ExtensionContext): Promise<string>
 export function imagePrepSettings(): { maxEdge: number; jpegQuality: number } {
   const cfg = vscode.workspace.getConfiguration("builderforce.images");
   return { maxEdge: cfg.get<number>("maxEdge", 1568), jpegQuality: cfg.get<number>("jpegQuality", 0.85) };
+}
+
+/** The `builderforce.history.autoArchiveAfterDays` threshold; a non-positive value disables the sweep. */
+export function autoArchiveAfterDays(): number {
+  return vscode.workspace.getConfiguration("builderforce.history").get<number>("autoArchiveAfterDays", 5);
 }

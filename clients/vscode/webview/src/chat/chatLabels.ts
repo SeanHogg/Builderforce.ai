@@ -125,6 +125,7 @@ const CHAT_HISTORY_KEY: Readonly<Record<string, string>> = {
   ticketStatsCountOnly: 'app.chatTicketStatsCountOnly',
   ticketStatsCountOne: 'app.chatTicketStatsCountOne',
   untitled: 'app.chatUntitled',
+  daysIdle: 'app.chatDaysIdle',
   ticketStatsNone: 'app.chatTicketStatsNone',
   interrupted: 'ir.title',
   openChat: 'ir.openChat',

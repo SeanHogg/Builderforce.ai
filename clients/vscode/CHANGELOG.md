@@ -2,6 +2,15 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [NEXT] — The chat history shows a chat's idle age and auto-archives stale chats
+
+- **Added: each chat-history row shows how long since the chat was last touched or last executed (e.g. `5D`).** The chip appears beside the linked-ticket stats, so a stale chat is obvious at a glance. The age is computed from the chat's `updatedAt` and rendered by the shared `ChatHistoryRow`.
+- **Added: chats idle for longer than a configurable threshold auto-archive.** The sweep runs when the conversation list loads or the threshold changes, archiving any live chat whose idle age meets or exceeds `builderforce.history.autoArchiveAfterDays` (default **5** days, `0` disables it). The open chat and any chat with a live run are never auto-archived. The threshold rides `init`, so an already-open panel follows a settings change without a reload.
+
+## [2026.10.164] — A docs-only epic no longer pins at 75% after every child is done
+
+- **Fixed: a completed epic showed 75% instead of 100% when its delivery was documentation-only.** The epic health tier capped any "complete" epic at 75% whenever it had a live execution and no coder run left a non-documentation file. That was over-broad: a docs-only change (telemetry baseline, specs edit) ships nothing any evidence-policy check could fail, so there is nothing "unsupported" to withhold. The epic tier now treats a docs-only delivery as delivered — reusing the ship-gate's own `fileIsUnchecked` rule, so the health read and the gate agree — while a run that produced no delivery record at all still caps at 75%.
+
 ## [2026.10.163] — A docs-only change can close its ticket without a branch
 
 - **Fixed: the ship gate refused to mark a ticket done on a branch with no upstream even when the change was docs/copy only.** The completion gate failed closed whenever the outgoing change could not be computed — but for a run whose files are all outside every check the evidence policy could run (markdown, copy, images), there was nothing to verify: the identical files pass the gate with zero checks once an upstream exists. The gate now treats such a run as clear (still refusing the moment any source file is involved), and the run's own delta ticket closes under the same rule — unless the run's evidence holds a failing check or a placeholder is outstanding.

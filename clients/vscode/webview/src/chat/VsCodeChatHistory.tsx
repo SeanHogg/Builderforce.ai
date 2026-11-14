@@ -17,6 +17,7 @@ import { chatHistoryLabels, makeT } from './chatLabels';
 import { useChatChildrenCount } from './chatChildren';
 import { acknowledgeInterruptedRun, useInterruptedRuns } from './interruptedRunsStore';
 import { interruptedWhen } from './interruptedWhen';
+import { daysIdleOf } from './chatIdle';
 import type { InterruptedResume } from './useInterruptedResume';
 import type { ChatRunStatus } from './useVsCodeChats';
 
@@ -198,10 +199,13 @@ function VsCodeChatHistoryRow({
         id: chat.id,
         title: titleOf(chat),
         ticketCount: chat.ticketCount,
-        ticketProgressPct: chat.ticketProgressPct,
         ticketOpenCount: chat.ticketOpenCount,
         ticketDoneCount: chat.ticketDoneCount,
         stats: runStatsOf(chat, agents, t),
+        // Full days since `updatedAt` (last touched / last executed) — the row's
+        // `5D` chip. The threshold that flips a stale chat into the archive sweep
+        // below rides init from the host setting.
+        daysIdle: daysIdleOf(chat),
       }}
       active={active}
       marker={status ? <RunMarker status={status} label={status === 'running' ? t('app.chatRunning', 'Running') : t('app.chatAwaiting', 'Needs an answer')} /> : undefined}

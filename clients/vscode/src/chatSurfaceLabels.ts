@@ -36,6 +36,7 @@ export function chatSurfaceLabels(): Record<string, string> {
     "app.chatTicketStatsCountOnly": t("{count} tickets"),
     "app.chatTicketStatsCountOne": t("{count} ticket"),
     "app.chatUntitled": t("Chat {id}"),
+    "app.chatDaysIdle": t("{days}D"),
     "app.chatTicketStatsNone": t("No tickets"),
     "app.emptyTitle": t("What are we working on?"),
     "app.emptyHint": t("Ask about this workspace, or start from one of these."),
