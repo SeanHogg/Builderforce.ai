@@ -89,6 +89,7 @@
     "@electric-sql/pglite": "0.5.15",
     "drizzle-kit": "0.31.11",
     "fake-indexeddb": "^6.2.7",
+    "npm": "11.20.0",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "typescript-7": "npm:typescript@^7.0.2",
     "vitest": "^4.1.10",
