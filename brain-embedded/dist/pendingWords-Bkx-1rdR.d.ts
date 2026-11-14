@@ -1,5 +1,5 @@
-import { B as BrainTraceEvent, U as UsageSurface, a as BrainMessage } from './brainTriage-I5tIR9e1.cjs';
-import { L as LocalRuntimeId, a as LocalEndpoint, b as LocalRuntimeProbe, c as LocalModel } from './probe-BGCNrsPi.cjs';
+import { B as BrainTraceEvent, U as UsageSurface, a as BrainMessage } from './brainTriage-I5tIR9e1.js';
+import { L as LocalRuntimeId, a as LocalEndpoint, b as LocalRuntimeProbe, c as LocalModel } from './probe-BGCNrsPi.js';
 import { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import { ConsolidateOptions, ConsolidatedMemory } from '@seanhogg/builderforce-memory/working';
 
@@ -1953,6 +1953,14 @@ interface BrainRunRequest {
     priorResearch?: string | null;
     /** The user turn that triggered this run, appended to the transcript. */
     userTurn?: string | ContentPart[];
+    /**
+     * Set ONLY by the auto-continuation (`continueChat`) on the continuation run's request: this
+     * run continues the previous one on the chat's own direction, no person's words. `startRun`'s
+     * settle records the no-progress guard from the run's own evidence (a file changed or a check
+     * passed) BEFORE it decides the next continuation, so the streak can never lag a run behind
+     * (chat #80006: 24 empty-ask continuations, nothing closed). A person's turn never carries it.
+     */
+    continuationProgress?: boolean;
     /** The persisted message id behind each {@link seed} entry, in order (`transcriptSeedOf`). */
     seedIds?: number[];
     /** The persisted message id of {@link userTurn}. With {@link seedIds} it lets a fold

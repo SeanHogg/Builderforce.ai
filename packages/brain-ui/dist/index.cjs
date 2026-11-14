@@ -5746,6 +5746,9 @@ function TicketChip(props) {
     /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { style: { display: "flex", flexDirection: "column", minWidth: 0, maxWidth: 160 }, children: [
       onOpenTicket && tk.exists ? /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("button", { type: "button", title: `${labels.open} \xB7 ${tk.label}`, onClick: () => onOpenTicket(tk), style: S.ticketLink, children: tk.label }) : /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("span", { style: S.ticketLabel, title: tk.label, children: tk.label }),
       /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("span", { style: S.ticketMeta, children: [
+        "#",
+        tk.ref,
+        " \xB7 ",
         labels.kind[tk.kind],
         " \xB7 ",
         tk.status,

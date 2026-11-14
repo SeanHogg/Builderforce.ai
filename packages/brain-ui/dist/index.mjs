@@ -5543,6 +5543,9 @@ function TicketChip(props) {
     /* @__PURE__ */ jsxs44("div", { style: { display: "flex", flexDirection: "column", minWidth: 0, maxWidth: 160 }, children: [
       onOpenTicket && tk.exists ? /* @__PURE__ */ jsx48("button", { type: "button", title: `${labels.open} \xB7 ${tk.label}`, onClick: () => onOpenTicket(tk), style: S.ticketLink, children: tk.label }) : /* @__PURE__ */ jsx48("span", { style: S.ticketLabel, title: tk.label, children: tk.label }),
       /* @__PURE__ */ jsxs44("span", { style: S.ticketMeta, children: [
+        "#",
+        tk.ref,
+        " \xB7 ",
         labels.kind[tk.kind],
         " \xB7 ",
         tk.status,

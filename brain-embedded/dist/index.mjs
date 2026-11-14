@@ -356,7 +356,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-IGSJKCQH.mjs";
+} from "./chunk-AULQAVBN.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useEffect, useMemo } from "react";
@@ -1424,10 +1424,10 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-haiku-latest": [1e-7, 5e-7],
   "~anthropic/claude-opus-latest": [4e-6, 2e-5],
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
-  "~deepseek/deepseek-flash-latest": [22e-9, 4e-7],
+  "~deepseek/deepseek-flash-latest": [38e-9, 5e-7],
   "~deepseek/deepseek-pro-latest": [999e-10, 8e-6],
   "~deepseek/deepseek-v4-flash-latest": [434e-10, 3e-7],
-  "~google/gemini-flash-latest": [75e-8, 375e-8],
+  "~google/gemini-flash-latest": [15e-7, 75e-7],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
   "~moonshotai/kimi-latest": [1824e-10, 110055e-10],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
@@ -1507,11 +1507,11 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v4-flash-0731": [434e-10, 3e-7],
   "deepseek/deepseek-v4-flash-0731:batch": [48e-9, 144e-9],
   "deepseek/deepseek-v4-flash-vision-exp": [44e-8, 132e-8],
-  "deepseek/deepseek-v4-pro": [95526e-11, 191052e-11],
+  "deepseek/deepseek-v4-pro": [9e-7, 15e-7],
   "deepseek/deepseek-v4-pro-0813": [111e-9, 444e-8],
-  "deepseek/deepseek-v4.1-flash": [22e-9, 4e-7],
-  "deepseek/deepseek-v4.1-flash-1017": [15e-8, 6e-7],
-  "deepseek/deepseek-v4.1-flash-1017:batch": [11e-9, 2e-7],
+  "deepseek/deepseek-v4.1-flash": [507e-10, 2028e-10],
+  "deepseek/deepseek-v4.1-flash-1017": [38e-9, 5e-7],
+  "deepseek/deepseek-v4.1-flash-1017:batch": [5e-8, 15e-8],
   "deepseek/deepseek-v4.1-flash:batch": [112e-9, 336e-9],
   "dots-studio/dots-3-note-preview:free": [0, 0],
   "elorian/glimpse": [6e-7, 3e-6],
@@ -1548,6 +1548,8 @@ var PRICE_SNAPSHOT = {
   "google/gemini-4-argon:batch": [1e-6, 5e-6],
   "google/gemini-4-carbon": [2e-6, 1e-5],
   "google/gemini-4-carbon:batch": [1e-6, 5e-6],
+  "google/gemini-4-hydrogen": [15e-7, 75e-7],
+  "google/gemini-4-hydrogen:batch": [75e-8, 375e-8],
   "google/gemini-nano-banana-2.1": [15e-7, 75e-7],
   "google/gemini-omni-1.1-flash": [15e-7, 9e-6],
   "google/gemini-omni-1.2-flash": [15e-7, 9e-6],
@@ -1555,14 +1557,14 @@ var PRICE_SNAPSHOT = {
   "google/gemma-3-12b-it": [5e-8, 15e-8],
   "google/gemma-3-27b-it": [8e-8, 35e-8],
   "google/gemma-3-4b-it": [5e-8, 1e-7],
-  "google/gemma-4-26b-a4b-it": [8e-8, 1e-7],
+  "google/gemma-4-26b-a4b-it": [9e-8, 3e-7],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
   "google/gemma-4-31b-it": [2e-7, 4e-7],
   "google/gemma-4-31b-it:free": [0, 0],
   "google/lyria-3-clip-preview": [0, 0],
   "google/lyria-3-pro-preview": [0, 0],
   "gryphe/mythomax-l2-13b": [8e-8, 11e-8],
-  "ibm-granite/granite-4.2-8b": [6e-8, 15e-8],
+  "ibm-granite/granite-4.2-8b": [6e-8, 25e-8],
   "inclusionai/ling-3.0-flash": [21e-9, 63e-9],
   "inclusionai/ling-3.0-flash-vl": [6e-8, 18e-8],
   "inclusionai/ling-3.0-tiny": [15e-9, 45e-9],
@@ -1570,8 +1572,6 @@ var PRICE_SNAPSHOT = {
   "inference-net/schematron-v2-small": [5e-8, 23e-8],
   "inference-net/schematron-v2-turbo": [3e-8, 15e-8],
   "kt/midm-k-3.0-pro": [2e-7, 8e-7],
-  "liquid/lfm-2.5-2.6b": [35e-8, 5e-7],
-  "liquid/lfm-2.5-2.6b:free": [0, 0],
   "liquid/lfm-2.5-24b-a2b": [5e-8, 7e-7],
   "liquid/lfm-3-1.7b": [8e-8, 2e-7],
   "liquid/lfm-3-1.7b:free": [0, 0],
@@ -1596,7 +1596,7 @@ var PRICE_SNAPSHOT = {
   "meta/muse-spark-open": [125e-8, 425e-8],
   "meta/muse-wonder": [4e-6, 2e-5],
   "microsoft/phi-4": [7e-8, 14e-8],
-  "minimax/minimax-m2.5": [27e-8, 108e-8],
+  "minimax/minimax-m2.5": [27e-8, 95e-8],
   "minimax/minimax-m2.7": [21e-8, 84e-8],
   "minimax/minimax-m3": [3e-7, 12e-7],
   "minimax/minimax-m3:batch": [224e-9, 88e-8],
@@ -1627,12 +1627,12 @@ var PRICE_SNAPSHOT = {
   "moonshotai/kimi-k2": [57e-8, 23e-7],
   "moonshotai/kimi-k2-0905": [6e-7, 25e-7],
   "moonshotai/kimi-k2-thinking": [6e-7, 25e-7],
-  "moonshotai/kimi-k2.5": [532e-9, 3325e-9],
+  "moonshotai/kimi-k2.5": [5e-7, 25e-7],
   "moonshotai/kimi-k2.6": [65e-8, 341e-8],
   "moonshotai/kimi-k2.7-code": [6e-7, 35e-7],
   "moonshotai/kimi-k3": [192e-9, 16e-6],
   "moonshotai/kimi-k3:batch": [228e-8, 114e-7],
-  "moonshotai/kimi-k3.1-pro": [2375e-10, 84085e-10],
+  "moonshotai/kimi-k3.1-pro": [2e-6, 1e-5],
   "moonshotai/kimi-k3.1-pro:batch": [7e-7, 6e-6],
   "morph/morph-v3-fast": [8e-7, 12e-7],
   "morph/morph-v3-fast:batch": [4e-7, 6e-7],
@@ -1760,6 +1760,7 @@ var PRICE_SNAPSHOT = {
   "openrouter/fusion": [0, 0],
   "openrouter/pareto-code": [0, 0],
   "particle-ai/particle-1": [5e-8, 5e-7],
+  "particle-ai/particle-1:free": [0, 0],
   "perceptron/perceptron-mk1": [15e-8, 15e-7],
   "perceptron/perceptron-mk1.5": [15e-8, 15e-7],
   "perplexity/sonar": [1e-6, 1e-6],
@@ -1792,7 +1793,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3.5-27b": [26e-8, 26e-7],
   "qwen/qwen3.5-35b-a3b": [14e-8, 1e-6],
   "qwen/qwen3.5-397b-a17b": [6e-7, 36e-7],
-  "qwen/qwen3.5-9b": [68e-9, 1e-7],
+  "qwen/qwen3.5-9b": [28e-9, 41e-9],
   "qwen/qwen3.5-flash-02-23": [65e-9, 26e-8],
   "qwen/qwen3.5-plus-02-15": [26e-8, 156e-8],
   "qwen/qwen3.5-plus-20260420": [3e-7, 18e-7],
@@ -1818,7 +1819,7 @@ var PRICE_SNAPSHOT = {
   "rekaai/reka-flash-3": [1e-7, 2e-7],
   "relace/relace-apply-3": [85e-8, 125e-8],
   "relace/relace-search": [1e-6, 3e-6],
-  "ricursiveai/ripple-65b-preview": [2e-7, 6e-7],
+  "ricursiveai/ripple-65b-preview": [1e-7, 3e-7],
   "sakana/fugu-max": [2e-6, 6e-6],
   "sakana/fugu-ultra": [5e-6, 3e-5],
   "sakana/fugu-ultra-v2": [5e-6, 3e-5],
@@ -1842,6 +1843,7 @@ var PRICE_SNAPSHOT = {
   "thedrummer/skyfall-36b-v2": [55e-8, 8e-7],
   "thedrummer/unslopnemo-12b": [4e-7, 4e-7],
   "thinkingmachines/inkling": [1e-6, 405e-8],
+  "thinkingmachines/inkling-2-small": [3e-7, 1e-6],
   "thinkingmachines/inkling-2-small:free": [0, 0],
   "thinkingmachines/inkling-small": [45e-8, 12e-7],
   "thinkingmachines/inkling-small:batch": [36e-8, 96e-8],
@@ -1864,7 +1866,7 @@ var PRICE_SNAPSHOT = {
   "x-ai/grok-4.7:batch": [16e-7, 48e-7],
   "x-ai/grok-build-0.1": [1e-6, 2e-6],
   "xiaomi/mimo-v2.5": [4e-7, 2e-6],
-  "xiaomi/mimo-v2.5-pro": [48e-8, 18e-7],
+  "xiaomi/mimo-v2.5-pro": [435e-9, 87e-8],
   "xiaomi/mimo-v2.6-flash": [14e-8, 28e-8],
   "xiaomi/mimo-v2.6-pro": [435e-9, 87e-8],
   "xiaomi/mimo-v2.6-pro-ultraspeed": [435e-8, 87e-7],
@@ -1879,14 +1881,14 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-5-turbo": [12e-7, 4e-6],
   "z-ai/glm-5.1": [14e-7, 44e-7],
   "z-ai/glm-5.2": [7e-9, 68e-7],
-  "z-ai/glm-5.2:batch": [322e-9, 989e-9],
-  "z-ai/glm-5.3": [699e-10, 14e-7],
+  "z-ai/glm-5.2:batch": [298e-9, 916e-9],
+  "z-ai/glm-5.3": [84e-9, 36e-7],
   "z-ai/glm-5.3-flash": [399e-10, 784e-10],
   "z-ai/glm-5.3-flash:batch": [5e-8, 18e-8],
   "z-ai/glm-5.3-flashx": [37e-8, 125e-8],
   "z-ai/glm-5.3-flashx-legal": [37e-8, 125e-8],
   "z-ai/glm-5.3-prime": [28e-7, 88e-7],
-  "z-ai/glm-5.3:batch": [322e-9, 989e-9],
+  "z-ai/glm-5.3:batch": [45e-8, 2e-6],
   "z-ai/glm-5v-turbo": [12e-7, 4e-6]
 };
 
@@ -15348,12 +15350,21 @@ function releaseClaim(c, claim) {
 }
 
 // src/runStore/autoContinueGuard.ts
+var MAX_NO_PROGRESS_CONTINUATIONS = 3;
 var streaks = /* @__PURE__ */ new Map();
 function resetContinuationProgress() {
   streaks.clear();
 }
 function notePersonTurn(runKey) {
   streaks.delete(runKey);
+}
+function mayAutoContinue(runKey) {
+  return (streaks.get(runKey) ?? 0) < MAX_NO_PROGRESS_CONTINUATIONS;
+}
+function noteContinuationProgress(runKey, progressed2) {
+  const next = progressed2 ? 0 : (streaks.get(runKey) ?? 0) + 1;
+  streaks.set(runKey, next);
+  return next;
 }
 
 // src/runStore/continueChat.ts
@@ -15456,6 +15467,16 @@ async function continueChat(runKey, c, steers, start, claim, left, progress = { 
   const request = c.lastRequest;
   const binding = bindings.get(runKey);
   if (!request || !binding || steers.length === 0) return false;
+  const personSpoke = steers.some((m) => m.fromPerson);
+  if (!personSpoke && !mayAutoContinue(runKey)) {
+    trace(
+      c,
+      "steer.continue_no_progress",
+      { streak: MAX_NO_PROGRESS_CONTINUATIONS },
+      "The run kept continuing without changing a file or passing a check; it stops here so the chat can settle, and waits for your next turn."
+    );
+    return false;
+  }
   const links = depth.get(runKey) ?? 0;
   if (links >= MAX_CONTINUATIONS) {
     trace(c, "steer.continue_limit", { continuations: links }, "The run was continued as often as it may be without a new message; the direction waits for your next turn.");
@@ -15518,10 +15539,12 @@ async function continueChat(runKey, c, steers, start, claim, left, progress = { 
   const row = rows[rows.length - 1];
   const turnText = recordedModelText(content).trim();
   const userTurn = turnText ? content : request.userTurn ?? content;
+  const recordProgress = !personSpoke;
   start(runKey, {
     ...request,
     ...fresher,
     userTurn,
+    ...recordProgress ? { continuationProgress: true } : {},
     ...row ? { userTurnMessageId: row.id } : {}
   }, claim).catch((e) => {
     continuing.delete(runKey);
@@ -21408,6 +21431,7 @@ async function startRun(runKey, request, claim) {
       }));
       c.finishClosedOut = true;
       const finished = finishConditionMet(closeOut);
+      if (req.continuationProgress) noteContinuationProgress(runKey, changed2 || verification.verified);
       const finalTrace = runTrace(c);
       const requestText = req.userTurn === void 0 ? void 0 : contentText(req.userTurn);
       const wakeTurn = delegatingCells.has(c) && isChildReportText(requestText);
