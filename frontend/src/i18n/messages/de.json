@@ -2665,15 +2665,6 @@
     "loading": "Lädt…",
     "window": "Zeitraum",
     "days": "{n} Tage",
-    "llm": {
-      "requests": "Anfragen",
-      "requestsSub": "LLM-Anfragen insgesamt",
-      "promptTokens": "Prompt-Tokens",
-      "completionTokens": "Completion-Tokens",
-      "tokensSub": "dieser Arbeitsbereich",
-      "estCost": "Gesch. Ausgaben",
-      "estCostSub": "geschätzt, letzte 7 Tage"
-    },
     "aihub": {
       "title": "KI-Einblicke",
       "subtitle": "Akzeptanz, Effektivität und nächste Schritte – Ihr KI-Programm auf einen Blick. Öffnen Sie einen Bericht für Details.",
@@ -2705,6 +2696,15 @@
         "trendAria": "Täglicher KI-Token-Verbrauch diesen Monat",
         "noTrend": "Diesen Monat noch keine Token-Nutzung"
       }
+    },
+    "llm": {
+      "requests": "Anfragen",
+      "requestsSub": "LLM-Anfragen insgesamt",
+      "promptTokens": "Prompt-Tokens",
+      "completionTokens": "Completion-Tokens",
+      "tokensSub": "dieser Arbeitsbereich",
+      "estCost": "Gesch. Ausgaben",
+      "estCostSub": "geschätzt, letzte 7 Tage"
     },
     "delivhub": {
       "title": "Lieferung",
@@ -4392,11 +4392,11 @@
     "capex": "CAPEX",
     "opex": "OPEX",
     "anomalies": "{count} Klassifizierungsanomalien",
-    "openLifecycle": "Zeigen, wo die Zeit dieses Elements geblieben ist",
     "estimateNote": "$ = LLM-Kosten + geschätzte Arbeit",
     "item": "Element",
     "expand": "Aufklappen",
     "collapse": "Einklappen",
+    "openLifecycle": "Zeigen, wo die Zeit dieses Elements geblieben ist",
     "unclassified": "Nicht klassifiziert",
     "anomalyTip": "Die CAPEX/OPEX-Klasse dieses Elements widerspricht der des übergeordneten Elements – bitte abgleichen.",
     "descendantAnomalyTip": "Die Klasse eines untergeordneten Elements widerspricht der des übergeordneten.",
@@ -5052,7 +5052,10 @@
           "import": "Diese Datei konnte nicht als Bild importiert werden."
         },
         "modes": "Bearbeitungsmodus",
-        "mode": { "adjust": "Anpassen", "annotate": "Beschriften" },
+        "mode": {
+          "adjust": "Anpassen",
+          "annotate": "Beschriften"
+        },
         "import": "Bild importieren",
         "replace": "Bild ersetzen",
         "reset": "Bearbeitung zurücksetzen",
@@ -5068,9 +5071,18 @@
         "flipHorizontal": "Horizontal spiegeln",
         "flipVertical": "Vertikal spiegeln",
         "crop": "Zuschneiden",
-        "cropSide": { "left": "Links", "top": "Oben", "right": "Rechts", "bottom": "Unten" },
+        "cropSide": {
+          "left": "Links",
+          "top": "Oben",
+          "right": "Rechts",
+          "bottom": "Unten"
+        },
         "adjust": "Anpassen",
-        "adjustment": { "brightness": "Helligkeit", "contrast": "Kontrast", "saturation": "Sättigung" }
+        "adjustment": {
+          "brightness": "Helligkeit",
+          "contrast": "Kontrast",
+          "saturation": "Sättigung"
+        }
       },
       "podcast": {
         "chapters": "Kapitel",
@@ -5078,7 +5090,10 @@
         "play": "Abspielen",
         "segmentCount": "{count, plural, one {# Segment} other {# Segmente}}",
         "sections": "Podcast-Bereiche",
-        "tab": { "segments": "Segmente", "details": "Details und Feed" },
+        "tab": {
+          "segments": "Segmente",
+          "details": "Details und Feed"
+        },
         "problem": {
           "notAudio": "Einer Folge können nur Audiodateien hinzugefügt werden.",
           "import": "Dieses Audio konnte nicht hinzugefügt werden.",
@@ -13161,8 +13176,8 @@
     },
     "tickets": {
       "none": "Noch keine Tickets verknüpft.",
-      "originalRequestText": "Ursprüngliche Anfrage: {text}",
       "originalRequest": "Ursprüngliche Anfrage",
+      "originalRequestText": "Ursprüngliche Anfrage: {text}",
       "ringAria": "{label}: {pct}% erledigt",
       "inParent": "in {parent}",
       "spawned": "hier erstellt",
@@ -13263,6 +13278,8 @@
     "brainDefault": "Brain (Standard)",
     "noChatsYet": "Noch keine Chats. Klicke auf + Neu, um zu beginnen.",
     "noChatsMatch": "Keine Chats entsprechen deiner Suche.",
+    "providerCapBanner": "Dein {providers}-API-Schlüssel hat sein Nutzungslimit erreicht — dieser Lauf ist auf den gemeinsamen Modell-Pool zurückgefallen.",
+    "manageApiKeys": "API-Schlüssel verwalten →",
     "rename": "Umbenennen",
     "summarize": "Zusammenfassen",
     "deleteChatConfirm": "„{title}“ löschen? Dies kann nicht rückgängig gemacht werden.",
@@ -13393,8 +13410,6 @@
     "onboardMePrompt": "Ich bin neu hier – hilf mir beim Einstieg. Frag mich, was ich bauen möchte, erkläre, wie Nutzung und Kosten funktionieren, empfiehl, ob der Free- oder Pro-Plan zu meinem Zeitrahmen passt, und hilf mir, mein vorhandenes KI-Konto zu verbinden, falls ich eines habe.",
     "onboardMeHint": "Umfang, Kosten und Tarif – ich führe dich Schritt für Schritt durch.",
     "onboardHeading": "Neu hier?",
-    "providerCapBanner": "Dein {providers}-API-Schlüssel hat sein Nutzungslimit erreicht — dieser Lauf ist auf den gemeinsamen Modell-Pool zurückgefallen.",
-    "manageApiKeys": "API-Schlüssel verwalten →",
     "chatActions": "Chat-Aktionen",
     "chatActionsAria": "Aktionen für {title}",
     "chatTicketStats": "{pct} % · {open} offen · {done} erledigt",
@@ -17507,8 +17522,18 @@
   },
   "pullRequestSecurityGate": {
     "reasonUnknown": "Durch die Sicherheitsrichtlinie blockiert",
-    "scanType": { "SECRET": "Geheimnis", "SAST": "SAST", "SCA": "Abhängigkeits", "REVIEW": "Sicherheitsprüfungs" },
-    "severity": { "CRITICAL": "kritisch", "HIGH": "hoch", "MEDIUM": "mittel", "LOW": "niedrig" },
+    "scanType": {
+      "SECRET": "Geheimnis",
+      "SAST": "SAST",
+      "SCA": "Abhängigkeits",
+      "REVIEW": "Sicherheitsprüfungs"
+    },
+    "severity": {
+      "CRITICAL": "kritisch",
+      "HIGH": "hoch",
+      "MEDIUM": "mittel",
+      "LOW": "niedrig"
+    },
     "reason": {
       "scan_missing": "Der {scanType}-Scan wurde für diesen Commit nicht ausgeführt",
       "scan_pending": "Der {scanType}-Scan läuft noch",
@@ -21940,9 +21965,6 @@
     "provenanceOn": "Geprüft am {date}"
   },
   "creationCanvas": {
-    "costToBuild": "Baukosten",
-    "costUnderOneCent": "<0,01 $",
-    "costRunsAndTokens": "{requests} Läufe · {tokens} Tokens",
     "scopeKind": "Geltungsbereich",
     "scopeId": "Bereichs-ID",
     "scopeWorkspace": "Gesamter Workspace",
@@ -21971,13 +21993,16 @@
     "environmentStaging": "Staging",
     "environmentPreview": "Vorschau",
     "environmentDevelopment": "Entwicklung",
+    "costToBuild": "Baukosten",
+    "costUnderOneCent": "<0,01 $",
+    "costRunsAndTokens": "{requests} Läufe · {tokens} Tokens",
     "storyPoints": "Story Points",
     "investorMilestone": "Investoren-Meilenstein",
     "investorMilestonesHeading": "Seit dem letzten Update ausgelieferte Meilensteine",
     "investorMilestonesMore": "und {count} weitere",
-    "investorMilestonesEmpty":"Seit dem letzten Update wurde kein Investoren-Meilenstein ausgeliefert.",
+    "investorMilestonesEmpty": "Seit dem letzten Update wurde kein Investoren-Meilenstein ausgeliefert.",
     "investorMilestoneBoardLine": "{board} · {points} Punkte erreicht",
-    "investorMilestoneHint":"Sobald er ausgeliefert ist, erscheint er im nächsten Investoren-Update und im Board-Paket.",
+    "investorMilestoneHint": "Sobald er ausgeliefert ist, erscheint er im nächsten Investoren-Update und im Board-Paket.",
     "startDate": "Startdatum",
     "dueDate": "Fälligkeitsdatum",
     "sprintId": "Sprint",
@@ -23341,7 +23366,6 @@
     "projectTasks": "{count} Aufgaben",
     "exportCanvas": "Exportieren",
     "object": {
-      "legalDocument": "Rechtsdokument",
       "workflow": "Workflow",
       "project": "Projekt",
       "website": "Website",
@@ -23530,6 +23554,7 @@
       "book": "Buch",
       "account": "Kundenkonto",
       "sticky": "Haftnotiz",
+      "legalDocument": "Rechtsdokument",
       "quote": "Angebot",
       "sequence": "Sequenz",
       "call": "Anruf",
@@ -23728,11 +23753,11 @@
     "canvasViewControls": "Ansichtssteuerung der Leinwand",
     "undoCanvasChange": "Leinwandänderung rückgängig",
     "redoCanvasChange": "Leinwandänderung wiederholen",
+    "inviteCollaborators": "Mitarbeiter einladen",
     "collapseBar": "Symbolleiste einklappen",
     "expandBar": "Symbolleiste einblenden",
     "publishCanvas": "Veröffentlichen",
     "publishCanvasTitle": "Diese Leinwand veröffentlichen – prüfen und live stellen",
-    "inviteCollaborators": "Mitarbeiter einladen",
     "clickToFollow": "klicken, um der Ansicht zu folgen",
     "connectionKind": "Verbindungstyp",
     "viewOutcomeMetrics": "Ergebniskennzahlen ansehen",
@@ -24430,148 +24455,865 @@
     "noticeGuestLimitDevice": "Dieses Gerät hat sein kostenloses Gastlimit für heute erreicht. Melden Sie sich kostenlos an, um weiterzumachen – Ihre Leinwand kommt mit.",
     "pack": {
       "llm-builder-academy": {
-        "o0": { "title": "Ein LLM bauen" },
-        "o1": { "title": "Trainingskorpus-Labor", "data": { "status": "Übungsbereich", "subtitle": "Prüfen Sie Herkunft, Qualität, Deduplizierung und Aufteilungen." } },
-        "o2": { "title": "Tokenizer- und Trainings-Notebook", "data": { "status": "Übungsbereich" } },
-        "o3": { "title": "Release-Scorecard für das LLM", "data": { "status": "Wissensüberprüfungen", "criteria": { "0": "Leistungsfähigkeit", "1": "Sicherheit", "2": "Robustheit", "3": "Latenz", "4": "Kosten" } } },
-        "o4": { "title": "Modell-Blaupause", "data": { "status": "Abschlussprojekt", "instructions": "Dokumentieren Sie Architektur, Trainingsbudget, Evaluierungsnachweise und Release-Kontrollen." } },
-        "e0": "übt", "e1": "übt", "e2": "trainiert", "e3": "setzt um", "e4": "bewertet"
+        "o0": {
+          "title": "Ein LLM bauen"
+        },
+        "o1": {
+          "title": "Trainingskorpus-Labor",
+          "data": {
+            "status": "Übungsbereich",
+            "subtitle": "Prüfen Sie Herkunft, Qualität, Deduplizierung und Aufteilungen."
+          }
+        },
+        "o2": {
+          "title": "Tokenizer- und Trainings-Notebook",
+          "data": {
+            "status": "Übungsbereich"
+          }
+        },
+        "o3": {
+          "title": "Release-Scorecard für das LLM",
+          "data": {
+            "status": "Wissensüberprüfungen",
+            "criteria": {
+              "0": "Leistungsfähigkeit",
+              "1": "Sicherheit",
+              "2": "Robustheit",
+              "3": "Latenz",
+              "4": "Kosten"
+            }
+          }
+        },
+        "o4": {
+          "title": "Modell-Blaupause",
+          "data": {
+            "status": "Abschlussprojekt",
+            "instructions": "Dokumentieren Sie Architektur, Trainingsbudget, Evaluierungsnachweise und Release-Kontrollen."
+          }
+        },
+        "e0": "übt",
+        "e1": "übt",
+        "e2": "trainiert",
+        "e3": "setzt um",
+        "e4": "bewertet"
       },
       "sales-hub": {
-        "o0": { "title": "Vertriebspipeline", "data": { "status": "Live",
-          "swimlanes": {
-            "0": { "title": "Gründer und Solo-Entwickler", "hint": "Kurzer Zyklus, Self-Service, Kauf nach der Demo." },
-            "1": { "title": "Agenturen und Beratungen", "hint": "Verkaufen es an eigene Kunden weiter – beginnen Sie mit der Marge." },
-            "2": { "title": "KMU-Teams", "hint": "Team-Tarif, ein Fürsprecher plus ein Budgetinhaber." },
-            "3": { "title": "Enterprise", "hint": "Sicherheitsprüfung, Einkauf, ein Pilot vor dem Vertrag." }
-          },
-          "cards": {
-            "0": { "title": "Den Empfehlungslink dort posten, wo Entwickler schon sind", "note": "Indie Hackers, r/SaaS, Ihr eigenes Netzwerk. Beginnen Sie mit dem Canvas, nicht mit der Funktionsliste." },
-            "1": { "title": "Die Präsentation plus eine 20-minütige Canvas-Führung senden", "note": "Die Präsentation liegt auf diesem Board – hängen Sie sie an, verlinken Sie keine Login-Wand." },
-            "2": { "title": "10 Agenturen auflisten, die Tools weiterverkaufen", "note": "Das Argument ist die Marge: Sie berechnen ihren Kunden, was damit gebaut wird." },
-            "3": { "title": "Einen Co-Branding-Pilot für ein Kundenprojekt anbieten", "note": "Ein Projekt, ein Monat, ihr Logo auf dem Canvas." },
-            "4": { "title": "Den Fürsprecher vor dem Budgetinhaber finden", "note": "Ein Team-Tarif kommt zustande, wenn jemand intern ihn will, nicht wenn Sie den Finanzchef anschreiben." },
-            "5": { "title": "Die Pipeline-Review mit ihren eigenen Daten durchführen", "note": "Importieren Sie eines ihrer Projekte live. Das ist die ganze Demo." },
-            "6": { "title": "Den Sicherheitsprüfer früh identifizieren", "note": "SOC-2-Nachweise liegen vor – senden Sie sie, bevor sie danach fragen, nicht erst wenn es stockt." },
-            "7": { "title": "Einen bezahlten Pilot mit benannter Erfolgskennzahl abgrenzen", "note": "Enterprise kauft keine Lizenz, sondern ein nachgewiesenes Ergebnis." }
-          } } },
-        "o1": { "title": "Pipeline-Auswertung", "data": { "status": "Live", "widgets": {
-          "0": { "title": "Anmeldungen diesen Monat" }, "1": { "title": "Konversionen diesen Monat" },
-          "2": { "title": "Pipeline nach Phase", "labels": { "0": "Neu", "1": "Kontaktiert", "2": "Qualifiziert", "3": "Termin", "4": "Angebot", "5": "Gewonnen" } },
-          "3": { "title": "Provision gegenüber Ziel" } } } },
-        "o2": { "title": "An wen ich verkaufe", "data": { "status": "In Recherche", "segments": { "0": "Gründer und Solo-Entwickler", "1": "Agenturen und Beratungen", "2": "KMU-Teams", "3": "Enterprise" } } },
-        "o3": { "title": "Outreach-Kampagne", "data": { "status": "Entwurf", "subject": "Das Canvas, das das ganze System ausliefert" } },
-        "o4": { "title": "Wochenziele und meine Links", "data": { "status": "Aktiv" } },
-        "o5": { "title": "Demos und Coaching", "data": { "status": "Termin offen" } },
-        "o6": { "title": "Vertriebspräsentation und Medienkit", "data": { "status": "Versandbereit", "subtitle": "Die Pitch-Präsentation als PDF und PowerPoint sowie jede Folie als PNG." } },
-        "o7": { "title": "CRO – Ihr Vertriebscoach", "data": { "status": "Bereit", "subtitle": "Prüft Ihre Pipeline, benennt die Phase, in der Deals sterben, und gibt Ihnen die nächste Aktion.", "instructions": "Sie sind der CRO und coachen einen Builderforce-Vertriebspartner. Lesen Sie seine Live-Pipeline auf diesem Canvas, bevor Sie irgendetwas beantworten. Jede Woche: Benennen Sie die EINE Phase, in der Deals sterben, sagen Sie warum, und geben Sie die nächste Aktion für die zwei wertvollsten stockenden Karten. Halten Sie ihn an die wöchentlichen Aktivitätsziele auf diesem Board – Ansprache, neue Kontakte, vereinbarte Termine. Erfinden Sie niemals Pipeline. Wenn eine Zahl nicht auf diesem Board steht, sagen Sie, dass sie fehlt, und fragen Sie danach." } },
-        "o8": { "title": "So funktioniert dieses Board", "data": { "status": "Zuerst lesen", "content": "1. Arbeiten Sie das Kanban von links nach rechts ab. Eine Bahn ist ein Segment – dieselbe Phase ist für einen Gründer und für einen Enterprise-Käufer unterschiedliche Arbeit.\n\n2. Teilen Sie die Links auf der Zielkarte. Jede Anmeldung darüber wird Ihnen zugerechnet.\n\n3. Bitten Sie den CRO um eine wöchentliche Review. Er liest DIESES Board, halten Sie es also aktuell.\n\n4. Der Sales Hub (linkes Menü) enthält Ihre Leads, Berichte, Auszahlungen und den Posteingang." } },
-        "e0": "zielt auf", "e1": "erzeugt Leads", "e2": "misst", "e3": "gegen Ziele", "e4": "gehört zu", "e5": "gecoacht von", "e6": "bucht"
+        "o0": {
+          "title": "Vertriebspipeline",
+          "data": {
+            "status": "Live",
+            "swimlanes": {
+              "0": {
+                "title": "Gründer und Solo-Entwickler",
+                "hint": "Kurzer Zyklus, Self-Service, Kauf nach der Demo."
+              },
+              "1": {
+                "title": "Agenturen und Beratungen",
+                "hint": "Verkaufen es an eigene Kunden weiter – beginnen Sie mit der Marge."
+              },
+              "2": {
+                "title": "KMU-Teams",
+                "hint": "Team-Tarif, ein Fürsprecher plus ein Budgetinhaber."
+              },
+              "3": {
+                "title": "Enterprise",
+                "hint": "Sicherheitsprüfung, Einkauf, ein Pilot vor dem Vertrag."
+              }
+            },
+            "cards": {
+              "0": {
+                "title": "Den Empfehlungslink dort posten, wo Entwickler schon sind",
+                "note": "Indie Hackers, r/SaaS, Ihr eigenes Netzwerk. Beginnen Sie mit dem Canvas, nicht mit der Funktionsliste."
+              },
+              "1": {
+                "title": "Die Präsentation plus eine 20-minütige Canvas-Führung senden",
+                "note": "Die Präsentation liegt auf diesem Board – hängen Sie sie an, verlinken Sie keine Login-Wand."
+              },
+              "2": {
+                "title": "10 Agenturen auflisten, die Tools weiterverkaufen",
+                "note": "Das Argument ist die Marge: Sie berechnen ihren Kunden, was damit gebaut wird."
+              },
+              "3": {
+                "title": "Einen Co-Branding-Pilot für ein Kundenprojekt anbieten",
+                "note": "Ein Projekt, ein Monat, ihr Logo auf dem Canvas."
+              },
+              "4": {
+                "title": "Den Fürsprecher vor dem Budgetinhaber finden",
+                "note": "Ein Team-Tarif kommt zustande, wenn jemand intern ihn will, nicht wenn Sie den Finanzchef anschreiben."
+              },
+              "5": {
+                "title": "Die Pipeline-Review mit ihren eigenen Daten durchführen",
+                "note": "Importieren Sie eines ihrer Projekte live. Das ist die ganze Demo."
+              },
+              "6": {
+                "title": "Den Sicherheitsprüfer früh identifizieren",
+                "note": "SOC-2-Nachweise liegen vor – senden Sie sie, bevor sie danach fragen, nicht erst wenn es stockt."
+              },
+              "7": {
+                "title": "Einen bezahlten Pilot mit benannter Erfolgskennzahl abgrenzen",
+                "note": "Enterprise kauft keine Lizenz, sondern ein nachgewiesenes Ergebnis."
+              }
+            }
+          }
+        },
+        "o1": {
+          "title": "Pipeline-Auswertung",
+          "data": {
+            "status": "Live",
+            "widgets": {
+              "0": {
+                "title": "Anmeldungen diesen Monat"
+              },
+              "1": {
+                "title": "Konversionen diesen Monat"
+              },
+              "2": {
+                "title": "Pipeline nach Phase",
+                "labels": {
+                  "0": "Neu",
+                  "1": "Kontaktiert",
+                  "2": "Qualifiziert",
+                  "3": "Termin",
+                  "4": "Angebot",
+                  "5": "Gewonnen"
+                }
+              },
+              "3": {
+                "title": "Provision gegenüber Ziel"
+              }
+            }
+          }
+        },
+        "o2": {
+          "title": "An wen ich verkaufe",
+          "data": {
+            "status": "In Recherche",
+            "segments": {
+              "0": "Gründer und Solo-Entwickler",
+              "1": "Agenturen und Beratungen",
+              "2": "KMU-Teams",
+              "3": "Enterprise"
+            }
+          }
+        },
+        "o3": {
+          "title": "Outreach-Kampagne",
+          "data": {
+            "status": "Entwurf",
+            "subject": "Das Canvas, das das ganze System ausliefert"
+          }
+        },
+        "o4": {
+          "title": "Wochenziele und meine Links",
+          "data": {
+            "status": "Aktiv"
+          }
+        },
+        "o5": {
+          "title": "Demos und Coaching",
+          "data": {
+            "status": "Termin offen"
+          }
+        },
+        "o6": {
+          "title": "Vertriebspräsentation und Medienkit",
+          "data": {
+            "status": "Versandbereit",
+            "subtitle": "Die Pitch-Präsentation als PDF und PowerPoint sowie jede Folie als PNG."
+          }
+        },
+        "o7": {
+          "title": "CRO – Ihr Vertriebscoach",
+          "data": {
+            "status": "Bereit",
+            "subtitle": "Prüft Ihre Pipeline, benennt die Phase, in der Deals sterben, und gibt Ihnen die nächste Aktion.",
+            "instructions": "Sie sind der CRO und coachen einen Builderforce-Vertriebspartner. Lesen Sie seine Live-Pipeline auf diesem Canvas, bevor Sie irgendetwas beantworten. Jede Woche: Benennen Sie die EINE Phase, in der Deals sterben, sagen Sie warum, und geben Sie die nächste Aktion für die zwei wertvollsten stockenden Karten. Halten Sie ihn an die wöchentlichen Aktivitätsziele auf diesem Board – Ansprache, neue Kontakte, vereinbarte Termine. Erfinden Sie niemals Pipeline. Wenn eine Zahl nicht auf diesem Board steht, sagen Sie, dass sie fehlt, und fragen Sie danach."
+          }
+        },
+        "o8": {
+          "title": "So funktioniert dieses Board",
+          "data": {
+            "status": "Zuerst lesen",
+            "content": "1. Arbeiten Sie das Kanban von links nach rechts ab. Eine Bahn ist ein Segment – dieselbe Phase ist für einen Gründer und für einen Enterprise-Käufer unterschiedliche Arbeit.\n\n2. Teilen Sie die Links auf der Zielkarte. Jede Anmeldung darüber wird Ihnen zugerechnet.\n\n3. Bitten Sie den CRO um eine wöchentliche Review. Er liest DIESES Board, halten Sie es also aktuell.\n\n4. Der Sales Hub (linkes Menü) enthält Ihre Leads, Berichte, Auszahlungen und den Posteingang."
+          }
+        },
+        "e0": "zielt auf",
+        "e1": "erzeugt Leads",
+        "e2": "misst",
+        "e3": "gegen Ziele",
+        "e4": "gehört zu",
+        "e5": "gecoacht von",
+        "e6": "bucht"
       },
       "campaign": {
-        "o0": { "title": "Kampagnen-Workflow" }, "o1": { "title": "Kampagnen-Landingpage" }, "o2": { "title": "Kampagnenprognose" }, "o3": { "title": "Kampagnenstratege" },
-        "e0": "veröffentlicht", "e1": "misst"
+        "o0": {
+          "title": "Kampagnen-Workflow"
+        },
+        "o1": {
+          "title": "Kampagnen-Landingpage"
+        },
+        "o2": {
+          "title": "Kampagnenprognose"
+        },
+        "o3": {
+          "title": "Kampagnenstratege"
+        },
+        "e0": "veröffentlicht",
+        "e1": "misst"
       },
       "social-growth-campaign": {
-        "o0": { "title": "Plattformübergreifendes Social Listening", "data": { "status": "Social-Konten verbinden", "steps": {
-          "0": { "title": "Aktuelle Unterhaltungen auf X suchen" }, "1": { "title": "Instagram-Hashtag finden" }, "2": { "title": "Top-Medien auf Instagram lesen" },
-          "3": { "title": "TikTok-Creator-Performance lesen" },
-          "4": { "title": "Plattformübergreifende Trends zusammenfassen", "prompt": "Vergleichen Sie Themen, Geschwindigkeit, Engagement und Zielgruppensignale über die Connector-Ergebnisse hinweg. Geben Sie gerankte Trends zurück, dazu chartLabels, chartValues, sources und eine knappe Empfehlung." } } } },
-        "o1": { "title": "Top-Social-Trends", "data": { "status": "Listening-Workflow ausführen", "chartTitle": "Plattformübergreifende Trenddynamik", "xAxisLabel": "Trend", "yAxisLabel": "Dynamik-Score", "chartLabels": { "0": "Trend 1", "1": "Trend 2", "2": "Trend 3" } } },
-        "o2": { "title": "Social-Performance-Übersicht", "data": { "status": "Warten auf verbundene Daten", "dateRange": "Letzte 7 Tage", "kpis": { "0": { "label": "Reichweite" }, "1": { "label": "Engagement" }, "2": { "label": "Adoption" } } } },
-        "o3": { "title": "Briefing zur Adoptionskampagne", "data": { "status": "Entwurf des CMO", "markdown": "# Adoptionskampagne\n\n## Nachweise\nVerbinden Sie den Social-Listening-Workflow und führen Sie ihn aus.\n\n## Zielgruppe und Botschaft\n\n## Kanalplan\n\n## Adoptionsziel und Messung\n" } },
-        "o4": { "title": "Geplante Social-Veröffentlichung", "data": { "status": "Vor Aktivierung prüfen", "steps": {
-          "0": { "title": "Kampagnentakt an Werktagen" },
-          "1": { "title": "Kanalvarianten schreiben", "prompt": "Nutzen Sie das verbundene Adoptions-Briefing und die neuesten Trendnachweise, um plattformgerechte Varianten zu schreiben. Behalten Sie Kampagnenaussage, Call-to-Action und Tracking-URL bei; erfinden Sie keine Nachweise." },
-          "2": { "title": "Auf X veröffentlichen" }, "3": { "title": "Auf LinkedIn veröffentlichen" }, "4": { "title": "Auf Facebook veröffentlichen" }, "5": { "title": "Auf der Website veröffentlichen" } } } },
-        "o5": { "title": "Kampagnen-Landingpage", "data": { "status": "Entwurf", "websiteHeadline": "Aus Aufmerksamkeit wird Adoption", "websiteBody": "Gestalten Sie die Landingpage um die Kampagnennachweise und eine messbare Adoptionsaktion.", "websiteCta": "Jetzt starten" } },
-        "o6": { "data": { "focus": "Plattformübergreifende Trends, Kampagnenstrategie, Adoption und gemessene Iteration", "status": "Bereit" } },
-        "e0": "Trendnachweis", "e1": "fasst zusammen", "e2": "begründet", "e3": "treibt an", "e4": "veröffentlicht", "e5": "verantwortet"
+        "o0": {
+          "title": "Plattformübergreifendes Social Listening",
+          "data": {
+            "status": "Social-Konten verbinden",
+            "steps": {
+              "0": {
+                "title": "Aktuelle Unterhaltungen auf X suchen"
+              },
+              "1": {
+                "title": "Instagram-Hashtag finden"
+              },
+              "2": {
+                "title": "Top-Medien auf Instagram lesen"
+              },
+              "3": {
+                "title": "TikTok-Creator-Performance lesen"
+              },
+              "4": {
+                "title": "Plattformübergreifende Trends zusammenfassen",
+                "prompt": "Vergleichen Sie Themen, Geschwindigkeit, Engagement und Zielgruppensignale über die Connector-Ergebnisse hinweg. Geben Sie gerankte Trends zurück, dazu chartLabels, chartValues, sources und eine knappe Empfehlung."
+              }
+            }
+          }
+        },
+        "o1": {
+          "title": "Top-Social-Trends",
+          "data": {
+            "status": "Listening-Workflow ausführen",
+            "chartTitle": "Plattformübergreifende Trenddynamik",
+            "xAxisLabel": "Trend",
+            "yAxisLabel": "Dynamik-Score",
+            "chartLabels": {
+              "0": "Trend 1",
+              "1": "Trend 2",
+              "2": "Trend 3"
+            }
+          }
+        },
+        "o2": {
+          "title": "Social-Performance-Übersicht",
+          "data": {
+            "status": "Warten auf verbundene Daten",
+            "dateRange": "Letzte 7 Tage",
+            "kpis": {
+              "0": {
+                "label": "Reichweite"
+              },
+              "1": {
+                "label": "Engagement"
+              },
+              "2": {
+                "label": "Adoption"
+              }
+            }
+          }
+        },
+        "o3": {
+          "title": "Briefing zur Adoptionskampagne",
+          "data": {
+            "status": "Entwurf des CMO",
+            "markdown": "# Adoptionskampagne\n\n## Nachweise\nVerbinden Sie den Social-Listening-Workflow und führen Sie ihn aus.\n\n## Zielgruppe und Botschaft\n\n## Kanalplan\n\n## Adoptionsziel und Messung\n"
+          }
+        },
+        "o4": {
+          "title": "Geplante Social-Veröffentlichung",
+          "data": {
+            "status": "Vor Aktivierung prüfen",
+            "steps": {
+              "0": {
+                "title": "Kampagnentakt an Werktagen"
+              },
+              "1": {
+                "title": "Kanalvarianten schreiben",
+                "prompt": "Nutzen Sie das verbundene Adoptions-Briefing und die neuesten Trendnachweise, um plattformgerechte Varianten zu schreiben. Behalten Sie Kampagnenaussage, Call-to-Action und Tracking-URL bei; erfinden Sie keine Nachweise."
+              },
+              "2": {
+                "title": "Auf X veröffentlichen"
+              },
+              "3": {
+                "title": "Auf LinkedIn veröffentlichen"
+              },
+              "4": {
+                "title": "Auf Facebook veröffentlichen"
+              },
+              "5": {
+                "title": "Auf der Website veröffentlichen"
+              }
+            }
+          }
+        },
+        "o5": {
+          "title": "Kampagnen-Landingpage",
+          "data": {
+            "status": "Entwurf",
+            "websiteHeadline": "Aus Aufmerksamkeit wird Adoption",
+            "websiteBody": "Gestalten Sie die Landingpage um die Kampagnennachweise und eine messbare Adoptionsaktion.",
+            "websiteCta": "Jetzt starten"
+          }
+        },
+        "o6": {
+          "data": {
+            "focus": "Plattformübergreifende Trends, Kampagnenstrategie, Adoption und gemessene Iteration",
+            "status": "Bereit"
+          }
+        },
+        "e0": "Trendnachweis",
+        "e1": "fasst zusammen",
+        "e2": "begründet",
+        "e3": "treibt an",
+        "e4": "veröffentlicht",
+        "e5": "verantwortet"
       },
       "product-discovery": {
-        "o0": { "title": "Kundenfeedback" }, "o1": { "title": "Meistgewünschte Funktionen" }, "o2": { "title": "Funktionskonzept-Set" }, "o3": { "title": "Chancenbewertung" },
-        "e0": "Nachweis", "e1": "erweitert"
+        "o0": {
+          "title": "Kundenfeedback"
+        },
+        "o1": {
+          "title": "Meistgewünschte Funktionen"
+        },
+        "o2": {
+          "title": "Funktionskonzept-Set"
+        },
+        "o3": {
+          "title": "Chancenbewertung"
+        },
+        "e0": "Nachweis",
+        "e1": "erweitert"
       },
       "data-story": {
-        "o0": { "title": "Quelldatensatz" }, "o1": { "title": "Zentraler Trend" }, "o2": { "title": "Entscheidungs-Dashboard" }, "o3": { "title": "Datengeschichte für die Geschäftsleitung" },
-        "e0": "Daten", "e1": "präsentiert", "e2": "stützt"
+        "o0": {
+          "title": "Quelldatensatz"
+        },
+        "o1": {
+          "title": "Zentraler Trend"
+        },
+        "o2": {
+          "title": "Entscheidungs-Dashboard"
+        },
+        "o3": {
+          "title": "Datengeschichte für die Geschäftsleitung"
+        },
+        "e0": "Daten",
+        "e1": "präsentiert",
+        "e2": "stützt"
       },
       "stand-up": {
-        "o0": { "title": "Team-Stand-up" }, "o1": { "title": "Teammitglied" }, "o2": { "title": "Delivery-Agent" }, "o3": { "title": "Folgeaufgabe" }
+        "o0": {
+          "title": "Team-Stand-up"
+        },
+        "o1": {
+          "title": "Teammitglied"
+        },
+        "o2": {
+          "title": "Delivery-Agent"
+        },
+        "o3": {
+          "title": "Folgeaufgabe"
+        }
       },
       "model-build": {
-        "o0": { "title": "Trainingskorpus" }, "o1": { "title": "Evermind-Modell" }, "o2": { "title": "Modellbewertung" }, "o3": { "title": "Veröffentlichter Modell-Agent" },
-        "e0": "trainiert", "e1": "bewertet", "e2": "paketiert"
+        "o0": {
+          "title": "Trainingskorpus"
+        },
+        "o1": {
+          "title": "Evermind-Modell"
+        },
+        "o2": {
+          "title": "Modellbewertung"
+        },
+        "o3": {
+          "title": "Veröffentlichter Modell-Agent"
+        },
+        "e0": "trainiert",
+        "e1": "bewertet",
+        "e2": "paketiert"
       },
       "executive-review": {
-        "o0": { "title": "Projektkontext" }, "o1": { "title": "Portfolio-Gesundheit" }, "o2": { "title": "Roadmap für die Geschäftsleitung" }, "o3": { "title": "Präsentation für die Führung" },
-        "e0": "misst", "e1": "begründet", "e2": "präsentiert"
+        "o0": {
+          "title": "Projektkontext"
+        },
+        "o1": {
+          "title": "Portfolio-Gesundheit"
+        },
+        "o2": {
+          "title": "Roadmap für die Geschäftsleitung"
+        },
+        "o3": {
+          "title": "Präsentation für die Führung"
+        },
+        "e0": "misst",
+        "e1": "begründet",
+        "e2": "präsentiert"
       },
       "creative-studio": {
-        "o0": { "title": "Vorlagenbibliothek" }, "o1": { "title": "Video-Generator" }, "o2": { "title": "Bild-Generator" }, "o3": { "title": "Animations-Generator" }, "o4": { "title": "Podcast-Generator" }, "o5": { "title": "Comic-Generator" },
-        "e0": "Vorlagen", "e1": "Vorlagen", "e2": "Vorlagen", "e3": "Vorlagen", "e4": "Vorlagen"
+        "o0": {
+          "title": "Vorlagenbibliothek"
+        },
+        "o1": {
+          "title": "Video-Generator"
+        },
+        "o2": {
+          "title": "Bild-Generator"
+        },
+        "o3": {
+          "title": "Animations-Generator"
+        },
+        "o4": {
+          "title": "Podcast-Generator"
+        },
+        "o5": {
+          "title": "Comic-Generator"
+        },
+        "e0": "Vorlagen",
+        "e1": "Vorlagen",
+        "e2": "Vorlagen",
+        "e3": "Vorlagen",
+        "e4": "Vorlagen"
       },
       "career-documents": {
-        "o0": { "title": "Lebenslauf-Builder" }, "o1": { "title": "Begleitdokument" }, "o2": { "title": "Präsentation" }, "o3": { "title": "Exportierte Dateien" },
-        "e0": "ergänzt", "e1": "präsentiert", "e2": "exportiert", "e3": "exportiert"
+        "o0": {
+          "title": "Lebenslauf-Builder"
+        },
+        "o1": {
+          "title": "Begleitdokument"
+        },
+        "o2": {
+          "title": "Präsentation"
+        },
+        "o3": {
+          "title": "Exportierte Dateien"
+        },
+        "e0": "ergänzt",
+        "e1": "präsentiert",
+        "e2": "exportiert",
+        "e3": "exportiert"
       },
       "job-hunt": {
-        "o0": { "title": "Wie lange das Geld reicht" }, "o1": { "title": "Meine Bewerbungen" }, "o2": { "title": "Eine lohnende Stelle" }, "o3": { "title": "Master-Lebenslauf" }, "o4": { "title": "Anschreiben" }, "o5": { "title": "Diese Bewerbung" }, "o6": { "title": "Vorstellungsgespräch üben" },
-        "e0": "gibt den Takt vor", "e1": "beworben auf", "e2": "gesendet", "e3": "gesendet", "e4": "passt an", "e5": "adressiert an", "e6": "verfolgt in", "e7": "übt"
+        "o0": {
+          "title": "Wie lange das Geld reicht"
+        },
+        "o1": {
+          "title": "Meine Bewerbungen"
+        },
+        "o2": {
+          "title": "Eine lohnende Stelle"
+        },
+        "o3": {
+          "title": "Master-Lebenslauf"
+        },
+        "o4": {
+          "title": "Anschreiben"
+        },
+        "o5": {
+          "title": "Diese Bewerbung"
+        },
+        "o6": {
+          "title": "Vorstellungsgespräch üben"
+        },
+        "e0": "gibt den Takt vor",
+        "e1": "beworben auf",
+        "e2": "gesendet",
+        "e3": "gesendet",
+        "e4": "passt an",
+        "e5": "adressiert an",
+        "e6": "verfolgt in",
+        "e7": "übt"
       },
       "pitch-competition": {
-        "o0": { "title": "Wettbewerbsbeitrag" }, "o1": { "title": "Dreiminütiger Pitch" }, "o2": { "title": "Bewertungsbogen der Jury" }, "o3": { "title": "Jury-Fragen-Training" }, "o4": { "title": "Pitch-Deck" }, "o5": { "title": "Pitch-Coach" },
-        "e0": "qualifiziert", "e1": "wird bewertet mit", "e2": "präsentiert", "e3": "antizipiert", "e4": "coacht"
+        "o0": {
+          "title": "Wettbewerbsbeitrag"
+        },
+        "o1": {
+          "title": "Dreiminütiger Pitch"
+        },
+        "o2": {
+          "title": "Bewertungsbogen der Jury"
+        },
+        "o3": {
+          "title": "Jury-Fragen-Training"
+        },
+        "o4": {
+          "title": "Pitch-Deck"
+        },
+        "o5": {
+          "title": "Pitch-Coach"
+        },
+        "e0": "qualifiziert",
+        "e1": "wird bewertet mit",
+        "e2": "präsentiert",
+        "e3": "antizipiert",
+        "e4": "coacht"
       },
       "interactive-3d": {
-        "o0": { "title": "Spiele-Builder" }, "o1": { "title": "CAD-Zeichnung" }, "o2": { "title": "3D-Modell" }, "o3": { "title": "Prüfung des spielbaren Ergebnisses" },
-        "e0": "modelliert", "e1": "bewertet", "e2": "bewertet"
+        "o0": {
+          "title": "Spiele-Builder"
+        },
+        "o1": {
+          "title": "CAD-Zeichnung"
+        },
+        "o2": {
+          "title": "3D-Modell"
+        },
+        "o3": {
+          "title": "Prüfung des spielbaren Ergebnisses"
+        },
+        "e0": "modelliert",
+        "e1": "bewertet",
+        "e2": "bewertet"
       },
       "assessment-cycle": {
-        "o0": { "title": "PHYS2041 · Semester 2", "data": { "status": "Teilnehmerliste importieren", "term": "Semester 2 2026", "instructors": { "0": "Modulleitung", "1": "Tutor" }, "summary": "Importieren Sie die Teilnehmerliste aus einer CSV-Datei oder einem verbundenen LMS – jede Abgabe und jede Note verbindet sich über die Lernenden-Referenz, die sie trägt." } },
-        "o1": { "title": "Aufgabe 1 · Literaturkritik", "data": { "status": "Aufgabenstellung im Entwurf", "latePolicy": "5 % pro Tag, null Punkte nach 5 Tagen", "brief": "Kritisieren Sie einen Aufsatz aus der Leseliste: Nennen Sie seine These, beurteilen Sie, ob die Belege sie stützen, und benennen Sie den stärksten Einwand.", "deliverables": { "0": { "title": "Kritik", "detail": "1.500 Wörter, PDF" }, "1": { "title": "Literaturverzeichnis", "detail": "APA, auf dem Board" } } } },
-        "o2": { "title": "Bewertungsraster der Kritik", "data": { "status": "Deskriptoren hinzufügen", "levels": { "0": "Nicht bestanden", "1": "Bestanden", "2": "Gut", "3": "Auszeichnung" },
-          "moderationRule": "Jede nicht bestandene Arbeit und jede Auszeichnung wird doppelt blind bewertet; eine Abweichung von mehr als 10 Punkten geht an eine dritte Bewertung.",
-          "criteria": { "columns": { "0": "Nicht bestanden", "1": "Bestanden", "2": "Gut", "3": "Auszeichnung" }, "rows": {
-            "0": { "label": "These erkannt", "cells": { "0": "Keine These genannt", "1": "These genannt", "2": "These präzise genannt", "3": "These genannt und in der Literatur verortet" } },
-            "1": { "label": "Belege bewertet", "cells": { "0": "Nur Behauptung", "1": "Einige Belege genannt", "2": "Belege abgewogen", "3": "Belege gegen Alternativen abgewogen" } },
-            "2": { "label": "Einwand", "cells": { "0": "Keiner", "1": "Ein Einwand", "2": "Der stärkste Einwand", "3": "Der stärkste Einwand, beantwortet" } },
-            "3": { "label": "Quellenangaben", "cells": { "0": "Fehlen", "1": "Vorhanden, uneinheitlich", "2": "Einheitlich", "3": "Einheitlich und vollständig" } } } } } },
-        "o3": { "title": "Abgabe · eine pro Lernendem", "data": { "status": "Nicht abgegeben", "artifacts": { "0": { "title": "An die Kohorte verteilen", "detail": "Erstellt eine pro eingeschriebenem Lernenden, jeweils mit eigener Besitzerin bzw. eigenem Besitzer und Urheberschaftsnachweis." } } } },
-        "o4": { "title": "PHYS2041-Notenbuch", "data": { "status": "Noch keine Noten" } },
-        "o5": { "title": "Genehmigte Nachteilsausgleiche", "data": { "status": "Nicht genehmigt", "provisions": { "0": "25 % mehr Zeit", "1": "Untertitelte Aufzeichnungen" }, "formats": { "0": "untertiteltes Video", "1": "getaggtes PDF" } } },
-        "e0": "ist gestellt für", "e1": "wird bewertet nach", "e2": "wird beantwortet durch", "e3": "fließt ein in", "e4": "gleicht aus"
+        "o0": {
+          "title": "PHYS2041 · Semester 2",
+          "data": {
+            "status": "Teilnehmerliste importieren",
+            "term": "Semester 2 2026",
+            "instructors": {
+              "0": "Modulleitung",
+              "1": "Tutor"
+            },
+            "summary": "Importieren Sie die Teilnehmerliste aus einer CSV-Datei oder einem verbundenen LMS – jede Abgabe und jede Note verbindet sich über die Lernenden-Referenz, die sie trägt."
+          }
+        },
+        "o1": {
+          "title": "Aufgabe 1 · Literaturkritik",
+          "data": {
+            "status": "Aufgabenstellung im Entwurf",
+            "latePolicy": "5 % pro Tag, null Punkte nach 5 Tagen",
+            "brief": "Kritisieren Sie einen Aufsatz aus der Leseliste: Nennen Sie seine These, beurteilen Sie, ob die Belege sie stützen, und benennen Sie den stärksten Einwand.",
+            "deliverables": {
+              "0": {
+                "title": "Kritik",
+                "detail": "1.500 Wörter, PDF"
+              },
+              "1": {
+                "title": "Literaturverzeichnis",
+                "detail": "APA, auf dem Board"
+              }
+            }
+          }
+        },
+        "o2": {
+          "title": "Bewertungsraster der Kritik",
+          "data": {
+            "status": "Deskriptoren hinzufügen",
+            "levels": {
+              "0": "Nicht bestanden",
+              "1": "Bestanden",
+              "2": "Gut",
+              "3": "Auszeichnung"
+            },
+            "moderationRule": "Jede nicht bestandene Arbeit und jede Auszeichnung wird doppelt blind bewertet; eine Abweichung von mehr als 10 Punkten geht an eine dritte Bewertung.",
+            "criteria": {
+              "columns": {
+                "0": "Nicht bestanden",
+                "1": "Bestanden",
+                "2": "Gut",
+                "3": "Auszeichnung"
+              },
+              "rows": {
+                "0": {
+                  "label": "These erkannt",
+                  "cells": {
+                    "0": "Keine These genannt",
+                    "1": "These genannt",
+                    "2": "These präzise genannt",
+                    "3": "These genannt und in der Literatur verortet"
+                  }
+                },
+                "1": {
+                  "label": "Belege bewertet",
+                  "cells": {
+                    "0": "Nur Behauptung",
+                    "1": "Einige Belege genannt",
+                    "2": "Belege abgewogen",
+                    "3": "Belege gegen Alternativen abgewogen"
+                  }
+                },
+                "2": {
+                  "label": "Einwand",
+                  "cells": {
+                    "0": "Keiner",
+                    "1": "Ein Einwand",
+                    "2": "Der stärkste Einwand",
+                    "3": "Der stärkste Einwand, beantwortet"
+                  }
+                },
+                "3": {
+                  "label": "Quellenangaben",
+                  "cells": {
+                    "0": "Fehlen",
+                    "1": "Vorhanden, uneinheitlich",
+                    "2": "Einheitlich",
+                    "3": "Einheitlich und vollständig"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "o3": {
+          "title": "Abgabe · eine pro Lernendem",
+          "data": {
+            "status": "Nicht abgegeben",
+            "artifacts": {
+              "0": {
+                "title": "An die Kohorte verteilen",
+                "detail": "Erstellt eine pro eingeschriebenem Lernenden, jeweils mit eigener Besitzerin bzw. eigenem Besitzer und Urheberschaftsnachweis."
+              }
+            }
+          }
+        },
+        "o4": {
+          "title": "PHYS2041-Notenbuch",
+          "data": {
+            "status": "Noch keine Noten"
+          }
+        },
+        "o5": {
+          "title": "Genehmigte Nachteilsausgleiche",
+          "data": {
+            "status": "Nicht genehmigt",
+            "provisions": {
+              "0": "25 % mehr Zeit",
+              "1": "Untertitelte Aufzeichnungen"
+            },
+            "formats": {
+              "0": "untertiteltes Video",
+              "1": "getaggtes PDF"
+            }
+          }
+        },
+        "e0": "ist gestellt für",
+        "e1": "wird bewertet nach",
+        "e2": "wird beantwortet durch",
+        "e3": "fließt ein in",
+        "e4": "gleicht aus"
       },
       "field-operations": {
-        "o0": { "title": "Heizkessel · Riverside House", "data": { "status": "In Betrieb", "assetClass": "Gewerblicher Gaskessel", "site": "Riverside House, Heizraum (Schlüssel beim Pförtner)", "summary": "Jeder Auftrag, jede Kostenstelle und jedes Zertifikat hängt an diesem Asset – so wird Reparieren-oder-Ersetzen beantwortbar statt umstritten." } },
-        "o1": { "title": "Keine Heizung · Riverside House", "data": { "status": "Nicht eingeplant", "reportedFault": "Mieter melden seit heute Morgen keine Heizung in den Etagen 3 bis 5. Das Manometer zeigt niedrigen Druck.", "tasks": { "0": { "title": "Druckverlust diagnostizieren", "detail": "Prüfen Sie Ausdehnungsgefäß, Druckminderer und Systemdruck, bevor Sie etwas verurteilen." } } } },
-        "o2": { "title": "Erster Einsatz", "data": { "status": "Nicht eingeplant" } },
-        "o3": { "title": "Heute · Gebiet Nord", "data": { "status": "Tag wird geplant", "area": "Nord", "constraints": { "0": "Gas-Safe-Registrierung für jede Kesselarbeit", "1": "Zwei-Personen-Hub über 25 kg", "2": "Citymaut-Zone vor 18:00 Uhr" } } },
-        "o4": { "title": "Angebot · Behebung des Druckfehlers", "data": { "status": "Entwurf", "exclusions": { "0": "Wiederherstellung der Oberflächen", "1": "Einsatz außerhalb der Geschäftszeiten", "2": "Asbestuntersuchung" }, "summary": "Berechnen Sie, was Sie tatsächlich tun werden. Die Positionen summieren sich selbst – die Karte kann keine Zahl zeigen, die ihnen widerspricht." } },
-        "o5": { "title": "Riverside · Jahresvertrag", "data": { "status": "Entwurf", "summary": "Geplante Arbeiten werden aus dem hier hinterlegten Rhythmus erzeugt, statt sie sich zu merken." } },
-        "o6": { "title": "Jährliche Gassicherheitsprüfung", "data": { "status": "Nicht begonnen", "summary": "Eine nicht bestandene gesetzliche Prüfung bedeutet meist, dass das Asset heute nicht mehr genutzt wird – das Ergebnis muss auf der Karte ablesbar sein.", "inspectionType": "Gesetzliches Zertifikat" } },
-        "o7": { "title": "Techniker · Gas-Safe-Registrierung", "data": { "status": "Nicht verifiziert", "summary": "Ein abgelaufenes Zertifikat kündigt sich nicht an. Die Gültigkeit wird hier aus dem Ablaufdatum berechnet, nie behauptet.", "credentialType": "Berufsregistrierung" } },
-        "o8": { "title": "Ausdehnungsgefäß · 24 l", "data": { "status": "Nicht gezählt", "location": "Transporter 4", "summary": "Transporterbestand und Lagerbestand sind verschiedene Salden; sie zu vermischen ist der Weg, wie ein Auftrag ohne sein Teil rausgeht." } },
-        "o9": { "title": "Fachhandelstheke · Heizungsteile", "data": { "status": "Interessent" } },
-        "o10": { "title": "Nachschubbestellung", "data": { "status": "Entwurf" } },
-        "o11": { "title": "Eingehende Lieferung", "data": { "status": "Nicht versendet", "destination": "Lager" } },
-        "o12": { "title": "Beinaheunfall · Zugang zum Heizraum", "data": { "status": "Gemeldet", "summary": "Aus demselben Grund erfasst wie eine Verletzung: dasselbe Ereignis mit glücklicherem Ausgang. Standardmäßig eingeschränkt – es nennt eine Person." } },
-        "e0": "ist Arbeit an", "e1": "wird betreut durch", "e2": "disponiert", "e3": "kalkuliert", "e4": "deckt ab", "e5": "zertifiziert", "e6": "erlaubt", "e7": "wird verbraucht von", "e8": "liefert", "e9": "wird versendet als", "e10": "füllt auf", "e11": "ereignete sich während"
+        "o0": {
+          "title": "Heizkessel · Riverside House",
+          "data": {
+            "status": "In Betrieb",
+            "assetClass": "Gewerblicher Gaskessel",
+            "site": "Riverside House, Heizraum (Schlüssel beim Pförtner)",
+            "summary": "Jeder Auftrag, jede Kostenstelle und jedes Zertifikat hängt an diesem Asset – so wird Reparieren-oder-Ersetzen beantwortbar statt umstritten."
+          }
+        },
+        "o1": {
+          "title": "Keine Heizung · Riverside House",
+          "data": {
+            "status": "Nicht eingeplant",
+            "reportedFault": "Mieter melden seit heute Morgen keine Heizung in den Etagen 3 bis 5. Das Manometer zeigt niedrigen Druck.",
+            "tasks": {
+              "0": {
+                "title": "Druckverlust diagnostizieren",
+                "detail": "Prüfen Sie Ausdehnungsgefäß, Druckminderer und Systemdruck, bevor Sie etwas verurteilen."
+              }
+            }
+          }
+        },
+        "o2": {
+          "title": "Erster Einsatz",
+          "data": {
+            "status": "Nicht eingeplant"
+          }
+        },
+        "o3": {
+          "title": "Heute · Gebiet Nord",
+          "data": {
+            "status": "Tag wird geplant",
+            "area": "Nord",
+            "constraints": {
+              "0": "Gas-Safe-Registrierung für jede Kesselarbeit",
+              "1": "Zwei-Personen-Hub über 25 kg",
+              "2": "Citymaut-Zone vor 18:00 Uhr"
+            }
+          }
+        },
+        "o4": {
+          "title": "Angebot · Behebung des Druckfehlers",
+          "data": {
+            "status": "Entwurf",
+            "exclusions": {
+              "0": "Wiederherstellung der Oberflächen",
+              "1": "Einsatz außerhalb der Geschäftszeiten",
+              "2": "Asbestuntersuchung"
+            },
+            "summary": "Berechnen Sie, was Sie tatsächlich tun werden. Die Positionen summieren sich selbst – die Karte kann keine Zahl zeigen, die ihnen widerspricht."
+          }
+        },
+        "o5": {
+          "title": "Riverside · Jahresvertrag",
+          "data": {
+            "status": "Entwurf",
+            "summary": "Geplante Arbeiten werden aus dem hier hinterlegten Rhythmus erzeugt, statt sie sich zu merken."
+          }
+        },
+        "o6": {
+          "title": "Jährliche Gassicherheitsprüfung",
+          "data": {
+            "status": "Nicht begonnen",
+            "summary": "Eine nicht bestandene gesetzliche Prüfung bedeutet meist, dass das Asset heute nicht mehr genutzt wird – das Ergebnis muss auf der Karte ablesbar sein.",
+            "inspectionType": "Gesetzliches Zertifikat"
+          }
+        },
+        "o7": {
+          "title": "Techniker · Gas-Safe-Registrierung",
+          "data": {
+            "status": "Nicht verifiziert",
+            "summary": "Ein abgelaufenes Zertifikat kündigt sich nicht an. Die Gültigkeit wird hier aus dem Ablaufdatum berechnet, nie behauptet.",
+            "credentialType": "Berufsregistrierung"
+          }
+        },
+        "o8": {
+          "title": "Ausdehnungsgefäß · 24 l",
+          "data": {
+            "status": "Nicht gezählt",
+            "location": "Transporter 4",
+            "summary": "Transporterbestand und Lagerbestand sind verschiedene Salden; sie zu vermischen ist der Weg, wie ein Auftrag ohne sein Teil rausgeht."
+          }
+        },
+        "o9": {
+          "title": "Fachhandelstheke · Heizungsteile",
+          "data": {
+            "status": "Interessent"
+          }
+        },
+        "o10": {
+          "title": "Nachschubbestellung",
+          "data": {
+            "status": "Entwurf"
+          }
+        },
+        "o11": {
+          "title": "Eingehende Lieferung",
+          "data": {
+            "status": "Nicht versendet",
+            "destination": "Lager"
+          }
+        },
+        "o12": {
+          "title": "Beinaheunfall · Zugang zum Heizraum",
+          "data": {
+            "status": "Gemeldet",
+            "summary": "Aus demselben Grund erfasst wie eine Verletzung: dasselbe Ereignis mit glücklicherem Ausgang. Standardmäßig eingeschränkt – es nennt eine Person."
+          }
+        },
+        "e0": "ist Arbeit an",
+        "e1": "wird betreut durch",
+        "e2": "disponiert",
+        "e3": "kalkuliert",
+        "e4": "deckt ab",
+        "e5": "zertifiziert",
+        "e6": "erlaubt",
+        "e7": "wird verbraucht von",
+        "e8": "liefert",
+        "e9": "wird versendet als",
+        "e10": "füllt auf",
+        "e11": "ereignete sich während"
       },
       "research-programme": {
-        "o0": { "title": "Förderantrag", "data": { "status": "Antrag im Entwurf", "aims": { "0": { "title": "Ziel 1", "detail": "Formulieren Sie eine Behauptung, die scheitern kann." } } } },
-        "o1": { "title": "Evidenzbasis", "data": { "status": "Nicht durchsucht" } },
-        "o2": { "title": "Primäre Hypothese", "data": { "status": "Ungetestet", "statement": "Formulieren Sie sie gerichtet, damit sie widerlegt werden kann." } },
-        "o3": { "title": "Ethikantrag", "data": { "status": "Nicht eingereicht" } },
-        "o4": { "title": "Präregistrierung", "data": { "status": "Plan im Entwurf" } },
-        "o5": { "title": "Methode", "data": { "status": "Methode im Entwurf" } },
-        "o6": { "title": "Einwilligung der Teilnehmenden", "data": { "status": "Formular im Entwurf", "readingLevel": "Klasse 8" } },
-        "o7": { "title": "Rekrutierung", "data": { "status": "Keine Rekrutierung" } },
-        "o8": { "title": "Datenmanagementplan", "data": { "status": "Plan im Entwurf" } },
-        "o9": { "title": "Manuskript", "data": { "status": "Entwurf" } },
-        "o10": { "title": "Literaturangaben", "data": { "status": "Keine Einträge" } },
-        "o11": { "title": "Erhaltene Gutachten", "data": { "status": "Nicht begutachtet" } },
-        "e0": "begründet", "e1": "spezifiziert", "e2": "wird genehmigt durch", "e3": "wird registriert als", "e4": "erfordert", "e5": "holt Einwilligung ein von", "e6": "regelt", "e7": "belegt", "e8": "zitiert", "e9": "wird begutachtet durch", "e10": "finanziert"
+        "o0": {
+          "title": "Förderantrag",
+          "data": {
+            "status": "Antrag im Entwurf",
+            "aims": {
+              "0": {
+                "title": "Ziel 1",
+                "detail": "Formulieren Sie eine Behauptung, die scheitern kann."
+              }
+            }
+          }
+        },
+        "o1": {
+          "title": "Evidenzbasis",
+          "data": {
+            "status": "Nicht durchsucht"
+          }
+        },
+        "o2": {
+          "title": "Primäre Hypothese",
+          "data": {
+            "status": "Ungetestet",
+            "statement": "Formulieren Sie sie gerichtet, damit sie widerlegt werden kann."
+          }
+        },
+        "o3": {
+          "title": "Ethikantrag",
+          "data": {
+            "status": "Nicht eingereicht"
+          }
+        },
+        "o4": {
+          "title": "Präregistrierung",
+          "data": {
+            "status": "Plan im Entwurf"
+          }
+        },
+        "o5": {
+          "title": "Methode",
+          "data": {
+            "status": "Methode im Entwurf"
+          }
+        },
+        "o6": {
+          "title": "Einwilligung der Teilnehmenden",
+          "data": {
+            "status": "Formular im Entwurf",
+            "readingLevel": "Klasse 8"
+          }
+        },
+        "o7": {
+          "title": "Rekrutierung",
+          "data": {
+            "status": "Keine Rekrutierung"
+          }
+        },
+        "o8": {
+          "title": "Datenmanagementplan",
+          "data": {
+            "status": "Plan im Entwurf"
+          }
+        },
+        "o9": {
+          "title": "Manuskript",
+          "data": {
+            "status": "Entwurf"
+          }
+        },
+        "o10": {
+          "title": "Literaturangaben",
+          "data": {
+            "status": "Keine Einträge"
+          }
+        },
+        "o11": {
+          "title": "Erhaltene Gutachten",
+          "data": {
+            "status": "Nicht begutachtet"
+          }
+        },
+        "e0": "begründet",
+        "e1": "spezifiziert",
+        "e2": "wird genehmigt durch",
+        "e3": "wird registriert als",
+        "e4": "erfordert",
+        "e5": "holt Einwilligung ein von",
+        "e6": "regelt",
+        "e7": "belegt",
+        "e8": "zitiert",
+        "e9": "wird begutachtet durch",
+        "e10": "finanziert"
       }
     },
     "templateCategoryMarketplace": "Marketplace-Vorlage",
@@ -25585,8 +26327,8 @@
         "roleFamily": "Jobfamilie",
         "roles": "geplante Einstellungen",
         "roster": "Bestätigungsliste",
-        "signatureRequestId": "Signaturanfrage",
         "scenario": "Szenario",
+        "signatureRequestId": "Signaturanfrage",
         "scope": "Geltungsbereich",
         "shareUrl": "Freigabelink",
         "stage": "Stufe",
@@ -31108,12 +31850,12 @@
     },
     "extras": {
       "calculator": {
-        "moreTools": "Rechner für Burn, Break-even, Churn und Pricing",
         "heading": "Wie lange reicht dein Kapital?",
         "sub": "Gib Kassenbestand, monatliche Ausgaben und Umsatz ein. Runway und das Datum, an dem das Geld ausgeht, aktualisieren sich während der Eingabe — direkt im Browser, noch bevor du dich anmeldest.",
         "keepNumbers": "Diese Zahlen in einem Workspace speichern",
         "openFinance": "Finanzen öffnen",
-        "note": "Dieselbe Formel, die die CFO-Rolle verwendet: Kassenbestand geteilt durch Netto-Burn."
+        "note": "Dieselbe Formel, die die CFO-Rolle verwendet: Kassenbestand geteilt durch Netto-Burn.",
+        "moreTools": "Rechner für Burn, Break-even, Churn und Pricing"
       },
       "directory": {
         "heading": "Startups, die gerade Kapital aufnehmen",
@@ -34855,9 +35597,9 @@
     "resume": "Fortsetzen",
     "clearHeaders": "Zugangsdaten löschen",
     "remove": "Entfernen",
-    "enableAudit": "Audit hinzufügen",
-    "enableTraces": "Traces hinzufügen",
-    "tracesOnly": "Nur Traces",
+    "enableAudit": "Add audit",
+    "enableTraces": "Add traces",
+    "tracesOnly": "Traces only",
     "confirmRemove": "{name} entfernen? Agentenläufe werden sofort nicht mehr exportiert.",
     "status": {
       "healthy": "Export läuft",
@@ -34868,12 +35610,12 @@
       "nameLabel": "Name",
       "namePlaceholder": "z. B. Honeycomb Produktion",
       "endpointLabel": "Collector-Endpunkt",
-      "endpointHint": "OTLP über HTTP. Spans werden an /v1/traces und Audit-Logs an /v1/logs unter dieser Adresse gesendet.",
-      "signalsLabel": "Signale",
-      "signalsHint": "Audit-Ereignisse werden als OTLP-Logs gesendet; wählen Sie beide, um Traces und Logs an denselben Collector zu senden.",
-      "signalsTraces": "Nur Traces (Agentenläufe)",
-      "signalsAudit": "Nur Audit (Sicherheitsereignisse)",
-      "signalsBoth": "Traces und Audit",
+      "endpointHint": "OTLP über HTTP. Spans werden an /v1/traces unter dieser Adresse gesendet.",
+      "signalsLabel": "Signals",
+      "signalsTraces": "Traces only (agent runs)",
+      "signalsAudit": "Audit only (security events)",
+      "signalsBoth": "Traces and audit",
+      "signalsHint": "Audit events ship as OTLP logs; choose both to send traces and logs to the same collector.",
       "endpointMustBeHttps": "Geben Sie eine öffentliche https://-Adresse ein.",
       "headerNameLabel": "Name des Auth-Headers",
       "headerValueLabel": "Wert des Auth-Headers",
@@ -37721,22 +38463,77 @@
         "fileUnchecked": "Nicht geprüft",
         "showOnGraph": "Im Graphen zeigen",
         "notOnGraph": "Nicht in diesem Graphen",
-        "severity": { "info": "Hinweis", "warn": "Warnung", "error": "Fehler" },
-        "turnKinds": { "read": "Lesen", "write": "Schreiben", "forced": "Erzwungene Übergabe", "text": "Nur Text", "failed": "Fehlgeschlagen" },
+        "actionsFix": "Fix",
+        "actionsReview": "Review",
+        "actionsFixAria": "Fix the issues in this run",
+        "actionsReviewAria": "Review this run on the graph",
+        "fixPromptHeader": "The agent run \"{title}\" finished with {counts}. Resolve and fix each issue below.",
+        "fixPromptFiles": "Files it touched:",
+        "severity": {
+          "info": "Hinweis",
+          "warn": "Warnung",
+          "error": "Fehler"
+        },
+        "turnKinds": {
+          "read": "Lesen",
+          "write": "Schreiben",
+          "forced": "Erzwungene Übergabe",
+          "text": "Nur Text",
+          "failed": "Fehlgeschlagen"
+        },
         "findings": {
-          "analysis_overrun": { "title": "Lange Analyse vor dem ersten Schreiben", "description": "{readTurns} reine Leserunden vor dem ersten Schreiben (Runde {firstWriteTurn})." },
-          "unkept_readiness": { "title": "Bereitschaft gemeldet, weiter gelesen", "description": "Auf {claims} Bereitschaftsmeldungen folgten {readTurnsAfter} reine Leserunden." },
-          "serial_single_writes": { "title": "Ein Schreibvorgang pro Runde", "description": "{turns} Runden machten je nur einen Schreibvorgang und kosteten {promptTokens} Prompt-Tokens." },
-          "prompt_bloat": { "title": "Prompt weit größer als die Ausgabe", "description": "Der Prompt war {ratio}× so groß wie die Antwort: {promptTokens} Prompt-Tokens, {perWrite} pro Schreibvorgang." },
-          "unverified_writes": { "title": "Schreibvorgänge nie geprüft", "description": "{files} Dateien ({writes} Schreibvorgänge) wurden danach nie erfolgreich geprüft." },
-          "bracket_break": { "title": "Eine Änderung brach die Klammerbalance", "description": "Eine Änderung an {path} veränderte die Klammerbalance ({delta})." },
-          "edit_churn": { "title": "Dieselbe Datei immer wieder umgeschrieben", "description": "{path} wurde {writes}-mal geschrieben." },
-          "filed_then_inline": { "title": "Tickets angelegt, dann selbst erledigt", "description": "{tickets} Tickets wurden angelegt und keines vergeben; danach schrieb die Sitzung den Code selbst." },
-          "same_model_roles": { "title": "Planen und Programmieren mit einem Modell", "description": "Planen und Programmieren liefen beide auf {model}, obwohl die Arbeit übergeben wurde." },
-          "oversized_args": { "title": "Übergroße Tool-Argumente", "description": "{calls} {tool}-Aufrufe trugen bis zu {bytes} Bytes an Argumenten." },
-          "slow_turns": { "title": "Langsame Runden", "description": "{turns} Runden dauerten eine Minute oder länger; die langsamste dauerte {slowestMs} ms." },
-          "repeated_narration": { "title": "Wiederholte Erzählung", "description": "{turns} Runden wiederholten vor einem Tool-Aufruf dieselbe Erzählung." },
-          "stopped_unverified": { "title": "Mit ungeprüften Schreibvorgängen gestoppt", "description": "Der Lauf wurde gestoppt, während {files} geschriebene Dateien nie geprüft wurden." }
+          "analysis_overrun": {
+            "title": "Lange Analyse vor dem ersten Schreiben",
+            "description": "{readTurns} reine Leserunden vor dem ersten Schreiben (Runde {firstWriteTurn})."
+          },
+          "unkept_readiness": {
+            "title": "Bereitschaft gemeldet, weiter gelesen",
+            "description": "Auf {claims} Bereitschaftsmeldungen folgten {readTurnsAfter} reine Leserunden."
+          },
+          "serial_single_writes": {
+            "title": "Ein Schreibvorgang pro Runde",
+            "description": "{turns} Runden machten je nur einen Schreibvorgang und kosteten {promptTokens} Prompt-Tokens."
+          },
+          "prompt_bloat": {
+            "title": "Prompt weit größer als die Ausgabe",
+            "description": "Der Prompt war {ratio}× so groß wie die Antwort: {promptTokens} Prompt-Tokens, {perWrite} pro Schreibvorgang."
+          },
+          "unverified_writes": {
+            "title": "Schreibvorgänge nie geprüft",
+            "description": "{files} Dateien ({writes} Schreibvorgänge) wurden danach nie erfolgreich geprüft."
+          },
+          "bracket_break": {
+            "title": "Eine Änderung brach die Klammerbalance",
+            "description": "Eine Änderung an {path} veränderte die Klammerbalance ({delta})."
+          },
+          "edit_churn": {
+            "title": "Dieselbe Datei immer wieder umgeschrieben",
+            "description": "{path} wurde {writes}-mal geschrieben."
+          },
+          "filed_then_inline": {
+            "title": "Tickets angelegt, dann selbst erledigt",
+            "description": "{tickets} Tickets wurden angelegt und keines vergeben; danach schrieb die Sitzung den Code selbst."
+          },
+          "same_model_roles": {
+            "title": "Planen und Programmieren mit einem Modell",
+            "description": "Planen und Programmieren liefen beide auf {model}, obwohl die Arbeit übergeben wurde."
+          },
+          "oversized_args": {
+            "title": "Übergroße Tool-Argumente",
+            "description": "{calls} {tool}-Aufrufe trugen bis zu {bytes} Bytes an Argumenten."
+          },
+          "slow_turns": {
+            "title": "Langsame Runden",
+            "description": "{turns} Runden dauerten eine Minute oder länger; die langsamste dauerte {slowestMs} ms."
+          },
+          "repeated_narration": {
+            "title": "Wiederholte Erzählung",
+            "description": "{turns} Runden wiederholten vor einem Tool-Aufruf dieselbe Erzählung."
+          },
+          "stopped_unverified": {
+            "title": "Mit ungeprüften Schreibvorgängen gestoppt",
+            "description": "Der Lauf wurde gestoppt, während {files} geschriebene Dateien nie geprüft wurden."
+          }
         }
       },
       "spineLabel": "Wo Sie sind",
@@ -37863,7 +38660,18 @@
         "heuristic": "Heuristisch",
         "runtime": "Laufzeit"
       },
-      "resolveFinding": "Beheben", "resolveFindingAria": "Beheben: {title}", "kindsLegend": "Befundarten", "noDirectReference": "keine direkte Referenz", "imageTooLarge": "Dieses Bild ist größer als {size} MB.", "skipReasons": {"tooLarge": "Zu groß zum Speichern", "unreadable": "Konnte nicht gelesen werden", "rateLimited": "Server war ausgelastet", "unsupported": "Nicht unterstützte Datei", "other": "Anderer Grund"},
+      "resolveFinding": "Beheben",
+      "resolveFindingAria": "Beheben: {title}",
+      "kindsLegend": "Befundarten",
+      "noDirectReference": "keine direkte Referenz",
+      "imageTooLarge": "Dieses Bild ist größer als {size} MB.",
+      "skipReasons": {
+        "tooLarge": "Zu groß zum Speichern",
+        "unreadable": "Konnte nicht gelesen werden",
+        "rateLimited": "Server war ausgelastet",
+        "unsupported": "Nicht unterstützte Datei",
+        "other": "Anderer Grund"
+      },
       "system": {
         "componentAria": "{name}, {files}, {findings}",
         "antiBar": "Befunde nach Art",
@@ -37883,37 +38691,1603 @@
         "infrastructure": "liest und schreibt ↓"
       },
       "counts": {
-        "fileOne": "{count} Datei", "fileOther": "{count} Dateien",
-        "stationOne": "{count} Station", "stationOther": "{count} Stationen",
-        "deadEndOne": "{count} Sackgasse", "deadEndOther": "{count} Sackgassen",
-        "findingOne": "{count} Befund", "findingOther": "{count} Befunde",
-        "lineOne": "{count} Linie", "lineOther": "{count} Linien",
-        "layerOne": "{count} Schicht", "layerOther": "{count} Schichten",
-        "componentOne": "{count} Komponente", "componentOther": "{count} Komponenten",
-        "stopOne": "{count} Haltestelle", "stopOther": "{count} Haltestellen",
-        "messageOne": "{count} Nachricht", "messageOther": "{count} Nachrichten",
-        "endpointOne": "{count} Endpunkt", "endpointOther": "{count} Endpunkte",
-        "stationChangedOne": "{count} Station in diesem Commit geändert", "stationChangedOther": "{count} Stationen in diesem Commit geändert",
-        "fileMissingOne": "{count} Datei fehlt auf dem Server.", "fileMissingOther": "{count} Dateien fehlen auf dem Server.",
-        "fileTooLargeOne": "{count} Datei war zu groß zum Speichern.", "fileTooLargeOther": "{count} Dateien waren zu groß zum Speichern.",
-        "fileNotStoredOne": "{count} Datei nicht gespeichert", "fileNotStoredOther": "{count} Dateien nicht gespeichert",
-        "replicaQueuedOne": "{count} Änderung wartet auf das Senden", "replicaQueuedOther": "{count} Änderungen warten auf das Senden",
-        "replicaAwaitingReviewOne": "{count} Datei wartet auf eine Prüfung", "replicaAwaitingReviewOther": "{count} Dateien warten auf eine Prüfung",
-        "replicaFailedOne": "{count} Änderung konnte nicht gesendet werden", "replicaFailedOther": "{count} Änderungen konnten nicht gesendet werden",
-        "runFailureOne": "{count} Datei fehlgeschlagen", "runFailureOther": "{count} Dateien fehlgeschlagen",
-        "runRetryAllOne": "{count} Datei wiederholen", "runRetryAllOther": "Alle {count} Dateien wiederholen",
-        "runStepOne": "Letzter Schritt", "runStepOther": "Letzte {count} Schritte",
-        "awaitingJudgeOne": "{count} Datei wartet auf die Beurteilung", "awaitingJudgeOther": "{count} Dateien warten auf die Beurteilung",
-        "fileBothOne": "{count} Datei hier und auf dem Server", "fileBothOther": "{count} Dateien hier und auf dem Server",
-        "fileChangedOne": "{count} Datei geändert", "fileChangedOther": "{count} Dateien geändert",
-        "fileSkippedOne": "{count} Datei wurde nicht gespeichert.", "fileSkippedOther": "{count} Dateien wurden nicht gespeichert.",
-        "familyLightsOne": "{family} hebt {count} Station hervor", "familyLightsOther": "{family} hebt {count} Stationen hervor",
-        "checkFileOne": "Der Befund nennt {count} Datei.", "checkFileOther": "Der Befund nennt {count} Dateien.",
-        "checkStationOne": "Er betrifft {count} Station.", "checkStationOther": "Er betrifft {count} Stationen.",
-        "issueAtOne": "Bei {scope} · {count} Problem", "issueAtOther": "Bei {scope} · {count} Probleme",
-        "notLayeredOne": "Keiner Ebene zugeordnet · {count} Teil → Liste", "notLayeredOther": "Keiner Ebene zugeordnet · {count} Teile → Liste",
-        "branchFilesOne": "{name}, {count} Datei", "branchFilesOther": "{name}, {count} Dateien",
-        "packFilesOne": "{pack}: {count} Datei", "packFilesOther": "{pack}: {count} Dateien",
-        "sectionUnjudgedOne": "Das Budget hat {count} Abschnitt für später übrig gelassen.", "sectionUnjudgedOther": "Das Budget hat {count} Abschnitte für später übrig gelassen.",
-        "fixBatchOne": "Behebe diesen Befund in einer Änderung:", "fixBatchOther": "Behebe diese {count} Befunde gemeinsam in einer Änderung:",
-        "findingCollapsedOne": "{count} Befund – zum Laden aufklappen", "findingCollapsedOther": "{count} Befunde – zum L
+        "fileOne": "{count} Datei",
+        "fileOther": "{count} Dateien",
+        "stationOne": "{count} Station",
+        "stationOther": "{count} Stationen",
+        "deadEndOne": "{count} Sackgasse",
+        "deadEndOther": "{count} Sackgassen",
+        "findingOne": "{count} Befund",
+        "findingOther": "{count} Befunde",
+        "lineOne": "{count} Linie",
+        "lineOther": "{count} Linien",
+        "layerOne": "{count} Schicht",
+        "layerOther": "{count} Schichten",
+        "componentOne": "{count} Komponente",
+        "componentOther": "{count} Komponenten",
+        "stopOne": "{count} Haltestelle",
+        "stopOther": "{count} Haltestellen",
+        "messageOne": "{count} Nachricht",
+        "messageOther": "{count} Nachrichten",
+        "endpointOne": "{count} Endpunkt",
+        "endpointOther": "{count} Endpunkte",
+        "stationChangedOne": "{count} Station in diesem Commit geändert",
+        "stationChangedOther": "{count} Stationen in diesem Commit geändert",
+        "fileMissingOne": "{count} Datei fehlt auf dem Server.",
+        "fileMissingOther": "{count} Dateien fehlen auf dem Server.",
+        "fileTooLargeOne": "{count} Datei war zu groß zum Speichern.",
+        "fileTooLargeOther": "{count} Dateien waren zu groß zum Speichern.",
+        "fileNotStoredOne": "{count} Datei nicht gespeichert",
+        "fileNotStoredOther": "{count} Dateien nicht gespeichert",
+        "replicaQueuedOne": "{count} Änderung wartet auf das Senden",
+        "replicaQueuedOther": "{count} Änderungen warten auf das Senden",
+        "replicaAwaitingReviewOne": "{count} Datei wartet auf eine Prüfung",
+        "replicaAwaitingReviewOther": "{count} Dateien warten auf eine Prüfung",
+        "replicaFailedOne": "{count} Änderung konnte nicht gesendet werden",
+        "replicaFailedOther": "{count} Änderungen konnten nicht gesendet werden",
+        "runFailureOne": "{count} Datei fehlgeschlagen",
+        "runFailureOther": "{count} Dateien fehlgeschlagen",
+        "runRetryAllOne": "{count} Datei wiederholen",
+        "runRetryAllOther": "Alle {count} Dateien wiederholen",
+        "runStepOne": "Letzter Schritt",
+        "runStepOther": "Letzte {count} Schritte",
+        "awaitingJudgeOne": "{count} Datei wartet auf die Beurteilung",
+        "awaitingJudgeOther": "{count} Dateien warten auf die Beurteilung",
+        "fileBothOne": "{count} Datei hier und auf dem Server",
+        "fileBothOther": "{count} Dateien hier und auf dem Server",
+        "fileChangedOne": "{count} Datei geändert",
+        "fileChangedOther": "{count} Dateien geändert",
+        "fileSkippedOne": "{count} Datei wurde nicht gespeichert.",
+        "fileSkippedOther": "{count} Dateien wurden nicht gespeichert.",
+        "familyLightsOne": "{family} hebt {count} Station hervor",
+        "familyLightsOther": "{family} hebt {count} Stationen hervor",
+        "checkFileOne": "Der Befund nennt {count} Datei.",
+        "checkFileOther": "Der Befund nennt {count} Dateien.",
+        "checkStationOne": "Er betrifft {count} Station.",
+        "checkStationOther": "Er betrifft {count} Stationen.",
+        "issueAtOne": "Bei {scope} · {count} Problem",
+        "issueAtOther": "Bei {scope} · {count} Probleme",
+        "notLayeredOne": "Keiner Ebene zugeordnet · {count} Teil → Liste",
+        "notLayeredOther": "Keiner Ebene zugeordnet · {count} Teile → Liste",
+        "branchFilesOne": "{name}, {count} Datei",
+        "branchFilesOther": "{name}, {count} Dateien",
+        "packFilesOne": "{pack}: {count} Datei",
+        "packFilesOther": "{pack}: {count} Dateien",
+        "sectionUnjudgedOne": "Das Budget hat {count} Abschnitt für später übrig gelassen.",
+        "sectionUnjudgedOther": "Das Budget hat {count} Abschnitte für später übrig gelassen.",
+        "fixBatchOne": "Behebe diesen Befund in einer Änderung:",
+        "fixBatchOther": "Behebe diese {count} Befunde gemeinsam in einer Änderung:",
+        "findingCollapsedOne": "{count} Befund – zum Laden aufklappen",
+        "findingCollapsedOther": "{count} Befunde – zum Laden aufklappen",
+        "topNodesOne": "Gezeigt wird der wichtigste Knoten ({count}).",
+        "topNodesOther": "Gezeigt werden die wichtigsten {count} Knoten.",
+        "modelCallsOne": "≈ {count} Modellaufruf",
+        "modelCallsOther": "≈ {count} Modellaufrufe",
+        "endpointsCappedOne": "Die Anfrage nennt nur den ersten ({count}) Endpunkt.",
+        "endpointsCappedOther": "Die Anfrage nennt nur die ersten {count} Endpunkte.",
+        "commitsCappedOne": "Es wird nur der letzte ({count}) Commit angezeigt.",
+        "commitsCappedOther": "Es werden nur die letzten {count} Commits angezeigt.",
+        "moreChecksOne": "+{count} weitere Prüfung",
+        "moreChecksOther": "+{count} weitere Prüfungen",
+        "fileEndpointsOne": "{file}: {count} Endpunkt",
+        "fileEndpointsOther": "{file}: {count} Endpunkte",
+        "filesPlottedOne": "{count} Datei dargestellt. Die Komplexität wächst von links nach rechts, die Abdeckung von unten nach oben.",
+        "filesPlottedOther": "{count} Dateien dargestellt. Die Komplexität wächst von links nach rechts, die Abdeckung von unten nach oben.",
+        "applyV8One": "Anwenden: v8-Abdeckung in {count} Paket",
+        "applyV8Other": "Anwenden: v8-Abdeckung in {count} Paketen",
+        "applyV8RequestOne": "Richte die v8-Abdeckung in diesem Paket ({count}) ein: {packages}. Füge Konfiguration und Skript hinzu, führe die Tests mit Abdeckung aus und melde die neue Abdeckung.",
+        "applyV8RequestOther": "Richte die v8-Abdeckung in diesen {count} Paketen ein: {packages}. Füge jeweils Konfiguration und Skript hinzu, führe die Tests mit Abdeckung aus und melde die neue Abdeckung.",
+        "entryPointsOmittedOne": "{count} weiterer Einstiegspunkt wird nicht als Linie gezeichnet.",
+        "entryPointsOmittedOther": "{count} weitere Einstiegspunkte werden nicht als Linien gezeichnet.",
+        "interchangeOne": "Umstieg: {count} Linie",
+        "interchangeOther": "Umstieg: {count} Linien",
+        "entryPointOne": "{count} Einstiegspunkt",
+        "entryPointOther": "{count} Einstiegspunkte",
+        "fileServerOnlyOne": "{server} Datei auf dem Server · nicht auf diesem Rechner geprüft",
+        "fileServerOnlyOther": "{server} Dateien auf dem Server · nicht auf diesem Rechner geprüft",
+        "fileLocalOnlyOne": "{local} Datei hier · noch nicht auf dem Server",
+        "fileLocalOnlyOther": "{local} Dateien hier · noch nicht auf dem Server",
+        "pinFindingsOne": "{count} Befund bei {name}",
+        "pinFindingsOther": "{count} Befunde bei {name}",
+        "moreStationsOne": "+{count} weitere Station wird nicht gezeichnet.",
+        "moreStationsOther": "+{count} weitere Stationen werden nicht gezeichnet.",
+        "pipesCappedOne": "Es wird nur die erste ({count}) Leitung angezeigt.",
+        "pipesCappedOther": "Es werden nur die ersten {count} Leitungen angezeigt.",
+        "commitRowOne": "{sha} · {count} Datei · {when}",
+        "commitRowOther": "{sha} · {count} Dateien · {when}",
+        "commitRowAuthorOne": "{sha} · {author} · {count} Datei · {when}",
+        "commitRowAuthorOther": "{sha} · {author} · {count} Dateien · {when}",
+        "moreStopsOne": "+{count} weiterer Halt",
+        "moreStopsOther": "+{count} weitere Halte",
+        "antiTipOne": "aus {count} Warnung",
+        "antiTipOther": "aus {count} Warnungen",
+        "linkOne": "{count} Link",
+        "linkOther": "{count} Links",
+        "groupOne": "{count} Gruppe",
+        "groupOther": "{count} Gruppen",
+        "kindOne": "{count} Art",
+        "kindOther": "{count} Arten",
+        "antiPatternOne": "{count} Anti-Muster",
+        "antiPatternOther": "{count} Anti-Muster",
+        "groupSelectedOne": "{count} Gruppe ausgewählt",
+        "groupSelectedOther": "{count} Gruppen ausgewählt",
+        "previewFixOne": "{count} Korrektur ansehen",
+        "previewFixOther": "{count} Korrekturen ansehen",
+        "applyFixesOne": "{count} Korrektur anwenden",
+        "applyFixesOther": "{count} Korrekturen anwenden",
+        "applyFailedOne": "{count} Korrektur konnte nicht angewendet werden",
+        "applyFailedOther": "{count} Korrekturen konnten nicht angewendet werden",
+        "dependentOne": "{count} Datei hängt davon ab",
+        "dependentOther": "{count} Dateien hängen davon ab",
+        "callerOne": "{count} Aufrufer",
+        "callerOther": "{count} Aufrufer",
+        "moreFeaturesOne": "+{count} weiterer Eintrag wird nicht angezeigt.",
+        "moreFeaturesOther": "+{count} weitere Einträge werden nicht angezeigt."
+      },
+      "heat": {
+        "description": "Hitzeraster: {layers}, {components}. Wählen Sie eine Zelle für Details.",
+        "cellAria": "{name}, {files}",
+        "legend": "Zellgröße: {size} · Farbe: {colour} · Balken: {bar}",
+        "empty": "Es gibt keine Komponenten zum Zeichnen.",
+        "showMore": "{count} weitere anzeigen"
+      },
+      "cycleHop": "Zyklische Abhängigkeit",
+      "explain": {
+        "cutNote": "Gezeigt werden {shown} von {files}. Der Server hat nicht die ganze Karte gesendet; sie wird mit dem Server aktualisiert.",
+        "notSetUpWhy": "Nicht eingerichtet · {reason}",
+        "whyNoOutline": "der Server hat nur {shown} von {files} gesendet",
+        "whyNoBadges": "noch keine Datei hat {metric}; prüfen Sie erneut, um es zu erfassen",
+        "whyNotCollected": "{metric} wurde in dieser Prüfung nicht erfasst",
+        "oneStation": "Diese Linie hat nur eine Station: nichts zum Durchschreiten.",
+        "legendNotSetUp": "daher bleibt jede Station neutral",
+        "presetNeeds": "benötigt {metrics}"
+      },
+      "scaleSummary": "{stations} stehen für {files} · gezeigt werden die {nodes} wichtigsten · die Suche erreicht alles",
+      "repoConfig": "Repo-Konfiguration",
+      "sequence": {
+        "description": "Sequenz aus {stops} und {messages}.",
+        "empty": "Eine Sequenz braucht zwei Stationen; diese Linie hat nur eine.",
+        "messageAria": "{from} an {to}: {label}",
+        "backToMap": "Zurück zur Karte",
+        "hop": "verweist auf · {count}",
+        "noReference": "keine direkte Referenz"
+      },
+      "pillStates": {
+        "synced": "Synchronisiert",
+        "syncing": "Synchronisierung läuft",
+        "error": "Fehler",
+        "idle": "Nicht synchronisiert",
+        "partial": "Nicht synchron",
+        "serverOnly": "Nur auf dem Server"
+      },
+      "overlay": {
+        "outTo": "↑ Hinaus zu {name}",
+        "fit": "Einpassen",
+        "lensSub": "war die Ansicht {lens}",
+        "familyOnly": "Nur {family}",
+        "clearFamily": "Filter {family} aufheben",
+        "diagnose": "Diagnose",
+        "controls": "Szenensteuerung"
+      },
+      "map": {
+        "wall": "HTTP-Grenze",
+        "describes": "beschreibt",
+        "doc": "Dokument",
+        "deadEnd": "Sackgasse: nichts liest es",
+        "reported": "Gemeldet ✓",
+        "noSymbolsNote": "Dieser Graph hat keine Symbole, daher zeigen die Ebenen unter einem Paket Dateien.",
+        "world": "die ganze Karte",
+        "drillReset": "Die Karte hat sich geändert, deshalb ist die Ansicht aus {name} herausgegangen.",
+        "satelliteAria": "{name}, in {parent}",
+        "look": {
+          "label": "Kartenansicht",
+          "flat": "Flach",
+          "towers": "Türme",
+          "flatTip": "Stationen als flache Markierungen zeichnen",
+          "towersTip": "Jede Station als Turm und jede Linie als Rohr zeichnen"
+        },
+        "card": {
+          "close": "Schließen",
+          "issueMore": "+{count} weitere",
+          "goInside": "Hineingehen ↓",
+          "unfold": "{count} aufklappen",
+          "fold": "Zuklappen",
+          "whoCalls": "Wer ruft das auf?",
+          "apiContract": "API-Vertrag",
+          "patterns": "Muster",
+          "noSymbols": "Hier gibt es keine Symbole: weiter innen liegt nichts.",
+          "leaf": "Außerhalb dieser Ebene",
+          "loading": "Symbole werden gelesen…",
+          "callSite": "Aufrufstelle",
+          "openAtLine": "In Zeile {line} öffnen"
+        },
+        "stats": {
+          "issues": "Antimuster",
+          "complexity": "Komplexität",
+          "coverage": "Abdeckung",
+          "reached": "Erreicht",
+          "usage": "Wichtigkeit"
+        },
+        "statWords": {
+          "anti": {
+            "none": "keine",
+            "low": "niedrig",
+            "medium": "mittel",
+            "high": "hoch",
+            "severe": "schwer"
+          },
+          "importance": "Nr. {rank} von {total}",
+          "importanceTip": "Relativ zum meistgenutzten Teil"
+        },
+        "bands": {
+          "symbol": "Klasse",
+          "methods": "Methoden",
+          "errors": "Fehler und Tests",
+          "leaves": "Verlässt diese Ebene",
+          "body": "Diese Funktion",
+          "callees": "Was sie aufruft"
+        },
+        "names": {
+          "postgres": "Postgres",
+          "kv": "KV · R2",
+          "llm": "LLM-Anbieter",
+          "github": "GitHub-API",
+          "stripe": "Zahlungen",
+          "mail": "E-Mail",
+          "slack": "Slack",
+          "oauth": "Anmeldeanbieter"
+        }
+      },
+      "rail": {
+        "heading": "Linien von den Einstiegspunkten",
+        "legendHeading": "So liest sich das Bild jetzt",
+        "ownerSwatches": "Eine Farbe pro Eigentümer",
+        "legendEmpty": "Dem Bild ist nichts zugeordnet.",
+        "lineDetail": "{stations} · {files} · {end}",
+        "pinTag": "{n} · {title}",
+        "reachedTag": "{percent} % erreicht"
+      },
+      "act": {
+        "cardsTitle": "Zuerst beheben",
+        "titlePath": "Auf diesem Pfad · {count} zu bearbeiten",
+        "emptyTitle": "Hier gibt es nichts zu tun",
+        "emptyStation": "Keine offenen Befunde an dieser Station. Fragen Sie z. B. „Was hat keinen Test?“",
+        "emptyPath": "Keine offenen Befunde auf diesem Pfad. Fragen Sie z. B. „Was hat keinen Test?“",
+        "emptyAsk": "Fragen, was keinen Test hat",
+        "emptyShow": "Anzeigen",
+        "systemWide": "Systemweit · {count}",
+        "systemWideNote": "Sie betreffen den Großteil des Systems, daher trägt keine einzelne Station sie.",
+        "apply": "Anwenden",
+        "prompt": "Auftrag",
+        "show": "Zeigen",
+        "cardAction": "{action}: {title}",
+        "sourceExact": "Exakt",
+        "sourceAnalyzer": "Analyse",
+        "sourceModel": "Modell",
+        "fixQueue": "Korrekturliste · {count}",
+        "keepTitle": "Diesen Lauf als Test behalten",
+        "keepBody": "Mache aus {path} einen Test, der fehlschlägt, wenn einer seiner Schritte bricht.",
+        "keepButton": "Test beauftragen",
+        "testRequest": "Schreibe einen Integrationstest, der den Pfad {path} durchläuft. Die Halte in Reihenfolge: {stops}. Prüfe, dass jeder Schritt weiterhin stattfindet und dass keiner dieser Befunde zurückkehrt: {checks}.",
+        "doneTitle": "Dieser Pfad ist fertig, wenn…",
+        "doneCheck": "{title} ist behoben in {items}",
+        "doneNone": "Auf diesem Pfad ist kein Befund offen.",
+        "detailsTitle": "Details",
+        "linkCoverage": "Abdeckung",
+        "linkApi": "API"
+      },
+      "path": {
+        "title": "{line} · {entry}",
+        "reset": "Zurücksetzen",
+        "step": "Schritt",
+        "runToEnd": "Bis zum Ende",
+        "simulate": "Mit Werten simulieren",
+        "sequence": "Sequenz",
+        "noTests": "keine Tests",
+        "stops": "Halte",
+        "enlarge": "Vergrößern"
+      },
+      "sync": {
+        "skippedRowNoSize": "{path} · {reason}",
+        "skippedRow": "{path} · {size} · {reason}",
+        "skippedUnknown": "Unbekannt: Keine Prüfung hat aufgezeichnet, was übersprungen wurde.",
+        "sourcesTitle": "Datenquellen",
+        "excludedTitle": "Ausgeschlossene Ordner",
+        "excludedNote": "Diese Ordner werden nie gelesen.",
+        "deltaLoading": "Commits werden gelesen…",
+        "deltaTitle": "Änderungen seit der letzten Prüfung",
+        "deltaEmpty": "Keine Commits vorhanden.",
+        "deltaSummary": "{count} noch nicht im Bild",
+        "deltaPending": "Ausstehend",
+        "deltaApplied": "Im Bild",
+        "actionSetUpV8": "v8 einrichten",
+        "actionTurnOn": "Einschalten",
+        "actionGenerate": "Erzeugen",
+        "setUpV8Request": "Richte die v8-Abdeckung für das Projekt ein: Abdeckungsskript und Konfiguration hinzufügen, Tests mit Abdeckung ausführen und die erzeugten Abdeckungsdateien nennen.",
+        "turnOnRequest": "Schalte Laufzeit-Traces für das Projekt ein: Tracing an den Einstiegspunkten ergänzen, einmal ausführen und melden, wo die Traces abgelegt werden.",
+        "excludedNone": "Es wurde kein Ordner ausgelassen.",
+        "excludedFolder": "{path}",
+        "resend": "Erneut prüfen, um übersprungene Dateien zu wiederholen",
+        "resendNote": "Startet die gesamte Prüfung dieses Ordners erneut. Sie bestätigen sie zuerst.",
+        "replicaTitle": "Senden an das Projekt",
+        "replicaIdle": "Alles, was dieser Rechner geprüft hat, wurde gesendet.",
+        "replicaSending": "Wird gesendet…",
+        "replicaWaiting": "Wartet: {reason}. Neuer Versuch in {seconds} s.",
+        "replicaWhy429": "der Server drosselt die Anfragen",
+        "replicaWhyNetwork": "der Server ist nicht erreichbar",
+        "replicaWhyServer": "der Server hat mit einem Fehler geantwortet",
+        "replicaFailedRow": "{reason}",
+        "replicaLastSync": "Zuletzt gesendet {time}.",
+        "replicaPack": "Letztes Paket: {size}, {percent} % der JSON-Größe ({files} Dateien).",
+        "replicaParts": "Teil {sent} von {total} wird gesendet ({left} ausstehend).",
+        "replicaUnitB": "{value} B",
+        "replicaUnitKB": "{value} KB",
+        "replicaUnitMB": "{value} MB",
+        "replicaPausedAuth": "Pausiert: Melden Sie sich erneut an, um weiter zu senden.",
+        "replicaPausedUnreachable": "Pausiert: Der Server ist nicht erreichbar.",
+        "replicaPausedProject": "Pausiert: Dieser Arbeitsbereich ist mit einem anderen Projekt verknüpft.",
+        "replicaReasonAuth": "nicht erlaubt oder abgemeldet",
+        "replicaReasonBadRequest": "der Server hat es abgelehnt",
+        "replicaReasonTooLarge": "zu groß zum Speichern",
+        "replicaReasonRate": "gedrosselt",
+        "replicaReasonServer": "Serverfehler",
+        "replicaReasonNetwork": "nicht erreichbar",
+        "replicaReasonOther": "unerwarteter Fehler"
+      },
+      "syncSources": {
+        "code": "Code",
+        "docs": "Dokumente",
+        "coverage": "Abdeckung",
+        "usage": "Nutzung",
+        "traces": "Traces",
+        "openapi": "OpenAPI",
+        "history": "Verlauf",
+        "owners": "Verantwortliche"
+      },
+      "syncExcluded": {
+        "nested": "Verschachtelte Git-Checkouts",
+        "worktrees": ".worktrees-Ordner",
+        "local": "*.local-Ordner",
+        "vendored": "Eingebundene _*_src-Ordner"
+      },
+      "sourceStates": {
+        "collected": "Erfasst",
+        "estimated": "Geschätzt",
+        "absent": "Nicht eingerichtet"
+      },
+      "unavailable": {
+        "notHere": "Hier nicht verfügbar",
+        "labelled": "{label}: hier nicht verfügbar"
+      },
+      "coverage": {
+        "notSetUpTitle": "Die Abdeckung ist nicht eingerichtet",
+        "notSetUpBody": "Im geprüften Ordner wurde keine Abdeckungsdatei (coverage-final.json oder lcov.info) gefunden, daher wird keine Abdeckungszahl angezeigt. Führen Sie die Tests mit Abdeckung aus und prüfen Sie den Ordner erneut.",
+        "kpiFiles": "Dateien mit Abdeckung",
+        "kpiFilesValue": "{count} von {total}",
+        "kpiMean": "Mittlere Abdeckung",
+        "kpiComplexity": "Gesamtkomplexität",
+        "kpiRisky": "Komplex und kaum getestet",
+        "scatterTitle": "Komplexität gegen Abdeckung",
+        "axisX": "Komplexität",
+        "axisY": "Abdeckung",
+        "gapsTitle": "Riskanteste Lücken",
+        "gapsNone": "Keine komplexe Datei ist unzureichend getestet.",
+        "gapRow": "Komplexität {complexity} · {coverage} abgedeckt",
+        "runWithValues": "Mit Werten ausführen",
+        "promptTests": "Tests anfordern",
+        "promptText": "Schreibe Tests für {file}. Die Datei hat die Komplexität {complexity} und {coverage} Zeilenabdeckung. Decke die ungetesteten Zweige ab, führe die Tests aus und melde die neue Abdeckung.",
+        "noComplexity": "Die Komplexität wurde nicht gemessen.",
+        "shapeTitle": "Testverteilung",
+        "shapeNone": "Keine Testdateien im Graphen, die Verteilung wird nicht gemessen.",
+        "shapeAria": "{unit} Unit-, {integration} Integrations-, {e2e} End-to-End-Tests",
+        "shapeSegment": "{kind} {count}",
+        "unit": "Unit",
+        "integration": "Integration",
+        "e2e": "E2E",
+        "configTitle": "Wo die Abdeckung konfiguriert ist",
+        "configNone": "Keine Pakete mit Code gefunden.",
+        "configAll": "Die Abdeckung ist in jedem Paket konfiguriert.",
+        "configNowhere": "In keinem Paket ist die Abdeckung konfiguriert.",
+        "configOnly": "Die Abdeckung ist nur in {packages} konfiguriert. Anderswo wird sie nicht gemessen.",
+        "quadrant": "komplex · ungetestet",
+        "namesMore": "{names} +{count}"
+      },
+      "patterns": {
+        "notSetUpTitle": "Muster sind nicht eingerichtet",
+        "notSetUpBody": "In diesem Ordner wurde kein Muster erkannt, daher ist die Matrix leer.",
+        "matrixTitle": "Mustergruppen nach Schicht",
+        "antiRow": "Anti-Muster",
+        "cellAria": "{family}, {layer}: {count}",
+        "listTitle": "Gefundene Muster",
+        "listHint": "Heuristik: aus Namen, Exporten, Importen und Größe abgeleitet.",
+        "antiTitle": "Anti-Muster",
+        "antiNone": "Es wurden keine Anti-Muster gefunden.",
+        "resolve": "Beheben",
+        "showInTower": "Im Turm zeigen",
+        "summary": "{anti} in {kinds}",
+        "filterAll": "Alle",
+        "selectAllShown": "Alle angezeigten auswählen",
+        "selectGroupAria": "{title} auswählen: {route}",
+        "route": "{from} → {to}",
+        "climbs": "steigt eine Schicht auf",
+        "skips": "überspringt eine Schicht",
+        "layerMeta": "{route} · {verdict} · {links}",
+        "linksIn": "{links} in {files}",
+        "findingsIn": "{findings} in {files}",
+        "why": "Warum",
+        "goodLooksLike": "So sieht es richtig aus",
+        "afterLooksLike": "Nach der Behebung",
+        "topFilesSummary": "Wichtigste Dateien · {names}[[ · {more}]]",
+        "moreFiles": "+{count} weitere",
+        "showMore": "Mehr anzeigen",
+        "foldHint": "Eine Karte pro Art und Schichtenpaar, nicht eine pro Befund. {findings} werden zu {groups} zusammengefasst.",
+        "filteredTo": "Nur {layer} wird angezeigt",
+        "clearFilter": "Alle anzeigen",
+        "footerNote": "nichts ändert sich, bis Sie es anwenden",
+        "arrowCaption": "importiert (sollte nicht)",
+        "arrowAria": "{from} greift nach oben auf {to} zu",
+        "back": "Zurück",
+        "backToPatterns": "‹ Muster",
+        "before": "Vorher",
+        "after": "Nachher",
+        "afterPlanned": "Nachher (geplant)",
+        "tagHost": "Deterministisch",
+        "tagAgent": "Agent",
+        "agentNote": "Agent: Die echte Änderung erscheint auf dem Branch",
+        "previewNote": "Deterministische Korrekturen zeigen die exakte Änderung. Agent-Korrekturen zeigen hier den Plan und die echte Änderung auf dem Branch.",
+        "applyNote": "Wird auf einem neuen Branch angewendet · Jederzeit rückgängig",
+        "applying": "Wird angewendet…",
+        "beforeAria": "Vorher: {from} importiert {to}",
+        "afterAria": "Nachher: {from} implementiert einen Port, den {to} besitzt",
+        "withPort": "{file} + Port",
+        "moreOfKind": "+{count} weitere dieser Art",
+        "noComposerNote": "Es ist kein Agent-Composer verbunden, daher laufen nur Korrekturen, die der Host anwenden kann.",
+        "legendTitle": "Den Turm jetzt lesen",
+        "legendOffender": "Verstößt gegen die Regel (ausgewählt)",
+        "legendPartner": "Worauf es zugreift",
+        "legendOther": "Nicht beteiligt",
+        "legendArrow": "Ein Link, der eine Schicht aufsteigt",
+        "legendClose": "Legende schließen",
+        "applyProgress": "{done} von {total} werden angewendet",
+        "cancel": "Abbrechen",
+        "applyError": "Das Anwenden wurde unerwartet beendet. Es wurde nichts weiter geändert.",
+        "resolveFailed": "Den ersten in „Beheben“ öffnen",
+        "sampleOf": "{shown} von {total} werden angezeigt",
+        "rules": {
+          "partitionViolationReason": "{from} sollte nicht von {to} abhängen: Es greift eine Schicht nach oben, sodass eine Änderung oben kaputt machen kann, worauf es aufbaut.",
+          "partitionViolationGood": "Links zeigen nur nach unten: Einstieg → Präsentation → Anwendung → Domäne, wobei die Infrastruktur an die Ports der Domäne andockt.",
+          "partitionViolationAfter": "{to} deklariert den benötigten Port und {from} implementiert ihn. Der Pfeil zeigt jetzt nach unten.",
+          "godModuleReason": "Diese Datei erledigt zu viele Aufgaben. Sie überschreitet mindestens eine Größengrenze, sodass jede Änderung hier landet und sie schwer zu testen oder zu prüfen ist.",
+          "godModuleGood": "Eine Aufgabe pro Datei, jeder Balken links von seiner Grenzmarke.",
+          "godModuleAfter": "Eine Datei pro Aufgabe, jede innerhalb der Grenzen.",
+          "genericReason": "Die Prüfung hat dies als zu behebend markiert.",
+          "genericGood": "Nach der Behebung bleibt kein Befund dieser Art übrig.",
+          "genericAfter": "Der Agent schlägt die Änderung auf einem Branch vor, und Sie prüfen den echten Diff vor dem Mergen."
+        },
+        "block": {
+          "tag": "Anti-Muster · {title}",
+          "fix": "Beheben",
+          "fixAria": "{title} beheben",
+          "showInTower": "Im Turm zeigen",
+          "reReview": "Erneut prüfen, um eine Korrektur zu erhalten",
+          "measureLines": "Zeilen",
+          "measureExports": "Exporte",
+          "measureComplexity": "Komplexität der schlechtesten Funktion",
+          "limit": "/ Grenze {limit}",
+          "notMeasured": "Nicht gemessen",
+          "reachesInto": "Greift zu auf",
+          "reachedBy": "Verwendet von",
+          "measuresTitle": "Messwerte im Vergleich zu ihren Grenzen"
+        }
+      },
+      "stopReasons": {
+        "noReferences": "Keine weiteren Verweise",
+        "onlyUpward": "Nur Verweise nach oben",
+        "onlyVisited": "Nur Rückverweise",
+        "onlyHigherLayer": "Nur Verweise auf eine höhere Schicht",
+        "maxStops": "Am Haltelimit abgeschnitten"
+      },
+      "systems": {
+        "loose": "Lose Dateien",
+        "copyMark": "Kopie",
+        "groupAria": "System {name}"
+      },
+      "duplicateCopy": {
+        "title": "Verwaiste Kopie eines Projekts",
+        "body": "{copy} sieht aus wie eine verwaiste Kopie von {original} ({similarity} % der geprüften Dateien stimmen überein).",
+        "reasonNoGit": "Sie hat keinen .git-Ordner, das Original schon.",
+        "reasonNameMismatch": "Ihr Ordnername weicht vom Projektnamen ab.",
+        "reasonLaterName": "Beide sehen gleich aus, daher gilt der spätere Name als Kopie.",
+        "exclude": "Von der Prüfung ausschließen",
+        "excludeAria": "{copy} von der Prüfung ausschließen",
+        "excluding": "Wird ausgeschlossen…",
+        "failed": "Der Ordner konnte nicht ausgeschlossen werden.",
+        "note": "Bis du sie ausschließt, bleibt die Kopie auf der Karte, als Kopie markiert, und ihre Linien und Befunde werden unter dem Original zusammengefasst."
+      },
+      "partitionPicker": {
+        "label": "Dateien einer Partition anzeigen"
+      },
+      "scene": {
+        "edgesCapped": "{shown} von {total} Verbindungen angezeigt",
+        "layingOut": "Wird angeordnet…",
+        "errorTitle": "In dieser Ansicht ist ein Fehler aufgetreten",
+        "errorRetry": "Erneut versuchen",
+        "errorBack": "Zurück",
+        "depth": "Tiefe"
+      },
+      "nav": {
+        "group": "Ansicht bewegen",
+        "panUp": "Nach oben",
+        "panDown": "Nach unten",
+        "panLeft": "Nach links",
+        "panRight": "Nach rechts",
+        "rotateLeft": "Nach links drehen",
+        "rotateRight": "Nach rechts drehen",
+        "tiltUp": "Nach oben neigen",
+        "tiltDown": "Nach unten neigen"
+      },
+      "mind": {
+        "moreFoldersOne": "+{count} Ordner",
+        "moreFoldersOther": "+{count} Ordner",
+        "moreFoldersAriaOne": "{count} weiterer Ordner: die nächsten anzeigen",
+        "moreFoldersAriaOther": "{count} weitere Ordner: die nächsten anzeigen"
+      },
+      "zoom": {
+        "group": "Zoomstufe",
+        "system": "Systeme",
+        "class": "Klassen",
+        "method": "Methoden",
+        "code": "Code"
+      },
+      "code": {
+        "aria": "Code von {name}, Zeilen {from} bis {to}",
+        "loading": "Code wird gelesen…",
+        "unavailable": "Der Code ist hier nicht verfügbar.",
+        "truncated": "Die ersten {count} Zeilen werden angezeigt"
+      },
+      "api": {
+        "notSetUpTitle": "Keine Endpunkte gefunden",
+        "notSetUpBody": "Es wurde keine Routenregistrierung gefunden. Routen werden aus Hono- und Express-Registrierungen gelesen.",
+        "kpiEndpoints": "Endpunkte",
+        "kpiParams": "Parameter",
+        "kpiCallers": "Aufrufer",
+        "kpiTests": "Testdateien",
+        "kpiContract": "Vertrag",
+        "pickFile": "{name} auf der Karte auswählen",
+        "paramWithNote": "{where} · {note}",
+        "kpiUndocumented": "Undokumentiert",
+        "contractMissing": "In diesem Ordner gibt es keinen OpenAPI-Vertrag, daher sind alle Endpunkte undokumentiert.",
+        "documented": "Dokumentiert",
+        "undocumented": "Undokumentiert",
+        "callers": "Aufgerufen von: {names}",
+        "noCallers": "Keine Station importiert diese Datei.",
+        "downloadFailed": "Die Datei konnte nicht heruntergeladen werden.",
+        "tryIt": "Ausprobieren",
+        "requestLine": "Anfrage",
+        "copyCurl": "Als curl kopieren",
+        "exportOpenapi": "OpenAPI-Gerüst exportieren",
+        "exportPostman": "Postman-Collection exportieren",
+        "contractTests": "Vertragstests",
+        "contractTestsText": "Schreibe Vertragstests für diese Endpunkte anhand des OpenAPI-Gerüsts, führe sie aus und melde jedes Ergebnis: {routes}.",
+        "groupInContract": "Im Vertrag ({count})",
+        "groupUndocumented": "Nicht dokumentiert ({count})",
+        "selectEndpoint": "{route} in die Vertragstests aufnehmen",
+        "selectedCount": "{selected} von {endpoints} für Vertragstests ausgewählt",
+        "selectAtLeastOne": "Wähle mindestens einen Endpunkt, um Vertragstests zu erzeugen.",
+        "detailParams": "Parameter",
+        "paramPath": "Pfad",
+        "paramQuery": "Query",
+        "paramBody": "Body",
+        "paramBodyNote": "JSON-Body; seine Form wurde nicht aus dem Code gelesen.",
+        "noParams": "Diese Route hat keine Parameter.",
+        "detailTested": "Getestete Antworten",
+        "testedYes": "Getestet ✓",
+        "testedNo": "Nicht getestet ✗",
+        "testedBy": "Eine Testdatei verweist auf den Handler: {names}",
+        "testedNone": "Keine Testdatei verweist auf den Handler.",
+        "detailCallers": "Wer ruft ihn auf",
+        "callerFilesNone": "Keine Datei verweist auf den Handler.",
+        "sandboxTitle": "Ausprobieren · Sandbox",
+        "baseUrl": "Basis-URL",
+        "baseUrlInvalid": "Gib eine http- oder https-Adresse ein, zum Beispiel http://localhost:3000.",
+        "baseUrlRemote": "Das ist keine lokale Adresse. Die Anfrage geht unverändert dorthin.",
+        "paramValue": "Wert für {name}",
+        "paramMissing": "Gib einen Wert für {name} ein.",
+        "bodyInvalid": "Der Body ist kein gültiges JSON.",
+        "bodyLabel": "Request-Body (JSON)",
+        "send": "Senden",
+        "sending": "Wird gesendet…",
+        "sendUnavailable": "Senden ist im Editor verfügbar.",
+        "sendFailed": "Die Anfrage ist fehlgeschlagen: {message}",
+        "resultStatus": "{status} · {ms} ms",
+        "resultHeaders": "Antwort-Header",
+        "resultBody": "Antwort-Body",
+        "resultTruncated": "Der Body ist auf {count} Zeichen gekürzt.",
+        "resultEmpty": "Die Antwort hat keinen Body."
+      },
+      "resolve": {
+        "empty": "Wählen Sie bei einem Befund „Beheben“, um hier daran zu arbeiten.",
+        "provenanceLabel": "Quelle",
+        "checksTitle": "Prüfungen",
+        "checkReview": "Prüfen Sie den Ordner erneut, um zu bestätigen, dass der Befund verschwunden ist.",
+        "show": "Anzeigen"
+      },
+      "simulate": {
+        "pathTitle": "Zu durchlaufender Pfad",
+        "pathEmpty": "Wählen Sie zuerst eine Linie oder eine Station; die Simulation durchläuft ihren Pfad.",
+        "valuesLabel": "Zu verwendende Werte",
+        "run": "Agenten bitten, es auszuführen",
+        "requestText": "Schreibe und führe einen Test aus, der diesen Pfad durchläuft: {path}. Verwende diese Werte: {values}. Melde jeden Schritt: was aufgerufen wurde, was zurückkam und wo es fehlschlug.",
+        "noValues": "keine angegeben; wähle sinnvolle",
+        "sent": "An den Agenten gesendet. Das Ergebnis stammt aus seinem Lauf; vorher wird nichts angezeigt.",
+        "noComposer": "Der Host hat keinen Agenten-Composer, daher kann nichts ausgeführt werden.",
+        "note": "Simulieren täuscht nie einen Lauf vor. Der Agent schreibt den Test, führt ihn aus und meldet jeden Schritt.",
+        "noRecorded": "Der Host hat für diesen Pfad keine Werte aufgezeichnet, daher gibt es nichts zu bearbeiten. Der Durchlauf folgt trotzdem den Sprüngen.",
+        "presets": "Argument-Voreinstellungen",
+        "presetRecorded": "Aufgezeichnet",
+        "colRecorded": "Aufgezeichnet",
+        "editAria": "{name} bearbeiten",
+        "stubsTitle": "Simulierte Ports",
+        "stubsHint": "Eine simulierte Station antwortet mit ihrem aufgezeichneten Wert.",
+        "lineEnter": "{name} betreten",
+        "lineCall": "{name} aufrufen",
+        "lineReturn": "aus {name} zurückkehren",
+        "unknownResult": "unbekannt: Eine Eingabe wurde bearbeitet, nur ein echter Lauf kann es sagen",
+        "codeTitle": "Schritte im Pfad",
+        "noVars": "In diesem Schritt sind keine Werte bekannt.",
+        "varsTitle": "Variablen",
+        "resultTitle": "Ergebnis",
+        "noResult": "Hier ist kein Wert aufgezeichnet.",
+        "stubbedNote": "Diese Station ist simuliert: Sie antwortet mit ihrem aufgezeichneten Wert.",
+        "simulatedBanner": "Simuliert, nicht ausgeführt: Dies geht die Sprünge des Pfads mit aufgezeichneten und bearbeiteten Werten durch. „Agent den Lauf ausführen lassen“ macht den echten Lauf.",
+        "saveTest": "Speichern als {file}",
+        "saveTestText": "Schreibe die Testdatei {file}, die diesen Pfad durchläuft: {path}. Verwende diese Werte: {values}. Simuliere diese Ports: {stubs}. Speichere sie im Testordner des Projekts und führe sie aus.",
+        "noStubs": "keine",
+        "origin": {
+          "recorded": "aufgezeichnet",
+          "edited": "bearbeitet"
+        },
+        "startFrom": "Starten bei",
+        "startEntry": "Dem Einstieg",
+        "startStop": "Dieser Station"
+      },
+      "fix": {
+        "title": "Korrektur",
+        "queue": "{open} offen von {shown} angezeigt · {repo} im Repository",
+        "queueTitle": "Korrektur-Warteschlange",
+        "queueAria": "{title} öffnen",
+        "queueState": {
+          "open": "offen",
+          "applied": "angewendet · Prüfung",
+          "resolved": "gelöst"
+        },
+        "mode": {
+          "group": "Korrekturmodus",
+          "apply": "Deterministische Korrektur",
+          "prompt": "Prompt",
+          "noCodemod": "Für diese Art gibt es auf diesem Host keinen Codemod."
+        },
+        "primary": {
+          "apply": "Auf Branch fix/… anwenden",
+          "prompt": "An den Composer senden",
+          "checks": "Prüfungen ausführen",
+          "resolve": "Als gelöst markieren",
+          "resolved": "Gelöst ✓",
+          "sent": "An den Agent gesendet",
+          "running": "Läuft…"
+        },
+        "sendToAgent": "An Agent senden",
+        "noComposer": "Es ist kein Agent-Composer verbunden.",
+        "undo": "Rückgängig",
+        "undoNoRecord": "Dieser Host hat keine Aufzeichnung der Korrektur und kann sie daher nicht rückgängig machen.",
+        "permNote": "Läuft als Sie auf dem Branch fix/…. Rückgängig kehrt zum vorherigen Branch zurück; nichts erreicht den Hauptbranch, bevor die Prüfungen bestehen und Sie zusammenführen.",
+        "previewTitle": "Was sich ändert",
+        "previewFromFiles": "Dieser Host kann keine Zeilen vorab anzeigen; dies sind die Dateien, die der Befund nennt.",
+        "promptTitle": "Prompt",
+        "promptNote": "Geht an den einen Composer, mit diesem Befund und den vier Prüfungen im Anhang.",
+        "checksTitle": "Nur gelöst, wenn alle Prüfungen bestehen",
+        "checksList": "Prüfungen",
+        "check": {
+          "types": "Typen der betroffenen Pakete prüfen",
+          "tests": "Gezielte Tests bestehen",
+          "rescan": "Neu scannen: das Problem ist weg",
+          "review": "Prüfung durch den Agent: keine neuen Befunde"
+        },
+        "checkStatus": {
+          "pending": "Wartet",
+          "running": "Läuft",
+          "pass": "Bestanden",
+          "fail": "Fehlgeschlagen",
+          "skipped": "Übersprungen",
+          "error": "Fehler",
+          "agent": "An Agent gesendet"
+        },
+        "checkNoReport": "Diese Prüfung hat nie berichtet und zählt daher als Fehler.",
+        "appliedOn": "Auf Branch {branch} angewendet.",
+        "branchError": "Direkt angewendet: Der Branch konnte nicht erstellt werden ({reason}).",
+        "branchUnknown": "der Korrektur-Branch",
+        "requestApply": "Behebe diesen Befund auf einem neuen Branch namens fix/…: {title}: {items}. Nimm die Änderung vor und führe sie nicht zusammen.",
+        "requestChecks": "Prüfe die Typen der betroffenen Pakete und führe die gezielten Tests für die Änderung aus, die „{title}“ ({items}) auf {branch} behebt, und melde jedes Ergebnis.",
+        "requestResolve": "Markiere den Befund „{title}“ ({items}) als gelöst, sobald {branch} seine Prüfungen besteht.",
+        "requestUndo": "Mache die Korrektur für „{title}“ ({items}) rückgängig: setze die Änderungen auf {branch} zurück.",
+        "requestPrompt": "Behebe diesen Befund: {title}: {items}. Nimm die Änderung auf einem neuen Branch namens fix/… vor, prüfe die Typen der betroffenen Pakete, führe die gezielten Tests aus, scanne neu, um zu bestätigen, dass der Befund weg ist, und prüfe die Änderung auf neue Befunde. Melde jedes Ergebnis. Nicht zusammenführen.",
+        "requestReview": "Prüfe die Änderung, die „{title}“ ({items}) auf {branch} behebt, und melde jeden neuen Befund, den sie einführt.",
+        "beforeAfter": {
+          "group": "Vorher und nachher",
+          "noBaseline": "Dieser Host hält keine frühere Prüfung zum Vergleichen vor."
+        },
+        "errors": {
+          "noRoot": "Dieser Befund nennt keinen Ordner des Arbeitsbereichs.",
+          "noRecord": "Nichts rückgängig zu machen: Der Host hat keine Aufzeichnung dieser Korrektur.",
+          "unknown": "Der Schritt ist fehlgeschlagen."
+        },
+        "codemod": {
+          "unusedExport": "Diesen ungenutzten Export entfernen",
+          "unusedFile": "Ungenutzte Dateien entfernen",
+          "unusedDependency": "Ungenutzte Abhängigkeiten entfernen",
+          "splitByCommand": "Nach Befehlsgruppe aufteilen",
+          "extractClone": "Gemeinsamen Code herausziehen"
+        }
+      },
+      "architectureStyle": {
+        "title": "Architekturstil",
+        "description": "Allein aus dem Code gelesen: Jeder Stil wird anhand fester Prüfungen zu Schichten, Abhängigkeitsrichtungen, Dateinamen und auslieferbaren Einheiten bewertet.",
+        "verdict": "Beste Übereinstimmung: {style} ({percent} % der Prüfungen erfüllt)",
+        "verdictNone": "Kein Stil passt eindeutig: Keiner erfüllt mehr als die Hälfte seiner Prüfungen vor den anderen.",
+        "fit": "{percent} % Übereinstimmung",
+        "styles": {
+          "ddd": "Domain-Driven Design",
+          "onion": "Onion",
+          "nLayer": "N-Layer",
+          "nTier": "N-Tier",
+          "clientServer": "Client-Server",
+          "microservices": "Microservices"
+        },
+        "checks": {
+          "domainLayer": "Eine Domänenschicht hält einen echten Anteil des Codes",
+          "dddNamed": "Dateien heißen wie Aggregate, Entitäten, Wertobjekte oder Repositories",
+          "domainIsolated": "Die Domäne hängt von keiner anderen Schicht ab",
+          "inverted": "Die Infrastruktur hängt nach innen ab, von Domäne oder Anwendung",
+          "layered": "Der Code ist in mehrere Schichten geteilt",
+          "downward": "Abhängigkeiten zeigen nach unten, nie zu einer höheren Schicht",
+          "noSkips": "Keine Abhängigkeit überspringt eine Schicht",
+          "singleUnit": "Die Schichten werden als eine Einheit ausgeliefert",
+          "tierSplit": "Präsentation und Daten liegen in getrennten auslieferbaren Einheiten",
+          "clientSide": "Eine Client-Seite hat eigene Ordner",
+          "serverSide": "Eine Server-Seite hat eigene Ordner",
+          "routes": "Der Server stellt Routen bereit",
+          "manyUnits": "Mehrere auslieferbare Einheiten haben eigene Einstiegspunkte",
+          "independent": "Die Einheiten verweisen kaum aufeinander"
+        },
+        "evidence": "Gemessen: {count} von {total}",
+        "status": {
+          "met": "Erfüllt",
+          "partial": "Teilweise erfüllt",
+          "missed": "Nicht erfüllt"
+        },
+        "examples": "Beispiele",
+        "empty": "Keine Quelldatei liegt in einer Schicht, daher gibt es nichts zu klassifizieren."
+      },
+      "keyFeatures": {
+        "title": "Kernfunktionen",
+        "description": "Allein aus dem Code gelesen: die Fähigkeiten, die API, die Einstiegspunkte, die genutzten Muster und die Teile, von denen alles abhängt.",
+        "groups": {
+          "capabilities": "Fähigkeiten",
+          "endpoints": "API-Endpunkte",
+          "entryPoints": "Einstiegspunkte",
+          "patterns": "Genutzte Muster",
+          "core": "Am meisten benötigt"
+        },
+        "empty": {
+          "capabilities": "Es wurden keine Bereiche oder Ordner gefunden.",
+          "endpoints": "Keine Datei registriert eine Route.",
+          "entryPoints": "Keine Datei liegt in der Einstiegsschicht.",
+          "patterns": "Es wurde kein Entwurfsmuster erkannt.",
+          "core": "Keine Datei wird von einer anderen referenziert."
+        }
+      },
+      "pinpoint": {
+        "label": "Screenshot",
+        "button": "Screenshot",
+        "hint": "Fügen Sie einen Screenshot ein, legen Sie ihn ab oder wählen Sie einen aus, um den zugehörigen Code zu finden.",
+        "reading": "Screenshot wird gelesen …",
+        "failed": "Der Screenshot konnte nicht gelesen werden.",
+        "noMatch": "Nichts im Code passte zu diesem Screenshot.",
+        "thumbAlt": "Ihr Screenshot",
+        "descriptionTitle": "Was er zeigt",
+        "anchorsTitle": "Aus dem Bild gelesener Text",
+        "matchesTitle": "Wo es im Code liegt",
+        "diagnose": "Mit dem Agenten diagnostizieren",
+        "diagnoseText": "Ein Screenshot zeigt: {description}. Der Code dahinter, der Reihe nach: {path}. Befunde auf diesem Pfad: {findings}. Finde heraus, was falsch ist, und behebe es.",
+        "noFindings": "keine",
+        "clear": "Entfernen",
+        "dropHere": "Screenshot hier ablegen",
+        "clearAria": "Screenshot entfernen",
+        "notImage": "Diese Datei ist kein Bild."
+      },
+      "pinpointProvenance": {
+        "vision": "Bilderkennung",
+        "exact": "Exakter Treffer",
+        "catalog": "Katalogschlüssel",
+        "import": "Import"
+      },
+      "time": {
+        "label": "Prüfung",
+        "aria": "Verlauf: Wählen Sie einen Commit, um die von ihm geänderten Stationen zu markieren",
+        "now": "Jetzt",
+        "commitAria": "{title}, {at}"
+      },
+      "header": {
+        "statusLabel": "Synchronisierungsstatus",
+        "updateFailed": "Aktualisierung fehlgeschlagen",
+        "reviewFailed": "Review fehlgeschlagen",
+        "parityDiffers": "{local} hier · {server} auf dem Server",
+        "overlaysNote": "Jede Kennzahl kann jeden Kanal steuern. Karte, System, Graph, Mindmap, Turm, Heat, Liste und Sequenz lesen dieselben Zuordnungen, ein Abdeckungsbalken kann also genauso gut ein Anti-Pattern-Balken sein.",
+        "rootsLabel": "Geprüfte Ordner"
+      },
+      "askSentence": {
+        "where": "wohin führt {name}?",
+        "wrong": "was stimmt bei {name} nicht?",
+        "untested": "was hat bei {name} keinen Test?",
+        "patterns": "welche Muster gibt es in {name}?",
+        "changed": "was hat sich seit dem Review geändert?",
+        "callers": "wer ruft {name} sonst noch auf?",
+        "copied": "welcher Code ist kopiert?",
+        "unused": "was wird nie aufgerufen?",
+        "claims": "was sagen die Dokumente, und stimmt das?",
+        "layers": "in welcher Schicht liegt jeder Teil?",
+        "knowledge": "was weiß das Gedächtnis über {name}?"
+      },
+      "answerMode": {
+        "where": "beantwortet als Pfad",
+        "wrong": "beantwortet als Probleme",
+        "untested": "gestrichelt = kein Test führt es aus",
+        "patterns": "beantwortet als Muster",
+        "changed": "beantwortet als Commits",
+        "callers": "beantwortet als Verknüpfungen",
+        "copied": "beantwortet als Klongruppen",
+        "unused": "beantwortet als ungenutzter Code",
+        "claims": "beantwortet als Aussagen",
+        "layers": "beantwortet als Schichten",
+        "knowledge": "beantwortet als Fakten"
+      },
+      "run": {
+        "poolDown": "Parallele Extraktion nicht verfügbar · {reason} · Extraktion in einem Thread",
+        "timelineTitle": "Phasen",
+        "stepsTitle": "Schritte",
+        "slowestTitle": "Langsamste Schritte",
+        "slowestNone": "Noch keine Schritte zum Einordnen.",
+        "partRead": "Lesen {time}",
+        "partLookup": "Abruf {time}",
+        "partPool": "Pool {time}",
+        "historyTitle": "Frühere Läufe",
+        "phaseProgress": "{done} von {total}",
+        "perSecond": "{rate}/s",
+        "eta": "noch etwa {time}",
+        "judgeStopped": "Beurteilung angehalten: {reason}",
+        "stepsNone": "Noch keine Schritte.",
+        "stepsNoneFiltered": "Kein Schritt passt zu diesem Filter.",
+        "filterLabel": "Schritte anzeigen",
+        "retry": "Erneut versuchen",
+        "retryAria": "{path} erneut versuchen",
+        "headline": "{kind} · {outcome}",
+        "startedAt": "Gestartet {time}",
+        "duration": "Dauer: {time}",
+        "historyLoading": "Frühere Läufe werden gelesen…",
+        "historyNone": "Keine früheren Läufe dieses Ordners.",
+        "historyFailed": "Die früheren Läufe konnten nicht gelesen werden.",
+        "historyOpen": "{kind}, gestartet {started}",
+        "runUnavailable": "Dieser Lauf wird nicht mehr aufbewahrt.",
+        "stepOutcomes": {
+          "ok": "erledigt",
+          "cached": "wiederverwendet",
+          "skipped": "übersprungen",
+          "failed": "fehlgeschlagen"
+        },
+        "review": {
+          "chipNotReviewed": "Nicht geprüft · {files}",
+          "chipNotReviewedPlain": "Nicht geprüft",
+          "chipReviewedStored": "Geprüft am {date} · {stored}",
+          "chipReviewedSynced": "Geprüft {age} · synchron",
+          "chipReviewed": "Geprüft am {date}",
+          "chipOutOfDate": "Geprüft am {date} · veraltet",
+          "chipCounting": "Zählen · bisher {files}",
+          "chipCountingPlain": "Dateien werden gezählt…",
+          "chipReady": "Bereit zur Prüfung",
+          "chipReviewing": "Prüfung · {done} von {total} · noch ~{eta}",
+          "chipReviewingNoEta": "Prüfung · {done} von {total}",
+          "chipReviewingPlain": "Prüfung läuft…",
+          "chipStopping": "Stoppt · speichert das Gelesene",
+          "chipStopped": "Bei {pct} % gestoppt · noch {left}",
+          "chipStoppedPlain": "Gestoppt",
+          "actionReview": "{root} prüfen",
+          "actionUpdate": "Prüfung aktualisieren",
+          "actionStart": "Prüfung starten",
+          "actionResume": "Fortsetzen",
+          "actionRetryUpload": "Upload wiederholen",
+          "actionSeeUpload": "Fehlgeschlagenen Upload ansehen",
+          "actionAgain": "Erneut prüfen",
+          "headNever": "Nicht geprüft",
+          "headReviewed": "Geprüft am {date} · {age}",
+          "headOutOfDate": "Geprüft am {date} · {age} · veraltet",
+          "headRunning": "{kind} · gestartet {time} · {elapsed}",
+          "headStopped": "Bei {pct} % gestoppt · {time}",
+          "tabsLabel": "Prüfungen",
+          "tabReview": "Prüfung",
+          "tabRuns": "Läufe",
+          "tabServer": "Server",
+          "tabDiagnostics": "Diagnose",
+          "planning": "Dateien in {root} werden gezählt…",
+          "planningCount": "{files} bisher gezählt",
+          "idleBody": "Zähle die Dateien in diesem Ordner und wähle dann, was geprüft wird.",
+          "countedTitle": "Soeben gezählt",
+          "tileFiles": "Dateien",
+          "tileUnchanged": "Unverändert seit der letzten Prüfung",
+          "tileLeftOut": "Ausgelassen",
+          "tileAssets": "Als Dateien gespeichert",
+          "readTitle": "Was gelesen wird",
+          "choiceChanged": "Was sich geändert hat",
+          "choiceAll": "Alles noch einmal",
+          "choiceAllBody": "Ignoriert frühere Ergebnisse. Nutzen, nachdem Schichtregeln oder das Modell geändert wurden.",
+          "willTitle": "Was dieser Lauf tut",
+          "willRead": "Lesen und speichern · kostenlos, auf diesem Rechner",
+          "willJudge": "Die {count} am stärksten vernetzten bewerten",
+          "willUpdate": "Karte aktualisieren und hochladen",
+          "willQueued": "{count} Änderungen in der Warteschlange",
+          "estimate": "Etwa {duration} im Tempo deines letzten Laufs ({rate} Dateien/s)",
+          "estimateNone": "Keine frühere Zeitmessung für diesen Ordner",
+          "filesRead": "{done} von {total} Dateien gelesen und gespeichert",
+          "stepCount": "Zählen",
+          "stepWorkers": "Worker starten",
+          "stepRead": "Lesen und speichern",
+          "stepAnalyse": "Code abbilden",
+          "stepJudge": "Die {count} am stärksten vernetzten bewerten",
+          "stepJudgeWait": "nach dem Lesen",
+          "stepUpdate": "Karte aktualisieren und hochladen",
+          "stepUpdateWait": "am Ende",
+          "stepPace": "{rate} Dateien/s · noch etwa {eta}",
+          "stepPaceNoEta": "{rate} Dateien/s",
+          "workersBusy": "{count} Worker beschäftigt",
+          "whereTitle": "Wohin die Zeit geht",
+          "whereTimeouts": "{files} erreichten das Limit von {seconds} s.",
+          "whereTimedOut": "{files} liefen in eine Zeitüberschreitung.",
+          "whereWait": "Die langsamsten Dateien warteten {seconds} s auf einen freien Worker.",
+          "whereStall": "Editor-Aussetzer: max. {seconds} s.",
+          "readingNow": "Wird gerade gelesen",
+          "toggleSteps": "Jeder Schritt",
+          "stoppingTitle": "Wird gestoppt…",
+          "stoppingBody": "Es starten keine neuen Dateien. Die bereits gelesenen Dateien werden gespeichert.",
+          "stoppingWait": "wartet auf die Bestätigung der Erweiterung · {seconds} s",
+          "stoppingStuck": "Die Erweiterung hat noch nicht bestätigt.",
+          "forceStop": "Stopp erzwingen",
+          "stoppedTitle": "Bei {pct} % gestoppt",
+          "stoppedMeta": "{time} · lief {duration}",
+          "stoppedBody": "{files} wurden gelesen und gespeichert und behalten ihre Ergebnisse. {left} sind noch zu prüfen.",
+          "resume": "Fortsetzen · noch {left}",
+          "detailsButton": "Details",
+          "stoppedPace": "Etwa {eta} im Tempo dieses Laufs ({rate} Dateien/s).",
+          "noteIdle": "Nichts wird gelesen, gesendet oder ausgegeben, bis du startest.",
+          "noteRunning": "Das Schließen dieses Panels stoppt die Prüfung nicht.",
+          "noteLeft": "Noch {files} zu prüfen · {eta}",
+          "noteLeftNoEta": "Noch {files} zu prüfen",
+          "paceTabTitle": "Tempo, Dateien pro Sekunde",
+          "rowRead": "{read} von {total} gelesen",
+          "rowRate": "{rate} Dateien/s",
+          "rowFailures": "{count} fehlgeschlagen",
+          "rowFailuresWhy": "{count} fehlgeschlagen · meist {reason}",
+          "back": "Zurück",
+          "detailTimeline": "Zeitverlauf",
+          "paceTitle": "Tempo im Vergleich zu früheren Läufen",
+          "failedByReason": "Fehlgeschlagen, nach Grund",
+          "cancelledByStop": "Durch Stopp abgebrochen (keine Fehler)",
+          "leftTitle": "Was übrig blieb",
+          "leftExtracted": "{files} gelesen und gespeichert",
+          "leftStale": "{count} als veraltet markiert",
+          "leftAwaiting": "{files} warten auf ein Modell",
+          "leftUpload": "{count} Änderungen warten auf den Upload",
+          "serverTitle": "Hier und auf dem Server",
+          "hereLabel": "Hier",
+          "onServerLabel": "Auf dem Server",
+          "notStoredTitle": "Nicht gespeichert",
+          "uploadTitle": "Upload-Warteschlange",
+          "uploadWaiting": "{count} Änderungen warten auf den Upload · keine fehlgeschlagen",
+          "uploadFailed": "{count} Änderungen warten auf den Upload · {failed} fehlgeschlagen",
+          "uploadNone": "Es wartet nichts auf den Upload.",
+          "uploadRetrying": "Wird wiederholt…",
+          "revisionTitle": "Auf der Karte gezeigter Stand",
+          "diagRefresh": "Aktualisieren",
+          "diagGraph": "Graph",
+          "diagReview": "Prüfung und letzter Lauf",
+          "diagLoad": "Erstes Laden",
+          "diagCoverage": "Datenabdeckung",
+          "diagLines": "Linien",
+          "diagSync": "Sync und Replikat",
+          "diagFindings": "Befunde",
+          "diagEmpty": "Noch keine Diagnose.",
+          "diagTaken": "Erstellt um {time}",
+          "retryFailed": "Wiederholen nicht möglich",
+          "uploadNow": "Jetzt hochladen",
+          "leftOutLink": "Was ausgelassen wird",
+          "hintParity": "Die Zahlen stammen von diesem Rechner und vom verknüpften Projekt.",
+          "hintNotStored": "Zu große, nicht lesbare oder nicht unterstützte Dateien werden nicht gespeichert.",
+          "hintQueue": "Änderungen werden im Hintergrund gesendet; Jetzt hochladen sendet sie sofort.",
+          "seeThem": "Ansehen",
+          "slowestLink": "Langsamste Dateien",
+          "moreEvery": "+{count} weitere · jeder Schritt"
+        },
+        "filters": {
+          "all": "Alle",
+          "failed": "Fehlgeschlagen",
+          "skipped": "Übersprungen",
+          "cached": "Wiederverwendet"
+        },
+        "kinds": {
+          "review": "Prüfung",
+          "reReview": "Erneute Prüfung",
+          "seed": "Serverkopie"
+        },
+        "outcomes": {
+          "running": "Läuft",
+          "done": "Fertig",
+          "stopped": "Gestoppt",
+          "failed": "Fehlgeschlagen",
+          "interrupted": "Unterbrochen"
+        },
+        "reasons": {
+          "timeout": "Zeitüberschreitung",
+          "rateLimit": "der Anbieter ist ausgelastet",
+          "tooLarge": "zu groß",
+          "unreadable": "nicht lesbar",
+          "worker": "der Arbeiter wurde beendet",
+          "other": "unerwarteter Fehler"
+        },
+        "units": {
+          "ms": "{count} ms",
+          "second": "{count} s",
+          "minute": "{count} Min.",
+          "hour": "{count} Std."
+        }
+      },
+      "transition": {
+        "hop": "weiter {rate}",
+        "walkTitle": "Am wahrscheinlichsten ab {name}",
+        "walkHop": "{name} · {rate}",
+        "walkNone": "Von {name} geht kein Sprung aus, daher gibt es keine wahrscheinliche nächste Station."
+      },
+      "drawerSubtitle": {
+        "run": "jede Phase, jeder Arbeiter, jeder Fehler",
+        "coverage": "Tests, Reichweite und Lücken im ganzen System",
+        "patterns": "Entwurfs-, Enterprise- und Anti-Muster nach Schicht",
+        "api": "was die Routen versprechen, was getestet ist, ausprobieren",
+        "resolve": "eine deterministische Korrektur oder ein Prompt, dann prüfen",
+        "simulate": "den Pfad mit echten Werten ausführen"
+      }
+    }
+  },
+  "translation": {
+    "translatedFrom": "Übersetzt aus {language}",
+    "showOriginal": "Original anzeigen",
+    "showTranslation": "Übersetzung anzeigen",
+    "translating": "Wird übersetzt…",
+    "needsTranslator": "Für die Übersetzung wird der integrierte Übersetzer dieses Browsers benötigt",
+    "getTranslator": "Herunterladen",
+    "importDetected": "Diese Datei scheint auf {language} geschrieben zu sein.",
+    "importTranslateTo": "Nach {language} übersetzen",
+    "importDismiss": "Schließen",
+    "importFailed": "Diese Datei konnte nicht übersetzt werden. Sie bleibt wie importiert."
+  },
+  "voice": {
+    "provenance": {
+      "signedWatermarked": "Signiert und mit Wasserzeichen",
+      "signedOnly": "Signiert, ohne Wasserzeichen",
+      "details": "Erstellt mit {engine} am {date}. Einwilligungstext {consent}.",
+      "verify": "Diesen Clip prüfen",
+      "verifyPage": {
+        "title": "Sprachclip prüfen",
+        "intro": "Ziehen Sie eine Audiodatei hierher, um zu prüfen, ob sie auf Builderforce erstellt wurde und mit welcher Einwilligung. Die Datei wird in Ihrem Browser geprüft; nur das Wasserzeichen wird gesendet.",
+        "dropHint": "Audiodatei hier ablegen",
+        "choose": "Datei auswählen",
+        "checking": "Clip wird geprüft …",
+        "watermarkDetected": "Dieser Clip trägt ein Builderforce-Wasserzeichen für Clip {clipId}.",
+        "audioMatches": "Das Audio stimmt mit dem signierten Eintrag überein.",
+        "selfReported": "Vom Lizenznehmer der Stimme registriert; die Plattform hat dieses Audio nicht gesehen.",
+        "watermarkMismatch": "Trägt die Markierung von Clip {clipId}, aber dieses Audio ist nicht das signierte Audio.",
+        "watermarkUnchecked": "Trägt die Markierung von Clip {clipId}, aber für dieses Format konnte kein Audio-Fingerabdruck geprüft werden.",
+        "voiceDeleted": "Gelöschte Stimme",
+        "metaTitle": "Sprachclip prüfen",
+        "metaDescription": "Prüfen Sie, ob ein Sprachclip ein Builderforce-Wasserzeichen trägt und mit welcher Einwilligung er erstellt wurde.",
+        "noWatermark": "Kein Wasserzeichen gefunden. Der Clip wurde möglicherweise nicht auf Builderforce erstellt oder wurde bearbeitet oder neu codiert.",
+        "invalid": "Es wurde ein Wasserzeichen gefunden, es passt aber zu keinem gültigen signierten Eintrag.",
+        "unreadable": "Diese Datei konnte nicht als Audio gelesen werden.",
+        "failed": "Der Prüfdienst ist nicht erreichbar. Bitte erneut versuchen.",
+        "voiceLabel": "Stimme",
+        "privateVoice": "Private Stimme",
+        "markLabel": "Eintrag",
+        "engineLabel": "Engine",
+        "modelLabel": "Modell",
+        "consentLabel": "Einwilligungstext",
+        "createdLabel": "Erstellt",
+        "clipLabel": "Clip-ID"
+      }
+    },
+    "marketplace": {
+      "title": "Stimmen-Marktplatz",
+      "subtitle": "Stimmen, die andere Kreative veröffentlicht haben. Füge eine hinzu, um mit ihr zu sprechen.",
+      "searchPlaceholder": "Stimmen suchen",
+      "loading": "Stimmen werden geladen…",
+      "empty": "Noch keine Stimmen gelistet.",
+      "noMatch": "Keine Stimmen passen zu deiner Suche.",
+      "loadError": "Der Stimmen-Marktplatz konnte nicht geladen werden. Versuche es erneut.",
+      "free": "Kostenlos",
+      "price": "{price}",
+      "acquire": "Zu meinen Stimmen hinzufügen",
+      "acquiring": "Wird hinzugefügt…",
+      "owned": "In deinen Stimmen",
+      "buy": "Kaufen",
+      "checkoutCancelled": "Der Kauf wurde abgebrochen. Dir wurde nichts berechnet.",
+      "checkoutFailed": "Wir konnten diese Zahlung nicht bestätigen. Falls dir etwas berechnet wurde, aktualisiere in einem Moment.",
+      "checkoutDone": "Kauf abgeschlossen. Die Stimme ist jetzt in deinen Stimmen.",
+      "licenseRevoked": "Deine Lizenz für diese Stimme wurde nach einer Rückerstattung oder einem Streitfall widerrufen. Wende dich an den Support, um sie wiederherzustellen.",
+      "checkoutOpened": "Der Kauf wurde in deinem Browser geöffnet. Aktualisiere hier, sobald du bezahlt hast.",
+      "acquireFailed": "Diese Stimme konnte nicht hinzugefügt werden. Versuche es erneut.",
+      "refresh": "Aktualisieren"
+    }
+  },
+  "runDelta": {
+    "predictedUnusualLines": "≈ {count, plural, one {# ungewöhnliche Zeile} other {# ungewöhnliche Zeilen}} (vorhergesagt)",
+    "predictedHint": "Geschätzt danach, wie ungewöhnlich der neue Code für dieses Repository ist. Ein Hinweis, wo man hinschauen sollte, kein Urteil.",
+    "rankedNote": "{k} findings, highest-value first (ranked)",
+    "predictedHeading": "Predicted",
+    "predictedAdvisory": "Estimated, not measured — a place to look, never a verdict.",
+    "predictedRisk": "{probability} risk of a follow-up fix ({band}): {reasons}",
+    "predictedSimilar": "{noFollowup} of {k} similar runs needed no follow-up; {reverted} were reverted",
+    "predictedUndetected": "≈ {count} undetected problems in {dimension}",
+    "history": {
+      "title": "Lauf-Deltas",
+      "listHeading": "Letzte Läufe",
+      "trendHeading": "Verlauf",
+      "verdictTrend": "Urteil je Dimension, ältester Lauf zuerst",
+      "blastTrend": "Auswirkungsradius-Wert je Lauf",
+      "trendSummary": "{runs} Läufe: {worse} schlechter, {better} besser",
+      "blastSummary": "Letzter Auswirkungsradius-Wert {score} ({band}); Bereich {min} bis {max}",
+      "cellTitle": "{dimension}: {verdict} ({time})",
+      "pointTitle": "Auswirkungsradius-Wert {score}, {band} ({time})",
+      "tooFewRuns": "Der Verlauf erscheint ab zwei Läufen.",
+      "empty": "Noch keine Lauf-Deltas. Nach jedem abgeschlossenen Agentenlauf wird eines erfasst.",
+      "loading": "Lauf-Deltas werden geladen…",
+      "loadError": "Die Lauf-Deltas konnten nicht geladen werden.",
+      "openError": "Dieses Lauf-Delta konnte nicht geöffnet werden.",
+      "retry": "Erneut versuchen",
+      "loadMore": "Ältere Läufe anzeigen",
+      "counts": "{introduced} neu · {resolved} behoben",
+      "blocked": "Blockiert",
+      "openRun": "Lauf-Delta vom {time} öffnen",
+      "surfaces": {
+        "vscode": "Im Editor",
+        "cloud": "In der Cloud",
+        "web": "Im Browser"
+      }
+    },
+    "cardTitle": "Lauf-Delta",
+    "openDetails": "Details öffnen",
+    "openCode": "Code öffnen",
+    "close": "Schließen",
+    "resolve": "Resolve",
+    "resolveHint": "Fix the issues this run found",
+    "copyDiagnostics": "Copy diagnostics",
+    "copied": "Copied",
+    "copyFailed": "Copy failed",
+    "panelTitle": "Was dieser Lauf verändert hat",
+    "heuristicMark": "≈",
+    "heuristicHint": "Heuristisch geschätzt, nicht exakt gemessen",
+    "introducedCount": "{count} neu",
+    "resolvedCount": "{count} behoben",
+    "changedCount": "{count} geändert",
+    "blastRadius": "Auswirkungsradius",
+    "blastRadiusValue": "Auswirkungsradius: {band}",
+    "blocking": "Blockiert den Abschluss eines autonomen Laufs",
+    "noFindings": "Keine Befunde",
+    "findingsHeading": "Befunde",
+    "metricsHeading": "Metriken",
+    "evidenceHeading": "Belege",
+    "paramsHeading": "Details",
+    "excludedHeading": "Ausgeschlossene Dateien",
+    "failedHeading": "Prüfungen, die nicht liefen",
+    "measuringHeading": "Wird noch gemessen",
+    "measuringTool": "{tool} — wird gemessen…",
+    "metricValue": "{before} → {after}[[ {unit}]]",
+    "notMeasuredValue": "nicht gemessen",
+    "waived": "Risiko akzeptiert: {reason}",
+    "sideBefore": "Vorher",
+    "sideAfter": "Nachher",
+    "headline": {
+      "sentence": "{lead}: {clauses}.",
+      "sentenceNoClauses": "{lead}.",
+      "clause": "{dimension} ({detail})",
+      "detail": "[[{count} × ]]{label}",
+      "clauseSeparator": "; ",
+      "listSeparator": ", ",
+      "unchanged": "Unverändert: {dimensions}.",
+      "notMeasured": "Nicht gemessen: {dimensions}.",
+      "metricRegressed": "{metric} hat sich verschlechtert"
+    },
+    "verdicts": {
+      "better": "Besser",
+      "worse": "Schlechter",
+      "same": "Unverändert",
+      "notComparable": "Nicht vergleichbar",
+      "notMeasured": "Nicht gemessen"
+    },
+    "dimensions": {
+      "security": "Sicherheit",
+      "performance": "Leistung",
+      "quality": "Qualität",
+      "ilitiesFunctionalSuitability": "Funktionale Eignung",
+      "ilitiesCompatibility": "Kompatibilität",
+      "ilitiesInteractionCapability": "Interaktionsfähigkeit",
+      "ilitiesReliability": "Zuverlässigkeit",
+      "ilitiesMaintainability": "Wartbarkeit",
+      "ilitiesFlexibility": "Flexibilität",
+      "ilitiesSafety": "Betriebssicherheit"
+    },
+    "severities": {
+      "info": "Hinweis",
+      "warn": "Warnung",
+      "error": "Fehler"
+    },
+    "lineages": {
+      "introduced": "Neu in diesem Lauf",
+      "resolved": "Von diesem Lauf behoben",
+      "changed": "Von diesem Lauf geändert",
+      "persisting": "Bereits vorhanden",
+      "present": "Jetzt vorhanden"
+    },
+    "changes": {
+      "grew": "gewachsen",
+      "shrank": "geschrumpft",
+      "moved": "verschoben"
+    },
+    "bands": {
+      "low": "niedrig",
+      "medium": "mittel",
+      "high": "hoch"
+    },
+    "reasons": {
+      "staticOnly": "Nur statische Analyse",
+      "ruleNotBuilt": "Regel noch nicht umgesetzt",
+      "ruleFailed": "Eine Prüfung ist fehlgeschlagen",
+      "ruleThrew": "Die Prüfung brach mit einem Fehler ab",
+      "metricNotMeasured": "Eine Metrik wurde nicht gemessen",
+      "testsWeakened": "Tests abgeschwächt",
+      "heuristic": "Heuristisch",
+      "notComparable": "Nicht vergleichbar",
+      "beforeUnresolved": "Einige Vorher-Dateien konnten nicht gelesen werden",
+      "headSwitched": "Der Branch hat sich während des Laufs geändert",
+      "extractorMismatch": "Unterschiedlicher Extraktor auf beiden Seiten",
+      "extractorVersionChanged": "Extraktor-Version geändert",
+      "contentHashRuleChanged": "Regel für den Inhalts-Hash geändert",
+      "toolMissing": "{tool} fehlt auf einer Seite",
+      "toolVersionChanged": "Version von {tool} geändert",
+      "analyzerFailed": "{tool} ist fehlgeschlagen",
+      "scopeChanged": "Umfang geändert",
+      "repoChanged": "Repository geändert",
+      "branchChanged": "Branch geändert",
+      "truncated": "Ergebnisse wurden gekürzt",
+      "insufficientHistory": "Zu wenige frühere Läufe für eine Einordnung",
+      "notComparableRule": "{rule} konnte nicht bestätigt werden",
+      "analyzerNotMeasured": "{tool} nicht gemessen",
+      "toolAbsent": "Werkzeug nicht installiert",
+      "analyzerUnavailable": "Mitgelieferter Analysator konnte nicht starten",
+      "timeout": "Zeitüberschreitung",
+      "exitFailed": "Das Werkzeug wurde mit einem Fehler beendet",
+      "invalidReport": "Unlesbarer Werkzeugbericht",
+      "noCoverage": "Kein Abdeckungsbericht für die geänderten Zeilen",
+      "beforeTreeUnavailable": "Der Vorher-Stand des Baums konnte nicht erstellt werden",
+      "analyzerThrew": "Der Analysator brach mit einem Fehler ab",
+      "analyzerPending": "{tool} misst noch",
+      "analyzerDataStale": "Daten von {tool} sind veraltet",
+      "noAnalyzerHost": "Dieser Editor führt die Analysatoren nicht aus",
+      "untrustedWorkspace": "Nicht ausgeführt: dem Arbeitsbereich wird nicht vertraut",
+      "outputTooLarge": "Das Werkzeug hat zu viel ausgegeben",
+      "noDatabase": "Noch keine Offline-Schwachstellendatenbank",
+      "noConfig": "Das Repository hat keine Regeln für dieses Werkzeug",
+      "interrupted": "Abgebrochen, weil der Editor vor dem Ende geschlossen wurde",
+      "dynamicNotRun": "{tool} wurde nicht ausgeführt",
+      "optInOff": "Aus: in den Einstellungen nicht eingeschaltet",
+      "notScheduled": "Für diesen Lauf nicht eingeplant",
+      "notConfigured": "Für dieses Projekt nicht eingerichtet",
+      "toolUnavailable": "Werkzeug im Projekt nicht installiert",
+      "noChangedCode": "Kein geänderter Code zu messen",
+      "policyNever": "Durch die Projektrichtlinie ausgeschaltet",
+      "noShell": "Kein Prozess zum Ausführen verfügbar",
+      "aborted": "Vor dem Ende angehalten",
+      "runnerThrew": "Der Lauf brach mit einem Fehler ab",
+      "tooFewPairs": "Zu wenige Vorher/Nachher-Messungen",
+      "noReport": "Das Werkzeug hat keinen Bericht geschrieben",
+      "recomputeFailed": "Gemessen, aber das Ergebnis konnte nicht übernommen werden",
+      "budgetExhausted": "Nicht ausgeführt: die für diesen Lauf erlaubte Zeit ist aufgebraucht",
+      "treeUnavailable": "Eine temporäre Kopie des Projekts konnte nicht erstellt werden",
+      "nonFiniteSamples": "Ein Messwert war keine Zahl",
+      "notApplicable": "Für diesen Lauf nicht anwendbar",
+      "noPlan": "Kein Plan mit benannten Dateien für diesen Lauf",
+      "unsafeRegex": "{key}: unsicheres Muster verworfen ({reason})"
+    },
+    "clauses": {
+      "findingsResolved": "Befunde behoben",
+      "metricsImproved": "Metriken verbessert",
+      "worse": "verschlechtert"
+    },
+    "rules": {
+      "guardRemoved": "Route hat ihren Auth-Guard verloren",
+      "guardWeakened": "Routen-Guard abgeschwächt",
+      "entryAdded": "Neuer Einstiegspunkt",
+      "entryRemoved": "Einstiegspunkt entfernt",
+      "capabilityAdded": "Neue Systemfähigkeit",
+      "weakCrypto": "Schwache Kryptografie",
+      "secretAdded": "Geheimnis in den Code eingefügt",
+      "ioInLoop": "E/A in einer Schleife",
+      "syncIo": "Blockierender E/A-Aufruf",
+      "testDeleted": "Test gelöscht",
+      "testSkipped": "Test übersprungen",
+      "onlyAdded": "Fokussierter Test (.only) hinzugefügt",
+      "assertionsReduced": "Weniger Assertions",
+      "matcherWeakened": "Schwächerer Assertion-Matcher",
+      "suppressionAdded": "Lint- oder Typprüfung unterdrückt",
+      "timeoutRaised": "Test-Timeout erhöht",
+      "snapshotUpdatedWithImpl": "Snapshot zusammen mit dem Code aktualisiert",
+      "assertionEditedWithImpl": "Assertion zusammen mit dem Code geändert",
+      "apiBreaking": "Inkompatible API-Änderung",
+      "apiAdded": "Neue öffentliche API",
+      "cloneGroup": "Duplizierter Code",
+      "cycle": "Abhängigkeitszyklus",
+      "godModule": "Übergroßes Modul",
+      "partitionViolation": "Partitionsgrenze überschritten",
+      "unusedDependency": "Ungenutzte Abhängigkeit",
+      "unusedExport": "Ungenutzter Export",
+      "unusedFile": "Ungenutzte Datei",
+      "godFileGrowth": "Übergroße Datei ist gewachsen",
+      "destructiveDdl": "Destruktive Schemaänderung",
+      "forcePush": "Force-Push in einem Skript",
+      "rmRf": "Rekursives Löschen in einem Skript",
+      "deltaConfigChanged": "Delta-Richtliniendatei geändert",
+      "unboundedQuery": "Abfrage ohne Zeilenlimit",
+      "cacheBypass": "Cachebarer Lesezugriff umgeht den Cache",
+      "nestedIteration": "Verschachtelte Schleife über eine Sammlung (quadratisch)",
+      "regexRedos": "Regulärer Ausdruck mit katastrophalem Backtracking-Risiko",
+      "bundleWeight": "Schweres Server-Paket im Client-Code",
+      "renderHot": "Vermeidbares erneutes Rendern",
+      "untestedChange": "Code geändert, ohne dass ein Test ihn abdeckt",
+      "envVarAdded": "Neue Umgebungsvariable erforderlich",
+      "envVarRemoved": "Die geänderten Dateien lesen eine Umgebungsvariable nicht mehr",
+      "enginesChanged": "Laufzeitanforderung (engines) geändert",
+      "routeSchemaChanged": "Anfrageschema der Route geändert",
+      "a11yViolation": "Barrierefreiheitsproblem",
+      "catchSwallowed": "Fehler stillschweigend verschluckt",
+      "floatingPromise": "Unbehandeltes Promise",
+      "errorHandlingRemoved": "Fehlerbehandlung entfernt",
+      "timeoutRetryChanged": "Timeout oder Wiederholung geändert",
+      "processExit": "Bibliothekscode beendet den Prozess",
+      "platformSpecificApi": "Plattformspezifischer Pfad oder Befehl",
+      "nodeOnlyImport": "Nur-Node-Modul in Browser- oder Worker-Code",
+      "catchAllAdded": "Allumfassender Fehler-Handler hinzugefügt",
+      "outOfScopeChange": "Datei außerhalb des geplanten Umfangs geändert",
+      "methodWidened": "Route akzeptiert mehr HTTP-Methoden",
+      "newUntrustedInput": "Route liest neue nicht vertrauenswürdige Eingabe",
+      "taintPath": "Nicht vertrauenswürdige Eingabe erreicht einen riskanten Aufruf",
+      "tlsVerifyDisabled": "TLS-Zertifikatsprüfung deaktiviert",
+      "corsPermissive": "CORS für jeden Ursprung offen",
+      "cookieInsecure": "Cookie ohne Sicherheitsflags",
+      "cspPermissive": "Großzügige Content Security Policy",
+      "debugEnabled": "Debug-Modus in einer Produktionskonfiguration aktiv",
+      "workflowPermissive": "Workflow mit weitreichenden Berechtigungen",
+      "containerRoot": "Container läuft als root",
+      "infraSurfaceAdded": "Neue Route, Bindung oder neuer Port freigegeben",
+      "installScriptAdded": "Installationsskript hinzugefügt",
+      "vulnerableDependency": "Abhängigkeit mit bekannter Schwachstelle",
+      "secretLeak": "Vom Geheimnis-Scanner gefundenes Geheimnis",
+      "dependencyCycle": "Zyklische Modulabhängigkeit",
+      "forbiddenDependency": "Verbotene Abhängigkeit",
+      "typeError": "Typfehler",
+      "semgrepFinding": "Semgrep-Befund",
+      "codeqlFinding": "CodeQL-Befund",
+      "benchmark": "Leistungsmessungen",
+      "diffCoverage": "Tests mit Abdeckung",
+      "mutation": "Mutationstests",
+      "benchMetrics": "Benchmark-Ergebnisse",
+      "testSlower": "Test wurde deutlich langsamer",
+      "mutantSurvived": "Überlebende Mutante",
+      "mutantSurvivedMetrics": "Mutationswert"
+    },
+    "metrics": {
+      "complexityMax": "Höchste Komplexität",
+      "complexitySum": "Gesamtkomplexität",
+      "todoAdded": "Hinzugefügte TODOs",
+      "anyCastAdded": "Hinzugefügte \"any\"-Casts",
+      "coverageDiff": "Abdeckung geänderter Zeilen",
+      "couplingEfferent": "Ausgehende Abhängigkeiten der geänderten Dateien",
+      "couplingAfferent": "Dateien, die von den geänderten Dateien abhängen",
+      "couplingInstability": "Instabilität der geänderten Dateien",
+      "hotspotTouched": "Änderungshäufigkeit × Komplexität der riskantesten geänderten Datei",
+      "mutationScore": "Mutationswert der geänderten Dateien"
+    },
+    "units": {
+      "cyclomatic": "zyklomatisch",
+      "ratio": "Anteil",
+      "instructions": "Instruktionen"
+    },
+    "excluded": {
+      "preimageTooLarge": "Vorher-Version zu groß zum Aufbewahren",
+      "preimageMissing": "Vorher-Version fehlt",
+      "gitUnavailable": "Git nicht verfügbar",
+      "changedIgnored": "Ignorierte Datei",
+      "changedOutsideRun": "Außerhalb dieses Laufs geändert",
+      "submoduleMoved": "Submodul verschoben",
+      "binary": "Binärdatei"
+    },
+    "unresolvedHeading": "Dateien ohne Vorher-Version",
+    "aggregated": "zusammengefasst ({count})",
+    "blockingHeading": "Was einen autonomen Lauf blockiert",
+    "params": {
+      "route": "Route",
+      "guard": "Guard",
+      "via": "Erkannt über",
+      "file": "Datei",
+      "from": "Vorher",
+      "replacement": "Ersetzt durch",
+      "kind": "Art",
+      "guards": "Guards",
+      "symbol": "Symbol",
+      "change": "Änderung",
+      "before": "Vorher",
+      "after": "Nachher",
+      "crossed": "Größengrenze überschritten",
+      "test": "Test",
+      "assertions": "Assertions",
+      "to": "Jetzt",
+      "loop": "Schleife",
+      "call": "Aufruf",
+      "key": "Treffer",
+      "count": "Anzahl",
+      "members": "Mitglieder",
+      "collection": "Sammlung",
+      "module": "Modul",
+      "name": "Bezeichnung",
+      "sink": "Art des riskanten Aufrufs",
+      "source": "Eingabequelle",
+      "hops": "Schritte",
+      "stride": "Bedrohung (STRIDE)",
+      "missing": "Fehlende Flags",
+      "credentials": "Mit Anmeldedaten",
+      "script": "Skript",
+      "reflected": "Ursprung gespiegelt",
+      "chain": "Weg",
+      "strideSpoofing": "Identitätsvortäuschung abgedeckt durch",
+      "strideTampering": "Manipulation abgedeckt durch",
+      "strideRepudiation": "Abstreitbarkeit abgedeckt durch",
+      "strideInformationDisclosure": "Informationspreisgabe abgedeckt durch",
+      "strideDenialOfService": "Dienstverweigerung abgedeckt durch",
+      "strideElevationOfPrivilege": "Rechteausweitung abgedeckt durch",
+      "package": "Paket",
+      "version": "Versionsnummer",
+      "advisory": "Sicherheitshinweis",
+      "ecosystem": "Ökosystem",
+      "rule": "Regel",
+      "code": "Fehlercode",
+      "sarifRule": "Scanner-Regel",
+      "tool": "Prüfwerkzeug",
+      "cwe": "Schwachstellentyp (CWE)"
+    },
+    "paramValues": {
+      "via": {
+        "chain": "Handler-Kette",
+        "middleware": "Middleware",
+        "rekeyed": "Route umbenannt",
+        "unguardedSibling": "Ungeschützt zwischen geschützten Nachbarrouten"
+      },
+      "change": {
+        "added": "Hinzugefügt",
+        "edited": "Bearbeitet",
+        "deleted": "Gelöscht",
+        "removed": "Entfernt",
+        "changed": "Geändert"
+      },
+      "kind": {
+        "httpRoute": "HTTP-Route",
+        "middleware": "Middleware",
+        "vscodeCommand": "VS-Code-Befehl",
+        "webviewMessage": "Webview-Nachricht",
+        "workerRoute": "Worker-Route",
+        "binding": "Bindung",
+        "durableObject": "Durable-Object-Klasse",
+        "port": "Offener Port"
+      },
+      "sink": {
+        "commandExec": "Shell-Befehl",
+        "dynamicCode": "Dynamischer Code (eval)",
+        "html": "HTML-Markup",
+        "sqlRaw": "Rohes SQL",
+        "ssrf": "Serverseitige Anfrage (SSRF)",
+        "pathTraversal": "Dateipfad",
+        "openRedirect": "Weiterleitung",
+        "deserialization": "Deserialisierung",
+        "regexInjection": "Regulärer Ausdruck"
+      },
+      "source": {
+        "httpRequest": "HTTP-Anfrage",
+        "webviewMessage": "Webview-Nachricht",
+        "processArgv": "Befehlszeilenargumente",
+        "upload": "Hochgeladene Datei",
+        "mcpArgs": "MCP-Tool-Argumente"
+      },
+      "stride": {
+        "spoofing": "Identitätsvortäuschung",
+        "tampering": "Manipulation",
+        "repudiation": "Abstreitbarkeit",
+        "informationDisclosure": "Informationspreisgabe",
+        "denialOfService": "Dienstverweigerung",
+        "elevationOfPrivilege": "Rechteausweitung"
+      },
+      "credentials": {
+        "1": "Ja"
+      },
+      "reflected": {
+        "1": "Ja"
+      },
+      "strideSpoofing": {
+        "uncovered": "Nicht abgedeckt"
+      },
+      "strideTampering": {
+        "uncovered": "Nicht abgedeckt"
+      },
+      "strideRepudiation": {
+        "uncovered": "Nicht abgedeckt"
+      },
+      "strideInformationDisclosure": {
+        "uncovered": "Nicht abgedeckt"
+      },
+      "strideDenialOfService": {
+        "uncovered": "Nicht abgedeckt"
+      },
+      "strideElevationOfPrivilege": {
+        "uncovered": "Nicht abgedeckt"
+      },
+      "crossed": {
+        "0": "Nein",
+        "1": "Ja"
+      }
+    },
+    "unsafeReasons": {
+      "tooLong": "zu lang",
+      "invalid": "ungültig",
+      "backreference": "Rückverweis",
+      "nestedQuantifier": "verschachtelter Quantor",
+      "quantifiedAlternation": "quantifizierte Alternative"
+    },
+    "pendingCard": "Messe, was dieser Lauf verändert hat …",
+    "pendingDynamic": "Dynamische Prüfungen laufen (Tests, Benchmarks), bis zu {minutes} Min. …",
+    "failedCard": "Nicht gemessen: Was dieser Lauf verändert hat, konnte nicht gemessen werden.",
+    "held": "Angehalten: Prüfung nötig",
+    "heldUnmeasured": "Nicht gemessen: zur Prüfung angehalten",
+    "heldRules": "Blockiert durch {rules}",
+    "releaseRun": "Lauf freigeben",
+    "releaseConfirmTitle": "Diesen Lauf freigeben?",
+    "releaseConfirmMessage": "Dieser Lauf wurde angehalten, weil seine Änderungen blockierende Regeln ausgelöst haben ({rules}). Mit der Freigabe wird er mit deiner Zustimmung als abgeschlossen markiert.",
+    "releaseConfirmLabel": "Freigeben",
+    "released": "Von dir freigegeben",
+    "releaseRefused": "Dieser Lauf konnte nicht freigegeben werden: Er ist nicht mehr angehalten.",
+    "releasePending": "Die Anhaltung wird noch gespeichert. Versuche es gleich noch einmal.",
+    "releaseError": "Dieser Lauf konnte nicht freigegeben werden. Versuche es erneut.",
+    "releaseIdentityRequired": "Melde dich an, um diesen Lauf freizugeben.",
+    "releaseNotApprover": "Nur eine genehmigende Person dieses Boards kann diesen Lauf freigeben.",
+    "overridesHeading": "Ignorierte Überschreibungen",
+    "overrides": {
+      "unknownKey": "Unbekannte Einstellung „{section}“",
+      "invalid": "Ungültiger Wert in „{section}“",
+      "invalidRoot": "Die Richtliniendatei ist kein JSON-Objekt",
+      "invalidJson": "Die Richtliniendatei ist kein gültiges JSON",
+      "unsafeRegex": "Unsicheres Muster in „{section}“",
+      "unreadable": "Die Richtliniendatei konnte nicht gelesen werden[[ ({reason})]]",
+      "truncated": "{count} weitere nicht angezeigt"
+    }
+  }
+}
