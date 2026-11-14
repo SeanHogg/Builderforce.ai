@@ -6,6 +6,7 @@
  */
 import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import { TASK_CLOSED_STATUSES, UNSUPPORTED_DELIVERY_PROGRESS_CAP } from '@builderforce/agent-loop';
+import { DEFAULT_EVIDENCE_POLICY, fileIsUnchecked } from '@builderforce/run-guards';
 import { tasks, projects, executions, taskFileChanges } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { buildTaskProgressBreakdown } from '../task/taskProgressBreakdown';
@@ -130,7 +131,16 @@ async function epicsWithUnsupportedDelivery(db: Db, tenantId: number, epicIds: n
   for (const epicId of epicIds) {
     const rows = byEpic.get(epicId);
     if (!rows || rows.length === 0) continue;
-    const supported = rows.some((row) => coderProducedCode(row.payload, pathsByExec.get(row.id) ?? []));
+    // A child ships either by producing a non-documentation file OR by delivering a
+    // change no policy check could fail (docs-only by design — e.g. the W0 telemetry
+    // baseline or a specs edit). Reusing the ship-gate's own `fileIsUnchecked` keeps the
+    // Epic tier and the gate in agreement on "nothing here is verifiable", so a complete
+    // docs-only epic reads 100 rather than being pinned at the unsupported-delivery cap.
+    const supported = rows.some((row) => {
+      const paths = pathsByExec.get(row.id) ?? [];
+      if (coderProducedCode(row.payload, paths)) return true;
+      return paths.length > 0 && paths.every((p) => fileIsUnchecked({ absPath: p, isNew: false }, DEFAULT_EVIDENCE_POLICY));
+    });
     if (!supported) unsupported.add(epicId);
   }
   return unsupported;

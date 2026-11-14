@@ -175,13 +175,32 @@ describe('epic health (container, over its children)', () => {
     expect(h).toMatchObject({ done: 3, total: 5, progressPct: 60 });
   });
 
-  it('withholds 100 when every child is done but no coder left a non-doc file', async () => {
-    // Epic #2545: 2/2 documentation children, developer runs, zero code files.
+  it('grants 100 when every child is done and the delivery is docs-only — nothing a check could fail', async () => {
+    // Epic #6550: 2/2 documentation children, developer runs, zero code files. A
+    // docs-only change ships no file any policy check could fail, so there is nothing
+    // "unsupported" to withhold — pinning a legitimately-complete docs epic at the
+    // unsupported-delivery cap was the bug this corrects.
     queue = [
       [{ id: 2545, title: 'Advisor platform', status: 'done', completedAt: new Date() }],
       [{ parentId: 2545, total: 2, done: 2 }],
       [{ id: 31648, taskId: 2546, parentTaskId: 2545, payload: JSON.stringify({ roleKey: 'developer' }) }],
       [{ executionId: 31648, path: 'docs/specs/26-prd-advisor-platform.md' }],
+    ];
+    const h = (await service().ticketHealthBatch(1, [{ kind: 'epic', ref: '2545' }])).get('epic:2545')!;
+    expect(h.progressPct).toBe(100);
+    expect(h.unsupportedDelivery).toBeUndefined();
+    expect(h).toMatchObject({ done: 2, total: 2, status: 'done' });
+  });
+
+  it('withholds 100 when live runs exist but left no delivery record at all', async () => {
+    // A developer run that recorded ZERO file changes shipped nothing anyone can
+    // verify — claimed done with no delivery record is genuinely unsupported and
+    // stays capped. (A recorded change — even a docs or a .ts edit — IS delivery.)
+    queue = [
+      [{ id: 2545, title: 'Advisor platform', status: 'done', completedAt: new Date() }],
+      [{ parentId: 2545, total: 2, done: 2 }],
+      [{ id: 31650, taskId: 2546, parentTaskId: 2545, payload: JSON.stringify({ roleKey: 'developer' }) }],
+      [],
     ];
     const h = (await service().ticketHealthBatch(1, [{ kind: 'epic', ref: '2545' }])).get('epic:2545')!;
     expect(h.progressPct).toBe(75);
