@@ -22,8 +22,7 @@
  */
 
 import { execFile, spawn } from "child_process";
-import { existsSync } from "fs";
-import * as fs from "fs";
+import { existsSync, realpathSync } from "fs";
 import { createRequire } from "module";
 import * as path from "path";
 import { killTree } from "../process/killTree";
@@ -67,29 +66,42 @@ const CMD_UNSAFE = /["%\r\n\0]/;
  * `Cannot find module …/npm/bin/npx-cli.js` (exit 1) on every pre-push test check.
  */
 function resolveNpmCli(cwd: string, cli: "npx-cli.js" | "npm-cli.js"): string | null {
+  // A resolved entry can be a SYMLINK into pnpm's store (`node_modules/.pnpm/<pkg>@<ver>/…`).
+  // The CLI's first statement is `require('./npm-prefix.js')`, resolved relative to the entry's
+  // OWN REAL DIRECTORY — so the prefix module must exist at the entry's realpath, not beside the
+  // symlink. A partial store package can ship `npx-cli.js` without `npm-prefix.js`: validating
+  // beside the symlink accepts it, then `node <entry>` dies with `Cannot find module
+  // …/npm/bin/npm-prefix.js` (exit 1, no findings). Resolve the realpath first and validate —
+  // and SPAWN — that, so the target always loads.
+  const entryLoads = (p: string): string | null => {
+    let real: string;
+    try {
+      real = realpathSync(p);
+    } catch {
+      return null;
+    }
+    return existsSync(real) && existsSync(path.join(path.dirname(real), "npm-prefix.js")) ? real : null;
+  };
   const tryResolve = (fromDir: string): string | null => {
     try {
-      const p = createRequire(path.join(fromDir, "package.json")).resolve(`npm/bin/${cli}`);
-      // The entry must actually LOAD, not merely exist: a partial package can ship the
-      // CLI entry as a stub without its siblings (npm's `npx-cli.js`/`npm-cli.js` both
-      // `require('./npm-prefix.js')` as their first import). Spawning node on such an
-      // entry dies at require-time with `Cannot find module …/npm/bin/npm-prefix.js`
-      // (exit 1, no findings) — so an entry whose sibling prefix module is absent is
-      // treated as unresolvable and falls through to the npm beside the running node.
-      if (existsSync(p) && existsSync(path.join(path.dirname(p), "npm-prefix.js"))) return p;
+      return entryLoads(createRequire(path.join(fromDir, "package.json")).resolve(`npm/bin/${cli}`));
     } catch {
-      /* fall through to the next source */
+      return null; // not resolvable from here — try the next source
     }
-    return null;
   };
   // 1. A package-managed `npm` dep first (its own node_modules), else the install that owns
   //    the running node. Both the cwd and its realpath: pnpm's isolated `node-linker` keeps the
   //    real package under `node_modules/.pnpm/<pkg>@<ver>/node_modules/<pkg>`, so a bare cwd
   //    resolves nothing while the realpath does.
-  const realCwd = (() => { try { return fs.realpathSync(cwd); } catch { return cwd; } })();
+  let realCwd: string;
+  try {
+    realCwd = realpathSync(cwd);
+  } catch {
+    realCwd = cwd;
+  }
   return tryResolve(cwd) ?? (realCwd === cwd ? null : tryResolve(realCwd))
     // 2. The npm that sits beside the running node — `<node-dir>/node_modules/npm/bin`.
-    ?? (() => { const p = path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", cli); return existsSync(p) ? p : null; })();
+    ?? entryLoads(path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", cli));
 }
 
 /**
