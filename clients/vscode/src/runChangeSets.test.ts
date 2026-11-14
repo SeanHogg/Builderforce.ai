@@ -718,3 +718,6 @@ describe("bounded baseline fingerprints", () => {
     expect(await fingerprintFiles(many)).toEqual(many.map((_, index) => sha(`file ${index}`)));
   });
 });
+
+// Evidence re-verification: busts the verify cache (content-hash key) so the pre-push
+// gate re-runs checks against the repaired install instead of replaying a stale record.

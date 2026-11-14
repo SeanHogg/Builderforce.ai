@@ -145,3 +145,6 @@ describe.skipIf(!localSqliteAvailable())("a linked root whose server answers 429
     await vi.waitFor(async () => expect((await replicaStatusOf(root.rootId, { read: async () => undefined, write: async () => undefined })).dirty).toBeGreaterThan(0));
   }, 120_000);
 });
+
+// Evidence re-verification: busts the verify cache (content-hash key) so the pre-push
+// gate re-runs checks against the repaired install instead of replaying a stale record.

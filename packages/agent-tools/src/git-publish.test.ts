@@ -213,3 +213,6 @@ describe("surface gating", () => {
     }
   });
 });
+
+// Evidence re-verification: busts the verify cache (content-hash key) so the pre-push
+// gate re-runs checks against the repaired install instead of replaying a stale record.

@@ -101,3 +101,6 @@ export function RunDeltaCard({ delta, labels, repoLabel, onOpenDetails, held, pr
         </section>
     );
 }
+
+// Evidence re-verification: busts the verify cache (content-hash key) so the pre-push
+// gate re-runs checks against the repaired install instead of replaying a stale record.

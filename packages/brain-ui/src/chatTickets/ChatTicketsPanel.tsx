@@ -384,3 +384,6 @@ function isBuiltinPanel(key: string): key is BuiltinPanel { return BUILTIN_PANEL
  * props (memoize `chatList` and `onChanged`) for the memo to take effect.
  */
 export const ChatTicketsPanel = memo(ChatTicketsPanelInner);
+
+// Evidence re-verification: busts the verify cache (content-hash key) so the pre-push
+// gate re-runs checks against the repaired install instead of replaying a stale record.

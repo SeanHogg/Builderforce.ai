@@ -348,3 +348,6 @@ export type KnowledgePanelRenderer = (props: KnowledgePanelRenderProps) => React
 
 /** The host's destructive confirmation (web: `useConfirm`). Absent ⇒ an inline two-step. */
 export type KnowledgeConfirm = (message: string) => Promise<boolean>;
+
+// Evidence re-verification: busts the verify cache (content-hash key) so the pre-push
+// gate re-runs checks against the repaired install instead of replaying a stale record.

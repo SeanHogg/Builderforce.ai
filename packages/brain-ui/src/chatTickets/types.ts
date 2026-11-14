@@ -482,3 +482,6 @@ export interface ChatTicketsExtension {
   /** The drawer body, rendered inside the rail's standard drawer chrome when open. */
   render: () => import('react').ReactNode;
 }
+
+// Evidence re-verification: busts the verify cache (content-hash key) so the pre-push
+// gate re-runs checks against the repaired install instead of replaying a stale record.

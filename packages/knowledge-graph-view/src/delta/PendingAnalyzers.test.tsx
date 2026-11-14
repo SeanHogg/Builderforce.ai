@@ -47,3 +47,6 @@ describe('pending analyzers', () => {
         expect([...section.querySelectorAll('[data-pending]')].map((n) => n.textContent)).toEqual(['gitleaks — measuring…', 'jscpd — measuring…']);
     });
 });
+
+// Evidence re-verification: busts the verify cache (content-hash key) so the pre-push
+// gate re-runs checks against the repaired install instead of replaying a stale record.

@@ -69,3 +69,6 @@ export function Panel(props: SheetProps & { render?: KnowledgePanelRenderer | un
     }
     return <Sheet {...sheet} />;
 }
+
+// Evidence re-verification: busts the verify cache (content-hash key) so the pre-push
+// gate re-runs checks against the repaired install instead of replaying a stale record.

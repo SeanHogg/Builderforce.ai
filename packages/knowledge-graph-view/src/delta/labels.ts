@@ -494,3 +494,6 @@ export function labelKey(code: string): string {
 export function runDeltaLabels(raw: (key: string) => unknown): RunDeltaLabels {
     return labelsFromCatalog(DEFAULT_RUN_DELTA_LABELS, RUN_DELTA_NAMESPACE, raw);
 }
+
+// Evidence re-verification: busts the verify cache (content-hash key) so the pre-push
+// gate re-runs checks against the repaired install instead of replaying a stale record.
