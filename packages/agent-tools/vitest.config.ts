@@ -31,7 +31,6 @@ function tsSourceForJs() {
     name: "ts-source-for-js",
     enforce: "pre" as const,
     resolveId(source: string, importer: string | undefined) {
-      if (source.includes("replicaPump")) console.error("[plugin] resolveId:", source, "from", importer);
       if (!importer) return null;
       if (!source.startsWith("./") && !source.startsWith("../")) return null;
       if (!source.endsWith(".js")) return null;
