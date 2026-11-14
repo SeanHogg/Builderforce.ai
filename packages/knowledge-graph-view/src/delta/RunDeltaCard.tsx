@@ -11,10 +11,10 @@
 import { useState, type ReactNode } from 'react';
 import type { RunDelta } from '@builderforce/run-delta/contract';
 import { cssVar } from '../scene/themeColors';
-import { card, quietButton } from '../styles';
+import { card } from '../styles';
 import { TYPE } from '../surface/ui/type';
 import { fillTemplate } from '../template';
-import { DeltaIconButton, CopyIcon, ResolveIcon } from './DeltaActionIcons';
+import { ChevronIcon, DeltaIconButton, CopyIcon, OpenDetailsIcon, ResolveIcon } from './DeltaActionIcons';
 import { headlineText, reasonLabel } from './deltaText';
 import { DimensionRow } from './DimensionRow';
 import { HeldNotice, type HeldNoticeProps } from './HeldNotice';
@@ -65,15 +65,16 @@ export function RunDeltaCard({ delta, labels, repoLabel, onOpenDetails, held, pr
                         <CopyIcon />
                     </DeltaIconButton>
                 )}
-                <button
-                    type="button"
-                    data-expanded={expanded}
-                    aria-expanded={expanded}
+                <DeltaIconButton label={labels.openDetails} onClick={onOpenDetails}>
+                    <OpenDetailsIcon />
+                </DeltaIconButton>
+                <DeltaIconButton
+                    label={expanded ? labels.collapseDetails : labels.expandDetails}
+                    expanded={expanded}
                     onClick={() => setExpanded((v) => !v)}
-                    style={{ ...quietButton, whiteSpace: 'nowrap' }}
                 >
-                    {expanded ? labels.collapseDetails : labels.expandDetails}
-                </button>
+                    <ChevronIcon expanded={expanded} />
+                </DeltaIconButton>
             </header>
             <p style={{ ...TYPE.body, margin: 0, display: 'flex', gap: 6, alignItems: 'flex-start', overflowWrap: 'anywhere' }}>
                 <span style={{ color: VERDICT_TONE[delta.headline], paddingTop: 1 }}><VerdictIcon verdict={delta.headline} /></span>
@@ -96,9 +97,6 @@ export function RunDeltaCard({ delta, labels, repoLabel, onOpenDetails, held, pr
                 </span>
                 {delta.blastRadius.reasons.map((r) => <span key={r} data-reason={r} style={reasonTag}>{reasonLabel(labels, r)}</span>)}
                 {delta.blocking.length > 0 && <span style={{ ...reasonTag, color: cssVar('sev5'), borderColor: cssVar('sev5') }}>{labels.blocking}</span>}
-                <button type="button" onClick={onOpenDetails} style={{ ...quietButton, marginInlineStart: 'auto' }}>
-                    {labels.openDetails}
-                </button>
             </footer>
         </section>
     );

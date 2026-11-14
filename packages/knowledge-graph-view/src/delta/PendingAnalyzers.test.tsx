@@ -31,12 +31,12 @@ describe('pending analyzers', () => {
 
     it('the card shows "<tool> — measuring…" per pending tool, localized, and nothing once final', () => {
         const de = runDeltaLabels((key) => ({ measuringTool: '{tool} — wird gemessen…', measuringHeading: 'Wird noch gemessen' } as Record<string, string>)[key]);
-        const { container, getByText } = render(<RunDeltaCard delta={pendingDelta()} labels={de} onOpenDetails={() => {}} />);
-        fireEvent.click(getByText(de.expandDetails)); // The rows are collapsed by default.
+        const { container, getByLabelText } = render(<RunDeltaCard delta={pendingDelta()} labels={de} onOpenDetails={() => {}} />);
+        fireEvent.click(getByLabelText(de.expandDetails)); // The rows are collapsed by default.
         const rows = [...container.querySelectorAll('[data-pending]')].map((n) => n.textContent);
         expect(rows).toEqual(['gitleaks — wird gemessen…', 'jscpd — wird gemessen…']);
         const final = render(<RunDeltaCard delta={worseDelta()} labels={L} onOpenDetails={() => {}} />);
-        fireEvent.click(final.getByText(L.expandDetails));
+        fireEvent.click(final.getByLabelText(L.expandDetails));
         expect(final.container.querySelectorAll('[data-pending]')).toHaveLength(0);
     });
 
