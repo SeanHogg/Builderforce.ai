@@ -22,6 +22,14 @@ export interface RunDeltaWriter {
    * Optional: a writer without it refuses revisions (`run_delta_immutable`).
    */
   revise?(tenantId: number, projectId: number | null, imported: ImportedRunDelta): Promise<{ status: 'revised' } | { status: 'missing' }>;
+  /**
+   * Write a computed delta that the server itself owns — the cloud-run delta (PRD 41 §C14 "Cloud runs"). The record is
+   * authored by the platform, not a client push, so it has no client history to gate on: `upsert` is chosen over
+   * `insert` by a pre-call {@link RunDeltaImportPorts.findMapping}; an existing row under the (run, repo key) is
+   * REVISED to the new digest (a retried finalize must converge, not wedge), a missing one is INSERTED. The first
+   * write wins per (run, repo key): an `insert` that found a row is not silently overwritten with a different digest.
+   */
+  upsert?(tenantId: number, projectId: number | null, imported: ImportedRunDelta): Promise<{ status: 'inserted' } | { status: 'revised' } | { status: 'exists'; digest: string }>;
 }
 
 /** The full delta (evidence included), as a blob keyed by its digest. */

@@ -30,6 +30,15 @@ export class SkillRepository implements ISkillRepository {
     return rows.map((r) => toDomain(r.skill));
   }
 
+  /** Every skill owned by one agent (its legacy `agent_id` compatibility reference). */
+  async findAllByAgent(agentId: AgentId): Promise<Skill[]> {
+    const rows = await this.db
+      .select({ skill: skillsTable })
+      .from(skillsTable)
+      .where(eq(skillsTable.agentId, agentId));
+    return rows.map((r) => toDomain(r.skill));
+  }
+
   async save(skill: Skill): Promise<Skill> {
     const plain = skill.toPlain();
     const [inserted] = await this.db

@@ -22,6 +22,13 @@ export function runDeltaWriter(outer: Tx): RunDeltaWriter {
     // own transaction stays usable and the importer can answer the event instead of losing the whole batch.
     insert: (tenantId, projectId, imported) => outer.transaction((tx) => insertDelta(tx, tenantId, projectId, imported)),
     revise: (tenantId, projectId, imported) => outer.transaction((tx) => reviseDelta(tx, tenantId, projectId, imported)),
+    // PRD 41 §C14 cloud runs: a server-owned finalize (no client push, no base-version gate) converges a retried
+    // finalize instead of wedging on the unique key — an existing row under (run, repo key) is revised, else inserted.
+    upsert: async (tenantId, projectId, imported) => {
+      const revised = await outer.transaction((tx) => reviseDelta(tx, tenantId, projectId, imported));
+      if (revised.status === 'revised') return revised;
+      return outer.transaction((tx) => insertDelta(tx, tenantId, projectId, imported));
+    },
   };
 }
 

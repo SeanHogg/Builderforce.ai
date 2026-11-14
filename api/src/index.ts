@@ -210,6 +210,7 @@ import { createContributorRoutes }  from './presentation/routes/contributorRoute
 import { runRepoActivitySweep }      from './application/contributors/runRepoActivitySweep';
 import { createDevTeamRoutes }      from './presentation/routes/devTeamRoutes';
 import { createTeamRoutes }         from './presentation/routes/teamRoutes';
+import { createPersonScoreRoutes }  from './presentation/routes/personScoreRoutes';
 import { createReportRoutes } from './presentation/routes/reportRoutes';
 import { createAnalyticsRoutes }    from './presentation/routes/analyticsRoutes';
 import { createPromptLibraryRoutes } from './presentation/routes/promptLibraryRoutes';
@@ -1200,6 +1201,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // otherwise match "memory" as an id and shadow it (Hono runs the first-
   // registered matching handler — verified, static is NOT auto-prioritized).
   app.route('/api/teams/memory', createTeamMemoryRoutes(db));
+  // WS22 person scores (§D14) — static `/people` segment registered before the
+  // `/api/teams` CRUD so `GET /:id/people` is not shadowed by `GET /:id`.
+  app.route('/api/teams/:id/people', createPersonScoreRoutes(db));
   app.route('/api/teams',        createTeamRoutes(db));
   app.route('/api/ide',       createIdeRoutes());
   app.route('/api/compile',   createCompileRoutes(db, runtimeService));
