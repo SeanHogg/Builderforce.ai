@@ -23,7 +23,6 @@
 
 import { execFile, spawn } from "child_process";
 import { existsSync, realpathSync } from "fs";
-import { createRequire } from "module";
 import * as path from "path";
 import { killTree } from "../process/killTree";
 
@@ -83,8 +82,12 @@ function resolveNpmCli(cwd: string, cli: "npx-cli.js" | "npm-cli.js"): string | 
     return existsSync(real) && existsSync(path.join(path.dirname(real), "npm-prefix.js")) ? real : null;
   };
   const tryResolve = (fromDir: string): string | null => {
+    // A modern `npm` (≥11) ships an `exports` map that blocks `createRequire().resolve('npm/bin/…')`
+    // with ERR_PACKAGE_PATH_NOT_EXPORTED, so a package-managed npm the dep resolver could not
+    // subpath-resolve was silently skipped and the check fell through to the cmd shim. Resolve
+    // the entry by EXPLICIT realpath from the owning package instead, which never consults exports.
     try {
-      return entryLoads(createRequire(path.join(fromDir, "package.json")).resolve(`npm/bin/${cli}`));
+      return entryLoads(path.join(fromDir, "node_modules", "npm", "bin", cli));
     } catch {
       return null; // not resolvable from here — try the next source
     }
