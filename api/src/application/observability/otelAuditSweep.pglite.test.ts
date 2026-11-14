@@ -96,7 +96,7 @@ beforeAll(async () => {
 afterAll(async () => { await pg.close(); });
 
 beforeEach(async () => {
-  await pg.exec('TRUNCATE tenants, users, tenant_members, auth_user_sessions, tenant_api_keys, audit_report_runs, connector_connections, approval_actions, tool_audit_events, otel_exporters');
+  await pg.exec('TRUNCATE tenants, users, tenant_members, auth_user_sessions, tenant_api_keys, audit_report_runs, connector_connections, approval_actions, tool_audit_events, otel_exporters RESTART IDENTITY');
 });
 
 async function seedExporter(overrides: Record<string, unknown> = {}): Promise<string> {
@@ -129,7 +129,7 @@ describe('runOtelAuditSweep', () => {
     await pg.query(`INSERT INTO auth_user_sessions (id, user_id) VALUES ('${crypto.randomUUID()}', 'u1'), ('${crypto.randomUUID()}', 'u2')`);
     await pg.query(`INSERT INTO tenant_api_keys (id, tenant_id, name, key_hash) VALUES ('${crypto.randomUUID()}', 1, 'k1', 'h1')`);
     await pg.query(`INSERT INTO audit_report_runs (tenant_id, period_month) VALUES (1, '2026-11')`);
-    await pg.query(`INSERT INTO connector_connections (id, tenant_id, connector_key, name) VALUES ('${crypto.randomUUID()}', 1, 'slack', 'team')`);
+    await pg.query(`INSERT INTO connector_connections (id, tenant_id, connector_key, name, credentials_enc, iv) VALUES ('${crypto.randomUUID()}', 1, 'slack', 'team', 'enc', 'iv')`);
     await pg.query(`INSERT INTO approval_actions (tenant_id, subject_kind, subject_ref, approver_ref) VALUES (1, 'run', '42', 'u1')`);
     await pg.query(`INSERT INTO tool_audit_events (tenant_id, tool_name) VALUES (1, 'read_file'), (2, 'delete_file')`);
 
@@ -170,7 +170,7 @@ describe('runOtelAuditSweep', () => {
     expect((await runOtelAuditSweep(env, db, third.fetchImpl)).sent).toBe(1);
     expect(logRecordIds(third.calls[0]!.body)).toEqual([`exports:3`]);
     const later = await cursorOf(id);
-    expect(later!['exports']).toBeGreaterThan(cursor!['exports'] as number);
+    expect(Number(later!['exports'])).toBeGreaterThan(Number(cursor!['exports']));
   });
 
   it('the cursor survives a failed batch: no loss on retry, no duplication', async () => {

@@ -34,9 +34,8 @@ declare function CopyButton({ text, labels, icon }: {
  *
  * The header is the row you skim: outcome, tool, and the concrete subject — the file,
  * the query, the command line — so a run's steps can be read without opening any of
- * them. A shell step then opens by default onto its terminal exchange, because "did
- * it actually run the tests, and what did they say" is the question a transcript
- * exists to answer, and a caret is a poor place to keep the answer.
+ * them. Every step starts collapsed (a failure is the one exception, since it exists
+ * to be read); opening a shell step reveals its terminal exchange.
  */
 interface ToolStepLabels extends CopyLabels {
     /** Heading for the raw argument panel. */
@@ -948,7 +947,9 @@ interface ToolStepView {
     argsText: string;
     /** Raw result JSON. `''` = the terminal panel already shows all of it. */
     resultText: string;
-    /** Whether the step opens expanded: a command and a failure both exist to be read. */
+    /** Whether the step opens expanded: a failure exists to be read without a click;
+     *  everything else — including a shell step — starts collapsed so a run's tool
+     *  calls stay a skimmable header list (the command line is already the subject). */
     defaultOpen: boolean;
 }
 /**
@@ -1518,11 +1519,11 @@ declare function ChatTicketStats({ chat, labels }: {
  *
  * A row is the title (or its rename input), its linked-ticket column (`ChatTicketStats`,
  * on every row — the host never recomposes it), a meta line the host fills (project tag,
- * time, attention, unread — `meta`), and its revealed actions: Rename / Summarize /
- * Delete, each offered only when the host supplies its handler, plus host extras
- * (`extraActions`, e.g. "Add to project"). Rows reveal actions per-row, not "whatever
- * is selected": opening a chat leaves the history view, so tying actions to the
- * selection put them somewhere nobody can see.
+ * time, attention, unread — `meta`), and its actions as always-visible icon buttons
+ * under the title/meta: Rename / Summarize / Archive / Delete, each offered only when
+ * the host supplies its handler, plus host extras (`extraActions`, e.g. "Add to
+ * project"). The icons replaced the old "…" overflow toggle: the actions are few, so
+ * they live on the row itself instead of hiding behind one.
  */
 interface ChatHistoryLabels extends ChatTicketStatsLabels {
     loading: string;
@@ -1650,8 +1651,6 @@ interface ChatHistoryRowProps {
     meta?: ReactNode;
     /** A glyph before the title (a live run, a question waiting). */
     marker?: ReactNode;
-    actionsOpen?: boolean;
-    onToggleActions?: (id: number) => void;
     renaming?: boolean;
     renameValue?: string;
     onStartRename?: (chat: ChatHistoryChat) => void;
@@ -1677,8 +1676,8 @@ interface ChatHistoryRowProps {
     labels?: Partial<ChatHistoryLabels>;
     className?: string;
 }
-/** One chat-history row: title (or its rename input), meta line, and its revealed actions. */
-declare const ChatHistoryRow: react.MemoExoticComponent<({ chat, active, onOpen, meta, marker, actionsOpen, onToggleActions, renaming, renameValue, onStartRename, onRenameChange, onSubmitRename, onCancelRename, onSummarize, summarizing, onArchive, archiving, archived, onUnarchive, unarchiving, onDelete, deleting, extraActions, labels: overrides, className, }: ChatHistoryRowProps) => react.JSX.Element>;
+/** One chat-history row: title (or its rename input), meta line, and its always-visible icon actions. */
+declare const ChatHistoryRow: react.MemoExoticComponent<({ chat, active, onOpen, meta, marker, renaming, renameValue, onStartRename, onRenameChange, onSubmitRename, onCancelRename, onSummarize, summarizing, onArchive, archiving, archived, onUnarchive, unarchiving, onDelete, deleting, extraActions, labels: overrides, className, }: ChatHistoryRowProps) => react.JSX.Element>;
 
 /** What a row action needs of a chat — the shared history row hands back this much. */
 interface ChatRowRef {
@@ -1688,9 +1687,6 @@ interface ChatRowRef {
 interface UseChatRowActionsOptions {
     /** Open the chat (the host switches to it, and closes / leaves its history view). */
     onOpen: (id: number) => void;
-    /** Reveal the opened row's actions — a host that keeps the list beside the thread
-     *  (the web Brain page) instead of leaving it on open. */
-    revealActionsOnOpen?: boolean;
     /** Persist a new title. Only called for a non-blank title that actually changed. */
     rename: (id: number, title: string) => Promise<unknown> | void;
     /** Rows offer Summarize only when the host supplies it. */
@@ -1716,13 +1712,13 @@ interface UseChatRowActionsOptions {
     assign?: (chatId: number, projectId: number | null) => Promise<unknown> | void;
 }
 /** The action props a `ChatHistoryRow` takes, bound to one chat. */
-type ChatRowActionProps = Pick<ChatHistoryRowProps, 'onOpen' | 'actionsOpen' | 'onToggleActions' | 'renaming' | 'renameValue' | 'onStartRename' | 'onRenameChange' | 'onSubmitRename' | 'onCancelRename' | 'onSummarize' | 'summarizing' | 'onArchive' | 'archiving' | 'archived' | 'onUnarchive' | 'unarchiving' | 'onDelete' | 'deleting'>;
+type ChatRowActionProps = Pick<ChatHistoryRowProps, 'onOpen' | 'renaming' | 'renameValue' | 'onStartRename' | 'onRenameChange' | 'onSubmitRename' | 'onCancelRename' | 'onSummarize' | 'summarizing' | 'onArchive' | 'archiving' | 'archived' | 'onUnarchive' | 'unarchiving' | 'onDelete' | 'deleting'>;
 /**
  * THE chat-history row state and its per-row actions (open, reveal actions, rename,
  * summarize, archive, delete, assign) — every host's `ChatHistoryRow`s bind through it
  * (web Brain panel, the editor's chat surface, Rovr), so the rules live once:
  *
- * - one row's actions are revealed at a time, toggled from its "more" button;
+ * - the row's actions are always-visible icons under the title/meta — no "…" toggle;
  * - Rename is inline; a blank or unchanged title just cancels (no needless write), and
  *   Enter commits once — the input unmounts on Enter and its blur would commit again;
  * - Summarize / Archive / Delete / Assign each mark their row busy while in flight;
@@ -1738,7 +1734,6 @@ type ChatRowActionProps = Pick<ChatHistoryRowProps, 'onOpen' | 'actionsOpen' | '
  * across renders and the memoized rows do not re-render on every parent render.
  */
 declare function useChatRowActions(options: UseChatRowActionsOptions): {
-    actionsChatId: number | null;
     renamingId: number | null;
     renameValue: string;
     setRenameValue: react.Dispatch<react.SetStateAction<string>>;
@@ -1748,7 +1743,6 @@ declare function useChatRowActions(options: UseChatRowActionsOptions): {
     deletingId: number | null;
     busyId: number | null;
     openChat: (id: number) => void;
-    toggleActions: (id: number) => void;
     startRename: (chat: ChatRowRef) => void;
     cancelRename: () => void;
     submitRename: (id: number, value: string) => Promise<void>;

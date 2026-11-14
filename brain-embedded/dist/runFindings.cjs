@@ -144,7 +144,7 @@ function analysisOverrun(view) {
   }, evidence)];
 }
 
-// ../packages/agent-tools/src/modelRoles.js
+// ../packages/agent-tools/src/modelRoles.ts
 var MODEL_ROLES = ["plan", "code", "verify", "explore", "chat", "utility"];
 var MODEL_ROLE_DESCRIPTIONS = {
   plan: "Deciding an approach or breaking work down \u2014 no code written yet.",
@@ -162,19 +162,17 @@ function delegationRole(raw) {
   return isModelRole(raw) ? raw : "code";
 }
 
-// ../packages/agent-tools/src/edit.js
+// ../packages/agent-tools/src/edit.ts
 var toLF = (s) => s.replace(/\r\n/g, "\n");
 var countNewlines = (s) => s.split("\n").length - 1;
 function dominantEol(content) {
   const all = countNewlines(content);
-  if (all === 0)
-    return null;
+  if (all === 0) return null;
   const crlf = content.split("\r\n").length - 1;
   return crlf >= all - crlf ? "\r\n" : "\n";
 }
 function withEol(text, eol) {
-  if (!eol)
-    return text;
+  if (!eol) return text;
   const lf = toLF(text);
   return eol === "\n" ? lf : lf.replace(/\n/g, "\r\n");
 }
@@ -184,8 +182,7 @@ function foldToLF(content) {
   let j = 0;
   for (let i = 0; i < content.length; i += 1) {
     at[j] = i;
-    if (content.charCodeAt(i) === 13 && content.charCodeAt(i + 1) === 10)
-      i += 1;
+    if (content.charCodeAt(i) === 13 && content.charCodeAt(i + 1) === 10) i += 1;
     j += 1;
   }
   at[j] = content.length;
@@ -195,8 +192,7 @@ function spansOf(hay, needle, all) {
   const spans = [];
   for (let at = hay.indexOf(needle); at !== -1; at = hay.indexOf(needle, at + needle.length)) {
     spans.push([at, at + needle.length]);
-    if (!all && spans.length === 2)
-      break;
+    if (!all && spans.length === 2) break;
   }
   return spans;
 }
@@ -211,8 +207,7 @@ function excerptAfterEdit(content, region) {
   const lines = content.split(/\r?\n/);
   const from = Math.max(0, region.startLine - 1 - EDIT_EXCERPT_CONTEXT);
   const to = Math.min(lines.length, region.endLine + EDIT_EXCERPT_CONTEXT);
-  if (to - from <= EDIT_EXCERPT_MAX_LINES)
-    return numberedLines(lines, from, to);
+  if (to - from <= EDIT_EXCERPT_MAX_LINES) return numberedLines(lines, from, to);
   const half = Math.floor(EDIT_EXCERPT_MAX_LINES / 2);
   return `${numberedLines(lines, from, from + half)}
 \u2026
@@ -224,14 +219,11 @@ function regionAt(content, offset, newS) {
 }
 function findNearest(content, oldString) {
   const needle = oldString.split(/\r?\n/).map((l) => l.trim()).find((l) => l.length > 0);
-  if (!needle)
-    return void 0;
+  if (!needle) return void 0;
   const lines = content.split(/\r?\n/);
   let index = lines.findIndex((l) => l.trim() === needle);
-  if (index === -1 && needle.length >= MIN_CONTAINS_NEEDLE)
-    index = lines.findIndex((l) => l.includes(needle));
-  if (index === -1)
-    return void 0;
+  if (index === -1 && needle.length >= MIN_CONTAINS_NEEDLE) index = lines.findIndex((l) => l.includes(needle));
+  if (index === -1) return void 0;
   const from = Math.max(0, index - EXCERPT_RADIUS);
   const to = Math.min(lines.length, index + EXCERPT_RADIUS + 1);
   return { line: index + 1, excerpt: numberedLines(lines, from, to) };
@@ -243,8 +235,7 @@ function applyStringEdit(content, oldString, newString, replaceAll = false) {
   const newS = withEol(newString, dominantEol(content));
   const { lf, at } = foldToLF(content);
   let spans = spansOf(lf, toLF(oldString), replaceAll).map(([s, e]) => [at[s], at[e]]);
-  if (spans.length === 0)
-    spans = spansOf(content, oldString, replaceAll);
+  if (spans.length === 0) spans = spansOf(content, oldString, replaceAll);
   if (spans.length > 1 && !replaceAll) {
     return {
       ok: false,
@@ -290,20 +281,17 @@ function editedFilesOf(toolName, args) {
         out.push({ path });
       }
     };
-    if ("old_string" in a || "new_string" in a)
-      replacement(a, null);
+    if ("old_string" in a || "new_string" in a) replacement(a, null);
     if (Array.isArray(a.edits)) {
       for (const raw of a.edits) {
-        if (raw && typeof raw === "object")
-          replacement(raw, top);
+        if (raw && typeof raw === "object") replacement(raw, top);
       }
     }
   } else if (toolName === "write_file" && top) {
     const after = editStr(a.content);
     out.push({ path: top, ...after !== void 0 ? { after } : {} });
   }
-  if (out.length === 0 && top)
-    out.push({ path: top });
+  if (out.length === 0 && top) out.push({ path: top });
   return out;
 }
 function editedPathsOf(toolName, args) {
@@ -311,24 +299,18 @@ function editedPathsOf(toolName, args) {
 }
 var EDIT_BATCH_MAX = 20;
 function entryProblem(e) {
-  if (typeof e.path !== "string" || e.path.trim() === "")
-    return "path is required";
-  if (typeof e.old_string !== "string" || e.old_string.length === 0)
-    return "old_string is required";
-  if (typeof e.new_string !== "string")
-    return "new_string is required";
+  if (typeof e.path !== "string" || e.path.trim() === "") return "path is required";
+  if (typeof e.old_string !== "string" || e.old_string.length === 0) return "old_string is required";
+  if (typeof e.new_string !== "string") return "new_string is required";
   return null;
 }
 function planBatchEdits(raw) {
-  if (!Array.isArray(raw) || raw.length === 0)
-    return { edits: [], error: "edits must be a non-empty array" };
-  if (raw.length > EDIT_BATCH_MAX)
-    return { edits: [], error: `edits takes at most ${EDIT_BATCH_MAX} edits per call \u2014 split the rest into another edit_file` };
+  if (!Array.isArray(raw) || raw.length === 0) return { edits: [], error: "edits must be a non-empty array" };
+  if (raw.length > EDIT_BATCH_MAX) return { edits: [], error: `edits takes at most ${EDIT_BATCH_MAX} edits per call \u2014 split the rest into another edit_file` };
   const edits = raw;
   for (let i = 0; i < edits.length; i += 1) {
     const problem = entryProblem(edits[i]);
-    if (problem)
-      return { edits: [], error: `edit ${i + 1} (${edits[i].path ?? "?"}): ${problem}`, invalidAt: i };
+    if (problem) return { edits: [], error: `edit ${i + 1} (${edits[i].path ?? "?"}): ${problem}`, invalidAt: i };
   }
   return { edits };
 }
@@ -363,15 +345,14 @@ async function applyBatchEdits(plan, io) {
   }
   const written = /* @__PURE__ */ new Set();
   for (const o of outcomes) {
-    if (written.has(o.path))
-      continue;
+    if (written.has(o.path)) continue;
     written.add(o.path);
     await io.write(o.path, overlay.get(o.path));
   }
   return { ok: true, files: outcomes.map(({ content: _c, ...rest }) => rest) };
 }
 
-// ../packages/agent-tools/src/editBalance.js
+// ../packages/agent-tools/src/editBalance.ts
 var LEXED_EXTENSIONS = /* @__PURE__ */ new Set([
   "js",
   "jsx",
@@ -417,8 +398,7 @@ function bracketBalance(text, options = {}) {
   let expr = true;
   const skipQuoted = (quote, multiline) => {
     i += 1;
-    while (i < n && text[i] !== quote && (multiline || text[i] !== "\n"))
-      i += !multiline && text[i] === "\\" ? 2 : 1;
+    while (i < n && text[i] !== quote && (multiline || text[i] !== "\n")) i += !multiline && text[i] === "\\" ? 2 : 1;
     i += 1;
   };
   const tryRegex = () => {
@@ -426,20 +406,16 @@ function bracketBalance(text, options = {}) {
     let inClass = false;
     while (j < n) {
       const c = text[j];
-      if (c === "\n")
-        return false;
+      if (c === "\n") return false;
       if (c === "\\") {
         j += 2;
         continue;
       }
-      if (c === "[")
-        inClass = true;
-      else if (c === "]")
-        inClass = false;
+      if (c === "[") inClass = true;
+      else if (c === "]") inClass = false;
       else if (c === "/" && !inClass) {
         j += 1;
-        while (j < n && /[a-z]/i.test(text[j]))
-          j += 1;
+        while (j < n && /[a-z]/i.test(text[j])) j += 1;
         i = j;
         return true;
       }
@@ -457,8 +433,7 @@ function bracketBalance(text, options = {}) {
     }
   };
   const skipSpace = () => {
-    while (i < n && /\s/.test(text[i]))
-      i += 1;
+    while (i < n && /\s/.test(text[i])) i += 1;
   };
   const jsxChildren = () => {
     while (i < n) {
@@ -473,8 +448,7 @@ function bracketBalance(text, options = {}) {
           i = end < 0 ? n : end + 1;
           return;
         }
-        if (tryJsxElement())
-          continue;
+        if (tryJsxElement()) continue;
       }
       i += 1;
     }
@@ -496,8 +470,7 @@ function bracketBalance(text, options = {}) {
     let first = true;
     while (i < n) {
       skipSpace();
-      if (i >= n)
-        return true;
+      if (i >= n) return true;
       const c = text[i];
       if (c === "/" && text[i + 1] === ">") {
         i += 2;
@@ -521,14 +494,11 @@ function bracketBalance(text, options = {}) {
       first = false;
       i += attr[0].length;
       skipSpace();
-      if (text[i] !== "=")
-        continue;
+      if (text[i] !== "=") continue;
       i += 1;
       skipSpace();
-      if (text[i] === '"' || text[i] === "'")
-        skipQuoted(text[i], true);
-      else if (text[i] === "{")
-        container();
+      if (text[i] === '"' || text[i] === "'") skipQuoted(text[i], true);
+      else if (text[i] === "{") container();
     }
     return true;
   };
@@ -577,8 +547,7 @@ function bracketBalance(text, options = {}) {
       }
       if (WORD_START.test(ch) || /\d/.test(ch)) {
         const start = i;
-        while (i < n && WORD_CHAR.test(text[i]))
-          i += 1;
+        while (i < n && WORD_CHAR.test(text[i])) i += 1;
         expr = EXPRESSION_KEYWORDS.has(text.slice(start, i));
         continue;
       }
@@ -587,11 +556,9 @@ function bracketBalance(text, options = {}) {
         depth += 1;
         expr = true;
       } else if (ch === "}") {
-        if (nested && depth === 0)
-          return;
+        if (nested && depth === 0) return;
         out.curly -= 1;
-        if (depth > 0)
-          depth -= 1;
+        if (depth > 0) depth -= 1;
         expr = true;
       } else if (ch === "(" || ch === "[") {
         out[ch === "(" ? "paren" : "square"] += 1;
@@ -599,8 +566,7 @@ function bracketBalance(text, options = {}) {
       } else if (ch === ")" || ch === "]") {
         out[ch === ")" ? "paren" : "square"] -= 1;
         expr = false;
-      } else
-        expr = ch !== ".";
+      } else expr = ch !== ".";
       i += 1;
     }
   }
@@ -619,8 +585,7 @@ function bracketBalance(text, options = {}) {
         i += 2;
         expr = true;
         code(true);
-        if (text[i] === "}")
-          i += 1;
+        if (text[i] === "}") i += 1;
         continue;
       }
       i += 1;
@@ -631,8 +596,7 @@ function bracketBalance(text, options = {}) {
 }
 function bracketDelta(before, after, ext) {
   const e = extensionOf(ext);
-  if (!LEXED_EXTENSIONS.has(e))
-    return { ...ZERO };
+  if (!LEXED_EXTENSIONS.has(e)) return { ...ZERO };
   const options = { jsx: JSX_EXTENSIONS.has(e) };
   const b = bracketBalance(before, options);
   const a = bracketBalance(after, options);
@@ -646,7 +610,7 @@ function describeBracketDelta(d, style = "name") {
   return ["curly", "paren", "square"].filter((k) => d[k] !== 0).map((k) => `${style === "glyph" ? glyph[k] : k} ${d[k] > 0 ? "+" : ""}${d[k]}`).join(style === "glyph" ? ", " : " \xB7 ");
 }
 
-// ../packages/agent-tools/src/jsonKeyRead.js
+// ../packages/agent-tools/src/jsonKeyRead.ts
 var JSON_KEY_READ_MAX_CHARS = 12e3;
 var MAX_LISTED_KEYS = 60;
 function keysOf(value) {
@@ -660,8 +624,7 @@ function readJsonKey(text, key) {
     return { ok: false, error: "the file is not valid JSON, so `key` cannot be used \u2014 read it by line window instead" };
   }
   const segments = key.split(".").filter((s) => s.length > 0);
-  if (segments.length === 0)
-    return { ok: false, error: '`key` is empty \u2014 name a dot path such as "admin.visitorFlow"' };
+  if (segments.length === 0) return { ok: false, error: '`key` is empty \u2014 name a dot path such as "admin.visitorFlow"' };
   let node = root;
   for (let i = 0; i < segments.length; i++) {
     const segment = segments[i];
@@ -677,12 +640,11 @@ function readJsonKey(text, key) {
     node = container[segment];
   }
   const content = JSON.stringify(node, null, 2) ?? "null";
-  if (content.length <= JSON_KEY_READ_MAX_CHARS)
-    return { ok: true, key: segments.join("."), content };
+  if (content.length <= JSON_KEY_READ_MAX_CHARS) return { ok: true, key: segments.join("."), content };
   return { ok: true, key: segments.join("."), tooLarge: true, size: content.length, childKeys: keysOf(node).slice(0, MAX_LISTED_KEYS) };
 }
 
-// ../packages/agent-tools/src/glob.js
+// ../packages/agent-tools/src/glob.ts
 function normalizeScopeDir(raw) {
   return (raw ?? "").split("\\").join("/").trim().replace(/^\.\/+/, "").replace(/^\/+|\/+$/g, "");
 }
@@ -695,7 +657,7 @@ function emptyGlobListingNote(glob, scopeDir, truncated) {
   return `${base} Try a broader pattern (e.g. "*${glob.replace(/[*?/]/g, "")}*"), or list_files without a glob to see the tree. 0 matches means no such file exists in the paths scanned \u2014 do not claim one is missing without trying a broader glob first.`;
 }
 
-// ../packages/agent-tools/src/tool.js
+// ../packages/agent-tools/src/tool.ts
 function defineTool(def) {
   return {
     name: def.name,
@@ -708,13 +670,13 @@ function defineTool(def) {
   };
 }
 
-// ../packages/agent-tools/src/tool-side-effect.js
+// ../packages/agent-tools/src/tool-side-effect.ts
 var CONTROL_TOOL_NAMES = ["finish", "ask_human", "ask_user"];
 
-// ../packages/agent-tools/src/gate-lowering.js
+// ../packages/agent-tools/src/gate-lowering.ts
 var CONTROL = new Set(CONTROL_TOOL_NAMES);
 
-// ../packages/agent-tools/src/fileWindow.js
+// ../packages/agent-tools/src/fileWindow.ts
 var READ_DEFAULT_LINE_LIMIT = 2e3;
 function windowFileContent(content, opts) {
   const lines = content.split("\n");
@@ -726,13 +688,12 @@ function windowFileContent(content, opts) {
   return { content: slice.join("\n"), truncated: end < totalLines, totalLines, offset: start, returnedLines: slice.length };
 }
 function fileWindowNote(win) {
-  if (!win.truncated)
-    return void 0;
+  if (!win.truncated) return void 0;
   const lastLine = win.offset + win.returnedLines - 1;
   return `Showing lines ${win.offset}\u2013${lastLine} of ${win.totalLines}. To continue, call read_file again with offset ${lastLine + 1}.`;
 }
 
-// ../packages/agent-tools/src/preSearch.js
+// ../packages/agent-tools/src/preSearch.ts
 var DEFAULTS = {
   maxIdentifiers: 6,
   definitionsPerIdentifier: 3,
@@ -742,26 +703,19 @@ var DEFAULTS = {
 var TOKEN = /[A-Za-z_$][\w$]*/g;
 var REFERENCE_TEXT_MAX = 140;
 function looksLikeIdentifier(word) {
-  if (word.length < 3)
-    return false;
-  if (/^_+$/.test(word))
-    return false;
-  if (word.includes("_") || word.includes("$"))
-    return true;
-  if (/[a-z][A-Z]/.test(word))
-    return true;
-  if (/[0-9][A-Z]/.test(word) && /[a-z]/.test(word))
-    return true;
-  if (/^[A-Z][A-Z0-9]*\d$/.test(word))
-    return true;
+  if (word.length < 3) return false;
+  if (/^_+$/.test(word)) return false;
+  if (word.includes("_") || word.includes("$")) return true;
+  if (/[a-z][A-Z]/.test(word)) return true;
+  if (/[0-9][A-Z]/.test(word) && /[a-z]/.test(word)) return true;
+  if (/^[A-Z][A-Z0-9]*\d$/.test(word)) return true;
   return false;
 }
 function extractIdentifiers(request, max = DEFAULTS.maxIdentifiers) {
   const out = [];
   const seen = /* @__PURE__ */ new Set();
   const add = (word) => {
-    if (!word || seen.has(word) || out.length >= max)
-      return;
+    if (!word || seen.has(word) || out.length >= max) return;
     seen.add(word);
     out.push(word);
   };
@@ -769,18 +723,14 @@ function extractIdentifiers(request, max = DEFAULTS.maxIdentifiers) {
   for (const span of text.matchAll(/`([^`\n]{1,120})`/g)) {
     const words = span[1].match(TOKEN) ?? [];
     const last = words[words.length - 1];
-    if (last && last.length >= 2)
-      add(last);
+    if (last && last.length >= 2) add(last);
   }
   for (const m of text.matchAll(/([A-Za-z_$][\w$]*)(\s*\()?/g)) {
     const word = m[1];
     const after = text.charAt((m.index ?? 0) + word.length);
-    if (after === "." && /[A-Za-z]/.test(text.charAt((m.index ?? 0) + word.length + 1)) && !looksLikeIdentifier(word))
-      continue;
-    if (m[2] && word.length >= 3 && /[a-z]/.test(word))
-      add(word);
-    else if (looksLikeIdentifier(word))
-      add(word);
+    if (after === "." && /[A-Za-z]/.test(text.charAt((m.index ?? 0) + word.length + 1)) && !looksLikeIdentifier(word)) continue;
+    if (m[2] && word.length >= 3 && /[a-z]/.test(word)) add(word);
+    else if (looksLikeIdentifier(word)) add(word);
   }
   return out;
 }
@@ -792,8 +742,7 @@ function clip(s, n) {
   return t.length > n ? `${t.slice(0, n - 1)}\u2026` : t;
 }
 function renderPreSearchBlock(r, maxChars = DEFAULTS.maxChars) {
-  if (r.definitions.length === 0 && r.references.length === 0)
-    return "";
+  if (r.definitions.length === 0 && r.references.length === 0) return "";
   const lines = [
     "## Pre-search (symbol index + text search, gathered before this run with no model call)",
     `Identifiers in the request: ${r.identifiers.map((i) => `\`${i}\``).join(", ")}`
@@ -808,8 +757,7 @@ function renderPreSearchBlock(r, maxChars = DEFAULTS.maxChars) {
   }
   lines.push("Start from these locations (read_file with a line range) instead of searching for them again.");
   let out = lines.join("\n");
-  if (out.length > maxChars)
-    out = `${out.slice(0, maxChars).replace(/\n[^\n]*$/, "")}
+  if (out.length > maxChars) out = `${out.slice(0, maxChars).replace(/\n[^\n]*$/, "")}
 - \u2026`;
   return out;
 }
@@ -818,8 +766,7 @@ async function preSearch(request, ports, options = {}) {
   const { signal } = options;
   const identifiers = extractIdentifiers(request, o.maxIdentifiers);
   const empty = { identifiers, definitions: [], references: [], block: "" };
-  if (identifiers.length === 0 || signal?.aborted)
-    return empty;
+  if (identifiers.length === 0 || signal?.aborted) return empty;
   const perId = await Promise.all(identifiers.map(async (identifier) => {
     const [defs, refs] = await Promise.all([
       ports.findSymbol ? ports.findSymbol(identifier).catch(() => ({ ok: false })) : Promise.resolve({ ok: false }),
@@ -836,11 +783,9 @@ async function preSearch(request, ports, options = {}) {
     const defined = new Set(definitions2.map((d) => `${d.path}:${d.line}`));
     const references2 = [];
     for (const m of refs.ok ? refs.matches ?? [] : []) {
-      if (references2.length >= o.referencesPerIdentifier)
-        break;
+      if (references2.length >= o.referencesPerIdentifier) break;
       const line = typeof m.line === "number" ? m.line : Number(m.line);
-      if (!Number.isFinite(line) || defined.has(`${m.path}:${line}`))
-        continue;
+      if (!Number.isFinite(line) || defined.has(`${m.path}:${line}`)) continue;
       references2.push({ identifier, path: m.path, line, text: typeof m.text === "string" ? m.text : "" });
     }
     return { definitions: definitions2, references: references2 };
@@ -853,29 +798,27 @@ async function preSearch(request, ports, options = {}) {
 function preSearchFiles(r, max = 6) {
   const out = [];
   for (const p of [...r.definitions.map((d) => d.path), ...r.references.map((x) => x.path)]) {
-    if (!out.includes(p))
-      out.push(p);
-    if (out.length >= max)
-      break;
+    if (!out.includes(p)) out.push(p);
+    if (out.length >= max) break;
   }
   return out;
 }
 
-// ../packages/agent-tools/src/knowledge/codeMask.js
+// ../packages/agent-tools/src/knowledge/codeMask.ts
 var SPACES = " ".repeat(256);
 
-// ../packages/agent-tools/src/callScan.js
+// ../packages/agent-tools/src/callScan.ts
 var ID = "[A-Za-z_$][\\w$]*";
 var MAX_SCANNED_LINE = 2048;
 var JSX_TAG = new RegExp(`<(\\/?)([A-Z][\\w$]*(?:\\.${ID})*)(?=[\\s/>]|$)`, "g");
 
-// ../packages/agent-tools/src/testPaths.js
+// ../packages/agent-tools/src/testPaths.ts
 var TEST_SOURCE_PATH = /(?:^|\/)(?:__tests__|tests?|spec|e2e)\/|(?:^|\/)(?:test|spec)\.[^/]+$|\.(?:test|spec|e2e|e2e-spec)\.[^/]+$/i;
 function isTestSourcePath(path) {
   return TEST_SOURCE_PATH.test(path.replace(/\\/g, "/"));
 }
 
-// ../packages/agent-tools/src/callbackOwners.js
+// ../packages/agent-tools/src/callbackOwners.ts
 var MAX_OWNER_LITERAL = 80;
 var STATEMENT = new RegExp(`^([ \\t]*)(${ID}(?:\\??\\.${ID})*)\\s*\\(`);
 var CALLBACK_AT_END = new RegExp(`(?:\\([^()]*\\)(?:\\s*:\\s*[^=()]+)?\\s*=>|\\b${ID}\\s*=>|\\bfunction\\b[^(]*\\([^()]*\\))\\s*\\{\\s*$`);
@@ -917,43 +860,32 @@ function owningOpen(line, at) {
   for (let i = 0; i < at; i += 1) {
     const c = line[i];
     if (c === '"' || c === "'" || c === "`") {
-      for (i += 1; i < at && line[i] !== c; i += 1)
-        if (line[i] === "\\")
-          i += 1;
-    } else if (c === "(")
-      open.push(i);
-    else if (c === ")")
-      open.pop();
+      for (i += 1; i < at && line[i] !== c; i += 1) if (line[i] === "\\") i += 1;
+    } else if (c === "(") open.push(i);
+    else if (c === ")") open.pop();
   }
   return open.length ? open[open.length - 1] : -1;
 }
 function callbackOwnerName(line) {
-  if (line.length > MAX_SCANNED_LINE)
-    return void 0;
+  if (line.length > MAX_SCANNED_LINE) return void 0;
   const st = STATEMENT.exec(line);
   const cb = st ? CALLBACK_AT_END.exec(line) : null;
-  if (!st || !cb)
-    return void 0;
+  if (!st || !cb) return void 0;
   const lead = st[2].replace(/\?/g, "");
   const root = lead.split(".")[0];
-  if (NOT_OWNERS.has(root))
-    return void 0;
+  if (NOT_OWNERS.has(root)) return void 0;
   let open = owningOpen(line, cb.index);
-  if (open < 0)
-    return void 0;
+  if (open < 0) return void 0;
   const before = line.slice(0, open).trimEnd();
   const member = /(?:^|[^\w$])([A-Za-z_$][\w$]*)$/.exec(before)?.[1];
   let callee;
-  if (open === st[0].length - 1)
-    callee = lead;
-  else if (member && /\)\s*\.\s*$/.test(before.slice(0, before.length - member.length)))
-    callee = `${root}.${member}`;
+  if (open === st[0].length - 1) callee = lead;
+  else if (member && /\)\s*\.\s*$/.test(before.slice(0, before.length - member.length))) callee = `${root}.${member}`;
   else {
     callee = lead;
     open = st[0].length - 1;
   }
-  if (member && NOT_OWNERS.has(member) && callee !== lead)
-    return void 0;
+  if (member && NOT_OWNERS.has(member) && callee !== lead) return void 0;
   const first = /^\s*(["'`])((?:\\.|(?!\1)[^\\])*)\1/.exec(line.slice(open + 1));
   const literal = first && !first[2].includes("${") ? first[2].slice(0, MAX_OWNER_LITERAL) : void 0;
   return literal !== void 0 ? `${callee} "${literal}"` : callee;
@@ -970,35 +902,28 @@ var CallbackOwnerScan = class {
   }
   /** True while the line is inside an owner's body (no definition is read there). Call for EVERY line, in order. */
   inBody(line) {
-    if (this.inside === void 0)
-      return false;
+    if (this.inside === void 0) return false;
     const rest = line.startsWith(this.inside) ? line.slice(this.inside.length) : void 0;
     if (rest !== void 0 && /^[})]/.test(rest)) {
       this.inside = void 0;
       return true;
     }
-    if (!/^\S/.test(line) || /^[})\]`]/.test(line))
-      return true;
+    if (!/^\S/.test(line) || /^[})\]`]/.test(line)) return true;
     this.inside = void 0;
     return false;
   }
   /** Tracks the column-0 blocks; call for every line outside an owner's body, before the definitions are read. */
   track(line) {
-    if (/^\S/.test(line))
-      this.topBlock = TOP_BLOCK.test(line) ? "" : void 0;
-    else if (this.topBlock === "" && line.trim())
-      this.topBlock = /^[ \t]*/.exec(line)[0];
+    if (/^\S/.test(line)) this.topBlock = TOP_BLOCK.test(line) ? "" : void 0;
+    else if (this.topBlock === "" && line.trim()) this.topBlock = /^[ \t]*/.exec(line)[0];
   }
   /** The owner a line outside any class declares, if any. */
   ownerAt(line, lineNo) {
-    if (!this.enabled)
-      return void 0;
+    if (!this.enabled) return void 0;
     const indent = /^[ \t]*/.exec(line)[0];
-    if (indent !== "" && indent !== this.topBlock)
-      return void 0;
+    if (indent !== "" && indent !== this.topBlock) return void 0;
     const base = callbackOwnerName(line);
-    if (!base)
-      return void 0;
+    if (!base) return void 0;
     const n = (this.named.get(base) ?? 0) + 1;
     this.named.set(base, n);
     this.inside = indent;
@@ -1006,7 +931,7 @@ var CallbackOwnerScan = class {
   }
 };
 
-// ../packages/agent-tools/src/symbols.js
+// ../packages/agent-tools/src/symbols.ts
 var SYMBOL_KINDS = [
   "function",
   "method",
@@ -1074,17 +999,22 @@ var JS_RULES = [
   // `namespace A.B {`, `declare module "x" {` — the module's name, its quotes dropped.
   { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:namespace|module)\\s+(${ID2}(?:\\.${ID2})*|"[^"]+"|'[^']+')\\s*\\{`), kind: "module" }
 ];
-var JS_METHOD = new RegExp(`^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|abstract|async|get|set)\\s+)*\\*?\\s*(${ID2})\\s*(?:<[^>]*>)?\\s*\\(.*\\)?[^;]*\\{\\s*$`);
-var JS_ABSTRACT_METHOD = new RegExp(`^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override)\\s+)*abstract\\s+(?:(?:public|private|protected|static|readonly|override|async)\\s+)*(${ID2})\\s*\\??\\s*(?:<[^>]*>)?\\s*\\(`);
-var JS_METHOD_OPEN = new RegExp(`^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|async|get|set)\\s+)*\\*?\\s*(${ID2})\\s*(?:<[^>]*>)?\\s*\\(\\s*$`);
+var JS_METHOD = new RegExp(
+  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|abstract|async|get|set)\\s+)*\\*?\\s*(${ID2})\\s*(?:<[^>]*>)?\\s*\\(.*\\)?[^;]*\\{\\s*$`
+);
+var JS_ABSTRACT_METHOD = new RegExp(
+  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override)\\s+)*abstract\\s+(?:(?:public|private|protected|static|readonly|override|async)\\s+)*(${ID2})\\s*\\??\\s*(?:<[^>]*>)?\\s*\\(`
+);
+var JS_METHOD_OPEN = new RegExp(
+  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|async|get|set)\\s+)*\\*?\\s*(${ID2})\\s*(?:<[^>]*>)?\\s*\\(\\s*$`
+);
 var JS_SIGNATURE_CLOSE = /^\s*\)\s*(?::[^;=]*)?\{\s*$/;
 var MAX_SIGNATURE_LINES = 40;
 var JS_KEYWORDS = /* @__PURE__ */ new Set(["if", "for", "while", "switch", "catch", "return", "function", "with", "do", "else", "try"]);
 function closesWithBody(lines, at) {
   for (let i = at + 1; i < Math.min(lines.length, at + MAX_SIGNATURE_LINES); i += 1) {
     const line = lines[i] ?? "";
-    if (/^\s*\)/.test(line))
-      return JS_SIGNATURE_CLOSE.test(line);
+    if (/^\s*\)/.test(line)) return JS_SIGNATURE_CLOSE.test(line);
   }
   return false;
 }
@@ -1092,35 +1022,28 @@ function extractJs(lines, out, path = "") {
   let cls;
   const owners = new CallbackOwnerScan(path);
   eachLine(lines, out, (line, lineNo) => {
-    if (/^\}/.test(line))
-      cls = void 0;
-    if (owners.inBody(line))
-      return;
+    if (/^\}/.test(line)) cls = void 0;
+    if (owners.inBody(line)) return;
     owners.track(line);
     for (const rule of JS_RULES) {
       const m = rule.re.exec(line);
-      if (!m)
-        continue;
+      if (!m) continue;
       const exported = !!m[1];
-      if (!exported && /^\s/.test(line))
-        continue;
+      if (!exported && /^\s/.test(line)) continue;
       const name2 = group(m, 2).replace(/^["']|["']$/g, "");
       out.push({ name: name2, kind: rule.kind, line: lineNo, exported });
-      if (rule.kind === "class")
-        cls = name2;
+      if (rule.kind === "class") cls = name2;
       return;
     }
     if (cls === void 0) {
       const owner = owners.ownerAt(line, lineNo);
-      if (owner)
-        out.push(owner);
+      if (owner) out.push(owner);
       return;
     }
     const open = JS_METHOD_OPEN.exec(line);
     const method = JS_METHOD.exec(line) ?? JS_ABSTRACT_METHOD.exec(line) ?? (open && closesWithBody(lines, lineNo - 1) ? open : null);
     const name = method ? group(method, 1) : "";
-    if (name && !JS_KEYWORDS.has(name))
-      out.push({ name, kind: "method", line: lineNo, exported: false, container: cls });
+    if (name && !JS_KEYWORDS.has(name)) out.push({ name, kind: "method", line: lineNo, exported: false, container: cls });
   });
 }
 function extractPython(lines, out) {
@@ -1133,8 +1056,7 @@ function extractPython(lines, out) {
       cls = void 0;
       memberIndent = void 0;
     }
-    if (!m)
-      return;
+    if (!m) return;
     const name = group(m, 3);
     if (group(m, 2) === "class") {
       if (indent === "") {
@@ -1153,11 +1075,9 @@ function extractPython(lines, out) {
       out.push({ name, kind: "function", line: lineNo, exported: !name.startsWith("_") });
       return;
     }
-    if (cls === void 0)
-      return;
+    if (cls === void 0) return;
     memberIndent ??= indent;
-    if (indent === memberIndent)
-      out.push({ name, kind: "method", line: lineNo, exported: !name.startsWith("_"), container: cls });
+    if (indent === memberIndent) out.push({ name, kind: "method", line: lineNo, exported: !name.startsWith("_"), container: cls });
   });
 }
 var goReceiver = (receiver) => /\(\s*(?:[A-Za-z_]\w*\s+)?\*?\s*([A-Za-z_]\w*)/.exec(receiver)?.[1];
@@ -1171,8 +1091,7 @@ function extractGo(lines, out) {
       return;
     }
     const ty = /^type\s+([A-Za-z_]\w*)\s+(struct|interface)?/.exec(line);
-    if (!ty)
-      return;
+    if (!ty) return;
     const name = group(ty, 1);
     const word = group(ty, 2);
     const kind = word === "struct" ? "struct" : word === "interface" ? "interface" : "type";
@@ -1181,8 +1100,7 @@ function extractGo(lines, out) {
 }
 function rustImplTarget(line) {
   const m = /^\s*(?:unsafe\s+)?impl\b(?:\s*<[^>]*>)?\s+([^{]*)/.exec(line);
-  if (!m)
-    return void 0;
+  if (!m) return void 0;
   const text = group(m, 1).replace(/\bwhere\b.*$/, "");
   const target = text.includes(" for ") ? text.slice(text.indexOf(" for ") + 5) : text;
   return /(?:[A-Za-z_]\w*::)*([A-Za-z_]\w*)/.exec(target.replace(/^[\s&]+(?:mut\s+|dyn\s+)?/, ""))?.[1];
@@ -1190,24 +1108,21 @@ function rustImplTarget(line) {
 function extractRust(lines, out) {
   let block;
   eachLine(lines, out, (line, lineNo) => {
-    if (/^\}/.test(line))
-      block = void 0;
+    if (/^\}/.test(line)) block = void 0;
     const target = rustImplTarget(line);
     if (target) {
       block = target;
       return;
     }
     const m = /^(\s*)(pub(?:\([^)]*\))?\s+)?(?:(?:async|unsafe|const|extern(?:\s+"[^"]*")?)\s+)*(fn|struct|enum|trait|mod|type)\s+([A-Za-z_]\w*)/.exec(line);
-    if (!m)
-      return;
+    if (!m) return;
     const word = group(m, 3);
     const indented = group(m, 1).length > 0;
     const kind = word === "fn" ? indented ? "method" : "function" : word === "mod" ? "module" : word;
     const name = group(m, 4);
     const container = kind === "method" ? block : void 0;
     out.push({ name, kind, line: lineNo, exported: !!m[2], ...container ? { container } : {} });
-    if (word === "trait" && !indented)
-      block = name;
+    if (word === "trait" && !indented) block = name;
   });
 }
 var OO_TYPE = /^\s*(?:(?:public|private|protected|internal|static|final|abstract|sealed|open|data|partial|export|inline|value)\s+)*(class|interface|enum|record|object|struct|protocol|trait)\s+([A-Za-z_]\w*)/;
@@ -1223,8 +1138,7 @@ function extractOo(lines, out) {
       return;
     }
     const fn = OO_FUNC.exec(line);
-    if (fn)
-      out.push({ name: group(fn, 1), kind: /^\s/.test(line) ? "method" : "function", line: lineNo, exported });
+    if (fn) out.push({ name: group(fn, 1), kind: /^\s/.test(line) ? "method" : "function", line: lineNo, exported });
   });
 }
 function extractRuby(lines, out) {
@@ -1235,16 +1149,14 @@ function extractRuby(lines, out) {
       return;
     }
     const fn = /^(\s*)def\s+(?:self\.)?([A-Za-z_]\w*[?!=]?)/.exec(line);
-    if (fn)
-      out.push({ name: group(fn, 2), kind: group(fn, 1).length > 0 ? "method" : "function", line: lineNo, exported: true });
+    if (fn) out.push({ name: group(fn, 2), kind: group(fn, 1).length > 0 ? "method" : "function", line: lineNo, exported: true });
   });
 }
 var SQL_CREATE = /^\s*create\s+(?:or\s+replace\s+)?(?:unique\s+)?(table|view|materialized\s+view|function|procedure|index|type|trigger)\s+(?:concurrently\s+)?(?:if\s+not\s+exists\s+)?([\w."]+)/i;
 function extractSql(lines, out) {
   eachLine(lines, out, (line, lineNo) => {
     const m = SQL_CREATE.exec(line);
-    if (!m)
-      return;
+    if (!m) return;
     const word = group(m, 1).toLowerCase();
     const kind = word === "function" || word === "procedure" || word === "trigger" ? "function" : word === "index" || word === "type" ? "type" : "table";
     out.push({ name: group(m, 2).replace(/"/g, ""), kind, line: lineNo, exported: true });
@@ -1257,11 +1169,9 @@ function extractMarkdown(lines, out) {
       fenced2 = !fenced2;
       return;
     }
-    if (fenced2)
-      return;
+    if (fenced2) return;
     const m = /^(#{1,4})\s+(.+?)\s*#*\s*$/.exec(line);
-    if (m)
-      out.push({ name: `${group(m, 1)} ${group(m, 2).slice(0, 120)}`, kind: "heading", line: lineNo, exported: true });
+    if (m) out.push({ name: `${group(m, 1)} ${group(m, 2).slice(0, 120)}`, kind: "heading", line: lineNo, exported: true });
   });
 }
 var EXTRACTORS = {
@@ -1276,8 +1186,7 @@ var EXTRACTORS = {
 };
 function extractSymbols(path, content, cap = MAX_SYMBOLS_PER_FILE) {
   const language = languageOf(path);
-  if (!language)
-    return [];
+  if (!language) return [];
   const out = [];
   const outer = symbolCap;
   symbolCap = cap;
@@ -1292,7 +1201,7 @@ function formatSymbol(symbol) {
   return `L${symbol.line} ${symbol.kind} ${symbol.name}${symbol.exported && symbol.kind !== "heading" ? " (export)" : ""}`;
 }
 
-// ../packages/agent-tools/src/symbol-tools.js
+// ../packages/agent-tools/src/symbol-tools.ts
 var FIND_DEFAULT_LIMIT = 20;
 var FIND_MAX_LIMIT = 50;
 var OUTLINE_MAX_ENTRIES = 150;
@@ -1315,15 +1224,13 @@ var findSymbolTool = defineTool({
   requires: ["repo.symbols"],
   async execute(args, ctx) {
     const query = typeof args.query === "string" ? args.query.trim() : "";
-    if (!query)
-      return { data: { ok: false, error: "query is required" } };
+    if (!query) return { data: { ok: false, error: "query is required" } };
     const scope = typeof args.path === "string" && args.path.trim() ? args.path.trim() : void 0;
     const kind = asKind(args.kind);
     const requested = typeof args.limit === "number" && Number.isFinite(args.limit) ? Math.floor(args.limit) : FIND_DEFAULT_LIMIT;
     const limit = Math.min(FIND_MAX_LIMIT, Math.max(1, requested));
     const r = await ctx.caps.symbols.find(query, { scope, kind, limit });
-    if (!r.ok)
-      return { data: r };
+    if (!r.ok) return { data: r };
     const data = {
       ok: true,
       query,
@@ -1354,12 +1261,10 @@ var fileOutlineTool = defineTool({
   requires: ["repo.read", "repo.symbols"],
   async execute(args, ctx) {
     const path = typeof args.path === "string" ? args.path.trim() : "";
-    if (!path)
-      return { data: { ok: false, error: "path is required" } };
+    if (!path) return { data: { ok: false, error: "path is required" } };
     const kind = asKind(args.kind);
     const file = await ctx.caps.repoRead.readFile(path);
-    if (!file.ok)
-      return { data: file };
+    if (!file.ok) return { data: file };
     const content = file.content ?? "";
     const all = extractSymbols(path, content).filter((s) => !kind || s.kind === kind);
     const shown = all.slice(0, OUTLINE_MAX_ENTRIES);
@@ -1384,13 +1289,12 @@ function markdownOutline(path, content) {
 }
 var SYMBOL_TOOLS = [findSymbolTool, fileOutlineTool];
 
-// ../packages/agent-tools/src/fileRead.js
+// ../packages/agent-tools/src/fileRead.ts
 var OUTLINE_FIRST_MIN_CHARS = 16e3;
 var OUTLINE_FIRST_MIN_LINES = 300;
 var OUTLINE_FIRST_PREFIX_LINES = 40;
 function outlineFirstApplies(content, leverOn) {
-  if (leverOn !== true)
-    return false;
+  if (leverOn !== true) return false;
   const lines = content.split("\n").length;
   return content.length >= OUTLINE_FIRST_MIN_CHARS || lines >= OUTLINE_FIRST_MIN_LINES;
 }
@@ -1401,8 +1305,7 @@ function readFileKey(path, file, key) {
     return { ok: false, path, key, error: "the file is too large to load whole, so `key` cannot be used \u2014 page it with offset/limit" };
   }
   const read = readJsonKey(file.content ?? "", key);
-  if (!read.ok)
-    return { path, key, ...read };
+  if (!read.ok) return { path, key, ...read };
   if ("tooLarge" in read) {
     return {
       ok: true,
@@ -1417,10 +1320,8 @@ function readFileKey(path, file, key) {
 var isMarkdown = (path) => /\.mdx?$/i.test(path);
 async function readOneFile(path, opts, caps, leverOn) {
   const r = await caps.repoRead.readFile(path);
-  if (!r.ok)
-    return r;
-  if (opts.key)
-    return readFileKey(r.path ?? path, r, opts.key);
+  if (!r.ok) return r;
+  if (opts.key) return readFileKey(r.path ?? path, r, opts.key);
   const content = r.content ?? "";
   if (opts.offset === void 0 && opts.limit === void 0 && outlineFirstApplies(content, leverOn) && r.truncated !== true) {
     const symbols = extractSymbols(path, content).slice(0, 150).map((s) => `L${s.line} ${s.kind} ${s.name}${s.exported && s.kind !== "heading" ? " (export)" : ""}`);
@@ -1454,15 +1355,18 @@ async function readOneFile(path, opts, caps, leverOn) {
       note = note ? `${note} ${pointer}` : pointer;
     }
   }
-  if (note)
-    data.note = note;
+  if (note) data.note = note;
   return data;
 }
 async function readManyFiles(paths, opts, caps, leverOn) {
-  return Promise.all(paths.map((path) => readOneFile(path, opts, caps, leverOn).catch((err) => ({ ok: false, path, error: err instanceof Error ? err.message : String(err) }))));
+  return Promise.all(
+    paths.map(
+      (path) => readOneFile(path, opts, caps, leverOn).catch((err) => ({ ok: false, path, error: err instanceof Error ? err.message : String(err) }))
+    )
+  );
 }
 
-// ../packages/agent-tools/src/compress.js
+// ../packages/agent-tools/src/compress.ts
 var DEFAULT_COMPRESS_MIN_CHARS = 4e3;
 var DEFAULT_COMPRESS_RATE = 0.5;
 var FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})/;
@@ -1475,8 +1379,7 @@ function splitFences(text) {
   let buf = "";
   let fence = null;
   const flush = (kind) => {
-    if (buf)
-      out.push({ kind, text: buf });
+    if (buf) out.push({ kind, text: buf });
     buf = "";
   };
   for (const line of lines) {
@@ -1505,8 +1408,7 @@ async function compressLargeContext(text, opts = {}) {
   const minChars = opts.minChars ?? DEFAULT_COMPRESS_MIN_CHARS;
   const rate = opts.rate ?? DEFAULT_COMPRESS_RATE;
   const unchanged = { text, compressed: false, originalTokens: 0, keptTokens: 0 };
-  if (!opts.compress || text.length < minChars || !(rate > 0 && rate < 1))
-    return unchanged;
+  if (!opts.compress || text.length < minChars || !(rate > 0 && rate < 1)) return unchanged;
   let compressed = false;
   let originalTokens = 0;
   let keptTokens = 0;
@@ -1545,19 +1447,17 @@ async function compressToolOutput(text, ctx, tool) {
   return r;
 }
 async function compressShellResult(r, ctx) {
-  if (!r.ok || r.exitCode !== void 0 && r.exitCode !== 0 || typeof r.stdout !== "string")
-    return r;
+  if (!r.ok || r.exitCode !== void 0 && r.exitCode !== 0 || typeof r.stdout !== "string") return r;
   const c = await compressToolOutput(r.stdout, ctx, "run_command");
   return c.compressed ? { ...r, stdout: c.text, compressed: true } : r;
 }
 async function compressWebFetchResult(r, ctx) {
-  if (!r.ok || typeof r.content !== "string")
-    return r;
+  if (!r.ok || typeof r.content !== "string") return r;
   const c = await compressToolOutput(r.content, ctx, "web_fetch");
   return c.compressed ? { ...r, content: c.text, compressed: true } : r;
 }
 
-// ../packages/agent-tools/src/git-repo-scope.js
+// ../packages/agent-tools/src/git-repo-scope.ts
 function safeGitArg(v) {
   return typeof v === "string" && /^[\w./@-]+$/.test(v) && !v.startsWith("-") ? v : null;
 }
@@ -1569,32 +1469,26 @@ function safeRepoArg(repo) {
   return arg && !arg.split("/").includes("..") && !arg.startsWith("/") ? arg : null;
 }
 function invalidRepoResult(action, repo) {
-  if (typeof repo !== "string" || repo === "" || safeRepoArg(repo) !== null)
-    return null;
+  if (typeof repo !== "string" || repo === "" || safeRepoArg(repo) !== null) return null;
   return { data: { ok: false, action, error: `repo '${repo}' must be a directory inside the workspace (no '..', not absolute), so nothing was run` } };
 }
 function inferRepoFromPath(path) {
-  if (typeof path !== "string" || !path.trim())
-    return null;
+  if (typeof path !== "string" || !path.trim()) return null;
   const parts = path.split(/[\\/]/).filter((s) => s.length > 0 && s !== ".");
-  if (parts.length < 2)
-    return null;
+  if (parts.length < 2) return null;
   return safeRepoArg(parts[0]);
 }
 function buildListCheckoutsCommand() {
   return 'for d in */; do [ -e "$d.git" ] && printf "%s\\n" "${d%/}"; done';
 }
 function parseCheckoutList(stdout) {
-  if (!stdout)
-    return [];
+  if (!stdout) return [];
   const names = [];
   for (const line of stdout.split(/\r?\n/)) {
     const name = line.trim().replace(/\/+$/, "");
-    if (!name || name === "*" || name === "." || name === "..")
-      continue;
+    if (!name || name === "*" || name === "." || name === "..") continue;
     const safe = safeRepoArg(name);
-    if (safe)
-      names.push(safe);
+    if (safe) names.push(safe);
   }
   return names;
 }
@@ -1619,8 +1513,7 @@ function defaultRepoOf(ctx) {
   return safeRepoArg(ctx.caps.shell?.defaultRepo);
 }
 function pathInRepo(path, repo) {
-  if (!path)
-    return path;
+  if (!path) return path;
   const inner = commitPathCandidates(path, repo);
   return inner.length > 0 ? inner[inner.length - 1] : void 0;
 }
@@ -1637,11 +1530,9 @@ function commitPathCandidates(path, repo) {
   const dir = safeRepoArg(repo);
   if (dir) {
     const prefix = `${dir.replace(/\/+$/, "")}/`;
-    if (path.startsWith(prefix))
-      out.push(path.slice(prefix.length));
+    if (path.startsWith(prefix)) out.push(path.slice(prefix.length));
     const leaf = dir.split("/").filter(Boolean).pop();
-    if (leaf && path.startsWith(`${leaf}/`))
-      out.push(path.slice(leaf.length + 1));
+    if (leaf && path.startsWith(`${leaf}/`)) out.push(path.slice(leaf.length + 1));
   }
   return [...new Set(out)].filter((p) => p.trim() !== "");
 }
@@ -1650,29 +1541,23 @@ function scopeAttempts(ctx, path) {
   const fallback = defaultRepoOf(ctx);
   const shell = ctx.caps.shell;
   const attempts = [];
-  if (!(fallback && shell && rootNotARepo.has(shell)))
-    attempts.push({ path });
+  if (!(fallback && shell && rootNotARepo.has(shell))) attempts.push({ path });
   const inferred = inferRepoFromPath(path);
-  if (inferred)
-    attempts.push({ repo: inferred, path: pathInRepo(path, inferred) });
-  if (fallback && fallback !== inferred)
-    attempts.push({ repo: fallback, path: pathInRepo(path, fallback) });
+  if (inferred) attempts.push({ repo: inferred, path: pathInRepo(path, inferred) });
+  if (fallback && fallback !== inferred) attempts.push({ repo: fallback, path: pathInRepo(path, fallback) });
   return attempts;
 }
 async function runInRepoScope(ctx, scope, run) {
-  if (scope.repo)
-    return { r: await run(scope.repo, scope.path), repo: scope.repo };
+  if (scope.repo) return { r: await run(scope.repo, scope.path), repo: scope.repo };
   for (const attempt of scopeAttempts(ctx, scope.path)) {
     const r = await run(attempt.repo, attempt.path);
-    if (!isNotARepo(r))
-      return attempt.repo ? { r, repo: attempt.repo } : { r };
-    if (!attempt.repo && ctx.caps.shell)
-      rootNotARepo.add(ctx.caps.shell);
+    if (!isNotARepo(r)) return attempt.repo ? { r, repo: attempt.repo } : { r };
+    if (!attempt.repo && ctx.caps.shell) rootNotARepo.add(ctx.caps.shell);
   }
   return null;
 }
 
-// ../packages/agent-tools/src/shell-command-shape.js
+// ../packages/agent-tools/src/shell-command-shape.ts
 function withoutQuoted(command) {
   return command.replace(/"(?:[^"\\]|\\.)*"|'[^']*'/g, '""');
 }
@@ -1689,39 +1574,33 @@ function verbOf(stage) {
 var SEARCH_VERBS = /* @__PURE__ */ new Set(["grep", "egrep", "fgrep", "rg", "findstr", "ag", "ack"]);
 function isSearchStage(stage) {
   const verb = verbOf(stage);
-  if (SEARCH_VERBS.has(verb))
-    return true;
-  if (verb === "git")
-    return /^\S+\s+(?:-\S+\s+)*grep\b/.test(stage.replace(/^(?:\w+=\S*\s+)+/, ""));
+  if (SEARCH_VERBS.has(verb)) return true;
+  if (verb === "git") return /^\S+\s+(?:-\S+\s+)*grep\b/.test(stage.replace(/^(?:\w+=\S*\s+)+/, ""));
   return verb === "select-string" || verb === "sls";
 }
 function isSearchCommand(command) {
   const bare = withoutQuoted(command);
-  if (isChained(bare))
-    return false;
+  if (isChained(bare)) return false;
   return isSearchStage(stages(bare).pop() ?? "");
 }
 var NO_OUTPUT = /^\s*(\(no output\))?\s*$/;
 function searchNoMatch(command, result) {
-  if (result.ok || result.exitCode !== 1 || result.aborted || result.error)
-    return result;
-  if (!NO_OUTPUT.test(result.stdout ?? "") || !isSearchCommand(command))
-    return result;
+  if (result.ok || result.exitCode !== 1 || result.aborted || result.error) return result;
+  if (!NO_OUTPUT.test(result.stdout ?? "") || !isSearchCommand(command)) return result;
   const { exitCode: _exit, ...rest } = result;
   return { ...rest, ok: true, matches: 0, stdout: "(no matches \u2014 the search exited 1 with no output)" };
 }
 
-// ../packages/agent-tools/src/shell-pipe.js
+// ../packages/agent-tools/src/shell-pipe.ts
 var TRAILING_TAIL = /\s*\|\s*(?:2>&1\s*\|\s*)?tail\s+(?:-\s*(?:n\s+)?)?(\d+)\s*$/;
 function stripTailLimit(command) {
   const m = TRAILING_TAIL.exec(command);
-  if (!m)
-    return { command, stripped: false };
+  if (!m) return { command, stripped: false };
   const n = Number.parseInt(m[1] ?? "", 10);
   return { command: command.slice(0, m.index).trimEnd(), tail: Number.isFinite(n) ? n : void 0, stripped: true };
 }
 
-// ../packages/agent-tools/src/shell-output-filter.js
+// ../packages/agent-tools/src/shell-output-filter.ts
 var DEFAULT_WINDOW = 200;
 var MAX_LINE_CHARS = 2e3;
 function lineCount(v) {
@@ -1774,11 +1653,9 @@ var outputFilterTool = defineTool({
   requires: ["shell.outputs"],
   async execute(args, ctx) {
     const outputId = typeof args.outputId === "string" ? args.outputId.trim() : "";
-    if (!outputId)
-      return { data: { ok: false, error: "outputId is required" } };
+    if (!outputId) return { data: { ok: false, error: "outputId is required" } };
     const read = ctx.caps.shell?.output;
-    if (!read)
-      return { data: { ok: false, error: "retained command outputs are not available on this surface" } };
+    if (!read) return { data: { ok: false, error: "retained command outputs are not available on this surface" } };
     const text = await read.call(ctx.caps.shell, outputId);
     if (text === void 0) {
       return { data: { ok: false, outputId, error: `no retained output "${outputId}" in this run (only the last commands are kept) \u2014 run the command again` } };
@@ -1794,26 +1671,21 @@ var outputFilterTool = defineTool({
   }
 });
 
-// ../packages/agent-tools/src/shell-tools.js
+// ../packages/agent-tools/src/shell-tools.ts
 var SHELL_WAIT_MAX_MS = 10 * 60 * 1e3;
 function waitArg(v) {
   return typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.min(Math.floor(v), SHELL_WAIT_MAX_MS) : void 0;
 }
 function cwdArg(v) {
-  if (v == null || v === "")
-    return void 0;
-  if (typeof v !== "string")
-    return null;
+  if (v == null || v === "") return void 0;
+  if (typeof v !== "string") return null;
   const dir = v.trim().split("\\").join("/").replace(/^(\.\/)+/, "").replace(/\/+$/, "");
-  if (dir === "" || dir === ".")
-    return ".";
+  if (dir === "" || dir === ".") return ".";
   return safeRepoArg(dir);
 }
 function commandDir(command, cwd, defaultRepo) {
-  if (cwd)
-    return cwd === "." ? void 0 : cwd;
-  if (/^\s*(cd|pushd)\s/i.test(command))
-    return void 0;
+  if (cwd) return cwd === "." ? void 0 : cwd;
+  if (/^\s*(cd|pushd)\s/i.test(command)) return void 0;
   return safeRepoArg(defaultRepo) ?? void 0;
 }
 var jobNote = (id) => `Running in the background (job ${id}). Keep working; check it with command_status { "id": "${id}" } (pass waitMs to wait for it), stop it with command_stop { "id": "${id}" }.`;
@@ -1833,8 +1705,7 @@ async function runShellCommand(args, ctx) {
   const stripped = stripTailLimit(typeof args.command === "string" ? args.command : "");
   const command = stripped.command;
   const tailNote = stripped.stripped ? `ran without the trailing \`| tail -${stripped.tail}\` \u2014 the full output is retained under \`outputId\`; read its head with output_filter { outputId, head: \u2026 }. ` : "";
-  if (!command.trim())
-    return { data: { ok: false, error: "command is required" } };
+  if (!command.trim()) return { data: { ok: false, error: "command is required" } };
   const cwd = cwdArg(args.cwd);
   if (cwd === null) {
     return { data: { ok: false, error: "`cwd` must be a directory inside the workspace, relative to its root (no `..`, no absolute path)." } };
@@ -1847,14 +1718,11 @@ async function runShellCommand(args, ctx) {
   let note;
   if (background || yieldMs !== void 0) {
     if (shell.start && shell.poll) {
-      if (ctx.signal?.aborted)
-        return { data: { ok: false, aborted: true, error: "stopped before the command started", ...where } };
+      if (ctx.signal?.aborted) return { data: { ok: false, aborted: true, error: "stopped before the command started", ...where } };
       const started = await (dir ? shell.start(command, { cwd: dir }) : shell.start(command));
-      if (!started.ok || !started.id)
-        return { data: { ok: false, error: started.error ?? "the background job did not start", ...where } };
+      if (!started.ok || !started.id) return { data: { ok: false, error: started.error ?? "the background job did not start", ...where } };
       const id = started.id;
-      if (background)
-        return { data: { ok: true, background: true, id, status: "running", note: jobNote(id), ...where } };
+      if (background) return { data: { ok: true, background: true, id, status: "running", note: jobNote(id), ...where } };
       const st = await shell.poll(id, { waitMs: yieldMs, ...ctx.signal ? { signal: ctx.signal } : {} });
       if (st.status === "running") {
         const why = ctx.signal?.aborted ? "The wait was interrupted" : `Still running after ${yieldMs}ms`;
@@ -1871,8 +1739,7 @@ async function runShellCommand(args, ctx) {
   return { data: { ...r, ...where, ...notes ? { note: notes } : {} } };
 }
 async function compressedJobStatus(st, ctx) {
-  if (st.status === "running" || typeof st.output !== "string")
-    return st;
+  if (st.status === "running" || typeof st.output !== "string") return st;
   const r = await compressShellResult(finishedJob(st), ctx);
   return r.compressed && typeof r.stdout === "string" ? { ...st, output: r.stdout } : st;
 }
@@ -1893,11 +1760,9 @@ var commandStatusTool = defineTool({
   requires: ["shell.jobs"],
   async execute(args, ctx) {
     const id = jobId(args);
-    if (!id)
-      return { data: { ok: false, error: "id is required" } };
+    if (!id) return { data: { ok: false, error: "id is required" } };
     const poll = ctx.caps.shell?.poll;
-    if (!poll)
-      return { data: { ok: false, error: "background commands are not available on this surface" } };
+    if (!poll) return { data: { ok: false, error: "background commands are not available on this surface" } };
     const waitMs = waitArg(args.waitMs);
     const st = await poll.call(ctx.caps.shell, id, { ...waitMs !== void 0 ? { waitMs } : {}, ...ctx.signal ? { signal: ctx.signal } : {} });
     return { data: await compressedJobStatus(st, ctx) };
@@ -1914,18 +1779,16 @@ var commandStopTool = defineTool({
   requires: ["shell.jobs"],
   async execute(args, ctx) {
     const id = jobId(args);
-    if (!id)
-      return { data: { ok: false, error: "id is required" } };
+    if (!id) return { data: { ok: false, error: "id is required" } };
     const kill = ctx.caps.shell?.kill;
-    if (!kill)
-      return { data: { ok: false, error: "background commands are not available on this surface" } };
+    if (!kill) return { data: { ok: false, error: "background commands are not available on this surface" } };
     const st = await kill.call(ctx.caps.shell, id);
     return { data: await compressedJobStatus(st, ctx) };
   }
 });
 var SHELL_JOB_TOOLS = [commandStatusTool, commandStopTool, outputFilterTool];
 
-// ../packages/agent-tools/src/git-status.js
+// ../packages/agent-tools/src/git-status.ts
 var GIT_STATUS_COMMAND = "git status --short --branch";
 var GIT_STATUS_MAX_PATHS = 20;
 var MAX_ENTRIES = 200;
@@ -1939,8 +1802,7 @@ function statusPaths(paths) {
 }
 function buildStatusCommand(paths, repo) {
   const wanted = statusPaths(paths);
-  if (wanted.length === 0)
-    return GIT_STATUS_COMMAND;
+  if (wanted.length === 0) return GIT_STATUS_COMMAND;
   const candidatesOf = (p) => commitPathCandidates(p, repo);
   const spec2 = [...new Set(wanted.flatMap(candidatesOf))].map(shellQuote).join(" ");
   const log = (p) => `"$(git --no-pager log -1 --format='${LOG_FORMAT}' -- ${shellQuote(p)} 2>/dev/null)"`;
@@ -1949,15 +1811,15 @@ function buildStatusCommand(paths, repo) {
     const [first, ...rest] = candidatesOf(p);
     lines.push(`echo "${PATH_MARK} ${i}"`);
     lines.push(`L=${log(first ?? p)}`);
-    for (const c of rest)
-      lines.push(`[ -n "$L" ] || L=${log(c)}`);
-    lines.push(`[ -z "$L" ] || { printf '%s\\n' "$L"; git merge-base --is-ancestor "\${L%% *}" '@{u}' 2>/dev/null && echo "${PUSHED_MARK} yes" || echo "${PUSHED_MARK} no"; }`);
+    for (const c of rest) lines.push(`[ -n "$L" ] || L=${log(c)}`);
+    lines.push(
+      `[ -z "$L" ] || { printf '%s\\n' "$L"; git merge-base --is-ancestor "\${L%% *}" '@{u}' 2>/dev/null && echo "${PUSHED_MARK} yes" || echo "${PUSHED_MARK} no"; }`
+    );
   });
   return lines.join("\n");
 }
 function unquoteGitPath(s) {
-  if (s.length < 2 || !s.startsWith('"') || !s.endsWith('"'))
-    return s;
+  if (s.length < 2 || !s.startsWith('"') || !s.endsWith('"')) return s;
   const body = s.slice(1, -1);
   const enc = new TextEncoder();
   const bytes = [];
@@ -1982,35 +1844,28 @@ function unquoteGitPath(s) {
 }
 function parseHeader(line) {
   const header = { branch: null, upstream: null, ahead: 0, behind: 0 };
-  if (!line)
-    return header;
+  if (!line) return header;
   const text = line.replace(/^##\s*/, "");
   const initial = /^(?:No commits yet on|Initial commit on) (.+)$/.exec(text);
-  if (initial)
-    return { ...header, branch: initial[1].trim(), noCommits: true };
-  if (/^HEAD \(no branch\)/.test(text))
-    return { ...header, detached: true };
+  if (initial) return { ...header, branch: initial[1].trim(), noCommits: true };
+  if (/^HEAD \(no branch\)/.test(text)) return { ...header, detached: true };
   const [names = "", bracket = ""] = text.split(/ \[(.*)\]$/);
   const dots = names.indexOf("...");
   header.branch = (dots === -1 ? names : names.slice(0, dots)).trim() || null;
-  if (dots !== -1)
-    header.upstream = names.slice(dots + 3).trim() || null;
+  if (dots !== -1) header.upstream = names.slice(dots + 3).trim() || null;
   header.ahead = Number(/ahead (\d+)/.exec(bracket)?.[1] ?? 0);
   header.behind = Number(/behind (\d+)/.exec(bracket)?.[1] ?? 0);
-  if (/\bgone\b/.test(bracket))
-    header.upstreamGone = true;
+  if (/\bgone\b/.test(bracket)) header.upstreamGone = true;
   return header;
 }
 var CONFLICT = /* @__PURE__ */ new Set(["DD", "AU", "UD", "UA", "DU", "AA", "UU"]);
 function parseEntries(lines) {
   const out = { staged: [], unstaged: [], untracked: [], conflicted: [] };
   for (const line of lines) {
-    if (line.length < 4 || line.startsWith("##"))
-      continue;
+    if (line.length < 4 || line.startsWith("##")) continue;
     const xy = line.slice(0, 2);
     const rest = line.slice(3);
-    if (xy === "!!")
-      continue;
+    if (xy === "!!") continue;
     if (xy === "??") {
       out.untracked.push(unquoteGitPath(rest));
       continue;
@@ -2023,10 +1878,8 @@ function parseEntries(lines) {
       continue;
     }
     const [x, y] = [xy[0], xy[1]];
-    if (x !== " ")
-      out.staged.push({ path, status: x, ...from && (x === "R" || x === "C") ? { from } : {} });
-    if (y !== " ")
-      out.unstaged.push({ path, status: y });
+    if (x !== " ") out.staged.push({ path, status: x, ...from && (x === "R" || x === "C") ? { from } : {} });
+    if (y !== " ") out.unstaged.push({ path, status: y });
   }
   return out;
 }
@@ -2034,8 +1887,7 @@ function parsePathSections(sections, paths, upstreamUsable) {
   return paths.map((path, i) => {
     const lines = sections[i] ?? [];
     const logLine = lines.find((l) => l.includes(US));
-    if (!logLine)
-      return { path, lastCommit: null, onUpstream: null };
+    if (!logLine) return { path, lastCommit: null, onUpstream: null };
     const space = logLine.indexOf(" ");
     const [author = "", email = "", date = "", ...subject] = logLine.slice(space + 1).split(US);
     const pushed = lines.find((l) => l.startsWith(PUSHED_MARK));
@@ -2054,10 +1906,8 @@ function parseGitStatusOutput(stdout, paths) {
   if (firstMark !== -1) {
     for (const line of lines.slice(firstMark)) {
       const mark = new RegExp(`^${PATH_MARK} (\\d+)$`).exec(line);
-      if (mark)
-        sections[Number(mark[1])] = [];
-      else
-        sections[sections.length - 1]?.push(line);
+      if (mark) sections[Number(mark[1])] = [];
+      else sections[sections.length - 1]?.push(line);
     }
   }
   const header = parseHeader(statusLines.find((l) => l.startsWith("##")));
@@ -2073,12 +1923,11 @@ function parseGitStatusOutput(stdout, paths) {
     ...truncated ? { truncated: true } : {}
   };
   const wanted = statusPaths(paths);
-  if (wanted.length > 0)
-    report.paths = parsePathSections(sections, wanted, !!header.upstream && !header.upstreamGone);
+  if (wanted.length > 0) report.paths = parsePathSections(sections, wanted, !!header.upstream && !header.upstreamGone);
   return { output: statusLines.join("\n").trim(), report };
 }
 
-// ../packages/agent-tools/src/git-script-parts.js
+// ../packages/agent-tools/src/git-script-parts.ts
 var RESOLVE_BASE = `BASE="$(git remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p')"; [ -n "$BASE" ] || BASE=main`;
 var IDENTITY_EMAIL = 'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"';
 var IDENTITY_NAME = 'git config user.name  >/dev/null 2>&1 || git config user.name  "Builderforce Agent"';
@@ -2087,7 +1936,7 @@ var REPO_PARAM = {
   description: 'Optional subdirectory holding the repository, when the open folder CONTAINS checkouts rather than being one (e.g. "my-project"). Omit when the workspace root is itself the repo.'
 };
 
-// ../packages/agent-tools/src/git-publish-tools.js
+// ../packages/agent-tools/src/git-publish-tools.ts
 function buildCommitCommand(opts) {
   const branch = safeGitArg(opts.branch);
   const resolveLines = opts.paths.map((p, i) => {
@@ -2193,7 +2042,9 @@ function publishToolResult(action, r) {
   const out = (r.stdout ?? "").trim();
   const fail = (error) => ({ data: { ok: false, action, error, output: out } });
   if (r.exitCode === 5 || /\bON_BASE_BRANCH\b/.test(out)) {
-    return fail(action === "push" ? "you are on the BASE branch (main/master) and `allowBaseBranch` was not set \u2014 pushing here bypasses pull-request review. Open a pull request instead (git_commit with a `branch`, then open_pull_request). If the human has explicitly asked you to push the base branch, or your session instructions make you the reviewer of your own change and you have self-reviewed it, re-call with allowBaseBranch:true; they will be prompted to approve it." : "you are on the BASE branch (main/master) and `allowBaseBranch` was not set \u2014 committing here bypasses pull-request review. Pass `branch` to git_commit to work on a ticket branch (it is created for you), then open_pull_request. If the human has explicitly asked you to commit to the base branch directly, or your session instructions make you the reviewer of your own change and you have self-reviewed it, re-call with allowBaseBranch:true; they will be prompted to approve it.");
+    return fail(
+      action === "push" ? "you are on the BASE branch (main/master) and `allowBaseBranch` was not set \u2014 pushing here bypasses pull-request review. Open a pull request instead (git_commit with a `branch`, then open_pull_request). If the human has explicitly asked you to push the base branch, or your session instructions make you the reviewer of your own change and you have self-reviewed it, re-call with allowBaseBranch:true; they will be prompted to approve it." : "you are on the BASE branch (main/master) and `allowBaseBranch` was not set \u2014 committing here bypasses pull-request review. Pass `branch` to git_commit to work on a ticket branch (it is created for you), then open_pull_request. If the human has explicitly asked you to commit to the base branch directly, or your session instructions make you the reviewer of your own change and you have self-reviewed it, re-call with allowBaseBranch:true; they will be prompted to approve it."
+    );
   }
   if (r.exitCode === 6 || /\bNOTHING_STAGED\b/.test(out)) {
     return fail("none of the named paths have uncommitted changes \u2014 nothing was committed. Run git_status to see what actually differs; do not report a commit that did not happen.");
@@ -2201,13 +2052,17 @@ function publishToolResult(action, r) {
   const missing = /MISSING_PATHS:([^\n]*)/.exec(out);
   if (r.exitCode === 8 || missing) {
     const named = (missing?.[1] ?? "").trim();
-    return fail(`these paths do not exist in the repository, so nothing was committed:${named ? ` ${named}` : ""}. \`paths\` are relative to the REPOSITORY root \u2014 when you pass \`repo\`, that means relative to the repo directory, NOT to the workspace root your file tools use. Run git_status (with the same \`repo\`) and copy the paths it prints.`);
+    return fail(
+      `these paths do not exist in the repository, so nothing was committed:${named ? ` ${named}` : ""}. \`paths\` are relative to the REPOSITORY root \u2014 when you pass \`repo\`, that means relative to the repo directory, NOT to the workspace root your file tools use. Run git_status (with the same \`repo\`) and copy the paths it prints.`
+    );
   }
   if (r.exitCode === 9 || /\bNOTHING_TO_CLEAN\b/.test(out)) {
     return fail("you are already on the base branch and no ticket branch was named \u2014 there is nothing to clean up. Pass `branch` to name the merged branch to delete.");
   }
   if (r.exitCode === 10 || /\bNOT_MERGED\b/.test(out)) {
-    return fail("that branch's commits are NOT in the base branch, so it was left alone \u2014 deleting it would destroy unmerged work. If the pull request was SQUASH-merged (the commits are in main under a new hash and the remote branch still exists), re-call with force:true to delete it anyway.");
+    return fail(
+      "that branch's commits are NOT in the base branch, so it was left alone \u2014 deleting it would destroy unmerged work. If the pull request was SQUASH-merged (the commits are in main under a new hash and the remote branch still exists), re-call with force:true to delete it anyway."
+    );
   }
   if (r.exitCode === 11 || /\bNO_SUCH_BRANCH\b/.test(out)) {
     return fail("no local branch by that name \u2014 it has already been deleted. Nothing to do.");
@@ -2223,8 +2078,7 @@ function publishToolResult(action, r) {
 function invalidRefResult(action, refs) {
   for (const [name, value] of Object.entries(refs)) {
     for (const v of Array.isArray(value) ? value : [value]) {
-      if (typeof v !== "string" || v === "" || safeGitArg(v) !== null)
-        continue;
+      if (typeof v !== "string" || v === "" || safeGitArg(v) !== null) continue;
       return {
         data: {
           ok: false,
@@ -2238,15 +2092,12 @@ function invalidRefResult(action, refs) {
 }
 async function runPublishTool(action, command, repo, ctx) {
   const refused = invalidRepoResult(action, repo);
-  if (refused)
-    return refused;
+  if (refused) return refused;
   const build = (scope) => typeof command === "string" ? command : command(scope);
   const ran = await runInRepoScope(ctx, repo ? { repo } : {}, (scope) => shellRunWithStop(ctx, build(scope), safeRepoArg(scope) ?? void 0));
-  if (!ran)
-    return notARepoWithCandidates(action, ctx);
+  if (!ran) return notARepoWithCandidates(action, ctx);
   const result = publishToolResult(action, ran.r);
-  if (ran.repo && result.data.ok)
-    result.data.repo = ran.repo;
+  if (ran.repo && result.data.ok) result.data.repo = ran.repo;
   return result;
 }
 var gitCommitTool = defineTool({
@@ -2266,17 +2117,20 @@ var gitCommitTool = defineTool({
   requires: ["git.write"],
   execute: (args, ctx) => {
     const message = typeof args.message === "string" ? args.message.trim() : "";
-    if (!message)
-      return Promise.resolve({ data: { ok: false, action: "commit", error: "message is required" } });
+    if (!message) return Promise.resolve({ data: { ok: false, action: "commit", error: "message is required" } });
     const paths = Array.isArray(args.paths) ? args.paths.filter((p) => typeof p === "string" && p.trim() !== "") : [];
     if (paths.length === 0) {
       return Promise.resolve({ data: { ok: false, action: "commit", error: "paths is required \u2014 list the exact files you changed. Run git_status to see them. Do not pass '.' or '-A': the working tree may hold changes that are not yours." } });
     }
     const badRef = invalidRefResult("commit", { branch: args.branch });
-    if (badRef)
-      return Promise.resolve(badRef);
+    if (badRef) return Promise.resolve(badRef);
     const repo = typeof args.repo === "string" ? args.repo : void 0;
-    return runPublishTool("commit", (scope) => buildCommitCommand({ message, paths, branch: typeof args.branch === "string" ? args.branch : void 0, allowBaseBranch: args.allowBaseBranch === true, repo: scope }), repo, ctx);
+    return runPublishTool(
+      "commit",
+      (scope) => buildCommitCommand({ message, paths, branch: typeof args.branch === "string" ? args.branch : void 0, allowBaseBranch: args.allowBaseBranch === true, repo: scope }),
+      repo,
+      ctx
+    );
   }
 });
 var gitPushTool = defineTool({
@@ -2313,14 +2167,17 @@ var openPullRequestTool = defineTool({
   execute: (args, ctx) => {
     const title = typeof args.title === "string" ? args.title.trim() : "";
     const body = typeof args.body === "string" ? args.body : "";
-    if (!title)
-      return Promise.resolve({ data: { ok: false, action: "pull_request", error: "title is required" } });
+    if (!title) return Promise.resolve({ data: { ok: false, action: "pull_request", error: "title is required" } });
     const repo = typeof args.repo === "string" ? args.repo : void 0;
     const reviewers = Array.isArray(args.reviewers) ? args.reviewers.filter((r) => typeof r === "string") : void 0;
     const badRef = invalidRefResult("pull_request", { base: args.base, reviewers });
-    if (badRef)
-      return Promise.resolve(badRef);
-    return runPublishTool("pull_request", buildPullRequestCommand({ title, body, base: typeof args.base === "string" ? args.base : void 0, reviewers }), repo, ctx);
+    if (badRef) return Promise.resolve(badRef);
+    return runPublishTool(
+      "pull_request",
+      buildPullRequestCommand({ title, body, base: typeof args.base === "string" ? args.base : void 0, reviewers }),
+      repo,
+      ctx
+    );
   }
 });
 var gitCleanupMergedTool = defineTool({
@@ -2338,18 +2195,22 @@ var gitCleanupMergedTool = defineTool({
   requires: ["git.write"],
   execute: (args, ctx) => {
     const badRef = invalidRefResult("cleanup", { branch: args.branch, baseBranch: args.baseBranch });
-    if (badRef)
-      return Promise.resolve(badRef);
+    if (badRef) return Promise.resolve(badRef);
     const repo = typeof args.repo === "string" ? args.repo : void 0;
-    return runPublishTool("cleanup", buildCleanupCommand({
-      branch: typeof args.branch === "string" ? args.branch : void 0,
-      baseBranch: typeof args.baseBranch === "string" ? args.baseBranch : void 0,
-      force: args.force === true
-    }), repo, ctx);
+    return runPublishTool(
+      "cleanup",
+      buildCleanupCommand({
+        branch: typeof args.branch === "string" ? args.branch : void 0,
+        baseBranch: typeof args.baseBranch === "string" ? args.baseBranch : void 0,
+        force: args.force === true
+      }),
+      repo,
+      ctx
+    );
   }
 });
 
-// ../packages/agent-tools/src/git-tools.js
+// ../packages/agent-tools/src/git-tools.ts
 function buildGitCommand(action, opts) {
   const path = safeGitArg(opts?.path);
   const pathArg = path ? ` -- "${path}"` : "";
@@ -2414,15 +2275,13 @@ function gitToolResult(action, r, paths) {
 }
 async function runGitTool(action, opts, ctx) {
   const refused = invalidRepoResult(action, opts.repo);
-  if (refused)
-    return refused;
+  if (refused) return refused;
   const trackedBranch = ctx.caps.shell?.trackedBranch;
   const remote = trackedBranch && (action === "sync_latest" || action === "undo" || action === "redo") ? ctx.caps.shell?.git : void 0;
   let baseBranch = opts.baseBranch;
   if (remote) {
     const synced = await remote.sync({ baseBranch: opts.baseBranch });
-    if (!synced.ok)
-      return { data: { ok: false, action, error: `could not fetch from the remote: ${synced.error ?? "unknown error"}` } };
+    if (!synced.ok) return { data: { ok: false, action, error: `could not fetch from the remote: ${synced.error ?? "unknown error"}` } };
     baseBranch = synced.baseBranch ?? baseBranch;
   }
   const scope = { repo: opts.repo, path: opts.path ?? opts.paths?.[0] };
@@ -2434,12 +2293,10 @@ async function runGitTool(action, opts, ctx) {
     ...trackedBranch ? { trackedBranch } : {},
     ...remote ? { remoteViaSandbox: true } : {}
   }), safeRepoArg(repo) ?? void 0));
-  if (!ran)
-    return notARepoWithCandidates(action, ctx);
+  if (!ran) return notARepoWithCandidates(action, ctx);
   if (remote && ran.r.ok) {
     const published = await remote.publish({ force: action !== "sync_latest" });
-    if (!published.ok)
-      return { data: { ok: false, action, error: `the change was made locally but could not be published: ${published.error ?? "unknown error"}` } };
+    if (!published.ok) return { data: { ok: false, action, error: `the change was made locally but could not be published: ${published.error ?? "unknown error"}` } };
   }
   const result = gitToolResult(action, ran.r, opts.paths);
   if (ran.repo && result.data.ok) {
@@ -2518,28 +2375,24 @@ var GIT_TOOLS = [
   gitCleanupMergedTool
 ];
 
-// ../packages/agent-tools/src/retrievalK.js
+// ../packages/agent-tools/src/retrievalK.ts
 var ADAPTIVE_K_START = 3;
 var ADAPTIVE_K_FLOOR = 0.5;
 var ADAPTIVE_K_HEAD_MARGIN = 0.15;
 var positiveInt = (n, fallback) => typeof n === "number" && Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : fallback;
 function hasClearHead(scores, start = ADAPTIVE_K_START, floor = ADAPTIVE_K_FLOOR, headMargin = ADAPTIVE_K_HEAD_MARGIN) {
   const top = Number(scores[0]);
-  if (!Number.isFinite(top) || top < floor || top <= 0)
-    return false;
-  if (scores.length <= start)
-    return true;
+  if (!Number.isFinite(top) || top < floor || top <= 0) return false;
+  if (scores.length <= start) return true;
   const firstDropped = Number(scores[start]);
-  if (!Number.isFinite(firstDropped))
-    return true;
+  if (!Number.isFinite(firstDropped)) return true;
   return (top - firstDropped) / top >= headMargin;
 }
 function chooseK(input) {
   const n = input.scores.length;
   const requested = positiveInt(input.requested, 0);
   const ceiling = Math.min(requested, positiveInt(input.max, requested), n);
-  if (ceiling <= 0)
-    return 0;
+  if (ceiling <= 0) return 0;
   const start = Math.max(1, Math.min(positiveInt(input.start, ADAPTIVE_K_START), ceiling));
   let k = hasClearHead(input.scores, start, input.floor ?? ADAPTIVE_K_FLOOR, input.headMargin ?? ADAPTIVE_K_HEAD_MARGIN) ? start : ceiling;
   const budget = input.budgetTokens;
@@ -2548,8 +2401,7 @@ function chooseK(input) {
     let fit = 0;
     for (let i = 0; i < k; i++) {
       used += Math.max(0, Number(input.itemTokens[i] ?? 0) || 0);
-      if (used > budget)
-        break;
+      if (used > budget) break;
       fit = i + 1;
     }
     k = Math.max(1, fit);
@@ -2557,7 +2409,7 @@ function chooseK(input) {
   return k;
 }
 
-// ../packages/agent-tools/src/proseCompress.js
+// ../packages/agent-tools/src/proseCompress.ts
 var PROSE_BY_EXT = {
   md: "markdown",
   mdx: "markdown",
@@ -2578,8 +2430,7 @@ function proseKindOf(path) {
   return PROSE_BY_EXT[ext] ?? "code";
 }
 async function compressProse(text, kind, opts = {}) {
-  if (kind === "code" || !opts.compress)
-    return { text, compressed: false, originalTokens: 0, keptTokens: 0 };
+  if (kind === "code" || !opts.compress) return { text, compressed: false, originalTokens: 0, keptTokens: 0 };
   return compressLargeContext(text, {
     compress: opts.compress,
     ...opts.minChars !== void 0 ? { minChars: opts.minChars } : {},
@@ -2587,7 +2438,7 @@ async function compressProse(text, kind, opts = {}) {
   });
 }
 
-// ../packages/agent-tools/src/read-compressed-tool.js
+// ../packages/agent-tools/src/read-compressed-tool.ts
 var READ_COMPRESSED_MIN_CHARS = 1500;
 var RATE_MIN = 0.2;
 var RATE_MAX = 0.9;
@@ -2605,18 +2456,15 @@ var readCompressedTool = defineTool({
   requires: ["repo.read", "repo.compress"],
   async execute(args, ctx) {
     const path = typeof args.path === "string" ? args.path.trim() : "";
-    if (!path)
-      return { data: { ok: false, error: "path is required" } };
+    if (!path) return { data: { ok: false, error: "path is required" } };
     const kind = proseKindOf(path);
     if (kind === "code") {
       return { data: { ok: false, path, error: `read_compressed only reads prose (${PROSE_EXTENSIONS.join(" ")}). Use read_file for code \u2014 an edit needs the exact text.` } };
     }
     const semantic = ctx.caps.semantic;
-    if (!semantic?.compress)
-      return { data: { ok: false, path, error: "Compression is not available on this surface right now \u2014 use read_file." } };
+    if (!semantic?.compress) return { data: { ok: false, path, error: "Compression is not available on this surface right now \u2014 use read_file." } };
     const read = await ctx.caps.repoRead.readFile(path);
-    if (!read.ok || typeof read.content !== "string")
-      return { data: read };
+    if (!read.ok || typeof read.content !== "string") return { data: read };
     const rate = typeof args.rate === "number" && Number.isFinite(args.rate) ? Math.min(RATE_MAX, Math.max(RATE_MIN, args.rate)) : void 0;
     const r = await compressProse(read.content, kind, {
       compress: (t, k) => semantic.compress(t, k),
@@ -2631,15 +2479,13 @@ var readCompressedTool = defineTool({
     } else {
       data.note = read.content.length < READ_COMPRESSED_MIN_CHARS ? "Short enough to read as-is \u2014 returned uncompressed." : "Compression did not shorten this text \u2014 returned as-is.";
     }
-    if (read.truncated)
-      data.truncated = true;
-    if (r.compressed)
-      ctx.emit?.({ level: "debug", message: "read_compressed: compressed (C8)", detail: { originalTokens: r.originalTokens, keptTokens: r.keptTokens } });
+    if (read.truncated) data.truncated = true;
+    if (r.compressed) ctx.emit?.({ level: "debug", message: "read_compressed: compressed (C8)", detail: { originalTokens: r.originalTokens, keptTokens: r.keptTokens } });
     return { data };
   }
 });
 
-// ../packages/agent-tools/src/semantic-tools.js
+// ../packages/agent-tools/src/semantic-tools.ts
 var SEARCH_DEFAULT_LIMIT = 8;
 var SEARCH_MAX_LIMIT = 25;
 var MAP_DEFAULT_TOKENS = 1500;
@@ -2659,16 +2505,14 @@ var semanticSearchTool = defineTool({
   requires: ["repo.semantic"],
   async execute(args, ctx) {
     const query = typeof args.query === "string" ? args.query.trim() : "";
-    if (!query)
-      return { data: { ok: false, error: "query is required" } };
+    if (!query) return { data: { ok: false, error: "query is required" } };
     const scope = typeof args.path === "string" && args.path.trim() ? args.path.trim() : void 0;
     const explicit = typeof args.limit === "number" && Number.isFinite(args.limit);
     const requested = explicit ? Math.floor(args.limit) : SEARCH_DEFAULT_LIMIT;
     const limit = Math.min(SEARCH_MAX_LIMIT, Math.max(1, requested));
     const semantic = ctx.caps.semantic;
     const r = await semantic.search(query, { scope, limit });
-    if (!r.ok)
-      return { data: r };
+    if (!r.ok) return { data: r };
     let hits = r.results ?? [];
     if (semantic.adaptive && !explicit && hits.length > 0) {
       hits = hits.slice(0, chooseK({ requested: limit, scores: hits.map((h) => typeof h.score === "number" ? h.score : Number.NaN) }));
@@ -2707,24 +2551,22 @@ var repoMapTool = defineTool({
     const maxTokens = Math.min(MAP_MAX_TOKENS, Math.max(200, requested));
     const query = typeof args.query === "string" && args.query.trim() ? args.query.trim() : void 0;
     const r = await ctx.caps.semantic.repoMap({ maxTokens, focus, ...query ? { query } : {} });
-    if (!r.ok)
-      return { data: r };
+    if (!r.ok) return { data: r };
     const data = { ok: true, map: r.map ?? "" };
-    if (r.indexing)
-      data.note = "The index is still being built \u2014 the map covers only the files scanned so far.";
+    if (r.indexing) data.note = "The index is still being built \u2014 the map covers only the files scanned so far.";
     return { data };
   }
 });
 var SEMANTIC_TOOLS = [semanticSearchTool, repoMapTool, readCompressedTool];
 
-// ../packages/agent-tools/src/researchCache.js
+// ../packages/agent-tools/src/researchCache.ts
 function researchCacheKey(question, files) {
   const q = question.replace(/\s+/g, " ").trim();
   const sorted = [...files].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   return JSON.stringify([q, ...sorted.map((f) => `${f.path}@${Math.round(f.mtimeMs)}:${f.size}`)]);
 }
 
-// ../packages/agent-tools/src/local-research-tool.js
+// ../packages/agent-tools/src/local-research-tool.ts
 var MAX_PATHS = 8;
 var DEFAULT_TIME_LIMIT_MS = 45e3;
 var EXCERPT_BUDGET_CHARS = 24e3;
@@ -2742,20 +2584,16 @@ function excerptAround(content, lines, budget, radius = HIT_WINDOW_LINES) {
     const start = Math.max(1, lines.length > 0 ? line - radius : 1);
     const end = Math.min(all.length, lines.length > 0 ? line + radius : radius * 4);
     const last = ranges[ranges.length - 1];
-    if (last && start <= last[1] + 1)
-      last[1] = Math.max(last[1], end);
-    else
-      ranges.push([start, end]);
+    if (last && start <= last[1] + 1) last[1] = Math.max(last[1], end);
+    else ranges.push([start, end]);
   }
   const out = [];
   let used = 0;
   for (const [start, end] of ranges) {
-    if (out.length > 0)
-      out.push("\u2026");
+    if (out.length > 0) out.push("\u2026");
     for (let n = start; n <= end; n++) {
       const row = `${n}: ${all[n - 1] ?? ""}`;
-      if (used + row.length + 1 > budget)
-        return `${out.join("\n")}
+      if (used + row.length + 1 > budget) return `${out.join("\n")}
 \u2026`;
       out.push(row);
       used += row.length + 1;
@@ -2764,8 +2602,7 @@ function excerptAround(content, lines, budget, radius = HIT_WINDOW_LINES) {
   return out.join("\n");
 }
 function hitLinesFor(path, hits) {
-  if (!hits)
-    return [];
+  if (!hits) return [];
   return [...hits.definitions, ...hits.references].filter((h) => h.path === path).map((h) => h.line);
 }
 async function readExcerpts(ctx, files, hits) {
@@ -2773,8 +2610,7 @@ async function readExcerpts(ctx, files, hits) {
   const per = Math.floor(EXCERPT_BUDGET_CHARS / Math.max(1, files.length));
   for (const path of files) {
     const r = await ctx.caps.repoRead.readFile(path).catch(() => null);
-    if (!r?.ok || typeof r.content !== "string")
-      continue;
+    if (!r?.ok || typeof r.content !== "string") continue;
     out.push({ path, text: excerptAround(r.content, hitLinesFor(path, hits), per) });
   }
   return out;
@@ -2799,10 +2635,8 @@ function deadlineSignal(limitMs, outer) {
     ctl.abort(new Error("local_research time limit"));
   }, limitMs);
   const onOuter = () => ctl.abort(outer?.reason);
-  if (outer?.aborted)
-    ctl.abort(outer.reason);
-  else
-    outer?.addEventListener("abort", onOuter, { once: true });
+  if (outer?.aborted) ctl.abort(outer.reason);
+  else outer?.addEventListener("abort", onOuter, { once: true });
   return {
     signal: ctl.signal,
     timedOut: () => timedOut,
@@ -2826,11 +2660,9 @@ var localResearchTool = defineTool({
   requires: ["repo.read", "local.research"],
   async execute(args, ctx) {
     const question = typeof args.question === "string" ? args.question.trim() : "";
-    if (!question)
-      return { data: { ok: false, error: "question is required" } };
+    if (!question) return { data: { ok: false, error: "question is required" } };
     const research = ctx.caps.research;
-    if (!research)
-      return { data: { ok: false, error: "No local model is available on this machine right now." } };
+    if (!research) return { data: { ok: false, error: "No local model is available on this machine right now." } };
     const named = Array.isArray(args.paths) ? [...new Set(args.paths.filter((p) => typeof p === "string" && p.trim() !== "").map((p) => p.trim()))].slice(0, MAX_PATHS) : [];
     const hits = await preSearch(question, {
       ...ctx.caps.symbols ? { findSymbol: (q) => ctx.caps.symbols.find(q, { limit: 20 }) } : {},
@@ -2842,12 +2674,10 @@ var localResearchTool = defineTool({
     }
     const fingerprints = await research.fingerprint(chosen);
     const files = fingerprints.map((f) => f.path);
-    if (files.length === 0)
-      return { data: { ok: false, question, error: `None of these files could be read: ${chosen.join(", ")}` } };
+    if (files.length === 0) return { data: { ok: false, question, error: `None of these files could be read: ${chosen.join(", ")}` } };
     const key = researchCacheKey(question, fingerprints);
     const cached = await research.cache?.get(key).catch(() => void 0);
-    if (cached)
-      return { data: { ok: true, question, files, answer: cached, cached: true } };
+    if (cached) return { data: { ok: true, question, files, answer: cached, cached: true } };
     const excerpts = await readExcerpts(ctx, files, hits);
     const deadline = deadlineSignal(research.timeLimitMs ?? DEFAULT_TIME_LIMIT_MS, ctx.signal);
     const partial = (reason) => ({
@@ -2855,19 +2685,16 @@ var localResearchTool = defineTool({
     });
     try {
       const stopped = new Promise((_, reject) => {
-        if (deadline.signal.aborted)
-          reject(deadline.signal.reason ?? new Error("aborted"));
+        if (deadline.signal.aborted) reject(deadline.signal.reason ?? new Error("aborted"));
         deadline.signal.addEventListener("abort", () => reject(deadline.signal.reason ?? new Error("aborted")), { once: true });
       });
       stopped.catch(() => void 0);
       const answer = (await Promise.race([research.complete(researchMessages(question, excerpts), deadline.signal), stopped])).trim();
-      if (!answer)
-        return partial("the local model returned an empty answer");
+      if (!answer) return partial("the local model returned an empty answer");
       await research.cache?.set(key, answer).catch(() => void 0);
       return { data: { ok: true, question, files, answer } };
     } catch (e) {
-      if (ctx.signal?.aborted)
-        throw e;
+      if (ctx.signal?.aborted) throw e;
       return partial(deadline.timedOut() ? "the local model ran out of time" : `the local model failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       deadline.dispose();
@@ -2875,15 +2702,14 @@ var localResearchTool = defineTool({
   }
 });
 
-// ../packages/agent-tools/src/codeAnalysis.js
+// ../packages/agent-tools/src/codeAnalysis.ts
 var import_knowledge = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/dependencyCruiserRules.js
+// ../packages/agent-tools/src/knowledge/dependencyCruiserRules.ts
 var import_knowledge2 = require("@seanhogg/builderforce-memory/knowledge");
 var LAYER_RULE_PREFIX = "kg-layer";
 function alternation(globs) {
-  if (globs.length === 0)
-    return void 0;
+  if (globs.length === 0) return void 0;
   return globs.map((g) => `(?:${(0, import_knowledge2.globToRegExp)(g).source})`).join("|");
 }
 function matchOf(rule, earlier) {
@@ -2891,8 +2717,7 @@ function matchOf(rule, earlier) {
   return { path: alternation(rule.match), ...not ? { pathNot: not } : {} };
 }
 function toDependencyCruiserRules(reg) {
-  if (!reg.allow)
-    return [];
+  if (!reg.allow) return [];
   const ordered = reg.partitions;
   const named = ordered.filter((r) => r.id !== import_knowledge2.TOP_LEVEL_FOLDER && r.match.length > 0);
   const matchById = new Map(named.map((r) => [r.id, matchOf(r, ordered.slice(0, ordered.indexOf(r)))]));
@@ -2900,8 +2725,7 @@ function toDependencyCruiserRules(reg) {
   for (const from of named) {
     for (const to of named) {
       const verdict = (0, import_knowledge2.verdictOf)(from.id, to.id, reg);
-      if (verdict !== "upward" && verdict !== "skips")
-        continue;
+      if (verdict !== "upward" && verdict !== "skips") continue;
       rules.push({
         name: `${LAYER_RULE_PREFIX}-${from.id}-to-${to.id}`,
         comment: `${from.id} may not use ${to.id} (${verdict})`,
@@ -2914,7 +2738,7 @@ function toDependencyCruiserRules(reg) {
   return rules;
 }
 
-// ../packages/agent-tools/src/analyzerPins.js
+// ../packages/agent-tools/src/analyzerPins.ts
 var TYPESCRIPT_PIN = "typescript@5.6.3";
 var ANALYZER_VERSIONS = {
   "dependency-cruiser": "16.10.4",
@@ -2922,19 +2746,19 @@ var ANALYZER_VERSIONS = {
   knip: "5.30.0"
 };
 
-// ../packages/agent-tools/src/knowledge/workspaceFingerprint.js
+// ../packages/agent-tools/src/knowledge/workspaceFingerprint.ts
 var import_ingest = require("@seanhogg/builderforce-memory/ingest");
 
-// ../packages/agent-tools/src/knowledge/fsDirectorySource.js
+// ../packages/agent-tools/src/knowledge/fsDirectorySource.ts
 var import_knowledge5 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/statManifest.js
+// ../packages/agent-tools/src/knowledge/statManifest.ts
 var RACY_WINDOW_NS = BigInt(2e9);
 
-// ../packages/agent-tools/src/knowledge/documents/withDocumentText.js
+// ../packages/agent-tools/src/knowledge/documents/withDocumentText.ts
 var import_knowledge4 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/documents/documentText.js
+// ../packages/agent-tools/src/knowledge/documents/documentText.ts
 var import_knowledge3 = require("@seanhogg/builderforce-memory/knowledge");
 var PDF_MEDIA_TYPE = "application/pdf";
 var DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -2956,65 +2780,54 @@ var isExtractableDocumentType = (mediaType) => EXTRACTABLE_DOCUMENT_MEDIA_TYPES.
 var MAX_ENTRY_BYTES = 8 * 1024 * 1024;
 var MAX_TOTAL_BYTES = 16 * 1024 * 1024;
 
-// ../packages/agent-tools/src/knowledge/fsDirectorySource.js
+// ../packages/agent-tools/src/knowledge/fsDirectorySource.ts
 var BUILDERFORCE_INPUTS = /* @__PURE__ */ new Set([".builderforce/ignore", ".builderforce/partitions.json"]);
 function isBuilderforceState(rel2) {
   const path = rel2.replace(/\\/g, "/");
   return path.split("/").includes(".builderforce") && !BUILDERFORCE_INPUTS.has(path);
 }
 
-// ../packages/agent-tools/src/knowledge/shaCache.js
+// ../packages/agent-tools/src/knowledge/shaCache.ts
 function createShaCache(opts = {}) {
   const max = opts.max ?? 8;
   const now = opts.now ?? Date.now;
   const entries = /* @__PURE__ */ new Map();
   const join = (key, entry, signal) => {
     entry.waiting += 1;
-    if (!signal)
-      return;
+    if (!signal) return;
     const stop = () => {
       entry.stopped += 1;
-      if (entry.settled || entry.stopped < entry.waiting)
-        return;
+      if (entry.settled || entry.stopped < entry.waiting) return;
       entry.controller.abort();
-      if (entries.get(key) === entry)
-        entries.delete(key);
+      if (entries.get(key) === entry) entries.delete(key);
     };
-    if (signal.aborted)
-      stop();
-    else
-      signal.addEventListener("abort", stop, { once: true });
+    if (signal.aborted) stop();
+    else signal.addEventListener("abort", stop, { once: true });
   };
   return {
     getOrRun(key, work, signal) {
-      if (key === null)
-        return work(signal);
+      if (key === null) return work(signal);
       const hit = entries.get(key);
       if (hit && (hit.expires === void 0 || hit.expires > now())) {
         join(key, hit, signal);
         return hit.run;
       }
-      if (hit)
-        entries.delete(key);
+      if (hit) entries.delete(key);
       const controller = new AbortController();
       const entry = { run: void 0, waiting: 0, stopped: 0, controller, settled: false };
       entries.set(key, entry);
-      while (entries.size > max)
-        entries.delete(entries.keys().next().value);
+      while (entries.size > max) entries.delete(entries.keys().next().value);
       join(key, entry, signal);
       entry.run = work(controller.signal);
       const drop = () => {
-        if (entries.get(key) === entry)
-          entries.delete(key);
+        if (entries.get(key) === entry) entries.delete(key);
       };
       entry.run.then((value) => {
         entry.settled = true;
         const verdict = opts.keep ? opts.keep(value) : true;
-        if (verdict === false)
-          return drop();
+        if (verdict === false) return drop();
         const lifetime = typeof verdict === "number" ? verdict : opts.ttlMs;
-        if (lifetime !== void 0)
-          entry.expires = now() + lifetime;
+        if (lifetime !== void 0) entry.expires = now() + lifetime;
       }, () => {
         entry.settled = true;
         drop();
@@ -3028,7 +2841,7 @@ function createShaCache(opts = {}) {
   };
 }
 
-// ../packages/agent-tools/src/knowledge/workspaceFingerprint.js
+// ../packages/agent-tools/src/knowledge/workspaceFingerprint.ts
 var GIT = "git --no-optional-locks";
 var FINGERPRINT_TTL_MS = 2e3;
 var REVIEW_INPUT_FILES = [".builderforce/ignore", ".builderforce/partitions.json"];
@@ -3062,31 +2875,26 @@ async function readFingerprint(ctx) {
   const head = await gitText(ctx, `${GIT} rev-parse --show-toplevel --show-prefix HEAD`);
   const lines = head?.split(/\r?\n/) ?? [];
   const commit = lines.at(-1)?.trim();
-  if (!commit || !OBJECT_ID.test(commit))
-    return { commit: null, branch: null, dirty: null };
+  if (!commit || !OBJECT_ID.test(commit)) return { commit: null, branch: null, dirty: null };
   const prefix = lines.length >= 3 ? (lines[1] ?? "").trim().replace(/\/+$/, "") : "";
   const branch = (await gitText(ctx, `${GIT} branch --show-current`))?.trim() ?? null;
   const status = await gitText(ctx, `${GIT} status --porcelain --untracked-files=all`);
-  if (status === null)
-    return { commit, branch, dirty: null, prefix };
+  if (status === null) return { commit, branch, dirty: null, prefix };
   const changes = status.split("\n").filter((line) => line.trim() && !isBuilderforceState(pathOfStatusLine(line)));
-  if (changes.length === 0)
-    return { commit, branch, dirty: false, prefix };
+  if (changes.length === 0) return { commit, branch, dirty: false, prefix };
   const tree = await workingTreeId(ctx);
   return { commit, branch, dirty: true, prefix, ...tree ? { dirtyHash: (0, import_ingest.hashText)(tree).slice(0, 16) } : {} };
 }
 var memos = /* @__PURE__ */ new WeakMap();
 async function workspaceFingerprint(ctx) {
   const shell = ctx.caps.shell;
-  if (!shell)
-    return { commit: null, branch: null, dirty: null };
+  if (!shell) return { commit: null, branch: null, dirty: null };
   let memo = memos.get(shell);
-  if (!memo)
-    memos.set(shell, memo = createShaCache({ ttlMs: FINGERPRINT_TTL_MS, max: 1 }));
+  if (!memo) memos.set(shell, memo = createShaCache({ ttlMs: FINGERPRINT_TTL_MS, max: 1 }));
   return memo.getOrRun("fingerprint", (shared) => readFingerprint({ caps: ctx.caps, ...shared ? { signal: shared } : {} }), ctx.signal);
 }
 
-// ../packages/agent-tools/src/delta/adapters/analyzer.js
+// ../packages/agent-tools/src/delta/adapters/analyzer.ts
 var ANALYZER_TIMEOUT_MS = 5 * 6e4;
 var ignoredGlobs = (ignored) => (ignored ?? []).map((d) => `${d.replace(/\/+$/, "")}/**`);
 function ignoredRegex(ignored) {
@@ -3094,7 +2902,7 @@ function ignoredRegex(ignored) {
   return dirs.length > 0 ? `^(?:${dirs.join("|")})(?:/|$)` : void 0;
 }
 
-// ../packages/agent-tools/src/codeAnalysisTool.js
+// ../packages/agent-tools/src/codeAnalysisTool.ts
 function spec(name, version, extraPackages, bin, args) {
   const packages = [`${name}@${version}`, ...extraPackages];
   return { name, version, packages, bin, args, command: analyzerCommand({ packages, bin, args }, ".") };
@@ -3114,24 +2922,17 @@ function analyzerCommand(a, scope, entry) {
 }
 function parseAnalyzerJson(text) {
   const start = text.indexOf("{");
-  if (start < 0)
-    throw new Error("No JSON report in analyzer output");
+  if (start < 0) throw new Error("No JSON report in analyzer output");
   let depth = 0, quoted = false, escaped = false;
   for (let i = start; i < text.length; i++) {
     const char = text[i];
     if (quoted) {
-      if (escaped)
-        escaped = false;
-      else if (char === "\\")
-        escaped = true;
-      else if (char === '"')
-        quoted = false;
-    } else if (char === '"')
-      quoted = true;
-    else if (char === "{")
-      depth++;
-    else if (char === "}" && --depth === 0)
-      return JSON.parse(text.slice(start, i + 1));
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') quoted = false;
+    } else if (char === '"') quoted = true;
+    else if (char === "{") depth++;
+    else if (char === "}" && --depth === 0) return JSON.parse(text.slice(start, i + 1));
   }
   throw new Error("Truncated analyzer JSON report");
 }
@@ -3144,15 +2945,13 @@ function dependencyCruiserConfig(partitions) {
 }
 function base64Utf8(text) {
   let binary = "";
-  for (const byte of new TextEncoder().encode(text))
-    binary += String.fromCharCode(byte);
+  for (const byte of new TextEncoder().encode(text)) binary += String.fromCharCode(byte);
   return btoa(binary);
 }
 function dependencyCruiserConfigWith(partitions, ignored) {
   const config = dependencyCruiserConfig(partitions);
   const extra = ignoredRegex(ignored);
-  if (!extra)
-    return config;
+  if (!extra) return config;
   const options = config.options ?? {};
   const base = options.exclude?.path;
   return { ...config, options: { ...options, exclude: { ...options.exclude ?? {}, path: base ? `${base}|${extra}` : extra } } };
@@ -3171,8 +2970,7 @@ function createAnalyzeCodebaseTool(options = {}) {
     requires: ["shell", "repo.read"],
     async execute(args, ctx) {
       const scope = typeof args.path === "string" ? args.path : ".";
-      if (!/^[a-zA-Z0-9_.][a-zA-Z0-9_./-]*$/.test(scope) || scope.split("/").includes(".."))
-        return { data: { error: "path must be a relative project directory without traversal or shell syntax" } };
+      if (!/^[a-zA-Z0-9_.][a-zA-Z0-9_./-]*$/.test(scope) || scope.split("/").includes("..")) return { data: { error: "path must be a relative project directory without traversal or shell syntax" } };
       const tools = [];
       const id = crypto.randomUUID();
       const outputDir = `.builderforce/code-analysis/${id}`;
@@ -3204,20 +3002,17 @@ function createAnalyzeCodebaseTool(options = {}) {
         let launched = false;
         try {
           const setupFailed = (message) => {
-            if (entry)
-              return "unavailable";
+            if (entry) return "unavailable";
             throw new Error(message);
           };
           let unavailable2;
           if (analyzer.name === "dependency-cruiser") {
             const config = await shellRunWithStop(ctx, `node -e "const f=require('fs');f.mkdirSync('${outputDir}',{recursive:true});f.writeFileSync('${outputDir}/dependencies.json',Buffer.from('${configOf(ignored)}','base64'))"`);
-            if (!config.ok)
-              unavailable2 = setupFailed("Could not create dependency analysis configuration");
+            if (!config.ok) unavailable2 = setupFailed("Could not create dependency analysis configuration");
           }
           if (analyzer.name === "jscpd") {
             const cleanup = await shellRunWithStop(ctx, `node -e "require('fs').mkdirSync('${outputDir}',{recursive:true})"`);
-            if (!cleanup.ok)
-              unavailable2 = setupFailed("Could not clear the previous duplication artifact");
+            if (!cleanup.ok) unavailable2 = setupFailed("Could not clear the previous duplication artifact");
           }
           if (unavailable2) {
             outputs.push(null);
@@ -3235,20 +3030,15 @@ function createAnalyzeCodebaseTool(options = {}) {
             tools.push({ name: analyzer.name, version: analyzer.version, status: "not_measured", reason: "analyzer-unavailable" });
             continue;
           }
-          if (!text || artifact?.truncated)
-            throw new Error("Analyzer output is empty or truncated; scan a smaller project");
+          if (!text || artifact?.truncated) throw new Error("Analyzer output is empty or truncated; scan a smaller project");
           const value = parseAnalyzerJson(text);
-          if (analyzer.name === "dependency-cruiser" && !Array.isArray(value.modules))
-            throw new Error("Invalid dependency report");
-          if (analyzer.name === "jscpd" && !Array.isArray(value.duplicates))
-            throw new Error("Invalid duplication report");
-          if (analyzer.name === "knip" && (!Array.isArray(value.files) || !Array.isArray(value.issues)))
-            throw new Error("Invalid unused-code report");
+          if (analyzer.name === "dependency-cruiser" && !Array.isArray(value.modules)) throw new Error("Invalid dependency report");
+          if (analyzer.name === "jscpd" && !Array.isArray(value.duplicates)) throw new Error("Invalid duplication report");
+          if (analyzer.name === "knip" && (!Array.isArray(value.files) || !Array.isArray(value.issues))) throw new Error("Invalid unused-code report");
           const unresolved = analyzer.name === "dependency-cruiser" ? value.modules.flatMap((m) => m.dependencies ?? []).filter((d) => d.couldNotResolve).length : 0;
           outputs.push(value);
           tools.push({ name: analyzer.name, version: analyzer.version, status: unresolved ? "failed" : "complete", ...unresolved ? { error: `${unresolved} imports could not be resolved; graph coverage is incomplete.` } : {} });
-          if (l3 && l3Key && !unresolved)
-            await l3.cache.put(l3Key, { result: l3.toResult(analyzer.name, analyzer.version, value), raw: value }).catch(() => void 0);
+          if (l3 && l3Key && !unresolved) await l3.cache.put(l3Key, { result: l3.toResult(analyzer.name, analyzer.version, value), raw: value }).catch(() => void 0);
         } catch (error) {
           if (entry && !launched) {
             outputs.push(null);
@@ -3277,7 +3067,7 @@ function createAnalyzeCodebaseTool(options = {}) {
 }
 var analyzeCodebaseTool = createAnalyzeCodebaseTool();
 
-// ../packages/agent-tools/src/writeOverwriteGuard.js
+// ../packages/agent-tools/src/writeOverwriteGuard.ts
 var WRITE_OVERWRITE_LARGE_BYTES = 2048;
 var WRITE_OVERWRITE_SHRINK_RATIO = 0.5;
 function utf8ByteLength(text) {
@@ -3289,8 +3079,7 @@ function isNotFoundReadError(error) {
 }
 function probeFromRepoRead(read) {
   if (!read.ok) {
-    if (isNotFoundReadError(read.error))
-      return { status: "missing" };
+    if (isNotFoundReadError(read.error)) return { status: "missing" };
     return { status: "unreadable", reason: read.error?.trim() || "read failed" };
   }
   const content = read.content ?? "";
@@ -3307,8 +3096,7 @@ function probeFromRepoRead(read) {
     };
   }
   if (content === "") {
-    if (read.totalLines === 0)
-      return { status: "ok", bytes: 0 };
+    if (read.totalLines === 0) return { status: "ok", bytes: 0 };
     return {
       status: "unreadable",
       reason: "read returned empty contents; refusing to treat that as an empty file"
@@ -3317,8 +3105,7 @@ function probeFromRepoRead(read) {
   return { status: "ok", bytes: utf8ByteLength(content) };
 }
 function refuseWriteOverwrite(probe, incoming) {
-  if (probe.status === "missing")
-    return null;
+  if (probe.status === "missing") return null;
   if (probe.status === "unreadable") {
     return `cannot overwrite: ${probe.reason}. A failed or empty read is not an empty file \u2014 use edit_file after a successful read, or create a new path.`;
   }
@@ -3329,7 +3116,7 @@ function refuseWriteOverwrite(probe, incoming) {
   return null;
 }
 
-// ../packages/agent-tools/src/core-tools.js
+// ../packages/agent-tools/src/core-tools.ts
 var listFilesTool = defineTool({
   name: "list_files",
   description: "List repo files (recursively) on the ticket branch so you can discover the existing codebase before editing. Optionally pass `path` to scope to a subdirectory. To FIND A FILE BY NAME, pass `glob` \u2014 e.g. `ROADMAP.md` (matches that filename at any depth, case-insensitive) or `src/**/*.test.ts`. Use `glob` instead of concluding a file is missing: a large repo's unfiltered listing is summarized to directories, but a `glob` always returns the matching files in full.",
@@ -3370,8 +3157,7 @@ var searchCodeTool = defineTool({
   requires: ["repo.search"],
   async execute(args, ctx) {
     const query = typeof args.query === "string" ? args.query : "";
-    if (!query.trim())
-      return { data: { ok: false, error: "query is required" } };
+    if (!query.trim()) return { data: { ok: false, error: "query is required" } };
     const scope = typeof args.path === "string" && args.path.trim() ? args.path.trim() : void 0;
     const r = await ctx.caps.repoRead.searchCode(query, scope);
     if (r.ok && r.total === 0) {
@@ -3403,17 +3189,14 @@ var readFileTool = defineTool({
   async execute(args, ctx) {
     const path = typeof args.path === "string" ? args.path : "";
     const paths = !path && Array.isArray(args.paths) ? args.paths.filter((p) => typeof p === "string" && p.trim() !== "") : [];
-    if (!path && paths.length === 0)
-      return { data: { ok: false, error: "path is required (or paths: a list of up to " + READ_FILE_MAX_PATHS + ")" } };
-    if (paths.length > READ_FILE_MAX_PATHS)
-      return { data: { ok: false, error: `paths takes at most ${READ_FILE_MAX_PATHS} files per call \u2014 split the rest into another read_file` } };
+    if (!path && paths.length === 0) return { data: { ok: false, error: "path is required (or paths: a list of up to " + READ_FILE_MAX_PATHS + ")" } };
+    if (paths.length > READ_FILE_MAX_PATHS) return { data: { ok: false, error: `paths takes at most ${READ_FILE_MAX_PATHS} files per call \u2014 split the rest into another read_file` } };
     const opts = {
       offset: typeof args.offset === "number" && args.offset > 0 ? Math.floor(args.offset) : void 0,
       limit: typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : void 0,
       key: typeof args.key === "string" ? args.key.trim() : ""
     };
-    if (!path)
-      return { data: { ok: true, files: await readManyFiles(paths, opts, ctx.caps, ctx.outlineFirstReads) } };
+    if (!path) return { data: { ok: true, files: await readManyFiles(paths, opts, ctx.caps, ctx.outlineFirstReads) } };
     return { data: await readOneFile(path, opts, ctx.caps, ctx.outlineFirstReads) };
   }
 });
@@ -3434,8 +3217,7 @@ var writeFileTool = defineTool({
     const path = typeof args.path === "string" ? args.path : "";
     const content = typeof args.content === "string" ? args.content : "";
     const summary = typeof args.summary === "string" ? args.summary : void 0;
-    if (!path || !content)
-      return { data: { ok: false, error: "path and content are both required" } };
+    if (!path || !content) return { data: { ok: false, error: "path and content are both required" } };
     if (ctx.caps.repoRead) {
       let existing;
       try {
@@ -3450,8 +3232,7 @@ var writeFileTool = defineTool({
         };
       }
       const refusal = refuseWriteOverwrite(probeFromRepoRead(existing), content);
-      if (refusal)
-        return { data: { ok: false, error: refusal } };
+      if (refusal) return { data: { ok: false, error: refusal } };
     }
     const r = await ctx.caps.repoWrite.writeFile(path, content, summary);
     return { data: r.ok ? { ok: true, branch: r.branch, commitUrl: r.commitUrl } : { ok: false, error: r.error } };
@@ -3471,12 +3252,10 @@ var deleteFileTool = defineTool({
   requires: ["repo.delete"],
   async execute(args, ctx) {
     const path = typeof args.path === "string" ? args.path : "";
-    if (!path)
-      return { data: { ok: false, error: "path is required" } };
+    if (!path) return { data: { ok: false, error: "path is required" } };
     const reason = typeof args.reason === "string" ? args.reason : void 0;
     const r = await ctx.caps.repoWrite.deleteFile(path, reason);
-    if (r.ok && r.deleted === false)
-      return { data: { ok: true, deleted: false, note: r.note } };
+    if (r.ok && r.deleted === false) return { data: { ok: true, deleted: false, note: r.note } };
     return { data: r.ok ? { ok: true, deleted: true, branch: r.branch, commitUrl: r.commitUrl } : { ok: false, error: r.error } };
   }
 });
@@ -3512,8 +3291,7 @@ var editFileTool = defineTool({
   async execute(args, ctx) {
     if (Array.isArray(args.edits)) {
       const plan = planBatchEdits(args.edits);
-      if (plan.error)
-        return { data: { ok: false, error: plan.error } };
+      if (plan.error) return { data: { ok: false, error: plan.error } };
       const read = async (p) => {
         const r2 = await ctx.caps.repoRead?.readFile(p);
         return r2 && r2.ok && typeof r2.content === "string" ? r2.content : null;
@@ -3547,8 +3325,7 @@ var editFileTool = defineTool({
     const oldString = typeof args.old_string === "string" ? args.old_string : "";
     const newString = typeof args.new_string === "string" ? args.new_string : "";
     const replaceAll = args.replace_all === true;
-    if (!path || !oldString)
-      return { data: { ok: false, error: "path and old_string are required" } };
+    if (!path || !oldString) return { data: { ok: false, error: "path and old_string are required" } };
     const r = await ctx.caps.repoWrite.editFile(path, oldString, newString, replaceAll);
     return {
       data: r.ok ? {
@@ -3576,8 +3353,7 @@ var memoryRecallTool = defineTool({
   requires: ["memory"],
   async execute(args, ctx) {
     const query = typeof args.query === "string" ? args.query : "";
-    if (!query.trim())
-      return { data: { ok: false, error: "query is required" } };
+    if (!query.trim()) return { data: { ok: false, error: "query is required" } };
     const limit = typeof args.limit === "number" && Number.isFinite(args.limit) ? args.limit : void 0;
     const r = await ctx.caps.memory.recall(query, limit);
     return { data: r };
@@ -3609,8 +3385,7 @@ var memoryRememberTool = defineTool({
   async execute(args, ctx) {
     const key = typeof args.key === "string" ? args.key : "";
     const content = typeof args.content === "string" ? args.content : "";
-    if (!key.trim() || !content.trim())
-      return { data: { ok: false, error: "key and content are required" } };
+    if (!key.trim() || !content.trim()) return { data: { ok: false, error: "key and content are required" } };
     const tags = Array.isArray(args.tags) ? args.tags.filter((t) => typeof t === "string") : void 0;
     const importance = typeof args.importance === "number" && Number.isFinite(args.importance) ? args.importance : void 0;
     const scope = MEMORY_SCOPES.includes(args.scope) ? args.scope : void 0;
@@ -3631,8 +3406,7 @@ var memoryForgetTool = defineTool({
   requires: ["memory", "memory.forget"],
   async execute(args, ctx) {
     const key = typeof args.key === "string" ? args.key : "";
-    if (!key.trim())
-      return { data: { ok: false, error: "key is required" } };
+    if (!key.trim()) return { data: { ok: false, error: "key is required" } };
     const r = await ctx.caps.memory.forget(key);
     return { data: r };
   }
@@ -3656,8 +3430,7 @@ var claimResourceTool = defineTool({
   requires: ["coordinate"],
   async execute(args, ctx) {
     const resource = typeof args.resource === "string" ? args.resource : "";
-    if (!resource.trim())
-      return { data: { ok: false, error: "resource is required" } };
+    if (!resource.trim()) return { data: { ok: false, error: "resource is required" } };
     const mode = args.mode === "shared" || args.mode === "exclusive" ? args.mode : void 0;
     const reason = typeof args.reason === "string" ? args.reason : void 0;
     const r = await ctx.caps.coordination.claim(resource, { mode, reason });
@@ -3675,8 +3448,7 @@ var releaseResourceTool = defineTool({
   requires: ["coordinate"],
   async execute(args, ctx) {
     const resource = typeof args.resource === "string" ? args.resource : "";
-    if (!resource.trim())
-      return { data: { ok: false, error: "resource is required" } };
+    if (!resource.trim()) return { data: { ok: false, error: "resource is required" } };
     const r = await ctx.caps.coordination.release(resource);
     return { data: r };
   }
@@ -3696,8 +3468,7 @@ var workspaceNoteTool = defineTool({
   async execute(args, ctx) {
     const key = typeof args.key === "string" ? args.key : "";
     const content = typeof args.content === "string" ? args.content : "";
-    if (!key.trim() || !content.trim())
-      return { data: { ok: false, error: "key and content are required" } };
+    if (!key.trim() || !content.trim()) return { data: { ok: false, error: "key and content are required" } };
     const r = await ctx.caps.coordination.postNote(key, content);
     return { data: r };
   }
@@ -3720,8 +3491,7 @@ var workspaceReadTool = defineTool({
       ctx.caps.coordination.readNotes(query, limit),
       ctx.caps.coordination.listClaims()
     ]);
-    if (!notes.ok)
-      return { data: notes };
+    if (!notes.ok) return { data: notes };
     return { data: { ok: true, notes: notes.notes ?? [], heldResources: leases.ok ? leases.leases ?? [] : [] } };
   }
 });
@@ -3738,8 +3508,7 @@ var webFetchTool = defineTool({
   requires: ["web"],
   async execute(args, ctx) {
     const url = typeof args.url === "string" ? args.url : "";
-    if (!url.trim())
-      return { data: { ok: false, error: "url is required" } };
+    if (!url.trim()) return { data: { ok: false, error: "url is required" } };
     const r = await compressWebFetchResult(await ctx.caps.web.fetch(url), ctx);
     return { data: r };
   }
@@ -3757,10 +3526,8 @@ var webSearchTool = defineTool({
   requires: ["web.search"],
   async execute(args, ctx) {
     const query = typeof args.query === "string" ? args.query : "";
-    if (!query.trim())
-      return { data: { ok: false, error: "query is required" } };
-    if (!ctx.caps.web?.search)
-      return { data: { ok: false, error: "web search is not available on this surface" } };
+    if (!query.trim()) return { data: { ok: false, error: "query is required" } };
+    if (!ctx.caps.web?.search) return { data: { ok: false, error: "web search is not available on this surface" } };
     const r = await ctx.caps.web.search(query);
     return { data: r };
   }
@@ -3808,8 +3575,7 @@ var askHumanTool = defineTool({
   async execute(args, ctx) {
     const question = typeof args.question === "string" ? args.question.trim() : "";
     const context = typeof args.context === "string" ? args.context : void 0;
-    if (!question)
-      return { data: { ok: false, error: "question is required to ask a human" } };
+    if (!question) return { data: { ok: false, error: "question is required to ask a human" } };
     const r = await ctx.caps.human.ask(question, context);
     if (r.paused) {
       return {
@@ -3846,8 +3612,7 @@ var updatePrdTool = defineTool({
   async execute(args, ctx) {
     const mode = args.mode === "section" ? "section" : "append";
     const content = typeof args.content === "string" ? args.content.trim() : "";
-    if (!content)
-      return { data: { ok: false, error: "content is required" } };
+    if (!content) return { data: { ok: false, error: "content is required" } };
     if (mode === "section") {
       const heading = typeof args.section === "string" ? args.section.trim() : "";
       if (!heading) {
@@ -3909,13 +3674,13 @@ var CORE_TOOLS = [
   finishTool
 ];
 
-// ../packages/agent-tools/src/knowledge-notes.js
+// ../packages/agent-tools/src/knowledge-notes.ts
 var import_working2 = require("@seanhogg/builderforce-memory/working");
 
-// ../packages/agent-tools/src/run-knowledge.js
+// ../packages/agent-tools/src/run-knowledge.ts
 var import_working3 = require("@seanhogg/builderforce-memory/working");
 
-// ../packages/agent-tools/src/skill-tools.js
+// ../packages/agent-tools/src/skill-tools.ts
 var skillProposeTool = defineTool({
   name: "skill_propose",
   description: "Propose a reusable SKILL \u2014 a procedure a future agent can follow \u2014 drafted from work you just completed and verified. Use it when you worked out a repeatable way to do something non-obvious in this codebase (a migration + guard + test sequence, a release path, a debugging route) and a future run would otherwise rediscover it. Do NOT propose a skill for a one-off fix, for something the repo already documents, or for a procedure you did not actually complete. The draft goes to a human for review; it does not take effect until approved.",
@@ -3974,7 +3739,7 @@ var skillListTool = defineTool({
   }
 });
 
-// ../packages/agent-tools/src/live-subagent-tools.js
+// ../packages/agent-tools/src/live-subagent-tools.ts
 var LIVE_DELEGATION_NOTE = "HERE the child runs IN THE BACKGROUND: the call returns its handle at once and you keep working \u2014 plan, code, or start more children \u2014 while it does its slice. Its messages appear in the chat under its own name, and its report reaches you on its own when it finishes (call wait_agents only when you cannot go on without it). Redirect it with message_agent; cancel it with stop_agent. Do not edit the files a child is working on while it runs.";
 var BLOCKING_DELEGATION_NOTE = "HERE the call BLOCKS: you wait while the child does its slice, and its report is the call's result. There is no background handle, nothing to wait for or redirect afterwards, so delegate a slice you can afford to wait for. A child cannot delegate further.";
 function delegationNote(caps) {
@@ -4007,8 +3772,7 @@ var waitAgentsTool = defineTool({
   requires: ["orchestrate.live"],
   async execute(args, ctx) {
     const controls = live(ctx);
-    if (!controls)
-      return unavailable();
+    if (!controls) return unavailable();
     const seconds = Math.min(MAX_WAIT_SECONDS, Math.max(1, Number(args.timeout_seconds) || DEFAULT_WAIT_SECONDS));
     const { reports, running, note } = await controls.wait(handlesOf(args.agents), seconds * 1e3, ctx.signal);
     const changedFiles = [...new Set(reports.flatMap((r) => r.changedFiles ?? []))];
@@ -4038,12 +3802,10 @@ var messageAgentTool = defineTool({
   requires: ["orchestrate.live"],
   async execute(args, ctx) {
     const controls = live(ctx);
-    if (!controls)
-      return unavailable();
+    if (!controls) return unavailable();
     const handle = typeof args.agent === "string" ? args.agent.trim() : "";
     const text = typeof args.message === "string" ? args.message.trim() : "";
-    if (!handle || !text)
-      return { data: { ok: false, error: "agent and message are required" } };
+    if (!handle || !text) return { data: { ok: false, error: "agent and message are required" } };
     const out = await controls.message(handle, text);
     return { data: out };
   }
@@ -4060,8 +3822,7 @@ var stopAgentTool = defineTool({
   requires: ["orchestrate.live"],
   async execute(args, ctx) {
     const controls = live(ctx);
-    if (!controls)
-      return unavailable();
+    if (!controls) return unavailable();
     const named = handlesOf(args.agents);
     const stopped = await controls.stop(named.length ? named : "all");
     return { data: { ok: true, stopped } };
@@ -4069,7 +3830,7 @@ var stopAgentTool = defineTool({
 });
 var SUBAGENT_CONTROL_TOOLS = [waitAgentsTool, messageAgentTool, stopAgentTool];
 
-// ../packages/agent-tools/src/subagent-tools.js
+// ../packages/agent-tools/src/subagent-tools.ts
 var ROLE_ENUM_DESCRIPTION = MODEL_ROLES.map((role) => `${role} \u2014 ${MODEL_ROLE_DESCRIPTIONS[role]}`).join(" \xB7 ");
 var spawnAgentTool = withDelegationNote(defineTool({
   name: "spawn_agent",
@@ -4102,8 +3863,7 @@ var spawnAgentTool = withDelegationNote(defineTool({
     const str3 = (v) => typeof v === "string" ? v.trim() : "";
     const label = str3(args.label);
     const task = str3(args.task);
-    if (!task)
-      return { data: { ok: false, error: "task is required \u2014 the child sees none of your conversation" } };
+    if (!task) return { data: { ok: false, error: "task is required \u2014 the child sees none of your conversation" } };
     const role = delegationRole(args.role);
     const asAgent = str3(args.as_agent);
     const r = await ctx.caps.orchestration.spawn({
@@ -4119,8 +3879,7 @@ var MAX_WORKSTREAMS = 4;
 var FANOUT_OUTPUT_CHARS = 4800;
 var SPAWN_AGENTS_TOOL = "spawn_agents";
 function parseWorkstreams(raw) {
-  if (!Array.isArray(raw) || raw.length === 0)
-    return "workstreams is required \u2014 one entry per independent slice";
+  if (!Array.isArray(raw) || raw.length === 0) return "workstreams is required \u2014 one entry per independent slice";
   if (raw.length > MAX_WORKSTREAMS) {
     return `at most ${MAX_WORKSTREAMS} workstreams per call \u2014 run the rest in a second call once these are back`;
   }
@@ -4129,8 +3888,7 @@ function parseWorkstreams(raw) {
   for (const [i, item] of raw.entries()) {
     const w = item ?? {};
     const task = str3(w.task);
-    if (!task)
-      return `workstream ${i + 1} has no task \u2014 each child sees none of your conversation`;
+    if (!task) return `workstream ${i + 1} has no task \u2014 each child sees none of your conversation`;
     const ticket = str3(w.ticket);
     const role = str3(w.role);
     out.push({
@@ -4175,8 +3933,7 @@ var spawnAgentsTool = withDelegationNote(defineTool({
   // the same schema and parser.
   async execute(args, ctx) {
     const parsed = parseWorkstreams(args.workstreams);
-    if (typeof parsed === "string")
-      return { data: { ok: false, error: parsed } };
+    if (typeof parsed === "string") return { data: { ok: false, error: parsed } };
     const outputChars = Math.floor(FANOUT_OUTPUT_CHARS / parsed.length);
     const results = await Promise.all(parsed.map((w) => ctx.caps.orchestration.spawn({
       label: w.label,
@@ -4197,15 +3954,15 @@ var spawnAgentsTool = withDelegationNote(defineTool({
 }));
 var SUBAGENT_TOOLS = [spawnAgentTool, spawnAgentsTool, ...SUBAGENT_CONTROL_TOOLS];
 
-// ../packages/agent-tools/src/symbolRelations.js
+// ../packages/agent-tools/src/symbolRelations.ts
 var import_knowledge6 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/symbolImports.js
+// ../packages/agent-tools/src/symbolImports.ts
 var IMPORT_NAMED = new RegExp(`^\\s*(?:type\\s+)?(${ID})(?:\\s+as\\s+(${ID}))?\\s*$`);
 var IMPORT_NAMESPACE = new RegExp(`\\*\\s*as\\s+(${ID})`);
 var IMPORT_DEFAULT = new RegExp(`^\\s*(${ID})\\s*(?:,|$)`);
 
-// ../packages/agent-tools/src/symbolRelations.js
+// ../packages/agent-tools/src/symbolRelations.ts
 var import_knowledge7 = require("@seanhogg/builderforce-memory/knowledge");
 var LEADING_TYPE = new RegExp(`^\\s*(${ID}(?:\\s*\\.\\s*${ID})?)`);
 var FIELD = new RegExp(`^\\s*(?:(?:public|private|protected|readonly|static|declare|override|abstract|accessor)\\s+)*#?(${ID})\\s*[?!]?\\s*:\\s*([^=;]+)`);
@@ -4217,19 +3974,19 @@ var LAST_ID = new RegExp(`(${ID})\\s*(?:=[^,]*)?\\s*$`);
 var CALLBACK_PARAMS = new RegExp(`(?:\\(([^()]*)\\)(?:\\s*:\\s*[^=()]+)?\\s*=>|(${ID})\\s*=>|\\bfunction\\b[^(]*\\(([^()]*)\\))\\s*\\{\\s*$`);
 var PARAM_NAME = new RegExp(`^\\s*(?:\\.\\.\\.)?(?:(?:public|private|protected|readonly)\\s+)*(${ID})`);
 
-// ../packages/agent-tools/src/knowledge/codePack.js
+// ../packages/agent-tools/src/knowledge/codePack.ts
 var import_knowledge22 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest4 = require("@seanhogg/builderforce-memory/ingest");
 
-// ../packages/agent-tools/src/knowledge/codeComplexity.js
+// ../packages/agent-tools/src/knowledge/codeComplexity.ts
 var TERNARY = String.raw`\?(?![.:,)=]|\(\s*\)\s*:)`;
 var JS_DECISIONS = new RegExp(String.raw`\b(?:if|for|while|case|catch)\b|&&|\|\||\?\?|${TERNARY}`, "g");
 var OO_DECISIONS = new RegExp(String.raw`\b(?:if|for|foreach|while|case|catch)\b|&&|\|\||\?\?|${TERNARY}`, "g");
 
-// ../packages/agent-tools/src/knowledge/codeConcurrency.js
+// ../packages/agent-tools/src/knowledge/codeConcurrency.ts
 var import_knowledge8 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/codeNodes.js
+// ../packages/agent-tools/src/knowledge/codeNodes.ts
 var import_knowledge9 = require("@seanhogg/builderforce-memory/knowledge");
 var import_working4 = require("@seanhogg/builderforce-memory/working");
 var import_ingest2 = require("@seanhogg/builderforce-memory/ingest");
@@ -4279,23 +4036,25 @@ var CODE_BADGES = {
   concurrency: "concurrency"
 };
 
-// ../packages/agent-tools/src/knowledge/codePatterns.js
+// ../packages/agent-tools/src/knowledge/codePatterns.ts
 var import_knowledge10 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/codeRoutes.js
+// ../packages/agent-tools/src/knowledge/codeRoutes.ts
 var METHODS = "get|post|put|patch|delete|options|head|all";
-var ROUTER_FILE = new RegExp(String.raw`\bfrom\s*['"](?:hono(?:/[^'"]*)?|@hono/[^'"]*|express|fastify|koa-router|@koa/router|[^'"]*/router(?:\.js)?)['"]` + String.raw`|\brequire\s*\(\s*['"](?:express|hono)['"]\s*\)|\bnew\s+Hono\b|\bexpress\.Router\s*\(|\bRouter\s*\(\s*\)`);
+var ROUTER_FILE = new RegExp(
+  String.raw`\bfrom\s*['"](?:hono(?:/[^'"]*)?|@hono/[^'"]*|express|fastify|koa-router|@koa/router|[^'"]*/router(?:\.js)?)['"]` + String.raw`|\brequire\s*\(\s*['"](?:express|hono)['"]\s*\)|\bnew\s+Hono\b|\bexpress\.Router\s*\(|\bRouter\s*\(\s*\)`
+);
 var REGISTRATION = new RegExp(String.raw`([A-Za-z_$][\w$]*)\s*\.\s*(${METHODS}|route)\s*\(\s*(['"` + "`" + String.raw`])(/[^'"` + "`" + String.raw`]*)\3\s*(,)?`, "g");
 var NEXT_WITH_PATH = new RegExp(String.raw`\s*\.\s*(${METHODS})\s*\(\s*(['"` + "`" + String.raw`])(/[^'"` + "`" + String.raw`]*)\2\s*,`, "y");
 var NEXT_ANY = new RegExp(String.raw`\s*\.\s*(${METHODS})\s*\(`, "y");
 
-// ../packages/agent-tools/src/knowledge/codeFindings.js
+// ../packages/agent-tools/src/knowledge/codeFindings.ts
 var import_knowledge15 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/rules/unusedDependency.js
+// ../packages/agent-tools/src/knowledge/rules/unusedDependency.ts
 var import_knowledge12 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/rules/unusedItems.js
+// ../packages/agent-tools/src/knowledge/rules/unusedItems.ts
 var import_knowledge11 = require("@seanhogg/builderforce-memory/knowledge");
 var codeFiles = (g) => g.nodes.filter((n) => n.pack === CODE_PACK_ID && n.kind === "file").sort((a, b) => (0, import_knowledge11.compareStr)(a.ref, b.ref));
 var namesOf = (n, badge) => [...new Set(String(n.badges?.[badge] ?? "").split(",").filter(Boolean))].sort(import_knowledge11.compareStr);
@@ -4312,7 +4071,7 @@ function itemFindings(n, item) {
   });
 }
 
-// ../packages/agent-tools/src/knowledge/rules/unusedDependency.js
+// ../packages/agent-tools/src/knowledge/rules/unusedDependency.ts
 var ITEM = { kind: "unused-dependency", names: CODE_BADGES.unusedDependencyNames, count: CODE_BADGES.unusedDependencies, anchorKind: "package" };
 var unusedDependencyRule = (0, import_knowledge12.defineRule)({
   id: "code.unused-dependency",
@@ -4324,7 +4083,7 @@ var unusedDependencyRule = (0, import_knowledge12.defineRule)({
   derive: ({ extra: { knowledge: k } }) => codeFiles(k.graph).flatMap((n) => itemFindings(n, ITEM))
 });
 
-// ../packages/agent-tools/src/knowledge/rules/unusedExport.js
+// ../packages/agent-tools/src/knowledge/rules/unusedExport.ts
 var import_knowledge13 = require("@seanhogg/builderforce-memory/knowledge");
 var ITEM2 = { kind: "unused-export", names: CODE_BADGES.unusedExportNames, count: CODE_BADGES.unusedExports, anchorKind: "symbol" };
 var unusedExportRule = (0, import_knowledge13.defineRule)({
@@ -4337,7 +4096,7 @@ var unusedExportRule = (0, import_knowledge13.defineRule)({
   derive: ({ extra: { knowledge: k } }) => codeFiles(k.graph).flatMap((n) => itemFindings(n, ITEM2))
 });
 
-// ../packages/agent-tools/src/knowledge/rules/unusedFile.js
+// ../packages/agent-tools/src/knowledge/rules/unusedFile.ts
 var import_knowledge14 = require("@seanhogg/builderforce-memory/knowledge");
 var unusedFileRule = (0, import_knowledge14.defineRule)({
   id: "code.unused-file",
@@ -4349,23 +4108,23 @@ var unusedFileRule = (0, import_knowledge14.defineRule)({
   derive: ({ extra: { knowledge: k } }) => codeFiles(k.graph).filter((n) => n.badges?.[CODE_BADGES.unused] === "file").map((n) => (0, import_knowledge14.finding)("unused-file", CODE_PACK_ID, [n.ref], "info", { count: 1, files: 1 }, void 0, (0, import_knowledge14.refAnchor)(n.ref)))
 });
 
-// ../packages/agent-tools/src/knowledge/codeFindings.js
+// ../packages/agent-tools/src/knowledge/codeFindings.ts
 var CODE_FACT_RULES = Object.freeze([unusedFileRule, unusedExportRule, unusedDependencyRule]);
 
-// ../packages/agent-tools/src/knowledge/codeRollup.js
+// ../packages/agent-tools/src/knowledge/codeRollup.ts
 var import_knowledge18 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/moduleAliases.js
+// ../packages/agent-tools/src/knowledge/moduleAliases.ts
 var import_knowledge16 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/rootId.js
+// ../packages/agent-tools/src/knowledge/rootId.ts
 var import_knowledge17 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/deploy/deployParser.js
+// ../packages/agent-tools/src/knowledge/deploy/deployParser.ts
 var import_knowledge20 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest3 = require("@seanhogg/builderforce-memory/ingest");
 
-// ../packages/agent-tools/src/knowledge/deploy/deployNodes.js
+// ../packages/agent-tools/src/knowledge/deploy/deployNodes.ts
 var import_knowledge19 = require("@seanhogg/builderforce-memory/knowledge");
 var DEPLOY_BADGES = {
   type: "type",
@@ -4396,10 +4155,10 @@ var DEPLOY_BADGES = {
 var UNIT_PREFIX = `ent:${CODE_PACK_ID}:unit:`;
 var BINDING_PREFIX = `ent:${CODE_PACK_ID}:binding:`;
 
-// ../packages/agent-tools/src/knowledge/deploy/parseDescriptor.js
+// ../packages/agent-tools/src/knowledge/deploy/parseDescriptor.ts
 var MAX_DESCRIPTOR_CHARS = 256 * 1024;
 
-// ../packages/agent-tools/src/knowledge/codeLayers.js
+// ../packages/agent-tools/src/knowledge/codeLayers.ts
 var import_knowledge21 = require("@seanhogg/builderforce-memory/knowledge");
 var FOLDER_LAYERS = {
   presentation: ["routes", "components", "app", "pages", "webview", "views", "hooks", "handlers", "controllers", "ui"],
@@ -4439,10 +4198,10 @@ function defaultLayerRegistry() {
 }
 var CODE_LAYERS = defaultLayerRegistry();
 
-// ../packages/agent-tools/src/knowledge/knowledgePacks.js
+// ../packages/agent-tools/src/knowledge/knowledgePacks.ts
 var import_knowledge24 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/documents/documentsPack.js
+// ../packages/agent-tools/src/knowledge/documents/documentsPack.ts
 var import_knowledge23 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest5 = require("@seanhogg/builderforce-memory/ingest");
 var DOCUMENTS_PACK_ID = "documents";
@@ -4457,57 +4216,57 @@ var DOCUMENTS_PACK = {
   ...import_knowledge23.DOCS_PACK.judgement ? { judgement: import_knowledge23.DOCS_PACK.judgement } : {}
 };
 
-// ../packages/agent-tools/src/knowledge/codeExtracted.js
+// ../packages/agent-tools/src/knowledge/codeExtracted.ts
 var import_knowledge25 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/facts/fileFactsOf.js
+// ../packages/agent-tools/src/knowledge/facts/fileFactsOf.ts
 var import_knowledge27 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/facts/factsAst.js
+// ../packages/agent-tools/src/knowledge/facts/factsAst.ts
 var import_knowledge26 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/reviewRunner.js
+// ../packages/agent-tools/src/knowledge/reviewRunner.ts
 var import_knowledge38 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/codeGraph.js
+// ../packages/agent-tools/src/knowledge/codeGraph.ts
 var import_knowledge29 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/deploy/deployGraph.js
+// ../packages/agent-tools/src/knowledge/deploy/deployGraph.ts
 var import_knowledge28 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/codeRootSignals.js
+// ../packages/agent-tools/src/knowledge/codeRootSignals.ts
 var import_knowledge32 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest6 = require("@seanhogg/builderforce-memory/ingest");
 
-// ../packages/agent-tools/src/knowledge/codeCoverage.js
+// ../packages/agent-tools/src/knowledge/codeCoverage.ts
 var MAX_FILE_BYTES = 40 * 1024 * 1024;
 
-// ../packages/agent-tools/src/knowledge/codeOwners.js
+// ../packages/agent-tools/src/knowledge/codeOwners.ts
 var import_knowledge30 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/historyPort.js
+// ../packages/agent-tools/src/knowledge/historyPort.ts
 var import_knowledge31 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/fileEdits.js
+// ../packages/agent-tools/src/knowledge/fileEdits.ts
 var import_knowledge33 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/workspaceAnalysis.js
+// ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
 var import_ingest7 = require("@seanhogg/builderforce-memory/ingest");
 
-// ../packages/agent-tools/src/knowledge/graphIgnore.js
+// ../packages/agent-tools/src/knowledge/graphIgnore.ts
 var import_knowledge34 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/workspaceAnalysis.js
+// ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
 var MAX_GRAPH_FILE_BYTES = 256 * 1024;
 var FAILED_RETAIN_MS = 2 * 6e4;
 var cache = createShaCache({
   keep: (held) => held.retainMs === 0 ? false : held.retainMs ?? true
 });
 
-// ../packages/agent-tools/src/knowledge/reviewJudgePass.js
+// ../packages/agent-tools/src/knowledge/reviewJudgePass.ts
 var import_knowledge35 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/judgement.js
+// ../packages/agent-tools/src/knowledge/judgement.ts
 var import_knowledge36 = require("@seanhogg/builderforce-memory/knowledge");
 var KNOWLEDGE_EXTRACT_SYSTEM = [
   "You read one section of a document and list what it asserts.",
@@ -4521,61 +4280,61 @@ var KNOWLEDGE_COMPARE_SYSTEM = [
   'Reply with JSON only: {"compare":[{"a":<ref a>,"b":<ref b>,"relation":"contradicts"|"agrees"|"unrelated","confidence":<0..1>}]}.'
 ].join("\n");
 
-// ../packages/agent-tools/src/knowledge/measuredWith.js
+// ../packages/agent-tools/src/knowledge/measuredWith.ts
 var import_knowledge37 = require("@seanhogg/builderforce-memory/knowledge");
 var TYPESCRIPT_VERSION = TYPESCRIPT_PIN.slice(TYPESCRIPT_PIN.lastIndexOf("@") + 1);
 
-// ../packages/agent-tools/src/knowledge/humanFact.js
+// ../packages/agent-tools/src/knowledge/humanFact.ts
 var import_knowledge39 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/documents/documentDoc.js
+// ../packages/agent-tools/src/knowledge/documents/documentDoc.ts
 var import_knowledge40 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/index/persistence.js
+// ../packages/agent-tools/src/knowledge/index/persistence.ts
 var import_knowledge41 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/replicaQueue.js
+// ../packages/agent-tools/src/knowledge/replicaQueue.ts
 var import_knowledge42 = require("@seanhogg/builderforce-memory/knowledge");
 var import_pack = require("@seanhogg/builderforce-memory/knowledge/pack");
 
-// ../packages/agent-tools/src/knowledge/replicatedStore.js
+// ../packages/agent-tools/src/knowledge/replicatedStore.ts
 var import_pack2 = require("@seanhogg/builderforce-memory/knowledge/pack");
 
-// ../packages/agent-tools/src/knowledge/replicaPump.js
+// ../packages/agent-tools/src/knowledge/replicaPump.ts
 var import_pack5 = require("@seanhogg/builderforce-memory/knowledge/pack");
 
-// ../packages/agent-tools/src/knowledge/replicaPack.js
+// ../packages/agent-tools/src/knowledge/replicaPack.ts
 var import_knowledge43 = require("@seanhogg/builderforce-memory/knowledge");
 var import_pack3 = require("@seanhogg/builderforce-memory/knowledge/pack");
 var DEFAULT_MAX_DECODED = 16 * 1024 * 1024;
 var EMPTY_PACK = { rootId: "", baseGeneration: 0, targetDigest: import_pack3.ZERO_DIGEST };
 var EMPTY_EXTRACTED_BYTES = (0, import_pack3.jsonBytesOf)({ ...EMPTY_PACK, extracted: [] });
 
-// ../packages/agent-tools/src/knowledge/replicaGenerationCheck.js
+// ../packages/agent-tools/src/knowledge/replicaGenerationCheck.ts
 var GENERATION_CHECK_INTERVAL_MS = 10 * 6e4;
 
-// ../packages/agent-tools/src/knowledge/replicaReconcile.js
+// ../packages/agent-tools/src/knowledge/replicaReconcile.ts
 var import_pack4 = require("@seanhogg/builderforce-memory/knowledge/pack");
 var EMPTY_ROOT = (0, import_pack4.manifestTree)([]).root;
 
-// ../packages/agent-tools/src/knowledge/replicaPump.js
+// ../packages/agent-tools/src/knowledge/replicaPump.ts
 var MAX_ANALYSIS_BYTES = 2 * 1024 * 1024;
 var MAX_SYNC_PACK_BYTES = 24 * 1024 * 1024;
 
-// ../packages/agent-tools/src/knowledge/replicaFirstSync.js
+// ../packages/agent-tools/src/knowledge/replicaFirstSync.ts
 var import_knowledge44 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/claimSimilarity.js
+// ../packages/agent-tools/src/knowledge/claimSimilarity.ts
 var import_knowledge45 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/portablePack.js
+// ../packages/agent-tools/src/knowledge/portablePack.ts
 var import_knowledge46 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/packGraph.js
+// ../packages/agent-tools/src/knowledge/packGraph.ts
 var import_knowledge47 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest8 = require("@seanhogg/builderforce-memory/ingest");
 
-// ../packages/agent-tools/src/knowledge/pinpointMatch.js
+// ../packages/agent-tools/src/knowledge/pinpointMatch.ts
 var import_knowledge48 = require("@seanhogg/builderforce-memory/knowledge");
 var MAX_PINPOINT_IMAGE_BYTES = 8 * 1024 * 1024;
 var MAX_DATA_URL_CHARS = Math.ceil(MAX_PINPOINT_IMAGE_BYTES * 4 / 3) + 64;
@@ -4585,28 +4344,28 @@ var PINPOINT_VISION_SYSTEM = [
   '"texts": the exact visible strings (labels, headings, buttons, status text, error messages), at most 12, verbatim}.'
 ].join(" ");
 
-// ../packages/agent-tools/src/knowledge/replicaLock.js
+// ../packages/agent-tools/src/knowledge/replicaLock.ts
 var LOCK_REFRESH_MS = 3e4;
 var LOCK_STALE_MS = 12e4;
 var LOCK_FRESH_MS = LOCK_STALE_MS - LOCK_REFRESH_MS;
 
-// ../packages/agent-tools/src/delta/adapters/dependencyCruiser.js
+// ../packages/agent-tools/src/delta/adapters/dependencyCruiser.ts
 var import_ingest9 = require("@seanhogg/builderforce-memory/ingest");
 var import_knowledge49 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/delta/adapters/gitleaks.js
+// ../packages/agent-tools/src/delta/adapters/gitleaks.ts
 var import_knowledge50 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/delta/adapters/jscpd.js
+// ../packages/agent-tools/src/delta/adapters/jscpd.ts
 var import_knowledge51 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/delta/adapters/knip.js
+// ../packages/agent-tools/src/delta/adapters/knip.ts
 var import_knowledge52 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/delta/adapters/osv.js
+// ../packages/agent-tools/src/delta/adapters/osv.ts
 var import_knowledge53 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/delta/adapters/sarifTools.js
+// ../packages/agent-tools/src/delta/adapters/sarifTools.ts
 var import_knowledge54 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/sarif/src/emit.js
@@ -4615,19 +4374,19 @@ var SARIF_BASELINE_STATES = ["new", "unchanged", "updated", "absent"];
 // ../packages/sarif/src/parse.js
 var BASELINE = new Set(SARIF_BASELINE_STATES);
 
-// ../packages/agent-tools/src/delta/adapters/sarifTools.js
+// ../packages/agent-tools/src/delta/adapters/sarifTools.ts
 var SEMGREP_TOOL = "semgrep";
 var CODEQL_TOOL = "codeql";
 var SARIF_KINDS = { [SEMGREP_TOOL]: "semgrep-finding", [CODEQL_TOOL]: "codeql-finding" };
 
-// ../packages/agent-tools/src/delta/adapters/l3Cache.js
+// ../packages/agent-tools/src/delta/adapters/l3Cache.ts
 var import_retrieval = require("@seanhogg/builderforce-memory/retrieval");
 
-// ../packages/agent-tools/src/delta/adapters/typescript.js
+// ../packages/agent-tools/src/delta/adapters/typescript.ts
 var import_knowledge55 = require("@seanhogg/builderforce-memory/knowledge");
 var TYPESCRIPT_VERSION2 = TYPESCRIPT_PIN.slice(TYPESCRIPT_PIN.lastIndexOf("@") + 1);
 
-// ../packages/agent-tools/src/delta/dynamic/host.js
+// ../packages/agent-tools/src/delta/dynamic/host.ts
 var DYNAMIC_STEP_CAP_MS = 30 * 6e4;
 
 // src/runFindings/detectors/bracketBreak.ts

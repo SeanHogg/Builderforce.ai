@@ -1,12 +1,17 @@
 /**
  * What one source file contributes to the graph: the symbols it DEFINES (from the one
- * shared extractor, `@builderforce/agent-tools/symbols`), the identifiers it USES (a
- * light tokenizer over the code with comments and string literals blanked) and the
- * terms of its IMPORT statements (per-language patterns).
+ * shared extractor, `@builderforce/agent-tools/symbols`) and the identifiers it USES plus
+ * the terms of its IMPORT statements — both read off the SAME shared tokenizer
+ * (`terms.identifiers`), not a second per-language regex table (PRD 41 §B9: repo-map's
+ * `FileFacts` converges on the one understanding; a Worker-built graph and a VSIX-built
+ * graph differ only in the extractor tag, and the tag below records that this side is the
+ * no-parser/regex host).
  *
- * bf-index reads the same three facts off a tree-sitter parse; here they come from
- * regexes because this runs in a Worker with no parser. A missed or spurious fact
- * shifts a rank a little, never a wrong edit — the same trade the symbol index made.
+ * bf-index reads the same facts off a tree-sitter parse; here they come from regexes and
+ * the shared tokenizer because this runs in a Worker with no parser. The hosts agree on
+ * WHAT a file mentions (one tokenizer) even though they find it differently. A missed or
+ * spurious fact shifts a rank a little, never a wrong edit — the same trade the symbol
+ * index made.
  */
 
 import { extractSymbols, symbolLanguageOf, type SymbolLanguage } from '@builderforce/agent-tools/symbols';
@@ -35,42 +40,23 @@ interface LanguageSyntax {
   lineComments: readonly string[];
   blockComments: ReadonlyArray<readonly [open: string, close: string]>;
   quotes: readonly string[];
-  imports: readonly RegExp[];
 }
 
 const C_LIKE = { lineComments: ['//'], blockComments: [['/*', '*/']] as const, quotes: ['"', "'"] };
 
-/** Per-family syntax — data, one row per family the shared extractor knows. */
+/**
+ * Per-family comment/string syntax — data, one row per family the shared extractor knows.
+ * The IMPORT terms are NOT a second per-language table: they come from the same shared
+ * tokenizer as the identifiers (see {@link importTerms}), so this package holds ONE
+ * understanding of what a file mentions (PRD 41 §B9).
+ */
 const SYNTAX: Readonly<Record<CodeLanguage, LanguageSyntax>> = {
-  js: {
-    ...C_LIKE,
-    quotes: ['"', "'", '`'],
-    imports: [
-      /^\s*import\s[^;]*?['"][^'"\n]+['"]/gm,
-      /^\s*export\s[^;]*?\sfrom\s*['"][^'"\n]+['"]/gm,
-      /\b(?:require|import)\(\s*['"][^'"\n]+['"]\s*\)/g,
-    ],
-  },
-  python: {
-    lineComments: ['#'],
-    blockComments: [],
-    quotes: ['"""', "'''", '"', "'"],
-    imports: [/^\s*(?:from\s+[\w.]+\s+)?import\s+[^\n]+/gm],
-  },
-  go: { ...C_LIKE, quotes: ['"', '`'], imports: [/^\s*import\s*\([^)]*\)/gm, /^\s*import\s+[^\n(]+/gm] },
-  rust: { ...C_LIKE, quotes: ['"'], imports: [/^\s*(?:pub(?:\([^)]*\))?\s+)?use\s+[^;]+;/gm] },
-  oo: {
-    lineComments: ['//', '#'],
-    blockComments: [['/*', '*/']],
-    quotes: ['"', "'"],
-    imports: [/^\s*(?:import|using|use)\s+[^\n;]+/gm, /^\s*(?:require|include)(?:_once)?\s*\(?\s*['"][^'"\n]+['"]/gm],
-  },
-  ruby: {
-    lineComments: ['#'],
-    blockComments: [['=begin', '=end']],
-    quotes: ['"', "'"],
-    imports: [/^\s*(?:require|require_relative|load)\s*\(?\s*['"][^'"\n]+['"]/gm],
-  },
+  js: { ...C_LIKE, quotes: ['"', "'", '`'] },
+  python: { lineComments: ['#'], blockComments: [], quotes: ['"""', "'''", '"', "'"] },
+  go: { ...C_LIKE, quotes: ['"', '`'] },
+  rust: { ...C_LIKE, quotes: ['"'] },
+  oo: { lineComments: ['//', '#'], blockComments: [['/*', '*/']], quotes: ['"', "'"] },
+  ruby: { lineComments: ['#'], blockComments: [['=begin', '=end']], quotes: ['"', "'"] },
 };
 
 /** Longest import statement read for terms; anything longer is a generated blob (bf-index). */
@@ -135,13 +121,26 @@ function blankCommentsAndStrings(text: string, syntax: LanguageSyntax): string {
   return parts.join('');
 }
 
-function importTerms(text: string, syntax: LanguageSyntax): Set<string> {
+/**
+ * An import statement's keywords across the map's language families (data, one row). The
+ * detector is language-agnostic on purpose: the import terms are read with the SAME shared
+ * tokenizer as the identifiers (one understanding, PRD 41 §B9), and a per-language regex
+ * table is the second understanding this convergence removes.
+ */
+const IMPORT_KEYWORDS = /\b(?:import|require|require_relative|include|using|from|use|load)\b/;
+
+/**
+ * The import terms of a file — the identifiers (the shared tokenizer) of the lines whose
+ * statement is an import. The import PATH terms are read off the RAW line, not the
+ * comment/string-blanked text: a module path lives inside a string literal the blanking
+ * would erase. A line that merely mentions a keyword shifts a rank a little, never a wrong
+ * edit — the same trade the symbol index made.
+ */
+function importTerms(content: string): Set<string> {
   const terms = new Set<string>();
-  for (const re of syntax.imports) {
-    re.lastIndex = 0;
-    for (const m of text.matchAll(re)) {
-      for (const w of identifiers(m[0].slice(0, MAX_IMPORT_CHARS), 2)) terms.add(w.toLowerCase());
-    }
+  for (const line of content.split('\n')) {
+    if (!IMPORT_KEYWORDS.test(line)) continue;
+    for (const w of identifiers(line.trim().slice(0, MAX_IMPORT_CHARS), 2)) terms.add(w.toLowerCase());
   }
   return terms;
 }
@@ -161,6 +160,6 @@ export function extractFileFacts(path: string, content: string): FileFacts | nul
   return {
     symbols,
     identifiers: new Set(identifiers(blankCommentsAndStrings(content, syntax), 3)),
-    imports: importTerms(content, syntax),
+    imports: importTerms(content),
   };
 }

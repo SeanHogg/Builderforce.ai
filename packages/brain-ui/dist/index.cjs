@@ -2532,9 +2532,11 @@ function toolStepView({ args, result, isError }) {
     preview: toolPreview(args),
     argsText: formatPayload(residualArgs(args, commandLine)),
     resultText: command?.outputComplete ? "" : formatPayload(result),
-    // A command is the step a reader opens the transcript to check, and a failure is
-    // the step they need to read at all — neither should cost a click to see.
-    defaultOpen: !!command || isError
+    // Only a FAILURE opens by default — it is the step nobody should have to click to
+    // read. A command is exactly the opposite: its header already carries the command
+    // line (the subject), so opening it would push the transcript's body down with
+    // terminal noise the reader has not asked for.
+    defaultOpen: isError
   };
 }
 
@@ -3656,6 +3658,51 @@ function ChatTicketStats({ chat, labels }) {
 
 // src/surface/ChatHistory.tsx
 var import_jsx_runtime30 = require("react/jsx-runtime");
+function ActionIcon({ label, children }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("svg", { width: "15", height: "15", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", role: "img", "aria-label": label, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("title", { children: label }),
+    children
+  ] });
+}
+var ACTION_ICONS = {
+  /** Rename — a pencil. */
+  rename: /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(import_jsx_runtime30.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("path", { d: "M12 20h9" }),
+    /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("path", { d: "M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" })
+  ] }),
+  /** Summarize — a four-point sparkle. */
+  summarize: /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("path", { d: "M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8Z" }),
+  /** Archive — a box with a slot. */
+  archive: /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(import_jsx_runtime30.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("rect", { x: "3", y: "4", width: "18", height: "4", rx: "1" }),
+    /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("path", { d: "M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" }),
+    /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("path", { d: "M10 12h4" })
+  ] }),
+  /** Unarchive — a box with an up arrow (the mirror of Archive). */
+  unarchive: /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(import_jsx_runtime30.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("rect", { x: "3", y: "4", width: "18", height: "4", rx: "1" }),
+    /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("path", { d: "M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" }),
+    /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("path", { d: "M12 11v6" }),
+    /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("path", { d: "m9 13 3-3 3 3" })
+  ] }),
+  /** Delete — a trash can. */
+  delete: /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(import_jsx_runtime30.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("path", { d: "M3 6h18" }),
+    /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("path", { d: "M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" }),
+    /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("path", { d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" }),
+    /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("path", { d: "M10 11v6" }),
+    /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("path", { d: "M14 11v6" })
+  ] }),
+  /** Open chat — a speech bubble. */
+  openChat: /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("path", { d: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" }),
+  /** Resume — a play triangle. */
+  resume: /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("path", { d: "m6 4 14 8-14 8Z" }),
+  /** Dismiss — an ×. */
+  dismiss: /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(import_jsx_runtime30.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("path", { d: "M18 6 6 18" }),
+    /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("path", { d: "m6 6 12 12" })
+  ] })
+};
 var DEFAULT_CHAT_HISTORY_LABELS = {
   loading: "Loading\u2026",
   empty: "No chats yet",
@@ -3708,9 +3755,9 @@ function InterruptedRunRow({ state, className }) {
         ] }),
         state.failed && !state.pending && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { className: "bf-chatrow__meta", role: "alert", children: labels.resumeFailed ?? "Couldn't resume" }),
         /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { className: "bf-chatrow__actions", children: [
-          state.resumable && state.onOpen && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("button", { type: "button", className: "bf-chatrow__action", disabled, onClick: state.onOpen, children: labels.openChat ?? "Open chat" }),
-          state.resumable && state.onResume && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("button", { type: "button", className: "bf-chatrow__action", disabled, onClick: state.onResume, children: labels.resume ?? "Resume" }),
-          state.onDismiss && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("button", { type: "button", className: "bf-chatrow__action", disabled, onClick: state.onDismiss, children: labels.dismiss ?? "Dismiss" })
+          state.resumable && state.onOpen && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("button", { type: "button", className: "bf-chatrow__action", disabled, title: labels.openChat ?? "Open chat", "aria-label": labels.openChat ?? "Open chat", onClick: state.onOpen, children: /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(ActionIcon, { label: labels.openChat ?? "Open chat", children: ACTION_ICONS.openChat }) }),
+          state.resumable && state.onResume && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("button", { type: "button", className: "bf-chatrow__action", disabled, title: labels.resume ?? "Resume", "aria-label": labels.resume ?? "Resume", onClick: state.onResume, children: /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(ActionIcon, { label: labels.resume ?? "Resume", children: ACTION_ICONS.resume }) }),
+          state.onDismiss && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("button", { type: "button", className: "bf-chatrow__action", disabled, title: labels.dismiss ?? "Dismiss", "aria-label": labels.dismiss ?? "Dismiss", onClick: state.onDismiss, children: /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(ActionIcon, { label: labels.dismiss ?? "Dismiss", children: ACTION_ICONS.dismiss }) })
         ] })
       ]
     }
@@ -3732,8 +3779,6 @@ var ChatHistoryRow = (0, import_react21.memo)(function ChatHistoryRow2({
   onOpen,
   meta,
   marker,
-  actionsOpen = false,
-  onToggleActions,
   renaming = false,
   renameValue = "",
   onStartRename,
@@ -3757,7 +3802,7 @@ var ChatHistoryRow = (0, import_react21.memo)(function ChatHistoryRow2({
   const submitRename = () => onSubmitRename?.(chat.id, renameValue);
   const daysIdle = chat.daysIdle != null && Number.isFinite(chat.daysIdle) && chat.daysIdle >= 1 ? fill(labels.daysIdle, { days: Math.floor(chat.daysIdle) }) : null;
   const canArchive = Boolean(onArchive) && !archived;
-  const hasActions = Boolean(onStartRename || onSummarize || canArchive || onDelete || extraActions);
+  const hasActions = Boolean(onStartRename || onSummarize || canArchive || onUnarchive || onDelete || extraActions);
   return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
     "div",
     {
@@ -3797,43 +3842,15 @@ var ChatHistoryRow = (0, import_react21.memo)(function ChatHistoryRow2({
           ),
           !renaming && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(ChatTicketStats, { chat, labels }),
           !renaming && daysIdle != null && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { className: "bf-chatrow__days", title: daysIdle, children: daysIdle }),
-          !renaming && chat.stats != null && chat.stats !== "" && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { className: "bf-chatrow__stats", title: chat.stats, children: chat.stats }),
-          !renaming && hasActions && onToggleActions && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
-            "button",
-            {
-              type: "button",
-              className: "bf-chatrow__more",
-              "aria-expanded": actionsOpen,
-              "aria-label": labels.actionsAria.replace("{title}", chat.title),
-              title: labels.actions,
-              onClick: () => onToggleActions(chat.id),
-              children: /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("svg", { width: "14", height: "14", viewBox: "0 0 24 24", fill: "currentColor", "aria-hidden": true, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("circle", { cx: "5", cy: "12", r: "1.8" }),
-                /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("circle", { cx: "12", cy: "12", r: "1.8" }),
-                /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("circle", { cx: "19", cy: "12", r: "1.8" })
-              ] })
-            }
-          )
+          !renaming && chat.stats != null && chat.stats !== "" && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { className: "bf-chatrow__stats", title: chat.stats, children: chat.stats })
         ] }),
         meta != null && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { className: "bf-chatrow__meta", children: meta }),
-        actionsOpen && !renaming && hasActions && /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { className: "bf-chatrow__actions", children: [
-          onStartRename && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("button", { type: "button", className: "bf-chatrow__action", onClick: () => onStartRename(chat), children: labels.rename }),
-          onSummarize && /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("button", { type: "button", className: "bf-chatrow__action", onClick: () => onSummarize(chat.id), disabled: summarizing, "aria-busy": summarizing || void 0, children: [
-            labels.summarize,
-            summarizing && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { "aria-hidden": true, children: "\u2026" })
-          ] }),
-          canArchive && /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("button", { type: "button", className: "bf-chatrow__action", onClick: () => onArchive?.(chat), disabled: archiving, "aria-busy": archiving || void 0, children: [
-            labels.archive,
-            archiving && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { "aria-hidden": true, children: "\u2026" })
-          ] }),
-          onUnarchive && archived && /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("button", { type: "button", className: "bf-chatrow__action", onClick: () => onUnarchive(chat), disabled: unarchiving, "aria-busy": unarchiving || void 0, children: [
-            labels.unarchive,
-            unarchiving && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { "aria-hidden": true, children: "\u2026" })
-          ] }),
-          onDelete && /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("button", { type: "button", className: "bf-chatrow__action bf-chatrow__action--danger", onClick: () => onDelete(chat), disabled: deleting, "aria-busy": deleting || void 0, children: [
-            labels.delete,
-            deleting && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { "aria-hidden": true, children: "\u2026" })
-          ] }),
+        !renaming && hasActions && /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { className: "bf-chatrow__actions", children: [
+          onStartRename && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("button", { type: "button", className: "bf-chatrow__action", title: labels.rename, "aria-label": labels.rename, onClick: () => onStartRename(chat), children: /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(ActionIcon, { label: labels.rename, children: ACTION_ICONS.rename }) }),
+          onSummarize && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("button", { type: "button", className: "bf-chatrow__action", title: labels.summarize, "aria-label": labels.summarize, onClick: () => onSummarize(chat.id), disabled: summarizing, "aria-busy": summarizing || void 0, children: /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(ActionIcon, { label: labels.summarize, children: ACTION_ICONS.summarize }) }),
+          canArchive && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("button", { type: "button", className: "bf-chatrow__action", title: labels.archive, "aria-label": labels.archive, onClick: () => onArchive?.(chat), disabled: archiving, "aria-busy": archiving || void 0, children: /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(ActionIcon, { label: labels.archive, children: ACTION_ICONS.archive }) }),
+          onUnarchive && archived && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("button", { type: "button", className: "bf-chatrow__action", title: labels.unarchive, "aria-label": labels.unarchive, onClick: () => onUnarchive(chat), disabled: unarchiving, "aria-busy": unarchiving || void 0, children: /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(ActionIcon, { label: labels.unarchive, children: ACTION_ICONS.unarchive }) }),
+          onDelete && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("button", { type: "button", className: "bf-chatrow__action bf-chatrow__action--danger", title: labels.delete, "aria-label": labels.delete, onClick: () => onDelete(chat), disabled: deleting, "aria-busy": deleting || void 0, children: /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(ActionIcon, { label: labels.delete, children: ACTION_ICONS.delete }) }),
           extraActions
         ] })
       ]
@@ -3846,7 +3863,6 @@ var import_react22 = require("react");
 function useChatRowActions(options) {
   const opts = (0, import_react22.useRef)(options);
   opts.current = options;
-  const [actionsChatId, setActionsChatId] = (0, import_react22.useState)(null);
   const [renamingId, setRenamingId] = (0, import_react22.useState)(null);
   const [renameValue, setRenameValue] = (0, import_react22.useState)("");
   const [summarizingId, setSummarizingId] = (0, import_react22.useState)(null);
@@ -3858,17 +3874,12 @@ function useChatRowActions(options) {
   const settled = (0, import_react22.useRef)(null);
   const openChat = (0, import_react22.useCallback)((id) => {
     opts.current.onOpen(id);
-    if (opts.current.revealActionsOnOpen) setActionsChatId(id);
-  }, []);
-  const toggleActions = (0, import_react22.useCallback)((id) => {
-    setActionsChatId((cur) => cur === id ? null : id);
   }, []);
   const startRename = (0, import_react22.useCallback)((chat) => {
     settled.current = null;
     renameFrom.current = chat.title;
     setRenamingId(chat.id);
     setRenameValue(chat.title);
-    setActionsChatId(null);
   }, []);
   const endRename = (0, import_react22.useCallback)((id) => {
     settled.current = id;
@@ -3899,7 +3910,6 @@ function useChatRowActions(options) {
     setArchivingId(chat.id);
     try {
       await archive({ id: chat.id, title: chat.title });
-      setActionsChatId((cur) => cur === chat.id ? null : cur);
     } finally {
       setArchivingId((cur) => cur === chat.id ? null : cur);
     }
@@ -3910,7 +3920,6 @@ function useChatRowActions(options) {
     setUnarchivingId(chat.id);
     try {
       await unarchive({ id: chat.id, title: chat.title });
-      setActionsChatId((cur) => cur === chat.id ? null : cur);
     } finally {
       setUnarchivingId((cur) => cur === chat.id ? null : cur);
     }
@@ -3922,7 +3931,6 @@ function useChatRowActions(options) {
     setDeletingId(chat.id);
     try {
       await remove({ id: chat.id, title: chat.title });
-      setActionsChatId((cur) => cur === chat.id ? null : cur);
     } finally {
       setDeletingId((cur) => cur === chat.id ? null : cur);
     }
@@ -3944,8 +3952,6 @@ function useChatRowActions(options) {
     const archived = options.isArchived?.(id) ?? false;
     return {
       onOpen: openChat,
-      actionsOpen: actionsChatId === id,
-      onToggleActions: toggleActions,
       renaming,
       renameValue: renaming ? renameValue : "",
       onStartRename: startRename,
@@ -3965,7 +3971,6 @@ function useChatRowActions(options) {
     };
   };
   return {
-    actionsChatId,
     renamingId,
     renameValue,
     setRenameValue,
@@ -3975,7 +3980,6 @@ function useChatRowActions(options) {
     deletingId,
     busyId,
     openChat,
-    toggleActions,
     startRename,
     cancelRename,
     submitRename,

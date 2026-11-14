@@ -2287,9 +2287,11 @@ function toolStepView({ args, result, isError }) {
     preview: toolPreview(args),
     argsText: formatPayload(residualArgs(args, commandLine)),
     resultText: command?.outputComplete ? "" : formatPayload(result),
-    // A command is the step a reader opens the transcript to check, and a failure is
-    // the step they need to read at all — neither should cost a click to see.
-    defaultOpen: !!command || isError
+    // Only a FAILURE opens by default — it is the step nobody should have to click to
+    // read. A command is exactly the opposite: its header already carries the command
+    // line (the subject), so opening it would push the transcript's body down with
+    // terminal noise the reader has not asked for.
+    defaultOpen: isError
   };
 }
 
@@ -3414,7 +3416,52 @@ function ChatTicketStats({ chat, labels }) {
 }
 
 // src/surface/ChatHistory.tsx
-import { jsx as jsx30, jsxs as jsxs27 } from "react/jsx-runtime";
+import { Fragment as Fragment9, jsx as jsx30, jsxs as jsxs27 } from "react/jsx-runtime";
+function ActionIcon({ label, children }) {
+  return /* @__PURE__ */ jsxs27("svg", { width: "15", height: "15", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", role: "img", "aria-label": label, children: [
+    /* @__PURE__ */ jsx30("title", { children: label }),
+    children
+  ] });
+}
+var ACTION_ICONS = {
+  /** Rename — a pencil. */
+  rename: /* @__PURE__ */ jsxs27(Fragment9, { children: [
+    /* @__PURE__ */ jsx30("path", { d: "M12 20h9" }),
+    /* @__PURE__ */ jsx30("path", { d: "M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" })
+  ] }),
+  /** Summarize — a four-point sparkle. */
+  summarize: /* @__PURE__ */ jsx30("path", { d: "M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8Z" }),
+  /** Archive — a box with a slot. */
+  archive: /* @__PURE__ */ jsxs27(Fragment9, { children: [
+    /* @__PURE__ */ jsx30("rect", { x: "3", y: "4", width: "18", height: "4", rx: "1" }),
+    /* @__PURE__ */ jsx30("path", { d: "M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" }),
+    /* @__PURE__ */ jsx30("path", { d: "M10 12h4" })
+  ] }),
+  /** Unarchive — a box with an up arrow (the mirror of Archive). */
+  unarchive: /* @__PURE__ */ jsxs27(Fragment9, { children: [
+    /* @__PURE__ */ jsx30("rect", { x: "3", y: "4", width: "18", height: "4", rx: "1" }),
+    /* @__PURE__ */ jsx30("path", { d: "M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" }),
+    /* @__PURE__ */ jsx30("path", { d: "M12 11v6" }),
+    /* @__PURE__ */ jsx30("path", { d: "m9 13 3-3 3 3" })
+  ] }),
+  /** Delete — a trash can. */
+  delete: /* @__PURE__ */ jsxs27(Fragment9, { children: [
+    /* @__PURE__ */ jsx30("path", { d: "M3 6h18" }),
+    /* @__PURE__ */ jsx30("path", { d: "M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" }),
+    /* @__PURE__ */ jsx30("path", { d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" }),
+    /* @__PURE__ */ jsx30("path", { d: "M10 11v6" }),
+    /* @__PURE__ */ jsx30("path", { d: "M14 11v6" })
+  ] }),
+  /** Open chat — a speech bubble. */
+  openChat: /* @__PURE__ */ jsx30("path", { d: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" }),
+  /** Resume — a play triangle. */
+  resume: /* @__PURE__ */ jsx30("path", { d: "m6 4 14 8-14 8Z" }),
+  /** Dismiss — an ×. */
+  dismiss: /* @__PURE__ */ jsxs27(Fragment9, { children: [
+    /* @__PURE__ */ jsx30("path", { d: "M18 6 6 18" }),
+    /* @__PURE__ */ jsx30("path", { d: "m6 6 12 12" })
+  ] })
+};
 var DEFAULT_CHAT_HISTORY_LABELS = {
   loading: "Loading\u2026",
   empty: "No chats yet",
@@ -3467,9 +3514,9 @@ function InterruptedRunRow({ state, className }) {
         ] }),
         state.failed && !state.pending && /* @__PURE__ */ jsx30("div", { className: "bf-chatrow__meta", role: "alert", children: labels.resumeFailed ?? "Couldn't resume" }),
         /* @__PURE__ */ jsxs27("div", { className: "bf-chatrow__actions", children: [
-          state.resumable && state.onOpen && /* @__PURE__ */ jsx30("button", { type: "button", className: "bf-chatrow__action", disabled, onClick: state.onOpen, children: labels.openChat ?? "Open chat" }),
-          state.resumable && state.onResume && /* @__PURE__ */ jsx30("button", { type: "button", className: "bf-chatrow__action", disabled, onClick: state.onResume, children: labels.resume ?? "Resume" }),
-          state.onDismiss && /* @__PURE__ */ jsx30("button", { type: "button", className: "bf-chatrow__action", disabled, onClick: state.onDismiss, children: labels.dismiss ?? "Dismiss" })
+          state.resumable && state.onOpen && /* @__PURE__ */ jsx30("button", { type: "button", className: "bf-chatrow__action", disabled, title: labels.openChat ?? "Open chat", "aria-label": labels.openChat ?? "Open chat", onClick: state.onOpen, children: /* @__PURE__ */ jsx30(ActionIcon, { label: labels.openChat ?? "Open chat", children: ACTION_ICONS.openChat }) }),
+          state.resumable && state.onResume && /* @__PURE__ */ jsx30("button", { type: "button", className: "bf-chatrow__action", disabled, title: labels.resume ?? "Resume", "aria-label": labels.resume ?? "Resume", onClick: state.onResume, children: /* @__PURE__ */ jsx30(ActionIcon, { label: labels.resume ?? "Resume", children: ACTION_ICONS.resume }) }),
+          state.onDismiss && /* @__PURE__ */ jsx30("button", { type: "button", className: "bf-chatrow__action", disabled, title: labels.dismiss ?? "Dismiss", "aria-label": labels.dismiss ?? "Dismiss", onClick: state.onDismiss, children: /* @__PURE__ */ jsx30(ActionIcon, { label: labels.dismiss ?? "Dismiss", children: ACTION_ICONS.dismiss }) })
         ] })
       ]
     }
@@ -3491,8 +3538,6 @@ var ChatHistoryRow = memo7(function ChatHistoryRow2({
   onOpen,
   meta,
   marker,
-  actionsOpen = false,
-  onToggleActions,
   renaming = false,
   renameValue = "",
   onStartRename,
@@ -3516,7 +3561,7 @@ var ChatHistoryRow = memo7(function ChatHistoryRow2({
   const submitRename = () => onSubmitRename?.(chat.id, renameValue);
   const daysIdle = chat.daysIdle != null && Number.isFinite(chat.daysIdle) && chat.daysIdle >= 1 ? fill(labels.daysIdle, { days: Math.floor(chat.daysIdle) }) : null;
   const canArchive = Boolean(onArchive) && !archived;
-  const hasActions = Boolean(onStartRename || onSummarize || canArchive || onDelete || extraActions);
+  const hasActions = Boolean(onStartRename || onSummarize || canArchive || onUnarchive || onDelete || extraActions);
   return /* @__PURE__ */ jsxs27(
     "div",
     {
@@ -3556,43 +3601,15 @@ var ChatHistoryRow = memo7(function ChatHistoryRow2({
           ),
           !renaming && /* @__PURE__ */ jsx30(ChatTicketStats, { chat, labels }),
           !renaming && daysIdle != null && /* @__PURE__ */ jsx30("span", { className: "bf-chatrow__days", title: daysIdle, children: daysIdle }),
-          !renaming && chat.stats != null && chat.stats !== "" && /* @__PURE__ */ jsx30("span", { className: "bf-chatrow__stats", title: chat.stats, children: chat.stats }),
-          !renaming && hasActions && onToggleActions && /* @__PURE__ */ jsx30(
-            "button",
-            {
-              type: "button",
-              className: "bf-chatrow__more",
-              "aria-expanded": actionsOpen,
-              "aria-label": labels.actionsAria.replace("{title}", chat.title),
-              title: labels.actions,
-              onClick: () => onToggleActions(chat.id),
-              children: /* @__PURE__ */ jsxs27("svg", { width: "14", height: "14", viewBox: "0 0 24 24", fill: "currentColor", "aria-hidden": true, children: [
-                /* @__PURE__ */ jsx30("circle", { cx: "5", cy: "12", r: "1.8" }),
-                /* @__PURE__ */ jsx30("circle", { cx: "12", cy: "12", r: "1.8" }),
-                /* @__PURE__ */ jsx30("circle", { cx: "19", cy: "12", r: "1.8" })
-              ] })
-            }
-          )
+          !renaming && chat.stats != null && chat.stats !== "" && /* @__PURE__ */ jsx30("span", { className: "bf-chatrow__stats", title: chat.stats, children: chat.stats })
         ] }),
         meta != null && /* @__PURE__ */ jsx30("div", { className: "bf-chatrow__meta", children: meta }),
-        actionsOpen && !renaming && hasActions && /* @__PURE__ */ jsxs27("div", { className: "bf-chatrow__actions", children: [
-          onStartRename && /* @__PURE__ */ jsx30("button", { type: "button", className: "bf-chatrow__action", onClick: () => onStartRename(chat), children: labels.rename }),
-          onSummarize && /* @__PURE__ */ jsxs27("button", { type: "button", className: "bf-chatrow__action", onClick: () => onSummarize(chat.id), disabled: summarizing, "aria-busy": summarizing || void 0, children: [
-            labels.summarize,
-            summarizing && /* @__PURE__ */ jsx30("span", { "aria-hidden": true, children: "\u2026" })
-          ] }),
-          canArchive && /* @__PURE__ */ jsxs27("button", { type: "button", className: "bf-chatrow__action", onClick: () => onArchive?.(chat), disabled: archiving, "aria-busy": archiving || void 0, children: [
-            labels.archive,
-            archiving && /* @__PURE__ */ jsx30("span", { "aria-hidden": true, children: "\u2026" })
-          ] }),
-          onUnarchive && archived && /* @__PURE__ */ jsxs27("button", { type: "button", className: "bf-chatrow__action", onClick: () => onUnarchive(chat), disabled: unarchiving, "aria-busy": unarchiving || void 0, children: [
-            labels.unarchive,
-            unarchiving && /* @__PURE__ */ jsx30("span", { "aria-hidden": true, children: "\u2026" })
-          ] }),
-          onDelete && /* @__PURE__ */ jsxs27("button", { type: "button", className: "bf-chatrow__action bf-chatrow__action--danger", onClick: () => onDelete(chat), disabled: deleting, "aria-busy": deleting || void 0, children: [
-            labels.delete,
-            deleting && /* @__PURE__ */ jsx30("span", { "aria-hidden": true, children: "\u2026" })
-          ] }),
+        !renaming && hasActions && /* @__PURE__ */ jsxs27("div", { className: "bf-chatrow__actions", children: [
+          onStartRename && /* @__PURE__ */ jsx30("button", { type: "button", className: "bf-chatrow__action", title: labels.rename, "aria-label": labels.rename, onClick: () => onStartRename(chat), children: /* @__PURE__ */ jsx30(ActionIcon, { label: labels.rename, children: ACTION_ICONS.rename }) }),
+          onSummarize && /* @__PURE__ */ jsx30("button", { type: "button", className: "bf-chatrow__action", title: labels.summarize, "aria-label": labels.summarize, onClick: () => onSummarize(chat.id), disabled: summarizing, "aria-busy": summarizing || void 0, children: /* @__PURE__ */ jsx30(ActionIcon, { label: labels.summarize, children: ACTION_ICONS.summarize }) }),
+          canArchive && /* @__PURE__ */ jsx30("button", { type: "button", className: "bf-chatrow__action", title: labels.archive, "aria-label": labels.archive, onClick: () => onArchive?.(chat), disabled: archiving, "aria-busy": archiving || void 0, children: /* @__PURE__ */ jsx30(ActionIcon, { label: labels.archive, children: ACTION_ICONS.archive }) }),
+          onUnarchive && archived && /* @__PURE__ */ jsx30("button", { type: "button", className: "bf-chatrow__action", title: labels.unarchive, "aria-label": labels.unarchive, onClick: () => onUnarchive(chat), disabled: unarchiving, "aria-busy": unarchiving || void 0, children: /* @__PURE__ */ jsx30(ActionIcon, { label: labels.unarchive, children: ACTION_ICONS.unarchive }) }),
+          onDelete && /* @__PURE__ */ jsx30("button", { type: "button", className: "bf-chatrow__action bf-chatrow__action--danger", title: labels.delete, "aria-label": labels.delete, onClick: () => onDelete(chat), disabled: deleting, "aria-busy": deleting || void 0, children: /* @__PURE__ */ jsx30(ActionIcon, { label: labels.delete, children: ACTION_ICONS.delete }) }),
           extraActions
         ] })
       ]
@@ -3605,7 +3622,6 @@ import { useCallback as useCallback4, useRef as useRef10, useState as useState10
 function useChatRowActions(options) {
   const opts = useRef10(options);
   opts.current = options;
-  const [actionsChatId, setActionsChatId] = useState10(null);
   const [renamingId, setRenamingId] = useState10(null);
   const [renameValue, setRenameValue] = useState10("");
   const [summarizingId, setSummarizingId] = useState10(null);
@@ -3617,17 +3633,12 @@ function useChatRowActions(options) {
   const settled = useRef10(null);
   const openChat = useCallback4((id) => {
     opts.current.onOpen(id);
-    if (opts.current.revealActionsOnOpen) setActionsChatId(id);
-  }, []);
-  const toggleActions = useCallback4((id) => {
-    setActionsChatId((cur) => cur === id ? null : id);
   }, []);
   const startRename = useCallback4((chat) => {
     settled.current = null;
     renameFrom.current = chat.title;
     setRenamingId(chat.id);
     setRenameValue(chat.title);
-    setActionsChatId(null);
   }, []);
   const endRename = useCallback4((id) => {
     settled.current = id;
@@ -3658,7 +3669,6 @@ function useChatRowActions(options) {
     setArchivingId(chat.id);
     try {
       await archive({ id: chat.id, title: chat.title });
-      setActionsChatId((cur) => cur === chat.id ? null : cur);
     } finally {
       setArchivingId((cur) => cur === chat.id ? null : cur);
     }
@@ -3669,7 +3679,6 @@ function useChatRowActions(options) {
     setUnarchivingId(chat.id);
     try {
       await unarchive({ id: chat.id, title: chat.title });
-      setActionsChatId((cur) => cur === chat.id ? null : cur);
     } finally {
       setUnarchivingId((cur) => cur === chat.id ? null : cur);
     }
@@ -3681,7 +3690,6 @@ function useChatRowActions(options) {
     setDeletingId(chat.id);
     try {
       await remove({ id: chat.id, title: chat.title });
-      setActionsChatId((cur) => cur === chat.id ? null : cur);
     } finally {
       setDeletingId((cur) => cur === chat.id ? null : cur);
     }
@@ -3703,8 +3711,6 @@ function useChatRowActions(options) {
     const archived = options.isArchived?.(id) ?? false;
     return {
       onOpen: openChat,
-      actionsOpen: actionsChatId === id,
-      onToggleActions: toggleActions,
       renaming,
       renameValue: renaming ? renameValue : "",
       onStartRename: startRename,
@@ -3724,7 +3730,6 @@ function useChatRowActions(options) {
     };
   };
   return {
-    actionsChatId,
     renamingId,
     renameValue,
     setRenameValue,
@@ -3734,7 +3739,6 @@ function useChatRowActions(options) {
     deletingId,
     busyId,
     openChat,
-    toggleActions,
     startRename,
     cancelRename,
     submitRename,
@@ -4110,7 +4114,7 @@ function usePopover() {
 }
 
 // src/promptOptions/ModePane.tsx
-import { Fragment as Fragment9, jsx as jsx35, jsxs as jsxs31 } from "react/jsx-runtime";
+import { Fragment as Fragment10, jsx as jsx35, jsxs as jsxs31 } from "react/jsx-runtime";
 var IconConsolidate = () => /* @__PURE__ */ jsx35("svg", { width: "13", height: "13", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ jsx35("path", { d: "M2 5.5 4.5 8 2 10.5M14 5.5 11.5 8 14 10.5M6.5 3v10M9.5 3v10", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round", strokeLinejoin: "round" }) });
 var IconFork = () => /* @__PURE__ */ jsxs31("svg", { width: "13", height: "13", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: [
   /* @__PURE__ */ jsx35("circle", { cx: "4", cy: "3.5", r: "1.5", fill: "currentColor" }),
@@ -4119,8 +4123,8 @@ var IconFork = () => /* @__PURE__ */ jsxs31("svg", { width: "13", height: "13", 
   /* @__PURE__ */ jsx35("path", { d: "M4 5v6M4 8h4.5A3.5 3.5 0 0 0 12 4.5V5", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round", strokeLinejoin: "round" })
 ] });
 function ModePane({ labels, mode, memory, autoMode, session, close }) {
-  return /* @__PURE__ */ jsxs31(Fragment9, { children: [
-    mode && /* @__PURE__ */ jsx35(Fragment9, { children: mode.choices.map((choice) => /* @__PURE__ */ jsxs31(
+  return /* @__PURE__ */ jsxs31(Fragment10, { children: [
+    mode && /* @__PURE__ */ jsx35(Fragment10, { children: mode.choices.map((choice) => /* @__PURE__ */ jsxs31(
       "button",
       {
         type: "button",
@@ -4142,7 +4146,7 @@ function ModePane({ labels, mode, memory, autoMode, session, close }) {
       },
       choice.value
     )) }),
-    memory && /* @__PURE__ */ jsxs31(Fragment9, { children: [
+    memory && /* @__PURE__ */ jsxs31(Fragment10, { children: [
       mode && /* @__PURE__ */ jsx35("div", { className: "bf-pmenu__sep" }),
       /* @__PURE__ */ jsxs31(
         "button",
@@ -4168,7 +4172,7 @@ function ModePane({ labels, mode, memory, autoMode, session, close }) {
         }
       )
     ] }),
-    autoMode && /* @__PURE__ */ jsxs31(Fragment9, { children: [
+    autoMode && /* @__PURE__ */ jsxs31(Fragment10, { children: [
       (mode || memory) && /* @__PURE__ */ jsx35("div", { className: "bf-pmenu__sep" }),
       /* @__PURE__ */ jsxs31(
         "button",
@@ -4190,7 +4194,7 @@ function ModePane({ labels, mode, memory, autoMode, session, close }) {
         }
       )
     ] }),
-    session && /* @__PURE__ */ jsxs31(Fragment9, { children: [
+    session && /* @__PURE__ */ jsxs31(Fragment10, { children: [
       (mode || memory || autoMode) && /* @__PURE__ */ jsx35("div", { className: "bf-pmenu__sep" }),
       /* @__PURE__ */ jsx35("div", { className: "bf-pmenu__group", children: labels.conversation }),
       /* @__PURE__ */ jsxs31(
@@ -4374,7 +4378,7 @@ function LocalModelRow({ row, labels, active, failed, locale, onSelect, onDownlo
 }
 
 // src/localModels/LocalModelList.tsx
-import { Fragment as Fragment10, jsx as jsx37, jsxs as jsxs33 } from "react/jsx-runtime";
+import { Fragment as Fragment11, jsx as jsx37, jsxs as jsxs33 } from "react/jsx-runtime";
 var isHeld = (row, activeRef) => row.state === "ready" || row.state === "downloading" || row.downloaded === true || row.ref === activeRef;
 function LocalModelList({ state, labels, activeRef, locale, hideHeading, onSelect }) {
   const { rows } = state;
@@ -4412,7 +4416,7 @@ function LocalModelList({ state, labels, activeRef, locale, hideHeading, onSelec
         /* @__PURE__ */ jsx37("div", { className: "bf-lmodels__heading", children: labels[LOCAL_PICKER_GROUP_LABEL[group]] }),
         renderRows(listed)
       ] }, group)),
-      view.more.length + view.hidden.length > 0 && /* @__PURE__ */ jsxs33(Fragment10, { children: [
+      view.more.length + view.hidden.length > 0 && /* @__PURE__ */ jsxs33(Fragment11, { children: [
         /* @__PURE__ */ jsx37(
           "button",
           {
@@ -4521,7 +4525,7 @@ function useLocalModels(store) {
 }
 
 // src/promptOptions/ModelPane.tsx
-import { Fragment as Fragment11, jsx as jsx38, jsxs as jsxs34 } from "react/jsx-runtime";
+import { Fragment as Fragment12, jsx as jsx38, jsxs as jsxs34 } from "react/jsx-runtime";
 function ModelPane({ model, labels, identity, inUse, inferenceMode, onPicked }) {
   const [query, setQuery] = useState17("");
   const [filter, setFilter] = useState17("all");
@@ -4569,12 +4573,12 @@ function ModelPane({ model, labels, identity, inUse, inferenceMode, onPicked }) 
   const visible = filterModelItems(items, labels, query, filter);
   const listed = filter === "local" ? visible.filter((item) => !storeKeys.has(item.key)) : visible;
   const lockedLocal = items.filter((item) => item.category === "auto" ? model.selection.mode !== "auto" : item.category === "local" && !storeKeys.has(item.key));
-  return /* @__PURE__ */ jsxs34(Fragment11, { children: [
+  return /* @__PURE__ */ jsxs34(Fragment12, { children: [
     inUse && /* @__PURE__ */ jsx38("div", { className: "bf-pmenu__info", children: /* @__PURE__ */ jsxs34("span", { className: "bf-pmenu__lbl", children: [
       labels.modelInUse,
       /* @__PURE__ */ jsx38("span", { className: "bf-pmenu__desc", children: inUse.name })
     ] }) }),
-    identity.canChoose ? /* @__PURE__ */ jsxs34(Fragment11, { children: [
+    identity.canChoose ? /* @__PURE__ */ jsxs34(Fragment12, { children: [
       /* @__PURE__ */ jsx38(
         "input",
         {
@@ -4601,7 +4605,7 @@ function ModelPane({ model, labels, identity, inUse, inferenceMode, onPicked }) 
         !listed.length && filter !== "local" && /* @__PURE__ */ jsx38("div", { className: "bf-pmenu__empty", children: labels.noModels })
       ] }),
       filter === "local" && localSection
-    ] }) : /* @__PURE__ */ jsxs34(Fragment11, { children: [
+    ] }) : /* @__PURE__ */ jsxs34(Fragment12, { children: [
       !model.identityPending && /* @__PURE__ */ jsx38("div", { className: "bf-pmenu__info", children: /* @__PURE__ */ jsx38("span", { className: "bf-pmenu__desc", children: labels.modelLocked }) }),
       lockedLocal.length > 0 && /* @__PURE__ */ jsx38("div", { className: "bf-pmenu__list", role: "listbox", "aria-label": labels.chooseModel, children: renderItems(lockedLocal) }),
       localSection
@@ -4687,7 +4691,7 @@ function InferenceModeControl({ inferenceMode, labels, onPicked }) {
 }
 
 // src/promptOptions/PromptOptionsMenu.tsx
-import { Fragment as Fragment12, jsx as jsx40, jsxs as jsxs36 } from "react/jsx-runtime";
+import { Fragment as Fragment13, jsx as jsx40, jsxs as jsxs36 } from "react/jsx-runtime";
 var EFFORT_LEVELS = ["quick", "balanced", "thorough"];
 var EFFORT_ICON = { quick: "\u{1F3C3}", balanced: "\u2696\uFE0F", thorough: "\u{1F3AF}" };
 var EFFORT_LABEL = {
@@ -4799,7 +4803,7 @@ function PromptOptionsMenu({
           "aria-labelledby": `bf-pmenu-tab-${activeTab}`,
           children: [
             activeTab === "mode" && /* @__PURE__ */ jsx40(ModePane, { labels, mode, memory, autoMode, session, close }),
-            activeTab === "effort" && /* @__PURE__ */ jsxs36(Fragment12, { children: [
+            activeTab === "effort" && /* @__PURE__ */ jsxs36(Fragment13, { children: [
               onEffortChange && EFFORT_LEVELS.map((level) => /* @__PURE__ */ jsxs36(
                 "button",
                 {
@@ -4819,7 +4823,7 @@ function PromptOptionsMenu({
                 },
                 level
               )),
-              onThinkingChange && /* @__PURE__ */ jsxs36(Fragment12, { children: [
+              onThinkingChange && /* @__PURE__ */ jsxs36(Fragment13, { children: [
                 onEffortChange && /* @__PURE__ */ jsx40("div", { className: "bf-pmenu__sep" }),
                 /* @__PURE__ */ jsxs36(
                   "button",
@@ -4842,7 +4846,7 @@ function PromptOptionsMenu({
                 )
               ] })
             ] }),
-            activeTab === "model" && /* @__PURE__ */ jsxs36(Fragment12, { children: [
+            activeTab === "model" && /* @__PURE__ */ jsxs36(Fragment13, { children: [
               /* @__PURE__ */ jsx40(InferenceModeControl, { inferenceMode, labels, onPicked: close }),
               inferenceMode && model && /* @__PURE__ */ jsx40("div", { className: "bf-pmenu__sep" }),
               model && /* @__PURE__ */ jsx40(ModelPane, { model, labels, identity, inUse, ...inferenceMode ? { inferenceMode } : {}, onPicked: close })
@@ -5078,7 +5082,7 @@ function PickerItem({ icon, label, hint, active = false, onClick }) {
 var IconBolt = () => /* @__PURE__ */ jsx42("svg", { width: "13", height: "13", viewBox: "0 0 16 16", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ jsx42("path", { d: "M9.2 1 3.4 8.6h3.4L6 15l6.2-8.1H8.6L9.2 1z" }) });
 
 // src/recipient/RecipientPicker.tsx
-import { Fragment as Fragment13, jsx as jsx43, jsxs as jsxs39 } from "react/jsx-runtime";
+import { Fragment as Fragment14, jsx as jsx43, jsxs as jsxs39 } from "react/jsx-runtime";
 var DEFAULT_RECIPIENT_PICKER_LABELS = {
   to: "To",
   title: "Send to",
@@ -5100,7 +5104,7 @@ function RecipientPicker({ participants, recipient, onChoose, labels, disabled, 
       title: l.title,
       active: recipient != null,
       disabled,
-      children: (close) => /* @__PURE__ */ jsxs39(Fragment13, { children: [
+      children: (close) => /* @__PURE__ */ jsxs39(Fragment14, { children: [
         /* @__PURE__ */ jsx43("div", { className: "bf-pmenu__group", children: l.title }),
         /* @__PURE__ */ jsx43(
           PickerItem,
@@ -5174,7 +5178,7 @@ import {
   modalityPersonaChoice,
   personaAgentOf
 } from "@seanhogg/builderforce-brain-embedded";
-import { Fragment as Fragment14, jsx as jsx44, jsxs as jsxs40 } from "react/jsx-runtime";
+import { Fragment as Fragment15, jsx as jsx44, jsxs as jsxs40 } from "react/jsx-runtime";
 var DEFAULT_PERSONA_PICKER_LABELS = {
   actingAs: "Acting as",
   title: "Brain agent or persona",
@@ -5202,9 +5206,9 @@ function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, 
           onChange(next);
           close();
         };
-        return /* @__PURE__ */ jsxs40(Fragment14, { children: [
+        return /* @__PURE__ */ jsxs40(Fragment15, { children: [
           /* @__PURE__ */ jsx44(PickerItem, { icon: /* @__PURE__ */ jsx44(IconBolt, {}), label: l.defaultBrain, active: !modality && !agent, onClick: () => pick(DEFAULT_PERSONA) }),
-          modalities.length > 0 && /* @__PURE__ */ jsxs40(Fragment14, { children: [
+          modalities.length > 0 && /* @__PURE__ */ jsxs40(Fragment15, { children: [
             /* @__PURE__ */ jsx44("div", { className: "bf-pmenu__sep" }),
             /* @__PURE__ */ jsx44("div", { className: "bf-pmenu__group", children: l.personas }),
             modalities.map((m) => /* @__PURE__ */ jsx44(
@@ -5218,7 +5222,7 @@ function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, 
               m.id
             ))
           ] }),
-          agents.length > 0 && /* @__PURE__ */ jsxs40(Fragment14, { children: [
+          agents.length > 0 && /* @__PURE__ */ jsxs40(Fragment15, { children: [
             /* @__PURE__ */ jsx44("div", { className: "bf-pmenu__sep" }),
             /* @__PURE__ */ jsx44("div", { className: "bf-pmenu__group", children: l.assignedAgents }),
             agents.map((a) => /* @__PURE__ */ jsx44(
@@ -5806,7 +5810,7 @@ function spendLabelsFrom(lookup) {
 }
 
 // src/spend/SpendPill.tsx
-import { Fragment as Fragment15, jsx as jsx52, jsxs as jsxs48 } from "react/jsx-runtime";
+import { Fragment as Fragment16, jsx as jsx52, jsxs as jsxs48 } from "react/jsx-runtime";
 function hasSpendToShow(summary) {
   if (!summary) return false;
   const { spend, saved } = summary;
@@ -5836,7 +5840,7 @@ function SpendPill({ summary, labels: overrides, locale }) {
           ] }),
           /* @__PURE__ */ jsx52("span", { className: "bf-spend-pill__sep", "aria-hidden": true, children: "\xB7" }),
           /* @__PURE__ */ jsx52("span", { className: "bf-spend-pill__tok", children: fill(labels.tokens, { tokens: formatTokens(spend.totalTokens, locale) }) }),
-          savedText && /* @__PURE__ */ jsxs48(Fragment15, { children: [
+          savedText && /* @__PURE__ */ jsxs48(Fragment16, { children: [
             /* @__PURE__ */ jsx52("span", { className: "bf-spend-pill__sep", "aria-hidden": true, children: "\xB7" }),
             /* @__PURE__ */ jsx52("span", { className: "bf-spend-pill__saved", children: savedText })
           ] })
@@ -6196,7 +6200,7 @@ function useHideDoneTickets() {
 }
 
 // src/chatTickets/ChatTicketsPanel.tsx
-import { Fragment as Fragment16, jsx as jsx58, jsxs as jsxs54 } from "react/jsx-runtime";
+import { Fragment as Fragment17, jsx as jsx58, jsxs as jsxs54 } from "react/jsx-runtime";
 var RUNNABLE = new Set(RUNNABLE_KINDS);
 var COLLAPSE_THRESHOLD = 8;
 var NO_SUBAGENTS = [];
@@ -6380,7 +6384,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         "\uFF0B ",
         labels.link
       ] }),
-      platformSections && /* @__PURE__ */ jsxs54(Fragment16, { children: [
+      platformSections && /* @__PURE__ */ jsxs54(Fragment17, { children: [
         /* @__PURE__ */ jsxs54("button", { type: "button", onClick: () => togglePanel("agents"), style: S.pill(panel === "agents"), children: [
           "\u{1F465} ",
           labels.agents,
@@ -7591,7 +7595,7 @@ function Confirm({
 
 // src/evermind/EvermindAnalyzer.tsx
 import { useCallback as useCallback20, useEffect as useEffect21, useMemo as useMemo16, useState as useState33 } from "react";
-import { Fragment as Fragment17, jsx as jsx64, jsxs as jsxs60 } from "react/jsx-runtime";
+import { Fragment as Fragment18, jsx as jsx64, jsxs as jsxs60 } from "react/jsx-runtime";
 var TONE = {
   ok: "ok",
   incoherent: "bad",
@@ -7657,7 +7661,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
     /* @__PURE__ */ jsx64("div", { style: fieldHint, children: t.analyzeHint }),
     /* @__PURE__ */ jsxs60("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
       /* @__PURE__ */ jsx64("button", { type: "button", onClick: () => void run(), disabled: busy, style: secondaryBtn(busy), children: running ? t.analyzing : t.analyzeCta }),
-      findings.length > 0 && onApply && /* @__PURE__ */ jsxs60(Fragment17, { children: [
+      findings.length > 0 && onApply && /* @__PURE__ */ jsxs60(Fragment18, { children: [
         /* @__PURE__ */ jsx64("button", { type: "button", onClick: () => void apply(), disabled: busy || selected.size === 0, style: primaryBtn(busy || selected.size === 0), children: applying ? t.analyzeApplying : t.analyzeApplyCta(selected.size) }),
         /* @__PURE__ */ jsx64(
           "button",
@@ -7676,7 +7680,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
     analysis?.warning && /* @__PURE__ */ jsx64("p", { style: warnBox, role: "note", children: analysis.warning }),
     analysis && findings.length === 0 && /* @__PURE__ */ jsx64("p", { style: italic, children: t.analyzeClean(analysis.analyzed) }),
     analysis?.truncated && typeof analysis.total === "number" && /* @__PURE__ */ jsx64("p", { style: italic, children: t.analyzeCoverage(analysis.analyzed, analysis.total) }),
-    analysis && findings.length > 0 && /* @__PURE__ */ jsxs60(Fragment17, { children: [
+    analysis && findings.length > 0 && /* @__PURE__ */ jsxs60(Fragment18, { children: [
       /* @__PURE__ */ jsx64("p", { style: { margin: 0, fontSize: "0.74rem", color: C.text2 }, children: analysis.model ? t.analyzeSummary(findings.length, analysis.analyzed, analysis.model) : t.analyzeSummaryLocal(findings.length, analysis.analyzed) }),
       /* @__PURE__ */ jsx64("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: findings.map((f) => /* @__PURE__ */ jsx64(
         FindingRow,
@@ -7754,7 +7758,7 @@ function FindingRow({
 
 // src/evermind/EvermindDiagnostics.tsx
 import { useCallback as useCallback21, useEffect as useEffect22, useRef as useRef20, useState as useState34 } from "react";
-import { Fragment as Fragment18, jsx as jsx65, jsxs as jsxs61 } from "react/jsx-runtime";
+import { Fragment as Fragment19, jsx as jsx65, jsxs as jsxs61 } from "react/jsx-runtime";
 function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
   const [report, setReport] = useState34(null);
   const [copied, setCopied] = useState34(false);
@@ -7792,7 +7796,7 @@ function EvermindDiagnostics({ t, disabled, copy }) {
       /* @__PURE__ */ jsx65("button", { type: "button", onClick: () => void copy.copy(), disabled, style: secondaryBtn(disabled), children: t.diagnosticsCta }),
       report !== null && /* @__PURE__ */ jsx65("button", { type: "button", onClick: copy.toggleReveal, style: linkBtn, children: revealed ? t.diagnosticsHide : t.diagnosticsShow })
     ] }),
-    revealed && report !== null && /* @__PURE__ */ jsxs61(Fragment18, { children: [
+    revealed && report !== null && /* @__PURE__ */ jsxs61(Fragment19, { children: [
       !copied && /* @__PURE__ */ jsx65("p", { style: { margin: 0, fontSize: "0.72rem", color: C.text2, lineHeight: 1.4 }, children: t.diagnosticsManualHint }),
       /* @__PURE__ */ jsx65(
         "textarea",
@@ -8093,7 +8097,7 @@ function buildEvermindDiagnostics(input) {
 }
 
 // src/evermind/EvermindConsole.tsx
-import { Fragment as Fragment19, jsx as jsx67, jsxs as jsxs62 } from "react/jsx-runtime";
+import { Fragment as Fragment20, jsx as jsx67, jsxs as jsxs62 } from "react/jsx-runtime";
 var TEACH_POLL_INTERVAL_MS = 3e3;
 var TEACH_POLL_TIMEOUT_MS = 12e4;
 function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate, host = "web" }) {
@@ -8352,7 +8356,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       // The queue depth belongs here: "3 waiting" is a prompt to press Learn now, and
       // it is the one number that changes while you are on another tab.
       ...head.pending > 0 ? { badge: String(head.pending), badgeTone: "info" } : {},
-      content: /* @__PURE__ */ jsxs62(Fragment19, { children: [
+      content: /* @__PURE__ */ jsxs62(Fragment20, { children: [
         /* @__PURE__ */ jsx67(
           TeacherPicker,
           {
@@ -8470,7 +8474,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     tabs.push({
       id: "maintain",
       label: t.tabMaintain,
-      content: /* @__PURE__ */ jsxs62(Fragment19, { children: [
+      content: /* @__PURE__ */ jsxs62(Fragment20, { children: [
         canManage && /* @__PURE__ */ jsx67(
           EvermindMaintenance,
           {
@@ -8542,7 +8546,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
         onSelect: setSelectedSlug,
         onSeed: () => selectedSlug && run(() => adapter.seedFromModel(selectedSlug))
       }
-    ) : /* @__PURE__ */ jsxs62(Fragment19, { children: [
+    ) : /* @__PURE__ */ jsxs62(Fragment20, { children: [
       /* @__PURE__ */ jsx67(StatRow, { t, data }),
       /* @__PURE__ */ jsx67(
         ToggleRow,
@@ -8760,7 +8764,7 @@ function TeachBox({
   return /* @__PURE__ */ jsxs62("div", { style: sectionBlock, children: [
     /* @__PURE__ */ jsx67("div", { style: fieldTitle, children: teaching ? t.teachTeacherTitle : t.teachTitle }),
     /* @__PURE__ */ jsx67("div", { style: fieldHint, children: teaching ? t.teachTeacherHint(teacherModel) : t.teachHint }),
-    teaching ? /* @__PURE__ */ jsx67("textarea", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachTaskPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } }) : /* @__PURE__ */ jsxs62(Fragment19, { children: [
+    teaching ? /* @__PURE__ */ jsx67("textarea", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachTaskPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } }) : /* @__PURE__ */ jsxs62(Fragment20, { children: [
       /* @__PURE__ */ jsx67("input", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachPromptPlaceholder, style: { ...select, width: "100%" } }),
       /* @__PURE__ */ jsx67("textarea", { value: text, onChange: (e) => onText(e.target.value), disabled: busy, placeholder: t.teachTextPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } })
     ] }),
@@ -9301,7 +9305,7 @@ var DEFAULT_PROJECT360_LABELS = {
 };
 
 // src/project360/Project360View.tsx
-import { Fragment as Fragment20, jsx as jsx69, jsxs as jsxs64 } from "react/jsx-runtime";
+import { Fragment as Fragment21, jsx as jsx69, jsxs as jsxs64 } from "react/jsx-runtime";
 var STATUS_ORDER = ["working", "awaiting", "blocked", "idle", "available"];
 function Project360View({ data, loading, error, labels, onAction, onRefresh }) {
   const L = useMemo18(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
@@ -9408,7 +9412,7 @@ ${lines}`
         ) }, d.key)) })
       ] })
     ] }),
-    hasData && /* @__PURE__ */ jsxs64(Fragment20, { children: [
+    hasData && /* @__PURE__ */ jsxs64(Fragment21, { children: [
       /* @__PURE__ */ jsxs64("section", { className: "bf-360-section", children: [
         /* @__PURE__ */ jsxs64("h3", { className: "bf-360-section__title", children: [
           L.missingItems,
@@ -9693,7 +9697,7 @@ function relativeFuture(iso, locale, now = Date.now()) {
 }
 
 // src/workStatus/AccountStatus.tsx
-import { Fragment as Fragment21, jsx as jsx71, jsxs as jsxs66 } from "react/jsx-runtime";
+import { Fragment as Fragment22, jsx as jsx71, jsxs as jsxs66 } from "react/jsx-runtime";
 function AccountStatus({ snapshot, labels, locale, onUpgrade }) {
   const free = !planIsPaid(snapshot);
   const billing = snapshot.plan.billingStatus;
@@ -9725,7 +9729,7 @@ function AccountStatus({ snapshot, labels, locale, onUpgrade }) {
           /* @__PURE__ */ jsx71("span", { className: "bf-acct__k", children: labelForKey(labels.meters, m.key) }),
           /* @__PURE__ */ jsx71("span", { className: "bf-acct__v", children: pct == null ? labels.unlimited : `${pct}%` })
         ] }),
-        pct != null && /* @__PURE__ */ jsxs66(Fragment21, { children: [
+        pct != null && /* @__PURE__ */ jsxs66(Fragment22, { children: [
           /* @__PURE__ */ jsx71("div", { className: "bf-acct__bar", "aria-hidden": "true", children: /* @__PURE__ */ jsx71("div", { className: "bf-acct__bar-fill", style: { width: `${pct}%` } }) }),
           /* @__PURE__ */ jsx71("div", { className: "bf-acct__meta", children: fill(labels.meterOf, { used: num2(m.used), limit: num2(m.limit), unit: labelForKey(labels.units, m.unit) }) })
         ] })
@@ -9774,7 +9778,7 @@ function EvermindStatus({ request: request2, projectId, labels }) {
 }
 
 // src/workStatus/WorkStatusPanel.tsx
-import { Fragment as Fragment22, jsx as jsx73, jsxs as jsxs68 } from "react/jsx-runtime";
+import { Fragment as Fragment23, jsx as jsx73, jsxs as jsxs68 } from "react/jsx-runtime";
 function WorkStatusPanel({ request: request2, projectId, labels: overrides, locale, onUpgrade }) {
   const labels = workStatusLabels(overrides);
   const snapshot = useConsumptionSnapshot(request2);
@@ -9783,20 +9787,20 @@ function WorkStatusPanel({ request: request2, projectId, labels: overrides, loca
     invalidateConsumptionSnapshot();
     onUpgrade(target);
   } : void 0;
-  return /* @__PURE__ */ jsxs68(Fragment22, { children: [
+  return /* @__PURE__ */ jsxs68(Fragment23, { children: [
     /* @__PURE__ */ jsx73(AccountStatus, { snapshot, labels, locale, onUpgrade: upgrade }),
     /* @__PURE__ */ jsx73(EvermindStatus, { request: request2, projectId, labels })
   ] });
 }
 
 // src/workStatus/WorkSpendPanel.tsx
-import { Fragment as Fragment23, jsx as jsx74, jsxs as jsxs69 } from "react/jsx-runtime";
+import { Fragment as Fragment24, jsx as jsx74, jsxs as jsxs69 } from "react/jsx-runtime";
 var SPEND_PERIOD_DAYS = 30;
 function WorkSpendPanel({ request: request2, labels: overrides, loadingLabel, locale }) {
   const labels = spendLabels(overrides);
   const snapshot = useConsumptionSnapshot(request2);
   if (!snapshot) return /* @__PURE__ */ jsx74("div", { className: "bf-pmenu__desc", children: loadingLabel });
-  return /* @__PURE__ */ jsxs69(Fragment23, { children: [
+  return /* @__PURE__ */ jsxs69(Fragment24, { children: [
     /* @__PURE__ */ jsx74("div", { className: "bf-pmenu__group", children: fill(labels.periodHeading, { days: String(SPEND_PERIOD_DAYS) }) }),
     snapshot.spendSavings ? /* @__PURE__ */ jsx74(SpendBreakdown, { summary: snapshot.spendSavings, labels, locale }) : /* @__PURE__ */ jsx74("div", { className: "bf-pmenu__desc", children: fill(labels.spent, { amount: formatUsd(0, locale) }) })
   ] });
@@ -10221,7 +10225,7 @@ function ComposerAddMenu({ labels, disabled = false, onAttachFiles, uploading = 
 }
 
 // src/composer/ComposerTrailingButton.tsx
-import { Fragment as Fragment24, jsx as jsx79, jsxs as jsxs74 } from "react/jsx-runtime";
+import { Fragment as Fragment25, jsx as jsx79, jsxs as jsxs74 } from "react/jsx-runtime";
 function queueShortcutKeys(nav = typeof navigator === "undefined" ? void 0 : navigator) {
   const platform = nav?.userAgentData?.platform || nav?.platform || "";
   return /mac|iphone|ipad/i.test(platform) ? "\u2325+Enter" : "Alt+Enter";
@@ -10263,7 +10267,7 @@ function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, 
   }, disabled: !canSubmit || disabled, title: label, "aria-label": label, children: /* @__PURE__ */ jsx79(IconSend, {}) });
   if (!(running && onQueue && canSubmit)) return send;
   const queueLabel = labels.queueAfter(queueShortcutKeys());
-  return /* @__PURE__ */ jsxs74(Fragment24, { children: [
+  return /* @__PURE__ */ jsxs74(Fragment25, { children: [
     /* @__PURE__ */ jsxs74("button", { type: "button", className: "bf-cmp-queuebtn", onClick: onQueue, disabled, title: queueLabel, "aria-label": queueLabel, children: [
       /* @__PURE__ */ jsx79(IconQueue, {}),
       /* @__PURE__ */ jsx79("span", { className: "bf-cmp-queuebtn__text", children: labels.queueAfterShort })
@@ -10383,7 +10387,7 @@ import { useDraftIsEmpty } from "@seanhogg/builderforce-brain-embedded";
 // src/composer/ComposerTextBox.tsx
 import { memo as memo11 } from "react";
 import { useDraftText } from "@seanhogg/builderforce-brain-embedded";
-import { Fragment as Fragment25, jsx as jsx82, jsxs as jsxs77 } from "react/jsx-runtime";
+import { Fragment as Fragment26, jsx as jsx82, jsxs as jsxs77 } from "react/jsx-runtime";
 var noop = () => void 0;
 var NO_PARTICIPANTS = [];
 var NO_TICKETS = [];
@@ -10441,7 +10445,7 @@ function ComposerTextBoxInner(props) {
       else onSubmit();
     }
   };
-  return /* @__PURE__ */ jsxs77(Fragment25, { children: [
+  return /* @__PURE__ */ jsxs77(Fragment26, { children: [
     ticket.open ? ticket.popup : mention.popup,
     /* @__PURE__ */ jsx82(
       "textarea",
@@ -10523,7 +10527,7 @@ function composerLabelsFrom(lookup, overrides) {
 }
 
 // src/composer/BrainComposer.tsx
-import { Fragment as Fragment26, jsx as jsx83, jsxs as jsxs78 } from "react/jsx-runtime";
+import { Fragment as Fragment27, jsx as jsx83, jsxs as jsxs78 } from "react/jsx-runtime";
 function BrainComposerInner(props) {
   const {
     draftStore,
@@ -10647,7 +10651,7 @@ function BrainComposerInner(props) {
   const chips = attachments ? /* @__PURE__ */ jsx83(AttachmentChips, { items: attachments.items, onRemove: attachments.onRemove, labels }) : null;
   const showSuggestions = !!suggestions?.items.length && empty && !running;
   const modeQuestion = gate.asking ? /* @__PURE__ */ jsx83(InferenceModeFirstRun, { labels: promptOptionsLabels(labelBundle?.options), onChoose: gate.choose }) : null;
-  const aboveBox = modeQuestion || above || showSuggestions || attachments && attachments.items.length > 0 ? /* @__PURE__ */ jsxs78(Fragment26, { children: [
+  const aboveBox = modeQuestion || above || showSuggestions || attachments && attachments.items.length > 0 ? /* @__PURE__ */ jsxs78(Fragment27, { children: [
     modeQuestion,
     above,
     showSuggestions && /* @__PURE__ */ jsx83(SuggestionRow, { items: suggestions.items, ariaLabel: suggestions.label }),
@@ -10693,7 +10697,7 @@ function BrainComposerInner(props) {
             ticketLabels: labelBundle?.ticket
           }
         ),
-        actions: /* @__PURE__ */ jsxs78(Fragment26, { children: [
+        actions: /* @__PURE__ */ jsxs78(Fragment27, { children: [
           /* @__PURE__ */ jsx83(
             ComposerAddMenu,
             {
@@ -10713,7 +10717,7 @@ function BrainComposerInner(props) {
               labels: labelBundle?.options,
               disabled,
               ...groups,
-              status: statusNode && /* @__PURE__ */ jsxs78(Fragment26, { children: [
+              status: statusNode && /* @__PURE__ */ jsxs78(Fragment27, { children: [
                 statusNode,
                 connectionsNode
               ] }),
@@ -10722,7 +10726,7 @@ function BrainComposerInner(props) {
             }
           )
         ] }),
-        context: context || contextUsage ? /* @__PURE__ */ jsxs78(Fragment26, { children: [
+        context: context || contextUsage ? /* @__PURE__ */ jsxs78(Fragment27, { children: [
           context,
           /* @__PURE__ */ jsx83(ContextMeter, { usage: contextUsage, labels, locale: account?.locale })
         ] }) : void 0,

@@ -18,7 +18,9 @@ import { recordLocalAuditGate } from "../localAuditGate";
 import type { RunHold } from "../runRecovery";
 import type { BaselineCaptureOptions } from "../runChangeBaseline";
 import type { FinalizedRunChangeSets } from "../runChangeSets";
+import type { LocalChangeSetValue } from "../runChangeSets";
 import { RUN_DELTA_BUDGET_MS, startRunDelta } from "./finalizeRunDelta";
+import { isDesignOnlyChangeSet } from "./designOnly";
 import { runDeltaFile, type OpenCodeRequest } from "./openCode";
 import { createRunDeltaProgress, lastReplySince } from "./runDeltaProgress";
 import { readRunDeltas } from "./runDeltaRecords";
@@ -77,6 +79,20 @@ export interface EditorRunDelta {
 
 const log = (what: string, error: unknown): void =>
   hostLog(`[run delta] ${what}: ${error instanceof Error ? error.message : String(error)}`);
+
+/**
+ * Whether EVERY committed change set of a finalized run is design-only (`.design/` / `*.dc.html`): reads each
+ * change-set record's files from the store (`closed.committed` carries only `{ id, root }`). A committed set whose
+ * record is missing, or that has zero files, makes the run NOT design-only (fail-closed).
+ */
+async function everyCommittedSetIsDesignOnly(store: LocalFirstStore, closed: FinalizedRunChangeSets): Promise<boolean> {
+  if (closed.committed.length === 0) return false;
+  for (const set of closed.committed) {
+    const record = await store.read((tx) => tx.get<LocalChangeSetValue>("change-set", set.id));
+    if (!record || !isDesignOnlyChangeSet(record.payload.files)) return false;
+  }
+  return true;
+}
 
 export function editorRunDelta(args: {
   secrets: vscode.SecretStorage;
@@ -190,9 +206,18 @@ export function editorRunDelta(args: {
     onFinalized({ writes, ...run }) {
       return (closed) => {
         const written = writes?.();
-        const hold = run.mode === "autonomous" ? gate.port(closed.runId) : undefined;
-        // The hand-off: the gate's clock starts now, not when the run settled (finalization can take a large repo a while).
-        hold?.begin(closed.committed.length > 0);
+        // §12.5 exemption: a run whose change set is ONLY design artefacts (`.design/`, `*.dc.html` mockups) is
+        // told not to change code, so it is never held at the finalize gate. The gate's clock starts SYNCHRONOUSLY
+        // with `hold.begin(...)` (`runHoldGate.ts`), so design-only is detected first and the clock starts in the
+        // same microtask either way — no extra finalization time is measured against the delta. The delta still
+        // computes and posts its card; only the hold is skipped. Fail-closed: a missing/empty/mixed change set is
+        // not design-only and is gated exactly as before.
+        const beginHold = (designOnly: boolean): void => {
+          if (run.mode !== "autonomous") return;
+          const port = gate.port(closed.runId);
+          if (designOnly) { port.settled(); return; } // `expect`ed in `brainRunHostPorts.ts`: release it, no hold.
+          port.begin(closed.committed.length > 0);
+        };
         // The reply the run produced anchors its card; the pending card is posted now, before anything is computed.
         const at = lastReplySince(getRunSnapshot(run.chatId).appended, closed.baseline.capturedAt);
         const progressOver = progress.begin({ chatId: run.chatId, runId: closed.runId, ...(at !== undefined ? { at } : {}), repos: closed.committed.length });
@@ -204,7 +229,17 @@ export function editorRunDelta(args: {
           measuredDone();
         };
         const settled: StoredRunDelta[] = [];
-        void loadHost().then((h) => startRunDelta({
+        const holdFor = (designOnly: boolean) =>
+          run.mode === "autonomous" && !designOnly ? gate.port(closed.runId) : undefined;
+        void loadHost().then(async (h) => {
+          const designOnly = await everyCommittedSetIsDesignOnly(args.store, closed);
+          beginHold(designOnly);
+          return { h, designOnly };
+        }, (error: unknown) => {
+          log("load", error);
+          beginHold(false); // fail-closed: the host could not be read, so its changes are gated exactly as before
+          throw error;
+        }).then(({ h, designOnly }) => startRunDelta({
           store: args.store,
           deviceId: args.deviceId,
           sources: h.editorDeltaSources(args.secrets, log, closed.runId),
@@ -223,7 +258,7 @@ export function editorRunDelta(args: {
             settled.push(stored);
             void runEnd().then((m) => m.onDeltaStored(endDeps(h, closed.runId), stored), (error: unknown) => log("run outcome load", error));
           },
-        }, { ...run, closed, ...(at !== undefined ? { at } : {}), ...(written ? { writes: written } : {}), ...(hold ? { hold } : {}) }).finally(() => {
+        }, { ...run, closed, ...(at !== undefined ? { at } : {}), ...(written ? { writes: written } : {}), ...(holdFor(designOnly) ? { hold: holdFor(designOnly) } : {}) }).finally(() => {
           measured();
           // PRD 41 §D6: once the WHOLE delta settled (never inside its budget), naturalness; its cards then re-post with it.
           if (settled.length === 0) return;
@@ -231,8 +266,8 @@ export function editorRunDelta(args: {
             .catch((error: unknown) => log(`run end ${closed.runId}`, error));
         }), (error: unknown) => {
           log("load", error);
-          if (closed.committed.length > 0) hold?.unmeasured(); // fail-closed: its changes were never measured
-          hold?.settled();
+          if (closed.committed.length > 0) holdFor(false)?.unmeasured(); // fail-closed: its changes were never measured
+          holdFor(false)?.settled();
           measured();
         });
       };
