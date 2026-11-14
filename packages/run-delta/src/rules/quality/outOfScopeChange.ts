@@ -50,12 +50,13 @@ export const outOfScopeChange: DeltaRule = {
             const touched = touchedBy(input, pair);
             if ([...plannedModules].some((m) => touchesModule(touched, m))) continue; // a planned file's own test or snapshot
             const side = pair.after ? 'after' : 'before';
-            after.push(heuristicFinding(
+            // Measured: a deterministic comparison of the change set against the plan (C8.3).
+            after.push({ ...heuristicFinding(
                 ruleIdentity(outOfScopeChange, 'file', p, { members: [p] }),
                 'warn',
                 { file: p },
                 [{ side, path: pair[side]?.sidePath ?? p }],
-            ));
+            ), confidence: 'measured' });
         }
         return { before: [], after };
     },

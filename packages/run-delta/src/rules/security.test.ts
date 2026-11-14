@@ -29,8 +29,8 @@ describe('taint-path (C5.2)', () => {
             severity: 'error', confidence: 'heuristic',
             params: { sink: 'command-exec', source: 'http-request', call: 'exec(', hops: 4, stride: 'elevation-of-privilege' },
         });
-        // The engine orders evidence by location; the chain reads top to bottom.
-        expect(path!.evidence.map((e) => [e.line, e.note])).toEqual([[2, 'body'], [2, 'c.req.json('], [3, 'cmd'], [4, 'exec(']]);
+        // The engine orders evidence by location; the chain reads top to bottom, numbered.
+        expect(path!.evidence.map((e) => [e.line, e.note])).toEqual([[2, '1. c.req.json('], [2, '2. body'], [3, '3. cmd'], [4, '4. exec(']]);
     });
 
     it('a sanitizer on the path resolves it; the identity is anchored at the sink', async () => {
@@ -198,12 +198,12 @@ describe('security registries (C5) and STRIDE (C5.7)', () => {
     it('overrides merge taint and STRIDE groups and drop invalid ones', () => {
         const { registries, dropped } = withOverrides(DEFAULT_REGISTRIES, {
             taintSinks: { 'command-exec': ['runShell('] },
-            taintSanitizers: ['allowlisted('],
+            taintSanitizers: { '*': ['allowlisted('] },
             strideCoverage: { repudiation: ['auditTrail'], bogus: ['x'], spoofing: ['not an ident'] },
             insecureConfig: { 'tls-verify-disabled': ['(a+)+'] },
         });
         expect(registries.taintSinks['command-exec']).toEqual([...DEFAULT_REGISTRIES.taintSinks['command-exec']!, 'runShell(']);
-        expect(registries.taintSanitizers).toContain('allowlisted(');
+        expect(registries.taintSanitizers['*']).toContain('allowlisted(');
         expect(registries.strideCoverage['repudiation']).toContain('auditTrail');
         expect(dropped).toEqual(['invalid:strideCoverage.bogus', 'invalid:strideCoverage.spoofing', 'unsafe-regex:insecureConfig.nested-quantifier']);
     });
