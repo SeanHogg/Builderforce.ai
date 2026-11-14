@@ -53,6 +53,11 @@ export class PendingCalls {
     this.running.set(callId, activity);
   }
 
+  /** How many calls' tools are still running — a narration turn that references pending work is sent back while any are. */
+  pendingCount(): number {
+    return this.running.size;
+  }
+
   /** The call's tool returned. The live step of the most recently started sibling still running, or undefined when none is. */
   end(callId: string): BrainRunActivity | undefined {
     this.running.delete(callId);

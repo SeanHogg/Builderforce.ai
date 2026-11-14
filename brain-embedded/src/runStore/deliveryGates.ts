@@ -58,6 +58,19 @@ export function deliveryGates(run: BrainRunContext): DeliveryGate[] {
       spend: () => { run.reviewRecoveryUsed = true; },
     },
     {
+      // The turn references work that is STILL IN FLIGHT — "let me wait for the test run to
+      // finish", "both type-checks pass, now self-reviewing" — while a tool call it started
+      // has not returned. That narration is not the answer: the run is mid-task. Sent back once
+      // to keep working; a run that still narrates after the recovery has read the contract twice
+      // and its answer — whatever it is — is the answer.
+      id: 'brain.pending_narration',
+      entersVerify: false,
+      applies: () => !run.pendingNarrationRecoveryUsed && run.pending.pendingCount() > 0,
+      nudge: () => 'A tool call you started is still running. Do not finish — continue the task until the pending step resolves and there is a concrete result to report.',
+      trace: { label: 'loop.recover_pending_narration', args: () => ({ pending: run.pending.pendingCount() }), result: 'The run ended on a narration turn while a tool call it started was still running — re-prompted to continue until the pending step resolves.' },
+      spend: () => { run.pendingNarrationRecoveryUsed = true; },
+    },
+    {
       // The user asked for SUB-AGENTS and the run is ending in prose without having started one. The `ask_user` twin is in
       // `turnToolCalls.ts`; both spend the one recovery.
       id: 'brain.delegate',

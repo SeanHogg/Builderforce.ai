@@ -427,6 +427,9 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
     // refused on a real result (see `delegationRequest.ts`).
     delegationRecoveryUsed: false,
     restateRecoveryUsed: false,
+    // One redirect per run for a narration turn that ended while a tool call was still running
+    // (see `deliveryGates.ts`): the run is mid-task, not answering.
+    pendingNarrationRecoveryUsed: false,
     stopHookRounds: 0,
     redirectAskToDelegation: false,
     pending: new PendingCalls(),
