@@ -23,6 +23,7 @@
 
 import { execFile, spawn } from "child_process";
 import { existsSync } from "fs";
+import * as fs from "fs";
 import { createRequire } from "module";
 import * as path from "path";
 import { killTree } from "../process/killTree";
@@ -56,18 +57,33 @@ const CMD_UNSAFE = /["%\r\n\0]/;
  * The absolute path to the npm CLI entry a shim would run — `npx-cli.js` / `npm-cli.js` —
  * resolved from the package that owns the command's cwd (its `node_modules`), so the
  * pnpm-managed `npm` dep is found even when it is not linked at the workspace root.
+ *
+ * `pnpm` never links `npm` into a package's `node_modules`, so the cwd `createRequire`
+ * usually resolves nothing for `npm/bin/…` (it does for the runner, e.g. `vitest`, but not
+ * for `npm`). When that lookup misses we fall through to the npm that sits beside the running
+ * `node` executable — a globally installed npm (nvm, the node installer) always has its CLI
+ * entry at `<node-dir>/node_modules/npm/bin`. Without this the verifier's `npx`/`npm` checks
+ * fell through to the `.cmd` shim, which cannot resolve its own location and died with
+ * `Cannot find module …/npm/bin/npx-cli.js` (exit 1) on every pre-push test check.
  */
 function resolveNpmCli(cwd: string, cli: "npx-cli.js" | "npm-cli.js"): string | null {
-  // A package-managed `npm` dep first (its own node_modules), else the install that owns
-  // the running node — the npm CLI entry sits in `<node-dir>/node_modules/npm/bin`.
-  try {
-    const p = createRequire(path.join(cwd, "package.json")).resolve(`npm/bin/${cli}`);
-    if (existsSync(p)) return p;
-  } catch {
-    /* fall through to the node's own npm */
-  }
-  const alongsideNode = path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", cli);
-  return existsSync(alongsideNode) ? alongsideNode : null;
+  const tryResolve = (fromDir: string): string | null => {
+    try {
+      const p = createRequire(path.join(fromDir, "package.json")).resolve(`npm/bin/${cli}`);
+      if (existsSync(p)) return p;
+    } catch {
+      /* fall through to the next source */
+    }
+    return null;
+  };
+  // 1. A package-managed `npm` dep first (its own node_modules), else the install that owns
+  //    the running node. Both the cwd and its realpath: pnpm's isolated `node-linker` keeps the
+  //    real package under `node_modules/.pnpm/<pkg>@<ver>/node_modules/<pkg>`, so a bare cwd
+  //    resolves nothing while the realpath does.
+  const realCwd = (() => { try { return fs.realpathSync(cwd); } catch { return cwd; } })();
+  return tryResolve(cwd) ?? (realCwd === cwd ? null : tryResolve(realCwd))
+    // 2. The npm that sits beside the running node — `<node-dir>/node_modules/npm/bin`.
+    ?? (() => { const p = path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", cli); return existsSync(p) ? p : null; })();
 }
 
 /**
