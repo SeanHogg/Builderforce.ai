@@ -1,3 +1,11 @@
+## ✅ RESOLVED 2026-11-15: L3 quarantine index edge cases (`233f62658`)
+
+- `blocked()` backfills quarantine records written before the index existed (2026.10.172) into `builderforce.knowledge.l3Quarantined`, so the retry command can offer them.
+- `quarantinedL3Roots(resolves)` prunes expired or missing entries and skips roots the open folders can't place (they are kept in the index).
+- An explicit retry holds the root fresh, so `sharedAnalysis` runs uncached; the hold is released in `finally`.
+- Ticketed requests: an explicit ask that arrives during a normal pass gets its own forced pass.
+- Opus review found nothing blocking. Typecheck is clean, 74/74 tests pass, `l3Gate.ts` is 251 lines and `l3CrashGuard.ts` 273.
+
 ## ✅ RESOLVED 2026-11-15: the extension host no longer crashes every ~13 minutes, and the heavy analyzers run only on demand (VS Code 2026.10.174, installed)
 
 - **Cause, from 25+ Crashpad minidumps:** every dump showed 0xE0000008 (Chromium OOM) on a Node `WorkerThread`, with a failed allocation of 0x93ffffc0. That is V8 `ValueSerializer` growth: the L3 worker posted its whole `WorkspaceExtracted` for a ~20k-file scope in one `postMessage`.

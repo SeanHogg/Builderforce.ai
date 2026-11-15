@@ -445,12 +445,11 @@ Synapse lives in [builderforce-inference](https://github.com/SeanHogg/builderfor
     - packaging fails when the installed memory doesn't satisfy the declared range;
     - consumers move to `^2026.10.82` with refreshed lockfiles;
     - build and install VSIX 2026.10.175.
-- **[vscode] Quarantine-index edge cases (implemented, IN REVIEW 2026-11-15).**
-  - `blocked()` backfills pre-index records.
-  - `quarantinedL3Roots` prunes expired entries and skips roots that don't resolve.
-  - An explicit retry holds the root fresh, bypassing the `sharedAnalysis` cache.
-  - Ticketed requests give an explicit ask that arrives during a normal pass its own forced pass.
-  - Uncommitted under `clients/vscode/src/knowledge`; 98 targeted tests pass.
+- **[vscode] L3 retry cache edges (non-blocking, from the `233f62658` review; fix after the 175 build lands).**
+  - "Fresh" skips only the in-memory `sharedAnalysis` cache. The worker's on-disk analyzer cache (`indexerL3Binding`, keyed by tree hash) can still serve a retry.
+  - A fresh run uses a null cache key, so its result never replaces the stale in-memory entry.
+  - The fresh hold covers every analysis of the root, so prefetch can run a second worker during a retry.
+  - Old `sha: null` records without `until` are listed until the guard next looks at the root.
 - **[vscode] The `clients/vscode` lockfile fails `pnpm install --frozen-lockfile`** (`ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY` on `vitest@4.1.10`; already the case at `cde1f7bbc`).
   - Dependabot `3a48f26a8` wrote 24 importer blocks for projects outside clients/vscode. Pruning them (281 deleted lines) makes frozen install pass. The change is in the working copy.
   - *Blocker: the user hasn't yet approved committing it; the automated permission check denied the agent's commit.*
