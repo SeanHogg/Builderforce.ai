@@ -1,3 +1,41 @@
+## ✅ RESOLVED 2026-11-15: the extension host no longer crashes every ~13 minutes, and the heavy analyzers run only on demand (VS Code 2026.10.174, installed)
+
+- **Cause, from 25+ Crashpad minidumps:** every dump showed 0xE0000008 (Chromium OOM) on a Node `WorkerThread`, with a failed allocation of 0x93ffffc0. That is V8 `ValueSerializer` growth: the L3 worker posted its whole `WorkspaceExtracted` for a ~20k-file scope in one `postMessage`.
+  - Worker `resourceLimits` don't bound off-heap serializer buffers, so the failed allocation killed the whole host and every chat with it.
+  - The host had about 8.6 GB committed at the crash.
+  - It looped because `c:/code/agentic` isn't a git repo, and a dead host records no failure.
+- **Fix:** `a8af9c8dc` + `d8af13ef9`:
+  - `workers/boundedTransfer.ts` is ONE bounded transfer: 8 MB parts, a 2× JSON size estimate, a 256 MB budget, and an oversize item counts as over-budget. The L3, run-delta and TypeScript-analyzer workers all use it.
+  - `l3CrashGuard.ts` writes a persisted in-flight sentinel. A host that died mid-pass quarantines that root (git: until the sha moves; non-git: 24 h). The sentinel is cleared on a clean shutdown. OOM and over-budget count as permanent failures.
+  - **BuilderForce: Retry Code Analyzers** lists the quarantined roots and lifts the chosen one.
+  - **User decision:** the heavy L3 analyzers run only on demand (knowledge view, review, chat code action), never on idle.
+  - A failed analyzer counts as a failed pass, and sub-folder roots analyse only their sub-folder.
+  - The gate is single-flight. Retries wait for idle after the session's first reconcile, and an explicit retry forces a pass.
+- **Reviews:** three Opus rounds found nothing blocking, and the findings were fixed. Typecheck is clean and 113 targeted tests pass. The VSIX was built with the source unchanged during the build (hashes verified) and is installed as 2026.10.174.
+
+## ✅ RESOLVED 2026-11-15: the knowledge plan's merkle step yields too (builderforce-memory 2026.10.82)
+
+- `merkleTree`, `canonicalListing` and `changedPaths` (`knowledge/merkle.ts`) are async and cooperative under the same 12 ms budget (`ce41630`). This changes exported signatures; every caller awaits (memory `plan.ts`; VS Code `runDelta/sideFacts.ts`).
+- **Review:** Opus found nothing blocking; the output is byte-identical by inspection.
+- **Tests:** `contract/regression.merkleCooperative.test.ts` covers ~8k paths with a budget that is always due, and checks the results equal a never-due run. It also pins the literal root `0e62f74f…deb4` for a fixed 5-file set. `canonicalListing_signature` pins the full signature.
+- **Flaky tests:** `review.readAhead` "Stop settles" was already failing before this change; another session fixed it in `89427c8`. `regression.assets` "3 MB claimed pdf" is CPU-bound and now has a 30 s timeout.
+- **Release:** `f5dd0c2`, tag `v2026.10.82`. The Release run passed and published memory and memory-mcp 2026.10.82.
+
+## ✅ RESOLVED 2026-11-14: the knowledge plan no longer runs its ignore matching and fact load as one long block (builderforce-memory 2026.10.81, released and consumed)
+
+- **Review:** Opus found no blocking issues (0 mismatches against the old matcher over 600k randomized rule sets). Its 2 low findings were fixed before release. The fallback yield is captured at load and uses `MessageChannel` / `scheduler.yield` before `setTimeout(0)`, so hidden browser tabs don't throttle it. New `cooperative.test.ts` covers it.
+- **Release:** builderforce-memory `608ec6b`, tag `v2026.10.81`. Release and CI passed, and npm `latest` = 2026.10.81 (memory + memory-mcp + MCP registry).
+- **Consumers:** all 17 Builderforce.ai package.json files moved to `^2026.10.81` with their lockfiles (memory line only): `db0c7c2a9`, plus brain-embedded and clients/vscode in `261ffbca7`.
+
+- **Cause, from 30 VS Code CPU profiles:** VS Code flagged the extension host unresponsive 110 times on 2026-11-14, 108 of them blamed on BuilderForce, with blocks of up to 12 s.
+  - `ignoreMatcher` regex-tested every rule × every ancestor folder × every file: about 88 s of CPU over a 34,588-file multi-repo workspace.
+  - The derived-facts load read every fact object in one synchronous `getObjects` call: about 30 s.
+- **Fix (`packages/memory/src/knowledge/`):**
+  - `ignoreMatcher.ts` (extracted from `sources.ts`): semantics unchanged (last matching rule wins; a negation still re-includes). Each folder caches the highest rule that hit it or an ancestor, plus the rules still live below it, so nested `.gitignore` rules drop out outside their base. A literal prefix/suffix check runs before any regex.
+  - `cooperative.ts`: ONE 12 ms yield budget (`setImmediate` or `setTimeout(0)`; portable to browsers). It is used in `plan.ts` (walk, classify loop, before the merkle step) and in `rules/factStore.ts` `loadOnce`.
+  - `getObjects` now runs in batches of 512. The result is identical and in the same order.
+- **Tests:** `contract/regression.ignoreMatcher.test.ts` (randomized parity against the old algorithm, plus a perf guard: 30k paths × ~300 rules, 4.6 s → 0.2 s) and `contract/regression.factStoreBatchedLoad.test.ts`. Typecheck and the contract types are clean, and 210 targeted tests pass. No public export changed.
+
 ## ✅ RESOLVED 2026-11-14: agent commits no longer open Terminal/CMD windows on Windows (VS Code 2026.10.171)
 
 - **Cause, proven by a live window and process trace:** `cmd.exe /d /s /c vitest run src/brainRunStore.test.ts` ← `Code.exe` running npx-cli.js ← extension host.
