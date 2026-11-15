@@ -27,32 +27,34 @@ export function autoIndexOn(): boolean {
 }
 
 /**
- * The running roots a Visualizer holds, with a stop still inside its grace counted as running.
- * The autoIndex opt-in counts every folder as running (the indexer's folders follow it).
+ * The folders a running root's id resolves to: every open workspace folder, so a running folder
+ * root (`<folder id>`) and any sub-folder root (`<folder id>:<rel>`) inside it are both matched.
+ * The autoIndex opt-in indexes every folder.
  */
-function runningRoots(): KnowledgeRoot[] {
+function runningFolders(): string[] {
+  if (autoIndexOn()) return workspaceFolders().map((f) => f.path);
   const folders = workspaceFolders();
-  const byId = new Map(folders.map((f) => {
-    const root = rootForPath(f.path, folders);
-    return [root?.rootId ?? pathKey(f.path), root] as const;
-  }));
-  return visualizerSessions.runningRoots().flatMap((id) => {
-    const held = byId.get(id);
-    return held ? [held] : [];
-  });
+  const held = new Set<string>();
+  for (const id of visualizerSessions.runningRoots()) {
+    for (const f of folders) {
+      const root = rootForPath(f.path, folders);
+      const folderId = root?.rootId ?? pathKey(f.path);
+      if (id === folderId || id.startsWith(`${folderId}:`)) { held.add(f.path); break; }
+    }
+  }
+  return [...held];
 }
 
 /** This folder is indexed while knowledge runs: the opt-in is on, or one of its roots runs. */
 export function indexesFolder(root: KnowledgeRoot): boolean {
-  return autoIndexOn() || runningRoots().some((r) => r.folderPath === root.folderPath);
+  return runningFolders().some((f) => pathKey(f) === pathKey(root.folderPath));
 }
 
 /** Knowledge runs for this absolute path: the opt-in is on, or it sits under a running root. */
 export function knowledgeRunsAt(absPath: string): boolean {
-  if (autoIndexOn()) return true;
   const target = pathKey(absPath);
-  return runningRoots().some((r) => {
-    const key = pathKey(r.rootPath);
+  return runningFolders().some((f) => {
+    const key = pathKey(f);
     return target === key || target.startsWith(`${key}/`);
   });
 }

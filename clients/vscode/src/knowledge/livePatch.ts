@@ -101,7 +101,9 @@ export class LivePatchBuilder {
         // (its own file node included) leaves the screen.
         if (wasHash === undefined) continue; // an unreviewed path: nothing of it is on screen
         const oldExtract = ownExtract(rootId, path, await store.getExtracted?.(wasHash));
-        removedNodes.push(refKey, ...(oldExtract?.nodes.map((n) => String(n.ref)) ?? []));
+        const oldRefs = oldExtract?.nodes.map((n) => String(n.ref)) ?? [];
+        // The file's own node is in its extract; when the extract is missing, its own ref still leaves the screen.
+        removedNodes.push(...(oldRefs.length > 0 ? oldRefs : [refKey]));
         continue;
       }
       if (nowHash === wasHash) continue; // already on screen at this hash (a re-read): nothing moves
