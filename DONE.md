@@ -5,6 +5,7 @@
 - **One fresh run per key:** `l3FreshHold.ts` tracks started keys per hold, so a prefetch can neither steal the retry's fresh pass nor start a second worker for the same key. A run without `l3RootPath` can't stand in for the retry. The ticket returns as soon as every asker stops, or on failure.
 - **Old quarantine records:** `sha: null` records without `until` get the 24 h expiry on load (undatable ones are dropped), which also fixes a `q.sha!.slice` TypeError.
 - Tests: `l3FreshRetry.test.ts`, plus new cases in `l3CrashGuard.test.ts` and `shaCache.test.ts`.
+- Residuals closed: every null-key ask under a hold runs fresh; a fresh run whose result isn't kept (`keepOf`) returns its ticket; a prefetch still in flight when the retry arrives keeps its own askers while the retry gets an equipped fresh run that later asks join.
 
 ## ✅ RESOLVED 2026-11-15: one memory copy in every toolchain (esbuild, webview Vite, vitest, chrome)
 

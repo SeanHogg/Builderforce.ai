@@ -6,8 +6,9 @@
  * key is known, so a prefetch with other layers (another key) never uses up the retry's. Every other ask of that key meanwhile
  * joins the fresh run through the cache, so no second worker starts. A fresh run that lacks what a later ask needs — the
  * on-disk cache's write-through (`equipped`: the job binds `l3RootPath`), which the retry's own pass has and a prefetch has
- * not — does not satisfy that ask: it gets its own fresh run. A run that is stopped (every asker left) or fails gives its
- * ticket back, so the next ask of that key under the hold runs fresh again.
+ * not — does not satisfy that ask: it gets its own fresh run. A run that is stopped (every asker left), fails, or whose
+ * result the cache does not keep gives its ticket back, so the next ask of that key under the hold runs fresh again. A tree
+ * git cannot name (a null key) is never cached, so each of its asks under the hold runs fresh.
  */
 
 /** One fresh run started under a hold. `live` false ⇒ given back. */
@@ -31,7 +32,9 @@ export interface FreshTicket {
 export function takeFreshTicket(rootId: string, key: string | null, equipped: boolean): FreshTicket | undefined {
   const hold = holds.get(rootId);
   if (!hold) return undefined;
-  const id = key ?? "";
+  // A tree git cannot name is never cached: there is no run to join, so every ask of it under the hold runs fresh.
+  if (key === null) return { reopen: () => undefined };
+  const id = key;
   const prior = hold.started.get(id);
   if (prior && (prior.equipped || !equipped)) return undefined;
   const mine: Started = { equipped, live: true };

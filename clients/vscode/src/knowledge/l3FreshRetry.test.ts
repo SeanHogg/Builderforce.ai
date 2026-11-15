@@ -5,6 +5,8 @@ const h = vi.hoisted(() => ({
   jobs: [] as Array<{ fresh?: boolean }>,
   gate: undefined as Promise<void> | undefined,
   fail: undefined as Error | undefined,
+  /** The worker answers with no snapshot: a result the cache does not keep. */
+  nothing: false,
   analysed: [] as Array<{ l3?: { cache: { get(k: string, t: string): Promise<unknown>; put(k: string, e: unknown): Promise<void> } } }>,
   binding: {
     cache: { get: vi.fn(async () => ({ result: "stale" })), put: vi.fn(async () => undefined) },
@@ -20,10 +22,10 @@ vi.mock("./knowledgeSyncStatus", () => ({ hostMemento: () => undefined }));
 vi.mock("../runDelta/analyzers/l3Binding", () => ({ indexerL3Binding: () => h.binding }));
 vi.mock("./l3Worker", () => ({
   runL3InWorker: vi.fn(async (job: { fresh?: boolean }) => {
-    h.jobs.push(job);
+    const n = h.jobs.push(job); // each run's result names it
     await h.gate;
     if (h.fail) throw h.fail;
-    return { extracted: [], snapshot: { tools: [{ status: "complete" }] }, edges: h.jobs.length };
+    return { extracted: [], snapshot: h.nothing ? null : { tools: [{ status: "complete" }] }, edges: n };
   }),
 }));
 vi.mock("@builderforce/agent-tools/knowledge", async (importOriginal) => ({
@@ -46,6 +48,7 @@ beforeEach(() => {
   h.jobs = [];
   h.gate = undefined;
   h.fail = undefined;
+  h.nothing = false;
   h.analysed = [];
   h.binding.cache.get.mockClear();
   h.binding.cache.put.mockClear();
@@ -155,6 +158,45 @@ describe("the explicit retry runs the analyzers afresh — end to end", () => {
     expect((await Promise.all([retry, after])).map((r) => r.edges)).toEqual([2, 2]);
     expect((await sharedAnalysis(job)).edges).toBe(2);
     expect(h.jobs).toHaveLength(2);
+  });
+
+  it("regression: a prefetch still IN FLIGHT when the retry arrives — the retry gets its own equipped fresh run, later asks join it", async () => {
+    await sharedAnalysis(job);
+    let open: () => void = () => undefined;
+    h.gate = new Promise((resolve) => { open = resolve; });
+    const release = holdFreshAnalysis("r");
+    const plain = { folderPath: "/ws", rootId: "r" };
+    const prefetch = sharedAnalysis(plain); // fresh, but no on-disk write-through
+    await vi.waitFor(() => expect(h.jobs).toHaveLength(2));
+    const prefetchJoined = sharedAnalysis(plain);
+    const retry = sharedAnalysis(job);
+    await vi.waitFor(() => expect(h.jobs).toHaveLength(3));
+    const later = sharedAnalysis(plain);
+    open();
+    const edges = (await Promise.all([prefetch, prefetchJoined, retry, later])).map((r) => r.edges);
+    release();
+    expect(edges).toEqual([2, 2, 3, 3]); // the prefetch's askers keep its run; the retry's run serves the rest
+    expect(h.jobs).toHaveLength(3);
+    expect(h.jobs[2]).toMatchObject({ l3RootPath: "/ws", fresh: true });
+  });
+
+  it("regression: every ask of a tree git cannot name runs fresh under the hold — it has no run to join", async () => {
+    h.key = null;
+    const release = holdFreshAnalysis("r");
+    await sharedAnalysis({ folderPath: "/ws", rootId: "r" });
+    await sharedAnalysis(job);
+    release();
+    expect(h.jobs.map((j) => j.fresh)).toEqual([true, true]);
+  });
+
+  it("regression: a fresh result the cache does not keep gives the ticket back: the next ask of the key runs fresh again", async () => {
+    const release = holdFreshAnalysis("r");
+    h.nothing = true;
+    await sharedAnalysis(job);
+    h.nothing = false;
+    await sharedAnalysis(job);
+    release();
+    expect(h.jobs.map((j) => j.fresh)).toEqual([true, true]);
   });
 
   it("a fresh run that fails gives the ticket back: the hold's next analysis is fresh again", async () => {

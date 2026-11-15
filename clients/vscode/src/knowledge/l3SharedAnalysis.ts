@@ -23,7 +23,9 @@ import type { L3Job } from "./l3WorkerJob";
 /** The retry's hold lives beside the door it opens (`l3FreshHold.ts`); its holders (`indexHostPorts.ts`) take it from here. */
 export { holdFreshAnalysis } from "./l3FreshHold";
 
-const cache = createShaCache<WorkspaceExtracted>({ max: 2, keep: (held) => analysisKeep(held.snapshot) });
+/** Whether (and how long) the cache keeps a finished analysis. */
+const keepOf = (held: WorkspaceExtracted): boolean | number => analysisKeep(held.snapshot);
+const cache = createShaCache<WorkspaceExtracted>({ max: 2, keep: keepOf });
 
 /** One local provider per folder, for the cache key's git reads (a fresh one per call would lose its fingerprint memo). */
 const capsOf = new Map<string, CapabilityProvider>();
@@ -77,7 +79,10 @@ export async function sharedAnalysis(job: L3Job, hooks: WorkspaceExtractedHooks 
     if (shared?.aborted) ticket?.reopen();
     else shared?.addEventListener("abort", () => ticket?.reopen(), { once: true });
     try {
-      return await guarded(run, () => runL3InWorker(run, { ...hooks, ...(shared ? { signal: shared } : {}) }));
+      const result = await guarded(run, () => runL3InWorker(run, { ...hooks, ...(shared ? { signal: shared } : {}) }));
+      // A result the cache drops leaves no entry to join: the next ask of the key under the hold must run fresh again.
+      if (keepOf(result) === false) ticket?.reopen();
+      return result;
     } catch (error) {
       ticket?.reopen();
       throw error;
