@@ -3,3 +3,16 @@ out/
 out-integration/
 *.vsix
 .vscode-test/
+# tsc output emitted beside its .ts (every tsconfig here is noEmit; esbuild/vite write
+# to out/ and media/). A stale .js shadows its source — vite/vitest resolve .js first.
+# Enforced on disk by rule 8 of scripts/check-source-package-graph.mjs.
+src/**/*.js
+src/**/*.js.map
+webview/src/**/*.js
+webview/src/**/*.js.map
+webview/vite*.config.js
+webview/vite*.config.js.map
+harness/**/*.js
+harness/**/*.js.map
+test-integration/**/*.js
+test-integration/**/*.js.map

@@ -437,7 +437,6 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 
 Synapse lives in [builderforce-inference](https://github.com/SeanHogg/builderforce-inference), Spawn in [builderforce-spawn](https://github.com/SeanHogg/builderforce-spawn).
 
-- **[repo] Commit `28af68822` checked in ~2,940 compiler outputs (`.js`, `.js.map`, `.d.ts`) next to `.ts` sources (IN PROGRESS 2026-11-15).** Vite and vitest resolve `.js` before `.ts`, so these stale copies shadow the real sources (a stale `clients/vscode/webview/vite.config.js` already hid the real config from tests). Fix: remove every output that has a `.ts`/`.tsx` sibling, stop the in-place emit at its tsconfig, and guard against it returning.
 - **[vscode] The `clients/vscode` lockfile fails `pnpm install --frozen-lockfile`** (`ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY` on `vitest@4.1.10`; already the case at `cde1f7bbc`).
   - Dependabot `3a48f26a8` wrote 24 importer blocks for projects outside clients/vscode. Pruning them (281 deleted lines) makes frozen install pass. The change is in the working copy.
   - *Blocker: the user hasn't yet approved committing it; the automated permission check denied the agent's commit.*

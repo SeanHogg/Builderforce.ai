@@ -16,7 +16,7 @@
  * `.claude/hooks/source-package-graph-guard.mjs` PostToolUse hook runs this file,
  * so the editor, `npm test` and CI can never disagree about what the rule is.
  *
- * SEVEN RULES:
+ * EIGHT RULES:
  *
  *  1. DECLARED EXTERNALS. Every non-builtin import in a source-only package's
  *     `src/` that is not another source-only package must appear in that
@@ -50,6 +50,10 @@
  *     because JSON cannot import a module. Every JS config takes the set from
  *     `sourcePackages.mjs` instead of naming packages in strings.
  *
+ *  8. NO EMITTED SIDECARS. No `X.js` / `X.js.map` / `X.d.ts.map` beside
+ *     an `X.ts`/`X.tsx` in a source-only package's `src/` or a consuming project's
+ *     sources: bundlers resolve `.js` first, so a stale emit replaces the source.
+ *
  * Projects are DISCOVERED, not listed: the guard walks the repo for tsconfigs and
  * checks every one that resolves or imports these packages. The list it replaced
  * named three projects and there are nine.
@@ -66,6 +70,7 @@ import {
   runtimeDeclaredNames,
   undeclaredImports,
 } from './lib/declaredDependencies.mjs';
+import { SKIP_DIRS } from './lib/skipDirs.mjs';
 import { findTsconfigProjects, resolveThroughPaths, resolvesTo } from './lib/tsconfigPaths.mjs';
 import { sourcePackageGraph } from './sourcePackageGraph.mjs';
 
@@ -190,6 +195,65 @@ for (const project of relevant) {
         : `Remove it — no package under packages/ exports '${key}'.`,
     });
   }
+}
+
+// ── Rule 8: no compiler output beside the source it would shadow ─────────────
+//
+// Every project here is `noEmit` and these packages ship `src/` only, yet commit
+// 28af68822 checked in ~2,940 `X.js` / `X.js.map` files emitted next to their
+// `X.ts` (the clients/vscode root project compiled with emit forced on — its
+// `sourceMap: true` and its import closure are what landed). Vite, vitest and
+// esbuild try `.js` before `.ts`, so each stale copy silently replaced the real
+// source: tests ran old code and `webview/vite.config.js` hid the real config.
+// Checked on disk, not just in git, because the shadowing happens before commit.
+// `.d.ts` is NOT matched: a hand-written ambient `declare module` beside the file
+// that uses it (`knowledge-graph-view/src/stage/labels/troika.d.ts`) is legitimate.
+const EMITTED = /^(.+?)(?:\.d\.ts\.map|\.js\.map|\.js)$/;
+const sidecarRoots = [
+  ...graph.nodes.map((node) => ({ dir: node.srcDir, recursive: true })),
+  ...relevant.flatMap((project) => [
+    ...project.sources.map((dir) => ({ dir, recursive: true })),
+    { dir: project.dir, recursive: false }, // its top-level configs (`vite.config.ts`)
+  ]),
+];
+const sidecars = new Map(); // owning root → absolute files
+const visited = new Set();
+const flagged = new Set();
+for (const root of sidecarRoots) {
+  const pending = [root.dir];
+  while (pending.length) {
+    const current = /** @type {string} */ (pending.pop());
+    const key = `${current}|${root.recursive}`;
+    if (visited.has(key) || visited.has(`${current}|true`)) continue;
+    visited.add(key);
+    const entries = readdirSync(current, { withFileTypes: true });
+    const names = new Set(entries.filter((entry) => entry.isFile()).map((entry) => entry.name));
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        if (root.recursive && !SKIP_DIRS.has(entry.name)) pending.push(join(current, entry.name));
+        continue;
+      }
+      const base = EMITTED.exec(entry.name)?.[1];
+      if (!base || !(names.has(`${base}.ts`) || names.has(`${base}.tsx`))) continue;
+      if (flagged.has(join(current, entry.name))) continue;
+      flagged.add(join(current, entry.name));
+      const owner = toPosix(relative(repoRoot, root.dir)) || '.';
+      if (!sidecars.has(owner)) sidecars.set(owner, []);
+      sidecars.get(owner).push(join(current, entry.name));
+    }
+  }
+}
+for (const [owner, files] of sidecars) {
+  const shown = files.slice(0, 5).map((file) => toPosix(relative(repoRoot, file)));
+  failures.push({
+    rule: 'no emitted sidecars',
+    detail:
+      `${files.length} compiler output(s) under ${owner} sit beside the .ts they were emitted from and shadow it ` +
+      `(vite/vitest/esbuild resolve .js first): ${shown.join(', ')}${files.length > shown.length ? ', …' : ''}.`,
+    remedy:
+      'Delete them (`git rm` if tracked). Type-check with the project as configured (`tsc -p <dir>` — every ' +
+      'tsconfig here is noEmit); never pass `--noEmit false` or emit without an `outDir`.',
+  });
 }
 
 // ── Rule 7: a JS toolchain DERIVES its aliases, never types them out ─────────

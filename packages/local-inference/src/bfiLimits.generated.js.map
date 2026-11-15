@@ -1,1 +1,0 @@
-{"version":3,"file":"bfiLimits.generated.js","sourceRoot":"","sources":["bfiLimits.generated.ts"],"names":[],"mappings":"AAAA,sEAAsE;AACtE,+EAA+E;AAC/E,8EAA8E;AAE9E;;;oFAGoF;AACpF,MAAM,CAAC,MAAM,cAAc,GAAG;IAC5B,gBAAgB,EAAE,SAAS;IAC3B,kBAAkB,EAAE,SAAS;IAC7B,iBAAiB,EAAE,UAAU;IAC7B,wBAAwB,EAAE,CAAC;IAC3B,wBAAwB,EAAE,UAAU;IACpC,yBAAyB,EAAE,UAAU;CAC7B,CAAC"}

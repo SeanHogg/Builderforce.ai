@@ -20,6 +20,12 @@ worker/dist/
 # builderforce-embedded) so the CF Pages frozen install can resolve the linked
 # `@seanhogg/builderforce-sdk` + `@seanhogg/builderforce-studio` packages — their
 # `link:` targets have no build step in CI. Rebuild via `npm run build` in each.
+# Source-only packages ship src/ (exports → ./src/*.ts) and never emit there. A .js
+# beside its .ts shadows it (vite/vitest/esbuild resolve .js first) — see rule 8 of
+# scripts/check-source-package-graph.mjs, which also checks the disk.
+packages/*/src/**/*.js
+packages/*/src/**/*.js.map
+packages/*/src/**/*.d.ts.map
 
 # Env
 .env

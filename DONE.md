@@ -1,3 +1,9 @@
+## ✅ RESOLVED 2026-11-15: compiler outputs no longer shadow their sources
+
+- Commit `28af68822` added 2,938 `.js`/`.js.map` files beside their `.ts` sources, all from one run of the clients/vscode root project with emit forced on (2026-11-14 07:38; every tsconfig involved is already `noEmit`, so the run used an explicit override). Vite and vitest resolve `.js` before `.ts`, so these stale copies could be loaded instead of the real code.
+- The remaining 1,587 were removed (the rest had already gone in `e7765c3b0`, `0f8c1f5e0`, `d189327c1` and `68d36230e`).
+- Rule 8 of `scripts/check-source-package-graph.mjs` fails on any `X.js`/`X.js.map`/`X.d.ts.map` beside `X.ts`/`X.tsx` in source-only packages and the projects that consume them, checked on disk (so it runs from the PostToolUse hook before anything is committed). `.gitignore` rules in the root and `clients/vscode` cover the same folders.
+
 ## ✅ RESOLVED 2026-11-15: "Retry analyzers" really re-runs them
 
 - **On-disk cache:** a fresh job wraps the worker's on-disk analyzer cache in `writeOnlyBinding()`, so reads miss and writes replace the old entries. The in-thread fallback passes `fresh` to `analyseWorkspace`'s own cache too.
