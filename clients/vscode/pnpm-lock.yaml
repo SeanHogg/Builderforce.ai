@@ -44,14 +44,14 @@ importers:
         specifier: link:../../packages/brain-ui
         version: link:../../packages/brain-ui
       '@seanhogg/builderforce-memory':
-        specifier: ^2026.10.81
-        version: 2026.10.81(@seanhogg/builderforce-memory-engine@2026.10.65)
+        specifier: ^2026.10.82
+        version: 2026.10.82(@seanhogg/builderforce-memory-engine@2026.10.65)
       '@seanhogg/builderforce-memory-engine':
         specifier: ^2026.10.65
         version: 2026.10.65
       '@seanhogg/builderforce-memory-mcp':
         specifier: ^2026.10.67
-        version: 2026.10.67(@seanhogg/builderforce-memory-engine@2026.10.65)(@seanhogg/builderforce-memory@2026.10.81(@seanhogg/builderforce-memory-engine@2026.10.65))(fake-indexeddb@6.2.5)
+        version: 2026.10.67(@seanhogg/builderforce-memory-engine@2026.10.65)(@seanhogg/builderforce-memory@2026.10.82(@seanhogg/builderforce-memory-engine@2026.10.65))(fake-indexeddb@6.2.5)
       '@seanhogg/builderforce-studio':
         specifier: link:../../studio
         version: link:../../studio
@@ -163,287 +163,6 @@ importers:
       xlsx:
         specifier: ^0.18.5
         version: 0.18.5
-
-  packages/agent-loop:
-    devDependencies:
-      vitest:
-        specifier: ^4.0.18
-        version: 4.1.10(@types/node@20.19.43)(jsdom@28.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(tsx@4.23.15))
-
-  packages/agent-skills:
-    devDependencies:
-      vitest:
-        specifier: ^4.0.18
-        version: 4.1.10(@types/node@20.19.43)(jsdom@28.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(tsx@4.23.15))
-
-  packages/agent-stall:
-    devDependencies:
-      vitest:
-        specifier: ^4.0.18
-        version: 4.1.10(@types/node@20.19.43)(jsdom@28.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(tsx@4.23.15))
-
-  packages/brain-ui:
-    dependencies:
-      '@seanhogg/builderforce-brain-embedded':
-        specifier: link:../../brain-embedded
-        version: link:../../brain-embedded
-      react-markdown:
-        specifier: ^10.1.0
-        version: 10.1.0(@types/react@19.3.0)(react@19.3.1)(supports-color@8.1.1)
-      remark-gfm:
-        specifier: ^4.0.1
-        version: 4.0.1(supports-color@8.1.1)
-    devDependencies:
-      '@builderforce/agent-loop':
-        specifier: link:../agent-loop
-        version: link:../agent-loop
-      '@types/react':
-        specifier: ^19.3.0
-        version: 19.3.0
-      '@types/react-dom':
-        specifier: ^19.3.0
-        version: 19.3.0(@types/react@19.3.0)
-      jsdom:
-        specifier: ^28.1.0
-        version: 28.1.0(supports-color@8.1.1)
-      react:
-        specifier: ^19.3.1
-        version: 19.3.1
-      react-dom:
-        specifier: ^19.3.1
-        version: 19.3.1(react@19.3.1)
-      tsup:
-        specifier: ^8.5.1
-        version: 8.5.1(@typescript/typescript6@6.0.2)(jiti@1.21.7)(postcss@8.5.32)(supports-color@8.1.1)(tsx@4.23.15)
-      typescript:
-        specifier: npm:@typescript/typescript6@^6.0.2
-        version: '@typescript/typescript6@6.0.2'
-      typescript-7:
-        specifier: npm:typescript@^7.0.2
-        version: typescript@7.0.2
-      vitest:
-        specifier: ^4.1.10
-        version: 4.1.10(@types/node@20.19.43)(jsdom@28.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(tsx@4.23.15))
-
-  packages/cost-levers:
-    devDependencies:
-      vitest:
-        specifier: ^4.0.18
-        version: 4.1.10(@types/node@20.19.43)(jsdom@28.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(tsx@4.23.15))
-
-  packages/creation-canvas-contract:
-    devDependencies:
-      vitest:
-        specifier: ^4.0.18
-        version: 4.1.10(@types/node@20.19.43)(jsdom@28.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(tsx@4.23.15))
-
-  packages/difficulty-router:
-    devDependencies:
-      vitest:
-        specifier: ^4.0.18
-        version: 4.1.10(@types/node@20.19.43)(jsdom@28.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(tsx@4.23.15))
-
-  packages/learned-routing:
-    devDependencies:
-      vitest:
-        specifier: ^4.0.18
-        version: 4.1.10(@types/node@20.19.43)(jsdom@28.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(tsx@4.23.15))
-
-  packages/local-first:
-    devDependencies:
-      fake-indexeddb:
-        specifier: ^6.2.4
-        version: 6.2.5
-      vitest:
-        specifier: ^4.0.18
-        version: 4.1.10(@types/node@20.19.43)(jsdom@28.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(tsx@4.23.15))
-
-  packages/local-inference:
-    devDependencies:
-      vitest:
-        specifier: ^4.0.18
-        version: 4.1.10(@types/node@20.19.43)(jsdom@28.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(tsx@4.23.15))
-
-  packages/model-catalog:
-    devDependencies:
-      vitest:
-        specifier: ^4.0.18
-        version: 4.1.10(@types/node@20.19.43)(jsdom@28.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(tsx@4.23.15))
-
-  packages/pipeline-route:
-    devDependencies:
-      vitest:
-        specifier: ^4.0.18
-        version: 4.1.10(@types/node@20.19.43)(jsdom@28.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(tsx@4.23.15))
-
-  packages/run-guards:
-    devDependencies:
-      vitest:
-        specifier: ^4.0.18
-        version: 4.1.10(@types/node@20.19.43)(jsdom@28.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(tsx@4.23.15))
-
-  packages/run-policy:
-    devDependencies:
-      vitest:
-        specifier: ^4.0.18
-        version: 4.1.10(@types/node@20.19.43)(jsdom@28.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(tsx@4.23.15))
-
-  packages/spend-contract:
-    devDependencies:
-      vitest:
-        specifier: ^4.0.18
-        version: 4.1.10(@types/node@20.19.43)(jsdom@28.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(tsx@4.23.15))
-
-  packages/tool-output-policy:
-    devDependencies:
-      vitest:
-        specifier: ^4.0.18
-        version: 4.1.10(@types/node@20.19.43)(jsdom@28.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(tsx@4.23.15))
-
-  packages/workload:
-    devDependencies:
-      vitest:
-        specifier: ^4.0.18
-        version: 4.1.10(@types/node@20.19.43)(jsdom@28.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(tsx@4.23.15))
-
-  packages/write-outbox:
-    devDependencies:
-      vitest:
-        specifier: ^4.0.18
-        version: 4.1.10(@types/node@20.19.43)(jsdom@28.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(tsx@4.23.15))
-
-  studio:
-    dependencies:
-      '@webdit/runtime':
-        specifier: file:../webdit/runtime
-        version: link:../webdit/runtime
-      '@webdit/shared':
-        specifier: file:../webdit/shared
-        version: link:../webdit/shared
-      '@webdit/torch':
-        specifier: file:../webdit/torch
-        version: link:../webdit/torch
-      mp4-muxer:
-        specifier: ^5.2.2
-        version: 5.2.2
-    devDependencies:
-      '@huggingface/transformers':
-        specifier: ^3.8.1
-        version: 3.8.1
-      '@seanhogg/builderforce-sdk':
-        specifier: ^0.8.1
-        version: 0.8.2
-      '@types/node':
-        specifier: ^24.7.2
-        version: 24.19.2
-      '@webdit/convert':
-        specifier: file:../webdit/converter
-        version: link:../webdit/converter
-      '@webgpu/types':
-        specifier: ^0.1.74
-        version: 0.1.74
-      onnxruntime-web:
-        specifier: ^1.21.0
-        version: 1.31.1
-      tsup:
-        specifier: ^8.5.0
-        version: 8.5.1(@typescript/typescript6@6.0.2)(jiti@1.21.7)(postcss@8.5.32)(supports-color@8.1.1)(tsx@4.23.15)
-      typescript:
-        specifier: npm:@typescript/typescript6@^6.0.2
-        version: '@typescript/typescript6@6.0.2'
-      typescript-7:
-        specifier: npm:typescript@^7.0.2
-        version: typescript@7.0.2
-      vitest:
-        specifier: ^4.0.3
-        version: 4.1.10(@types/node@24.19.2)(jsdom@28.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@24.19.2)(jiti@1.21.7)(tsx@4.23.15))
-
-  voice:
-    dependencies:
-      '@seanhogg/builderforce-studio':
-        specifier: '>=0.2.0'
-        version: 2026.10.1(@huggingface/transformers@3.8.1)(@seanhogg/builderforce-sdk@0.8.2)(onnxruntime-web@1.22.0-dev.20250409-89f8206ba4)
-    devDependencies:
-      '@types/node':
-        specifier: ^24.7.2
-        version: 24.19.2
-      tsup:
-        specifier: ^8.5.0
-        version: 8.5.1(@typescript/typescript6@6.0.2)(jiti@1.21.7)(postcss@8.5.32)(supports-color@8.1.1)(tsx@4.23.15)
-      typescript:
-        specifier: npm:@typescript/typescript6@^6.0.2
-        version: '@typescript/typescript6@6.0.2'
-      typescript-7:
-        specifier: npm:typescript@^7.0.2
-        version: typescript@7.0.2
-      vitest:
-        specifier: ^4.1.11
-        version: 4.1.12(@types/node@24.19.2)(jsdom@28.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@24.19.2)(jiti@1.21.7)(tsx@4.23.15))
-
-  webdit/converter:
-    dependencies:
-      '@webdit/shared':
-        specifier: file:../shared
-        version: link:../shared
-    devDependencies:
-      '@types/node':
-        specifier: ^20.12.0
-        version: 20.19.43
-      tsx:
-        specifier: ^4.7.0
-        version: 4.23.15
-      typescript:
-        specifier: ^7.0.2
-        version: 7.0.2
-      vitest:
-        specifier: ^4.0.18
-        version: 4.1.10(@types/node@20.19.43)(jsdom@28.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(tsx@4.23.15))
-
-  webdit/runtime:
-    dependencies:
-      '@huggingface/transformers':
-        specifier: ^3.8.1
-        version: 3.8.1
-      '@webdit/shared':
-        specifier: file:../shared
-        version: link:../shared
-      '@webdit/torch':
-        specifier: file:../torch
-        version: link:../torch
-      onnxruntime-web:
-        specifier: ^1.21.0
-        version: 1.31.1
-    devDependencies:
-      '@mlc-ai/web-llm':
-        specifier: ^0.2.0
-        version: 0.2.84
-      '@webdit/convert':
-        specifier: file:../converter
-        version: link:../converter
-      typescript:
-        specifier: ^7.0.2
-        version: 7.0.2
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@20.19.43)(jiti@1.21.7)(jsdom@28.1.0(supports-color@8.1.1))(supports-color@8.1.1)(tsx@4.23.15)
-
-  webdit/shared:
-    devDependencies:
-      typescript:
-        specifier: ^7.0.2
-        version: 7.0.2
-      vitest:
-        specifier: ^4.1.11
-        version: 4.1.12(@types/node@20.19.43)(jsdom@28.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(tsx@4.23.15))
-
-  webdit/torch:
-    devDependencies:
-      typescript:
-        specifier: ^7.0.2
-        version: 7.0.2
-      vitest:
-        specifier: ^4.1.11
-        version: 4.1.12(@types/node@20.19.43)(jsdom@28.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(tsx@4.23.15))
 
 packages:
 
@@ -1381,8 +1100,8 @@ packages:
       fake-indexeddb:
         optional: true
 
-  '@seanhogg/builderforce-memory@2026.10.81':
-    resolution: {integrity: sha512-m3ozoE+E+SUZdjTxKJZSt231YmRc0pD2cMkO8P2EpEltry+SDRHf7aYl/lYHw1jl7+7Eq3tBdipY687hy4fVIw==}
+  '@seanhogg/builderforce-memory@2026.10.82':
+    resolution: {integrity: sha512-lChj1wTObecAcPDTl82jvAEi0cuhVw7mWWCV+fFirGmgy6HQ38pAg9SdfiV5b8SD4nfW2Ax/Z3cdJQf3xE+w7w==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       '@seanhogg/builderforce-memory-engine': ^2026.10.65
@@ -5801,19 +5520,19 @@ snapshots:
 
   '@seanhogg/builderforce-memory-engine@2026.10.65': {}
 
-  '@seanhogg/builderforce-memory-mcp@2026.10.67(@seanhogg/builderforce-memory-engine@2026.10.65)(@seanhogg/builderforce-memory@2026.10.81(@seanhogg/builderforce-memory-engine@2026.10.65))(fake-indexeddb@6.2.5)':
+  '@seanhogg/builderforce-memory-mcp@2026.10.67(@seanhogg/builderforce-memory-engine@2026.10.65)(@seanhogg/builderforce-memory@2026.10.82(@seanhogg/builderforce-memory-engine@2026.10.65))(fake-indexeddb@6.2.5)':
     dependencies:
       '@modelcontextprotocol/sdk': 1.30.1(zod@3.25.76)
       zod: 3.25.76
     optionalDependencies:
-      '@seanhogg/builderforce-memory': 2026.10.81(@seanhogg/builderforce-memory-engine@2026.10.65)
+      '@seanhogg/builderforce-memory': 2026.10.82(@seanhogg/builderforce-memory-engine@2026.10.65)
       '@seanhogg/builderforce-memory-engine': 2026.10.65
       fake-indexeddb: 6.2.5
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - supports-color
 
-  '@seanhogg/builderforce-memory@2026.10.81(@seanhogg/builderforce-memory-engine@2026.10.65)':
+  '@seanhogg/builderforce-memory@2026.10.82(@seanhogg/builderforce-memory-engine@2026.10.65)':
     dependencies:
       '@seanhogg/builderforce-memory-engine': 2026.10.65
 
@@ -7299,7 +7018,8 @@ snapshots:
 
   extend@3.0.2: {}
 
-  fake-indexeddb@6.2.5: {}
+  fake-indexeddb@6.2.5:
+    optional: true
 
   fast-deep-equal@3.1.3: {}
 
@@ -9544,6 +9264,7 @@ snapshots:
       esbuild: 0.28.2
     optionalDependencies:
       fsevents: 2.3.3
+    optional: true
 
   tunnel-agent@0.6.0:
     dependencies:
