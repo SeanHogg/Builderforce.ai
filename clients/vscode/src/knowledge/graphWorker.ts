@@ -6,7 +6,7 @@
  * repo never holds the extension host's thread and the repository's extracts never cross it.
  *
  *   - the host posts a plain {@link GraphBuildRequest} (`graphBuildProtocol.ts`); the worker posts
- *     the result back as bounded parts then a `done` head, reassembled here ({@link PartsReceiver});
+ *     the result back as bounded parts then a `done` head, reassembled here ({@link assembleBounded});
  *   - ONE build at a time, in arrival order: a build waits behind the one in flight (a view load and
  *     a run-delta side never build at once), each named by an id the replies echo;
  *   - an `extracted` request's large array crosses host → worker as bounded parts, then its `build`;
@@ -25,10 +25,11 @@ import * as path from "node:path";
 import { Worker } from "node:worker_threads";
 import type { CodeGraphFindings } from "@builderforce/agent-tools/knowledge";
 import type { KnowledgeGraph } from "@seanhogg/builderforce-memory/knowledge";
-import { PartsReceiver, postBounded } from "../workers/boundedTransfer";
+import { assembleBounded, PartsReceiver, postBounded } from "../workers/boundedTransfer";
 import { folderKnowledge } from "./folderKnowledge";
 import {
-  EXTRACTED_REQUEST_ARRAYS, GRAPH_RESULT_ARRAYS, CODE_GRAPH_RESULT_ARRAYS, type GraphBuildRequest, type GraphWorkerMessage, type GraphWorkerReply, type StoredGraphRequest,
+  EXTRACTED_REQUEST_ARRAYS, GRAPH_RESULT_ARRAYS, CODE_GRAPH_RESULT_ARRAYS,
+  type GraphBuildRequest, type GraphWorkerMessage, type GraphWorkerReply, type StoredGraphRequest,
 } from "./graphBuildProtocol";
 import { runGraphBuild, type FolderStores } from "./graphBuildJob";
 
@@ -69,18 +70,23 @@ let seams: GraphWorkerSeams = {};
 export function useGraphWorkerSeams(overrides: GraphWorkerSeams): () => void {
   const prior = seams;
   seams = overrides;
-  // A new seam set starts from no worker: the next build spawns by the new rules.
-  worker.holder = undefined;
-  return () => { seams = prior; worker.holder = undefined; };
+  resetPool();
+  return () => { seams = prior; resetPool(); };
 }
 
-/** The ONE reused worker, spawned lazily and respawned after a crash. */
-const worker: { holder: GraphWorkerHandle | undefined } = { holder: undefined };
+interface ActiveWorker {
+  handle: GraphWorkerHandle;
+  /** The entry whose build this worker is running (undefined between builds). */
+  current?: QueueEntry;
+}
 
-const spawn = (): GraphWorkerHandle => {
-  const file = seams.file === undefined ? workerFile() : seams.file;
-  if (!file) throw new Error("graph_worker_unavailable");
-  return (seams.spawn ?? ((f: string) => new Worker(f) as unknown as GraphWorkerHandle))(file);
+/** The ONE reused worker and the builds waiting for it (only the head runs). */
+const pool: { worker: ActiveWorker | undefined; queue: QueueEntry[] } = { worker: undefined, queue: [] };
+let nextId = 1;
+
+const resetPool = (): void => {
+  pool.worker = undefined;
+  pool.queue = [];
 };
 
 interface QueueEntry {
@@ -90,35 +96,16 @@ interface QueueEntry {
   parts: PartsReceiver;
   resolve(result: KnowledgeGraph | CodeGraphFindings | null): void;
   reject(error: unknown): void;
+  settled: boolean;
   settle(finish: () => void): void;
   onAbort(): void;
 }
 
-/** Builds waiting for the worker, in arrival order; only the head runs. */
-const queue: QueueEntry[] = [];
-let nextId = 1;
-let draining = false;
-
 const resultArraysOf = (request: GraphBuildRequest): readonly string[] => (request.kind === "extracted" ? CODE_GRAPH_RESULT_ARRAYS : GRAPH_RESULT_ARRAYS);
 
-/** Rebuilds a result from the `done` head and the parts that came before it. */
-function assembleResult(request: GraphBuildRequest, head: KnowledgeGraph | CodeGraphFindings | null, parts: PartsReceiver): KnowledgeGraph | CodeGraphFindings | null {
-  if (head === null) return null;
-  const arrays = resultArraysOf(request);
-  let value: unknown = head;
-  // assembleBounded walks dot-paths; the graph arrays are top-level, so fold them by key.
-  for (const key of arrays) {
-    const arrived = parts.take(key);
-    if (arrived.length === 0) continue;
-    value = { ...(value as Record<string, unknown>), [key]: [...((value as Record<string, unknown[]>)[key] ?? []), ...arrived] };
-  }
-  return value as KnowledgeGraph | CodeGraphFindings;
-}
-
 /** Sends a request: an `extracted` array goes as bounded parts first, then `build` completes it. */
-function sendRequest(entry: QueueEntry): void {
-  const w = worker.holder!;
-  const send: (message: GraphWorkerMessage) => void = (m) => w.postMessage(m);
+function sendRequest(worker: ActiveWorker, entry: QueueEntry): void {
+  const send: (message: GraphWorkerMessage) => void = (m) => worker.handle.postMessage(m);
   if (entry.request.kind === "extracted") {
     const head = postBounded(send, entry.request, [...EXTRACTED_REQUEST_ARRAYS]);
     send({ type: "build", id: entry.id, request: head });
@@ -127,61 +114,69 @@ function sendRequest(entry: QueueEntry): void {
   }
 }
 
-/** Drops the entry (aborted) and keeps the queue draining. */
-function dropEntry(entry: QueueEntry, error: unknown): void {
-  entry.settle(() => entry.reject(error));
-  drain();
+/** Spawns the reused worker and wires its replies to the queue. */
+function attachWorker(): ActiveWorker {
+  const file = seams.file === undefined ? workerFile() : seams.file;
+  if (!file) throw new Error("graph_worker_unavailable");
+  const handle = (seams.spawn ?? ((f: string) => new Worker(f) as unknown as GraphWorkerHandle))(file);
+  const active: ActiveWorker = { handle };
+  handle.on("message", (message: GraphWorkerReply) => {
+    const entry = active.current;
+    if (!entry || pool.worker !== active) return;
+    if (entry.parts.accept(message)) return; // a slice of the result: kept until `done` completes it
+    if (message.type === "done" && message.id === entry.id) {
+      entry.settle(() => entry.resolve(assembleBounded(message.result, entry.parts, [...resultArraysOf(entry.request)])));
+    } else if (message.type === "error" && message.id === entry.id) {
+      entry.settle(() => entry.reject(Object.assign(new Error(message.error), message.code ? { code: message.code } : {})));
+    } else {
+      return; // a reply for a build nobody waits for: ignored
+    }
+    active.current = undefined;
+    drain();
+  });
+  handle.on("error", (error: unknown) => {
+    if (pool.worker !== active) return;
+    pool.worker = undefined; // a crashed worker is not reused; the next build respawns
+    const entry = active.current;
+    active.current = undefined;
+    if (entry) entry.settle(() => entry.reject(error instanceof Error ? error : new Error(String(error))));
+    drain();
+  });
+  handle.on("exit", (code: number) => {
+    if (pool.worker !== active) return;
+    pool.worker = undefined;
+    const entry = active.current;
+    active.current = undefined;
+    if (entry) entry.settle(() => entry.reject(new Error(`graph_worker_exit:${code}`)));
+    drain();
+  });
+  pool.worker = active;
+  return active;
 }
 
 /** Runs the queued builds one at a time on the (single reused) worker. */
 function drain(): void {
-  if (draining) return;
-  const entry = queue[0];
-  if (!entry) return;
-  if (entry.signal?.aborted) { queue.shift(); dropEntry(entry, aborted()); return; }
-  if (!worker.holder) {
-    try { worker.holder = spawn(); } catch (error) {
-      // No worker (and no in-thread fallback wanted here): the build fails.
-      queue.shift();
-      dropEntry(entry, error);
+  const entry = pool.queue[0];
+  if (!entry || entry.settled) return;
+  if (entry.signal?.aborted) {
+    pool.queue.shift();
+    entry.settle(() => entry.reject(aborted()));
+    drain();
+    return;
+  }
+  let active = pool.worker;
+  if (!active) {
+    try { active = attachWorker(); } catch (error) {
+      pool.queue.shift();
+      entry.settle(() => entry.reject(error));
       return;
     }
-    const w = worker.holder;
-    w.on("message", (message: GraphWorkerReply) => {
-      const head = queue[0];
-      if (!head || w !== worker.holder) return;
-      if (head.parts.accept(message)) return; // a slice of the result: kept until `done` completes it
-      if (message.type === "done" && message.id === head.id) {
-        queue.shift();
-        head.settle(() => head.resolve(assembleResult(head.request, message.result, head.parts)));
-        drain();
-      } else if (message.type === "error" && message.id === head.id) {
-        queue.shift();
-        head.settle(() => head.reject(Object.assign(new Error(message.error), message.code ? { code: message.code } : {})));
-        drain();
-      }
-    });
-    w.on("error", (error: unknown) => {
-      const head = queue[0];
-      worker.holder = undefined; // a crashed worker is not reused; the next build respawns
-      if (head && w === headSignalWorker(head)) { queue.shift(); head.settle(() => head.reject(error instanceof Error ? error : new Error(String(error)))); }
-      drain();
-    });
-    w.on("exit", (code: number) => {
-      const head = queue[0];
-      worker.holder = undefined;
-      if (head && w === workerFor(head)) { queue.shift(); head.settle(() => head.reject(new Error(`graph_worker_exit:${code}`))); }
-      drain();
-    });
   }
-  draining = true;
-  sendRequest(entry);
-  draining = false;
+  if (active.current) return; // a build is in flight: the head waits behind it, in arrival order
+  active.current = entry;
+  pool.queue.shift();
+  sendRequest(active, entry);
 }
-
-// The worker an entry ran on, for matching a crash to the build in flight.
-const workerFor = (entry: QueueEntry): GraphWorkerHandle | undefined => worker.holder;
-const headSignalWorker = (_entry: QueueEntry): GraphWorkerHandle | undefined => worker.holder;
 
 /**
  * ONE graph build, in the reused worker when the bundle has one (else in this thread). An aborted
@@ -200,21 +195,33 @@ export async function buildOffThread<R extends GraphBuildRequest>(
   }
 
   return new Promise<KnowledgeGraph | CodeGraphFindings | null>((resolve, reject) => {
-    let settled = false;
     const entry: QueueEntry = {
-      id: nextId++, request, signal, parts: new PartsReceiver(),
+      id: nextId++, request, signal, parts: new PartsReceiver(), settled: false,
       resolve: (r) => { resolve(r); }, reject: (e) => { reject(e); },
-      settle(finish) { if (settled) return; settled = true; signal?.removeEventListener("abort", this.onAbort); finish(); },
-      onAbort() {
-        const at = queue.indexOf(entry);
-        if (at > 0) { queue.splice(at, 1); dropEntry(entry, aborted()); return; } // queued: dropped
-        // In flight: the worker is terminated (a synchronous build no flag could reach); the next build respawns.
-        worker.holder = undefined;
-        dropEntry(entry, aborted());
+      settle(finish) {
+        if (this.settled) return;
+        this.settled = true;
+        signal?.removeEventListener("abort", this.onAbort);
+        finish();
+      },
+      onAbort: () => {
+        if (entry.settled) return;
+        const at = pool.queue.indexOf(entry);
+        if (at >= 0) { pool.queue.splice(at, 1); entry.settle(() => entry.reject(aborted())); drain(); return; } // queued: dropped
+        // In flight (this is the worker's current build): terminate the worker (a synchronous build
+        // no flag could reach); the crash path respawns a fresh one for the next build.
+        if (pool.worker?.current === entry) {
+          const w = pool.worker;
+          pool.worker = undefined;
+          w.current = undefined;
+          void w.handle.terminate();
+          entry.settle(() => entry.reject(aborted()));
+          drain();
+        }
       },
     };
     signal?.addEventListener("abort", entry.onAbort, { once: true });
-    queue.push(entry);
+    pool.queue.push(entry);
     drain();
   }) as never;
 }

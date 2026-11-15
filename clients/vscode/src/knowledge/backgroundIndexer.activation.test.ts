@@ -1,6 +1,9 @@
 /**
  * Operator decision 2026-11-15: nothing knowledge-related runs at activation. The background indexer is wired only once a
  * Visualizer's Run makes a root run (or the autoIndex opt-in is on), and unwired when the last one stops.
+ *
+ * Evidence re-verification: busts the verify cache (content-hash key) so the pre-push
+ * gate re-runs checks against the repaired install instead of replaying a stale record.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
