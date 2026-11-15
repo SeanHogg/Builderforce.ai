@@ -10,6 +10,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { Worker } from "node:worker_threads";
 import type { RunDelta } from "@builderforce/run-delta";
+import { assembleBounded, PartsReceiver } from "../workers/boundedTransfer";
+import { RUN_DELTA_ARRAYS, type DeltaWorkerReply } from "./deltaWorkerProtocol";
 import { computePrepared, type PreparedDelta } from "./preparedPorts";
 
 /** The bundle entry esbuild writes beside `out/extension.js`. */
@@ -31,11 +33,18 @@ export function computeInWorker(prepared: PreparedDelta, signal?: AbortSignal): 
     const onAbort = (): void => { stop(); reject(new Error("run_delta_aborted")); };
     signal?.addEventListener("abort", onAbort, { once: true });
     const done = (): void => { signal?.removeEventListener("abort", onAbort); stop(); };
-    worker.once("message", (reply: { ok: true; delta: RunDelta } | { ok: false; error: string }) => {
+    // The delta's large arrays arrive as bounded parts first (`deltaWorkerProtocol.ts`), then `ok` completes it.
+    const parts = new PartsReceiver();
+    const onMessage = (reply: DeltaWorkerReply): void => {
+      if (parts.accept(reply)) return;
+      worker.off("message", onMessage);
       done();
-      if (reply.ok) resolve(reply.delta);
-      else reject(new Error(reply.error));
-    });
+      if (reply.type === "ok") resolve(assembleBounded(reply.delta, parts, RUN_DELTA_ARRAYS));
+      else if (reply.type === "error") reject(Object.assign(new Error(reply.error), reply.code ? { code: reply.code } : {}));
+      else reject(new Error(`run_delta_worker_reply:${(reply as { type?: string }).type ?? "unknown"}`));
+      parts.clear();
+    };
+    worker.on("message", onMessage);
     worker.once("error", (error) => { done(); reject(error); });
     worker.once("exit", (code) => { if (code !== 0) reject(new Error(`run_delta_worker_exit:${code}`)); });
     worker.postMessage(prepared);
