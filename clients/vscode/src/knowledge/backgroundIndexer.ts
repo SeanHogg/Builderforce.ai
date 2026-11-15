@@ -150,7 +150,7 @@ export class BackgroundIndexer {
     });
     const stopWatch = this.host.watch(root.rootPath, (paths) => this.coalescer.push(root, paths));
     const stopPreempt = registerBackgroundPreemptor(root.rootId, () => indexer.preempt());
-    const stopRequests = registerL3Requester(root.rootId, { request: (scope) => indexer.requestL3(scope), withdraw: (scope) => indexer.withdrawL3(scope) });
+    const stopRequests = registerL3Requester(root.rootId, { request: (scope, opts) => indexer.requestL3(scope, opts), withdraw: (scope) => indexer.withdrawL3(scope) });
     this.roots.set(root.rootId, { root, indexer, ports, stopWatch, unregister: () => { stopPreempt(); stopRequests(); } });
     setIndexerWatching(root.rootId, true);
     void indexer.reconcile();

@@ -280,3 +280,66 @@ describe("L3 gate — single flight, withdrawal, the tick's idle wait, sub-folde
     expect(subRootPass).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("L3 gate — the explicit retry, and reconciles after the first", () => {
+  it("an explicit request runs a pass even when the analysis is current (the person asked to analyse again)", async () => {
+    const h = harness({ l3State: { head: async () => "aaa", done: () => "aaa", markDone: () => undefined } });
+    await h.indexer.reconcile();
+    expect(await h.indexer.requestL3()).toBe(true); // current: nothing ran
+    expect(h.analyzerPasses()).toBe(0);
+    expect(await h.indexer.requestL3("", { explicit: true })).toBe(true);
+    expect(h.analyzerPasses()).toBe(1);
+  });
+
+  it("an explicit request is immune to a view's withdrawal; a view's is not", async () => {
+    let busy = true;
+    const h = harness({ busy: () => busy });
+    await h.indexer.reconcile();
+    expect(await h.indexer.requestL3("", { explicit: true })).toBe(false); // waits: a review holds the root
+    h.indexer.withdrawL3(); // another view closed
+    busy = false;
+    await h.indexer.tick("/ws");
+    expect(h.analyzerPasses()).toBe(1);
+  });
+
+  // regression: every window refocus runs a reconcile (5 s apart at most), whose end started a pending request with no idle
+  // wait — a person alt-tabbing between bursts of typing restarted the whole analysis each time.
+  it("regression: only the session's FIRST reconcile starts a pending request directly; a later one waits for idle like the tick", async () => {
+    let idle = 0;
+    let typing: "typing" | undefined;
+    const ports = {
+      rootId: "r", plan: vi.fn(async () => plan()), extractEdited: vi.fn(async () => ({ changed: [] as string[], unreviewed: [] as string[] })),
+      mapPass: vi.fn(async (_p: IndexPlan, _o: { analyzers: boolean; signal: AbortSignal }) => ({ changed: [] as string[] })), onFactsChanged: vi.fn(async () => undefined),
+    } satisfies IndexRootPorts;
+    const indexer = new RootIndexer({
+      ports, clock: realClock, gate: { pausedBy: () => typing, idleForMs: () => idle }, power: { current: async () => "mains" },
+      priorityOf: () => PRIORITY.rest, publish: () => undefined, telemetry: () => undefined, log: () => undefined, quietPollMs: 10,
+    });
+    const passes = () => ports.mapPass.mock.calls.filter(([, o]) => o.analyzers).length;
+    // asked before the levels were ready: the first reconcile's end runs it at once
+    expect(await indexer.requestL3()).toBe(false);
+    idle = 5_000;
+    const first = indexer.reconcile();
+    await vi.advanceTimersByTimeAsync(10);
+    await first;
+    await vi.advanceTimersByTimeAsync(10);
+    expect(passes()).toBe(1);
+    // an edit makes the analysis stale; a new ask that waits (typing), then a refocus reconcile while the person is only
+    // briefly idle: nothing starts
+    ports.extractEdited.mockResolvedValue({ changed: ["a.ts"], unreviewed: [] });
+    const edited = indexer.edited(["a.ts"]);
+    await vi.advanceTimersByTimeAsync(50);
+    await edited;
+    typing = "typing";
+    expect(await indexer.requestL3()).toBe(false);
+    typing = undefined;
+    const again = indexer.reconcile();
+    await vi.advanceTimersByTimeAsync(10);
+    await again;
+    await vi.advanceTimersByTimeAsync(10);
+    expect(passes()).toBe(1);
+    idle = L3_IDLE_MAINS_MS;
+    await indexer.tick("/ws");
+    expect(passes()).toBe(2);
+  });
+});

@@ -49,7 +49,10 @@ export function l3StateOf(root: Pick<KnowledgeRoot, "rootId" | "rootPath">, seam
       kept = sha;
       void Promise.resolve(memento()?.update(key, sha)).catch(() => undefined);
     },
-    blocked: (head, rel) => l3BlockedFor(rel ? `${root.rootId}:${rel}` : root.rootId, rel, head ?? null, seams.memento ? { memento: seams.memento } : undefined),
+    blocked: (head, rel) => l3BlockedFor(
+      rel ? `${root.rootId}:${rel}` : root.rootId, rel, head ?? null, seams.memento ? { memento: seams.memento } : undefined,
+      rel ? `${root.rootPath.replace(/\\/g, "/")}/${rel}` : root.rootPath.replace(/\\/g, "/"),
+    ),
   };
 }
 

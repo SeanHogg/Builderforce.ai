@@ -1299,6 +1299,7 @@
   "{n} open": "{n} 个未完成",
   "{n} done": "{n} 个已完成",
   "Choose the folder whose code analyzers should run again": "选择要重新运行代码分析器的文件夹",
+  "Choose the folder whose code analyzers were skipped": "选择代码分析器被跳过的文件夹",
   "The code analyzers ran again for {0}.": "已为 {0} 重新运行代码分析器。",
   "The code analyzers will run again for {0} when the folder is free, or when you next review it.": "当文件夹空闲时，或在你下次审查它时，将为 {0} 重新运行代码分析器。"
 }

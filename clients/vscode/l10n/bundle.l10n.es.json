@@ -1299,6 +1299,7 @@
   "{n} open": "{n} abiertos",
   "{n} done": "{n} hechos",
   "Choose the folder whose code analyzers should run again": "Elige la carpeta cuyos analizadores de código deben ejecutarse de nuevo",
+  "Choose the folder whose code analyzers were skipped": "Elige la carpeta cuyos analizadores de código se omitieron",
   "The code analyzers ran again for {0}.": "Los analizadores de código se ejecutaron de nuevo para {0}.",
   "The code analyzers will run again for {0} when the folder is free, or when you next review it.": "Los analizadores de código se ejecutarán de nuevo para {0} cuando la carpeta esté libre o la próxima vez que la revises."
 }

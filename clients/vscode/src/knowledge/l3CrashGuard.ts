@@ -35,17 +35,24 @@ export const l3InFlightKey = (rootId: string): string => `builderforce.knowledge
 /** The workspaceState key of a root's L3 quarantine. */
 export const l3QuarantineKey = (rootId: string): string => `builderforce.knowledge.l3Quarantine.${rootId}`;
 
-/** A pass in flight, as persisted. `sha` null ⇒ git could not name the tree. */
-export interface L3InFlight { sha: string | null; startedAt: number }
+/** The workspaceState key of the root ids that hold a quarantine record: what the retry command offers. */
+export const L3_QUARANTINED_KEY = "builderforce.knowledge.l3Quarantined";
 
-/** Why and for which tree L3 is held off a root. `until` is set only for a tree git cannot name. */
+/** A pass in flight, as persisted. `sha` null ⇒ git could not name the tree. `where`: the root's folder, for people. */
+export interface L3InFlight { sha: string | null; startedAt: number; where?: string }
+
+/** Why and for which tree L3 is held off a root. `until` is set only for a tree git cannot name. `where`: the root's folder. */
 export interface L3QuarantineRecord {
   sha: string | null;
   at: number;
   until?: number;
   reason: "host-died" | "permanent-failure";
   detail?: string;
+  where?: string;
 }
+
+/** A quarantined root, as the retry command offers it. */
+export interface L3QuarantinedRoot { rootId: string; where?: string; reason: string }
 
 /** What the guard reads and writes of the workspace state. */
 export interface L3GuardMemento {
@@ -87,11 +94,17 @@ export class L3CrashGuard {
   private adopted: Promise<void> | undefined;
   private running = 0;
   private told = false;
+  /** The root's folder, for people (the log line, the retry command's list); the root id when no caller named it. */
+  private where: string | undefined;
 
   constructor(private readonly rootId: string, private readonly seams: Required<L3GuardSeams>) {}
 
-  /** Why L3 must not start on this root at `sha` now (null ⇒ git cannot name the tree), or undefined. Logs ONE line per session. */
-  async blocked(sha: string | null): Promise<string | undefined> {
+  /**
+   * Why L3 must not start on this root at `sha` now (null ⇒ git cannot name the tree), or undefined. Logs ONE line per session,
+   * naming the root (`where`, its folder) and the retry command that lifts it.
+   */
+  async blocked(sha: string | null, where?: string): Promise<string | undefined> {
+    this.where = where ?? this.where;
     await this.adopt();
     const q = this.read<L3QuarantineRecord>(l3QuarantineKey(this.rootId));
     if (!q) return undefined;
@@ -99,23 +112,26 @@ export class L3CrashGuard {
     // A named tree is held until its commit moves; an unnamed one (either side) for the quarantine window.
     const held = q.sha !== null && sha !== null ? q.sha === sha : now < (q.until ?? q.at + L3_QUARANTINE_MS);
     if (!held) {
-      await this.write(l3QuarantineKey(this.rootId), undefined);
+      await this.forget();
       return undefined;
     }
     const reason = describe(q);
     if (!this.told) {
       this.told = true;
-      this.seams.log(`[knowledge] L3 analyzers skipped for ${this.rootId}: ${reason}. Run "BuilderForce: Retry Code Analyzers" (${L3_RETRY_COMMAND}) to analyse it again now.`);
+      const name = this.where ?? q.where ?? this.rootId;
+      this.seams.log(`[knowledge] L3 analyzers skipped for ${name}${name === this.rootId ? "" : ` (${this.rootId})`}: ${reason}. To analyse it again now, run "BuilderForce: Retry Code Analyzers" (${L3_RETRY_COMMAND}) and choose ${name}.`);
     }
     return reason;
   }
 
   /** Before a pass starts: refuses a quarantined one ({@link L3Quarantined}), else persists the sentinel (awaited). */
-  async begin(sha: string | null): Promise<void> {
-    const reason = await this.blocked(sha);
+  async begin(sha: string | null, where?: string): Promise<void> {
+    const reason = await this.blocked(sha, where);
     if (reason) throw new L3Quarantined(`l3_quarantined: ${reason}`);
     this.running += 1;
-    if (this.running === 1) await this.write(l3InFlightKey(this.rootId), { sha, startedAt: this.seams.now() } satisfies L3InFlight);
+    if (this.running === 1) {
+      await this.write(l3InFlightKey(this.rootId), { sha, startedAt: this.seams.now(), ...(this.where ? { where: this.where } : {}) } satisfies L3InFlight);
+    }
   }
 
   /** The pass ended — completed, stopped or failed: the sentinel goes once no pass of the root runs. A permanent failure quarantines. */
@@ -130,8 +146,7 @@ export class L3CrashGuard {
   /** The person asked to retry (`builderforce.knowledge.retryAnalyzers`): the quarantine is lifted, whatever put it there. */
   async lift(): Promise<void> {
     await this.adopt();
-    this.told = false;
-    await this.write(l3QuarantineKey(this.rootId), undefined);
+    await this.forget();
   }
 
   /** The host is shutting down cleanly: a pass still in flight did not take it down, so its sentinel goes (awaited). */
@@ -146,15 +161,26 @@ export class L3CrashGuard {
     return (this.adopted ??= (async () => {
       const left = this.read<L3InFlight>(l3InFlightKey(this.rootId));
       if (!left || typeof left !== "object") return;
-      await this.quarantine({ sha: left.sha ?? null, at: left.startedAt, reason: "host-died" });
+      await this.quarantine({ sha: left.sha ?? null, at: left.startedAt, reason: "host-died", ...(left.where ? { where: left.where } : {}) });
       await this.write(l3InFlightKey(this.rootId), undefined);
     })());
   }
 
-  private quarantine(q: L3QuarantineRecord): Promise<void> {
-    const record: L3QuarantineRecord = q.sha === null ? { ...q, until: this.seams.now() + L3_QUARANTINE_MS } : q;
+  private async quarantine(q: L3QuarantineRecord): Promise<void> {
+    const where = q.where ?? this.where;
+    const record: L3QuarantineRecord = { ...q, ...(q.sha === null ? { until: this.seams.now() + L3_QUARANTINE_MS } : {}), ...(where ? { where } : {}) };
     this.told = false; // a new quarantine is told afresh
-    return this.write(l3QuarantineKey(this.rootId), record);
+    await this.write(l3QuarantineKey(this.rootId), record);
+    const listed = this.read<string[]>(L3_QUARANTINED_KEY) ?? [];
+    if (!listed.includes(this.rootId)) await this.write(L3_QUARANTINED_KEY, [...listed, this.rootId].sort());
+  }
+
+  /** The quarantine is over (lifted, or the commit moved / the window passed): its record and its listing go. */
+  private async forget(): Promise<void> {
+    this.told = false;
+    await this.write(l3QuarantineKey(this.rootId), undefined);
+    const listed = this.read<string[]>(L3_QUARANTINED_KEY) ?? [];
+    if (listed.includes(this.rootId)) await this.write(L3_QUARANTINED_KEY, listed.filter((id) => id !== this.rootId));
   }
 
   private read<T>(key: string): T | undefined {
@@ -190,13 +216,33 @@ export function l3GuardIds(rootId: string, rel?: string): string[] {
   return rel && rootId.endsWith(`:${rel}`) ? [rootId, rootId.slice(0, -(rel.length + 1))] : [rootId];
 }
 
-/** Why L3 must not start on `rootId` (a sub-folder root: or on its folder) at `sha`, or undefined. */
-export async function l3BlockedFor(rootId: string, rel: string | undefined, sha: string | null, seams?: L3GuardSeams): Promise<string | undefined> {
+/**
+ * Why L3 must not start on `rootId` (a sub-folder root: or on its folder) at `sha`, or undefined. `where` is the root's folder
+ * (for a sub-folder root, its folder's is `where` without the trailing `/<rel>`).
+ */
+export async function l3BlockedFor(rootId: string, rel: string | undefined, sha: string | null, seams?: L3GuardSeams, where?: string): Promise<string | undefined> {
   for (const id of l3GuardIds(rootId, rel)) {
-    const reason = await l3CrashGuard(id, seams).blocked(sha);
+    const slashed = where?.replace(/\\/g, "/");
+    const place = id === rootId || !slashed || !rel || !slashed.endsWith(`/${rel}`) ? where : slashed.slice(0, -(rel.length + 1));
+    const reason = await l3CrashGuard(id, seams).blocked(sha, place);
     if (reason) return reason;
   }
   return undefined;
+}
+
+/**
+ * The roots that hold a quarantine record now (folder and sub-folder ones), for the retry command: a record whose window has
+ * passed is left out. A git root whose commit moved is still listed until the guard next looks at it (lifting it is harmless).
+ */
+export async function quarantinedL3Roots(seams?: L3GuardSeams): Promise<L3QuarantinedRoot[]> {
+  const memento = (seams?.memento ?? hostMemento)();
+  const now = (seams?.now ?? Date.now)();
+  const listed = memento?.get<string[]>(L3_QUARANTINED_KEY) ?? [];
+  return listed.flatMap((rootId) => {
+    const q = memento?.get<L3QuarantineRecord>(l3QuarantineKey(rootId));
+    if (!q || (q.until !== undefined && now >= q.until)) return [];
+    return [{ rootId, ...(q.where ? { where: q.where } : {}), reason: describe(q) }];
+  });
 }
 
 /**

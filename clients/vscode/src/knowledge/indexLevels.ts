@@ -143,7 +143,8 @@ export async function preemptBackground(rootId: string): Promise<() => void> {
  * when that scope's analysis is current at the end (it ran, or had nothing to do); `withdraw` drops a request not started yet.
  */
 export interface L3Requester {
-  request(scope: string): Promise<boolean>;
+  /** `explicit`: the person asked to analyse again — a pass runs even when current, and no withdrawal drops it. */
+  request(scope: string, opts?: { explicit?: boolean }): Promise<boolean>;
   withdraw(scope: string): void;
 }
 
@@ -172,12 +173,15 @@ function l3TargetOf(rootId: string): { requester: L3Requester; scope: string } |
  * (`<folder root id>:<rel>`, whose analysis is scoped to that sub-folder) — runs the pass when it has work and the root
  * allows it, else keeps it requested (`l3Gate.ts`) until {@link withdrawL3Request}. Resolves false when no indexer runs the
  * root (`builderforce.knowledge.autoIndex` off): a review still runs its own analysis.
+ *
+ * `explicit` (the retry command): the ask is not a view's — it is not counted among the askers, runs a pass even when the
+ * analysis looks current, and no view closing drops it.
  */
-export async function requestL3(rootId: string, opts: { looking?: boolean } = {}): Promise<boolean> {
-  // A view is an asker that stops looking ({@link withdrawL3Request}); a command (`looking: false`) asks once and stays asked.
-  if (opts.looking !== false) l3Askers.set(rootId, (l3Askers.get(rootId) ?? 0) + 1);
+export async function requestL3(rootId: string, opts: { explicit?: boolean } = {}): Promise<boolean> {
+  // A view is an asker that stops looking ({@link withdrawL3Request}); an explicit ask stays asked until it settles.
+  if (!opts.explicit) l3Askers.set(rootId, (l3Askers.get(rootId) ?? 0) + 1);
   const target = l3TargetOf(rootId);
-  return target ? target.requester.request(target.scope).catch(() => false) : false;
+  return target ? target.requester.request(target.scope, opts.explicit ? { explicit: true } : {}).catch(() => false) : false;
 }
 
 /** One asker of {@link requestL3} stopped looking (the view closed): when none is left, a request not started yet is dropped. */

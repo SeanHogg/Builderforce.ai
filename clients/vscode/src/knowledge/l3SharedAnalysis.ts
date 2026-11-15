@@ -40,12 +40,13 @@ async function guarded(job: L3Job, run: () => Promise<WorkspaceExtracted>): Prom
   const [own, ...outer] = l3GuardIds(job.rootId, job.path);
   const guard = l3CrashGuard(own!);
   const sha = await headOf(job.folderPath);
+  const folder = job.folderPath.replace(/\\/g, "/");
   // A sub-folder root is held off by its folder's quarantine too (its own is checked by `begin`).
   for (const id of outer) {
-    const reason = await l3CrashGuard(id).blocked(sha);
+    const reason = await l3CrashGuard(id).blocked(sha, folder);
     if (reason) throw new L3Quarantined(`l3_quarantined: ${reason}`);
   }
-  await guard.begin(sha);
+  await guard.begin(sha, job.path ? `${folder}/${job.path}` : folder);
   try {
     const result = await run();
     await guard.end(sha);

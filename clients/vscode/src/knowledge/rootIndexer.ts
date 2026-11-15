@@ -28,6 +28,7 @@ import { PassGuard } from "./indexPasses";
 import type { IndexPlan } from "./indexReconcile";
 import { IndexQueue, PRIORITY, SliceRunner } from "./indexScheduler";
 import { L3Gate } from "./l3Gate";
+import type { L3RequestOptions } from "./l3Requests";
 import type { L3StatePort } from "./l3Persist";
 import { NearPriority } from "./nearPriority";
 
@@ -114,6 +115,8 @@ export class RootIndexer {
   private factsSynced = false;
   private cycleStart = 0;
   private planned = false;
+  /** A reconcile ran to its end this session: later ones retry a pending L3 request only through the idle gate. */
+  private reconciledOnce = false;
   private recent: ReadonlySet<string> = new Set();
   /** The hand-over from the live view's own watcher: waited for once, before this indexer's first write on the root. */
   private liveHandover: Promise<void> | undefined;
@@ -163,8 +166,12 @@ export class RootIndexer {
       this.reconciling = undefined;
       this.working = null;
       this.emit();
-      // A request that came before the levels were ready runs now (only a requested pass: nothing starts L3 on its own).
-      if (this.l3.pending && !this.disposed) void this.l3.retryRequested(true);
+      // A request that came before the levels were ready runs now (only a requested pass: nothing starts L3 on its own) — at
+      // the session's FIRST reconcile only. A later one (every refocus runs one) takes the tick's idle gate, so a refocus
+      // between bursts of typing never restarts the analysis.
+      const first = !this.reconciledOnce;
+      this.reconciledOnce = true;
+      if (this.l3.pending && !this.disposed) void this.l3.retryRequested(first);
     });
     return this.reconciling;
   }
@@ -205,10 +212,11 @@ export class RootIndexer {
   /**
    * A person asked for L3 on this root — `scope` `""` — or on its sub-folder root `scope` (the knowledge view opened on it):
    * the analyzers' pass runs now when it has work and the root allows it, else it stays requested and the tick starts it
-   * (`l3Gate.ts`). True when the analysis is current at the end.
+   * (`l3Gate.ts`). True when the analysis is current at the end. `explicit` (the retry command): a pass runs even when the
+   * analysis looks current, and no view closing drops the ask.
    */
-  requestL3(scope = ""): Promise<boolean> {
-    return this.l3.request(scope);
+  requestL3(scope = "", opts: L3RequestOptions = {}): Promise<boolean> {
+    return this.l3.request(scope, opts);
   }
 
   /** The person stopped looking (the knowledge view closed): a request of `scope` not started yet is dropped. */

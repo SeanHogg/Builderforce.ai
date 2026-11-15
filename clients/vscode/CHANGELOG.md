@@ -2,7 +2,7 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
-## [2026.10.172] — The code analyzers no longer take the extension host down, and run only when you ask
+## [2026.10.174] — The code analyzers no longer take the extension host down, and run only when you ask
 
 - **"Copy chat diagnostics" now names the question the chat is waiting on.** When a run ends by asking you something (an `ask_user`), the report previously read as if the run had simply finished — the chat is actually blocked on your answer. The diagnostics now list the pending question(s) under a "Questions pending" line and raise a Signal saying the chat is waiting on a human, so a capture makes the blocked state obvious instead of looking done.
 - **Fixed: the extension host crashed every ~13 minutes on a large workspace, closing every chat with it.** The background code analysis of a ~20,000-file folder sent its whole result back from its worker as one message; copying that message grew past what the process could allocate, and Electron ends the whole extension host when that happens (the worker's own memory limit does not cover it). The result now comes back in bounded slices, and a result too large to send is refused with a clear error instead.

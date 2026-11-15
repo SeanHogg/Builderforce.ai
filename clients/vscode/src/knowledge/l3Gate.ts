@@ -27,6 +27,7 @@ import { ALL_FACT_KINDS, type FactKind, type IndexLevel, type L3Wait } from "./i
 import type { PassGuard } from "./indexPasses";
 import type { IndexPlan } from "./indexReconcile";
 import { L3Tracker } from "./l3Persist";
+import { L3Requests, type L3RequestOptions } from "./l3Requests";
 import { requeueL3Task, takeL3Task } from "./l3Tasks";
 import type { RootIndexerDeps } from "./rootIndexer";
 
@@ -50,10 +51,8 @@ export interface L3GateHost {
 type Attempt = "settled" | "wait";
 
 export class L3Gate {
-  /** The scopes a person asked for that have not run (or been found current, or refused) yet; `""` is the whole root. */
-  private readonly requested = new Set<string>();
-  /** The last answer of each scope that settled: true when its analysis is current. */
-  private readonly answers = new Map<string, boolean>();
+  /** What a person asked for and how it settled, and the single-flight drive (`l3Requests.ts`). */
+  private readonly requests = new L3Requests((direct) => this.attemptAll(direct), (error) => this.host.deps.log("L3 request", error));
   /** The sub-folder scopes whose pass completed since the last change. */
   private readonly currentScopes = new Set<string>();
   /**
@@ -63,8 +62,6 @@ export class L3Gate {
   private staleSinceStart = true;
   /** Something CHANGED since the last completed pass (a file edit, a map pass): the sha never vetoes it. */
   private changedSince = false;
-  /** The attempt in progress: single-flight. */
-  private driving: Promise<void> | undefined;
   waiting: L3Wait | undefined;
   private sweptOnce = false;
 
@@ -77,7 +74,7 @@ export class L3Gate {
   }
 
   /** Whether a request waits to run. */
-  get pending(): boolean { return this.requested.size > 0; }
+  get pending(): boolean { return this.requests.size > 0; }
 
   /** The tree changed (an edit, a map pass): the next request runs a pass whatever the sha says. Starts nothing. */
   changed(): void {
@@ -94,26 +91,27 @@ export class L3Gate {
   /**
    * A person asked for L3 on `scope` (`""`: the root; else its sub-folder root there): runs the pass now when it has work and
    * may start; else it stays requested. True when that scope's analysis is current at the end (it ran, or had nothing to do).
+   * An `explicit` ask (the retry command) runs a pass even when the analysis looks current.
    */
-  async request(scope = ""): Promise<boolean> {
-    this.answers.delete(scope);
-    this.requested.add(scope);
-    await this.drive(true);
-    return this.answers.get(scope) ?? false;
+  async request(scope = "", opts: L3RequestOptions = {}): Promise<boolean> {
+    this.requests.add(scope, opts);
+    await this.requests.drive(true);
+    return this.requests.answer(scope);
   }
 
-  /** The person no longer looks (the knowledge view closed): a request not started yet is dropped. A running pass finishes. */
+  /** The person no longer looks (the knowledge view closed): a request not started yet is dropped — never an explicit one. */
   withdraw(scope = ""): void {
-    this.requested.delete(scope);
-    if (this.requested.size === 0 && this.waiting) { this.waiting = undefined; this.host.emit(); }
+    this.requests.withdraw(scope);
+    if (this.requests.size === 0 && this.waiting) { this.waiting = undefined; this.host.emit(); }
   }
 
   /**
-   * Starts pending requests when the root allows it: the tick (`direct` false: only after {@link L3_IDLE_MAINS_MS} idle) and a
-   * reconcile's end (`direct` true: the levels just became ready). Joins an attempt already in progress.
+   * Starts pending requests when the root allows it: the tick and every later reconcile (`direct` false: only after
+   * {@link L3_IDLE_MAINS_MS} idle) and the session's FIRST reconcile (`direct` true: the levels just became ready). Joins an
+   * attempt already in progress.
    */
   retryRequested(direct = false): Promise<void> {
-    return this.requested.size === 0 ? Promise.resolve() : this.drive(direct);
+    return this.requests.size === 0 ? Promise.resolve() : this.requests.drive(direct);
   }
 
   /**
@@ -153,18 +151,10 @@ export class L3Gate {
     }
   }
 
-  /** ONE attempt at a time: a direct request queues behind the one in progress; the tick joins it. */
-  private drive(direct: boolean): Promise<void> {
-    if (this.driving) return direct ? this.driving.then(() => this.drive(true)) : this.driving;
-    const run = this.attemptAll(direct).catch((error: unknown) => this.host.deps.log("L3 request", error));
-    this.driving = run.finally(() => { this.driving = undefined; });
-    return this.driving;
-  }
-
   /** Every pending scope in turn (the whole root first), until one finds the root not free. */
   private async attemptAll(direct: boolean): Promise<void> {
-    for (const scope of [...this.requested].sort()) {
-      if (!this.requested.has(scope)) continue; // withdrawn meanwhile
+    for (const scope of this.requests.scopes()) {
+      if (!this.requests.has(scope)) continue; // withdrawn meanwhile
       if ((await this.attempt(scope, direct)) === "wait") return;
     }
   }
@@ -181,7 +171,7 @@ export class L3Gate {
       if (await this.tracker.blocked(scope || undefined)) return this.settle(scope, false);
     }
     const current = scope ? this.currentScopes.has(scope) : !this.staleSinceStart && !this.changedSince;
-    if (current) return this.settle(scope, true);
+    if (current && !this.requests.explicit(scope)) return this.settle(scope, true); // the retry command forces a pass
     if (scope && !deps.ports.subRootPass) {
       deps.log("L3 analyzers", `no sub-folder pass for ${scope} on this host`);
       return this.settle(scope, false);
@@ -241,9 +231,8 @@ export class L3Gate {
   }
 
   private settle(scope: string, current: boolean): Attempt {
-    this.requested.delete(scope);
-    this.answers.set(scope, current);
-    if (this.requested.size === 0 && this.waiting) { this.waiting = undefined; this.host.emit(); }
+    this.requests.settle(scope, current);
+    if (this.requests.size === 0 && this.waiting) { this.waiting = undefined; this.host.emit(); }
     return "settled";
   }
 

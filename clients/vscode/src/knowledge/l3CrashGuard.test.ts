@@ -33,7 +33,7 @@ vi.mock("@builderforce/agent-tools/knowledge", async (importOriginal) => ({
 
 import type { PlanDetail } from "@seanhogg/builderforce-memory/knowledge";
 import {
-  clearL3InFlight, forgetL3Guards, l3BlockedFor, l3CrashGuard, l3InFlightKey, L3_QUARANTINE_MS, l3QuarantineKey, L3Quarantined, type L3QuarantineRecord,
+  clearL3InFlight, forgetL3Guards, l3BlockedFor, quarantinedL3Roots, l3CrashGuard, l3InFlightKey, L3_QUARANTINE_MS, l3QuarantineKey, L3Quarantined, type L3QuarantineRecord,
 } from "./l3CrashGuard";
 import { L3_IDLE_MAINS_MS, realClock } from "./indexBudget";
 import type { IndexPlan } from "./indexReconcile";
@@ -182,6 +182,24 @@ describe("L3 crash guard — no false quarantine, and the escape hatch", () => {
     await guard.lift();
     expect(await guard.blocked("aaa")).toBeUndefined();
     expect(h.store.has(l3QuarantineKey("r"))).toBe(false);
+  });
+
+  // regression: the retry command could never lift a sub-folder root's quarantine — nothing passed it a root id, and the
+  // output line named the command but not which root to retry.
+  it("regression: the quarantined roots — folder and sub-folder — are listed for the retry command, and the line names the root", async () => {
+    h.hang = true;
+    void sharedAnalysis({ folderPath: "C:\\ws", rootId: "r:packages/x", path: "packages/x" });
+    await vi.waitFor(() => expect(h.store.has(l3InFlightKey("r:packages/x"))).toBe(true));
+    restart(); // the host died
+    h.hang = false;
+    const log = vi.fn();
+    const sub = l3CrashGuard("r:packages/x", { memento: () => memento, log });
+    expect(await sub.blocked("aaa")).toBeDefined();
+    expect(log.mock.calls[0]![0]).toMatch(/skipped for C:\/ws\/packages\/x \(r:packages\/x\).*choose C:\/ws\/packages\/x/);
+    h.store.set(l3QuarantineKey("other"), { sha: null, at: 0, until: 1, reason: "host-died" } satisfies L3QuarantineRecord); // expired, unlisted
+    expect(await quarantinedL3Roots()).toEqual([{ rootId: "r:packages/x", where: "C:/ws/packages/x", reason: expect.stringMatching(/host stopped/) }]);
+    await sub.lift();
+    expect(await quarantinedL3Roots()).toEqual([]);
   });
 });
 
