@@ -24,6 +24,7 @@ import { buildLocalCapabilityProvider } from "../localCapabilities";
 import { symbolGrammarOptions } from "../workspaceSymbols";
 import { anyRunActive } from "./activeRuns";
 import { l3StateOf } from "./l3Persist";
+import { holdFreshAnalysis } from "./l3SharedAnalysis";
 import { sqliteCandidateRows, sqliteFactStore } from "@builderforce/agent-tools/node-knowledge-store";
 import { FactIndex } from "./factIndex";
 import { registerFactIndex } from "./factFindings";
@@ -142,20 +143,31 @@ export function hostIndexPorts(secrets: vscode.SecretStorage, root: KnowledgeRoo
         ...(moved ? { changedKinds: moved.changedKinds } : {}),
       };
     },
-    async mapPass(plan, { analyzers, signal }) {
-      const report = await review.mapPass({ plan: plan.detail, analyzers, signal });
-      // The L1 pass extracted the plan's changed files (the indexer syncs the fact graph in the same pass); L3's news is the
-      // analysis — and whether an analyzer failed, which the review records and goes on from.
-      return { changed: analyzers ? [] : [...plan.changed], ...(analyzers ? { analyzerFailures: analyzerFailuresOf(report) } : {}) };
+    async mapPass(plan, { analyzers, signal, fresh }) {
+      // An explicit retry runs the analyzers afresh: the shared analysis cache is bypassed for this root while it runs.
+      const release = fresh ? holdFreshAnalysis(rootId) : undefined;
+      try {
+        const report = await review.mapPass({ plan: plan.detail, analyzers, signal });
+        // The L1 pass extracted the plan's changed files (the indexer syncs the fact graph in the same pass); L3's news is the
+        // analysis — and whether an analyzer failed, which the review records and goes on from.
+        return { changed: analyzers ? [] : [...plan.changed], ...(analyzers ? { analyzerFailures: analyzerFailuresOf(report) } : {}) };
+      } finally {
+        release?.();
+      }
     },
-    async subRootPass(rel, signal) {
+    async subRootPass(rel, signal, opts) {
       // The sub-folder root's OWN review: its plan, its store's rows, and the analysis scoped to it (`L3Job.path`).
       const sub = rootById(`${rootId}:${rel}`, workspaceFolders());
       if (!sub) throw new Error(`no sub-folder root ${rel} under ${root.title}`);
-      const subReview = reviewRoot(secrets, sub);
-      const detail = await subReview.backgroundPlan();
-      signal.throwIfAborted();
-      return { analyzerFailures: analyzerFailuresOf(await subReview.mapPass({ plan: detail, analyzers: true, signal })) };
+      const release = opts?.fresh ? holdFreshAnalysis(sub.rootId) : undefined;
+      try {
+        const subReview = reviewRoot(secrets, sub);
+        const detail = await subReview.backgroundPlan();
+        signal.throwIfAborted();
+        return { analyzerFailures: analyzerFailuresOf(await subReview.mapPass({ plan: detail, analyzers: true, signal })) };
+      } finally {
+        release?.();
+      }
     },
     async syncFacts(plan, signal) {
       // The stored graph first (only what moved since is extracted), the root's aliases (a change re-resolves every file),

@@ -59,13 +59,33 @@ async function guarded(job: L3Job, run: () => Promise<WorkspaceExtracted>): Prom
 
 /** The analysis of `job`, from the worker, shared per tree. Progress and warnings reach only the asker whose run it is. */
 export async function sharedAnalysis(job: L3Job, hooks: WorkspaceExtractedHooks = {}): Promise<WorkspaceExtracted> {
-  const key = await workspaceAnalysisKey({
+  // A root held fresh (the person asked to analyse again) runs the worker whatever the cache holds (a null key: uncached).
+  const key = (freshRoots.get(job.rootId) ?? 0) > 0 ? null : await workspaceAnalysisKey({
     caps: capsFor(job.folderPath), rootId: job.rootId, repoGraph: repoMapPort,
     ...(job.path ? { path: job.path } : {}), ...(job.partitions ? { partitions: job.partitions } : {}),
   }, hooks.signal);
   const result = await cache.getOrRun(key, (shared) => guarded(job, () => runL3InWorker(job, { ...hooks, ...(shared ? { signal: shared } : {}) })), hooks.signal);
   // The asker who stopped gets nothing, whoever else the run served.
   return hooks.signal?.aborted ? { extracted: [], snapshot: null } : result;
+}
+
+/** Roots whose analyses bypass the cache while held, with how many holders. */
+const freshRoots = new Map<string, number>();
+
+/**
+ * While the returned release is not called, every analysis of `rootId` runs the worker afresh — the explicit retry
+ * (`builderforce.knowledge.retryAnalyzers`): "ran again" must mean the analyzers ran, not that a cached result came back.
+ */
+export function holdFreshAnalysis(rootId: string): () => void {
+  freshRoots.set(rootId, (freshRoots.get(rootId) ?? 0) + 1);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    const left = (freshRoots.get(rootId) ?? 1) - 1;
+    if (left > 0) freshRoots.set(rootId, left);
+    else freshRoots.delete(rootId);
+  };
 }
 
 /** Forget the shared analyses (tests). */

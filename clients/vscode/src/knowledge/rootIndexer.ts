@@ -49,9 +49,12 @@ export interface IndexRootPorts {
    * extracted and, when known, the kinds that moved — and the reasons of the analyzers that FAILED (the review records a
    * failure and goes on; L3 treats any as a failed pass).
    */
-  mapPass(plan: IndexPlan, opts: { analyzers: boolean; signal: AbortSignal }): Promise<{ changed: string[]; changedKinds?: readonly FactKind[]; analyzerFailures?: readonly string[] }>;
-  /** The analyzers' pass of the sub-folder root at `rel` (its own plan and review, the analysis scoped to it). Absent ⇒ none. */
-  subRootPass?(rel: string, signal: AbortSignal): Promise<{ analyzerFailures?: readonly string[] }>;
+  mapPass(plan: IndexPlan, opts: { analyzers: boolean; signal: AbortSignal; fresh?: boolean }): Promise<{ changed: string[]; changedKinds?: readonly FactKind[]; analyzerFailures?: readonly string[] }>;
+  /**
+   * The analyzers' pass of the sub-folder root at `rel` (its own plan and review, the analysis scoped to it). Absent ⇒ none.
+   * `fresh` (with `mapPass`'s too): the person asked to analyse again — no cached analysis stands in for the analyzers.
+   */
+  subRootPass?(rel: string, signal: AbortSignal, opts?: { fresh?: boolean }): Promise<{ analyzerFailures?: readonly string[] }>;
   /** The fact graph catches up with the plan's whole listing (extracts what moved, drops what is gone). Absent ⇒ no fact graph. */
   syncFacts?(plan: IndexPlan, signal: AbortSignal): Promise<FactsMoved>;
   /** Sweeps the fact store's unreferenced objects (run from the L3 gate's idle hook, once per session). Absent ⇒ no store. */

@@ -300,6 +300,36 @@ describe("L3 gate — the explicit retry, and reconciles after the first", () =>
     busy = false;
     await h.indexer.tick("/ws");
     expect(h.analyzerPasses()).toBe(1);
+    expect(h.ports.mapPass.mock.calls[0]![1]).toMatchObject({ analyzers: true, fresh: true }); // the cache is bypassed
+
+    // the same withdrawal DOES drop a view's (non-explicit) ask
+    h.ports.extractEdited.mockResolvedValue({ changed: ["a.ts"], unreviewed: [] });
+    const edited = h.indexer.edited(["a.ts"]);
+    await vi.advanceTimersByTimeAsync(50);
+    await edited;
+    busy = true;
+    expect(await h.indexer.requestL3()).toBe(false);
+    h.indexer.withdrawL3();
+    busy = false;
+    await h.indexer.tick("/ws");
+    expect(h.analyzerPasses()).toBe(1);
+  });
+
+  // regression: an explicit retry that arrived while a view's pass ran on the same scope was settled by that pass, so the
+  // forced pass the person asked for never ran.
+  it("regression: an explicit ask that arrives during a normal pass of the same scope gets its own forced pass afterwards", async () => {
+    const h = harness();
+    await h.indexer.reconcile();
+    let release!: () => void;
+    h.ports.mapPass.mockImplementationOnce(() => new Promise((resolve) => { release = () => resolve({ changed: [] }); }));
+    const normal = h.indexer.requestL3();
+    await vi.advanceTimersByTimeAsync(10);
+    const explicit = h.indexer.requestL3("", { explicit: true });
+    release();
+    expect(await normal).toBe(false); // its pass ran, but the newer ask holds the answer
+    expect(await explicit).toBe(true);
+    expect(h.analyzerPasses()).toBe(2);
+    expect(h.ports.mapPass.mock.calls[1]![1]).toMatchObject({ fresh: true });
   });
 
   // regression: every window refocus runs a reconcile (5 s apart at most), whose end started a pending request with no idle

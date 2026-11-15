@@ -44,9 +44,10 @@ async function chosenTarget(args: unknown): Promise<Target | undefined> {
     return root ? targetOf(root) : { rootId: named, title: named };
   }
   // The quarantined roots: what the guard's output line told the person to retry.
-  const held = (await quarantinedL3Roots()).map((q) => {
-    const root = rootById(q.rootId, folders);
-    return { target: root ? targetOf(root) : { rootId: q.rootId, title: q.where ?? q.rootId }, where: q.where ?? root?.rootPath ?? q.rootId, reason: q.reason };
+  // Only roots among the open folders: an entry of a folder closed since is never picked silently.
+  const held = (await quarantinedL3Roots((id) => !!rootById(id, folders))).map((q) => {
+    const root = rootById(q.rootId, folders)!;
+    return { target: targetOf(root), where: q.where ?? root.rootPath, reason: q.reason };
   });
   if (held.length === 1) return held[0]!.target;
   if (held.length > 1) {

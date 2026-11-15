@@ -27,7 +27,7 @@ import { ALL_FACT_KINDS, type FactKind, type IndexLevel, type L3Wait } from "./i
 import type { PassGuard } from "./indexPasses";
 import type { IndexPlan } from "./indexReconcile";
 import { L3Tracker } from "./l3Persist";
-import { L3Requests, type L3RequestOptions } from "./l3Requests";
+import { L3Requests, type L3RequestOptions, type L3Ticket } from "./l3Requests";
 import { requeueL3Task, takeL3Task } from "./l3Tasks";
 import type { RootIndexerDeps } from "./rootIndexer";
 
@@ -62,6 +62,8 @@ export class L3Gate {
   private staleSinceStart = true;
   /** Something CHANGED since the last completed pass (a file edit, a map pass): the sha never vetoes it. */
   private changedSince = false;
+  /** The ask the attempt in progress took up. */
+  private ask: L3Ticket | undefined;
   waiting: L3Wait | undefined;
   private sweptOnce = false;
 
@@ -161,6 +163,8 @@ export class L3Gate {
 
   private async attempt(scope: string, direct: boolean): Promise<Attempt> {
     const { deps } = this.host;
+    // The ask this attempt takes up (attempts are single-flight): an ask that comes meanwhile is not settled by it.
+    this.ask = this.requests.ticket(scope);
     if (!this.mayLookAtL3()) return "wait";
     if (!direct && deps.gate.idleForMs() < L3_IDLE_MAINS_MS) return "wait";
     if (deps.ports.busy?.() || deps.ports.agentBusy?.()) return this.wait("busy");
@@ -171,7 +175,7 @@ export class L3Gate {
       if (await this.tracker.blocked(scope || undefined)) return this.settle(scope, false);
     }
     const current = scope ? this.currentScopes.has(scope) : !this.staleSinceStart && !this.changedSince;
-    if (current && !this.requests.explicit(scope)) return this.settle(scope, true); // the retry command forces a pass
+    if (current && !this.ask?.explicit) return this.settle(scope, true); // the retry command forces a pass
     if (scope && !deps.ports.subRootPass) {
       deps.log("L3 analyzers", `no sub-folder pass for ${scope} on this host`);
       return this.settle(scope, false);
@@ -188,13 +192,17 @@ export class L3Gate {
     this.host.setWorking(3);
     this.host.emit();
     const started = deps.clock.now();
+    // An explicit ask runs the analyzers afresh: no cached analysis stands in for them.
+    const fresh = this.ask?.explicit === true;
     let bailed = false;
     try {
       const outcome = await this.host.passes.run("l3", async (signal) => {
         await this.host.handover();
         // An agent run may have started while the pass waited for its turn.
         if (deps.ports.agentBusy?.()) { bailed = true; return { changed: [] as string[] }; }
-        return scope ? { changed: [] as string[], ...(await deps.ports.subRootPass!(scope, signal)) } : deps.ports.mapPass(this.host.lastPlan()!, { analyzers: true, signal });
+        return scope
+          ? { changed: [] as string[], ...(await deps.ports.subRootPass!(scope, signal, { fresh })) }
+          : deps.ports.mapPass(this.host.lastPlan()!, { analyzers: true, signal, ...(fresh ? { fresh } : {}) });
       });
       if (bailed || this.host.disposed() || "aborted" in outcome) return "wait"; // still requested: it reruns when the root is quiet
       const failures = outcome.value.analyzerFailures ?? [];
@@ -231,7 +239,7 @@ export class L3Gate {
   }
 
   private settle(scope: string, current: boolean): Attempt {
-    this.requests.settle(scope, current);
+    this.requests.settle(scope, current, this.ask);
     if (this.requests.size === 0 && this.waiting) { this.waiting = undefined; this.host.emit(); }
     return "settled";
   }

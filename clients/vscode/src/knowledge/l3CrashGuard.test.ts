@@ -33,13 +33,13 @@ vi.mock("@builderforce/agent-tools/knowledge", async (importOriginal) => ({
 
 import type { PlanDetail } from "@seanhogg/builderforce-memory/knowledge";
 import {
-  clearL3InFlight, forgetL3Guards, l3BlockedFor, quarantinedL3Roots, l3CrashGuard, l3InFlightKey, L3_QUARANTINE_MS, l3QuarantineKey, L3Quarantined, type L3QuarantineRecord,
+  clearL3InFlight, forgetL3Guards, l3BlockedFor, quarantinedL3Roots, L3_QUARANTINED_KEY, l3CrashGuard, l3InFlightKey, L3_QUARANTINE_MS, l3QuarantineKey, L3Quarantined, type L3QuarantineRecord,
 } from "./l3CrashGuard";
 import { L3_IDLE_MAINS_MS, realClock } from "./indexBudget";
 import type { IndexPlan } from "./indexReconcile";
 import { PRIORITY } from "./indexScheduler";
 import { l3StateOf } from "./l3Persist";
-import { forgetSharedAnalyses, sharedAnalysis } from "./l3SharedAnalysis";
+import { forgetSharedAnalyses, holdFreshAnalysis, sharedAnalysis } from "./l3SharedAnalysis";
 import { RootIndexer, type IndexRootPorts } from "./rootIndexer";
 
 /** A new extension-host session over the same workspace state. */
@@ -200,6 +200,40 @@ describe("L3 crash guard — no false quarantine, and the escape hatch", () => {
     expect(await quarantinedL3Roots()).toEqual([{ rootId: "r:packages/x", where: "C:/ws/packages/x", reason: expect.stringMatching(/host stopped/) }]);
     await sub.lift();
     expect(await quarantinedL3Roots()).toEqual([]);
+  });
+
+  // regression: 2026.10.172 wrote quarantine records before the index existed, so the retry command never offered them.
+  it("regression: a held record missing from the index is listed the first time the guard looks at it", async () => {
+    h.store.set(l3QuarantineKey("old"), { sha: "aaa", at: 1, reason: "host-died" } satisfies L3QuarantineRecord); // no index entry
+    expect(await quarantinedL3Roots()).toEqual([]);
+    expect(await l3CrashGuard("old", { memento: () => memento }).blocked("aaa")).toBeDefined();
+    expect((await quarantinedL3Roots()).map((q) => q.rootId)).toEqual(["old"]);
+  });
+
+  // regression: a lone stale index entry (a folder closed since, or a window passed) was picked without asking.
+  it("regression: entries the open folders cannot place are skipped (kept), expired ones are pruned from the index", async () => {
+    h.store.set(l3QuarantineKey("open"), { sha: "aaa", at: 1, reason: "host-died" } satisfies L3QuarantineRecord);
+    h.store.set(l3QuarantineKey("closed"), { sha: "aaa", at: 1, reason: "host-died" } satisfies L3QuarantineRecord);
+    h.store.set(l3QuarantineKey("expired"), { sha: null, at: 0, until: 1, reason: "host-died" } satisfies L3QuarantineRecord);
+    h.store.set(L3_QUARANTINED_KEY, ["closed", "expired", "gone", "open"]);
+    expect((await quarantinedL3Roots((id) => id !== "closed")).map((q) => q.rootId)).toEqual(["open"]);
+    expect(h.store.get(L3_QUARANTINED_KEY)).toEqual(["closed", "open"]);
+    expect(await quarantinedL3Roots((id) => id === "closed")).toHaveLength(1); // the closed folder's entry is still there
+  });
+});
+
+describe("the explicit retry bypasses the shared analysis cache", () => {
+  // regression: the retry command said "ran again" while the per-sha cache handed back the last result without a worker.
+  it("regression: while a root is held fresh, its analysis runs the worker even though the cache holds this tree", async () => {
+    await sharedAnalysis({ folderPath: "/ws", rootId: "r" });
+    await sharedAnalysis({ folderPath: "/ws", rootId: "r" });
+    expect(h.runs).toBe(1); // cached
+    const release = holdFreshAnalysis("r");
+    await sharedAnalysis({ folderPath: "/ws", rootId: "r" });
+    expect(h.runs).toBe(2);
+    release();
+    await sharedAnalysis({ folderPath: "/ws", rootId: "r" });
+    expect(h.runs).toBe(2); // cached again once released
   });
 });
 

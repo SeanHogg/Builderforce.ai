@@ -116,6 +116,8 @@ export class L3CrashGuard {
       return undefined;
     }
     const reason = describe(q);
+    // A record written before the index existed (2026.10.172) is listed now, so the retry command can offer it.
+    await this.list();
     if (!this.told) {
       this.told = true;
       const name = this.where ?? q.where ?? this.rootId;
@@ -171,6 +173,11 @@ export class L3CrashGuard {
     const record: L3QuarantineRecord = { ...q, ...(q.sha === null ? { until: this.seams.now() + L3_QUARANTINE_MS } : {}), ...(where ? { where } : {}) };
     this.told = false; // a new quarantine is told afresh
     await this.write(l3QuarantineKey(this.rootId), record);
+    await this.list();
+  }
+
+  /** The root is in the index of quarantined roots (what the retry command offers). */
+  private async list(): Promise<void> {
     const listed = this.read<string[]>(L3_QUARANTINED_KEY) ?? [];
     if (!listed.includes(this.rootId)) await this.write(L3_QUARANTINED_KEY, [...listed, this.rootId].sort());
   }
@@ -231,17 +238,23 @@ export async function l3BlockedFor(rootId: string, rel: string | undefined, sha:
 }
 
 /**
- * The roots that hold a quarantine record now (folder and sub-folder ones), for the retry command: a record whose window has
- * passed is left out. A git root whose commit moved is still listed until the guard next looks at it (lifting it is harmless).
+ * The roots that hold a quarantine record now (folder and sub-folder ones), for the retry command. An entry whose record is
+ * gone or whose window has passed is pruned from the index; one `resolves` cannot place among the open folders (a folder
+ * closed since) is left out but kept, so a lone stale entry is never picked silently. A git root whose commit moved is
+ * still listed until the guard next looks at it (lifting it is harmless).
  */
-export async function quarantinedL3Roots(seams?: L3GuardSeams): Promise<L3QuarantinedRoot[]> {
+export async function quarantinedL3Roots(resolves: (rootId: string) => boolean = () => true, seams?: L3GuardSeams): Promise<L3QuarantinedRoot[]> {
   const memento = (seams?.memento ?? hostMemento)();
   const now = (seams?.now ?? Date.now)();
   const listed = memento?.get<string[]>(L3_QUARANTINED_KEY) ?? [];
-  return listed.flatMap((rootId) => {
+  const live = listed.filter((rootId) => {
     const q = memento?.get<L3QuarantineRecord>(l3QuarantineKey(rootId));
-    if (!q || (q.until !== undefined && now >= q.until)) return [];
-    return [{ rootId, ...(q.where ? { where: q.where } : {}), reason: describe(q) }];
+    return !!q && !(q.until !== undefined && now >= q.until);
+  });
+  if (live.length !== listed.length) await Promise.resolve(memento?.update(L3_QUARANTINED_KEY, live)).catch(() => undefined);
+  return live.filter(resolves).map((rootId) => {
+    const q = memento!.get<L3QuarantineRecord>(l3QuarantineKey(rootId))!;
+    return { rootId, ...(q.where ? { where: q.where } : {}), reason: describe(q) };
   });
 }
 

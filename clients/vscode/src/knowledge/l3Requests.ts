@@ -12,9 +12,13 @@ export interface L3RequestOptions {
   explicit?: boolean;
 }
 
+/** One ask of a scope, as an attempt takes it up. */
+export interface L3Ticket { readonly explicit: boolean; readonly id: number }
+
 export class L3Requests {
-  /** The scopes asked for that have not settled yet, and whether each ask is explicit. */
-  private readonly pending = new Map<string, { explicit: boolean }>();
+  /** The scopes asked for that have not settled yet, whether each ask is explicit, and its ticket (a new ask, a new ticket). */
+  private readonly pending = new Map<string, L3Ticket>();
+  private tickets = 0;
   /** The last answer of each scope that settled: true when its analysis is current. */
   private readonly answers = new Map<string, boolean>();
   /** The attempt in progress. */
@@ -36,10 +40,16 @@ export class L3Requests {
   /** Whether the pending ask of `scope` is explicit (forced past "current"). */
   explicit(scope: string): boolean { return this.pending.get(scope)?.explicit ?? false; }
 
-  /** A new ask of `scope`; an explicit ask stays explicit until it settles. */
+  /** The pending ask of `scope` an attempt takes up: its ticket says, at settle time, whether a newer ask came meanwhile. */
+  ticket(scope: string): L3Ticket | undefined { return this.pending.get(scope); }
+
+  /**
+   * A new ask of `scope`, with a new ticket; an explicit ask stays explicit until it settles. An explicit ask that arrives
+   * while an unforced attempt of the same scope runs is NOT absorbed by that attempt's settle: it gets its own forced pass.
+   */
   add(scope: string, opts: L3RequestOptions = {}): void {
     this.answers.delete(scope);
-    this.pending.set(scope, { explicit: !!opts.explicit || this.explicit(scope) });
+    this.pending.set(scope, { explicit: !!opts.explicit || this.explicit(scope), id: ++this.tickets });
   }
 
   /** A view stopped looking: a pending ask is dropped — unless it is explicit. */
@@ -47,8 +57,14 @@ export class L3Requests {
     if (!this.explicit(scope)) this.pending.delete(scope);
   }
 
-  /** `scope` ended: current (it ran, or had nothing to do) or not (refused, failed). */
-  settle(scope: string, current: boolean): void {
+  /**
+   * `scope` ended: current (it ran, or had nothing to do) or not (refused, failed). With the `ticket` the attempt took up: when
+   * a newer EXPLICIT ask came meanwhile and this attempt was not forced, that ask stays pending for its own forced pass (and
+   * the answer waits for it); a newer plain ask is served by this attempt.
+   */
+  settle(scope: string, current: boolean, ticket?: L3Ticket): void {
+    const now = this.pending.get(scope);
+    if (ticket && now && now.id !== ticket.id && now.explicit && !ticket.explicit) return;
     this.pending.delete(scope);
     this.answers.set(scope, current);
   }
