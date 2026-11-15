@@ -31,6 +31,7 @@
  * row's "3 open · 2 done" line. A ticket is completed when its effective progress is
  * at least 100. The unsupported-delivery cap can keep a pre-close "done-claim" below
  * 100, but once the lane itself is closed the ticket is complete and counts as done.
+ * Cancelled tickets count as neither. open = counted − completed, so an
  * empty or all-cancelled list is 0 / 0.
  */
 

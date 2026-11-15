@@ -209,11 +209,27 @@ describe('epic health (container, over its children)', () => {
     expect(h).toMatchObject({ done: 2, total: 2, status: 'done' });
   });
 
+  it('does not cap a pre-close claim when the live run left no file rows — absence is not evidence', async () => {
+    // A failed or timed-out run that touched nothing is not delivery evidence either
+    // way. The lane is not closed, but there is nothing to judge, so the epic is not
+    // unsupported and reads 100. (The cap only fires when a run actually shipped files
+    // the delivery check fails — see the next test.)
+    queue = [
+      [{ id: 2545, title: 'Advisor platform', status: 'in_review', completedAt: null }],
+      [{ parentId: 2545, total: 2, done: 2 }],
+      [{ id: 31650, taskId: 2546, parentTaskId: 2545, payload: JSON.stringify({ roleKey: 'developer' }) }],
+      [],
+    ];
+    const h = (await service().ticketHealthBatch(1, [{ kind: 'epic', ref: '2545' }])).get('epic:2545')!;
+    expect(h.progressPct).toBe(100);
+    expect(h.unsupportedDelivery).toBeUndefined();
+    expect(h).toMatchObject({ done: 2, total: 2, status: 'in_review' });
+  });
+
   it('caps a pre-close claim when a live run shipped files the delivery check fails', async () => {
     // Same delivery shape, but the lane is NOT closed: claimed complete by children
     // while a live run produced files that fail the delivery check (a non-coder role
-    // touching a code file) is genuinely unsupported and stays capped. A run that
-    // left NO file rows is "absence is not evidence" and never reaches this path.
+    // touching a code file) is genuinely unsupported and stays capped.
     queue = [
       [{ id: 2545, title: 'Advisor platform', status: 'in_review', completedAt: null }],
       [{ parentId: 2545, total: 2, done: 2 }],
