@@ -438,11 +438,7 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 Synapse lives in [builderforce-inference](https://github.com/SeanHogg/builderforce-inference), Spawn in [builderforce-spawn](https://github.com/SeanHogg/builderforce-spawn).
 
 - **[repo] Commit `28af68822` checked in ~2,940 compiler outputs (`.js`, `.js.map`, `.d.ts`) next to `.ts` sources (IN PROGRESS 2026-11-15).** Vite and vitest resolve `.js` before `.ts`, so these stale copies shadow the real sources (a stale `clients/vscode/webview/vite.config.js` already hid the real config from tests). Fix: remove every output that has a `.ts`/`.tsx` sibling, stop the in-place emit at its tsconfig, and guard against it returning.
-- **[vscode] L3 retry cache edges (non-blocking, from the `233f62658` review; fix after the 175 build lands).**
-  - "Fresh" skips only the in-memory `sharedAnalysis` cache. The worker's on-disk analyzer cache (`indexerL3Binding`, keyed by tree hash) can still serve a retry.
-  - A fresh run uses a null cache key, so its result never replaces the stale in-memory entry.
-  - The fresh hold covers every analysis of the root, so prefetch can run a second worker during a retry.
-  - Old `sha: null` records without `until` are listed until the guard next looks at the root.
+- **[vscode] L3 fresh-retry residuals (IN PROGRESS 2026-11-15, from the re-review).** In `clients/vscode/src/knowledge/l3FreshHold.ts`: a null cache key is never cached, so only the first null-key ask under a hold runs fresh and a later equipped one can read the on-disk cache; a fresh run whose result `analysisKeep` drops uses up the ticket with no entry, so the next ask runs non-fresh; and no test covers a prefetch still in flight when the retry arrives.
 - **[vscode] The `clients/vscode` lockfile fails `pnpm install --frozen-lockfile`** (`ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY` on `vitest@4.1.10`; already the case at `cde1f7bbc`).
   - Dependabot `3a48f26a8` wrote 24 importer blocks for projects outside clients/vscode. Pruning them (281 deleted lines) makes frozen install pass. The change is in the working copy.
   - *Blocker: the user hasn't yet approved committing it; the automated permission check denied the agent's commit.*

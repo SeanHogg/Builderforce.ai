@@ -89,6 +89,16 @@ const describe = (q: L3QuarantineRecord): string => {
   return `${why}, so the L3 analyzers are skipped ${until}`;
 };
 
+/**
+ * A quarantine record as the guard reads it. A record of a tree git could not name (`sha: null`) written before `until`
+ * existed gets the window from its recorded time; one with no usable time cannot be dated: undefined (dropped).
+ */
+export function normalisedQuarantine(q: L3QuarantineRecord | undefined): L3QuarantineRecord | undefined {
+  if (!q || typeof q !== "object") return undefined;
+  if (typeof q.sha === "string" || typeof q.until === "number") return q;
+  return typeof q.at === "number" && Number.isFinite(q.at) ? { ...q, sha: null, until: q.at + L3_QUARANTINE_MS } : undefined;
+}
+
 /** One root's guard. Use {@link l3CrashGuard}: the leftover sentinel must be read once per session, before any pass of it. */
 export class L3CrashGuard {
   private adopted: Promise<void> | undefined;
@@ -106,8 +116,11 @@ export class L3CrashGuard {
   async blocked(sha: string | null, where?: string): Promise<string | undefined> {
     this.where = where ?? this.where;
     await this.adopt();
-    const q = this.read<L3QuarantineRecord>(l3QuarantineKey(this.rootId));
-    if (!q) return undefined;
+    const q = normalisedQuarantine(this.read<L3QuarantineRecord>(l3QuarantineKey(this.rootId)));
+    if (!q) {
+      if (this.read(l3QuarantineKey(this.rootId)) !== undefined) await this.forget(); // undatable: dropped
+      return undefined;
+    }
     const now = this.seams.now();
     // A named tree is held until its commit moves; an unnamed one (either side) for the quarantine window.
     const held = q.sha !== null && sha !== null ? q.sha === sha : now < (q.until ?? q.at + L3_QUARANTINE_MS);
@@ -241,19 +254,25 @@ export async function l3BlockedFor(rootId: string, rel: string | undefined, sha:
  * The roots that hold a quarantine record now (folder and sub-folder ones), for the retry command. An entry whose record is
  * gone or whose window has passed is pruned from the index; one `resolves` cannot place among the open folders (a folder
  * closed since) is left out but kept, so a lone stale entry is never picked silently. A git root whose commit moved is
- * still listed until the guard next looks at it (lifting it is harmless).
+ * still listed until the guard next looks at it (lifting it is harmless). Old records are normalised on load
+ * ({@link normalisedQuarantine}): an undated non-git one gets its window and is persisted so; an undatable one is dropped.
  */
 export async function quarantinedL3Roots(resolves: (rootId: string) => boolean = () => true, seams?: L3GuardSeams): Promise<L3QuarantinedRoot[]> {
   const memento = (seams?.memento ?? hostMemento)();
   const now = (seams?.now ?? Date.now)();
+  const write = (key: string, value: unknown): Promise<void> => Promise.resolve(memento?.update(key, value)).catch(() => undefined);
   const listed = memento?.get<string[]>(L3_QUARANTINED_KEY) ?? [];
-  const live = listed.filter((rootId) => {
-    const q = memento?.get<L3QuarantineRecord>(l3QuarantineKey(rootId));
-    return !!q && !(q.until !== undefined && now >= q.until);
-  });
-  if (live.length !== listed.length) await Promise.resolve(memento?.update(L3_QUARANTINED_KEY, live)).catch(() => undefined);
+  const records = new Map<string, L3QuarantineRecord>();
+  for (const rootId of listed) {
+    const raw = memento?.get<L3QuarantineRecord>(l3QuarantineKey(rootId));
+    const q = normalisedQuarantine(raw);
+    if (q !== raw) await write(l3QuarantineKey(rootId), q);
+    if (q && !(q.until !== undefined && now >= q.until)) records.set(rootId, q);
+  }
+  const live = listed.filter((rootId) => records.has(rootId));
+  if (live.length !== listed.length) await write(L3_QUARANTINED_KEY, live);
   return live.filter(resolves).map((rootId) => {
-    const q = memento!.get<L3QuarantineRecord>(l3QuarantineKey(rootId))!;
+    const q = records.get(rootId)!;
     return { rootId, ...(q.where ? { where: q.where } : {}), reason: describe(q) };
   });
 }

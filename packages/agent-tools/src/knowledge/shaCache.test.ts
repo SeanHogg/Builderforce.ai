@@ -97,4 +97,39 @@ describe('the per-sha cache', () => {
         release(1);
         await Promise.all([first, second]);
     });
+
+    // regression: a forced recompute ran uncached, so its result never replaced the stale entry and the next ask got the old one.
+    it('regression: a fresh run replaces the entry; later askers join it and then get its result', async () => {
+        const cache = createShaCache<number>();
+        await cache.getOrRun('k', async () => 1);
+        let finish: (v: number) => void = () => undefined;
+        const work = vi.fn(() => new Promise<number>((resolve) => { finish = resolve; }));
+        const fresh = cache.getOrRun('k', work, undefined, { fresh: true });
+        const joined = cache.getOrRun('k', async () => 99);
+        finish(2);
+        expect(await Promise.all([fresh, joined])).toEqual([2, 2]);
+        expect(await cache.getOrRun('k', async () => 99)).toBe(2);
+        expect(work).toHaveBeenCalledTimes(1);
+    });
+
+    it('a fresh run over an in-flight run: the old askers keep the old result, later askers get the fresh one', async () => {
+        const cache = createShaCache<number>();
+        let finishOld: (v: number) => void = () => undefined;
+        const old = cache.getOrRun('k', () => new Promise<number>((resolve) => { finishOld = resolve; }));
+        const oldJoined = cache.getOrRun('k', async () => 99);
+        const fresh = cache.getOrRun('k', async () => 2, undefined, { fresh: true });
+        finishOld(1);
+        expect(await Promise.all([old, oldJoined, fresh])).toEqual([1, 1, 2]);
+        expect(await cache.getOrRun('k', async () => 99)).toBe(2);
+    });
+
+    it('a failed fresh run leaves the key empty: the next ask runs cold', async () => {
+        const cache = createShaCache<number>();
+        await cache.getOrRun('k', async () => 1);
+        await expect(cache.getOrRun('k', async () => { throw new Error('boom'); }, undefined, { fresh: true })).rejects.toThrow('boom');
+        expect(cache.size).toBe(0);
+        const work = vi.fn(async () => 3);
+        expect(await cache.getOrRun('k', work)).toBe(3);
+        expect(work).toHaveBeenCalledTimes(1);
+    });
 });

@@ -16,8 +16,12 @@ import { repoMapPort } from "@builderforce/repo-map";
 import { buildLocalCapabilityProvider } from "../localCapabilities";
 import { recentCommits } from "@builderforce/agent-tools/node-git-history";
 import { l3CrashGuard, l3GuardIds, L3Quarantined } from "./l3CrashGuard";
+import { takeFreshTicket } from "./l3FreshHold";
 import { runL3InWorker } from "./l3Worker";
 import type { L3Job } from "./l3WorkerJob";
+
+/** The retry's hold lives beside the door it opens (`l3FreshHold.ts`); its holders (`indexHostPorts.ts`) take it from here. */
+export { holdFreshAnalysis } from "./l3FreshHold";
 
 const cache = createShaCache<WorkspaceExtracted>({ max: 2, keep: (held) => analysisKeep(held.snapshot) });
 
@@ -59,33 +63,29 @@ async function guarded(job: L3Job, run: () => Promise<WorkspaceExtracted>): Prom
 
 /** The analysis of `job`, from the worker, shared per tree. Progress and warnings reach only the asker whose run it is. */
 export async function sharedAnalysis(job: L3Job, hooks: WorkspaceExtractedHooks = {}): Promise<WorkspaceExtracted> {
-  // A root held fresh (the person asked to analyse again) runs the worker whatever the cache holds (a null key: uncached).
-  const key = (freshRoots.get(job.rootId) ?? 0) > 0 ? null : await workspaceAnalysisKey({
+  const key = await workspaceAnalysisKey({
     caps: capsFor(job.folderPath), rootId: job.rootId, repoGraph: repoMapPort,
     ...(job.path ? { path: job.path } : {}), ...(job.partitions ? { partitions: job.partitions } : {}),
   }, hooks.signal);
-  const result = await cache.getOrRun(key, (shared) => guarded(job, () => runL3InWorker(job, { ...hooks, ...(shared ? { signal: shared } : {}) })), hooks.signal);
+  // A root held fresh (the person asked to analyse again, `l3FreshHold.ts`): the first ask of this key under the hold runs the
+  // worker whatever either cache holds (the job's `fresh`: the on-disk one too) and REPLACES the entry under the real key;
+  // other asks of the key meanwhile join that run. No await between taking the ticket and registering the run.
+  const ticket = takeFreshTicket(job.rootId, key, !!job.l3RootPath);
+  const run: L3Job = ticket ? { ...job, fresh: true } : job;
+  const work = async (shared?: AbortSignal): Promise<WorkspaceExtracted> => {
+    // Every asker stopped: the cache drops the entry now, and the ticket goes back with it (not when the worker settles).
+    if (shared?.aborted) ticket?.reopen();
+    else shared?.addEventListener("abort", () => ticket?.reopen(), { once: true });
+    try {
+      return await guarded(run, () => runL3InWorker(run, { ...hooks, ...(shared ? { signal: shared } : {}) }));
+    } catch (error) {
+      ticket?.reopen();
+      throw error;
+    }
+  };
+  const result = await cache.getOrRun(key, work, hooks.signal, ticket ? { fresh: true } : undefined);
   // The asker who stopped gets nothing, whoever else the run served.
   return hooks.signal?.aborted ? { extracted: [], snapshot: null } : result;
-}
-
-/** Roots whose analyses bypass the cache while held, with how many holders. */
-const freshRoots = new Map<string, number>();
-
-/**
- * While the returned release is not called, every analysis of `rootId` runs the worker afresh — the explicit retry
- * (`builderforce.knowledge.retryAnalyzers`): "ran again" must mean the analyzers ran, not that a cached result came back.
- */
-export function holdFreshAnalysis(rootId: string): () => void {
-  freshRoots.set(rootId, (freshRoots.get(rootId) ?? 0) + 1);
-  let released = false;
-  return () => {
-    if (released) return;
-    released = true;
-    const left = (freshRoots.get(rootId) ?? 1) - 1;
-    if (left > 0) freshRoots.set(rootId, left);
-    else freshRoots.delete(rootId);
-  };
 }
 
 /** Forget the shared analyses (tests). */

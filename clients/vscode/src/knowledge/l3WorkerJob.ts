@@ -9,6 +9,7 @@
 
 import { analyseWorkspaceExtracted, graphAcceptsOf, type WorkspaceExtracted, type WorkspaceExtractedHooks } from "@builderforce/agent-tools/knowledge";
 import type { PartitionRegistry } from "@seanhogg/builderforce-memory/knowledge";
+import type { L3CacheBinding } from "@builderforce/agent-tools";
 import { repoMapPort } from "@builderforce/repo-map";
 import { buildLocalCapabilityProvider } from "../localCapabilities";
 import { indexerL3Binding } from "../runDelta/analyzers/l3Binding";
@@ -28,17 +29,29 @@ export interface L3Job {
   path?: string;
   /** The workspace's layer registry; absent ⇒ the analyzers' defaults. */
   partitions?: PartitionRegistry;
+  /**
+   * The person asked to analyse again (`builderforce.knowledge.retryAnalyzers`): every analyzer runs — the on-disk L3 result
+   * cache is never read — and what it measured overwrites that cache's entries for this tree.
+   */
+  fresh?: boolean;
+}
+
+/** A fresh job's binding to THE L3 cache: never served from it, still written — the new result replaces the stale entry. */
+export function writeOnlyBinding<B extends L3CacheBinding>(binding: B): B {
+  return { ...binding, cache: { get: async () => undefined, put: (key, entry) => binding.cache.put(key, entry) } };
 }
 
 /** The analysis of `job`, in THIS thread: the ONE implementation the worker and the fallback share. */
 export function runL3Job(job: L3Job, hooks: WorkspaceExtractedHooks = {}): Promise<WorkspaceExtracted> {
+  const l3 = job.l3RootPath ? indexerL3Binding(job.l3RootPath) : undefined;
   return analyseWorkspaceExtracted({
     caps: buildLocalCapabilityProvider(job.folderPath),
     rootId: job.rootId,
     repoGraph: repoMapPort,
-    ...(job.l3RootPath ? { l3: indexerL3Binding(job.l3RootPath) } : {}),
+    ...(l3 ? { l3: job.fresh ? writeOnlyBinding(l3) : l3 } : {}),
     ...(job.path ? { path: job.path } : {}),
     ...(job.partitions ? { partitions: job.partitions } : {}),
+    ...(job.fresh ? { fresh: true } : {}),
     ...(hooks.onWarn ? { onWarn: hooks.onWarn } : {}),
     ...(hooks.onProgress ? { onProgress: hooks.onProgress } : {}),
   }, hooks.signal);

@@ -67,7 +67,7 @@ export {
     canDeleteFact, factRightsCache,
     type FactAuthor, type FactRightsCache, type FactViewer, type FactsListing,
 } from './factRights.js';
-export { createShaCache, type ShaCache, type ShaCacheOptions } from './shaCache.js';
+export { createShaCache, type ShaCache, type ShaCacheOptions, type ShaCacheRunOptions } from './shaCache.js';
 export {
     FINGERPRINT_TTL_MS, GIT, fingerprintSha, forgetWorkspaceFingerprints, gitText, workspaceFingerprint,
     type GitCtx, type WorkspaceFingerprint,

@@ -1,3 +1,11 @@
+## ✅ RESOLVED 2026-11-15: "Retry analyzers" really re-runs them
+
+- **On-disk cache:** a fresh job wraps the worker's on-disk analyzer cache in `writeOnlyBinding()`, so reads miss and writes replace the old entries. The in-thread fallback passes `fresh` to `analyseWorkspace`'s own cache too.
+- **Real key:** `shaCache.getOrRun(key, work, signal, { fresh })` starts a new run over a cached or in-flight entry and replaces it; later askers join it.
+- **One fresh run per key:** `l3FreshHold.ts` tracks started keys per hold, so a prefetch can neither steal the retry's fresh pass nor start a second worker for the same key. A run without `l3RootPath` can't stand in for the retry. The ticket returns as soon as every asker stops, or on failure.
+- **Old quarantine records:** `sha: null` records without `until` get the 24 h expiry on load (undatable ones are dropped), which also fixes a `q.sha!.slice` TypeError.
+- Tests: `l3FreshRetry.test.ts`, plus new cases in `l3CrashGuard.test.ts` and `shaCache.test.ts`.
+
 ## ✅ RESOLVED 2026-11-15: one memory copy in every toolchain (esbuild, webview Vite, vitest, chrome)
 
 - `pinnedInstallVitePlugin` (sharing `pinnedInstallFilter` with the esbuild pin) pins memory and memory-engine in the webview build (main and worker plugins) and in `clients/vscode/vitest.config.ts`; the webview's `dedupe` only covered memory, so a stale memory-engine could still reach it.

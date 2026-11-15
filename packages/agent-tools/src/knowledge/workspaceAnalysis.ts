@@ -84,6 +84,11 @@ export interface WorkspaceAnalysisDeps {
      * only for what that store does not hold: the repo map's graph, and one shared run for concurrent askers.
      */
     l3?: AnalyzeCodebaseOptions['l3'];
+    /**
+     * The person asked to analyse again: the per-sha cache below is not served — this run replaces its entry (and askers of
+     * the key meanwhile join it). The caller makes `l3` write-only for the same ask.
+     */
+    fresh?: boolean;
 }
 
 export interface WorkspaceAnalysis {
@@ -210,7 +215,7 @@ export async function analyseWorkspace(deps: WorkspaceAnalysisDeps, signal?: Abo
         const healthy = snapshot.tools.every((t) => t.status === 'complete');
         const retain = [healthy ? undefined : FAILED_RETAIN_MS, sha ? undefined : UNIDENTIFIED_RETAIN_MS].filter((n): n is number => n !== undefined);
         return { analysis: { snapshot, repoGraph, ...(graphReads ? { graphReads } : {}) }, ...(retain.length ? { retainMs: Math.min(...retain) } : {}) };
-    }, signal);
+    }, signal, deps.fresh ? { fresh: true } : undefined);
     // The asker who stopped gets nothing, whoever else the run served.
     return signal?.aborted ? { snapshot: null, repoGraph: null } : held.analysis;
 }

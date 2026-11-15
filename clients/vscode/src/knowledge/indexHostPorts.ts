@@ -144,7 +144,8 @@ export function hostIndexPorts(secrets: vscode.SecretStorage, root: KnowledgeRoo
       };
     },
     async mapPass(plan, { analyzers, signal, fresh }) {
-      // An explicit retry runs the analyzers afresh: the shared analysis cache is bypassed for this root while it runs.
+      // An explicit retry runs the analyzers afresh: the root's next analysis bypasses (and replaces) both the shared analysis
+      // cache and the on-disk analyzer cache; any other ask of the root while it runs joins that one run.
       const release = fresh ? holdFreshAnalysis(rootId) : undefined;
       try {
         const report = await review.mapPass({ plan: plan.detail, analyzers, signal });

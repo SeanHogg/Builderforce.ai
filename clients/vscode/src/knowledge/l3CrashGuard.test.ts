@@ -220,6 +220,21 @@ describe("L3 crash guard — no false quarantine, and the escape hatch", () => {
     expect(h.store.get(L3_QUARANTINED_KEY)).toEqual(["closed", "open"]);
     expect(await quarantinedL3Roots((id) => id === "closed")).toHaveLength(1); // the closed folder's entry is still there
   });
+
+  // regression: an old non-git record (`sha: null`, no `until`) stayed listed until the guard next looked at the root.
+  it("regression: old non-git records are normalised on load — dated from their time, or dropped when undatable", async () => {
+    const now = Date.now();
+    h.store.set(l3QuarantineKey("recent"), { sha: null, at: now - 3_600_000, reason: "host-died" } as L3QuarantineRecord);
+    h.store.set(l3QuarantineKey("old"), { sha: null, at: now - L3_QUARANTINE_MS - 1, reason: "host-died" } as L3QuarantineRecord);
+    h.store.set(l3QuarantineKey("undatable"), { sha: null, reason: "host-died" } as unknown as L3QuarantineRecord);
+    h.store.set(L3_QUARANTINED_KEY, ["old", "recent", "undatable"]);
+    const listed = await quarantinedL3Roots();
+    expect(listed.map((q) => q.rootId)).toEqual(["recent"]);
+    expect(listed[0]!.reason).toMatch(/until /);
+    expect(h.store.get(L3_QUARANTINED_KEY)).toEqual(["recent"]);
+    expect((h.store.get(l3QuarantineKey("recent")) as L3QuarantineRecord).until).toBe(now - 3_600_000 + L3_QUARANTINE_MS);
+    expect(h.store.has(l3QuarantineKey("undatable"))).toBe(false);
+  });
 });
 
 describe("the explicit retry bypasses the shared analysis cache", () => {

@@ -29,9 +29,19 @@ export interface ShaCacheOptions<T> {
     now?: () => number;
 }
 
+export interface ShaCacheRunOptions {
+    /**
+     * Run `work` whatever the cache holds for `key` (the person asked to compute it again): the new run REPLACES the entry,
+     * so later askers of the key join it and then get its result. A run already in flight keeps serving its own askers.
+     * A fresh run that fails (or that every asker stops) leaves the key EMPTY — the stale entry it replaced is gone — so the
+     * next ask of the key runs cold.
+     */
+    fresh?: boolean;
+}
+
 export interface ShaCache<T> {
     /** `work` receives the shared run's signal (see above); `signal` is THIS asker's. */
-    getOrRun(key: string | null, work: (signal?: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T>;
+    getOrRun(key: string | null, work: (signal?: AbortSignal) => Promise<T>, signal?: AbortSignal, opts?: ShaCacheRunOptions): Promise<T>;
     clear(): void;
     readonly size: number;
 }
@@ -68,10 +78,10 @@ export function createShaCache<T>(opts: ShaCacheOptions<T> = {}): ShaCache<T> {
     };
 
     return {
-        getOrRun(key, work, signal) {
+        getOrRun(key, work, signal, runOpts) {
             if (key === null) return work(signal);
             const hit = entries.get(key);
-            if (hit && (hit.expires === undefined || hit.expires > now())) {
+            if (hit && !runOpts?.fresh && (hit.expires === undefined || hit.expires > now())) {
                 join(key, hit, signal);
                 return hit.run;
             }
