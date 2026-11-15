@@ -834,16 +834,35 @@ export async function setTenantProviderPriorityRanks(
 /**
  * The tenant's connected providers as ordered GATEWAY VENDOR IDS (most-preferred
  * first) — the precedence {@link byoAutoSeedModels} sorts its flagship seeds by.
- * Only providers with a set `priority` are included (unset providers fall back to
- * catalog-tier ordering inside the seed). Maps each provider → its DISPATCH vendor id
- * via {@link byoVendorIdFor} ('google' → 'googleai', an OAuth xAI → 'xai-oauth') so the
+ * Providers the tenant RANKED come first in their priority order; providers they
+ * left at the DEFAULT (priority `null`) follow, in stable input order — they are
+ * still connected accounts the tenant can use, so they stay IN the precedence,
+ * just after the ranked ones. Maps each provider → its DISPATCH vendor id via
+ * {@link byoVendorIdFor} ('google' → 'googleai', an OAuth xAI → 'xai-oauth') so the
  * ids line up with `vendorForModel(flagship)` — otherwise the tenant's chosen order
  * silently ranks every subscription-connected provider last.
+ *
+ * Why the un-ranked ones must appear at all: a tenant who ranks their Grok #1 and
+ * leaves Kimi at the default reads "order your providers" as "Grok first, then
+ * Kimi". Dropping the un-ranked Kimi from the list is not neutral — to
+ * `byoAutoSeedModels`'s comparator an ABSENT vendor is "the tenant ranked it
+ * nowhere", while a LAST-ranked one is "the tenant put it after everything they
+ * ranked above it". Both sort ahead of tier, but only the absent vendor leaves the
+ * comparison at rank N vs rank N (a tie) where the higher catalog TIER decides —
+ * and Kimi's flagship is a ULTRA-tier model that outranks Grok's on tier alone.
+ * So an excluded default-priority Kimi leads the seed over a ranked Grok: the
+ * "always Kimi" report. Including it after the ranked ones makes the tenant's
+ * stated order (Grok before Kimi) win over tier, which is the contract.
  */
 export function byoVendorPriorityOrder(summaries: readonly ProviderRouteSpec[]): string[] {
   return summaries
     .filter((s) => s.priority !== null)
-    .map((s) => byoVendorIdFor(s.provider, s.authType));
+    .map((s) => byoVendorIdFor(s.provider, s.authType))
+    .concat(
+      summaries
+        .filter((s) => s.priority === null)
+        .map((s) => byoVendorIdFor(s.provider, s.authType)),
+    );
 }
 
 /** Remove a tenant's provider credential (API key or OAuth subscription). */

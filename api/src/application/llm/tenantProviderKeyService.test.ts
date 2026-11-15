@@ -104,6 +104,19 @@ describe('BYO provider routing map', () => {
     expect(byoVendorPriorityOrder([{ provider: 'xai', authType: 'oauth', priority: 0 }])).toEqual(['xai-oauth']);
     expect(byoVendorPriorityOrder([{ provider: 'xai', authType: 'api_key', priority: 0 }])).toEqual(['xai']);
   });
+
+  it('keeps default-priority (unranked) providers AFTER the ranked ones', () => {
+    // The tenant ranked their Grok #1 and left Kimi at the default. The order is
+    // "Grok, then Kimi" — both stay IN the precedence; dropping the unranked Kimi
+    // would make the seed fall back to catalog TIER, where Kimi's ULTRA flagship
+    // outranks Grok's and leads auto-select (the "always Kimi" bug).
+    expect(
+      byoVendorPriorityOrder([
+        { provider: 'xai', authType: 'api_key', priority: 0 },
+        { provider: 'kimi', authType: 'api_key', priority: null },
+      ]),
+    ).toEqual(['xai', 'kimi-code']);
+  });
 });
 
 /** Stage an oauth row whose decrypted token blob has the given absolute `expires`. */
