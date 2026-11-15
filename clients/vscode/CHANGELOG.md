@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.176] — A chat waiting on your answer keeps its “?” after you reload
+
+- **Fixed: a chat paused on a question lost its “needs an answer” (?) marker when you reloaded the window or reopened the panel.** The history marker only read the live run-state, which is empty after a reload, while the chat diagnostics (derived from the persisted transcript) still listed the question. The marker now also derives from each chat's stored messages through the same `selectPendingAskUser` predicate the in-chat banner and diagnostics use, so a chat blocked on a question keeps its (?) — and the marker can never disagree with the banner.
+
 ## [2026.10.175] — Typing no longer stalls while the workspace is indexed
 
 - **Fixed: keystrokes lagged for 1–5 seconds while Builderforce indexed a large folder.** The extension was still shipping an older copy of the memory library whose `.gitignore` matching ran as one long block on the extension host. Every bundle now uses the single, current memory release (with cached ignore matching that yields between batches), and packaging refuses to build when an installed dependency is older than the version the extension declares.

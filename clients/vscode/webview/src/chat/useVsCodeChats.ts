@@ -15,7 +15,9 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_CHAT_TITLE, useArmedNewChat, useBrainChats, useChatCreation, type BrainChat, type ChatMode, type DraftBinding, type DraftToken } from '@seanhogg/builderforce-brain-embedded';
+import { selectPendingAskUser } from '@seanhogg/builderforce-brain-ui';
 import { onHostMessage, onRefresh, post, request, type InitData } from '../vscodeBridge';
+import { createHostPersistence } from '../hostPersistence';
 import { daysIdleOf } from './chatIdle';
 import { useGlobalRunState } from './useGlobalRunState';
 
@@ -78,6 +80,22 @@ export type ChatRunStatus = 'awaiting' | 'running' | null;
  */
 export function runStatusOf(awaiting: ReadonlySet<number>, running: ReadonlySet<number>, id: number): ChatRunStatus {
   return awaiting.has(id) ? 'awaiting' : running.has(id) ? 'running' : null;
+}
+
+const TAIL_LIMIT = 25;
+
+/**
+ * True when the chat's message tail is BLOCKED on an unanswered `ask_user` — the same
+ * predicate (`selectPendingAskUser`) the in-chat banner and the diagnostics derive the
+ * pending question from, so the history marker can never disagree with either. A
+ * pending question is always at the transcript TAIL (a later user turn answers it), so
+ * a bounded tail read is enough — never the full transcript.
+ */
+export function hasPendingAskUser(messages: readonly { id: number; role: string; content: unknown }[]): boolean {
+  const like = messages
+    .filter((m) => typeof m.content === 'string')
+    .map((m) => ({ id: m.id, role: m.role, content: m.content as string }));
+  return selectPendingAskUser(like) != null;
 }
 
 export function useVsCodeChats(init: InitData, newChatLabel: string): VsCodeChats {
@@ -162,9 +180,48 @@ export function useVsCodeChats(init: InitData, newChatLabel: string): VsCodeChat
   const runState = useGlobalRunState();
   const runningSet = useMemo(() => new Set(runState.running), [runState]);
   const awaitingSet = useMemo(() => new Set(runState.awaiting), [runState]);
+
+  // A chat paused on a question ALSO marks its row when the live run-state is gone —
+  // the sets above hold a chat only while its run is live in THIS webview, so after a
+  // reload/reopen a chat that ended on an `ask_user` would show no '?' while the
+  // diagnostics (derived from the persisted transcript) still listed the question.
+  // Derive 'awaiting' from each listed chat's stored tail through the shared predicate,
+  // refreshed whenever the list re-reads (a send/answer bumps the chat's stamp, so the
+  // list reload clears or sets the marker without a manual refresh). One bounded tail
+  // read per chat — a pending ask is necessarily at the tail.
+  const persistence = useMemo(() => createHostPersistence(), []);
+  const [durableAwaiting, setDurableAwaiting] = useState<ReadonlySet<number>>(() => new Set());
+  useEffect(() => {
+    let cancelled = false;
+    const ids = chats.map((c) => c.id);
+    if (ids.length === 0) {
+      setDurableAwaiting((prev) => (prev.size === 0 ? prev : new Set()));
+      return;
+    }
+    void Promise.all(
+      ids.map((id) =>
+        persistence
+          .getMessages(id, TAIL_LIMIT)
+          .then((messages) => ({ id, pending: hasPendingAskUser(messages) }))
+          .catch(() => ({ id, pending: false })),
+      ),
+    ).then((results) => {
+      if (cancelled) return;
+      setDurableAwaiting(new Set(results.filter((r) => r.pending).map((r) => r.id)));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [persistence, chats]);
+
   const runStatus = useCallback(
-    (id: number): ChatRunStatus => runStatusOf(awaitingSet, runningSet, id),
-    [awaitingSet, runningSet],
+    (id: number): ChatRunStatus =>
+      awaitingSet.has(id) || durableAwaiting.has(id)
+        ? 'awaiting'
+        : runningSet.has(id)
+          ? 'running'
+          : null,
+    [awaitingSet, runningSet, durableAwaiting],
   );
   const titleOf = useCallback(
     (chat: BrainChat) => (!chat.title || chat.title === DEFAULT_CHAT_TITLE ? newChatLabel : chat.title),
