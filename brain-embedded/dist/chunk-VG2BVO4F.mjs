@@ -58,19 +58,17 @@ function reportPendingWordsFailure(stage, error) {
   console.warn(`BuilderForce pending words: ${stage} failed (${errorMessage(error)})`);
 }
 
-// ../packages/agent-loop/src/types.js
+// ../packages/agent-loop/src/types.ts
 var DEFAULT_TOOL_FAILURE_STREAK = 5;
 
-// ../packages/agent-loop/src/parseToolCall.js
+// ../packages/agent-loop/src/parseToolCall.ts
 function asToolArgs(value) {
-  if (value && typeof value === "object" && !Array.isArray(value))
-    return value;
+  if (value && typeof value === "object" && !Array.isArray(value)) return value;
   return null;
 }
 function parseToolArgs(raw) {
   const text = typeof raw === "string" ? raw.trim() : "";
-  if (!text)
-    return { args: {}, malformed: false };
+  if (!text) return { args: {}, malformed: false };
   try {
     const bag = asToolArgs(JSON.parse(text));
     return bag ? { args: bag, malformed: false } : { args: {}, malformed: true };
@@ -83,7 +81,7 @@ function parseToolCall(raw) {
   return { id: raw.id, name: raw.name, args, raw, malformed };
 }
 
-// ../packages/agent-loop/src/repetitionLoop.js
+// ../packages/agent-loop/src/repetitionLoop.ts
 var COUNT_MIN_RUN = 50;
 var COUNT_MAX_DIGITS = 6;
 var isDigit = (code) => code >= 48 && code <= 57;
@@ -95,25 +93,19 @@ function tailCountingRun(text) {
   let start = pos;
   for (; ; ) {
     let end = pos;
-    while (end > 0 && isCountSeparator(text.charCodeAt(end - 1)))
-      end -= 1;
+    while (end > 0 && isCountSeparator(text.charCodeAt(end - 1))) end -= 1;
     let begin = end;
-    while (begin > 0 && end - begin <= COUNT_MAX_DIGITS && isDigit(text.charCodeAt(begin - 1)))
-      begin -= 1;
-    if (begin === end || end - begin > COUNT_MAX_DIGITS)
-      break;
-    if (begin > 0 && !isCountSeparator(text.charCodeAt(begin - 1)))
-      break;
+    while (begin > 0 && end - begin <= COUNT_MAX_DIGITS && isDigit(text.charCodeAt(begin - 1))) begin -= 1;
+    if (begin === end || end - begin > COUNT_MAX_DIGITS) break;
+    if (begin > 0 && !isCountSeparator(text.charCodeAt(begin - 1))) break;
     const value = Number(text.slice(begin, end));
-    if (expected !== null && value !== expected)
-      break;
+    if (expected !== null && value !== expected) break;
     count += 1;
     start = begin;
     pos = begin;
     expected = value - 1;
   }
-  if (count < COUNT_MIN_RUN)
-    return null;
+  if (count < COUNT_MIN_RUN) return null;
   return { block: text.slice(start).trim(), copies: count, kept: text.slice(0, start).trimEnd() };
 }
 var LOOP_MIN_COPIES = 3;
@@ -125,48 +117,38 @@ var minCopiesFor = (chars) => chars >= LOOP_LONG_BLOCK_CHARS ? LOOP_LONG_MIN_COP
 var LOOP_MIN_BLOCK_WORDS = 5;
 function inOpenCodeFence(text) {
   let fences = 0;
-  for (let i = text.indexOf("```"); i !== -1; i = text.indexOf("```", i + 3))
-    fences += 1;
+  for (let i = text.indexOf("```"); i !== -1; i = text.indexOf("```", i + 3)) fences += 1;
   return fences % 2 === 1;
 }
 function readsAsProse(block) {
   let words = 0;
   for (const word of block.split(/\s+/)) {
-    if (/\p{L}/u.test(word))
-      words += 1;
-    if (words >= LOOP_MIN_BLOCK_WORDS)
-      return true;
+    if (/\p{L}/u.test(word)) words += 1;
+    if (words >= LOOP_MIN_BLOCK_WORDS) return true;
   }
   return false;
 }
 function tailHasPeriod(text, p, span) {
   const end = text.length;
   for (let i = end - 1; i >= end - span + p; i -= 1) {
-    if (text.charCodeAt(i) !== text.charCodeAt(i - p))
-      return false;
+    if (text.charCodeAt(i) !== text.charCodeAt(i - p)) return false;
   }
   return true;
 }
 function detectRepetitionLoop(text) {
   const counting = tailCountingRun(text);
-  if (counting)
-    return inOpenCodeFence(text) ? null : counting;
+  if (counting) return inOpenCodeFence(text) ? null : counting;
   const length = text.length;
-  if (length < LOOP_MIN_COPIES * LOOP_MIN_BLOCK_CHARS)
-    return null;
+  if (length < LOOP_MIN_COPIES * LOOP_MIN_BLOCK_CHARS) return null;
   const maxBlock = Math.min(LOOP_MAX_BLOCK_CHARS, Math.floor(length / LOOP_LONG_MIN_COPIES));
   for (let p = LOOP_MIN_BLOCK_CHARS; p <= maxBlock; p += 1) {
     const copies = minCopiesFor(p);
-    if (copies * p > length || !tailHasPeriod(text, p, copies * p))
-      continue;
+    if (copies * p > length || !tailHasPeriod(text, p, copies * p)) continue;
     let start = length - copies * p;
-    while (start > 0 && text.charCodeAt(start - 1) === text.charCodeAt(start - 1 + p))
-      start -= 1;
+    while (start > 0 && text.charCodeAt(start - 1) === text.charCodeAt(start - 1 + p)) start -= 1;
     const block = text.slice(start, start + p);
-    if (!readsAsProse(block))
-      continue;
-    if (inOpenCodeFence(text))
-      return null;
+    if (!readsAsProse(block)) continue;
+    if (inOpenCodeFence(text)) return null;
     return { block, copies: Math.floor((length - start) / p), kept: text.slice(0, start + p) };
   }
   return null;
@@ -175,42 +157,41 @@ function trimRepetitionLoop(text) {
   return detectRepetitionLoop(text)?.kept ?? text;
 }
 
-// ../packages/agent-loop/src/loop.js
+// ../packages/agent-loop/src/loop.ts
 var Ctx = class {
+  constructor(messages, signal) {
+    this.messages = messages;
+    this.signal = signal;
+  }
   messages;
   signal;
   step = 0;
   stepInCall = 0;
   output = "";
   failureStreak = 0;
-  constructor(messages, signal) {
-    this.messages = messages;
-    this.signal = signal;
-  }
 };
 var CANCELLED = /* @__PURE__ */ Symbol("cancelled");
 function raceCancel(work, signal) {
-  if (!signal)
-    return work;
+  if (!signal) return work;
   return new Promise((resolve, reject) => {
     const onAbort = () => resolve(CANCELLED);
-    if (signal.aborted)
-      onAbort();
-    else
-      signal.addEventListener("abort", onAbort, { once: true });
-    work.then((value) => {
-      signal.removeEventListener("abort", onAbort);
-      resolve(value);
-    }, (error) => {
-      signal.removeEventListener("abort", onAbort);
-      reject(error);
-    });
+    if (signal.aborted) onAbort();
+    else signal.addEventListener("abort", onAbort, { once: true });
+    work.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      }
+    );
   });
 }
 function readOnlySpan(calls, start, isReadOnly) {
   let end = start;
-  while (end < calls.length && isReadOnly(calls[end]))
-    end++;
+  while (end < calls.length && isReadOnly(calls[end])) end++;
   return end - start >= 2 ? end - start : 1;
 }
 async function runAgentLoop(args) {
@@ -237,8 +218,7 @@ async function runAgentLoop(args) {
     const before = await hooks.beforeTurn?.(ctx);
     if (before?.action === "stop") {
       ok = before.ok ?? false;
-      if (before.output !== void 0)
-        ctx.output = before.output;
+      if (before.output !== void 0) ctx.output = before.output;
       finished = before.finished ?? true;
       break;
     }
@@ -252,8 +232,7 @@ async function runAgentLoop(args) {
       }
       throw err;
     }
-    if ("skip" in turnResult)
-      continue;
+    if ("skip" in turnResult) continue;
     if ("failed" in turnResult) {
       ok = false;
       ctx.output = turnResult.failed;
@@ -266,22 +245,18 @@ async function runAgentLoop(args) {
       turn = { ...turn, content: looped.kept };
       await hooks.onRepetitionLoop?.(ctx, looped);
     }
-    if (turn.content)
-      ctx.output = turn.content;
+    if (turn.content) ctx.output = turn.content;
     await hooks.afterTurn?.(ctx, turn);
     if (turn.toolCalls.length === 0) {
       const decision = await hooks.onNoToolCalls?.(ctx, turn) ?? { action: "finish" };
-      if (decision.action === "continue")
-        continue;
+      if (decision.action === "continue") continue;
       if (decision.action === "stop") {
         ok = decision.ok ?? false;
-        if (decision.output !== void 0)
-          ctx.output = decision.output;
+        if (decision.output !== void 0) ctx.output = decision.output;
         finished = decision.finished ?? true;
         break;
       }
-      if (decision.output !== void 0)
-        ctx.output = decision.output;
+      if (decision.output !== void 0) ctx.output = decision.output;
       finished = true;
       break;
     }
@@ -289,8 +264,7 @@ async function runAgentLoop(args) {
     const gate = await hooks.beforeToolCalls?.(ctx, turn, calls);
     if (gate?.action === "stop") {
       ok = gate.ok ?? true;
-      if (gate.output !== void 0)
-        ctx.output = gate.output;
+      if (gate.output !== void 0) ctx.output = gate.output;
       finished = gate.finished ?? true;
       break;
     }
@@ -305,26 +279,20 @@ async function runAgentLoop(args) {
           result = { data: { ok: false, error: block }, isError: true };
         } else {
           finished = true;
-          if (result.control.summary)
-            ctx.output = result.control.summary;
+          if (result.control.summary) ctx.output = result.control.summary;
         }
       } else if (result.control?.kind === "ask_human") {
         const answered = await hooks.onAskHuman?.(ctx, result.control, call);
-        if (answered)
-          result = answered;
-        else
-          awaitingInput = { approvalId: result.control.approvalId, question: result.control.question, callId: call.id };
+        if (answered) result = answered;
+        else awaitingInput = { approvalId: result.control.approvalId, question: result.control.question, callId: call.id };
       }
-      if (!result.control)
-        ctx.failureStreak = result.isError ? ctx.failureStreak + 1 : 0;
+      if (!result.control) ctx.failureStreak = result.isError ? ctx.failureStreak + 1 : 0;
       const row = codec.tool(call, result);
       ctx.messages.push(row);
       const post = await hooks.afterDispatch?.(call, result, row, ctx);
-      if (!post?.skipRemaining)
-        return false;
+      if (!post?.skipRemaining) return false;
       const skipped = { data: post.skipRemaining.data, isError: post.skipRemaining.isError ?? true };
-      for (const rest of calls.slice(i + 1))
-        ctx.messages.push(codec.tool(rest, skipped));
+      for (const rest of calls.slice(i + 1)) ctx.messages.push(codec.tool(rest, skipped));
       return true;
     };
     for (let i = 0; i < calls.length; ) {
@@ -334,13 +302,10 @@ async function runAgentLoop(args) {
         let call = calls[j];
         let result;
         const pre = await hooks.beforeDispatch?.(call, ctx);
-        if (pre && "result" in pre)
-          result = pre.result;
-        else if (pre && "rewrite" in pre)
-          call = pre.rewrite;
+        if (pre && "result" in pre) result = pre.result;
+        else if (pre && "rewrite" in pre) call = pre.rewrite;
         prepared.push(result ? { call, result } : { call });
-        if (span > 1 && (result?.control || !result && !ports.isReadOnly(call)))
-          break;
+        if (span > 1 && (result?.control || !result && !ports.isReadOnly(call))) break;
       }
       const last = prepared[prepared.length - 1];
       const tail = prepared.length > 1 && !last.result && !ports.isReadOnly(last.call) ? last : void 0;
@@ -348,29 +313,22 @@ async function runAgentLoop(args) {
       const start = (call) => signal?.aborted ? Promise.resolve(CANCELLED) : raceCancel(ports.dispatch(call, ctx), signal);
       const dispatchOne = (p) => p.result ? Promise.resolve(p.result) : start(p.call);
       const results = await Promise.all(batch.map(dispatchOne));
-      if (tail && !results.includes(CANCELLED))
-        results.push(await start(tail.call));
+      if (tail && !results.includes(CANCELLED)) results.push(await start(tail.call));
       if (results.includes(CANCELLED)) {
         const stopped = { data: { ok: false, aborted: true, error: "stopped" }, isError: true };
-        for (const rest of calls.slice(i))
-          ctx.messages.push(codec.tool(rest, stopped));
+        for (const rest of calls.slice(i)) ctx.messages.push(codec.tool(rest, stopped));
         cancelled = true;
         break;
       }
       let stop = false;
-      for (let k = 0; k < prepared.length && !stop; k++)
-        stop = await settle(i + k, prepared[k].call, results[k]);
-      if (stop)
-        break;
+      for (let k = 0; k < prepared.length && !stop; k++) stop = await settle(i + k, prepared[k].call, results[k]);
+      if (stop) break;
       i += prepared.length;
     }
-    if (cancelled)
-      break;
+    if (cancelled) break;
     const after = await hooks.afterToolCalls?.(ctx, finished);
-    if (after && after.finished !== void 0)
-      finished = after.finished;
-    if (awaitingInput)
-      break;
+    if (after && after.finished !== void 0) finished = after.finished;
+    if (awaitingInput) break;
     if (!finished && ctx.failureStreak >= failureStreakCap) {
       ctx.step++;
       ctx.stepInCall++;
@@ -392,12 +350,11 @@ async function runAgentLoop(args) {
   };
 }
 
-// ../packages/agent-loop/src/malformedCall.js
+// ../packages/agent-loop/src/malformedCall.ts
 var MALFORMED_CALL_RESULT = "This tool call's arguments were not valid JSON, so it was NOT executed. Re-issue it with strictly valid JSON: no comments, no trailing commas, no unescaped newlines or quotes inside string values.";
 var TRUNCATED_CALL_RESULT = "This tool call was cut off by the output limit before its arguments were complete, so it was NOT executed. Re-issue it in your next response as ONE call with complete JSON \u2014 never several calls in one response. If the content is long, write it in parts: create it with its essential fields first, then extend it with follow-up calls.";
 function malformedCallOutcome(call, truncated, retryHint) {
-  if (!call.malformed)
-    return null;
+  if (!call.malformed) return null;
   const base = truncated ? TRUNCATED_CALL_RESULT : MALFORMED_CALL_RESULT;
   return { error: retryHint ? `${base} ${retryHint}` : base };
 }
@@ -405,16 +362,18 @@ function malformedCallLabel(name, truncated) {
   return truncated ? `${name} (cut off by the output limit)` : `${name} (unparseable arguments)`;
 }
 
-// ../packages/agent-loop/src/runNarration.js
-var NARRATION_OPENER = new RegExp("^(?:(?:now|next|first|then|so|okay|ok|alright|actually|great|good|perfect|but|and|also|finally)[,!.]?\\s+)*(?:let me|let's|i(?:'ll| will| need to| should| want to| am going to|'m going to| think| see| can see| notice| ran)\\b|looking (?:at|back|for)\\b|checking\\b|now the\\b|that was expected\\b)", "i");
+// ../packages/agent-loop/src/runNarration.ts
+var NARRATION_OPENER = new RegExp(
+  "^(?:(?:now|next|first|then|so|okay|ok|alright|actually|great|good|perfect|but|and|also|finally)[,!.]?\\s+)*(?:let me|let's|i(?:'ll| will| need to| should| want to| am going to|'m going to| think| see| can see| notice| ran)\\b|looking (?:at|back|for)\\b|checking\\b|now the\\b|that was expected\\b)",
+  "i"
+);
 
-// ../packages/agent-loop/src/turnPhase.js
+// ../packages/agent-loop/src/turnPhase.ts
 var MID_TURN_META_KEY = "midTurn";
 function isMidTurnMetadata(metadata) {
   let meta = metadata;
   if (typeof meta === "string") {
-    if (!meta.includes(MID_TURN_META_KEY))
-      return false;
+    if (!meta.includes(MID_TURN_META_KEY)) return false;
     try {
       meta = JSON.parse(meta);
     } catch {
@@ -424,7 +383,7 @@ function isMidTurnMetadata(metadata) {
   return typeof meta === "object" && meta !== null && meta[MID_TURN_META_KEY] === true;
 }
 
-// ../packages/agent-loop/src/stepRow.js
+// ../packages/agent-loop/src/stepRow.ts
 var STEP_RESULT_CAP = 4e3;
 function capped(value) {
   let s;
@@ -456,11 +415,11 @@ function stepRow(step) {
   return { role: "tool", content: "", metadata };
 }
 
-// ../packages/agent-loop/src/taskClosedState.js
+// ../packages/agent-loop/src/taskClosedState.ts
 var TASK_CLOSED_STATUSES = ["done", "cancelled", "canceled", "completed", "archived"];
 var CLOSED = new Set(TASK_CLOSED_STATUSES);
 
-// ../packages/agent-loop/src/reasoning.js
+// ../packages/agent-loop/src/reasoning.ts
 var REASONING_TAG = "think(?:ing)?|thought|antthinking|scratchpad|reasoning";
 var QUICK_TAG_RE = new RegExp(`<\\s*/?\\s*(?:${REASONING_TAG}|final)\\b`, "i");
 var FINAL_TAG_RE = /<\s*\/?\s*final\b[^<>]*>/gi;
@@ -478,8 +437,7 @@ function findCodeRegions(text) {
     const start = match.index ?? 0;
     const end = start + match[0].length;
     const insideFenced = regions.some((r) => start >= r.start && end <= r.end);
-    if (!insideFenced)
-      regions.push({ start, end });
+    if (!insideFenced) regions.push({ start, end });
   }
   regions.sort((a, b) => a.start - b.start);
   return regions;
@@ -503,12 +461,10 @@ function scanReasoning(text) {
     const region = codeRegionAt(idx, regions);
     if (region) {
       const releases = region.unterminated === true && kind === "thought" && isClose && region.start >= contentStart;
-      if (!releases)
-        continue;
+      if (!releases) continue;
       region.end = idx;
     }
-    if (kind === "thought" && !isClose)
-      continue;
+    if (kind === "thought" && !isClose) continue;
     const after = idx + match[0].length;
     spans.push({ kind, start, contentStart, contentEnd: idx, end: isClose ? after : idx, unterminated: false });
     kind = isClose ? "answer" : "thought";
@@ -526,14 +482,11 @@ function scanReasoning(text) {
   return spans;
 }
 function splitReasoningSegments(text) {
-  if (!text)
-    return [];
-  if (!QUICK_TAG_RE.test(text))
-    return [{ kind: "answer", content: text }];
+  if (!text) return [];
+  if (!QUICK_TAG_RE.test(text)) return [{ kind: "answer", content: text }];
   const cleaned = unwrapFinalTags(text);
   const segments = segmentsOf(cleaned, scanReasoning(cleaned));
-  if (segments.length === 0)
-    return [{ kind: "answer", content: text }];
+  if (segments.length === 0) return [{ kind: "answer", content: text }];
   return stitchSplitSentence(promoteSwallowedAnswer(segments));
 }
 var EMPTY_TOOL_CALL_WRAPPER = /<([a-z][\w-]*:tool_call)\b[^<>]*>\s*<\/\1>/gi;
@@ -542,8 +495,7 @@ function segmentsOf(text, spans) {
   for (const span of spans) {
     const raw = text.slice(span.contentStart, span.contentEnd);
     const content = (span.kind === "thought" ? raw.replace(EMPTY_TOOL_CALL_WRAPPER, "") : raw).trim();
-    if (content)
-      out.push({ kind: span.kind, content });
+    if (content) out.push({ kind: span.kind, content });
   }
   return out;
 }
@@ -558,8 +510,7 @@ function unwrapFinalTags(text) {
   const cuts = [];
   for (const match of text.matchAll(FINAL_TAG_RE)) {
     const start = match.index ?? 0;
-    if (!isInsideCode(start, regions))
-      cuts.push({ start, length: match[0].length });
+    if (!isInsideCode(start, regions)) cuts.push({ start, length: match[0].length });
   }
   let out = text;
   for (let i = cuts.length - 1; i >= 0; i--) {
@@ -569,22 +520,17 @@ function unwrapFinalTags(text) {
   return out;
 }
 function stripReasoningTagsFromText(text, options) {
-  if (!text)
-    return text;
-  if (!QUICK_TAG_RE.test(text))
-    return text;
+  if (!text) return text;
+  if (!QUICK_TAG_RE.test(text)) return text;
   const mode = options?.mode ?? "strict";
   const trimMode = options?.trim ?? "both";
   const cleaned = unwrapFinalTags(text);
   let result = "";
   for (const span of scanReasoning(cleaned)) {
-    if (span.kind === "answer")
-      result += cleaned.slice(span.contentStart, span.contentEnd);
-    else if (span.unterminated && mode === "preserve")
-      result += cleaned.slice(span.contentStart, span.contentEnd);
+    if (span.kind === "answer") result += cleaned.slice(span.contentStart, span.contentEnd);
+    else if (span.unterminated && mode === "preserve") result += cleaned.slice(span.contentStart, span.contentEnd);
   }
-  if (trimMode === "none")
-    return result;
+  if (trimMode === "none") return result;
   return trimMode === "start" ? result.trimStart() : result.trim();
 }
 var MAX_FRAGMENT_CHARS = 40;
@@ -594,19 +540,17 @@ function isFragment(text) {
 }
 function promoteSwallowedAnswer(segments) {
   const answers = segments.filter((s) => s.kind === "answer");
-  if (answers.length === 0)
-    return segments;
+  if (answers.length === 0) return segments;
   const answerText = answers.map((s) => s.content).join(" ").trim();
-  if (!isFragment(answerText))
-    return segments;
+  if (!isFragment(answerText)) return segments;
   const thoughts = segments.filter((s) => s.kind === "thought");
-  const richest = thoughts.reduce((best, s) => !best || s.content.length > best.content.length ? s : best, null);
-  if (!richest || richest.content.length <= answerText.length)
-    return segments;
+  const richest = thoughts.reduce(
+    (best, s) => !best || s.content.length > best.content.length ? s : best,
+    null
+  );
+  if (!richest || richest.content.length <= answerText.length) return segments;
   const promoted = [{ kind: "answer", content: `${richest.content} ${answerText}`.trim() }];
-  for (const s of thoughts)
-    if (s !== richest)
-      promoted.unshift(s);
+  for (const s of thoughts) if (s !== richest) promoted.unshift(s);
   return promoted;
 }
 var UNFINISHED_TAIL = /[\p{L}\p{N},]$/u;
@@ -615,8 +559,7 @@ function lastSentenceStart(text) {
   let cut = text.lastIndexOf("\n") + 1;
   for (const match of text.matchAll(/[.!?](?=\s)/g)) {
     const after = (match.index ?? 0) + 1;
-    if (after > cut)
-      cut = after;
+    if (after > cut) cut = after;
   }
   return cut;
 }
@@ -625,12 +568,9 @@ function stitchSplitSentence(segments) {
   for (let i = 1; i < out.length; i++) {
     const prev = out[i - 1];
     const cur = out[i];
-    if (prev.kind !== "thought" || cur.kind !== "answer")
-      continue;
-    if (cur.content.length <= MAX_FRAGMENT_CHARS)
-      continue;
-    if (!LOWERCASE_OPENER.test(cur.content) || !UNFINISHED_TAIL.test(prev.content))
-      continue;
+    if (prev.kind !== "thought" || cur.kind !== "answer") continue;
+    if (cur.content.length <= MAX_FRAGMENT_CHARS) continue;
+    if (!LOWERCASE_OPENER.test(cur.content) || !UNFINISHED_TAIL.test(prev.content)) continue;
     const cut = lastSentenceStart(prev.content);
     const head = prev.content.slice(0, cut).trim();
     out[i] = { kind: "answer", content: `${prev.content.slice(cut).trim()} ${cur.content}` };
@@ -653,8 +593,7 @@ function replayTextOf(content) {
   return answerTextOf(content) || thoughtTextOf(content);
 }
 function detailsText(details) {
-  if (!Array.isArray(details))
-    return "";
+  if (!Array.isArray(details)) return "";
   return details.map((d) => {
     const item = d;
     return item && (item.type === void 0 || item.type === "reasoning.text") && typeof item.text === "string" ? item.text : "";
@@ -675,8 +614,7 @@ function splitVendorReasoning(message) {
 function canonicalReasoningText(content, reasoning) {
   const answer = (content ?? "").trim();
   const thought = (reasoning ?? "").trim();
-  if (!thought)
-    return answer;
+  if (!thought) return answer;
   return answer ? `<think>${thought}</think>
 
 ${answer}` : `<think>${thought}</think>`;
@@ -1124,4 +1062,4 @@ export {
   replayPendingWords,
   replayAllPendingWords
 };
-//# sourceMappingURL=chunk-EUT326S6.mjs.map
+//# sourceMappingURL=chunk-VG2BVO4F.mjs.map

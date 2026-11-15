@@ -11858,13 +11858,16 @@ var gitPushTool = defineTool({
     type: "object",
     properties: {
       allowBaseBranch: { type: "boolean", description: "Set ONLY when the human explicitly asked to push the base branch directly. Default false, which refuses and tells you to open a pull request." },
+      branch: { type: "string", description: "Ticket branch to push, as named to git_commit. Pushes it by ref, so the checkout the human is on is never switched. Defaults to the current branch." },
       repo: REPO_PARAM
     }
   },
   requires: ["git.write"],
   execute: (args, ctx) => {
+    const badRef = invalidRefResult("push", { branch: args.branch });
+    if (badRef) return Promise.resolve(badRef);
     const repo = typeof args.repo === "string" ? args.repo : void 0;
-    return runPublishTool("push", buildPushCommand({ allowBaseBranch: args.allowBaseBranch === true }), repo, ctx);
+    return runPublishTool("push", buildPushCommand({ allowBaseBranch: args.allowBaseBranch === true, branch: typeof args.branch === "string" ? args.branch : void 0 }), repo, ctx);
   }
 });
 var openPullRequestTool = defineTool({
@@ -11876,6 +11879,7 @@ var openPullRequestTool = defineTool({
       title: { type: "string", description: "Pull request title \u2014 what this change does, in one line." },
       body: { type: "string", description: "Pull request description: what changed, why, and how a reviewer can verify it." },
       base: { type: "string", description: "Base branch to target. Defaults to the remote's default branch (usually main)." },
+      branch: { type: "string", description: "Ticket branch to open the pull request from, as named to git_commit. Uses it by ref, so the checkout the human is on is never switched. Defaults to the current branch." },
       reviewers: { type: "array", items: { type: "string" }, description: "GitHub usernames or org/team slugs to request review from." },
       repo: REPO_PARAM
     },
@@ -11888,11 +11892,11 @@ var openPullRequestTool = defineTool({
     if (!title) return Promise.resolve({ data: { ok: false, action: "pull_request", error: "title is required" } });
     const repo = typeof args.repo === "string" ? args.repo : void 0;
     const reviewers = Array.isArray(args.reviewers) ? args.reviewers.filter((r) => typeof r === "string") : void 0;
-    const badRef = invalidRefResult("pull_request", { base: args.base, reviewers });
+    const badRef = invalidRefResult("pull_request", { base: args.base, branch: args.branch, reviewers });
     if (badRef) return Promise.resolve(badRef);
     return runPublishTool(
       "pull_request",
-      buildPullRequestCommand({ title, body, base: typeof args.base === "string" ? args.base : void 0, reviewers }),
+      buildPullRequestCommand({ title, body, base: typeof args.base === "string" ? args.base : void 0, branch: typeof args.branch === "string" ? args.branch : void 0, reviewers }),
       repo,
       ctx
     );

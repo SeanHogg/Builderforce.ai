@@ -5,7 +5,7 @@ import {
   reportPageEngineFailure
 } from "./chunk-SLI7C3HD.mjs";
 
-// ../packages/local-inference/src/runtimes.js
+// ../packages/local-inference/src/runtimes.ts
 var BROWSER_ENGINE_BASE_URL = "http://browser.local";
 var BFI_ENGINE_BASE_URL = "http://bfi.local";
 var WEBLLM_ENGINE_BASE_URL = "http://webllm.local";
@@ -93,33 +93,28 @@ function localRuntime(id) {
 }
 var HOST_FALLBACK_RUNTIMES = LOCAL_RUNTIMES.filter((r) => r.fallbackReach === "host");
 
-// ../packages/local-inference/src/ref.js
+// ../packages/local-inference/src/ref.ts
 var LOCAL_MODEL_PREFIX = "local/";
 var GATEWAY_DIRECT_PREFIX = "direct/";
 function formatLocalModelRef(runtime, model) {
   return `${LOCAL_MODEL_PREFIX}${runtime}/${model}`;
 }
 function parseLocalModelRef(ref) {
-  if (!ref || !ref.startsWith(LOCAL_MODEL_PREFIX))
-    return null;
+  if (!ref || !ref.startsWith(LOCAL_MODEL_PREFIX)) return null;
   const rest = ref.slice(LOCAL_MODEL_PREFIX.length);
   const slash = rest.indexOf("/");
-  if (slash <= 0)
-    return null;
+  if (slash <= 0) return null;
   const provider = rest.slice(0, slash);
   const model = rest.slice(slash + 1);
-  if (!model || !isLocalRuntimeId(provider))
-    return null;
+  if (!model || !isLocalRuntimeId(provider)) return null;
   return { provider, model };
 }
 function clientPinOf(ref) {
   const local = parseLocalModelRef(ref);
-  if (local || !ref || !ref.startsWith(GATEWAY_DIRECT_PREFIX))
-    return local;
+  if (local || !ref || !ref.startsWith(GATEWAY_DIRECT_PREFIX)) return local;
   const rest = ref.slice(GATEWAY_DIRECT_PREFIX.length);
   const slash = rest.indexOf("/");
-  if (slash <= 0)
-    return null;
+  if (slash <= 0) return null;
   const vendor = rest.slice(0, slash);
   const model = rest.slice(slash + 1);
   const runtime = LOCAL_RUNTIMES.find((r) => r.gatewayVendor === vendor);
@@ -138,10 +133,8 @@ function servedAttempt(result) {
 }
 function servedIdentity(result, requested) {
   const served = servedAttempt(result);
-  if (!served)
-    return { onDevice: runsOnDevice(result.resolvedModel), name: result.resolvedModel ?? requested };
-  if (isLocalModelRef(served.target))
-    return { onDevice: runsOnDevice(served.target), name: served.target };
+  if (!served) return { onDevice: runsOnDevice(result.resolvedModel), name: result.resolvedModel ?? requested };
+  if (isLocalModelRef(served.target)) return { onDevice: runsOnDevice(served.target), name: served.target };
   const name = result.resolvedModel ?? (served.target !== GATEWAY_ATTEMPT_TARGET ? served.target : void 0);
   return { onDevice: false, name };
 }
@@ -150,15 +143,13 @@ function servedOnDevice(result) {
 }
 function hostedDirectRef(ref) {
   const pin = clientPinOf(ref);
-  if (!pin)
-    return void 0;
+  if (!pin) return void 0;
   const runtime = localRuntime(pin.provider);
   return !runtime.onDevice && runtime.gatewayVendor ? `${GATEWAY_DIRECT_PREFIX}${runtime.gatewayVendor}/${pin.model}` : void 0;
 }
 function hostedCatalogId(ref) {
   const pin = clientPinOf(ref);
-  if (!pin)
-    return void 0;
+  if (!pin) return void 0;
   const runtime = localRuntime(pin.provider);
   return runtime.onDevice ? void 0 : runtime.catalogAliases?.[pin.model];
 }
@@ -166,7 +157,7 @@ function pricedId(ref) {
   return hostedCatalogId(ref) ?? hostedDirectRef(ref) ?? ref;
 }
 
-// ../packages/local-inference/src/webllmCatalog.generated.js
+// ../packages/local-inference/src/webllmCatalog.generated.ts
 var WEBLLM_CATALOG = [
   { modelId: "snowflake-arctic-embed-s-q0f32-MLC-b4", label: "Snowflake Arctic Embed S \xB7 B4", family: "snowflake-arctic-embed", params: 33e6, bytes: 132e6, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 250305577, f16: false, uses: ["embedding"], recommended: true },
   { modelId: "SmolLM2-135M-Instruct-q0f16-MLC", label: "SmolLM2 135M Instruct", family: "smollm2", params: 135e6, bytes: 27e7, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 377162301, f16: true, uses: ["chat"], recommended: false },
@@ -250,7 +241,7 @@ var WEBLLM_CATALOG = [
   { modelId: "Llama-2-13b-chat-hf-q4f16_1-MLC", label: "Llama 2 13B Chat HF", family: "llama-2", params: 13e9, bytes: 73125e5, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 12387971236, f16: true, uses: ["chat"], recommended: false }
 ];
 
-// ../packages/local-inference/src/catalog.js
+// ../packages/local-inference/src/catalog.ts
 var MIB = 1024 * 1024;
 var WEBGPU_DEFAULT_BINDING_BYTES = 128 * MIB;
 var WEBLLM_FULL_BINDING_BYTES = 1024 * MIB;
@@ -316,14 +307,11 @@ function localCatalogFor(runtime) {
   return LOCAL_MODEL_CATALOG.filter((m) => m.runtime === runtime && isLocalChatModel(m));
 }
 
-// ../packages/local-inference/src/catalogPicker.js
+// ../packages/local-inference/src/catalogPicker.ts
 var LOCAL_PICKER_GROUPS = ["tools", "chat", "coding", "reasoning", "math"];
 function localPickerGroup(row) {
-  if (row.tools)
-    return "tools";
-  for (const group of ["coding", "reasoning", "math"])
-    if (row.uses.includes(group))
-      return group;
+  if (row.tools) return "tools";
+  for (const group of ["coding", "reasoning", "math"]) if (row.uses.includes(group)) return group;
   return "chat";
 }
 function localPickerView(rows, options = {}) {
@@ -332,8 +320,7 @@ function localPickerView(rows, options = {}) {
   const more = [];
   const hidden = [];
   for (const row of rows) {
-    if (!isLocalChatModel(row))
-      continue;
+    if (!isLocalChatModel(row)) continue;
     const held = pinned(row);
     if (!fits(row) && !held) {
       hidden.push(row);
@@ -353,7 +340,7 @@ function localPickerView(rows, options = {}) {
   return { groups, more, hidden };
 }
 
-// ../packages/local-inference/src/endpoint.js
+// ../packages/local-inference/src/endpoint.ts
 function normalizeLocalBaseUrl(raw) {
   return raw.trim().replace(/\/+$/, "").replace(/\/v1$/i, "");
 }
@@ -367,34 +354,29 @@ function rewriteToLocalUrl(url) {
 }
 async function fetchLocal(endpoint, fetchImpl, url, init) {
   const credential = endpoint.credential;
-  if (!credential)
-    return fetchImpl(url, init);
+  if (!credential) return fetchImpl(url, init);
   const send = (token2) => fetchImpl(url, { ...init, headers: withBearer(init.headers, token2) });
   const token = await credential();
   const res = await send(token);
-  if (res.status !== 401 || !token)
-    return res;
+  if (res.status !== 401 || !token) return res;
   const replacement = await credential(token);
-  if (!replacement || replacement === token)
-    return res;
+  if (!replacement || replacement === token) return res;
   await res.body?.cancel().catch(() => void 0);
   return send(replacement);
 }
 function withBearer(headers, token) {
   const out = {};
   new Headers(headers).forEach((value, key) => {
-    if (key !== "authorization")
-      out[key] = value;
+    if (key !== "authorization") out[key] = value;
   });
-  if (token)
-    out.authorization = `Bearer ${token}`;
+  if (token) out.authorization = `Bearer ${token}`;
   return out;
 }
 function localAuthHeaders(endpoint) {
   return endpoint.token ? { authorization: `Bearer ${endpoint.token}` } : {};
 }
 
-// ../packages/local-inference/src/probe.js
+// ../packages/local-inference/src/probe.ts
 function isServableLocalModel(m) {
   return m.state === void 0 || m.state === "ready";
 }
@@ -403,7 +385,7 @@ function localModelLabel(row, runtimeId) {
   return runtime.labelFromProbe && row?.label || runtime.label;
 }
 
-// ../packages/local-inference/src/bfiLimits.generated.js
+// ../packages/local-inference/src/bfiLimits.generated.ts
 var BFI_CPU_LIMITS = {
   cpuKvBudgetBytes: 536870912,
   cpuWorkingSetBytes: 268435456,
@@ -413,15 +395,13 @@ var BFI_CPU_LIMITS = {
   assumedDesktopMemoryBytes: 8589934592
 };
 
-// ../packages/local-inference/src/fit.js
+// ../packages/local-inference/src/fit.ts
 var VRAM_PER_MAX_BUFFER = 8;
 var MOBILE_UA = /Android|iPhone|iPad|iPod|Mobile|Silk|Kindle|BlackBerry|Opera Mini|IEMobile/i;
 function isMobileDevice(nav) {
-  if (!nav)
-    return false;
+  if (!nav) return false;
   const hinted = nav.userAgentData?.mobile;
-  if (typeof hinted === "boolean")
-    return hinted;
+  if (typeof hinted === "boolean") return hinted;
   const ua = nav.userAgent ?? "";
   return MOBILE_UA.test(ua) || /Macintosh/.test(ua) && (nav.maxTouchPoints ?? 0) > 1;
 }
@@ -436,42 +416,33 @@ function webGpuFit(model, support) {
   if (!support.supported) {
     return { fits: false, reason: "webgpu_unavailable", ...support.reason ? { detail: support.reason } : {} };
   }
-  if (model.requires.f16 && !support.f16)
-    return { fits: false, reason: "shader_f16_unavailable" };
+  if (model.requires.f16 && !support.f16) return { fits: false, reason: "shader_f16_unavailable" };
   const bindingBytes = support.maxStorageBufferBindingSizeBytes ?? support.maxBufferBytes;
-  if (bindingBytes < model.requires.minBufferBytes)
-    return { fits: false, reason: "buffer_too_small" };
+  if (bindingBytes < model.requires.minBufferBytes) return { fits: false, reason: "buffer_too_small" };
   const { vramBytes } = model.requires;
   const maxBuffer = support.maxBufferSizeBytes;
-  if (vramBytes && maxBuffer && vramBytes > maxBuffer * VRAM_PER_MAX_BUFFER)
-    return { fits: false, reason: "vram_too_small" };
+  if (vramBytes && maxBuffer && vramBytes > maxBuffer * VRAM_PER_MAX_BUFFER) return { fits: false, reason: "vram_too_small" };
   return { fits: true, backend: "webgpu" };
 }
 function cpuFits(model, cpu) {
   const floor = model.requires.cpu?.minDeviceMemoryBytes;
-  if (floor === void 0 || !cpu.supported)
-    return false;
-  if ((cpu.deviceMemoryBytes ?? assumedDeviceMemoryBytes()) < floor)
-    return false;
+  if (floor === void 0 || !cpu.supported) return false;
+  if ((cpu.deviceMemoryBytes ?? assumedDeviceMemoryBytes()) < floor) return false;
   const need = model.bytes + (cpu.kvBudgetBytes ?? BFI_CPU_LIMITS.cpuKvBudgetBytes) + BFI_CPU_LIMITS.cpuWorkingSetBytes;
   return need <= (cpu.maxMemoryBytes ?? cpuMemoryCeiling(cpu.deviceMemoryBytes));
 }
 function localModelFit(model, support) {
   const gpu = webGpuFit(model, support);
-  if (gpu.fits)
-    return gpu;
+  if (gpu.fits) return gpu;
   const cpu = support.backends?.cpu;
-  if (!model.requires.cpu || !cpu?.supported)
-    return gpu;
-  if (cpuFits({ requires: model.requires, bytes: model.bytes ?? 0 }, cpu))
-    return { fits: true, backend: "cpu" };
+  if (!model.requires.cpu || !cpu?.supported) return gpu;
+  if (cpuFits({ requires: model.requires, bytes: model.bytes ?? 0 }, cpu)) return { fits: true, backend: "cpu" };
   return { fits: false, reason: "memory_insufficient" };
 }
 
-// ../packages/local-inference/src/plan.js
+// ../packages/local-inference/src/plan.ts
 function localModelUnfitReason(model, workload) {
-  if (workload.agentic && model.tools !== true)
-    return "tools";
+  if (workload.agentic && model.tools !== true) return "tools";
   if (model.contextTokens !== void 0 && model.contextTokens < workload.inputTokens + workload.outputTokens) {
     return "context";
   }
@@ -480,23 +451,24 @@ function localModelUnfitReason(model, workload) {
 function localFirstPlan(input) {
   const onDevice = new Set(LOCAL_RUNTIMES.filter((r) => r.onDevice).map((r) => r.id));
   const rank = (id) => LOCAL_RUNTIMES.find((r) => r.id === id)?.automaticRank ?? Number.POSITIVE_INFINITY;
-  const candidates = input.probes.filter((p) => p.reachable && onDevice.has(p.provider)).sort((a, b) => rank(a.provider) - rank(b.provider)).flatMap((p) => p.models.filter((m) => isServableLocalModel(m) && localModelUnfitReason(m, input.workload) === null).map((m) => ({
-    kind: "local",
-    ref: m.ref,
-    provider: p.provider,
-    model: m.model,
-    endpoint: p.endpoint
-  })));
+  const candidates = input.probes.filter((p) => p.reachable && onDevice.has(p.provider)).sort((a, b) => rank(a.provider) - rank(b.provider)).flatMap(
+    (p) => p.models.filter((m) => isServableLocalModel(m) && localModelUnfitReason(m, input.workload) === null).map((m) => ({
+      kind: "local",
+      ref: m.ref,
+      provider: p.provider,
+      model: m.model,
+      endpoint: p.endpoint
+    }))
+  );
   const preferredIndex = input.preferred ? candidates.findIndex((c) => c.kind === "local" && c.ref === input.preferred) : -1;
-  if (preferredIndex > 0)
-    candidates.unshift(...candidates.splice(preferredIndex, 1));
+  if (preferredIndex > 0) candidates.unshift(...candidates.splice(preferredIndex, 1));
   const local = candidates.slice(0, Math.max(0, input.maxLocalAttempts ?? 1));
   const accounts = (input.accounts ?? []).map((account) => ({ kind: "local", ...account }));
   const leading = [...local, ...accounts];
   return input.cloud ? [...leading, { kind: "cloud", ...input.cloud.model ? { model: input.cloud.model } : {} }] : leading;
 }
 
-// ../packages/local-inference/src/failover.js
+// ../packages/local-inference/src/failover.ts
 var LocalFirstUnavailableError = class extends Error {
   constructor() {
     super("local_first_unavailable: no local model fits this call and no cloud fallback is available");
@@ -504,8 +476,7 @@ var LocalFirstUnavailableError = class extends Error {
   }
 };
 async function runLocalFirst(plan, run, options = {}) {
-  if (plan.length === 0)
-    throw new LocalFirstUnavailableError();
+  if (plan.length === 0) throw new LocalFirstUnavailableError();
   const attempts = [];
   const record = (entry) => {
     attempts.push(entry);
@@ -527,8 +498,7 @@ async function runLocalFirst(plan, run, options = {}) {
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
       record({ attempt, outcome: "failed", detail });
-      if (options.signal?.aborted || state.committed || isLast)
-        throw e;
+      if (options.signal?.aborted || state.committed || isLast) throw e;
     }
   }
   throw new LocalFirstUnavailableError();
@@ -1414,4 +1384,4 @@ export {
   createHfModelStore,
   catalogProbe
 };
-//# sourceMappingURL=chunk-42Q6LR6O.mjs.map
+//# sourceMappingURL=chunk-ZJ3PNS54.mjs.map

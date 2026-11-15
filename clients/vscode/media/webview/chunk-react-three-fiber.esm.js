@@ -1,4 +1,4 @@
-import{dl as Xx,br as qx,d1 as Yx,r as Tt,j as wi}from"./index.js";/**
+import{gg as Xx,br as qx,db as Yx,r as Tt,j as wi}from"./index.js";/**
  * @license
  * Copyright 2010-2026 Three.js Authors
  * SPDX-License-Identifier: MIT

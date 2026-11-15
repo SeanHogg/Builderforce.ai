@@ -598,7 +598,7 @@ function formatEvermindLearnStep(outcome) {
   }
 }
 
-// ../packages/agent-stall/src/requestIntent.js
+// ../packages/agent-stall/src/requestIntent.ts
 var CHANGE_VERBS = "add|change|fix|update|reduce|increase|remove|delete|rename|refactor|implement|create|build|make|move|set|wire|migrate|replace|adjust|enable|disable|improve|write|edit|apply|correct|resolve|shrink|expand|hide|show|bump|revert|restore|install|upgrade|downgrade|rewrite|extract|split|merge";
 var CHANGE_VERB = new RegExp(`\\b(${CHANGE_VERBS})\\b`, "i");
 var FINISH_OBJECT = "(complete|finish|finali[sz]e)\\s+(the|this|that|these|those|it|my|our|your|all|implementation|work|task|change)\\b";
@@ -607,16 +607,16 @@ var CHAINED_FINISH = new RegExp(`(\\band|\\bthen|[,.;])\\s+((also|then|please|no
 var QUESTION_SHAPE = /^\s*(what|why|how|where|when|which|who|is|are|was|were|does|do|did|can|could|should|would|will)\b|\?\s*$/i;
 var RESEARCH_LEAD = /^\s*(explain|describe|summar\w*|tell me|show me|list|compare|review|analyse|analyze|research|investigate|find|locate|trace|audit|look into|search)\b/i;
 var REPORT_OBJECTS = "summary|report|findings|notes|overview|write-?up|answer|explanation|list|table|recommendations?";
-var CHAINED_CHANGE = new RegExp(`(\\band|\\bthen|[,.;])\\s+((also|then|please|now)\\s+)*(${CHANGE_VERBS})\\b(?!\\s+(me|us)\\b|\\s+(up\\s+)?((a|an|the|your|me|us|my)\\s+)?(short\\s+|brief\\s+)?(${REPORT_OBJECTS})\\b)`, "i");
+var CHAINED_CHANGE = new RegExp(
+  `(\\band|\\bthen|[,.;])\\s+((also|then|please|now)\\s+)*(${CHANGE_VERBS})\\b(?!\\s+(me|us)\\b|\\s+(up\\s+)?((a|an|the|your|me|us|my)\\s+)?(short\\s+|brief\\s+)?(${REPORT_OBJECTS})\\b)`,
+  "i"
+);
 function asksForChange(text) {
   const t = (text ?? "").trim();
-  if (!t)
-    return false;
+  if (!t) return false;
   const head = t.slice(0, 600);
-  if (QUESTION_SHAPE.test(head))
-    return false;
-  if (RESEARCH_LEAD.test(head))
-    return CHAINED_CHANGE.test(head) || CHAINED_FINISH.test(head);
+  if (QUESTION_SHAPE.test(head)) return false;
+  if (RESEARCH_LEAD.test(head)) return CHAINED_CHANGE.test(head) || CHAINED_FINISH.test(head);
   return CHANGE_VERB.test(head) || FINISH_ORDER.test(head) || CHAINED_FINISH.test(head);
 }
 var NOTHING_DONE = /\b(nothing (has been|was|is) (changed|modified|applied|edited|written|saved)|no (changes?|edits?) (have been|were|was) (made|applied|written|saved)|(not|never) (yet )?(been )?(applied|written|saved|committed)|has not been (changed|applied|modified)|before (applying|making) the edit)\b/i;
@@ -624,36 +624,32 @@ var DEFERRED_PROMISE = /\b(re-?run me|run me again|ask me again|in a follow-?up|
 var BUDGET_EXHAUSTED = /\b(tool-?call budget|step budget|iteration (cap|limit|budget)|ran out of (tool calls|steps|budget)|hit (the|my) (tool|step|budget))\b/i;
 function promisesUnfinishedWork(text) {
   const t = (text ?? "").trim();
-  if (!t)
-    return false;
+  if (!t) return false;
   return NOTHING_DONE.test(t) || DEFERRED_PROMISE.test(t) || BUDGET_EXHAUSTED.test(t);
 }
 var CONTINUATION = /^\s*(?:ok(?:ay)?[,\s]*)?(?:please\s+)?(?:now\s+)?(?:just\s+)?(?:go\s+ahead|carry\s+on|keep\s+going|make\s+it\s+so|do\s+it|do\s+that|do\s+so|fix\s+it|fix\s+that|apply\s+it|apply\s+that|apply|fix|go|proceed|continue|yes|yep|yeah|y|sure|confirm(?:ed)?|approved?|ship\s+it|send\s+it|run\s+it|do\s+the\s+fix|make\s+the\s+change)\s*[.!]*\s*$/i;
 var MAX_CONTINUATION_CHARS = 40;
 function isContinuationDirective(text) {
   const t = (text ?? "").trim();
-  if (!t || t.length > MAX_CONTINUATION_CHARS)
-    return false;
+  if (!t || t.length > MAX_CONTINUATION_CHARS) return false;
   return CONTINUATION.test(t);
 }
 var CURRENT_STATE = /^\s*(?:(?:so|ok(?:ay)?|and|hey)[,\s]+)?(?:(?:what(?:'s| is) )?(?:the )?(?:current |latest )?(?:status|progress|update|updates|news|eta|state of (?:play|things))\b|any (?:updates?|news|progress)\b|where (?:are|do) (?:we|things|you) (?:stand|at)\b|where are we\b|how(?:'s| is) it going\b|how far along\b|is it (?:done|finished|ready|working|fixed)\b|are (?:we|you) done\b|what(?:'s| is) (?:left|next|remaining|the latest|happening)\b|still working\b)/i;
 function asksAboutCurrentState(text) {
   const t = (text ?? "").trim();
-  if (!t)
-    return false;
+  if (!t) return false;
   return CURRENT_STATE.test(t.slice(0, 200));
 }
 function memoryReplayable(question, context = {}) {
   const q = (question ?? "").trim();
-  if (!q || context.followUp === true)
-    return false;
+  if (!q || context.followUp === true) return false;
   return !asksForChange(q) && !asksAboutCurrentState(q) && !isContinuationDirective(q);
 }
 function continuationDirective() {
   return `The user's last message is a bare directive ("fix", "do it", "go ahead") with no subject of its own. It refers to the proposal in YOUR immediately preceding message, which described work you had not yet carried out. Carry out that exact proposal now, using the tools, starting from the files and the change it already named \u2014 do NOT ask the user what to fix, and do NOT re-derive the analysis you have already done and can read above. If the earlier proposal named a specific file and edit, apply that edit. Report what you changed when it is done.`;
 }
 
-// ../packages/agent-stall/src/handoff.js
+// ../packages/agent-stall/src/handoff.ts
 var EXECUTION_TOOLS = /* @__PURE__ */ new Set([
   "run_command",
   "run_shell_command",
@@ -687,100 +683,105 @@ function normalise(text) {
   return text.replace(/```[\s\S]*?(?:```|$)/g, (m) => mark(m)).replace(/`[^`\n]+`/g, (m) => mark(m));
 }
 var HANDOFF_VERB = "(?:re-?run|run|execute|apply|install|re-?install|rebuild|build|compile|commit|push|deploy|publish|restart|relaunch|launch|start|test|verify|lint|type-?check|typecheck|migrate|regenerate|package|bump|trigger|kick off)";
-var HANDS_OFF = new RegExp([
-  // "you can run", "you'll need to run", "you should now commit", "you must rebuild"
-  `\\byou(?:'ll|'d|'ve| will| would| should| must| may| might| can| could| still| then| now)?(?:\\s+(?:then|now|also|just|still|next|first|finally|want to|need to|have to|be able to))*\\s+${HANDOFF_VERB}\\b`,
-  // "please run the guards"
-  `\\bplease\\s+(?:now\\s+|then\\s+)?${HANDOFF_VERB}\\b`,
-  // "once you've run the build", "after you push"
-  `\\b(?:once|after|when|before)\\s+you(?:'ve| have| had)?\\s+${HANDOFF_VERB}\\b`,
-  // "run the following", "apply these changes", "execute this command"
-  `\\b${HANDOFF_VERB}\\s+(?:the\\s+following|these|this)\\b`,
-  // "to verify, run …" / "to apply the fix you need to run …"
-  `\\bto\\s+(?:apply|verify|confirm|finish|complete|deploy|ship|land|pick up|see)\\b[^.\\n]{0,60}?,?\\s*(?:you\\s+(?:can|should|must|will|need to|have to)\\s+)?${HANDOFF_VERB}\\b`,
-  // A steps list: "1. Run the type-check", "- Commit the change", "Then push to main"
-  `(?:^|\\n)[ \\t]*(?:\\d+[.)]|[-*+]|#{1,6}|>)?[ \\t]*(?:then|now|next|finally|first)?[,:]?[ \\t]*${HANDOFF_VERB}\\b`,
-  // The same imperative mid-paragraph: "I applied the fix. Now run the type-check."
-  // The adverb is REQUIRED here, unlike the line-leading form above — without it a
-  // plain sentence that happens to open with one of these words ("Build output is
-  // clean now.") would read as an instruction.
-  `[.!?]\\s+(?:then|now|next|finally|first)[,:]?\\s+${HANDOFF_VERB}\\b`
-].join("|"), "gi");
+var HANDS_OFF = new RegExp(
+  [
+    // "you can run", "you'll need to run", "you should now commit", "you must rebuild"
+    `\\byou(?:'ll|'d|'ve| will| would| should| must| may| might| can| could| still| then| now)?(?:\\s+(?:then|now|also|just|still|next|first|finally|want to|need to|have to|be able to))*\\s+${HANDOFF_VERB}\\b`,
+    // "please run the guards"
+    `\\bplease\\s+(?:now\\s+|then\\s+)?${HANDOFF_VERB}\\b`,
+    // "once you've run the build", "after you push"
+    `\\b(?:once|after|when|before)\\s+you(?:'ve| have| had)?\\s+${HANDOFF_VERB}\\b`,
+    // "run the following", "apply these changes", "execute this command"
+    `\\b${HANDOFF_VERB}\\s+(?:the\\s+following|these|this)\\b`,
+    // "to verify, run …" / "to apply the fix you need to run …"
+    `\\bto\\s+(?:apply|verify|confirm|finish|complete|deploy|ship|land|pick up|see)\\b[^.\\n]{0,60}?,?\\s*(?:you\\s+(?:can|should|must|will|need to|have to)\\s+)?${HANDOFF_VERB}\\b`,
+    // A steps list: "1. Run the type-check", "- Commit the change", "Then push to main"
+    `(?:^|\\n)[ \\t]*(?:\\d+[.)]|[-*+]|#{1,6}|>)?[ \\t]*(?:then|now|next|finally|first)?[,:]?[ \\t]*${HANDOFF_VERB}\\b`,
+    // The same imperative mid-paragraph: "I applied the fix. Now run the type-check."
+    // The adverb is REQUIRED here, unlike the line-leading form above — without it a
+    // plain sentence that happens to open with one of these words ("Build output is
+    // clean now.") would read as an instruction.
+    `[.!?]\\s+(?:then|now|next|finally|first)[,:]?\\s+${HANDOFF_VERB}\\b`
+  ].join("|"),
+  "gi"
+);
 var COMMAND_NEARBY = new RegExp(`${CMD_MARK}|${RUNNER}|\\b${SCRIPT_NOUN}`, "i");
 function handsWorkToUser(text) {
   const t = (text ?? "").trim();
-  if (!t)
-    return false;
+  if (!t) return false;
   const scanned = normalise(t.slice(-TAIL_CHARS));
   HANDS_OFF.lastIndex = 0;
   for (let m = HANDS_OFF.exec(scanned); m; m = HANDS_OFF.exec(scanned)) {
-    const window = scanned.slice(Math.max(0, m.index - WINDOW_BEFORE), m.index + m[0].length + WINDOW_AFTER);
-    if (!COMMAND_NEARBY.test(window))
-      continue;
-    if (OUT_OF_REACH.test(window))
-      continue;
+    const window = scanned.slice(
+      Math.max(0, m.index - WINDOW_BEFORE),
+      m.index + m[0].length + WINDOW_AFTER
+    );
+    if (!COMMAND_NEARBY.test(window)) continue;
+    if (OUT_OF_REACH.test(window)) continue;
     HANDS_OFF.lastIndex = 0;
     return true;
   }
   return false;
 }
 function delegatesExecutableWork(text, ctx) {
-  if (!canExecuteCommands(ctx.availableToolNames))
-    return false;
-  if (!asksForChange(ctx.requestText))
-    return false;
+  if (!canExecuteCommands(ctx.availableToolNames)) return false;
+  if (!asksForChange(ctx.requestText)) return false;
   return handsWorkToUser(text);
 }
 function handoffRecoveryNudge(lastChance) {
   return "Your last turn ended by telling the USER to run commands. You are the one holding the tools \u2014 `run_command` for shell steps, the git tools to commit and push \u2014 so those steps are yours, not theirs. Carry them out NOW in this turn: run the commands you just listed, read their output, and fix anything that fails before you answer. Verification you hand to the user is verification nobody does. Only leave a step to the user when you genuinely cannot do it here \u2014 it needs a credential, a browser, or a decision that is theirs \u2014 and then say which step and why." + (lastChance ? " This is your last chance to act: your answer after this turn is shown to the user as-is, so either run the commands now or state plainly, at the top of your reply, that the change is UNVERIFIED and exactly which steps were never run." : "");
 }
 
-// ../packages/agent-stall/src/permissionMenu.js
+// ../packages/agent-stall/src/permissionMenu.ts
 var TAIL_CHARS2 = 900;
 var ACTION_VERB = "(?:run|execute|apply|implement|install|rebuild|build|compile|commit|push|merge|rebase|deploy|publish|release|ship|open|create|file|draft|write|add|update|patch|edit|change|modify|fix|resolve|refactor|rename|move|delete|remove|drop|close|cancel|archive|assign|dispatch|schedule|start|kick off|trigger|link|list|enumerate|show|generate|produce|proceed|continue|go ahead|do (?:it|that|this|them|so|first|next|now|any|all)|handle|take care of|work through|go through|tackle|clean up|tidy|sort out|migrate|convert|split|extract|bump|revert|restore|retry|re-?try|re-?run|verify|test|check|review|investigate|dig into|look into)";
-var OFFER = new RegExp([
-  // "Would you like me to open the PRs?" · "Do you want me to merge these?"
-  // · "Would you like me to proceed?"
-  `\\b(?:would|do)\\s+you\\s+(?:like|want|prefer)\\s+(?:me|us)\\s+to\\b`,
-  // "Shall I open PRs?" · "Should I cancel the stalled tickets?" · "Can I proceed?"
-  // · "May I go ahead?"
-  `\\b(?:shall|should|can|may)\\s+i\\b[^.?\\n]{0,80}\\?`,
-  // "Want me to push these?" — the subjectless form.
-  `\\bwant\\s+(?:me|us)\\s+to\\b`,
-  // "Let me know if you'd like me to…" · "Let me know which of these to do"
-  // · "Tell me which you'd prefer" · "Just say the word and I'll merge them"
-  // "how" earns its place: "let me know how you'd like to proceed" is the single most
-  // common way this pause is phrased, and it names no option at all.
-  `\\blet me know\\b[^.\\n]{0,80}\\b(?:if|whether|which|what|how)\\b`,
-  `\\b(?:tell|let)\\s+me\\s+know\\s+(?:which|what|whether|if)\\b`,
-  `\\bsay the word\\b`,
-  // "I can open the PRs if you'd like." · "I could cancel them if you want."
-  // · "I'm happy to merge these if that's what you want."
-  `\\bi\\s+(?:can|could|am happy to|'?m happy to|would be happy to)\\b[^.\\n]{0,120}?\\bif\\s+(?:you|that|you'?d|you would)\\b`,
-  // "Confirm and I'll proceed." · "Approve and I'll merge them."
-  `\\b(?:confirm|approve|give me the go-?ahead|give the go-?ahead)\\b[^.\\n]{0,40}\\band\\s+i(?:'ll| will)\\b`,
-  // "Which would you like me to do first?" · "Which of these should I start with?"
-  `\\bwhich\\s+(?:one|of these|of those)?\\s*(?:would|do|should|shall)\\s+(?:you|i)\\b`,
-  // "Your call." · "Up to you." · "How would you like to proceed?" — and the
-  // declarative order the same sentence takes inside a clause, "…how you would like
-  // to proceed", which the interrogative-only form used to miss.
-  `\\b(?:your call|up to you|it'?s your call)\\b`,
-  `\\bhow\\s+(?:you\\s+(?:would|do)|(?:would|do)\\s+you)\\s+(?:want|like|prefer)\\b`
-].join("|"), "gi");
+var OFFER = new RegExp(
+  [
+    // "Would you like me to open the PRs?" · "Do you want me to merge these?"
+    // · "Would you like me to proceed?"
+    `\\b(?:would|do)\\s+you\\s+(?:like|want|prefer)\\s+(?:me|us)\\s+to\\b`,
+    // "Shall I open PRs?" · "Should I cancel the stalled tickets?" · "Can I proceed?"
+    // · "May I go ahead?"
+    `\\b(?:shall|should|can|may)\\s+i\\b[^.?\\n]{0,80}\\?`,
+    // "Want me to push these?" — the subjectless form.
+    `\\bwant\\s+(?:me|us)\\s+to\\b`,
+    // "Let me know if you'd like me to…" · "Let me know which of these to do"
+    // · "Tell me which you'd prefer" · "Just say the word and I'll merge them"
+    // "how" earns its place: "let me know how you'd like to proceed" is the single most
+    // common way this pause is phrased, and it names no option at all.
+    `\\blet me know\\b[^.\\n]{0,80}\\b(?:if|whether|which|what|how)\\b`,
+    `\\b(?:tell|let)\\s+me\\s+know\\s+(?:which|what|whether|if)\\b`,
+    `\\bsay the word\\b`,
+    // "I can open the PRs if you'd like." · "I could cancel them if you want."
+    // · "I'm happy to merge these if that's what you want."
+    `\\bi\\s+(?:can|could|am happy to|'?m happy to|would be happy to)\\b[^.\\n]{0,120}?\\bif\\s+(?:you|that|you'?d|you would)\\b`,
+    // "Confirm and I'll proceed." · "Approve and I'll merge them."
+    `\\b(?:confirm|approve|give me the go-?ahead|give the go-?ahead)\\b[^.\\n]{0,40}\\band\\s+i(?:'ll| will)\\b`,
+    // "Which would you like me to do first?" · "Which of these should I start with?"
+    `\\bwhich\\s+(?:one|of these|of those)?\\s*(?:would|do|should|shall)\\s+(?:you|i)\\b`,
+    // "Your call." · "Up to you." · "How would you like to proceed?" — and the
+    // declarative order the same sentence takes inside a clause, "…how you would like
+    // to proceed", which the interrogative-only form used to miss.
+    `\\b(?:your call|up to you|it'?s your call)\\b`,
+    `\\bhow\\s+(?:you\\s+(?:would|do)|(?:would|do)\\s+you)\\s+(?:want|like|prefer)\\b`
+  ].join("|"),
+  "gi"
+);
 var WINDOW_AFTER2 = 400;
 var WINDOW_BEFORE2 = 120;
 var ACTION_NEARBY = new RegExp(`\\b${ACTION_VERB}\\b`, "i");
 var USERS_OWN_CHOICE = /\b(?:did you mean|do you mean|what did you (?:mean|intend)|which did you mean|prefer(?:ence|red)?\b|intended behaviou?r|by design|is that (?:right|correct|intended|what you)|am i (?:right|correct) (?:that|in)|credential|password|api ?key|secret|which account|whose|budget|deadline|priorit(?:y|ise|ize))\b/i;
 function offersMenuInsteadOfActing(text) {
   const t = (text ?? "").trim();
-  if (!t)
-    return false;
+  if (!t) return false;
   const scanned = t.slice(-TAIL_CHARS2);
   OFFER.lastIndex = 0;
   for (let m = OFFER.exec(scanned); m; m = OFFER.exec(scanned)) {
-    const window = scanned.slice(Math.max(0, m.index - WINDOW_BEFORE2), m.index + m[0].length + WINDOW_AFTER2);
-    if (!ACTION_NEARBY.test(window))
-      continue;
+    const window = scanned.slice(
+      Math.max(0, m.index - WINDOW_BEFORE2),
+      m.index + m[0].length + WINDOW_AFTER2
+    );
+    if (!ACTION_NEARBY.test(window)) continue;
     OFFER.lastIndex = 0;
     return true;
   }
@@ -794,12 +795,9 @@ function askUserAdvertised(toolNames) {
   return (toolNames ?? []).some((n) => n.toLowerCase() === ASK_USER_TOOL_NAME);
 }
 function asksPermissionForRequestedWork(text, ctx) {
-  if (!asksForChange(ctx.requestText))
-    return false;
-  if (!offersMenuInsteadOfActing(text))
-    return false;
-  if (pausesOnUsersOwnChoice(text) && !askUserAdvertised(ctx.availableToolNames))
-    return false;
+  if (!asksForChange(ctx.requestText)) return false;
+  if (!offersMenuInsteadOfActing(text)) return false;
+  if (pausesOnUsersOwnChoice(text) && !askUserAdvertised(ctx.availableToolNames)) return false;
   return true;
 }
 function permissionRecoveryNudge(lastChance, askUserAvailable = false) {
@@ -3472,13 +3470,16 @@ var gitPushTool = defineTool({
     type: "object",
     properties: {
       allowBaseBranch: { type: "boolean", description: "Set ONLY when the human explicitly asked to push the base branch directly. Default false, which refuses and tells you to open a pull request." },
+      branch: { type: "string", description: "Ticket branch to push, as named to git_commit. Pushes it by ref, so the checkout the human is on is never switched. Defaults to the current branch." },
       repo: REPO_PARAM
     }
   },
   requires: ["git.write"],
   execute: (args, ctx) => {
+    const badRef = invalidRefResult("push", { branch: args.branch });
+    if (badRef) return Promise.resolve(badRef);
     const repo = typeof args.repo === "string" ? args.repo : void 0;
-    return runPublishTool("push", buildPushCommand({ allowBaseBranch: args.allowBaseBranch === true }), repo, ctx);
+    return runPublishTool("push", buildPushCommand({ allowBaseBranch: args.allowBaseBranch === true, branch: typeof args.branch === "string" ? args.branch : void 0 }), repo, ctx);
   }
 });
 var openPullRequestTool = defineTool({
@@ -3490,6 +3491,7 @@ var openPullRequestTool = defineTool({
       title: { type: "string", description: "Pull request title \u2014 what this change does, in one line." },
       body: { type: "string", description: "Pull request description: what changed, why, and how a reviewer can verify it." },
       base: { type: "string", description: "Base branch to target. Defaults to the remote's default branch (usually main)." },
+      branch: { type: "string", description: "Ticket branch to open the pull request from, as named to git_commit. Uses it by ref, so the checkout the human is on is never switched. Defaults to the current branch." },
       reviewers: { type: "array", items: { type: "string" }, description: "GitHub usernames or org/team slugs to request review from." },
       repo: REPO_PARAM
     },
@@ -3502,11 +3504,11 @@ var openPullRequestTool = defineTool({
     if (!title) return Promise.resolve({ data: { ok: false, action: "pull_request", error: "title is required" } });
     const repo = typeof args.repo === "string" ? args.repo : void 0;
     const reviewers = Array.isArray(args.reviewers) ? args.reviewers.filter((r) => typeof r === "string") : void 0;
-    const badRef = invalidRefResult("pull_request", { base: args.base, reviewers });
+    const badRef = invalidRefResult("pull_request", { base: args.base, branch: args.branch, reviewers });
     if (badRef) return Promise.resolve(badRef);
     return runPublishTool(
       "pull_request",
-      buildPullRequestCommand({ title, body, base: typeof args.base === "string" ? args.base : void 0, reviewers }),
+      buildPullRequestCommand({ title, body, base: typeof args.base === "string" ? args.base : void 0, branch: typeof args.branch === "string" ? args.branch : void 0, reviewers }),
       repo,
       ctx
     );
@@ -4145,10 +4147,10 @@ function createShaCache(opts = {}) {
     else signal.addEventListener("abort", stop, { once: true });
   };
   return {
-    getOrRun(key, work, signal) {
+    getOrRun(key, work, signal, runOpts) {
       if (key === null) return work(signal);
       const hit = entries.get(key);
-      if (hit && (hit.expires === void 0 || hit.expires > now())) {
+      if (hit && !runOpts?.fresh && (hit.expires === void 0 || hit.expires > now())) {
         join(key, hit, signal);
         return hit.run;
       }
@@ -5954,6 +5956,9 @@ import {
 } from "@seanhogg/builderforce-memory/knowledge";
 import { InMemoryIngestManifest } from "@seanhogg/builderforce-memory/ingest";
 
+// ../packages/agent-tools/src/knowledge/codeGraphFindings.ts
+import { partitionOf } from "@seanhogg/builderforce-memory/knowledge";
+
 // ../packages/agent-tools/src/knowledge/pinpointMatch.ts
 import { srcRef as srcRef11 } from "@seanhogg/builderforce-memory/knowledge";
 var MAX_PINPOINT_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -6093,10 +6098,10 @@ import { composeAnchor as composeAnchor4 } from "@seanhogg/builderforce-memory/k
 // ../packages/agent-tools/src/delta/adapters/sarifTools.ts
 import { anchorWithSnippet as anchorWithSnippet2, composeAnchor as composeAnchor5 } from "@seanhogg/builderforce-memory/knowledge";
 
-// ../packages/sarif/src/emit.js
+// ../packages/sarif/src/emit.ts
 var SARIF_BASELINE_STATES = ["new", "unchanged", "updated", "absent"];
 
-// ../packages/sarif/src/parse.js
+// ../packages/sarif/src/parse.ts
 var BASELINE = new Set(SARIF_BASELINE_STATES);
 
 // ../packages/agent-tools/src/delta/adapters/sarifTools.ts
@@ -6114,7 +6119,7 @@ var TYPESCRIPT_VERSION2 = TYPESCRIPT_PIN.slice(TYPESCRIPT_PIN.lastIndexOf("@") +
 // ../packages/agent-tools/src/delta/dynamic/host.ts
 var DYNAMIC_STEP_CAP_MS = 30 * 6e4;
 
-// ../packages/run-guards/src/visitTally.js
+// ../packages/run-guards/src/visitTally.ts
 var REVISIT_NUDGE_AT = 3;
 var REVISIT_HARD_AT = 5;
 var MAX_REMEMBERED_ARGS = 8;
@@ -6151,24 +6156,19 @@ var VisitTally = class {
   }
   /** Forget every visit whose key matches. */
   forget(match) {
-    for (const key of [...this.visits.keys()])
-      if (match(key))
-        this.visits.delete(key);
+    for (const key of [...this.visits.keys()]) if (match(key)) this.visits.delete(key);
   }
   /** Something with an unknown blast radius ran: excuse the NEXT read of every target. */
   markAllMayHaveChanged() {
-    for (const visit of this.visits.values())
-      visit.mayHaveChanged = true;
+    for (const visit of this.visits.values()) visit.mayHaveChanged = true;
   }
   snapshot() {
     return [...this.visits.entries()].map(([k, v]) => [k, { ...v, priorArgs: [...v.priorArgs] }]);
   }
 };
 function revisitAdvisory(tool, target, visit) {
-  if (visit.count < REVISIT_NUDGE_AT)
-    return null;
-  if (visit.mayHaveChanged)
-    return null;
+  if (visit.count < REVISIT_NUDGE_AT) return null;
+  if (visit.mayHaveChanged) return null;
   const shape = visit.priorArgs.length > 1 ? ` The argument sets you have already used on it: ${visit.priorArgs.map((a) => `\`${a}\``).join(", ")}.` : "";
   if (visit.count >= REVISIT_HARD_AT) {
     return `STOP RE-READING. This is call ${visit.count} of \`${tool}\` against ${target} in this run, and the previous ${visit.count - 1} results are all still above you in this conversation.${shape} Re-reading it again will return content you already have and will not move the task forward \u2014 this pattern is how a run exhausts its tool budget without producing a single change. Do ONE of these now: (a) if you still need more of the file, continue from the \`offset\` the last result's note gave you and page forward in order \u2014 never re-open a window you already have; (b) otherwise stop reading and make the edit, or state plainly what is blocking you. Do not issue another partial read of this target.`;
@@ -6186,7 +6186,7 @@ ${advisory}` : advisory;
   return { result, note: advisory };
 }
 
-// ../packages/run-guards/src/readOnlyShell.js
+// ../packages/run-guards/src/readOnlyShell.ts
 var READ_ONLY_PROGRAMS = /* @__PURE__ */ new Set([
   "cat",
   "head",
@@ -6284,8 +6284,7 @@ function splitSegments(command) {
     const ch = command[i];
     if (quote) {
       current += ch;
-      if (ch === quote)
-        quote = null;
+      if (ch === quote) quote = null;
       continue;
     }
     if (ch === '"' || ch === "'") {
@@ -6309,19 +6308,15 @@ function splitSegments(command) {
       continue;
     }
     if (depth === 0 && (ch === ";" || ch === "\n" || ch === "|" || ch === "&")) {
-      if ((ch === "&" || ch === "|") && command[i + 1] === ch)
-        i += 1;
-      if (current.trim())
-        out.push(current.trim());
+      if ((ch === "&" || ch === "|") && command[i + 1] === ch) i += 1;
+      if (current.trim()) out.push(current.trim());
       current = "";
       continue;
     }
     current += ch;
   }
-  if (quote || depth !== 0)
-    return null;
-  if (current.trim())
-    out.push(current.trim());
+  if (quote || depth !== 0) return null;
+  if (current.trim()) out.push(current.trim());
   return out;
 }
 function substitutions(segment) {
@@ -6331,10 +6326,8 @@ function substitutions(segment) {
     let depth = 1;
     let j = i + 2;
     for (; j < segment.length && depth > 0; j += 1) {
-      if (segment[j] === "(")
-        depth += 1;
-      else if (segment[j] === ")")
-        depth -= 1;
+      if (segment[j] === "(") depth += 1;
+      else if (segment[j] === ")") depth -= 1;
     }
     out.push(segment.slice(i + 2, j - 1));
     i = segment.indexOf("$(", j);
@@ -6357,8 +6350,7 @@ function writesViaRedirect(segment) {
   let m = re.exec(unquoted);
   while (m) {
     const target = m[2] ?? "";
-    if (!/^(&\d+|\/dev\/null|nul|NUL|\$null)$/.test(target))
-      return true;
+    if (!/^(&\d+|\/dev\/null|nul|NUL|\$null)$/.test(target)) return true;
     m = re.exec(unquoted);
   }
   return false;
@@ -6370,25 +6362,20 @@ function gitIsReadOnly(args) {
   }
   const sub = args[i];
   const rest = args.slice(i + 1);
-  if (!sub)
-    return true;
-  if (READ_ONLY_GIT.has(sub))
-    return true;
+  if (!sub) return true;
+  if (READ_ONLY_GIT.has(sub)) return true;
   const flags = new Set(rest.filter((a) => a.startsWith("-")));
   const positional = rest.filter((a) => !a.startsWith("-"));
   switch (sub) {
     case "branch": {
       const writes = ["-d", "-D", "--delete", "-m", "-M", "--move", "-c", "-C", "--copy", "-f", "--force", "-u", "--set-upstream-to", "--unset-upstream", "--edit-description"];
-      if (writes.some((f) => flags.has(f) || [...flags].some((x) => x.startsWith(`${f}=`))))
-        return false;
-      if (flags.has("--list") || flags.has("-l"))
-        return true;
+      if (writes.some((f) => flags.has(f) || [...flags].some((x) => x.startsWith(`${f}=`)))) return false;
+      if (flags.has("--list") || flags.has("-l")) return true;
       const valued = /* @__PURE__ */ new Set(["--format", "--sort", "--contains", "--no-contains", "--merged", "--no-merged", "--points-at"]);
       for (let k = 0; k < rest.length; k += 1) {
         const word = rest[k] ?? "";
         if (word.startsWith("-")) {
-          if (valued.has(word))
-            k += 1;
+          if (valued.has(word)) k += 1;
           continue;
         }
         return false;
@@ -6414,15 +6401,12 @@ function gitIsReadOnly(args) {
   }
 }
 function segmentIsReadOnly(segment, depth) {
-  if (depth > 4)
-    return false;
+  if (depth > 4) return false;
   for (const body of substitutions(segment)) {
-    if (!commandIsReadOnly(body, depth + 1))
-      return false;
+    if (!commandIsReadOnly(body, depth + 1)) return false;
   }
   const flat = segment.replace(/\$\((?:[^()]|\([^()]*\))*\)/g, "X");
-  if (writesViaRedirect(flat))
-    return false;
+  if (writesViaRedirect(flat)) return false;
   let words2 = tokens(flat);
   const leads = () => {
     const first = words2[0] ?? "";
@@ -6432,47 +6416,35 @@ function segmentIsReadOnly(segment, depth) {
     words2 = words2.slice(1);
   }
   const [program, ...args] = words2;
-  if (program === void 0)
-    return true;
-  if (program === "for" || program === "case")
-    return true;
-  if (program === "git")
-    return gitIsReadOnly(args);
-  if (!READ_ONLY_PROGRAMS.has(program))
-    return false;
-  if (INFO_ONLY_PROGRAMS.has(program))
-    return args.length > 0 && args.every((a) => INFO_FLAGS.has(a));
-  if (program === "sed")
-    return !args.some((a) => a === "-i" || a.startsWith("-i") || a === "--in-place" || a.startsWith("--in-place="));
-  if (program === "find")
-    return !args.some((a) => ["-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprintf", "-fls"].includes(a));
-  if (program === "sort")
-    return !args.some((a) => a === "-o" || a.startsWith("--output"));
+  if (program === void 0) return true;
+  if (program === "for" || program === "case") return true;
+  if (program === "git") return gitIsReadOnly(args);
+  if (!READ_ONLY_PROGRAMS.has(program)) return false;
+  if (INFO_ONLY_PROGRAMS.has(program)) return args.length > 0 && args.every((a) => INFO_FLAGS.has(a));
+  if (program === "sed") return !args.some((a) => a === "-i" || a.startsWith("-i") || a === "--in-place" || a.startsWith("--in-place="));
+  if (program === "find") return !args.some((a) => ["-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprintf", "-fls"].includes(a));
+  if (program === "sort") return !args.some((a) => a === "-o" || a.startsWith("--output"));
   return true;
 }
 function commandIsReadOnly(command, depth) {
-  if (/`/.test(command))
-    return false;
+  if (/`/.test(command)) return false;
   const segments = splitSegments(command);
-  if (!segments || segments.length === 0)
-    return false;
+  if (!segments || segments.length === 0) return false;
   return segments.every((s) => segmentIsReadOnly(s, depth));
 }
 function isReadOnlyShellCommand(command) {
   const trimmed = command.trim();
-  if (!trimmed)
-    return false;
+  if (!trimmed) return false;
   return commandIsReadOnly(trimmed, 0);
 }
 function isReadOnlyShellCall(tool, args) {
-  if (tool !== "run_command" || !args || typeof args !== "object")
-    return false;
+  if (tool !== "run_command" || !args || typeof args !== "object") return false;
   const record2 = args;
   const command = typeof record2.command === "string" ? record2.command : typeof record2.cmd === "string" ? record2.cmd : "";
   return isReadOnlyShellCommand(command);
 }
 
-// ../packages/run-guards/src/fingerprint.js
+// ../packages/run-guards/src/fingerprint.ts
 function callFingerprint(tool, args) {
   let text;
   try {
@@ -6491,13 +6463,12 @@ function contentHash3(text) {
   return `${text.length.toString(36)}.${h.toString(36)}`;
 }
 function pathArgOf(args) {
-  if (!args || typeof args !== "object" || Array.isArray(args))
-    return null;
+  if (!args || typeof args !== "object" || Array.isArray(args)) return null;
   const path = args.path;
   return typeof path === "string" && path.trim() ? path.trim() : null;
 }
 
-// ../packages/run-guards/src/failureTally.js
+// ../packages/run-guards/src/failureTally.ts
 var FAILURE_NUDGE_AT = 2;
 var FAILURE_HARD_AT = 3;
 var FailureTally = class {
@@ -6525,14 +6496,12 @@ var FailureTally = class {
   }
 };
 function failureReason(result) {
-  if (!result || typeof result !== "object" || Array.isArray(result))
-    return void 0;
+  if (!result || typeof result !== "object" || Array.isArray(result)) return void 0;
   const error = result.error;
   return typeof error === "string" && error.trim() ? error.trim().slice(0, 400) : void 0;
 }
 function repeatedFailureAdvisory(tool, attempts, reason) {
-  if (attempts < FAILURE_NUDGE_AT)
-    return null;
+  if (attempts < FAILURE_NUDGE_AT) return null;
   const got = reason ? ` Both times it answered: "${reason}".` : "";
   if (attempts >= FAILURE_HARD_AT) {
     const said = reason ? ` It has answered "${reason}" every time.` : "";
@@ -6541,54 +6510,46 @@ function repeatedFailureAdvisory(tool, attempts, reason) {
   return `\`${tool}\` has now failed ${attempts} times in this run with these exact arguments.${got} Another identical attempt will not behave differently \u2014 this is not a flake. Read the error above and change what it names (most failures state the argument to pass instead), use a different tool to reach the same goal, or say plainly what is blocking you. Do not simply repeat the call.`;
 }
 
-// ../packages/run-guards/src/streak.js
+// ../packages/run-guards/src/streak.ts
 var BACK_TO_BACK_AT = 3;
 
-// ../packages/run-guards/src/multiRead.js
+// ../packages/run-guards/src/multiRead.ts
 function singleReadsOf(tool, args) {
-  if (tool !== "read_file" || !args || typeof args !== "object" || Array.isArray(args))
-    return null;
+  if (tool !== "read_file" || !args || typeof args !== "object" || Array.isArray(args)) return null;
   const { paths, ...rest } = args;
-  if (!Array.isArray(paths) || typeof rest.path === "string" && rest.path !== "")
-    return null;
+  if (!Array.isArray(paths) || typeof rest.path === "string" && rest.path !== "") return null;
   const named = paths.filter((p) => typeof p === "string" && p.trim() !== "").slice(0, READ_FILE_MAX_PATHS);
-  if (named.length === 0)
-    return null;
+  if (named.length === 0) return null;
   return named.map((path) => ({ ...rest, path }));
 }
 function perFileResults(result) {
   return result && Array.isArray(result.files) ? result.files : null;
 }
 
-// ../packages/run-guards/src/readCoverage.js
+// ../packages/run-guards/src/readCoverage.ts
 var PATH_ARG_KEYS = /* @__PURE__ */ new Set(["path", "scope", "repo", "file", "filePath", "dir"]);
 function normalizePathArg(value) {
   const p = value.split("\\").join("/").replace(/^\.\/+/, "").replace(/\/+$/, "");
   return p === "." ? "" : p;
 }
 function canonicalReadArgs(tool, args) {
-  if (!args || typeof args !== "object" || Array.isArray(args))
-    return {};
+  if (!args || typeof args !== "object" || Array.isArray(args)) return {};
   const out = {};
   for (const [key, value] of Object.entries(args)) {
-    if (value == null)
-      continue;
+    if (value == null) continue;
     if (typeof value === "string") {
       const trimmed = PATH_ARG_KEYS.has(key) ? normalizePathArg(value.trim()) : value.trim();
-      if (trimmed)
-        out[key] = trimmed;
+      if (trimmed) out[key] = trimmed;
       continue;
     }
     out[key] = value;
   }
-  if (tool === "read_file" && (out.offset === 1 || out.offset === 0))
-    delete out.offset;
+  if (tool === "read_file" && (out.offset === 1 || out.offset === 0)) delete out.offset;
   return out;
 }
 var TREE_WIDE_READ_TOOLS = /* @__PURE__ */ new Set(["search_code", "find_symbol", "list_files", "semantic_search", "repo_map", "local_research"]);
 function resultObject(result) {
-  if (result && typeof result === "object" && !Array.isArray(result))
-    return result;
+  if (result && typeof result === "object" && !Array.isArray(result)) return result;
   if (typeof result === "string") {
     try {
       const parsed = JSON.parse(result);
@@ -6600,8 +6561,7 @@ function resultObject(result) {
   return null;
 }
 function isUnderDir(p, dir) {
-  if (!dir)
-    return true;
+  if (!dir) return true;
   const path = normalizePathArg(p);
   return path === dir || path.startsWith(`${dir}/`);
 }
@@ -6615,13 +6575,11 @@ function requestedReadWindow(args) {
 }
 function servedReadWindow(result) {
   const data = resultObject(result);
-  if (!data || data.ok === false)
-    return null;
+  if (!data || data.ok === false) return null;
   const start = asPositiveInt(data.offset, 1);
   const content = typeof data.content === "string" ? data.content : "";
   const returned = content === "" ? 0 : content.split("\n").length;
-  if (returned <= 0)
-    return null;
+  if (returned <= 0) return null;
   let end = start + returned - 1;
   if (data.truncated !== true && typeof data.totalLines === "number" && data.totalLines >= start) {
     end = Math.max(end, Math.floor(data.totalLines));
@@ -6633,21 +6591,20 @@ function spanContains(outer, inner) {
 }
 function clipRequestedToEof(want, covering) {
   const data = resultObject(covering);
-  if (!data || data.truncated === true || typeof data.totalLines !== "number" || data.totalLines < 1)
-    return want;
+  if (!data || data.truncated === true || typeof data.totalLines !== "number" || data.totalLines < 1) return want;
   return { start: want.start, end: Math.min(want.end, Math.floor(data.totalLines)) };
 }
 function servedCopy(cached) {
   return cached.served !== void 0 ? cached.served : cached.result;
 }
 var ReadCoverage = class _ReadCoverage {
+  constructor(traits) {
+    this.traits = traits;
+  }
   traits;
   visits = new VisitTally();
   /** Successful reads by `${tool}:${canonical args}` — the exact-repeat guard. */
   exact = /* @__PURE__ */ new Map();
-  constructor(traits) {
-    this.traits = traits;
-  }
   static exactKey(tool, args) {
     return `${tool}:${stableStringify(canonicalReadArgs(tool, args))}`;
   }
@@ -6666,8 +6623,7 @@ var ReadCoverage = class _ReadCoverage {
     if (singles) {
       const results = perFileResults(resultObject(cached.result));
       const served = cached.served !== void 0 ? perFileResults(resultObject(cached.served)) : null;
-      if (!results)
-        return;
+      if (!results) return;
       singles.forEach((single, i) => {
         const entry = resultObject(results[i]);
         if (!entry || entry.ok === false) {
@@ -6675,15 +6631,13 @@ var ReadCoverage = class _ReadCoverage {
           return;
         }
         const one = { result: results[i], anchor: cached.anchor };
-        if (served && served[i] !== void 0)
-          one.served = served[i];
+        if (served && served[i] !== void 0) one.served = served[i];
         this.cacheResult(tool, single, one);
       });
       return;
     }
     const read = this.exact.get(_ReadCoverage.exactKey(tool, args));
-    if (read)
-      read.cached = cached;
+    if (read) read.cached = cached;
   }
   /** The cached result of an exact earlier read, or null when none is held. */
   cachedResult(tool, args) {
@@ -6699,15 +6653,13 @@ var ReadCoverage = class _ReadCoverage {
       let worst = null;
       for (const single of singles) {
         const visit = this.record(tool, single);
-        if (visit && (!worst || visit.count > worst.count))
-          worst = visit;
+        if (visit && (!worst || visit.count > worst.count)) worst = visit;
       }
       return worst;
     }
     const target = this.traits.visitTarget(args) ?? null;
     this.exact.set(_ReadCoverage.exactKey(tool, args), { tool, args: canonicalReadArgs(tool, args), target });
-    if (!target)
-      return null;
+    if (!target) return null;
     return this.visits.record(`${tool}:${target}`, args);
   }
   /**
@@ -6733,20 +6685,16 @@ var ReadCoverage = class _ReadCoverage {
     }
     if (t.isCodeChangeTool(tool)) {
       const target = t.activityTarget(args);
-      if (!target)
-        return;
+      if (!target) return;
       this.visits.forget((key) => this.visitedScopeIs(key.slice(key.indexOf(":") + 1), target));
       for (const [key, read] of [...this.exact.entries()]) {
-        if (this.visitedScopeIs(read.target, target) || TREE_WIDE_READ_TOOLS.has(read.tool))
-          this.exact.delete(key);
+        if (this.visitedScopeIs(read.target, target) || TREE_WIDE_READ_TOOLS.has(read.tool)) this.exact.delete(key);
       }
       return;
     }
-    if (t.isLocalWorkspaceTool(tool) && !t.isRepoPublishTool(tool))
-      return;
+    if (t.isLocalWorkspaceTool(tool) && !t.isRepoPublishTool(tool)) return;
     for (const [key, read] of [...this.exact.entries()]) {
-      if (!t.isLocalWorkspaceTool(read.tool) || t.isRepoStateReadTool(read.tool))
-        this.exact.delete(key);
+      if (!t.isLocalWorkspaceTool(read.tool) || t.isRepoStateReadTool(read.tool)) this.exact.delete(key);
     }
   }
   /**
@@ -6755,32 +6703,23 @@ var ReadCoverage = class _ReadCoverage {
    * page that extends past a truncated window — those still need the disk.
    */
   coveredRead(tool, args) {
-    if (tool !== "read_file")
-      return null;
+    if (tool !== "read_file") return null;
     const wanted = canonicalReadArgs(tool, args);
     const path = typeof wanted.path === "string" ? wanted.path : "";
-    if (!path)
-      return null;
-    if (typeof wanted.key === "string")
-      return null;
+    if (!path) return null;
+    if (typeof wanted.key === "string") return null;
     const want = requestedReadWindow(wanted);
     for (const read of this.exact.values()) {
-      if (read.tool !== "read_file" || !read.cached)
-        continue;
-      if (typeof read.args.key === "string")
-        continue;
+      if (read.tool !== "read_file" || !read.cached) continue;
+      if (typeof read.args.key === "string") continue;
       const earlierPath = typeof read.args.path === "string" ? read.args.path : "";
-      if (earlierPath !== path)
-        continue;
+      if (earlierPath !== path) continue;
       const served = servedCopy(read.cached);
       const got = servedReadWindow(served);
-      if (!got)
-        continue;
+      if (!got) continue;
       const clipped = clipRequestedToEof(want, served);
-      if (clipped.start > clipped.end)
-        continue;
-      if (!spanContains(got, clipped))
-        continue;
+      if (clipped.start > clipped.end) continue;
+      if (!spanContains(got, clipped)) continue;
       return {
         start: clipped.start,
         end: clipped.end,
@@ -6797,29 +6736,24 @@ var ReadCoverage = class _ReadCoverage {
    * of absence — so the narrower search must actually run.
    */
   derivedSearch(tool, args) {
-    if (tool !== "search_code")
-      return null;
+    if (tool !== "search_code") return null;
     const wanted = canonicalReadArgs(tool, args);
     const scope = typeof wanted.path === "string" ? wanted.path : "";
-    if (!scope)
-      return null;
+    if (!scope) return null;
     const { path: _scope, ...rest } = wanted;
     const others = stableStringify(rest);
     for (const read of this.exact.values()) {
-      if (read.tool !== "search_code" || !read.cached)
-        continue;
+      if (read.tool !== "search_code" || !read.cached) continue;
       const { path: earlierPath, ...earlierRest } = read.args;
       const earlier = typeof earlierPath === "string" ? earlierPath : "";
-      if (earlier === scope || !isUnderDir(scope, earlier))
-        continue;
-      if (stableStringify(earlierRest) !== others)
-        continue;
+      if (earlier === scope || !isUnderDir(scope, earlier)) continue;
+      if (stableStringify(earlierRest) !== others) continue;
       const result = resultObject(read.cached.result);
-      if (!result || result.ok !== true || result.truncated === true || !Array.isArray(result.matches))
-        continue;
-      const matches = result.matches.filter((m) => typeof m.path === "string" && isUnderDir(m.path, scope));
-      if (matches.length === 0)
-        continue;
+      if (!result || result.ok !== true || result.truncated === true || !Array.isArray(result.matches)) continue;
+      const matches = result.matches.filter(
+        (m) => typeof m.path === "string" && isUnderDir(m.path, scope)
+      );
+      if (matches.length === 0) continue;
       return {
         ok: true,
         query: wanted.query,
@@ -6833,51 +6767,38 @@ var ReadCoverage = class _ReadCoverage {
   }
 };
 
-// ../packages/run-guards/src/shellFileRead.js
+// ../packages/run-guards/src/shellFileRead.ts
 var SHELL_META = /[|;&<>`$*?(){}\[\]\\\n\r!~]/;
 function words(text) {
   const unquoted = text.replace(/"[^"]*"|'[^']*'/g, "");
-  if (SHELL_META.test(unquoted) || /["']/.test(unquoted))
-    return null;
+  if (SHELL_META.test(unquoted) || /["']/.test(unquoted)) return null;
   const out = [];
   const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
-  for (let m = re.exec(text); m; m = re.exec(text))
-    out.push(m[1] ?? m[2] ?? m[3] ?? "");
+  for (let m = re.exec(text); m; m = re.exec(text)) out.push(m[1] ?? m[2] ?? m[3] ?? "");
   return out;
 }
 function workspacePath(raw) {
   const p = raw.trim().split("\\").join("/");
-  if (!p || p.startsWith("/") || p.startsWith("-") || p.includes(":"))
-    return null;
+  if (!p || p.startsWith("/") || p.startsWith("-") || p.includes(":")) return null;
   const parts = p.split("/").filter((s) => s !== "" && s !== ".");
-  if (parts.length === 0 || parts.some((s) => s === ".."))
-    return null;
+  if (parts.length === 0 || parts.some((s) => s === "..")) return null;
   return parts.join("/");
 }
 var positiveInt2 = (s) => s !== void 0 && /^\d+$/.test(s) && Number(s) > 0 ? Number(s) : void 0;
 function printedLines(argv) {
   const [program, ...args] = argv;
-  if (program === "cat" && args.length === 1)
-    return { file: args[0], from: 1 };
+  if (program === "cat" && args.length === 1) return { file: args[0], from: 1 };
   if (program === "head" || program === "tail") {
     let n;
     let file;
-    if (args.length === 1)
-      [file] = args;
-    else if (args.length === 2 && /^-\d+$/.test(args[0]))
-      [n, file] = [args[0].slice(1), args[1]];
-    else if (args.length === 2 && /^-n\+?\d+$/.test(args[0]))
-      [n, file] = [args[0].slice(2), args[1]];
-    else if (args.length === 2 && /^--lines=\+?\d+$/.test(args[0]))
-      [n, file] = [args[0].slice(8), args[1]];
-    else if (args.length === 3 && args[0] === "-n")
-      [n, file] = [args[1], args[2]];
-    else
-      return null;
-    if (!file)
-      return null;
-    if (n === void 0)
-      n = "10";
+    if (args.length === 1) [file] = args;
+    else if (args.length === 2 && /^-\d+$/.test(args[0])) [n, file] = [args[0].slice(1), args[1]];
+    else if (args.length === 2 && /^-n\+?\d+$/.test(args[0])) [n, file] = [args[0].slice(2), args[1]];
+    else if (args.length === 2 && /^--lines=\+?\d+$/.test(args[0])) [n, file] = [args[0].slice(8), args[1]];
+    else if (args.length === 3 && args[0] === "-n") [n, file] = [args[1], args[2]];
+    else return null;
+    if (!file) return null;
+    if (n === void 0) n = "10";
     if (program === "head") {
       const count2 = positiveInt2(n);
       return count2 ? { file, from: 1, count: count2 } : null;
@@ -6893,8 +6814,7 @@ function printedLines(argv) {
     const m = /^(\d+)(?:,(\d+))?\s*p$/.exec(args[1].trim());
     const from = positiveInt2(m?.[1]);
     const to = m && m[2] !== void 0 ? positiveInt2(m[2]) : from;
-    if (!from || !to || to < from)
-      return null;
+    if (!from || !to || to < from) return null;
     return { file: args[2], from, count: to - from + 1 };
   }
   return null;
@@ -6905,30 +6825,24 @@ function parseShellFileRead(command) {
   const cd = /^cd\s+("[^"]+"|'[^']+'|[^\s;&|<>`$"']+)\s*&&\s*/.exec(rest);
   if (cd) {
     const folder = workspacePath(cd[1].replace(/^["']|["']$/g, ""));
-    if (!folder)
-      return null;
+    if (!folder) return null;
     dir = folder;
     rest = rest.slice(cd[0].length);
   }
   const argv = words(rest);
-  if (!argv || argv.length === 0)
-    return null;
+  if (!argv || argv.length === 0) return null;
   const printed = printedLines(argv);
-  if (!printed)
-    return null;
+  if (!printed) return null;
   const file = workspacePath(printed.file);
-  if (!file)
-    return null;
+  if (!file) return null;
   const { file: _file, ...lines } = printed;
   return { path: dir ? `${dir}/${file}` : file, ...lines };
 }
 function shellReadAsFileRead(command, stdout) {
   const read = parseShellFileRead(command);
-  if (!read)
-    return null;
+  if (!read) return null;
   const body = stdout.replace(/\r?\n$/, "");
-  if (!body)
-    return null;
+  if (!body) return null;
   const printed = body.split("\n").length;
   const whole = (from) => ({ ok: true, path: read.path, content: body, offset: from, totalLines: from + printed - 1, truncated: false });
   if (read.from === void 0) {
@@ -6937,51 +6851,42 @@ function shellReadAsFileRead(command, stdout) {
   if (read.count === void 0) {
     return { args: read.from > 1 ? { path: read.path, offset: read.from } : { path: read.path }, result: whole(read.from) };
   }
-  if (printed > read.count)
-    return null;
+  if (printed > read.count) return null;
   const args = { path: read.path, offset: read.from, limit: read.count };
-  if (printed < read.count)
-    return { args, result: whole(read.from) };
+  if (printed < read.count) return { args, result: whole(read.from) };
   return { args, result: { ok: true, path: read.path, content: body, offset: read.from, truncated: true } };
 }
 
-// ../packages/run-guards/src/shellPrint.js
+// ../packages/run-guards/src/shellPrint.ts
 function cleanPrint(args, out) {
-  if (!args || typeof args !== "object" || !out || typeof out !== "object" || Array.isArray(out))
-    return null;
+  if (!args || typeof args !== "object" || !out || typeof out !== "object" || Array.isArray(out)) return null;
   const a = args;
   const r = out;
-  if (r.ok === false || r.compressed === true || r.exitCode !== void 0 && r.exitCode !== 0)
-    return null;
+  if (r.ok === false || r.compressed === true || r.exitCode !== void 0 && r.exitCode !== 0) return null;
   const stdout = typeof r.stdout === "string" ? r.stdout : typeof r.output === "string" ? r.output : null;
   const raw = typeof a.command === "string" ? a.command : typeof a.cmd === "string" ? a.cmd : "";
-  if (stdout === null || !raw.trim())
-    return null;
+  if (stdout === null || !raw.trim()) return null;
   const cwd = [r.cwd, a.cwd].map((v) => typeof v === "string" ? v.trim() : "").find(Boolean) ?? "";
   return { command: cwd ? `cd ${JSON.stringify(cwd)} && ${raw}` : raw, stdout };
 }
 function shellPrintAsRead(tool, args, out, servedWhole) {
-  if (!servedWhole || !isReadOnlyShellCall(tool, args))
-    return null;
+  if (!servedWhole || !isReadOnlyShellCall(tool, args)) return null;
   const print = cleanPrint(args, out);
   return print ? shellReadAsFileRead(print.command, print.stdout) : null;
 }
 function recordShellFileRead(coverage, tool, args, out, servedWhole, anchor) {
   const read = shellPrintAsRead(tool, args, out, servedWhole);
-  if (!read)
-    return false;
+  if (!read) return false;
   coverage.record("read_file", read.args);
   coverage.cacheResult("read_file", read.args, { result: read.result, anchor });
   return true;
 }
 
-// ../packages/run-guards/src/writeLedger.js
+// ../packages/run-guards/src/writeLedger.ts
 function contentWriteOf(tool, args) {
-  if (!args || typeof args !== "object" || Array.isArray(args))
-    return null;
+  if (!args || typeof args !== "object" || Array.isArray(args)) return null;
   const { path, content } = args;
-  if (typeof path !== "string" || !path.trim() || typeof content !== "string")
-    return null;
+  if (typeof path !== "string" || !path.trim() || typeof content !== "string") return null;
   return { path: path.trim(), fingerprint: callFingerprint(tool, args) };
 }
 var WriteLedger = class {
@@ -7008,37 +6913,32 @@ var WriteLedger = class {
       return;
     }
     const path = pathArgOf(args);
-    if (path)
-      this.written.delete(path);
+    if (path) this.written.delete(path);
   }
 };
 function repeatedWriteNote(tool, path) {
   return `Not re-run: this exact \`${tool}\` of "${path}" already succeeded earlier in this run and nothing has changed the file since, so it already holds this content \u2014 writing it again cannot change anything. If something still looks broken, the cause is not that the write failed: re-read the error (it may predate your write), look elsewhere for the cause, or tell the user what you see.`;
 }
 
-// ../packages/run-guards/src/editRevert.js
+// ../packages/run-guards/src/editRevert.ts
 var MAX_HISTORY_PER_PATH = 16;
 var MAX_PATHS2 = 200;
 function stringArg(args, ...keys) {
   for (const key of keys) {
     const v = args[key];
-    if (typeof v === "string")
-      return v;
+    if (typeof v === "string") return v;
   }
   return void 0;
 }
 function changeOf(args) {
   const path = pathArgOf(args);
-  if (!path)
-    return null;
+  if (!path) return null;
   const a = args;
   const content = stringArg(a, "content");
-  if (content !== void 0)
-    return { path, sig: `w:${contentHash3(content)}` };
+  if (content !== void 0) return { path, sig: `w:${contentHash3(content)}` };
   const from = stringArg(a, "old_string", "oldString", "find");
   const to = stringArg(a, "new_string", "newString", "replace");
-  if (from === void 0 || to === void 0 || from === to)
-    return null;
+  if (from === void 0 || to === void 0 || from === to) return null;
   const f = contentHash3(from);
   const t = contentHash3(to);
   return { path, sig: `e:${f}>${t}`, inverse: `e:${t}>${f}` };
@@ -7059,13 +6959,11 @@ var EditRevertTracker = class {
   record(tool, args, outcome) {
     if (outcome.deleted) {
       const path = pathArgOf(args);
-      if (path)
-        this.history.delete(path);
+      if (path) this.history.delete(path);
       return null;
     }
     const change = changeOf(args);
-    if (!change)
-      return null;
+    if (!change) return null;
     if (!outcome.ok) {
       this.history.delete(change.path);
       return null;
@@ -7074,18 +6972,15 @@ var EditRevertTracker = class {
     let revert = null;
     if (change.sig.startsWith("w:")) {
       const earlier = past.lastIndexOf(change.sig);
-      if (earlier >= 0 && earlier < past.length - 1)
-        revert = { path: change.path, tool, restores: "write" };
+      if (earlier >= 0 && earlier < past.length - 1) revert = { path: change.path, tool, restores: "write" };
     } else if (change.inverse) {
       const lastWrite = past.map((s) => s.startsWith("w:")).lastIndexOf(true);
-      if (past.slice(lastWrite + 1).includes(change.inverse))
-        revert = { path: change.path, tool, restores: "inverse_edit" };
+      if (past.slice(lastWrite + 1).includes(change.inverse)) revert = { path: change.path, tool, restores: "inverse_edit" };
     }
     const next = [...past, change.sig].slice(-MAX_HISTORY_PER_PATH);
     this.history.delete(change.path);
     this.history.set(change.path, next);
-    if (this.history.size > MAX_PATHS2)
-      this.history.delete(this.history.keys().next().value);
+    if (this.history.size > MAX_PATHS2) this.history.delete(this.history.keys().next().value);
     return revert;
   }
   /** An unscoped mutation (shell, checkout) ran: no path's content is known any more. */
@@ -7097,7 +6992,7 @@ var EditRevertTracker = class {
   }
 };
 
-// ../packages/run-guards/src/noProgress.js
+// ../packages/run-guards/src/noProgress.ts
 var NO_PROGRESS_TURNS = 4;
 var CHURN_TURNS = 12;
 var REGROUND_TURNS = 8;
@@ -7105,10 +7000,8 @@ var MAX_SEEN = 500;
 var TEST_PATH = /(^|\/)(__tests__|tests?|spec)\/|\.(test|spec)\.[a-z0-9]+$|_test\.(go|py)$/i;
 var TEST_COMMAND = /\b(test|tests|vitest|jest|pytest|mocha|tsc|tsgo|typecheck|lint|eslint|cargo\s+test|go\s+test)\b/i;
 function isCheckCallDefault(tool, args) {
-  if (tool === "run_checks" || tool === "run_tests")
-    return true;
-  if (tool !== "run_command" || !args || typeof args !== "object")
-    return false;
+  if (tool === "run_checks" || tool === "run_tests") return true;
+  if (tool !== "run_command" || !args || typeof args !== "object") return false;
   const command = args.command;
   return typeof command === "string" && TEST_COMMAND.test(command);
 }
@@ -7162,34 +7055,27 @@ var NoProgressTracker = class {
     if (path) {
       if (!this.seen.has(path)) {
         this.seen.add(path);
-        if (this.seen.size > MAX_SEEN)
-          this.seen.delete(this.seen.values().next().value);
+        if (this.seen.size > MAX_SEEN) this.seen.delete(this.seen.values().next().value);
         this.groundThisTurn = true;
       } else {
         const last = this.lastSeenAt.get(path);
-        if (last === void 0 || this.turn - last >= REGROUND_TURNS)
-          this.groundThisTurn = true;
+        if (last === void 0 || this.turn - last >= REGROUND_TURNS) this.groundThisTurn = true;
       }
       this.lastSeenAt.set(path, this.turn);
     }
-    if (outcome.ok && !path && this.isPlatformProgress?.(tool, args))
-      this.groundThisTurn = true;
+    if (outcome.ok && !path && this.isPlatformProgress?.(tool, args)) this.groundThisTurn = true;
     if (outcome.ok && outcome.wrote) {
-      if (path && isTestPath(path))
-        this.groundThisTurn = true;
+      if (path && isTestPath(path)) this.groundThisTurn = true;
       const fingerprint = contentHash3(callFingerprint(tool, args));
       if (!this.changes.has(fingerprint)) {
         this.changes.add(fingerprint);
-        if (this.changes.size > MAX_SEEN)
-          this.changes.delete(this.changes.values().next().value);
+        if (this.changes.size > MAX_SEEN) this.changes.delete(this.changes.values().next().value);
         this.churnThisTurn = true;
       }
     }
-    if (!this.isCheckCall(tool, args))
-      return { checkChanged: false };
+    if (!this.isCheckCall(tool, args)) return { checkChanged: false };
     const digest = resultDigest(outcome.result);
-    if (digest === this.lastCheck)
-      return { checkChanged: false };
+    if (digest === this.lastCheck) return { checkChanged: false };
     this.groundThisTurn = true;
     this.lastCheck = digest;
     return { checkChanged: true };
@@ -7197,8 +7083,7 @@ var NoProgressTracker = class {
   /** The turn's calls all ran. Returns the idle-turn streak after it. */
   endTurn() {
     let progressed = this.groundThisTurn;
-    if (this.groundThisTurn)
-      this.churnTurns = 0;
+    if (this.groundThisTurn) this.churnTurns = 0;
     else if (this.churnThisTurn) {
       this.churnTurns += 1;
       progressed = this.churnTurns <= CHURN_TURNS;
@@ -7238,7 +7123,7 @@ var NoProgressTracker = class {
   }
 };
 
-// ../packages/run-guards/src/readinessClaim.js
+// ../packages/run-guards/src/readinessClaim.ts
 var UNKEPT_READY_AT = 2;
 var UNKEPT_STEER_AT = 1;
 var READY_PATTERNS = [
@@ -7265,16 +7150,14 @@ function ownWords(text) {
   return text.replace(/```[\s\S]*?(?:```|$)/g, " ").replace(/`[^`\n]*`/g, " ").replace(/^\s*>.*$/gm, " ").replace(/"[^"\n]*"|“[^”\n]*”/g, " ").replace(/[’‘]/g, "'");
 }
 function sentenceClaims(sentence) {
-  if (sentence.trimEnd().endsWith("?"))
-    return false;
+  if (sentence.trimEnd().endsWith("?")) return false;
   return READY_PATTERNS.some((p) => {
     const m = p.exec(sentence);
     return !!m && !NEGATION.test(sentence.slice(0, m.index + m[0].length));
   });
 }
 function claimsReady(text) {
-  if (!text)
-    return false;
+  if (!text) return false;
   return ownWords(text).toLowerCase().split(/(?<=[.!?])\s+|\n+/).some(sentenceClaims);
 }
 var UnkeptClaimTracker = class {
@@ -7287,22 +7170,18 @@ var UnkeptClaimTracker = class {
   }
   /** The current turn's own text. */
   noteText(text) {
-    if (claimsReady(text))
-      this.claimed = true;
+    if (claimsReady(text)) this.claimed = true;
   }
   /** One call of the current turn. `readOnly` = it only read. */
   observe(readOnly) {
     this.called = true;
-    if (!readOnly)
-      this.acted = true;
+    if (!readOnly) this.acted = true;
   }
   /** The turn's calls all ran. Returns the unkept-claim count after it. A turn with no
    *  calls is a final answer (or a narrated call, which the stall recovery owns). */
   endTurn() {
-    if (this.acted)
-      this.unkept = 0;
-    else if (this.claimed && this.called)
-      this.unkept += 1;
+    if (this.acted) this.unkept = 0;
+    else if (this.claimed && this.called) this.unkept += 1;
     this.claimed = false;
     this.acted = false;
     this.called = false;
@@ -7317,7 +7196,7 @@ var UnkeptClaimTracker = class {
   }
 };
 
-// ../packages/run-guards/src/readinessAdvisory.js
+// ../packages/run-guards/src/readinessAdvisory.ts
 var READINESS_ADVISORY_NOTE = "You said you have what you need. Make the edit now; read only files you will change.";
 var ReadinessAdvisory = class {
   note;
@@ -7350,10 +7229,10 @@ var ReadinessAdvisory = class {
   }
 };
 
-// ../packages/run-guards/src/batching.js
+// ../packages/run-guards/src/batching.ts
 var SERIAL_SINGLE_CALLS_AT = 2;
 
-// ../packages/run-guards/src/batchingNudge.js
+// ../packages/run-guards/src/batchingNudge.ts
 var BATCHING_NUDGE_NOTE = "You have made one read-only call per turn for several turns. When the calls are independent, batch them into one: use the `edit_file` `edits` array for several edits, or one `run_command` that runs the checks together.";
 var BatchingNudge = class {
   streak;
@@ -7388,15 +7267,14 @@ function turnCallsOf(calls, isReadOnly) {
   return calls.map((c) => ({ readOnly: isReadOnly?.(c.tool, c.args) === true }));
 }
 
-// ../packages/run-guards/src/reverifyTracker.js
+// ../packages/run-guards/src/reverifyTracker.ts
 var MAX_REVERIFY_PATHS = 200;
 function addBounded(set, path) {
   set.delete(path);
   set.add(path);
   while (set.size > MAX_REVERIFY_PATHS) {
     const oldest = set.values().next().value;
-    if (oldest === void 0)
-      break;
+    if (oldest === void 0) break;
     set.delete(oldest);
   }
 }
@@ -7427,8 +7305,7 @@ var ReverifyTracker = class {
   read(target) {
     this.readsThisTurn += 1;
     if (this.writtenPaths.has(target)) {
-      if (!this.readBackSinceWrite.has(target))
-        this.allRepeatReadBacks = false;
+      if (!this.readBackSinceWrite.has(target)) this.allRepeatReadBacks = false;
       addBounded(this.readBackSinceWrite, target);
     } else {
       this.allRepeatReadBacks = false;
@@ -7449,7 +7326,7 @@ var ReverifyTracker = class {
   }
 };
 
-// ../packages/run-guards/src/progressDetector.js
+// ../packages/run-guards/src/progressDetector.ts
 var LADDER_RESET_TURNS = 8;
 var SIGNAL_RANK = {
   edit_revert: 0,
@@ -7460,22 +7337,36 @@ var SIGNAL_RANK = {
   no_progress: 5
 };
 function succeeded(result) {
-  if (result.isError)
-    return false;
+  if (result.isError) return false;
   const d = result.data;
   return !(d && typeof d === "object" && d.ok === false);
 }
 function visitTargetOf(args) {
   const path = pathArgOf(args);
-  if (!args || typeof args !== "object")
-    return path;
+  if (!args || typeof args !== "object") return path;
   const a = args;
   const question = [a.query, a.pattern, a.symbol, a.name].find((v) => typeof v === "string" && v.trim() !== "");
-  if (path && question)
-    return `${path} \u220B ${question.trim()}`;
+  if (path && question) return `${path} \u220B ${question.trim()}`;
   return path ?? question?.trim() ?? null;
 }
 var ProgressDetector = class {
+  constructor(state = {}, ports = {}) {
+    this.ports = ports;
+    this.visits = new VisitTally(state.visits);
+    this.failures = new FailureTally(state.failures);
+    this.edits = new EditRevertTracker(state.edits);
+    this.progress = new NoProgressTracker(state.progress, ports);
+    this.claims = new UnkeptClaimTracker(state.claims);
+    this.trips = state.trips ?? 0;
+    this.tripsBySignal = { ...state.tripsBySignal ?? {} };
+    this.unkeptTurns = state.unkeptTurns ?? 0;
+    this.quietTurns = state.quietTurns ?? 0;
+    this.steer = state.steer;
+    this.readiness = new ReadinessAdvisory(state.advisory);
+    this.batching = new BatchingNudge(state.batching);
+    this.reverify = new ReverifyTracker(state);
+    this.turnCalls = [];
+  }
   ports;
   visits;
   failures;
@@ -7497,26 +7388,8 @@ var ProgressDetector = class {
   reverify;
   /** Every call of the current turn, for the B4 batching nudge's read-only count. */
   turnCalls;
-  constructor(state = {}, ports = {}) {
-    this.ports = ports;
-    this.visits = new VisitTally(state.visits);
-    this.failures = new FailureTally(state.failures);
-    this.edits = new EditRevertTracker(state.edits);
-    this.progress = new NoProgressTracker(state.progress, ports);
-    this.claims = new UnkeptClaimTracker(state.claims);
-    this.trips = state.trips ?? 0;
-    this.tripsBySignal = { ...state.tripsBySignal ?? {} };
-    this.unkeptTurns = state.unkeptTurns ?? 0;
-    this.quietTurns = state.quietTurns ?? 0;
-    this.steer = state.steer;
-    this.readiness = new ReadinessAdvisory(state.advisory);
-    this.batching = new BatchingNudge(state.batching);
-    this.reverify = new ReverifyTracker(state);
-    this.turnCalls = [];
-  }
   raise(signal) {
-    if (!this.turnSignal || SIGNAL_RANK[signal.kind] < SIGNAL_RANK[this.turnSignal.kind])
-      this.turnSignal = signal;
+    if (!this.turnSignal || SIGNAL_RANK[signal.kind] < SIGNAL_RANK[this.turnSignal.kind]) this.turnSignal = signal;
   }
   /** The current turn's own text — what it said before its calls (a readiness claim?). */
   noteTurnText(text) {
@@ -7532,43 +7405,36 @@ var ProgressDetector = class {
     if (unscoped) {
       this.visits.markAllMayHaveChanged();
       this.edits.reset();
-      if (wrote)
-        this.reverify.wroteAnything();
+      if (wrote) this.reverify.wroteAnything();
     } else if ((this.ports.isDelete ?? ((t) => t === "delete_file"))(tool)) {
       this.edits.record(tool, args, { ok, deleted: ok });
       this.forgetVisitsOf(pathArgOf(args));
     } else if (changesContent(args)) {
       const revert = this.edits.record(tool, args, { ok });
-      if (revert)
-        this.raise({ kind: "edit_revert", tool, target: revert.path });
+      if (revert) this.raise({ kind: "edit_revert", tool, target: revert.path });
       if (ok) {
         const path = pathArgOf(args);
         this.forgetVisitsOf(path);
-        if (path)
-          this.reverify.wrote(path);
+        if (path) this.reverify.wrote(path);
       }
     } else if (ok && this.ports.isReadOnly?.(tool, args)) {
       const target = visitTargetOf(args);
       if (target) {
         this.reverify.read(target);
         const visit = this.visits.record(`${tool}:${target}`, args);
-        if (visit.count >= REVISIT_HARD_AT && !visit.mayHaveChanged)
-          this.raise({ kind: "circling_read", tool, target, count: visit.count });
+        if (visit.count >= REVISIT_HARD_AT && !visit.mayHaveChanged) this.raise({ kind: "circling_read", tool, target, count: visit.count });
       }
     }
     const { checkChanged } = this.progress.observe(tool, args, { ok, wrote, result: result.data });
-    if (ok || checkChanged)
-      this.failures.clear(tool, args);
+    if (ok || checkChanged) this.failures.clear(tool, args);
     else {
       const attempts = this.failures.record(tool, args);
       const reason = failureReason(result.data);
-      if (attempts >= FAILURE_HARD_AT)
-        this.raise({ kind: "repeated_failure", tool, count: attempts, ...reason ? { reason } : {} });
+      if (attempts >= FAILURE_HARD_AT) this.raise({ kind: "repeated_failure", tool, count: attempts, ...reason ? { reason } : {} });
     }
   }
   forgetVisitsOf(path) {
-    if (!path)
-      return;
+    if (!path) return;
     this.visits.forget((key) => {
       const target = key.slice(key.indexOf(":") + 1);
       return target === path || target.startsWith(`${path} \u220B `);
@@ -7588,25 +7454,18 @@ var ProgressDetector = class {
     }
     const unkeptBefore = this.claims.snapshot().unkept;
     const unkept = this.claims.endTurn();
-    if (unkept > unkeptBefore)
-      this.unkeptTurns += 1;
-    if (unkept >= UNKEPT_READY_AT)
-      this.raise({ kind: "unkept_ready", count: unkept });
-    if (!this.turnSignal && idle >= NO_PROGRESS_TURNS)
-      this.raise({ kind: "no_progress", count: idle });
+    if (unkept > unkeptBefore) this.unkeptTurns += 1;
+    if (unkept >= UNKEPT_READY_AT) this.raise({ kind: "unkept_ready", count: unkept });
+    if (!this.turnSignal && idle >= NO_PROGRESS_TURNS) this.raise({ kind: "no_progress", count: idle });
     const signal = this.turnSignal;
     this.turnSignal = null;
     if (!signal) {
       this.readiness.endTurn();
       const advisoryNote = this.readiness.observe(this.unkeptTurns);
-      if (advisoryNote)
-        return { kind: "advisory", note: advisoryNote };
-      if (batchNote && this.progress.lastTurnIdle)
-        return { kind: "advisory", note: batchNote };
-      if (this.progress.lastTurnGround)
-        this.quietTurns += 1;
-      else if (idle > 0)
-        this.quietTurns = 0;
+      if (advisoryNote) return { kind: "advisory", note: advisoryNote };
+      if (batchNote && this.progress.lastTurnIdle) return { kind: "advisory", note: batchNote };
+      if (this.progress.lastTurnGround) this.quietTurns += 1;
+      else if (idle > 0) this.quietTurns = 0;
       if (this.quietTurns >= LADDER_RESET_TURNS) {
         this.trips = 0;
         this.quietTurns = 0;
@@ -7699,7 +7558,7 @@ function progressPauseQuestion(signal, trip) {
   return `This run ${what[signal.kind]} \u2014 progress check ${trip}, after earlier warnings. How should it proceed? Reply with guidance to continue, or stop the run.`;
 }
 
-// ../packages/run-guards/src/progressTrace.js
+// ../packages/run-guards/src/progressTrace.ts
 function advisorySourceOf(note) {
   return note === BATCHING_NUDGE_NOTE ? "batching" : "readiness";
 }
@@ -7720,29 +7579,25 @@ function progressTraceStep(action, override = {}) {
   };
 }
 
-// ../packages/run-guards/src/inRunVerify.js
+// ../packages/run-guards/src/inRunVerify.ts
 var PUBLISH_TOOLS = /* @__PURE__ */ new Set(["git_commit", "git_push", "open_pull_request"]);
 var IN_RUN_VERIFY_SCRIPT_NAMES = ["typecheck", "type-check", "test"];
 var DURABLE_IN_RUN_VERIFY_NOTE = "Durable/Worker has no shell. Typecheck/test are skipped in-run; CI on the pull request is the source of truth. Never claim those checks passed.";
 var SANDBOX_IN_RUN_VERIFY_NOTE = "After code changes, run these via the sandbox shell (`run_command`) before finish. Do not invent SSH.";
 function firstDeclaredScript(scripts, names) {
-  if (!scripts)
-    return null;
+  if (!scripts) return null;
   for (const name of names) {
     const body = scripts[name];
-    if (typeof body === "string" && body.trim())
-      return name;
+    if (typeof body === "string" && body.trim()) return name;
   }
   return null;
 }
 function packageVerifyCommands(scripts, runner = "npm") {
   const cmds = [];
   const typecheck = firstDeclaredScript(scripts, ["typecheck", "type-check"]);
-  if (typecheck)
-    cmds.push(`${runner} run ${typecheck}`);
+  if (typecheck) cmds.push(`${runner} run ${typecheck}`);
   const test = firstDeclaredScript(scripts, ["test"]);
-  if (test)
-    cmds.push(`${runner} run ${test}`);
+  if (test) cmds.push(`${runner} run ${test}`);
   return cmds;
 }
 function planInRunVerify(input) {
@@ -7767,8 +7622,7 @@ function planInRunVerify(input) {
   };
 }
 function wroteCode(writtenPaths) {
-  if (!writtenPaths)
-    return false;
+  if (!writtenPaths) return false;
   return "size" in writtenPaths ? writtenPaths.size > 0 : writtenPaths.length > 0;
 }
 function inRunVerifyOutcome(input) {
@@ -7841,7 +7695,7 @@ function inRunVerifyOutcome(input) {
   };
 }
 
-// ../packages/run-guards/src/stopIntent.js
+// ../packages/run-guards/src/stopIntent.ts
 function normalizeStopText(text) {
   return text.trim().toLowerCase();
 }
@@ -7878,24 +7732,19 @@ var TAIL = /* @__PURE__ */ new Set([
 var CANCEL_OBJECTS = /* @__PURE__ */ new Set(["run", "task", "job", "execution", "it", "this", "that", "everything", "all", "work"]);
 var MAX_WORDS = 6;
 function stopIntent(text) {
-  if (!text)
-    return false;
+  if (!text) return false;
   const words2 = normalizeStopText(text).replace(/[.!…]+$/u, "").split(/[\s,]+/).map((w) => w.replace(/^[!.]+|[!.]+$/g, "")).filter(Boolean);
-  if (words2.length === 0 || words2.length > MAX_WORDS)
-    return false;
+  if (words2.length === 0 || words2.length > MAX_WORDS) return false;
   let i = 0;
-  while (i < words2.length - 1 && LEADS.has(words2[i]))
-    i++;
+  while (i < words2.length - 1 && LEADS.has(words2[i])) i++;
   const verb = words2[i];
   const tail = words2.slice(i + 1);
-  if (!tail.every((w) => TAIL.has(w)))
-    return false;
-  if (BARE_VERBS.has(verb))
-    return true;
+  if (!tail.every((w) => TAIL.has(w))) return false;
+  if (BARE_VERBS.has(verb)) return true;
   return OBJECT_VERBS.has(verb) && tail.some((w) => CANCEL_OBJECTS.has(w));
 }
 
-// ../packages/run-guards/src/readsWithoutSpawn.js
+// ../packages/run-guards/src/readsWithoutSpawn.ts
 var READS_BEFORE_DELEGATION_NUDGE = 4;
 var ReadsWithoutSpawn = class {
   state;
@@ -7904,10 +7753,8 @@ var ReadsWithoutSpawn = class {
   }
   /** Record one dispatched call. Returns the reads-without-spawn count after it. */
   record(kind) {
-    if (kind === "spawn")
-      this.state.spawned = true;
-    else if (kind === "read" && !this.state.spawned)
-      this.state.reads += 1;
+    if (kind === "spawn") this.state.spawned = true;
+    else if (kind === "read" && !this.state.spawned) this.state.reads += 1;
     return this.state.reads;
   }
   /** The threshold is reached, nothing was spawned, and the nudge has not fired yet. */
@@ -7923,7 +7770,7 @@ var ReadsWithoutSpawn = class {
   }
 };
 
-// ../packages/run-guards/src/evidence/ledger.js
+// ../packages/run-guards/src/evidence/ledger.ts
 var MAX_CHECK_FINDINGS = 20;
 var MAX_CHECK_OUTPUT_TAIL = 2048;
 function normalizeEvidencePath(path) {
@@ -7956,8 +7803,7 @@ function createEvidenceLedger(resume) {
     },
     record(path, contentHash4, check) {
       const e = entryFor(path);
-      if (e.latestHash !== null && e.latestHash !== contentHash4)
-        return;
+      if (e.latestHash !== null && e.latestHash !== contentHash4) return;
       e.latestHash = contentHash4;
       const capped = {
         ...check,
@@ -7965,29 +7811,24 @@ function createEvidenceLedger(resume) {
         ...check.outputTail ? { outputTail: check.outputTail.slice(-MAX_CHECK_OUTPUT_TAIL) } : {}
       };
       const list = e.byHash.get(contentHash4);
-      if (list)
-        list.push(capped);
-      else
-        e.byHash.set(contentHash4, [capped]);
+      if (list) list.push(capped);
+      else e.byHash.set(contentHash4, [capped]);
     },
     for(path, contentHash4) {
       const e = entries.get(normalizeEvidencePath(path));
-      if (!e || e.latestHash !== contentHash4)
-        return [];
+      if (!e || e.latestHash !== contentHash4) return [];
       return e.byHash.get(contentHash4) ?? [];
     },
     current(path) {
       const key = normalizeEvidencePath(path);
       const e = entries.get(key);
-      if (!e || e.latestHash === null)
-        return null;
+      if (!e || e.latestHash === null) return null;
       return { path: key, contentHash: e.latestHash, checks: e.byHash.get(e.latestHash) ?? [] };
     },
     snapshot() {
       const out = [];
       for (const [key, e] of entries) {
-        if (e.latestHash === null)
-          continue;
+        if (e.latestHash === null) continue;
         out.push({ path: key, contentHash: e.latestHash, checks: e.byHash.get(e.latestHash) ?? [] });
       }
       return out;
@@ -7995,12 +7836,12 @@ function createEvidenceLedger(resume) {
   };
 }
 
-// ../packages/run-guards/src/evidence/gitCommandPattern.js
+// ../packages/run-guards/src/evidence/gitCommandPattern.ts
 function gitCommandPattern(verbs) {
   return new RegExp(`\\bgit\\s+(?:-[Cc]\\s+\\S+\\s+|-\\S+\\s+|--\\S+(?:=\\S+)?\\s+)*(?:${verbs})\\b`, "i");
 }
 
-// ../packages/run-guards/src/evidence/gates.js
+// ../packages/run-guards/src/evidence/gates.ts
 var DEFAULT_EVIDENCE_POLICY = {
   required: {
     ".ts": ["diagnostics", "typecheck", "test"],
@@ -8070,20 +7911,16 @@ function needsTest(file, policy) {
 }
 function covers(test, file, policy) {
   const coverage = policy.newSourceTestCoverage ?? ["stem"];
-  if (coverage.includes("stem") && basenameOf(test.absPath).startsWith(stemOf(file.absPath) + "."))
-    return true;
+  if (coverage.includes("stem") && basenameOf(test.absPath).startsWith(stemOf(file.absPath) + ".")) return true;
   if (coverage.includes("directory")) {
     const dir = dirOf2(file.absPath);
-    if (dirOf2(test.absPath) === dir)
-      return true;
+    if (dirOf2(test.absPath) === dir) return true;
     const dirName = dir.slice(dir.lastIndexOf("/") + 1);
-    if (dirName && dirOf2(test.absPath) === dirOf2(dir) && basenameOf(test.absPath).startsWith(dirName + "."))
-      return true;
+    if (dirName && dirOf2(test.absPath) === dirOf2(dir) && basenameOf(test.absPath).startsWith(dirName + ".")) return true;
   }
   if (coverage.includes("import") && test.imports?.length) {
     const target = moduleKey(file.absPath);
-    if (test.imports.some((i) => moduleKey(i) === target))
-      return true;
+    if (test.imports.some((i) => moduleKey(i) === target)) return true;
   }
   return false;
 }
@@ -8098,10 +7935,8 @@ function refuse(reason) {
   return { ok: false, reason };
 }
 function fileIsUnchecked(file, policy) {
-  if (file.deleted)
-    return true;
-  if ((policy.required[extOf(file.absPath)] ?? []).length > 0)
-    return false;
+  if (file.deleted) return true;
+  if ((policy.required[extOf(file.absPath)] ?? []).length > 0) return false;
   return !needsTest(file, policy);
 }
 function firstFindings(check, max = 3) {
@@ -8116,12 +7951,10 @@ function checkFailureReason(path, check, detail) {
 function outgoingGate(files, ledger, policy) {
   const unavailable2 = [];
   for (const file of files) {
-    if (file.deleted)
-      continue;
+    if (file.deleted) continue;
     const checks = ledger.for(file.absPath, file.hash);
     const required = file.unavailable ? [] : policy.required[extOf(file.absPath)] ?? [];
-    if (file.unavailable)
-      unavailable2.push(`${file.absPath}: ${file.unavailable}`);
+    if (file.unavailable) unavailable2.push(`${file.absPath}: ${file.unavailable}`);
     for (const kind of required) {
       const records = checks.filter((c) => c.kind === kind);
       if (records.length === 0) {
@@ -8137,15 +7970,16 @@ function outgoingGate(files, ledger, policy) {
         unavailable2.push(`${file.absPath}: ${record2.name} (${kind}) unavailable`);
       }
       if (kind === "diagnostics") {
-        if (record2.findings.some(isErrorFinding))
-          return refuse(checkFailureReason(file.absPath, record2, " (LSP error)"));
+        if (record2.findings.some(isErrorFinding)) return refuse(checkFailureReason(file.absPath, record2, " (LSP error)"));
       }
     }
     if (needsTest(file, policy)) {
       const stem = stemOf(file.absPath);
       const hasTest = files.some((t) => t !== file && !t.deleted && isTestPath(t.absPath) && covers(t, file, policy));
       if (!hasTest) {
-        return refuse(`git_push refused: ${file.absPath} is new and has no test in this push. Add ${stem}.test.ts covering it, commit, and push again \u2014 the host runs the checks.`);
+        return refuse(
+          `git_push refused: ${file.absPath} is new and has no test in this push. Add ${stem}.test.ts covering it, commit, and push again \u2014 the host runs the checks.`
+        );
       }
     }
   }
@@ -8153,22 +7987,29 @@ function outgoingGate(files, ledger, policy) {
 }
 function reviewGate(review, authorModels, currentDiffHash) {
   if (!review) {
-    return refuse("git_push refused: no independent review. The push gate requires one review sub-run by a model that did not author the change (PRD 45 OD-1); record it with the reviewer port, then push again.");
+    return refuse(
+      "git_push refused: no independent review. The push gate requires one review sub-run by a model that did not author the change (PRD 45 OD-1); record it with the reviewer port, then push again."
+    );
   }
   if (authorModels.includes(review.reviewerModel)) {
-    return refuse(`git_push refused: reviewer ${review.reviewerModel} is one of the author models (${authorModels.join(", ")}). Run the review on a different model and push again.`);
+    return refuse(
+      `git_push refused: reviewer ${review.reviewerModel} is one of the author models (${authorModels.join(", ")}). Run the review on a different model and push again.`
+    );
   }
   if (review.diffHash !== currentDiffHash) {
-    return refuse("git_push refused: the diff changed after the review was recorded. Re-run the review on the current diff and push again.");
+    return refuse(
+      "git_push refused: the diff changed after the review was recorded. Re-run the review on the current diff and push again."
+    );
   }
   if (review.verdict === "changes_requested") {
-    return refuse(`git_push refused: reviewer ${review.reviewerModel} requested changes. Findings: ${review.findings.slice(0, 5).join("; ") || "(none recorded)"}. Address them and push again.`);
+    return refuse(
+      `git_push refused: reviewer ${review.reviewerModel} requested changes. Findings: ${review.findings.slice(0, 5).join("; ") || "(none recorded)"}. Address them and push again.`
+    );
   }
   return pass();
 }
 function shellPublishHint(command) {
-  if (!gitCommandPattern("commit|push").test(command))
-    return null;
+  if (!gitCommandPattern("commit|push").test(command)) return null;
   return "That shell command publishes. Use the git_commit / git_push tools instead: git_push runs the evidence gates and the independent review before the push leaves the machine.";
 }
 
@@ -8232,52 +8073,42 @@ function ticketStatusMove(ref, status, vocabulary) {
   return vocabulary.local && text ? { tool: LOCAL_TICKET_MOVE_TOOL, args: { id: text, status } } : null;
 }
 
-// ../packages/tool-output-policy/src/textCut.js
+// ../packages/tool-output-policy/src/textCut.ts
 function keepTail(text, max) {
-  if (text.length <= max)
-    return text;
+  if (text.length <= max) return text;
   return text.slice(text.length - max);
 }
 var DEFAULT_TRUNCATION_SUFFIX = "\n\n\u26A0\uFE0F [Content truncated \u2014 original was too large for the model's context window. The content above is a partial view. If you need more, request specific sections or use offset/limit parameters to read smaller chunks.]";
 function cutHead(text, maxChars, opts = {}) {
-  if (text.length <= maxChars)
-    return text;
+  if (text.length <= maxChars) return text;
   const suffix = opts.suffix ?? DEFAULT_TRUNCATION_SUFFIX;
   const snap = opts.snap ?? 0.8;
   const keep = Math.max(opts.minKeep ?? 0, maxChars - suffix.length);
-  if (keep <= 0)
-    return opts.emptyNotice ?? suffix.trim();
+  if (keep <= 0) return opts.emptyNotice ?? suffix.trim();
   let cutPoint = keep;
   const lastNewline = text.lastIndexOf("\n", keep);
-  if (lastNewline > keep * snap)
-    cutPoint = lastNewline;
+  if (lastNewline > keep * snap) cutPoint = lastNewline;
   return text.slice(0, cutPoint) + suffix;
 }
 var MARKER_RESERVE = 160;
 function countLines(text) {
   let n = 0;
-  for (let i = 0; i < text.length; i++)
-    if (text.charCodeAt(i) === 10)
-      n++;
+  for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) === 10) n++;
   return n;
 }
 function cutHeadTail(text, maxChars, opts = {}) {
-  if (text.length <= maxChars)
-    return text;
+  if (text.length <= maxChars) return text;
   const budget = maxChars - MARKER_RESERVE;
-  if (budget <= 0)
-    return keepTail(text, Math.max(0, maxChars));
+  if (budget <= 0) return keepTail(text, Math.max(0, maxChars));
   const headShare = Math.min(1, Math.max(0, opts.headShare ?? 0.25));
   const headBudget = Math.floor(budget * headShare);
   const tailBudget = budget - headBudget;
   let headEnd = headBudget;
   const nl = text.lastIndexOf("\n", headBudget);
-  if (nl > headBudget * 0.8)
-    headEnd = nl;
+  if (nl > headBudget * 0.8) headEnd = nl;
   let tailStart = text.length - tailBudget;
   const nextNl = text.indexOf("\n", tailStart);
-  if (nextNl >= 0 && nextNl - tailStart < tailBudget * 0.2)
-    tailStart = nextNl + 1;
+  if (nextNl >= 0 && nextNl - tailStart < tailBudget * 0.2) tailStart = nextNl + 1;
   const head = text.slice(0, headEnd);
   const tail = text.slice(tailStart);
   const elided = text.slice(headEnd, tailStart);
@@ -8293,33 +8124,28 @@ var isHighSurrogate = (c) => c >= 55296 && c <= 56319;
 var isLowSurrogate = (c) => c >= 56320 && c <= 57343;
 function safePrefix(s, n) {
   let end = Math.max(0, Math.min(n, s.length));
-  if (end > 0 && end < s.length && isHighSurrogate(s.charCodeAt(end - 1)))
-    end -= 1;
+  if (end > 0 && end < s.length && isHighSurrogate(s.charCodeAt(end - 1))) end -= 1;
   return s.slice(0, end);
 }
 function safeSuffix(s, n) {
-  if (n <= 0)
-    return "";
+  if (n <= 0) return "";
   let start = Math.max(0, s.length - n);
-  if (start > 0 && isLowSurrogate(s.charCodeAt(start)))
-    start += 1;
+  if (start > 0 && isLowSurrogate(s.charCodeAt(start))) start += 1;
   return s.slice(start);
 }
 function truncateMiddle(text, max, opts = {}) {
-  if (text.length <= max)
-    return text;
+  if (text.length <= max) return text;
   const { marker = defaultMiddleMarker, symmetric = false } = opts;
   const markerFor = typeof marker === "string" ? () => marker : marker;
   const room = Math.max(0, max - markerFor(text.length).length);
-  if (room === 0)
-    return safePrefix(text, max);
+  if (room === 0) return safePrefix(text, max);
   const tailShare = Math.floor(room / 2);
   const head = safePrefix(text, symmetric ? tailShare : room - tailShare);
   const tail = safeSuffix(text, tailShare);
   return `${head}${markerFor(text.length - head.length - tail.length)}${tail}`;
 }
 
-// ../packages/tool-output-policy/src/caps.js
+// ../packages/tool-output-policy/src/caps.ts
 var DEFAULT_TOOL_OUTPUT_CHARS = 6e3;
 var TOOL_OUTPUT_CAPS = {
   read_file: 16e3,
@@ -8375,18 +8201,16 @@ function windowToolResultCap(contextWindowTokens) {
 }
 var READ_FILE_MAX_CHARS = 64e3;
 function windowedCap(tool, tableCap, contextWindowTokens) {
-  if (typeof contextWindowTokens !== "number" || !Number.isFinite(contextWindowTokens) || contextWindowTokens <= 0)
-    return tableCap;
+  if (typeof contextWindowTokens !== "number" || !Number.isFinite(contextWindowTokens) || contextWindowTokens <= 0) return tableCap;
   const share = windowToolResultCap(contextWindowTokens);
-  if (isPagedReadTool(tool))
-    return Math.min(READ_FILE_MAX_CHARS, Math.max(tableCap, share));
+  if (isPagedReadTool(tool)) return Math.min(READ_FILE_MAX_CHARS, Math.max(tableCap, share));
   return Math.min(tableCap, share);
 }
 function isShellTool(tool) {
   return SHELL_TOOLS.has(tool);
 }
 
-// ../packages/tool-output-policy/src/shellSummary.js
+// ../packages/tool-output-policy/src/shellSummary.ts
 var DEFAULT_TAIL_LINES = 40;
 var MAX_DIFF_LINES = 24;
 var ANSI = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
@@ -8402,9 +8226,7 @@ var RUNNER_SIGNATURES = [
   ["go", /^(?:---|===) (?:FAIL|RUN|PASS):|^(?:ok|FAIL)\s+\S+\s+[\d.]+s/m]
 ];
 function detectRunner(text) {
-  for (const [runner, re] of RUNNER_SIGNATURES)
-    if (re.test(text))
-      return runner;
+  for (const [runner, re] of RUNNER_SIGNATURES) if (re.test(text)) return runner;
   return "unknown";
 }
 var NOISE = [
@@ -8459,8 +8281,7 @@ function isErrorLine(line) {
 function failingTestName(line) {
   for (const re of FAILING_TEST) {
     const m = re.exec(line);
-    if (m && m[1])
-      return m[1].trim();
+    if (m && m[1]) return m[1].trim();
   }
   return null;
 }
@@ -8487,8 +8308,7 @@ function summarizeShellOutput(raw, opts) {
       seenFailing.add(name);
       failing.push(name);
     }
-    if (i >= tailFrom)
-      continue;
+    if (i >= tailFrom) continue;
     if (DIFF_HEADER.test(line)) {
       diffLeft = MAX_DIFF_LINES;
       kept.push(line);
@@ -8508,8 +8328,7 @@ function summarizeShellOutput(raw, opts) {
     }
     if (isErrorLine(line)) {
       const key = line.trim();
-      if (seenKept.has(key))
-        continue;
+      if (seenKept.has(key)) continue;
       seenKept.add(key);
       kept.push(line);
     }
@@ -8533,7 +8352,7 @@ ${kept.join("\n")}`;
   return { text: fitted, runner, failingTests: failing, droppedNoise };
 }
 
-// ../packages/tool-output-policy/src/jsonProjection.js
+// ../packages/tool-output-policy/src/jsonProjection.ts
 var STEPS = [
   { depth: 4, arrayItems: 10, stringChars: 400 },
   { depth: 3, arrayItems: 5, stringChars: 200 },
@@ -8542,29 +8361,23 @@ var STEPS = [
   { depth: 1, arrayItems: 1, stringChars: 60 }
 ];
 function describe(value) {
-  if (Array.isArray(value))
-    return `[array: ${value.length} items]`;
-  if (value && typeof value === "object")
-    return `{object: ${Object.keys(value).length} keys}`;
+  if (Array.isArray(value)) return `[array: ${value.length} items]`;
+  if (value && typeof value === "object") return `{object: ${Object.keys(value).length} keys}`;
   return String(value);
 }
 function projectValue(value, step, depth) {
   if (typeof value === "string") {
     return value.length > step.stringChars ? `${value.slice(0, step.stringChars)}\u2026(+${value.length - step.stringChars} chars)` : value;
   }
-  if (value === null || typeof value !== "object")
-    return value;
-  if (depth >= step.depth)
-    return describe(value);
+  if (value === null || typeof value !== "object") return value;
+  if (depth >= step.depth) return describe(value);
   if (Array.isArray(value)) {
     const head = value.slice(0, step.arrayItems).map((v) => projectValue(v, step, depth + 1));
-    if (value.length > step.arrayItems)
-      head.push(`\u2026(+${value.length - step.arrayItems} more of ${value.length} items)`);
+    if (value.length > step.arrayItems) head.push(`\u2026(+${value.length - step.arrayItems} more of ${value.length} items)`);
     return head;
   }
   const out = {};
-  for (const [k, v] of Object.entries(value))
-    out[k] = projectValue(v, step, depth + 1);
+  for (const [k, v] of Object.entries(value)) out[k] = projectValue(v, step, depth + 1);
   return out;
 }
 function projectJson(value, maxChars) {
@@ -8573,13 +8386,12 @@ function projectJson(value, maxChars) {
     const projected = projectValue(value, step, 0);
     const json = JSON.stringify(projected);
     last = { value: projected, json, fits: json.length <= maxChars };
-    if (last.fits)
-      return last;
+    if (last.fits) return last;
   }
   return last;
 }
 
-// ../packages/tool-output-policy/src/readFileWindow.js
+// ../packages/tool-output-policy/src/readFileWindow.ts
 var READ_FILE_RESULT_CHARS = TOOL_OUTPUT_CAPS.read_file ?? 16e3;
 function isReadFileResult(out) {
   return !!out && typeof out === "object" && !Array.isArray(out) && out.ok !== false && typeof out.content === "string";
@@ -8599,8 +8411,7 @@ function windowReadFile(out, opts = {}) {
   };
   const build = (kept, note) => withNote(served(kept, note));
   const fits = (value) => JSON.stringify(value).length <= maxChars;
-  if (fits(withNote({ ...out })))
-    return done({ ...out }, false);
+  if (fits(withNote({ ...out }))) return done({ ...out }, false);
   const how = (next) => opts.alone !== void 0 ? `call ${tool} again with ONLY the path ${JSON.stringify(opts.alone)} (offset applies to a single file) and offset ${next}` : `call ${tool} again with offset ${next}`;
   const continuation = (lastLine) => `Showing lines ${offset}\u2013${lastLine} of ${totalLines}. This surface returns at most ~${maxChars.toLocaleString("en-US")} chars per read, so a large file arrives in several windows \u2014 ${how(lastLine + 1)} to continue from exactly where this one stopped. Do not re-request lines you already have.`;
   let lo = 1;
@@ -8670,38 +8481,33 @@ function sliceReadFile(out, start, end) {
   };
 }
 
-// ../packages/tool-output-policy/src/policy.js
+// ../packages/tool-output-policy/src/policy.ts
 var LOG_FIELDS = ["output", "stdout", "stderr"];
 function isLogLike(text, tool) {
   return tool !== void 0 && isShellTool(tool) || detectRunner(text) !== "unknown";
 }
 function fitToolText(text, maxChars, opts = {}) {
-  if (text.length <= maxChars)
-    return text;
-  if (opts.summarize && isLogLike(text, opts.tool))
-    return summarizeShellOutput(text, { maxChars }).text;
+  if (text.length <= maxChars) return text;
+  if (opts.summarize && isLogLike(text, opts.tool)) return summarizeShellOutput(text, { maxChars }).text;
   return (opts.fallback ?? cutHeadTail)(text, maxChars);
 }
 function attach(value, opts) {
   return opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(value, opts.advisory) : value;
 }
 function capFor(tool, opts) {
-  if (opts.maxChars !== void 0)
-    return opts.maxChars;
+  if (opts.maxChars !== void 0) return opts.maxChars;
   const tableCap = !opts.summarize && !isPagedReadTool(tool) ? DEFAULT_TOOL_OUTPUT_CHARS : toolOutputCap(tool, opts.caps);
   return windowedCap(tool, tableCap, opts.contextWindowTokens);
 }
 function shrinkLogFields(tool, out, cap2, overhead) {
   const fields = LOG_FIELDS.filter((f) => typeof out[f] === "string" && out[f].length > 0);
-  if (fields.length === 0)
-    return null;
+  if (fields.length === 0) return null;
   const logChars = fields.reduce((n, f) => n + out[f].length, 0);
   const rest = JSON.stringify({ ...out, ...Object.fromEntries(fields.map((f) => [f, ""])) }).length;
   const escapedLog = fields.reduce((n, f) => n + JSON.stringify(out[f]).length - 2, 0);
   const inflation = logChars > 0 ? escapedLog / logChars : 1;
   const budget = Math.floor((cap2 - rest - overhead) / inflation);
-  if (budget < 500)
-    return null;
+  if (budget < 500) return null;
   const shrunk = { ...out };
   for (const f of fields) {
     const text = out[f];
@@ -8711,8 +8517,7 @@ function shrinkLogFields(tool, out, cap2, overhead) {
   return shrunk;
 }
 function truncatedResultNote(originalChars, maxChars) {
-  if (maxChars < 600)
-    return "Truncated: NOT the whole result \u2014 do not treat it as complete.";
+  if (maxChars < 600) return "Truncated: NOT the whole result \u2014 do not treat it as complete.";
   return `Truncated: the full result was ${originalChars.toLocaleString("en-US")} chars and this surface returns at most ~${maxChars.toLocaleString("en-US")}. \`output\` is only a cut of it, NOT the whole \u2014 never treat it as complete or write it back as if it were. Re-call with a narrower query, id or filter to see the rest.`;
 }
 function shapeToolResult(tool, out, opts = {}) {
@@ -8725,22 +8530,19 @@ function shapeToolResult(tool, out, opts = {}) {
   }
   const cap2 = capFor(tool, opts);
   const full = JSON.stringify(attach(out ?? null, opts));
-  if (full.length <= cap2)
-    return { content: full, bytes, truncated: false };
+  if (full.length <= cap2) return { content: full, bytes, truncated: false };
   const advisoryChars = opts.advisory ? opts.advisory.length + 16 : 0;
   if (opts.summarize) {
     if (typeof out === "string") {
       const inflation = out.length > 0 ? (bytes - 2) / out.length : 1;
       const shaped = fitToolText(out, Math.max(500, Math.floor((cap2 - advisoryChars - 32) / Math.max(1, inflation))), { tool, summarize: true });
       const content2 = JSON.stringify(attach(shaped, opts));
-      if (content2.length <= cap2)
-        return { content: content2, bytes, truncated: true };
+      if (content2.length <= cap2) return { content: content2, bytes, truncated: true };
     } else if (out && typeof out === "object" && !Array.isArray(out)) {
       const shrunk = shrinkLogFields(tool, out, cap2, advisoryChars + 64);
       if (shrunk) {
         const content2 = JSON.stringify(attach(shrunk, opts));
-        if (content2.length <= cap2)
-          return { content: content2, bytes, truncated: true };
+        if (content2.length <= cap2) return { content: content2, bytes, truncated: true };
       }
     }
     const marker2 = `
@@ -10989,4 +10791,4 @@ export {
   toolCallArgBytes,
   createComposingActivity
 };
-//# sourceMappingURL=chunk-2RRTOB6I.mjs.map
+//# sourceMappingURL=chunk-WJDQ7HAH.mjs.map
