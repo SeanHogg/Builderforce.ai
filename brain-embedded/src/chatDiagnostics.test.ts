@@ -249,6 +249,27 @@ describe('chat mode', () => {
   });
 });
 
+describe('pending questions', () => {
+  it('lists the pending question(s) and raises a Signal when one is outstanding', () => {
+    // A run that ended on an ask_user still needs the human — the report must say so,
+    // both as a named line and as a Signal, otherwise a finished-looking run reads as
+    // done while the user is actually still being asked to decide.
+    const out = formatChatDiagnostics(baseline({
+      pendingQuestions: [{ text: 'Which slice first?' }],
+    })).join('\n');
+    expect(out).toMatch(/Questions pending \(1\):/);
+    expect(out).toContain('Which slice first?');
+    expect(out).toMatch(/1 question\(s\) are PENDING a human answer/);
+  });
+
+  it('states plainly when there are none, and omits the line when not gathered', () => {
+    expect(formatChatDiagnostics(baseline({ pendingQuestions: [] })).join('\n'))
+      .toContain('- Questions pending: none');
+    expect(formatChatDiagnostics(baseline()).some((l) => l.startsWith('- Questions pending')))
+      .toBe(false);
+  });
+});
+
 /**
  * WHO is in the chat, and WHAT actually ran.
  *

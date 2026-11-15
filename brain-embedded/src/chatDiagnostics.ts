@@ -200,6 +200,14 @@ export interface ChatDiagnosticsData {
    * so a report without it reads a deliberate hold as an unfinished execution.
    */
   publishHold?: { messageNumber: number; text: string } | null;
+  /**
+   * The questions this chat has PROMPTED but not yet had answered — an `ask_user` that
+   * settled the run terminally, blocking on a human. Reported because the report
+   * otherwise reads the chat as finished (the run ended), while the user is actually
+   * still being asked to decide. Absent means NOT GATHERED; an empty list means none
+   * pending.
+   */
+  pendingQuestions?: Array<{ text: string }> | null;
   /** The chat's OWN project (what the learn gate keys on), or null when unattached. */
   projectId?: number | null;
   projectName?: string | null;
@@ -468,6 +476,16 @@ function diagnosticsSignals(d: ChatDiagnosticsData): string[] {
       `⚠️ Last turn's learn step evaluated v${d.lastLearn.version} but the chat's project head is v${ev.version} — BEHIND it. A queued learn only moves a head forward, so the learn step and the panel are resolving DIFFERENT projects/heads.`,
     );
   }
+  // A pending question is the signal that the chat is blocked on a HUMAN, not finished.
+  // The run has already ended (settled terminally on an ask_user), so every count below
+  // reads as "done" — this is the one line that says it is not.
+  const pending = d.pendingQuestions ?? [];
+  if (pending.length > 0) {
+    out.push(
+      `⚠️ ${pending.length} question(s) are PENDING a human answer — the run ended on an ask_user and the chat is blocked until they are answered: ${pending.slice(0, 3).map((q) => `"${q.text.slice(0, 120)}"`).join('; ')}${pending.length > 3 ? `; …and ${pending.length - 3} more` : ''}`,
+    );
+  }
+
   const agentCount = d.agents?.length ?? 0;
   if (agentCount === 0) {
     out.push('ℹ️ No agents are invited into this chat (chats.list_agents is empty), so dispatched agents post nothing back here.');
@@ -816,6 +834,20 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
   // purpose until the person lifts it, so the run ending uncommitted is correct.
   if (d.publishHold) {
     lines.push(`- Publish hold: ON (set by user message #${d.publishHold.messageNumber}: "${d.publishHold.text.slice(0, 120)}") — commit/push/PR calls are refused until the user explicitly asks to ship`);
+  }
+  // A pending question is the one state that makes a FINISHED run still need the human:
+  // the run settled terminally on an `ask_user`, so the chat is blocked on a decision.
+  // Printed right after the hold because both invert the "the run ended, so it's done"
+  // reading. Absent means not gathered; an empty list means genuinely none pending.
+  if (d.pendingQuestions != null) {
+    if (d.pendingQuestions.length === 0) {
+      lines.push('- Questions pending: none');
+    } else {
+      lines.push(`- Questions pending (${d.pendingQuestions.length}):`);
+      for (const q of d.pendingQuestions) {
+        lines.push(`  - ${q.text.slice(0, 240)}`);
+      }
+    }
   }
   // Directly under the chat too: this report is a trimmed view, and the count plus the
   // location is how a reader gets from it to the whole conversation.

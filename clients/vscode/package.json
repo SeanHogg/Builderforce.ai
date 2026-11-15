@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.10.171",
+  "version": "2026.10.172",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -177,6 +177,11 @@
         "title": "%command.openKnowledgeGraph%",
         "category": "BuilderForce",
         "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "builderforce.knowledge.retryAnalyzers",
+        "title": "%command.knowledgeRetryAnalyzers%",
+        "category": "BuilderForce"
       },
       {
         "command": "builderforce.createKnowledgePack",
@@ -1327,7 +1332,7 @@
     "@seanhogg/bfi-web": "link:../../packages/bfi-web",
     "@seanhogg/builderforce-brain-embedded": "link:../../brain-embedded",
     "@seanhogg/builderforce-brain-ui": "link:../../packages/brain-ui",
-    "@seanhogg/builderforce-memory": "^2026.10.80",
+    "@seanhogg/builderforce-memory": "^2026.10.81",
     "@seanhogg/builderforce-memory-engine": "^2026.10.65",
     "@seanhogg/builderforce-memory-mcp": "^2026.10.67",
     "@seanhogg/builderforce-studio": "link:../../studio",

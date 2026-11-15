@@ -28,6 +28,7 @@ import { toolExposureInTrace } from './toolExposure';
 import type { BrainTraceEvent } from './brainTriage';
 import { publishHoldFromPersonTurns } from './runStore/publishHold';
 import { isStepMessage } from './types';
+import { selectPendingAskUser } from '@builderforce/agent-loop';
 
 /** The `/api/consumption` snapshot, structurally — each host has its own named type
  *  for it, and they agree on exactly these fields. */
@@ -233,6 +234,18 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
         .map((m) => ({ text: m.content!.trim() })),
   );
 
+  // A pending question is the one state that makes a FINISHED run still need the human:
+  // the run settled terminally on an `ask_user`, so the chat is blocked on a decision
+  // even though the run has ended. Derived from the transcript with the SAME selector
+  // the chat surface uses to decide whether to render the pending-question bar, so the
+  // report can never disagree with the UI about whether a question is outstanding.
+  const pendingAsk = selectPendingAskUser(
+    msgs
+      .filter((m) => (m.role === 'assistant' || m.role === 'user') && typeof m.content === 'string')
+      .map((m) => ({ id: 0, role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content as string })),
+  );
+  const pendingQuestions = pendingAsk ? [{ text: pendingAsk.payload.question }] : [];
+
   const account: ChatDiagnosticsAccount = {
     plan: plan?.plan.effective ?? null,
     billingStatus: plan?.plan.billingStatus ?? null,
@@ -274,6 +287,7 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
     evermind: toEvermind(head),
     lastLearn,
     publishHold,
+    pendingQuestions,
     agents: agents.map((a) => ({
       agentRef: a.agentRef,
       role: a.role,
