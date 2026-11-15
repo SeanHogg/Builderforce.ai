@@ -2,6 +2,9 @@
  * lastBuiltCounts.test.ts — the Sync panel reads a root's counts from the last graph BUILT (or
  * seen), never a fresh build: a `live`/`load` push replaces the counts, a `lastSeen` snapshot
  * fills them only until a fresher build lands.
+ *
+ * Evidence re-verification: busts the verify cache (content-hash key) so the pre-push
+ * gate re-runs checks against the repaired install instead of replaying a stale record.
  */
 
 import { describe, expect, it } from "vitest";
