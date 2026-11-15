@@ -2,6 +2,9 @@
  * GUARD: the extension host never builds a knowledge graph on its own thread. The knowledge view's `loadGraph` and a run
  * delta's `sideFacts` hand their build to the graph worker (`graphWorker.ts`); the in-thread builders are wired to fail here,
  * and a fake worker answers — so a build that slipped back onto the host thread fails this test.
+ *
+ * Evidence re-verification: busts the verify cache (content-hash key) so the pre-push
+ * gate re-runs checks against the repaired install instead of replaying a stale record.
  */
 import * as os from "node:os";
 import * as path from "node:path";
