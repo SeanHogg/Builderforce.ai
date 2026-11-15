@@ -136,10 +136,16 @@ async function epicsWithUnsupportedDelivery(db: Db, tenantId: number, epicIds: n
     // baseline or a specs edit). Reusing the ship-gate's own `fileIsUnchecked` keeps the
     // Epic tier and the gate in agreement on "nothing here is verifiable", so a complete
     // docs-only epic reads 100 rather than being pinned at the unsupported-delivery cap.
-    const supported = rows.some((row) => {
+    // A live execution that produced NO file rows is not delivery evidence either
+    // way: a failed or timed-out run leaves nothing to verify, so per this module's
+    // own rule — "absence is not evidence" — it must not mark a claimed-complete
+    // epic unsupported. Only runs that actually touched files get a verdict.
+    const rowsWithFiles = rows.filter((row) => (pathsByExec.get(row.id) ?? []).length > 0);
+    if (rowsWithFiles.length === 0) continue;
+    const supported = rowsWithFiles.some((row) => {
       const paths = pathsByExec.get(row.id) ?? [];
       if (coderProducedCode(row.payload, paths)) return true;
-      return paths.length > 0 && paths.every((p) => fileIsUnchecked({ absPath: p, isNew: false }, DEFAULT_EVIDENCE_POLICY));
+      return paths.every((p) => fileIsUnchecked({ absPath: p, isNew: false }, DEFAULT_EVIDENCE_POLICY));
     });
     if (!supported) unsupported.add(epicId);
   }
@@ -228,7 +234,10 @@ export async function addTaskTierHealth(
       ? Math.round((done / total) * 100)
       : (r.completedAt != null || DONE_STATUS.has(r.status) ? 100 : 0);
     const unsupportedDelivery = unsupported.has(id);
-    const progressPct = unsupportedDelivery
+    // The unsupported-delivery cap applies only BEFORE the lane closes: a done
+    // epic is complete by definition (the status ladder is authoritative once
+    // closed), so it must not be demoted to the in_review rung.
+    const progressPct = unsupportedDelivery && !DONE_STATUS.has(r.status)
       ? Math.min(claimed, UNSUPPORTED_DELIVERY_PROGRESS_CAP)
       : claimed;
     const parent = parentByChild.get(id);
