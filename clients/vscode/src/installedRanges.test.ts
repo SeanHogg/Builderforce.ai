@@ -27,6 +27,31 @@ describe('satisfiesRange', () => {
     expect(satisfiesRange('9.0.0', '>=1.2.3')).toBe(true);
     expect(satisfiesRange('1.2.3', 'link:../x')).toBeNull();
   });
+
+  it('refuses a prerelease install against a range with no prerelease on that version', () => {
+    // The regression: the prerelease tag was stripped, so a beta passed as the release.
+    expect(satisfiesRange('2026.10.82-beta.1', '^2026.10.82')).toBe(false);
+    expect(satisfiesRange('2026.10.83-beta.1', '^2026.10.82')).toBe(false);
+    expect(satisfiesRange('2026.10.82-beta.1', '>=2026.10.81')).toBe(false);
+    expect(satisfiesRange('1.2.4-rc.1', '~1.2.3')).toBe(false);
+    // Build metadata carries no precedence and is still accepted.
+    expect(satisfiesRange('2026.10.82+build.7', '^2026.10.82')).toBe(true);
+  });
+
+  it('accepts a prerelease install only on the major.minor.patch the range names a prerelease for', () => {
+    expect(satisfiesRange('2026.10.82-beta.1', '^2026.10.82-beta.1')).toBe(true);
+    expect(satisfiesRange('2026.10.82-beta.2', '^2026.10.82-beta.1')).toBe(true);
+    expect(satisfiesRange('2026.10.82-beta.10', '^2026.10.82-beta.2')).toBe(true);
+    expect(satisfiesRange('2026.10.82-beta.0', '^2026.10.82-beta.1')).toBe(false);
+    expect(satisfiesRange('2026.10.82-alpha.9', '^2026.10.82-beta.1')).toBe(false);
+    // A beta on a LATER version is not opted into by a beta on this one.
+    expect(satisfiesRange('2026.10.83-beta.1', '^2026.10.82-beta.1')).toBe(false);
+    // The release itself (and later releases) satisfy a prerelease floor.
+    expect(satisfiesRange('2026.10.82', '^2026.10.82-beta.1')).toBe(true);
+    expect(satisfiesRange('2026.11.0', '^2026.10.82-beta.1')).toBe(true);
+    expect(satisfiesRange('2026.10.82-beta.1', '2026.10.82-beta.1')).toBe(true);
+    expect(satisfiesRange('2026.10.82', '2026.10.82-beta.1')).toBe(false);
+  });
 });
 
 describe('installedRangeMismatches', () => {
@@ -55,6 +80,13 @@ describe('installedRangeMismatches', () => {
     expect(installedRangeMismatches(root, ['@seanhogg/builderforce-memory', '@seanhogg/builderforce-memory-engine', 'not-declared'])).toEqual([
       { name: '@seanhogg/builderforce-memory', declared: '^2026.10.82', installed: '2026.10.80', reason: 'outside the declared range' },
       { name: '@seanhogg/builderforce-memory-engine', declared: '^2026.10.65', installed: null, reason: 'not installed' },
+    ]);
+  });
+
+  it('reports a prerelease install under a release range', () => {
+    const root = consumer({ '@seanhogg/builderforce-memory': '^2026.10.82' }, { '@seanhogg/builderforce-memory': '2026.10.82-beta.1' });
+    expect(installedRangeMismatches(root)).toEqual([
+      { name: '@seanhogg/builderforce-memory', declared: '^2026.10.82', installed: '2026.10.82-beta.1', reason: 'outside the declared range' },
     ]);
   });
 

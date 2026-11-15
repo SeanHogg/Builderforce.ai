@@ -10,12 +10,12 @@
   "scripts": {
     "postinstall": "node ../../scripts/ensure-linked-deps.mjs",
     "build": "node build.mjs",
-    "build:production": "node build.mjs --production",
+    "build:production": "node ../../scripts/check-installed-ranges.mjs . && node build.mjs --production",
     "type-check": "tsc -p ./",
     "typecheck": "pnpm run type-check",
     "test": "vitest run",
     "test:watch": "vitest",
-    "package": "node build.mjs --production && node package.mjs"
+    "package": "pnpm run build:production && node package.mjs"
   },
   "devDependencies": {
     "@fontsource/inter": "^5.3.0",

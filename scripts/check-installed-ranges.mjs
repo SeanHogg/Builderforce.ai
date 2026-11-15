@@ -18,21 +18,54 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PINNED_INSTALL_PACKAGES } from './sourcePackages.mjs';
 
-/** `x.y.z` (prerelease/build stripped) → `[x, y, z]`, or null when it is not one. */
+/**
+ * `x.y.z[-pre][+build]` → `{ core: [x, y, z], pre: [...identifiers] }`, or null when it is not one.
+ * Build metadata is dropped (semver gives it no precedence); the prerelease is KEPT — stripping it
+ * let `2026.10.82-beta.1` pass `^2026.10.82`.
+ */
 function parseVersion(version) {
-  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(String(version).trim());
-  return match ? match.slice(1, 4).map(Number) : null;
+  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.exec(
+    String(version).trim(),
+  );
+  return match ? { core: match.slice(1, 4).map(Number), pre: match[4] ? match[4].split('.') : [] } : null;
 }
 
-function compare(a, b) {
+function compareCore(a, b) {
   for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] - b[i];
   return 0;
 }
 
+/** Semver §11 prerelease precedence: none > any; numeric < alphanumeric; a longer set wins a tie. */
+function comparePre(a, b) {
+  if (!a.length || !b.length) return (a.length ? -1 : 0) + (b.length ? 1 : 0);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    if (i >= a.length) return -1;
+    if (i >= b.length) return 1;
+    const aNum = /^\d+$/.test(a[i]);
+    const bNum = /^\d+$/.test(b[i]);
+    if (aNum && bNum) {
+      if (Number(a[i]) !== Number(b[i])) return Number(a[i]) - Number(b[i]);
+    } else if (aNum !== bNum) {
+      return aNum ? -1 : 1;
+    } else if (a[i] !== b[i]) {
+      return a[i] < b[i] ? -1 : 1;
+    }
+  }
+  return 0;
+}
+
+function compare(a, b) {
+  return compareCore(a.core, b.core) || comparePre(a.pre, b.pre);
+}
+
 /**
- * Whether `version` satisfies `range`. Covers the range forms these manifests use — exact `x.y.z`,
- * `^x.y.z`, `~x.y.z`, `>=x.y.z` — and returns null for any other form, which the caller reports as
- * unsupported rather than guessing.
+ * Whether `version` satisfies `range`, by node-semver's rules. Covers the range forms these
+ * manifests use — exact `x.y.z`, `^x.y.z`, `~x.y.z`, `>=x.y.z`, each optionally with a prerelease —
+ * and returns null for any other form, which the caller reports as unsupported rather than guessing.
+ *
+ * A PRERELEASE install satisfies a range only when the range's comparator itself carries a
+ * prerelease on the same `major.minor.patch` (`2026.10.82-beta.2` satisfies `^2026.10.82-beta.1`,
+ * never `^2026.10.82` nor `^2026.10.81`): opting into one beta is not opting into every later one.
  *
  * @param {string} version Installed version.
  * @param {string} range   Declared range.
@@ -43,15 +76,17 @@ export function satisfiesRange(version, range) {
   const match = /^(\^|~|>=|=)?\s*(.+)$/.exec(String(range).trim());
   const floor = match ? parseVersion(match[2]) : null;
   if (!installed || !floor) return null;
+  if (installed.pre.length && !(floor.pre.length && compareCore(installed.core, floor.core) === 0)) return false;
   const op = match[1] ?? '=';
   if (op === '=') return compare(installed, floor) === 0;
   if (compare(installed, floor) < 0) return false;
   if (op === '>=') return true;
-  if (op === '~') return installed[0] === floor[0] && installed[1] === floor[1];
+  const [major, minor] = installed.core;
+  if (op === '~') return major === floor.core[0] && minor === floor.core[1];
   // `^`: the left-most non-zero component is fixed.
-  if (floor[0] > 0) return installed[0] === floor[0];
-  if (floor[1] > 0) return installed[0] === 0 && installed[1] === floor[1];
-  return compare(installed, floor) === 0;
+  if (floor.core[0] > 0) return major === floor.core[0];
+  if (floor.core[1] > 0) return major === 0 && minor === floor.core[1];
+  return compareCore(installed.core, floor.core) === 0;
 }
 
 /**

@@ -437,11 +437,7 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 
 Synapse lives in [builderforce-inference](https://github.com/SeanHogg/builderforce-inference), Spawn in [builderforce-spawn](https://github.com/SeanHogg/builderforce-spawn).
 
-- **[vscode] Memory pin follow-ups from the 2026.10.175 review (IN PROGRESS 2026-11-15).** The esbuild bundles are pinned; these edges remain:
-  - the webview vite build (`clients/vscode/webview/vite.config.ts`) only dedupes memory, so a stale memory-engine under `packages/*/node_modules` can still reach the webview — pin both names from `PINNED_INSTALL_PACKAGES`;
-  - `scripts/check-installed-ranges.mjs` strips prerelease tags, so `2026.10.82-beta.1` passes `^2026.10.82` — reject it like semver does, with a test;
-  - `pinnedInstallResolve` has no test proving a stale copy under a source package's `node_modules` loses to the consumer's copy (subpath included);
-  - the chrome build uses the pin but never runs the range check.
+- **[repo] Commit `28af68822` checked in ~2,940 compiler outputs (`.js`, `.js.map`, `.d.ts`) next to `.ts` sources (IN PROGRESS 2026-11-15).** Vite and vitest resolve `.js` before `.ts`, so these stale copies shadow the real sources (a stale `clients/vscode/webview/vite.config.js` already hid the real config from tests). Fix: remove every output that has a `.ts`/`.tsx` sibling, stop the in-place emit at its tsconfig, and guard against it returning.
 - **[vscode] L3 retry cache edges (non-blocking, from the `233f62658` review; fix after the 175 build lands).**
   - "Fresh" skips only the in-memory `sharedAnalysis` cache. The worker's on-disk analyzer cache (`indexerL3Binding`, keyed by tree hash) can still serve a retry.
   - A fresh run uses a null cache key, so its result never replaces the stale in-memory entry.

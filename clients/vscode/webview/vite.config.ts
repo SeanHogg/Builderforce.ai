@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canvasPaths, collectCanvasNamespaces } from './src/canvas/messageNamespaces';
-import { sourcePackageAliases } from '../../../scripts/sourcePackages.mjs';
+import { pinnedInstallVitePlugin, sourcePackageAliases } from '../../../scripts/sourcePackages.mjs';
 // The SAME hash the extension host stamps (see esbuild.mjs), so the two ids are
 // comparable rather than merely both present.
 import { computeBuildId } from '../buildId.mjs';
@@ -77,6 +77,14 @@ const webviewRuntimeVersion = firstPackageVersion([
   path.resolve(REPO_ROOT, '../builderforce-webcontainers/packages/browser/package.json'),
 ]);
 const FRONTEND_SRC = path.join(REPO_ROOT, 'frontend/src');
+/**
+ * The extension package — the install whose `package.json` declares the memory range that
+ * `check-installed-ranges` holds packaging to. Every `PINNED_INSTALL_PACKAGES` import
+ * (memory, memory-engine, any subpath) resolves from HERE, whoever imports it: a source-only
+ * package's own `node_modules` copy is never bundled beside it (the esbuild half's pin, the
+ * same helper, `scripts/sourcePackages.mjs`).
+ */
+const INSTALL_DIR = path.resolve(HERE, '..');
 
 /**
  * Supplies `virtual:bf-canvas-messages` — the web message catalogs trimmed to the
@@ -160,7 +168,7 @@ function dropWasmAssets(): Plugin {
  * and @react-three/drei. The package is source-only with no install of its own, so a bare
  * `three` from its files finds nothing by node resolution. They resolve exactly as the
  * frontend's own sources resolve them (the 3D world already bundles that copy), so there
- * is ONE three.js in the bundle; React and memory are the `dedupe`d copies below. The 3D
+ * is ONE three.js in the bundle; React is the `dedupe`d copy and memory the pinned one below. The 3D
  * scene stays a lazy chunk: the view imports it with `lazy(() => import(...))`.
  */
 const KNOWLEDGE_VIEW_PEERS = /^(three|@react-three\/fiber|@react-three\/drei|troika-three-text)(\/.*)?$/;
@@ -220,7 +228,7 @@ export default defineConfig({
     'process.env.NEXT_PUBLIC_WORKER_URL': JSON.stringify(''),
     'process.env.NEXT_PUBLIC_APP_URL': JSON.stringify('https://builderforce.ai'),
   },
-  plugins: [react(), knowledgeViewPeers(), canvasMessages(), dropWasmAssets(), entryKeepsShellNames()],
+  plugins: [react(), pinnedInstallVitePlugin(INSTALL_DIR), knowledgeViewPeers(), canvasMessages(), dropWasmAssets(), entryKeepsShellNames()],
   root: HERE,
   base: './',
   resolve: {
@@ -240,9 +248,9 @@ export default defineConfig({
     ],
     // The canvas closure and this package both pull React in; two copies would
     // break hooks. Resolve to this package's single instance.
-    // `@seanhogg/builderforce-memory`: the knowledge packages (graph view, client, agent-tools'
-    // code pack, the browser host) are source-only and import it bare — ONE copy, this package's.
-    dedupe: ['react', 'react-dom', '@xyflow/react', '@seanhogg/builderforce-memory'],
+    // Memory and memory-engine are NOT deduped here: dedupe resolves from `root` and names only
+    // what was remembered. `pinnedInstallVitePlugin` pins both, subpaths included, to INSTALL_DIR.
+    dedupe: ['react', 'react-dom', '@xyflow/react'],
   },
   css: {
     // THE webview's PostCSS config — there is only one, and this is its name.
@@ -266,7 +274,8 @@ export default defineConfig({
   // Every worker the bundle spawns is a module worker (`{ type: 'module' }`), and some
   // (the Mamba worker) code-split through dynamic imports, which Vite's default IIFE
   // worker output cannot hold.
-  worker: { format: 'es' },
+  // Top-level `plugins` reach worker bundles only in dev, so the memory pin is listed again.
+  worker: { format: 'es', plugins: () => [pinnedInstallVitePlugin(INSTALL_DIR)] },
   build: {
     outDir: path.resolve(HERE, '../media/webview'),
     // The webview runs in VS Code's own (current) Chromium, so nothing needs lowering to

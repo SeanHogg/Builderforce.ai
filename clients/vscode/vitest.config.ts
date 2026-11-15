@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
-import { sourcePackageAliases, sourcePackageRoots } from '../../scripts/sourcePackages.mjs';
+import { pinnedInstallVitePlugin, sourcePackageAliases, sourcePackageRoots } from '../../scripts/sourcePackages.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '../..');
@@ -25,7 +25,10 @@ const agentToolsTsResolve = {
 };
 
 export default defineConfig({
-  plugins: [agentToolsTsResolve],
+  // The memory pin: `@seanhogg/builderforce-memory` and `-memory-engine` (subpaths included)
+  // resolve from THIS package's install whoever imports them — the same copies `esbuild.mjs`
+  // and the webview's vite config bundle (`scripts/sourcePackages.mjs`).
+  plugins: [agentToolsTsResolve, pinnedInstallVitePlugin(here)],
   resolve: {
     // The same set `esbuild.mjs` bundles with, from the same registry. Subpath
     // exports are included and anchored: `@builderforce/agent-tools/node-path` is
@@ -35,7 +38,8 @@ export default defineConfig({
     alias: sourcePackageAliases(repoRoot),
     // Source-only packages with PEERS and no install of their own (the knowledge graph
     // view, client and browser host) import these bare: ONE copy, this package's.
-    dedupe: ['react', 'react-dom', '@seanhogg/builderforce-memory'],
+    // Memory is pinned by the plugin above, not deduped.
+    dedupe: ['react', 'react-dom'],
   },
   test: {
     // The harness drives the run loop headlessly — no DOM, no extension host.

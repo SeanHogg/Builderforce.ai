@@ -1,3 +1,10 @@
+## ✅ RESOLVED 2026-11-15: one memory copy in every toolchain (esbuild, webview Vite, vitest, chrome)
+
+- `pinnedInstallVitePlugin` (sharing `pinnedInstallFilter` with the esbuild pin) pins memory and memory-engine in the webview build (main and worker plugins) and in `clients/vscode/vitest.config.ts`; the webview's `dedupe` only covered memory, so a stale memory-engine could still reach it.
+- `check-installed-ranges.mjs` follows semver for prereleases (`2026.10.82-beta.1` no longer satisfies `^2026.10.82`); chrome's `build:production` (and so `package`) runs the check. Chrome's install was itself stale (memory 2026.10.80) and was refreshed.
+- `src/pinnedInstall.test.ts` reproduces the bug on a fixture for esbuild and Vite (bare, subpath, engine) and proves the pin picks the consumer's copy.
+- Removed the stale compiled `webview/vite.config.js` that shadowed the real config in tests.
+
 ## ✅ RESOLVED 2026-11-15: the VSIX no longer bundles memory's old slow ignore matcher (VS Code 2026.10.175, installed)
 
 - **Cause:** esbuild bundled source-only packages (`@builderforce/agent-tools`) whose bare `@seanhogg/builderforce-memory` import resolved from `packages/agent-tools/node_modules` (2026.10.80), so every VSIX through 174 shipped the pre-2026.10.81 matcher that blocked typing for 1–5 s.

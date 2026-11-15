@@ -117,6 +117,53 @@ export function sourcePackageAliasMap(repoRoot) {
 export const PINNED_INSTALL_PACKAGES = ['@seanhogg/builderforce-memory', '@seanhogg/builderforce-memory-engine'];
 
 /**
+ * The specifiers a pin applies to: each package root and any subpath of it
+ * (`@seanhogg/builderforce-memory/knowledge`), never a name that merely shares the prefix
+ * (`@seanhogg/builderforce-memory-engine` is pinned only because it is listed itself).
+ * Shared by the esbuild and Vite pins so the two bundlers cannot disagree on what is pinned.
+ *
+ * @param {string[]} [packages] Package names to pin; defaults to `PINNED_INSTALL_PACKAGES`.
+ * @returns {RegExp}
+ */
+export function pinnedInstallFilter(packages = PINNED_INSTALL_PACKAGES) {
+  return new RegExp(`^(?:${packages.map(escapeRegExp).join('|')})(?:/.*)?$`);
+}
+
+/**
+ * The Vite/Rollup twin of `pinnedInstallResolve`. `resolve.dedupe` is not a pin: it resolves
+ * from Vite's `root`, which is whatever directory the config names rather than the consumer
+ * whose `package.json` declares the range, and it only covers the names someone remembered to
+ * list. This plugin re-resolves every pinned specifier as if `installDir/package.json` imported
+ * it — through Vite's own resolver, so the `exports` map, subpaths and conditions are honoured
+ * exactly as for a direct import.
+ *
+ * Vite applies top-level `plugins` to worker bundles only in dev; a config that bundles workers
+ * must also list this under `worker.plugins`.
+ *
+ * @param {string} installDir Absolute path of the consumer whose install is the one copy.
+ * @param {string[]} [packages] Package names to pin; defaults to `PINNED_INSTALL_PACKAGES`.
+ * @returns {import('vite').Plugin}
+ */
+export function pinnedInstallVitePlugin(installDir, packages = PINNED_INSTALL_PACKAGES) {
+  const filter = pinnedInstallFilter(packages);
+  // Must EXIST: Vite resolves a bare import from the importer's directory only when the
+  // importer is on disk. The consumer's own manifest always is.
+  const anchor = path.join(installDir, 'package.json');
+  return {
+    name: 'pinned-install-resolve',
+    enforce: 'pre',
+    async resolveId(source, _importer, options) {
+      if (!filter.test(source)) return null;
+      // `skipSelf` keeps the re-entry from reaching this hook again; the rest of the
+      // caller's options (custom, isEntry, attributes) pass through unchanged.
+      const resolved = await this.resolve(source, anchor, { ...options, skipSelf: true });
+      if (!resolved) this.error(`[pinned-install-resolve] ${source} is not installed under ${installDir}`);
+      return resolved;
+    },
+  };
+}
+
+/**
  * An esbuild plugin that resolves every `PINNED_INSTALL_PACKAGES` specifier — the root and
  * any subpath (`@seanhogg/builderforce-memory/knowledge`) — from `installDir`'s own
  * `node_modules`, whatever the importer. Resolution goes back through esbuild with
@@ -128,7 +175,7 @@ export const PINNED_INSTALL_PACKAGES = ['@seanhogg/builderforce-memory', '@seanh
  * @returns {import('esbuild').Plugin}
  */
 export function pinnedInstallResolve(installDir, packages = PINNED_INSTALL_PACKAGES) {
-  const filter = new RegExp(`^(?:${packages.map(escapeRegExp).join('|')})(?:/.*)?$`);
+  const filter = pinnedInstallFilter(packages);
   const reentry = Symbol('pinned-install-resolve');
   return {
     name: 'pinned-install-resolve',
