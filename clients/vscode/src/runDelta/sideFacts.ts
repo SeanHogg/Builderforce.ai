@@ -70,10 +70,10 @@ const META: SideFacts["meta"] = {
   ...(FACTS_STAMP.extractor ? { extractor: FACTS_STAMP.extractor } : {}), tools: { ...(FACTS_STAMP.tools ?? {}) },
 };
 
-function emptyFacts(files: readonly SideFile[], generation: string, fileFacts?: ReadonlyMap<string, FileFacts>): SideFacts {
+async function emptyFacts(files: readonly SideFile[], generation: string, fileFacts?: ReadonlyMap<string, FileFacts>): Promise<SideFacts> {
   const manifest = files.filter((f) => f.hash).map((f) => ({ path: f.path, hash: f.hash! }));
   return {
-    manifestGeneration: generation, merkleRoot: merkleTree(manifest).root,
+    manifestGeneration: generation, merkleRoot: (await merkleTree(manifest)).root,
     findings: [], imports: new Map(), badges: new Map(), meta: META, ...(fileFacts ? { fileFacts } : {}),
   };
 }
@@ -146,7 +146,7 @@ export async function sideFacts(ctx: KnowledgeContext | undefined, files: readon
     const path = repoPathOf(prefix, p);
     return path === undefined ? [] : [{ path, hash }];
   });
-  const merkleRoot = merkleTree(sideManifest).root;
+  const merkleRoot = (await merkleTree(sideManifest)).root;
   // FileFacts of the changed files, resolved against THIS side's listing (the before listing for the before side).
   const index = factIndexOf(rootId);
   const fileFacts = await sideFileFacts({
@@ -155,7 +155,7 @@ export async function sideFacts(ctx: KnowledgeContext | undefined, files: readon
     isRouterFile: (repoFile) => { const k = toKnowledgePath(prefix, repoFile); return k !== undefined && !!index?.isRouterFile(k); },
   });
   const generation = ctx.generation();
-  if (!graph) return { ...emptyFacts(files, generation, fileFacts), merkleRoot };
+  if (!graph) return { ...(await emptyFacts(files, generation, fileFacts)), merkleRoot };
   return {
     manifestGeneration: generation,
     merkleRoot,
