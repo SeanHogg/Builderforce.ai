@@ -22,7 +22,8 @@
  */
 
 import { execFile, spawn } from "child_process";
-import { existsSync, realpathSync } from "fs";
+import { existsSync, readFileSync, realpathSync } from "fs";
+import { createRequire } from "module";
 import * as path from "path";
 import { anyNodePath, consoleNodePath, needsRunAsNode } from "../process/consoleNode";
 import { killTree } from "../process/killTree";
@@ -118,6 +119,49 @@ function resolveNpmCli(cwd: string, cli: NpmCli, nodePath: string): string | nul
 }
 
 /**
+ * The owning package's OWN bin for the `npx --no-install <pkg>` shape, resolved from the cwd's
+ * own node_modules upward. Node's walk-up rule applies: a directory that does not actually
+ * contain the package is SKIPPED — so a stale, cache-only ancestor `node_modules` (one that
+ * holds only `.vite`/`.vitest-cache`) cannot shadow the owning package's install.
+ *
+ * Why this exists: the verifier's targeted-test tier runs `npx --no-install vitest …`. Spawning
+ * the resolved `npx-cli.js` (a pnpm-store npm) lets THAT npx walk up from the cwd and stop at
+ * such a stale ancestor, synthesizing `<ancestor>/<pkg>/<bin>.mjs` — `Cannot find module` on
+ * every pre-push test check. Resolving the bin here pins the runner to the owning package, and
+ * spawning it under node directly keeps the launch shell-free.
+ *
+ * The package.json is read directly (never through an `exports` map, which can block
+ * subpath resolution), and the realpath of the store-symlinked package dir is used, mirroring
+ * {@link resolveNpmCli}'s symlink handling. Any failure resolves null — the caller falls back
+ * to the npx-cli path.
+ */
+const PACKAGE_NAME_RE = /^(@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i;
+
+function resolvePackageBin(cwd: string, pkg: string): string | null {
+  if (!PACKAGE_NAME_RE.test(pkg)) return null;
+  let dir = cwd;
+  for (let i = 0; i < 32; i += 1) {
+    const candidate = path.join(dir, "node_modules", pkg, "package.json");
+    if (existsSync(candidate)) {
+      try {
+        const real = realpathSync(candidate);
+        const bin = (JSON.parse(readFileSync(real, "utf8")) as { bin?: string | Record<string, string> }).bin;
+        const rel = typeof bin === "string" ? bin : bin?.[pkg] ?? (bin && Object.keys(bin).length === 1 ? Object.values(bin)[0] : undefined);
+        if (!rel) return null;
+        const abs = path.join(path.dirname(real), rel);
+        return existsSync(abs) ? abs : null;
+      } catch {
+        return null; // unreadable or malformed: the caller falls back to the npx-cli path
+      }
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+  return null;
+}
+
+/**
  * The spawn plan for one argv on this platform, or null when it cannot be launched safely.
  * Windows: a package-manager shim is a `.cmd` batch file, which cannot be spawned without a
  * shell — EXCEPT `npx`/`npm`, which under `cmd.exe /d /v:off /s /c` with verbatim quoting
@@ -156,6 +200,12 @@ export function launchPlan(
   if (!WINDOWS_SHIMS.has(name)) return { file: which(program) ?? program, args: [...args], verbatim: false };
   if (name === "npx" || name === "npm") {
     const node = nodePath();
+    // `npx --no-install <pkg> …`: spawn the pkg's OWN bin under node, pinned to the owning
+    // package's node_modules — a stale ancestor cache dir must not shadow the resolution.
+    if (name === "npx" && args[0] === "--no-install") {
+      const bin = resolvePackageBin(cwd ?? process.cwd(), args[1] ?? "");
+      if (bin) return { file: node, args: [bin, ...args.slice(2)], verbatim: false };
+    }
     const cli = resolveCli(cwd ?? process.cwd(), name === "npx" ? "npx-cli.js" : "npm-cli.js", node);
     if (cli) return { file: node, args: [cli, ...args], verbatim: false };
     // The CLI could not be resolved: fall through to the cmd shim (may still work when the
