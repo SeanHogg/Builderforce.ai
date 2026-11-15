@@ -1,3 +1,12 @@
+## ✅ RESOLVED 2026-11-15: the VSIX no longer bundles memory's old slow ignore matcher (VS Code 2026.10.175, installed)
+
+- **Cause:** esbuild bundled source-only packages (`@builderforce/agent-tools`) whose bare `@seanhogg/builderforce-memory` import resolved from `packages/agent-tools/node_modules` (2026.10.80), so every VSIX through 174 shipped the pre-2026.10.81 matcher that blocked typing for 1–5 s.
+- **Fix:**
+  - `pinnedInstallResolve` in `scripts/sourcePackages.mjs` pins memory and memory-engine (and subpaths) to the consumer's own install, in every vscode esbuild bundle and the chrome build;
+  - `scripts/check-installed-ranges.mjs` runs first in `vscode:prepublish` and fails when the installed version is outside the declared range (replaces the old "packaging does not check installed dependencies" gap);
+  - all consumers are on `^2026.10.82`.
+- **Proof:** the old matcher appears 0 times in the 175 bundles (1 in 174); there is one memory copy in `extension.js` instead of two.
+
 ## ✅ RESOLVED 2026-11-15: L3 quarantine index edge cases (`233f62658`)
 
 - `blocked()` backfills quarantine records written before the index existed (2026.10.172) into `builderforce.knowledge.l3Quarantined`, so the retry command can offer them.

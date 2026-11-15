@@ -11,7 +11,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { computeBuildId } from "./buildId.mjs";
-import { sourcePackageAliasMap, sourcePackageRoots } from "../../scripts/sourcePackages.mjs";
+import { pinnedInstallResolve, sourcePackageAliasMap, sourcePackageRoots } from "../../scripts/sourcePackages.mjs";
 
 const watch = process.argv.includes("--watch");
 const production = process.argv.includes("--production");
@@ -57,6 +57,11 @@ const sharedPackageAliases = sourcePackageAliasMap(repoRoot);
  *  as `tsconfig.json` maps them for tsc — a fallback only, after node's own walk (the same
  *  shape as `clients/chrome/build.mjs`). */
 const peerNodePaths = [path.join(here, "node_modules")];
+
+/** ONE memory engine in every bundle: `@seanhogg/builderforce-memory` (+ subpaths) and
+ *  `-memory-engine` always resolve from THIS package's install, whoever imports them — a
+ *  source-only package's own `node_modules` copy is never bundled beside it. */
+const pinnedMemoryResolve = pinnedInstallResolve(here);
 
 /** Source-consumed shared packages whose NodeNext `./x.js` imports must be rewritten to
  *  `./x.ts`. The resolver plugin below reads these roots rather than hard-coding one
@@ -144,7 +149,7 @@ const options = integration
       external: ["vscode", "react", "react-dom"],
       alias: sharedPackageAliases,
       nodePaths: peerNodePaths,
-      plugins: [agentToolsTsResolve],
+      plugins: [agentToolsTsResolve, pinnedMemoryResolve],
       ...importMetaUrlShim,
       define: { ...importMetaUrlShim.define, ...buildIdentity.define },
       sourcemap: true,
@@ -160,7 +165,7 @@ const options = integration
       external: ["vscode"],
       alias: sharedPackageAliases,
       nodePaths: peerNodePaths,
-      plugins: [agentToolsTsResolve],
+      plugins: [agentToolsTsResolve, pinnedMemoryResolve],
       ...importMetaUrlShim,
       define: { ...importMetaUrlShim.define, ...buildIdentity.define },
       sourcemap: !production,
@@ -280,7 +285,7 @@ async function treeSitterManifest(agentTools) {
     format: "esm",
     platform: "node",
     target: "node20",
-    plugins: [agentToolsTsResolve],
+    plugins: [agentToolsTsResolve, pinnedMemoryResolve],
     logLevel: "silent",
   });
   return import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString("base64")}`);

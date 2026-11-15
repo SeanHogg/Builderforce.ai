@@ -105,6 +105,45 @@ export function sourcePackageAliasMap(repoRoot) {
 }
 
 /**
+ * The installed packages that must exist ONCE in a bundle, whoever imports them.
+ *
+ * A source-only package is bundled from `packages/<name>/src`, so its bare imports
+ * resolve by node's walk from THAT directory — and every `packages/<name>/node_modules`
+ * holds its own copy of the memory engine. `nodePaths` is only a fallback after that
+ * walk, so it never got a say: VSIX 2026.10.174 shipped the consumer's memory 2026.10.81
+ * for its own imports and agent-tools' 2026.10.80 (the old O(n·m) `.gitignore` matcher)
+ * for the knowledge index, and typing in the editor stalled on it.
+ */
+export const PINNED_INSTALL_PACKAGES = ['@seanhogg/builderforce-memory', '@seanhogg/builderforce-memory-engine'];
+
+/**
+ * An esbuild plugin that resolves every `PINNED_INSTALL_PACKAGES` specifier — the root and
+ * any subpath (`@seanhogg/builderforce-memory/knowledge`) — from `installDir`'s own
+ * `node_modules`, whatever the importer. Resolution goes back through esbuild with
+ * `resolveDir: installDir`, so the package's `exports` map and conditions are honoured
+ * exactly as for a direct import; `pluginData` marks that re-entry so it is not pinned twice.
+ *
+ * @param {string} installDir Absolute path of the consumer whose install is the one copy.
+ * @param {string[]} [packages] Package names to pin; defaults to `PINNED_INSTALL_PACKAGES`.
+ * @returns {import('esbuild').Plugin}
+ */
+export function pinnedInstallResolve(installDir, packages = PINNED_INSTALL_PACKAGES) {
+  const filter = new RegExp(`^(?:${packages.map(escapeRegExp).join('|')})(?:/.*)?$`);
+  const reentry = Symbol('pinned-install-resolve');
+  return {
+    name: 'pinned-install-resolve',
+    setup(build) {
+      build.onResolve({ filter }, async (args) => {
+        if (args.pluginData === reentry) return undefined;
+        const result = await build.resolve(args.path, { kind: args.kind, resolveDir: installDir, pluginData: reentry });
+        if (result.errors.length > 0) return { errors: result.errors };
+        return { path: result.path, external: result.external, sideEffects: result.sideEffects, namespace: result.namespace };
+      });
+    },
+  };
+}
+
+/**
  * The `src` roots of the source-only packages.
  *
  * A package written for NodeNext spells its own relative imports `./x.js`, and no

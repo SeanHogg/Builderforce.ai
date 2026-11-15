@@ -8055,6 +8055,16 @@ interface ChatDiagnosticsData {
         messageNumber: number;
         text: string;
     } | null;
+    /**
+     * The questions this chat has PROMPTED but not yet had answered — an `ask_user` that
+     * settled the run terminally, blocking on a human. Reported because the report
+     * otherwise reads the chat as finished (the run ended), while the user is actually
+     * still being asked to decide. Absent means NOT GATHERED; an empty list means none
+     * pending.
+     */
+    pendingQuestions?: Array<{
+        text: string;
+    }> | null;
     /** The chat's OWN project (what the learn gate keys on), or null when unattached. */
     projectId?: number | null;
     projectName?: string | null;

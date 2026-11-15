@@ -14933,6 +14933,7 @@ function makeCell() {
     errorAction: null,
     pendingConfirm: null,
     confirmResolver: null,
+    pendingQuestion: null,
     appended: [],
     messagesEpoch: 0,
     listeners: /* @__PURE__ */ new Set(),
@@ -15245,6 +15246,7 @@ function getGlobalRunState() {
     if (typeof id !== "number") continue;
     if (cell.pendingConfirm) awaiting.push(id);
     else if (cell.running) running.push(id);
+    else if (cell.pendingQuestion) awaiting.push(id);
   }
   return { running, awaiting };
 }
@@ -20826,6 +20828,7 @@ async function settleBrainRun(run, outcome, last) {
     ...served ? { resolvedModel: served.model, ...served.account ? { account: served.account } : {} } : {}
   };
   const assistantMsg = last.settled ?? await settleReply(run, text2, result, last.requested);
+  if (outcome.kind === "paused") c.pendingQuestion = { messageId: assistantMsg.id };
   emit2(c);
   emitEvermindLearnReconcile(run, assistantMsg, text2);
   req.onActivity?.(chatId);
@@ -21529,6 +21532,7 @@ function beginRun(c, outcomeKey) {
   c.pendingTurn = null;
   c.stoppedTurn = null;
   c.turn = null;
+  c.pendingQuestion = null;
   if (typeof outcomeKey === "number") c.runId = runOutcomeId(outcomeKey, Date.now());
   c.abort = new AbortController();
   c.activity = { phase: "starting", startedAt: Date.now(), step: 0 };
@@ -23791,6 +23795,12 @@ function diagnosticsSignals(d) {
       `\u26A0\uFE0F Last turn's learn step evaluated v${d.lastLearn.version} but the chat's project head is v${ev.version} \u2014 BEHIND it. A queued learn only moves a head forward, so the learn step and the panel are resolving DIFFERENT projects/heads.`
     );
   }
+  const pending = d.pendingQuestions ?? [];
+  if (pending.length > 0) {
+    out.push(
+      `\u26A0\uFE0F ${pending.length} question(s) are PENDING a human answer \u2014 the run ended on an ask_user and the chat is blocked until they are answered: ${pending.slice(0, 3).map((q) => `"${q.text.slice(0, 120)}"`).join("; ")}${pending.length > 3 ? `; \u2026and ${pending.length - 3} more` : ""}`
+    );
+  }
   const agentCount = d.agents?.length ?? 0;
   if (agentCount === 0) {
     out.push("\u2139\uFE0F No agents are invited into this chat (chats.list_agents is empty), so dispatched agents post nothing back here.");
@@ -24015,6 +24025,16 @@ function formatChatDiagnostics(d) {
   if (d.publishHold) {
     lines.push(`- Publish hold: ON (set by user message #${d.publishHold.messageNumber}: "${d.publishHold.text.slice(0, 120)}") \u2014 commit/push/PR calls are refused until the user explicitly asks to ship`);
   }
+  if (d.pendingQuestions != null) {
+    if (d.pendingQuestions.length === 0) {
+      lines.push("- Questions pending: none");
+    } else {
+      lines.push(`- Questions pending (${d.pendingQuestions.length}):`);
+      for (const q of d.pendingQuestions) {
+        lines.push(`  - ${q.text.slice(0, 240)}`);
+      }
+    }
+  }
   if (d.history) {
     lines.push(
       `- History (loaded): ${d.history.messages} message(s) \xB7 ${d.history.steps} run step(s) \xB7 full dialogue: ${d.history.location ?? "not reported by this surface"}`
@@ -24197,6 +24217,10 @@ async function gatherChatDiagnostics(src) {
   const publishHold2 = publishHoldFromPersonTurns(
     msgs.filter((m) => m.role === "user" && typeof m.content === "string" && m.content.trim()).map((m) => ({ text: m.content.trim() }))
   );
+  const pendingAsk = selectPendingAskUser(
+    msgs.filter((m) => (m.role === "assistant" || m.role === "user") && typeof m.content === "string").map((m) => ({ id: 0, role: m.role === "assistant" ? "assistant" : "user", content: m.content }))
+  );
+  const pendingQuestions = pendingAsk ? [{ text: pendingAsk.payload.question }] : [];
   const account = {
     plan: plan?.plan.effective ?? null,
     billingStatus: plan?.plan.billingStatus ?? null,
@@ -24237,6 +24261,7 @@ async function gatherChatDiagnostics(src) {
     evermind: toEvermind(head),
     lastLearn,
     publishHold: publishHold2,
+    pendingQuestions,
     agents: agents.map((a) => ({
       agentRef: a.agentRef,
       role: a.role,

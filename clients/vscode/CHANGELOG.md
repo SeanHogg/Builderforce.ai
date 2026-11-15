@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.175] — Typing no longer stalls while the workspace is indexed
+
+- **Fixed: keystrokes lagged for 1–5 seconds while Builderforce indexed a large folder.** The extension was still shipping an older copy of the memory library whose `.gitignore` matching ran as one long block on the extension host. Every bundle now uses the single, current memory release (with cached ignore matching that yields between batches), and packaging refuses to build when an installed dependency is older than the version the extension declares.
+
 ## [2026.10.174] — The code analyzers no longer take the extension host down, and run only when you ask
 
 - **"Copy chat diagnostics" now names the question the chat is waiting on.** When a run ends by asking you something (an `ask_user`), the report previously read as if the run had simply finished — the chat is actually blocked on your answer. The diagnostics now list the pending question(s) under a "Questions pending" line and raise a Signal saying the chat is waiting on a human, so a capture makes the blocked state obvious instead of looking done.

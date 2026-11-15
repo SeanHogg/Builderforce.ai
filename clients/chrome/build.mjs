@@ -33,7 +33,7 @@ import * as esbuild from 'esbuild';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { sourcePackageAliasMap, sourcePackageRoots } from '../../scripts/sourcePackages.mjs';
+import { pinnedInstallResolve, sourcePackageAliasMap, sourcePackageRoots } from '../../scripts/sourcePackages.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '../..');
@@ -112,7 +112,8 @@ const shared = {
     react: nodeModule('react'),
     'react-dom': nodeModule('react-dom'),
   },
-  plugins: [sharedPackageTsResolve, webCatalogs],
+  // ONE memory engine: a source-only package's own node_modules copy never bundles beside ours.
+  plugins: [sharedPackageTsResolve, webCatalogs, pinnedInstallResolve(here)],
 };
 
 fs.rmSync(outDir, { recursive: true, force: true });

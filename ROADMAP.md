@@ -437,14 +437,11 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 
 Synapse lives in [builderforce-inference](https://github.com/SeanHogg/builderforce-inference), Spawn in [builderforce-spawn](https://github.com/SeanHogg/builderforce-spawn).
 
-- **[vscode] Every VSIX still ships memory's OLD slow ignore matcher, so typing stays slow after 2026.10.174 (IN PROGRESS 2026-11-15).** `esbuild.mjs` bundles `@builderforce/agent-tools` (and other source-only packages) from source. Node's resolution of their bare `@seanhogg/builderforce-memory` import starts from the importer's folder, so `packages/agent-tools/node_modules` wins, and it holds 2026.10.**80**. `peerNodePaths` is only a fallback.
-  - Evidence: profiles after the 174 install still show `(c.dirOnly?s:[...s,r]).some(` blocking the host for 1–5 s.
-  - This is the concrete case of the old gap "Packaging does not check installed dependencies against declared ranges" (`clients/vscode/node_modules` held memory 2026.10.35 and engine 2026.10.28 under `^2026.10.37`), which this entry replaces.
-  - Fix in progress:
-    - an esbuild plugin pins memory and memory-engine (and their subpaths) to clients/vscode's install;
-    - packaging fails when the installed memory doesn't satisfy the declared range;
-    - consumers move to `^2026.10.82` with refreshed lockfiles;
-    - build and install VSIX 2026.10.175.
+- **[vscode] Memory pin follow-ups from the 2026.10.175 review (IN PROGRESS 2026-11-15).** The esbuild bundles are pinned; these edges remain:
+  - the webview vite build (`clients/vscode/webview/vite.config.ts`) only dedupes memory, so a stale memory-engine under `packages/*/node_modules` can still reach the webview — pin both names from `PINNED_INSTALL_PACKAGES`;
+  - `scripts/check-installed-ranges.mjs` strips prerelease tags, so `2026.10.82-beta.1` passes `^2026.10.82` — reject it like semver does, with a test;
+  - `pinnedInstallResolve` has no test proving a stale copy under a source package's `node_modules` loses to the consumer's copy (subpath included);
+  - the chrome build uses the pin but never runs the range check.
 - **[vscode] L3 retry cache edges (non-blocking, from the `233f62658` review; fix after the 175 build lands).**
   - "Fresh" skips only the in-memory `sharedAnalysis` cache. The worker's on-disk analyzer cache (`indexerL3Binding`, keyed by tree hash) can still serve a retry.
   - A fresh run uses a null cache key, so its result never replaces the stale in-memory entry.
