@@ -29,12 +29,12 @@
  * OPEN / COMPLETED TICKETS
  * `openTickets` / `completedTickets` count TICKETS (not sub-items) for the history
  * row's "3 open · 2 done" line. A ticket is completed when its effective progress is
- * at least 100, so the unsupported-delivery cap applies: a documentation-only "done"
- * stays open. Cancelled tickets count as neither. open = counted − completed, so an
+ * at least 100. The unsupported-delivery cap can keep a pre-close "done-claim" below
+ * 100, but once the lane itself is closed the ticket is complete and counts as done.
  * empty or all-cancelled list is 0 / 0.
  */
 
-import { isCancelledTaskStatus } from "./taskClosedState.js";
+import { isCancelledTaskStatus, isClosedTaskStatus } from "./taskClosedState.js";
 
 export interface ChatTicketHealthInput {
   /** Authoritative progress for this ticket, 0–100. */
@@ -79,9 +79,16 @@ export function isExcludedFromChatHealth(status?: string | null): boolean {
   return isCancelledTaskStatus(status);
 }
 
-/** 100 is the completion signal. Unsupported delivery may not emit it. */
+/**
+ * 100 is the completion signal. Unsupported delivery may not emit it — but the
+ * cap applies only BEFORE the lane closes. A ticket whose status is a closed
+ * (done) lane is complete by definition: the status ladder is authoritative
+ * and must never be demoted by delivery evidence, so a done ticket always
+ * reads 100 and always counts as completed.
+ */
 function effectiveProgressPct(t: ChatTicketHealthInput): number {
   const raw = Number.isFinite(t.progressPct) ? t.progressPct : 0;
+  if (isClosedTaskStatus(t.status)) return raw;
   if (t.unsupportedDelivery === true && raw >= 100) return UNSUPPORTED_DELIVERY_PROGRESS_CAP;
   return raw;
 }

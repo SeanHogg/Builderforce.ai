@@ -91,11 +91,12 @@ export interface TicketHealth {
    *   `progressPct` is 100 while the item is not complete, except the cap below.
    * - EXCEPTION — unsupported delivery. An epic whose children (or own status)
    *   read complete, but a live execution on the epic or a direct child exists and
-   *   no coder run left a non-documentation file, does NOT emit 100. `progressPct`
-   *   is capped at `UNSUPPORTED_DELIVERY_PROGRESS_CAP` and `unsupportedDelivery`
-   *   is set. No executions means unknown, not unsupported — absence is not
-   *   evidence, so 100 is still emitted. The cap is applied before the value is
-   *   stored, so a consumer that ignores the flag still cannot read 100.
+   *   no coder run left a non-documentation file, does NOT emit 100 — UNLESS the
+   *   lane is closed. Once `status` is a closed (done) lane the status ladder is
+   *   authoritative and the epic reads 100; the cap applies only pre-close.
+   *   `progressPct` is capped at `UNSUPPORTED_DELIVERY_PROGRESS_CAP` and
+   *   `unsupportedDelivery` is set. No executions means unknown, not unsupported —
+   *   absence is not evidence, so 100 is still emitted.
    */
   progressPct: number;
   /**

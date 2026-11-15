@@ -1,4 +1,18 @@
 {
+  "projectAnalytics": {
+    "pulse": "Pulso de salud",
+    "overall": "Salud general",
+    "progress": "Progreso",
+    "updated": "Actualizado {time}",
+    "dimensions": "Dimensiones",
+    "diagnostics": "Diagnósticos",
+    "openHub": "Abrir centro de diagnósticos",
+    "loading": "Cargando diagnósticos…",
+    "noDiagnostics": "Aún no se han ejecutado diagnósticos para este proyecto.",
+    "gaps": "{count, plural, one {# brecha} other {# brechas}}",
+    "run": "Ejecutar",
+    "results": "Resultados"
+  },
   "careerAi": {
     "title": "Taller de currículums",
     "lede": "Cuatro herramientas asistidas por modelo construidas sobre lo que esta plataforma ya mide: reescribir una viñeta en la forma XYZ, fusionar varias versiones en una, calificar el documento nombrando las carencias y ponerlo ante un colega para que lo revise.",

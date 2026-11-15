@@ -192,10 +192,12 @@ describe('epic health (container, over its children)', () => {
     expect(h).toMatchObject({ done: 2, total: 2, status: 'done' });
   });
 
-  it('withholds 100 when live runs exist but left no delivery record at all', async () => {
+  it('grants 100 in a closed lane even when live runs left no delivery record', async () => {
     // A developer run that recorded ZERO file changes shipped nothing anyone can
-    // verify — claimed done with no delivery record is genuinely unsupported and
-    // stays capped. (A recorded change — even a docs or a .ts edit — IS delivery.)
+    // verify — but the lane is closed. The status ladder is authoritative once
+    // closed: the unsupported-delivery cap applies only BEFORE the lane closes
+    // (a pre-close in_review claim with no delivery evidence stays capped). This
+    // is the #6618 contract: a done epic must not read 75%.
     queue = [
       [{ id: 2545, title: 'Advisor platform', status: 'done', completedAt: new Date() }],
       [{ parentId: 2545, total: 2, done: 2 }],
@@ -203,9 +205,25 @@ describe('epic health (container, over its children)', () => {
       [],
     ];
     const h = (await service().ticketHealthBatch(1, [{ kind: 'epic', ref: '2545' }])).get('epic:2545')!;
+    expect(h.progressPct).toBe(100);
+    expect(h).toMatchObject({ done: 2, total: 2, status: 'done' });
+  });
+
+  it('caps a pre-close claim when a live run shipped files the delivery check fails', async () => {
+    // Same delivery shape, but the lane is NOT closed: claimed complete by children
+    // while a live run produced files that fail the delivery check (a non-coder role
+    // touching a code file) is genuinely unsupported and stays capped. A run that
+    // left NO file rows is "absence is not evidence" and never reaches this path.
+    queue = [
+      [{ id: 2545, title: 'Advisor platform', status: 'in_review', completedAt: null }],
+      [{ parentId: 2545, total: 2, done: 2 }],
+      [{ id: 31650, taskId: 2546, parentTaskId: 2545, payload: JSON.stringify({ roleKey: 'qa' }) }],
+      [{ executionId: 31650, path: 'src/advisor/check.ts' }],
+    ];
+    const h = (await service().ticketHealthBatch(1, [{ kind: 'epic', ref: '2545' }])).get('epic:2545')!;
     expect(h.progressPct).toBe(75);
     expect(h.unsupportedDelivery).toBe(true);
-    expect(h).toMatchObject({ done: 2, total: 2, status: 'done' });
+    expect(h).toMatchObject({ done: 2, total: 2, status: 'in_review' });
   });
 
   it('keeps 100 when a coder run on a child changed a non-doc file', async () => {

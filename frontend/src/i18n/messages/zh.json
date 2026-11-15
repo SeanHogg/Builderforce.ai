@@ -14569,6 +14569,20 @@
     "member_open": "打开",
     "improveSeedIntro": "这是我项目的“项目 360”健康检查。请帮我逐一解决这些缺口，从影响最大的开始。"
   },
+  "projectAnalytics": {
+    "pulse": "健康脉搏",
+    "overall": "整体健康度",
+    "progress": "进度",
+    "updated": "更新于 {time}",
+    "dimensions": "维度",
+    "diagnostics": "诊断",
+    "openHub": "打开诊断中心",
+    "loading": "正在加载诊断…",
+    "noDiagnostics": "该项目尚未运行任何诊断。",
+    "gaps": "{count, plural, other {# 个缺口}}",
+    "run": "运行",
+    "results": "结果"
+  },
   "freelancer": {
     "loading": "加载中…",
     "loadFailed": "无法加载您的资料。",

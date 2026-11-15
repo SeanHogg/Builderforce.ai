@@ -13,7 +13,9 @@ import { surfaceFixture } from '../../testing';
 import { CAMERAS } from '../../surface/cameras';
 import type { SceneProps } from '../../surface/registry';
 import { useSurface, type SurfaceModel } from '../../surface/useSurface';
+import { StageFactoryContext } from '../host/StageFactoryContext';
 import StageHost from '../host/StageHost';
+import { createNoopStage } from '../renderer';
 
 const graph = surfaceFixture();
 const LIST = CAMERAS.find((c) => c.fallback)!.component!;
@@ -30,7 +32,11 @@ function mount(over: Partial<SceneProps> = {}) {
             />
         );
     }
-    return render(<Harness />);
+    return render(
+        <StageFactoryContext.Provider value={() => createNoopStage()}>
+            <Harness />
+        </StageFactoryContext.Provider>,
+    );
 }
 
 const stationId = (name: string) => seen.surface!.stations.stations.find((s) => s.name === name)!.id;

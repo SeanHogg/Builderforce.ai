@@ -1,4 +1,18 @@
 {
+  "projectAnalytics": {
+    "pulse": "Gesundheitspuls",
+    "overall": "Gesamtzustand",
+    "progress": "Fortschritt",
+    "updated": "Aktualisiert {time}",
+    "dimensions": "Dimensionen",
+    "diagnostics": "Diagnostik",
+    "openHub": "Diagnose-Hub öffnen",
+    "loading": "Diagnose wird geladen…",
+    "noDiagnostics": "Für dieses Projekt wurden noch keine Diagnosen ausgeführt.",
+    "gaps": "{count, plural, one {# Lücke} other {# Lücken}}",
+    "run": "Ausführen",
+    "results": "Ergebnisse"
+  },
   "careerAi": {
     "title": "Lebenslauf-Werkstatt",
     "lede": "Vier modellgestützte Werkzeuge, die auf dem aufbauen, was diese Plattform ohnehin misst: einen Stichpunkt in die XYZ-Form bringen, mehrere Fassungen zu einer zusammenführen, das Dokument bewerten und die Lücken benennen, und es einer Kollegin zur Durchsicht vorlegen.",

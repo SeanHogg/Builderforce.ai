@@ -1,4 +1,18 @@
 {
+  "projectAnalytics": {
+    "pulse": "Pouls de santé",
+    "overall": "Santé globale",
+    "progress": "Progression",
+    "updated": "Mis à jour {time}",
+    "dimensions": "Dimensions",
+    "diagnostics": "Diagnostics",
+    "openHub": "Ouvrir le hub de diagnostics",
+    "loading": "Chargement des diagnostics…",
+    "noDiagnostics": "Aucun diagnostic n'a encore été exécuté pour ce projet.",
+    "gaps": "{count, plural, one {# lacune} other {# lacunes}}",
+    "run": "Exécuter",
+    "results": "Résultats"
+  },
   "careerAi": {
     "title": "Atelier CV",
     "lede": "Quatre outils assistés par modèle, bâtis sur ce que la plateforme mesure déjà : réécrire une puce à la forme XYZ, fusionner plusieurs versions en une seule, noter le document en nommant les manques, et le soumettre à la relecture d’un collègue.",

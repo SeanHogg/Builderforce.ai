@@ -98,16 +98,29 @@ describe('rollupChatTicketHealth', () => {
     ])).toEqual({ pct: 50, done: 0, total: 1, openTickets: 1, completedTickets: 0 });
   });
 
-  it('does not let an unsupported epic 100 pull the session to complete', () => {
+  it('does not let an unsupported pre-close 100 pull the session to complete', () => {
     // Chat #112: epic children were documentation, so the chip said 100 while
-    // the spec, roadmap and gaps were still open. The cap keeps the mean honest.
+    // the spec, roadmap and gaps were still open. The cap keeps the mean honest
+    // — but only BEFORE the lane closes (see the next test).
     const result = rollupChatTicketHealth([
-      { progressPct: 100, done: 1, total: 1, status: 'done', unsupportedDelivery: true },
+      { progressPct: 100, done: 1, total: 1, status: 'in_review', unsupportedDelivery: true },
       { progressPct: 0, done: 0, total: 1, status: 'draft' },
       { progressPct: 0, done: 0, total: 1, status: 'planned' },
     ]);
     expect(result.pct).toBeLessThan(100);
     expect(result.pct).toBe(25);
+  });
+
+  it('a done lane is complete even without delivery evidence (the #6618 bug)', () => {
+    // #6618 sat in the done lane but the chip read 75%: the unsupported-delivery
+    // cap demoted it. The status ladder is authoritative once closed — a done
+    // ticket must read 100 and count as completed.
+    const result = rollupChatTicketHealth([
+      { progressPct: 100, done: 1, total: 1, status: 'done', unsupportedDelivery: true },
+    ]);
+    expect(result.pct).toBe(100);
+    expect(result.completedTickets).toBe(1);
+    expect(result.openTickets).toBe(0);
   });
 });
 
@@ -135,13 +148,17 @@ describe('rollupChatTicketHealth open / completed tickets', () => {
     expect(result.openTickets).toBe(1);
   });
 
-  it('keeps an unsupported-delivery 100 open', () => {
-    const result = rollupChatTicketHealth([
+  it('keeps an unsupported-delivery 100 open only before the lane closes', () => {
+    // Pre-close claim without delivery evidence stays capped (counts open)…
+    expect(rollupChatTicketHealth([
+      { progressPct: 100, done: 1, total: 1, status: 'in_review', unsupportedDelivery: true },
+      { progressPct: 100, done: 1, total: 1, status: 'done' },
+    ])).toMatchObject({ completedTickets: 1, openTickets: 1 });
+    // …but the same ticket in a closed lane is complete.
+    expect(rollupChatTicketHealth([
       { progressPct: 100, done: 1, total: 1, status: 'done', unsupportedDelivery: true },
       { progressPct: 100, done: 1, total: 1, status: 'done' },
-    ]);
-    expect(result.completedTickets).toBe(1);
-    expect(result.openTickets).toBe(1);
+    ])).toMatchObject({ completedTickets: 2, openTickets: 0 });
   });
 
   it('reports 0 / 0 for an empty list', () => {

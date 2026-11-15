@@ -63,8 +63,9 @@ export interface RenderReport {
     probe: ProbeLog;
 }
 
-/** The order the views are visited in (fixed: a view's cost depends on what the views before it left memoised). */
-export const VIEW_ORDER = ['system', 'graph', 'map', '3d', 'heat', 'list', 'transit', '4plus1', 'style', 'features'] as const;
+/** The order the views are visited in (fixed: a view's cost depends on what the views before it left memoised).
+ * Only cameras the switcher actually offers — `4plus1` was removed from the registry, so it is not probed. */
+export const VIEW_ORDER = ['system', 'graph', 'map', '3d', 'heat', 'list', 'transit', 'style', 'features'] as const;
 const MAX_ROUNDS = 400;
 
 export async function probeViews(graph: KnowledgeGraph, host: ViewHost): Promise<RenderReport> {
