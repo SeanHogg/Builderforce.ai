@@ -72,6 +72,9 @@ function looksLikeRunNarration(text) {
 // ../agent-loop/src/taskClosedState.ts
 var TASK_CLOSED_STATUSES = ["done", "cancelled", "canceled", "completed", "archived"];
 var CLOSED = new Set(TASK_CLOSED_STATUSES);
+function isClosedTaskStatus(status) {
+  return status != null && CLOSED.has(status.trim().toLowerCase());
+}
 function isCancelledTaskStatus(status) {
   const s = (status ?? "").trim().toLowerCase();
   return s === "cancelled" || s === "canceled";
@@ -84,6 +87,7 @@ function isExcludedFromChatHealth(status) {
 }
 function effectiveProgressPct(t) {
   const raw = Number.isFinite(t.progressPct) ? t.progressPct : 0;
+  if (isClosedTaskStatus(t.status)) return raw;
   if (t.unsupportedDelivery === true && raw >= 100) return UNSUPPORTED_DELIVERY_PROGRESS_CAP;
   return raw;
 }
