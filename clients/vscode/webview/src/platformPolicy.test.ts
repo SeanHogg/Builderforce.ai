@@ -139,10 +139,12 @@ describe('webview platform gate', () => {
 });
 
 describe('connected capability (the composer offline decision)', () => {
-  // The composer swaps `@`/`#` from server-backed (invited participants / linked
-  // tickets) to LOCAL candidates (live sub-agents, persona agents / local tickets)
-  // when the platform cannot serve the typeahead. `!webviewCapability('connected')` is that decision;
-  // `useCapability` snapshots the same read, re-rendering on every pushed frame.
+  // The composer lists LOCAL candidates (live sub-agents, persona agents / local
+  // tickets) no matter the policy, and ADDS the server roster (invited participants /
+  // linked tickets) on top when connected — a union, never a swap, so a late or denied
+  // `platform.policy` frame can never starve the pickers by flipping the source.
+  // `webviewCapability('connected')` is still the decision the SERVER half reads;
+  // `useCapability` snapshots it and re-renders on every pushed frame.
   const setHost = async (platformPolicy: Partial<PlatformPolicySnapshot>, inferenceMode: InferenceMode) => {
     await install();
     fromHost({ type: 'platform.policy', platformPolicy, inferenceMode, baseUrl: 'https://builderforce.ai' });

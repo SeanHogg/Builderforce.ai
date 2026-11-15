@@ -107,26 +107,39 @@ export function useTicketRail({ init, apiReq, serverChatId, chatClientId, chats,
 
   // The composer's #-ticket typeahead: the chat's linked tickets, from the local rail copy.
   //
-  // OFFLINE `#`: when the platform is denied there is no server chat to read links
-  // from, so the typeahead lists the host's LOCAL tickets (G05 `localWorkRepository`
-  // over the `local.tickets` bridge). An unbound chat offline reads local too.
-  // Reactive: a late `platform.policy` frame must re-run this read on the right source.
-  const offline = !useCapability('connected');
+  // ALWAYS-ALLOW `#`: the device-local tickets (`local.tickets`, G05 `localWorkRepository`)
+  // are ALWAYS listed — no matter the policy — so `#` never starves while signed in the
+  // way a server-only roster would. Connected ADDS the server chat's linked tickets on
+  // top (a union, never a swap). Reactive: a late `platform.policy` frame re-runs this
+  // read so the SERVER half grows/shrinks, never dropping the always-present local set.
+  // Local tickets carry no server key, so they are appended as-is; a server ticket whose
+  // numeric id collides with a local id wins (the server row is the bound chat's truth).
+  const connected = useCapability('connected');
   const [typeaheadTickets, setTypeaheadTickets] = useState<TypeaheadTicket[]>([]);
   useEffect(() => {
-    if (!offline && serverChatId != null) {
+    if (!connected) {
       let live = true;
-      ticketAdapter.listTickets(serverChatId).then((tickets) => {
-        if (live) setTypeaheadTickets(tickets.map((tk) => ({ id: parseInt(tk.ref) || tk.linkId, title: tk.label || tk.ref, status: tk.status, key: tk.ref })));
-      }).catch(() => { if (live) setTypeaheadTickets([]); });
+      request<Array<{ id: number; title: string; status?: string }>>('local.tickets')
+        .then((tickets) => { if (live) setTypeaheadTickets(tickets.map((t) => ({ id: t.id, title: t.title, status: t.status }))); })
+        .catch(() => { if (live) setTypeaheadTickets([]); });
       return () => { live = false; };
     }
     let live = true;
-    request<Array<{ id: number; title: string; status?: string }>>('local.tickets')
-      .then((tickets) => { if (live) setTypeaheadTickets(tickets.map((t) => ({ id: t.id, title: t.title, status: t.status }))); })
-      .catch(() => { if (live) setTypeaheadTickets([]); });
+    const localPromise = request<Array<{ id: number; title: string; status?: string }>>('local.tickets')
+      .then((tickets) => tickets.map((t) => ({ id: t.id, title: t.title, status: t.status })))
+      .catch(() => [] as TypeaheadTicket[]);
+    const serverPromise = serverChatId != null
+      ? ticketAdapter.listTickets(serverChatId)
+          .then((tickets) => tickets.map((tk) => ({ id: parseInt(tk.ref) || tk.linkId, title: tk.label || tk.ref, status: tk.status, key: tk.ref })))
+          .catch(() => [] as TypeaheadTicket[])
+      : Promise.resolve([] as TypeaheadTicket[]);
+    void Promise.all([localPromise, serverPromise]).then(([local, server]) => {
+      if (!live) return;
+      const seen = new Set(server.map((t) => t.id));
+      setTypeaheadTickets([...server, ...local.filter((t) => !seen.has(t.id))]);
+    });
     return () => { live = false; };
-  }, [offline, serverChatId, ticketAdapter, ticketRefresh]);
+  }, [connected, serverChatId, ticketAdapter, ticketRefresh]);
 
   // "The agent changed code and nothing said so" — the chat's own signal, as a pill. LOCAL-FIRST:
   // the chat's changed files come from the host's local change-set records via the rail; the server

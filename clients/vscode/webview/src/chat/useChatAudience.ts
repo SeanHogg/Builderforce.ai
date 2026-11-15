@@ -40,27 +40,28 @@ export function useChatAudience({ ticketAdapter, chatId, serverChatId, messages,
   // is working) steers that child's run instead of starting a turn of the chat's own.
   const liveChildren = useChatChildren(chatId);
   const subagentRoster = useChatSubagentRoster(chatId);
-  // OFFLINE `@`: with the platform denied there are no invited participants to read;
-  // the addressable set is who is actually HERE — the live local sub-agents and the
-  // persona agents the Brain can answer as — so `@` still routes a turn offline.
-  // Reactive: a `platform.policy` frame that arrives after mount must re-render the
-  // picker roster, or the `@` typeahead stays starved on the wrong (offline) source.
-  const offline = !useCapability('connected');
+  // OFFLINE `@`: ALWAYS-ALLOW — the addressable local set (live sub-agents + the
+  // persona agents the Brain can answer as) is in the roster NO MATTER the policy,
+  // so `@` always routes a turn. Connected only ADDS the server roster on top (a
+  // union, never a swap), so a signed-in chat never loses the local candidates and
+  // a late `platform.policy` frame can never re-starve the picker by flipping the
+  // source. Reactive: the frame still re-renders to grow/shrink the SERVER half.
+  const connected = useCapability('connected');
   const localMentionable = useMemo<typeof participants>(
-    () => (offline ? [...childParticipants(liveChildren), ...personaAgents.map((a) => ({ kind: 'agent' as const, ref: a.ref, name: a.name }))] : []),
-    [offline, liveChildren, personaAgents],
+    () => [...childParticipants(liveChildren), ...personaAgents.map((a) => ({ kind: 'agent' as const, ref: a.ref, name: a.name }))],
+    [liveChildren, personaAgents],
   );
   const mentionable = useMemo(
-    () => (offline ? localMentionable : [...participants, ...childParticipants(liveChildren)]),
-    [offline, localMentionable, participants, liveChildren],
+    () => (connected ? [...participants, ...localMentionable] : localMentionable),
+    [connected, localMentionable, participants],
   );
 
-  useEffect(() => { onRoster(chatRosterFromParticipants(offline ? localMentionable : participants)); }, [offline, localMentionable, participants, onRoster]);
+  useEffect(() => { onRoster(chatRosterFromParticipants(connected ? [...participants, ...localMentionable] : localMentionable)); }, [connected, localMentionable, participants, onRoster]);
 
   // The effective target (shared with the web composer): an explicit BRAIN pick wins;
   // else an explicit participant; else a leading @mention; else the BRAIN (null). The
   // pick resets on a chat switch and drops a participant who has since left.
   const { recipient, choose: chooseRecipient } = useRecipientChoice({ participants: mentionable, draftStore, resetKey: chatId });
 
-  return { railRefresh, participants, liveChildren, subagentRoster, mentionable, recipient, chooseRecipient, personaAgents, offline };
+  return { railRefresh, participants, liveChildren, subagentRoster, mentionable, recipient, chooseRecipient, personaAgents, offline: !connected };
 }

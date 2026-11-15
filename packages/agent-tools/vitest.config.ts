@@ -26,19 +26,39 @@ const pkgSrc = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "src")
  * `./<name>.ts` whenever that `.ts` exists under `src/` — the source of truth the
  * `.js` was generated from. `.js` files with no `.ts` sibling still resolve as-is.
  */
+/**
+ * Canonical form for a path this plugin maps, so every spelling of the same file
+ * (different drive-letter casing from Vite vs vitest importers, `/` vs `\`) resolves
+ * to ONE id. Without this, `./replicaPump.js` reached from a `c:/…` importer and a
+ * `C:/…` importer resolved to two different absolute ids, and vitest's `vi.mock`
+ * registry (keyed by resolved id) bound a different module instance than the import —
+ * the spy never fired and the real (silent) code ran.
+ */
+function canon(p: string): string {
+  const norm = path.normalize(p);
+  return norm.length > 1 && norm[1] === ":" ? norm[0]!.toUpperCase() + norm.slice(1) : norm;
+}
+
 function tsSourceForJs() {
   return {
     name: "ts-source-for-js",
     enforce: "pre" as const,
     resolveId(source: string, importer: string | undefined) {
-      if (!importer) return null;
-      if (!source.startsWith("./") && !source.startsWith("../")) return null;
       if (!source.endsWith(".js")) return null;
-      const resolved = path.resolve(path.dirname(importer), source);
+      // Resolve the specifier against the importer when present, else treat it as already absolute.
+      let resolved: string;
+      if (importer) {
+        if (!source.startsWith("./") && !source.startsWith("../")) return null;
+        resolved = path.resolve(path.dirname(importer), source);
+      } else {
+        if (!path.isAbsolute(source)) return null;
+        resolved = source;
+      }
       // Only remap within this package's own src; leave node_modules and other roots alone.
-      if (!resolved.startsWith(pkgSrc + path.sep)) return null;
+      const within = canon(resolved).startsWith(canon(pkgSrc) + path.sep);
+      if (!within) return null;
       const ts = resolved.replace(/\.js$/, ".ts");
-      return existsSync(ts) ? ts : null;
+      return existsSync(ts) ? canon(ts) : null;
     },
   };
 }
