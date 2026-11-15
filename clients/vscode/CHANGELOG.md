@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.178] — Test checks always run your own installed tools
+
+- **Fixed: pre-push test checks could fail with a path that does not exist.** The test runner launched `npx --no-install <pkg>`, and npx's upward walk could land in a stale cache-only `node_modules` (holding only `.vite`) one directory up, synthesizing a nonexistent `vitest.mjs`. The runner now resolves `<pkg>`'s bin by walking up from the project to the nearest real `node_modules/<pkg>` install, so every check runs the owning package's own installed copy.
+
 ## [2026.10.177] — The Visualizer runs only when you press Run, and never blocks typing
 
 - **Fixed: typing stalled for 0.5–4 seconds whenever the knowledge graph rebuilt.** VS Code's own CPU profiles blamed the extension for 50–95% of each stall: the whole-repo graph (its fingerprint, layer matching and ranking) was rebuilt on the editor's thread on every save, on opening the Visualizer, for the run-delta card and for the agent's code checks. Every graph build now runs in a background worker that reads the folder's store itself.
