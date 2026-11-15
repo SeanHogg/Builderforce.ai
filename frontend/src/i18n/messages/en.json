@@ -14569,6 +14569,20 @@
     "member_open": "Open",
     "improveSeedIntro": "Here is my project’s Project 360 health check. Help me work through these gaps, highest impact first."
   },
+  "projectAnalytics": {
+    "pulse": "Health pulse",
+    "overall": "Overall health",
+    "progress": "Progress",
+    "updated": "Updated {time}",
+    "dimensions": "Dimensions",
+    "diagnostics": "Diagnostics",
+    "openHub": "Open diagnostics hub",
+    "loading": "Loading diagnostics…",
+    "noDiagnostics": "No diagnostics have been run for this project yet.",
+    "gaps": "{count, plural, one {# gap} other {# gaps}}",
+    "run": "Run",
+    "results": "Results"
+  },
   "freelancer": {
     "loading": "Loading…",
     "loadFailed": "Could not load your profile.",
