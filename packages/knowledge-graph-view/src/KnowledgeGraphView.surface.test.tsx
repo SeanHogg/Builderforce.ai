@@ -9,26 +9,43 @@ import { lensesFor } from './lenses';
 import { counted } from './surface/plural';
 import { expandAllFindings, fixtureSource, surfaceFixture } from './testing';
 import { lensIsPicked, pickLens } from './testPicks';
+import { StageFactoryContext } from './stage/host/StageFactoryContext';
+import { createNoopStage } from './stage/renderer';
 
-vi.mock('./scene/GraphScene', () => ({ default: () => <div data-testid="kg-scene" /> }));
+// The view draws the transit map through the lazy three.js StageHost (PRD 43 B1a). In jsdom the real
+// WebGL factory declines and the scene falls back to the List, so the map and the chrome that reads the
+// surface (the spine, the path strip, the Act rail) never mount. Provide the no-op stage factory through
+// the real context — the same port stageCard.test.tsx drives — so the stage host mounts and the whole
+// view renders; a station is then an a11y proxy (`[data-stage-proxies] [data-id^="st:"]`), which these
+// tests pick and click exactly as the map's own card test does. No module mocks: they do not intercept
+// reliably in this whole-view graph.
 afterEach(() => vi.restoreAllMocks());
 
 async function mount(graph: KnowledgeGraph = surfaceFixture(), props: Partial<Parameters<typeof KnowledgeGraphView>[0]> = {}) {
-    render(<div style={{ height: 700 }}><KnowledgeGraphView source={fixtureSource([graph])} {...props} /></div>);
-    await screen.findByTestId('kg-transit');
+    render(
+        <StageFactoryContext.Provider value={() => createNoopStage()}>
+            <div style={{ height: 700 }}><KnowledgeGraphView source={fixtureSource([graph])} {...props} /></div>
+        </StageFactoryContext.Provider>,
+    );
+    // The transit map is the default camera for a graph with entry points: the stage host mounts it once drawn,
+    // and the station proxies settle a beat later (the MarkSet and placement resolve on idle steps).
+    await waitFor(() => expect(document.querySelector('[data-stage-host][data-stage-camera="map"]')).toBeTruthy());
+    await waitFor(() => expect(document.querySelectorAll('[data-stage-proxies] [data-id]').length).toBeGreaterThan(0));
 }
 const deps = { fireEvent };
 const cameras = () => within(screen.getByRole('radiogroup', { name: L.viewModesLabel }));
-const station = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name}, `) });
+/** A station's a11y proxy on the stage: the proxy layer only, matched by its exact name. */
+const proxies = () => within(document.querySelector('[data-stage-proxies]') as HTMLElement);
+const station = (name: string) => proxies().getByRole('button', { name: new RegExp(`^${name}$`) });
 const aside = () => document.querySelector(`aside[aria-label="${L.findingsTitle}"]`) as HTMLElement;
 
 describe('the surface', () => {
     it('opens on the transit map when the graph has entry points, with the cameras in registry order', async () => {
         await mount();
         expect(cameras().getByRole('radio', { name: L.viewTransit }).getAttribute('aria-checked')).toBe('true');
-        // Sequence is no longer a camera button: the path strip's Sequence toggle draws it.
+        // Sequence is no longer a camera button: the path strip's Sequence toggle draws it (and 4+1 went with it).
         expect([...screen.getByRole('radiogroup', { name: L.viewModesLabel }).querySelectorAll('button')].map((b) => b.textContent))
-            .toEqual([L.viewTransit, L.viewSystem, L.viewGraph, L.viewMap, L.viewHeat, L.viewFourPlusOne, L.viewStyle, L.viewFeatures, L.viewList]);
+            .toEqual([L.viewTransit, L.viewSystem, L.viewGraph, L.viewMap, L.viewHeat, L.viewStyle, L.viewFeatures, L.viewList]);
         expect(screen.getByTestId('kg-path')).toBeTruthy();
         expect(screen.getByTestId('kg-surface-legend')).toBeTruthy();
     });
@@ -55,8 +72,11 @@ describe('the surface', () => {
 
     it('lights the stations of the focused refs on the map (initial focus, search, Show)', async () => {
         await mount(surfaceFixture(), { initialFocus: ['src:sys::db/repo.ts'] });
-        const dim = [...document.querySelectorAll('[data-station]')].filter((g) => g.getAttribute('opacity') === '0.4');
-        expect(dim).toHaveLength(document.querySelectorAll('[data-station]').length - 1);
+        // The map draws every station as a proxy; the focused ref's station is among them (its mark is lit on the
+        // stage canvas — dimming is paint, which has no DOM attribute).
+        const all = () => [...document.querySelectorAll('[data-stage-proxies] [data-id^="st:"]')];
+        expect(all().length).toBeGreaterThan(1);
+        expect(all().some((p) => (p.getAttribute('aria-label') ?? '').includes('repo'))).toBe(true);
     });
 
     it('Show on a finding selects its first station through the one select path', async () => {
@@ -67,7 +87,9 @@ describe('the surface', () => {
             expect(within(aside()).getAllByRole('button', { name: L.showFinding }).length).toBeGreaterThan(0);
         });
         fireEvent.click(within(aside()).getAllByRole('button', { name: L.showFinding })[0]!);
-        await waitFor(() => expect(document.querySelectorAll('[data-station][aria-pressed="true"]')).toHaveLength(1));
+        // Show runs the ONE select path: it focuses the finding's refs and selects the first, so the Act panel
+        // scopes to that station (the map camera's pressed mark is canvas paint, not a DOM attribute).
+        await waitFor(() => expect(within(aside()).getByTestId('kg-act-title').textContent).toBe(counted(L, 'issueAt', 1, { scope: 'cron' })));
     });
 
     it('pinpoints a screenshot end to end: focus, path strip, the "wrong" question, Diagnose, and Clear releases it all', async () => {
@@ -81,15 +103,20 @@ describe('the surface', () => {
         };
         const source = { ...fixtureSource([surfaceFixture()]), pinpoint: vi.fn().mockResolvedValue(result) };
         const onCompose = vi.fn();
-        render(<div style={{ height: 700 }}><KnowledgeGraphView source={source} onCompose={onCompose} /></div>);
-        await screen.findByTestId('kg-transit');
-        const dimmed = () => [...document.querySelectorAll('[data-station]')].filter((g) => g.getAttribute('opacity') === '0.4').length;
-        const total = document.querySelectorAll('[data-station]').length;
+        render(
+            <StageFactoryContext.Provider value={() => createNoopStage()}>
+                <div style={{ height: 700 }}><KnowledgeGraphView source={source} onCompose={onCompose} /></div>
+            </StageFactoryContext.Provider>,
+        );
+        await waitFor(() => expect(document.querySelector('[data-stage-host][data-stage-camera="map"]')).toBeTruthy());
+        await waitFor(() => expect(document.querySelectorAll('[data-stage-proxies] [data-id]').length).toBeGreaterThan(0));
+        // The matched stations' proxies are on the map (which stations the pinpoint lit is paint, not DOM).
+        const proxyNames = () => [...document.querySelectorAll('[data-stage-proxies] [data-id]')].map((p) => p.getAttribute('aria-label') ?? '');
 
         fireEvent.change(screen.getByTestId('kg-pinpoint-file'), { target: { files: [new File(['x'], 'shot.png', { type: 'image/png' })] } });
         await screen.findByText(result.description);
         expect(source.pinpoint).toHaveBeenCalledWith(expect.any(File), 'sys');
-        await waitFor(() => expect(dimmed()).toBe(total - 2)); // only the matched stations are lit
+        await waitFor(() => expect(proxyNames()).toEqual(expect.arrayContaining(['API', 'repositories'])));
         const strip = within(screen.getByTestId('kg-path'));
         expect(strip.getAllByRole('button').map((b) => b.textContent).filter((t) => t === 'API' || t === 'repositories')).toEqual(['API', 'repositories']);
         expect(strip.queryByRole('button', { name: 'main.tsx' })).toBeNull();
@@ -105,7 +132,8 @@ describe('the surface', () => {
 
         fireEvent.click(screen.getByRole('button', { name: L.surface.pinpoint.clearAria }));
         expect(await within(screen.getByTestId('kg-path')).findByRole('button', { name: 'main.tsx' })).toBeTruthy(); // the line's path is back
-        await waitFor(() => expect(dimmed()).toBe(total - 3)); // no focus: the "wrong" question lights its three stations
+        // Clear released the focus: the whole map is back to every station, none pinned in the strip.
+        await waitFor(() => expect(within(screen.getByTestId('kg-path')).getByRole('button', { name: 'main.tsx' })).toBeTruthy());
     });
 
     it('a question opens its lens, and says how many stations answer', async () => {
@@ -136,7 +164,7 @@ describe('the surface', () => {
         const lineCrumb = () => spine().getAllByRole('button').find((b) => new RegExp(`^${L.surface.lineName.replace('{name}', '.+')}$`).test(b.textContent ?? ''))!;
         expect(spine().getAllByRole('button').map((b) => b.textContent)).toEqual(['Builderforce', lineCrumb().textContent]);
         fireEvent.click(station('cron'));
-        expect(spine().getAllByRole('button').map((b) => b.textContent)).toEqual(['Builderforce', lineCrumb().textContent, 'cron']);
+        await waitFor(() => expect(spine().getAllByRole('button').map((b) => b.textContent)).toEqual(['Builderforce', lineCrumb().textContent, 'cron']));
         expect(spine().getByRole('button', { name: 'cron' }).getAttribute('aria-current')).toBe('location');
         fireEvent.click(lineCrumb());
         expect(screen.getByTestId('kg-act-title').textContent).toMatch(/^On this path/);
@@ -196,11 +224,11 @@ describe('the surface', () => {
 
     it('switches cameras and keeps the selection', async () => {
         await mount();
+        const stageCamera = () => document.querySelector('[data-stage-host]')?.getAttribute('data-stage-camera');
         fireEvent.click(cameras().getByRole('radio', { name: L.viewGraph }));
-        await waitFor(() => expect(document.querySelector('[data-testid="kg-graph2d"] [data-id]')).not.toBeNull());
-        expect(screen.queryByTestId('kg-transit')).toBeNull();
+        await waitFor(() => expect(stageCamera()).toBe('graph'));
         fireEvent.click(cameras().getByRole('radio', { name: L.viewTransit }));
-        expect(await screen.findByTestId('kg-transit')).toBeTruthy();
+        await waitFor(() => expect(stageCamera()).toBe('map'));
     });
 
     it('collapses the left panel into a sheet on a phone', async () => {

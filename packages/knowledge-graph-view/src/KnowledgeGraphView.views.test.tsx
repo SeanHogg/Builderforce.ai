@@ -7,25 +7,43 @@ import { KnowledgeGraphView } from './KnowledgeGraphView';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from './labels';
 import { codeFixture, fixtureSource, mixedFixture } from './testing';
 import { lensIsPicked, openDetails as openDetailsOf } from './testPicks';
+import { StageFactoryContext } from './stage/host/StageFactoryContext';
+import { createNoopStage } from './stage/renderer';
 
-vi.mock('./scene/GraphScene', () => ({ default: () => <div data-testid="kg-scene" /> }));
+// The view draws every placement camera (Graph/Map/3D/transit) through the lazy three.js StageHost
+// (PRD 43 B1a). In jsdom the real WebGL factory declines and the scene falls back to the List, so the
+// camera switcher and scene these tests assert on never mount. Provide the no-op stage factory through
+// the real context — the same port stageCard.test.tsx drives — so the stage host mounts and the whole
+// view renders. No module mocks: they do not intercept reliably in this whole-view graph.
 afterEach(() => vi.restoreAllMocks());
 
 async function mount(graph: KnowledgeGraph = codeFixture()) {
-    render(<div style={{ height: 600 }}><KnowledgeGraphView source={fixtureSource([graph])} /></div>);
-    // A cheap DOM wait: a role query over the whole view can outlast the idle layout's timer.
-    await waitFor(() => expect(document.querySelector('[data-testid="kg-graph2d"] [data-id]')).not.toBeNull());
+    render(
+        <StageFactoryContext.Provider value={() => createNoopStage()}>
+            <div style={{ height: 600 }}><KnowledgeGraphView source={fixtureSource([graph])} /></div>
+        </StageFactoryContext.Provider>,
+    );
+    // The scene's "a graph is loaded and drawn" gate: the stage host mounts only once a real graph paints.
+    await waitFor(() => expect(document.querySelector('[data-stage-host]')).toBeTruthy());
 }
 // The View group is a segmented radio group; Insights and the Lens panel sit in the Act rail's collapsed Details section (in the DOM, hidden).
 const modes = () => within(screen.getByRole('radiogroup', { name: L.viewModesLabel }));
 const insights = () => within(screen.getByTestId('kg-insights'));
 const openDetails = () => openDetailsOf({ fireEvent });
+// The Graph camera draws the graph on the stage: every shown node is an a11y proxy button (data-id "node:<ref>").
+const graphNodeProxies = () => document.querySelectorAll('[data-stage-proxies] [data-id^="node:"]');
+const stageCamera = () => document.querySelector('[data-stage-host]')?.getAttribute('data-stage-camera');
+
+async function graphNodesSettled(): Promise<void> {
+    // Proxies land after the MarkSet and placement resolve: wait until at least one node shows.
+    await waitFor(() => expect(graphNodeProxies().length).toBeGreaterThan(0));
+}
 
 describe('view modes', () => {
     it('opens on the 2D graph, not the list, when there is no WebGL', async () => {
         await mount();
         expect(screen.queryByTestId('kg-list')).toBeNull();
-        expect(screen.getAllByRole('button', { name: /, File$/ }).length).toBeGreaterThan(0);
+        await graphNodesSettled();
         expect(modes().getByRole('radio', { name: L.viewGraph }).getAttribute('aria-checked')).toBe('true');
         expect(modes().queryByRole('radio', { name: L.view3d })).toBeNull();
         expect(modes().getByRole('radio', { name: L.viewMap })).toBeTruthy();
@@ -45,8 +63,9 @@ describe('view modes', () => {
     it('draws the folder mind map', async () => {
         await mount();
         fireEvent.click(modes().getByRole('radio', { name: L.viewMap }));
-        expect(await screen.findByTestId('kg-map')).toBeTruthy();
-        expect(screen.queryByTestId('kg-graph2d')).toBeNull();
+        // The Mind map camera is the `mind` placement of the one stage.
+        await waitFor(() => expect(stageCamera()).toBe('mind'));
+        expect(stageCamera()).not.toBe('graph');
     });
 
     it('offers 3D when WebGL exists, even with reduced motion, and does not default to it', async () => {
@@ -54,8 +73,9 @@ describe('view modes', () => {
         vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener: () => undefined, removeEventListener: () => undefined }));
         try {
             await mount();
+            // The 3D camera is offered (WebGL exists) but the Graph is still the default.
             fireEvent.click(await modes().findByRole('radio', { name: L.view3d }));
-            expect(await screen.findByTestId('kg-scene')).toBeTruthy();
+            await waitFor(() => expect(stageCamera()).toBe('3d'));
             expect(screen.getByTestId('kg-insights')).toBeTruthy();
         } finally {
             vi.unstubAllGlobals();

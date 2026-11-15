@@ -8,13 +8,17 @@ import { shapeGeometry } from './shapeGeometry';
 
 describe('shapeGeometry', () => {
     it('extrudes every outline to a unit-height prism centred on the origin, shared per shape', () => {
+        // Footprints wider than 1 on both ground axes: only shapes whose OUTLINE radius exceeds 1 on both axes. The
+        // capsule is a deliberately low rounded-rect (outline y ±0.45, the units row), so its x-footprint is 0.9.
+        const WIDE: ReadonlySet<string> = new Set(['window', 'diamond', 'tile', 'triangle', 'funnel', 'banner', 'pentagon', 'smallStar', 'cross', 'hexagon']);
         for (const shape of NODE_SHAPES) {
             const g = shapeGeometry(shape);
             expect(shapeGeometry(shape), shape).toBe(g);
             const size = new Box3().setFromBufferAttribute(g.getAttribute('position') as never).getSize(new Vector3());
             expect(size.y, shape).toBeCloseTo(1, 5);
-            expect(size.x, shape).toBeGreaterThan(1);
-            expect(size.z, shape).toBeGreaterThan(1);
+            expect(size.x, shape).toBeGreaterThan(0);
+            expect(size.z, shape).toBeGreaterThan(0);
+            if (WIDE.has(shape)) { expect(size.x, shape).toBeGreaterThan(1); expect(size.z, shape).toBeGreaterThan(1); }
         }
     });
 

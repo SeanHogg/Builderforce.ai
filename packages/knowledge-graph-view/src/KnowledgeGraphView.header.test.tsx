@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 /** The header: the review action (status chip, action button), the scrubber in the question row, the ask bar, the Panels group, Risk overlays, and the narrow layout. */
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ReactNode } from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { KnowledgeGraphView } from './KnowledgeGraphView';
@@ -11,14 +12,29 @@ import { Toolbar } from './Toolbar';
 import { fixtureSource, surfaceFixture } from './testing';
 
 import type { KnowledgeGraphSource, SyncStatus } from './types';
+import { StageFactoryContext } from './stage/host/StageFactoryContext';
+import { createNoopStage } from './stage/renderer';
 
-vi.mock('./scene/GraphScene', () => ({ default: () => <div data-testid="kg-scene" /> }));
+// The view draws every placement camera through the lazy three.js StageHost (PRD 43 B1a). In jsdom the
+// real WebGL factory declines and the scene falls back to the List, so the header chrome these tests
+// assert on (the spine, the scene overlay's tools, the Act rail) never mounts. Provide the no-op stage
+// factory through the real context — the same port stageCard.test.tsx drives — so the stage host mounts
+// and the whole view renders. No module mocks: they do not intercept reliably in this whole-view graph.
 afterEach(() => vi.restoreAllMocks());
 
 const h = L.surface.header;
 
 const sync = (over: Partial<SyncStatus> = {}): SyncStatus => ({ local: { files: 120, docs: 0 }, server: { files: 120, docs: 0 }, sources: [{ id: 'code', state: 'collected' }], ...over });
 const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
+
+/** The view with the no-op stage factory the test host "can draw": the stage host mounts in jsdom. */
+function view(element: ReactNode) {
+    return (
+        <StageFactoryContext.Provider value={() => createNoopStage()}>
+            <div style={{ height: 700 }}>{element}</div>
+        </StageFactoryContext.Provider>
+    );
+}
 
 /** A source over the surface fixture, with the optional host methods the header reads. */
 function sourceOf(extra: Partial<KnowledgeGraphSource> = {}, graphs: KnowledgeGraph[] = [surfaceFixture()]): KnowledgeGraphSource {
@@ -33,8 +49,9 @@ function sourceOf(extra: Partial<KnowledgeGraphSource> = {}, graphs: KnowledgeGr
 }
 
 async function mount(source: KnowledgeGraphSource) {
-    render(<div style={{ height: 700 }}><KnowledgeGraphView source={source} /></div>);
-    await screen.findByTestId('kg-transit');
+    render(view(<KnowledgeGraphView source={source} />));
+    // The scene's "a graph is loaded and drawn" gate: the stage host mounts only once a real graph paints.
+    await waitFor(() => expect(document.querySelector('[data-stage-host]')).toBeTruthy());
 }
 const strip = () => within(screen.getByTestId('kg-status-strip'));
 const askBox = () => screen.getByRole('searchbox', { name: L.searchLabel }) as HTMLInputElement;
@@ -139,7 +156,7 @@ describe('what the ⋯ menu held, now in the Reviews panel', () => {
 
 describe('openReview with a graph on screen', () => {
     it('opens the Reviews panel', async () => {
-        render(<div style={{ height: 700 }}><KnowledgeGraphView source={sourceOf()} openReview /></div>);
+        render(view(<KnowledgeGraphView source={sourceOf()} openReview />));
         expect(await screen.findByRole('dialog', { name: 'Builderforce' })).toBeTruthy();
     });
 
@@ -293,13 +310,21 @@ describe('the canvas tools and panel toggles', () => {
     });
 
     it('hides the Act panel when the right toggle is pressed, and brings it back', async () => {
-        window.localStorage.removeItem('kg.panelVisibility.v1');
-        await mount(sourceOf());
-        expect(screen.queryByTestId('kg-act-title')).not.toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: L.surface.panelToggles.hideRight }));
-        expect(screen.queryByTestId('kg-act-title')).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: L.surface.panelToggles.showRight }));
-        expect(screen.queryByTestId('kg-act-title')).not.toBeNull();
-        window.localStorage.removeItem('kg.panelVisibility.v1');
+        // jsdom may run without a localStorage (the experimental flag): give the panel-visibility
+        // persistence an in-memory stand-in so the toggle round-trips.
+        const mem = new Map<string, string>();
+        vi.stubGlobal('localStorage', { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => { mem.set(k, v); }, removeItem: (k: string) => { mem.delete(k); }, clear: () => mem.clear(), key: () => null, length: 0 });
+        try {
+            window.localStorage.removeItem('kg.panelVisibility.v1');
+            await mount(sourceOf());
+            expect(screen.queryByTestId('kg-act-title')).not.toBeNull();
+            fireEvent.click(screen.getByRole('button', { name: L.surface.panelToggles.hideRight }));
+            expect(screen.queryByTestId('kg-act-title')).toBeNull();
+            fireEvent.click(screen.getByRole('button', { name: L.surface.panelToggles.showRight }));
+            expect(screen.queryByTestId('kg-act-title')).not.toBeNull();
+            window.localStorage.removeItem('kg.panelVisibility.v1');
+        } finally {
+            vi.unstubAllGlobals();
+        }
     });
 });

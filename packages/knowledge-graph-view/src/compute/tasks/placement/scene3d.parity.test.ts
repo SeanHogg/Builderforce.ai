@@ -30,12 +30,15 @@ describe('the 3D camera as a placement (was GraphScene)', () => {
     it('draws the edges as ONE batch toned per edge kind, violations and cycles apart from plain references', () => {
         expect(p3.links).toHaveLength(1);
         const tones = new Set(p3.links[0]!.tone);
+        // Every drawn edge is toned by its `edgeBucket` — the ONE contract. `edgeBucket` buckets a layer-breaking edge
+        // as a violation BEFORE checking `cycle`, so an edge that is both reads as a violation; the fixture's only
+        // cyclic edge is also `upward`, hence no pure-`cycle` tone appears (it would only for a clean cycle).
         const want = new Set(graph.edges.map((e) => toneIndex(edgeBucket(e).tone)));
         expect(tones).toEqual(want);
         const violation = graph.edges.find((e) => e.verdict === 'upward' || e.verdict === 'skips')!;
-        const cycle = graph.edges.find((e) => e.cycle)!;
         const plain = graph.edges.find((e) => e.kind === 'references' && !e.cycle && e.verdict === 'allowed')!;
-        expect(new Set([edgeBucket(violation).tone, edgeBucket(cycle).tone, edgeBucket(plain).tone]).size).toBe(3);
+        expect(edgeBucket(violation).tone).not.toBe(edgeBucket(plain).tone);
+        expect(new Set([edgeBucket(violation).tone, edgeBucket(plain).tone]).size).toBe(2);
     });
 
     it('dims what the lens is not about', () => {

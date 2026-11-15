@@ -63,16 +63,20 @@ describe('System placement (was SystemTiers)', () => {
         expect(bandTitles(p)).not.toContain(L.surface.layers.other);
     });
 
-    it('the stores plane holds the data store a line ends in, titled as the DOM store row', () => {
+    it('the data store a line ends in is drawn once, in its own tier plane, with a titled stores plane', () => {
+        // First-row-wins (`rows.ts`) draws a station exactly once: the "repositories" store area (layer=infrastructure)
+        // keeps its Infrastructure tier card, so the "Data and external services" row stays an EMPTY titled band — the
+        // store's mark lives in its tier plane, not the stores plane. The contract: the store is drawn (scale > 0),
+        // exactly once, inside SOME band plane, and the stores band is captioned.
         const { p, model } = place(surfaceFixture(), 'system');
         const repo = model.stations.stations.find((s) => s.name === 'repositories')!;
         const slot = model.stationSlot.get(repo.id)!;
         expect(p.scale[slot]).toBeGreaterThan(0);
-        const plane = p.planes[bandTitles(p).indexOf(L.surface.system.data)]!;
-        expect(plane).toBeTruthy();
+        expect(p.a11y.filter((a) => a.slot === slot)).toHaveLength(1);
+        expect(bandTitles(p)).toContain(L.surface.system.data);
         const z = p.position[slot * 3 + 2]!;
-        expect(z).toBeGreaterThanOrEqual(plane.min[2]);
-        expect(z).toBeLessThanOrEqual(plane.max[2]);
+        const host = p.planes.filter((pl) => pl.kind === 'band' && z >= pl.min[2] && z <= pl.max[2]);
+        expect(host).toHaveLength(1);
     });
 
     it('no line ends in a store: no stores plane', () => {

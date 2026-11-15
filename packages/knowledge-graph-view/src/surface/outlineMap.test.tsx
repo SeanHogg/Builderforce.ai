@@ -1,17 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { buildOutline, type GraphOutline, type KnowledgeGraph, type KNode, type NodeRef } from '@seanhogg/builderforce-memory/knowledge';
-import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from '../labels';
 import { codeFixture, surfaceFixture } from '../testing';
 import type { KnowledgeGraphSource } from '../types';
 import { useKnowledgeGraph } from '../useKnowledgeGraph';
-import { HEAT_CELL_CAP, HeatGrid } from './HeatGrid';
 import { buildLines } from './lines';
 import { outlineView } from './outlineGraph';
 import { ref, truncatedFixture } from './outlineFixture';
 import { buildStations, stationOfRef } from './stations';
 import { MAX_STATIONS } from './areaRollup';
-import type { SceneProps } from './registry';
 import { useSurfaceActions } from './useSurfaceActions';
 
 const flush = () => act(async () => { await Promise.resolve(); await Promise.resolve(); });
@@ -190,25 +187,5 @@ describe('Show brings an outline-only ref in', () => {
         await flush();
         expect(load).toHaveBeenLastCalledWith('a', { focus: ['src:a::not/in/the/graph.ts'] });
         expect(result.current.focus).toEqual(['src:a::not/in/the/graph.ts']);
-    });
-});
-
-describe('HeatGrid pages its cells', () => {
-    it('draws at most HEAT_CELL_CAP cells and reveals the next page on request', () => {
-        const total = HEAT_CELL_CAP + 50;
-        const stationList = Array.from({ length: total }, (_, i) => ({
-            id: `s${i}`, name: `station ${i}`, kind: 'folder' as const, entry: false, refs: [], files: 1, layer: 'application', anti: 1,
-            findingIds: [], use: 0.5, changed: false, patterns: [], dup: 0, unused: 0, facts: 0, claims: 0,
-        }));
-        const stations = { stations: stationList, byId: new Map(stationList.map((s) => [s.id, s])), stationOf: new Map() };
-        const surface = {
-            stations, lit: null, station: null, selectStation: vi.fn(),
-            overlay: { bindings: { size: 'cx', colour: 'anti', ring: 'cov' }, style: () => ({ size: 5, tone: 'accent', ring: null }) },
-        };
-        render(<HeatGrid {...({ labels: L, surface } as unknown as SceneProps)} />);
-        expect(document.querySelectorAll('[data-cell]')).toHaveLength(HEAT_CELL_CAP);
-        fireEvent.click(screen.getByText(fillTemplate(L.surface.heat.showMore, { count: 50 })));
-        expect(document.querySelectorAll('[data-cell]')).toHaveLength(total);
-        expect(document.querySelector('[data-heat-more]')).toBeNull();
     });
 });

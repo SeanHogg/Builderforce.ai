@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
-/** The architecture cameras (4+1, Style, Features): drawn over the surface fixture, hidden on a graph with no source code. */
+/**
+ * The architecture cameras: Style and Features are stage placements now (the DOM 4+1, Style and Features cameras retired
+ * at make-default, PRD 43 P1 — `fourPlusOne.ts`). Offered for code, hidden on a graph with no source files; through
+ * `ViewSurface` each renders on the one stage host, never as the retired DOM markup.
+ */
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
-import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from '../labels';
+import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from '../labels';
 import { LENSES } from '../lenses';
 import { docsFixture, surfaceFixture } from '../testing';
 import type { ViewMode } from '../types';
@@ -14,7 +18,8 @@ import { useSurface } from './useSurface';
 vi.mock('../scene/GraphScene', () => ({ default: () => null }));
 
 const env = { webgl: false, reducedMotion: true, hasLines: true, compact: false };
-const ARCH: ViewMode[] = ['4plus1', 'style', 'features'];
+/** The architecture cameras still registered: the DOM 4+1 camera retired at make-default (PRD 43 P1, `fourPlusOne.ts`). */
+const ARCH: ViewMode[] = ['style', 'features'];
 
 function mount(mode: ViewMode, graph: KnowledgeGraph = surfaceFixture(), onSelect = vi.fn()) {
     function Harness() {
@@ -37,43 +42,34 @@ describe('the architecture cameras', () => {
         expect(ids(docsFixture())).toEqual([]);
     });
 
-    it('4+1 switches between its five views and names each', () => {
-        mount('4plus1');
-        const views = within(screen.getByRole('radiogroup', { name: L.surface.fourPlusOne.viewsLabel }));
-        expect(views.getAllByRole('radio').map((r) => r.textContent)).toEqual(Object.values(L.surface.fourPlusOne.views));
-        expect(screen.getByText(L.surface.fourPlusOne.hints.logical)).toBeTruthy();
-        fireEvent.click(views.getByRole('radio', { name: L.surface.fourPlusOne.views.scenarios }));
-        expect(screen.getByTestId('kg-4plus1-scenarios')).toBeTruthy();
-        fireEvent.click(views.getByRole('radio', { name: L.surface.fourPlusOne.views.physical }));
-        expect(screen.getByTestId('kg-4plus1-physical')).toBeTruthy();
-        expect(screen.getByText(L.surface.fourPlusOne.unitsTitle)).toBeTruthy();
+    it('registers no 4+1 camera anymore: its id is not a ViewMode', () => {
+        expect(CAMERAS.map((c) => c.id)).not.toContain('4plus1' as ViewMode);
     });
 
-    it('4+1 Process says why it is empty on a graph with no lines, instead of an empty sequence', () => {
-        const base = surfaceFixture();
-        const noEntries = { ...base, nodes: base.nodes.map((n) => (n.partition === 'entry' ? { ...n, partition: 'application' } : n)) };
-        mount('4plus1', noEntries);
-        const views = within(screen.getByRole('radiogroup', { name: L.surface.fourPlusOne.viewsLabel }));
-        fireEvent.click(views.getByRole('radio', { name: L.surface.fourPlusOne.views.process }));
-        expect(screen.getByTestId('kg-4plus1-process-empty').textContent).toBe(L.surface.fourPlusOne.scenariosEmpty);
-        expect(screen.queryByTestId('kg-sequence')).toBeNull();
+    it('Style is a stage placement now: it renders through the stage host, not the retired DOM verdict/checks markup', async () => {
+        const style = CAMERAS.find((c) => c.id === 'style')!;
+        expect(style.placement).toBe('style');
+        expect(style.component).toBeUndefined();
+        mount('style');
+        // The lazy stage host resolves after the first tick; the retired DOM markup is never drawn.
+        await waitFor(() => expect(document.querySelector('[data-stage-host]')).toBeTruthy());
+        expect(document.querySelectorAll('[data-style]')).toHaveLength(0);
     });
 
-    it('Style shows a verdict and every style with its checks; an example selects its file', () => {
-        const onSelect = mount('style');
-        expect(screen.getByTestId('kg-style-verdict').textContent).toBeTruthy();
-        expect(document.querySelectorAll('[data-style]')).toHaveLength(6);
-        const example = document.querySelector<HTMLButtonElement>('[data-check] button');
-        expect(example).toBeTruthy();
-        fireEvent.click(example!);
-        expect(onSelect).toHaveBeenCalledWith(example!.title);
-    });
-
-    it('Features lists the five groups; an endpoint selects the file that registers it', () => {
-        const onSelect = mount('features');
-        for (const g of Object.values(L.surface.keyFeatures.groups)) expect(screen.getByRole('region', { name: g })).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: /POST \/users/ }));
-        expect(onSelect).toHaveBeenCalledWith('src:sys::api/routes.ts');
-        expect(screen.getAllByText(fillTemplate(L.surface.counts.dependentOther, { count: 2 })).length).toBeGreaterThan(0);
+    it('Features is a stage placement now: the retired DOM group regions are gone', async () => {
+        const features = CAMERAS.find((c) => c.id === 'features')!;
+        expect(features.placement).toBe('features');
+        expect(features.component).toBeUndefined();
+        mount('features');
+        // The placement host or its no-WebGL List fallback eventually resolves; either way the retired
+        // DOM camera's five group regions are never drawn.
+        await waitFor(() => {
+            expect(
+                document.querySelector('[data-stage-host]') !== null
+                || document.querySelector('[data-testid="kg-list"]') !== null
+                || document.querySelector('[data-testid="kg-camera-error"]') !== null,
+            ).toBe(true);
+        });
+        expect(document.querySelectorAll('[data-cell]')).toHaveLength(0);
     });
 });
