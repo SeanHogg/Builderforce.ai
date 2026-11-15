@@ -2,6 +2,9 @@
  * The graph worker's host (`graphWorker.ts`): ONE reused worker, builds serialised, a crash rejects the build in flight and
  * the next build respawns, an abort drops a queued build or terminates the worker under a running one, and bounded parts
  * are reassembled on both sides.
+ *
+ * Evidence re-verification: busts the verify cache (content-hash key) so the pre-push
+ * gate re-runs checks against the repaired install instead of replaying a stale record.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
