@@ -2189,7 +2189,10 @@ Version bumps and ROADMAP/DONE entries stay with the session model.
 2. **Fact store location: the repo directory**, `.builderforce/cache/`, with the gitignore,
    watcher and search exclusions in B4. VS Code's `storageUri` has no I/O advantage; its only
    gain was keeping watcher load away, and the exclusions provide that.
-3. **Auto-index on open: on.** L0–L2 always; L3 when idle and on mains power.
+3. **Auto-index on open: on.** L0–L2 always. L3 (the analyzers' pass) only on demand — the knowledge view opened on
+   a root, a review, a chat code action — never on its own (decided 2026-11-14, after the idle-time pass crashed the
+   extension host on a ~20k-file folder). The run delta's queued analyzer phase, which an agent run asked for, still
+   waits for idle and mains power.
 4. **Signed-out views:** `health` and `evermind` run on local data behind capability keys.
 5. **Autonomous-run policy:** C8.2 errors and `guard-removed` block finalization of an
    autonomous run. Everything else is advisory. Interactive runs are never blocked.

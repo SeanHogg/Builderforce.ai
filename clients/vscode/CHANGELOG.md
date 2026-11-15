@@ -2,14 +2,13 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
-## [2026.10.172] — 2026-11-14
+## [2026.10.172] — The code analyzers no longer take the extension host down, and run only when you ask
 
 - **"Copy chat diagnostics" now names the question the chat is waiting on.** When a run ends by asking you something (an `ask_user`), the report previously read as if the run had simply finished — the chat is actually blocked on your answer. The diagnostics now list the pending question(s) under a "Questions pending" line and raise a Signal saying the chat is waiting on a human, so a capture makes the blocked state obvious instead of looking done.
-
-## [Unreleased] — The code analyzers no longer take the extension host down, and run only when you ask
-
 - **Fixed: the extension host crashed every ~13 minutes on a large workspace, closing every chat with it.** The background code analysis of a ~20,000-file folder sent its whole result back from its worker as one message; copying that message grew past what the process could allocate, and Electron ends the whole extension host when that happens (the worker's own memory limit does not cover it). The result now comes back in bounded slices, and a result too large to send is refused with a clear error instead.
-- **Fixed: a crash during the analysis no longer repeats on every restart.** Before the analysis starts, BuilderForce now records that it is running. If VS Code finds that record on the next start, the previous run took the extension host down: the analysis is skipped for that folder until its commit changes (or for 24 hours when the folder is not a git repository), and the BuilderForce output channel says why.
+- **Fixed: a crash during the analysis no longer repeats on every restart.** Before the analysis starts, BuilderForce now records that it is running. If VS Code finds that record on the next start, the previous run took the extension host down: the analysis is skipped for that folder until its commit changes (or for 24 hours when the folder is not a git repository), and the BuilderForce output channel says why. Run **BuilderForce: Retry Code Analyzers** to analyse it again right away. Reloading or closing VS Code during an analysis is not treated as a crash.
+- **Fixed: an analysis whose analyzer failed was counted as complete.** It is now logged as failed and runs again the next time you ask, and an analysis that ran out of memory or produced too large a result is not retried for the same commit.
+- **Changed: opening the knowledge view on a sub-folder analyses that sub-folder only, not its whole workspace folder; closing the view cancels an analysis that has not started yet.**
 - **Changed: the bundled code analyzers never run on their own.** Background indexing (the file list, symbols and facts) still runs under `builderforce.knowledge.autoIndex`, but the heavy analyzer pass now runs only when you ask for it: opening the knowledge view on a folder, running a review, or a chat code action. Analyzer checks queued by an agent run still finish while you are idle.
 
 ## [2026.10.171] — Agent commits and checks no longer pop up Terminal/CMD windows on Windows

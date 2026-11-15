@@ -12,6 +12,9 @@ import type { PartitionRegistry } from "@seanhogg/builderforce-memory/knowledge"
 import { repoMapPort } from "@builderforce/repo-map";
 import { buildLocalCapabilityProvider } from "../localCapabilities";
 import { indexerL3Binding } from "../runDelta/analyzers/l3Binding";
+import {
+  assembleBounded, isOverBudget, postBounded, RESULT_OVER_BUDGET, type PartsReceiver, type TransferLimits, type TransferPart,
+} from "../workers/boundedTransfer";
 
 /** What the worker needs of the extension host's world, as structured-cloneable data. */
 export interface L3Job {
@@ -53,9 +56,40 @@ export function rehydratedResult(result: WorkspaceExtracted): WorkspaceExtracted
   return result.graphReads ? { ...result, graphReads: { ...result.graphReads, accepts: graphAcceptsOf(repoMapPort) } } : result;
 }
 
-/** The worker's messages to the host. */
+/** The stable code of an L3 result over the transfer budget (`workers/boundedTransfer.ts`): a permanent failure for that tree. */
+export const L3_RESULT_OVER_BUDGET = `l3_${RESULT_OVER_BUDGET}`;
+
+/** The arrays of a result that scale with the repository: they cross as bounded parts (`workers/boundedTransfer.ts`). */
+export const L3_RESULT_ARRAYS = [
+  "extracted", "snapshot.nodes", "snapshot.edges", "snapshot.issues", "graphReads.read", "graphReads.skipped.*.paths",
+] as const;
+
+/** The result the host reassembles from the `done` message's head and the parts that came before it. */
+export function assembledResult(head: WorkspaceExtracted, parts: PartsReceiver): WorkspaceExtracted {
+  return assembleBounded(head, parts, L3_RESULT_ARRAYS);
+}
+
+/**
+ * Sends a finished result from the worker: its large arrays as bounded parts, then `done` with the rest. A result over the
+ * transfer budget (or with one item over a part) sends `error` ({@link L3_RESULT_OVER_BUDGET}) instead — the giant message is
+ * never built.
+ */
+export function postResult(send: (reply: L3WorkerReply) => void, result: WorkspaceExtracted, limits?: TransferLimits): void {
+  let head: WorkspaceExtracted;
+  try {
+    head = postBounded(send, portableResult(result), L3_RESULT_ARRAYS, limits);
+  } catch (error) {
+    if (!isOverBudget(error)) throw error;
+    send({ type: "error", error: `${L3_RESULT_OVER_BUDGET}: ${error.message.replace(`${RESULT_OVER_BUDGET}: `, "")}`, code: L3_RESULT_OVER_BUDGET });
+    return;
+  }
+  send({ type: "done", result: head });
+}
+
+/** The worker's messages to the host: progress, warnings, the result's parts, then `done` (or `error`). */
 export type L3WorkerReply =
   | { type: "progress"; progress: Parameters<NonNullable<WorkspaceExtractedHooks["onProgress"]>>[0] }
   | { type: "warn"; message: string }
+  | TransferPart
   | { type: "done"; result: WorkspaceExtracted }
-  | { type: "error"; error: string };
+  | { type: "error"; error: string; code?: string };

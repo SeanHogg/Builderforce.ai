@@ -71,17 +71,17 @@ describe("RootIndexer: the sweep runs from the L3 gate's idle hook", () => {
 
   it("idle and quiet: it sweeps once per session (L3 itself waiting on battery does not stop it)", async () => {
     const h = harness(L3_IDLE_MAINS_MS);
-    await h.indexer.maybeRunL3();
-    await h.indexer.maybeRunL3();
+    await h.indexer.tick("/ws");
+    await h.indexer.tick("/ws");
     expect(h.sweepFacts).toHaveBeenCalledTimes(1);
   });
 
   it("not idle long enough, or typing: no sweep yet", async () => {
     const busy = harness(L3_IDLE_MAINS_MS - 1);
-    await busy.indexer.maybeRunL3();
+    await busy.indexer.tick("/ws");
     expect(busy.sweepFacts).not.toHaveBeenCalled();
     const typing = harness(L3_IDLE_MAINS_MS, true);
-    await typing.indexer.maybeRunL3();
+    await typing.indexer.tick("/ws");
     expect(typing.sweepFacts).not.toHaveBeenCalled();
   });
 });

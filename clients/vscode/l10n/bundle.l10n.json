@@ -1297,5 +1297,8 @@
   "{n} MB": "{n} MB",
   "{kind} {ref}": "{kind} {ref}",
   "{n} open": "{n} open",
-  "{n} done": "{n} done"
+  "{n} done": "{n} done",
+  "Choose the folder whose code analyzers should run again": "Choose the folder whose code analyzers should run again",
+  "The code analyzers ran again for {0}.": "The code analyzers ran again for {0}.",
+  "The code analyzers will run again for {0} when the folder is free, or when you next review it.": "The code analyzers will run again for {0} when the folder is free, or when you next review it."
 }

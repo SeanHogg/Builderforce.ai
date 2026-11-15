@@ -49,6 +49,7 @@ import { reviewParallelism } from "./review/extractPoolHost";
 import { UNTIMED, type LoadTimer } from "./knowledgeLoadTrace";
 import { factFindingsProvider, factIndexOf } from "./factFindings";
 import { preemptBackground } from "./indexLevels";
+import { useL3GuardLog } from "./l3CrashGuard";
 import { untilAborted } from "../boundedStep";
 
 /** Where the reviewed roots are listed (`workspaceState`), set at activation. */
@@ -57,6 +58,7 @@ export function configureKnowledgeHost(memento: RootsMemento): void {
   reviewedRootsMemento = memento;
   useRecordMemento(memento);
   configureReplicaLog(log);
+  useL3GuardLog(logLine);
 }
 
 export const log = (what: string, error: unknown): void =>

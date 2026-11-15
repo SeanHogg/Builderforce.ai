@@ -10,7 +10,8 @@
  *                the changed ones to `onFactsChanged` (L2). A batch over {@link BULK_EDIT_FILES} (a branch switch) goes to
  *                the reconcile and its map pass instead. A file the manifest does not know asks for a reconcile — only when
  *                the plan would list it, and at most once per {@link UNKNOWN_RECONCILE_MS};
- *   L3         — the analyzers' pass and queued L3 tasks, only when their gate opens (`l3Gate.ts`, §12.3).
+ *   L3         — the analyzers' pass ONLY when a person asks for it ({@link RootIndexer.requestL3}), and the queued L3 tasks an
+ *                agent run asked for, on their idle and mains-power gate (`l3Gate.ts`, §12.3). Nothing here starts L3 on its own.
  *
  * Long passes (`indexPasses.ts`) have their own abort signal: a keystroke stops one (it reruns when quiet), a person's
  * review preempts one ({@link RootIndexer.preempt}), and slices and passes never run on the root at the same time.
@@ -42,8 +43,14 @@ export interface IndexRootPorts {
    * fact kinds that moved (PRD 41 §B1, from the fact graph's kind hashes); absent ⇒ every kind.
    */
   extractEdited(paths: readonly string[]): Promise<{ changed: string[]; unreviewed: string[]; changedKinds?: readonly FactKind[] }>;
-  /** A map-only pass of the review over `plan` (L1); with `analyzers` the bundled analyzers run too (L3). Returns the paths it extracted and, when known, the kinds that moved. */
-  mapPass(plan: IndexPlan, opts: { analyzers: boolean; signal: AbortSignal }): Promise<{ changed: string[]; changedKinds?: readonly FactKind[] }>;
+  /**
+   * A map-only pass of the review over `plan` (L1); with `analyzers` the bundled analyzers run too (L3). Returns the paths it
+   * extracted and, when known, the kinds that moved — and the reasons of the analyzers that FAILED (the review records a
+   * failure and goes on; L3 treats any as a failed pass).
+   */
+  mapPass(plan: IndexPlan, opts: { analyzers: boolean; signal: AbortSignal }): Promise<{ changed: string[]; changedKinds?: readonly FactKind[]; analyzerFailures?: readonly string[] }>;
+  /** The analyzers' pass of the sub-folder root at `rel` (its own plan and review, the analysis scoped to it). Absent ⇒ none. */
+  subRootPass?(rel: string, signal: AbortSignal): Promise<{ analyzerFailures?: readonly string[] }>;
   /** The fact graph catches up with the plan's whole listing (extracts what moved, drops what is gone). Absent ⇒ no fact graph. */
   syncFacts?(plan: IndexPlan, signal: AbortSignal): Promise<FactsMoved>;
   /** Sweeps the fact store's unreferenced objects (run from the L3 gate's idle hook, once per session). Absent ⇒ no store. */
@@ -56,7 +63,7 @@ export interface IndexRootPorts {
   busy?(): boolean;
   /** An agent/chat run is executing: only L3 (the analyzers, seconds of CPU) waits for it. */
   agentBusy?(): boolean;
-  /** What L3 completed, kept across restarts (`l3Persist.ts`). Absent ⇒ L3 is owed afresh every session. */
+  /** What L3 completed, kept across restarts, and the root's crash quarantine (`l3Persist.ts`). Absent ⇒ the first request of a session runs a pass. */
   l3State?: L3StatePort;
   /** Files the root's recent commits touched (`git log -n 200`): queued ahead of the rest (B6 scheduling 4). */
   recent?(): Promise<ReadonlySet<string>>;
@@ -152,7 +159,13 @@ export class RootIndexer {
         await this.reconcileOnce().catch((error: unknown) => this.deps.log("reconcile", error));
       } while (this.reconcileAgain && !this.disposed);
     };
-    this.reconciling = loop().finally(() => { this.reconciling = undefined; this.working = null; this.emit(); });
+    this.reconciling = loop().finally(() => {
+      this.reconciling = undefined;
+      this.working = null;
+      this.emit();
+      // A request that came before the levels were ready runs now (only a requested pass: nothing starts L3 on its own).
+      if (this.l3.pending && !this.disposed) void this.l3.retryRequested(true);
+    });
     return this.reconciling;
   }
 
@@ -190,13 +203,28 @@ export class RootIndexer {
   }
 
   /**
-   * The L3 gate's idle check (`l3Gate.ts`): runs L3 when it is owed and its gate is open (true when it ran to the end), then
-   * the once-per-session fact-store sweep when the root is still idle and quiet.
+   * A person asked for L3 on this root — `scope` `""` — or on its sub-folder root `scope` (the knowledge view opened on it):
+   * the analyzers' pass runs now when it has work and the root allows it, else it stays requested and the tick starts it
+   * (`l3Gate.ts`). True when the analysis is current at the end.
    */
-  async maybeRunL3(): Promise<boolean> {
-    const ran = await this.l3.maybeRunL3();
+  requestL3(scope = ""): Promise<boolean> {
+    return this.l3.request(scope);
+  }
+
+  /** The person stopped looking (the knowledge view closed): a request of `scope` not started yet is dropped. */
+  withdrawL3(scope = ""): void {
+    this.l3.withdraw(scope);
+  }
+
+  /**
+   * The indexer's periodic check (`BackgroundIndexer`): a pending L3 request whose root is now quiet, the once-per-session
+   * fact-store sweep when idle, then ONE queued L3 task of the root (`rootPath`) on its idle and mains-power gate. Starts no L3
+   * nobody asked for.
+   */
+  async tick(rootPath: string): Promise<void> {
+    await this.l3.retryRequested();
     await this.l3.maybeSweep();
-    return ran;
+    await this.l3.runL3Task(rootPath);
   }
 
   /** Runs ONE queued L3 task of this root under the L3 gate; true when one ran to the end (`l3Gate.ts`). */
@@ -213,7 +241,7 @@ export class RootIndexer {
       pending: this.queue.size,
       ...(this.files !== undefined ? { files: this.files } : {}),
       ...(paused ? { paused } : {}),
-      ...(this.l3.owed && this.l3.waiting ? { l3Waiting: this.l3.waiting } : {}),
+      ...(this.l3.pending && this.l3.waiting ? { l3Waiting: this.l3.waiting } : {}),
     };
   }
 
@@ -315,7 +343,7 @@ export class RootIndexer {
     // The knowledge graph's sources moved (content); the fact graph says which kinds of facts did.
     const kinds = facts ? ALL_FACT_KINDS.filter((k) => k === "content" || facts.changedKinds.includes(k)) : map.changedKinds;
     await this.factsChanged(union(map.changed, plan.removed, facts?.changedPaths ?? []), kinds);
-    this.l3.owed = true;
+    this.l3.changed();
     this.levelReady(2);
   }
 
@@ -357,7 +385,7 @@ export class RootIndexer {
     this.working = 2;
     this.emit();
     await this.factsChanged(changed, changedKinds);
-    this.l3.owed = true;
+    this.l3.changed();
     if (this.ready === 3) this.ready = 2;
   }
 

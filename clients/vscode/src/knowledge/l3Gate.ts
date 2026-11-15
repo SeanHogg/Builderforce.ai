@@ -1,15 +1,32 @@
 /**
- * One root's L3 gate (PRD 41 B6, §12.3): the bundled analyzers' pass and the queued L3 tasks (`l3Tasks.ts`: the run delta's
- * analyzer phase) run only when the person is idle and on mains power, no review of theirs runs and no other pass holds
- * the root — as a long pass a keystroke stops (it reruns when the gate opens again). Split out of `rootIndexer.ts`; the
- * indexer owns the levels and hands the gate what it reads through {@link L3GateHost}.
+ * One root's L3 gate (PRD 41 B6, §12.3). The heavy analyzers' pass runs ON DEMAND ONLY — never on its own because a session
+ * started or files changed: a person opening the knowledge view on the root (or on one of its sub-folder roots) asks for it
+ * ({@link L3Gate.request}, through `requestL3` in `indexLevels.ts`), and closing the view withdraws the ask
+ * ({@link L3Gate.withdraw}); a review and the chat code actions run their own analysis (`l3SharedAnalysis.ts`). A request:
+ *
+ *   - names a SCOPE: `""` is the whole root (`ports.mapPass` with analyzers), a relative path is the sub-folder root there
+ *     (`ports.subRootPass`, scoped to it — never the whole folder's analysis);
+ *   - has nothing to do when the last completed pass saw this tree (the persisted sha, `l3Persist.ts`) and nothing changed since;
+ *   - is refused while the crash guard quarantines the root — or, for a sub-folder root, it or its folder (`l3CrashGuard.ts`) —
+ *     and one output-channel line says why;
+ *   - starts when no other pass holds the root, no review of the person's runs, no agent run is active and the person is not
+ *     typing — otherwise it stays requested, and the indexer's tick ({@link L3Gate.retryRequested}) starts it once the person
+ *     has been idle for {@link L3_IDLE_MAINS_MS} (so typing in bursts never restarts it every tick); a keystroke or a starting
+ *     agent run stops it the same way;
+ *   - is done when its pass completes AND every analyzer measured: a pass whose analyzer failed (the review records it in
+ *     `analyzerStatus` and goes on) is a FAILED pass — logged, not marked done, not L3-ready.
+ *
+ * Attempts are single-flight: a request, the tick and a reconcile's end never start two passes. The queued L3 tasks
+ * (`l3Tasks.ts`: the run delta's analyzer phase — an agent run asked for them) still run on the idle and mains-power gate
+ * ({@link L3Gate.runL3Task}), as does the once-per-session fact-store sweep. Split out of `rootIndexer.ts`; the indexer owns
+ * the levels and hands the gate what it reads through {@link L3GateHost}.
  */
 
 import { L3_IDLE_MAINS_MS, mayRunL3 } from "./indexBudget";
 import { ALL_FACT_KINDS, type FactKind, type IndexLevel, type L3Wait } from "./indexLevels";
 import type { PassGuard } from "./indexPasses";
 import type { IndexPlan } from "./indexReconcile";
-import { isWorkerOom, L3Tracker } from "./l3Persist";
+import { L3Tracker } from "./l3Persist";
 import { requeueL3Task, takeL3Task } from "./l3Tasks";
 import type { RootIndexerDeps } from "./rootIndexer";
 
@@ -29,28 +46,43 @@ export interface L3GateHost {
   levelReady(level: IndexLevel, since: number): void;
 }
 
+/** One scope's attempt: it ended (answered), or the root is not free and it stays requested. */
+type Attempt = "settled" | "wait";
+
 export class L3Gate {
+  /** The scopes a person asked for that have not run (or been found current, or refused) yet; `""` is the whole root. */
+  private readonly requested = new Set<string>();
+  /** The last answer of each scope that settled: true when its analysis is current. */
+  private readonly answers = new Map<string, boolean>();
+  /** The sub-folder scopes whose pass completed since the last change. */
+  private readonly currentScopes = new Set<string>();
   /**
-   * Owed at the session's start: the first cycle runs the analyzers once (they cache by input) — unless the root's persisted sha
-   * says its last completed pass already saw this tree (`l3Persist.ts`; only THIS owed is vetoed by it).
+   * The whole root's analysis may be stale since the session started: true until a pass completes, or the persisted sha says
+   * the last completed pass already saw this tree (only THIS staleness is vetoed by it).
    */
-  private startOwed = true;
-  /** Owed because something CHANGED (a file edit, a map pass): the sha never vetoes it. */
-  private changeOwed = false;
-  get owed(): boolean { return this.startOwed || this.changeOwed; }
-  set owed(value: boolean) {
-    this.changeOwed = value;
-    if (!value) this.startOwed = false;
-  }
+  private staleSinceStart = true;
+  /** Something CHANGED since the last completed pass (a file edit, a map pass): the sha never vetoes it. */
+  private changedSince = false;
+  /** The attempt in progress: single-flight. */
+  private driving: Promise<void> | undefined;
   waiting: L3Wait | undefined;
   private sweptOnce = false;
 
-  /** Present when the root persists what L3 completed (`l3Persist.ts`): the sha decides whether L3 is owed across restarts. */
+  /** Present when the root persists what L3 completed (`l3Persist.ts`): the sha says whether a request has work to do. */
   private readonly tracker: L3Tracker | undefined;
 
   constructor(private readonly host: L3GateHost) {
     const { l3State } = host.deps.ports;
-    this.tracker = l3State ? new L3Tracker(l3State, host.deps.clock) : undefined;
+    this.tracker = l3State ? new L3Tracker(l3State) : undefined;
+  }
+
+  /** Whether a request waits to run. */
+  get pending(): boolean { return this.requested.size > 0; }
+
+  /** The tree changed (an edit, a map pass): the next request runs a pass whatever the sha says. Starts nothing. */
+  changed(): void {
+    this.changedSince = true;
+    this.currentScopes.clear();
   }
 
   /** Nothing else runs on the root and the person is not typing: a long pass may start. */
@@ -59,48 +91,29 @@ export class L3Gate {
     return !h.disposed() && !h.passes.running && !h.passes.held() && !h.reconciling() && !h.sliceBusy() && !h.deps.gate.pausedBy();
   }
 
-  /** Runs L3 when it is owed and its gate is open; true when it ran to the end. */
-  async maybeRunL3(): Promise<boolean> {
-    const { deps } = this.host;
-    // The cheap conditions first: git is asked only when L3 could start.
-    if (!this.mayLookAtL3()) return false;
-    const idleOk = deps.gate.idleForMs() >= L3_IDLE_MAINS_MS;
-    if (idleOk && !deps.ports.busy?.() && !deps.ports.agentBusy?.()) await this.lookAtSha();
-    if (!this.mayStart()) return false;
-    // Idle first: the power source is asked only when L3 could start on it.
-    if (!idleOk) return this.wait("idle-wait");
-    if (deps.ports.busy?.() || deps.ports.agentBusy?.()) return this.wait("busy");
-    const power = await deps.power.current();
-    // Anything may have started during the power query — an agent run included.
-    if (!this.mayStart() || deps.ports.agentBusy?.()) return false;
-    if (!mayRunL3(power, deps.gate.idleForMs())) return this.wait(power === "battery" ? "battery" : "idle-wait");
-    this.waiting = undefined;
-    this.host.setWorking(3);
-    this.host.emit();
-    const started = deps.clock.now();
-    let bailed = false;
-    try {
-      const outcome = await this.host.passes.run("l3", async (signal) => {
-        await this.host.handover();
-        // An agent run may have started while the pass waited for its turn.
-        if (deps.ports.agentBusy?.()) { bailed = true; return { changed: [] as string[] }; }
-        return deps.ports.mapPass(this.host.lastPlan()!, { analyzers: true, signal });
-      });
-      if (bailed || this.host.disposed() || "aborted" in outcome) return false; // still owed: it reruns when the gate opens again
-      this.owed = false;
-      this.tracker?.completed();
-      // The analysis moved even when no file did: the derived step always reruns, for every kind.
-      await this.host.factsChanged(outcome.value.changed, ALL_FACT_KINDS);
-      this.host.levelReady(3, started);
-      return true;
-    } catch (error) {
-      deps.log("L3 analyzers", error);
-      this.tracker?.failedPass(isWorkerOom(error));
-      return false;
-    } finally {
-      this.host.setWorking(null);
-      this.host.emit();
-    }
+  /**
+   * A person asked for L3 on `scope` (`""`: the root; else its sub-folder root there): runs the pass now when it has work and
+   * may start; else it stays requested. True when that scope's analysis is current at the end (it ran, or had nothing to do).
+   */
+  async request(scope = ""): Promise<boolean> {
+    this.answers.delete(scope);
+    this.requested.add(scope);
+    await this.drive(true);
+    return this.answers.get(scope) ?? false;
+  }
+
+  /** The person no longer looks (the knowledge view closed): a request not started yet is dropped. A running pass finishes. */
+  withdraw(scope = ""): void {
+    this.requested.delete(scope);
+    if (this.requested.size === 0 && this.waiting) { this.waiting = undefined; this.host.emit(); }
+  }
+
+  /**
+   * Starts pending requests when the root allows it: the tick (`direct` false: only after {@link L3_IDLE_MAINS_MS} idle) and a
+   * reconcile's end (`direct` true: the levels just became ready). Joins an attempt already in progress.
+   */
+  retryRequested(direct = false): Promise<void> {
+    return this.requested.size === 0 ? Promise.resolve() : this.drive(direct);
   }
 
   /**
@@ -123,7 +136,7 @@ export class L3Gate {
     }
   }
 
-  /** Runs ONE queued L3 task of this root under the same gate; true when one ran to the end. */
+  /** Runs ONE queued L3 task of this root (an agent run asked for it) on the idle and mains-power gate; true when one ran to the end. */
   async runL3Task(rootPath: string): Promise<boolean> {
     const { deps } = this.host;
     if (!this.quietForLongPass() || deps.gate.idleForMs() < L3_IDLE_MAINS_MS || deps.ports.busy?.() || deps.ports.agentBusy?.()) return false;
@@ -140,30 +153,102 @@ export class L3Gate {
     }
   }
 
+  /** ONE attempt at a time: a direct request queues behind the one in progress; the tick joins it. */
+  private drive(direct: boolean): Promise<void> {
+    if (this.driving) return direct ? this.driving.then(() => this.drive(true)) : this.driving;
+    const run = this.attemptAll(direct).catch((error: unknown) => this.host.deps.log("L3 request", error));
+    this.driving = run.finally(() => { this.driving = undefined; });
+    return this.driving;
+  }
+
+  /** Every pending scope in turn (the whole root first), until one finds the root not free. */
+  private async attemptAll(direct: boolean): Promise<void> {
+    for (const scope of [...this.requested].sort()) {
+      if (!this.requested.has(scope)) continue; // withdrawn meanwhile
+      if ((await this.attempt(scope, direct)) === "wait") return;
+    }
+  }
+
+  private async attempt(scope: string, direct: boolean): Promise<Attempt> {
+    const { deps } = this.host;
+    if (!this.mayLookAtL3()) return "wait";
+    if (!direct && deps.gate.idleForMs() < L3_IDLE_MAINS_MS) return "wait";
+    if (deps.ports.busy?.() || deps.ports.agentBusy?.()) return this.wait("busy");
+    if (this.tracker) {
+      const verdict = await this.tracker.verdict();
+      if (verdict !== "unknown") this.staleSinceStart = verdict === "owed";
+      // A quarantined root is refused before anything starts (the guard logs why, once): a later request asks again.
+      if (await this.tracker.blocked(scope || undefined)) return this.settle(scope, false);
+    }
+    const current = scope ? this.currentScopes.has(scope) : !this.staleSinceStart && !this.changedSince;
+    if (current) return this.settle(scope, true);
+    if (scope && !deps.ports.subRootPass) {
+      deps.log("L3 analyzers", `no sub-folder pass for ${scope} on this host`);
+      return this.settle(scope, false);
+    }
+    // Anything may have started during the git reads — an agent run included.
+    if (!this.mayLookAtL3() || deps.ports.busy?.() || deps.ports.agentBusy?.()) return this.wait("busy");
+    return this.runPass(scope);
+  }
+
+  /** The requested pass itself. Stopped ⇒ still requested; failed (thrown, or an analyzer that failed) ⇒ logged, and the request ends. */
+  private async runPass(scope: string): Promise<Attempt> {
+    const { deps } = this.host;
+    this.waiting = undefined;
+    this.host.setWorking(3);
+    this.host.emit();
+    const started = deps.clock.now();
+    let bailed = false;
+    try {
+      const outcome = await this.host.passes.run("l3", async (signal) => {
+        await this.host.handover();
+        // An agent run may have started while the pass waited for its turn.
+        if (deps.ports.agentBusy?.()) { bailed = true; return { changed: [] as string[] }; }
+        return scope ? { changed: [] as string[], ...(await deps.ports.subRootPass!(scope, signal)) } : deps.ports.mapPass(this.host.lastPlan()!, { analyzers: true, signal });
+      });
+      if (bailed || this.host.disposed() || "aborted" in outcome) return "wait"; // still requested: it reruns when the root is quiet
+      const failures = outcome.value.analyzerFailures ?? [];
+      if (failures.length > 0) {
+        // The review records an analyzer failure and goes on; for L3 it is a failed pass: never marked done, never L3-ready.
+        deps.log("L3 analyzers", new Error(failures.join("; ")));
+        return this.settle(scope, false);
+      }
+      if (scope) {
+        this.currentScopes.add(scope);
+        return this.settle(scope, true);
+      }
+      this.staleSinceStart = false;
+      this.changedSince = false;
+      this.tracker?.completed();
+      this.settle(scope, true);
+      // The analysis moved even when no file did: the derived step always reruns, for every kind.
+      await this.host.factsChanged(outcome.value.changed, ALL_FACT_KINDS);
+      this.host.levelReady(3, started);
+      return "settled";
+    } catch (error) {
+      deps.log("L3 analyzers", error);
+      return this.settle(scope, false);
+    } finally {
+      this.host.setWorking(null);
+      this.host.emit();
+    }
+  }
+
   /** The cheap conditions of a start: the levels are there and nothing else runs on the root. */
   private mayLookAtL3(): boolean {
     const ready = this.host.ready();
     return this.quietForLongPass() && !!this.host.lastPlan() && ready !== null && ready >= 2;
   }
 
-  /**
-   * The persisted sha's say (`l3Persist.ts`) on the session-start / sha owed ONLY: the same sha as the last completed pass is
-   * not owed, a changed one is once it has settled. An owed set by a change (an edit) is never vetoed. Also takes the sha the
-   * pass will complete at.
-   */
-  private async lookAtSha(): Promise<void> {
-    if (!this.tracker) return;
-    const verdict = await this.tracker.verdict();
-    if (verdict !== "unknown") this.startOwed = verdict === "owed";
+  private settle(scope: string, current: boolean): Attempt {
+    this.requested.delete(scope);
+    this.answers.set(scope, current);
+    if (this.requested.size === 0 && this.waiting) { this.waiting = undefined; this.host.emit(); }
+    return "settled";
   }
 
-  private mayStart(): boolean {
-    const ready = this.host.ready();
-    return this.owed && this.quietForLongPass() && !!this.host.lastPlan() && ready !== null && ready >= 2;
-  }
-
-  private wait(reason: L3Wait): false {
+  private wait(reason: L3Wait): Attempt {
     if (reason !== this.waiting) { this.waiting = reason; this.host.emit(); }
-    return false;
+    return "wait";
   }
 }

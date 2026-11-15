@@ -12,7 +12,7 @@ vi.mock("./folderKnowledge", () => ({ beforeKnowledgeShutdown: () => () => undef
 import type { PlanDetail } from "@seanhogg/builderforce-memory/knowledge";
 import { BackgroundIndexer, L3_CHECK_MS, type IndexerHost } from "./backgroundIndexer";
 import { COALESCE_MS, realClock } from "./indexBudget";
-import { indexerWatches, preemptBackground } from "./indexLevels";
+import { indexerWatches, preemptBackground, requestL3, withdrawL3Request } from "./indexLevels";
 import type { KnowledgeRoot } from "./knowledgeRoots";
 
 const rootOf = (path: string): KnowledgeRoot => ({ rootId: `id:${path}`, title: path, rootPath: path, folderPath: path, rel: "" });
@@ -33,6 +33,7 @@ function fakeHost(initial: string[]) {
       extractEdited: vi.fn(async (batch: readonly string[]) => ({ changed: [...batch], unreviewed: [] as string[] })),
       mapPass: vi.fn(async (_p: unknown, o: { analyzers: boolean; signal: AbortSignal }) => { signals.push(o.signal); return { changed: [] as string[] }; }),
       onFactsChanged: vi.fn(async () => undefined),
+      subRootPass: vi.fn(async (_rel: string, _signal: AbortSignal) => ({})),
       dispose: vi.fn(() => { disposed.push(root.rootId); }),
     };
   }
@@ -161,12 +162,48 @@ describe("BackgroundIndexer — keystrokes, preemption and shutdown", () => {
     await vi.advanceTimersByTimeAsync(10);
     const p = f.ports.get("id:/a")!;
     p.mapPass.mockImplementationOnce((_plan, o) => new Promise((resolve) => { f.signals.push(o.signal); o.signal.addEventListener("abort", () => resolve({ changed: [] })); }));
-    await vi.advanceTimersByTimeAsync(L3_CHECK_MS + 100); // idle, mains: the L3 tick starts the analyzers' pass
+    void requestL3("id:/a"); // L3 runs only on request (the knowledge view opened on the root)
+    await vi.advanceTimersByTimeAsync(100);
     expect(p.mapPass.mock.calls.some(([, o]) => o.analyzers)).toBe(true);
     f.startRun();
     await vi.advanceTimersByTimeAsync(0);
     expect(f.signals[0]!.aborted).toBe(true);
     await bi.dispose();
+  });
+
+  // regression: the idle tick started the heavy analyzers' pass on its own; on a ~20k-file folder it took the host down every ~13 min.
+  it("regression: an idle session with no request never starts L3 — the tick runs only what was asked for", async () => {
+    const f = fakeHost(["/a"]);
+    const bi = new BackgroundIndexer(f.host);
+    bi.start(true);
+    await vi.advanceTimersByTimeAsync(L3_CHECK_MS * 10); // idle, on mains, levels ready: every tick looked
+    const p = f.ports.get("id:/a")!;
+    expect(p.mapPass.mock.calls.some(([, o]) => o.analyzers)).toBe(false);
+    // the person asks (the knowledge view opened on a sub-folder root of /a): the folder's indexer runs THAT root's pass
+    expect(await requestL3("id:/a:packages/x")).toBe(true);
+    expect(p.subRootPass.mock.calls.map(([rel]) => rel)).toEqual(["packages/x"]);
+    expect(p.mapPass.mock.calls.filter(([, o]) => o.analyzers)).toHaveLength(0);
+    // …and on the folder itself: the folder's pass
+    expect(await requestL3("id:/a")).toBe(true);
+    expect(p.mapPass.mock.calls.filter(([, o]) => o.analyzers)).toHaveLength(1);
+    await bi.dispose();
+    expect(await requestL3("id:/a")).toBe(false); // no indexer: nobody runs it
+  });
+
+  it("a waiting request is dropped only when the LAST view on the root closes", async () => {
+    for (const [folder, views, closed, runs] of [["/w1", 2, 1, 1], ["/w2", 2, 2, 0]] as const) {
+      const f = fakeHost([folder]);
+      const bi = new BackgroundIndexer(f.host);
+      bi.start(true);
+      await vi.advanceTimersByTimeAsync(10);
+      const p = f.ports.get(`id:${folder}`)!;
+      bi.keystroke(); // typing: the requests wait
+      for (let i = 0; i < views; i++) expect(await requestL3(`id:${folder}`)).toBe(false);
+      for (let i = 0; i < closed; i++) withdrawL3Request(`id:${folder}`);
+      await vi.advanceTimersByTimeAsync(L3_CHECK_MS * 3); // typing stopped, idle long enough: the tick looks
+      expect(p.mapPass.mock.calls.filter(([, o]) => o.analyzers)).toHaveLength(runs);
+      await bi.dispose();
+    }
   });
 
   it("preemptBackground reaches the root's indexer — and the containing folder's for a sub-folder root — and hands back the release", async () => {

@@ -1297,5 +1297,8 @@
   "{n} MB": "{n} Mo",
   "{kind} {ref}": "{kind} {ref}",
   "{n} open": "{n} ouverts",
-  "{n} done": "{n} terminés"
+  "{n} done": "{n} terminés",
+  "Choose the folder whose code analyzers should run again": "Choisissez le dossier dont les analyseurs de code doivent être relancés",
+  "The code analyzers ran again for {0}.": "Les analyseurs de code ont été relancés pour {0}.",
+  "The code analyzers will run again for {0} when the folder is free, or when you next review it.": "Les analyseurs de code seront relancés pour {0} dès que le dossier sera libre, ou lors de votre prochaine revue."
 }

@@ -1,7 +1,7 @@
 /**
  * Queued L3 work for the background indexer's L3 gate (PRD 41 B6, §12.3): heavy, deferrable tasks — today the run delta's
- * analyzer phase (`runDelta/analyzers/l3Phase.ts`) — that run like the indexer's own analyzer pass: only when the person
- * is idle and on mains power, never beside another long pass on the root, ONE at a time (`RootIndexer.runL3Task`).
+ * analyzer phase (`runDelta/analyzers/l3Phase.ts`), which an agent run asked for — that run only when the person is idle
+ * and on mains power, never beside another long pass on the root, ONE at a time (`RootIndexer.runL3Task`).
  *
  * A task is claimed by the indexer whose root holds its repository (or that the repository holds: a monorepo subfolder
  * opened on its own). With no indexer running (auto-index off), or none for the repository, a task runs at once,

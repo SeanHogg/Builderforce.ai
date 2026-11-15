@@ -4,7 +4,8 @@
  *   L0 — the plan: tree, manifest, sizes (the stat prefilter + Merkle walk);
  *   L1 — per-file facts (open and visible files first, then the rest in the background);
  *   L2 — derived knowledge: the file/symbol graph and its findings (today derived when the graph is built);
- *   L3 — the bundled analyzers' findings, only when idle and on mains power (§12.3).
+ *   L3 — the bundled analyzers' findings, only when a person asks for them ({@link requestL3}: the knowledge view opened on
+ *        the root) — never on its own (§12.3).
  *
  * The bus has two topics: a root's level status (for the visualizer's level indicator, `knowledgeProtocol` `level`
  * event) and the paths whose facts changed (the live graph re-reads on them instead of running a watcher of its own).
@@ -23,8 +24,8 @@ export const ALL_FACT_KINDS: readonly FactKind[] = ["structure", "body", "conten
 /** Why the indexer's queue is not draining: the person is typing, the window was long unfocused, or a map pass holds the root. */
 export type IndexPauseReason = "typing" | "unfocused" | "pass";
 
-/** Why L3 waits although L2 is ready: on battery, the person not idle long enough, or a review of theirs running. */
-export type L3Wait = "battery" | "idle-wait" | "busy";
+/** Why a requested L3 pass waits although L2 is ready: a review of the person's, or an agent run, holds the root. */
+export type L3Wait = "busy";
 
 /** One root's indexing state, as the visualizer renders it. */
 export interface IndexLevelStatus {
@@ -38,7 +39,7 @@ export interface IndexLevelStatus {
   /** Files the last plan listed (L0). */
   files?: number;
   paused?: IndexPauseReason;
-  /** Set while L3 is owed but its gate is shut. */
+  /** Set while a requested L3 pass waits for the root. */
   l3Waiting?: L3Wait;
 }
 
@@ -135,6 +136,57 @@ export async function preemptBackground(rootId: string): Promise<() => void> {
     released = true;
     for (const release of releases) release();
   };
+}
+
+/**
+ * An indexer's L3 handlers, by SCOPE (`""`: its root; else the relative path of a sub-folder root inside it): `request` is true
+ * when that scope's analysis is current at the end (it ran, or had nothing to do); `withdraw` drops a request not started yet.
+ */
+export interface L3Requester {
+  request(scope: string): Promise<boolean>;
+  withdraw(scope: string): void;
+}
+
+const l3Requesters = new Map<string, L3Requester>();
+/** How many askers (open knowledge views) still want L3 on each root id. */
+const l3Askers = new Map<string, number>();
+
+/** The indexer's way to be asked for L3 on its root and the sub-folder roots inside it (see {@link requestL3}). */
+export function registerL3Requester(rootId: string, requester: L3Requester): () => void {
+  l3Requesters.set(rootId, requester);
+  return () => { if (l3Requesters.get(rootId) === requester) l3Requesters.delete(rootId); };
+}
+
+/** The indexer that runs `rootId` (its own, or its folder's for `<folder root id>:<rel>`), and the scope inside it. */
+function l3TargetOf(rootId: string): { requester: L3Requester; scope: string } | undefined {
+  for (const [id, requester] of l3Requesters) {
+    if (rootId === id) return { requester, scope: "" };
+    if (rootId.startsWith(`${id}:`)) return { requester, scope: rootId.slice(id.length + 1) };
+  }
+  return undefined;
+}
+
+/**
+ * THE one entry point of an on-demand L3 pass through the background indexer: a person asked for the analyzers' findings on
+ * this root (the knowledge view opened on it). The indexer of the root — of its workspace folder, for a sub-folder root
+ * (`<folder root id>:<rel>`, whose analysis is scoped to that sub-folder) — runs the pass when it has work and the root
+ * allows it, else keeps it requested (`l3Gate.ts`) until {@link withdrawL3Request}. Resolves false when no indexer runs the
+ * root (`builderforce.knowledge.autoIndex` off): a review still runs its own analysis.
+ */
+export async function requestL3(rootId: string, opts: { looking?: boolean } = {}): Promise<boolean> {
+  // A view is an asker that stops looking ({@link withdrawL3Request}); a command (`looking: false`) asks once and stays asked.
+  if (opts.looking !== false) l3Askers.set(rootId, (l3Askers.get(rootId) ?? 0) + 1);
+  const target = l3TargetOf(rootId);
+  return target ? target.requester.request(target.scope).catch(() => false) : false;
+}
+
+/** One asker of {@link requestL3} stopped looking (the view closed): when none is left, a request not started yet is dropped. */
+export function withdrawL3Request(rootId: string): void {
+  const left = (l3Askers.get(rootId) ?? 0) - 1;
+  if (left > 0) { l3Askers.set(rootId, left); return; }
+  l3Askers.delete(rootId);
+  const target = l3TargetOf(rootId);
+  target?.requester.withdraw(target.scope);
 }
 
 const liveBatches = new Map<string, Set<Promise<void>>>();

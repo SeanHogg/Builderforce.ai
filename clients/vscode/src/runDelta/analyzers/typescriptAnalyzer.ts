@@ -14,6 +14,7 @@
 
 import * as path from "node:path";
 import { Worker } from "node:worker_threads";
+import { PART_BYTES, PartsReceiver, TRANSFER_BUDGET_BYTES, TRANSFER_SENDER_SOURCE } from "../../workers/boundedTransfer";
 import {
   ANALYZER_TIMEOUT_MS, failed, missingReason, okResult, skipped, tsProjectsOf, typeErrorFindings, TYPESCRIPT_TOOL, TYPESCRIPT_VERSION,
   type DeltaAnalyzer, type TscDiagnostic,
@@ -60,7 +61,13 @@ for (const project of workerData.projects) {
     }
   }
 }
-parentPort.postMessage(out);
+const sendParts = ${TRANSFER_SENDER_SOURCE};
+try {
+  sendParts((part) => parentPort.postMessage(part), [['diagnostics', out]], ${PART_BYTES}, ${TRANSFER_BUDGET_BYTES}, 0);
+  parentPort.postMessage({ type: 'done' });
+} catch (error) {
+  parentPort.postMessage({ type: 'error', code: error && error.code, error: String(error && error.message) });
+}
 `;
 
 /** The compiler module beside the bundled `bin/tsc` entry. */
@@ -75,7 +82,17 @@ function check(data: { tsModule: string; root: string; projects: string[]; chang
     const onAbort = (): void => { void worker.terminate(); resolve("timeout"); };
     signal?.addEventListener("abort", onAbort, { once: true });
     const done = (): void => { clearTimeout(timer); signal?.removeEventListener("abort", onAbort); };
-    worker.once("message", (d: TscDiagnostic[]) => { done(); void worker.terminate(); resolve(d); });
+    // Every diagnostic of the changed files arrives in bounded parts (`workers/boundedTransfer.ts`), then `done` (or `error`:
+    // a list over the transfer budget fails the analyzer instead of building one giant message).
+    const parts = new PartsReceiver();
+    const onMessage = (m: { type?: string }): void => {
+      if (parts.accept(m)) return;
+      worker.off("message", onMessage);
+      done();
+      void worker.terminate();
+      resolve(m.type === "done" ? parts.take<TscDiagnostic>("diagnostics") : "failed");
+    };
+    worker.on("message", onMessage);
     worker.once("error", () => { done(); resolve("failed"); });
     worker.once("exit", () => { done(); resolve("failed"); });
   });

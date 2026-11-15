@@ -8,7 +8,9 @@
  *                   mark stale, re-extract by the new hash;
  *   mapPass       — `reviewRoot(...).mapPass`: the review's own ports at its map-only stage (`reviewPortsFor` `mapOnly`:
  *                   symbols, history, root files, the knowledge index, systems — no judge), `judgeFiles: 0`, the extraction
- *                   worker pool; it tells `onKnowledgeChanged` listeners when it lands. With `analyzers`, L3;
+ *                   worker pool; it tells `onKnowledgeChanged` listeners when it lands. With `analyzers`, L3 — and the
+ *                   analyzers the review recorded as failed come back, so L3 never counts a failed analysis as done;
+ *   subRootPass   — a sub-folder root's own `reviewRoot(...).mapPass` with analyzers: L3 scoped to that sub-folder;
  *   wouldList     — the last plan's ignore files and skipped folders (`indexReconcile.listingFilter`);
  *   onFactsChanged — the L2 step (see {@link onFactsChanged}).
  */
@@ -17,7 +19,7 @@ import type * as vscode from "vscode";
 import { createReviewRecorder, knownKeysCache, markFilesEditedDetailed, reviewPacks } from "@builderforce/agent-tools/knowledge";
 import { recentCommits } from "@builderforce/agent-tools/node-git-history";
 import { readPartitions } from "@builderforce/agent-tools/prefetch";
-import { ignoreSourcesOf, type FactStoreVersion, type PlanDetail } from "@seanhogg/builderforce-memory/knowledge";
+import { ignoreSourcesOf, type FactStoreVersion, type PlanDetail, type ReviewReport } from "@seanhogg/builderforce-memory/knowledge";
 import { buildLocalCapabilityProvider } from "../localCapabilities";
 import { symbolGrammarOptions } from "../workspaceSymbols";
 import { anyRunActive } from "./activeRuns";
@@ -35,8 +37,8 @@ import { listedPaths, listingFilter, planIndex } from "./indexReconcile";
 import { vscodeKnowledgeFs } from "./knowledgeFs";
 import { isReviewingUnder } from "./knowledgeReplica";
 import { reviewRecords } from "./knowledgeSyncStatus";
-import type { KnowledgeRoot } from "./knowledgeRoots";
-import { log, onKnowledgeChanged, openRoot, reviewRoot } from "./knowledgeService";
+import { rootById, type KnowledgeRoot } from "./knowledgeRoots";
+import { log, onKnowledgeChanged, openRoot, reviewRoot, workspaceFolders } from "./knowledgeService";
 import type { IndexRootPorts } from "./rootIndexer";
 
 /**
@@ -47,6 +49,11 @@ import type { IndexRootPorts } from "./rootIndexer";
  */
 export async function onFactsChanged(rootId: string, changedPaths: readonly string[], changedKinds: readonly FactKind[] = ALL_FACT_KINDS): Promise<void> {
   publishIndexedFacts({ rootId, paths: changedPaths, kinds: changedKinds });
+}
+
+/** The reasons of the analyzers a review pass recorded as FAILED (`report.analyzerStatus`). */
+export function analyzerFailuresOf(report: Pick<ReviewReport, "analyzerStatus">): string[] {
+  return (report.analyzerStatus ?? []).filter((s) => s.status === "failed").map((s) => `${s.id}: ${s.reason ?? "failed"}`);
 }
 
 /** Per root, the fact store's version after this session's last sweep (`FactGraphStore.sweptAt`). */
@@ -136,9 +143,19 @@ export function hostIndexPorts(secrets: vscode.SecretStorage, root: KnowledgeRoo
       };
     },
     async mapPass(plan, { analyzers, signal }) {
-      await review.mapPass({ plan: plan.detail, analyzers, signal });
-      // The L1 pass extracted the plan's changed files (the indexer syncs the fact graph in the same pass); L3's news is the analysis.
-      return { changed: analyzers ? [] : [...plan.changed] };
+      const report = await review.mapPass({ plan: plan.detail, analyzers, signal });
+      // The L1 pass extracted the plan's changed files (the indexer syncs the fact graph in the same pass); L3's news is the
+      // analysis — and whether an analyzer failed, which the review records and goes on from.
+      return { changed: analyzers ? [] : [...plan.changed], ...(analyzers ? { analyzerFailures: analyzerFailuresOf(report) } : {}) };
+    },
+    async subRootPass(rel, signal) {
+      // The sub-folder root's OWN review: its plan, its store's rows, and the analysis scoped to it (`L3Job.path`).
+      const sub = rootById(`${rootId}:${rel}`, workspaceFolders());
+      if (!sub) throw new Error(`no sub-folder root ${rel} under ${root.title}`);
+      const subReview = reviewRoot(secrets, sub);
+      const detail = await subReview.backgroundPlan();
+      signal.throwIfAborted();
+      return { analyzerFailures: analyzerFailuresOf(await subReview.mapPass({ plan: detail, analyzers: true, signal })) };
     },
     async syncFacts(plan, signal) {
       // The stored graph first (only what moved since is extracted), the root's aliases (a change re-resolves every file),
@@ -161,7 +178,7 @@ export function hostIndexPorts(secrets: vscode.SecretStorage, root: KnowledgeRoo
     onFactsChanged: (changedPaths, changedKinds) => onFactsChanged(rootId, changedPaths, changedKinds),
     // The folder's own reviews AND its sub-folder roots' (`<rootId>:<rel>`): a folder pass would cover their files too.
     busy: () => isReviewingUnder(rootId),
-    // An agent/chat run: the person is idle while it works, so the idle gate alone would start L3 mid-run. Read by the L3 gate only.
+    // An agent/chat run: a requested L3 pass and the queued L3 tasks wait for it (the person is idle while it works). Read by the L3 gate only.
     agentBusy: anyRunActive,
     l3State: l3StateOf(root),
     liveIdle: () => liveWatcherIdle(rootId, LIVE_IDLE_WAIT_MS),

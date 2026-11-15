@@ -1297,5 +1297,8 @@
   "{n} MB": "{n} MB",
   "{kind} {ref}": "{kind} {ref}",
   "{n} open": "{n} offen",
-  "{n} done": "{n} erledigt"
+  "{n} done": "{n} erledigt",
+  "Choose the folder whose code analyzers should run again": "Ordner wählen, dessen Code-Analysewerkzeuge erneut laufen sollen",
+  "The code analyzers ran again for {0}.": "Die Code-Analysewerkzeuge wurden für {0} erneut ausgeführt.",
+  "The code analyzers will run again for {0} when the folder is free, or when you next review it.": "Die Code-Analysewerkzeuge laufen für {0} erneut, sobald der Ordner frei ist oder wenn Sie ihn das nächste Mal prüfen."
 }

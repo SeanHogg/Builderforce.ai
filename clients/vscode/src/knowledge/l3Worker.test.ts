@@ -4,7 +4,8 @@ vi.mock("@builderforce/repo-map", () => ({ repoMapPort: { accepts: (p: string) =
 
 import type { WorkspaceExtracted } from "@builderforce/agent-tools/knowledge";
 import { L3_WORKER_HEAP_MB, runL3InWorker, workspaceRunner, type L3WorkerHandle } from "./l3Worker";
-import { portableResult, type L3Job } from "./l3WorkerJob";
+import { assembledResult, L3_RESULT_ARRAYS, L3_RESULT_OVER_BUDGET, portableResult, postResult, type L3Job, type L3WorkerReply } from "./l3WorkerJob";
+import { PartsReceiver, splitBounded } from "../workers/boundedTransfer";
 
 const job: L3Job = { folderPath: "/ws", rootId: "r" };
 const result: WorkspaceExtracted = { extracted: [], snapshot: null, edges: 3 };
@@ -103,6 +104,60 @@ describe("runL3InWorker", () => {
     const hooks = { onWarn: vi.fn() };
     expect(await runL3InWorker(job, hooks, { file: null, inThread })).toEqual(result);
     expect(inThread).toHaveBeenCalledWith(job, hooks);
+  });
+});
+
+describe("the result's bounded transfer (workers/boundedTransfer.ts)", () => {
+  const big: WorkspaceExtracted = {
+    extracted: Array.from({ length: 300 }, (_, i) => ({ sourceRef: `src:r::f${i}.ts`, sourceHash: `h${i}`, nodes: [], edges: [] }) as unknown as WorkspaceExtracted["extracted"][number]),
+    snapshot: {
+      version: 1, id: "s", capturedAt: "t", source: { commit: null, branch: null, dirty: null }, tools: [],
+      nodes: Array.from({ length: 200 }, (_, i) => `f${i}.ts`),
+      edges: Array.from({ length: 200 }, (_, i) => ({ from: `f${i}.ts`, to: `f${i + 1}.ts`, circular: false })),
+      issues: [{ id: "i", kind: "unused-file", locations: [{ path: "a.ts", startLine: 1, endLine: 1 }] }],
+      truncated: true,
+    },
+    edges: 7,
+    graphReads: { read: Array.from({ length: 100 }, (_, i) => `f${i}.ts`), skipped: [{ reason: "too-large", paths: ["big.ts"] }, { reason: "unsupported", paths: ["x.png", "y.png"] }], accepts: () => true },
+  };
+
+  it("the worker sends the large arrays as bounded parts before `done`, and the host reassembles the same result", async () => {
+    const replies: L3WorkerReply[] = [];
+    postResult((r) => replies.push(structuredClone(r)), big, { partBytes: 2_000 });
+    const done = replies[replies.length - 1]!;
+    expect(done.type).toBe("done");
+    expect(replies.filter((r) => r.type === "part").length).toBeGreaterThan(5);
+    expect(JSON.stringify(done).length).toBeLessThan(2_000); // the completing message is small
+    const w = fakeWorker();
+    const run = runL3InWorker(job, {}, { file: "/out/w.js", spawn: () => w.handle });
+    for (const reply of replies) w.emit("message", reply);
+    const arrived = await run;
+    const { accepts: _a, ...reads } = big.graphReads!;
+    expect({ ...arrived, graphReads: { ...arrived.graphReads, accepts: undefined } }).toEqual({ ...big, graphReads: { ...reads, accepts: undefined } });
+    expect(typeof arrived.graphReads!.accepts).toBe("function"); // rehydrated as before
+  });
+
+  // regression: a ~20k-file analysis posted as ONE message grew V8's serializer buffer past what the process could allocate,
+  // and Electron ended the whole extension host (every chat in it), not just the worker.
+  it("regression: a result over the transfer budget is never built into a message — the job fails with l3_result_over_budget", async () => {
+    const replies: L3WorkerReply[] = [];
+    postResult((r) => replies.push(r), big, { partBytes: 2_000, budgetBytes: 5_000 });
+    const last = replies[replies.length - 1]!;
+    expect(last).toMatchObject({ type: "error", code: L3_RESULT_OVER_BUDGET });
+    expect(replies.some((r) => r.type === "done")).toBe(false);
+    const w = fakeWorker();
+    const run = runL3InWorker(job, {}, { file: "/out/w.js", spawn: () => w.handle });
+    for (const reply of replies) w.emit("message", reply);
+    await expect(run).rejects.toMatchObject({ code: L3_RESULT_OVER_BUDGET });
+    expect(w.handle.terminated).toBe(1);
+  });
+
+  it("split and reassembly are inverse for a result with no snapshot and no graph reads", () => {
+    const small: WorkspaceExtracted = { extracted: big.extracted.slice(0, 3), snapshot: null };
+    const { head, arrays } = splitBounded(small, L3_RESULT_ARRAYS);
+    const parts = new PartsReceiver();
+    for (const [key, items] of arrays) parts.accept({ type: "part", key, items: [...items] });
+    expect(assembledResult(head, parts)).toEqual(small);
   });
 });
 

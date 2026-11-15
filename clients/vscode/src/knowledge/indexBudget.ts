@@ -4,8 +4,9 @@
  *   - work runs in slices of at most {@link SLICE_MS}, handing the event loop back between slices;
  *   - a keystroke pauses the queue until the person has stopped typing for {@link TYPING_QUIET_MS};
  *   - the window unfocused for {@link UNFOCUSED_PAUSE_MS} pauses it until focus returns;
- *   - L3 (the analyzers) runs only when idle AND on mains power; with the power source unknown, only after
- *     {@link L3_IDLE_UNKNOWN_MS} of idle; on battery never (§12.3).
+ *   - a queued L3 task (the run delta's analyzer phase) runs only when idle AND on mains power; with the power source unknown,
+ *     only after {@link L3_IDLE_UNKNOWN_MS} of idle; on battery never (§12.3). The analyzers' own pass is not gated here: it
+ *     runs only when a person asks for it (`l3Gate.ts`).
  */
 
 import type { PowerState } from "../power/powerSource";
@@ -21,13 +22,9 @@ export const TYPING_QUIET_MS = 750;
 export const UNFOCUSED_PAUSE_MS = 10 * 60_000;
 /** A long pass (the whole-tree L1 map) starts only after this much quiet. */
 export const LONG_PASS_IDLE_MS = 2_000;
-/** Idle needed before L3 starts on mains power. */
+/** Idle needed before a queued L3 task (or the fact-store sweep) starts on mains power. */
 export const L3_IDLE_MAINS_MS = 30_000;
-/** A new HEAD owes L3 only after it has stood this long (`l3Persist.ts`): a burst of commits (a rebase, a pull) makes ONE pass. */
-export const L3_HEAD_STABLE_MS = 5 * 60_000;
-/** After a failed L3 pass (not an out-of-memory), the sha owes it again only after this long (`l3Persist.ts`); an edit-owed pass is not held back. */
-export const L3_RETRY_BACKOFF_MS = 10 * 60_000;
-/** Idle needed before L3 starts when the power source is unknown (B6). */
+/** Idle needed before a queued L3 task starts when the power source is unknown (B6). */
 export const L3_IDLE_UNKNOWN_MS = 120_000;
 /** Most files one slice takes, whatever the measured speed. */
 export const MAX_SLICE_FILES = 64;
@@ -43,7 +40,7 @@ export const PREEMPT_HOLD_MAX_MS = 10 * 60_000;
 /** Longest an indexer's first write on a root waits for the live view's own watcher batch still in flight. */
 export const LIVE_IDLE_WAIT_MS = 5_000;
 
-/** Whether L3 may start: never on battery; on mains after {@link L3_IDLE_MAINS_MS} idle; unknown after {@link L3_IDLE_UNKNOWN_MS}. */
+/** Whether a queued L3 task may start: never on battery; on mains after {@link L3_IDLE_MAINS_MS} idle; unknown after {@link L3_IDLE_UNKNOWN_MS}. */
 export function mayRunL3(power: PowerState, idleForMs: number): boolean {
   if (power === "battery") return false;
   return idleForMs >= (power === "mains" ? L3_IDLE_MAINS_MS : L3_IDLE_UNKNOWN_MS);

@@ -10,7 +10,10 @@
  *     person is quiet; the window unfocused for 10 minutes pauses it (`indexBudget.ts`);
  *   - files open in editors first, then visible ones;
  *   - a person's review, Retry or Exclude preempts the root's pass (`preemptBackground`);
- *   - L3 is offered every {@link L3_CHECK_MS}; it runs only when idle and on mains power (`powerSource.ts`);
+ *   - L3 (the heavy analyzers' pass) runs ON DEMAND ONLY: a person's request reaches the root's indexer through `requestL3`
+ *     (`indexLevels.ts`); every {@link L3_CHECK_MS} the tick starts a request still pending once its root is quiet, the
+ *     once-per-session fact-store sweep, and ONE queued L3 task an agent run asked for (idle and on mains power, `powerSource.ts`)
+ *     — never an L3 pass nobody asked for;
  *   - level status goes to the bus (`indexLevels.ts`, the knowledge view's `level` event); `index.plan_ms` and
  *     `index.level_ready` go to the product-event channel and the output channel;
  *   - shutdown (`shutdownKnowledge`) waits for every root to be quiet, including a slice in flight, before stores close.
@@ -24,7 +27,7 @@ import { beforeKnowledgeShutdown } from "./folderKnowledge";
 import { onRunStarted } from "./activeRuns";
 import { ActivityGate, realClock, type Clock } from "./indexBudget";
 import { hostIndexPorts } from "./indexHostPorts";
-import { publishIndexLevel, registerBackgroundPreemptor, setIndexerWatching } from "./indexLevels";
+import { publishIndexLevel, registerBackgroundPreemptor, registerL3Requester, setIndexerWatching } from "./indexLevels";
 import { PRIORITY } from "./indexScheduler";
 import { PathCoalescer } from "./indexWatcher";
 import { registerL3Runner } from "./l3Tasks";
@@ -35,7 +38,7 @@ import { RootIndexer, type IndexRootPorts, type IndexTelemetry } from "./rootInd
 
 /** `builderforce.knowledge.autoIndex`. */
 export const AUTO_INDEX_SETTING = "knowledge.autoIndex";
-/** How often an owed L3 pass checks its gate. */
+/** How often the tick looks for a pending L3 request, the sweep and a queued L3 task. */
 export const L3_CHECK_MS = 30_000;
 /** Refocus reconciles at most this often (a focus flicker is not a reason to walk again). */
 const REFOCUS_MIN_MS = 5_000;
@@ -63,7 +66,7 @@ export interface IndexerHost {
   log(what: string, error: unknown): void;
 }
 
-interface HeldRoot { root: KnowledgeRoot; indexer: RootIndexer; ports: IndexRootPorts & { dispose(): void }; stopWatch: () => void; stopPreempt: () => void }
+interface HeldRoot { root: KnowledgeRoot; indexer: RootIndexer; ports: IndexRootPorts & { dispose(): void }; stopWatch: () => void; unregister: () => void }
 
 /** The indexer over every workspace folder. Host events reach it through its methods; {@link dispose} waits for quiet. */
 export class BackgroundIndexer {
@@ -87,8 +90,8 @@ export class BackgroundIndexer {
     this.focused = focused;
     this.gate.focus(focused);
     const tick = (): void => {
-      // The analyzers' own pass first; then ONE queued L3 task of the root (the run delta's analyzer phase) on the same gate.
-      for (const h of this.roots.values()) void h.indexer.maybeRunL3().then(() => h.indexer.runL3Task(h.root.rootPath));
+      // A pending request, the sweep, then ONE queued L3 task of the root (the run delta's analyzer phase): nothing unrequested.
+      for (const h of this.roots.values()) void h.indexer.tick(h.root.rootPath).catch((error: unknown) => this.host.log("index tick", error));
       this.l3Timer = this.host.clock.setTimeout(tick, L3_CHECK_MS);
     };
     this.l3Timer = this.host.clock.setTimeout(tick, L3_CHECK_MS);
@@ -147,7 +150,8 @@ export class BackgroundIndexer {
     });
     const stopWatch = this.host.watch(root.rootPath, (paths) => this.coalescer.push(root, paths));
     const stopPreempt = registerBackgroundPreemptor(root.rootId, () => indexer.preempt());
-    this.roots.set(root.rootId, { root, indexer, ports, stopWatch, stopPreempt });
+    const stopRequests = registerL3Requester(root.rootId, { request: (scope) => indexer.requestL3(scope), withdraw: (scope) => indexer.withdrawL3(scope) });
+    this.roots.set(root.rootId, { root, indexer, ports, stopWatch, unregister: () => { stopPreempt(); stopRequests(); } });
     setIndexerWatching(root.rootId, true);
     void indexer.reconcile();
   }
@@ -155,7 +159,7 @@ export class BackgroundIndexer {
   private async stopRoot(rootId: string, held: HeldRoot): Promise<void> {
     this.roots.delete(rootId);
     held.stopWatch();
-    held.stopPreempt();
+    held.unregister();
     try {
       await held.indexer.dispose();
     } finally {

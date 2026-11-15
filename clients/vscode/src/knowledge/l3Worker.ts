@@ -7,8 +7,11 @@
  *   - the caller's signal terminates the worker at once (a keystroke or a started agent run stops a synchronous build that no
  *     abort flag could reach) and the job resolves to nothing — the same "the asker who stopped gets nothing" answer the
  *     in-thread analysis gives, so a stopped pass never fails a review;
- *   - the worker's heap is bounded ({@link L3_WORKER_HEAP_MB}): an out-of-memory ends the WORKER, which rejects the job with
- *     the reason (logged as a failed L3 pass by the caller), never the extension host;
+ *   - the worker's V8 heap is bounded ({@link L3_WORKER_HEAP_MB}): a heap out-of-memory ends the WORKER, which rejects the job
+ *     with the reason (logged as a failed L3 pass by the caller). That bound does NOT cover memory outside the heap — above
+ *     all the serializer buffer of a `postMessage` clone, whose failed growth ends the WHOLE extension host in Electron — so
+ *     the result arrives in bounded parts (`workers/boundedTransfer.ts`, reassembled here by `assembledResult`) and a result
+ *     past the transfer budget is refused by the worker (`l3_result_over_budget`, a permanent failure for that tree);
  *   - no worker file (a test, a dev run before the bundle exists): the same job runs in this thread.
  *
  * ONE seam for every analysis in the VSIX: {@link workspaceRunner} is the review's / the indexer's runner
@@ -19,7 +22,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { Worker, type ResourceLimits } from "node:worker_threads";
 import type { WorkspaceExtracted, WorkspaceExtractedHooks, WorkspaceExtractedRunner } from "@builderforce/agent-tools/knowledge";
-import { rehydratedResult, runL3Job, type L3Job, type L3WorkerReply } from "./l3WorkerJob";
+import { PartsReceiver } from "../workers/boundedTransfer";
+import { assembledResult, rehydratedResult, runL3Job, type L3Job, type L3WorkerReply } from "./l3WorkerJob";
 
 /** The bundle entry esbuild writes beside `out/extension.js`. */
 export const L3_WORKER_FILE = "knowledgeL3Worker.js";
@@ -60,20 +64,25 @@ export function runL3InWorker(job: L3Job, hooks: WorkspaceExtractedHooks = {}, s
     const options = { resourceLimits: { maxOldGenerationSizeMb: L3_WORKER_HEAP_MB } };
     const worker = (seams.spawn ?? ((f, o) => new Worker(f, o)))(file, options);
     let settled = false;
+    const parts = new PartsReceiver();
     const settle = (finish: () => void): void => {
       if (settled) return;
       settled = true;
       signal?.removeEventListener("abort", onAbort);
       void worker.terminate();
+      parts.clear();
       finish();
     };
     const onAbort = (): void => settle(() => resolve(NOTHING));
     signal?.addEventListener("abort", onAbort, { once: true });
     worker.on("message", (reply: L3WorkerReply) => {
+      if (parts.accept(reply)) return; // a slice of the result: kept until `done` completes it
       if (reply.type === "progress") hooks.onProgress?.(reply.progress);
       else if (reply.type === "warn") hooks.onWarn?.(reply.message);
-      else if (reply.type === "done") settle(() => resolve(rehydratedResult(reply.result)));
-      else settle(() => reject(new Error(reply.error)));
+      else if (reply.type === "done") {
+        const result = assembledResult(reply.result, parts);
+        settle(() => resolve(rehydratedResult(result)));
+      } else if (reply.type === "error") settle(() => reject(Object.assign(new Error(reply.error), reply.code ? { code: reply.code } : {})));
     });
     // An out-of-memory arrives as an `error` (ERR_WORKER_OUT_OF_MEMORY) and then an `exit`; either ends the job, once.
     worker.on("error", (error: unknown) => settle(() => reject(error instanceof Error ? error : new Error(String(error)))));

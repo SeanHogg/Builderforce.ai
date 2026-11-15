@@ -1,18 +1,18 @@
 /**
- * What L3 remembers across extension-host restarts (PRD 41 B6, §12.3). The analyzers' pass was owed afresh every session, so
- * a host that died mid-pass (or was restarted by VS Code) re-owed it and re-ran it 30 s later — a crash loop. Now:
+ * What L3 remembers across extension-host restarts (PRD 41 B6, §12.3). L3 runs only when a person asks for it (`l3Gate.ts`),
+ * and a request on a tree the last completed pass already saw has nothing to do:
  *
  *   - the sha of the last COMPLETED pass is kept per root (`workspaceState`, beside the review records) — {@link l3StateOf};
- *   - L3 is owed only when the root's current sha differs from it (or none was kept);
- *   - a sha that CHANGES while the host runs owes L3 only once it has stood still for {@link L3_HEAD_STABLE_MS}, so a burst
- *     of commits makes one pass — {@link L3Tracker}; a pass that FAILED is not retried for the same sha this session.
+ *   - a request is owed a pass only when the root's current sha differs from it (or none was kept, or git cannot say);
+ *   - a root whose pass took the host down, or failed permanently, is quarantined by its crash guard (`l3CrashGuard.ts`):
+ *     {@link L3StatePort.blocked} says so before a pass starts.
  *
  * The sha is the root's latest commit (`recentCommits`, the history reader the indexer already uses): a sub-folder root only
  * moves with commits that touch it.
  */
 
 import { recentCommits } from "@builderforce/agent-tools/node-git-history";
-import { L3_HEAD_STABLE_MS, L3_RETRY_BACKOFF_MS, type Clock } from "./indexBudget";
+import { l3BlockedFor } from "./l3CrashGuard";
 import { hostMemento } from "./knowledgeSyncStatus";
 import type { KnowledgeRoot } from "./knowledgeRoots";
 
@@ -23,6 +23,11 @@ export interface L3StatePort {
   /** The sha of the last completed L3 pass. */
   done(): string | undefined;
   markDone(sha: string): void;
+  /**
+   * Why L3 must not start on this root — or, with `rel`, on its sub-folder root `rel` — at `head` (the crash guard's quarantine
+   * of that root or of this one), or undefined. Absent ⇒ never blocked here.
+   */
+  blocked?(head: string | undefined, rel?: string): Promise<string | undefined>;
 }
 
 /** The workspaceState key of a root's last completed sha. */
@@ -44,62 +49,39 @@ export function l3StateOf(root: Pick<KnowledgeRoot, "rootId" | "rootPath">, seam
       kept = sha;
       void Promise.resolve(memento()?.update(key, sha)).catch(() => undefined);
     },
+    blocked: (head, rel) => l3BlockedFor(rel ? `${root.rootId}:${rel}` : root.rootId, rel, head ?? null, seams.memento ? { memento: seams.memento } : undefined),
   };
 }
 
 /** The answer of one look at a root's sha. */
 export type L3Verdict =
-  /** The sha differs from the last completed pass's and has stood still long enough. */
+  /** The sha differs from the last completed pass's (or none was kept): a request runs a pass. */
   | "owed"
-  /** The last completed pass (or the last failed one) was at this sha. */
+  /** The last completed pass was at this sha. */
   | "current"
-  /** The sha moved a moment ago: wait for it to settle. */
-  | "settling"
   /** git cannot say: the gate's own flag decides. */
   | "unknown";
 
 /** Decides, per look, whether the root's sha owes L3; remembers what completed. */
 export class L3Tracker {
-  private seen: { sha: string; since: number } | undefined;
   private looked: string | undefined;
-  private failed: string | undefined;
-  private retryAt = Number.NEGATIVE_INFINITY;
 
-  constructor(
-    private readonly port: L3StatePort, private readonly clock: Pick<Clock, "now">,
-    private readonly stableMs: number = L3_HEAD_STABLE_MS, private readonly backoffMs: number = L3_RETRY_BACKOFF_MS,
-  ) {}
+  constructor(private readonly port: L3StatePort) {}
 
   async verdict(): Promise<L3Verdict> {
     const head = await this.port.head().catch(() => undefined);
-    if (!head) return "unknown";
-    const now = this.clock.now();
-    // The session's first reading has stood since before it began; a later, different one starts the window afresh.
-    if (!this.seen) this.seen = { sha: head, since: Number.NEGATIVE_INFINITY };
-    else if (this.seen.sha !== head) this.seen = { sha: head, since: now };
     this.looked = head;
-    if (head === this.port.done() || head === this.failed) return "current";
-    if (now < this.retryAt) return "settling"; // a failed pass backs off
-    return now - this.seen.since >= this.stableMs ? "owed" : "settling";
+    if (!head) return "unknown";
+    return head === this.port.done() ? "current" : "owed";
+  }
+
+  /** Why L3 must not start — on the root, or with `rel` on its sub-folder root — at the sha of the last look, or undefined. */
+  blocked(rel?: string): Promise<string | undefined> {
+    return this.port.blocked?.(this.looked, rel) ?? Promise.resolve(undefined);
   }
 
   /** The pass that began at the last look finished. */
   completed(): void {
     if (this.looked) this.port.markDone(this.looked);
   }
-
-  /**
-   * The pass that began at the last look failed. An out-of-memory (`permanent`) is not retried for this sha until the host
-   * restarts or the sha moves — it would die the same way; any other failure retries after {@link L3_RETRY_BACKOFF_MS}.
-   */
-  failedPass(permanent: boolean): void {
-    if (permanent) this.failed = this.looked;
-    else this.retryAt = this.clock.now() + this.backoffMs;
-  }
-}
-
-/** Whether an L3 pass failed because its worker hit its heap limit (the one failure a retry on the same tree cannot cure). */
-export function isWorkerOom(error: unknown): boolean {
-  const e = error as { code?: unknown; message?: unknown } | null;
-  return e?.code === "ERR_WORKER_OUT_OF_MEMORY" || /memory limit|out of memory/i.test(String(e?.message ?? ""));
 }

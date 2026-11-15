@@ -27,6 +27,7 @@ import { resumeAuthPaused } from "./knowledgeReplica";
 import { shutdownKnowledge } from "./folderKnowledge";
 import { replicateReviewedRoots } from "./knowledgeReplicate";
 import { startBackgroundIndexer } from "./backgroundIndexer";
+import { registerL3RetryCommand } from "./l3RetryCommand";
 
 /** The folder the command was invoked on (explorer), else the one the person picks. */
 async function folderToReview(uri: unknown): Promise<vscode.Uri | undefined> {
@@ -59,6 +60,8 @@ export function registerKnowledgeCommands(context: vscode.ExtensionContext): voi
   configureExtractPool(context.extensionPath);
   // (the pool's width is `min(cores - 1, 8)`; at one it is not used and the review runs at memory's default width)
   registerKnowledgePackCommands(context);
+  // The L3 crash guard's escape hatch, and its clean-shutdown clear (`l3RetryCommand.ts`).
+  registerL3RetryCommand(context);
   context.subscriptions.push(
     { dispose: disposeExtractPool },
     vscode.commands.registerCommand("builderforce.reviewFolder", async (uri?: unknown) => {
@@ -83,7 +86,7 @@ export function registerKnowledgeCommands(context: vscode.ExtensionContext): voi
     vscode.authentication.onDidChangeSessions((e) => {
       if (e.provider.id === BuilderForceAuthProvider.id) void resumeAuthPaused();
     }),
-    // PRD 41 B6: every workspace folder indexed in the background (L0–L2 always; L3 when idle on mains), unless turned off.
+    // PRD 41 B6: every workspace folder indexed in the background (L0–L2 always; L3 only on demand), unless turned off.
     // Registered BEFORE the shutdown below, and the shutdown itself awaits the indexer's quiet (`beforeKnowledgeShutdown`).
     startBackgroundIndexer(context),
     // Queues are made durable and pumps stop with the extension (the queues resume on the next open); then the folders' SQLite connections close (one shared shutdown, also awaited by `deactivate`).

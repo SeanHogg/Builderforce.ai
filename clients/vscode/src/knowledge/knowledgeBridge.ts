@@ -33,7 +33,7 @@ import { excludeFromReview } from "./knowledgeExclude";
 import { rootIgnoreFile } from "./knowledgeFs";
 import { duringReview, isRootReviewing } from "./knowledgeReplica";
 import { subscribeLiveGraph } from "./knowledgeLive";
-import { onIndexLevel, preemptBackground } from "./indexLevels";
+import { onIndexLevel, preemptBackground, requestL3, withdrawL3Request } from "./indexLevels";
 import { notReviewedHere } from "./knowledgeNotHere";
 import { assertWritable, packRootGraph, packScopeRows, readOnlyPack } from "./packs/packRoots";
 import { linkedKnowledgeClient, linkedProject, loadGraph, log, openRoot, rootKnowledgeFiles, workspaceFolders, type GraphQuery } from "./knowledgeService";
@@ -133,7 +133,11 @@ export class KnowledgeBridge implements vscode.Disposable {
         const stopGraph = subscribeLiveGraph(this.secrets, call.rootId, (graph, changed) => this.event({ stream: call.stream, type: "graph", graph, changed }), (id) => this.loadedBy.get(id));
         // The background indexer's level for the root rides the same stream (PRD 41 B6).
         const stopLevel = onIndexLevel(call.rootId, (status) => this.event({ stream: call.stream, type: "level", status }));
-        this.live.set(call.stream, () => { stopGraph(); stopLevel(); });
+        // The person opened the knowledge view on the root: THE on-demand ask for its analyzers' pass (L3 never runs on its
+        // own), withdrawn when the view stops listening. A quarantined root is refused there, with one output line saying why.
+        const { rootId } = call;
+        void requestL3(rootId).catch((error: unknown) => log("L3 request", error));
+        this.live.set(call.stream, () => { stopGraph(); stopLevel(); withdrawL3Request(rootId); });
         return null;
       }
       case "unlive": this.live.get(call.stream)?.(); this.live.delete(call.stream); return null;

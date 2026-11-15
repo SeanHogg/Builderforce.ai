@@ -190,18 +190,18 @@ describe("RootIndexer — long passes yield to the person (Risks: background ind
     expect(h.last().ready).toBe(2);
   });
 
-  it("a keystroke during L3 stops it; L3 stays owed and runs when its gate opens again", async () => {
+  it("a keystroke during a requested L3 stops it; it stays requested and the tick runs it once the root is quiet", async () => {
     const h = harness({ power: "mains", idle: L3_IDLE_MAINS_MS });
     await h.indexer.reconcile();
     const pass = blockingPass();
     h.ports.mapPass.mockImplementationOnce(pass.impl);
-    const l3 = h.indexer.maybeRunL3();
+    const l3 = h.indexer.requestL3();
     await vi.advanceTimersByTimeAsync(10);
     h.indexer.pauseLongPass();
     expect(await l3).toBe(false);
     expect(pass.signals[0]!.aborted).toBe(true);
     expect(h.indexer.status().ready).toBe(2);
-    expect(await h.indexer.maybeRunL3()).toBe(true);
+    await h.indexer.tick("/ws");
     expect(h.last().ready).toBe(3);
   });
 
@@ -270,7 +270,7 @@ describe("RootIndexer — long passes yield to the person (Risks: background ind
     await h.indexer.reconcile();
     const pass = blockingPass();
     h.ports.mapPass.mockImplementationOnce(pass.impl);
-    const l3 = h.indexer.maybeRunL3();
+    const l3 = h.indexer.requestL3();
     await vi.advanceTimersByTimeAsync(10);
     h.ports.plan.mockResolvedValueOnce(planOf([paths[4]!]));
     const done = h.indexer.reconcile();
@@ -370,60 +370,66 @@ describe("RootIndexer — unknown paths and bulk edits never storm the tree", ()
   });
 });
 
-describe("RootIndexer — L3 only when idle and on mains power (§12.3)", () => {
+describe("RootIndexer — L3 only when a person asks for it (§12.3)", () => {
   it("is blocked while the person's own review runs, and says so", async () => {
     const h = harness({ power: "mains", idle: 24 * 3_600_000 });
     Object.assign(h.ports, { busy: () => true });
     await h.indexer.reconcile();
-    expect(await h.indexer.maybeRunL3()).toBe(false);
+    expect(await h.indexer.requestL3()).toBe(false);
     expect(h.ports.mapPass).not.toHaveBeenCalled();
     expect(h.last()).toMatchObject({ l3Waiting: "busy" });
   });
 
-  it("reports waiting for idle apart from busy, and asks the power source only once idle long enough", async () => {
-    const h = harness({ power: "mains", idle: 1_000 });
-    await h.indexer.reconcile();
-    expect(await h.indexer.maybeRunL3()).toBe(false);
-    expect(h.last()).toMatchObject({ l3Waiting: "idle-wait" });
-    expect(h.powerQueries()).toBe(0);
-  });
-
   const analyzerPasses = (h: ReturnType<typeof harness>) => h.ports.mapPass.mock.calls.filter(([, o]) => o.analyzers).length;
 
-  it("never runs on battery, however long idle", async () => {
-    const h = harness({ power: "battery", idle: 24 * 3_600_000 });
+  // regression: the indexer ran the heavy analyzers' pass on its own whenever the person went idle on mains power.
+  it("regression: an idle session with no request never starts L3 — however long idle, on mains or unknown power", async () => {
+    const h = harness({ power: "mains", idle: 24 * 3_600_000 });
     await h.indexer.reconcile();
-    expect(await h.indexer.maybeRunL3()).toBe(false);
+    for (const power of ["mains", "unknown"] as const) {
+      h.setPower(power);
+      await h.indexer.tick("/ws");
+    }
+    await h.edit([paths[2]!]); // a change makes the analysis stale, but starts nothing
+    await h.indexer.tick("/ws");
     expect(analyzerPasses(h)).toBe(0);
-    expect(h.last()).toMatchObject({ ready: 2, l3Waiting: "battery" });
+    expect(h.last()).not.toHaveProperty("l3Waiting");
   });
 
-  it("never runs while the person is not idle, on mains or unknown power", async () => {
+  it("a request runs at once whatever the power source and however recent the activity: the person asked", async () => {
+    const h = harness({ power: "battery", idle: 0 });
+    await h.indexer.reconcile();
+    expect(await h.indexer.requestL3()).toBe(true);
+    expect(analyzerPasses(h)).toBe(1);
+  });
+
+  it("a request waits while the person types and the tick runs it once they have been idle long enough", async () => {
     const h = harness({ power: "mains", idle: L3_IDLE_MAINS_MS - 1 });
     await h.indexer.reconcile();
-    expect(await h.indexer.maybeRunL3()).toBe(false);
-    h.setPower("unknown");
-    h.setIdle(L3_IDLE_UNKNOWN_MS - 1);
-    expect(await h.indexer.maybeRunL3()).toBe(false);
     h.setPaused("typing");
-    h.setPower("mains");
-    h.setIdle(L3_IDLE_UNKNOWN_MS);
-    expect(await h.indexer.maybeRunL3()).toBe(false);
+    expect(await h.indexer.requestL3()).toBe(false);
     expect(analyzerPasses(h)).toBe(0);
+    h.setPaused(undefined);
+    await h.indexer.tick("/ws"); // a pause between bursts: not idle long enough, so it is not restarted
+    expect(analyzerPasses(h)).toBe(0);
+    h.setIdle(L3_IDLE_MAINS_MS);
+    await h.indexer.tick("/ws");
+    expect(analyzerPasses(h)).toBe(1);
   });
 
-  it("runs once idle on mains (or long idle on unknown power), then reports L3 ready until facts change", async () => {
+  it("runs on request, then has nothing to do on a second request until facts change", async () => {
     const h = harness({ power: "mains", idle: L3_IDLE_MAINS_MS });
     await h.indexer.reconcile();
-    expect(await h.indexer.maybeRunL3()).toBe(true);
+    expect(await h.indexer.requestL3()).toBe(true);
     expect(analyzerPasses(h)).toBe(1);
     expect(h.last().ready).toBe(3);
-    expect(await h.indexer.maybeRunL3()).toBe(false); // not owed again
+    expect(await h.indexer.requestL3()).toBe(true); // current: nothing to run
+    expect(analyzerPasses(h)).toBe(1);
     await h.edit([paths[2]!]);
     expect(h.indexer.status().ready).toBe(2);
     h.setPower("unknown");
     h.setIdle(L3_IDLE_UNKNOWN_MS);
-    expect(await h.indexer.maybeRunL3()).toBe(true);
+    expect(await h.indexer.requestL3()).toBe(true);
     expect(analyzerPasses(h)).toBe(2);
   });
 });
