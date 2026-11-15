@@ -362,6 +362,10 @@ export interface StoredGraphArgs {
     hashOverrides?: ReadonlyMap<string, string | null>;
     /** The host's findings for the kinds it owns (PRD 41 §B5: the fact index), over the WHOLE graph (memory `BuildGraphOptions.findings`). */
     findings?: FindingsProvider;
+    /** Yield the event loop every N files during the build (UI hosts keep the loop responsive); absent ⇒ never yield. */
+    yieldEvery?: number;
+    /** The macrotask the build awaits at each yield; defaults to a 0ms timer (library / non-UI hosts pass none and never yield). */
+    yieldDelay?: () => Promise<void>;
 }
 
 /** The content hash of every file a stored graph reads: the review's (or a newer edit's), with `overrides` applied. */

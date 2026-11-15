@@ -54,7 +54,9 @@ async function analyse(host: PrefetchExecHost, signal: AbortSignal): Promise<Ana
     // The graph placed every file (folder, name, import direction); the verdicts below must use THOSE layers, not a second glob match.
     const placed = new Map(graph.placed);
     const registry = isDefaultLayers(partitions) ? placedLayerRegistry(partitions) : partitions;
-    const layerOf = isDefaultLayers(partitions) ? (path: string) => placed.get(path) : (path: string) => partitionOf(path, partitions);
+    const layerOf = isDefaultLayers(partitions)
+        ? (path: string): string | undefined => placed.get(path)
+        : (path: string): string | undefined => partitionOf(path, partitions);
     return { snapshot, findings: graph.findings, layers: { registry, layerOf } };
 }
 

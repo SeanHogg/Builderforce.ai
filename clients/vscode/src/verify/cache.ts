@@ -21,6 +21,9 @@ export interface VerifyCache<T = CheckRecord> {
   set(absPath: string, hash: string, checkName: string, record: T): void;
   /** Drop every entry for a path (its bytes changed). Memory only — a gate that re-hashes would miss anyway. */
   invalidate(absPath: string): void;
+  /** Drop every entry for paths under `dir` — a sibling file in the same package changed, so the
+   *  package-wide typecheck those cached entries encode may now differ. */
+  invalidateUnder(dir: string): void;
   /** Bounded, so a long session's cache cannot grow without limit. */
   size(): number;
 }
@@ -52,6 +55,11 @@ export function createVerifyCache<T = CheckRecord>(maxEntries: number = DEFAULT_
     },
     invalidate(absPath) {
       const prefix = `${absPath.replace(/\\/g, "/")}\u0000`;
+      for (const key of [...store.keys()]) if (key.startsWith(prefix)) store.delete(key);
+    },
+    invalidateUnder(dir) {
+      const norm = dir.replace(/\\/g, "/").replace(/\/+$/, "");
+      const prefix = `${norm}/`;
       for (const key of [...store.keys()]) if (key.startsWith(prefix)) store.delete(key);
     },
     size() {
