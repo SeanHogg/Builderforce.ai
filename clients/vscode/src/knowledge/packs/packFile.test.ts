@@ -2,6 +2,9 @@
  * packFile.test.ts — a `.bfpack` is canonical JSON (write → read round-trips the same content,
  * re-writing the same pack is a no-op on the bytes), the library folder is created on write, and a
  * read is cached by content so an unchanged file is parsed once and a changed one re-reads.
+ *
+ * Evidence re-verification: busts the verify cache (content-hash key) so the pre-push
+ * gate re-runs checks against the repaired install instead of replaying a stale record.
  */
 
 import { mkdtemp, rm } from "node:fs/promises";
