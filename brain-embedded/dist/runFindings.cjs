@@ -2837,10 +2837,10 @@ function createShaCache(opts = {}) {
     else signal.addEventListener("abort", stop, { once: true });
   };
   return {
-    getOrRun(key, work, signal) {
+    getOrRun(key, work, signal, runOpts) {
       if (key === null) return work(signal);
       const hit = entries.get(key);
-      if (hit && (hit.expires === void 0 || hit.expires > now())) {
+      if (hit && !runOpts?.fresh && (hit.expires === void 0 || hit.expires > now())) {
         join(key, hit, signal);
         return hit.run;
       }
@@ -4366,8 +4366,11 @@ var import_knowledge46 = require("@seanhogg/builderforce-memory/knowledge");
 var import_knowledge47 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest8 = require("@seanhogg/builderforce-memory/ingest");
 
-// ../packages/agent-tools/src/knowledge/pinpointMatch.ts
+// ../packages/agent-tools/src/knowledge/codeGraphFindings.ts
 var import_knowledge48 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/pinpointMatch.ts
+var import_knowledge49 = require("@seanhogg/builderforce-memory/knowledge");
 var MAX_PINPOINT_IMAGE_BYTES = 8 * 1024 * 1024;
 var MAX_DATA_URL_CHARS = Math.ceil(MAX_PINPOINT_IMAGE_BYTES * 4 / 3) + 64;
 var PINPOINT_VISION_SYSTEM = [
@@ -4383,27 +4386,27 @@ var LOCK_FRESH_MS = LOCK_STALE_MS - LOCK_REFRESH_MS;
 
 // ../packages/agent-tools/src/delta/adapters/dependencyCruiser.ts
 var import_ingest9 = require("@seanhogg/builderforce-memory/ingest");
-var import_knowledge49 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/delta/adapters/gitleaks.ts
 var import_knowledge50 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/delta/adapters/jscpd.ts
+// ../packages/agent-tools/src/delta/adapters/gitleaks.ts
 var import_knowledge51 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/delta/adapters/knip.ts
+// ../packages/agent-tools/src/delta/adapters/jscpd.ts
 var import_knowledge52 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/delta/adapters/osv.ts
+// ../packages/agent-tools/src/delta/adapters/knip.ts
 var import_knowledge53 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/delta/adapters/sarifTools.ts
+// ../packages/agent-tools/src/delta/adapters/osv.ts
 var import_knowledge54 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/sarif/src/emit.js
+// ../packages/agent-tools/src/delta/adapters/sarifTools.ts
+var import_knowledge55 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/sarif/src/emit.ts
 var SARIF_BASELINE_STATES = ["new", "unchanged", "updated", "absent"];
 
-// ../packages/sarif/src/parse.js
+// ../packages/sarif/src/parse.ts
 var BASELINE = new Set(SARIF_BASELINE_STATES);
 
 // ../packages/agent-tools/src/delta/adapters/sarifTools.ts
@@ -4415,7 +4418,7 @@ var SARIF_KINDS = { [SEMGREP_TOOL]: "semgrep-finding", [CODEQL_TOOL]: "codeql-fi
 var import_retrieval = require("@seanhogg/builderforce-memory/retrieval");
 
 // ../packages/agent-tools/src/delta/adapters/typescript.ts
-var import_knowledge55 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge56 = require("@seanhogg/builderforce-memory/knowledge");
 var TYPESCRIPT_VERSION2 = TYPESCRIPT_PIN.slice(TYPESCRIPT_PIN.lastIndexOf("@") + 1);
 
 // ../packages/agent-tools/src/delta/dynamic/host.ts
@@ -4451,72 +4454,81 @@ function editChurn(view) {
   ));
 }
 
-// ../packages/agent-stall/src/requestIntent.js
+// ../packages/agent-stall/src/requestIntent.ts
 var CHANGE_VERBS = "add|change|fix|update|reduce|increase|remove|delete|rename|refactor|implement|create|build|make|move|set|wire|migrate|replace|adjust|enable|disable|improve|write|edit|apply|correct|resolve|shrink|expand|hide|show|bump|revert|restore|install|upgrade|downgrade|rewrite|extract|split|merge";
 var CHANGE_VERB = new RegExp(`\\b(${CHANGE_VERBS})\\b`, "i");
 var FINISH_OBJECT = "(complete|finish|finali[sz]e)\\s+(the|this|that|these|those|it|my|our|your|all|implementation|work|task|change)\\b";
 var FINISH_ORDER = new RegExp(`^\\s*(please\\s+)?(now\\s+)?${FINISH_OBJECT}`, "i");
 var CHAINED_FINISH = new RegExp(`(\\band|\\bthen|[,.;])\\s+((also|then|please|now)\\s+)*${FINISH_OBJECT}`, "i");
 var REPORT_OBJECTS = "summary|report|findings|notes|overview|write-?up|answer|explanation|list|table|recommendations?";
-var CHAINED_CHANGE = new RegExp(`(\\band|\\bthen|[,.;])\\s+((also|then|please|now)\\s+)*(${CHANGE_VERBS})\\b(?!\\s+(me|us)\\b|\\s+(up\\s+)?((a|an|the|your|me|us|my)\\s+)?(short\\s+|brief\\s+)?(${REPORT_OBJECTS})\\b)`, "i");
+var CHAINED_CHANGE = new RegExp(
+  `(\\band|\\bthen|[,.;])\\s+((also|then|please|now)\\s+)*(${CHANGE_VERBS})\\b(?!\\s+(me|us)\\b|\\s+(up\\s+)?((a|an|the|your|me|us|my)\\s+)?(short\\s+|brief\\s+)?(${REPORT_OBJECTS})\\b)`,
+  "i"
+);
 
-// ../packages/agent-stall/src/handoff.js
+// ../packages/agent-stall/src/handoff.ts
 var RUNNER = "(?:npm|pnpm|yarn|npx|bun|deno|node|git|make|cargo|go|dotnet|mvn|gradle|python3?|pip3?|poetry|uv|ruby|rake|bundle|composer|php|docker(?:\\s+compose)?|kubectl|helm|terraform|wrangler|vercel|netlify|vite|webpack|tsc|tsgo|eslint|prettier|pytest|jest|vitest|playwright|cypress|bash|sh|zsh|pwsh|powershell|curl|wget|sed|awk|rsync|vsce)\\b";
 var SCRIPT_NOUN = "(?:build|tests?|test suite|type-?check(?:ing)?|typecheck|lint(?:er|ing)?|guards?|checks?|install|dev server|migrations?|deploy(?:ment)?|codegen|bundle|vsix|package|commit|push|pull request|pr\\b|branch|lockfile|extension host)";
 var CMD_MARK = "\u2983cmd\u2984";
 var HANDOFF_VERB = "(?:re-?run|run|execute|apply|install|re-?install|rebuild|build|compile|commit|push|deploy|publish|restart|relaunch|launch|start|test|verify|lint|type-?check|typecheck|migrate|regenerate|package|bump|trigger|kick off)";
-var HANDS_OFF = new RegExp([
-  // "you can run", "you'll need to run", "you should now commit", "you must rebuild"
-  `\\byou(?:'ll|'d|'ve| will| would| should| must| may| might| can| could| still| then| now)?(?:\\s+(?:then|now|also|just|still|next|first|finally|want to|need to|have to|be able to))*\\s+${HANDOFF_VERB}\\b`,
-  // "please run the guards"
-  `\\bplease\\s+(?:now\\s+|then\\s+)?${HANDOFF_VERB}\\b`,
-  // "once you've run the build", "after you push"
-  `\\b(?:once|after|when|before)\\s+you(?:'ve| have| had)?\\s+${HANDOFF_VERB}\\b`,
-  // "run the following", "apply these changes", "execute this command"
-  `\\b${HANDOFF_VERB}\\s+(?:the\\s+following|these|this)\\b`,
-  // "to verify, run …" / "to apply the fix you need to run …"
-  `\\bto\\s+(?:apply|verify|confirm|finish|complete|deploy|ship|land|pick up|see)\\b[^.\\n]{0,60}?,?\\s*(?:you\\s+(?:can|should|must|will|need to|have to)\\s+)?${HANDOFF_VERB}\\b`,
-  // A steps list: "1. Run the type-check", "- Commit the change", "Then push to main"
-  `(?:^|\\n)[ \\t]*(?:\\d+[.)]|[-*+]|#{1,6}|>)?[ \\t]*(?:then|now|next|finally|first)?[,:]?[ \\t]*${HANDOFF_VERB}\\b`,
-  // The same imperative mid-paragraph: "I applied the fix. Now run the type-check."
-  // The adverb is REQUIRED here, unlike the line-leading form above — without it a
-  // plain sentence that happens to open with one of these words ("Build output is
-  // clean now.") would read as an instruction.
-  `[.!?]\\s+(?:then|now|next|finally|first)[,:]?\\s+${HANDOFF_VERB}\\b`
-].join("|"), "gi");
+var HANDS_OFF = new RegExp(
+  [
+    // "you can run", "you'll need to run", "you should now commit", "you must rebuild"
+    `\\byou(?:'ll|'d|'ve| will| would| should| must| may| might| can| could| still| then| now)?(?:\\s+(?:then|now|also|just|still|next|first|finally|want to|need to|have to|be able to))*\\s+${HANDOFF_VERB}\\b`,
+    // "please run the guards"
+    `\\bplease\\s+(?:now\\s+|then\\s+)?${HANDOFF_VERB}\\b`,
+    // "once you've run the build", "after you push"
+    `\\b(?:once|after|when|before)\\s+you(?:'ve| have| had)?\\s+${HANDOFF_VERB}\\b`,
+    // "run the following", "apply these changes", "execute this command"
+    `\\b${HANDOFF_VERB}\\s+(?:the\\s+following|these|this)\\b`,
+    // "to verify, run …" / "to apply the fix you need to run …"
+    `\\bto\\s+(?:apply|verify|confirm|finish|complete|deploy|ship|land|pick up|see)\\b[^.\\n]{0,60}?,?\\s*(?:you\\s+(?:can|should|must|will|need to|have to)\\s+)?${HANDOFF_VERB}\\b`,
+    // A steps list: "1. Run the type-check", "- Commit the change", "Then push to main"
+    `(?:^|\\n)[ \\t]*(?:\\d+[.)]|[-*+]|#{1,6}|>)?[ \\t]*(?:then|now|next|finally|first)?[,:]?[ \\t]*${HANDOFF_VERB}\\b`,
+    // The same imperative mid-paragraph: "I applied the fix. Now run the type-check."
+    // The adverb is REQUIRED here, unlike the line-leading form above — without it a
+    // plain sentence that happens to open with one of these words ("Build output is
+    // clean now.") would read as an instruction.
+    `[.!?]\\s+(?:then|now|next|finally|first)[,:]?\\s+${HANDOFF_VERB}\\b`
+  ].join("|"),
+  "gi"
+);
 var COMMAND_NEARBY = new RegExp(`${CMD_MARK}|${RUNNER}|\\b${SCRIPT_NOUN}`, "i");
 
-// ../packages/agent-stall/src/permissionMenu.js
+// ../packages/agent-stall/src/permissionMenu.ts
 var ACTION_VERB = "(?:run|execute|apply|implement|install|rebuild|build|compile|commit|push|merge|rebase|deploy|publish|release|ship|open|create|file|draft|write|add|update|patch|edit|change|modify|fix|resolve|refactor|rename|move|delete|remove|drop|close|cancel|archive|assign|dispatch|schedule|start|kick off|trigger|link|list|enumerate|show|generate|produce|proceed|continue|go ahead|do (?:it|that|this|them|so|first|next|now|any|all)|handle|take care of|work through|go through|tackle|clean up|tidy|sort out|migrate|convert|split|extract|bump|revert|restore|retry|re-?try|re-?run|verify|test|check|review|investigate|dig into|look into)";
-var OFFER = new RegExp([
-  // "Would you like me to open the PRs?" · "Do you want me to merge these?"
-  // · "Would you like me to proceed?"
-  `\\b(?:would|do)\\s+you\\s+(?:like|want|prefer)\\s+(?:me|us)\\s+to\\b`,
-  // "Shall I open PRs?" · "Should I cancel the stalled tickets?" · "Can I proceed?"
-  // · "May I go ahead?"
-  `\\b(?:shall|should|can|may)\\s+i\\b[^.?\\n]{0,80}\\?`,
-  // "Want me to push these?" — the subjectless form.
-  `\\bwant\\s+(?:me|us)\\s+to\\b`,
-  // "Let me know if you'd like me to…" · "Let me know which of these to do"
-  // · "Tell me which you'd prefer" · "Just say the word and I'll merge them"
-  // "how" earns its place: "let me know how you'd like to proceed" is the single most
-  // common way this pause is phrased, and it names no option at all.
-  `\\blet me know\\b[^.\\n]{0,80}\\b(?:if|whether|which|what|how)\\b`,
-  `\\b(?:tell|let)\\s+me\\s+know\\s+(?:which|what|whether|if)\\b`,
-  `\\bsay the word\\b`,
-  // "I can open the PRs if you'd like." · "I could cancel them if you want."
-  // · "I'm happy to merge these if that's what you want."
-  `\\bi\\s+(?:can|could|am happy to|'?m happy to|would be happy to)\\b[^.\\n]{0,120}?\\bif\\s+(?:you|that|you'?d|you would)\\b`,
-  // "Confirm and I'll proceed." · "Approve and I'll merge them."
-  `\\b(?:confirm|approve|give me the go-?ahead|give the go-?ahead)\\b[^.\\n]{0,40}\\band\\s+i(?:'ll| will)\\b`,
-  // "Which would you like me to do first?" · "Which of these should I start with?"
-  `\\bwhich\\s+(?:one|of these|of those)?\\s*(?:would|do|should|shall)\\s+(?:you|i)\\b`,
-  // "Your call." · "Up to you." · "How would you like to proceed?" — and the
-  // declarative order the same sentence takes inside a clause, "…how you would like
-  // to proceed", which the interrogative-only form used to miss.
-  `\\b(?:your call|up to you|it'?s your call)\\b`,
-  `\\bhow\\s+(?:you\\s+(?:would|do)|(?:would|do)\\s+you)\\s+(?:want|like|prefer)\\b`
-].join("|"), "gi");
+var OFFER = new RegExp(
+  [
+    // "Would you like me to open the PRs?" · "Do you want me to merge these?"
+    // · "Would you like me to proceed?"
+    `\\b(?:would|do)\\s+you\\s+(?:like|want|prefer)\\s+(?:me|us)\\s+to\\b`,
+    // "Shall I open PRs?" · "Should I cancel the stalled tickets?" · "Can I proceed?"
+    // · "May I go ahead?"
+    `\\b(?:shall|should|can|may)\\s+i\\b[^.?\\n]{0,80}\\?`,
+    // "Want me to push these?" — the subjectless form.
+    `\\bwant\\s+(?:me|us)\\s+to\\b`,
+    // "Let me know if you'd like me to…" · "Let me know which of these to do"
+    // · "Tell me which you'd prefer" · "Just say the word and I'll merge them"
+    // "how" earns its place: "let me know how you'd like to proceed" is the single most
+    // common way this pause is phrased, and it names no option at all.
+    `\\blet me know\\b[^.\\n]{0,80}\\b(?:if|whether|which|what|how)\\b`,
+    `\\b(?:tell|let)\\s+me\\s+know\\s+(?:which|what|whether|if)\\b`,
+    `\\bsay the word\\b`,
+    // "I can open the PRs if you'd like." · "I could cancel them if you want."
+    // · "I'm happy to merge these if that's what you want."
+    `\\bi\\s+(?:can|could|am happy to|'?m happy to|would be happy to)\\b[^.\\n]{0,120}?\\bif\\s+(?:you|that|you'?d|you would)\\b`,
+    // "Confirm and I'll proceed." · "Approve and I'll merge them."
+    `\\b(?:confirm|approve|give me the go-?ahead|give the go-?ahead)\\b[^.\\n]{0,40}\\band\\s+i(?:'ll| will)\\b`,
+    // "Which would you like me to do first?" · "Which of these should I start with?"
+    `\\bwhich\\s+(?:one|of these|of those)?\\s*(?:would|do|should|shall)\\s+(?:you|i)\\b`,
+    // "Your call." · "Up to you." · "How would you like to proceed?" — and the
+    // declarative order the same sentence takes inside a clause, "…how you would like
+    // to proceed", which the interrogative-only form used to miss.
+    `\\b(?:your call|up to you|it'?s your call)\\b`,
+    `\\bhow\\s+(?:you\\s+(?:would|do)|(?:would|do)\\s+you)\\s+(?:want|like|prefer)\\b`
+  ].join("|"),
+  "gi"
+);
 var ACTION_NEARBY = new RegExp(`\\b${ACTION_VERB}\\b`, "i");
 
 // ../packages/agent-stall/src/index.ts
@@ -4873,7 +4885,7 @@ function isCodeChangeTool(name) {
   return CODE_CHANGE_TOOLS.has(name);
 }
 
-// ../packages/run-guards/src/readinessClaim.js
+// ../packages/run-guards/src/readinessClaim.ts
 var READY_PATTERNS = [
   // "Now I have everything I need", "I've got all the context", "we now have enough"
   /\b(?:i|we)(?:'ve| have)?\s+(?:now\s+)?(?:have|got)\s+(?:got\s+)?(?:everything|all\s+(?:the\s+)?(?:context|information|info|details|i\s+need|we\s+need)|enough)\b/,
@@ -4898,20 +4910,18 @@ function ownWords(text) {
   return text.replace(/```[\s\S]*?(?:```|$)/g, " ").replace(/`[^`\n]*`/g, " ").replace(/^\s*>.*$/gm, " ").replace(/"[^"\n]*"|“[^”\n]*”/g, " ").replace(/[’‘]/g, "'");
 }
 function sentenceClaims(sentence) {
-  if (sentence.trimEnd().endsWith("?"))
-    return false;
+  if (sentence.trimEnd().endsWith("?")) return false;
   return READY_PATTERNS.some((p) => {
     const m = p.exec(sentence);
     return !!m && !NEGATION.test(sentence.slice(0, m.index + m[0].length));
   });
 }
 function claimsReady(text) {
-  if (!text)
-    return false;
+  if (!text) return false;
   return ownWords(text).toLowerCase().split(/(?<=[.!?])\s+|\n+/).some(sentenceClaims);
 }
 
-// ../packages/run-guards/src/evidence/gitCommandPattern.js
+// ../packages/run-guards/src/evidence/gitCommandPattern.ts
 function gitCommandPattern(verbs) {
   return new RegExp(`\\bgit\\s+(?:-[Cc]\\s+\\S+\\s+|-\\S+\\s+|--\\S+(?:=\\S+)?\\s+)*(?:${verbs})\\b`, "i");
 }
@@ -5147,7 +5157,7 @@ var COST_LEVERS = [
 ];
 var BY_ID = new Map(COST_LEVERS.map((l) => [l.id, l]));
 
-// ../packages/tool-output-policy/src/caps.js
+// ../packages/tool-output-policy/src/caps.ts
 var TOOL_OUTPUT_CAPS = {
   read_file: 16e3,
   run_command: 2e4,
@@ -5181,7 +5191,7 @@ var PAGED_READ_TOOLS = {
   canvas_read_build_file: { search: "canvas_search_build_files", perPathOffset: false }
 };
 
-// ../packages/tool-output-policy/src/readFileWindow.js
+// ../packages/tool-output-policy/src/readFileWindow.ts
 var READ_FILE_RESULT_CHARS = TOOL_OUTPUT_CAPS.read_file ?? 16e3;
 
 // src/brainTriage.ts

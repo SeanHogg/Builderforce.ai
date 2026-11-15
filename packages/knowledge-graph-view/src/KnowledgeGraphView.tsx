@@ -276,9 +276,9 @@ export function KnowledgeGraphView({
                                 ) : (
                                     <SceneState status={kg.status} labels={labels} source={source} targets={targets} review={null} reviewStatus={kg.review.state.status} start={kg.review.start} openReview={openReview} onRetry={kg.reload}
                                         loading={{ phase: currentLoadPhase(hostTrace.trace, kg.rootId), diagnostics: () => diagnostics().text }}
-                                        onSeed={kg.notHere?.canSeed && kg.rootId ? () => kg.review.start({ rootId: kg.rootId!, seed: true }) : undefined} />
+                                        onSeed={kg.notHere?.canSeed && kg.rootId ? () => kg.review.start({ rootId: kg.rootId!, seed: true }) : undefined} onRun={kg.run} />
                                 )}
-                                <SceneStatus stale={kg.stale} refreshFailed={kg.refreshFailed} labels={labels} onRetry={kg.reload} />
+                                <SceneStatus stale={kg.stale} refreshFailed={kg.refreshFailed} labels={labels} onRetry={kg.reload} onRun={real && !kg.running ? kg.run : undefined} />
                             </div>
                             {!layout.phone && overlay}
                             {surface.highlight && showsTowers(mode, surface.towers) && <TowerLegend highlight={surface.highlight} labels={labels} compact={layout.compact} onClose={() => surface.setHighlight(null)} />}

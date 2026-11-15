@@ -10,8 +10,9 @@
  *                host, with the editor's warm symbol index, the code pack's analyzers through
  *                the local shell (their snapshot queued for the project when linked), the
  *                judgement port (`knowledgeJudgement.ts`) and the knowledge index's `similar`;
- *   graph      — ALWAYS built here from the local store (PRD 41 A7), linked or not; the
- *                server's graph is read only for the Sync drawer's server column.
+ *   graph      — ALWAYS built from the local store (PRD 41 A7), linked or not, in the graph
+ *                worker (`graphWorker.ts`), never on this thread; the server's graph is read
+ *                only for the Sync drawer's server column.
  *
  * Used by the panel's bridge (`knowledgeBridge.ts`), the PreFetch rows (`knowledgeRows.ts`)
  * and the commands (`knowledgeCommands.ts`).
@@ -19,7 +20,7 @@
 
 import * as vscode from "vscode";
 import {
-  buildStoredGraph, createReviewRecorder, deferredHashCache, migratingRootFiles, reviewPacks,
+  createReviewRecorder, deferredHashCache, migratingRootFiles,
   rootManifest, rootStore, runKnowledgeReview,
   type FsDirectorySource, type KnowledgeReviewOptions, type ReviewRecorder,
 } from "@builderforce/agent-tools/knowledge";
@@ -37,7 +38,7 @@ import { buildLocalCapabilityProvider } from "../localCapabilities";
 import { logLine } from "../errorReporter";
 import { getHostKnowledgeIndex } from "./index/hostKnowledgeIndex";
 import { vscodeKnowledgeFs, workspaceKnowledgeFiles } from "./knowledgeFs";
-import { createDirectorySource, EVENT_LOOP_YIELD_EVERY, eventLoopYield } from "./vscodeDirectorySource";
+import { createDirectorySource } from "./vscodeDirectorySource";
 import type { KnowledgeFiles } from "./knowledgeStores";
 import { openRootKnowledge, rootMigration } from "./folderKnowledge";
 import { configureReplicaLog, duringReview, replicatedStoreOf, type PumpSource } from "./knowledgeReplica";
@@ -47,7 +48,7 @@ import { reviewPortsFor } from "./reviewPortsFor";
 import { reviewRecords, useRecordMemento } from "./knowledgeSyncStatus";
 import { reviewParallelism } from "./review/extractPoolHost";
 import { UNTIMED, type LoadTimer } from "./knowledgeLoadTrace";
-import { factFindingsProvider, factIndexOf } from "./factFindings";
+import { storedGraphOffThread } from "./graphWorker";
 import { preemptBackground } from "./indexLevels";
 import { useL3GuardLog } from "./l3CrashGuard";
 import { untilAborted } from "../boundedStep";
@@ -273,6 +274,7 @@ export async function loadGraph(
   q: GraphQuery = {},
   timer: LoadTimer = UNTIMED,
   onNearDuplicates?: (pairs: number) => void,
+  options?: LoadGraphOptions,
 ): Promise<KnowledgeGraph | null> {
   const root = rootById(rootId, workspaceFolders());
   if (!root) return null;
@@ -284,20 +286,19 @@ export async function loadGraph(
   ]);
   const nearDuplicates = index ? timer.phase("nearDuplicates", () => index.nearDuplicates()) : undefined;
   if (nearDuplicates) onNearDuplicates?.(nearDuplicates.length);
-  const packs = reviewPacks({ partitions });
-  // The generic and code-pack findings come from the root's fact index (PRD 41 §B5), over the whole graph, once it synced.
-  const findings = factFindingsProvider(factIndexOf(rootId));
-  return timer.phase("build", () => buildStoredGraph({
-    rootId, store: open.store, manifest: open.manifest, packs,
-    // The extension host is the webview bridge: hand its event loop a macrotask every so
-    // many per-file reads, so a large root's load does not starve pending bridge work for
-    // the whole walk (the per-file reads resolve synchronously — node:sqlite + a cached
-    // parse — which otherwise drains only microtasks between iterations).
-    yieldEvery: EVENT_LOOP_YIELD_EVERY,
-    yieldDelay: eventLoopYield,
+  // The worker reads the folder's file itself: a legacy import must have landed first.
+  await open.migrated;
+  // The build runs in the graph worker (`graphWorker.ts`), never on this thread: the extension host is the webview bridge.
+  // Its findings are memory's and the code pack's rules over the whole graph, computed by the build itself.
+  return timer.phase("build", () => storedGraphOffThread({
+    folderPath: root.folderPath, rootId, partitions,
     ...(nearDuplicates ? { nearDuplicates } : {}),
     ...(q.focus ? { focus: q.focus } : {}),
     ...(q.maxNodes ? { maxNodes: q.maxNodes } : {}),
-    ...(findings ? { findings } : {}),
-  }));
+  }, open.local, options?.signal));
+}
+
+export interface LoadGraphOptions {
+  /** Aborted when a newer load supersedes this one: the worker drops its result. */
+  signal?: AbortSignal;
 }

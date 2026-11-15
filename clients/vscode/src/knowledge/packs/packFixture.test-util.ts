@@ -8,6 +8,10 @@ import { InMemoryIngestManifest } from "@seanhogg/builderforce-memory/ingest";
 import { localSnapshotStore, type DirectorySource } from "@seanhogg/builderforce-memory/knowledge";
 import { packFromStore, runKnowledgeReview, type PortableKnowledgePack } from "@builderforce/agent-tools/knowledge";
 import type { PackMemento } from "./loadedPackRegistry";
+import { writePackFile } from "./packFile";
+import { mkdtemp } from "fs/promises";
+import { tmpdir } from "os";
+import * as path from "path";
 
 /** A root id no workspace folder of the tests has. */
 export const FOREIGN_ROOT = "vscode:f-foreign-docs";
@@ -38,6 +42,13 @@ export async function leasePack(rootId = FOREIGN_ROOT, name = "lease-docs", docs
   await runKnowledgeReview({ source: docsSource(rootId, docs), store, manifest });
   const extracted = await store.extractedEntries();
   return packFromStore({ name, rootId, title: "Lease docs", store, manifest, extracted });
+}
+
+/** `pack` written as a `.bfpack` in a fresh temp folder: the file `indexPack` builds the pack's graph from. */
+export async function packFileOf(pack: PortableKnowledgePack): Promise<string> {
+  const file = path.join(await mkdtemp(path.join(tmpdir(), "bf-pack-file-")), `${pack.name}.bfpack`);
+  await writePackFile(file, pack);
+  return file;
 }
 
 export function memoryMemento(initial: Record<string, unknown> = {}): PackMemento & { values: Map<string, unknown> } {

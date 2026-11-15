@@ -263,3 +263,24 @@ describe("BackgroundIndexer — keystrokes, preemption and shutdown", () => {
     expect(f.ports.get("id:/b")!.plan.mock.calls.length).toBe(plansBefore);
   });
 });
+
+describe("BackgroundIndexer — only the folders knowledge runs for (operator decision 2026-11-15)", () => {
+  it("indexes only included folders, and follows a root starting and stopping running", async () => {
+    const f = fakeHost(["/a", "/b"]);
+    const running = new Set<string>(["id:/a"]);
+    const bi = new BackgroundIndexer({ ...f.host, includes: (root) => running.has(root.rootId) });
+    bi.start(true);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(bi.rootIds).toEqual(["id:/a"]);
+    expect([...f.watchers.keys()]).toEqual(["/a"]);
+    expect(f.ports.has("id:/b")).toBe(false); // nothing of /b was opened, walked or watched
+
+    running.add("id:/b");
+    running.delete("id:/a");
+    bi.syncFolders();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(bi.rootIds).toEqual(["id:/b"]);
+    expect(f.disposed).toEqual(["id:/a"]);
+    await bi.dispose();
+  });
+});

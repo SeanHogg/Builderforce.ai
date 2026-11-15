@@ -31,6 +31,7 @@ import { workspaceSymbolIndex } from "../workspaceSymbols";
 import { getHostKnowledgeIndex } from "./index/hostKnowledgeIndex";
 import { vscodeKnowledgeFs } from "./knowledgeFs";
 import { replicaQueueFor } from "./knowledgeReplica";
+import { storedGraphOffThread } from "./graphWorker";
 import { sharedAnalysis } from "./l3SharedAnalysis";
 import { workspaceRunner } from "./l3Worker";
 import { editorJudgement, judgeConfigured } from "./knowledgeJudgement";
@@ -163,7 +164,8 @@ export function reviewPortsFor(deps: RootPortsDeps): RootPortsBuilder {
       // After the review the root's graph feeds the knowledge index (the shared runner does it and reports the phase).
       index: reviewIndexPort(() => getHostKnowledgeIndex(root.rootId)),
       // No `platformGraph`: the knowledge index is fed from the LOCAL graph too, so nothing the editor
-      // shows or searches depends on the server's version (PRD 41 A7).
+      // shows or searches depends on the server's version (PRD 41 A7). That graph is built in the graph worker, never here.
+      storedGraph: (rootId) => storedGraphOffThread({ folderPath: root.folderPath, rootId, ...(parts ? { partitions: parts } : {}) }, open.local),
       onIndexError: (error) => log("index upsert", error),
       onSystemsError: (error) => log("systems", error),
     };

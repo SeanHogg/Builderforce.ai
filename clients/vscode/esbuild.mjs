@@ -202,6 +202,12 @@ const outcomeWorker = harness || integration ? null : { ...options, entryPoints:
  * Same options as the extension; the bundle must not reach `vscode`.
  */
 const l3Worker = harness || integration ? null : { ...options, entryPoints: ["src/knowledge/l3WorkerEntry.ts"], outfile: "out/knowledgeL3Worker.js" };
+/**
+ * The knowledge graph worker (`src/knowledge/graphWorkerEntry.ts`): every graph build of the extension (the knowledge view, a
+ * run delta's sides, the code actions) runs here, off the extension host's thread (`graphWorker.ts`, ONE reused worker,
+ * reading the folder's knowledge file through its own read-only connection). Same options; the bundle must not reach `vscode`.
+ */
+const graphWorker = harness || integration ? null : { ...options, entryPoints: ["src/knowledge/graphWorkerEntry.ts"], outfile: "out/knowledgeGraphWorker.js" };
 async function copyBfiWasm() {
   const wasm = createRequire(import.meta.url).resolve("@seanhogg/bfi-web/bfi_web_bg.wasm");
   fs.mkdirSync("out", { recursive: true });
@@ -319,6 +325,7 @@ if (watch) {
   if (deltaWorker) await (await esbuild.context(deltaWorker)).watch();
   if (outcomeWorker) await (await esbuild.context(outcomeWorker)).watch();
   if (l3Worker) await (await esbuild.context(l3Worker)).watch();
+  if (graphWorker) await (await esbuild.context(graphWorker)).watch();
   console.log("[esbuild] watching…");
 } else {
   await esbuild.build(options);
@@ -330,4 +337,5 @@ if (watch) {
   if (deltaWorker) await esbuild.build(deltaWorker);
   if (outcomeWorker) await esbuild.build(outcomeWorker);
   if (l3Worker) await esbuild.build(l3Worker);
+  if (graphWorker) await esbuild.build(graphWorker);
 }

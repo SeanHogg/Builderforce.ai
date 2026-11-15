@@ -94,6 +94,7 @@ export {
 } from './portablePack.js';
 export { mergePacksWithCards, packFromStore, packGraph, reviewHasWork, type PackFromStoreArgs, type PackGraphQuery } from './packGraph.js';
 export { buildCodeGraph } from './codeGraph.js';
+export { codeGraphFindings, type CodeGraphFindings } from './codeGraphFindings.js';
 export {
     NO_MODULE_ALIASES, PACKAGE_MODULE_DIR, aliasCandidates, aliasesOf, isAliasSpecifier, parseConfigText, resolveImportPath,
     type ModuleAliases, type ModuleResolution,

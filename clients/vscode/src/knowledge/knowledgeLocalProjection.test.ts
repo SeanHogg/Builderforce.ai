@@ -46,7 +46,7 @@ vi.mock("@builderforce/agent-tools/node-git-history", () => ({ gitHistoryPort: a
 vi.mock("@builderforce/repo-map", () => ({ repoMapPort: {} }));
 vi.mock("@seanhogg/builderforce-brain-embedded", () => ({ NOT_SIGNED_IN: "not-signed-in" }));
 
-import { codeFileNode, forgetRootPorts } from "@builderforce/agent-tools/knowledge";
+import { codeFileNode, forgetRootPorts, graphCounts } from "@builderforce/agent-tools/knowledge";
 import { localSqliteAvailable } from "@builderforce/agent-tools/node-local-sqlite";
 import { closeFolderKnowledge, folderKnowledge } from "./folderKnowledge";
 import { loadGraph } from "./knowledgeService";
@@ -104,9 +104,10 @@ describe.skipIf(!localSqliteAvailable())("a linked workspace draws from the loca
     expect(mocks.fetchAuthed.mock.calls.every(([, path]) => !String(path).includes("knowledge-graph"))).toBe(true);
   });
 
-  it("sync status: local counts come from the local graph, the server column is empty when unreachable, and the replica state is present", async () => {
+  it("sync status: local counts come from the last local graph built (never a build of its own), the server column is empty when unreachable, and the replica state is present", async () => {
     const root = await reviewedLocally();
-    const status = await rootSyncStatus(secrets, root);
+    const built = graphCounts((await loadGraph(secrets, root.rootId))!);
+    const status = await rootSyncStatus(secrets, root, { lastBuilt: () => built });
     expect(status.local.files).toBe(1);
     expect(status.server).toBeUndefined();
     expect(status.replica).toMatchObject({ dirty: 0, sending: false, failed: [] });
@@ -119,9 +120,10 @@ describe.skipIf(!localSqliteAvailable())("a linked workspace draws from the loca
   // fetch never settles.
   it("sync status answers on local counts without waiting on a server graph that never resolves", async () => {
     const root = await reviewedLocally();
+    const built = graphCounts((await loadGraph(secrets, root.rootId))!);
     // A server graph read that hangs forever (offline): no throw, no settle.
     mocks.fetchAuthed.mockImplementationOnce(async () => new Promise<Response>(() => undefined));
-    const status = await rootSyncStatus(secrets, root, { serverTimeoutMs: 20 });
+    const status = await rootSyncStatus(secrets, root, { serverTimeoutMs: 20, lastBuilt: () => built });
     expect(status.local.files).toBe(1);
     expect(status.server).toBeUndefined();
   });

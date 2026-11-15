@@ -14,7 +14,7 @@ import { knowledgeRootId } from "../knowledge/knowledgeRoots";
 import { VSCODE_PREFETCH_REGISTRY } from "./executors";
 import { configureLoadedPacks, loadedPackRegistry } from "../knowledge/packs/loadedPackRegistry";
 import { indexPack } from "../knowledge/packs/packIndexing";
-import { LEASE_DOCS, docsSource, leasePack, memoryMemento } from "../knowledge/packs/packFixture.test-util";
+import { LEASE_DOCS, docsSource, leasePack, memoryMemento, packFileOf } from "../knowledge/packs/packFixture.test-util";
 
 const ROOT = path.resolve("/tmp/kx-ask-repo");
 const fn = (name: string) => ({ name, kind: "function" as const, line: 1, exported: true });
@@ -118,7 +118,7 @@ describe("knowledge.ask over a LOADED PACK (a root no workspace folder holds)", 
     const pack = await leasePack();
     expect(await ask(ROOT)).toBeUndefined();
 
-    await indexPack(pack);
+    await indexPack(pack, await packFileOf(pack));
     await loadedPackRegistry().remember(pack.name, { path: "/packs/lease.bfpack", rootId: pack.rootId, title: pack.title, loadedAt: pack.createdAt });
 
     for (const root of [ROOT, ""]) {
@@ -134,7 +134,7 @@ describe("knowledge.ask over a LOADED PACK (a root no workspace folder holds)", 
   it("a pack that is indexed but no longer registered is not consulted", async () => {
     configureHostKnowledgeIndex({ workspaceRoots: () => [ROOT], idle: () => undefined, embedder: async () => undefined, symbolFiles: async () => [] });
     configureLoadedPacks(memoryMemento());
-    await indexPack(await leasePack());
+    { const lease = await leasePack(); await indexPack(lease, await packFileOf(lease)); }
     expect(await ask("")).toBeUndefined();
   });
 
@@ -142,7 +142,7 @@ describe("knowledge.ask over a LOADED PACK (a root no workspace folder holds)", 
     configureHostKnowledgeIndex({ workspaceRoots: () => [ROOT], idle: () => undefined, embedder: async () => undefined, symbolFiles: async () => [] });
     configureLoadedPacks(memoryMemento());
     const pack = await leasePack();
-    await indexPack(pack);
+    await indexPack(pack, await packFileOf(pack));
     await loadedPackRegistry().remember(pack.name, { path: "/packs/lease.bfpack", rootId: pack.rootId, title: pack.title, loadedAt: pack.createdAt });
     const unrelated = await knowledgeAskExecutors(() => "")["knowledge.ask"]!.run("where is the zzqx handled", new AbortController().signal);
     expect(unrelated).toBeUndefined();

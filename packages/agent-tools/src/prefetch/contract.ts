@@ -14,7 +14,8 @@
  */
 
 import type { CapabilityProvider } from '../capabilities.js';
-import type { PartitionRegistry } from '@seanhogg/builderforce-memory/knowledge';
+import type { Extracted, PartitionRegistry } from '@seanhogg/builderforce-memory/knowledge';
+import type { CodeGraphFindings } from '../knowledge/codeGraphFindings.js';
 import type { RepoGraphPort } from '../knowledge/workspaceAnalysis.js';
 import type { WorkspaceExtracted } from '../knowledge/workspaceExtracted.js';
 
@@ -90,6 +91,12 @@ export interface PrefetchExecHost {
      * undefined when it cannot serve the call; absent ⇒ the executors run `analyseWorkspaceExtracted` in this thread.
      */
     analyse?(args: { partitions: PartitionRegistry; signal: AbortSignal }): Promise<WorkspaceExtracted | undefined>;
+    /**
+     * Builds the code pack's graph over an analysis OFF this thread (the editor's graph worker) and answers only what the code
+     * actions read ({@link CodeGraphFindings}: findings and placed layers). A rejection answers nothing (the build never falls
+     * back to this thread); absent ⇒ the executors run `codeGraphFindings` in this thread.
+     */
+    codeGraph?(args: { extracted: Extracted[]; partitions: PartitionRegistry; signal: AbortSignal }): Promise<CodeGraphFindings>;
     /** Starter scaffolds; absent ⇒ `scaffold.template` is not offered. */
     templates?: ScaffoldTemplates;
 }

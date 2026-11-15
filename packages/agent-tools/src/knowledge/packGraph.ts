@@ -35,6 +35,11 @@ export interface PackFromStoreArgs {
     provenance?: PackProvenance;
     /** The cards could not be built (the pack is written without them; a consumer rebuilds them). */
     onError?(error: unknown): void;
+    /**
+     * Builds the root's stored graph somewhere other than this thread (the VS Code extension's graph worker): the same
+     * `buildStoredGraph` over the same store. Absent ⇒ built here.
+     */
+    storedGraph?(): Promise<KnowledgeGraph | null>;
 }
 
 /**
@@ -45,10 +50,15 @@ export interface PackFromStoreArgs {
 export async function mergePacksWithCards(
     base: PortableKnowledgePack,
     fresh: PortableKnowledgePack,
-    opts: { now?(): string; mirror?: boolean } = {},
+    opts: {
+        now?(): string;
+        mirror?: boolean;
+        /** Builds the merged pack's graph somewhere other than this thread (the VS Code extension's graph worker). Absent ⇒ `packGraph` here. */
+        packGraph?(merged: PortableKnowledgePack): Promise<KnowledgeGraph | null>;
+    } = {},
 ): Promise<PortableKnowledgePack> {
     const { cards: _stale, ...merged } = mergePacks(base, fresh, opts);
-    const graph = await packGraph(merged);
+    const graph = await (opts.packGraph ? opts.packGraph(merged) : packGraph(merged));
     return graph ? { ...merged, cards: toCards(graph) } : merged;
 }
 
@@ -87,7 +97,9 @@ export async function packFromStore(args: PackFromStoreArgs): Promise<PortableKn
     };
     let cards: IndexDoc[] | undefined;
     try {
-        const graph = await buildStoredGraph({ rootId, store, manifest: args.manifest, packs: args.packs ?? reviewPacks({}) });
+        const graph = args.storedGraph
+            ? await args.storedGraph()
+            : await buildStoredGraph({ rootId, store, manifest: args.manifest, packs: args.packs ?? reviewPacks({}) });
         if (graph) cards = toCards(graph);
     } catch (error) {
         args.onError?.(error);

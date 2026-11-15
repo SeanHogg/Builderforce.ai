@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { HostKnowledgeIndexCore, Recall } from "@builderforce/agent-tools/knowledge-index";
 import { configureHostKnowledgeIndex } from "../knowledge/index/hostKnowledgeIndex";
 import { configureLoadedPacks, loadedPackRegistry } from "../knowledge/packs/loadedPackRegistry";
-import { leasePack, memoryMemento } from "../knowledge/packs/packFixture.test-util";
+import { leasePack, memoryMemento, packFileOf } from "../knowledge/packs/packFixture.test-util";
 import { indexPack } from "../knowledge/packs/packIndexing";
 import { KNOWLEDGE_PART_HITS, knowledgePart, knowledgeRecall, preSearchPaths } from "./knowledgeSource";
 
@@ -81,7 +81,7 @@ describe("context pack — a loaded knowledge pack", () => {
     configureHostKnowledgeIndex({ workspaceRoots: () => [ROOT], idle: () => undefined, embedder: async () => undefined, symbolFiles: async () => [] });
     configureLoadedPacks(memoryMemento());
     const pack = await leasePack();
-    await indexPack(pack);
+    await indexPack(pack, await packFileOf(pack));
     await loadedPackRegistry().remember(pack.name, { path: "/packs/lease.bfpack", rootId: pack.rootId, title: pack.title, loadedAt: pack.createdAt });
 
     for (const root of [ROOT, ""]) {

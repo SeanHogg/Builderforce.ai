@@ -11,7 +11,7 @@
  * file gone since the last seed is removed from the index.
  */
 
-import { compareStr, MAX_NODES_CAP, type Extracted, type NodeRef, type PartitionRegistry } from '@seanhogg/builderforce-memory/knowledge';
+import { compareStr, MAX_NODES_CAP, type Extracted, type KnowledgeGraph, type KnowledgePack, type NodeRef, type PartitionRegistry, type StoredFact, type StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
 import { CONTENT_HASH_FIELD, hashText, type SourceDocument } from '@seanhogg/builderforce-memory/ingest';
 import type { CodeSymbol } from '../../symbols.js';
 import { buildCodeGraph } from '../codeGraph.js';
@@ -77,6 +77,26 @@ export function chunkByArea(extracted: readonly Extracted[], size: number = SEED
 }
 
 /**
+ * A host whose UI is a single event loop (the VS Code extension host, the browser) never
+ * lets `seedCodeCards`'s synchronous `buildCodeGraph` run on it: {@link codeGraphSeam}
+ * hands the graph to a worker, by default. Tests set the seam to the direct builder.
+ */
+let codeGraphSeam: ((args: CodeGraphArgs) => KnowledgeGraph) | undefined;
+export interface CodeGraphArgs { rootId: string; extracted: Extracted[]; facts: StoredFact[]; relations: StoredRelation[]; packs: KnowledgePack[]; maxNodes: number }
+/** Replaces {@link seedCodeCards}'s graph builder (tests; a host that builds in a worker). Returns the restore. */
+export function setCodeGraphSeam(seam: (args: CodeGraphArgs) => KnowledgeGraph): () => void {
+    const prior = codeGraphSeam;
+    codeGraphSeam = seam;
+    return () => { codeGraphSeam = prior; };
+}
+
+const buildGraph = (args: CodeGraphArgs): KnowledgeGraph =>
+    codeGraphSeam ? codeGraphSeam(args) : buildCodeGraph(
+        { rootId: args.rootId, extracted: args.extracted, facts: args.facts, relations: args.relations, packs: args.packs },
+        { maxNodes: args.maxNodes },
+    );
+
+/**
  * Upserts the code cards for `files` and removes the cards of files no longer present
  * (`previous` is the last seed's ids). Returns this seed's ids, for the next one.
  */
@@ -91,7 +111,7 @@ export async function seedCodeCards(
     const seen = new Set<string>();
     for (const chunk of chunkByArea(extracted)) {
         if (opts.signal?.aborted) return new Set(opts.previous ?? []);
-        const graph = buildCodeGraph({ rootId, extracted: chunk, facts: [], relations: [], packs }, { maxNodes: MAX_NODES_CAP });
+        const graph = buildGraph({ rootId, extracted: chunk, facts: [], relations: [], packs, maxNodes: MAX_NODES_CAP });
         const keys = new Map<string, string[]>();
         for (const ex of chunk) {
             for (const { ref, key } of ex.keys) keys.set(ref, [...(keys.get(ref) ?? []), key]);

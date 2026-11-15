@@ -7,7 +7,7 @@ import type { ReactNode, Ref } from 'react';
 import type { KnowledgeGraphLabels } from '../labels';
 import { ReviewLauncher } from '../ReviewLauncher';
 import { cssVar } from '../scene/themeColors';
-import { button, heading, muted } from '../styles';
+import { button, heading, muted, primaryButton } from '../styles';
 import type { KnowledgeGraphSource } from '../types';
 import type { GraphStatus } from '../useKnowledgeGraph';
 import { TYPE, TYPE_VARS } from './ui/type';
@@ -42,10 +42,23 @@ export interface SurfaceStateProps {
     /** While loading: the host's phase and the diagnostics a slow load offers to copy. */
     loading?: LoadingProgress | undefined;
     onRetry(): void;
+    /** Run (a run-gated host's `idle` card): load the folder once and track its changes. */
+    onRun?: (() => void) | undefined;
 }
 
 /** The screen for a status that has no graph yet, or null when there is one to draw. */
-export function SurfaceState({ status, labels, source, review, reviewStatus, start, targets, openReview, onSeed, loading, onRetry }: SurfaceStateProps): ReactNode {
+export function SurfaceState({ status, labels, source, review, reviewStatus, start, targets, openReview, onSeed, loading, onRetry, onRun }: SurfaceStateProps): ReactNode {
+    if (status === 'idle') {
+        // A reviewed folder on a host that builds only on Run: nothing is read until the person presses it.
+        return (
+            <div data-testid="kg-run-card" style={{ padding: 24, display: 'grid', gap: 12, justifyItems: 'start', maxWidth: 560 }}>
+                <h2 style={heading}>{labels.runTitle}</h2>
+                <p style={{ ...muted, margin: 0, fontSize: TYPE.bodyLarge.fontSize }}>{labels.runBody}</p>
+                {onRun && <button type="button" style={primaryButton} onClick={onRun}>{labels.run}</button>}
+                {review}
+            </div>
+        );
+    }
     if (status === 'not-here') {
         // This machine holds no review of the root: never the server's cut, never a fault — Review, or the server's copy.
         return (

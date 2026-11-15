@@ -38120,6 +38120,10 @@
     },
     "refreshing": "Mise à jour…",
     "refreshFailed": "Échec de la mise à jour : dernier graphe affiché. Réessayer",
+    "runTitle": "Prêt à exécuter",
+    "runBody": "Le graphe n’est construit que lorsque vous appuyez sur Exécuter. Ensuite, seul ce qui change est mis à jour.",
+    "run": "Exécuter",
+    "runLastSeen": "Dernier graphe affiché — exécuter pour mettre à jour",
     "errorTitle": "Le graphe de connaissances n’a pas pu se charger",
     "errorBody": "Une erreur est survenue lors de la lecture des connaissances de ce dossier. Réessayez.",
     "retry": "Réessayer",
@@ -40321,6 +40325,8 @@
       "unsafeRegex": "Motif dangereux dans « {section} »",
       "unreadable": "Impossible de lire le fichier de règles[[ ({reason})]]",
       "truncated": "{count} de plus non affichés"
-    }
+    },
+    "expandDetails": "Développer les détails",
+    "collapseDetails": "Réduire les détails"
   }
 }

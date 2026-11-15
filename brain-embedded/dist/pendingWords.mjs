@@ -7,7 +7,7 @@ import {
   replayAllPendingWords,
   replayPendingWords,
   setPendingWordsOwner
-} from "./chunk-EUT326S6.mjs";
+} from "./chunk-VG2BVO4F.mjs";
 import "./chunk-SFVLTQ7J.mjs";
 import "./chunk-SLI7C3HD.mjs";
 export {

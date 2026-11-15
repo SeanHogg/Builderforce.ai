@@ -89,6 +89,11 @@ export interface KnowledgeReviewPorts {
     index?: ReviewIndexPort;
     /** A linked host's platform graph of the root; null or a failure ⇒ the graph is built from the store. */
     platformGraph?(rootId: string): Promise<KnowledgeGraph | null>;
+    /**
+     * Builds the root's stored graph somewhere other than this thread (the VS Code extension's graph worker): the same
+     * `buildStoredGraph` over the same store. Absent ⇒ built here.
+     */
+    storedGraph?(rootId: string): Promise<KnowledgeGraph | null>;
     /** A failed index update is reported, never a failed review. Must not throw (the runner calls it from its cleanup). */
     onIndexError?(error: unknown): void;
     /** A failure to record the root's systems is reported, never a failed review. Must not throw. */
@@ -320,7 +325,9 @@ async function indexReviewed(ports: KnowledgeReviewPorts, rootId: string, tell: 
     let graph: KnowledgeGraph | null;
     try {
         graph = (await ports.platformGraph?.(rootId).catch(() => null))
-            ?? await buildStoredGraph({ rootId, store: ports.store, manifest: ports.manifest, packs: reviewPacks(ports) });
+            ?? await (ports.storedGraph
+                ? ports.storedGraph(rootId)
+                : buildStoredGraph({ rootId, store: ports.store, manifest: ports.manifest, packs: reviewPacks(ports) }));
     } catch (error) {
         ports.onIndexError?.(error);
         return null;
@@ -355,19 +362,6 @@ export interface StoredGraphArgs {
     hashOverrides?: ReadonlyMap<string, string | null>;
     /** The host's findings for the kinds it owns (PRD 41 §B5: the fact index), over the WHOLE graph (memory `BuildGraphOptions.findings`). */
     findings?: FindingsProvider;
-    /**
-     * Event-loop yield seam for a UI-thread host (the VS Code extension host): hand the
-     * loop a macrotask every `yieldEvery` files while reading per-file extracts, so a
-     * large root's load does not starve the webview bridge for the whole walk. The
-     * per-file reads are async but resolve synchronously (node:sqlite + a cached parse),
-     * which drains only microtasks between iterations — never letting a pending webview
-     * message run. `yieldDelay` is the macrotask awaited; a test passes a fake to walk
-     * synchronously. 0/absent: no yields (the library default, every other host).
-     */
-    yieldEvery?: number;
-    /** The macrotask `buildStoredGraph` awaits to yield; default none — the CALLER passes
-     *  its own (`setTimeout(0)` on the extension host). */
-    yieldDelay?: () => Promise<void>;
 }
 
 /** The content hash of every file a stored graph reads: the review's (or a newer edit's), with `overrides` applied. */
@@ -398,19 +392,12 @@ export async function buildStoredGraph(args: StoredGraphArgs): Promise<Knowledge
         ...files.map((f) => ({ ref: srcRef(rootId, f.id) as string, hash: f.hash })),
         ...roots.map((r) => ({ ref: r.id, hash: r.hash })),
     ];
-    // A UI-thread host yields the loop every so often: each per-file read resolves
-    // synchronously, so without a macrotask the whole walk blocks pending bridge work.
-    const yieldEvery = args.yieldEvery ?? 0;
-    let sinceYield = 0;
+    // A UI-thread host (the VS Code extension host) never calls this: it builds in its graph worker.
     for (const w of wanted) {
         // A deleted file has no content hash: there is nothing of it to fetch.
         if (!w.hash) continue;
         const hit = (await store.getExtracted?.(w.hash))?.find((e) => e.sourceRef === w.ref);
         if (hit) extracted.push(hit);
-        if (yieldEvery > 0 && args.yieldDelay && ++sinceYield >= yieldEvery) {
-            sinceYield = 0;
-            await args.yieldDelay();
-        }
     }
     const [facts, relations, systems] = await Promise.all([store.facts({ rootId }), store.relations({ rootId }), readSystems(manifest, rootId)]);
     // The ONE graph builder for code: the default layers are resolved over the whole file graph (folder, name, import direction).

@@ -10,12 +10,14 @@
  * No `vscode` import: the files are plain paths (the extension host reads them directly).
  */
 
-import { mkdir, readFile, stat, writeFile } from "fs/promises";
-import * as path from "path";
-import { packGraph, parsePack, serializePack, type PortableKnowledgePack } from "@builderforce/agent-tools/knowledge";
+import type { PortableKnowledgePack } from "@builderforce/agent-tools/knowledge";
 import { packRetrievalPort, withPacks, type PackRetrievalPort, type RecallingIndex } from "@builderforce/agent-tools/knowledge-index";
+import { buildOffThread } from "../graphWorker";
 import { hostKnowledgeIndexCore, ownsKnowledgeRoot } from "../index/hostKnowledgeIndex";
 import { loadedPackRegistry } from "./loadedPackRegistry";
+
+/** The file itself lives in `packFile.ts` (worker-safe: the graph worker reads it too). */
+export { readPackFile, writePackFile } from "./packFile";
 
 type PackError = (what: string, error: unknown) => void;
 
@@ -25,36 +27,14 @@ export function configurePackErrors(report: PackError): void {
   reportError = report;
 }
 
-/** Parsed packs by path, valid while the file's mtime and size are unchanged — listing and loading a pack re-parse nothing. */
-const parsed = new Map<string, { stamp: string; pack: PortableKnowledgePack }>();
-const PARSED_MAX = 16;
-
-export async function readPackFile(filePath: string): Promise<PortableKnowledgePack> {
-  const info = await stat(filePath);
-  const stamp = `${info.mtimeMs}:${info.size}`;
-  const hit = parsed.get(filePath);
-  if (hit?.stamp === stamp) return hit.pack;
-  const pack = parsePack(await readFile(filePath, "utf8"));
-  parsed.delete(filePath);
-  parsed.set(filePath, { stamp, pack });
-  if (parsed.size > PARSED_MAX) parsed.delete(parsed.keys().next().value as string);
-  return pack;
-}
-
-export async function writePackFile(filePath: string, pack: PortableKnowledgePack): Promise<void> {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, serializePack(pack), "utf8");
-  parsed.delete(filePath);
-}
-
 /**
- * Makes a pack queryable: its graph (rebuilt from its snapshot) feeds the host knowledge
- * index. Returns the cards indexed — 0 for a pack with nothing to index, and for a pack of a
- * workspace folder's own root, whose index that folder's review owns. Idempotent.
+ * Makes a pack queryable: its graph (rebuilt from its snapshot, in the graph worker — which reads `file`, the pack's
+ * `.bfpack`, itself) feeds the host knowledge index. Returns the cards indexed — 0 for a pack with nothing to index, and for
+ * a pack of a workspace folder's own root, whose index that folder's review owns. Idempotent.
  */
-export async function indexPack(pack: PortableKnowledgePack): Promise<number> {
+export async function indexPack(pack: Pick<PortableKnowledgePack, "rootId">, file: string): Promise<number> {
   if (ownsKnowledgeRoot(pack.rootId)) return 0;
-  const graph = await packGraph(pack);
+  const graph = await buildOffThread({ kind: "pack", file });
   if (!graph) return 0;
   await hostKnowledgeIndexCore(pack.rootId).upsertFromGraph(graph);
   return graph.nodes.length;
@@ -71,7 +51,8 @@ export async function reindexLoadedPacks(onError: PackError = reportError): Prom
   for (const entry of loadedPackRegistry().all()) {
     if (!entry.path) continue;
     try {
-      await indexPack(await readPackFile(entry.path));
+      // The registry records the pack's root id: the file is read once, by the worker.
+      await indexPack(entry, entry.path);
     } catch (error) {
       onError(`pack reindex ${entry.name}`, error);
     }

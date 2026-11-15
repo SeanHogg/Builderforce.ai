@@ -198,11 +198,18 @@ export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: Host
     runs: hostReviewRuns(t),
     agentRuns: hostAgentRuns(t),
     search: (rootId, q) => t.call<KnowledgeSearchHit[]>({ op: 'search', rootId, q }),
-    subscribeLive(rootId, cb) {
+    // The extension builds nothing until the view's Run: then one load, and `live` starts the root's session (deltas only).
+    runGated: true,
+    subscribeLive(rootId, cb, onPatch) {
       const stream = nextStream('live');
       const off = t.onEvent((e) => {
-        if (e.stream !== stream || e.type !== 'graph') return;
-        cb(opts.overlay ? opts.overlay(e.graph, e.changed) : e.graph);
+        if (e.stream !== stream) return;
+        if (e.type === 'graph') cb(opts.overlay ? opts.overlay(e.graph, e.changed) : e.graph);
+        // A change batch: the view applies it to the graph on screen, then this host's overlay marks what changed.
+        else if (e.type === 'patch' && onPatch) {
+          const { changed } = e.patch;
+          onPatch(e.patch, opts.overlay ? (g) => opts.overlay!(g, changed) : undefined);
+        }
       });
       void t.call({ op: 'live', rootId, stream }).catch(() => undefined);
       return () => {

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { canonicalDump, type Extracted, type ScopeRecord, type StoredFact, type StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
 import { localSqliteAvailable } from './node-local-sqlite.js';
-import { knowledgeDbPath, nodeIngestManifest, nodeKnowledgeStore, type NodeKnowledgeStore } from './node-knowledge-store.js';
+import { knowledgeDbPath, nodeIngestManifest, nodeKnowledgeReader, nodeKnowledgeStore, type NodeKnowledgeStore } from './node-knowledge-store.js';
 import { moveAside } from './node-knowledge/openKnowledgeDb.js';
 import { writeManifestEntries } from './node-knowledge/manifestBuffer.js';
 
@@ -352,5 +352,31 @@ describe.skipIf(!localSqliteAvailable())('nodeKnowledgeStore', () => {
         expect(() => newer.persistence.setMeta('x', '1')).toThrow(refused);
         expect(newer.persistence.getMeta('x')).toBeUndefined();
         expect(newer.persistence.getMeta('format')).toBe('99');
+    });
+});
+
+describe.skipIf(!localSqliteAvailable())('nodeKnowledgeReader', () => {
+    it('is undefined while the folder has no knowledge file, and never creates one', () => {
+        const dir = folder();
+        expect(nodeKnowledgeReader(dir)).toBeUndefined();
+        expect(existsSync(knowledgeDbPath(dir))).toBe(false);
+    });
+
+    it('reads the writer\'s committed rows and manifest through its own read-only connection, and follows later commits', async () => {
+        const dir = folder();
+        const writer = opened(dir);
+        await writer.store.write({ scope: SCOPE, facts: [fact('claim:1', 'one')], relations: [] });
+        await writer.store.putExtracted!('h1', [extracted('h1')]);
+        await writer.manifest.set('files:r', [{ id: 'a.ts', hash: 'h1' }]);
+        const reader = nodeKnowledgeReader(dir)!;
+        open.push(reader);
+        expect((await reader.store.facts({ rootId: 'r' })).map((f) => f.key)).toEqual(['claim:1']);
+        expect(await reader.store.getExtracted!('h1')).toEqual([extracted('h1')]);
+        expect(await reader.manifest.get('files:r')).toEqual([{ id: 'a.ts', hash: 'h1' }]);
+        // A later commit is seen by the same reader (its generation moved).
+        await writer.store.write({ scope: SCOPE, facts: [fact('claim:2', 'two')], relations: [] });
+        expect((await reader.store.facts({ rootId: 'r' })).map((f) => f.key).sort()).toEqual(['claim:1', 'claim:2']);
+        // It never writes: a write through it is refused by the read-only connection.
+        await expect(reader.store.write({ scope: SCOPE, facts: [fact('claim:3', 'three')], relations: [] })).rejects.toThrow();
     });
 });

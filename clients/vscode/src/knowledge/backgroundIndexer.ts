@@ -2,8 +2,10 @@
  * The background indexer's composition root (PRD 41 B6, B2 step 5, §6 "Open a folder, offline" / "Edit a file", §12.3):
  * every workspace folder is a root with its own {@link RootIndexer}; this wires them to VS Code and nothing else.
  *
- *   - `builderforce.knowledge.autoIndex` (default on) starts and stops it;
- *   - activation, a new workspace folder and every window refocus run a reconciling plan (watchers drop events);
+ *   - it runs only while knowledge runs (`visualizerSession.ts`): a folder is indexed while a Visualizer that the person
+ *     pressed Run on holds a root in it, and stops when the last such Visualizer closes; `builderforce.knowledge.autoIndex`
+ *     (default OFF) is the opt-in that indexes every folder from startup. Activation alone starts nothing;
+ *   - its start, a new workspace folder and every window refocus run a reconciling plan (watchers drop events);
  *   - one FileSystemWatcher per folder (`vscodeKnowledgeFs().watch`, which already drops `.builderforce/cache/**`)
  *     feeds the 100 ms coalescer (`indexWatcher.ts`);
  *   - a keystroke (a file or an untitled document) pauses the queue AND stops a running long pass, which reruns when the
@@ -35,9 +37,8 @@ import { vscodeKnowledgeFs } from "./knowledgeFs";
 import { pathKey, rootForPath, type KnowledgeRoot } from "./knowledgeRoots";
 import { log, workspaceFolders } from "./knowledgeService";
 import { RootIndexer, type IndexRootPorts, type IndexTelemetry } from "./rootIndexer";
+import { AUTO_INDEX_SETTING, autoIndexOn, indexesFolder, visualizerSessions } from "./visualizerSession";
 
-/** `builderforce.knowledge.autoIndex`. */
-export const AUTO_INDEX_SETTING = "knowledge.autoIndex";
 /** How often the tick looks for a pending L3 request, the sweep and a queued L3 task. */
 export const L3_CHECK_MS = 30_000;
 /** Refocus reconciles at most this often (a focus flicker is not a reason to walk again). */
@@ -47,12 +48,12 @@ const PRIORITY_TTL_MS = 1_000;
 /** Documents whose typing pauses the indexer: files and untitled buffers (not the output channel, which "types" itself). */
 const TYPED_SCHEMES: ReadonlySet<string> = new Set(["file", "untitled"]);
 
-const autoIndexOn = (): boolean => vscode.workspace.getConfiguration("builderforce").get<boolean>(AUTO_INDEX_SETTING, true) !== false;
-
 /** What one root needs from the host: injected so the composition is tested without an extension host. */
 export interface IndexerHost {
   folders(): Array<{ path: string }>;
   rootFor(folderPath: string, folders: Array<{ path: string }>): KnowledgeRoot | undefined;
+  /** Whether this folder's root is indexed now (`visualizerSession.indexesFolder`). Absent ⇒ every folder. */
+  includes?(root: KnowledgeRoot): boolean;
   ports(root: KnowledgeRoot): IndexRootPorts & { dispose(): void };
   /** Watches the root's folder; returns the unsubscribe. */
   watch(rootPath: string, cb: (absPaths: string[]) => void): () => void;
@@ -125,14 +126,14 @@ export class BackgroundIndexer {
     }
   }
 
-  /** One indexer per workspace folder: new folders start (and reconcile), removed ones stop. */
+  /** One indexer per included workspace folder: new (or newly running) folders start and reconcile, removed ones stop. */
   syncFolders(): void {
     if (this.disposing) return;
     const folders = this.host.folders();
     const wanted = new Map<string, KnowledgeRoot>();
     for (const f of folders) {
       const root = this.host.rootFor(f.path, folders);
-      if (root && root.rel === "") wanted.set(root.rootId, root);
+      if (root && root.rel === "" && (this.host.includes?.(root) ?? true)) wanted.set(root.rootId, root);
     }
     for (const [rootId, held] of [...this.roots]) if (!wanted.has(rootId)) void this.stopRoot(rootId, held);
     for (const [rootId, root] of wanted) if (!this.roots.has(rootId)) this.startRoot(root);
@@ -219,6 +220,7 @@ function vscodeIndexerHost(secrets: vscode.SecretStorage): IndexerHost {
   return {
     folders: workspaceFolders,
     rootFor: rootForPath,
+    includes: indexesFolder,
     ports: (root) => hostIndexPorts(secrets, root),
     watch: (rootPath, cb) => watchFs.watch?.(rootPath, cb) ?? (() => undefined),
     editors: () => ({
@@ -250,9 +252,10 @@ function wireEvents(indexer: BackgroundIndexer): vscode.Disposable[] {
 }
 
 /**
- * Starts the background indexer when `builderforce.knowledge.autoIndex` is on, and follows the setting. Shutdown
- * (`shutdownKnowledge`, also run by deactivation) waits for it to be quiet before the stores close; the returned
- * disposable stops it too.
+ * Wires the background indexer to when knowledge runs (`visualizerSession.ts`): nothing starts here at activation; the
+ * indexer starts when a Visualizer's Run makes a root run (or `builderforce.knowledge.autoIndex` is turned on), follows the
+ * running roots' folders, and stops when none runs and the setting is off. Shutdown (`shutdownKnowledge`, also run by
+ * deactivation) waits for it to be quiet before the stores close; the returned disposable stops it too.
  */
 export function startBackgroundIndexer(context: Pick<vscode.ExtensionContext, "secrets">): vscode.Disposable {
   let running: { indexer: BackgroundIndexer; events: vscode.Disposable[] } | undefined;
@@ -267,23 +270,30 @@ export function startBackgroundIndexer(context: Pick<vscode.ExtensionContext, "s
     }
     return stopping;
   };
+  /** Knowledge runs somewhere: the opt-in setting, or a root a Visualizer is running. */
+  const wanted = (): boolean => autoIndexOn() || visualizerSessions.runningRoots().length > 0;
   const apply = (): void => {
-    if (autoIndexOn() && !running) {
-      const indexer = new BackgroundIndexer(vscodeIndexerHost(context.secrets));
-      running = { indexer, events: wireEvents(indexer) };
-      indexer.start(vscode.window.state.focused);
-    } else if (!autoIndexOn() && running) {
-      void stop().catch((error: unknown) => log("background indexer stop", error));
+    try {
+      if (wanted() && !running) {
+        const indexer = new BackgroundIndexer(vscodeIndexerHost(context.secrets));
+        running = { indexer, events: wireEvents(indexer) };
+        indexer.start(vscode.window.state.focused);
+      } else if (wanted() && running) {
+        // Another root started or stopped running: the folders indexed follow it.
+        running.indexer.syncFolders();
+      } else if (!wanted() && running) {
+        void stop().catch((error: unknown) => log("background indexer stop", error));
+      }
+    } catch (error) {
+      log("background indexer start", error);
     }
   };
   const config = vscode.workspace.onDidChangeConfiguration((e) => { if (e.affectsConfiguration(`builderforce.${AUTO_INDEX_SETTING}`)) apply(); });
+  const sessions = visualizerSessions.onChange(apply);
   // Stays registered for the process: whichever runs first, the dispose below or `shutdownKnowledge`, the shutdown
   // still awaits the stop in flight before the stores close.
   beforeKnowledgeShutdown(stop);
-  try {
-    apply();
-  } catch (error) {
-    log("background indexer start", error);
-  }
-  return { dispose: () => { config.dispose(); void stop().catch(() => undefined); } };
+  // Only the opt-in starts it here; without it nothing runs until a Visualizer's Run.
+  apply();
+  return { dispose: () => { config.dispose(); sessions(); void stop().catch(() => undefined); } };
 }

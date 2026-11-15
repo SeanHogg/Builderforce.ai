@@ -11,22 +11,22 @@
  *   sync   — the plan's whole listing: extract what is new or moved since this index last applied it, drop what is gone;
  *   resolution — when the listing's path set (or the aliases) moves, every file is re-resolved (no parse) and only those
  *            whose resolution changed are re-applied, so an incremental index equals a scratch build of the same listing;
- *   knowledge rules — memory's generic finding rules and the code pack's (`KNOWLEDGE_FINDING_RULES`, `CODE_FACT_RULES`)
- *            are registered once the root's whole knowledge graph is handed in ({@link FactIndex.setKnowledge}), behind
- *            `knowledgeInputHash`: they rerun only when that hash moves.
+ *
+ * The knowledge-graph finding rules are not evaluated here: they run inside the graph build, in the graph worker
+ * (`graphWorker.ts`), over the graph they read.
  *
  * In memory for the session: a reload re-extracts once through `sync` (the B4 fact store will persist it).
  */
 
 import {
-  CODE_FACT_RULES, hasCandidateMounts, importResolver, isRouterFacts, NO_MODULE_ALIASES, resolutionKey, resolvedKey, resolveFileFacts, unresolveFileFacts,
+  hasCandidateMounts, importResolver, isRouterFacts, NO_MODULE_ALIASES, resolutionKey, resolvedKey, resolveFileFacts, unresolveFileFacts,
   type ModuleAliases,
 } from "@builderforce/agent-tools/knowledge";
 import type { CandidateRowsPort, StoredCandidates } from "@builderforce/agent-tools/node-knowledge-store";
 import { hasFileFacts } from "@builderforce/agent-tools/node-file-facts";
 import {
-  FACT_KINDS, KNOWLEDGE_FINDING_RULES, canonicalJson, emptyFactGraph, importNeighbours, knowledgeInputHash, updateFactGraph,
-  type FactChange, type FactGraph, type FactKind, type FactRule, type FileFacts, type Finding, type KnowledgeFacts, type MountFact, type RuleTraceEntry,
+  FACT_KINDS, canonicalJson, emptyFactGraph, importNeighbours, updateFactGraph,
+  type FactChange, type FactGraph, type FactKind, type FactRule, type FileFacts, type Finding, type MountFact, type RuleTraceEntry,
 } from "@seanhogg/builderforce-memory/knowledge";
 import type { FactGraphStore } from "./factGraphStore";
 
@@ -59,8 +59,6 @@ export interface FactIndexOptions {
   facts: FactsPort;
   /** FactRules over FileFacts evaluated at L2 (default none: the run delta's rules read facts through `SideFacts.fileFacts`). */
   rules?: readonly FactRule<any>[];
-  /** The knowledge rules registered once a knowledge graph is handed in. Default memory's generic ones plus the code pack's. */
-  knowledgeRules?: readonly FactRule<any>[];
   /** Facts jobs in flight (a sliding window; the pool's width). Default 4. */
   concurrency?: () => number;
   /** Which paths have a fact grammar (default agent-tools `hasFileFacts`): no other path reaches the port. */
@@ -95,7 +93,6 @@ export class FactIndex {
   /** The root's listed paths (what imports resolve against). */
   private listing = new Set<string>();
   private aliases: ModuleAliases = NO_MODULE_ALIASES;
-  private knowledge: { extra: { knowledge: KnowledgeFacts }; hash: string } | undefined;
   private found: Finding[] = [];
   private neighboursOf: ((path: string) => readonly string[]) | undefined;
   /** Changes applied but not yet saved, by path, with the apply sequence that made them (re-applied on a save conflict). */
@@ -157,19 +154,6 @@ export class FactIndex {
     if (canonicalJson(aliases.scopes) === canonicalJson(this.aliases.scopes)) return { changedPaths: [], changedKinds: [], trace: [] };
     this.aliases = aliases;
     return this.apply(new Map(), new Map(), true);
-  }
-
-  /**
-   * The root's WHOLE knowledge graph (untruncated) with its partition registries and near-duplicate pairs: the knowledge
-   * rules are registered from now on, behind its `knowledgeInputHash`. Returns the findings of every registered rule.
-   */
-  setKnowledge(knowledge: KnowledgeFacts): Finding[] {
-    const hash = knowledgeInputHash(knowledge);
-    if (this.knowledge?.hash !== hash) {
-      this.knowledge = { extra: { knowledge }, hash };
-      this.apply(new Map(), new Map(), false);
-    }
-    return this.found;
   }
 
   /** Files whose content moved (`hash: ''` = deleted). */
@@ -270,7 +254,7 @@ export class FactIndex {
     }
     const before = this.graph.manifest;
     const rowsBefore = this.graph.derived.size;
-    const result = updateFactGraph(this.graph, changes, this.rules(), this.ruleOpts());
+    const result = updateFactGraph(this.graph, changes, this.rules());
     this.graph = result.graph;
     this.found = result.findings;
     // Nothing to write when no file moved, no rule reran and no row went (an early-cutoff step): no generation is spent.
@@ -308,13 +292,9 @@ export class FactIndex {
     this.candidateWrites = this.candidateWrites.then(() => port.write(puts, deletes)).catch((error: unknown) => this.opts.log?.("fact candidates write", error));
   }
 
-  /** The registered rules: the file-facts ones, plus the knowledge ones once a knowledge graph was handed in. */
+  /** The registered rules: the file-facts ones. */
   private rules(): FactRule<any>[] {
-    return [...(this.opts.rules ?? []), ...(this.knowledge ? this.opts.knowledgeRules ?? [...KNOWLEDGE_FINDING_RULES, ...CODE_FACT_RULES] : [])];
-  }
-
-  private ruleOpts() {
-    return this.knowledge ? { extra: this.knowledge.extra, extraHashes: { knowledge: this.knowledge.hash } } : {};
+    return [...(this.opts.rules ?? [])];
   }
 
   /** Saves the delta (serialized); on a conflict the unsaved changes are re-applied on what the other writer left. */
@@ -325,7 +305,7 @@ export class FactIndex {
     const upTo = this.seq;
     void store.save({
       current: () => this.graph,
-      reapply: (loaded) => updateFactGraph(loaded, [...this.unsaved.values()].map((u) => u.change), this.rules(), this.ruleOpts()).graph,
+      reapply: (loaded) => updateFactGraph(loaded, [...this.unsaved.values()].map((u) => u.change), this.rules()).graph,
       adopt: (graph) => { this.graph = graph; this.neighboursOf = undefined; },
       saved: () => { for (const [path, u] of this.unsaved) if (u.seq <= upTo) this.unsaved.delete(path); },
     });

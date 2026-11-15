@@ -46,7 +46,7 @@ import type { IndexRootPorts } from "./rootIndexer";
  * THE step after a root's facts changed (L2). The incremental FactRule evaluator (`factIndex.ts`, memory
  * `updateFactGraph`) has already run in the extract step that produced these paths; this tells the graph's readers (the
  * live view) which paths and which fact KINDS moved (a comment edit: `content` only), and they re-read the graph, whose
- * generic and code-pack findings come from this root's fact index (`factFindings.ts`).
+ * generic and code-pack findings the graph build computes (in the graph worker, `graphWorker.ts`).
  */
 export async function onFactsChanged(rootId: string, changedPaths: readonly string[], changedKinds: readonly FactKind[] = ALL_FACT_KINDS): Promise<void> {
   publishIndexedFacts({ rootId, paths: changedPaths, kinds: changedKinds });
@@ -89,8 +89,8 @@ export function hostIndexPorts(secrets: vscode.SecretStorage, root: KnowledgeRoo
   const knownKeys = knownKeysCache(open.store, rootId);
   const stopChanged = onKnowledgeChanged((changed) => { if (changed === rootId) knownKeys.invalidate(); });
   // The root's fact graph (PRD 41 §B1/§B5): raw FileFacts through THE extraction pool (a sliding window at its width),
-  // resolved against the root's listing and aliases, the FactRule evaluator, real changed kinds. Registered for the view's
-  // findings (`factFindings.ts`).
+  // resolved against the root's listing and aliases, the FactRule evaluator, real changed kinds. Registered for the run
+  // delta's router reads (`factFindings.ts`).
   // Persisted in the folder's own knowledge file (G03 `index.sqlite`, `sqliteFactStore`): restored once at start, the
   // delta saved after every apply. Every fact step waits for the restore.
   const indexLog = (what: string, error: unknown) => log(`index ${what}`, error);

@@ -140,7 +140,7 @@ async function webGpuSupport(gpu = pageGpu(), timeoutMs = WEBGPU_ADAPTER_TIMEOUT
   }
 }
 
-// ../packages/local-inference/src/runtimes.js
+// ../packages/local-inference/src/runtimes.ts
 var BROWSER_ENGINE_BASE_URL = "http://browser.local";
 var BFI_ENGINE_BASE_URL = "http://bfi.local";
 var WEBLLM_ENGINE_BASE_URL = "http://webllm.local";
@@ -222,13 +222,13 @@ var HTTP_LOCAL_RUNTIMES = LOCAL_RUNTIMES.filter((r) => r.reach === "http");
 var LOCAL_RUNTIME_IDS = LOCAL_RUNTIMES.map((r) => r.id);
 var HOST_FALLBACK_RUNTIMES = LOCAL_RUNTIMES.filter((r) => r.fallbackReach === "host");
 
-// ../packages/local-inference/src/ref.js
+// ../packages/local-inference/src/ref.ts
 var LOCAL_MODEL_PREFIX = "local/";
 function formatLocalModelRef(runtime, model) {
   return `${LOCAL_MODEL_PREFIX}${runtime}/${model}`;
 }
 
-// ../packages/local-inference/src/bfiLimits.generated.js
+// ../packages/local-inference/src/bfiLimits.generated.ts
 var BFI_CPU_LIMITS = {
   cpuKvBudgetBytes: 536870912,
   cpuWorkingSetBytes: 268435456,
@@ -238,7 +238,7 @@ var BFI_CPU_LIMITS = {
   assumedDesktopMemoryBytes: 8589934592
 };
 
-// ../packages/local-inference/src/webllmCatalog.generated.js
+// ../packages/local-inference/src/webllmCatalog.generated.ts
 var WEBLLM_CATALOG = [
   { modelId: "snowflake-arctic-embed-s-q0f32-MLC-b4", label: "Snowflake Arctic Embed S \xB7 B4", family: "snowflake-arctic-embed", params: 33e6, bytes: 132e6, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 250305577, f16: false, uses: ["embedding"], recommended: true },
   { modelId: "SmolLM2-135M-Instruct-q0f16-MLC", label: "SmolLM2 135M Instruct", family: "smollm2", params: 135e6, bytes: 27e7, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 377162301, f16: true, uses: ["chat"], recommended: false },
@@ -322,7 +322,7 @@ var WEBLLM_CATALOG = [
   { modelId: "Llama-2-13b-chat-hf-q4f16_1-MLC", label: "Llama 2 13B Chat HF", family: "llama-2", params: 13e9, bytes: 73125e5, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 12387971236, f16: true, uses: ["chat"], recommended: false }
 ];
 
-// ../packages/local-inference/src/catalog.js
+// ../packages/local-inference/src/catalog.ts
 var MIB = 1024 * 1024;
 var WEBGPU_DEFAULT_BINDING_BYTES = 128 * MIB;
 var WEBLLM_FULL_BINDING_BYTES = 1024 * MIB;
@@ -388,15 +388,13 @@ function localCatalogFor(runtime) {
   return LOCAL_MODEL_CATALOG.filter((m) => m.runtime === runtime && isLocalChatModel(m));
 }
 
-// ../packages/local-inference/src/fit.js
+// ../packages/local-inference/src/fit.ts
 var VRAM_PER_MAX_BUFFER = 8;
 var MOBILE_UA = /Android|iPhone|iPad|iPod|Mobile|Silk|Kindle|BlackBerry|Opera Mini|IEMobile/i;
 function isMobileDevice(nav) {
-  if (!nav)
-    return false;
+  if (!nav) return false;
   const hinted = nav.userAgentData?.mobile;
-  if (typeof hinted === "boolean")
-    return hinted;
+  if (typeof hinted === "boolean") return hinted;
   const ua = nav.userAgent ?? "";
   return MOBILE_UA.test(ua) || /Macintosh/.test(ua) && (nav.maxTouchPoints ?? 0) > 1;
 }
@@ -411,35 +409,27 @@ function webGpuFit(model, support) {
   if (!support.supported) {
     return { fits: false, reason: "webgpu_unavailable", ...support.reason ? { detail: support.reason } : {} };
   }
-  if (model.requires.f16 && !support.f16)
-    return { fits: false, reason: "shader_f16_unavailable" };
+  if (model.requires.f16 && !support.f16) return { fits: false, reason: "shader_f16_unavailable" };
   const bindingBytes = support.maxStorageBufferBindingSizeBytes ?? support.maxBufferBytes;
-  if (bindingBytes < model.requires.minBufferBytes)
-    return { fits: false, reason: "buffer_too_small" };
+  if (bindingBytes < model.requires.minBufferBytes) return { fits: false, reason: "buffer_too_small" };
   const { vramBytes } = model.requires;
   const maxBuffer = support.maxBufferSizeBytes;
-  if (vramBytes && maxBuffer && vramBytes > maxBuffer * VRAM_PER_MAX_BUFFER)
-    return { fits: false, reason: "vram_too_small" };
+  if (vramBytes && maxBuffer && vramBytes > maxBuffer * VRAM_PER_MAX_BUFFER) return { fits: false, reason: "vram_too_small" };
   return { fits: true, backend: "webgpu" };
 }
 function cpuFits(model, cpu) {
   const floor = model.requires.cpu?.minDeviceMemoryBytes;
-  if (floor === void 0 || !cpu.supported)
-    return false;
-  if ((cpu.deviceMemoryBytes ?? assumedDeviceMemoryBytes()) < floor)
-    return false;
+  if (floor === void 0 || !cpu.supported) return false;
+  if ((cpu.deviceMemoryBytes ?? assumedDeviceMemoryBytes()) < floor) return false;
   const need = model.bytes + (cpu.kvBudgetBytes ?? BFI_CPU_LIMITS.cpuKvBudgetBytes) + BFI_CPU_LIMITS.cpuWorkingSetBytes;
   return need <= (cpu.maxMemoryBytes ?? cpuMemoryCeiling(cpu.deviceMemoryBytes));
 }
 function localModelFit(model, support) {
   const gpu = webGpuFit(model, support);
-  if (gpu.fits)
-    return gpu;
+  if (gpu.fits) return gpu;
   const cpu = support.backends?.cpu;
-  if (!model.requires.cpu || !cpu?.supported)
-    return gpu;
-  if (cpuFits({ requires: model.requires, bytes: model.bytes ?? 0 }, cpu))
-    return { fits: true, backend: "cpu" };
+  if (!model.requires.cpu || !cpu?.supported) return gpu;
+  if (cpuFits({ requires: model.requires, bytes: model.bytes ?? 0 }, cpu)) return { fits: true, backend: "cpu" };
   return { fits: false, reason: "memory_insufficient" };
 }
 

@@ -33,7 +33,8 @@ import { defineRegistry, type PrefetchAction, type PrefetchExecutors } from "@bu
 import { CONTEXT_PACK_DEADLINE_MS } from "../contextPack/deadline";
 import { preSearchOnce, whereDefinedOnce } from "../contextPack/preSearchSource";
 import { buildLocalCapabilityProvider } from "../localCapabilities";
-import type { PartitionRegistry } from "@seanhogg/builderforce-memory/knowledge";
+import type { Extracted, PartitionRegistry } from "@seanhogg/builderforce-memory/knowledge";
+import { buildOffThread } from "../knowledge/graphWorker";
 import { knowledgeRootId } from "../knowledge/knowledgeRoots";
 import { sharedAnalysis } from "../knowledge/l3SharedAnalysis";
 import { KNOWLEDGE_ASK_ROWS, knowledgeAskExecutors } from "./knowledgeAskRow";
@@ -127,6 +128,9 @@ function execHost(options: EditorExecutorOptions): PrefetchExecHost {
       // A worker that fails answers undefined, so the executors' in-thread analysis runs instead.
       analyse: ({ partitions, signal }: { partitions: PartitionRegistry; signal: AbortSignal }) =>
         sharedAnalysis({ folderPath: options.root(), rootId: knowledgeRootId(options.root()), partitions }, { signal }).catch(() => undefined),
+      // The code pack's graph over that analysis is built in the graph worker too; a failed build answers nothing (never in this thread).
+      codeGraph: ({ extracted, partitions, signal }: { extracted: Extracted[]; partitions: PartitionRegistry; signal: AbortSignal }) =>
+        buildOffThread({ kind: "extracted", rootId: knowledgeRootId(options.root()), partitions, extracted }, signal),
     }),
     ...(options.focusFiles ? { focusFiles: options.focusFiles } : {}),
     ...(options.templates ? { templates: options.templates } : {}),

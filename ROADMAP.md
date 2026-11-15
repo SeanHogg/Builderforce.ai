@@ -437,6 +437,13 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 
 Synapse lives in [builderforce-inference](https://github.com/SeanHogg/builderforce-inference), Spawn in [builderforce-spawn](https://github.com/SeanHogg/builderforce-spawn).
 
+- **[vscode] The knowledge graph build blocks the extension host for 0.5–4 s at a time, which delays typing.** Evidence is 14 `UNRESPONSIVE extension host` profiles (2026-11-15 00:01–09:51, VSIX .174/.175) that blame `builderforce-ai` for 50–95% of each stall.
+  - The hot path is memory `graphDigest` (canonical JSON plus pure-JS SHA-256 over the whole input), the code-graph layer glob match, PageRank and communities. All of it runs synchronously in `buildStoredGraph`→`buildCodeGraph`.
+  - Callers on the host: the view's `load` on panel open, `subscribeLiveGraph` doing a full rebuild per change, the review "grow" reload, `rootSyncStatus` (a full build just for counts), pinpoint, `runDelta/sideFacts.ts` (2 full builds per delta), and prefetch `codePackExecutors` (`buildCodeGraph` after the worker analysis).
+  - The background indexer starts at activation (`knowledge.autoIndex` defaults to on).
+  - Done when: knowledge work starts only from the Visualizer's Run, every graph build runs in a worker, and live tracking ships deltas, not full rebuilds.
+  - *Blocker: the end-state design awaits the user's review.*
+
 - **[vscode] The `clients/vscode` lockfile fails `pnpm install --frozen-lockfile`** (`ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY` on `vitest@4.1.10`; already the case at `cde1f7bbc`).
   - Dependabot `3a48f26a8` wrote 24 importer blocks for projects outside clients/vscode. Pruning them (281 deleted lines) makes frozen install pass. The change is in the working copy.
   - *Blocker: the user hasn't yet approved committing it; the automated permission check denied the agent's commit.*

@@ -15,7 +15,7 @@ import { TYPE } from './ui/type';
 import { SurfaceState, type SurfaceStateProps } from './SurfaceStates';
 
 export function SceneState(props: SurfaceStateProps) {
-    const pending = props.status !== 'empty' && props.status !== 'error' && props.status !== 'load-failed' && props.status !== 'not-here';
+    const pending = props.status !== 'empty' && props.status !== 'error' && props.status !== 'load-failed' && props.status !== 'not-here' && props.status !== 'idle';
     if (pending) {
         return (
             <div style={{ position: 'absolute', inset: 0, padding: 16 }}>
@@ -32,20 +32,24 @@ export function SceneState(props: SurfaceStateProps) {
     );
 }
 
-export function SceneStatus({ stale, refreshFailed, labels, onRetry }: { stale: boolean; refreshFailed: boolean; labels: KnowledgeGraphLabels; onRetry(): void }) {
-    if (!stale && !refreshFailed) return null;
+/**
+ * `onRun`: the graph drawn is the last one seen and the host builds only on Run (not running): the corner offers Run instead
+ * of saying it is updating.
+ */
+export function SceneStatus({ stale, refreshFailed, labels, onRetry, onRun }: { stale: boolean; refreshFailed: boolean; labels: KnowledgeGraphLabels; onRetry(): void; onRun?: (() => void) | undefined }) {
+    if (!stale && !refreshFailed && !onRun) return null;
     const corner = { position: 'absolute', left: 12, bottom: 12, zIndex: 2, ...muted } as const;
-    if (refreshFailed) {
-        return (
-            <span role="status" style={corner}>
-                <button
-                    type="button" onClick={onRetry}
-                    style={{ minHeight: 28, padding: '0 10px', borderRadius: 8, border: `1px solid ${cssVar('border')}`, background: cssVar('panel'), color: cssVar('text'), cursor: 'pointer', font: 'inherit', ...TYPE.pill }}
-                >
-                    {labels.refreshFailed}
-                </button>
-            </span>
-        );
-    }
+    const action = (text: string, onClick: () => void, testId?: string) => (
+        <span role="status" style={corner}>
+            <button
+                type="button" onClick={onClick} {...(testId ? { 'data-testid': testId } : {})}
+                style={{ minHeight: 28, padding: '0 10px', borderRadius: 8, border: `1px solid ${cssVar('border')}`, background: cssVar('panel'), color: cssVar('text'), cursor: 'pointer', font: 'inherit', ...TYPE.pill }}
+            >
+                {text}
+            </button>
+        </span>
+    );
+    if (refreshFailed) return action(labels.refreshFailed, onRetry);
+    if (onRun && !stale) return action(labels.runLastSeen, onRun, 'kg-run-last-seen');
     return <span role="status" style={{ ...corner, padding: '4px 10px', borderRadius: 8, background: cssVar('panel'), pointerEvents: 'none' }}>{labels.refreshing}</span>;
 }

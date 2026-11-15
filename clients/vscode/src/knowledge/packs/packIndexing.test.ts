@@ -6,7 +6,7 @@ import { serializePack } from "@builderforce/agent-tools/knowledge";
 import { configureHostKnowledgeIndex, hostKnowledgeIndexCore } from "../index/hostKnowledgeIndex";
 import { knowledgeRootId } from "../knowledgeRoots";
 import { configureLoadedPacks, loadedPackRegistry } from "./loadedPackRegistry";
-import { FOREIGN_ROOT, leasePack, memoryMemento } from "./packFixture.test-util";
+import { FOREIGN_ROOT, leasePack, memoryMemento, packFileOf } from "./packFixture.test-util";
 import { editorPackRetrieval, indexPack, readPackFile, reindexLoadedPacks, withLoadedPacks, writePackFile } from "./packIndexing";
 
 let dir: string;
@@ -35,11 +35,11 @@ describe("pack files", () => {
 describe("indexPack", () => {
   it("indexes the pack's cards under its own root, idempotently", async () => {
     const pack = await leasePack();
-    const cards = await indexPack(pack);
+    const cards = await indexPack(pack, await packFileOf(pack));
     expect(cards).toBeGreaterThan(0);
     const size = await hostKnowledgeIndexCore(FOREIGN_ROOT).size();
     expect(size).toBeGreaterThan(0);
-    await indexPack(pack);
+    await indexPack(pack, await packFileOf(pack));
     expect(await hostKnowledgeIndexCore(FOREIGN_ROOT).size()).toBe(size);
   });
 });
@@ -49,7 +49,7 @@ describe("a pack of an open workspace folder's own root", () => {
     const owned = knowledgeRootId(dir);
     configureHostKnowledgeIndex({ workspaceRoots: () => [dir], idle: () => undefined, embedder: async () => undefined, symbolFiles: async () => [] });
     const stale = await leasePack(owned, "mine");
-    expect(await indexPack(stale)).toBe(0);
+    expect(await indexPack(stale, await packFileOf(stale))).toBe(0);
     expect(await hostKnowledgeIndexCore(owned).size()).toBe(0);
 
     const file = path.join(dir, "mine.bfpack");
@@ -95,7 +95,7 @@ describe("reindexLoadedPacks", () => {
 describe("the editor's pack retrieval", () => {
   it("recalls a loaded pack with no workspace index at all", async () => {
     const pack = await leasePack();
-    await indexPack(pack);
+    await indexPack(pack, await packFileOf(pack));
     await loadedPackRegistry().remember(pack.name, { path: "/x.bfpack", rootId: pack.rootId, title: pack.title, loadedAt: pack.createdAt });
     const out = await withLoadedPacks(undefined).recall("lease termination");
     expect(out.hits.some((h) => h.path === "lease.md")).toBe(true);

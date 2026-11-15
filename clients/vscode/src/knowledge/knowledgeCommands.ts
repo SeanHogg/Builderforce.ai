@@ -86,7 +86,8 @@ export function registerKnowledgeCommands(context: vscode.ExtensionContext): voi
     vscode.authentication.onDidChangeSessions((e) => {
       if (e.provider.id === BuilderForceAuthProvider.id) void resumeAuthPaused();
     }),
-    // PRD 41 B6: every workspace folder indexed in the background (L0–L2 always; L3 only on demand), unless turned off.
+    // PRD 41 B6: the background indexer, wired to WHEN knowledge runs (`visualizerSession.ts`): nothing starts here; a folder
+    // is indexed while a Visualizer the person pressed Run on holds a root in it (or `autoIndex`, default off, is on).
     // Registered BEFORE the shutdown below, and the shutdown itself awaits the indexer's quiet (`beforeKnowledgeShutdown`).
     startBackgroundIndexer(context),
     // Queues are made durable and pumps stop with the extension (the queues resume on the next open); then the folders' SQLite connections close (one shared shutdown, also awaited by `deactivate`).

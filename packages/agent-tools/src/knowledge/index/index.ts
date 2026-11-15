@@ -21,7 +21,7 @@ export {
     RESEED_DEBOUNCE_MS, createKnowledgeIndexRegistry, readSeedPartitions,
     type KnowledgeIndexRegistry, type KnowledgeIndexRegistryOptions,
 } from './registry.js';
-export { SEED_CHUNK_FILES, chunkByArea, extractFromSymbols, seedCodeCards, type SymbolFile } from './seedCode.js';
+export { SEED_CHUNK_FILES, chunkByArea, extractFromSymbols, seedCodeCards, setCodeGraphSeam, type CodeGraphArgs, type SymbolFile } from './seedCode.js';
 export {
     HIT_EXCERPT_CHARS, SINGLE_TIER_WEIGHT, hitConfidence, hitLine, renderKnowledgeAnswer, renderKnowledgeContext, shownHits,
     type RenderHitsOptions,

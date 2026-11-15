@@ -38120,6 +38120,10 @@
     },
     "refreshing": "Actualizando…",
     "refreshFailed": "No se pudo actualizar: se muestra el último grafo. Reintentar",
+    "runTitle": "Listo para ejecutar",
+    "runBody": "El grafo solo se crea cuando pulsas Ejecutar. Después, solo se actualiza lo que cambia.",
+    "run": "Ejecutar",
+    "runLastSeen": "Se muestra el último grafo: ejecuta para actualizar",
     "errorTitle": "No se pudo cargar el grafo de conocimiento",
     "errorBody": "Algo salió mal al leer el conocimiento de esta carpeta. Inténtalo de nuevo.",
     "retry": "Reintentar",
@@ -40321,6 +40325,8 @@
       "unsafeRegex": "Patrón inseguro en «{section}»",
       "unreadable": "No se pudo leer el archivo de política[[ ({reason})]]",
       "truncated": "{count} más sin mostrar"
-    }
+    },
+    "expandDetails": "Expandir detalles",
+    "collapseDetails": "Contraer detalles"
   }
 }

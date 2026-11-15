@@ -20,7 +20,7 @@ vi.mock("./rootModules", () => ({ rootModules: async () => ({ aliases: { scopes:
 vi.mock("./knowledgeFs", () => ({ vscodeKnowledgeFs: () => ({}) }));
 vi.mock("../gitChanges", () => ({ detectPendingChanges: async () => undefined, watchPendingChanges: () => ({ dispose: () => undefined }) }));
 vi.mock("../localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
-vi.mock("@builderforce/agent-tools/knowledge", () => ({ reviewPacks: () => [], knownKeysCache: () => ({ invalidate: () => undefined }), watchFileEdits: mocks.watchFileEdits }));
+vi.mock("@builderforce/agent-tools/knowledge", () => ({ reviewPacks: () => [], knownKeysCache: () => ({ invalidate: () => undefined }), watchFileEdits: mocks.watchFileEdits, currentFileHashes: async () => new Map() }));
 vi.mock("@builderforce/agent-tools/prefetch", () => ({ readPartitions: async () => undefined }));
 
 import { liveWatcherIdle, publishIndexedFacts, setIndexerWatching } from "./indexLevels";
@@ -34,21 +34,22 @@ afterEach(() => { setIndexerWatching("r", false); vi.useRealTimers(); vi.clearAl
 describe("the live graph and the background indexer (PRD 41 B6)", () => {
   it("while the indexer watches the root, hears its changed facts and runs no watcher of its own", async () => {
     setIndexerWatching("r", true);
-    const onGraph = vi.fn();
-    const stop = subscribeLiveGraph(secrets, "r", onGraph);
+    const onPatch = vi.fn();
+    const stop = subscribeLiveGraph(secrets, "r", { onGraph: vi.fn(), onPatch });
     await vi.advanceTimersByTimeAsync(0);
     expect(mocks.watchFileEdits).not.toHaveBeenCalled();
     publishIndexedFacts({ rootId: "r", paths: ["src/a.ts"], kinds: ["structure", "body", "content"] });
     await vi.advanceTimersByTimeAsync(1000);
-    expect(onGraph).toHaveBeenCalledTimes(1);
-    expect(onGraph.mock.calls[0]![1]).toEqual(["src/a.ts"]);
+    expect(onPatch).toHaveBeenCalledTimes(1);
+    expect(onPatch.mock.calls[0]![0].changed).toEqual(["src/a.ts"]);
+    expect(mocks.loadGraph).not.toHaveBeenCalled(); // a delta, never a rebuild per change
     stop();
   });
 
   it("switches to its own watcher when the indexer stops (auto-index turned off), and back when it starts again", async () => {
     setIndexerWatching("r", true);
-    const onGraph = vi.fn();
-    const stop = subscribeLiveGraph(secrets, "r", onGraph);
+    const onPatch = vi.fn();
+    const stop = subscribeLiveGraph(secrets, "r", { onGraph: vi.fn(), onPatch });
     setIndexerWatching("r", false);
     await vi.advanceTimersByTimeAsync(0);
     expect(mocks.watchFileEdits).toHaveBeenCalledTimes(1);
@@ -56,13 +57,13 @@ describe("the live graph and the background indexer (PRD 41 B6)", () => {
     expect(mocks.stopOwnWatcher).toHaveBeenCalledTimes(1);
     publishIndexedFacts({ rootId: "r", paths: ["src/b.ts"], kinds: ["body"] });
     await vi.advanceTimersByTimeAsync(1000);
-    expect(onGraph.mock.calls.at(-1)![1]).toEqual(["src/b.ts"]);
+    expect(onPatch.mock.calls.at(-1)![0].changed).toEqual(["src/b.ts"]);
     stop();
   });
 
   it("switching to the indexer waits for the own watcher's batch in flight before it listens", async () => {
-    const onGraph = vi.fn();
-    const stop = subscribeLiveGraph(secrets, "r", onGraph);
+    const onPatch = vi.fn();
+    const stop = subscribeLiveGraph(secrets, "r", { onGraph: vi.fn(), onPatch });
     await vi.advanceTimersByTimeAsync(0);
     const args = mocks.watchFileEdits.mock.calls[0]![0];
     // The own watcher took a batch (its event arrived through the source's watch) and is still writing it.
@@ -71,7 +72,7 @@ describe("the live graph and the background indexer (PRD 41 B6)", () => {
     setIndexerWatching("r", true);
     publishIndexedFacts({ rootId: "r", paths: ["src/early.ts"], kinds: ["body"] });
     await vi.advanceTimersByTimeAsync(1000);
-    expect(onGraph).not.toHaveBeenCalled(); // not listening yet
+    expect(onPatch).not.toHaveBeenCalled(); // not listening yet
     // The other direction: the indexer's first write waits for the same batch.
     let indexerMayWrite = false;
     void liveWatcherIdle("r", 5_000).then(() => { indexerMayWrite = true; });
@@ -82,12 +83,12 @@ describe("the live graph and the background indexer (PRD 41 B6)", () => {
     expect(indexerMayWrite).toBe(true);
     publishIndexedFacts({ rootId: "r", paths: ["src/late.ts"], kinds: ["body"] });
     await vi.advanceTimersByTimeAsync(1000);
-    expect(onGraph.mock.calls.at(-1)![1]).toEqual(["src/late.ts", "src/x.ts"]);
+    expect(onPatch.mock.calls.at(-1)![0].changed).toEqual(["src/late.ts", "src/x.ts"]);
     stop();
   });
 
   it("a watcher still starting when the indexer takes over never installs itself", async () => {
-    const stop = subscribeLiveGraph(secrets, "r", vi.fn());
+    const stop = subscribeLiveGraph(secrets, "r", { onGraph: vi.fn(), onPatch: vi.fn() });
     setIndexerWatching("r", true); // before the own watcher's partitions read resolved
     await vi.advanceTimersByTimeAsync(0);
     expect(mocks.watchFileEdits).not.toHaveBeenCalled();

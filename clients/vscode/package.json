@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.10.176",
+  "version": "2026.10.177",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -1028,7 +1028,7 @@
         },
         "builderforce.knowledge.autoIndex": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "markdownDescription": "%config.knowledgeAutoIndex.desc%"
         },
         "builderforce.runDelta.dynamicTier": {

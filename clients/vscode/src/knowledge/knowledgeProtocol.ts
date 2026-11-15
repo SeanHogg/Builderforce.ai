@@ -18,7 +18,7 @@
  */
 
 import type { PinpointMatchResult, ReplicaState } from "@builderforce/agent-tools/knowledge";
-import type { CallSite, Finding, KnowledgeGraph, ReviewPlan, ReviewFailure, ReviewProgress, ReviewReport, ReviewRun } from "@seanhogg/builderforce-memory/knowledge";
+import type { CallSite, Finding, KEdge, KNode, KnowledgeGraph, ReviewPlan, ReviewFailure, ReviewProgress, ReviewReport, ReviewRun } from "@seanhogg/builderforce-memory/knowledge";
 import type { IndexLevelStatus } from "./indexLevels";
 
 export type { IndexLevelStatus };
@@ -281,6 +281,25 @@ export interface KnowledgeEventFrame {
   event: KnowledgeEvent;
 }
 
+/**
+ * One live change batch of a running root (`patch` event): the view's `KnowledgeGraphPatch` (`knowledge-graph-view`
+ * `types.ts`), restated because the extension host cannot import that package. The webview hands this object straight to
+ * the view's `applyGraphPatch`, so the compiler holds the two shapes together.
+ */
+export interface KnowledgeGraphPatch {
+  rootId: string;
+  /** The file refs the batch re-read. */
+  files: string[];
+  removedNodes: string[];
+  upsertNodes: KNode[];
+  removedEdges: Array<{ from: string; to: string; kind: string }>;
+  upsertEdges: KEdge[];
+  /** Refs whose judged knowledge no longer matches the file. */
+  stale: string[];
+  /** Every root-relative path changed since the root started running (the live overlay's set). */
+  changed: string[];
+}
+
 /** A host → webview event on one stream (a review id, or a live subscription id). */
 export type KnowledgeEvent =
   | { stream: string; type: "planned"; reply: KnowledgePlanReply }
@@ -292,5 +311,7 @@ export type KnowledgeEvent =
   // *Copy details* carries (the stack, the extension build, the folder) — all logged host-side too.
   | { stream: string; type: "failed"; error: string; detail?: string; host?: string; rootPath?: string }
   | { stream: string; type: "graph"; graph: KnowledgeGraph; changed: string[] }
+  // A running root's change batch: applied to the graph on screen (the whole graph follows at most every 30 s).
+  | { stream: string; type: "patch"; patch: KnowledgeGraphPatch }
   // PRD 41 B6: the background indexer's level for the root on a live stream (L0–L3 ready, what runs, what waits).
   | { stream: string; type: "level"; status: IndexLevelStatus };

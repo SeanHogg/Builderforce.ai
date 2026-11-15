@@ -122,7 +122,7 @@ describe('useKnowledgeGraph: last-seen graph (stale-while-revalidate)', () => {
 });
 
 describe('useKnowledgeGraph: the graph grows during a review', () => {
-    it('re-reads on progress at most once per 4s and only when the count advanced', async () => {
+    it('re-reads on progress at most once per 30s (the full-refresh window) and only when the count advanced', async () => {
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
         const g = codeFixture('a');
@@ -150,9 +150,9 @@ describe('useKnowledgeGraph: the graph grows during a review', () => {
         act(() => result.current.review.start({ rootId: 'a' }));
         await push(1);
         expect(load).toHaveBeenCalledTimes(2);
-        await push(2); // inside the 4s window
+        await push(2); // inside the 30s window
         expect(load).toHaveBeenCalledTimes(2);
-        vi.setSystemTime(new Date('2026-01-01T00:00:05Z'));
+        vi.setSystemTime(new Date('2026-01-01T00:00:31Z'));
         await push(1); // window open, but the count did not advance past the last re-read
         expect(load).toHaveBeenCalledTimes(2);
         await push(3);
@@ -215,14 +215,14 @@ describe('useKnowledgeGraph: growth re-reads', () => {
         expect(h.load).toHaveBeenCalledTimes(2);
         await h.progress(2); // inside the window: held back
         expect(h.load).toHaveBeenCalledTimes(2);
-        await act(async () => { vi.advanceTimersByTime(4100); });
+        await act(async () => { vi.advanceTimersByTime(30_100); });
         await flush();
         expect(h.load).toHaveBeenCalledTimes(3); // the trailing re-read
         await h.progress(1, 'extract'); // a new phase counts as advancing, even with a lower count
         await h.push({ type: 'done', rootId: 'a', report: FIXTURE_REPORT }); // the review ends: the held re-read is cancelled
         await flush();
         const afterDone = h.load.mock.calls.length;
-        await act(async () => { vi.advanceTimersByTime(10_000); });
+        await act(async () => { vi.advanceTimersByTime(40_000); });
         await flush();
         expect(h.load).toHaveBeenCalledTimes(afterDone);
     });

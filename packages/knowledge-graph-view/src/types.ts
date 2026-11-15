@@ -28,7 +28,7 @@
 
 import type { ReactNode } from 'react';
 import type {
-    CallSite, Finding, KnowledgeGraph, ReviewPlan, ReviewProgress as MemoryReviewProgress, ReviewReport,
+    CallSite, Finding, KEdge, KNode, KnowledgeGraph, ReviewPlan, ReviewProgress as MemoryReviewProgress, ReviewReport,
 } from '@seanhogg/builderforce-memory/knowledge';
 
 import type { AppliedFix, FixCheckResult, FixCheckUpdate, FixPreview, FixStepRequest, RecordedRun } from './fixPorts';
@@ -148,6 +148,30 @@ export interface FactActions {
     delete?(): Promise<void>;
 }
 
+/** One relation a {@link KnowledgeGraphPatch} removes: the edge's identity in the graph. */
+export interface KnowledgeEdgeKey { from: string; to: string; kind: string }
+
+/**
+ * One live change batch of a running root (`subscribeLive`'s `onPatch`): what the changed files' NEW extracted output adds,
+ * replaces and drops, instead of a whole new graph. `files` are the file refs the batch re-read; `stale` the refs whose
+ * judged knowledge no longer matches the file; `changed` every root-relative path changed since the root started running
+ * (the live overlay's set). Bounded by the batch: whole-graph scores (importance, communities, findings) arrive with the
+ * host's next full `graph`. Applied by `applyGraphPatch`. The VS Code host restates this shape (`knowledgeProtocol.ts`).
+ */
+export interface KnowledgeGraphPatch {
+    rootId: string;
+    files: string[];
+    removedNodes: string[];
+    upsertNodes: KNode[];
+    removedEdges: KnowledgeEdgeKey[];
+    upsertEdges: KEdge[];
+    stale: string[];
+    changed: string[];
+}
+
+/** What a host hands with a patch: its own decoration of the patched graph (the editor's live overlay); absent ⇒ none. */
+export type LiveGraphDecorate = (graph: KnowledgeGraph) => KnowledgeGraph;
+
 export interface KnowledgeGraphSource {
     scopes(): Promise<KnowledgeScopeSummary[]>;
     load(rootId: string, opts?: { focus?: string[]; maxNodes?: number }): Promise<KnowledgeGraph | NotReviewedHere | null>;
@@ -160,7 +184,16 @@ export interface KnowledgeGraphSource {
     /** Recorded agent runs and their findings (PRD 46). Absent ⇒ no Agent runs drawer. */
     agentRuns?: AgentRunsPort;
     search?(rootId: string, q: string): Promise<KnowledgeSearchHit[]>;
-    subscribeLive?(rootId: string, cb: (g: KnowledgeGraph) => void): () => void;
+    /**
+     * Live updates of a root: `cb` gets a whole graph (the host's throttled full refresh), `onPatch` a bounded change batch
+     * the view applies to the graph on screen (`applyGraphPatch`), with the host's decoration of the result.
+     */
+    subscribeLive?(rootId: string, cb: (g: KnowledgeGraph) => void, onPatch?: (patch: KnowledgeGraphPatch, decorate?: LiveGraphDecorate) => void): () => void;
+    /**
+     * The host builds nothing until the person presses Run (VS Code: building a large root blocks the editor). Opening the
+     * view paints `lastSeen` or a Run card; Run loads the root once and starts `subscribeLive`. Absent ⇒ the view loads on open.
+     */
+    runGated?: boolean;
     rememberFact?(fact: { content: string; ref: string; rootId: string }): Promise<void>;
     /** The actions this viewer has on a fact node; `undefined` when they have none. */
     factActions?(ref: string): Promise<FactActions | undefined>;

@@ -23,6 +23,7 @@ import * as path from "path";
 import * as vscode from "vscode";
 import { mergePacksWithCards, rebasePackRoot, type PortableKnowledgePack } from "@builderforce/agent-tools/knowledge";
 import { rootFileStem, type KnowledgePackEntry } from "@builderforce/agent-tools/knowledge-index";
+import { buildOffThread } from "./graphWorker";
 import { reviewedRoots, rootById, rootForPath, type KnowledgeRoot } from "./knowledgeRoots";
 import { log, workspaceFolders } from "./knowledgeService";
 import { loadedPackRegistry, recordOfPack } from "./packs/loadedPackRegistry";
@@ -169,7 +170,7 @@ async function loadKnowledgePack(): Promise<void> {
   }
   let nodes = 0;
   try {
-    nodes = await indexPack(pack);
+    nodes = await indexPack(pack, file);
   } catch (error) {
     log(`pack index ${pack.rootId}`, error);
   }
@@ -239,10 +240,17 @@ async function updateKnowledgePack(context: vscode.ExtensionContext): Promise<vo
   // A moved folder reviews under ITS root id; the pack keeps its own, so the fresh knowledge is rebased onto it.
   const fresh = rebasePackRoot(await packOfRoot(context, root, pack.name, provenance), pack.rootId);
   // Update mirrors the folder: files it no longer holds leave the pack, and the cards are rebuilt from what the pack now holds.
-  const merged = await mergePacksWithCards(pack, fresh, { mirror: true });
+  // The merged pack's cards come from its graph, built in the graph worker from the file: the merge is written first.
+  const merged = await mergePacksWithCards(pack, fresh, {
+    mirror: true,
+    packGraph: async (uncarded) => {
+      await writePackFile(choice.file, uncarded);
+      return buildOffThread({ kind: "pack", file: choice.file });
+    },
+  });
   await writePackFile(choice.file, merged);
   try {
-    await indexPack(merged);
+    await indexPack(merged, choice.file);
   } catch (error) {
     log(`pack index ${merged.rootId}`, error);
   }

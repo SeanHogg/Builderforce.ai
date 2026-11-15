@@ -33,6 +33,8 @@ import { excludeFromReview } from "./knowledgeExclude";
 import { rootIgnoreFile } from "./knowledgeFs";
 import { duringReview, isRootReviewing } from "./knowledgeReplica";
 import { subscribeLiveGraph } from "./knowledgeLive";
+import { LastBuiltCounts } from "./lastBuiltCounts";
+import { visualizerSessions } from "./visualizerSession";
 import { onIndexLevel, preemptBackground, requestL3, withdrawL3Request } from "./indexLevels";
 import { notReviewedHere } from "./knowledgeNotHere";
 import { assertWritable, packRootGraph, packScopeRows, readOnlyPack } from "./packs/packRoots";
@@ -77,6 +79,8 @@ export class KnowledgeBridge implements vscode.Disposable {
   private readonly trace = createLoadTrace({ log: (line) => log("timing", line) });
   /** How the view last loaded each root; Live's refresh repeats it. */
   private readonly loadedBy = new Map<string, GraphQuery>();
+  /** The counts of the last graph built per root: the sync status reads them instead of building one. */
+  private readonly built = new LastBuiltCounts();
   /** Delete rights per root, read once per graph version (the facts endpoint's viewer + authors). */
   private readonly rights: FactRightsCache = factRightsCache(async (rootId) => (await linkedKnowledgeClient(this.secrets)?.facts(rootId)) ?? null);
   /** The recent local agent runs and their findings (PRD 46), memoised per chat; the linked project's chats only. */
@@ -116,7 +120,12 @@ export class KnowledgeBridge implements vscode.Disposable {
     assertWritable(call, this.lastRoot);
     switch (call.op) {
       case "scopes": return this.trace.run("scopes", undefined, async () => (this.lastScopes = await this.scopes()), (rows) => ({ count: rows.length }));
-      case "lastSeen": return this.trace.run("lastSeen", undefined, () => readLastSeen(this.host.ctx.globalStorageUri.fsPath, this.lastSeenKey()), (seen) => graphFields(seen.graph));
+      case "lastSeen": return this.trace.run("lastSeen", undefined, async () => {
+        const seen = await readLastSeen(this.host.ctx.globalStorageUri.fsPath, this.lastSeenKey());
+        // The snapshot is the last graph built for its root: the sync status counts from it until a fresher one is built.
+        if (seen) this.built.noteSnapshot(seen.rootId, seen.graph);
+        return seen;
+      }, (seen) => graphFields(seen.graph));
       case "load": return this.trace.run("load", call.rootId, (traced) => this.load(call, traced), (answer) => (isGraph(answer) ? graphFields(answer) : {}));
       case "loadTrace": return this.trace.snapshot();
       case "targets": return this.targets();
@@ -129,15 +138,24 @@ export class KnowledgeBridge implements vscode.Disposable {
         return (await index.search(call.q, SEARCH_HITS)).map((h) => ({ ref: h.id, score: h.score, tier: h.tier }));
       }
       case "live": {
+        // The view's Run on a root (it loaded the root once, then subscribes): from here the root RUNS — its session starts
+        // the background indexer for its folder and its save re-seed — and the view hears deltas only.
         this.live.get(call.stream)?.();
-        const stopGraph = subscribeLiveGraph(this.secrets, call.rootId, (graph, changed) => this.event({ stream: call.stream, type: "graph", graph, changed }), (id) => this.loadedBy.get(id));
+        const { rootId, stream } = call;
+        // Only a root an open workspace folder holds runs: a stale or root-less id subscribes to nothing and never
+        // starts a session or an L3 request (no knowledge work starts for a folder that is not here).
+        if (!rootById(rootId, workspaceFolders())) return null;
+        visualizerSessions.start(rootId);
+        const stopGraph = subscribeLiveGraph(this.secrets, rootId, {
+          onGraph: (graph, changed) => { this.built.note(rootId, graph); this.event({ stream, type: "graph", graph, changed }); },
+          onPatch: (patch) => this.event({ stream, type: "patch", patch }),
+        }, (id) => this.loadedBy.get(id));
         // The background indexer's level for the root rides the same stream (PRD 41 B6).
-        const stopLevel = onIndexLevel(call.rootId, (status) => this.event({ stream: call.stream, type: "level", status }));
-        // The person opened the knowledge view on the root: THE on-demand ask for its analyzers' pass (L3 never runs on its
+        const stopLevel = onIndexLevel(rootId, (status) => this.event({ stream, type: "level", status }));
+        // The person ran the knowledge view on the root: THE on-demand ask for its analyzers' pass (L3 never runs on its
         // own), withdrawn when the view stops listening. A quarantined root is refused there, with one output line saying why.
-        const { rootId } = call;
         void requestL3(rootId).catch((error: unknown) => log("L3 request", error));
-        this.live.set(call.stream, () => { stopGraph(); stopLevel(); withdrawL3Request(rootId); });
+        this.live.set(stream, () => { stopGraph(); stopLevel(); withdrawL3Request(rootId); visualizerSessions.stop(rootId); });
         return null;
       }
       case "unlive": this.live.get(call.stream)?.(); this.live.delete(call.stream); return null;
@@ -149,7 +167,7 @@ export class KnowledgeBridge implements vscode.Disposable {
       case "takeFocus": { const focus = pendingFocus; pendingFocus = null; return focus; }
       case "pinpoint": return pinpointRoot(this.secrets, this.rootOf(call.rootId), call.image);
       case "history": return rootHistory(this.rootOf(call.rootId).rootPath, call.rootId, { onWarn: (m) => log("history", m) });
-      case "syncStatus": return this.trace.run("syncStatus", call.rootId, async () => rootSyncStatus(this.secrets, this.rootOf(call.rootId)));
+      case "syncStatus": return this.trace.run("syncStatus", call.rootId, async () => rootSyncStatus(this.secrets, this.rootOf(call.rootId), { lastBuilt: () => this.built.get(call.rootId) }));
       case "retrySync": await retryRootSync(this.secrets, this.rootOf(call.rootId)); return null;
       case "applyFix": return this.applyFix(call.rootId, call.finding);
       case "runFixCheck": return this.fixes.check(call.rootId, this.rootOf(call.rootId).rootPath, call.check, call.finding);
@@ -203,10 +221,10 @@ export class KnowledgeBridge implements vscode.Disposable {
     traced.set({ via: pack ? "pack" : "local" });
     const graph = pack
       ? await traced.timer.phase("pack", () => packRootGraph(pack, query))
-      : await loadGraph(this.secrets, call.rootId, query, traced.timer, (pairs) => traced.set({ nearDuplicates: pairs }));
+      : await loadGraph(this.secrets, call.rootId, query, traced.timer);
     this.rights.loaded(call.rootId, graph?.scope.digest);
-    // Only a FULL load is what the next open paints first (a focus load is a partial picture).
-    if (graph && !call.focus) void this.rememberLastSeen(call.rootId, graph);
+    // Only a FULL load is what the next open paints first (a focus load is a partial picture), and what the sync status counts.
+    if (graph && !call.focus) { this.built.note(call.rootId, graph); void this.rememberLastSeen(call.rootId, graph); }
     // No local review of an open root: the typed "not reviewed on this machine", never the server's cut.
     if (graph || pack) return graph;
     // A root listed from the project that no folder here holds (a teammate's, an uploaded pack): no local tree to

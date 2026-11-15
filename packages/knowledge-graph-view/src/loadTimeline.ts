@@ -39,8 +39,8 @@ export interface LoadTimelineSnapshot {
     freshMs?: number;
 }
 
-/** What the first settled screen was: a graph (the last-seen one, a fresh load, a held snapshot) or a screen without one. */
-export type PaintSource = 'lastSeen' | 'fresh' | 'snapshot' | 'empty' | 'not-here' | 'load-failed' | 'error';
+/** What the first settled screen was: a graph (the last-seen one, a fresh load, a held snapshot) or a screen without one (`idle`: a run-gated host's Run card). */
+export type PaintSource = 'lastSeen' | 'fresh' | 'snapshot' | 'empty' | 'not-here' | 'load-failed' | 'error' | 'idle';
 
 export interface LoadTimeline {
     /** Opens a mark; the returned function closes it. */

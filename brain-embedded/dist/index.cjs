@@ -781,19 +781,17 @@ function reportPendingWordsFailure(stage, error) {
   console.warn(`BuilderForce pending words: ${stage} failed (${errorMessage(error)})`);
 }
 
-// ../packages/agent-loop/src/types.js
+// ../packages/agent-loop/src/types.ts
 var DEFAULT_TOOL_FAILURE_STREAK = 5;
 
-// ../packages/agent-loop/src/parseToolCall.js
+// ../packages/agent-loop/src/parseToolCall.ts
 function asToolArgs(value) {
-  if (value && typeof value === "object" && !Array.isArray(value))
-    return value;
+  if (value && typeof value === "object" && !Array.isArray(value)) return value;
   return null;
 }
 function parseToolArgs(raw) {
   const text2 = typeof raw === "string" ? raw.trim() : "";
-  if (!text2)
-    return { args: {}, malformed: false };
+  if (!text2) return { args: {}, malformed: false };
   try {
     const bag = asToolArgs(JSON.parse(text2));
     return bag ? { args: bag, malformed: false } : { args: {}, malformed: true };
@@ -806,7 +804,7 @@ function parseToolCall(raw) {
   return { id: raw.id, name: raw.name, args, raw, malformed };
 }
 
-// ../packages/agent-loop/src/repetitionLoop.js
+// ../packages/agent-loop/src/repetitionLoop.ts
 var COUNT_MIN_RUN = 50;
 var COUNT_MAX_DIGITS = 6;
 var isDigit = (code) => code >= 48 && code <= 57;
@@ -818,25 +816,19 @@ function tailCountingRun(text2) {
   let start = pos;
   for (; ; ) {
     let end = pos;
-    while (end > 0 && isCountSeparator(text2.charCodeAt(end - 1)))
-      end -= 1;
+    while (end > 0 && isCountSeparator(text2.charCodeAt(end - 1))) end -= 1;
     let begin = end;
-    while (begin > 0 && end - begin <= COUNT_MAX_DIGITS && isDigit(text2.charCodeAt(begin - 1)))
-      begin -= 1;
-    if (begin === end || end - begin > COUNT_MAX_DIGITS)
-      break;
-    if (begin > 0 && !isCountSeparator(text2.charCodeAt(begin - 1)))
-      break;
+    while (begin > 0 && end - begin <= COUNT_MAX_DIGITS && isDigit(text2.charCodeAt(begin - 1))) begin -= 1;
+    if (begin === end || end - begin > COUNT_MAX_DIGITS) break;
+    if (begin > 0 && !isCountSeparator(text2.charCodeAt(begin - 1))) break;
     const value = Number(text2.slice(begin, end));
-    if (expected !== null && value !== expected)
-      break;
+    if (expected !== null && value !== expected) break;
     count2 += 1;
     start = begin;
     pos = begin;
     expected = value - 1;
   }
-  if (count2 < COUNT_MIN_RUN)
-    return null;
+  if (count2 < COUNT_MIN_RUN) return null;
   return { block: text2.slice(start).trim(), copies: count2, kept: text2.slice(0, start).trimEnd() };
 }
 var LOOP_MIN_COPIES = 3;
@@ -848,48 +840,38 @@ var minCopiesFor = (chars) => chars >= LOOP_LONG_BLOCK_CHARS ? LOOP_LONG_MIN_COP
 var LOOP_MIN_BLOCK_WORDS = 5;
 function inOpenCodeFence(text2) {
   let fences = 0;
-  for (let i = text2.indexOf("```"); i !== -1; i = text2.indexOf("```", i + 3))
-    fences += 1;
+  for (let i = text2.indexOf("```"); i !== -1; i = text2.indexOf("```", i + 3)) fences += 1;
   return fences % 2 === 1;
 }
 function readsAsProse(block) {
   let words3 = 0;
   for (const word of block.split(/\s+/)) {
-    if (/\p{L}/u.test(word))
-      words3 += 1;
-    if (words3 >= LOOP_MIN_BLOCK_WORDS)
-      return true;
+    if (/\p{L}/u.test(word)) words3 += 1;
+    if (words3 >= LOOP_MIN_BLOCK_WORDS) return true;
   }
   return false;
 }
 function tailHasPeriod(text2, p, span) {
   const end = text2.length;
   for (let i = end - 1; i >= end - span + p; i -= 1) {
-    if (text2.charCodeAt(i) !== text2.charCodeAt(i - p))
-      return false;
+    if (text2.charCodeAt(i) !== text2.charCodeAt(i - p)) return false;
   }
   return true;
 }
 function detectRepetitionLoop(text2) {
   const counting = tailCountingRun(text2);
-  if (counting)
-    return inOpenCodeFence(text2) ? null : counting;
+  if (counting) return inOpenCodeFence(text2) ? null : counting;
   const length = text2.length;
-  if (length < LOOP_MIN_COPIES * LOOP_MIN_BLOCK_CHARS)
-    return null;
+  if (length < LOOP_MIN_COPIES * LOOP_MIN_BLOCK_CHARS) return null;
   const maxBlock = Math.min(LOOP_MAX_BLOCK_CHARS, Math.floor(length / LOOP_LONG_MIN_COPIES));
   for (let p = LOOP_MIN_BLOCK_CHARS; p <= maxBlock; p += 1) {
     const copies = minCopiesFor(p);
-    if (copies * p > length || !tailHasPeriod(text2, p, copies * p))
-      continue;
+    if (copies * p > length || !tailHasPeriod(text2, p, copies * p)) continue;
     let start = length - copies * p;
-    while (start > 0 && text2.charCodeAt(start - 1) === text2.charCodeAt(start - 1 + p))
-      start -= 1;
+    while (start > 0 && text2.charCodeAt(start - 1) === text2.charCodeAt(start - 1 + p)) start -= 1;
     const block = text2.slice(start, start + p);
-    if (!readsAsProse(block))
-      continue;
-    if (inOpenCodeFence(text2))
-      return null;
+    if (!readsAsProse(block)) continue;
+    if (inOpenCodeFence(text2)) return null;
     return { block, copies: Math.floor((length - start) / p), kept: text2.slice(0, start + p) };
   }
   return null;
@@ -898,42 +880,41 @@ function trimRepetitionLoop(text2) {
   return detectRepetitionLoop(text2)?.kept ?? text2;
 }
 
-// ../packages/agent-loop/src/loop.js
+// ../packages/agent-loop/src/loop.ts
 var Ctx = class {
+  constructor(messages, signal) {
+    this.messages = messages;
+    this.signal = signal;
+  }
   messages;
   signal;
   step = 0;
   stepInCall = 0;
   output = "";
   failureStreak = 0;
-  constructor(messages, signal) {
-    this.messages = messages;
-    this.signal = signal;
-  }
 };
 var CANCELLED = /* @__PURE__ */ Symbol("cancelled");
 function raceCancel(work, signal) {
-  if (!signal)
-    return work;
+  if (!signal) return work;
   return new Promise((resolve, reject) => {
     const onAbort = () => resolve(CANCELLED);
-    if (signal.aborted)
-      onAbort();
-    else
-      signal.addEventListener("abort", onAbort, { once: true });
-    work.then((value) => {
-      signal.removeEventListener("abort", onAbort);
-      resolve(value);
-    }, (error) => {
-      signal.removeEventListener("abort", onAbort);
-      reject(error);
-    });
+    if (signal.aborted) onAbort();
+    else signal.addEventListener("abort", onAbort, { once: true });
+    work.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      }
+    );
   });
 }
 function readOnlySpan(calls, start, isReadOnly) {
   let end = start;
-  while (end < calls.length && isReadOnly(calls[end]))
-    end++;
+  while (end < calls.length && isReadOnly(calls[end])) end++;
   return end - start >= 2 ? end - start : 1;
 }
 async function runAgentLoop(args) {
@@ -960,8 +941,7 @@ async function runAgentLoop(args) {
     const before = await hooks.beforeTurn?.(ctx);
     if (before?.action === "stop") {
       ok = before.ok ?? false;
-      if (before.output !== void 0)
-        ctx.output = before.output;
+      if (before.output !== void 0) ctx.output = before.output;
       finished = before.finished ?? true;
       break;
     }
@@ -975,8 +955,7 @@ async function runAgentLoop(args) {
       }
       throw err;
     }
-    if ("skip" in turnResult)
-      continue;
+    if ("skip" in turnResult) continue;
     if ("failed" in turnResult) {
       ok = false;
       ctx.output = turnResult.failed;
@@ -989,22 +968,18 @@ async function runAgentLoop(args) {
       turn = { ...turn, content: looped.kept };
       await hooks.onRepetitionLoop?.(ctx, looped);
     }
-    if (turn.content)
-      ctx.output = turn.content;
+    if (turn.content) ctx.output = turn.content;
     await hooks.afterTurn?.(ctx, turn);
     if (turn.toolCalls.length === 0) {
       const decision = await hooks.onNoToolCalls?.(ctx, turn) ?? { action: "finish" };
-      if (decision.action === "continue")
-        continue;
+      if (decision.action === "continue") continue;
       if (decision.action === "stop") {
         ok = decision.ok ?? false;
-        if (decision.output !== void 0)
-          ctx.output = decision.output;
+        if (decision.output !== void 0) ctx.output = decision.output;
         finished = decision.finished ?? true;
         break;
       }
-      if (decision.output !== void 0)
-        ctx.output = decision.output;
+      if (decision.output !== void 0) ctx.output = decision.output;
       finished = true;
       break;
     }
@@ -1012,8 +987,7 @@ async function runAgentLoop(args) {
     const gate = await hooks.beforeToolCalls?.(ctx, turn, calls);
     if (gate?.action === "stop") {
       ok = gate.ok ?? true;
-      if (gate.output !== void 0)
-        ctx.output = gate.output;
+      if (gate.output !== void 0) ctx.output = gate.output;
       finished = gate.finished ?? true;
       break;
     }
@@ -1028,26 +1002,20 @@ async function runAgentLoop(args) {
           result = { data: { ok: false, error: block }, isError: true };
         } else {
           finished = true;
-          if (result.control.summary)
-            ctx.output = result.control.summary;
+          if (result.control.summary) ctx.output = result.control.summary;
         }
       } else if (result.control?.kind === "ask_human") {
         const answered2 = await hooks.onAskHuman?.(ctx, result.control, call2);
-        if (answered2)
-          result = answered2;
-        else
-          awaitingInput = { approvalId: result.control.approvalId, question: result.control.question, callId: call2.id };
+        if (answered2) result = answered2;
+        else awaitingInput = { approvalId: result.control.approvalId, question: result.control.question, callId: call2.id };
       }
-      if (!result.control)
-        ctx.failureStreak = result.isError ? ctx.failureStreak + 1 : 0;
+      if (!result.control) ctx.failureStreak = result.isError ? ctx.failureStreak + 1 : 0;
       const row = codec.tool(call2, result);
       ctx.messages.push(row);
       const post = await hooks.afterDispatch?.(call2, result, row, ctx);
-      if (!post?.skipRemaining)
-        return false;
+      if (!post?.skipRemaining) return false;
       const skipped2 = { data: post.skipRemaining.data, isError: post.skipRemaining.isError ?? true };
-      for (const rest of calls.slice(i + 1))
-        ctx.messages.push(codec.tool(rest, skipped2));
+      for (const rest of calls.slice(i + 1)) ctx.messages.push(codec.tool(rest, skipped2));
       return true;
     };
     for (let i = 0; i < calls.length; ) {
@@ -1057,13 +1025,10 @@ async function runAgentLoop(args) {
         let call2 = calls[j];
         let result;
         const pre = await hooks.beforeDispatch?.(call2, ctx);
-        if (pre && "result" in pre)
-          result = pre.result;
-        else if (pre && "rewrite" in pre)
-          call2 = pre.rewrite;
+        if (pre && "result" in pre) result = pre.result;
+        else if (pre && "rewrite" in pre) call2 = pre.rewrite;
         prepared.push(result ? { call: call2, result } : { call: call2 });
-        if (span > 1 && (result?.control || !result && !ports.isReadOnly(call2)))
-          break;
+        if (span > 1 && (result?.control || !result && !ports.isReadOnly(call2))) break;
       }
       const last = prepared[prepared.length - 1];
       const tail = prepared.length > 1 && !last.result && !ports.isReadOnly(last.call) ? last : void 0;
@@ -1071,29 +1036,22 @@ async function runAgentLoop(args) {
       const start = (call2) => signal?.aborted ? Promise.resolve(CANCELLED) : raceCancel(ports.dispatch(call2, ctx), signal);
       const dispatchOne = (p) => p.result ? Promise.resolve(p.result) : start(p.call);
       const results = await Promise.all(batch.map(dispatchOne));
-      if (tail && !results.includes(CANCELLED))
-        results.push(await start(tail.call));
+      if (tail && !results.includes(CANCELLED)) results.push(await start(tail.call));
       if (results.includes(CANCELLED)) {
         const stopped = { data: { ok: false, aborted: true, error: "stopped" }, isError: true };
-        for (const rest of calls.slice(i))
-          ctx.messages.push(codec.tool(rest, stopped));
+        for (const rest of calls.slice(i)) ctx.messages.push(codec.tool(rest, stopped));
         cancelled = true;
         break;
       }
       let stop = false;
-      for (let k = 0; k < prepared.length && !stop; k++)
-        stop = await settle2(i + k, prepared[k].call, results[k]);
-      if (stop)
-        break;
+      for (let k = 0; k < prepared.length && !stop; k++) stop = await settle2(i + k, prepared[k].call, results[k]);
+      if (stop) break;
       i += prepared.length;
     }
-    if (cancelled)
-      break;
+    if (cancelled) break;
     const after = await hooks.afterToolCalls?.(ctx, finished);
-    if (after && after.finished !== void 0)
-      finished = after.finished;
-    if (awaitingInput)
-      break;
+    if (after && after.finished !== void 0) finished = after.finished;
+    if (awaitingInput) break;
     if (!finished && ctx.failureStreak >= failureStreakCap) {
       ctx.step++;
       ctx.stepInCall++;
@@ -1115,12 +1073,11 @@ async function runAgentLoop(args) {
   };
 }
 
-// ../packages/agent-loop/src/malformedCall.js
+// ../packages/agent-loop/src/malformedCall.ts
 var MALFORMED_CALL_RESULT = "This tool call's arguments were not valid JSON, so it was NOT executed. Re-issue it with strictly valid JSON: no comments, no trailing commas, no unescaped newlines or quotes inside string values.";
 var TRUNCATED_CALL_RESULT = "This tool call was cut off by the output limit before its arguments were complete, so it was NOT executed. Re-issue it in your next response as ONE call with complete JSON \u2014 never several calls in one response. If the content is long, write it in parts: create it with its essential fields first, then extend it with follow-up calls.";
 function malformedCallOutcome(call2, truncated, retryHint) {
-  if (!call2.malformed)
-    return null;
+  if (!call2.malformed) return null;
   const base = truncated ? TRUNCATED_CALL_RESULT : MALFORMED_CALL_RESULT;
   return { error: retryHint ? `${base} ${retryHint}` : base };
 }
@@ -1128,16 +1085,18 @@ function malformedCallLabel(name, truncated) {
   return truncated ? `${name} (cut off by the output limit)` : `${name} (unparseable arguments)`;
 }
 
-// ../packages/agent-loop/src/runNarration.js
-var NARRATION_OPENER = new RegExp("^(?:(?:now|next|first|then|so|okay|ok|alright|actually|great|good|perfect|but|and|also|finally)[,!.]?\\s+)*(?:let me|let's|i(?:'ll| will| need to| should| want to| am going to|'m going to| think| see| can see| notice| ran)\\b|looking (?:at|back|for)\\b|checking\\b|now the\\b|that was expected\\b)", "i");
+// ../packages/agent-loop/src/runNarration.ts
+var NARRATION_OPENER = new RegExp(
+  "^(?:(?:now|next|first|then|so|okay|ok|alright|actually|great|good|perfect|but|and|also|finally)[,!.]?\\s+)*(?:let me|let's|i(?:'ll| will| need to| should| want to| am going to|'m going to| think| see| can see| notice| ran)\\b|looking (?:at|back|for)\\b|checking\\b|now the\\b|that was expected\\b)",
+  "i"
+);
 
-// ../packages/agent-loop/src/turnPhase.js
+// ../packages/agent-loop/src/turnPhase.ts
 var MID_TURN_META_KEY = "midTurn";
 function isMidTurnMetadata(metadata) {
   let meta = metadata;
   if (typeof meta === "string") {
-    if (!meta.includes(MID_TURN_META_KEY))
-      return false;
+    if (!meta.includes(MID_TURN_META_KEY)) return false;
     try {
       meta = JSON.parse(meta);
     } catch {
@@ -1147,7 +1106,7 @@ function isMidTurnMetadata(metadata) {
   return typeof meta === "object" && meta !== null && meta[MID_TURN_META_KEY] === true;
 }
 
-// ../packages/agent-loop/src/stepRow.js
+// ../packages/agent-loop/src/stepRow.ts
 var STEP_RESULT_CAP = 4e3;
 function capped(value) {
   let s;
@@ -1179,11 +1138,11 @@ function stepRow(step) {
   return { role: "tool", content: "", metadata };
 }
 
-// ../packages/agent-loop/src/taskClosedState.js
+// ../packages/agent-loop/src/taskClosedState.ts
 var TASK_CLOSED_STATUSES = ["done", "cancelled", "canceled", "completed", "archived"];
 var CLOSED = new Set(TASK_CLOSED_STATUSES);
 
-// ../packages/agent-loop/src/reasoning.js
+// ../packages/agent-loop/src/reasoning.ts
 var REASONING_TAG = "think(?:ing)?|thought|antthinking|scratchpad|reasoning";
 var QUICK_TAG_RE = new RegExp(`<\\s*/?\\s*(?:${REASONING_TAG}|final)\\b`, "i");
 var FINAL_TAG_RE = /<\s*\/?\s*final\b[^<>]*>/gi;
@@ -1201,8 +1160,7 @@ function findCodeRegions(text2) {
     const start = match.index ?? 0;
     const end = start + match[0].length;
     const insideFenced = regions.some((r) => start >= r.start && end <= r.end);
-    if (!insideFenced)
-      regions.push({ start, end });
+    if (!insideFenced) regions.push({ start, end });
   }
   regions.sort((a, b) => a.start - b.start);
   return regions;
@@ -1226,12 +1184,10 @@ function scanReasoning(text2) {
     const region = codeRegionAt(idx, regions);
     if (region) {
       const releases = region.unterminated === true && kind === "thought" && isClose && region.start >= contentStart;
-      if (!releases)
-        continue;
+      if (!releases) continue;
       region.end = idx;
     }
-    if (kind === "thought" && !isClose)
-      continue;
+    if (kind === "thought" && !isClose) continue;
     const after = idx + match[0].length;
     spans.push({ kind, start, contentStart, contentEnd: idx, end: isClose ? after : idx, unterminated: false });
     kind = isClose ? "answer" : "thought";
@@ -1249,14 +1205,11 @@ function scanReasoning(text2) {
   return spans;
 }
 function splitReasoningSegments(text2) {
-  if (!text2)
-    return [];
-  if (!QUICK_TAG_RE.test(text2))
-    return [{ kind: "answer", content: text2 }];
+  if (!text2) return [];
+  if (!QUICK_TAG_RE.test(text2)) return [{ kind: "answer", content: text2 }];
   const cleaned = unwrapFinalTags(text2);
   const segments = segmentsOf(cleaned, scanReasoning(cleaned));
-  if (segments.length === 0)
-    return [{ kind: "answer", content: text2 }];
+  if (segments.length === 0) return [{ kind: "answer", content: text2 }];
   return stitchSplitSentence(promoteSwallowedAnswer(segments));
 }
 var EMPTY_TOOL_CALL_WRAPPER = /<([a-z][\w-]*:tool_call)\b[^<>]*>\s*<\/\1>/gi;
@@ -1265,8 +1218,7 @@ function segmentsOf(text2, spans) {
   for (const span of spans) {
     const raw = text2.slice(span.contentStart, span.contentEnd);
     const content = (span.kind === "thought" ? raw.replace(EMPTY_TOOL_CALL_WRAPPER, "") : raw).trim();
-    if (content)
-      out.push({ kind: span.kind, content });
+    if (content) out.push({ kind: span.kind, content });
   }
   return out;
 }
@@ -1281,8 +1233,7 @@ function unwrapFinalTags(text2) {
   const cuts = [];
   for (const match of text2.matchAll(FINAL_TAG_RE)) {
     const start = match.index ?? 0;
-    if (!isInsideCode(start, regions))
-      cuts.push({ start, length: match[0].length });
+    if (!isInsideCode(start, regions)) cuts.push({ start, length: match[0].length });
   }
   let out = text2;
   for (let i = cuts.length - 1; i >= 0; i--) {
@@ -1292,22 +1243,17 @@ function unwrapFinalTags(text2) {
   return out;
 }
 function stripReasoningTagsFromText(text2, options) {
-  if (!text2)
-    return text2;
-  if (!QUICK_TAG_RE.test(text2))
-    return text2;
+  if (!text2) return text2;
+  if (!QUICK_TAG_RE.test(text2)) return text2;
   const mode = options?.mode ?? "strict";
   const trimMode = options?.trim ?? "both";
   const cleaned = unwrapFinalTags(text2);
   let result = "";
   for (const span of scanReasoning(cleaned)) {
-    if (span.kind === "answer")
-      result += cleaned.slice(span.contentStart, span.contentEnd);
-    else if (span.unterminated && mode === "preserve")
-      result += cleaned.slice(span.contentStart, span.contentEnd);
+    if (span.kind === "answer") result += cleaned.slice(span.contentStart, span.contentEnd);
+    else if (span.unterminated && mode === "preserve") result += cleaned.slice(span.contentStart, span.contentEnd);
   }
-  if (trimMode === "none")
-    return result;
+  if (trimMode === "none") return result;
   return trimMode === "start" ? result.trimStart() : result.trim();
 }
 var MAX_FRAGMENT_CHARS = 40;
@@ -1317,19 +1263,17 @@ function isFragment(text2) {
 }
 function promoteSwallowedAnswer(segments) {
   const answers = segments.filter((s) => s.kind === "answer");
-  if (answers.length === 0)
-    return segments;
+  if (answers.length === 0) return segments;
   const answerText = answers.map((s) => s.content).join(" ").trim();
-  if (!isFragment(answerText))
-    return segments;
+  if (!isFragment(answerText)) return segments;
   const thoughts = segments.filter((s) => s.kind === "thought");
-  const richest = thoughts.reduce((best, s) => !best || s.content.length > best.content.length ? s : best, null);
-  if (!richest || richest.content.length <= answerText.length)
-    return segments;
+  const richest = thoughts.reduce(
+    (best, s) => !best || s.content.length > best.content.length ? s : best,
+    null
+  );
+  if (!richest || richest.content.length <= answerText.length) return segments;
   const promoted = [{ kind: "answer", content: `${richest.content} ${answerText}`.trim() }];
-  for (const s of thoughts)
-    if (s !== richest)
-      promoted.unshift(s);
+  for (const s of thoughts) if (s !== richest) promoted.unshift(s);
   return promoted;
 }
 var UNFINISHED_TAIL = /[\p{L}\p{N},]$/u;
@@ -1338,8 +1282,7 @@ function lastSentenceStart(text2) {
   let cut = text2.lastIndexOf("\n") + 1;
   for (const match of text2.matchAll(/[.!?](?=\s)/g)) {
     const after = (match.index ?? 0) + 1;
-    if (after > cut)
-      cut = after;
+    if (after > cut) cut = after;
   }
   return cut;
 }
@@ -1348,12 +1291,9 @@ function stitchSplitSentence(segments) {
   for (let i = 1; i < out.length; i++) {
     const prev = out[i - 1];
     const cur = out[i];
-    if (prev.kind !== "thought" || cur.kind !== "answer")
-      continue;
-    if (cur.content.length <= MAX_FRAGMENT_CHARS)
-      continue;
-    if (!LOWERCASE_OPENER.test(cur.content) || !UNFINISHED_TAIL.test(prev.content))
-      continue;
+    if (prev.kind !== "thought" || cur.kind !== "answer") continue;
+    if (cur.content.length <= MAX_FRAGMENT_CHARS) continue;
+    if (!LOWERCASE_OPENER.test(cur.content) || !UNFINISHED_TAIL.test(prev.content)) continue;
     const cut = lastSentenceStart(prev.content);
     const head = prev.content.slice(0, cut).trim();
     out[i] = { kind: "answer", content: `${prev.content.slice(cut).trim()} ${cur.content}` };
@@ -1376,8 +1316,7 @@ function replayTextOf(content) {
   return answerTextOf(content) || thoughtTextOf(content);
 }
 function detailsText(details) {
-  if (!Array.isArray(details))
-    return "";
+  if (!Array.isArray(details)) return "";
   return details.map((d) => {
     const item = d;
     return item && (item.type === void 0 || item.type === "reasoning.text") && typeof item.text === "string" ? item.text : "";
@@ -1398,8 +1337,7 @@ function splitVendorReasoning(message2) {
 function canonicalReasoningText(content, reasoning) {
   const answer2 = (content ?? "").trim();
   const thought = (reasoning ?? "").trim();
-  if (!thought)
-    return answer2;
+  if (!thought) return answer2;
   return answer2 ? `<think>${thought}</think>
 
 ${answer2}` : `<think>${thought}</think>`;
@@ -3219,7 +3157,7 @@ var RESNAPSHOT2 = Object.freeze({ resnapshotRequired: true });
 // src/localFirstPersistence.ts
 var import_working2 = require("@seanhogg/builderforce-memory/working");
 
-// ../packages/spend-contract/src/cost.js
+// ../packages/spend-contract/src/cost.ts
 var MILLICENTS_PER_USD = 1e5;
 var MEDIAN_TURN_TOKENS = Object.freeze({ prompt: 6e3, completion: 400 });
 function millicentsToUsd(millicents) {
@@ -3228,8 +3166,7 @@ function millicentsToUsd(millicents) {
 var CACHE_READ_MULTIPLIER = 0.1;
 var CACHE_CREATION_MULTIPLIER = 1.25;
 function computeCostMillicents(pricing, usage) {
-  if (!pricing)
-    return 0;
+  if (!pricing) return 0;
   const cacheRead = usage.cacheReadTokens ?? 0;
   const cacheCreation = usage.cacheCreationTokens ?? 0;
   const fullPrompt = Math.max(0, usage.promptTokens - cacheRead - cacheCreation);
@@ -3237,7 +3174,7 @@ function computeCostMillicents(pricing, usage) {
   return Math.round(usd3 * 1e5);
 }
 
-// ../packages/model-catalog/src/price.js
+// ../packages/model-catalog/src/price.ts
 var TOKENS_PER_MILLION = 1e6;
 function perMillionToPerToken(usdPerMillion) {
   return usdPerMillion / TOKENS_PER_MILLION;
@@ -3247,7 +3184,7 @@ function perTokenToPerMillion(usdPerToken) {
 }
 var ZERO_PRICE = Object.freeze({ input: 0, output: 0 });
 
-// ../packages/model-catalog/src/tier.js
+// ../packages/model-catalog/src/tier.ts
 var UNKNOWN_TIER_RANK = 4;
 var STRONGEST_FIRST = {
   ULTRA: 0,
@@ -3261,16 +3198,13 @@ function tierRank(tier2) {
 var STANDARD_MAX_OUTPUT_PER_MILLION = 8;
 var PREMIUM_MAX_OUTPUT_PER_MILLION = 20;
 function tierForPrice(price) {
-  if (price.input === 0 && price.output === 0)
-    return "FREE";
+  if (price.input === 0 && price.output === 0) return "FREE";
   const outputPerMillion = perTokenToPerMillion(price.output);
-  if (outputPerMillion < STANDARD_MAX_OUTPUT_PER_MILLION)
-    return "STANDARD";
+  if (outputPerMillion < STANDARD_MAX_OUTPUT_PER_MILLION) return "STANDARD";
   return outputPerMillion < PREMIUM_MAX_OUTPUT_PER_MILLION ? "PREMIUM" : "ULTRA";
 }
 function resolveModelTier(known) {
-  if (known.catalogTier)
-    return known.catalogTier;
+  if (known.catalogTier) return known.catalogTier;
   return known.price ? tierForPrice(known.price) : void 0;
 }
 var AGENTIC_TIERS = /* @__PURE__ */ new Set(["PREMIUM", "ULTRA"]);
@@ -3278,7 +3212,7 @@ function isAgenticTier(tier2) {
   return tier2 ? AGENTIC_TIERS.has(tier2) : void 0;
 }
 
-// ../packages/model-catalog/src/priceTiers.js
+// ../packages/model-catalog/src/priceTiers.ts
 var tier = (aboveInputTokens, inputPerMillion, outputPerMillion) => ({
   aboveInputTokens,
   input: perMillionToPerToken(inputPerMillion),
@@ -3318,7 +3252,7 @@ function withPriceTiers(modelId, price) {
   return tiers ? { ...price, priceTiers: tiers } : price;
 }
 
-// ../packages/model-catalog/src/priceBook.js
+// ../packages/model-catalog/src/priceBook.ts
 function directCatalogId(model) {
   return model.startsWith("direct/") ? model.slice("direct/".length).toLowerCase() : void 0;
 }
@@ -3345,13 +3279,13 @@ function priceBookFromPrices(prices) {
   };
 }
 
-// ../packages/model-catalog/src/generated/priceSnapshot.js
+// ../packages/model-catalog/src/generated/priceSnapshot.ts
 var PRICE_SNAPSHOT = {
   "~anthropic/claude-fable-latest": [8e-6, 4e-5],
   "~anthropic/claude-haiku-latest": [1e-7, 5e-7],
   "~anthropic/claude-opus-latest": [4e-6, 2e-5],
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
-  "~deepseek/deepseek-flash-latest": [38e-9, 5e-7],
+  "~deepseek/deepseek-flash-latest": [2e-8, 108e-9],
   "~deepseek/deepseek-pro-latest": [999e-10, 8e-6],
   "~deepseek/deepseek-v4-flash-latest": [434e-10, 3e-7],
   "~google/gemini-flash-latest": [15e-7, 75e-7],
@@ -3423,7 +3357,7 @@ var PRICE_SNAPSHOT = {
   "cohere/command-r-plus-08-2024": [25e-7, 1e-5],
   "cohere/command-r7b-12-2024": [375e-10, 15e-8],
   "cohere/north-mini-code:free": [0, 0],
-  "deepseek/deepseek-chat": [32e-8, 89e-8],
+  "deepseek/deepseek-chat": [2574e-10, 10287e-10],
   "deepseek/deepseek-chat-v3-0324": [29e-8, 114e-8],
   "deepseek/deepseek-chat-v3.1": [25e-8, 95e-8],
   "deepseek/deepseek-r1-0528": [5e-7, 215e-8],
@@ -3437,8 +3371,8 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v4-pro": [9e-7, 15e-7],
   "deepseek/deepseek-v4-pro-0813": [111e-9, 444e-8],
   "deepseek/deepseek-v4.1-flash": [507e-10, 2028e-10],
-  "deepseek/deepseek-v4.1-flash-1017": [38e-9, 5e-7],
-  "deepseek/deepseek-v4.1-flash-1017:batch": [5e-8, 15e-8],
+  "deepseek/deepseek-v4.1-flash-1017": [2e-8, 108e-9],
+  "deepseek/deepseek-v4.1-flash-1017:batch": [36e-9, 318e-9],
   "deepseek/deepseek-v4.1-flash:batch": [112e-9, 336e-9],
   "dots-studio/dots-3-note-preview:free": [0, 0],
   "elorian/glimpse": [6e-7, 3e-6],
@@ -3484,18 +3418,19 @@ var PRICE_SNAPSHOT = {
   "google/gemma-3-12b-it": [5e-8, 15e-8],
   "google/gemma-3-27b-it": [8e-8, 35e-8],
   "google/gemma-3-4b-it": [5e-8, 1e-7],
-  "google/gemma-4-26b-a4b-it": [9e-8, 3e-7],
+  "google/gemma-4-26b-a4b-it": [675e-10, 225e-9],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
   "google/gemma-4-31b-it": [2e-7, 4e-7],
   "google/gemma-4-31b-it:free": [0, 0],
   "google/lyria-3-clip-preview": [0, 0],
   "google/lyria-3-pro-preview": [0, 0],
   "gryphe/mythomax-l2-13b": [8e-8, 11e-8],
-  "ibm-granite/granite-4.2-8b": [6e-8, 25e-8],
+  "ibm-granite/granite-4.2-8b": [6e-8, 15e-8],
   "inclusionai/ling-3.0-flash": [21e-9, 63e-9],
   "inclusionai/ling-3.0-flash-vl": [6e-8, 18e-8],
   "inclusionai/ling-3.0-tiny": [15e-9, 45e-9],
   "inclusionai/ling-3.1-flash": [45e-9, 135e-9],
+  "inclusionai/ling-3.2-flash:free": [0, 0],
   "inference-net/schematron-v2-small": [5e-8, 23e-8],
   "inference-net/schematron-v2-turbo": [3e-8, 15e-8],
   "kt/midm-k-3.0-pro": [2e-7, 8e-7],
@@ -3507,7 +3442,7 @@ var PRICE_SNAPSHOT = {
   "meta-llama/llama-3.1-70b-instruct": [72e-8, 72e-8],
   "meta-llama/llama-3.1-8b-instruct": [2e-8, 4e-8],
   "meta-llama/llama-3.2-1b-instruct": [27e-9, 201e-9],
-  "meta-llama/llama-3.2-3b-instruct": [5e-8, 33e-8],
+  "meta-llama/llama-3.2-3b-instruct": [509e-10, 335e-9],
   "meta-llama/llama-3.3-70b-instruct": [71e-8, 71e-8],
   "meta-llama/llama-4-maverick": [35e-8, 1e-6],
   "meta-llama/llama-4-scout": [1e-7, 3e-7],
@@ -3527,7 +3462,7 @@ var PRICE_SNAPSHOT = {
   "minimax/minimax-m2.7": [21e-8, 84e-8],
   "minimax/minimax-m3": [3e-7, 12e-7],
   "minimax/minimax-m3:batch": [224e-9, 88e-8],
-  "minimax/minimax-m3.1-flash": [15e-8, 6e-7],
+  "minimax/minimax-m3.1-flash": [75e-9, 3e-7],
   "mistralai/codestral-2508": [3e-7, 9e-7],
   "mistralai/devstral-2512": [4e-7, 2e-6],
   "mistralai/ministral-14b-2512": [2e-7, 2e-7],
@@ -3559,8 +3494,8 @@ var PRICE_SNAPSHOT = {
   "moonshotai/kimi-k2.7-code": [6e-7, 35e-7],
   "moonshotai/kimi-k3": [192e-9, 16e-6],
   "moonshotai/kimi-k3:batch": [228e-8, 114e-7],
-  "moonshotai/kimi-k3.1-pro": [2e-6, 1e-5],
-  "moonshotai/kimi-k3.1-pro:batch": [7e-7, 6e-6],
+  "moonshotai/kimi-k3.1-pro": [2403e-10, 84023e-10],
+  "moonshotai/kimi-k3.1-pro:batch": [408e-9, 6111e-9],
   "morph/morph-v3-fast": [8e-7, 12e-7],
   "morph/morph-v3-fast:batch": [4e-7, 6e-7],
   "morph/morph-v3-large": [9e-7, 19e-7],
@@ -3578,7 +3513,7 @@ var PRICE_SNAPSHOT = {
   "nvidia/nemotron-3.5-content-safety": [2e-7, 2e-7],
   "nvidia/nemotron-3.5-lightning": [7e-8, 2e-7],
   "nvidia/nemotron-3.5-lightning:free": [0, 0],
-  "nvidia/nemotron-3.5-super-vl": [15e-8, 47e-8],
+  "nvidia/nemotron-3.5-super-vl": [15e-8, 5e-7],
   "nvidia/nemotron-3.5-super-vl:free": [0, 0],
   "nvidia/switchyard": [0, 0],
   "openai/gpt-3.5-turbo-0613": [1e-6, 2e-6],
@@ -3686,7 +3621,7 @@ var PRICE_SNAPSHOT = {
   "openrouter/free": [0, 0],
   "openrouter/fusion": [0, 0],
   "openrouter/pareto-code": [0, 0],
-  "particle-ai/particle-1": [5e-8, 5e-7],
+  "particle-ai/particle-1": [6e-8, 5e-7],
   "particle-ai/particle-1:free": [0, 0],
   "perceptron/perceptron-mk1": [15e-8, 15e-7],
   "perceptron/perceptron-mk1.5": [15e-8, 15e-7],
@@ -3714,13 +3649,12 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3-next-80b-a3b-instruct": [9e-8, 11e-7],
   "qwen/qwen3-vl-235b-a22b-instruct": [21e-8, 19e-7],
   "qwen/qwen3-vl-30b-a3b-instruct": [15e-8, 6e-7],
-  "qwen/qwen3-vl-30b-a3b-thinking": [29e-8, 1e-6],
   "qwen/qwen3-vl-8b-instruct": [25e-8, 75e-8],
   "qwen/qwen3.5-122b-a10b": [26e-8, 208e-8],
   "qwen/qwen3.5-27b": [26e-8, 26e-7],
   "qwen/qwen3.5-35b-a3b": [14e-8, 1e-6],
   "qwen/qwen3.5-397b-a17b": [6e-7, 36e-7],
-  "qwen/qwen3.5-9b": [28e-9, 41e-9],
+  "qwen/qwen3.5-9b": [66e-9, 97e-9],
   "qwen/qwen3.5-flash-02-23": [65e-9, 26e-8],
   "qwen/qwen3.5-plus-02-15": [26e-8, 156e-8],
   "qwen/qwen3.5-plus-20260420": [3e-7, 18e-7],
@@ -3755,10 +3689,8 @@ var PRICE_SNAPSHOT = {
   "sao10k/l3.1-euryale-70b": [85e-8, 85e-8],
   "scaledown/extract": [4e-8, 0],
   "scaledown/summarize": [4e-8, 0],
-  "stepfun/step-3.5-flash": [1e-7, 3e-7],
   "stepfun/step-3.7-flash": [2e-7, 115e-8],
   "stepfun/step-5-preview": [1e-6, 27e-7],
-  "tencent/hunyuan-a13b-instruct": [14e-8, 57e-8],
   "tencent/hy-mt2-1.8b": [44e-9, 177e-9],
   "tencent/hy-mt2-30b-a3b": [74e-9, 295e-9],
   "tencent/hy-mt2-7b": [74e-9, 295e-9],
@@ -3802,13 +3734,12 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-4.5v": [6e-7, 18e-7],
   "z-ai/glm-4.6": [5e-7, 2e-6],
   "z-ai/glm-4.6v": [3e-7, 9e-7],
-  "z-ai/glm-4.7": [6e-7, 22e-7],
+  "z-ai/glm-4.7": [4e-7, 175e-8],
   "z-ai/glm-4.7-flash": [605e-10, 4e-7],
   "z-ai/glm-5": [1e-6, 32e-7],
   "z-ai/glm-5-turbo": [12e-7, 4e-6],
   "z-ai/glm-5.1": [14e-7, 44e-7],
   "z-ai/glm-5.2": [7e-9, 68e-7],
-  "z-ai/glm-5.2:batch": [298e-9, 916e-9],
   "z-ai/glm-5.3": [84e-9, 36e-7],
   "z-ai/glm-5.3-flash": [399e-10, 784e-10],
   "z-ai/glm-5.3-flash:batch": [5e-8, 18e-8],
@@ -3819,14 +3750,16 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-5v-turbo": [12e-7, 4e-6]
 };
 
-// ../packages/model-catalog/src/snapshotPriceBook.js
+// ../packages/model-catalog/src/snapshotPriceBook.ts
 var book;
 function snapshotPriceBook() {
-  book ??= priceBookFromPrices(Object.entries(PRICE_SNAPSHOT).map(([id, [input, output]]) => [id, withPriceTiers(id, { input, output })]));
+  book ??= priceBookFromPrices(
+    Object.entries(PRICE_SNAPSHOT).map(([id, [input, output]]) => [id, withPriceTiers(id, { input, output })])
+  );
   return book;
 }
 
-// ../packages/model-catalog/src/anthropic.js
+// ../packages/model-catalog/src/anthropic.ts
 var ANTHROPIC_RELEASES = {
   opus: ["5.5", "5", "4.8", "4.7", "4.6", "4.5", "4.1", "4.0"],
   sonnet: ["5.5", "5", "4.6", "4.5", "4.0"],
@@ -3847,25 +3780,22 @@ function parseAnthropicModelId(id) {
   };
 }
 
-// ../packages/model-catalog/src/weakerModel.js
+// ../packages/model-catalog/src/weakerModel.ts
 function catalogIdCandidates(model) {
   const ids2 = [model];
   const claude = parseAnthropicModelId(model.slice(model.lastIndexOf("/") + 1));
   if (claude) {
     const [major, minor] = claude.version;
     ids2.push(`anthropic/claude-${claude.family}-${major}.${minor}`);
-    if (minor === 0)
-      ids2.push(`anthropic/claude-${claude.family}-${major}`);
+    if (minor === 0) ids2.push(`anthropic/claude-${claude.family}-${major}`);
   }
   return ids2;
 }
 function tierOfModel(model, book2 = snapshotPriceBook()) {
-  if (!model || model === "default")
-    return void 0;
+  if (!model || model === "default") return void 0;
   for (const id of catalogIdCandidates(model)) {
     const price = listPriceOf(book2, id);
-    if (price)
-      return resolveModelTier({ price });
+    if (price) return resolveModelTier({ price });
   }
   return void 0;
 }
@@ -3875,7 +3805,7 @@ function isWeakerModel(requested, served, book2 = snapshotPriceBook()) {
   return asked !== void 0 && got !== void 0 && tierRank(got) > tierRank(asked);
 }
 
-// ../packages/model-catalog/src/providers.js
+// ../packages/model-catalog/src/providers.ts
 var LLM_PROVIDER_INFO = [
   { id: "anthropic", label: "Anthropic (Claude)", credential: "api_key", keyPlaceholder: "sk-ant-\u2026", subscription: "paste", signInDomains: ["claude.ai", "anthropic.com"] },
   { id: "openai", label: "OpenAI", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: "paste", signInDomains: ["openai.com"] },
@@ -3910,12 +3840,11 @@ var LLM_PROVIDER_INFO = [
 var LLM_PROVIDERS = LLM_PROVIDER_INFO.map((p) => p.id);
 var INFO_BY_ID = new Map(LLM_PROVIDER_INFO.map((p) => [p.id, p]));
 
-// ../packages/spend-contract/src/fold.js
+// ../packages/spend-contract/src/fold.ts
 var AVOIDED_SOURCES = /* @__PURE__ */ new Set(["memory_answer", "evermind_answer", "response_cache", "deterministic"]);
 var LOCAL_MODEL_SOURCE = "local_model";
 function addSaving(acc, source, mc, tokens2, events, estimated) {
-  if (tokens2 === 0 && mc === 0)
-    return;
+  if (tokens2 === 0 && mc === 0) return;
   const key = `${source}:${estimated ? "e" : "m"}`;
   const prev = acc.get(key) ?? { source, mc: 0, tokens: 0, events: 0, estimated };
   acc.set(key, { ...prev, mc: prev.mc + mc, tokens: prev.tokens + tokens2, events: prev.events + events });
@@ -3926,10 +3855,8 @@ function savedFrom(acc, spentUsd) {
   let tokensSaved = 0;
   const bySource = [];
   for (const v of acc.values()) {
-    if (v.estimated)
-      estimatedMc += v.mc;
-    else
-      measuredMc += v.mc;
+    if (v.estimated) estimatedMc += v.mc;
+    else measuredMc += v.mc;
     tokensSaved += v.tokens;
     bySource.push({ source: v.source, usd: millicentsToUsd(v.mc), tokens: v.tokens, events: v.events, estimated: v.estimated });
   }
@@ -3976,8 +3903,7 @@ function foldSpendSavings(slices, book2) {
     platformMc += g.costMc;
     const price = listPriceOf(book2, g.model);
     const pricing = price ? { prompt: price.input, completion: price.output } : void 0;
-    if (g.unpriced)
-      spend.unpricedTokens += g.total;
+    if (g.unpriced) spend.unpricedTokens += g.total;
     else if (g.byo && pricing) {
       yourKeyMc += computeCostMillicents(pricing, {
         promptTokens: g.prompt,
@@ -4023,17 +3949,15 @@ function combineSpendSavings(a, b) {
   return { spend, ...savedFrom(acc, spend.totalUsd) };
 }
 
-// ../packages/spend-contract/src/runBudget.js
+// ../packages/spend-contract/src/runBudget.ts
 var RUN_BUDGET_WARN_AT = 0.8;
 var capOf = (n2) => typeof n2 === "number" && Number.isFinite(n2) ? n2 : null;
 function runBudgetBreach(caps, usage) {
   const spendCap = capOf(caps.maxSpendMillicents);
-  if (spendCap != null && usage.spendMillicents >= spendCap)
-    return { kind: "spend", used: usage.spendMillicents, cap: spendCap };
+  if (spendCap != null && usage.spendMillicents >= spendCap) return { kind: "spend", used: usage.spendMillicents, cap: spendCap };
   const tokenCap = capOf(caps.maxTokens);
   const tokens2 = usage.tokens ?? 0;
-  if (tokenCap != null && tokens2 >= tokenCap)
-    return { kind: "tokens", used: tokens2, cap: tokenCap };
+  if (tokenCap != null && tokens2 >= tokenCap) return { kind: "tokens", used: tokens2, cap: tokenCap };
   return null;
 }
 function runBudgetUsedShare(caps, usage) {
@@ -6428,7 +6352,7 @@ function createLocalChatIdentity(options) {
   };
 }
 
-// ../packages/local-inference/src/runtimes.js
+// ../packages/local-inference/src/runtimes.ts
 var BROWSER_ENGINE_BASE_URL = "http://browser.local";
 var BFI_ENGINE_BASE_URL = "http://bfi.local";
 var WEBLLM_ENGINE_BASE_URL = "http://webllm.local";
@@ -6516,33 +6440,28 @@ function localRuntime(id) {
 }
 var HOST_FALLBACK_RUNTIMES = LOCAL_RUNTIMES.filter((r) => r.fallbackReach === "host");
 
-// ../packages/local-inference/src/ref.js
+// ../packages/local-inference/src/ref.ts
 var LOCAL_MODEL_PREFIX = "local/";
 var GATEWAY_DIRECT_PREFIX = "direct/";
 function formatLocalModelRef(runtime, model) {
   return `${LOCAL_MODEL_PREFIX}${runtime}/${model}`;
 }
 function parseLocalModelRef(ref) {
-  if (!ref || !ref.startsWith(LOCAL_MODEL_PREFIX))
-    return null;
+  if (!ref || !ref.startsWith(LOCAL_MODEL_PREFIX)) return null;
   const rest = ref.slice(LOCAL_MODEL_PREFIX.length);
   const slash2 = rest.indexOf("/");
-  if (slash2 <= 0)
-    return null;
+  if (slash2 <= 0) return null;
   const provider = rest.slice(0, slash2);
   const model = rest.slice(slash2 + 1);
-  if (!model || !isLocalRuntimeId(provider))
-    return null;
+  if (!model || !isLocalRuntimeId(provider)) return null;
   return { provider, model };
 }
 function clientPinOf(ref) {
   const local = parseLocalModelRef(ref);
-  if (local || !ref || !ref.startsWith(GATEWAY_DIRECT_PREFIX))
-    return local;
+  if (local || !ref || !ref.startsWith(GATEWAY_DIRECT_PREFIX)) return local;
   const rest = ref.slice(GATEWAY_DIRECT_PREFIX.length);
   const slash2 = rest.indexOf("/");
-  if (slash2 <= 0)
-    return null;
+  if (slash2 <= 0) return null;
   const vendor = rest.slice(0, slash2);
   const model = rest.slice(slash2 + 1);
   const runtime = LOCAL_RUNTIMES.find((r) => r.gatewayVendor === vendor);
@@ -6561,10 +6480,8 @@ function servedAttempt(result) {
 }
 function servedIdentity(result, requested) {
   const served = servedAttempt(result);
-  if (!served)
-    return { onDevice: runsOnDevice(result.resolvedModel), name: result.resolvedModel ?? requested };
-  if (isLocalModelRef(served.target))
-    return { onDevice: runsOnDevice(served.target), name: served.target };
+  if (!served) return { onDevice: runsOnDevice(result.resolvedModel), name: result.resolvedModel ?? requested };
+  if (isLocalModelRef(served.target)) return { onDevice: runsOnDevice(served.target), name: served.target };
   const name = result.resolvedModel ?? (served.target !== GATEWAY_ATTEMPT_TARGET ? served.target : void 0);
   return { onDevice: false, name };
 }
@@ -6573,15 +6490,13 @@ function servedOnDevice(result) {
 }
 function hostedDirectRef(ref) {
   const pin = clientPinOf(ref);
-  if (!pin)
-    return void 0;
+  if (!pin) return void 0;
   const runtime = localRuntime(pin.provider);
   return !runtime.onDevice && runtime.gatewayVendor ? `${GATEWAY_DIRECT_PREFIX}${runtime.gatewayVendor}/${pin.model}` : void 0;
 }
 function hostedCatalogId(ref) {
   const pin = clientPinOf(ref);
-  if (!pin)
-    return void 0;
+  if (!pin) return void 0;
   const runtime = localRuntime(pin.provider);
   return runtime.onDevice ? void 0 : runtime.catalogAliases?.[pin.model];
 }
@@ -6589,7 +6504,7 @@ function pricedId(ref) {
   return hostedCatalogId(ref) ?? hostedDirectRef(ref) ?? ref;
 }
 
-// ../packages/local-inference/src/endpoint.js
+// ../packages/local-inference/src/endpoint.ts
 function normalizeLocalBaseUrl(raw) {
   return raw.trim().replace(/\/+$/, "").replace(/\/v1$/i, "");
 }
@@ -6603,34 +6518,29 @@ function rewriteToLocalUrl(url) {
 }
 async function fetchLocal(endpoint, fetchImpl, url, init) {
   const credential = endpoint.credential;
-  if (!credential)
-    return fetchImpl(url, init);
+  if (!credential) return fetchImpl(url, init);
   const send = (token2) => fetchImpl(url, { ...init, headers: withBearer(init.headers, token2) });
   const token = await credential();
   const res = await send(token);
-  if (res.status !== 401 || !token)
-    return res;
+  if (res.status !== 401 || !token) return res;
   const replacement = await credential(token);
-  if (!replacement || replacement === token)
-    return res;
+  if (!replacement || replacement === token) return res;
   await res.body?.cancel().catch(() => void 0);
   return send(replacement);
 }
 function withBearer(headers, token) {
   const out = {};
   new Headers(headers).forEach((value, key) => {
-    if (key !== "authorization")
-      out[key] = value;
+    if (key !== "authorization") out[key] = value;
   });
-  if (token)
-    out.authorization = `Bearer ${token}`;
+  if (token) out.authorization = `Bearer ${token}`;
   return out;
 }
 function localAuthHeaders(endpoint) {
   return endpoint.token ? { authorization: `Bearer ${endpoint.token}` } : {};
 }
 
-// ../packages/local-inference/src/probe.js
+// ../packages/local-inference/src/probe.ts
 function isServableLocalModel(m) {
   return m.state === void 0 || m.state === "ready";
 }
@@ -6639,7 +6549,7 @@ function localModelLabel(row, runtimeId) {
   return runtime.labelFromProbe && row?.label || runtime.label;
 }
 
-// ../packages/local-inference/src/bfiLimits.generated.js
+// ../packages/local-inference/src/bfiLimits.generated.ts
 var BFI_CPU_LIMITS = {
   cpuKvBudgetBytes: 536870912,
   cpuWorkingSetBytes: 268435456,
@@ -6649,7 +6559,7 @@ var BFI_CPU_LIMITS = {
   assumedDesktopMemoryBytes: 8589934592
 };
 
-// ../packages/local-inference/src/webllmCatalog.generated.js
+// ../packages/local-inference/src/webllmCatalog.generated.ts
 var WEBLLM_CATALOG = [
   { modelId: "snowflake-arctic-embed-s-q0f32-MLC-b4", label: "Snowflake Arctic Embed S \xB7 B4", family: "snowflake-arctic-embed", params: 33e6, bytes: 132e6, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 250305577, f16: false, uses: ["embedding"], recommended: true },
   { modelId: "SmolLM2-135M-Instruct-q0f16-MLC", label: "SmolLM2 135M Instruct", family: "smollm2", params: 135e6, bytes: 27e7, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 377162301, f16: true, uses: ["chat"], recommended: false },
@@ -6733,7 +6643,7 @@ var WEBLLM_CATALOG = [
   { modelId: "Llama-2-13b-chat-hf-q4f16_1-MLC", label: "Llama 2 13B Chat HF", family: "llama-2", params: 13e9, bytes: 73125e5, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 12387971236, f16: true, uses: ["chat"], recommended: false }
 ];
 
-// ../packages/local-inference/src/catalog.js
+// ../packages/local-inference/src/catalog.ts
 var MIB = 1024 * 1024;
 var WEBGPU_DEFAULT_BINDING_BYTES = 128 * MIB;
 var WEBLLM_FULL_BINDING_BYTES = 1024 * MIB;
@@ -6799,14 +6709,11 @@ function localCatalogFor(runtime) {
   return LOCAL_MODEL_CATALOG.filter((m) => m.runtime === runtime && isLocalChatModel(m));
 }
 
-// ../packages/local-inference/src/catalogPicker.js
+// ../packages/local-inference/src/catalogPicker.ts
 var LOCAL_PICKER_GROUPS = ["tools", "chat", "coding", "reasoning", "math"];
 function localPickerGroup(row) {
-  if (row.tools)
-    return "tools";
-  for (const group2 of ["coding", "reasoning", "math"])
-    if (row.uses.includes(group2))
-      return group2;
+  if (row.tools) return "tools";
+  for (const group2 of ["coding", "reasoning", "math"]) if (row.uses.includes(group2)) return group2;
   return "chat";
 }
 function localPickerView(rows, options = {}) {
@@ -6815,8 +6722,7 @@ function localPickerView(rows, options = {}) {
   const more = [];
   const hidden = [];
   for (const row of rows) {
-    if (!isLocalChatModel(row))
-      continue;
+    if (!isLocalChatModel(row)) continue;
     const held = pinned(row);
     if (!fits(row) && !held) {
       hidden.push(row);
@@ -6836,15 +6742,13 @@ function localPickerView(rows, options = {}) {
   return { groups, more, hidden };
 }
 
-// ../packages/local-inference/src/fit.js
+// ../packages/local-inference/src/fit.ts
 var VRAM_PER_MAX_BUFFER = 8;
 var MOBILE_UA = /Android|iPhone|iPad|iPod|Mobile|Silk|Kindle|BlackBerry|Opera Mini|IEMobile/i;
 function isMobileDevice(nav) {
-  if (!nav)
-    return false;
+  if (!nav) return false;
   const hinted = nav.userAgentData?.mobile;
-  if (typeof hinted === "boolean")
-    return hinted;
+  if (typeof hinted === "boolean") return hinted;
   const ua = nav.userAgent ?? "";
   return MOBILE_UA.test(ua) || /Macintosh/.test(ua) && (nav.maxTouchPoints ?? 0) > 1;
 }
@@ -6859,42 +6763,33 @@ function webGpuFit(model, support) {
   if (!support.supported) {
     return { fits: false, reason: "webgpu_unavailable", ...support.reason ? { detail: support.reason } : {} };
   }
-  if (model.requires.f16 && !support.f16)
-    return { fits: false, reason: "shader_f16_unavailable" };
+  if (model.requires.f16 && !support.f16) return { fits: false, reason: "shader_f16_unavailable" };
   const bindingBytes = support.maxStorageBufferBindingSizeBytes ?? support.maxBufferBytes;
-  if (bindingBytes < model.requires.minBufferBytes)
-    return { fits: false, reason: "buffer_too_small" };
+  if (bindingBytes < model.requires.minBufferBytes) return { fits: false, reason: "buffer_too_small" };
   const { vramBytes } = model.requires;
   const maxBuffer = support.maxBufferSizeBytes;
-  if (vramBytes && maxBuffer && vramBytes > maxBuffer * VRAM_PER_MAX_BUFFER)
-    return { fits: false, reason: "vram_too_small" };
+  if (vramBytes && maxBuffer && vramBytes > maxBuffer * VRAM_PER_MAX_BUFFER) return { fits: false, reason: "vram_too_small" };
   return { fits: true, backend: "webgpu" };
 }
 function cpuFits(model, cpu) {
   const floor = model.requires.cpu?.minDeviceMemoryBytes;
-  if (floor === void 0 || !cpu.supported)
-    return false;
-  if ((cpu.deviceMemoryBytes ?? assumedDeviceMemoryBytes()) < floor)
-    return false;
+  if (floor === void 0 || !cpu.supported) return false;
+  if ((cpu.deviceMemoryBytes ?? assumedDeviceMemoryBytes()) < floor) return false;
   const need = model.bytes + (cpu.kvBudgetBytes ?? BFI_CPU_LIMITS.cpuKvBudgetBytes) + BFI_CPU_LIMITS.cpuWorkingSetBytes;
   return need <= (cpu.maxMemoryBytes ?? cpuMemoryCeiling(cpu.deviceMemoryBytes));
 }
 function localModelFit(model, support) {
   const gpu = webGpuFit(model, support);
-  if (gpu.fits)
-    return gpu;
+  if (gpu.fits) return gpu;
   const cpu = support.backends?.cpu;
-  if (!model.requires.cpu || !cpu?.supported)
-    return gpu;
-  if (cpuFits({ requires: model.requires, bytes: model.bytes ?? 0 }, cpu))
-    return { fits: true, backend: "cpu" };
+  if (!model.requires.cpu || !cpu?.supported) return gpu;
+  if (cpuFits({ requires: model.requires, bytes: model.bytes ?? 0 }, cpu)) return { fits: true, backend: "cpu" };
   return { fits: false, reason: "memory_insufficient" };
 }
 
-// ../packages/local-inference/src/plan.js
+// ../packages/local-inference/src/plan.ts
 function localModelUnfitReason(model, workload) {
-  if (workload.agentic && model.tools !== true)
-    return "tools";
+  if (workload.agentic && model.tools !== true) return "tools";
   if (model.contextTokens !== void 0 && model.contextTokens < workload.inputTokens + workload.outputTokens) {
     return "context";
   }
@@ -6903,23 +6798,24 @@ function localModelUnfitReason(model, workload) {
 function localFirstPlan(input) {
   const onDevice2 = new Set(LOCAL_RUNTIMES.filter((r) => r.onDevice).map((r) => r.id));
   const rank = (id) => LOCAL_RUNTIMES.find((r) => r.id === id)?.automaticRank ?? Number.POSITIVE_INFINITY;
-  const candidates = input.probes.filter((p) => p.reachable && onDevice2.has(p.provider)).sort((a, b) => rank(a.provider) - rank(b.provider)).flatMap((p) => p.models.filter((m) => isServableLocalModel(m) && localModelUnfitReason(m, input.workload) === null).map((m) => ({
-    kind: "local",
-    ref: m.ref,
-    provider: p.provider,
-    model: m.model,
-    endpoint: p.endpoint
-  })));
+  const candidates = input.probes.filter((p) => p.reachable && onDevice2.has(p.provider)).sort((a, b) => rank(a.provider) - rank(b.provider)).flatMap(
+    (p) => p.models.filter((m) => isServableLocalModel(m) && localModelUnfitReason(m, input.workload) === null).map((m) => ({
+      kind: "local",
+      ref: m.ref,
+      provider: p.provider,
+      model: m.model,
+      endpoint: p.endpoint
+    }))
+  );
   const preferredIndex = input.preferred ? candidates.findIndex((c) => c.kind === "local" && c.ref === input.preferred) : -1;
-  if (preferredIndex > 0)
-    candidates.unshift(...candidates.splice(preferredIndex, 1));
+  if (preferredIndex > 0) candidates.unshift(...candidates.splice(preferredIndex, 1));
   const local = candidates.slice(0, Math.max(0, input.maxLocalAttempts ?? 1));
   const accounts = (input.accounts ?? []).map((account) => ({ kind: "local", ...account }));
   const leading = [...local, ...accounts];
   return input.cloud ? [...leading, { kind: "cloud", ...input.cloud.model ? { model: input.cloud.model } : {} }] : leading;
 }
 
-// ../packages/local-inference/src/failover.js
+// ../packages/local-inference/src/failover.ts
 var LocalFirstUnavailableError = class extends Error {
   constructor() {
     super("local_first_unavailable: no local model fits this call and no cloud fallback is available");
@@ -6927,8 +6823,7 @@ var LocalFirstUnavailableError = class extends Error {
   }
 };
 async function runLocalFirst(plan, run, options = {}) {
-  if (plan.length === 0)
-    throw new LocalFirstUnavailableError();
+  if (plan.length === 0) throw new LocalFirstUnavailableError();
   const attempts = [];
   const record3 = (entry) => {
     attempts.push(entry);
@@ -6950,8 +6845,7 @@ async function runLocalFirst(plan, run, options = {}) {
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
       record3({ attempt, outcome: "failed", detail });
-      if (options.signal?.aborted || state.committed || isLast)
-        throw e;
+      if (options.signal?.aborted || state.committed || isLast) throw e;
     }
   }
   throw new LocalFirstUnavailableError();
@@ -7636,7 +7530,7 @@ function summarizeGateRuns(rows, accepted = /* @__PURE__ */ new Map()) {
   return report;
 }
 
-// ../packages/pipeline-route/src/score.js
+// ../packages/pipeline-route/src/score.ts
 var import_stats = require("@seanhogg/builderforce-memory/stats");
 var LENGTH_FLOOR_CHARS = 80;
 var MAX_FILE_MENTIONS = 4;
@@ -7684,10 +7578,8 @@ function scorePipeline(f, opts = {}) {
   const score2 = round2((0, import_stats.sigmoid)(parts.reduce((z, [, c]) => z + c, w.bias)));
   const strongest = parts.filter(([, c]) => c !== 0).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 3).map(([name]) => name);
   const why = strongest.length ? ` (${strongest.join(", ")})` : "";
-  if (f.forceFull)
-    return { score: score2, route: "full", reason: `the request asks for the full pipeline; score ${score2}${why}` };
-  if (opts.mode === "always")
-    return { score: score2, route: "full", reason: `routing is set to always; score ${score2}${why}` };
+  if (f.forceFull) return { score: score2, route: "full", reason: `the request asks for the full pipeline; score ${score2}${why}` };
+  if (opts.mode === "always") return { score: score2, route: "full", reason: `routing is set to always; score ${score2}${why}` };
   return score2 >= threshold ? { score: score2, route: "full", reason: `score ${score2} \u2265 ${threshold}${why}` } : { score: score2, route: "quick", reason: `score ${score2} < ${threshold}${why}` };
 }
 var FILE_RE = /(?:[\w@.-]+\/)+[\w.-]+|\b[\w-]+\.(?:tsx?|jsx?|mjs|cjs|py|go|rs|java|kt|cs|php|rb|swift|c|cc|cpp|h|hpp|md|json|ya?ml|toml|sql|css|scss|html|vue|svelte|sh)\b/gi;
@@ -7715,7 +7607,7 @@ function pipelineFeaturesOf(request, context = {}) {
   };
 }
 
-// ../packages/pipeline-route/src/report.js
+// ../packages/pipeline-route/src/report.ts
 var RERUN_WINDOW_MS = 30 * 6e4;
 var MIN_QUICK_RUNS_FOR_SUGGESTION = 10;
 var MISROUTE_HIGH = 0.15;
@@ -7736,15 +7628,13 @@ function misroutedRuns(runs, windowMs = RERUN_WINDOW_MS) {
     indexes.sort((a, b) => runs[a].startedAt.localeCompare(runs[b].startedAt));
     indexes.forEach((i, k) => {
       const run = runs[i];
-      if (run.route !== "quick")
-        return;
+      if (run.route !== "quick") return;
       if (run.failed) {
         out.add(i);
         return;
       }
       const next = indexes[k + 1] !== void 0 ? runs[indexes[k + 1]] : void 0;
-      if (next?.route === "full" && Date.parse(next.startedAt) - Date.parse(run.startedAt) <= windowMs)
-        out.add(i);
+      if (next?.route === "full" && Date.parse(next.startedAt) - Date.parse(run.startedAt) <= windowMs) out.add(i);
     });
   }
   return out;
@@ -7768,8 +7658,7 @@ function histogramOf(runs) {
     quick: 0
   }));
   for (const r of runs) {
-    if (typeof r.score !== "number" || !Number.isFinite(r.score))
-      continue;
+    if (typeof r.score !== "number" || !Number.isFinite(r.score)) continue;
     const i = Math.min(HISTOGRAM_BINS - 1, Math.max(0, Math.floor(r.score * HISTOGRAM_BINS)));
     bins[i][r.route] += 1;
   }
@@ -7777,8 +7666,7 @@ function histogramOf(runs) {
 }
 function suggestThreshold(runs, threshold, misrouted = misroutedRuns(runs)) {
   const quick = runs.filter((r) => r.route === "quick").length;
-  if (quick < MIN_QUICK_RUNS_FOR_SUGGESTION)
-    return { suggestedThreshold: null };
+  if (quick < MIN_QUICK_RUNS_FOR_SUGGESTION) return { suggestedThreshold: null };
   const rate = misrouted.size / quick;
   if (rate > MISROUTE_HIGH) {
     const scores = [...misrouted].map((i) => runs[i].score).filter((s) => typeof s === "number").sort((a, b) => a - b);
@@ -7807,16 +7695,16 @@ function summarizeRouteRuns(runs, opts = {}) {
   };
 }
 
-// ../packages/prefetch/src/registry.js
+// ../packages/prefetch/src/registry.ts
 var NEEDS_LLM = "needs-llm";
 function offeredActions(registry2, ports) {
   return registry2.filter((a) => a.surfaces.includes(ports.surface) && (!a.requires || !!ports.tools?.has(a.requires.tool)));
 }
 
-// ../packages/prefetch/src/calibrate.js
+// ../packages/prefetch/src/calibrate.ts
 var import_stats2 = require("@seanhogg/builderforce-memory/stats");
 
-// ../packages/prefetch/src/lexical.js
+// ../packages/prefetch/src/lexical.ts
 var STOP = /* @__PURE__ */ new Set([
   "a",
   "an",
@@ -7873,27 +7761,21 @@ function tokenize(text2) {
   const words3 = (text2 ?? "").replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase().split(/[^a-z0-9]+/);
   const out = [];
   for (const raw of words3) {
-    if (raw.length < 2 || STOP.has(raw))
-      continue;
+    if (raw.length < 2 || STOP.has(raw)) continue;
     const word = raw.length > 3 && raw.endsWith("s") && !raw.endsWith("ss") ? raw.slice(0, -1) : raw;
-    if (!out.includes(word))
-      out.push(word);
+    if (!out.includes(word)) out.push(word);
   }
   return out;
 }
 function similarity(a, b) {
-  if (a.length === 0 || b.length === 0)
-    return 0;
+  if (a.length === 0 || b.length === 0) return 0;
   const set = new Set(b);
   let shared = 0;
-  for (const t of a)
-    if (set.has(t))
-      shared += 1;
+  for (const t of a) if (set.has(t)) shared += 1;
   return shared / Math.sqrt(a.length * b.length);
 }
 function lexicalFeatures(request, examples) {
-  if (request.length === 0 || examples.length === 0)
-    return [0, 0, 0];
+  if (request.length === 0 || examples.length === 0) return [0, 0, 0];
   const sims = examples.map((ex) => similarity(request, ex)).sort((x, y) => y - x);
   const best = sims[0] ?? 0;
   const top2 = sims.length > 1 ? (best + sims[1]) / 2 : best;
@@ -7906,7 +7788,7 @@ function isReask(previous, next) {
   return similarity(tokenize(previous), tokenize(next)) >= REASK_SIMILARITY;
 }
 
-// ../packages/prefetch/src/calibrate.js
+// ../packages/prefetch/src/calibrate.ts
 var COLD_START = Object.freeze({ answer: 0.9, prefetch: 0.6 });
 var TARGET_PRECISION = Object.freeze({ answer: 0.95, prefetch: 0.8 });
 var BOUNDS = Object.freeze({ answer: { min: 0.5, cap: 0.99 }, prefetch: { min: 0.3, cap: 0.95 } });
@@ -7919,12 +7801,11 @@ function thresholdOf(state, id) {
   return state?.thresholds[id] ?? { answer: COLD_START.answer, prefetch: COLD_START.prefetch, n: 0 };
 }
 function predict(head, features) {
-  if (features.length !== head.weights.length)
-    return 0;
+  if (features.length !== head.weights.length) return 0;
   return (0, import_stats2.logisticProbability)(head.weights, head.bias, features);
 }
 
-// ../packages/prefetch/src/deadline.js
+// ../packages/prefetch/src/deadline.ts
 async function withinMs(work, ms, fallback) {
   let timer;
   const late = new Promise((resolve) => {
@@ -7933,17 +7814,14 @@ async function withinMs(work, ms, fallback) {
   try {
     return await Promise.race([work.catch(() => fallback), late]);
   } finally {
-    if (timer)
-      clearTimeout(timer);
+    if (timer) clearTimeout(timer);
   }
 }
 function deadlineSignal(ms, parent) {
   const ctl = new AbortController();
   const onParent = () => ctl.abort(parent?.reason);
-  if (parent?.aborted)
-    ctl.abort(parent.reason);
-  else
-    parent?.addEventListener("abort", onParent, { once: true });
+  if (parent?.aborted) ctl.abort(parent.reason);
+  else parent?.addEventListener("abort", onParent, { once: true });
   const timer = setTimeout(() => ctl.abort(new Error("deadline")), Math.max(0, ms));
   return {
     signal: ctl.signal,
@@ -7954,7 +7832,7 @@ function deadlineSignal(ms, parent) {
   };
 }
 
-// ../packages/prefetch/src/logprob.js
+// ../packages/prefetch/src/logprob.ts
 var TIER3_MIN_MS = 40;
 var TIER3_CANDIDATES = 6;
 var AMBIGUOUS_FLOOR = 0.25;
@@ -7973,24 +7851,21 @@ function logprobPrompt(request, actions) {
 }
 function labelProbabilities(logprobs, labels) {
   const scored = labels.filter((l) => typeof logprobs[l] === "number" && Number.isFinite(logprobs[l]));
-  if (scored.length === 0)
-    return {};
+  if (scored.length === 0) return {};
   const max = Math.max(...scored.map((l) => logprobs[l]));
   const exp = new Map(scored.map((l) => [l, Math.exp(logprobs[l] - max)]));
   const total = [...exp.values()].reduce((s, v) => s + v, 0);
   const out = {};
-  for (const l of labels)
-    out[l] = (exp.get(l) ?? 0) / total;
+  for (const l of labels) out[l] = (exp.get(l) ?? 0) / total;
   return out;
 }
 
-// ../packages/prefetch/src/classify.js
+// ../packages/prefetch/src/classify.ts
 var DEFAULT_GATE_BUDGET_MS = 300;
 var LLM_ROUTE_SHOWN = 3;
 var clock = () => typeof performance !== "undefined" ? performance.now() : Date.now();
 function slashHit(request, slash2) {
-  if (!slash2)
-    return false;
+  if (!slash2) return false;
   const head = request.trimStart().split(/\s/, 1)[0] ?? "";
   return head.toLowerCase() === slash2.toLowerCase();
 }
@@ -8015,8 +7890,7 @@ async function tier3(request, scored, ports, remainingMs) {
   try {
     const logprobs = await withinMs(port.logprobs(logprobPrompt(request, shortlist.map((s) => s.action)), labels, signal), remainingMs, {});
     const probs = labelProbabilities(logprobs, labels);
-    if (Object.keys(probs).length === 0)
-      return void 0;
+    if (Object.keys(probs).length === 0) return void 0;
     for (const s of shortlist) {
       s.p = probs[s.id] ?? 0;
       s.tier = 3;
@@ -8037,8 +7911,7 @@ async function classify(request, registry2, ports) {
     elapsedMs: Math.max(0, clock() - started)
   });
   const offered = offeredActions(registry2, ports);
-  if (!request.trim() || offered.length === 0 || ports.signal?.aborted)
-    return done("llm", [], 1);
+  if (!request.trim() || offered.length === 0 || ports.signal?.aborted) return done("llm", [], 1);
   const words3 = tokenize(request);
   let exact = false;
   const scored = offered.map((action) => {
@@ -8050,8 +7923,7 @@ async function classify(request, registry2, ports) {
     return { id: action.id, action, p: predict(headOf(ports.calibration, action.id), features), tier: 2, features };
   });
   tiersRun.push(1);
-  if (!exact)
-    tiersRun.push(2);
+  if (!exact) tiersRun.push(2);
   scored.sort(byP);
   const top = scored[0];
   let pNeedsLlm = 1 - top.p;
@@ -8069,20 +7941,17 @@ async function classify(request, registry2, ports) {
   const clears = (s) => s.p >= thresholdFor(s.action, ports) && s.p > (s.tier === 3 ? pNeedsLlm : 0);
   const answers = scored.filter((s) => s.action.kind === "answer" && clears(s));
   const prefetches = scored.filter((s) => s.action.kind === "prefetch" && clears(s));
-  if (answers.length > 0)
-    return done("answer", [...answers, ...prefetches], pNeedsLlm);
-  if (prefetches.length > 0)
-    return done("prefetch", prefetches, pNeedsLlm);
+  if (answers.length > 0) return done("answer", [...answers, ...prefetches], pNeedsLlm);
+  if (prefetches.length > 0) return done("prefetch", prefetches, pNeedsLlm);
   return done("llm", scored.slice(0, LLM_ROUTE_SHOWN), pNeedsLlm);
 }
 
-// ../packages/prefetch/src/runGate.js
+// ../packages/prefetch/src/runGate.ts
 var PREPARE_BUDGET_MS = 1500;
 var PREVIEW_BUDGET_MS = 3e4;
 async function previewPrefetchAction(port, action, request, stop) {
   const preview = port.executors[action.id]?.preview;
-  if (!preview)
-    return void 0;
+  if (!preview) return void 0;
   const ms = Math.min(action.budgetMs, PREVIEW_BUDGET_MS);
   const { signal, dispose } = deadlineSignal(ms, stop);
   try {
@@ -8094,8 +7963,7 @@ async function previewPrefetchAction(port, action, request, stop) {
 }
 async function runPrefetchAction(port, action, request, stop) {
   const executor = port.executors[action.id];
-  if (!executor)
-    return void 0;
+  if (!executor) return void 0;
   const { signal, dispose } = deadlineSignal(action.budgetMs, stop);
   try {
     const result = await withinMs(executor.run(request, signal), action.budgetMs, void 0);
@@ -8105,15 +7973,13 @@ async function runPrefetchAction(port, action, request, stop) {
   }
 }
 function belowAnswerThreshold(port, action, result) {
-  if (result.confidence === void 0)
-    return false;
+  if (result.confidence === void 0) return false;
   return !(result.confidence >= thresholdOf(port.ports.calibration, action.id).answer);
 }
 async function runGate(request, port, hooks) {
   const started = Date.now();
   const stop = hooks.signal;
-  if (port.prepare)
-    await withinMs(port.prepare(stop).catch(() => void 0), PREPARE_BUDGET_MS, void 0);
+  if (port.prepare) await withinMs(port.prepare(stop).catch(() => void 0), PREPARE_BUDGET_MS, void 0);
   let decision;
   try {
     decision = await classify(request, port.registry, { ...port.ports, ...stop ? { signal: stop } : {} });
@@ -8129,8 +7995,7 @@ async function runGate(request, port, hooks) {
   const demoted = [];
   const done = (settled2, extra = {}) => ({ decision, settled: settled2, ran, tail: [], elapsedMs: Date.now() - started, ...extra });
   for (const { candidate, action } of chosen.filter((x) => x.action.kind === "answer")) {
-    if (stop?.aborted || !port.executors[action.id])
-      continue;
+    if (stop?.aborted || !port.executors[action.id]) continue;
     let confirmed;
     if (action.sideEffect === "write") {
       const detail = hooks.confirm ? await previewPrefetchAction(port, action, request, stop) : void 0;
@@ -8143,38 +8008,34 @@ async function runGate(request, port, hooks) {
     const result = await runPrefetchAction(port, action, request, stop);
     const entry = { candidate, action, result, ...confirmed !== void 0 ? { confirmed } : {} };
     ran.push(entry);
-    if (!result)
-      continue;
+    if (!result) continue;
     if (belowAnswerThreshold(port, action, result)) {
       demoted.push({ entry, text: (result.context ?? result.text).trim() });
       continue;
     }
     const answer2 = { ...entry, result };
-    if (await hooks.adopt(answer2))
-      return done("answer", { answer: answer2, lead: answer2 });
+    if (await hooks.adopt(answer2)) return done("answer", { answer: answer2, lead: answer2 });
   }
   const prefetches = chosen.filter((x) => x.action.kind === "prefetch" && port.executors[x.action.id]);
   const results = await Promise.all(prefetches.map(({ action }) => runPrefetchAction(port, action, request, stop)));
   const tail = [];
   let lead;
   for (const { entry, text: text2 } of demoted) {
-    if (!text2)
-      continue;
+    if (!text2) continue;
     tail.push(text2);
     lead ??= entry;
   }
   prefetches.forEach(({ candidate, action }, i) => {
     const entry = { candidate, action, result: results[i] };
     ran.push(entry);
-    if (!results[i])
-      return;
+    if (!results[i]) return;
     tail.push(results[i].text);
     lead ??= entry;
   });
   return done(tail.length > 0 ? "prefetch" : "llm", { tail, ...lead ? { lead } : {} });
 }
 
-// ../packages/prefetch/src/confirmRequest.js
+// ../packages/prefetch/src/confirmRequest.ts
 var REQUEST_ECHO_MAX = 240;
 function prefetchConfirmRequest(action, request, detail) {
   const echo = request.trim();
@@ -8190,11 +8051,9 @@ function prefetchConfirmRequest(action, request, detail) {
   };
 }
 function prefetchConfirmOf(pending) {
-  if (!pending)
-    return null;
+  if (!pending) return null;
   const args = pending.args;
-  if (!args || args.prefetch !== true || typeof args.labelKey !== "string")
-    return null;
+  if (!args || args.prefetch !== true || typeof args.labelKey !== "string") return null;
   return {
     actionId: pending.name,
     labelKey: args.labelKey,
@@ -8259,7 +8118,7 @@ async function bindInSlices(store, type, select, bind) {
   }
 }
 
-// ../packages/agent-stall/src/requestIntent.js
+// ../packages/agent-stall/src/requestIntent.ts
 var CHANGE_VERBS = "add|change|fix|update|reduce|increase|remove|delete|rename|refactor|implement|create|build|make|move|set|wire|migrate|replace|adjust|enable|disable|improve|write|edit|apply|correct|resolve|shrink|expand|hide|show|bump|revert|restore|install|upgrade|downgrade|rewrite|extract|split|merge";
 var CHANGE_VERB = new RegExp(`\\b(${CHANGE_VERBS})\\b`, "i");
 var FINISH_OBJECT = "(complete|finish|finali[sz]e)\\s+(the|this|that|these|those|it|my|our|your|all|implementation|work|task|change)\\b";
@@ -8268,16 +8127,16 @@ var CHAINED_FINISH = new RegExp(`(\\band|\\bthen|[,.;])\\s+((also|then|please|no
 var QUESTION_SHAPE = /^\s*(what|why|how|where|when|which|who|is|are|was|were|does|do|did|can|could|should|would|will)\b|\?\s*$/i;
 var RESEARCH_LEAD = /^\s*(explain|describe|summar\w*|tell me|show me|list|compare|review|analyse|analyze|research|investigate|find|locate|trace|audit|look into|search)\b/i;
 var REPORT_OBJECTS = "summary|report|findings|notes|overview|write-?up|answer|explanation|list|table|recommendations?";
-var CHAINED_CHANGE = new RegExp(`(\\band|\\bthen|[,.;])\\s+((also|then|please|now)\\s+)*(${CHANGE_VERBS})\\b(?!\\s+(me|us)\\b|\\s+(up\\s+)?((a|an|the|your|me|us|my)\\s+)?(short\\s+|brief\\s+)?(${REPORT_OBJECTS})\\b)`, "i");
+var CHAINED_CHANGE = new RegExp(
+  `(\\band|\\bthen|[,.;])\\s+((also|then|please|now)\\s+)*(${CHANGE_VERBS})\\b(?!\\s+(me|us)\\b|\\s+(up\\s+)?((a|an|the|your|me|us|my)\\s+)?(short\\s+|brief\\s+)?(${REPORT_OBJECTS})\\b)`,
+  "i"
+);
 function asksForChange(text2) {
   const t = (text2 ?? "").trim();
-  if (!t)
-    return false;
+  if (!t) return false;
   const head = t.slice(0, 600);
-  if (QUESTION_SHAPE.test(head))
-    return false;
-  if (RESEARCH_LEAD.test(head))
-    return CHAINED_CHANGE.test(head) || CHAINED_FINISH.test(head);
+  if (QUESTION_SHAPE.test(head)) return false;
+  if (RESEARCH_LEAD.test(head)) return CHAINED_CHANGE.test(head) || CHAINED_FINISH.test(head);
   return CHANGE_VERB.test(head) || FINISH_ORDER.test(head) || CHAINED_FINISH.test(head);
 }
 var NOTHING_DONE = /\b(nothing (has been|was|is) (changed|modified|applied|edited|written|saved)|no (changes?|edits?) (have been|were|was) (made|applied|written|saved)|(not|never) (yet )?(been )?(applied|written|saved|committed)|has not been (changed|applied|modified)|before (applying|making) the edit)\b/i;
@@ -8285,36 +8144,32 @@ var DEFERRED_PROMISE = /\b(re-?run me|run me again|ask me again|in a follow-?up|
 var BUDGET_EXHAUSTED = /\b(tool-?call budget|step budget|iteration (cap|limit|budget)|ran out of (tool calls|steps|budget)|hit (the|my) (tool|step|budget))\b/i;
 function promisesUnfinishedWork(text2) {
   const t = (text2 ?? "").trim();
-  if (!t)
-    return false;
+  if (!t) return false;
   return NOTHING_DONE.test(t) || DEFERRED_PROMISE.test(t) || BUDGET_EXHAUSTED.test(t);
 }
 var CONTINUATION = /^\s*(?:ok(?:ay)?[,\s]*)?(?:please\s+)?(?:now\s+)?(?:just\s+)?(?:go\s+ahead|carry\s+on|keep\s+going|make\s+it\s+so|do\s+it|do\s+that|do\s+so|fix\s+it|fix\s+that|apply\s+it|apply\s+that|apply|fix|go|proceed|continue|yes|yep|yeah|y|sure|confirm(?:ed)?|approved?|ship\s+it|send\s+it|run\s+it|do\s+the\s+fix|make\s+the\s+change)\s*[.!]*\s*$/i;
 var MAX_CONTINUATION_CHARS = 40;
 function isContinuationDirective(text2) {
   const t = (text2 ?? "").trim();
-  if (!t || t.length > MAX_CONTINUATION_CHARS)
-    return false;
+  if (!t || t.length > MAX_CONTINUATION_CHARS) return false;
   return CONTINUATION.test(t);
 }
 var CURRENT_STATE = /^\s*(?:(?:so|ok(?:ay)?|and|hey)[,\s]+)?(?:(?:what(?:'s| is) )?(?:the )?(?:current |latest )?(?:status|progress|update|updates|news|eta|state of (?:play|things))\b|any (?:updates?|news|progress)\b|where (?:are|do) (?:we|things|you) (?:stand|at)\b|where are we\b|how(?:'s| is) it going\b|how far along\b|is it (?:done|finished|ready|working|fixed)\b|are (?:we|you) done\b|what(?:'s| is) (?:left|next|remaining|the latest|happening)\b|still working\b)/i;
 function asksAboutCurrentState(text2) {
   const t = (text2 ?? "").trim();
-  if (!t)
-    return false;
+  if (!t) return false;
   return CURRENT_STATE.test(t.slice(0, 200));
 }
 function memoryReplayable(question, context = {}) {
   const q = (question ?? "").trim();
-  if (!q || context.followUp === true)
-    return false;
+  if (!q || context.followUp === true) return false;
   return !asksForChange(q) && !asksAboutCurrentState(q) && !isContinuationDirective(q);
 }
 function continuationDirective() {
   return `The user's last message is a bare directive ("fix", "do it", "go ahead") with no subject of its own. It refers to the proposal in YOUR immediately preceding message, which described work you had not yet carried out. Carry out that exact proposal now, using the tools, starting from the files and the change it already named \u2014 do NOT ask the user what to fix, and do NOT re-derive the analysis you have already done and can read above. If the earlier proposal named a specific file and edit, apply that edit. Report what you changed when it is done.`;
 }
 
-// ../packages/agent-stall/src/handoff.js
+// ../packages/agent-stall/src/handoff.ts
 var EXECUTION_TOOLS = /* @__PURE__ */ new Set([
   "run_command",
   "run_shell_command",
@@ -8348,100 +8203,105 @@ function normalise(text2) {
   return text2.replace(/```[\s\S]*?(?:```|$)/g, (m) => mark(m)).replace(/`[^`\n]+`/g, (m) => mark(m));
 }
 var HANDOFF_VERB = "(?:re-?run|run|execute|apply|install|re-?install|rebuild|build|compile|commit|push|deploy|publish|restart|relaunch|launch|start|test|verify|lint|type-?check|typecheck|migrate|regenerate|package|bump|trigger|kick off)";
-var HANDS_OFF = new RegExp([
-  // "you can run", "you'll need to run", "you should now commit", "you must rebuild"
-  `\\byou(?:'ll|'d|'ve| will| would| should| must| may| might| can| could| still| then| now)?(?:\\s+(?:then|now|also|just|still|next|first|finally|want to|need to|have to|be able to))*\\s+${HANDOFF_VERB}\\b`,
-  // "please run the guards"
-  `\\bplease\\s+(?:now\\s+|then\\s+)?${HANDOFF_VERB}\\b`,
-  // "once you've run the build", "after you push"
-  `\\b(?:once|after|when|before)\\s+you(?:'ve| have| had)?\\s+${HANDOFF_VERB}\\b`,
-  // "run the following", "apply these changes", "execute this command"
-  `\\b${HANDOFF_VERB}\\s+(?:the\\s+following|these|this)\\b`,
-  // "to verify, run …" / "to apply the fix you need to run …"
-  `\\bto\\s+(?:apply|verify|confirm|finish|complete|deploy|ship|land|pick up|see)\\b[^.\\n]{0,60}?,?\\s*(?:you\\s+(?:can|should|must|will|need to|have to)\\s+)?${HANDOFF_VERB}\\b`,
-  // A steps list: "1. Run the type-check", "- Commit the change", "Then push to main"
-  `(?:^|\\n)[ \\t]*(?:\\d+[.)]|[-*+]|#{1,6}|>)?[ \\t]*(?:then|now|next|finally|first)?[,:]?[ \\t]*${HANDOFF_VERB}\\b`,
-  // The same imperative mid-paragraph: "I applied the fix. Now run the type-check."
-  // The adverb is REQUIRED here, unlike the line-leading form above — without it a
-  // plain sentence that happens to open with one of these words ("Build output is
-  // clean now.") would read as an instruction.
-  `[.!?]\\s+(?:then|now|next|finally|first)[,:]?\\s+${HANDOFF_VERB}\\b`
-].join("|"), "gi");
+var HANDS_OFF = new RegExp(
+  [
+    // "you can run", "you'll need to run", "you should now commit", "you must rebuild"
+    `\\byou(?:'ll|'d|'ve| will| would| should| must| may| might| can| could| still| then| now)?(?:\\s+(?:then|now|also|just|still|next|first|finally|want to|need to|have to|be able to))*\\s+${HANDOFF_VERB}\\b`,
+    // "please run the guards"
+    `\\bplease\\s+(?:now\\s+|then\\s+)?${HANDOFF_VERB}\\b`,
+    // "once you've run the build", "after you push"
+    `\\b(?:once|after|when|before)\\s+you(?:'ve| have| had)?\\s+${HANDOFF_VERB}\\b`,
+    // "run the following", "apply these changes", "execute this command"
+    `\\b${HANDOFF_VERB}\\s+(?:the\\s+following|these|this)\\b`,
+    // "to verify, run …" / "to apply the fix you need to run …"
+    `\\bto\\s+(?:apply|verify|confirm|finish|complete|deploy|ship|land|pick up|see)\\b[^.\\n]{0,60}?,?\\s*(?:you\\s+(?:can|should|must|will|need to|have to)\\s+)?${HANDOFF_VERB}\\b`,
+    // A steps list: "1. Run the type-check", "- Commit the change", "Then push to main"
+    `(?:^|\\n)[ \\t]*(?:\\d+[.)]|[-*+]|#{1,6}|>)?[ \\t]*(?:then|now|next|finally|first)?[,:]?[ \\t]*${HANDOFF_VERB}\\b`,
+    // The same imperative mid-paragraph: "I applied the fix. Now run the type-check."
+    // The adverb is REQUIRED here, unlike the line-leading form above — without it a
+    // plain sentence that happens to open with one of these words ("Build output is
+    // clean now.") would read as an instruction.
+    `[.!?]\\s+(?:then|now|next|finally|first)[,:]?\\s+${HANDOFF_VERB}\\b`
+  ].join("|"),
+  "gi"
+);
 var COMMAND_NEARBY = new RegExp(`${CMD_MARK}|${RUNNER}|\\b${SCRIPT_NOUN}`, "i");
 function handsWorkToUser(text2) {
   const t = (text2 ?? "").trim();
-  if (!t)
-    return false;
+  if (!t) return false;
   const scanned = normalise(t.slice(-TAIL_CHARS));
   HANDS_OFF.lastIndex = 0;
   for (let m = HANDS_OFF.exec(scanned); m; m = HANDS_OFF.exec(scanned)) {
-    const window2 = scanned.slice(Math.max(0, m.index - WINDOW_BEFORE), m.index + m[0].length + WINDOW_AFTER);
-    if (!COMMAND_NEARBY.test(window2))
-      continue;
-    if (OUT_OF_REACH.test(window2))
-      continue;
+    const window2 = scanned.slice(
+      Math.max(0, m.index - WINDOW_BEFORE),
+      m.index + m[0].length + WINDOW_AFTER
+    );
+    if (!COMMAND_NEARBY.test(window2)) continue;
+    if (OUT_OF_REACH.test(window2)) continue;
     HANDS_OFF.lastIndex = 0;
     return true;
   }
   return false;
 }
 function delegatesExecutableWork(text2, ctx) {
-  if (!canExecuteCommands(ctx.availableToolNames))
-    return false;
-  if (!asksForChange(ctx.requestText))
-    return false;
+  if (!canExecuteCommands(ctx.availableToolNames)) return false;
+  if (!asksForChange(ctx.requestText)) return false;
   return handsWorkToUser(text2);
 }
 function handoffRecoveryNudge(lastChance) {
   return "Your last turn ended by telling the USER to run commands. You are the one holding the tools \u2014 `run_command` for shell steps, the git tools to commit and push \u2014 so those steps are yours, not theirs. Carry them out NOW in this turn: run the commands you just listed, read their output, and fix anything that fails before you answer. Verification you hand to the user is verification nobody does. Only leave a step to the user when you genuinely cannot do it here \u2014 it needs a credential, a browser, or a decision that is theirs \u2014 and then say which step and why." + (lastChance ? " This is your last chance to act: your answer after this turn is shown to the user as-is, so either run the commands now or state plainly, at the top of your reply, that the change is UNVERIFIED and exactly which steps were never run." : "");
 }
 
-// ../packages/agent-stall/src/permissionMenu.js
+// ../packages/agent-stall/src/permissionMenu.ts
 var TAIL_CHARS2 = 900;
 var ACTION_VERB = "(?:run|execute|apply|implement|install|rebuild|build|compile|commit|push|merge|rebase|deploy|publish|release|ship|open|create|file|draft|write|add|update|patch|edit|change|modify|fix|resolve|refactor|rename|move|delete|remove|drop|close|cancel|archive|assign|dispatch|schedule|start|kick off|trigger|link|list|enumerate|show|generate|produce|proceed|continue|go ahead|do (?:it|that|this|them|so|first|next|now|any|all)|handle|take care of|work through|go through|tackle|clean up|tidy|sort out|migrate|convert|split|extract|bump|revert|restore|retry|re-?try|re-?run|verify|test|check|review|investigate|dig into|look into)";
-var OFFER = new RegExp([
-  // "Would you like me to open the PRs?" · "Do you want me to merge these?"
-  // · "Would you like me to proceed?"
-  `\\b(?:would|do)\\s+you\\s+(?:like|want|prefer)\\s+(?:me|us)\\s+to\\b`,
-  // "Shall I open PRs?" · "Should I cancel the stalled tickets?" · "Can I proceed?"
-  // · "May I go ahead?"
-  `\\b(?:shall|should|can|may)\\s+i\\b[^.?\\n]{0,80}\\?`,
-  // "Want me to push these?" — the subjectless form.
-  `\\bwant\\s+(?:me|us)\\s+to\\b`,
-  // "Let me know if you'd like me to…" · "Let me know which of these to do"
-  // · "Tell me which you'd prefer" · "Just say the word and I'll merge them"
-  // "how" earns its place: "let me know how you'd like to proceed" is the single most
-  // common way this pause is phrased, and it names no option at all.
-  `\\blet me know\\b[^.\\n]{0,80}\\b(?:if|whether|which|what|how)\\b`,
-  `\\b(?:tell|let)\\s+me\\s+know\\s+(?:which|what|whether|if)\\b`,
-  `\\bsay the word\\b`,
-  // "I can open the PRs if you'd like." · "I could cancel them if you want."
-  // · "I'm happy to merge these if that's what you want."
-  `\\bi\\s+(?:can|could|am happy to|'?m happy to|would be happy to)\\b[^.\\n]{0,120}?\\bif\\s+(?:you|that|you'?d|you would)\\b`,
-  // "Confirm and I'll proceed." · "Approve and I'll merge them."
-  `\\b(?:confirm|approve|give me the go-?ahead|give the go-?ahead)\\b[^.\\n]{0,40}\\band\\s+i(?:'ll| will)\\b`,
-  // "Which would you like me to do first?" · "Which of these should I start with?"
-  `\\bwhich\\s+(?:one|of these|of those)?\\s*(?:would|do|should|shall)\\s+(?:you|i)\\b`,
-  // "Your call." · "Up to you." · "How would you like to proceed?" — and the
-  // declarative order the same sentence takes inside a clause, "…how you would like
-  // to proceed", which the interrogative-only form used to miss.
-  `\\b(?:your call|up to you|it'?s your call)\\b`,
-  `\\bhow\\s+(?:you\\s+(?:would|do)|(?:would|do)\\s+you)\\s+(?:want|like|prefer)\\b`
-].join("|"), "gi");
+var OFFER = new RegExp(
+  [
+    // "Would you like me to open the PRs?" · "Do you want me to merge these?"
+    // · "Would you like me to proceed?"
+    `\\b(?:would|do)\\s+you\\s+(?:like|want|prefer)\\s+(?:me|us)\\s+to\\b`,
+    // "Shall I open PRs?" · "Should I cancel the stalled tickets?" · "Can I proceed?"
+    // · "May I go ahead?"
+    `\\b(?:shall|should|can|may)\\s+i\\b[^.?\\n]{0,80}\\?`,
+    // "Want me to push these?" — the subjectless form.
+    `\\bwant\\s+(?:me|us)\\s+to\\b`,
+    // "Let me know if you'd like me to…" · "Let me know which of these to do"
+    // · "Tell me which you'd prefer" · "Just say the word and I'll merge them"
+    // "how" earns its place: "let me know how you'd like to proceed" is the single most
+    // common way this pause is phrased, and it names no option at all.
+    `\\blet me know\\b[^.\\n]{0,80}\\b(?:if|whether|which|what|how)\\b`,
+    `\\b(?:tell|let)\\s+me\\s+know\\s+(?:which|what|whether|if)\\b`,
+    `\\bsay the word\\b`,
+    // "I can open the PRs if you'd like." · "I could cancel them if you want."
+    // · "I'm happy to merge these if that's what you want."
+    `\\bi\\s+(?:can|could|am happy to|'?m happy to|would be happy to)\\b[^.\\n]{0,120}?\\bif\\s+(?:you|that|you'?d|you would)\\b`,
+    // "Confirm and I'll proceed." · "Approve and I'll merge them."
+    `\\b(?:confirm|approve|give me the go-?ahead|give the go-?ahead)\\b[^.\\n]{0,40}\\band\\s+i(?:'ll| will)\\b`,
+    // "Which would you like me to do first?" · "Which of these should I start with?"
+    `\\bwhich\\s+(?:one|of these|of those)?\\s*(?:would|do|should|shall)\\s+(?:you|i)\\b`,
+    // "Your call." · "Up to you." · "How would you like to proceed?" — and the
+    // declarative order the same sentence takes inside a clause, "…how you would like
+    // to proceed", which the interrogative-only form used to miss.
+    `\\b(?:your call|up to you|it'?s your call)\\b`,
+    `\\bhow\\s+(?:you\\s+(?:would|do)|(?:would|do)\\s+you)\\s+(?:want|like|prefer)\\b`
+  ].join("|"),
+  "gi"
+);
 var WINDOW_AFTER2 = 400;
 var WINDOW_BEFORE2 = 120;
 var ACTION_NEARBY = new RegExp(`\\b${ACTION_VERB}\\b`, "i");
 var USERS_OWN_CHOICE = /\b(?:did you mean|do you mean|what did you (?:mean|intend)|which did you mean|prefer(?:ence|red)?\b|intended behaviou?r|by design|is that (?:right|correct|intended|what you)|am i (?:right|correct) (?:that|in)|credential|password|api ?key|secret|which account|whose|budget|deadline|priorit(?:y|ise|ize))\b/i;
 function offersMenuInsteadOfActing(text2) {
   const t = (text2 ?? "").trim();
-  if (!t)
-    return false;
+  if (!t) return false;
   const scanned = t.slice(-TAIL_CHARS2);
   OFFER.lastIndex = 0;
   for (let m = OFFER.exec(scanned); m; m = OFFER.exec(scanned)) {
-    const window2 = scanned.slice(Math.max(0, m.index - WINDOW_BEFORE2), m.index + m[0].length + WINDOW_AFTER2);
-    if (!ACTION_NEARBY.test(window2))
-      continue;
+    const window2 = scanned.slice(
+      Math.max(0, m.index - WINDOW_BEFORE2),
+      m.index + m[0].length + WINDOW_AFTER2
+    );
+    if (!ACTION_NEARBY.test(window2)) continue;
     OFFER.lastIndex = 0;
     return true;
   }
@@ -8455,12 +8315,9 @@ function askUserAdvertised(toolNames) {
   return (toolNames ?? []).some((n2) => n2.toLowerCase() === ASK_USER_TOOL_NAME);
 }
 function asksPermissionForRequestedWork(text2, ctx) {
-  if (!asksForChange(ctx.requestText))
-    return false;
-  if (!offersMenuInsteadOfActing(text2))
-    return false;
-  if (pausesOnUsersOwnChoice(text2) && !askUserAdvertised(ctx.availableToolNames))
-    return false;
+  if (!asksForChange(ctx.requestText)) return false;
+  if (!offersMenuInsteadOfActing(text2)) return false;
+  if (pausesOnUsersOwnChoice(text2) && !askUserAdvertised(ctx.availableToolNames)) return false;
   return true;
 }
 function permissionRecoveryNudge(lastChance, askUserAvailable = false) {
@@ -9188,7 +9045,7 @@ function providerFailureTrace(ts, step, model, error, durationMs) {
 // src/localFirstTransport.ts
 var import_handoff3 = require("@seanhogg/builderforce-memory/handoff");
 
-// ../packages/learned-routing/src/actionTypes.js
+// ../packages/learned-routing/src/actionTypes.ts
 var ACTION_TYPES = [
   "sql",
   "frontend_ui",
@@ -9207,17 +9064,19 @@ var ACTION_TYPES = [
 var DEFAULT_ACTION_TYPE = "other";
 var ACTION_TYPE_SET = new Set(ACTION_TYPES);
 
-// ../packages/learned-routing/src/exploration.js
+// ../packages/learned-routing/src/exploration.ts
 var import_stats3 = require("@seanhogg/builderforce-memory/stats");
 
-// ../packages/learned-routing/src/recencyDecay.js
+// ../packages/learned-routing/src/recencyDecay.ts
 var ROUTING_HALF_LIFE_DAYS = 30;
 var DECAYED_WINDOW_DAYS = 4 * ROUTING_HALF_LIFE_DAYS;
 var DAY_MS3 = 24 * 60 * 60 * 1e3;
 
-// ../packages/learned-routing/src/runOutcomeTelemetry.js
+// ../packages/learned-routing/src/runOutcomeTelemetry.ts
 var ALL_ENTRY_POINTS = ["vscode", "web", "rovr", "canvas", "on-prem", "cloud"];
-var CLIENT_ENTRY_POINTS = ALL_ENTRY_POINTS.filter((entryPoint2) => entryPoint2 !== "cloud");
+var CLIENT_ENTRY_POINTS = ALL_ENTRY_POINTS.filter(
+  (entryPoint2) => entryPoint2 !== "cloud"
+);
 var MODEL_PREFLIGHT_MAX = 32;
 var PROGRESS_SIGNALS_MAX = 8;
 var SIGNAL_NAME_MAX = 32;
@@ -9247,30 +9106,24 @@ function verify(v) {
   return v === "passed" || v === "failed" || v === "not-run" ? v : void 0;
 }
 function modelPreflight(v) {
-  if (typeof v !== "string")
-    return void 0;
+  if (typeof v !== "string") return void 0;
   const s = v.trim();
-  if (s !== "ok" && s !== "refreshed" && !s.startsWith("degraded"))
-    return void 0;
+  if (s !== "ok" && s !== "refreshed" && !s.startsWith("degraded")) return void 0;
   return s.slice(0, MODEL_PREFLIGHT_MAX);
 }
 function parentRunId(v) {
-  if (typeof v !== "string")
-    return void 0;
+  if (typeof v !== "string") return void 0;
   const s = v.trim();
   return s.length > 0 && s.length <= PARENT_RUN_ID_MAX && /^[\w:.\-]+$/.test(s) ? s : void 0;
 }
 function progressTrips(v) {
-  if (!v || typeof v !== "object" || Array.isArray(v))
-    return void 0;
+  if (!v || typeof v !== "object" || Array.isArray(v)) return void 0;
   const entries = Object.entries(v);
-  if (entries.length > PROGRESS_SIGNALS_MAX)
-    return void 0;
+  if (entries.length > PROGRESS_SIGNALS_MAX) return void 0;
   const out = {};
   for (const [signal, n2] of entries) {
     const c = count(n2);
-    if (!/^[a-z_]+$/.test(signal) || signal.length > SIGNAL_NAME_MAX || c === void 0)
-      return void 0;
+    if (!/^[a-z_]+$/.test(signal) || signal.length > SIGNAL_NAME_MAX || c === void 0) return void 0;
     out[signal] = c;
   }
   return out;
@@ -9282,36 +9135,28 @@ function wireCost(row) {
 function parseRunOutcomeTelemetry(b) {
   const out = {};
   const ep = entryPoint(b.entryPoint);
-  if (ep)
-    out.entryPoint = ep;
+  if (ep) out.entryPoint = ep;
   for (const key of COUNTERS) {
     const c = count(b[key]);
-    if (c !== void 0)
-      out[key] = c;
+    if (c !== void 0) out[key] = c;
   }
   const v = verify(b.verify);
-  if (v)
-    out.verify = v;
-  if (b.firstSpawnTurn === null)
-    out.firstSpawnTurn = null;
+  if (v) out.verify = v;
+  if (b.firstSpawnTurn === null) out.firstSpawnTurn = null;
   else {
     const turn = count(b.firstSpawnTurn);
-    if (turn !== void 0)
-      out.firstSpawnTurn = turn;
+    if (turn !== void 0) out.firstSpawnTurn = turn;
   }
   const preflight = modelPreflight(b.modelPreflight);
-  if (preflight)
-    out.modelPreflight = preflight;
+  if (preflight) out.modelPreflight = preflight;
   const trips = progressTrips(b.progressTrips);
-  if (trips)
-    out.progressTrips = trips;
+  if (trips) out.progressTrips = trips;
   const parent = parentRunId(b.parentRunId);
-  if (parent)
-    out.parentRunId = parent;
+  if (parent) out.parentRunId = parent;
   return out;
 }
 
-// ../packages/learned-routing/src/rateLimitFailure.js
+// ../packages/learned-routing/src/rateLimitFailure.ts
 var AVAILABILITY = /\b429\b|\b529\b|rate.?limit|too many requests|over ?capacity|capacity limit|overloaded|resource has been exhausted|\bin cooldown\b|cooldown or unavailable/i;
 var GRPC_RESOURCE_EXHAUSTED = /\bRESOURCE_EXHAUSTED\b/;
 var AVAILABILITY_STATUSES = /* @__PURE__ */ new Set([429, 529]);
@@ -9326,19 +9171,21 @@ var TENANT_BUDGET_CODES = [
   "claw_token_limit_exceeded"
 ];
 var BUDGET_CODE = new RegExp(`\\b(?:${TENANT_BUDGET_CODES.join("|")})\\b`);
-var BUDGET_WORDING = new RegExp([
-  /(?:plan|daily|monthly|agenthost)\b[^.]{0,30}\btoken limit reached/,
-  /generation limit reached/,
-  /allowance reached/,
-  /spend cap reached/,
-  /premium-model budget exhausted/
-].map((re) => re.source).join("|"), "i");
+var BUDGET_WORDING = new RegExp(
+  [
+    /(?:plan|daily|monthly|agenthost)\b[^.]{0,30}\btoken limit reached/,
+    /generation limit reached/,
+    /allowance reached/,
+    /spend cap reached/,
+    /premium-model budget exhausted/
+  ].map((re) => re.source).join("|"),
+  "i"
+);
 function isTenantBudgetFailure(message2) {
   return !!message2 && (BUDGET_CODE.test(message2) || BUDGET_WORDING.test(message2));
 }
 function isRateLimitFailure(message2, status2) {
-  if (isTenantBudgetFailure(message2))
-    return false;
+  if (isTenantBudgetFailure(message2)) return false;
   return status2 != null && AVAILABILITY_STATUSES.has(status2) || !!message2 && (AVAILABILITY.test(message2) || GRPC_RESOURCE_EXHAUSTED.test(message2));
 }
 
@@ -12676,10 +12523,10 @@ function createShaCache(opts = {}) {
     else signal.addEventListener("abort", stop, { once: true });
   };
   return {
-    getOrRun(key, work, signal) {
+    getOrRun(key, work, signal, runOpts) {
       if (key === null) return work(signal);
       const hit = entries.get(key);
-      if (hit && (hit.expires === void 0 || hit.expires > now())) {
+      if (hit && !runOpts?.fresh && (hit.expires === void 0 || hit.expires > now())) {
         join(key, hit, signal);
         return hit.run;
       }
@@ -14416,8 +14263,11 @@ var import_knowledge46 = require("@seanhogg/builderforce-memory/knowledge");
 var import_knowledge47 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest8 = require("@seanhogg/builderforce-memory/ingest");
 
-// ../packages/agent-tools/src/knowledge/pinpointMatch.ts
+// ../packages/agent-tools/src/knowledge/codeGraphFindings.ts
 var import_knowledge48 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/pinpointMatch.ts
+var import_knowledge49 = require("@seanhogg/builderforce-memory/knowledge");
 var MAX_PINPOINT_IMAGE_BYTES = 8 * 1024 * 1024;
 var MAX_DATA_URL_CHARS = Math.ceil(MAX_PINPOINT_IMAGE_BYTES * 4 / 3) + 64;
 var PINPOINT_VISION_SYSTEM = [
@@ -14538,27 +14388,27 @@ var TOOL_SEARCH_SCHEMA = {
 
 // ../packages/agent-tools/src/delta/adapters/dependencyCruiser.ts
 var import_ingest9 = require("@seanhogg/builderforce-memory/ingest");
-var import_knowledge49 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/delta/adapters/gitleaks.ts
 var import_knowledge50 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/delta/adapters/jscpd.ts
+// ../packages/agent-tools/src/delta/adapters/gitleaks.ts
 var import_knowledge51 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/delta/adapters/knip.ts
+// ../packages/agent-tools/src/delta/adapters/jscpd.ts
 var import_knowledge52 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/delta/adapters/osv.ts
+// ../packages/agent-tools/src/delta/adapters/knip.ts
 var import_knowledge53 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/delta/adapters/sarifTools.ts
+// ../packages/agent-tools/src/delta/adapters/osv.ts
 var import_knowledge54 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/sarif/src/emit.js
+// ../packages/agent-tools/src/delta/adapters/sarifTools.ts
+var import_knowledge55 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/sarif/src/emit.ts
 var SARIF_BASELINE_STATES = ["new", "unchanged", "updated", "absent"];
 
-// ../packages/sarif/src/parse.js
+// ../packages/sarif/src/parse.ts
 var BASELINE = new Set(SARIF_BASELINE_STATES);
 
 // ../packages/agent-tools/src/delta/adapters/sarifTools.ts
@@ -14570,7 +14420,7 @@ var SARIF_KINDS = { [SEMGREP_TOOL]: "semgrep-finding", [CODEQL_TOOL]: "codeql-fi
 var import_retrieval = require("@seanhogg/builderforce-memory/retrieval");
 
 // ../packages/agent-tools/src/delta/adapters/typescript.ts
-var import_knowledge55 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge56 = require("@seanhogg/builderforce-memory/knowledge");
 var TYPESCRIPT_VERSION2 = TYPESCRIPT_PIN.slice(TYPESCRIPT_PIN.lastIndexOf("@") + 1);
 
 // ../packages/agent-tools/src/delta/dynamic/host.ts
@@ -18394,7 +18244,7 @@ function createPageEngineSet(options = {}) {
   };
 }
 
-// ../packages/run-guards/src/fingerprint.js
+// ../packages/run-guards/src/fingerprint.ts
 function callFingerprint(tool, args) {
   let text2;
   try {
@@ -18413,13 +18263,12 @@ function contentHash3(text2) {
   return `${text2.length.toString(36)}.${h.toString(36)}`;
 }
 function pathArgOf(args) {
-  if (!args || typeof args !== "object" || Array.isArray(args))
-    return null;
+  if (!args || typeof args !== "object" || Array.isArray(args)) return null;
   const path = args.path;
   return typeof path === "string" && path.trim() ? path.trim() : null;
 }
 
-// ../packages/run-guards/src/visitTally.js
+// ../packages/run-guards/src/visitTally.ts
 var REVISIT_NUDGE_AT = 3;
 var REVISIT_HARD_AT = 5;
 var MAX_REMEMBERED_ARGS = 8;
@@ -18456,24 +18305,19 @@ var VisitTally = class {
   }
   /** Forget every visit whose key matches. */
   forget(match) {
-    for (const key of [...this.visits.keys()])
-      if (match(key))
-        this.visits.delete(key);
+    for (const key of [...this.visits.keys()]) if (match(key)) this.visits.delete(key);
   }
   /** Something with an unknown blast radius ran: excuse the NEXT read of every target. */
   markAllMayHaveChanged() {
-    for (const visit of this.visits.values())
-      visit.mayHaveChanged = true;
+    for (const visit of this.visits.values()) visit.mayHaveChanged = true;
   }
   snapshot() {
     return [...this.visits.entries()].map(([k, v]) => [k, { ...v, priorArgs: [...v.priorArgs] }]);
   }
 };
 function revisitAdvisory(tool, target, visit) {
-  if (visit.count < REVISIT_NUDGE_AT)
-    return null;
-  if (visit.mayHaveChanged)
-    return null;
+  if (visit.count < REVISIT_NUDGE_AT) return null;
+  if (visit.mayHaveChanged) return null;
   const shape = visit.priorArgs.length > 1 ? ` The argument sets you have already used on it: ${visit.priorArgs.map((a) => `\`${a}\``).join(", ")}.` : "";
   if (visit.count >= REVISIT_HARD_AT) {
     return `STOP RE-READING. This is call ${visit.count} of \`${tool}\` against ${target} in this run, and the previous ${visit.count - 1} results are all still above you in this conversation.${shape} Re-reading it again will return content you already have and will not move the task forward \u2014 this pattern is how a run exhausts its tool budget without producing a single change. Do ONE of these now: (a) if you still need more of the file, continue from the \`offset\` the last result's note gave you and page forward in order \u2014 never re-open a window you already have; (b) otherwise stop reading and make the edit, or state plainly what is blocking you. Do not issue another partial read of this target.`;
@@ -18491,51 +18335,43 @@ ${advisory}` : advisory;
   return { result, note: advisory };
 }
 
-// ../packages/run-guards/src/multiRead.js
+// ../packages/run-guards/src/multiRead.ts
 function singleReadsOf(tool, args) {
-  if (tool !== "read_file" || !args || typeof args !== "object" || Array.isArray(args))
-    return null;
+  if (tool !== "read_file" || !args || typeof args !== "object" || Array.isArray(args)) return null;
   const { paths, ...rest } = args;
-  if (!Array.isArray(paths) || typeof rest.path === "string" && rest.path !== "")
-    return null;
+  if (!Array.isArray(paths) || typeof rest.path === "string" && rest.path !== "") return null;
   const named = paths.filter((p) => typeof p === "string" && p.trim() !== "").slice(0, READ_FILE_MAX_PATHS);
-  if (named.length === 0)
-    return null;
+  if (named.length === 0) return null;
   return named.map((path) => ({ ...rest, path }));
 }
 function perFileResults(result) {
   return result && Array.isArray(result.files) ? result.files : null;
 }
 
-// ../packages/run-guards/src/readCoverage.js
+// ../packages/run-guards/src/readCoverage.ts
 var PATH_ARG_KEYS = /* @__PURE__ */ new Set(["path", "scope", "repo", "file", "filePath", "dir"]);
 function normalizePathArg(value) {
   const p = value.split("\\").join("/").replace(/^\.\/+/, "").replace(/\/+$/, "");
   return p === "." ? "" : p;
 }
 function canonicalReadArgs(tool, args) {
-  if (!args || typeof args !== "object" || Array.isArray(args))
-    return {};
+  if (!args || typeof args !== "object" || Array.isArray(args)) return {};
   const out = {};
   for (const [key, value] of Object.entries(args)) {
-    if (value == null)
-      continue;
+    if (value == null) continue;
     if (typeof value === "string") {
       const trimmed = PATH_ARG_KEYS.has(key) ? normalizePathArg(value.trim()) : value.trim();
-      if (trimmed)
-        out[key] = trimmed;
+      if (trimmed) out[key] = trimmed;
       continue;
     }
     out[key] = value;
   }
-  if (tool === "read_file" && (out.offset === 1 || out.offset === 0))
-    delete out.offset;
+  if (tool === "read_file" && (out.offset === 1 || out.offset === 0)) delete out.offset;
   return out;
 }
 var TREE_WIDE_READ_TOOLS = /* @__PURE__ */ new Set(["search_code", "find_symbol", "list_files", "semantic_search", "repo_map", "local_research"]);
 function resultObject(result) {
-  if (result && typeof result === "object" && !Array.isArray(result))
-    return result;
+  if (result && typeof result === "object" && !Array.isArray(result)) return result;
   if (typeof result === "string") {
     try {
       const parsed = JSON.parse(result);
@@ -18547,8 +18383,7 @@ function resultObject(result) {
   return null;
 }
 function isUnderDir(p, dir) {
-  if (!dir)
-    return true;
+  if (!dir) return true;
   const path = normalizePathArg(p);
   return path === dir || path.startsWith(`${dir}/`);
 }
@@ -18562,13 +18397,11 @@ function requestedReadWindow(args) {
 }
 function servedReadWindow(result) {
   const data = resultObject(result);
-  if (!data || data.ok === false)
-    return null;
+  if (!data || data.ok === false) return null;
   const start = asPositiveInt(data.offset, 1);
   const content = typeof data.content === "string" ? data.content : "";
   const returned = content === "" ? 0 : content.split("\n").length;
-  if (returned <= 0)
-    return null;
+  if (returned <= 0) return null;
   let end = start + returned - 1;
   if (data.truncated !== true && typeof data.totalLines === "number" && data.totalLines >= start) {
     end = Math.max(end, Math.floor(data.totalLines));
@@ -18580,21 +18413,20 @@ function spanContains(outer, inner) {
 }
 function clipRequestedToEof(want, covering) {
   const data = resultObject(covering);
-  if (!data || data.truncated === true || typeof data.totalLines !== "number" || data.totalLines < 1)
-    return want;
+  if (!data || data.truncated === true || typeof data.totalLines !== "number" || data.totalLines < 1) return want;
   return { start: want.start, end: Math.min(want.end, Math.floor(data.totalLines)) };
 }
 function servedCopy(cached2) {
   return cached2.served !== void 0 ? cached2.served : cached2.result;
 }
 var ReadCoverage = class _ReadCoverage {
+  constructor(traits) {
+    this.traits = traits;
+  }
   traits;
   visits = new VisitTally();
   /** Successful reads by `${tool}:${canonical args}` — the exact-repeat guard. */
   exact = /* @__PURE__ */ new Map();
-  constructor(traits) {
-    this.traits = traits;
-  }
   static exactKey(tool, args) {
     return `${tool}:${stableStringify(canonicalReadArgs(tool, args))}`;
   }
@@ -18613,8 +18445,7 @@ var ReadCoverage = class _ReadCoverage {
     if (singles) {
       const results = perFileResults(resultObject(cached2.result));
       const served = cached2.served !== void 0 ? perFileResults(resultObject(cached2.served)) : null;
-      if (!results)
-        return;
+      if (!results) return;
       singles.forEach((single, i) => {
         const entry = resultObject(results[i]);
         if (!entry || entry.ok === false) {
@@ -18622,15 +18453,13 @@ var ReadCoverage = class _ReadCoverage {
           return;
         }
         const one = { result: results[i], anchor: cached2.anchor };
-        if (served && served[i] !== void 0)
-          one.served = served[i];
+        if (served && served[i] !== void 0) one.served = served[i];
         this.cacheResult(tool, single, one);
       });
       return;
     }
     const read2 = this.exact.get(_ReadCoverage.exactKey(tool, args));
-    if (read2)
-      read2.cached = cached2;
+    if (read2) read2.cached = cached2;
   }
   /** The cached result of an exact earlier read, or null when none is held. */
   cachedResult(tool, args) {
@@ -18646,15 +18475,13 @@ var ReadCoverage = class _ReadCoverage {
       let worst = null;
       for (const single of singles) {
         const visit = this.record(tool, single);
-        if (visit && (!worst || visit.count > worst.count))
-          worst = visit;
+        if (visit && (!worst || visit.count > worst.count)) worst = visit;
       }
       return worst;
     }
     const target = this.traits.visitTarget(args) ?? null;
     this.exact.set(_ReadCoverage.exactKey(tool, args), { tool, args: canonicalReadArgs(tool, args), target });
-    if (!target)
-      return null;
+    if (!target) return null;
     return this.visits.record(`${tool}:${target}`, args);
   }
   /**
@@ -18680,20 +18507,16 @@ var ReadCoverage = class _ReadCoverage {
     }
     if (t.isCodeChangeTool(tool)) {
       const target = t.activityTarget(args);
-      if (!target)
-        return;
+      if (!target) return;
       this.visits.forget((key) => this.visitedScopeIs(key.slice(key.indexOf(":") + 1), target));
       for (const [key, read2] of [...this.exact.entries()]) {
-        if (this.visitedScopeIs(read2.target, target) || TREE_WIDE_READ_TOOLS.has(read2.tool))
-          this.exact.delete(key);
+        if (this.visitedScopeIs(read2.target, target) || TREE_WIDE_READ_TOOLS.has(read2.tool)) this.exact.delete(key);
       }
       return;
     }
-    if (t.isLocalWorkspaceTool(tool) && !t.isRepoPublishTool(tool))
-      return;
+    if (t.isLocalWorkspaceTool(tool) && !t.isRepoPublishTool(tool)) return;
     for (const [key, read2] of [...this.exact.entries()]) {
-      if (!t.isLocalWorkspaceTool(read2.tool) || t.isRepoStateReadTool(read2.tool))
-        this.exact.delete(key);
+      if (!t.isLocalWorkspaceTool(read2.tool) || t.isRepoStateReadTool(read2.tool)) this.exact.delete(key);
     }
   }
   /**
@@ -18702,32 +18525,23 @@ var ReadCoverage = class _ReadCoverage {
    * page that extends past a truncated window — those still need the disk.
    */
   coveredRead(tool, args) {
-    if (tool !== "read_file")
-      return null;
+    if (tool !== "read_file") return null;
     const wanted = canonicalReadArgs(tool, args);
     const path = typeof wanted.path === "string" ? wanted.path : "";
-    if (!path)
-      return null;
-    if (typeof wanted.key === "string")
-      return null;
+    if (!path) return null;
+    if (typeof wanted.key === "string") return null;
     const want = requestedReadWindow(wanted);
     for (const read2 of this.exact.values()) {
-      if (read2.tool !== "read_file" || !read2.cached)
-        continue;
-      if (typeof read2.args.key === "string")
-        continue;
+      if (read2.tool !== "read_file" || !read2.cached) continue;
+      if (typeof read2.args.key === "string") continue;
       const earlierPath = typeof read2.args.path === "string" ? read2.args.path : "";
-      if (earlierPath !== path)
-        continue;
+      if (earlierPath !== path) continue;
       const served = servedCopy(read2.cached);
       const got = servedReadWindow(served);
-      if (!got)
-        continue;
+      if (!got) continue;
       const clipped = clipRequestedToEof(want, served);
-      if (clipped.start > clipped.end)
-        continue;
-      if (!spanContains(got, clipped))
-        continue;
+      if (clipped.start > clipped.end) continue;
+      if (!spanContains(got, clipped)) continue;
       return {
         start: clipped.start,
         end: clipped.end,
@@ -18744,29 +18558,24 @@ var ReadCoverage = class _ReadCoverage {
    * of absence — so the narrower search must actually run.
    */
   derivedSearch(tool, args) {
-    if (tool !== "search_code")
-      return null;
+    if (tool !== "search_code") return null;
     const wanted = canonicalReadArgs(tool, args);
     const scope = typeof wanted.path === "string" ? wanted.path : "";
-    if (!scope)
-      return null;
+    if (!scope) return null;
     const { path: _scope, ...rest } = wanted;
     const others = stableStringify(rest);
     for (const read2 of this.exact.values()) {
-      if (read2.tool !== "search_code" || !read2.cached)
-        continue;
+      if (read2.tool !== "search_code" || !read2.cached) continue;
       const { path: earlierPath, ...earlierRest } = read2.args;
       const earlier = typeof earlierPath === "string" ? earlierPath : "";
-      if (earlier === scope || !isUnderDir(scope, earlier))
-        continue;
-      if (stableStringify(earlierRest) !== others)
-        continue;
+      if (earlier === scope || !isUnderDir(scope, earlier)) continue;
+      if (stableStringify(earlierRest) !== others) continue;
       const result = resultObject(read2.cached.result);
-      if (!result || result.ok !== true || result.truncated === true || !Array.isArray(result.matches))
-        continue;
-      const matches = result.matches.filter((m) => typeof m.path === "string" && isUnderDir(m.path, scope));
-      if (matches.length === 0)
-        continue;
+      if (!result || result.ok !== true || result.truncated === true || !Array.isArray(result.matches)) continue;
+      const matches = result.matches.filter(
+        (m) => typeof m.path === "string" && isUnderDir(m.path, scope)
+      );
+      if (matches.length === 0) continue;
       return {
         ok: true,
         query: wanted.query,
@@ -18780,51 +18589,38 @@ var ReadCoverage = class _ReadCoverage {
   }
 };
 
-// ../packages/run-guards/src/shellFileRead.js
+// ../packages/run-guards/src/shellFileRead.ts
 var SHELL_META = /[|;&<>`$*?(){}\[\]\\\n\r!~]/;
 function words(text2) {
   const unquoted = text2.replace(/"[^"]*"|'[^']*'/g, "");
-  if (SHELL_META.test(unquoted) || /["']/.test(unquoted))
-    return null;
+  if (SHELL_META.test(unquoted) || /["']/.test(unquoted)) return null;
   const out = [];
   const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
-  for (let m = re.exec(text2); m; m = re.exec(text2))
-    out.push(m[1] ?? m[2] ?? m[3] ?? "");
+  for (let m = re.exec(text2); m; m = re.exec(text2)) out.push(m[1] ?? m[2] ?? m[3] ?? "");
   return out;
 }
 function workspacePath(raw) {
   const p = raw.trim().split("\\").join("/");
-  if (!p || p.startsWith("/") || p.startsWith("-") || p.includes(":"))
-    return null;
+  if (!p || p.startsWith("/") || p.startsWith("-") || p.includes(":")) return null;
   const parts = p.split("/").filter((s) => s !== "" && s !== ".");
-  if (parts.length === 0 || parts.some((s) => s === ".."))
-    return null;
+  if (parts.length === 0 || parts.some((s) => s === "..")) return null;
   return parts.join("/");
 }
 var positiveInt2 = (s) => s !== void 0 && /^\d+$/.test(s) && Number(s) > 0 ? Number(s) : void 0;
 function printedLines(argv) {
   const [program, ...args] = argv;
-  if (program === "cat" && args.length === 1)
-    return { file: args[0], from: 1 };
+  if (program === "cat" && args.length === 1) return { file: args[0], from: 1 };
   if (program === "head" || program === "tail") {
     let n2;
     let file;
-    if (args.length === 1)
-      [file] = args;
-    else if (args.length === 2 && /^-\d+$/.test(args[0]))
-      [n2, file] = [args[0].slice(1), args[1]];
-    else if (args.length === 2 && /^-n\+?\d+$/.test(args[0]))
-      [n2, file] = [args[0].slice(2), args[1]];
-    else if (args.length === 2 && /^--lines=\+?\d+$/.test(args[0]))
-      [n2, file] = [args[0].slice(8), args[1]];
-    else if (args.length === 3 && args[0] === "-n")
-      [n2, file] = [args[1], args[2]];
-    else
-      return null;
-    if (!file)
-      return null;
-    if (n2 === void 0)
-      n2 = "10";
+    if (args.length === 1) [file] = args;
+    else if (args.length === 2 && /^-\d+$/.test(args[0])) [n2, file] = [args[0].slice(1), args[1]];
+    else if (args.length === 2 && /^-n\+?\d+$/.test(args[0])) [n2, file] = [args[0].slice(2), args[1]];
+    else if (args.length === 2 && /^--lines=\+?\d+$/.test(args[0])) [n2, file] = [args[0].slice(8), args[1]];
+    else if (args.length === 3 && args[0] === "-n") [n2, file] = [args[1], args[2]];
+    else return null;
+    if (!file) return null;
+    if (n2 === void 0) n2 = "10";
     if (program === "head") {
       const count3 = positiveInt2(n2);
       return count3 ? { file, from: 1, count: count3 } : null;
@@ -18840,8 +18636,7 @@ function printedLines(argv) {
     const m = /^(\d+)(?:,(\d+))?\s*p$/.exec(args[1].trim());
     const from = positiveInt2(m?.[1]);
     const to = m && m[2] !== void 0 ? positiveInt2(m[2]) : from;
-    if (!from || !to || to < from)
-      return null;
+    if (!from || !to || to < from) return null;
     return { file: args[2], from, count: to - from + 1 };
   }
   return null;
@@ -18852,30 +18647,24 @@ function parseShellFileRead(command) {
   const cd = /^cd\s+("[^"]+"|'[^']+'|[^\s;&|<>`$"']+)\s*&&\s*/.exec(rest);
   if (cd) {
     const folder = workspacePath(cd[1].replace(/^["']|["']$/g, ""));
-    if (!folder)
-      return null;
+    if (!folder) return null;
     dir = folder;
     rest = rest.slice(cd[0].length);
   }
   const argv = words(rest);
-  if (!argv || argv.length === 0)
-    return null;
+  if (!argv || argv.length === 0) return null;
   const printed = printedLines(argv);
-  if (!printed)
-    return null;
+  if (!printed) return null;
   const file = workspacePath(printed.file);
-  if (!file)
-    return null;
+  if (!file) return null;
   const { file: _file, ...lines } = printed;
   return { path: dir ? `${dir}/${file}` : file, ...lines };
 }
 function shellReadAsFileRead(command, stdout) {
   const read2 = parseShellFileRead(command);
-  if (!read2)
-    return null;
+  if (!read2) return null;
   const body = stdout.replace(/\r?\n$/, "");
-  if (!body)
-    return null;
+  if (!body) return null;
   const printed = body.split("\n").length;
   const whole = (from) => ({ ok: true, path: read2.path, content: body, offset: from, totalLines: from + printed - 1, truncated: false });
   if (read2.from === void 0) {
@@ -18884,15 +18673,13 @@ function shellReadAsFileRead(command, stdout) {
   if (read2.count === void 0) {
     return { args: read2.from > 1 ? { path: read2.path, offset: read2.from } : { path: read2.path }, result: whole(read2.from) };
   }
-  if (printed > read2.count)
-    return null;
+  if (printed > read2.count) return null;
   const args = { path: read2.path, offset: read2.from, limit: read2.count };
-  if (printed < read2.count)
-    return { args, result: whole(read2.from) };
+  if (printed < read2.count) return { args, result: whole(read2.from) };
   return { args, result: { ok: true, path: read2.path, content: body, offset: read2.from, truncated: true } };
 }
 
-// ../packages/run-guards/src/readOnlyShell.js
+// ../packages/run-guards/src/readOnlyShell.ts
 var READ_ONLY_PROGRAMS = /* @__PURE__ */ new Set([
   "cat",
   "head",
@@ -18990,8 +18777,7 @@ function splitSegments(command) {
     const ch = command[i];
     if (quote) {
       current += ch;
-      if (ch === quote)
-        quote = null;
+      if (ch === quote) quote = null;
       continue;
     }
     if (ch === '"' || ch === "'") {
@@ -19015,19 +18801,15 @@ function splitSegments(command) {
       continue;
     }
     if (depth2 === 0 && (ch === ";" || ch === "\n" || ch === "|" || ch === "&")) {
-      if ((ch === "&" || ch === "|") && command[i + 1] === ch)
-        i += 1;
-      if (current.trim())
-        out.push(current.trim());
+      if ((ch === "&" || ch === "|") && command[i + 1] === ch) i += 1;
+      if (current.trim()) out.push(current.trim());
       current = "";
       continue;
     }
     current += ch;
   }
-  if (quote || depth2 !== 0)
-    return null;
-  if (current.trim())
-    out.push(current.trim());
+  if (quote || depth2 !== 0) return null;
+  if (current.trim()) out.push(current.trim());
   return out;
 }
 function substitutions(segment) {
@@ -19037,10 +18819,8 @@ function substitutions(segment) {
     let depth2 = 1;
     let j = i + 2;
     for (; j < segment.length && depth2 > 0; j += 1) {
-      if (segment[j] === "(")
-        depth2 += 1;
-      else if (segment[j] === ")")
-        depth2 -= 1;
+      if (segment[j] === "(") depth2 += 1;
+      else if (segment[j] === ")") depth2 -= 1;
     }
     out.push(segment.slice(i + 2, j - 1));
     i = segment.indexOf("$(", j);
@@ -19063,8 +18843,7 @@ function writesViaRedirect(segment) {
   let m = re.exec(unquoted);
   while (m) {
     const target = m[2] ?? "";
-    if (!/^(&\d+|\/dev\/null|nul|NUL|\$null)$/.test(target))
-      return true;
+    if (!/^(&\d+|\/dev\/null|nul|NUL|\$null)$/.test(target)) return true;
     m = re.exec(unquoted);
   }
   return false;
@@ -19076,25 +18855,20 @@ function gitIsReadOnly(args) {
   }
   const sub = args[i];
   const rest = args.slice(i + 1);
-  if (!sub)
-    return true;
-  if (READ_ONLY_GIT.has(sub))
-    return true;
+  if (!sub) return true;
+  if (READ_ONLY_GIT.has(sub)) return true;
   const flags = new Set(rest.filter((a) => a.startsWith("-")));
   const positional = rest.filter((a) => !a.startsWith("-"));
   switch (sub) {
     case "branch": {
       const writes = ["-d", "-D", "--delete", "-m", "-M", "--move", "-c", "-C", "--copy", "-f", "--force", "-u", "--set-upstream-to", "--unset-upstream", "--edit-description"];
-      if (writes.some((f) => flags.has(f) || [...flags].some((x) => x.startsWith(`${f}=`))))
-        return false;
-      if (flags.has("--list") || flags.has("-l"))
-        return true;
+      if (writes.some((f) => flags.has(f) || [...flags].some((x) => x.startsWith(`${f}=`)))) return false;
+      if (flags.has("--list") || flags.has("-l")) return true;
       const valued = /* @__PURE__ */ new Set(["--format", "--sort", "--contains", "--no-contains", "--merged", "--no-merged", "--points-at"]);
       for (let k = 0; k < rest.length; k += 1) {
         const word = rest[k] ?? "";
         if (word.startsWith("-")) {
-          if (valued.has(word))
-            k += 1;
+          if (valued.has(word)) k += 1;
           continue;
         }
         return false;
@@ -19120,15 +18894,12 @@ function gitIsReadOnly(args) {
   }
 }
 function segmentIsReadOnly(segment, depth2) {
-  if (depth2 > 4)
-    return false;
+  if (depth2 > 4) return false;
   for (const body of substitutions(segment)) {
-    if (!commandIsReadOnly(body, depth2 + 1))
-      return false;
+    if (!commandIsReadOnly(body, depth2 + 1)) return false;
   }
   const flat = segment.replace(/\$\((?:[^()]|\([^()]*\))*\)/g, "X");
-  if (writesViaRedirect(flat))
-    return false;
+  if (writesViaRedirect(flat)) return false;
   let words3 = tokens(flat);
   const leads = () => {
     const first = words3[0] ?? "";
@@ -19138,77 +18909,60 @@ function segmentIsReadOnly(segment, depth2) {
     words3 = words3.slice(1);
   }
   const [program, ...args] = words3;
-  if (program === void 0)
-    return true;
-  if (program === "for" || program === "case")
-    return true;
-  if (program === "git")
-    return gitIsReadOnly(args);
-  if (!READ_ONLY_PROGRAMS.has(program))
-    return false;
-  if (INFO_ONLY_PROGRAMS.has(program))
-    return args.length > 0 && args.every((a) => INFO_FLAGS.has(a));
-  if (program === "sed")
-    return !args.some((a) => a === "-i" || a.startsWith("-i") || a === "--in-place" || a.startsWith("--in-place="));
-  if (program === "find")
-    return !args.some((a) => ["-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprintf", "-fls"].includes(a));
-  if (program === "sort")
-    return !args.some((a) => a === "-o" || a.startsWith("--output"));
+  if (program === void 0) return true;
+  if (program === "for" || program === "case") return true;
+  if (program === "git") return gitIsReadOnly(args);
+  if (!READ_ONLY_PROGRAMS.has(program)) return false;
+  if (INFO_ONLY_PROGRAMS.has(program)) return args.length > 0 && args.every((a) => INFO_FLAGS.has(a));
+  if (program === "sed") return !args.some((a) => a === "-i" || a.startsWith("-i") || a === "--in-place" || a.startsWith("--in-place="));
+  if (program === "find") return !args.some((a) => ["-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprintf", "-fls"].includes(a));
+  if (program === "sort") return !args.some((a) => a === "-o" || a.startsWith("--output"));
   return true;
 }
 function commandIsReadOnly(command, depth2) {
-  if (/`/.test(command))
-    return false;
+  if (/`/.test(command)) return false;
   const segments = splitSegments(command);
-  if (!segments || segments.length === 0)
-    return false;
+  if (!segments || segments.length === 0) return false;
   return segments.every((s) => segmentIsReadOnly(s, depth2));
 }
 function isReadOnlyShellCommand(command) {
   const trimmed = command.trim();
-  if (!trimmed)
-    return false;
+  if (!trimmed) return false;
   return commandIsReadOnly(trimmed, 0);
 }
 function isReadOnlyShellCall(tool, args) {
-  if (tool !== "run_command" || !args || typeof args !== "object")
-    return false;
+  if (tool !== "run_command" || !args || typeof args !== "object") return false;
   const record3 = args;
   const command = typeof record3.command === "string" ? record3.command : typeof record3.cmd === "string" ? record3.cmd : "";
   return isReadOnlyShellCommand(command);
 }
 
-// ../packages/run-guards/src/shellPrint.js
+// ../packages/run-guards/src/shellPrint.ts
 function cleanPrint(args, out) {
-  if (!args || typeof args !== "object" || !out || typeof out !== "object" || Array.isArray(out))
-    return null;
+  if (!args || typeof args !== "object" || !out || typeof out !== "object" || Array.isArray(out)) return null;
   const a = args;
   const r = out;
-  if (r.ok === false || r.compressed === true || r.exitCode !== void 0 && r.exitCode !== 0)
-    return null;
+  if (r.ok === false || r.compressed === true || r.exitCode !== void 0 && r.exitCode !== 0) return null;
   const stdout = typeof r.stdout === "string" ? r.stdout : typeof r.output === "string" ? r.output : null;
   const raw = typeof a.command === "string" ? a.command : typeof a.cmd === "string" ? a.cmd : "";
-  if (stdout === null || !raw.trim())
-    return null;
+  if (stdout === null || !raw.trim()) return null;
   const cwd = [r.cwd, a.cwd].map((v) => typeof v === "string" ? v.trim() : "").find(Boolean) ?? "";
   return { command: cwd ? `cd ${JSON.stringify(cwd)} && ${raw}` : raw, stdout };
 }
 function shellPrintAsRead(tool, args, out, servedWhole) {
-  if (!servedWhole || !isReadOnlyShellCall(tool, args))
-    return null;
+  if (!servedWhole || !isReadOnlyShellCall(tool, args)) return null;
   const print = cleanPrint(args, out);
   return print ? shellReadAsFileRead(print.command, print.stdout) : null;
 }
 function recordShellFileRead(coverage, tool, args, out, servedWhole, anchor) {
   const read2 = shellPrintAsRead(tool, args, out, servedWhole);
-  if (!read2)
-    return false;
+  if (!read2) return false;
   coverage.record("read_file", read2.args);
   coverage.cacheResult("read_file", read2.args, { result: read2.result, anchor });
   return true;
 }
 
-// ../packages/run-guards/src/failureTally.js
+// ../packages/run-guards/src/failureTally.ts
 var FAILURE_NUDGE_AT = 2;
 var FAILURE_HARD_AT = 3;
 var FailureTally = class {
@@ -19236,14 +18990,12 @@ var FailureTally = class {
   }
 };
 function failureReason(result) {
-  if (!result || typeof result !== "object" || Array.isArray(result))
-    return void 0;
+  if (!result || typeof result !== "object" || Array.isArray(result)) return void 0;
   const error = result.error;
   return typeof error === "string" && error.trim() ? error.trim().slice(0, 400) : void 0;
 }
 function repeatedFailureAdvisory(tool, attempts, reason) {
-  if (attempts < FAILURE_NUDGE_AT)
-    return null;
+  if (attempts < FAILURE_NUDGE_AT) return null;
   const got = reason ? ` Both times it answered: "${reason}".` : "";
   if (attempts >= FAILURE_HARD_AT) {
     const said = reason ? ` It has answered "${reason}" every time.` : "";
@@ -19252,13 +19004,11 @@ function repeatedFailureAdvisory(tool, attempts, reason) {
   return `\`${tool}\` has now failed ${attempts} times in this run with these exact arguments.${got} Another identical attempt will not behave differently \u2014 this is not a flake. Read the error above and change what it names (most failures state the argument to pass instead), use a different tool to reach the same goal, or say plainly what is blocking you. Do not simply repeat the call.`;
 }
 
-// ../packages/run-guards/src/writeLedger.js
+// ../packages/run-guards/src/writeLedger.ts
 function contentWriteOf(tool, args) {
-  if (!args || typeof args !== "object" || Array.isArray(args))
-    return null;
+  if (!args || typeof args !== "object" || Array.isArray(args)) return null;
   const { path, content } = args;
-  if (typeof path !== "string" || !path.trim() || typeof content !== "string")
-    return null;
+  if (typeof path !== "string" || !path.trim() || typeof content !== "string") return null;
   return { path: path.trim(), fingerprint: callFingerprint(tool, args) };
 }
 var WriteLedger = class {
@@ -19285,37 +19035,32 @@ var WriteLedger = class {
       return;
     }
     const path = pathArgOf(args);
-    if (path)
-      this.written.delete(path);
+    if (path) this.written.delete(path);
   }
 };
 function repeatedWriteNote(tool, path) {
   return `Not re-run: this exact \`${tool}\` of "${path}" already succeeded earlier in this run and nothing has changed the file since, so it already holds this content \u2014 writing it again cannot change anything. If something still looks broken, the cause is not that the write failed: re-read the error (it may predate your write), look elsewhere for the cause, or tell the user what you see.`;
 }
 
-// ../packages/run-guards/src/editRevert.js
+// ../packages/run-guards/src/editRevert.ts
 var MAX_HISTORY_PER_PATH = 16;
 var MAX_PATHS2 = 200;
 function stringArg(args, ...keys) {
   for (const key of keys) {
     const v = args[key];
-    if (typeof v === "string")
-      return v;
+    if (typeof v === "string") return v;
   }
   return void 0;
 }
 function changeOf(args) {
   const path = pathArgOf(args);
-  if (!path)
-    return null;
+  if (!path) return null;
   const a = args;
   const content = stringArg(a, "content");
-  if (content !== void 0)
-    return { path, sig: `w:${contentHash3(content)}` };
+  if (content !== void 0) return { path, sig: `w:${contentHash3(content)}` };
   const from = stringArg(a, "old_string", "oldString", "find");
   const to = stringArg(a, "new_string", "newString", "replace");
-  if (from === void 0 || to === void 0 || from === to)
-    return null;
+  if (from === void 0 || to === void 0 || from === to) return null;
   const f = contentHash3(from);
   const t = contentHash3(to);
   return { path, sig: `e:${f}>${t}`, inverse: `e:${t}>${f}` };
@@ -19336,13 +19081,11 @@ var EditRevertTracker = class {
   record(tool, args, outcome) {
     if (outcome.deleted) {
       const path = pathArgOf(args);
-      if (path)
-        this.history.delete(path);
+      if (path) this.history.delete(path);
       return null;
     }
     const change = changeOf(args);
-    if (!change)
-      return null;
+    if (!change) return null;
     if (!outcome.ok) {
       this.history.delete(change.path);
       return null;
@@ -19351,18 +19094,15 @@ var EditRevertTracker = class {
     let revert = null;
     if (change.sig.startsWith("w:")) {
       const earlier = past.lastIndexOf(change.sig);
-      if (earlier >= 0 && earlier < past.length - 1)
-        revert = { path: change.path, tool, restores: "write" };
+      if (earlier >= 0 && earlier < past.length - 1) revert = { path: change.path, tool, restores: "write" };
     } else if (change.inverse) {
       const lastWrite = past.map((s) => s.startsWith("w:")).lastIndexOf(true);
-      if (past.slice(lastWrite + 1).includes(change.inverse))
-        revert = { path: change.path, tool, restores: "inverse_edit" };
+      if (past.slice(lastWrite + 1).includes(change.inverse)) revert = { path: change.path, tool, restores: "inverse_edit" };
     }
     const next = [...past, change.sig].slice(-MAX_HISTORY_PER_PATH);
     this.history.delete(change.path);
     this.history.set(change.path, next);
-    if (this.history.size > MAX_PATHS2)
-      this.history.delete(this.history.keys().next().value);
+    if (this.history.size > MAX_PATHS2) this.history.delete(this.history.keys().next().value);
     return revert;
   }
   /** An unscoped mutation (shell, checkout) ran: no path's content is known any more. */
@@ -19374,7 +19114,7 @@ var EditRevertTracker = class {
   }
 };
 
-// ../packages/run-guards/src/noProgress.js
+// ../packages/run-guards/src/noProgress.ts
 var NO_PROGRESS_TURNS = 4;
 var CHURN_TURNS = 12;
 var REGROUND_TURNS = 8;
@@ -19382,10 +19122,8 @@ var MAX_SEEN = 500;
 var TEST_PATH = /(^|\/)(__tests__|tests?|spec)\/|\.(test|spec)\.[a-z0-9]+$|_test\.(go|py)$/i;
 var TEST_COMMAND = /\b(test|tests|vitest|jest|pytest|mocha|tsc|tsgo|typecheck|lint|eslint|cargo\s+test|go\s+test)\b/i;
 function isCheckCallDefault(tool, args) {
-  if (tool === "run_checks" || tool === "run_tests")
-    return true;
-  if (tool !== "run_command" || !args || typeof args !== "object")
-    return false;
+  if (tool === "run_checks" || tool === "run_tests") return true;
+  if (tool !== "run_command" || !args || typeof args !== "object") return false;
   const command = args.command;
   return typeof command === "string" && TEST_COMMAND.test(command);
 }
@@ -19439,34 +19177,27 @@ var NoProgressTracker = class {
     if (path) {
       if (!this.seen.has(path)) {
         this.seen.add(path);
-        if (this.seen.size > MAX_SEEN)
-          this.seen.delete(this.seen.values().next().value);
+        if (this.seen.size > MAX_SEEN) this.seen.delete(this.seen.values().next().value);
         this.groundThisTurn = true;
       } else {
         const last = this.lastSeenAt.get(path);
-        if (last === void 0 || this.turn - last >= REGROUND_TURNS)
-          this.groundThisTurn = true;
+        if (last === void 0 || this.turn - last >= REGROUND_TURNS) this.groundThisTurn = true;
       }
       this.lastSeenAt.set(path, this.turn);
     }
-    if (outcome.ok && !path && this.isPlatformProgress?.(tool, args))
-      this.groundThisTurn = true;
+    if (outcome.ok && !path && this.isPlatformProgress?.(tool, args)) this.groundThisTurn = true;
     if (outcome.ok && outcome.wrote) {
-      if (path && isTestPath(path))
-        this.groundThisTurn = true;
+      if (path && isTestPath(path)) this.groundThisTurn = true;
       const fingerprint = contentHash3(callFingerprint(tool, args));
       if (!this.changes.has(fingerprint)) {
         this.changes.add(fingerprint);
-        if (this.changes.size > MAX_SEEN)
-          this.changes.delete(this.changes.values().next().value);
+        if (this.changes.size > MAX_SEEN) this.changes.delete(this.changes.values().next().value);
         this.churnThisTurn = true;
       }
     }
-    if (!this.isCheckCall(tool, args))
-      return { checkChanged: false };
+    if (!this.isCheckCall(tool, args)) return { checkChanged: false };
     const digest = resultDigest(outcome.result);
-    if (digest === this.lastCheck)
-      return { checkChanged: false };
+    if (digest === this.lastCheck) return { checkChanged: false };
     this.groundThisTurn = true;
     this.lastCheck = digest;
     return { checkChanged: true };
@@ -19474,8 +19205,7 @@ var NoProgressTracker = class {
   /** The turn's calls all ran. Returns the idle-turn streak after it. */
   endTurn() {
     let progressed2 = this.groundThisTurn;
-    if (this.groundThisTurn)
-      this.churnTurns = 0;
+    if (this.groundThisTurn) this.churnTurns = 0;
     else if (this.churnThisTurn) {
       this.churnTurns += 1;
       progressed2 = this.churnTurns <= CHURN_TURNS;
@@ -19515,7 +19245,7 @@ var NoProgressTracker = class {
   }
 };
 
-// ../packages/run-guards/src/readinessClaim.js
+// ../packages/run-guards/src/readinessClaim.ts
 var UNKEPT_READY_AT = 2;
 var UNKEPT_STEER_AT = 1;
 var READY_PATTERNS = [
@@ -19542,16 +19272,14 @@ function ownWords(text2) {
   return text2.replace(/```[\s\S]*?(?:```|$)/g, " ").replace(/`[^`\n]*`/g, " ").replace(/^\s*>.*$/gm, " ").replace(/"[^"\n]*"|“[^”\n]*”/g, " ").replace(/[’‘]/g, "'");
 }
 function sentenceClaims(sentence) {
-  if (sentence.trimEnd().endsWith("?"))
-    return false;
+  if (sentence.trimEnd().endsWith("?")) return false;
   return READY_PATTERNS.some((p) => {
     const m = p.exec(sentence);
     return !!m && !NEGATION.test(sentence.slice(0, m.index + m[0].length));
   });
 }
 function claimsReady(text2) {
-  if (!text2)
-    return false;
+  if (!text2) return false;
   return ownWords(text2).toLowerCase().split(/(?<=[.!?])\s+|\n+/).some(sentenceClaims);
 }
 var UnkeptClaimTracker = class {
@@ -19564,22 +19292,18 @@ var UnkeptClaimTracker = class {
   }
   /** The current turn's own text. */
   noteText(text2) {
-    if (claimsReady(text2))
-      this.claimed = true;
+    if (claimsReady(text2)) this.claimed = true;
   }
   /** One call of the current turn. `readOnly` = it only read. */
   observe(readOnly) {
     this.called = true;
-    if (!readOnly)
-      this.acted = true;
+    if (!readOnly) this.acted = true;
   }
   /** The turn's calls all ran. Returns the unkept-claim count after it. A turn with no
    *  calls is a final answer (or a narrated call, which the stall recovery owns). */
   endTurn() {
-    if (this.acted)
-      this.unkept = 0;
-    else if (this.claimed && this.called)
-      this.unkept += 1;
+    if (this.acted) this.unkept = 0;
+    else if (this.claimed && this.called) this.unkept += 1;
     this.claimed = false;
     this.acted = false;
     this.called = false;
@@ -19594,7 +19318,7 @@ var UnkeptClaimTracker = class {
   }
 };
 
-// ../packages/run-guards/src/readinessAdvisory.js
+// ../packages/run-guards/src/readinessAdvisory.ts
 var READINESS_ADVISORY_NOTE = "You said you have what you need. Make the edit now; read only files you will change.";
 var ReadinessAdvisory = class {
   note;
@@ -19627,10 +19351,10 @@ var ReadinessAdvisory = class {
   }
 };
 
-// ../packages/run-guards/src/batching.js
+// ../packages/run-guards/src/batching.ts
 var SERIAL_SINGLE_CALLS_AT = 2;
 
-// ../packages/run-guards/src/batchingNudge.js
+// ../packages/run-guards/src/batchingNudge.ts
 var BATCHING_NUDGE_NOTE = "You have made one read-only call per turn for several turns. When the calls are independent, batch them into one: use the `edit_file` `edits` array for several edits, or one `run_command` that runs the checks together.";
 var BatchingNudge = class {
   streak;
@@ -19665,15 +19389,14 @@ function turnCallsOf(calls, isReadOnly) {
   return calls.map((c) => ({ readOnly: isReadOnly?.(c.tool, c.args) === true }));
 }
 
-// ../packages/run-guards/src/reverifyTracker.js
+// ../packages/run-guards/src/reverifyTracker.ts
 var MAX_REVERIFY_PATHS = 200;
 function addBounded(set, path) {
   set.delete(path);
   set.add(path);
   while (set.size > MAX_REVERIFY_PATHS) {
     const oldest = set.values().next().value;
-    if (oldest === void 0)
-      break;
+    if (oldest === void 0) break;
     set.delete(oldest);
   }
 }
@@ -19704,8 +19427,7 @@ var ReverifyTracker = class {
   read(target) {
     this.readsThisTurn += 1;
     if (this.writtenPaths.has(target)) {
-      if (!this.readBackSinceWrite.has(target))
-        this.allRepeatReadBacks = false;
+      if (!this.readBackSinceWrite.has(target)) this.allRepeatReadBacks = false;
       addBounded(this.readBackSinceWrite, target);
     } else {
       this.allRepeatReadBacks = false;
@@ -19726,7 +19448,7 @@ var ReverifyTracker = class {
   }
 };
 
-// ../packages/run-guards/src/progressDetector.js
+// ../packages/run-guards/src/progressDetector.ts
 var LADDER_RESET_TURNS = 8;
 var SIGNAL_RANK = {
   edit_revert: 0,
@@ -19737,22 +19459,36 @@ var SIGNAL_RANK = {
   no_progress: 5
 };
 function succeeded2(result) {
-  if (result.isError)
-    return false;
+  if (result.isError) return false;
   const d = result.data;
   return !(d && typeof d === "object" && d.ok === false);
 }
 function visitTargetOf(args) {
   const path = pathArgOf(args);
-  if (!args || typeof args !== "object")
-    return path;
+  if (!args || typeof args !== "object") return path;
   const a = args;
   const question = [a.query, a.pattern, a.symbol, a.name].find((v) => typeof v === "string" && v.trim() !== "");
-  if (path && question)
-    return `${path} \u220B ${question.trim()}`;
+  if (path && question) return `${path} \u220B ${question.trim()}`;
   return path ?? question?.trim() ?? null;
 }
 var ProgressDetector = class {
+  constructor(state = {}, ports = {}) {
+    this.ports = ports;
+    this.visits = new VisitTally(state.visits);
+    this.failures = new FailureTally(state.failures);
+    this.edits = new EditRevertTracker(state.edits);
+    this.progress = new NoProgressTracker(state.progress, ports);
+    this.claims = new UnkeptClaimTracker(state.claims);
+    this.trips = state.trips ?? 0;
+    this.tripsBySignal = { ...state.tripsBySignal ?? {} };
+    this.unkeptTurns = state.unkeptTurns ?? 0;
+    this.quietTurns = state.quietTurns ?? 0;
+    this.steer = state.steer;
+    this.readiness = new ReadinessAdvisory(state.advisory);
+    this.batching = new BatchingNudge(state.batching);
+    this.reverify = new ReverifyTracker(state);
+    this.turnCalls = [];
+  }
   ports;
   visits;
   failures;
@@ -19774,26 +19510,8 @@ var ProgressDetector = class {
   reverify;
   /** Every call of the current turn, for the B4 batching nudge's read-only count. */
   turnCalls;
-  constructor(state = {}, ports = {}) {
-    this.ports = ports;
-    this.visits = new VisitTally(state.visits);
-    this.failures = new FailureTally(state.failures);
-    this.edits = new EditRevertTracker(state.edits);
-    this.progress = new NoProgressTracker(state.progress, ports);
-    this.claims = new UnkeptClaimTracker(state.claims);
-    this.trips = state.trips ?? 0;
-    this.tripsBySignal = { ...state.tripsBySignal ?? {} };
-    this.unkeptTurns = state.unkeptTurns ?? 0;
-    this.quietTurns = state.quietTurns ?? 0;
-    this.steer = state.steer;
-    this.readiness = new ReadinessAdvisory(state.advisory);
-    this.batching = new BatchingNudge(state.batching);
-    this.reverify = new ReverifyTracker(state);
-    this.turnCalls = [];
-  }
   raise(signal) {
-    if (!this.turnSignal || SIGNAL_RANK[signal.kind] < SIGNAL_RANK[this.turnSignal.kind])
-      this.turnSignal = signal;
+    if (!this.turnSignal || SIGNAL_RANK[signal.kind] < SIGNAL_RANK[this.turnSignal.kind]) this.turnSignal = signal;
   }
   /** The current turn's own text — what it said before its calls (a readiness claim?). */
   noteTurnText(text2) {
@@ -19809,43 +19527,36 @@ var ProgressDetector = class {
     if (unscoped) {
       this.visits.markAllMayHaveChanged();
       this.edits.reset();
-      if (wrote)
-        this.reverify.wroteAnything();
+      if (wrote) this.reverify.wroteAnything();
     } else if ((this.ports.isDelete ?? ((t) => t === "delete_file"))(tool)) {
       this.edits.record(tool, args, { ok, deleted: ok });
       this.forgetVisitsOf(pathArgOf(args));
     } else if (changesContent(args)) {
       const revert = this.edits.record(tool, args, { ok });
-      if (revert)
-        this.raise({ kind: "edit_revert", tool, target: revert.path });
+      if (revert) this.raise({ kind: "edit_revert", tool, target: revert.path });
       if (ok) {
         const path = pathArgOf(args);
         this.forgetVisitsOf(path);
-        if (path)
-          this.reverify.wrote(path);
+        if (path) this.reverify.wrote(path);
       }
     } else if (ok && this.ports.isReadOnly?.(tool, args)) {
       const target = visitTargetOf(args);
       if (target) {
         this.reverify.read(target);
         const visit = this.visits.record(`${tool}:${target}`, args);
-        if (visit.count >= REVISIT_HARD_AT && !visit.mayHaveChanged)
-          this.raise({ kind: "circling_read", tool, target, count: visit.count });
+        if (visit.count >= REVISIT_HARD_AT && !visit.mayHaveChanged) this.raise({ kind: "circling_read", tool, target, count: visit.count });
       }
     }
     const { checkChanged } = this.progress.observe(tool, args, { ok, wrote, result: result.data });
-    if (ok || checkChanged)
-      this.failures.clear(tool, args);
+    if (ok || checkChanged) this.failures.clear(tool, args);
     else {
       const attempts = this.failures.record(tool, args);
       const reason = failureReason(result.data);
-      if (attempts >= FAILURE_HARD_AT)
-        this.raise({ kind: "repeated_failure", tool, count: attempts, ...reason ? { reason } : {} });
+      if (attempts >= FAILURE_HARD_AT) this.raise({ kind: "repeated_failure", tool, count: attempts, ...reason ? { reason } : {} });
     }
   }
   forgetVisitsOf(path) {
-    if (!path)
-      return;
+    if (!path) return;
     this.visits.forget((key) => {
       const target = key.slice(key.indexOf(":") + 1);
       return target === path || target.startsWith(`${path} \u220B `);
@@ -19865,25 +19576,18 @@ var ProgressDetector = class {
     }
     const unkeptBefore = this.claims.snapshot().unkept;
     const unkept = this.claims.endTurn();
-    if (unkept > unkeptBefore)
-      this.unkeptTurns += 1;
-    if (unkept >= UNKEPT_READY_AT)
-      this.raise({ kind: "unkept_ready", count: unkept });
-    if (!this.turnSignal && idle >= NO_PROGRESS_TURNS)
-      this.raise({ kind: "no_progress", count: idle });
+    if (unkept > unkeptBefore) this.unkeptTurns += 1;
+    if (unkept >= UNKEPT_READY_AT) this.raise({ kind: "unkept_ready", count: unkept });
+    if (!this.turnSignal && idle >= NO_PROGRESS_TURNS) this.raise({ kind: "no_progress", count: idle });
     const signal = this.turnSignal;
     this.turnSignal = null;
     if (!signal) {
       this.readiness.endTurn();
       const advisoryNote = this.readiness.observe(this.unkeptTurns);
-      if (advisoryNote)
-        return { kind: "advisory", note: advisoryNote };
-      if (batchNote && this.progress.lastTurnIdle)
-        return { kind: "advisory", note: batchNote };
-      if (this.progress.lastTurnGround)
-        this.quietTurns += 1;
-      else if (idle > 0)
-        this.quietTurns = 0;
+      if (advisoryNote) return { kind: "advisory", note: advisoryNote };
+      if (batchNote && this.progress.lastTurnIdle) return { kind: "advisory", note: batchNote };
+      if (this.progress.lastTurnGround) this.quietTurns += 1;
+      else if (idle > 0) this.quietTurns = 0;
       if (this.quietTurns >= LADDER_RESET_TURNS) {
         this.trips = 0;
         this.quietTurns = 0;
@@ -19976,7 +19680,7 @@ function progressPauseQuestion(signal, trip) {
   return `This run ${what[signal.kind]} \u2014 progress check ${trip}, after earlier warnings. How should it proceed? Reply with guidance to continue, or stop the run.`;
 }
 
-// ../packages/run-guards/src/progressTrace.js
+// ../packages/run-guards/src/progressTrace.ts
 function advisorySourceOf(note) {
   return note === BATCHING_NUDGE_NOTE ? "batching" : "readiness";
 }
@@ -19997,29 +19701,25 @@ function progressTraceStep(action, override = {}) {
   };
 }
 
-// ../packages/run-guards/src/inRunVerify.js
+// ../packages/run-guards/src/inRunVerify.ts
 var PUBLISH_TOOLS = /* @__PURE__ */ new Set(["git_commit", "git_push", "open_pull_request"]);
 var IN_RUN_VERIFY_SCRIPT_NAMES = ["typecheck", "type-check", "test"];
 var DURABLE_IN_RUN_VERIFY_NOTE = "Durable/Worker has no shell. Typecheck/test are skipped in-run; CI on the pull request is the source of truth. Never claim those checks passed.";
 var SANDBOX_IN_RUN_VERIFY_NOTE = "After code changes, run these via the sandbox shell (`run_command`) before finish. Do not invent SSH.";
 function firstDeclaredScript(scripts, names) {
-  if (!scripts)
-    return null;
+  if (!scripts) return null;
   for (const name of names) {
     const body = scripts[name];
-    if (typeof body === "string" && body.trim())
-      return name;
+    if (typeof body === "string" && body.trim()) return name;
   }
   return null;
 }
 function packageVerifyCommands(scripts, runner = "npm") {
   const cmds = [];
   const typecheck = firstDeclaredScript(scripts, ["typecheck", "type-check"]);
-  if (typecheck)
-    cmds.push(`${runner} run ${typecheck}`);
+  if (typecheck) cmds.push(`${runner} run ${typecheck}`);
   const test = firstDeclaredScript(scripts, ["test"]);
-  if (test)
-    cmds.push(`${runner} run ${test}`);
+  if (test) cmds.push(`${runner} run ${test}`);
   return cmds;
 }
 function planInRunVerify(input) {
@@ -20044,8 +19744,7 @@ function planInRunVerify(input) {
   };
 }
 function wroteCode(writtenPaths) {
-  if (!writtenPaths)
-    return false;
+  if (!writtenPaths) return false;
   return "size" in writtenPaths ? writtenPaths.size > 0 : writtenPaths.length > 0;
 }
 function inRunVerifyOutcome(input) {
@@ -20118,10 +19817,10 @@ function inRunVerifyOutcome(input) {
   };
 }
 
-// ../packages/run-guards/src/streak.js
+// ../packages/run-guards/src/streak.ts
 var BACK_TO_BACK_AT = 3;
 
-// ../packages/run-guards/src/stopIntent.js
+// ../packages/run-guards/src/stopIntent.ts
 function normalizeStopText(text2) {
   return text2.trim().toLowerCase();
 }
@@ -20158,24 +19857,19 @@ var TAIL = /* @__PURE__ */ new Set([
 var CANCEL_OBJECTS = /* @__PURE__ */ new Set(["run", "task", "job", "execution", "it", "this", "that", "everything", "all", "work"]);
 var MAX_WORDS = 6;
 function stopIntent(text2) {
-  if (!text2)
-    return false;
+  if (!text2) return false;
   const words3 = normalizeStopText(text2).replace(/[.!…]+$/u, "").split(/[\s,]+/).map((w) => w.replace(/^[!.]+|[!.]+$/g, "")).filter(Boolean);
-  if (words3.length === 0 || words3.length > MAX_WORDS)
-    return false;
+  if (words3.length === 0 || words3.length > MAX_WORDS) return false;
   let i = 0;
-  while (i < words3.length - 1 && LEADS.has(words3[i]))
-    i++;
+  while (i < words3.length - 1 && LEADS.has(words3[i])) i++;
   const verb = words3[i];
   const tail = words3.slice(i + 1);
-  if (!tail.every((w) => TAIL.has(w)))
-    return false;
-  if (BARE_VERBS.has(verb))
-    return true;
+  if (!tail.every((w) => TAIL.has(w))) return false;
+  if (BARE_VERBS.has(verb)) return true;
   return OBJECT_VERBS.has(verb) && tail.some((w) => CANCEL_OBJECTS.has(w));
 }
 
-// ../packages/run-guards/src/readsWithoutSpawn.js
+// ../packages/run-guards/src/readsWithoutSpawn.ts
 var READS_BEFORE_DELEGATION_NUDGE = 4;
 var ReadsWithoutSpawn = class {
   state;
@@ -20184,10 +19878,8 @@ var ReadsWithoutSpawn = class {
   }
   /** Record one dispatched call. Returns the reads-without-spawn count after it. */
   record(kind) {
-    if (kind === "spawn")
-      this.state.spawned = true;
-    else if (kind === "read" && !this.state.spawned)
-      this.state.reads += 1;
+    if (kind === "spawn") this.state.spawned = true;
+    else if (kind === "read" && !this.state.spawned) this.state.reads += 1;
     return this.state.reads;
   }
   /** The threshold is reached, nothing was spawned, and the nudge has not fired yet. */
@@ -20203,7 +19895,7 @@ var ReadsWithoutSpawn = class {
   }
 };
 
-// ../packages/run-guards/src/evidence/ledger.js
+// ../packages/run-guards/src/evidence/ledger.ts
 var MAX_CHECK_FINDINGS = 20;
 var MAX_CHECK_OUTPUT_TAIL = 2048;
 function normalizeEvidencePath(path) {
@@ -20236,8 +19928,7 @@ function createEvidenceLedger(resume) {
     },
     record(path, contentHash4, check) {
       const e = entryFor(path);
-      if (e.latestHash !== null && e.latestHash !== contentHash4)
-        return;
+      if (e.latestHash !== null && e.latestHash !== contentHash4) return;
       e.latestHash = contentHash4;
       const capped2 = {
         ...check,
@@ -20245,29 +19936,24 @@ function createEvidenceLedger(resume) {
         ...check.outputTail ? { outputTail: check.outputTail.slice(-MAX_CHECK_OUTPUT_TAIL) } : {}
       };
       const list2 = e.byHash.get(contentHash4);
-      if (list2)
-        list2.push(capped2);
-      else
-        e.byHash.set(contentHash4, [capped2]);
+      if (list2) list2.push(capped2);
+      else e.byHash.set(contentHash4, [capped2]);
     },
     for(path, contentHash4) {
       const e = entries.get(normalizeEvidencePath(path));
-      if (!e || e.latestHash !== contentHash4)
-        return [];
+      if (!e || e.latestHash !== contentHash4) return [];
       return e.byHash.get(contentHash4) ?? [];
     },
     current(path) {
       const key = normalizeEvidencePath(path);
       const e = entries.get(key);
-      if (!e || e.latestHash === null)
-        return null;
+      if (!e || e.latestHash === null) return null;
       return { path: key, contentHash: e.latestHash, checks: e.byHash.get(e.latestHash) ?? [] };
     },
     snapshot() {
       const out = [];
       for (const [key, e] of entries) {
-        if (e.latestHash === null)
-          continue;
+        if (e.latestHash === null) continue;
         out.push({ path: key, contentHash: e.latestHash, checks: e.byHash.get(e.latestHash) ?? [] });
       }
       return out;
@@ -20275,12 +19961,12 @@ function createEvidenceLedger(resume) {
   };
 }
 
-// ../packages/run-guards/src/evidence/gitCommandPattern.js
+// ../packages/run-guards/src/evidence/gitCommandPattern.ts
 function gitCommandPattern(verbs) {
   return new RegExp(`\\bgit\\s+(?:-[Cc]\\s+\\S+\\s+|-\\S+\\s+|--\\S+(?:=\\S+)?\\s+)*(?:${verbs})\\b`, "i");
 }
 
-// ../packages/run-guards/src/evidence/gates.js
+// ../packages/run-guards/src/evidence/gates.ts
 var DEFAULT_EVIDENCE_POLICY = {
   required: {
     ".ts": ["diagnostics", "typecheck", "test"],
@@ -20350,20 +20036,16 @@ function needsTest(file, policy) {
 }
 function covers(test, file, policy) {
   const coverage = policy.newSourceTestCoverage ?? ["stem"];
-  if (coverage.includes("stem") && basenameOf(test.absPath).startsWith(stemOf(file.absPath) + "."))
-    return true;
+  if (coverage.includes("stem") && basenameOf(test.absPath).startsWith(stemOf(file.absPath) + ".")) return true;
   if (coverage.includes("directory")) {
     const dir = dirOf2(file.absPath);
-    if (dirOf2(test.absPath) === dir)
-      return true;
+    if (dirOf2(test.absPath) === dir) return true;
     const dirName = dir.slice(dir.lastIndexOf("/") + 1);
-    if (dirName && dirOf2(test.absPath) === dirOf2(dir) && basenameOf(test.absPath).startsWith(dirName + "."))
-      return true;
+    if (dirName && dirOf2(test.absPath) === dirOf2(dir) && basenameOf(test.absPath).startsWith(dirName + ".")) return true;
   }
   if (coverage.includes("import") && test.imports?.length) {
     const target = moduleKey(file.absPath);
-    if (test.imports.some((i) => moduleKey(i) === target))
-      return true;
+    if (test.imports.some((i) => moduleKey(i) === target)) return true;
   }
   return false;
 }
@@ -20378,10 +20060,8 @@ function refuse(reason) {
   return { ok: false, reason };
 }
 function fileIsUnchecked(file, policy) {
-  if (file.deleted)
-    return true;
-  if ((policy.required[extOf(file.absPath)] ?? []).length > 0)
-    return false;
+  if (file.deleted) return true;
+  if ((policy.required[extOf(file.absPath)] ?? []).length > 0) return false;
   return !needsTest(file, policy);
 }
 function firstFindings(check, max = 3) {
@@ -20396,12 +20076,10 @@ function checkFailureReason(path, check, detail) {
 function outgoingGate(files, ledger, policy) {
   const unavailable2 = [];
   for (const file of files) {
-    if (file.deleted)
-      continue;
+    if (file.deleted) continue;
     const checks = ledger.for(file.absPath, file.hash);
     const required = file.unavailable ? [] : policy.required[extOf(file.absPath)] ?? [];
-    if (file.unavailable)
-      unavailable2.push(`${file.absPath}: ${file.unavailable}`);
+    if (file.unavailable) unavailable2.push(`${file.absPath}: ${file.unavailable}`);
     for (const kind of required) {
       const records = checks.filter((c) => c.kind === kind);
       if (records.length === 0) {
@@ -20417,15 +20095,16 @@ function outgoingGate(files, ledger, policy) {
         unavailable2.push(`${file.absPath}: ${record3.name} (${kind}) unavailable`);
       }
       if (kind === "diagnostics") {
-        if (record3.findings.some(isErrorFinding))
-          return refuse(checkFailureReason(file.absPath, record3, " (LSP error)"));
+        if (record3.findings.some(isErrorFinding)) return refuse(checkFailureReason(file.absPath, record3, " (LSP error)"));
       }
     }
     if (needsTest(file, policy)) {
       const stem = stemOf(file.absPath);
       const hasTest = files.some((t) => t !== file && !t.deleted && isTestPath(t.absPath) && covers(t, file, policy));
       if (!hasTest) {
-        return refuse(`git_push refused: ${file.absPath} is new and has no test in this push. Add ${stem}.test.ts covering it, commit, and push again \u2014 the host runs the checks.`);
+        return refuse(
+          `git_push refused: ${file.absPath} is new and has no test in this push. Add ${stem}.test.ts covering it, commit, and push again \u2014 the host runs the checks.`
+        );
       }
     }
   }
@@ -20433,22 +20112,29 @@ function outgoingGate(files, ledger, policy) {
 }
 function reviewGate(review, authorModels, currentDiffHash) {
   if (!review) {
-    return refuse("git_push refused: no independent review. The push gate requires one review sub-run by a model that did not author the change (PRD 45 OD-1); record it with the reviewer port, then push again.");
+    return refuse(
+      "git_push refused: no independent review. The push gate requires one review sub-run by a model that did not author the change (PRD 45 OD-1); record it with the reviewer port, then push again."
+    );
   }
   if (authorModels.includes(review.reviewerModel)) {
-    return refuse(`git_push refused: reviewer ${review.reviewerModel} is one of the author models (${authorModels.join(", ")}). Run the review on a different model and push again.`);
+    return refuse(
+      `git_push refused: reviewer ${review.reviewerModel} is one of the author models (${authorModels.join(", ")}). Run the review on a different model and push again.`
+    );
   }
   if (review.diffHash !== currentDiffHash) {
-    return refuse("git_push refused: the diff changed after the review was recorded. Re-run the review on the current diff and push again.");
+    return refuse(
+      "git_push refused: the diff changed after the review was recorded. Re-run the review on the current diff and push again."
+    );
   }
   if (review.verdict === "changes_requested") {
-    return refuse(`git_push refused: reviewer ${review.reviewerModel} requested changes. Findings: ${review.findings.slice(0, 5).join("; ") || "(none recorded)"}. Address them and push again.`);
+    return refuse(
+      `git_push refused: reviewer ${review.reviewerModel} requested changes. Findings: ${review.findings.slice(0, 5).join("; ") || "(none recorded)"}. Address them and push again.`
+    );
   }
   return pass();
 }
 function shellPublishHint(command) {
-  if (!gitCommandPattern("commit|push").test(command))
-    return null;
+  if (!gitCommandPattern("commit|push").test(command)) return null;
   return "That shell command publishes. Use the git_commit / git_push tools instead: git_push runs the evidence gates and the independent review before the push leaves the machine.";
 }
 
@@ -23557,7 +23243,7 @@ function recorderForState(state) {
   return recorder;
 }
 
-// ../packages/agent-run/src/policy/memory/learnedFacts.js
+// ../packages/agent-run/src/policy/memory/learnedFacts.ts
 var MIN_FACT_CHARS = 24;
 var MAX_FACTS = 6;
 var KEY_PREFIX = "learned:";
@@ -23598,34 +23284,26 @@ function factKey2(raw) {
 function parseLearnedFacts(raw) {
   const start = raw.indexOf("[");
   const end = raw.lastIndexOf("]");
-  if (start < 0 || end <= start)
-    return [];
+  if (start < 0 || end <= start) return [];
   let parsed;
   try {
     parsed = JSON.parse(raw.slice(start, end + 1));
   } catch {
     return [];
   }
-  if (!Array.isArray(parsed))
-    return [];
+  if (!Array.isArray(parsed)) return [];
   const out = [];
   const seen = /* @__PURE__ */ new Set();
   for (const item of parsed) {
-    if (out.length >= MAX_FACTS)
-      break;
-    if (!item || typeof item !== "object")
-      continue;
+    if (out.length >= MAX_FACTS) break;
+    if (!item || typeof item !== "object") continue;
     const row = item;
-    if (typeof row.kind !== "string" || !KINDS.has(row.kind))
-      continue;
-    if (typeof row.key !== "string" || typeof row.content !== "string")
-      continue;
-    if (/^workspace:/i.test(row.key.trim()))
-      continue;
+    if (typeof row.kind !== "string" || !KINDS.has(row.kind)) continue;
+    if (typeof row.key !== "string" || typeof row.content !== "string") continue;
+    if (/^workspace:/i.test(row.key.trim())) continue;
     const key = factKey2(row.key);
     const content = row.content.replace(/\s+/g, " ").trim();
-    if (!key || content.length < MIN_FACT_CHARS || seen.has(key))
-      continue;
+    if (!key || content.length < MIN_FACT_CHARS || seen.has(key)) continue;
     seen.add(key);
     out.push({ key, content, kind: row.kind });
   }
@@ -23633,8 +23311,7 @@ function parseLearnedFacts(raw) {
 }
 async function commitLearnedFacts(input, deps) {
   const changed2 = changedPaths(input);
-  if (changed2.length === 0)
-    return [];
+  if (changed2.length === 0) return [];
   let raw = "";
   try {
     raw = await deps.complete(memoryCommitPrompt({ ...input, changed: changed2 }));
@@ -23645,8 +23322,7 @@ async function commitLearnedFacts(input, deps) {
   const landed = [];
   for (const fact of facts) {
     try {
-      if (await deps.remember(fact.key, fact.content))
-        landed.push(fact);
+      if (await deps.remember(fact.key, fact.content)) landed.push(fact);
     } catch {
     }
   }
@@ -23664,8 +23340,7 @@ function learnedFactsRequest(evidence) {
 var learnedFactDeps = null;
 async function extractAndWriteLearnedFacts(evidence) {
   const deps = learnedFactDeps;
-  if (!deps)
-    return null;
+  if (!deps) return null;
   return commitLearnedFacts(learnedFactsRequest(evidence), deps);
 }
 
@@ -24104,7 +23779,7 @@ function isChatReplyScope(toolScope) {
   return toolScope === "chat-reply";
 }
 
-// ../packages/tool-output-policy/src/caps.js
+// ../packages/tool-output-policy/src/caps.ts
 var DEFAULT_TOOL_OUTPUT_CHARS = 6e3;
 var TOOL_OUTPUT_CAPS = {
   read_file: 16e3,
@@ -24160,63 +23835,51 @@ function windowToolResultCap(contextWindowTokens) {
 }
 var READ_FILE_MAX_CHARS = 64e3;
 function windowedCap(tool, tableCap, contextWindowTokens) {
-  if (typeof contextWindowTokens !== "number" || !Number.isFinite(contextWindowTokens) || contextWindowTokens <= 0)
-    return tableCap;
+  if (typeof contextWindowTokens !== "number" || !Number.isFinite(contextWindowTokens) || contextWindowTokens <= 0) return tableCap;
   const share = windowToolResultCap(contextWindowTokens);
-  if (isPagedReadTool(tool))
-    return Math.min(READ_FILE_MAX_CHARS, Math.max(tableCap, share));
+  if (isPagedReadTool(tool)) return Math.min(READ_FILE_MAX_CHARS, Math.max(tableCap, share));
   return Math.min(tableCap, share);
 }
 function isShellTool(tool) {
   return SHELL_TOOLS.has(tool);
 }
 
-// ../packages/tool-output-policy/src/textCut.js
+// ../packages/tool-output-policy/src/textCut.ts
 function keepTail(text2, max) {
-  if (text2.length <= max)
-    return text2;
+  if (text2.length <= max) return text2;
   return text2.slice(text2.length - max);
 }
 var DEFAULT_TRUNCATION_SUFFIX = "\n\n\u26A0\uFE0F [Content truncated \u2014 original was too large for the model's context window. The content above is a partial view. If you need more, request specific sections or use offset/limit parameters to read smaller chunks.]";
 function cutHead(text2, maxChars, opts = {}) {
-  if (text2.length <= maxChars)
-    return text2;
+  if (text2.length <= maxChars) return text2;
   const suffix = opts.suffix ?? DEFAULT_TRUNCATION_SUFFIX;
   const snap = opts.snap ?? 0.8;
   const keep2 = Math.max(opts.minKeep ?? 0, maxChars - suffix.length);
-  if (keep2 <= 0)
-    return opts.emptyNotice ?? suffix.trim();
+  if (keep2 <= 0) return opts.emptyNotice ?? suffix.trim();
   let cutPoint = keep2;
   const lastNewline = text2.lastIndexOf("\n", keep2);
-  if (lastNewline > keep2 * snap)
-    cutPoint = lastNewline;
+  if (lastNewline > keep2 * snap) cutPoint = lastNewline;
   return text2.slice(0, cutPoint) + suffix;
 }
 var MARKER_RESERVE = 160;
 function countLines(text2) {
   let n2 = 0;
-  for (let i = 0; i < text2.length; i++)
-    if (text2.charCodeAt(i) === 10)
-      n2++;
+  for (let i = 0; i < text2.length; i++) if (text2.charCodeAt(i) === 10) n2++;
   return n2;
 }
 function cutHeadTail(text2, maxChars, opts = {}) {
-  if (text2.length <= maxChars)
-    return text2;
+  if (text2.length <= maxChars) return text2;
   const budget2 = maxChars - MARKER_RESERVE;
-  if (budget2 <= 0)
-    return keepTail(text2, Math.max(0, maxChars));
+  if (budget2 <= 0) return keepTail(text2, Math.max(0, maxChars));
   const headShare = Math.min(1, Math.max(0, opts.headShare ?? 0.25));
   const headBudget = Math.floor(budget2 * headShare);
   const tailBudget = budget2 - headBudget;
   let headEnd = headBudget;
   const nl = text2.lastIndexOf("\n", headBudget);
-  if (nl > headBudget * 0.8)
-    headEnd = nl;
+  if (nl > headBudget * 0.8) headEnd = nl;
   let tailStart = text2.length - tailBudget;
   const nextNl = text2.indexOf("\n", tailStart);
-  if (nextNl >= 0 && nextNl - tailStart < tailBudget * 0.2)
-    tailStart = nextNl + 1;
+  if (nextNl >= 0 && nextNl - tailStart < tailBudget * 0.2) tailStart = nextNl + 1;
   const head = text2.slice(0, headEnd);
   const tail = text2.slice(tailStart);
   const elided = text2.slice(headEnd, tailStart);
@@ -24232,33 +23895,28 @@ var isHighSurrogate = (c) => c >= 55296 && c <= 56319;
 var isLowSurrogate = (c) => c >= 56320 && c <= 57343;
 function safePrefix(s, n2) {
   let end = Math.max(0, Math.min(n2, s.length));
-  if (end > 0 && end < s.length && isHighSurrogate(s.charCodeAt(end - 1)))
-    end -= 1;
+  if (end > 0 && end < s.length && isHighSurrogate(s.charCodeAt(end - 1))) end -= 1;
   return s.slice(0, end);
 }
 function safeSuffix(s, n2) {
-  if (n2 <= 0)
-    return "";
+  if (n2 <= 0) return "";
   let start = Math.max(0, s.length - n2);
-  if (start > 0 && isLowSurrogate(s.charCodeAt(start)))
-    start += 1;
+  if (start > 0 && isLowSurrogate(s.charCodeAt(start))) start += 1;
   return s.slice(start);
 }
 function truncateMiddle(text2, max, opts = {}) {
-  if (text2.length <= max)
-    return text2;
+  if (text2.length <= max) return text2;
   const { marker = defaultMiddleMarker, symmetric = false } = opts;
   const markerFor = typeof marker === "string" ? () => marker : marker;
   const room = Math.max(0, max - markerFor(text2.length).length);
-  if (room === 0)
-    return safePrefix(text2, max);
+  if (room === 0) return safePrefix(text2, max);
   const tailShare = Math.floor(room / 2);
   const head = safePrefix(text2, symmetric ? tailShare : room - tailShare);
   const tail = safeSuffix(text2, tailShare);
   return `${head}${markerFor(text2.length - head.length - tail.length)}${tail}`;
 }
 
-// ../packages/tool-output-policy/src/shellSummary.js
+// ../packages/tool-output-policy/src/shellSummary.ts
 var DEFAULT_TAIL_LINES = 40;
 var MAX_DIFF_LINES = 24;
 var ANSI = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
@@ -24274,9 +23932,7 @@ var RUNNER_SIGNATURES = [
   ["go", /^(?:---|===) (?:FAIL|RUN|PASS):|^(?:ok|FAIL)\s+\S+\s+[\d.]+s/m]
 ];
 function detectRunner2(text2) {
-  for (const [runner, re] of RUNNER_SIGNATURES)
-    if (re.test(text2))
-      return runner;
+  for (const [runner, re] of RUNNER_SIGNATURES) if (re.test(text2)) return runner;
   return "unknown";
 }
 var NOISE = [
@@ -24331,8 +23987,7 @@ function isErrorLine(line) {
 function failingTestName(line) {
   for (const re of FAILING_TEST) {
     const m = re.exec(line);
-    if (m && m[1])
-      return m[1].trim();
+    if (m && m[1]) return m[1].trim();
   }
   return null;
 }
@@ -24359,8 +24014,7 @@ function summarizeShellOutput(raw, opts) {
       seenFailing.add(name);
       failing.push(name);
     }
-    if (i >= tailFrom)
-      continue;
+    if (i >= tailFrom) continue;
     if (DIFF_HEADER.test(line)) {
       diffLeft = MAX_DIFF_LINES;
       kept.push(line);
@@ -24380,8 +24034,7 @@ function summarizeShellOutput(raw, opts) {
     }
     if (isErrorLine(line)) {
       const key = line.trim();
-      if (seenKept.has(key))
-        continue;
+      if (seenKept.has(key)) continue;
       seenKept.add(key);
       kept.push(line);
     }
@@ -24405,7 +24058,7 @@ ${kept.join("\n")}`;
   return { text: fitted, runner, failingTests: failing, droppedNoise };
 }
 
-// ../packages/tool-output-policy/src/jsonProjection.js
+// ../packages/tool-output-policy/src/jsonProjection.ts
 var STEPS = [
   { depth: 4, arrayItems: 10, stringChars: 400 },
   { depth: 3, arrayItems: 5, stringChars: 200 },
@@ -24414,29 +24067,23 @@ var STEPS = [
   { depth: 1, arrayItems: 1, stringChars: 60 }
 ];
 function describe(value) {
-  if (Array.isArray(value))
-    return `[array: ${value.length} items]`;
-  if (value && typeof value === "object")
-    return `{object: ${Object.keys(value).length} keys}`;
+  if (Array.isArray(value)) return `[array: ${value.length} items]`;
+  if (value && typeof value === "object") return `{object: ${Object.keys(value).length} keys}`;
   return String(value);
 }
 function projectValue(value, step, depth2) {
   if (typeof value === "string") {
     return value.length > step.stringChars ? `${value.slice(0, step.stringChars)}\u2026(+${value.length - step.stringChars} chars)` : value;
   }
-  if (value === null || typeof value !== "object")
-    return value;
-  if (depth2 >= step.depth)
-    return describe(value);
+  if (value === null || typeof value !== "object") return value;
+  if (depth2 >= step.depth) return describe(value);
   if (Array.isArray(value)) {
     const head = value.slice(0, step.arrayItems).map((v) => projectValue(v, step, depth2 + 1));
-    if (value.length > step.arrayItems)
-      head.push(`\u2026(+${value.length - step.arrayItems} more of ${value.length} items)`);
+    if (value.length > step.arrayItems) head.push(`\u2026(+${value.length - step.arrayItems} more of ${value.length} items)`);
     return head;
   }
   const out = {};
-  for (const [k, v] of Object.entries(value))
-    out[k] = projectValue(v, step, depth2 + 1);
+  for (const [k, v] of Object.entries(value)) out[k] = projectValue(v, step, depth2 + 1);
   return out;
 }
 function projectJson(value, maxChars) {
@@ -24445,13 +24092,12 @@ function projectJson(value, maxChars) {
     const projected = projectValue(value, step, 0);
     const json = JSON.stringify(projected);
     last = { value: projected, json, fits: json.length <= maxChars };
-    if (last.fits)
-      return last;
+    if (last.fits) return last;
   }
   return last;
 }
 
-// ../packages/tool-output-policy/src/readFileWindow.js
+// ../packages/tool-output-policy/src/readFileWindow.ts
 var READ_FILE_RESULT_CHARS = TOOL_OUTPUT_CAPS.read_file ?? 16e3;
 function isReadFileResult(out) {
   return !!out && typeof out === "object" && !Array.isArray(out) && out.ok !== false && typeof out.content === "string";
@@ -24471,8 +24117,7 @@ function windowReadFile(out, opts = {}) {
   };
   const build = (kept, note) => withNote2(served(kept, note));
   const fits = (value) => JSON.stringify(value).length <= maxChars;
-  if (fits(withNote2({ ...out })))
-    return done({ ...out }, false);
+  if (fits(withNote2({ ...out }))) return done({ ...out }, false);
   const how = (next) => opts.alone !== void 0 ? `call ${tool} again with ONLY the path ${JSON.stringify(opts.alone)} (offset applies to a single file) and offset ${next}` : `call ${tool} again with offset ${next}`;
   const continuation = (lastLine) => `Showing lines ${offset}\u2013${lastLine} of ${totalLines}. This surface returns at most ~${maxChars.toLocaleString("en-US")} chars per read, so a large file arrives in several windows \u2014 ${how(lastLine + 1)} to continue from exactly where this one stopped. Do not re-request lines you already have.`;
   let lo = 1;
@@ -24542,38 +24187,33 @@ function sliceReadFile(out, start, end) {
   };
 }
 
-// ../packages/tool-output-policy/src/policy.js
+// ../packages/tool-output-policy/src/policy.ts
 var LOG_FIELDS = ["output", "stdout", "stderr"];
 function isLogLike(text2, tool) {
   return tool !== void 0 && isShellTool(tool) || detectRunner2(text2) !== "unknown";
 }
 function fitToolText(text2, maxChars, opts = {}) {
-  if (text2.length <= maxChars)
-    return text2;
-  if (opts.summarize && isLogLike(text2, opts.tool))
-    return summarizeShellOutput(text2, { maxChars }).text;
+  if (text2.length <= maxChars) return text2;
+  if (opts.summarize && isLogLike(text2, opts.tool)) return summarizeShellOutput(text2, { maxChars }).text;
   return (opts.fallback ?? cutHeadTail)(text2, maxChars);
 }
 function attach(value, opts) {
   return opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(value, opts.advisory) : value;
 }
 function capFor(tool, opts) {
-  if (opts.maxChars !== void 0)
-    return opts.maxChars;
+  if (opts.maxChars !== void 0) return opts.maxChars;
   const tableCap = !opts.summarize && !isPagedReadTool(tool) ? DEFAULT_TOOL_OUTPUT_CHARS : toolOutputCap(tool, opts.caps);
   return windowedCap(tool, tableCap, opts.contextWindowTokens);
 }
 function shrinkLogFields(tool, out, cap2, overhead) {
   const fields = LOG_FIELDS.filter((f) => typeof out[f] === "string" && out[f].length > 0);
-  if (fields.length === 0)
-    return null;
+  if (fields.length === 0) return null;
   const logChars = fields.reduce((n2, f) => n2 + out[f].length, 0);
   const rest = JSON.stringify({ ...out, ...Object.fromEntries(fields.map((f) => [f, ""])) }).length;
   const escapedLog = fields.reduce((n2, f) => n2 + JSON.stringify(out[f]).length - 2, 0);
   const inflation = logChars > 0 ? escapedLog / logChars : 1;
   const budget2 = Math.floor((cap2 - rest - overhead) / inflation);
-  if (budget2 < 500)
-    return null;
+  if (budget2 < 500) return null;
   const shrunk = { ...out };
   for (const f of fields) {
     const text2 = out[f];
@@ -24583,8 +24223,7 @@ function shrinkLogFields(tool, out, cap2, overhead) {
   return shrunk;
 }
 function truncatedResultNote(originalChars, maxChars) {
-  if (maxChars < 600)
-    return "Truncated: NOT the whole result \u2014 do not treat it as complete.";
+  if (maxChars < 600) return "Truncated: NOT the whole result \u2014 do not treat it as complete.";
   return `Truncated: the full result was ${originalChars.toLocaleString("en-US")} chars and this surface returns at most ~${maxChars.toLocaleString("en-US")}. \`output\` is only a cut of it, NOT the whole \u2014 never treat it as complete or write it back as if it were. Re-call with a narrower query, id or filter to see the rest.`;
 }
 function shapeToolResult(tool, out, opts = {}) {
@@ -24597,22 +24236,19 @@ function shapeToolResult(tool, out, opts = {}) {
   }
   const cap2 = capFor(tool, opts);
   const full = JSON.stringify(attach(out ?? null, opts));
-  if (full.length <= cap2)
-    return { content: full, bytes, truncated: false };
+  if (full.length <= cap2) return { content: full, bytes, truncated: false };
   const advisoryChars = opts.advisory ? opts.advisory.length + 16 : 0;
   if (opts.summarize) {
     if (typeof out === "string") {
       const inflation = out.length > 0 ? (bytes - 2) / out.length : 1;
       const shaped = fitToolText(out, Math.max(500, Math.floor((cap2 - advisoryChars - 32) / Math.max(1, inflation))), { tool, summarize: true });
       const content2 = JSON.stringify(attach(shaped, opts));
-      if (content2.length <= cap2)
-        return { content: content2, bytes, truncated: true };
+      if (content2.length <= cap2) return { content: content2, bytes, truncated: true };
     } else if (out && typeof out === "object" && !Array.isArray(out)) {
       const shrunk = shrinkLogFields(tool, out, cap2, advisoryChars + 64);
       if (shrunk) {
         const content2 = JSON.stringify(attach(shrunk, opts));
-        if (content2.length <= cap2)
-          return { content: content2, bytes, truncated: true };
+        if (content2.length <= cap2) return { content: content2, bytes, truncated: true };
       }
     }
     const marker2 = `
@@ -27298,7 +26934,7 @@ function wakeChat(runKey, turns, start) {
   return true;
 }
 
-// ../packages/write-outbox/src/classification.js
+// ../packages/write-outbox/src/classification.ts
 var RETENTION_BY_WORK = {
   history: "durable",
   histories: "durable",
@@ -27311,15 +26947,13 @@ var RETENTION_BY_WORK = {
   telemetry: "best-effort"
 };
 function classifyOutboxWork(work) {
-  if (typeof work !== "string")
-    return void 0;
+  if (typeof work !== "string") return void 0;
   const key = work.trim().toLowerCase();
-  if (!key)
-    return void 0;
+  if (!key) return void 0;
   return RETENTION_BY_WORK[key];
 }
 
-// ../packages/write-outbox/src/queueClass.js
+// ../packages/write-outbox/src/queueClass.ts
 var UNCLASSIFIED_USER_WORK_QUEUES = Object.freeze({
   "host-persist": {
     carries: "user work (mixed with host telemetry)",
@@ -27405,24 +27039,19 @@ function normalizeQueueName(name) {
 }
 function canonicalQueue(name) {
   let key = normalizeQueueName(name);
-  if (!key)
-    return void 0;
-  if (key.startsWith(STORAGE_PREFIX))
-    key = key.slice(STORAGE_PREFIX.length);
-  if (key === "steps" || key.startsWith("steps:"))
-    return "steps";
+  if (!key) return void 0;
+  if (key.startsWith(STORAGE_PREFIX)) key = key.slice(STORAGE_PREFIX.length);
+  if (key === "steps" || key.startsWith("steps:")) return "steps";
   return ALIAS_TO_QUEUE[key];
 }
 function classifyUserWorkQueue(name) {
-  if (typeof name !== "string")
-    return void 0;
+  if (typeof name !== "string") return void 0;
   const queue = canonicalQueue(name);
-  if (!queue)
-    return void 0;
+  if (!queue) return void 0;
   return CLASS_BY_QUEUE[queue];
 }
 
-// ../packages/write-outbox/src/classifyQueue.js
+// ../packages/write-outbox/src/classifyQueue.ts
 var EXTRA_TELEMETRY = {
   "qa-captures": "qa-capture",
   "visitor-journeys": "visitor-journey"
@@ -27452,48 +27081,45 @@ function classified(queue, retention, kind) {
 function classifyQueue(name) {
   const fromQueue = classifyUserWorkQueue(name);
   if (fromQueue) {
-    return classified(fromQueue.queue, fromQueue.retention, fromQueue.retention === "durable" ? "user-work" : "telemetry");
+    return classified(
+      fromQueue.queue,
+      fromQueue.retention,
+      fromQueue.retention === "durable" ? "user-work" : "telemetry"
+    );
   }
   const fromWork = classifyOutboxWork(name);
   if (fromWork && typeof name === "string") {
     const key2 = normalizeQueueName2(name);
     const queue = WORK_CANONICAL[key2];
-    if (queue)
-      return classified(queue, fromWork, fromWork === "durable" ? "user-work" : "telemetry");
+    if (queue) return classified(queue, fromWork, fromWork === "durable" ? "user-work" : "telemetry");
   }
-  if (typeof name !== "string")
-    return void 0;
+  if (typeof name !== "string") return void 0;
   const key = normalizeQueueName2(name);
-  if (!key)
-    return void 0;
+  if (!key) return void 0;
   const extra = EXTRA_TELEMETRY[key];
-  if (extra)
-    return classified(extra, "best-effort", "telemetry");
+  if (extra) return classified(extra, "best-effort", "telemetry");
   return void 0;
 }
 
-// ../packages/write-outbox/src/deadLetter.js
+// ../packages/write-outbox/src/deadLetter.ts
 function exportDeadLetters(entries) {
   return entries.filter((entry) => entry.deadLetter).map((entry) => ({ ...entry, deadLetter: { ...entry.deadLetter } })).sort((a, b) => a.seq - b.seq);
 }
 function repairDeadLetter(entries, id) {
-  if (typeof id !== "string" || id.trim() === "")
-    return null;
+  if (typeof id !== "string" || id.trim() === "") return null;
   const entry = entries.find((candidate) => candidate.id === id && candidate.deadLetter);
-  if (!entry)
-    return null;
+  if (!entry) return null;
   delete entry.deadLetter;
   delete entry.batch;
   entry.retention = "durable";
   return entry;
 }
 
-// ../packages/write-outbox/src/idempotency.js
+// ../packages/write-outbox/src/idempotency.ts
 var fallbackCounter = 0;
 function defaultId() {
   const c = globalThis.crypto;
-  if (c?.randomUUID)
-    return c.randomUUID();
+  if (c?.randomUUID) return c.randomUUID();
   fallbackCounter += 1;
   return `ob-${Date.now().toString(36)}-${fallbackCounter.toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -27502,19 +27128,18 @@ function batchIdempotencyKey(batch) {
   return head ? head.batch ?? head.id : void 0;
 }
 
-// ../packages/write-outbox/src/policy.js
+// ../packages/write-outbox/src/policy.ts
 var OUTBOX_MAX_ITEMS = 25;
 var OUTBOX_MAX_WAIT_MS = 5e3;
 var OUTBOX_RETRY_BASE_MS = 1e3;
 var OUTBOX_RETRY_MAX_MS = 5 * 6e4;
 function isPermanentHttpFailure(error) {
   const status2 = error?.status;
-  if (typeof status2 !== "number")
-    return false;
+  if (typeof status2 !== "number") return false;
   return status2 >= 400 && status2 < 500 && ![401, 408, 409, 425, 429].includes(status2);
 }
 
-// ../packages/write-outbox/src/sealedBatch.js
+// ../packages/write-outbox/src/sealedBatch.ts
 var bySeq = (a, b) => a.seq - b.seq;
 function sendable(e, scope) {
   return !e.deadLetter && (scope === void 0 || e.scope === void 0 || e.scope === scope);
@@ -27522,25 +27147,21 @@ function sendable(e, scope) {
 function takeBatch(l, scope, upTo, maxItems) {
   const due = (e) => e.seq <= upTo && sendable(e, scope);
   const start = l.entries.findIndex(due);
-  if (start < 0)
-    return null;
+  if (start < 0) return null;
   const head = l.entries[start];
   let n2 = 0;
   const at2 = (i) => l.entries[start + i];
   if (head.batch) {
-    while (at2(n2) && at2(n2).batch === head.batch)
-      n2 += 1;
+    while (at2(n2) && at2(n2).batch === head.batch) n2 += 1;
   } else {
-    while (at2(n2) && n2 < maxItems && !at2(n2).batch && due(at2(n2)))
-      n2 += 1;
+    while (at2(n2) && n2 < maxItems && !at2(n2).batch && due(at2(n2))) n2 += 1;
   }
   const batch = l.entries.splice(start, n2);
   const sealed = !head.batch;
   if (sealed) {
     for (const e of batch) {
       e.batch = head.id;
-      if (scope !== void 0)
-        e.scope = scope;
+      if (scope !== void 0) e.scope = scope;
     }
   }
   return { batch, sealed };
@@ -27561,7 +27182,7 @@ function drainContext(taken, scope, newId) {
   };
 }
 
-// ../packages/write-outbox/src/outbox.js
+// ../packages/write-outbox/src/outbox.ts
 function createOutbox(opts) {
   const maxItems = Math.max(1, opts.maxItems ?? OUTBOX_MAX_ITEMS);
   const maxWaitMs = opts.maxWaitMs ?? OUTBOX_MAX_WAIT_MS;
@@ -27599,21 +27220,22 @@ function createOutbox(opts) {
     lastSeq = Math.max(lastSeq + 1, Date.now() * 1e3);
     return lastSeq;
   };
-  const loaded = store ? Promise.resolve().then(() => store.load()).then((entries) => {
-    for (const e of entries) {
-      lane(e.key).entries.push(e);
-      lastSeq = Math.max(lastSeq, e.seq);
+  const loaded = store ? Promise.resolve().then(() => store.load()).then(
+    (entries) => {
+      for (const e of entries) {
+        lane(e.key).entries.push(e);
+        lastSeq = Math.max(lastSeq, e.seq);
+      }
+      for (const l of lanes.values()) l.entries.sort(bySeq);
+    },
+    (error) => {
+      storeFailure ??= error;
+      opts.onStoreError?.(error);
     }
-    for (const l of lanes.values())
-      l.entries.sort(bySeq);
-  }, (error) => {
-    storeFailure ??= error;
-    opts.onStoreError?.(error);
-  }) : Promise.resolve();
+  ) : Promise.resolve();
   let writes = loaded;
   const persist = (op) => {
-    if (!store)
-      return Promise.resolve();
+    if (!store) return Promise.resolve();
     writes = writes.then(() => op(store)).catch((error) => {
       storeFailure ??= error;
       opts.onStoreError?.(error);
@@ -27621,38 +27243,30 @@ function createOutbox(opts) {
     return writes;
   };
   const drop = (key, entries, reason) => {
-    if (entries.length === 0)
-      return;
+    if (entries.length === 0) return;
     dropped += entries.length;
     const ids2 = entries.map((e) => e.id);
     void persist((s) => s.remove(ids2));
     opts.onDrop?.({ key, count: entries.length, reason });
   };
   const retentionOf = (entry) => {
-    if (entry.retention)
-      return entry.retention;
+    if (entry.retention) return entry.retention;
     return durable ? "durable" : "best-effort";
   };
   const resolveRetention = (work, path) => {
     const classified2 = classifyQueue(work) ?? classifyQueue(opts.work);
-    if (classified2)
-      return classified2.retention;
-    if (path === "enqueueDurable" || durable)
-      return "durable";
+    if (classified2) return classified2.retention;
+    if (path === "enqueueDurable" || durable) return "durable";
     return "best-effort";
   };
   const totalQueued = () => {
     let total = 0;
-    for (const l of lanes.values())
-      total += l.entries.length;
+    for (const l of lanes.values()) total += l.entries.length;
     return total;
   };
   const durableQueued = () => {
     let n2 = 0;
-    for (const l of lanes.values())
-      for (const entry of l.entries)
-        if (retentionOf(entry) === "durable")
-          n2 += 1;
+    for (const l of lanes.values()) for (const entry of l.entries) if (retentionOf(entry) === "durable") n2 += 1;
     return n2;
   };
   const evictBestEffortWhileOver = (limit) => {
@@ -27665,8 +27279,7 @@ function createOutbox(opts) {
       for (const [k, l] of lanes) {
         for (let i = 0; i < l.entries.length; i += 1) {
           const entry = l.entries[i];
-          if (retentionOf(entry) !== "best-effort" || entry.seq >= oldestSeq)
-            continue;
+          if (retentionOf(entry) !== "best-effort" || entry.seq >= oldestSeq) continue;
           oldestSeq = entry.seq;
           oldestKey = k;
           oldestLane = l;
@@ -27674,8 +27287,7 @@ function createOutbox(opts) {
         }
       }
       if (!oldestLane || oldestIndex < 0) {
-        if (total > maxEntries)
-          opts.onCapacity?.(total, maxEntries);
+        if (total > maxEntries) opts.onCapacity?.(total, maxEntries);
         return;
       }
       drop(oldestKey, oldestLane.entries.splice(oldestIndex, 1), "overflow");
@@ -27688,25 +27300,20 @@ function createOutbox(opts) {
   const currentScope = () => opts.scope ? opts.scope() : void 0;
   const take = (l, scope, upTo) => {
     const next = takeBatch(l, scope, upTo, maxItems);
-    if (!next)
-      return null;
-    if (next.sealed)
-      persist((s) => s.put(next.batch));
+    if (!next) return null;
+    if (next.sealed) persist((s) => s.put(next.batch));
     return next.batch;
   };
   const clearTimer = (l) => {
-    if (l.timer !== null)
-      clearTimeout(l.timer);
+    if (l.timer !== null) clearTimeout(l.timer);
     l.timer = null;
   };
   const clearRetry = (l) => {
-    if (l.retryTimer !== null)
-      clearTimeout(l.retryTimer);
+    if (l.retryTimer !== null) clearTimeout(l.retryTimer);
     l.retryTimer = null;
   };
   const scheduleRetry = (key, l, force = false) => {
-    if (!retry && !force || !maySend() || l.retryTimer !== null)
-      return;
+    if (!retry && !force || !maySend() || l.retryTimer !== null) return;
     const policy = retry ?? retryPolicy;
     l.attempt += 1;
     const delay = Math.min(policy.maxMs, policy.baseMs * 2 ** (l.attempt - 1));
@@ -27717,8 +27324,7 @@ function createOutbox(opts) {
     }, jittered);
   };
   const armTimer = (key, l) => {
-    if (l.timer !== null || maxWaitMs <= 0 || !maySend())
-      return;
+    if (l.timer !== null || maxWaitMs <= 0 || !maySend()) return;
     l.timer = setTimeout(() => {
       l.timer = null;
       void flushKey(key, { final: false, auto: true });
@@ -27760,17 +27366,14 @@ function createOutbox(opts) {
   };
   const flushKey = (key, mode) => {
     const l = lanes.get(key);
-    if (!l || !maySend())
-      return Promise.resolve();
+    if (!l || !maySend()) return Promise.resolve();
     const upTo = mode.probe ? Number.POSITIVE_INFINITY : lastSeq;
     if (mode.final) {
       const scope = currentScope();
-      if (!isOnline() || scope === null)
-        return Promise.resolve();
+      if (!isOnline() || scope === null) return Promise.resolve();
       clearTimer(l);
       const batches = [];
-      for (let b = take(l, scope, upTo); b; b = take(l, scope, upTo))
-        batches.push(b);
+      for (let b = take(l, scope, upTo); b; b = take(l, scope, upTo)) batches.push(b);
       return Promise.all(batches.map((b) => sendBatch(key, l, b, true))).then(() => void 0);
     }
     const run = l.tail.then(async () => {
@@ -27780,14 +27383,12 @@ function createOutbox(opts) {
         clearRetry(l);
         return;
       }
-      if (mode.auto && l.retryTimer !== null)
-        return;
+      if (mode.auto && l.retryTimer !== null) return;
       if (mode.auto && !isOnline()) {
         scheduleRetry(key, l);
         return;
       }
-      if (!mode.auto && l.retryTimer !== null)
-        clearRetry(l);
+      if (!mode.auto && l.retryTimer !== null) clearRetry(l);
       const scope = currentScope();
       if (scope === null) {
         scheduleRetry(key, l);
@@ -27795,19 +27396,16 @@ function createOutbox(opts) {
       }
       clearTimer(l);
       for (let batch = take(l, scope, upTo); batch; batch = take(l, scope, upTo)) {
-        if (!await sendBatch(key, l, batch, false))
-          return;
+        if (!await sendBatch(key, l, batch, false)) return;
       }
-      if (l.entries.some((entry) => !entry.deadLetter))
-        armTimer(key, l);
+      if (l.entries.some((entry) => !entry.deadLetter)) armTimer(key, l);
     });
     l.tail = run;
     return run;
   };
   const flushAll = (final) => Promise.all([...lanes.keys()].map((k) => flushKey(k, { final }))).then(() => void 0);
   const unsubscribeOnline = opts.online?.subscribe((online) => {
-    if (!online || !maySend())
-      return;
+    if (!online || !maySend()) return;
     for (const l of lanes.values()) {
       clearRetry(l);
       l.attempt = 0;
@@ -27820,20 +27418,16 @@ function createOutbox(opts) {
         clearTimer(l);
         clearRetry(l);
       }
-      for (const controller of inFlightControllers)
-        controller.abort();
+      for (const controller of inFlightControllers) controller.abort();
       return;
     }
-    for (const l of lanes.values())
-      l.attempt = 0;
+    for (const l of lanes.values()) l.attempt = 0;
     void flushAll(false);
   });
   if (store) {
     void loaded.then(() => {
       enforceBound();
-      for (const [k, l] of lanes)
-        if (l.entries.length > 0)
-          void flushKey(k, { final: false, auto: true });
+      for (const [k, l] of lanes) if (l.entries.length > 0) void flushKey(k, { final: false, auto: true });
     });
   }
   const settleFailure = (key, l, batch, error) => {
@@ -27843,12 +27437,9 @@ function createOutbox(opts) {
     const discarded = [];
     for (const entry of batch) {
       const userWork = retentionOf(entry) === "durable";
-      if (permanent && userWork)
-        dead.push(entry);
-      else if (!permanent && (userWork || retry))
-        keep2.push(entry);
-      else
-        discarded.push(entry);
+      if (permanent && userWork) dead.push(entry);
+      else if (!permanent && (userWork || retry)) keep2.push(entry);
+      else discarded.push(entry);
     }
     if (dead.length) {
       const at2 = (/* @__PURE__ */ new Date()).toISOString();
@@ -27865,8 +27456,7 @@ function createOutbox(opts) {
       requeue2(l, keep2);
       scheduleRetry(key, l, !retry && keep2.some((entry) => retentionOf(entry) === "durable"));
     }
-    if (discarded.length)
-      drop(key, discarded, permanent ? "rejected" : "failed");
+    if (discarded.length) drop(key, discarded, permanent ? "rejected" : "failed");
     return keep2.length === 0;
   };
   const enqueueEntry = (key, item, work, path) => {
@@ -27890,13 +27480,10 @@ function createOutbox(opts) {
     };
     l.entries.push(entry);
     const persisted = persist((s) => s.put([entry]));
-    if (retention === "best-effort")
-      enforceBound();
+    if (retention === "best-effort") enforceBound();
     const unsealed = l.entries.reduce((n2, e) => e.batch || e.deadLetter ? n2 : n2 + 1, 0);
-    if (unsealed >= maxItems)
-      void flushKey(key, { final: false, auto: true });
-    else
-      armTimer(key, l);
+    if (unsealed >= maxItems) void flushKey(key, { final: false, auto: true });
+    else armTimer(key, l);
     return { id: entry.id, persisted };
   };
   return {
@@ -27906,29 +27493,25 @@ function createOutbox(opts) {
     async enqueueDurable(key, item, work) {
       const enqueued = enqueueEntry(key, item, work, "enqueueDurable");
       await enqueued.persisted;
-      if (storeFailure)
-        throw storeFailure;
+      if (storeFailure) throw storeFailure;
       return enqueued.id;
     },
     async flush(key, flushOpts) {
       const final = flushOpts?.final ?? false;
-      if (key === void 0)
-        return flushAll(final);
+      if (key === void 0) return flushAll(final);
       return flushKey(key, { final });
     },
     drainWith(key, request) {
       const l = lane(key);
       const run = l.tail.then(async () => {
         await loaded;
-        if (!maySend())
-          throw Object.assign(new Error("platform_send_disabled"), { code: "PLATFORM_SEND_DISABLED" });
+        if (!maySend()) throw Object.assign(new Error("platform_send_disabled"), { code: "PLATFORM_SEND_DISABLED" });
         clearTimer(l);
         const scope = currentScope();
         const taken = [];
         if (scope !== null) {
           const parked = [];
-          for (const e of l.entries)
-            (sendable(e, scope) ? taken : parked).push(e);
+          for (const e of l.entries) (sendable(e, scope) ? taken : parked).push(e);
           l.entries = parked;
         }
         const items = taken.map((e) => e.item);
@@ -27938,12 +27521,10 @@ function createOutbox(opts) {
         const ids2 = ctx.ids;
         l.inFlight += taken.length;
         try {
-          if (!maySend())
-            throw Object.assign(new Error("platform_send_disabled"), { code: "PLATFORM_SEND_DISABLED" });
+          if (!maySend()) throw Object.assign(new Error("platform_send_disabled"), { code: "PLATFORM_SEND_DISABLED" });
           const result = await request(opts.coalesce && items.length ? opts.coalesce(items) : items, ctx);
           l.inFlight -= taken.length;
-          if (taken.length)
-            void persist((s) => s.remove(ids2));
+          if (taken.length) void persist((s) => s.remove(ids2));
           return result;
         } catch (error) {
           l.inFlight -= taken.length;
@@ -27960,56 +27541,45 @@ function createOutbox(opts) {
       const retained = [];
       for (const l of lanes.values()) {
         for (const entry of l.entries) {
-          if (!entry.deadLetter)
-            continue;
+          if (!entry.deadLetter) continue;
           delete entry.deadLetter;
           retained.push(entry);
         }
       }
-      if (retained.length)
-        await persist((s) => s.put(retained));
+      if (retained.length) await persist((s) => s.put(retained));
       await flushAll(false);
     },
     exportDeadLetters() {
       const all = [];
-      for (const l of lanes.values())
-        all.push(...l.entries);
+      for (const l of lanes.values()) all.push(...l.entries);
       return exportDeadLetters(all);
     },
     async repairDeadLetter(id) {
-      if (typeof id !== "string" || id.trim() === "")
-        return false;
+      if (typeof id !== "string" || id.trim() === "") return false;
       let target;
       for (const l of lanes.values()) {
         target = l.entries.find((entry) => entry.id === id && entry.deadLetter);
-        if (target)
-          break;
+        if (target) break;
       }
-      if (!target?.deadLetter)
-        return false;
+      if (!target?.deadLetter) return false;
       const previousLetter = target.deadLetter;
       const previousBatch = target.batch;
       const repaired = repairDeadLetter([target], id);
-      if (!repaired)
-        return false;
+      if (!repaired) return false;
       const failureBefore = storeFailure;
       await persist((s) => s.put([repaired]));
       if (storeFailure !== failureBefore) {
         repaired.deadLetter = previousLetter;
-        if (previousBatch !== void 0)
-          repaired.batch = previousBatch;
-        else
-          delete repaired.batch;
+        if (previousBatch !== void 0) repaired.batch = previousBatch;
+        else delete repaired.batch;
         throw storeFailure;
       }
       return true;
     },
     size(key) {
-      if (key !== void 0)
-        return lanes.get(key)?.entries.length ?? 0;
+      if (key !== void 0) return lanes.get(key)?.entries.length ?? 0;
       let n2 = 0;
-      for (const l of lanes.values())
-        n2 += l.entries.length;
+      for (const l of lanes.values()) n2 += l.entries.length;
       return n2;
     },
     stats() {
@@ -28026,15 +27596,13 @@ function createOutbox(opts) {
     async ready() {
       await loaded;
       await writes;
-      if (storeFailure)
-        throw storeFailure;
+      if (storeFailure) throw storeFailure;
     },
     close() {
       closed = true;
       unsubscribeOnline?.();
       unsubscribePermission?.();
-      for (const controller of inFlightControllers)
-        controller.abort();
+      for (const controller of inFlightControllers) controller.abort();
       for (const l of lanes.values()) {
         clearTimer(l);
         clearRetry(l);
@@ -28043,7 +27611,7 @@ function createOutbox(opts) {
   };
 }
 
-// ../packages/write-outbox/src/stores.js
+// ../packages/write-outbox/src/stores.ts
 var isEntry = (v) => typeof v === "object" && v !== null && typeof v.id === "string" && typeof v.seq === "number";
 function idbRunner(opts) {
   const storeName = opts.storeName ?? "entries";
@@ -28053,8 +27621,7 @@ function idbRunner(opts) {
       const req = opts.indexedDB.open(opts.dbName, 1);
       req.onupgradeneeded = () => {
         const created = req.result;
-        if (!created.objectStoreNames.contains(storeName))
-          created.createObjectStore(storeName, { keyPath: "id" });
+        if (!created.objectStoreNames.contains(storeName)) created.createObjectStore(storeName, { keyPath: "id" });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -28084,23 +27651,19 @@ function createIndexedDbOutboxStore(opts) {
     },
     async put(entries) {
       await run("readwrite", (s) => {
-        for (const e of entries)
-          s.put(opts.partition === void 0 ? e : { ...e, partition: opts.partition });
+        for (const e of entries) s.put(opts.partition === void 0 ? e : { ...e, partition: opts.partition });
       });
     },
     async remove(ids2) {
       await run("readwrite", (s) => {
-        for (const id of ids2)
-          s.delete(id);
+        for (const id of ids2) s.delete(id);
       });
     }
   };
 }
 async function listIndexedDbOutboxPartitions(opts) {
   const partitions = /* @__PURE__ */ new Set();
-  for (const r of await readAll(idbRunner(opts)))
-    if (typeof r.partition === "string")
-      partitions.add(r.partition);
+  for (const r of await readAll(idbRunner(opts))) if (typeof r.partition === "string") partitions.add(r.partition);
   return [...partitions];
 }
 

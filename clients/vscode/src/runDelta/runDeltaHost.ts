@@ -118,7 +118,8 @@ async function knowledgeOf(secrets: vscode.SecretStorage, placement: RepoPlaceme
   const persistence = persistenceOf(kroot.folderPath);
   const modules = await rootModules(kroot);
   return {
-    rootId: kroot.rootId, placement, store: open.local, manifest: open.manifest, packs: reviewPacks({ partitions, modules }),
+    rootId: kroot.rootId, folderPath: kroot.folderPath, placement, store: open.local, manifest: open.manifest,
+    packs: reviewPacks({ partitions, modules }), partitions,
     generation: () => persistence.getMeta("generation") ?? "0",
     // The sides' FileFacts are in REPO space: they resolve with the repository's own aliases (a nested repo's tsconfig paths).
     aliases: await sideAliases(kroot, placement, repoRoot, modules.aliases),

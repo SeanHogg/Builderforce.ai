@@ -13,6 +13,13 @@ export interface LoadLabels {
     refreshing: string;
     /** The fresh read failed; the last graph stays drawn and this offers Retry. */
     refreshFailed: string;
+    /** A host that builds only on Run (the editor): the reviewed folder has no graph drawn yet. */
+    runTitle: string;
+    runBody: string;
+    /** The Run button: load the folder once, then track only what changes. */
+    run: string;
+    /** In the scene's corner while the last graph is drawn and not running: a button that runs. */
+    runLastSeen: string;
 }
 
 export const LOAD_DEFAULTS: LoadLabels = {
@@ -31,4 +38,8 @@ loadPhases: {
 },
 refreshing: 'Updating…',
 refreshFailed: 'Couldn’t update — showing the last graph. Retry',
+runTitle: 'Ready to run',
+runBody: 'The graph is built only when you press Run. After that, only what changes is updated.',
+run: 'Run',
+runLastSeen: 'Showing the last graph — Run to update',
 };

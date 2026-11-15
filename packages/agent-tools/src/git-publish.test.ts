@@ -141,6 +141,17 @@ describe("git_push", () => {
     expect(sh.scripts[0]).toContain('git push -u origin "$PUSHED"');
   });
 
+  it("pushes a named ticket branch by ref, never reading the checkout's branch", async () => {
+    // After a worktree commit the checkout is still on the human's branch — so a push that
+    // reads the current branch would push the WRONG thing. Naming the branch pushes it by
+    // ref and never switches the checkout.
+    const sh = recordingShell();
+    await gitPushTool.execute({ branch: "ticket/2394-mobile" }, sh as never);
+    expect(sh.scripts[0]).toContain('PUSHED="ticket/2394-mobile"');
+    expect(sh.scripts[0]).toContain('git push -u origin "$PUSHED"');
+    expect(sh.scripts[0]).not.toContain("git checkout");
+  });
+
   it("reports where the push LANDED, after pushing, without ever failing the push on it", async () => {
     // The branch header after the push is the evidence a host needs to call the change
     // shipped (and close its ticket) — so the push verifies itself instead of depending

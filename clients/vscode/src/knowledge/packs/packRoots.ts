@@ -12,12 +12,12 @@
 
 import * as vscode from "vscode";
 import type { KnowledgeGraph } from "@seanhogg/builderforce-memory/knowledge";
-import { packGraph, type PackGraphQuery } from "@builderforce/agent-tools/knowledge";
+import type { PackGraphQuery } from "@builderforce/agent-tools/knowledge";
 import type { KnowledgePackEntry } from "@builderforce/agent-tools/knowledge-index";
 import { ownsKnowledgeRoot } from "../index/hostKnowledgeIndex";
 import type { KnowledgeCall, KnowledgeScopeRow } from "../knowledgeProtocol";
 import { loadedPackRegistry } from "./loadedPackRegistry";
-import { readPackFile } from "./packIndexing";
+import { buildOffThread } from "../graphWorker";
 
 /** The loaded pack standing as the read-only root `rootId`; undefined for anything else (a workspace folder included). */
 export function readOnlyPack(rootId: string): KnowledgePackEntry | undefined {
@@ -46,7 +46,8 @@ export function packScopeRows(): KnowledgeScopeRow[] {
 /** The graph of a read-only pack root, rebuilt from its (cached) file; null when the pack has no file path or holds nothing. */
 export async function packRootGraph(entry: KnowledgePackEntry, query: PackGraphQuery): Promise<KnowledgeGraph | null> {
   if (!entry.path) return null;
-  return packGraph(await readPackFile(entry.path), query);
+  // Built in the graph worker, which reads the pack file itself: nothing of the pack is parsed on this thread.
+  return buildOffThread({ kind: "pack", file: entry.path, ...(query.focus?.length ? { focus: query.focus } : {}), ...(query.maxNodes ? { maxNodes: query.maxNodes } : {}) });
 }
 
 /** The root a call would write to or review, when it names one. */

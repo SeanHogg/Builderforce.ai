@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   loadGraph: vi.fn(async (_s: unknown, _root: string, _q?: unknown) => ({ scope: { rootId: "r" }, nodes: [], edges: [], findings: [] })),
   reviewed: [] as Array<(rootId: string) => void>,
+  onEdited: undefined as ((paths: string[]) => void) | undefined,
+  hashes: new Map<string, string>(),
 }));
 
 vi.mock("./knowledgeService", () => ({
@@ -14,28 +16,39 @@ vi.mock("./knowledgeService", () => ({
 }));
 vi.mock("./knowledgeRoots", () => ({ rootById: () => ({ rootId: "r", rootPath: "/w", folderPath: "/w", title: "w" }) }));
 vi.mock("./vscodeDirectorySource", () => ({ createDirectorySource: () => ({}) }));
+vi.mock("./rootModules", () => ({ rootModules: async () => ({ aliases: { scopes: [] } }) }));
 vi.mock("./knowledgeFs", () => ({ vscodeKnowledgeFs: () => ({}) }));
 vi.mock("../gitChanges", () => ({ detectPendingChanges: async () => undefined, watchPendingChanges: () => ({ dispose: () => undefined }) }));
 vi.mock("../localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
-vi.mock("@builderforce/agent-tools/knowledge", () => ({ reviewPacks: () => [], watchFileEdits: () => () => undefined }));
+vi.mock("@builderforce/agent-tools/knowledge", () => ({
+  reviewPacks: () => [],
+  knownKeysCache: () => ({ invalidate: () => undefined }),
+  watchFileEdits: (args: { onEdited?(paths: string[]): void }) => { mocks.onEdited = args.onEdited; return () => undefined; },
+  currentFileHashes: async () => new Map(mocks.hashes),
+}));
 vi.mock("@builderforce/agent-tools/prefetch", () => ({ readPartitions: async () => undefined }));
 
 import { subscribeLiveGraph } from "./knowledgeLive";
+import { FULL_REFRESH_MIN_MS } from "./liveRefresh";
+import { PATCH_MAX_FILES } from "./livePatch";
 
 const secrets = {} as never;
+const handlers = () => ({ onGraph: vi.fn(), onPatch: vi.fn() });
+/** Past the whole-graph refresh window (which opens from the subscription: the Run's own load). */
+const WINDOW = FULL_REFRESH_MIN_MS + 1_000;
 
-beforeEach(() => { vi.useFakeTimers(); mocks.reviewed.length = 0; });
+beforeEach(() => { vi.useFakeTimers(); mocks.reviewed.length = 0; mocks.onEdited = undefined; mocks.hashes.clear(); });
 afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); });
 
 async function refreshOnce(queryOf?: (rootId: string) => { focus?: string[]; maxNodes?: number } | undefined) {
-  const stop = subscribeLiveGraph(secrets, "r", () => undefined, queryOf);
+  const stop = subscribeLiveGraph(secrets, "r", handlers(), queryOf);
   await vi.advanceTimersByTimeAsync(0);
   mocks.reviewed[0]!("r");
-  await vi.advanceTimersByTimeAsync(1000);
+  await vi.advanceTimersByTimeAsync(WINDOW);
   stop();
 }
 
-describe("the editor's Live refresh", () => {
+describe("the editor's Live refresh of a running root", () => {
   it("re-reads the graph by the query the view last loaded the root with", async () => {
     await refreshOnce(() => ({ focus: ["src:r::a.md"], maxNodes: 50 }));
     expect(mocks.loadGraph).toHaveBeenCalledWith(secrets, "r", { focus: ["src:r::a.md"], maxNodes: 50 });
@@ -48,34 +61,45 @@ describe("the editor's Live refresh", () => {
     expect(mocks.loadGraph).toHaveBeenCalledWith(secrets, "r", undefined);
   });
 
-  it("coalesces a burst of refresh triggers into one rebuild (throttle, not one-per-event)", async () => {
-    const onGraph = vi.fn();
-    const stop = subscribeLiveGraph(secrets, "r", onGraph);
-    await vi.advanceTimersByTimeAsync(0);
-    // A burst: several watcher events land in the same tick.
-    mocks.reviewed[0]!("r");
-    mocks.reviewed[0]!("r");
-    mocks.reviewed[0]!("r");
-    await vi.advanceTimersByTimeAsync(1000);
-    // The burst produced ONE rebuild + push, not three.
-    expect(mocks.loadGraph).toHaveBeenCalledTimes(1);
-    expect(onGraph).toHaveBeenCalledTimes(1);
+  it("builds nothing on its own: subscribed with nothing changed, no graph is ever re-read", async () => {
+    const h = handlers();
+    const stop = subscribeLiveGraph(secrets, "r", h);
+    await vi.advanceTimersByTimeAsync(5 * WINDOW);
+    expect(mocks.loadGraph).not.toHaveBeenCalled();
+    expect(h.onGraph).not.toHaveBeenCalled();
     stop();
   });
 
-  it("throttles rebuilds: a second refresh inside the window does not trigger an immediate rebuild", async () => {
-    const onGraph = vi.fn();
-    const stop = subscribeLiveGraph(secrets, "r", onGraph);
+  it("coalesces a burst of refresh triggers into one rebuild (throttle, not one-per-event)", async () => {
+    const h = handlers();
+    const stop = subscribeLiveGraph(secrets, "r", h);
+    await vi.advanceTimersByTimeAsync(0);
+    // A burst: several triggers land in the same tick.
+    mocks.reviewed[0]!("r");
+    mocks.reviewed[0]!("r");
+    mocks.reviewed[0]!("r");
+    await vi.advanceTimersByTimeAsync(WINDOW);
+    // The burst produced ONE rebuild + push, not three.
+    expect(mocks.loadGraph).toHaveBeenCalledTimes(1);
+    expect(h.onGraph).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  it("throttles rebuilds to one per window: the first waits for the window opened by the Run's load, the next for its own", async () => {
+    const h = handlers();
+    const stop = subscribeLiveGraph(secrets, "r", h);
     await vi.advanceTimersByTimeAsync(0);
     mocks.reviewed[0]!("r");
-    await vi.advanceTimersByTimeAsync(1000); // first rebuild ran
-    expect(onGraph).toHaveBeenCalledTimes(1);
-    // Another event right away: the throttle window is still open, so no rebuild fires yet.
+    await vi.advanceTimersByTimeAsync(FULL_REFRESH_MIN_MS - 2_000);
+    expect(h.onGraph).not.toHaveBeenCalled(); // the Run's own load is still fresh
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(h.onGraph).toHaveBeenCalledTimes(1);
+    // Another trigger right away: the window is open again from that rebuild.
     mocks.reviewed[0]!("r");
-    await vi.advanceTimersByTimeAsync(1000);
-    expect(onGraph).toHaveBeenCalledTimes(1); // still one push
-    await vi.advanceTimersByTimeAsync(5000); // window elapses -> the trailing rebuild runs
-    expect(onGraph).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(h.onGraph).toHaveBeenCalledTimes(1); // still one push
+    await vi.advanceTimersByTimeAsync(FULL_REFRESH_MIN_MS); // window elapses -> the trailing rebuild runs
+    expect(h.onGraph).toHaveBeenCalledTimes(2);
     stop();
   });
 
@@ -87,16 +111,47 @@ describe("the editor's Live refresh", () => {
       stats: { sources: 5, nodes: 10, edges: 20, stale: 0, truncated: false },
     };
     mocks.loadGraph.mockResolvedValue(identified as never);
-    const onGraph = vi.fn();
-    const stop = subscribeLiveGraph(secrets, "r", onGraph);
+    const h = handlers();
+    const stop = subscribeLiveGraph(secrets, "r", h);
     await vi.advanceTimersByTimeAsync(0);
     mocks.reviewed[0]!("r");
-    await vi.advanceTimersByTimeAsync(1000);
-    expect(onGraph).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(WINDOW);
+    expect(h.onGraph).toHaveBeenCalledTimes(1);
     // Same picture again: the no-op guard drops it (the view would re-layout identically).
     mocks.reviewed[0]!("r");
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(onGraph).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(WINDOW);
+    expect(h.onGraph).toHaveBeenCalledTimes(1);
+    stop();
+  });
+});
+
+describe("the editor's Live deltas of a running root", () => {
+  it("an edited batch becomes a patch, never a rebuild per change; the whole graph follows once per window", async () => {
+    mocks.hashes.set("src/a.ts", "h1");
+    const h = handlers();
+    const stop = subscribeLiveGraph(secrets, "r", h);
+    await vi.advanceTimersByTimeAsync(0);
+    mocks.hashes.set("src/a.ts", "h2"); // the watcher re-extracted it by its new hash
+    mocks.onEdited!(["src/a.ts"]);
+    mocks.onEdited!(["src/a.ts"]); // same content again: nothing moves on screen
+    await vi.advanceTimersByTimeAsync(10);
+    expect(h.onPatch).toHaveBeenCalledTimes(1);
+    expect(h.onPatch.mock.calls[0]![0]).toMatchObject({ rootId: "r", files: ["src:r::src/a.ts"], stale: ["src:r::src/a.ts"], changed: ["src/a.ts"] });
+    expect(mocks.loadGraph).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(WINDOW);
+    expect(mocks.loadGraph).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  it(`a batch of more than ${PATCH_MAX_FILES} files (a branch switch) is the throttled full refresh, not a patch`, async () => {
+    const h = handlers();
+    const stop = subscribeLiveGraph(secrets, "r", h);
+    await vi.advanceTimersByTimeAsync(0);
+    mocks.onEdited!(Array.from({ length: PATCH_MAX_FILES + 1 }, (_, i) => `f${i}.ts`));
+    await vi.advanceTimersByTimeAsync(WINDOW);
+    expect(h.onPatch).not.toHaveBeenCalled();
+    expect(mocks.loadGraph).toHaveBeenCalledTimes(1);
+    expect(h.onGraph.mock.calls[0]![1]).toHaveLength(PATCH_MAX_FILES + 1);
     stop();
   });
 });

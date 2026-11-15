@@ -13,6 +13,7 @@ import {
 } from "@builderforce/agent-tools/knowledge";
 import type { Extracted } from "@seanhogg/builderforce-memory/knowledge";
 import { getCurrentUserName } from "../../bfApi";
+import { storedGraphOffThread } from "../graphWorker";
 import type { KnowledgeRoot } from "../knowledgeRoots";
 import { log, openRoot, reviewRoot, type OpenRoot } from "../knowledgeService";
 
@@ -46,6 +47,8 @@ export async function packOfRoot(
     extracted: await extractedOf(open, root.rootId),
     ...(provenance ? { provenance } : {}),
     onError: (error) => log(`pack cards ${root.rootId}`, error),
+    // The cards' graph is built in the graph worker from the folder's file, never on this thread.
+    storedGraph: () => storedGraphOffThread({ folderPath: root.folderPath, rootId: root.rootId }, open.local),
   });
 }
 

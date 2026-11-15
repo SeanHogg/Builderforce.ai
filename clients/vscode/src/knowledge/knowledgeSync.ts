@@ -2,9 +2,10 @@
  * The editor's `syncStatus` (PRD 38, Option B+ Contract 4; PRD 41 A7): assembles the pure status
  * (`knowledgeSyncStatus.ts`) from this root's ports. Nothing here walks the tree.
  *
- *   local    ALWAYS the local graph's counts (`graphCounts` of the graph built from the local store),
- *            linked or not; the last review's recorded counts win for files and docs (the plan's
- *            counts: the docs pack's files are the docs, skipped files are not counted);
+ *   local    ALWAYS the local graph's counts, linked or not: those of the last graph BUILT (`lastBuilt`:
+ *            the bridge's last full load / live refresh, or the last-seen snapshot) — never a fresh
+ *            build, which would block the editor; the last review's recorded counts win for files and
+ *            docs (the plan's counts: the docs pack's files are the docs, skipped files are not counted);
  *   server   the linked project's graph when it is reachable; counts from its `stats` (not from the
  *            capped nodes), `truncated` when the cap cut the file/doc split. The ONLY use the editor
  *            makes of `GET /knowledge-graph`;
@@ -13,13 +14,13 @@
  */
 
 import type * as vscode from "vscode";
-import { graphCounts } from "@builderforce/agent-tools/knowledge";
+import { graphCounts, type GraphCounts } from "@builderforce/agent-tools/knowledge";
 import { gitHistoryPort } from "@builderforce/agent-tools/node-git-history";
 import { vscodeKnowledgeFs } from "./knowledgeFs";
 import type { KnowledgeSyncStatus } from "./knowledgeProtocol";
 import { replicaStatusOf, retryReplica } from "./knowledgeReplica";
 import type { KnowledgeRoot } from "./knowledgeRoots";
-import { loadGraph, log, openRoot } from "./knowledgeService";
+import { log, openRoot } from "./knowledgeService";
 import { buildSyncStatus, reviewRecords } from "./knowledgeSyncStatus";
 import { EVENT_LOOP_YIELD_EVERY, eventLoopYield } from "./vscodeDirectorySource";
 
@@ -46,22 +47,26 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | undefined> {
   });
 }
 
+export interface RootSyncStatusOptions {
+  serverTimeoutMs?: number;
+  /** The counts of the last graph built for the root (`lastBuiltCounts.ts`); absent ⇒ only the review record counts. */
+  lastBuilt?: () => GraphCounts | undefined;
+}
+
 export async function rootSyncStatus(
   secrets: vscode.SecretStorage,
   root: KnowledgeRoot,
-  opts?: { serverTimeoutMs?: number },
+  opts?: RootSyncStatusOptions,
 ): Promise<KnowledgeSyncStatus> {
   const open = openRoot(secrets, root);
   const record = reviewRecords.get(root.rootId);
   // The server graph is an ENRICHMENT, never a gate: race it against a short bound so
   // the answer always goes out on local counts, even offline.
   const serverTimeoutMs = opts?.serverTimeoutMs ?? SERVER_GRAPH_TIMEOUT_MS;
-  const [serverGraph, graph] = await Promise.all([
-    open.client ? withTimeout(open.client.graph(root.rootId, { maxNodes: COUNT_MAX_NODES }), serverTimeoutMs) : null,
-    loadGraph(secrets, root.rootId, { maxNodes: COUNT_MAX_NODES }),
-  ]);
+  const serverGraph = open.client ? await withTimeout(open.client.graph(root.rootId, { maxNodes: COUNT_MAX_NODES }), serverTimeoutMs) : null;
   const server = serverGraph ? graphCounts(serverGraph) : undefined;
-  const measured = graph ? graphCounts(graph) : undefined;
+  // The local counts are the last BUILT graph's: a status read never builds one.
+  const measured = opts?.lastBuilt?.();
   const local = {
     files: record?.counts.files ?? measured?.files ?? 0,
     docs: record?.counts.docs ?? measured?.docs ?? 0,
@@ -77,7 +82,7 @@ export async function rootSyncStatus(
     ...(server ? { server } : {}),
     ...(replica ? { replica } : {}),
     skipped: record?.skipped,
-    reviewed: !!record || !!graph || !!server,
+    reviewed: !!record || !!measured || !!server,
     hasHistory: (await gitHistoryPort(root.rootPath, { onWarn: (m) => log("history", m) })) !== undefined,
   });
 }

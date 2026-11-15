@@ -277,9 +277,12 @@ var import_react = __toESM(require("react"), 1);
 var import_react_markdown = __toESM(require("react-markdown"), 1);
 var import_remark_gfm = __toESM(require("remark-gfm"), 1);
 
-// ../agent-loop/src/runNarration.js
+// ../agent-loop/src/runNarration.ts
 var NARRATION_MIN_CHARS = 40;
-var NARRATION_OPENER = new RegExp("^(?:(?:now|next|first|then|so|okay|ok|alright|actually|great|good|perfect|but|and|also|finally)[,!.]?\\s+)*(?:let me|let's|i(?:'ll| will| need to| should| want to| am going to|'m going to| think| see| can see| notice| ran)\\b|looking (?:at|back|for)\\b|checking\\b|now the\\b|that was expected\\b)", "i");
+var NARRATION_OPENER = new RegExp(
+  "^(?:(?:now|next|first|then|so|okay|ok|alright|actually|great|good|perfect|but|and|also|finally)[,!.]?\\s+)*(?:let me|let's|i(?:'ll| will| need to| should| want to| am going to|'m going to| think| see| can see| notice| ran)\\b|looking (?:at|back|for)\\b|checking\\b|now the\\b|that was expected\\b)",
+  "i"
+);
 var NARRATION_ANYWHERE = [
   /\btool calls?\b/i,
   /\brun_command\b/i,
@@ -290,12 +293,9 @@ var NARRATION_ANYWHERE = [
 var FENCE = /```[\s\S]*?(?:```|$)/g;
 function isNarrationSentence(sentence, leadsIntoCode) {
   const s = sentence.trim();
-  if (!s)
-    return false;
-  if (NARRATION_OPENER.test(s))
-    return true;
-  if (NARRATION_ANYWHERE.some((re) => re.test(s)))
-    return true;
+  if (!s) return false;
+  if (NARRATION_OPENER.test(s)) return true;
+  if (NARRATION_ANYWHERE.some((re) => re.test(s))) return true;
   return s.endsWith(":") && !leadsIntoCode;
 }
 function piecesOf(prose) {
@@ -307,8 +307,7 @@ function stripRunNarration(text) {
   const keepProse = (prose, leadsIntoCode) => {
     const pieces = piecesOf(prose);
     let lastIdx = pieces.length - 1;
-    while (lastIdx > 0 && !pieces[lastIdx].trim())
-      lastIdx -= 2;
+    while (lastIdx > 0 && !pieces[lastIdx].trim()) lastIdx -= 2;
     for (let i = 0; i < pieces.length; i += 2) {
       const piece = pieces[i];
       const sep = pieces[i + 1] ?? "";
@@ -330,13 +329,12 @@ function stripRunNarration(text) {
 }
 function looksLikeRunNarration(text) {
   const t = text.trim();
-  if (t.length < NARRATION_MIN_CHARS)
-    return false;
+  if (t.length < NARRATION_MIN_CHARS) return false;
   const { text: kept, dropped } = stripRunNarration(t);
   return dropped > 0 && kept.length * 2 <= t.length;
 }
 
-// ../agent-loop/src/taskClosedState.js
+// ../agent-loop/src/taskClosedState.ts
 var TASK_CLOSED_STATUSES = ["done", "cancelled", "canceled", "completed", "archived"];
 var CLOSED = new Set(TASK_CLOSED_STATUSES);
 function isCancelledTaskStatus(status) {
@@ -344,15 +342,14 @@ function isCancelledTaskStatus(status) {
   return s === "cancelled" || s === "canceled";
 }
 
-// ../agent-loop/src/chatTicketHealth.js
+// ../agent-loop/src/chatTicketHealth.ts
 var UNSUPPORTED_DELIVERY_PROGRESS_CAP = 75;
 function isExcludedFromChatHealth(status) {
   return isCancelledTaskStatus(status);
 }
 function effectiveProgressPct(t) {
   const raw = Number.isFinite(t.progressPct) ? t.progressPct : 0;
-  if (t.unsupportedDelivery === true && raw >= 100)
-    return UNSUPPORTED_DELIVERY_PROGRESS_CAP;
+  if (t.unsupportedDelivery === true && raw >= 100) return UNSUPPORTED_DELIVERY_PROGRESS_CAP;
   return raw;
 }
 function rollupChatTicketHealth(tickets) {
@@ -362,16 +359,14 @@ function rollupChatTicketHealth(tickets) {
   let counted = 0;
   let completedTickets = 0;
   for (const tk of tickets) {
-    if (isExcludedFromChatHealth(tk.status))
-      continue;
+    if (isExcludedFromChatHealth(tk.status)) continue;
     const pct = effectiveProgressPct(tk);
     const weight = Number.isFinite(tk.total) && tk.total > 0 ? tk.total : 1;
     done += Number.isFinite(tk.done) ? tk.done : 0;
     total += weight;
     weightedPct += pct * weight;
     counted++;
-    if (pct >= 100)
-      completedTickets++;
+    if (pct >= 100) completedTickets++;
   }
   if (counted === 0) {
     return { pct: tickets.length ? 100 : 0, done: 0, total: 0, openTickets: 0, completedTickets: 0 };
@@ -385,21 +380,17 @@ function rollupChatTicketHealth(tickets) {
   };
 }
 function displayChatProgressPct(pct) {
-  if (typeof pct !== "number" || !Number.isFinite(pct))
-    return null;
+  if (typeof pct !== "number" || !Number.isFinite(pct)) return null;
   return Math.min(100, Math.max(0, Math.round(pct)));
 }
 function chatProgressIsStale(row, tickets) {
-  if (!row || row.ticketCount == null)
-    return false;
-  if (row.ticketCount !== tickets.length)
-    return true;
-  if (tickets.length === 0)
-    return false;
+  if (!row || row.ticketCount == null) return false;
+  if (row.ticketCount !== tickets.length) return true;
+  if (tickets.length === 0) return false;
   return displayChatProgressPct(row.ticketProgressPct) !== rollupChatTicketHealth(tickets).pct;
 }
 
-// ../agent-loop/src/reasoning.js
+// ../agent-loop/src/reasoning.ts
 var REASONING_TAG = "think(?:ing)?|thought|antthinking|scratchpad|reasoning";
 var QUICK_TAG_RE = new RegExp(`<\\s*/?\\s*(?:${REASONING_TAG}|final)\\b`, "i");
 var FINAL_TAG_RE = /<\s*\/?\s*final\b[^<>]*>/gi;
@@ -417,8 +408,7 @@ function findCodeRegions(text) {
     const start = match.index ?? 0;
     const end = start + match[0].length;
     const insideFenced = regions.some((r) => start >= r.start && end <= r.end);
-    if (!insideFenced)
-      regions.push({ start, end });
+    if (!insideFenced) regions.push({ start, end });
   }
   regions.sort((a, b) => a.start - b.start);
   return regions;
@@ -442,12 +432,10 @@ function scanReasoning(text) {
     const region = codeRegionAt(idx, regions);
     if (region) {
       const releases = region.unterminated === true && kind === "thought" && isClose && region.start >= contentStart;
-      if (!releases)
-        continue;
+      if (!releases) continue;
       region.end = idx;
     }
-    if (kind === "thought" && !isClose)
-      continue;
+    if (kind === "thought" && !isClose) continue;
     const after = idx + match[0].length;
     spans.push({ kind, start, contentStart, contentEnd: idx, end: isClose ? after : idx, unterminated: false });
     kind = isClose ? "answer" : "thought";
@@ -465,14 +453,11 @@ function scanReasoning(text) {
   return spans;
 }
 function splitReasoningSegments(text) {
-  if (!text)
-    return [];
-  if (!QUICK_TAG_RE.test(text))
-    return [{ kind: "answer", content: text }];
+  if (!text) return [];
+  if (!QUICK_TAG_RE.test(text)) return [{ kind: "answer", content: text }];
   const cleaned = unwrapFinalTags(text);
   const segments = segmentsOf(cleaned, scanReasoning(cleaned));
-  if (segments.length === 0)
-    return [{ kind: "answer", content: text }];
+  if (segments.length === 0) return [{ kind: "answer", content: text }];
   return stitchSplitSentence(promoteSwallowedAnswer(segments));
 }
 var EMPTY_TOOL_CALL_WRAPPER = /<([a-z][\w-]*:tool_call)\b[^<>]*>\s*<\/\1>/gi;
@@ -481,8 +466,7 @@ function segmentsOf(text, spans) {
   for (const span of spans) {
     const raw = text.slice(span.contentStart, span.contentEnd);
     const content = (span.kind === "thought" ? raw.replace(EMPTY_TOOL_CALL_WRAPPER, "") : raw).trim();
-    if (content)
-      out.push({ kind: span.kind, content });
+    if (content) out.push({ kind: span.kind, content });
   }
   return out;
 }
@@ -497,8 +481,7 @@ function unwrapFinalTags(text) {
   const cuts = [];
   for (const match of text.matchAll(FINAL_TAG_RE)) {
     const start = match.index ?? 0;
-    if (!isInsideCode(start, regions))
-      cuts.push({ start, length: match[0].length });
+    if (!isInsideCode(start, regions)) cuts.push({ start, length: match[0].length });
   }
   let out = text;
   for (let i = cuts.length - 1; i >= 0; i--) {
@@ -514,19 +497,17 @@ function isFragment(text) {
 }
 function promoteSwallowedAnswer(segments) {
   const answers = segments.filter((s) => s.kind === "answer");
-  if (answers.length === 0)
-    return segments;
+  if (answers.length === 0) return segments;
   const answerText = answers.map((s) => s.content).join(" ").trim();
-  if (!isFragment(answerText))
-    return segments;
+  if (!isFragment(answerText)) return segments;
   const thoughts = segments.filter((s) => s.kind === "thought");
-  const richest = thoughts.reduce((best, s) => !best || s.content.length > best.content.length ? s : best, null);
-  if (!richest || richest.content.length <= answerText.length)
-    return segments;
+  const richest = thoughts.reduce(
+    (best, s) => !best || s.content.length > best.content.length ? s : best,
+    null
+  );
+  if (!richest || richest.content.length <= answerText.length) return segments;
   const promoted = [{ kind: "answer", content: `${richest.content} ${answerText}`.trim() }];
-  for (const s of thoughts)
-    if (s !== richest)
-      promoted.unshift(s);
+  for (const s of thoughts) if (s !== richest) promoted.unshift(s);
   return promoted;
 }
 var UNFINISHED_TAIL = /[\p{L}\p{N},]$/u;
@@ -535,8 +516,7 @@ function lastSentenceStart(text) {
   let cut = text.lastIndexOf("\n") + 1;
   for (const match of text.matchAll(/[.!?](?=\s)/g)) {
     const after = (match.index ?? 0) + 1;
-    if (after > cut)
-      cut = after;
+    if (after > cut) cut = after;
   }
   return cut;
 }
@@ -545,12 +525,9 @@ function stitchSplitSentence(segments) {
   for (let i = 1; i < out.length; i++) {
     const prev = out[i - 1];
     const cur = out[i];
-    if (prev.kind !== "thought" || cur.kind !== "answer")
-      continue;
-    if (cur.content.length <= MAX_FRAGMENT_CHARS)
-      continue;
-    if (!LOWERCASE_OPENER.test(cur.content) || !UNFINISHED_TAIL.test(prev.content))
-      continue;
+    if (prev.kind !== "thought" || cur.kind !== "answer") continue;
+    if (cur.content.length <= MAX_FRAGMENT_CHARS) continue;
+    if (!LOWERCASE_OPENER.test(cur.content) || !UNFINISHED_TAIL.test(prev.content)) continue;
     const cut = lastSentenceStart(prev.content);
     const head = prev.content.slice(0, cut).trim();
     out[i] = { kind: "answer", content: `${prev.content.slice(cut).trim()} ${cur.content}` };

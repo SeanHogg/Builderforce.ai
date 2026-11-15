@@ -2,6 +2,12 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.177] — The Visualizer runs only when you press Run, and never blocks typing
+
+- **Fixed: typing stalled for 0.5–4 seconds whenever the knowledge graph rebuilt.** VS Code's own CPU profiles blamed the extension for 50–95% of each stall: the whole-repo graph (its fingerprint, layer matching and ranking) was rebuilt on the editor's thread on every save, on opening the Visualizer, for the run-delta card and for the agent's code checks. Every graph build now runs in a background worker that reads the folder's store itself.
+- **Changed: the Visualizer does nothing until you open it and press Run.** Nothing indexes when VS Code starts (`builderforce.knowledge.autoIndex` is now off by default; turn it on to keep the old always-on indexing). Opening the panel shows the last picture you built; Run builds it once and starts live tracking for that folder; closing the panel stops it.
+- **Changed: after Run, edits arrive as small updates.** A saved file updates only its own nodes and edges; the whole graph is refreshed in the worker at most every 30 seconds while something changed (a branch switch touching 200+ files refreshes it once).
+
 ## [2026.10.176] — A chat waiting on your answer keeps its “?” after you reload
 
 - **Fixed: a chat paused on a question lost its “needs an answer” (?) marker when you reloaded the window or reopened the panel.** The history marker only read the live run-state, which is empty after a reload, while the chat diagnostics (derived from the persisted transcript) still listed the question. The marker now also derives from each chat's stored messages through the same `selectPendingAskUser` predicate the in-chat banner and diagnostics use, so a chat blocked on a question keeps its (?) — and the marker can never disagree with the banner.

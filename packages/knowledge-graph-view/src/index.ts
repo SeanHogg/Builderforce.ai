@@ -33,7 +33,8 @@ export type {
     SourceLocation, FindingEvidence, ViewMode, PinpointResult, SyncStatus, SkippedFile, TryRequest, TryResponse, SymbolRecord,
     SourceRange, SourceText, NotReviewedHere, ReplicaState, ReviewRunsPort, ReviewRunSummary, StoredReviewRun,
     AgentRunSeverity, AgentRunSummary, AgentRunTurnKind, AgentRunTurn, AgentRunEvidence, AgentRunFinding, AgentRunFile,
-    AgentRunReport, AgentRunsPort,
+    AgentRunReport, AgentRunsPort, KnowledgeGraphPatch, KnowledgeEdgeKey, LiveGraphDecorate,
 } from './types';
+export { applyGraphPatch } from './graphPatch';
 export { isNotReviewedHere } from './types';
 export type { LoadTrace, LoadTraceEntry, LoadTraceInFlight } from './loadTraceTypes';

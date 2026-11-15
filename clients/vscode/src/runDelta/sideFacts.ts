@@ -1,7 +1,7 @@
 /**
  * One side's FACTS of a run delta (PRD 41 §C1 and the `DeltaPorts.facts` contract), from the folder's knowledge store:
- * the graph the knowledge view builds (`buildStoredGraph`, the ONE stored-graph builder) with the run's changed files swapped
- * to this side's extracts.
+ * the graph the knowledge view builds (`buildStoredGraph`, the ONE stored-graph builder, run in the graph worker —
+ * `knowledge/graphWorker.ts`) with the run's changed files swapped to this side's extracts.
  *
  *   - Each changed file's extract on this side is read from the store's extract cache by its content hash; on a miss the code
  *     pack's extractor runs on the side's text through memory's `extractFile` (the same entry the editor's file watcher uses),
@@ -17,15 +17,16 @@
  */
 
 import {
-  buildStoredGraph, knownKeysCache, storedFileHashes, textDocument, type ModuleAliases,
+  knownKeysCache, storedFileHashes, textDocument, type ModuleAliases,
 } from "@builderforce/agent-tools/knowledge";
 import { fileFactsStamp } from "@builderforce/agent-tools/node-file-facts";
 import {
   CONTENT_HASH_RULE, EXTRACTOR_VERSION, MAX_NODES_CAP, extractFile, extractorStampMeta, identityOf, merkleTree, outlineOf, outlineRef, pathOfRef, srcRef,
-  type FileFacts, type KnowledgeGraph, type KnowledgePack, type KnowledgeStore,
+  type FileFacts, type KnowledgeGraph, type KnowledgePack, type KnowledgeStore, type PartitionRegistry,
 } from "@seanhogg/builderforce-memory/knowledge";
 import { sideFileFacts } from "./sideFileFacts";
 import { factIndexOf } from "../knowledge/factFindings";
+import { storedGraphOffThread } from "../knowledge/graphWorker";
 import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
 import type { SideFacts, SideText } from "@builderforce/run-delta";
 import { toKnowledgePath, toRepoPath, type RepoPlacement } from "./repoPlacement";
@@ -38,10 +39,15 @@ export interface KnowledgeContext {
    * prefix, a repository above the opened folder strips the folder's own. Paths outside the root have no knowledge.
    */
   placement: RepoPlacement;
+  /** The workspace folder whose knowledge file the graph worker reads (`graphWorker.ts`). */
+  folderPath: string;
   /** The root's LOCAL store (never the replicated wrapper: a delta's cache writes are not shared work). */
   store: KnowledgeStore;
   manifest: IngestManifest;
+  /** The packs the sides' changed files are extracted with (on this thread, one file at a time). */
   packs: KnowledgePack[];
+  /** The code pack's layer registry: the graph worker rebuilds the packs' layers and finding rules from it. */
+  partitions: PartitionRegistry;
   /** The store's fact generation (`meta.generation`), as text. */
   generation(): string;
   /** The root's path aliases (`rootModules`), for resolving the sides' FileFacts imports. Absent ⇒ none. */
@@ -136,11 +142,12 @@ export async function sideFacts(ctx: KnowledgeContext | undefined, files: readon
       onError?.(error);
     }
   }
-  const graph = await buildStoredGraph({
-    rootId, store, manifest, packs, hashOverrides: overrides,
+  // Built in the graph worker, never on this thread; the side's extracts written above are flushed to the file it reads.
+  const graph = await storedGraphOffThread({
+    folderPath: ctx.folderPath, rootId, partitions: ctx.partitions, hashOverrides: overrides,
     focus: files.filter((f) => f.hash !== undefined).map((f) => srcRef(rootId, at(f.path))),
     maxNodes: MAX_NODES_CAP,
-  });
+  }, store);
   const hashes = await storedFileHashes(manifest, rootId, overrides);
   const sideManifest = [...hashes].flatMap(([p, hash]) => {
     const path = repoPathOf(prefix, p);

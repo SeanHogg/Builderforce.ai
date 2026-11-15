@@ -4,19 +4,18 @@
  *
  *   the existing runner (`runCodeAnalysis`: dependency-cruiser, jscpd, knip, with the
  *   workspace's layers) → the code pack's analyzers (`codeAnalyzers`) → memory's
- *   `buildGraph(...).findings` over `knowledgePacks()`.
+ *   `buildGraph(...).findings` over `knowledgePacks()` (`codeGraphFindings`, in the host's graph worker when it binds one).
  *
  * One analysis serves every action while the tree is unchanged (cached per sha, see
  * `workspaceAnalysis.ts`), and a finding list ends with an **Open in graph** chip focused on its files. A run whose
  * relevant analyzer FAILED answers nothing — missing output is never reported as clean.
  */
 
-import { compareStr, MAX_NODES_CAP, partitionOf, partitionSeverity, pathOfRef, verdictOf, type Finding, type PartitionRegistry } from '@seanhogg/builderforce-memory/knowledge';
+import { compareStr, partitionOf, partitionSeverity, pathOfRef, verdictOf, type Finding, type PartitionRegistry } from '@seanhogg/builderforce-memory/knowledge';
 import type { CodeAnalysisSnapshot } from '../codeAnalysis.js';
 import { CODE_PARTITIONS_FILE, loadCodePartitions } from '../knowledge/codePack.js';
-import { buildCodeGraph } from '../knowledge/codeGraph.js';
+import { codeGraphFindings } from '../knowledge/codeGraphFindings.js';
 import { isDefaultLayers, placedLayerRegistry } from '../knowledge/codeLayers.js';
-import { knowledgePacks } from '../knowledge/knowledgePacks.js';
 import { forgetWorkspaceAnalyses } from '../knowledge/workspaceAnalysis.js';
 import { analyseWorkspaceExtracted } from '../knowledge/workspaceExtracted.js';
 import type { PrefetchExecHost, PrefetchRunner } from './contract.js';
@@ -49,10 +48,11 @@ async function analyse(host: PrefetchExecHost, signal: AbortSignal): Promise<Ana
             signal,
         );
     if (!snapshot || signal.aborted) return null;
-    const packs = knowledgePacks({ partitions });
-    const graph = buildCodeGraph({ rootId: host.rootId, extracted, facts: [], relations: [], packs }, { maxNodes: MAX_NODES_CAP });
+    // The host's graph worker (the VS Code extension's) when it binds one, else this thread — ONE build either way.
+    const graph = host.codeGraph ? await host.codeGraph({ extracted, partitions, signal }) : codeGraphFindings(host.rootId, extracted, partitions);
+    if (signal.aborted) return null;
     // The graph placed every file (folder, name, import direction); the verdicts below must use THOSE layers, not a second glob match.
-    const placed = new Map(graph.nodes.flatMap((n) => { const path = pathOfRef(n.ref); return path !== undefined && n.partition !== undefined ? [[path, n.partition] as const] : []; }));
+    const placed = new Map(graph.placed);
     const registry = isDefaultLayers(partitions) ? placedLayerRegistry(partitions) : partitions;
     const layerOf = isDefaultLayers(partitions) ? (path: string) => placed.get(path) : (path: string) => partitionOf(path, partitions);
     return { snapshot, findings: graph.findings, layers: { registry, layerOf } };

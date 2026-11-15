@@ -38120,6 +38120,10 @@
     },
     "refreshing": "Wird aktualisiert…",
     "refreshFailed": "Aktualisierung fehlgeschlagen – der letzte Graph wird angezeigt. Erneut versuchen",
+    "runTitle": "Bereit zum Ausführen",
+    "runBody": "Der Graph wird erst erstellt, wenn Sie auf „Ausführen“ klicken. Danach wird nur aktualisiert, was sich ändert.",
+    "run": "Ausführen",
+    "runLastSeen": "Letzter Graph wird angezeigt – zum Aktualisieren ausführen",
     "errorTitle": "Der Wissensgraph konnte nicht geladen werden",
     "errorBody": "Beim Lesen des Wissens dieses Ordners ist ein Fehler aufgetreten. Versuche es erneut.",
     "retry": "Erneut versuchen",
@@ -40321,6 +40325,8 @@
       "unsafeRegex": "Unsicheres Muster in „{section}“",
       "unreadable": "Die Richtliniendatei konnte nicht gelesen werden[[ ({reason})]]",
       "truncated": "{count} weitere nicht angezeigt"
-    }
+    },
+    "expandDetails": "Details erweitern",
+    "collapseDetails": "Details einklappen"
   }
 }

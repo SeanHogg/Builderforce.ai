@@ -43,7 +43,7 @@ import {
   servedIdentity,
   servedOnDevice,
   webGpuSupport
-} from "./chunk-42Q6LR6O.mjs";
+} from "./chunk-ZJ3PNS54.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -87,7 +87,7 @@ import {
   thoughtTextOf,
   trimRepetitionLoop,
   within
-} from "./chunk-EUT326S6.mjs";
+} from "./chunk-VG2BVO4F.mjs";
 import {
   BrainRequestError,
   LOCAL_ENGINE_FAILURE_CODES,
@@ -357,7 +357,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-2RRTOB6I.mjs";
+} from "./chunk-REAY2ADQ.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useEffect, useMemo } from "react";
@@ -1297,7 +1297,7 @@ function useBrainConfig() {
 // src/localFirstPersistence.ts
 import { summarizeTranscript } from "@seanhogg/builderforce-memory/working";
 
-// ../packages/spend-contract/src/cost.js
+// ../packages/spend-contract/src/cost.ts
 var MILLICENTS_PER_USD = 1e5;
 var MEDIAN_TURN_TOKENS = Object.freeze({ prompt: 6e3, completion: 400 });
 function millicentsToUsd(millicents) {
@@ -1306,8 +1306,7 @@ function millicentsToUsd(millicents) {
 var CACHE_READ_MULTIPLIER = 0.1;
 var CACHE_CREATION_MULTIPLIER = 1.25;
 function computeCostMillicents(pricing, usage) {
-  if (!pricing)
-    return 0;
+  if (!pricing) return 0;
   const cacheRead = usage.cacheReadTokens ?? 0;
   const cacheCreation = usage.cacheCreationTokens ?? 0;
   const fullPrompt = Math.max(0, usage.promptTokens - cacheRead - cacheCreation);
@@ -1315,7 +1314,7 @@ function computeCostMillicents(pricing, usage) {
   return Math.round(usd3 * 1e5);
 }
 
-// ../packages/model-catalog/src/price.js
+// ../packages/model-catalog/src/price.ts
 var TOKENS_PER_MILLION = 1e6;
 function perMillionToPerToken(usdPerMillion) {
   return usdPerMillion / TOKENS_PER_MILLION;
@@ -1325,7 +1324,7 @@ function perTokenToPerMillion(usdPerToken) {
 }
 var ZERO_PRICE = Object.freeze({ input: 0, output: 0 });
 
-// ../packages/model-catalog/src/tier.js
+// ../packages/model-catalog/src/tier.ts
 var UNKNOWN_TIER_RANK = 4;
 var STRONGEST_FIRST = {
   ULTRA: 0,
@@ -1339,16 +1338,13 @@ function tierRank(tier2) {
 var STANDARD_MAX_OUTPUT_PER_MILLION = 8;
 var PREMIUM_MAX_OUTPUT_PER_MILLION = 20;
 function tierForPrice(price) {
-  if (price.input === 0 && price.output === 0)
-    return "FREE";
+  if (price.input === 0 && price.output === 0) return "FREE";
   const outputPerMillion = perTokenToPerMillion(price.output);
-  if (outputPerMillion < STANDARD_MAX_OUTPUT_PER_MILLION)
-    return "STANDARD";
+  if (outputPerMillion < STANDARD_MAX_OUTPUT_PER_MILLION) return "STANDARD";
   return outputPerMillion < PREMIUM_MAX_OUTPUT_PER_MILLION ? "PREMIUM" : "ULTRA";
 }
 function resolveModelTier(known) {
-  if (known.catalogTier)
-    return known.catalogTier;
+  if (known.catalogTier) return known.catalogTier;
   return known.price ? tierForPrice(known.price) : void 0;
 }
 var AGENTIC_TIERS = /* @__PURE__ */ new Set(["PREMIUM", "ULTRA"]);
@@ -1356,7 +1352,7 @@ function isAgenticTier(tier2) {
   return tier2 ? AGENTIC_TIERS.has(tier2) : void 0;
 }
 
-// ../packages/model-catalog/src/priceTiers.js
+// ../packages/model-catalog/src/priceTiers.ts
 var tier = (aboveInputTokens, inputPerMillion, outputPerMillion) => ({
   aboveInputTokens,
   input: perMillionToPerToken(inputPerMillion),
@@ -1396,7 +1392,7 @@ function withPriceTiers(modelId, price) {
   return tiers ? { ...price, priceTiers: tiers } : price;
 }
 
-// ../packages/model-catalog/src/priceBook.js
+// ../packages/model-catalog/src/priceBook.ts
 function directCatalogId(model) {
   return model.startsWith("direct/") ? model.slice("direct/".length).toLowerCase() : void 0;
 }
@@ -1423,13 +1419,13 @@ function priceBookFromPrices(prices) {
   };
 }
 
-// ../packages/model-catalog/src/generated/priceSnapshot.js
+// ../packages/model-catalog/src/generated/priceSnapshot.ts
 var PRICE_SNAPSHOT = {
   "~anthropic/claude-fable-latest": [8e-6, 4e-5],
   "~anthropic/claude-haiku-latest": [1e-7, 5e-7],
   "~anthropic/claude-opus-latest": [4e-6, 2e-5],
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
-  "~deepseek/deepseek-flash-latest": [38e-9, 5e-7],
+  "~deepseek/deepseek-flash-latest": [2e-8, 108e-9],
   "~deepseek/deepseek-pro-latest": [999e-10, 8e-6],
   "~deepseek/deepseek-v4-flash-latest": [434e-10, 3e-7],
   "~google/gemini-flash-latest": [15e-7, 75e-7],
@@ -1501,7 +1497,7 @@ var PRICE_SNAPSHOT = {
   "cohere/command-r-plus-08-2024": [25e-7, 1e-5],
   "cohere/command-r7b-12-2024": [375e-10, 15e-8],
   "cohere/north-mini-code:free": [0, 0],
-  "deepseek/deepseek-chat": [32e-8, 89e-8],
+  "deepseek/deepseek-chat": [2574e-10, 10287e-10],
   "deepseek/deepseek-chat-v3-0324": [29e-8, 114e-8],
   "deepseek/deepseek-chat-v3.1": [25e-8, 95e-8],
   "deepseek/deepseek-r1-0528": [5e-7, 215e-8],
@@ -1515,8 +1511,8 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v4-pro": [9e-7, 15e-7],
   "deepseek/deepseek-v4-pro-0813": [111e-9, 444e-8],
   "deepseek/deepseek-v4.1-flash": [507e-10, 2028e-10],
-  "deepseek/deepseek-v4.1-flash-1017": [38e-9, 5e-7],
-  "deepseek/deepseek-v4.1-flash-1017:batch": [5e-8, 15e-8],
+  "deepseek/deepseek-v4.1-flash-1017": [2e-8, 108e-9],
+  "deepseek/deepseek-v4.1-flash-1017:batch": [36e-9, 318e-9],
   "deepseek/deepseek-v4.1-flash:batch": [112e-9, 336e-9],
   "dots-studio/dots-3-note-preview:free": [0, 0],
   "elorian/glimpse": [6e-7, 3e-6],
@@ -1562,18 +1558,19 @@ var PRICE_SNAPSHOT = {
   "google/gemma-3-12b-it": [5e-8, 15e-8],
   "google/gemma-3-27b-it": [8e-8, 35e-8],
   "google/gemma-3-4b-it": [5e-8, 1e-7],
-  "google/gemma-4-26b-a4b-it": [9e-8, 3e-7],
+  "google/gemma-4-26b-a4b-it": [675e-10, 225e-9],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
   "google/gemma-4-31b-it": [2e-7, 4e-7],
   "google/gemma-4-31b-it:free": [0, 0],
   "google/lyria-3-clip-preview": [0, 0],
   "google/lyria-3-pro-preview": [0, 0],
   "gryphe/mythomax-l2-13b": [8e-8, 11e-8],
-  "ibm-granite/granite-4.2-8b": [6e-8, 25e-8],
+  "ibm-granite/granite-4.2-8b": [6e-8, 15e-8],
   "inclusionai/ling-3.0-flash": [21e-9, 63e-9],
   "inclusionai/ling-3.0-flash-vl": [6e-8, 18e-8],
   "inclusionai/ling-3.0-tiny": [15e-9, 45e-9],
   "inclusionai/ling-3.1-flash": [45e-9, 135e-9],
+  "inclusionai/ling-3.2-flash:free": [0, 0],
   "inference-net/schematron-v2-small": [5e-8, 23e-8],
   "inference-net/schematron-v2-turbo": [3e-8, 15e-8],
   "kt/midm-k-3.0-pro": [2e-7, 8e-7],
@@ -1585,7 +1582,7 @@ var PRICE_SNAPSHOT = {
   "meta-llama/llama-3.1-70b-instruct": [72e-8, 72e-8],
   "meta-llama/llama-3.1-8b-instruct": [2e-8, 4e-8],
   "meta-llama/llama-3.2-1b-instruct": [27e-9, 201e-9],
-  "meta-llama/llama-3.2-3b-instruct": [5e-8, 33e-8],
+  "meta-llama/llama-3.2-3b-instruct": [509e-10, 335e-9],
   "meta-llama/llama-3.3-70b-instruct": [71e-8, 71e-8],
   "meta-llama/llama-4-maverick": [35e-8, 1e-6],
   "meta-llama/llama-4-scout": [1e-7, 3e-7],
@@ -1605,7 +1602,7 @@ var PRICE_SNAPSHOT = {
   "minimax/minimax-m2.7": [21e-8, 84e-8],
   "minimax/minimax-m3": [3e-7, 12e-7],
   "minimax/minimax-m3:batch": [224e-9, 88e-8],
-  "minimax/minimax-m3.1-flash": [15e-8, 6e-7],
+  "minimax/minimax-m3.1-flash": [75e-9, 3e-7],
   "mistralai/codestral-2508": [3e-7, 9e-7],
   "mistralai/devstral-2512": [4e-7, 2e-6],
   "mistralai/ministral-14b-2512": [2e-7, 2e-7],
@@ -1637,8 +1634,8 @@ var PRICE_SNAPSHOT = {
   "moonshotai/kimi-k2.7-code": [6e-7, 35e-7],
   "moonshotai/kimi-k3": [192e-9, 16e-6],
   "moonshotai/kimi-k3:batch": [228e-8, 114e-7],
-  "moonshotai/kimi-k3.1-pro": [2e-6, 1e-5],
-  "moonshotai/kimi-k3.1-pro:batch": [7e-7, 6e-6],
+  "moonshotai/kimi-k3.1-pro": [2403e-10, 84023e-10],
+  "moonshotai/kimi-k3.1-pro:batch": [408e-9, 6111e-9],
   "morph/morph-v3-fast": [8e-7, 12e-7],
   "morph/morph-v3-fast:batch": [4e-7, 6e-7],
   "morph/morph-v3-large": [9e-7, 19e-7],
@@ -1656,7 +1653,7 @@ var PRICE_SNAPSHOT = {
   "nvidia/nemotron-3.5-content-safety": [2e-7, 2e-7],
   "nvidia/nemotron-3.5-lightning": [7e-8, 2e-7],
   "nvidia/nemotron-3.5-lightning:free": [0, 0],
-  "nvidia/nemotron-3.5-super-vl": [15e-8, 47e-8],
+  "nvidia/nemotron-3.5-super-vl": [15e-8, 5e-7],
   "nvidia/nemotron-3.5-super-vl:free": [0, 0],
   "nvidia/switchyard": [0, 0],
   "openai/gpt-3.5-turbo-0613": [1e-6, 2e-6],
@@ -1764,7 +1761,7 @@ var PRICE_SNAPSHOT = {
   "openrouter/free": [0, 0],
   "openrouter/fusion": [0, 0],
   "openrouter/pareto-code": [0, 0],
-  "particle-ai/particle-1": [5e-8, 5e-7],
+  "particle-ai/particle-1": [6e-8, 5e-7],
   "particle-ai/particle-1:free": [0, 0],
   "perceptron/perceptron-mk1": [15e-8, 15e-7],
   "perceptron/perceptron-mk1.5": [15e-8, 15e-7],
@@ -1792,13 +1789,12 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3-next-80b-a3b-instruct": [9e-8, 11e-7],
   "qwen/qwen3-vl-235b-a22b-instruct": [21e-8, 19e-7],
   "qwen/qwen3-vl-30b-a3b-instruct": [15e-8, 6e-7],
-  "qwen/qwen3-vl-30b-a3b-thinking": [29e-8, 1e-6],
   "qwen/qwen3-vl-8b-instruct": [25e-8, 75e-8],
   "qwen/qwen3.5-122b-a10b": [26e-8, 208e-8],
   "qwen/qwen3.5-27b": [26e-8, 26e-7],
   "qwen/qwen3.5-35b-a3b": [14e-8, 1e-6],
   "qwen/qwen3.5-397b-a17b": [6e-7, 36e-7],
-  "qwen/qwen3.5-9b": [28e-9, 41e-9],
+  "qwen/qwen3.5-9b": [66e-9, 97e-9],
   "qwen/qwen3.5-flash-02-23": [65e-9, 26e-8],
   "qwen/qwen3.5-plus-02-15": [26e-8, 156e-8],
   "qwen/qwen3.5-plus-20260420": [3e-7, 18e-7],
@@ -1833,10 +1829,8 @@ var PRICE_SNAPSHOT = {
   "sao10k/l3.1-euryale-70b": [85e-8, 85e-8],
   "scaledown/extract": [4e-8, 0],
   "scaledown/summarize": [4e-8, 0],
-  "stepfun/step-3.5-flash": [1e-7, 3e-7],
   "stepfun/step-3.7-flash": [2e-7, 115e-8],
   "stepfun/step-5-preview": [1e-6, 27e-7],
-  "tencent/hunyuan-a13b-instruct": [14e-8, 57e-8],
   "tencent/hy-mt2-1.8b": [44e-9, 177e-9],
   "tencent/hy-mt2-30b-a3b": [74e-9, 295e-9],
   "tencent/hy-mt2-7b": [74e-9, 295e-9],
@@ -1880,13 +1874,12 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-4.5v": [6e-7, 18e-7],
   "z-ai/glm-4.6": [5e-7, 2e-6],
   "z-ai/glm-4.6v": [3e-7, 9e-7],
-  "z-ai/glm-4.7": [6e-7, 22e-7],
+  "z-ai/glm-4.7": [4e-7, 175e-8],
   "z-ai/glm-4.7-flash": [605e-10, 4e-7],
   "z-ai/glm-5": [1e-6, 32e-7],
   "z-ai/glm-5-turbo": [12e-7, 4e-6],
   "z-ai/glm-5.1": [14e-7, 44e-7],
   "z-ai/glm-5.2": [7e-9, 68e-7],
-  "z-ai/glm-5.2:batch": [298e-9, 916e-9],
   "z-ai/glm-5.3": [84e-9, 36e-7],
   "z-ai/glm-5.3-flash": [399e-10, 784e-10],
   "z-ai/glm-5.3-flash:batch": [5e-8, 18e-8],
@@ -1897,14 +1890,16 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-5v-turbo": [12e-7, 4e-6]
 };
 
-// ../packages/model-catalog/src/snapshotPriceBook.js
+// ../packages/model-catalog/src/snapshotPriceBook.ts
 var book;
 function snapshotPriceBook() {
-  book ??= priceBookFromPrices(Object.entries(PRICE_SNAPSHOT).map(([id, [input, output]]) => [id, withPriceTiers(id, { input, output })]));
+  book ??= priceBookFromPrices(
+    Object.entries(PRICE_SNAPSHOT).map(([id, [input, output]]) => [id, withPriceTiers(id, { input, output })])
+  );
   return book;
 }
 
-// ../packages/model-catalog/src/anthropic.js
+// ../packages/model-catalog/src/anthropic.ts
 var ANTHROPIC_RELEASES = {
   opus: ["5.5", "5", "4.8", "4.7", "4.6", "4.5", "4.1", "4.0"],
   sonnet: ["5.5", "5", "4.6", "4.5", "4.0"],
@@ -1925,25 +1920,22 @@ function parseAnthropicModelId(id) {
   };
 }
 
-// ../packages/model-catalog/src/weakerModel.js
+// ../packages/model-catalog/src/weakerModel.ts
 function catalogIdCandidates(model) {
   const ids = [model];
   const claude = parseAnthropicModelId(model.slice(model.lastIndexOf("/") + 1));
   if (claude) {
     const [major, minor] = claude.version;
     ids.push(`anthropic/claude-${claude.family}-${major}.${minor}`);
-    if (minor === 0)
-      ids.push(`anthropic/claude-${claude.family}-${major}`);
+    if (minor === 0) ids.push(`anthropic/claude-${claude.family}-${major}`);
   }
   return ids;
 }
 function tierOfModel(model, book2 = snapshotPriceBook()) {
-  if (!model || model === "default")
-    return void 0;
+  if (!model || model === "default") return void 0;
   for (const id of catalogIdCandidates(model)) {
     const price = listPriceOf(book2, id);
-    if (price)
-      return resolveModelTier({ price });
+    if (price) return resolveModelTier({ price });
   }
   return void 0;
 }
@@ -1953,7 +1945,7 @@ function isWeakerModel(requested, served, book2 = snapshotPriceBook()) {
   return asked !== void 0 && got !== void 0 && tierRank(got) > tierRank(asked);
 }
 
-// ../packages/model-catalog/src/providers.js
+// ../packages/model-catalog/src/providers.ts
 var LLM_PROVIDER_INFO = [
   { id: "anthropic", label: "Anthropic (Claude)", credential: "api_key", keyPlaceholder: "sk-ant-\u2026", subscription: "paste", signInDomains: ["claude.ai", "anthropic.com"] },
   { id: "openai", label: "OpenAI", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: "paste", signInDomains: ["openai.com"] },
@@ -1988,12 +1980,11 @@ var LLM_PROVIDER_INFO = [
 var LLM_PROVIDERS = LLM_PROVIDER_INFO.map((p) => p.id);
 var INFO_BY_ID = new Map(LLM_PROVIDER_INFO.map((p) => [p.id, p]));
 
-// ../packages/spend-contract/src/fold.js
+// ../packages/spend-contract/src/fold.ts
 var AVOIDED_SOURCES = /* @__PURE__ */ new Set(["memory_answer", "evermind_answer", "response_cache", "deterministic"]);
 var LOCAL_MODEL_SOURCE = "local_model";
 function addSaving(acc, source, mc, tokens, events, estimated) {
-  if (tokens === 0 && mc === 0)
-    return;
+  if (tokens === 0 && mc === 0) return;
   const key = `${source}:${estimated ? "e" : "m"}`;
   const prev = acc.get(key) ?? { source, mc: 0, tokens: 0, events: 0, estimated };
   acc.set(key, { ...prev, mc: prev.mc + mc, tokens: prev.tokens + tokens, events: prev.events + events });
@@ -2004,10 +1995,8 @@ function savedFrom(acc, spentUsd) {
   let tokensSaved = 0;
   const bySource = [];
   for (const v of acc.values()) {
-    if (v.estimated)
-      estimatedMc += v.mc;
-    else
-      measuredMc += v.mc;
+    if (v.estimated) estimatedMc += v.mc;
+    else measuredMc += v.mc;
     tokensSaved += v.tokens;
     bySource.push({ source: v.source, usd: millicentsToUsd(v.mc), tokens: v.tokens, events: v.events, estimated: v.estimated });
   }
@@ -2054,8 +2043,7 @@ function foldSpendSavings(slices, book2) {
     platformMc += g.costMc;
     const price = listPriceOf(book2, g.model);
     const pricing = price ? { prompt: price.input, completion: price.output } : void 0;
-    if (g.unpriced)
-      spend.unpricedTokens += g.total;
+    if (g.unpriced) spend.unpricedTokens += g.total;
     else if (g.byo && pricing) {
       yourKeyMc += computeCostMillicents(pricing, {
         promptTokens: g.prompt,
@@ -2101,17 +2089,15 @@ function combineSpendSavings(a, b) {
   return { spend, ...savedFrom(acc, spend.totalUsd) };
 }
 
-// ../packages/spend-contract/src/runBudget.js
+// ../packages/spend-contract/src/runBudget.ts
 var RUN_BUDGET_WARN_AT = 0.8;
 var capOf = (n2) => typeof n2 === "number" && Number.isFinite(n2) ? n2 : null;
 function runBudgetBreach(caps, usage) {
   const spendCap = capOf(caps.maxSpendMillicents);
-  if (spendCap != null && usage.spendMillicents >= spendCap)
-    return { kind: "spend", used: usage.spendMillicents, cap: spendCap };
+  if (spendCap != null && usage.spendMillicents >= spendCap) return { kind: "spend", used: usage.spendMillicents, cap: spendCap };
   const tokenCap = capOf(caps.maxTokens);
   const tokens = usage.tokens ?? 0;
-  if (tokenCap != null && tokens >= tokenCap)
-    return { kind: "tokens", used: tokens, cap: tokenCap };
+  if (tokenCap != null && tokens >= tokenCap) return { kind: "tokens", used: tokens, cap: tokenCap };
   return null;
 }
 function runBudgetUsedShare(caps, usage) {
@@ -5067,7 +5053,7 @@ function summarizeGateRuns(rows, accepted = /* @__PURE__ */ new Map()) {
   return report;
 }
 
-// ../packages/pipeline-route/src/score.js
+// ../packages/pipeline-route/src/score.ts
 import { sigmoid } from "@seanhogg/builderforce-memory/stats";
 var LENGTH_FLOOR_CHARS = 80;
 var MAX_FILE_MENTIONS = 4;
@@ -5115,10 +5101,8 @@ function scorePipeline(f, opts = {}) {
   const score = round2(sigmoid(parts.reduce((z, [, c]) => z + c, w.bias)));
   const strongest = parts.filter(([, c]) => c !== 0).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 3).map(([name]) => name);
   const why = strongest.length ? ` (${strongest.join(", ")})` : "";
-  if (f.forceFull)
-    return { score, route: "full", reason: `the request asks for the full pipeline; score ${score}${why}` };
-  if (opts.mode === "always")
-    return { score, route: "full", reason: `routing is set to always; score ${score}${why}` };
+  if (f.forceFull) return { score, route: "full", reason: `the request asks for the full pipeline; score ${score}${why}` };
+  if (opts.mode === "always") return { score, route: "full", reason: `routing is set to always; score ${score}${why}` };
   return score >= threshold ? { score, route: "full", reason: `score ${score} \u2265 ${threshold}${why}` } : { score, route: "quick", reason: `score ${score} < ${threshold}${why}` };
 }
 var FILE_RE = /(?:[\w@.-]+\/)+[\w.-]+|\b[\w-]+\.(?:tsx?|jsx?|mjs|cjs|py|go|rs|java|kt|cs|php|rb|swift|c|cc|cpp|h|hpp|md|json|ya?ml|toml|sql|css|scss|html|vue|svelte|sh)\b/gi;
@@ -5146,7 +5130,7 @@ function pipelineFeaturesOf(request, context = {}) {
   };
 }
 
-// ../packages/pipeline-route/src/report.js
+// ../packages/pipeline-route/src/report.ts
 var RERUN_WINDOW_MS = 30 * 6e4;
 var MIN_QUICK_RUNS_FOR_SUGGESTION = 10;
 var MISROUTE_HIGH = 0.15;
@@ -5167,15 +5151,13 @@ function misroutedRuns(runs, windowMs = RERUN_WINDOW_MS) {
     indexes.sort((a, b) => runs[a].startedAt.localeCompare(runs[b].startedAt));
     indexes.forEach((i, k) => {
       const run = runs[i];
-      if (run.route !== "quick")
-        return;
+      if (run.route !== "quick") return;
       if (run.failed) {
         out.add(i);
         return;
       }
       const next = indexes[k + 1] !== void 0 ? runs[indexes[k + 1]] : void 0;
-      if (next?.route === "full" && Date.parse(next.startedAt) - Date.parse(run.startedAt) <= windowMs)
-        out.add(i);
+      if (next?.route === "full" && Date.parse(next.startedAt) - Date.parse(run.startedAt) <= windowMs) out.add(i);
     });
   }
   return out;
@@ -5199,8 +5181,7 @@ function histogramOf(runs) {
     quick: 0
   }));
   for (const r of runs) {
-    if (typeof r.score !== "number" || !Number.isFinite(r.score))
-      continue;
+    if (typeof r.score !== "number" || !Number.isFinite(r.score)) continue;
     const i = Math.min(HISTOGRAM_BINS - 1, Math.max(0, Math.floor(r.score * HISTOGRAM_BINS)));
     bins[i][r.route] += 1;
   }
@@ -5208,8 +5189,7 @@ function histogramOf(runs) {
 }
 function suggestThreshold(runs, threshold, misrouted = misroutedRuns(runs)) {
   const quick = runs.filter((r) => r.route === "quick").length;
-  if (quick < MIN_QUICK_RUNS_FOR_SUGGESTION)
-    return { suggestedThreshold: null };
+  if (quick < MIN_QUICK_RUNS_FOR_SUGGESTION) return { suggestedThreshold: null };
   const rate = misrouted.size / quick;
   if (rate > MISROUTE_HIGH) {
     const scores = [...misrouted].map((i) => runs[i].score).filter((s) => typeof s === "number").sort((a, b) => a - b);
@@ -5238,16 +5218,16 @@ function summarizeRouteRuns(runs, opts = {}) {
   };
 }
 
-// ../packages/prefetch/src/registry.js
+// ../packages/prefetch/src/registry.ts
 var NEEDS_LLM = "needs-llm";
 function offeredActions(registry2, ports) {
   return registry2.filter((a) => a.surfaces.includes(ports.surface) && (!a.requires || !!ports.tools?.has(a.requires.tool)));
 }
 
-// ../packages/prefetch/src/calibrate.js
+// ../packages/prefetch/src/calibrate.ts
 import { logisticProbability, onlineLogisticStep } from "@seanhogg/builderforce-memory/stats";
 
-// ../packages/prefetch/src/lexical.js
+// ../packages/prefetch/src/lexical.ts
 var STOP = /* @__PURE__ */ new Set([
   "a",
   "an",
@@ -5304,27 +5284,21 @@ function tokenize(text2) {
   const words2 = (text2 ?? "").replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase().split(/[^a-z0-9]+/);
   const out = [];
   for (const raw of words2) {
-    if (raw.length < 2 || STOP.has(raw))
-      continue;
+    if (raw.length < 2 || STOP.has(raw)) continue;
     const word = raw.length > 3 && raw.endsWith("s") && !raw.endsWith("ss") ? raw.slice(0, -1) : raw;
-    if (!out.includes(word))
-      out.push(word);
+    if (!out.includes(word)) out.push(word);
   }
   return out;
 }
 function similarity(a, b) {
-  if (a.length === 0 || b.length === 0)
-    return 0;
+  if (a.length === 0 || b.length === 0) return 0;
   const set = new Set(b);
   let shared = 0;
-  for (const t of a)
-    if (set.has(t))
-      shared += 1;
+  for (const t of a) if (set.has(t)) shared += 1;
   return shared / Math.sqrt(a.length * b.length);
 }
 function lexicalFeatures(request, examples) {
-  if (request.length === 0 || examples.length === 0)
-    return [0, 0, 0];
+  if (request.length === 0 || examples.length === 0) return [0, 0, 0];
   const sims = examples.map((ex) => similarity(request, ex)).sort((x, y) => y - x);
   const best = sims[0] ?? 0;
   const top2 = sims.length > 1 ? (best + sims[1]) / 2 : best;
@@ -5337,7 +5311,7 @@ function isReask(previous, next) {
   return similarity(tokenize(previous), tokenize(next)) >= REASK_SIMILARITY;
 }
 
-// ../packages/prefetch/src/calibrate.js
+// ../packages/prefetch/src/calibrate.ts
 var COLD_START = Object.freeze({ answer: 0.9, prefetch: 0.6 });
 var TARGET_PRECISION = Object.freeze({ answer: 0.95, prefetch: 0.8 });
 var BOUNDS = Object.freeze({ answer: { min: 0.5, cap: 0.99 }, prefetch: { min: 0.3, cap: 0.95 } });
@@ -5350,12 +5324,11 @@ function thresholdOf(state, id) {
   return state?.thresholds[id] ?? { answer: COLD_START.answer, prefetch: COLD_START.prefetch, n: 0 };
 }
 function predict(head, features) {
-  if (features.length !== head.weights.length)
-    return 0;
+  if (features.length !== head.weights.length) return 0;
   return logisticProbability(head.weights, head.bias, features);
 }
 
-// ../packages/prefetch/src/deadline.js
+// ../packages/prefetch/src/deadline.ts
 async function withinMs(work, ms, fallback) {
   let timer;
   const late = new Promise((resolve) => {
@@ -5364,17 +5337,14 @@ async function withinMs(work, ms, fallback) {
   try {
     return await Promise.race([work.catch(() => fallback), late]);
   } finally {
-    if (timer)
-      clearTimeout(timer);
+    if (timer) clearTimeout(timer);
   }
 }
 function deadlineSignal(ms, parent) {
   const ctl = new AbortController();
   const onParent = () => ctl.abort(parent?.reason);
-  if (parent?.aborted)
-    ctl.abort(parent.reason);
-  else
-    parent?.addEventListener("abort", onParent, { once: true });
+  if (parent?.aborted) ctl.abort(parent.reason);
+  else parent?.addEventListener("abort", onParent, { once: true });
   const timer = setTimeout(() => ctl.abort(new Error("deadline")), Math.max(0, ms));
   return {
     signal: ctl.signal,
@@ -5385,7 +5355,7 @@ function deadlineSignal(ms, parent) {
   };
 }
 
-// ../packages/prefetch/src/logprob.js
+// ../packages/prefetch/src/logprob.ts
 var TIER3_MIN_MS = 40;
 var TIER3_CANDIDATES = 6;
 var AMBIGUOUS_FLOOR = 0.25;
@@ -5404,24 +5374,21 @@ function logprobPrompt(request, actions) {
 }
 function labelProbabilities(logprobs, labels) {
   const scored = labels.filter((l) => typeof logprobs[l] === "number" && Number.isFinite(logprobs[l]));
-  if (scored.length === 0)
-    return {};
+  if (scored.length === 0) return {};
   const max = Math.max(...scored.map((l) => logprobs[l]));
   const exp = new Map(scored.map((l) => [l, Math.exp(logprobs[l] - max)]));
   const total = [...exp.values()].reduce((s, v) => s + v, 0);
   const out = {};
-  for (const l of labels)
-    out[l] = (exp.get(l) ?? 0) / total;
+  for (const l of labels) out[l] = (exp.get(l) ?? 0) / total;
   return out;
 }
 
-// ../packages/prefetch/src/classify.js
+// ../packages/prefetch/src/classify.ts
 var DEFAULT_GATE_BUDGET_MS = 300;
 var LLM_ROUTE_SHOWN = 3;
 var clock = () => typeof performance !== "undefined" ? performance.now() : Date.now();
 function slashHit(request, slash) {
-  if (!slash)
-    return false;
+  if (!slash) return false;
   const head = request.trimStart().split(/\s/, 1)[0] ?? "";
   return head.toLowerCase() === slash.toLowerCase();
 }
@@ -5446,8 +5413,7 @@ async function tier3(request, scored, ports, remainingMs) {
   try {
     const logprobs = await withinMs(port.logprobs(logprobPrompt(request, shortlist.map((s) => s.action)), labels, signal), remainingMs, {});
     const probs = labelProbabilities(logprobs, labels);
-    if (Object.keys(probs).length === 0)
-      return void 0;
+    if (Object.keys(probs).length === 0) return void 0;
     for (const s of shortlist) {
       s.p = probs[s.id] ?? 0;
       s.tier = 3;
@@ -5468,8 +5434,7 @@ async function classify(request, registry2, ports) {
     elapsedMs: Math.max(0, clock() - started)
   });
   const offered = offeredActions(registry2, ports);
-  if (!request.trim() || offered.length === 0 || ports.signal?.aborted)
-    return done("llm", [], 1);
+  if (!request.trim() || offered.length === 0 || ports.signal?.aborted) return done("llm", [], 1);
   const words2 = tokenize(request);
   let exact = false;
   const scored = offered.map((action) => {
@@ -5481,8 +5446,7 @@ async function classify(request, registry2, ports) {
     return { id: action.id, action, p: predict(headOf(ports.calibration, action.id), features), tier: 2, features };
   });
   tiersRun.push(1);
-  if (!exact)
-    tiersRun.push(2);
+  if (!exact) tiersRun.push(2);
   scored.sort(byP);
   const top = scored[0];
   let pNeedsLlm = 1 - top.p;
@@ -5500,20 +5464,17 @@ async function classify(request, registry2, ports) {
   const clears = (s) => s.p >= thresholdFor(s.action, ports) && s.p > (s.tier === 3 ? pNeedsLlm : 0);
   const answers = scored.filter((s) => s.action.kind === "answer" && clears(s));
   const prefetches = scored.filter((s) => s.action.kind === "prefetch" && clears(s));
-  if (answers.length > 0)
-    return done("answer", [...answers, ...prefetches], pNeedsLlm);
-  if (prefetches.length > 0)
-    return done("prefetch", prefetches, pNeedsLlm);
+  if (answers.length > 0) return done("answer", [...answers, ...prefetches], pNeedsLlm);
+  if (prefetches.length > 0) return done("prefetch", prefetches, pNeedsLlm);
   return done("llm", scored.slice(0, LLM_ROUTE_SHOWN), pNeedsLlm);
 }
 
-// ../packages/prefetch/src/runGate.js
+// ../packages/prefetch/src/runGate.ts
 var PREPARE_BUDGET_MS = 1500;
 var PREVIEW_BUDGET_MS = 3e4;
 async function previewPrefetchAction(port, action, request, stop) {
   const preview = port.executors[action.id]?.preview;
-  if (!preview)
-    return void 0;
+  if (!preview) return void 0;
   const ms = Math.min(action.budgetMs, PREVIEW_BUDGET_MS);
   const { signal, dispose } = deadlineSignal(ms, stop);
   try {
@@ -5525,8 +5486,7 @@ async function previewPrefetchAction(port, action, request, stop) {
 }
 async function runPrefetchAction(port, action, request, stop) {
   const executor = port.executors[action.id];
-  if (!executor)
-    return void 0;
+  if (!executor) return void 0;
   const { signal, dispose } = deadlineSignal(action.budgetMs, stop);
   try {
     const result = await withinMs(executor.run(request, signal), action.budgetMs, void 0);
@@ -5536,15 +5496,13 @@ async function runPrefetchAction(port, action, request, stop) {
   }
 }
 function belowAnswerThreshold(port, action, result) {
-  if (result.confidence === void 0)
-    return false;
+  if (result.confidence === void 0) return false;
   return !(result.confidence >= thresholdOf(port.ports.calibration, action.id).answer);
 }
 async function runGate(request, port, hooks) {
   const started = Date.now();
   const stop = hooks.signal;
-  if (port.prepare)
-    await withinMs(port.prepare(stop).catch(() => void 0), PREPARE_BUDGET_MS, void 0);
+  if (port.prepare) await withinMs(port.prepare(stop).catch(() => void 0), PREPARE_BUDGET_MS, void 0);
   let decision;
   try {
     decision = await classify(request, port.registry, { ...port.ports, ...stop ? { signal: stop } : {} });
@@ -5560,8 +5518,7 @@ async function runGate(request, port, hooks) {
   const demoted = [];
   const done = (settled2, extra = {}) => ({ decision, settled: settled2, ran, tail: [], elapsedMs: Date.now() - started, ...extra });
   for (const { candidate, action } of chosen.filter((x) => x.action.kind === "answer")) {
-    if (stop?.aborted || !port.executors[action.id])
-      continue;
+    if (stop?.aborted || !port.executors[action.id]) continue;
     let confirmed;
     if (action.sideEffect === "write") {
       const detail = hooks.confirm ? await previewPrefetchAction(port, action, request, stop) : void 0;
@@ -5574,38 +5531,34 @@ async function runGate(request, port, hooks) {
     const result = await runPrefetchAction(port, action, request, stop);
     const entry = { candidate, action, result, ...confirmed !== void 0 ? { confirmed } : {} };
     ran.push(entry);
-    if (!result)
-      continue;
+    if (!result) continue;
     if (belowAnswerThreshold(port, action, result)) {
       demoted.push({ entry, text: (result.context ?? result.text).trim() });
       continue;
     }
     const answer2 = { ...entry, result };
-    if (await hooks.adopt(answer2))
-      return done("answer", { answer: answer2, lead: answer2 });
+    if (await hooks.adopt(answer2)) return done("answer", { answer: answer2, lead: answer2 });
   }
   const prefetches = chosen.filter((x) => x.action.kind === "prefetch" && port.executors[x.action.id]);
   const results = await Promise.all(prefetches.map(({ action }) => runPrefetchAction(port, action, request, stop)));
   const tail = [];
   let lead;
   for (const { entry, text: text2 } of demoted) {
-    if (!text2)
-      continue;
+    if (!text2) continue;
     tail.push(text2);
     lead ??= entry;
   }
   prefetches.forEach(({ candidate, action }, i) => {
     const entry = { candidate, action, result: results[i] };
     ran.push(entry);
-    if (!results[i])
-      return;
+    if (!results[i]) return;
     tail.push(results[i].text);
     lead ??= entry;
   });
   return done(tail.length > 0 ? "prefetch" : "llm", { tail, ...lead ? { lead } : {} });
 }
 
-// ../packages/prefetch/src/confirmRequest.js
+// ../packages/prefetch/src/confirmRequest.ts
 var REQUEST_ECHO_MAX = 240;
 function prefetchConfirmRequest(action, request, detail) {
   const echo = request.trim();
@@ -5621,11 +5574,9 @@ function prefetchConfirmRequest(action, request, detail) {
   };
 }
 function prefetchConfirmOf(pending) {
-  if (!pending)
-    return null;
+  if (!pending) return null;
   const args = pending.args;
-  if (!args || args.prefetch !== true || typeof args.labelKey !== "string")
-    return null;
+  if (!args || args.prefetch !== true || typeof args.labelKey !== "string") return null;
   return {
     actionId: pending.name,
     labelKey: args.labelKey,
@@ -6223,7 +6174,7 @@ function providerFailureTrace(ts, step, model, error, durationMs) {
 // src/localFirstTransport.ts
 import { isVolatileTail } from "@seanhogg/builderforce-memory/handoff";
 
-// ../packages/learned-routing/src/actionTypes.js
+// ../packages/learned-routing/src/actionTypes.ts
 var ACTION_TYPES = [
   "sql",
   "frontend_ui",
@@ -6242,17 +6193,19 @@ var ACTION_TYPES = [
 var DEFAULT_ACTION_TYPE = "other";
 var ACTION_TYPE_SET = new Set(ACTION_TYPES);
 
-// ../packages/learned-routing/src/exploration.js
+// ../packages/learned-routing/src/exploration.ts
 import { betaMoments, normalDraw } from "@seanhogg/builderforce-memory/stats";
 
-// ../packages/learned-routing/src/recencyDecay.js
+// ../packages/learned-routing/src/recencyDecay.ts
 var ROUTING_HALF_LIFE_DAYS = 30;
 var DECAYED_WINDOW_DAYS = 4 * ROUTING_HALF_LIFE_DAYS;
 var DAY_MS2 = 24 * 60 * 60 * 1e3;
 
-// ../packages/learned-routing/src/runOutcomeTelemetry.js
+// ../packages/learned-routing/src/runOutcomeTelemetry.ts
 var ALL_ENTRY_POINTS = ["vscode", "web", "rovr", "canvas", "on-prem", "cloud"];
-var CLIENT_ENTRY_POINTS = ALL_ENTRY_POINTS.filter((entryPoint2) => entryPoint2 !== "cloud");
+var CLIENT_ENTRY_POINTS = ALL_ENTRY_POINTS.filter(
+  (entryPoint2) => entryPoint2 !== "cloud"
+);
 var MODEL_PREFLIGHT_MAX = 32;
 var PROGRESS_SIGNALS_MAX = 8;
 var SIGNAL_NAME_MAX = 32;
@@ -6282,30 +6235,24 @@ function verify(v) {
   return v === "passed" || v === "failed" || v === "not-run" ? v : void 0;
 }
 function modelPreflight(v) {
-  if (typeof v !== "string")
-    return void 0;
+  if (typeof v !== "string") return void 0;
   const s = v.trim();
-  if (s !== "ok" && s !== "refreshed" && !s.startsWith("degraded"))
-    return void 0;
+  if (s !== "ok" && s !== "refreshed" && !s.startsWith("degraded")) return void 0;
   return s.slice(0, MODEL_PREFLIGHT_MAX);
 }
 function parentRunId(v) {
-  if (typeof v !== "string")
-    return void 0;
+  if (typeof v !== "string") return void 0;
   const s = v.trim();
   return s.length > 0 && s.length <= PARENT_RUN_ID_MAX && /^[\w:.\-]+$/.test(s) ? s : void 0;
 }
 function progressTrips(v) {
-  if (!v || typeof v !== "object" || Array.isArray(v))
-    return void 0;
+  if (!v || typeof v !== "object" || Array.isArray(v)) return void 0;
   const entries = Object.entries(v);
-  if (entries.length > PROGRESS_SIGNALS_MAX)
-    return void 0;
+  if (entries.length > PROGRESS_SIGNALS_MAX) return void 0;
   const out = {};
   for (const [signal, n2] of entries) {
     const c = count(n2);
-    if (!/^[a-z_]+$/.test(signal) || signal.length > SIGNAL_NAME_MAX || c === void 0)
-      return void 0;
+    if (!/^[a-z_]+$/.test(signal) || signal.length > SIGNAL_NAME_MAX || c === void 0) return void 0;
     out[signal] = c;
   }
   return out;
@@ -6317,36 +6264,28 @@ function wireCost(row) {
 function parseRunOutcomeTelemetry(b) {
   const out = {};
   const ep = entryPoint(b.entryPoint);
-  if (ep)
-    out.entryPoint = ep;
+  if (ep) out.entryPoint = ep;
   for (const key of COUNTERS) {
     const c = count(b[key]);
-    if (c !== void 0)
-      out[key] = c;
+    if (c !== void 0) out[key] = c;
   }
   const v = verify(b.verify);
-  if (v)
-    out.verify = v;
-  if (b.firstSpawnTurn === null)
-    out.firstSpawnTurn = null;
+  if (v) out.verify = v;
+  if (b.firstSpawnTurn === null) out.firstSpawnTurn = null;
   else {
     const turn = count(b.firstSpawnTurn);
-    if (turn !== void 0)
-      out.firstSpawnTurn = turn;
+    if (turn !== void 0) out.firstSpawnTurn = turn;
   }
   const preflight = modelPreflight(b.modelPreflight);
-  if (preflight)
-    out.modelPreflight = preflight;
+  if (preflight) out.modelPreflight = preflight;
   const trips = progressTrips(b.progressTrips);
-  if (trips)
-    out.progressTrips = trips;
+  if (trips) out.progressTrips = trips;
   const parent = parentRunId(b.parentRunId);
-  if (parent)
-    out.parentRunId = parent;
+  if (parent) out.parentRunId = parent;
   return out;
 }
 
-// ../packages/learned-routing/src/rateLimitFailure.js
+// ../packages/learned-routing/src/rateLimitFailure.ts
 var AVAILABILITY = /\b429\b|\b529\b|rate.?limit|too many requests|over ?capacity|capacity limit|overloaded|resource has been exhausted|\bin cooldown\b|cooldown or unavailable/i;
 var GRPC_RESOURCE_EXHAUSTED = /\bRESOURCE_EXHAUSTED\b/;
 var AVAILABILITY_STATUSES = /* @__PURE__ */ new Set([429, 529]);
@@ -6361,19 +6300,21 @@ var TENANT_BUDGET_CODES = [
   "claw_token_limit_exceeded"
 ];
 var BUDGET_CODE = new RegExp(`\\b(?:${TENANT_BUDGET_CODES.join("|")})\\b`);
-var BUDGET_WORDING = new RegExp([
-  /(?:plan|daily|monthly|agenthost)\b[^.]{0,30}\btoken limit reached/,
-  /generation limit reached/,
-  /allowance reached/,
-  /spend cap reached/,
-  /premium-model budget exhausted/
-].map((re) => re.source).join("|"), "i");
+var BUDGET_WORDING = new RegExp(
+  [
+    /(?:plan|daily|monthly|agenthost)\b[^.]{0,30}\btoken limit reached/,
+    /generation limit reached/,
+    /allowance reached/,
+    /spend cap reached/,
+    /premium-model budget exhausted/
+  ].map((re) => re.source).join("|"),
+  "i"
+);
 function isTenantBudgetFailure(message) {
   return !!message && (BUDGET_CODE.test(message) || BUDGET_WORDING.test(message));
 }
 function isRateLimitFailure(message, status2) {
-  if (isTenantBudgetFailure(message))
-    return false;
+  if (isTenantBudgetFailure(message)) return false;
   return status2 != null && AVAILABILITY_STATUSES.has(status2) || !!message && (AVAILABILITY.test(message) || GRPC_RESOURCE_EXHAUSTED.test(message));
 }
 
@@ -12539,7 +12480,7 @@ function recorderForState(state) {
   return recorder;
 }
 
-// ../packages/agent-run/src/policy/memory/learnedFacts.js
+// ../packages/agent-run/src/policy/memory/learnedFacts.ts
 var MIN_FACT_CHARS = 24;
 var MAX_FACTS = 6;
 var KEY_PREFIX = "learned:";
@@ -12580,34 +12521,26 @@ function factKey(raw) {
 function parseLearnedFacts(raw) {
   const start = raw.indexOf("[");
   const end = raw.lastIndexOf("]");
-  if (start < 0 || end <= start)
-    return [];
+  if (start < 0 || end <= start) return [];
   let parsed;
   try {
     parsed = JSON.parse(raw.slice(start, end + 1));
   } catch {
     return [];
   }
-  if (!Array.isArray(parsed))
-    return [];
+  if (!Array.isArray(parsed)) return [];
   const out = [];
   const seen = /* @__PURE__ */ new Set();
   for (const item of parsed) {
-    if (out.length >= MAX_FACTS)
-      break;
-    if (!item || typeof item !== "object")
-      continue;
+    if (out.length >= MAX_FACTS) break;
+    if (!item || typeof item !== "object") continue;
     const row = item;
-    if (typeof row.kind !== "string" || !KINDS.has(row.kind))
-      continue;
-    if (typeof row.key !== "string" || typeof row.content !== "string")
-      continue;
-    if (/^workspace:/i.test(row.key.trim()))
-      continue;
+    if (typeof row.kind !== "string" || !KINDS.has(row.kind)) continue;
+    if (typeof row.key !== "string" || typeof row.content !== "string") continue;
+    if (/^workspace:/i.test(row.key.trim())) continue;
     const key = factKey(row.key);
     const content = row.content.replace(/\s+/g, " ").trim();
-    if (!key || content.length < MIN_FACT_CHARS || seen.has(key))
-      continue;
+    if (!key || content.length < MIN_FACT_CHARS || seen.has(key)) continue;
     seen.add(key);
     out.push({ key, content, kind: row.kind });
   }
@@ -12615,8 +12548,7 @@ function parseLearnedFacts(raw) {
 }
 async function commitLearnedFacts(input, deps) {
   const changed2 = changedPaths(input);
-  if (changed2.length === 0)
-    return [];
+  if (changed2.length === 0) return [];
   let raw = "";
   try {
     raw = await deps.complete(memoryCommitPrompt({ ...input, changed: changed2 }));
@@ -12627,8 +12559,7 @@ async function commitLearnedFacts(input, deps) {
   const landed = [];
   for (const fact of facts) {
     try {
-      if (await deps.remember(fact.key, fact.content))
-        landed.push(fact);
+      if (await deps.remember(fact.key, fact.content)) landed.push(fact);
     } catch {
     }
   }
@@ -12646,8 +12577,7 @@ function learnedFactsRequest(evidence) {
 var learnedFactDeps = null;
 async function extractAndWriteLearnedFacts(evidence) {
   const deps = learnedFactDeps;
-  if (!deps)
-    return null;
+  if (!deps) return null;
   return commitLearnedFacts(learnedFactsRequest(evidence), deps);
 }
 
@@ -15684,7 +15614,7 @@ function wakeChat(runKey, turns, start) {
   return true;
 }
 
-// ../packages/write-outbox/src/classification.js
+// ../packages/write-outbox/src/classification.ts
 var RETENTION_BY_WORK = {
   history: "durable",
   histories: "durable",
@@ -15697,15 +15627,13 @@ var RETENTION_BY_WORK = {
   telemetry: "best-effort"
 };
 function classifyOutboxWork(work) {
-  if (typeof work !== "string")
-    return void 0;
+  if (typeof work !== "string") return void 0;
   const key = work.trim().toLowerCase();
-  if (!key)
-    return void 0;
+  if (!key) return void 0;
   return RETENTION_BY_WORK[key];
 }
 
-// ../packages/write-outbox/src/queueClass.js
+// ../packages/write-outbox/src/queueClass.ts
 var UNCLASSIFIED_USER_WORK_QUEUES = Object.freeze({
   "host-persist": {
     carries: "user work (mixed with host telemetry)",
@@ -15791,24 +15719,19 @@ function normalizeQueueName(name) {
 }
 function canonicalQueue(name) {
   let key = normalizeQueueName(name);
-  if (!key)
-    return void 0;
-  if (key.startsWith(STORAGE_PREFIX))
-    key = key.slice(STORAGE_PREFIX.length);
-  if (key === "steps" || key.startsWith("steps:"))
-    return "steps";
+  if (!key) return void 0;
+  if (key.startsWith(STORAGE_PREFIX)) key = key.slice(STORAGE_PREFIX.length);
+  if (key === "steps" || key.startsWith("steps:")) return "steps";
   return ALIAS_TO_QUEUE[key];
 }
 function classifyUserWorkQueue(name) {
-  if (typeof name !== "string")
-    return void 0;
+  if (typeof name !== "string") return void 0;
   const queue = canonicalQueue(name);
-  if (!queue)
-    return void 0;
+  if (!queue) return void 0;
   return CLASS_BY_QUEUE[queue];
 }
 
-// ../packages/write-outbox/src/classifyQueue.js
+// ../packages/write-outbox/src/classifyQueue.ts
 var EXTRA_TELEMETRY = {
   "qa-captures": "qa-capture",
   "visitor-journeys": "visitor-journey"
@@ -15838,48 +15761,45 @@ function classified(queue, retention, kind) {
 function classifyQueue(name) {
   const fromQueue = classifyUserWorkQueue(name);
   if (fromQueue) {
-    return classified(fromQueue.queue, fromQueue.retention, fromQueue.retention === "durable" ? "user-work" : "telemetry");
+    return classified(
+      fromQueue.queue,
+      fromQueue.retention,
+      fromQueue.retention === "durable" ? "user-work" : "telemetry"
+    );
   }
   const fromWork = classifyOutboxWork(name);
   if (fromWork && typeof name === "string") {
     const key2 = normalizeQueueName2(name);
     const queue = WORK_CANONICAL[key2];
-    if (queue)
-      return classified(queue, fromWork, fromWork === "durable" ? "user-work" : "telemetry");
+    if (queue) return classified(queue, fromWork, fromWork === "durable" ? "user-work" : "telemetry");
   }
-  if (typeof name !== "string")
-    return void 0;
+  if (typeof name !== "string") return void 0;
   const key = normalizeQueueName2(name);
-  if (!key)
-    return void 0;
+  if (!key) return void 0;
   const extra = EXTRA_TELEMETRY[key];
-  if (extra)
-    return classified(extra, "best-effort", "telemetry");
+  if (extra) return classified(extra, "best-effort", "telemetry");
   return void 0;
 }
 
-// ../packages/write-outbox/src/deadLetter.js
+// ../packages/write-outbox/src/deadLetter.ts
 function exportDeadLetters(entries) {
   return entries.filter((entry) => entry.deadLetter).map((entry) => ({ ...entry, deadLetter: { ...entry.deadLetter } })).sort((a, b) => a.seq - b.seq);
 }
 function repairDeadLetter(entries, id) {
-  if (typeof id !== "string" || id.trim() === "")
-    return null;
+  if (typeof id !== "string" || id.trim() === "") return null;
   const entry = entries.find((candidate) => candidate.id === id && candidate.deadLetter);
-  if (!entry)
-    return null;
+  if (!entry) return null;
   delete entry.deadLetter;
   delete entry.batch;
   entry.retention = "durable";
   return entry;
 }
 
-// ../packages/write-outbox/src/idempotency.js
+// ../packages/write-outbox/src/idempotency.ts
 var fallbackCounter = 0;
 function defaultId() {
   const c = globalThis.crypto;
-  if (c?.randomUUID)
-    return c.randomUUID();
+  if (c?.randomUUID) return c.randomUUID();
   fallbackCounter += 1;
   return `ob-${Date.now().toString(36)}-${fallbackCounter.toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -15888,19 +15808,18 @@ function batchIdempotencyKey(batch) {
   return head ? head.batch ?? head.id : void 0;
 }
 
-// ../packages/write-outbox/src/policy.js
+// ../packages/write-outbox/src/policy.ts
 var OUTBOX_MAX_ITEMS = 25;
 var OUTBOX_MAX_WAIT_MS = 5e3;
 var OUTBOX_RETRY_BASE_MS = 1e3;
 var OUTBOX_RETRY_MAX_MS = 5 * 6e4;
 function isPermanentHttpFailure(error) {
   const status2 = error?.status;
-  if (typeof status2 !== "number")
-    return false;
+  if (typeof status2 !== "number") return false;
   return status2 >= 400 && status2 < 500 && ![401, 408, 409, 425, 429].includes(status2);
 }
 
-// ../packages/write-outbox/src/sealedBatch.js
+// ../packages/write-outbox/src/sealedBatch.ts
 var bySeq = (a, b) => a.seq - b.seq;
 function sendable(e, scope) {
   return !e.deadLetter && (scope === void 0 || e.scope === void 0 || e.scope === scope);
@@ -15908,25 +15827,21 @@ function sendable(e, scope) {
 function takeBatch(l, scope, upTo, maxItems) {
   const due = (e) => e.seq <= upTo && sendable(e, scope);
   const start = l.entries.findIndex(due);
-  if (start < 0)
-    return null;
+  if (start < 0) return null;
   const head = l.entries[start];
   let n2 = 0;
   const at = (i) => l.entries[start + i];
   if (head.batch) {
-    while (at(n2) && at(n2).batch === head.batch)
-      n2 += 1;
+    while (at(n2) && at(n2).batch === head.batch) n2 += 1;
   } else {
-    while (at(n2) && n2 < maxItems && !at(n2).batch && due(at(n2)))
-      n2 += 1;
+    while (at(n2) && n2 < maxItems && !at(n2).batch && due(at(n2))) n2 += 1;
   }
   const batch = l.entries.splice(start, n2);
   const sealed = !head.batch;
   if (sealed) {
     for (const e of batch) {
       e.batch = head.id;
-      if (scope !== void 0)
-        e.scope = scope;
+      if (scope !== void 0) e.scope = scope;
     }
   }
   return { batch, sealed };
@@ -15947,7 +15862,7 @@ function drainContext(taken, scope, newId) {
   };
 }
 
-// ../packages/write-outbox/src/outbox.js
+// ../packages/write-outbox/src/outbox.ts
 function createOutbox(opts) {
   const maxItems = Math.max(1, opts.maxItems ?? OUTBOX_MAX_ITEMS);
   const maxWaitMs = opts.maxWaitMs ?? OUTBOX_MAX_WAIT_MS;
@@ -15985,21 +15900,22 @@ function createOutbox(opts) {
     lastSeq = Math.max(lastSeq + 1, Date.now() * 1e3);
     return lastSeq;
   };
-  const loaded = store ? Promise.resolve().then(() => store.load()).then((entries) => {
-    for (const e of entries) {
-      lane(e.key).entries.push(e);
-      lastSeq = Math.max(lastSeq, e.seq);
+  const loaded = store ? Promise.resolve().then(() => store.load()).then(
+    (entries) => {
+      for (const e of entries) {
+        lane(e.key).entries.push(e);
+        lastSeq = Math.max(lastSeq, e.seq);
+      }
+      for (const l of lanes.values()) l.entries.sort(bySeq);
+    },
+    (error) => {
+      storeFailure ??= error;
+      opts.onStoreError?.(error);
     }
-    for (const l of lanes.values())
-      l.entries.sort(bySeq);
-  }, (error) => {
-    storeFailure ??= error;
-    opts.onStoreError?.(error);
-  }) : Promise.resolve();
+  ) : Promise.resolve();
   let writes = loaded;
   const persist = (op) => {
-    if (!store)
-      return Promise.resolve();
+    if (!store) return Promise.resolve();
     writes = writes.then(() => op(store)).catch((error) => {
       storeFailure ??= error;
       opts.onStoreError?.(error);
@@ -16007,38 +15923,30 @@ function createOutbox(opts) {
     return writes;
   };
   const drop = (key, entries, reason) => {
-    if (entries.length === 0)
-      return;
+    if (entries.length === 0) return;
     dropped += entries.length;
     const ids = entries.map((e) => e.id);
     void persist((s) => s.remove(ids));
     opts.onDrop?.({ key, count: entries.length, reason });
   };
   const retentionOf = (entry) => {
-    if (entry.retention)
-      return entry.retention;
+    if (entry.retention) return entry.retention;
     return durable ? "durable" : "best-effort";
   };
   const resolveRetention = (work, path) => {
     const classified2 = classifyQueue(work) ?? classifyQueue(opts.work);
-    if (classified2)
-      return classified2.retention;
-    if (path === "enqueueDurable" || durable)
-      return "durable";
+    if (classified2) return classified2.retention;
+    if (path === "enqueueDurable" || durable) return "durable";
     return "best-effort";
   };
   const totalQueued = () => {
     let total = 0;
-    for (const l of lanes.values())
-      total += l.entries.length;
+    for (const l of lanes.values()) total += l.entries.length;
     return total;
   };
   const durableQueued = () => {
     let n2 = 0;
-    for (const l of lanes.values())
-      for (const entry of l.entries)
-        if (retentionOf(entry) === "durable")
-          n2 += 1;
+    for (const l of lanes.values()) for (const entry of l.entries) if (retentionOf(entry) === "durable") n2 += 1;
     return n2;
   };
   const evictBestEffortWhileOver = (limit) => {
@@ -16051,8 +15959,7 @@ function createOutbox(opts) {
       for (const [k, l] of lanes) {
         for (let i = 0; i < l.entries.length; i += 1) {
           const entry = l.entries[i];
-          if (retentionOf(entry) !== "best-effort" || entry.seq >= oldestSeq)
-            continue;
+          if (retentionOf(entry) !== "best-effort" || entry.seq >= oldestSeq) continue;
           oldestSeq = entry.seq;
           oldestKey = k;
           oldestLane = l;
@@ -16060,8 +15967,7 @@ function createOutbox(opts) {
         }
       }
       if (!oldestLane || oldestIndex < 0) {
-        if (total > maxEntries)
-          opts.onCapacity?.(total, maxEntries);
+        if (total > maxEntries) opts.onCapacity?.(total, maxEntries);
         return;
       }
       drop(oldestKey, oldestLane.entries.splice(oldestIndex, 1), "overflow");
@@ -16074,25 +15980,20 @@ function createOutbox(opts) {
   const currentScope = () => opts.scope ? opts.scope() : void 0;
   const take = (l, scope, upTo) => {
     const next = takeBatch(l, scope, upTo, maxItems);
-    if (!next)
-      return null;
-    if (next.sealed)
-      persist((s) => s.put(next.batch));
+    if (!next) return null;
+    if (next.sealed) persist((s) => s.put(next.batch));
     return next.batch;
   };
   const clearTimer = (l) => {
-    if (l.timer !== null)
-      clearTimeout(l.timer);
+    if (l.timer !== null) clearTimeout(l.timer);
     l.timer = null;
   };
   const clearRetry = (l) => {
-    if (l.retryTimer !== null)
-      clearTimeout(l.retryTimer);
+    if (l.retryTimer !== null) clearTimeout(l.retryTimer);
     l.retryTimer = null;
   };
   const scheduleRetry = (key, l, force = false) => {
-    if (!retry && !force || !maySend() || l.retryTimer !== null)
-      return;
+    if (!retry && !force || !maySend() || l.retryTimer !== null) return;
     const policy = retry ?? retryPolicy;
     l.attempt += 1;
     const delay = Math.min(policy.maxMs, policy.baseMs * 2 ** (l.attempt - 1));
@@ -16103,8 +16004,7 @@ function createOutbox(opts) {
     }, jittered);
   };
   const armTimer = (key, l) => {
-    if (l.timer !== null || maxWaitMs <= 0 || !maySend())
-      return;
+    if (l.timer !== null || maxWaitMs <= 0 || !maySend()) return;
     l.timer = setTimeout(() => {
       l.timer = null;
       void flushKey(key, { final: false, auto: true });
@@ -16146,17 +16046,14 @@ function createOutbox(opts) {
   };
   const flushKey = (key, mode) => {
     const l = lanes.get(key);
-    if (!l || !maySend())
-      return Promise.resolve();
+    if (!l || !maySend()) return Promise.resolve();
     const upTo = mode.probe ? Number.POSITIVE_INFINITY : lastSeq;
     if (mode.final) {
       const scope = currentScope();
-      if (!isOnline() || scope === null)
-        return Promise.resolve();
+      if (!isOnline() || scope === null) return Promise.resolve();
       clearTimer(l);
       const batches = [];
-      for (let b = take(l, scope, upTo); b; b = take(l, scope, upTo))
-        batches.push(b);
+      for (let b = take(l, scope, upTo); b; b = take(l, scope, upTo)) batches.push(b);
       return Promise.all(batches.map((b) => sendBatch(key, l, b, true))).then(() => void 0);
     }
     const run = l.tail.then(async () => {
@@ -16166,14 +16063,12 @@ function createOutbox(opts) {
         clearRetry(l);
         return;
       }
-      if (mode.auto && l.retryTimer !== null)
-        return;
+      if (mode.auto && l.retryTimer !== null) return;
       if (mode.auto && !isOnline()) {
         scheduleRetry(key, l);
         return;
       }
-      if (!mode.auto && l.retryTimer !== null)
-        clearRetry(l);
+      if (!mode.auto && l.retryTimer !== null) clearRetry(l);
       const scope = currentScope();
       if (scope === null) {
         scheduleRetry(key, l);
@@ -16181,19 +16076,16 @@ function createOutbox(opts) {
       }
       clearTimer(l);
       for (let batch = take(l, scope, upTo); batch; batch = take(l, scope, upTo)) {
-        if (!await sendBatch(key, l, batch, false))
-          return;
+        if (!await sendBatch(key, l, batch, false)) return;
       }
-      if (l.entries.some((entry) => !entry.deadLetter))
-        armTimer(key, l);
+      if (l.entries.some((entry) => !entry.deadLetter)) armTimer(key, l);
     });
     l.tail = run;
     return run;
   };
   const flushAll = (final) => Promise.all([...lanes.keys()].map((k) => flushKey(k, { final }))).then(() => void 0);
   const unsubscribeOnline = opts.online?.subscribe((online) => {
-    if (!online || !maySend())
-      return;
+    if (!online || !maySend()) return;
     for (const l of lanes.values()) {
       clearRetry(l);
       l.attempt = 0;
@@ -16206,20 +16098,16 @@ function createOutbox(opts) {
         clearTimer(l);
         clearRetry(l);
       }
-      for (const controller of inFlightControllers)
-        controller.abort();
+      for (const controller of inFlightControllers) controller.abort();
       return;
     }
-    for (const l of lanes.values())
-      l.attempt = 0;
+    for (const l of lanes.values()) l.attempt = 0;
     void flushAll(false);
   });
   if (store) {
     void loaded.then(() => {
       enforceBound();
-      for (const [k, l] of lanes)
-        if (l.entries.length > 0)
-          void flushKey(k, { final: false, auto: true });
+      for (const [k, l] of lanes) if (l.entries.length > 0) void flushKey(k, { final: false, auto: true });
     });
   }
   const settleFailure = (key, l, batch, error) => {
@@ -16229,12 +16117,9 @@ function createOutbox(opts) {
     const discarded = [];
     for (const entry of batch) {
       const userWork = retentionOf(entry) === "durable";
-      if (permanent && userWork)
-        dead.push(entry);
-      else if (!permanent && (userWork || retry))
-        keep2.push(entry);
-      else
-        discarded.push(entry);
+      if (permanent && userWork) dead.push(entry);
+      else if (!permanent && (userWork || retry)) keep2.push(entry);
+      else discarded.push(entry);
     }
     if (dead.length) {
       const at = (/* @__PURE__ */ new Date()).toISOString();
@@ -16251,8 +16136,7 @@ function createOutbox(opts) {
       requeue2(l, keep2);
       scheduleRetry(key, l, !retry && keep2.some((entry) => retentionOf(entry) === "durable"));
     }
-    if (discarded.length)
-      drop(key, discarded, permanent ? "rejected" : "failed");
+    if (discarded.length) drop(key, discarded, permanent ? "rejected" : "failed");
     return keep2.length === 0;
   };
   const enqueueEntry = (key, item, work, path) => {
@@ -16276,13 +16160,10 @@ function createOutbox(opts) {
     };
     l.entries.push(entry);
     const persisted = persist((s) => s.put([entry]));
-    if (retention === "best-effort")
-      enforceBound();
+    if (retention === "best-effort") enforceBound();
     const unsealed = l.entries.reduce((n2, e) => e.batch || e.deadLetter ? n2 : n2 + 1, 0);
-    if (unsealed >= maxItems)
-      void flushKey(key, { final: false, auto: true });
-    else
-      armTimer(key, l);
+    if (unsealed >= maxItems) void flushKey(key, { final: false, auto: true });
+    else armTimer(key, l);
     return { id: entry.id, persisted };
   };
   return {
@@ -16292,29 +16173,25 @@ function createOutbox(opts) {
     async enqueueDurable(key, item, work) {
       const enqueued = enqueueEntry(key, item, work, "enqueueDurable");
       await enqueued.persisted;
-      if (storeFailure)
-        throw storeFailure;
+      if (storeFailure) throw storeFailure;
       return enqueued.id;
     },
     async flush(key, flushOpts) {
       const final = flushOpts?.final ?? false;
-      if (key === void 0)
-        return flushAll(final);
+      if (key === void 0) return flushAll(final);
       return flushKey(key, { final });
     },
     drainWith(key, request) {
       const l = lane(key);
       const run = l.tail.then(async () => {
         await loaded;
-        if (!maySend())
-          throw Object.assign(new Error("platform_send_disabled"), { code: "PLATFORM_SEND_DISABLED" });
+        if (!maySend()) throw Object.assign(new Error("platform_send_disabled"), { code: "PLATFORM_SEND_DISABLED" });
         clearTimer(l);
         const scope = currentScope();
         const taken = [];
         if (scope !== null) {
           const parked = [];
-          for (const e of l.entries)
-            (sendable(e, scope) ? taken : parked).push(e);
+          for (const e of l.entries) (sendable(e, scope) ? taken : parked).push(e);
           l.entries = parked;
         }
         const items = taken.map((e) => e.item);
@@ -16324,12 +16201,10 @@ function createOutbox(opts) {
         const ids = ctx.ids;
         l.inFlight += taken.length;
         try {
-          if (!maySend())
-            throw Object.assign(new Error("platform_send_disabled"), { code: "PLATFORM_SEND_DISABLED" });
+          if (!maySend()) throw Object.assign(new Error("platform_send_disabled"), { code: "PLATFORM_SEND_DISABLED" });
           const result = await request(opts.coalesce && items.length ? opts.coalesce(items) : items, ctx);
           l.inFlight -= taken.length;
-          if (taken.length)
-            void persist((s) => s.remove(ids));
+          if (taken.length) void persist((s) => s.remove(ids));
           return result;
         } catch (error) {
           l.inFlight -= taken.length;
@@ -16346,56 +16221,45 @@ function createOutbox(opts) {
       const retained = [];
       for (const l of lanes.values()) {
         for (const entry of l.entries) {
-          if (!entry.deadLetter)
-            continue;
+          if (!entry.deadLetter) continue;
           delete entry.deadLetter;
           retained.push(entry);
         }
       }
-      if (retained.length)
-        await persist((s) => s.put(retained));
+      if (retained.length) await persist((s) => s.put(retained));
       await flushAll(false);
     },
     exportDeadLetters() {
       const all = [];
-      for (const l of lanes.values())
-        all.push(...l.entries);
+      for (const l of lanes.values()) all.push(...l.entries);
       return exportDeadLetters(all);
     },
     async repairDeadLetter(id) {
-      if (typeof id !== "string" || id.trim() === "")
-        return false;
+      if (typeof id !== "string" || id.trim() === "") return false;
       let target;
       for (const l of lanes.values()) {
         target = l.entries.find((entry) => entry.id === id && entry.deadLetter);
-        if (target)
-          break;
+        if (target) break;
       }
-      if (!target?.deadLetter)
-        return false;
+      if (!target?.deadLetter) return false;
       const previousLetter = target.deadLetter;
       const previousBatch = target.batch;
       const repaired = repairDeadLetter([target], id);
-      if (!repaired)
-        return false;
+      if (!repaired) return false;
       const failureBefore = storeFailure;
       await persist((s) => s.put([repaired]));
       if (storeFailure !== failureBefore) {
         repaired.deadLetter = previousLetter;
-        if (previousBatch !== void 0)
-          repaired.batch = previousBatch;
-        else
-          delete repaired.batch;
+        if (previousBatch !== void 0) repaired.batch = previousBatch;
+        else delete repaired.batch;
         throw storeFailure;
       }
       return true;
     },
     size(key) {
-      if (key !== void 0)
-        return lanes.get(key)?.entries.length ?? 0;
+      if (key !== void 0) return lanes.get(key)?.entries.length ?? 0;
       let n2 = 0;
-      for (const l of lanes.values())
-        n2 += l.entries.length;
+      for (const l of lanes.values()) n2 += l.entries.length;
       return n2;
     },
     stats() {
@@ -16412,15 +16276,13 @@ function createOutbox(opts) {
     async ready() {
       await loaded;
       await writes;
-      if (storeFailure)
-        throw storeFailure;
+      if (storeFailure) throw storeFailure;
     },
     close() {
       closed = true;
       unsubscribeOnline?.();
       unsubscribePermission?.();
-      for (const controller of inFlightControllers)
-        controller.abort();
+      for (const controller of inFlightControllers) controller.abort();
       for (const l of lanes.values()) {
         clearTimer(l);
         clearRetry(l);
@@ -16429,7 +16291,7 @@ function createOutbox(opts) {
   };
 }
 
-// ../packages/write-outbox/src/stores.js
+// ../packages/write-outbox/src/stores.ts
 var isEntry = (v) => typeof v === "object" && v !== null && typeof v.id === "string" && typeof v.seq === "number";
 function idbRunner(opts) {
   const storeName = opts.storeName ?? "entries";
@@ -16439,8 +16301,7 @@ function idbRunner(opts) {
       const req = opts.indexedDB.open(opts.dbName, 1);
       req.onupgradeneeded = () => {
         const created = req.result;
-        if (!created.objectStoreNames.contains(storeName))
-          created.createObjectStore(storeName, { keyPath: "id" });
+        if (!created.objectStoreNames.contains(storeName)) created.createObjectStore(storeName, { keyPath: "id" });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -16470,23 +16331,19 @@ function createIndexedDbOutboxStore(opts) {
     },
     async put(entries) {
       await run("readwrite", (s) => {
-        for (const e of entries)
-          s.put(opts.partition === void 0 ? e : { ...e, partition: opts.partition });
+        for (const e of entries) s.put(opts.partition === void 0 ? e : { ...e, partition: opts.partition });
       });
     },
     async remove(ids) {
       await run("readwrite", (s) => {
-        for (const id of ids)
-          s.delete(id);
+        for (const id of ids) s.delete(id);
       });
     }
   };
 }
 async function listIndexedDbOutboxPartitions(opts) {
   const partitions = /* @__PURE__ */ new Set();
-  for (const r of await readAll(idbRunner(opts)))
-    if (typeof r.partition === "string")
-      partitions.add(r.partition);
+  for (const r of await readAll(idbRunner(opts))) if (typeof r.partition === "string") partitions.add(r.partition);
   return [...partitions];
 }
 

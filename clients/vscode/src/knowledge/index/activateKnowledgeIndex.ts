@@ -1,7 +1,9 @@
 /**
  * Activation of the editor's knowledge index (`hostKnowledgeIndex.ts`): the workspace
  * folders and the workspace fs it persists through, and the save / delete events that
- * re-seed the workspace repository's code cards (debounced by the registry).
+ * re-seed the workspace repository's code cards (debounced by the registry) — only for a
+ * file under a root knowledge runs for (`visualizerSession.knowledgeRunsAt`: a Visualizer
+ * the person pressed Run on, or the `autoIndex` opt-in). A save elsewhere re-seeds nothing.
  */
 
 import * as vscode from "vscode";
@@ -10,6 +12,7 @@ import { logLine } from "../../errorReporter";
 import { getLocalModelsConfig } from "../../gateway";
 import { configureEditorEmbedder } from "./embedderPort";
 import { configureHostKnowledgeIndex, markKnowledgeFileChanged } from "./hostKnowledgeIndex";
+import { knowledgeRunsAt } from "../visualizerSession";
 
 const uriOf = (path: string): vscode.Uri => vscode.Uri.file(path);
 
@@ -39,8 +42,9 @@ export function activateKnowledgeIndex(): vscode.Disposable[] {
     files: workspaceIndexFiles(),
     onError: (e) => logLine(`[knowledge-index] ${e instanceof Error ? e.message : String(e)}`),
   });
+  const changed = (fsPath: string): void => { if (knowledgeRunsAt(fsPath)) markKnowledgeFileChanged(fsPath); };
   return [
-    vscode.workspace.onDidSaveTextDocument((doc) => markKnowledgeFileChanged(doc.uri.fsPath)),
-    vscode.workspace.onDidDeleteFiles((e) => e.files.forEach((uri) => markKnowledgeFileChanged(uri.fsPath))),
+    vscode.workspace.onDidSaveTextDocument((doc) => changed(doc.uri.fsPath)),
+    vscode.workspace.onDidDeleteFiles((e) => e.files.forEach((uri) => changed(uri.fsPath))),
   ];
 }
