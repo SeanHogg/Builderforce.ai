@@ -44,12 +44,14 @@ function callOf(ev: BrainTraceEvent, step: number, turn: number): ViewCall {
   const ok = !ev.isError && !isFailedToolResult(ev.result);
   const args = record(ev.args);
   const write = ok && isCodeChangeTool(ev.label) && !isCacheAnswered(ev);
+  const err = record(ev.result).error;
   return {
     step, turn, name: ev.label, args, ok,
     argBytes: jsonBytes(ev.args),
     write,
     check: ok && isCheck(ev),
     paths: write ? editedPathsOf(ev.label, args) : [],
+    ...(!ok && typeof err === 'string' ? { error: err } : {}),
   };
 }
 

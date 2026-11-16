@@ -132,6 +132,26 @@ describe('stopped_unverified', () => {
   });
 });
 
+describe('review_cap_hit', () => {
+  it('fires with a count when a ship call was refused at the review cap', () => {
+    const b = new TraceBuilder().turn({ role: 'code', calls: [
+      { name: 'git_push', args: {}, result: { ok: false, error: 'refusing to open review round 3 - cap reached' } },
+      { name: 'open_pull_request', args: {}, result: { ok: false, error: 'refusing to open review round 3 - cap reached' } },
+    ] });
+    const f = of(b, 'review_cap_hit')[0]!;
+    expect(f).toMatchObject({ severity: 'info', params: { count: 2 } });
+    expect(f.evidence).toHaveLength(2);
+    expect(f.evidence[0]).toMatchObject({ label: 'git_push' });
+    expect(f.evidence[1]).toMatchObject({ label: 'open_pull_request' });
+  });
+  it('stays quiet on a plain push failure without the marker', () => {
+    const b = new TraceBuilder().turn({ role: 'code', calls: [
+      { name: 'git_push', args: {}, result: { ok: false, error: 'remote ref does not exist' } },
+    ] });
+    expect(of(b, 'review_cap_hit')).toEqual([]);
+  });
+});
+
 describe('the report', () => {
   // Both errors' evidence starts at the first write, so kind breaks the tie.
   it('orders findings by severity, then first evidence step, then kind', () => {

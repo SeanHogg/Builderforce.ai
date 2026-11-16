@@ -8,6 +8,7 @@ import { filedThenInline } from './detectors/filedThenInline';
 import { oversizedArgs } from './detectors/oversizedArgs';
 import { promptBloat } from './detectors/promptBloat';
 import { repeatedNarration } from './detectors/repeatedNarration';
+import { reviewCapHit } from './detectors/reviewCapHit';
 import { sameModelRoles } from './detectors/sameModelRoles';
 import { serialSingleWrites } from './detectors/serialSingleWrites';
 import { slowTurns } from './detectors/slowTurns';
@@ -30,4 +31,5 @@ export const RUN_FINDING_REGISTRY: ReadonlyArray<{ kind: RunFindingKind; detect:
   { kind: 'slow_turns', detect: slowTurns },
   { kind: 'repeated_narration', detect: repeatedNarration },
   { kind: 'stopped_unverified', detect: stoppedUnverified },
+  { kind: 'review_cap_hit', detect: reviewCapHit },
 ];

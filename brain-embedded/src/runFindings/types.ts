@@ -86,7 +86,8 @@ export type RunFindingKind =
   | 'oversized_args'
   | 'slow_turns'
   | 'repeated_narration'
-  | 'stopped_unverified';
+  | 'stopped_unverified'
+  | 'review_cap_hit';
 
 /** One tool step of the run, read once. `step` is its 1-based position in the merged trace. */
 export interface ViewCall {
@@ -102,6 +103,8 @@ export interface ViewCall {
   write: boolean;
   /** A successful typecheck / test / diagnostics / lint call. */
   check: boolean;
+  /** The error text of a failed call's result, when it carried one (`ok === false`, string `error`). */
+  error?: string;
   /** The workspace paths a write changed. */
   paths: readonly string[];
 }
