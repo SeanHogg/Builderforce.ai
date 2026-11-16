@@ -27,13 +27,13 @@ import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-cha
 import { VERSION } from "../version.js";
 import type { NodeManagerChoice, OnboardMode, ResetScope } from "./onboard-types.js";
 
-export function guardCancel<T>(value: T | symbol, runtime: RuntimeEnv): T {
+export function guardCancel<T>(value: T | symbol, runtime: RuntimeEnv): Exclude<T, symbol> {
   if (isCancel(value)) {
     cancel(stylePromptTitle("Setup cancelled.") ?? "Setup cancelled.");
     runtime.exit(0);
     throw new Error("unreachable");
   }
-  return value;
+  return value as Exclude<T, symbol>;
 }
 
 export function summarizeExistingConfig(config: BuilderForceAgentsConfig): string {

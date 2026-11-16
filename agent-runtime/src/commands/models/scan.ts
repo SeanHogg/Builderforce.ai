@@ -25,13 +25,13 @@ const multiselect = <T>(params: Parameters<typeof clackMultiselect<T>>[0]) =>
     ),
   });
 
-function guardPromptCancel<T>(value: T | symbol, runtime: RuntimeEnv): T {
+function guardPromptCancel<T>(value: T | symbol, runtime: RuntimeEnv): Exclude<T, symbol> {
   if (isCancel(value)) {
     cancel(stylePromptTitle("Model scan cancelled.") ?? "Model scan cancelled.");
     runtime.exit(0);
     throw new Error("unreachable");
   }
-  return value;
+  return value as Exclude<T, symbol>;
 }
 
 function sortScanResults(results: ModelScanResult[]): ModelScanResult[] {

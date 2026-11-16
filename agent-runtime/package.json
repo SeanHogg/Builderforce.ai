@@ -297,7 +297,9 @@
       "tinypool": "^2.1.2",
       "vitest": "^4.1.12",
       "@vitest/browser": "^4.1.12",
-      "@vitest/coverage-v8": "^4.1.12"
+      "@vitest/coverage-v8": "^4.1.12",
+      "@grammyjs/types": "5.0.0",
+      "discord-api-types": "0.38.59"
     },
     "onlyBuiltDependencies": [
       "@lydell/node-pty",

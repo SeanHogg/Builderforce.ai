@@ -19,12 +19,12 @@ import { theme } from "../terminal/theme.js";
 import type { WizardProgress, WizardPrompter } from "./prompts.js";
 import { WizardCancelledError } from "./prompts.js";
 
-function guardCancel<T>(value: T | symbol): T {
+function guardCancel<T>(value: T | symbol): Exclude<T, symbol> {
   if (isCancel(value)) {
     cancel(stylePromptTitle("Setup cancelled.") ?? "Setup cancelled.");
     throw new WizardCancelledError();
   }
-  return value;
+  return value as Exclude<T, symbol>;
 }
 
 function normalizeSearchTokens(search: string): string[] {

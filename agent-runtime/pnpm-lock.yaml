@@ -72,6 +72,8 @@ overrides:
   vitest: ^4.1.12
   '@vitest/browser': ^4.1.12
   '@vitest/coverage-v8': ^4.1.12
+  '@grammyjs/types': 5.0.0
+  discord-api-types: 0.38.59
 
 importers:
 
@@ -150,7 +152,7 @@ importers:
         specifier: ^10.0.1
         version: 10.0.1
       discord-api-types:
-        specifier: ^0.38.39
+        specifier: 0.38.59
         version: 0.38.59
       dotenv:
         specifier: ^17.3.1
@@ -250,8 +252,8 @@ importers:
         specifier: link:../packages/tui
         version: link:../packages/tui
       '@grammyjs/types':
-        specifier: ^3.24.0
-        version: 3.28.0
+        specifier: 5.0.0
+        version: 5.0.0
       '@lit-labs/signals':
         specifier: ^0.2.0
         version: 0.2.0
@@ -1130,9 +1132,6 @@ packages:
     engines: {node: ^12.20.0 || >=14.13.1}
     peerDependencies:
       grammy: ^1.0.0
-
-  '@grammyjs/types@3.28.0':
-    resolution: {integrity: sha512-4JvXCdxRZHCje0M4gHzLwtB4bLno3WD28xd8CNfk4POWIu73BFnSvGeW6OQ5gPem4eYTEwkD9yDaXssixl6tMQ==}
 
   '@grammyjs/types@5.0.0':
     resolution: {integrity: sha512-iq1Qrq1iPKkB8yAa0qSuIURMZOCuqTY5pWy5gHpCeL1oQ+GPadGhw/cDTVE8waJwuCzacUzuIjRv1sESvk7u7A==}
@@ -3469,9 +3468,6 @@ packages:
 
   detect-node@2.1.0:
     resolution: {integrity: sha512-T0NIuQpnTvFDATNuHN5roPwSBG83rFsuO+MXXH9/3N1eFbn4wcPjttvjMLEPWJ0RGUYgQE7cGgS3tNxbqCGM7g==}
-
-  discord-api-types@0.38.37:
-    resolution: {integrity: sha512-Cv47jzY1jkGkh5sv0bfHYqGgKOWO1peOrGMkDFM4UmaGMOTgOW8QSexhvixa9sVOiz8MnVOBryWYyw/CEVhj7w==}
 
   discord-api-types@0.38.59:
     resolution: {integrity: sha512-LZqh8gvWU/Bhl9qEVIRLeLJuaPGO7rA26IXLrXnMcjXxofh/h5UhP6notfCTj4X5kR1ogMvVgcrVYIuynY/CxQ==}
@@ -5878,7 +5874,7 @@ snapshots:
   '@buape/carbon@0.14.0(hono@4.13.16)':
     dependencies:
       '@types/node': 25.9.9
-      discord-api-types: 0.38.37
+      discord-api-types: 0.38.59
     optionalDependencies:
       '@cloudflare/workers-types': 4.20260120.0
       '@discordjs/voice': 0.19.0
@@ -6127,8 +6123,6 @@ snapshots:
     dependencies:
       bottleneck: 2.19.5
       grammy: 1.46.0
-
-  '@grammyjs/types@3.28.0': {}
 
   '@grammyjs/types@5.0.0': {}
 
@@ -8384,8 +8378,6 @@ snapshots:
   detect-libc@2.1.2: {}
 
   detect-node@2.1.0: {}
-
-  discord-api-types@0.38.37: {}
 
   discord-api-types@0.38.59: {}
 
