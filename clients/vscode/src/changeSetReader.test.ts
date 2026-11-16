@@ -24,7 +24,7 @@ import {
   changeSetLifecycleId,
   type ChangeSetLifecycleValue,
 } from "./changeSetLifecycle";
-import { runChangeSetId, type LocalChangeSetValue } from "./runChangeSets";
+import { runChangeSetId, runChangeSetRepoKey, type LocalChangeSetValue } from "./runChangeSets";
 import {
   findChangeSetById,
   listChangeSetsForDestination,
@@ -78,6 +78,7 @@ async function seedChangeSet(
     payload: {
       runId: args.runId,
       repository: "SeanHogg/Builderforce.ai",
+      repoKey: runChangeSetRepoKey(root),
       branch: "main",
       baseCommit: "abc123",
       files: [

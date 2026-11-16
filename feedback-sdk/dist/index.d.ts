@@ -64,6 +64,9 @@ interface FeedbackLabels {
     errorRequired: string;
     errorGeneric: string;
     errorRateLimited: string;
+    /** Shown when the WORKSPACE's monthly allowance is spent, not this visitor's
+     *  burst — a different wait, so a different sentence. */
+    errorQuotaExceeded: string;
 }
 
 /**
@@ -100,6 +103,16 @@ interface SubmitOutcome {
     deduped?: boolean;
     /** Distinguishes the "come back tomorrow" message from a generic failure. */
     rateLimited?: boolean;
+    /**
+     * The WORKSPACE is out of monthly allowance, not this visitor out of burst.
+     *
+     * Both refusals arrive as 429, and telling someone to "try again tomorrow" when
+     * the real answer is "this month's allowance is spent" sends them back to a door
+     * that is still shut. The two are separated here so the widget can say something
+     * that is at least true — without ever mentioning our plans to a visitor who is
+     * a customer of the embedding app, not of us.
+     */
+    quotaExceeded?: boolean;
 }
 /** POST one request to the collector. Never throws — the widget renders the outcome. */
 declare function postFeedback(endpoint: string, key: string, payload: FeedbackPayload, fetchFn?: typeof fetch): Promise<SubmitOutcome>;

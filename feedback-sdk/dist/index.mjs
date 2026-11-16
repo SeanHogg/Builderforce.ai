@@ -23,7 +23,8 @@ var DEFAULT_LABELS = {
   another: "Send another",
   errorRequired: "Please describe your feedback before sending.",
   errorGeneric: "Something went wrong sending your feedback. Please try again.",
-  errorRateLimited: "We have received a lot of feedback today. Please try again tomorrow."
+  errorRateLimited: "We have received a lot of feedback today. Please try again tomorrow.",
+  errorQuotaExceeded: "This app is not accepting new feedback right now. Please try again later."
 };
 function normalizeEndpoint(endpoint) {
   const base = (endpoint ?? DEFAULT_ENDPOINT).trim().replace(/\/+$/, "");
@@ -55,7 +56,15 @@ async function postFeedback(endpoint, key, payload, fetchFn = fetch) {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify(payload)
     });
-    if (res.status === 429) return { ok: false, rateLimited: true };
+    if (res.status === 429) {
+      let refusal = null;
+      try {
+        refusal = await res.json();
+      } catch {
+        refusal = null;
+      }
+      return refusal?.quotaExceeded ? { ok: false, quotaExceeded: true } : { ok: false, rateLimited: true };
+    }
     if (!res.ok) return { ok: false };
     const json = await res.json().catch(() => null);
     return { ok: true, submissionId: json?.submissionId, deduped: !!json?.deduped };
@@ -230,7 +239,7 @@ var FeedbackWidget = class {
       this.draft = { kind: this.kinds[0], title: "", body: "", email: "" };
       this.opts.onSubmit?.({ submissionId: outcome.submissionId ?? "", deduped: !!outcome.deduped });
     } else {
-      this.error = outcome.rateLimited ? this.labels.errorRateLimited : this.labels.errorGeneric;
+      this.error = outcome.quotaExceeded ? this.labels.errorQuotaExceeded : outcome.rateLimited ? this.labels.errorRateLimited : this.labels.errorGeneric;
     }
     this.render();
   }

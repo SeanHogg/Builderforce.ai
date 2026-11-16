@@ -89,7 +89,7 @@ describe("overlap read is bounded by time", () => {
     const put = (id: string, runId: string, capturedAt: string) => store.transact(async (tx) => {
       await tx.put(newLocalRecord<LocalChangeSetValue>({
         id, entityType: "change-set", deviceId: "device-1",
-        payload: { runId, repository: repo, author: "agent:other", capturedAt, files: [] },
+        payload: { runId, repository: repo, repoKey: "k", author: "agent:other", capturedAt, files: [] },
       }));
     });
     // A year of history before the run: never read.

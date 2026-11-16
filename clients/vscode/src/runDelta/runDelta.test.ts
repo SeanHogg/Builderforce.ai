@@ -38,7 +38,7 @@ vi.mock("../gitApi", async () => {
 });
 
 import { captureRunChangeBaseline, type ChangeSetRepoBaseline } from "../runChangeBaseline";
-import { recordChangeSetAroundRun, type FinalizedRunChangeSets, type LocalChangeSetValue } from "../runChangeSets";
+import { recordChangeSetAroundRun, runChangeSetRepoKey, type FinalizedRunChangeSets, type LocalChangeSetValue } from "../runChangeSets";
 import { createHostRunLifecycle } from "../hostRunLifecycle";
 import { installRunRecovery } from "../installRunRecovery";
 import { finalizeRunDelta, RUN_DELTA_BUDGET_MS, startRunDelta, type RepoHostSources, type RunDeltaDeps } from "./finalizeRunDelta";
@@ -308,7 +308,7 @@ describe.skipIf(!localSqliteAvailable())("run delta at run finalization (PRD 41 
         await tx.put(newLocalRecord<LocalChangeSetValue>({
           id: "changeset:run-other:0000000000000000", entityType: "change-set", deviceId: "device-1",
           payload: {
-            runId: "run-other", repository: root, author: "agent:other", capturedAt: new Date(Date.now() + 1).toISOString(),
+            runId: "run-other", repository: root, repoKey: runChangeSetRepoKey(root), author: "agent:other", capturedAt: new Date(Date.now() + 1).toISOString(),
             files: [{ path: "api/routes.ts", afterHash: `sha256:${nodeContentHash(Buffer.from(UNGUARDED))}`, attribution: "run-authored", status: "modified" }],
           },
         }));
@@ -372,7 +372,7 @@ describe.skipIf(!localSqliteAvailable())("run delta at run finalization (PRD 41 
       await tx.put(newLocalRecord<LocalChangeSetValue>({
         id: "changeset:run-old:0000000000000000", entityType: "change-set", deviceId: "device-1",
         payload: {
-          runId: "run-old", repository: root, author: "agent:old", capturedAt: new Date(0).toISOString(),
+          runId: "run-old", repository: root, repoKey: runChangeSetRepoKey(root), author: "agent:old", capturedAt: new Date(0).toISOString(),
           files: [{ path: "api/routes.ts", afterHash: `sha256:${nodeContentHash(Buffer.from(UNGUARDED))}`, attribution: "run-authored", status: "modified" }],
         },
       }));
