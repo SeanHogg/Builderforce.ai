@@ -8056,6 +8056,54 @@ function outgoingGate(files, ledger, policy) {
   }
   return unavailable2.length ? { ok: true, unavailable: unavailable2 } : pass();
 }
+var MAX_BLOCKING_REVIEW_ROUNDS = 3;
+function findingKey(finding3) {
+  return finding3.toLowerCase().replace(/\s+/g, " ").trim();
+}
+function findingLocation(finding3) {
+  const m = /([\w./\\-]+\.\w+):(\d+)/.exec(finding3);
+  return m ? `${m[1].replace(/\\/g, "/").toLowerCase()}:${m[2]}` : null;
+}
+function findingMatchesPrior(finding3, prior) {
+  const key = findingKey(finding3);
+  if (!key) return false;
+  const loc = findingLocation(finding3);
+  return prior.some((p) => {
+    const pk = findingKey(p);
+    if (!pk) return false;
+    if (key === pk) return true;
+    const shorter = Math.min(key.length, pk.length);
+    if (shorter >= 24 && (key.includes(pk) || pk.includes(key))) return true;
+    const pl = findingLocation(p);
+    return loc !== null && pl === loc;
+  });
+}
+function priorsNamed(indices, priorBlocking) {
+  if (!indices) return [];
+  const still = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const i of indices) {
+    if (!Number.isInteger(i) || i < 1 || i > priorBlocking.length || seen.has(i)) continue;
+    seen.add(i);
+    const prior = priorBlocking[i - 1];
+    if (prior) still.push(prior);
+  }
+  return still;
+}
+function applyReviewRoundCap(verdict, priorBlocking, round) {
+  if (round < MAX_BLOCKING_REVIEW_ROUNDS || verdict.findings.length === 0) return verdict;
+  const named = verdict.unresolvedPrior;
+  const still = named ? priorsNamed(named, priorBlocking) : verdict.findings.filter((f) => findingMatchesPrior(f, priorBlocking));
+  const blockingKeys = new Set(still.map(findingKey));
+  const moved = verdict.findings.filter((f) => !blockingKeys.has(findingKey(f)));
+  if (moved.length === 0 && still.length === verdict.findings.length && !named) return verdict;
+  return {
+    ...verdict,
+    verdict: still.length > 0 ? "changes_requested" : "approved",
+    findings: still,
+    advisories: [...verdict.advisories ?? [], ...moved]
+  };
+}
 function reviewGate(review, authorModels, currentDiffHash) {
   if (!review) {
     return refuse(
@@ -10739,6 +10787,8 @@ export {
   DEFAULT_EVIDENCE_POLICY,
   fileIsUnchecked,
   outgoingGate,
+  MAX_BLOCKING_REVIEW_ROUNDS,
+  applyReviewRoundCap,
   reviewGate,
   shellPublishHint,
   turnInterruption,
@@ -10865,4 +10915,4 @@ export {
   toolCallArgBytes,
   createComposingActivity
 };
-//# sourceMappingURL=chunk-B5AAUPOB.mjs.map
+//# sourceMappingURL=chunk-QSSXZN4K.mjs.map

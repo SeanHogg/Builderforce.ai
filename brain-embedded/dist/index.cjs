@@ -20185,6 +20185,54 @@ function outgoingGate(files, ledger, policy) {
   }
   return unavailable2.length ? { ok: true, unavailable: unavailable2 } : pass();
 }
+var MAX_BLOCKING_REVIEW_ROUNDS = 3;
+function findingKey(finding3) {
+  return finding3.toLowerCase().replace(/\s+/g, " ").trim();
+}
+function findingLocation(finding3) {
+  const m = /([\w./\\-]+\.\w+):(\d+)/.exec(finding3);
+  return m ? `${m[1].replace(/\\/g, "/").toLowerCase()}:${m[2]}` : null;
+}
+function findingMatchesPrior(finding3, prior) {
+  const key = findingKey(finding3);
+  if (!key) return false;
+  const loc = findingLocation(finding3);
+  return prior.some((p) => {
+    const pk = findingKey(p);
+    if (!pk) return false;
+    if (key === pk) return true;
+    const shorter = Math.min(key.length, pk.length);
+    if (shorter >= 24 && (key.includes(pk) || pk.includes(key))) return true;
+    const pl = findingLocation(p);
+    return loc !== null && pl === loc;
+  });
+}
+function priorsNamed(indices, priorBlocking) {
+  if (!indices) return [];
+  const still = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const i of indices) {
+    if (!Number.isInteger(i) || i < 1 || i > priorBlocking.length || seen.has(i)) continue;
+    seen.add(i);
+    const prior = priorBlocking[i - 1];
+    if (prior) still.push(prior);
+  }
+  return still;
+}
+function applyReviewRoundCap(verdict, priorBlocking, round) {
+  if (round < MAX_BLOCKING_REVIEW_ROUNDS || verdict.findings.length === 0) return verdict;
+  const named = verdict.unresolvedPrior;
+  const still = named ? priorsNamed(named, priorBlocking) : verdict.findings.filter((f) => findingMatchesPrior(f, priorBlocking));
+  const blockingKeys = new Set(still.map(findingKey));
+  const moved = verdict.findings.filter((f) => !blockingKeys.has(findingKey(f)));
+  if (moved.length === 0 && still.length === verdict.findings.length && !named) return verdict;
+  return {
+    ...verdict,
+    verdict: still.length > 0 ? "changes_requested" : "approved",
+    findings: still,
+    advisories: [...verdict.advisories ?? [], ...moved]
+  };
+}
 function reviewGate(review, authorModels, currentDiffHash) {
   if (!review) {
     return refuse(
@@ -30431,8 +30479,8 @@ async function runOutgoingGate(run, repo, tool = "git_push", args) {
   const verdict = outgoingGate(files, run.evidence, policyOf(run));
   if (!verdict.ok) return { verdict, diffHash, gated: true };
   const reviewed = await runReviewGate(run, diffHash, { repo, diff: diff ?? "", tool });
-  if (!reviewed.ok) return { verdict: reviewed, diffHash, gated: true };
-  return { verdict, diffHash, gated: true };
+  if (!reviewed.verdict.ok) return { verdict: reviewed.verdict, diffHash, gated: true };
+  return { verdict, diffHash, gated: true, advisories: reviewed.advisories };
 }
 function approvedReviewFor(run, currentDiffHash) {
   for (const review of run.c.shipReviews) {
@@ -30440,19 +30488,72 @@ function approvedReviewFor(run, currentDiffHash) {
   }
   return null;
 }
+function roundsFor(run, repo) {
+  return run.c.shipReviewRounds.filter((r) => r.repo === repo);
+}
+function nextRoundOf(run, repo) {
+  return roundsFor(run, repo).length + 1;
+}
+function priorBlockingOf(repoRounds) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const r of repoRounds) {
+    for (const f of r.verdict.findings) {
+      const key = f.toLowerCase().replace(/\s+/g, " ").trim();
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        out.push(f);
+      }
+    }
+  }
+  return out;
+}
+function advisoriesFor(repoRounds) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const r of repoRounds) {
+    for (const a of r.verdict.advisories ?? []) {
+      if (!seen.has(a)) {
+        seen.add(a);
+        out.push(a);
+      }
+    }
+  }
+  return out;
+}
 async function runReviewGate(run, currentDiffHash, change = { repo: "", diff: "", tool: "git_push" }) {
+  const none = (verdict2) => ({ verdict: verdict2, reviewed: false, review: null, advisories: [] });
   const reviewer = run.req.reviewer;
-  if (!reviewer) return { ok: true, unavailable: [] };
-  if (approvedReviewFor(run, currentDiffHash)) return { ok: true, unavailable: [] };
+  if (!reviewer) return none({ ok: true, unavailable: [] });
+  if (approvedReviewFor(run, currentDiffHash)) return none({ ok: true, unavailable: [] });
   const authors = authorModelsOf(run);
   const evidence = evidenceSummary(run);
-  const res = await reviewer.review({ repo: change.repo, diff: change.diff, evidence, authorModels: authors });
+  const repoRounds = roundsFor(run, change.repo);
+  const round = nextRoundOf(run, change.repo);
+  const priorBlocking = priorBlockingOf(repoRounds);
+  const res = await reviewer.review({ repo: change.repo, diff: change.diff, evidence, authorModels: authors, priorBlocking, round });
   if ("refused" in res) {
-    return { ok: false, reason: `${change.tool} refused: ${res.refused}` };
+    return none({ ok: false, reason: `${change.tool} refused: ${res.refused}` });
   }
-  const verdict = reviewGate(res, authors, currentDiffHash);
-  if (verdict.ok) run.c.shipReviews.push(res);
-  return verdict;
+  const capped2 = applyReviewRoundCap(res, priorBlocking, round);
+  const verdict = reviewGate(capped2, authors, currentDiffHash);
+  const capApproved = capped2.verdict === "approved" && res.verdict !== "approved";
+  run.c.shipReviewRounds.push({ repo: change.repo, round, verdict: capped2 });
+  if (verdict.ok && !capApproved) run.c.shipReviews.push(capped2);
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: "ship.review_round",
+    args: {
+      repo: change.repo,
+      round,
+      reviewer: capped2.reviewerModel,
+      blocking: capped2.findings.length,
+      advisory: (capped2.advisories ?? []).length,
+      capped: round >= MAX_BLOCKING_REVIEW_ROUNDS && capped2.verdict !== res.verdict
+    }
+  });
+  return { verdict, reviewed: true, review: capped2, advisories: advisoriesFor(roundsFor(run, change.repo)) };
 }
 function evidenceSummary(run) {
   const lines = [];
@@ -30480,12 +30581,13 @@ async function shipGatePreflight(run, name, args) {
   if (!publish && !isCompleteReviewRecord(name, args)) return {};
   try {
     if (publish) {
-      const { verdict, diffHash: diffHash2, gated } = await runOutgoingGate(run, repoArgOf(args), name, args);
+      const { verdict, diffHash, gated, advisories } = await runOutgoingGate(run, repoArgOf(args), name, args);
       if (!verdict.ok) return { refusal: { ok: false, error: verdict.reason } };
-      return gated ? { evidence: approvalEvidence(run, verdict.unavailable, diffHash2) } : {};
+      return gated ? { evidence: approvalEvidence(run, verdict.unavailable, diffHash, advisories) } : {};
     }
-    const { diffHash } = await run.req.git.outgoing(repoArgOf(args));
-    const approved = diffHash ? approvedReviewFor(run, diffHash) : null;
+    const repo = repoArgOf(args);
+    const out = await run.req.git.outgoing(repo);
+    const approved = out.diffHash ? approvedReviewFor(run, out.diffHash) : null;
     if (!approved) {
       const authors = authorModelsOf(run);
       if (authors.length <= 1) {
@@ -30497,12 +30599,12 @@ async function shipGatePreflight(run, name, args) {
           }
         };
       }
-      return {
-        refusal: {
-          ok: false,
-          error: "builtin_reviews_record refused: no reviewGate-approved independent review exists for the current diff. The push gate runs one review sub-run by a model that did not author the change (PRD 45 OD-1) \u2014 push (or open a pull request) so the host records the review, then record complete again."
-        }
-      };
+      if (out.unavailable || !out.diffHash || !(out.diff ?? "").trim()) return {};
+      const reviewed = await runReviewGate(run, out.diffHash, { repo, diff: out.diff ?? "", tool: "builtin_reviews_record" });
+      if (!reviewed.verdict.ok) return { refusal: { ok: false, error: reviewed.verdict.reason } };
+      args.reviewerRef = reviewed.review?.reviewerModel;
+      args.evidence = evidenceSummary(run);
+      return {};
     }
     args.reviewerRef = approved.reviewerModel;
     args.evidence = evidenceSummary(run);
@@ -30575,10 +30677,12 @@ function anyFailingEvidence(run) {
     return false;
   });
 }
-function approvalEvidence(run, unavailable2, diffHash) {
+function approvalEvidence(run, unavailable2, diffHash, advisories) {
   const checks = unavailable2.length ? `checks passed \xB7 ${unavailable2.length} check${unavailable2.length === 1 ? "" : "s"} could not run here (not verified)` : "checks passed";
   const reviewer = diffHash ? approvedReviewFor(run, diffHash)?.reviewerModel : void 0;
-  return reviewer ? `${checks} \xB7 reviewed by ${reviewer}` : checks;
+  const head = reviewer ? `${checks} \xB7 reviewed by ${reviewer}` : checks;
+  if (!advisories?.length) return head;
+  return `${head} \xB7 ${advisories.length} advisory note${advisories.length === 1 ? "" : "s"} (never blocking): ${advisories.join("; ")}`;
 }
 function repoArgOf(args) {
   const r = args?.repo;
@@ -30609,6 +30713,11 @@ async function shipGateAdvisory(run, name, args, out) {
     const command = args?.command;
     if (typeof command === "string") return shellPublishHint(command);
     return null;
+  }
+  const publishSucceeded = (name === "git_push" || name === "open_pull_request") && !isFailed2(out);
+  if (publishSucceeded) {
+    const repo = repoArgOf(args);
+    run.c.shipReviewRounds = run.c.shipReviewRounds.filter((r) => r.repo !== repo);
   }
   if (name === "git_commit" && run.req.verifier && !isFailed2(out)) {
     const verdict = await outgoingEvidenceVerdict(run, repoArgOf(args));
@@ -30720,12 +30829,12 @@ async function finishCloseOut(run) {
       const out = await run.req.git.outgoing("");
       if (!out.unavailable) {
         const reviewed = await runReviewGate(run, out.diffHash, { repo: "", diff: out.diff ?? "", tool: "settle-close-out" });
-        if (!reviewed.ok) {
+        if (!reviewed.verdict.ok) {
           pushTrace(run.c, {
             ts: nowIso(),
             category: "message",
             label: "finish.review_gate",
-            result: `The independent review did not approve (the change landed without this run pushing it): ${reviewed.reason}`
+            result: `The independent review did not approve (the change landed without this run pushing it): ${reviewed.verdict.reason}`
           });
         }
       }

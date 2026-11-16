@@ -16,7 +16,7 @@ import {
   staffingSummaryInTrace,
   traceWithPersistedSteps,
   utf8ByteLength
-} from "./chunk-B5AAUPOB.mjs";
+} from "./chunk-QSSXZN4K.mjs";
 
 // src/runFindings/policy.ts
 import { NARRATION_OVERLAP } from "@seanhogg/builderforce-memory/working";
@@ -266,6 +266,24 @@ function repeatedNarration(view) {
   )];
 }
 
+// src/runFindings/detectors/reviewCapHit.ts
+var CAP_MARKER = "review round 3";
+var SHIP_TOOLS = /* @__PURE__ */ new Set(["git_push", "open_pull_request", "builtin_reviews_record"]);
+function capError(c) {
+  if (!SHIP_TOOLS.has(c.name) || !c.error) return null;
+  return c.error.includes(CAP_MARKER) ? c.error : null;
+}
+function reviewCapHit(view) {
+  const capped = view.calls.map((c) => ({ call: c, error: capError(c) })).filter((r) => r.error !== null);
+  if (capped.length === 0) return [];
+  return [finding(
+    "review_cap_hit",
+    "info",
+    { count: capped.length },
+    capped.map(({ call, error }) => callEvidence(call, void 0, error))
+  )];
+}
+
 // src/runFindings/detectors/sameModelRoles.ts
 function soleModel(view, role) {
   const models = view.routing.roles.find((r) => r.role === role)?.models ?? [];
@@ -370,7 +388,8 @@ var RUN_FINDING_REGISTRY = [
   { kind: "oversized_args", detect: oversizedArgs },
   { kind: "slow_turns", detect: slowTurns },
   { kind: "repeated_narration", detect: repeatedNarration },
-  { kind: "stopped_unverified", detect: stoppedUnverified }
+  { kind: "stopped_unverified", detect: stoppedUnverified },
+  { kind: "review_cap_hit", detect: reviewCapHit }
 ];
 
 // src/runFindings/runView.ts
@@ -392,6 +411,7 @@ function callOf(ev, step, turn) {
   const ok = !ev.isError && !isFailedToolResult(ev.result);
   const args = record(ev.args);
   const write = ok && isCodeChangeTool(ev.label) && !isCacheAnswered(ev);
+  const err = record(ev.result).error;
   return {
     step,
     turn,
@@ -401,7 +421,8 @@ function callOf(ev, step, turn) {
     argBytes: jsonBytes(ev.args),
     write,
     check: ok && isCheck(ev),
-    paths: write ? editedPathsOf(ev.label, args) : []
+    paths: write ? editedPathsOf(ev.label, args) : [],
+    ...!ok && typeof err === "string" ? { error: err } : {}
   };
 }
 function kindOf(t, failed) {

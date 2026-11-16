@@ -63,7 +63,7 @@ interface RunFindingsReport {
     files: readonly RunFindingsFile[];
 }
 /** Every kind a detector can name (PRD 46 §3.1). */
-type RunFindingKind = 'analysis_overrun' | 'unkept_readiness' | 'serial_single_writes' | 'prompt_bloat' | 'unverified_writes' | 'bracket_break' | 'edit_churn' | 'filed_then_inline' | 'same_model_roles' | 'oversized_args' | 'slow_turns' | 'repeated_narration' | 'stopped_unverified';
+type RunFindingKind = 'analysis_overrun' | 'unkept_readiness' | 'serial_single_writes' | 'prompt_bloat' | 'unverified_writes' | 'bracket_break' | 'edit_churn' | 'filed_then_inline' | 'same_model_roles' | 'oversized_args' | 'slow_turns' | 'repeated_narration' | 'stopped_unverified' | 'review_cap_hit';
 /** One tool step of the run, read once. `step` is its 1-based position in the merged trace. */
 interface ViewCall {
     step: number;
@@ -78,6 +78,8 @@ interface ViewCall {
     write: boolean;
     /** A successful typecheck / test / diagnostics / lint call. */
     check: boolean;
+    /** The error text of a failed call's result, when it carried one (`ok === false`, string `error`). */
+    error?: string;
     /** The workspace paths a write changed. */
     paths: readonly string[];
 }
