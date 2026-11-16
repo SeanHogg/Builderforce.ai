@@ -9,13 +9,14 @@
  * here: this list unmounts whenever History closes.
  */
 
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import type { BrainChat } from '@seanhogg/builderforce-brain-embedded';
 import { ChatHistoryList, ChatHistoryRow, InterruptedRunRow, type ChatRowActions, type InterruptedChatState } from '@seanhogg/builderforce-brain-ui';
 import type { LabelBundle } from '../vscodeBridge';
 import { chatHistoryLabels, makeT } from './chatLabels';
 import { useChatChildrenCount } from './chatChildren';
 import { acknowledgeInterruptedRun, useInterruptedRuns } from './interruptedRunsStore';
+import { interruptedCompleteIds as dedicatedInterruptedIdSet, resumableInterruptedRun as resumableInterruptedRunOf } from './interruptedRowPolicy';
 import { interruptedWhen } from './interruptedWhen';
 import { daysIdleOf } from './chatIdle';
 import type { InterruptedResume } from './useInterruptedResume';
@@ -97,16 +98,30 @@ export function VsCodeChatHistory({ id, chats, total, loading, activeId, titleOf
   const t = makeT(bundle);
   const interruptedRuns = useInterruptedRuns();
 
-  // The ids of chats that have an interrupted run: they render as interrupted rows
-  // (folded into the one list), NOT again as normal rows below — that was the double-listing.
-  const interruptedChatIds = useMemo(
-    () => new Set(interruptedRuns.map((r) => r.chatId).filter((c): c is string => c != null).map(Number)),
-    [interruptedRuns],
-  );
   // One resume per chat at a time (`interruptedResume.ts`): another run's pending resume blocks this chat's Resume.
   const pendingChats = useMemo(
     () => new Set(interruptedRuns.filter((r) => interrupted.pending.has(r.runId)).map((r) => Number(r.chatId))),
     [interruptedRuns, interrupted.pending],
+  );
+
+  // The interrupted-run row policy (which chats stay dedicated interrupted rows, which
+  // normal rows carry a Resume) is pure — `interruptedRowPolicy.ts`; these callbacks
+  // just bind the render's store snapshot. A chat's interrupted run, when it has exactly
+  // the resumable state we attach a Resume action to: the chat is interrupted AND not
+  // 100% complete. Interrupted-but-complete chats are left to the dedicated interrupted
+  // rows (their ▶ would be a no-op), so this stays undefined for them.
+  const resumableInterruptedRun = useCallback(
+    (chat: BrainChat) => resumableInterruptedRunOf(chat.id, chat.ticketProgressPct, interruptedRuns, interrupted),
+    [interruptedRuns, interrupted],
+  );
+
+  // A chat that is interrupted AND 100% complete still renders as a dedicated interrupted
+  // row (it is finished — its Resume would be a no-op). Every other interrupted chat is
+  // shown as a NORMAL row carrying the Resume action, so it is never duplicated (once
+  // interrupted, once plain) the way the old blanket filter avoided.
+  const dedicatedInterruptedIds = useMemo(
+    () => dedicatedInterruptedIdSet(chats.map((c) => c.id), interruptedRuns, interrupted, (id: number) => chats.find((c) => c.id === id)?.ticketProgressPct),
+    [chats, interruptedRuns, interrupted],
   );
 
   const interruptedStates: InterruptedChatState[] = useMemo(() => interruptedRuns.map((run) => {
@@ -158,25 +173,46 @@ export function VsCodeChatHistory({ id, chats, total, loading, activeId, titleOf
       {interruptedStates.map((state) => (
         <InterruptedRunRow key={state.runId} state={state} />
       ))}
-      {chats.filter((chat) => !interruptedChatIds.has(chat.id)).map((chat) => (
-        <VsCodeChatHistoryRow
-          key={chat.id}
-          chat={chat}
-          active={chat.id === activeId}
-          titleOf={titleOf}
-          runStatus={runStatus}
-          rows={rows}
-          labels={labels}
-          bundle={bundle}
-        />
-      ))}
+      {chats.filter((chat) => !dedicatedInterruptedIds.has(chat.id)).map((chat) => {
+        const target = resumableInterruptedRun(chat);
+        return (
+          <VsCodeChatHistoryRow
+            key={chat.id}
+            chat={chat}
+            active={chat.id === activeId}
+            titleOf={titleOf}
+            runStatus={runStatus}
+            rows={rows}
+            labels={labels}
+            bundle={bundle}
+            // The interrupted, not-100% rows carry the same Resume the dedicated
+            // interrupted rows offer — one mechanism (`interrupted.resume`), injected
+            // through the shared row's `extraActions` slot.
+            resumeAction={target ? {
+              runId: target.runId,
+              chatId: target.chatId,
+              pending: interrupted.pending.has(target.runId),
+              onResume: () => { void interrupted.resume({ runId: target.runId, chatId: target.chatId }); },
+            } : undefined}
+          />
+        );
+      })}
     </ChatHistoryList>
   );
 }
 
+/** The interrupted-run Resume affordance for a normal row: which run, its resume action, and whether that resume is in flight. */
+interface ResumeAction {
+  runId: string;
+  chatId: number;
+  /** True while `interrupted.resume` has this run pending (the play button disables). */
+  pending: boolean;
+  onResume: () => void;
+}
+
 /** One history row. Hooks live here (not in the list's `.map`) so they run unconditionally. */
 function VsCodeChatHistoryRow({
-  chat, active, titleOf, runStatus, rows, labels, bundle,
+  chat, active, titleOf, runStatus, rows, labels, bundle, resumeAction,
 }: {
   chat: BrainChat;
   active: boolean;
@@ -185,9 +221,13 @@ function VsCodeChatHistoryRow({
   rows: ChatRowActions;
   labels: ReturnType<typeof chatHistoryLabels>;
   bundle: LabelBundle;
+  resumeAction?: ResumeAction;
 }) {
   const t = makeT(bundle);
   const status = runStatus(chat.id);
+  // A resume is in flight for this row's interrupted run: the play button disables
+  // (like the dedicated interrupted rows) until it is claimed or fails.
+  const interruptedPending = resumeAction != null && resumeAction.pending;
   // Live count while sub-agents are announced; the session's announced total once
   // they settle — so a chat that HAD agents still says so, and the chip re-renders
   // the moment the host announces (or settles) a child, unlike a one-shot read.
@@ -212,6 +252,26 @@ function VsCodeChatHistoryRow({
       marker={status ? <RunMarker status={status} label={status === 'running' ? t('app.chatRunning', 'Running') : t('app.chatAwaiting', 'Needs an answer')} /> : undefined}
       {...rows.rowProps(chat.id)}
       labels={labels}
+      // The interrupted, not-100% rows get the same Resume the dedicated interrupted
+      // rows offer, injected here through the shared row's `extraActions` slot so the
+      // shared component stays host-agnostic. The play glyph matches the dedicated
+      // rows' `ACTION_ICONS.resume` triangle.
+      extraActions={resumeAction ? (
+        <button
+          type="button"
+          className="bf-chatrow__action"
+          title={labels.resume}
+          aria-label={labels.resume}
+          disabled={interruptedPending}
+          aria-busy={interruptedPending || undefined}
+          onClick={resumeAction.onResume}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" role="img" aria-label={labels.resume}>
+            <title>{labels.resume}</title>
+            <path d="m6 4 14 8-14 8Z" />
+          </svg>
+        </button>
+      ) : undefined}
     />
   );
 }

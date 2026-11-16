@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.180] — An interrupted chat shows a Resume action, unless it is already done
+
+- **Resume (▶) on interrupted chats.** Every chat-history row whose run was interrupted and whose tickets are not yet 100% complete now carries a Resume (▶) action — the same one-click resume the dedicated interrupted rows use. A chat whose linked tickets are all complete (or whose resume is already in flight, or is already running) stays as a dedicated interrupted row instead, so nothing is listed twice and Resume is never a no-op. The rule lives in `interruptedRowPolicy.ts` and is covered by 17 unit tests.
+
 ## [2026.10.178] — Test checks always run your own installed tools
 
 - **Fixed: pre-push test checks could fail with a path that does not exist.** The test runner launched `npx --no-install <pkg>`, and npx's upward walk could land in a stale cache-only `node_modules` (holding only `.vite`) one directory up, synthesizing a nonexistent `vitest.mjs`. The runner now resolves `<pkg>`'s bin by walking up from the project to the nearest real `node_modules/<pkg>` install, so every check runs the owning package's own installed copy.
