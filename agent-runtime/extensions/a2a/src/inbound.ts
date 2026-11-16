@@ -13,6 +13,7 @@
 import { createA2AHttpHandler } from "@builderforce/agent-tools/a2a.js";
 import type { A2ARequest } from "@builderforce/agent-tools/a2a.js";
 import type { BuilderForceAgentsPluginApi } from "@seanhogg/builderforce-agents/plugin-sdk";
+import { randomUUID } from "node:crypto";
 import { getA2aRuntime } from "./runtime.js";
 
 type RunEmbeddedAgentFn = (params: Record<string, unknown>) => Promise<{ payloads?: Array<{ text?: string }> }>;
@@ -65,15 +66,17 @@ async function runLocalAgent(prompt: string, sessionId?: string): Promise<string
   const api = getA2aRuntime();
   const runEmbeddedAgent = await loadRunEmbeddedAgent();
   const result = await runEmbeddedAgent({
-    sessionId: sessionId ?? `a2a-${Date.now()}`,
-    sessionFile: api.resolvePath(`a2a/${sessionId ?? Date.now()}.json`),
+    sessionId: sessionId ?? `a2a-${randomUUID()}`,
+    sessionFile: api.resolvePath(`a2a/${sessionId ?? randomUUID()}.json`),
     workspaceDir: api.config?.agents?.defaults?.workspace ?? process.cwd(),
     config: api.config,
     prompt,
     disableMessageTool: true,
     // The runner's contract requires these (RunEmbeddedAgentParams); without
     // them the A2A serve path would not type-check / would hang unbounded.
-    runId: `a2a-${Date.now().toString(36)}`,
+    // randomUUID() (not Date.now()) so two concurrent inbound requests never
+    // alias the same runId — the runner uses runId as run identity (abort, lane, logging).
+    runId: `a2a-${randomUUID()}`,
     timeoutMs: RUN_TIMEOUT_MS,
   });
   const text = (result.payloads ?? [])

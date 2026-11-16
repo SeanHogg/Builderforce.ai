@@ -76,6 +76,11 @@ describe("buildA2AHandler", () => {
       message: { role: "user", parts: [{ type: "text", text: "   " }] },
     } as never);
     expect(res.kind).toBe("reply");
+    // Must be an explicit rejection, not a normal reply: assert the error status
+    // and that the runner was never invoked.
+    if (res.kind === "reply") {
+      expect(res.status).toBe("error");
+    }
     expect(runnerCalls).toHaveLength(0);
   });
 });

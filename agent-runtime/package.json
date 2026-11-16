@@ -284,7 +284,7 @@
       "@opentelemetry/sdk-trace-node": "2.8.0",
       "@opentelemetry/exporter-zipkin": "2.8.0",
       "@opentelemetry/exporter-prometheus": "0.217.0",
-      "@opentelemetry/propagator-jaeger": "2.9.0",
+      "@opentelemetry/propagator-jaeger": "2.8.0",
       "rolldown": "1.0.0-rc.5",
       "request": "npm:@cypress/request@3.0.10",
       "request-promise": "npm:@cypress/request-promise@5.0.0",

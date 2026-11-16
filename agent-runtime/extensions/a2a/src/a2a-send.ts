@@ -25,6 +25,8 @@
  */
 import { Type } from "@sinclair/typebox";
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs"; 
+// `existsSync` stays synchronous so `resolveClaudeBin` runs before spawn.
 
 // ---------------------------------------------------------------------------
 // Claude Code CLI bridge
@@ -47,16 +49,61 @@ type SpawnedChild = {
 const CLAUDE_TIMEOUT_MS = 120_000;
 
 /**
- * On Windows, `spawn("claude", …)` only resolves `claude.cmd` / `claude.bat`
- * when the command runs through a shell — a bare spawn looks up `claude`
- * (no extension) and fails ENOENT even when Claude Code is installed. Force
- * the shell on win32 (and `windowsVerbatimArguments` so the quoted args are
- * not re-split); elsewhere a direct exec is fine.
+ * On Windows, `spawn("claude", …)` looks up `claude` with no extension and
+ * fails ENOENT even when Claude Code is installed (the shim is `claude.cmd` /
+ * `claude.bat`). Resolve the shim explicitly. Prefer a real `.exe` so the child
+ * can be spawned directly; batch shims are run through the command interpreter
+ * by `spawnClaude` with a single pre-quoted command line, never a shell string
+ * built from raw args (a correctness bug and a command-injection vector when an
+ * arg is influenced by remote A2A content or config).
  */
-const SPAWN_ON_WINDOWS = process.platform === "win32";
-const spawnOptions: import("node:child_process").SpawnOptions = SPAWN_ON_WINDOWS
-  ? { stdio: ["pipe", "pipe", "pipe"], env: { ...process.env }, shell: true, windowsVerbatimArguments: true }
-  : { stdio: ["pipe", "pipe", "pipe"], env: { ...process.env } };
+function resolveClaudeBin(bin: string): string {
+  if (process.platform !== "win32" || bin.includes("\\") || bin.includes("/")) {
+    return bin;
+  }
+  const pathEnv = process.env.PATH ?? "";
+  // Prefer .exe: it is a real executable and spawns without the command interpreter.
+  const exts = ["exe", "cmd", "bat"];
+  for (const dir of pathEnv.split(";")) {
+    if (!dir) continue;
+    for (const ext of exts) {
+      const candidate = `${dir}\\${bin}.${ext}`;
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    }
+  }
+  return bin;
+}
+
+/**
+ * Spawn the resolved Claude CLI with per-call options — `process.env` is
+ * snapshotted here, not at module load, so env changes made after startup
+ * (credentials set later, per-call env) are seen by the child, and no options
+ * object is shared across calls.
+ */
+function spawnClaude(bin: string, args: string[]): import("node:child_process").ChildProcess {
+  const env = { ...process.env };
+  const options: import("node:child_process").SpawnOptions = {
+    stdio: ["pipe", "pipe", "pipe"],
+    env,
+  };
+  const resolved = resolveClaudeBin(bin);
+  if (process.platform === "win32" && /\.(cmd|bat)$/i.test(resolved)) {
+    // Batch shims are not executables — CreateProcess can't run them directly. Drive
+    // the command interpreter with ONE pre-quoted command line (no raw-arg string
+    // building): every argv element is individually double-quoted so spaces and cmd
+    // metacharacters (& | ^ > <) inside caller-influenced values stay literal.
+    const comspec = process.env.COMSPEC ?? "cmd.exe";
+    const quote = (s: string) => `"${s.replace(/"/g, "'")}"`;
+    const cmdLine = [quote(resolved), ...args.map(quote)].join(" ");
+    return spawn(process.env.COMSPEC ?? "cmd.exe", ["/d", "/s", "/c", cmdLine], {
+      ...options,
+      windowsVerbatimArguments: true,
+    });
+  }
+  return spawn(resolved, args, options);
+}
 
 /**
  * Spawn the local `claude` CLI in streaming mode and exchange one message.
@@ -88,7 +135,7 @@ export async function talkToClaudeCode(
   const started = Date.now();
 
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(bin, args, spawnOptions);
+    const child = spawnClaude(bin, args);
 
     let stdoutBuf = "";
     let stderrBuf = "";
