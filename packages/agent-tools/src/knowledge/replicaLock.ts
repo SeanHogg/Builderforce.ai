@@ -27,7 +27,24 @@ export const lockFileName = (rootId: string): string => replicaFileName(rootId).
 type Owner = string | number;
 interface LockRecord { pid: Owner; at: number }
 
-/** The files a lock is kept in: {@link KnowledgeFiles}, plus the platform's exclusive create where the host has one. */
+/**
+ * The files a lock is kept in: {@link KnowledgeFiles}, plus the platform's exclusive create where the host has one.
+ *
+ * `schedule` is how a holder arms its refresh. The default is `setInterval`, which is wrong under a test's fake timers:
+ * the timer is created DURING `acquire`, so a fake-timer harness that drains timers as acquire's promise settles runs the
+ * refresh before the caller has the lock, and a refresh that calls `Date.now()` (itself a faked timer read) re-enters the
+ * timer queue. The pump then never starts (`pumpReplica` is never invoked) and a lock-lost case waits out a real second.
+ * A host under fake timers passes a scheduler that does not arm until after acquire has returned.
+ */
+export interface ReplicaLockFiles extends KnowledgeFiles {
+    /** Creates `name` with `text` only when it does not exist (`wx`): true when THIS call created it, false when it existed. */
+    createExclusive?(name: string, text: string): Promise<boolean>;
+    /**
+     * Arms `tick` every `ms` and returns how to stop it. Default: an unref'd `setInterval`.
+     * Must not run `tick` before the caller that asked for the lock has observed it.
+     */
+    schedule?(tick: () => void, ms: number): () => void;
+}
 export interface ReplicaLockFiles extends KnowledgeFiles {
     /** Creates `name` with `text` only when it does not exist (`wx`): true when THIS call created it, false when it existed. */
     createExclusive?(name: string, text: string): Promise<boolean>;
