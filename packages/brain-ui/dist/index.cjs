@@ -3768,8 +3768,8 @@ function InterruptedRunRow({ state, className }) {
 function ChatHistoryList({ loading, total, children, filter, labels: overrides, id, className }) {
   const labels = { ...DEFAULT_CHAT_HISTORY_LABELS, ...overrides };
   const hasRows = Array.isArray(children) ? children.length > 0 : children != null && children !== false;
-  const status = loading ? labels.loading : !hasRows ? total === 0 ? labels.empty : labels.noMatch : null;
-  return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { id, className: ["bf-history", className].filter(Boolean).join(" "), children: [
+  const status = hasRows ? null : loading ? labels.loading : total === 0 ? labels.empty : labels.noMatch;
+  return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { id, className: ["bf-history", className].filter(Boolean).join(" "), "aria-busy": loading || void 0, children: [
     filter != null && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { className: "bf-history__filter", children: filter }),
     status != null && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { className: "bf-history__status", role: "status", children: status }),
     hasRows && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { role: "list", className: "bf-history__rows", children })

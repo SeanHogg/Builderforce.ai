@@ -289,6 +289,12 @@ interface ReviewVerdict {
     findings: readonly string[];
     /** Style, speculative, hardening and documentation notes. Never a reason to refuse. */
     advisories?: readonly string[];
+    /**
+     * 1-based indices into the prior blocking list the reviewer was shown, naming which of
+     * those findings are STILL unresolved. Present (even empty) means the reviewer answered
+     * the resolution question; absent means it did not, and the cap falls back to text match.
+     */
+    unresolvedPrior?: readonly number[];
 }
 
 /**

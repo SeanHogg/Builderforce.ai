@@ -51,7 +51,11 @@ import type { OutcomeReport } from '../run/eventSink';
  *  see `readCoverage.ts`). The repeat key is the tool plus ALL its canonical args, so a
  *  `local_research` call is a repeat only when it asks the same question of the same
  *  files; a code change forgets it like any tree-wide read (`run-guards` readCoverage). */
-const DEDUP_READ_TOOLS = new Set(['read_file', 'search_code', 'list_files', 'find_symbol', 'file_outline', 'semantic_search', 'repo_map', 'read_compressed', 'local_research']);
+// `recall_facts` (chat #56886): the persona says to recall before searching, so an unguarded
+// run re-ran the same recall before every read, forever. Its store only changes on a
+// `remember_fact`, which is a mutation and clears this set, so a stubbed repeat never hides
+// a new fact.
+const DEDUP_READ_TOOLS = new Set(['read_file', 'search_code', 'list_files', 'find_symbol', 'file_outline', 'semantic_search', 'repo_map', 'read_compressed', 'local_research', 'recall_facts']);
 
 /** A tool whose identical-args repeat within a run is safe to suppress: a local file/search
  *  tool, a host read of repository state (`review_ticket_branches` — forgotten by every

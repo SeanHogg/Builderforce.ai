@@ -359,7 +359,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-4UBWKU3M.mjs";
+} from "./chunk-B5AAUPOB.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useEffect, useMemo } from "react";
@@ -18053,7 +18053,7 @@ function handleRouterCall(catalog, name, args) {
 }
 
 // src/runStore/brainRunContext.ts
-var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files", "find_symbol", "file_outline", "semantic_search", "repo_map", "read_compressed", "local_research"]);
+var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files", "find_symbol", "file_outline", "semantic_search", "repo_map", "read_compressed", "local_research", "recall_facts"]);
 var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isRepoStateReadTool(name) || isReadOnlyPlatformTool(name);
 function reportToPolicy(run, event) {
   if (run.view) return run.view.report(event);
@@ -20197,7 +20197,7 @@ async function brainTurnMenu(run, env, catalogSize) {
       category: "message",
       label: "tools.selected",
       args: { step: env.step },
-      result: `${selected.length} of ${catalogSize} tools advertised this turn (relevance-selected; ${run.usedTools.size} pinned from earlier calls)`
+      result: `${selected.length} of ${catalogSize} tools advertised this turn (nothing trimmed \u2014 the full catalog was offered; ${run.usedTools.size} pinned from earlier calls)`
     });
     return { tools: [...selected, ...routerToolSpecs(catalogSize)], ...tail.length > 0 ? { tail } : {} };
   }
@@ -21860,6 +21860,8 @@ function useBrainChats(options = {}) {
   const assigningRef = useRef4(false);
   const chatsRef = useRef4(chats);
   chatsRef.current = chats;
+  const archivedChatsRef = useRef4(archivedChats);
+  archivedChatsRef.current = archivedChats;
   const autoTitledRef = useRef4(/* @__PURE__ */ new Set());
   const originalRequestCapturedRef = useRef4(/* @__PURE__ */ new Set());
   const pendingRequestRef = useRef4(/* @__PURE__ */ new Map());
@@ -21879,7 +21881,8 @@ function useBrainChats(options = {}) {
     return filterProjectId && filterProjectId !== "none" ? Number(filterProjectId) : null;
   }, [pinnedProjectId, filterProjectId]);
   const reload = useCallback4(async () => {
-    setLoading(true);
+    const blocking = chatsRef.current.length === 0 && archivedChatsRef.current.length === 0;
+    if (blocking) setLoading(true);
     setError("");
     try {
       const params = pinnedProjectId != null ? { projectId: String(pinnedProjectId) } : filterProjectId === "none" ? { projectId: "none" } : filterProjectId ? { projectId: filterProjectId } : void 0;

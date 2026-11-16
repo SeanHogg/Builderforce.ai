@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.182] — The agent stops recalling the same facts over and over
+
+- **Fixed: a run could repeat the same `recall_facts` call before every search, indefinitely.** A repeat of the same recall in one run now returns a short note pointing back to the earlier result instead of running again, and the agent is told to recall once per topic instead of before every read. Saving a new fact clears this, so the next recall picks it up.
+
 ## [2026.10.181] — The agent makes the change instead of re-reading files
 
 - **Files come back whole.** A file that fits in one read is returned whole on the first read, and a request for a small window of it returns the whole file too. The agent no longer reads one file in five slices.

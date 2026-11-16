@@ -244,7 +244,7 @@ export function activeProjectDirective(project?: ActiveProject | null): string |
  * participant) share it, so neither can forget it has a memory.
  */
 export const PROJECT_MEMORY_DIRECTIVE =
-  "Project memory: BEFORE searching or reading files to rediscover how something works, call `recall_facts` with the topic — a prior run may already have recorded the answer (a root cause, the file that owns a behaviour, a convention), and a recalled fact costs no disk read and no re-reading. When you LEARN a durable fact in this run, call `remember_fact` with a stable key (e.g. `chat-list-data-source`) so the next run recalls it instead of re-deriving it. Facts are project-scoped and shared with every agent on the project.";
+  "Project memory: at the START of a task, call `recall_facts` ONCE with the task's topic — a prior run may already have recorded the answer (a root cause, the file that owns a behaviour, a convention), and a recalled fact costs no disk read. Do not recall again before each search or read: a recall you already made is above you, and repeating it (or rewording it) returns nothing new. Recall again only for a genuinely different topic. When you LEARN a durable fact in this run, call `remember_fact` with a stable key (e.g. `chat-list-data-source`) so the next run recalls it instead of re-deriving it. Facts are project-scoped and shared with every agent on the project.";
 
 /**
  * Repo facts for the open workspace folder — "where the code is". Pure data (no

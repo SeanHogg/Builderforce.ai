@@ -315,6 +315,12 @@ export interface ReviewVerdict {
   findings: readonly string[];
   /** Style, speculative, hardening and documentation notes. Never a reason to refuse. */
   advisories?: readonly string[];
+  /**
+   * 1-based indices into the prior blocking list the reviewer was shown, naming which of
+   * those findings are STILL unresolved. Present (even empty) means the reviewer answered
+   * the resolution question; absent means it did not, and the cap falls back to text match.
+   */
+  unresolvedPrior?: readonly number[];
 }
 
 /** A finding reduced to the words that decide whether two rounds raised the same defect. */
@@ -340,7 +346,11 @@ export function findingMatchesPrior(finding: string, prior: readonly string[]): 
   return prior.some((p) => {
     const pk = findingKey(p);
     if (!pk) return false;
-    if (key === pk || key.includes(pk) || pk.includes(key)) return true;
+    if (key === pk) return true;
+    // Containment only when the shorter wording is long enough to be the same defect.
+    // A short shared word ("error", "the") must not collapse two different findings.
+    const shorter = Math.min(key.length, pk.length);
+    if (shorter >= 24 && (key.includes(pk) || pk.includes(key))) return true;
     const pl = findingLocation(p);
     return loc !== null && pl === loc;
   });
@@ -352,18 +362,34 @@ export function findingMatchesPrior(finding: string, prior: readonly string[]): 
  * a blocking finding that does not match a prior blocking finding moves to `advisories`; when
  * none remain, the verdict is `approved`. A prior blocker that is still unresolved stays blocking.
  */
+/** Prior findings named by 1-based `unresolvedPrior`, dropping out-of-range and duplicates. */
+function priorsNamed(indices: readonly number[] | undefined, priorBlocking: readonly string[]): string[] {
+  if (!indices) return [];
+  const still: string[] = [];
+  const seen = new Set<number>();
+  for (const i of indices) {
+    if (!Number.isInteger(i) || i < 1 || i > priorBlocking.length || seen.has(i)) continue;
+    seen.add(i);
+    const prior = priorBlocking[i - 1];
+    if (prior) still.push(prior);
+  }
+  return still;
+}
+
 export function applyReviewRoundCap(
   verdict: ReviewVerdict,
   priorBlocking: readonly string[],
   round: number,
 ): ReviewVerdict {
   if (round < MAX_BLOCKING_REVIEW_ROUNDS || verdict.findings.length === 0) return verdict;
-  const still: string[] = [];
-  const moved: string[] = [];
-  for (const finding of verdict.findings) {
-    (findingMatchesPrior(finding, priorBlocking) ? still : moved).push(finding);
-  }
-  if (moved.length === 0) return verdict;
+  // A present unresolvedPrior is the reviewer's answer: only those prior findings still block.
+  // Anything else this round raised — including a new wording of a named prior — is advisory.
+  // Absent, the cap keeps a new finding only when it matches a prior one.
+  const named = verdict.unresolvedPrior;
+  const still = named ? priorsNamed(named, priorBlocking) : verdict.findings.filter((f) => findingMatchesPrior(f, priorBlocking));
+  const blockingKeys = new Set(still.map(findingKey));
+  const moved = verdict.findings.filter((f) => !blockingKeys.has(findingKey(f)));
+  if (moved.length === 0 && still.length === verdict.findings.length && !named) return verdict;
   return {
     ...verdict,
     verdict: still.length > 0 ? "changes_requested" : "approved",
