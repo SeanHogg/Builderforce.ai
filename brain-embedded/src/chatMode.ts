@@ -278,6 +278,8 @@ export function chatWorkDirective(chatId: number | null, opts?: ChatWorkDirectiv
     ordering +
     finish +
     `• STAFF WITH THE TEAM. The workspace's agents (builtin_chats_list_agents for those already in this chat, builtin_cloud_agents_list_mine for all of them) are the people this work belongs to. Match each ticket to the agent whose role fits it — Developer work to a developer, QA work to a QA agent — and never leave a ticket with no agent on it.${throughThem}\n` +
+    `• WORK IN BATCHES. Every independent read, search and status check goes into ONE turn as parallel tool calls — the run bills per turn, so a search followed by a read followed by a list is three bills where one sufficed. Batch them even when you are not sure both are needed.\n` +
+    `• VERIFY NARROWLY. Check your change with the NARROWEST check that covers it: the type-check, test or lint scoped to the files you touched (the package's own script, scoped where it allows), not the whole monorepo suite. Read the output before retrying — a non-zero exit is a result to act on, not a reason to run the same command again.\n` +
     (chatId != null
       ? `• builtin_chats_runs (chatId=${chatId}) says what has ALREADY run on this chat's tickets and who started each run. Read it before claiming work is under way, and before starting a duplicate: an empty result means nothing was ever dispatched, whatever the transcript says about it.\n`
       : '') +

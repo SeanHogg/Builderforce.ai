@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, resolve } from "node:path";
 
@@ -32,12 +32,29 @@ const forwardedArgs = process.argv.slice(3);
  *
  * The bundler now stamps a source hash into every artifact (see `esbuild.mjs` /
  * `src/buildInfo.ts`), so two builds are at least DISTINGUISHABLE after the fact. This
- * check stops them being created: bump the version, or delete the artifact you mean to
- * replace, or pass `--allow-overwrite` when you are deliberately re-cutting one.
+ * check stops them being created — but instead of hard-failing and forcing the caller
+ * to hand-edit package.json (an agent-loop turn spent on a version bump, measured on
+ * chat #131817), the default is to AUTO-BUMP the trailing numeric component and package
+ * under the new version. Overwriting is still possible only via `--allow-overwrite` when
+ * you are deliberately re-cutting one exact build.
  */
 const allowOverwriteIndex = forwardedArgs.indexOf("--allow-overwrite");
 const allowOverwrite = allowOverwriteIndex !== -1;
 if (allowOverwrite) forwardedArgs.splice(allowOverwriteIndex, 1);
+
+function bumpPatchVersion(version) {
+  const match = /^(.*?)(\d+)$/.exec(version);
+  if (!match) return null;
+  return `${match[1]}${Number(match[2]) + 1}`;
+}
+
+function rewritePackageVersion(version) {
+  const require = createRequire(import.meta.url);
+  const pkgPath = require.resolve("./package.json");
+  const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+  pkg.version = version;
+  writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
+}
 
 if (operation === "package") {
   const outFlag = forwardedArgs.findIndex((arg) => arg === "--out" || arg === "-o");
@@ -48,15 +65,22 @@ if (operation === "package") {
   if (outFlag === -1) forwardedArgs.push("--out", outPath);
   const absolute = resolve(outPath);
   if (existsSync(absolute) && !allowOverwrite) {
-    throw new Error(
-      `${basename(absolute)} already exists.
-`
-        + `Version ${manifest.version} has already been packaged, and overwriting it would ship different `
-        + `code under a version someone may already be running — an install a support report cannot identify.
-`
-        + `Bump "version" in clients/vscode/package.json, delete the existing artifact, or pass `
-        + `--allow-overwrite if you are deliberately re-cutting this exact build.`,
+    const nextVersion = bumpPatchVersion(manifest.version);
+    if (!nextVersion) {
+      throw new Error(
+        `${basename(absolute)} already exists and version ${manifest.version} cannot be auto-bumped.\n`
+          + `Bump "version" in clients/vscode/package.json, delete the existing artifact, or pass `
+          + `--allow-overwrite if you are deliberately re-cutting this exact build.`,
+      );
+    }
+    console.warn(
+      `${basename(absolute)} already exists (version ${manifest.version} already packaged). `
+        + `Auto-bumping to ${nextVersion} rather than overwriting a shipped artifact.`,
     );
+    rewritePackageVersion(nextVersion);
+    // Point --out at the new version's artifact so vsce writes a fresh file.
+    const outIndex = forwardedArgs.indexOf("--out");
+    forwardedArgs[outIndex + 1] = `${manifest.name}-${nextVersion}.vsix`;
   }
 }
 const result = spawnSync(
