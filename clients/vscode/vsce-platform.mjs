@@ -18,7 +18,8 @@ const os = process.platform === "win32"
     : isMusl ? "alpine" : "linux";
 const architecture = process.arch === "arm64" ? "arm64" : "x64";
 const target = `${os}-${architecture}`;
-const vsceCli = createRequire(import.meta.url).resolve("@vscode/vsce/vsce");
+const require = createRequire(import.meta.url);
+const vsceCli = require.resolve("@vscode/vsce/vsce");
 const forwardedArgs = process.argv.slice(3);
 
 /**
@@ -37,18 +38,26 @@ const forwardedArgs = process.argv.slice(3);
  *
  * ── RESOLVING A COLLISION ──────────────────────────────────────────────────────
  * The default remains a hard error — bump the version in package.json, delete the
- * artifact you mean to replace, or pass `--allow-overwrite` for a deliberate re-cut.
- * Two opt-in flags relax that:
+ * artifact you mean to replace, or pass one of two opt-in flags:
  *
  *   --allow-overwrite   Re-cut THIS exact version (overwrite the existing artifact).
+ *                       Takes precedence over --auto-bump when both are passed.
  *   --auto-bump         On collision, bump the trailing numeric component of the
  *                       version in package.json, then package under the new version.
  *                       The bump is committed to disk only when the package step
- *                       succeeds; on failure package.json is rolled back so the tree
- *                       is never left with a bumped version and no artifact.
+ *                       succeeds; on ANY failure (non-zero exit OR a thrown error)
+ *                       package.json is rolled back via try/finally so the tree is
+ *                       never left with a bumped version and no artifact.
  *
- * Auto-bump loops until it finds a version whose artifact does not exist (so a bumped
- * version that was itself already packaged is skipped, never overwritten). It only
+ * --auto-bump is refused together with a caller-supplied `--out`/`-o`: auto-bump only
+ * helps by redirecting the output to a new, un-taken artifact path, and a caller's
+ * explicit --out path is fixed — so the bumped version would still collide at that
+ * path and the bump would be pure damage. Pass --allow-overwrite to re-cut into a
+ * caller-supplied path instead.
+ *
+ * Auto-bump delegates the free-version search to the tested `nextFreeVersion` helper
+ * (see `vsce-platform.lib.mjs`), which re-checks every bumped version so a bumped
+ * version that was itself already packaged is skipped, never overwritten. It only
  * touches the version line of package.json and never overrides a caller-supplied
  * `--out`/`-o` path.
  */
@@ -60,7 +69,6 @@ const autoBumpIndex = forwardedArgs.indexOf("--auto-bump");
 const autoBump = autoBumpIndex !== -1;
 if (autoBump) forwardedArgs.splice(autoBumpIndex, 1);
 
-const require = createRequire(import.meta.url);
 const pkgPath = require.resolve("./package.json");
 const manifest = JSON.parse(readFileSync(pkgPath, "utf8"));
 /** The version package.json held before any auto-bump; null when no bump happened. */
@@ -71,83 +79,77 @@ function setPackageVersion(version) {
   writeFileSync(pkgPath, rewriteVersionLine(readFileSync(pkgPath, "utf8"), version));
 }
 
-if (operation === "package") {
-  const outFlagIndex = forwardedArgs.findIndex((arg) => arg === "--out" || arg === "-o");
-  const callerSuppliedOut = outFlagIndex !== -1;
-  const outPath = callerSuppliedOut
-    ? forwardedArgs[outFlagIndex + 1]
-    : `${manifest.name}-${manifest.version}.vsix`;
-  if (!callerSuppliedOut) forwardedArgs.push("--out", outPath);
-  const absolute = resolve(outPath);
+let result;
+try {
+  if (operation === "package") {
+    const outFlagIndex = forwardedArgs.findIndex((arg) => arg === "--out" || arg === "-o");
+    const callerSuppliedOut = outFlagIndex !== -1;
+    const outPath = callerSuppliedOut
+      ? forwardedArgs[outFlagIndex + 1]
+      : `${manifest.name}-${manifest.version}.vsix`;
+    if (!callerSuppliedOut) forwardedArgs.push("--out", outPath);
+    const absolute = resolve(outPath);
 
-  if (existsSync(absolute) && !allowOverwrite) {
-    if (!autoBump) {
-      throw new Error(
-        `${basename(absolute)} already exists.\n`
-          + `Version ${manifest.version} has already been packaged, and overwriting it would ship different `
-          + `code under a version someone may already be running — an install a support report cannot identify.\n`
-          + `Bump "version" in clients/vscode/package.json, delete the existing artifact, pass `
-          + `--auto-bump to bump the version automatically, or pass `
-          + `--allow-overwrite if you are deliberately re-cutting this exact build.`,
-      );
-    }
-
-    // Auto-bump: advance the version until the artifact for that version does not
-    // exist. This re-checks after every bump so we never overwrite a shipped artifact
-    // for the bumped version either. A caller-supplied --out is left alone (the bump
-    // still applies to package.json, but we do not redirect their chosen path).
-    const originalVersion = manifest.version;
-    let candidate = manifest.version;
-    let bumped = false;
-    for (let guard = 0; guard < 100; guard++) {
-      const next = bumpPatchVersion(candidate);
-      if (!next) {
+    if (existsSync(absolute) && !allowOverwrite) {
+      if (!autoBump) {
         throw new Error(
-          `${basename(absolute)} already exists and version ${candidate} cannot be auto-bumped. `
-            + `Bump "version" in clients/vscode/package.json manually or pass --allow-overwrite.`,
+          `${basename(absolute)} already exists.\n`
+            + `Version ${manifest.version} has already been packaged, and overwriting it would ship different `
+            + `code under a version someone may already be running — an install a support report cannot identify.\n`
+            + `Bump "version" in clients/vscode/package.json, delete the existing artifact, pass `
+            + `--auto-bump to bump the version automatically, or pass `
+            + `--allow-overwrite if you are deliberately re-cutting this exact build.`,
         );
       }
-      candidate = next;
-      const candidateOut = callerSuppliedOut
-        ? outPath
-        : `${manifest.name}-${candidate}.vsix`;
-      if (!existsSync(resolve(candidateOut))) {
-        setPackageVersion(candidate);
-        if (!callerSuppliedOut) {
-          const outIndex = forwardedArgs.indexOf("--out");
-          forwardedArgs[outIndex + 1] = `${manifest.name}-${candidate}.vsix`;
-        }
-        bumped = true;
-        console.warn(
-          `${basename(absolute)} already exists (version ${originalVersion} already packaged). `
-            + `Auto-bumped to ${candidate}.`,
+      if (callerSuppliedOut) {
+        throw new Error(
+          `--auto-bump cannot be combined with a caller-supplied --out/-o path. `
+            + `Auto-bump only helps by writing to a new, un-taken artifact path, but ${basename(absolute)} `
+            + `is fixed by --out, so the bumped version would still collide there. `
+            + `Pass --allow-overwrite to re-cut into that path, or drop --out and let the artifact `
+            + `path default to the bumped version.`,
         );
-        break;
       }
-    }
-    if (!bumped) {
-      throw new Error(
-        `Auto-bump could not find a free version after 100 attempts starting from ${originalVersion}. `
-          + `Bump "version" in clients/vscode/package.json manually.`,
+
+      // Auto-bump: find the first bumped version whose artifact does not exist,
+      // using the tested lib helper (which re-checks every candidate). Refuse to
+      // overwrite any existing artifact, including a bumped version that was
+      // itself already packaged.
+      const originalVersion = manifest.version;
+      const candidate = nextFreeVersion(originalVersion, (v) =>
+        existsSync(resolve(`${manifest.name}-${v}.vsix`))
+      );
+      if (!candidate) {
+        throw new Error(
+          `Auto-bump could not find a free version after 100 attempts starting from ${originalVersion}. `
+            + `Bump "version" in clients/vscode/package.json manually.`,
+        );
+      }
+      setPackageVersion(candidate);
+      const outIndex = forwardedArgs.indexOf("--out");
+      forwardedArgs[outIndex + 1] = `${manifest.name}-${candidate}.vsix`;
+      manifest.version = candidate;
+      autoBumpedFrom = originalVersion;
+      console.warn(
+        `${basename(absolute)} already exists (version ${originalVersion} already packaged). `
+          + `Auto-bumped to ${candidate}.`,
       );
     }
-    manifest.version = candidate;
-    autoBumpedFrom = originalVersion;
+  }
+
+  result = spawnSync(
+    process.execPath,
+    [vsceCli, operation, "--no-dependencies", "--target", target, ...forwardedArgs],
+    { stdio: "inherit" },
+  );
+  if (result.error) throw result.error;
+} finally {
+  // Roll the version bump back when the package step did not succeed, so the tree is
+  // never left with a bumped package.json and no corresponding artifact. Covers both a
+  // non-zero exit AND a thrown error (spawn failure, lib throw), via try/finally.
+  if (operation === "package" && autoBumpedFrom != null && (result?.status ?? 1) !== 0) {
+    setPackageVersion(autoBumpedFrom);
   }
 }
 
-const result = spawnSync(
-  process.execPath,
-  [vsceCli, operation, "--no-dependencies", "--target", target, ...forwardedArgs],
-  { stdio: "inherit" },
-);
-
-if (result.error) throw result.error;
-
-// Roll the version bump back when the package step failed, so the tree is never left
-// with a bumped package.json and no corresponding artifact.
-if (operation === "package" && autoBumpedFrom != null && result.status !== 0) {
-  setPackageVersion(autoBumpedFrom);
-}
-
-process.exitCode = result.status ?? 1;
+process.exitCode = result?.status ?? 1;
