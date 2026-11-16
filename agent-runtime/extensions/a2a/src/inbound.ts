@@ -3,18 +3,12 @@
  * agents (Claude Code, LangGraph, Google ADK, …) can send it messages and read
  * its replies over HTTP.
  *
- * Two surfaces are registered:
- *
- *  1. A streaming-JSON stdio bridge that talks to the local `claude` CLI
- *     (Claude Code's Agent SDK surface). Claude Code reads newline-delimited
- *     JSON events from our stdout and writes newline-delimited JSON messages
- *     to our stdin; we translate each inbound message into a BuilderForce
- *     agent run and stream the reply back as events.
- *
- *  2. An HTTP `/a2a` endpoint (via the plugin HTTP-route seam) that accepts a
- *     POSTed A2A envelope `{ message: { parts:[{text}] } }` and either returns
- *     a one-shot JSON reply or streams Server-Sent Events — matching the
- *     client in `packages/agent-tools/src/a2a.ts`.
+ * One surface is registered: an HTTP `/a2a` endpoint (via the plugin
+ * HTTP-route seam) that accepts a POSTed A2A envelope
+ * `{ message: { parts:[{text}] } }` and either returns a one-shot JSON reply
+ * or streams Server-Sent Events — matching the client in
+ * `packages/agent-tools/src/a2a.ts`. (The old stdio bridge to the `claude` CLI
+ * was removed; talking to Claude Code is the `a2a-send` tool's job.)
  */
 import { createA2AHttpHandler } from "@builderforce/agent-tools/a2a.js";
 import type { A2ARequest } from "@builderforce/agent-tools/a2a.js";
@@ -23,7 +17,25 @@ import { getA2aRuntime } from "./runtime.js";
 
 type RunEmbeddedAgentFn = (params: Record<string, unknown>) => Promise<{ payloads?: Array<{ text?: string }> }>;
 
+/** The runner's contract (`RunEmbeddedAgentParams`) requires a stable `runId` and a `timeoutMs`. */
+const RUN_TIMEOUT_MS = 120_000;
+
+/**
+ * Test-only override for the embedded runner, which `loadRunEmbeddedAgent`
+ * resolves via a dynamic import that `vi.mock` cannot intercept. Production
+ * code never sets this; it exists so the handler's contract with the runner
+ * (`runId`/`timeoutMs`) can be asserted without a real build.
+ */
+let testRunnerOverride: RunEmbeddedAgentFn | null = null;
+
+export function __setA2aTestRunner(fn: RunEmbeddedAgentFn | null): void {
+  testRunnerOverride = fn;
+}
+
 async function loadRunEmbeddedAgent(): Promise<RunEmbeddedAgentFn> {
+  if (testRunnerOverride) {
+    return testRunnerOverride;
+  }
   const candidates = [
     "../../../src/agents/embedded-runner.js",
     "../../../../dist/agents/embedded-runner.js",
@@ -59,10 +71,14 @@ async function runLocalAgent(prompt: string, sessionId?: string): Promise<string
     config: api.config,
     prompt,
     disableMessageTool: true,
+    // The runner's contract requires these (RunEmbeddedAgentParams); without
+    // them the A2A serve path would not type-check / would hang unbounded.
+    runId: `a2a-${Date.now().toString(36)}`,
+    timeoutMs: RUN_TIMEOUT_MS,
   });
   const text = (result.payloads ?? [])
-    .filter((p) => typeof p.text === "string")
-    .map((p) => p.text ?? "")
+    .map((p) => (typeof p.text === "string" ? p.text : ""))
+    .filter((t) => t.length > 0)
     .join("\n")
     .trim();
   if (!text) {

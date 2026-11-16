@@ -24,7 +24,7 @@
  * both.
  */
 import { Type } from "@sinclair/typebox";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 
 // ---------------------------------------------------------------------------
 // Claude Code CLI bridge
@@ -45,6 +45,18 @@ type SpawnedChild = {
 };
 
 const CLAUDE_TIMEOUT_MS = 120_000;
+
+/**
+ * On Windows, `spawn("claude", …)` only resolves `claude.cmd` / `claude.bat`
+ * when the command runs through a shell — a bare spawn looks up `claude`
+ * (no extension) and fails ENOENT even when Claude Code is installed. Force
+ * the shell on win32 (and `windowsVerbatimArguments` so the quoted args are
+ * not re-split); elsewhere a direct exec is fine.
+ */
+const SPAWN_ON_WINDOWS = process.platform === "win32";
+const spawnOptions: import("node:child_process").SpawnOptions = SPAWN_ON_WINDOWS
+  ? { stdio: ["pipe", "pipe", "pipe"], env: { ...process.env }, shell: true, windowsVerbatimArguments: true }
+  : { stdio: ["pipe", "pipe", "pipe"], env: { ...process.env } };
 
 /**
  * Spawn the local `claude` CLI in streaming mode and exchange one message.
@@ -76,10 +88,7 @@ export async function talkToClaudeCode(
   const started = Date.now();
 
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(bin, args, {
-      stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env },
-    });
+    const child = spawn(bin, args, spawnOptions);
 
     let stdoutBuf = "";
     let stderrBuf = "";
@@ -128,18 +137,18 @@ export async function talkToClaudeCode(
         if (typeof ev.result === "string" && !reply) {
           reply = ev.result;
         }
-        try { child.stdin.end(); } catch { /* already closed */ }
+        try { child.stdin?.end(); } catch { /* already closed */ }
       }
     };
 
-    child.stdout.on("data", (chunk: Buffer) => {
+    child.stdout?.on("data", (chunk: Buffer) => {
       stdoutBuf += chunk.toString("utf8");
       const lines = stdoutBuf.split(/\r?\n/);
       stdoutBuf = lines.pop() ?? "";
       for (const line of lines) handleLine(line);
     });
 
-    child.stderr.on("data", (chunk: Buffer) => {
+    child.stderr?.on("data", (chunk: Buffer) => {
       stderrBuf += chunk.toString("utf8");
     });
 
@@ -171,7 +180,7 @@ export async function talkToClaudeCode(
         content: [{ type: "text", text: message }],
       },
     };
-    child.stdin.write(JSON.stringify(first) + "\n");
+    child.stdin?.write(JSON.stringify(first) + "\n");
   });
 
   if (!reply.trim()) {
