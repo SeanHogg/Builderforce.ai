@@ -140,11 +140,14 @@ describe("planPackageStep", () => {
 
   it("auto-bumps to the first free version on collision", () => {
     const taken = new Set(["builderforce-ai-1.0.0.vsix"]);
-    const plan = planPackageStep(pkg, ["--auto-bump"], (p) => taken.has(p));
+    const plan = planPackageStep(pkg, ["--auto-bump"], (p: string) => taken.has(p));
     expect(plan.ok).toBe(true);
     if (!plan.ok) return;
     expect(plan.bumpedTo).toBe("1.0.1");
-    expect(plan.args[plan.args.indexOf("--out") + 1]).toBe("builderforce-ai-1.0.1.vsix");
+    // The .mjs lib's `ok` is a widened boolean, so `!plan.ok` above does not narrow `args`
+    // to the success variant — read it through the guard-established success shape.
+    const args = (plan as { args: string[] }).args;
+    expect(args[args.indexOf("--out") + 1]).toBe("builderforce-ai-1.0.1.vsix");
   });
 
   it("refuses --auto-bump combined with a caller-supplied --out", () => {

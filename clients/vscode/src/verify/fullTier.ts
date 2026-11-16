@@ -138,7 +138,13 @@ export async function runFullTier(
     const records = [diagnosticsFor(diagnostics, file, deps.root), pkg ? typecheckByPkg.get(pkg) ?? null : null, tests, guard]
       .filter((r): r is CheckRecord => !!r);
     // A bounded call's "unavailable" is the budget talking, not the check: never cached.
-    if (deadline === null || !records.some((r) => r.outcome === "unavailable")) deps.cache.set(file, hash, FULL_TIER, records);
+    // A FAILING result is never cached either: the typecheck is package-wide, so a file whose
+    // own bytes never changed can fail because of a sibling — and once the sibling is fixed,
+    // a cached failure (keyed by this file's bytes only) refused every later push with stale
+    // output (chat #134712: brainTurnMenu.ts "failed typecheck" after the error was gone).
+    // Only a pass is reused; a failure is re-checked every time it is asked.
+    const unavailable = deadline !== null && records.some((r) => r.outcome === "unavailable");
+    if (!unavailable && !records.some((r) => r.outcome === "fail")) deps.cache.set(file, hash, FULL_TIER, records);
     out.set(file, records);
   }
   return out;

@@ -216,7 +216,12 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     conv, chatId, drafts, draftStore, recipient, chooseRecipient, liveChildren, setTurnLimbic, reloadChats,
   });
   // An interrupted run's Resume: open its chat, send the continuation through THIS door, ack the run once the host claims it.
-  const interruptedResume = useChatInterruptedResume({ t, chatId, openChat, continueChat, runStatus });
+  // An open-only Resume (under 100%, no journaled run) scopes its turn to the chat's linked tickets.
+  const ticketStatsOf = useCallback((id: number) => {
+    const c = chats.find((c) => c.id === id);
+    return c ? { doneCount: c.ticketDoneCount ?? 0, openCount: c.ticketOpenCount ?? 0, progressPct: c.ticketProgressPct } : undefined;
+  }, [chats]);
+  const interruptedResume = useChatInterruptedResume({ t, chatId, openChat, continueChat, runStatus, ticketStatsOf });
 
   // The question this chat is BLOCKED on (banner + its "show me" reveal into the transcript).
   const { pendingQuestion, askLabels, reveal, revealQuestion } = usePendingQuestion(conv.messages, init.labels);

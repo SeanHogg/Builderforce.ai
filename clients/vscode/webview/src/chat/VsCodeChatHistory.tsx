@@ -194,11 +194,11 @@ export function VsCodeChatHistory({ id, chats, total, loading, activeId, titleOf
               journaled: target.journaled,
               pending: target.journaled && interrupted.pending.has(target.runId),
               onResume: () => {
-                // A journaled run resumes fully (open its chat, send the continuation);
-                // an open-only target (under 100%, nothing journaled) just opens the chat
-                // so the person continues the work — no turn is sent.
-                if (target.journaled) void interrupted.resume({ runId: target.runId, chatId: target.chatId });
-                else onOpenChat(target.chatId);
+                // Both journaled and open-only targets resume through the tracker: it opens
+                // the chat and sends a continuation turn (the journaled run's record, or an
+                // open-only turn scoped to this chat's linked tickets). The play button never
+                // just opens the chat silently — it always continues the work.
+                void interrupted.resume({ runId: target.runId, chatId: target.chatId });
               },
             } : undefined}
           />

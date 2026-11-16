@@ -34,7 +34,8 @@ export interface ResumeTarget {
   /**
    * True when the target is a JOURNALED interrupted run (its continuation is sent through
    * the composer). False when the chat is under 100% but has no journaled interrupted run:
-   * Resume just OPENS the chat so the person continues the work themselves — no turn is sent.
+   * Resume still sends a turn through the composer — an OPEN-ONLY continuation scoped to
+   * this chat's linked tickets (`openOnlyResumeTurn`) — it never just opens the chat.
    */
   journaled: boolean;
 }
@@ -60,8 +61,9 @@ export function pendingChatIds(runs: readonly InterruptedRunRef[], pending: Read
  * row must NOT offer Resume — a complete chat, a running chat, or a resume already in
  * flight. When the chat has a JOURNALED interrupted run the target carries it (its
  * continuation is sent through the composer, journaled: true); when it has none the
- * target is OPEN-ONLY (journaled: false) — the play button opens the chat so the person
- * continues the work, and no turn is sent (there is nothing journaled to continue).
+ * target is OPEN-ONLY (journaled: false): the play button opens the chat and sends a
+ * continuation scoped to the chat's linked tickets (there is nothing journaled to
+ * continue from, so the turn names the tickets and the % complete instead).
  */
 export function resumableInterruptedRun(
   chatId: number,

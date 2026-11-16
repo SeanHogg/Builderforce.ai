@@ -21,6 +21,8 @@ export type ResumeLabel = (key: string, fallback: string) => string;
 /** The English defaults of the continuation turn's `ir.*` keys - the single place they are spelled for the fallback. */
 export const RESUME_TURN_DEFAULTS = {
   "ir.continue": "Continue the task that was interrupted when the editor closed.",
+  "ir.openOnlyContinue": "Continue this chat's unfinished work.",
+  "ir.openOnlyTickets": "Linked tickets: {done} done, {open} open ({pct}% complete).",
   "ir.continueAsk": "The original request, verbatim:",
   "ir.continuePlan": "The plan when it stopped:",
   "ir.continueFiles": "Files changed so far:",
@@ -89,5 +91,22 @@ export function interruptedResumeTurn(t: ResumeLabel, resume: InterruptedRunResu
   if (resume.steps?.length) sections.push(`${label("ir.continueSteps")}\n${list(resume.steps)}`);
   if (resume.children?.length) sections.push(`${label("ir.continueChildren")}\n${renderInterruptedChildren(t, resume.children)}`);
   sections.push(label("ir.continueScope"));
+  return sections.join("\n\n");
+}
+
+/**
+ * The continuation turn for an OPEN-ONLY Resume: the chat is under 100% but has NO journaled
+ * interrupted run, so there is no ask/plan/files/steps to continue from. Scoped to THIS chat's
+ * linked tickets so the run continues this chat's task (never another session's): a headline, a
+ * tickets/progress line, then the same scope line the journaled turn ends on.
+ */
+export function openOnlyResumeTurn(t: ResumeLabel, stats: { doneCount: number; openCount: number; progressPct: number | null | undefined }): string {
+  const label = labelsOf(t);
+  const pct = typeof stats.progressPct === "number" && Number.isFinite(stats.progressPct) ? Math.round(stats.progressPct) : null;
+  const sections: string[] = [
+    label("ir.openOnlyContinue"),
+    label("ir.openOnlyTickets", { done: stats.doneCount, open: stats.openCount, pct: pct ?? "?" }),
+    label("ir.continueScope"),
+  ];
   return sections.join("\n\n");
 }

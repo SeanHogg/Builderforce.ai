@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.185] — The ▶ on a chat under 100% actually continues the work
+
+- **Fixed: clicking the Resume (▶) on a chat under 100% with no journaled interrupted run only opened the chat — nothing was sent, no run started.** The open-only path went through `onOpenChat` alone, skipping the composer's send. Now ▶ always continues the work through the composer: a journaled run sends its full journaled continuation, and an open-only chat sends a continuation scoped to its linked tickets ("Continue this chat's unfinished work. Linked tickets: N done, M open (P% complete). Continue only this chat's task…") — so the run picks up this chat's work and never another session's.
+
 ## [2026.10.184] — Every chat under 100% gets a Resume ▶, not just the interrupted ones
 
 - **Fixed: chats under 100% showed no Resume (▶) action unless they had a journaled interrupted run.** The play button had been coupled to the recovery journal, so a chat that finished its turn normally but still had open tickets offered no way to continue. Now **any chat under 100% that isn't running shows the ▶ action.** When the chat has a journaled interrupted run, ▶ resumes it (opens the chat and sends the continuation, as before). When it doesn't, ▶ simply opens the chat so you pick the work back up — no turn is sent.
