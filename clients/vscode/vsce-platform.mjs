@@ -2,7 +2,12 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, resolve } from "node:path";
-import { nextFreeVersion, parseOutArg, rewriteVersionLine } from "./vsce-platform.lib.mjs";
+import {
+  nextFreeVersion,
+  parseOutArg,
+  planPackageStep,
+  rewriteVersionLine,
+} from "./vsce-platform.lib.mjs";
 
 const operation = process.argv[2];
 if (operation !== "package" && operation !== "publish") {
@@ -48,8 +53,8 @@ const forwardedArgs = process.argv.slice(3);
  *                       version in package.json, then package under the new version.
  *                       The bump is committed to disk only when the package step
  *                       succeeds; on ANY failure (non-zero exit OR a thrown error)
- *                       package.json is rolled back via try/finally so the tree is
- *                       never left with a bumped version and no artifact.
+ *                       package.json is rolled back so the tree is never left with a
+ *                       bumped version and no artifact.
  *
  * --auto-bump is refused together with a caller-supplied output path (--out, -o, or
  * the --out=<path> form): auto-bump only helps by writing to a new, un-taken artifact
@@ -59,9 +64,9 @@ const forwardedArgs = process.argv.slice(3);
  * `publish` (there is no local artifact collision to resolve — the marketplace version
  * is authoritative), so a caller is never misled into thinking a publish was bumped.
  *
- * Auto-bump delegates the free-version search to the tested `nextFreeVersion` helper
- * (see `vsce-platform.lib.mjs`), which re-checks every bumped version so a bumped
- * version that was itself already packaged is skipped, never overwritten.
+ * The decision itself (flag parsing, caller-out detection, collision handling, the
+ * auto-bump free-version search) is the pure, unit-tested `planPackageStep` in
+ * `vsce-platform.lib.mjs`; this file is only the I/O wrapper around it.
  *
  * ── ROLLBACK & SIGNAL SAFETY ───────────────────────────────────────────────────
  * Auto-bump writes the bumped version into package.json BEFORE invoking vsce, and
@@ -69,44 +74,36 @@ const forwardedArgs = process.argv.slice(3);
  * build scripts vsce runs (or a concurrent tool/watcher) see the bumped version for
  * the duration. On success the bumped package.json is LEFT COMMITTED (that is the
  * point — the new version is now the source of truth, and the artifact path passed to
- * vsce is constructed from the same candidate, so the two cannot drift). On failure
- * the bump is rolled back in a `finally`, keyed on an explicit `succeeded` flag that
- * is set only after spawnSync returns cleanly with a zero exit status — any throw
- * anywhere in the try block leaves it false and triggers the rollback. That rollback
- * is best-effort: a throw inside it is swallowed (with a stderr note) so it cannot mask
- * the original error, and it CANNOT run if this node process itself is hard-killed
- * (SIGKILL / unrecoverable crash) between the bump and the spawn completing — in that
- * case package.json may be left with the bumped version and no artifact, and the
- * recovery is manual: check package.json and either keep the bump or revert it. Do not
- * auto-bump inside a long-running watcher where a kill is likely; bump the version
- * yourself and re-run.
+ * vsce was constructed from the same candidate, so the two cannot drift). On failure
+ * the bump is rolled back via `rollbackBump()`, keyed on an explicit `succeeded` flag
+ * that is set only after spawnSync returns cleanly with a zero exit status.
+ *
+ * That rollback covers: a non-zero vsce exit, a thrown error anywhere in the run, and
+ * a graceful Ctrl-C / SIGTERM (a `process.on` handler rolls back and re-raises so the
+ * default terminate behaviour still applies). It is still best-effort in two ways: a
+ * throw inside the rollback is swallowed (with a stderr note) so it cannot mask the
+ * original error; and a SIGKILL / unrecoverable crash of this process between the bump
+ * and the handler running cannot be recovered — in that case package.json may be left
+ * with the bumped version and no artifact, and the recovery is manual: check
+ * package.json and either keep the bump or revert it. Do not auto-bump inside a
+ * long-running watcher where a kill is likely; bump the version yourself and re-run.
  */
-const allowOverwriteIndex = forwardedArgs.indexOf("--allow-overwrite");
-const allowOverwrite = allowOverwriteIndex !== -1;
-if (allowOverwrite) forwardedArgs.splice(allowOverwriteIndex, 1);
-
-const autoBumpIndex = forwardedArgs.indexOf("--auto-bump");
-let autoBump = autoBumpIndex !== -1;
-if (autoBump) forwardedArgs.splice(autoBumpIndex, 1);
-
-// --allow-overwrite takes precedence over --auto-bump. Warn rather than silently
-// ignoring --auto-bump, so a caller who passed both knows which flag won.
-if (allowOverwrite && autoBump) {
-  console.warn("--allow-overwrite takes precedence over --auto-bump; --auto-bump ignored.");
-  autoBump = false;
-}
-
-// --auto-bump only resolves a local artifact collision; it is meaningless for publish
-// (the marketplace version is authoritative). Refuse it rather than silently stripping
-// it and misleading the caller into thinking the publish was bumped.
-if (autoBump && operation === "publish") {
-  throw new Error("--auto-bump is only supported for `package`, not `publish`.");
-}
-
 let result;
 let succeeded = false;
 /** The version package.json held before any auto-bump; null when no bump happened. */
 let autoBumpedFrom = null;
+/** Lazily-bound rollback; the signal handler below needs it before the try block. */
+let rollbackBump = () => {};
+
+// Roll the bump back on graceful interrupt (Ctrl-C / SIGTERM / SIGHUP) so a kill
+// mid-package does not leave a bumped package.json with no artifact. The handler
+// re-raises so the process still terminates with the default signal behaviour.
+for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+  process.on(sig, () => {
+    rollbackBump();
+    process.kill(process.pid, sig);
+  });
+}
 
 try {
   if (operation === "package") {
@@ -119,76 +116,37 @@ try {
     const setPackageVersion = (version) => {
       writeFileSync(pkgPath, rewriteVersionLine(readFileSync(pkgPath, "utf8"), version));
     };
-
-    /**
-     * THE single source for an artifact path: both the initial collision check and
-     * the auto-bump free-version search derive from this one function, so they can
-     * never disagree about what path belongs to a version. Kept relative for the
-     * default (what vsce has always printed/passed); resolved only where an absolute
-     * path is needed for existence checks. Assumes an unscoped package name;
-     * builderforce-ai is unscoped.
-     */
-    const artifactPathFor = (version) =>
-      `${manifest.name}-${version}.vsix`;
-
-    const callerOut = parseOutArg(forwardedArgs);
-    let defaultOutValueIndex = -1;
-    const outPath = callerOut
-      ? callerOut.path
-      : artifactPathFor(manifest.version);
-    if (!callerOut) {
-      forwardedArgs.push("--out", outPath);
-      // The value slot we just pushed — computed AFTER the push so no later arg
-      // mutation can silently shift it before the auto-bump overwrite below.
-      defaultOutValueIndex = forwardedArgs.length - 1;
-    }
-    const absolute = resolve(outPath);
-
-    if (existsSync(absolute) && !allowOverwrite) {
-      if (!autoBump) {
-        throw new Error(
-          `${basename(absolute)} already exists.\n`
-            + `Version ${manifest.version} has already been packaged, and overwriting it would ship different `
-            + `code under a version someone may already be running — an install a support report cannot identify.\n`
-            + `Bump "version" in clients/vscode/package.json, delete the existing artifact, pass `
-            + `--auto-bump to bump the version automatically, or pass `
-            + `--allow-overwrite if you are deliberately re-cutting this exact build.`,
+    rollbackBump = () => {
+      if (autoBumpedFrom == null) return;
+      try {
+        setPackageVersion(autoBumpedFrom);
+      } catch (rollbackErr) {
+        console.error(
+          `Warning: failed to roll package.json back to ${autoBumpedFrom}: ${rollbackErr.message}`,
         );
       }
-      if (callerOut) {
-        throw new Error(
-          `--auto-bump cannot be combined with a caller-supplied output path (${callerOut.path}). `
-            + `Auto-bump only helps by writing to a new, un-taken artifact path, but that path is fixed by `
-            + `the caller, so the bumped version would still collide there. Pass --allow-overwrite to re-cut `
-            + `into that path, or drop --out and let the artifact path default to the bumped version.`,
-        );
-      }
+    };
 
-      // Auto-bump: find the first bumped version whose artifact does not exist,
-      // using the tested lib helper (which re-checks every candidate). Refuses to
-      // overwrite any existing artifact, including a bumped version that was
-      // itself already packaged.
-      const originalVersion = manifest.version;
-      const candidate = nextFreeVersion(
-        originalVersion,
-        (v) => existsSync(resolve(artifactPathFor(v))),
-      );
-      if (!candidate) {
-        throw new Error(
-          `Auto-bump could not find a free version after 100 attempts starting from ${originalVersion}. `
-            + `Bump "version" in clients/vscode/package.json manually.`,
-        );
-      }
-      setPackageVersion(candidate);
-      // Keep the artifact path passed to vsce in sync with the bumped version by
-      // construction: we pushed our own --out, so we know the exact value slot.
-      forwardedArgs[defaultOutValueIndex] = artifactPathFor(candidate);
-      autoBumpedFrom = originalVersion;
+    /** Existence probe: an artifact path exists iff its cwd-resolved file exists. */
+    const artifactExists = (path) => existsSync(resolve(path));
+
+    // THE decision — pure and unit-tested in the lib. Nothing is written here.
+    const plan = planPackageStep(manifest, forwardedArgs, artifactExists);
+    if (plan.warning) console.warn(plan.warning);
+    if (!plan.ok) throw new Error(plan.error);
+
+    // A bump is committed to disk only now, after the plan has succeeded in full.
+    if (plan.bumpedTo != null) {
+      autoBumpedFrom = manifest.version;
+      setPackageVersion(plan.bumpedTo);
       console.warn(
-        `${basename(absolute)} already exists (version ${originalVersion} already packaged). `
-          + `Auto-bumped to ${candidate}.`,
+        `${basename(plan.outPath)} already exists (version ${autoBumpedFrom} already `
+          + `packaged). Auto-bumped to ${plan.bumpedTo}.`,
       );
     }
+    // The plan's args replace the raw ones forwarded to vsce.
+    forwardedArgs.length = 0;
+    forwardedArgs.push(...plan.args);
   }
 
   result = spawnSync(
@@ -197,31 +155,15 @@ try {
     { stdio: "inherit" },
   );
   if (result.error) throw result.error;
-  // Set only after every check above has passed: any throw leaves this false and the
-  // finally block rolls the bump back, as does a non-zero exit status. A signal kill
-  // (status null) is surfaced explicitly — silent status-1 exits hide why vsce died.
+  // A signal kill (status null) is surfaced explicitly — silent status-1 exits hide
+  // why vsce died. Any throw above leaves succeeded=false and the rollback runs.
   if (result.signal) {
     throw new Error(`vsce exited due to signal ${result.signal}.`);
   }
   succeeded = (result.status ?? 1) === 0;
 } finally {
-  // Roll the version bump back unless the package step fully succeeded, so the tree is
-  // never left with a bumped package.json and no corresponding artifact. Best-effort:
-  // a throw inside the rollback is swallowed (with a stderr note) so it cannot mask the
-  // original error, and a hard kill of this process between the bump and here cannot
-  // be recovered automatically (see the header note).
   if (operation === "package" && autoBumpedFrom != null && !succeeded) {
-    try {
-      const pkgPath = require.resolve("./package.json");
-      writeFileSync(
-        pkgPath,
-        rewriteVersionLine(readFileSync(pkgPath, "utf8"), autoBumpedFrom),
-      );
-    } catch (rollbackErr) {
-      console.error(
-        `Warning: failed to roll package.json back to ${autoBumpedFrom}: ${rollbackErr.message}`,
-      );
-    }
+    rollbackBump();
   }
 }
 

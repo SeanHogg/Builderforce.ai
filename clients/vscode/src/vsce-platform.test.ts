@@ -3,6 +3,7 @@ import {
   bumpPatchVersion,
   nextFreeVersion,
   parseOutArg,
+  planPackageStep,
   rewriteVersionLine,
 } from "../vsce-platform.lib.mjs";
 
@@ -13,9 +14,15 @@ describe("bumpPatchVersion", () => {
     expect(bumpPatchVersion("v2")).toBe("v3");
   });
 
-  it("bumps a trailing prerelease/build-metadata digit group", () => {
+  it("bumps a trailing prerelease digit group", () => {
     expect(bumpPatchVersion("1.2.3-beta.1")).toBe("1.2.3-beta.2");
-    expect(bumpPatchVersion("1.2.3+4")).toBe("1.2.3+5");
+  });
+
+  it("refuses build-metadata versions (+...): semver treats them as equal to the base", () => {
+    // Bumping build metadata produces a version with EQUAL precedence, so it can
+    // never resolve a collision — refuse outright.
+    expect(bumpPatchVersion("1.2.3+4")).toBeNull();
+    expect(bumpPatchVersion("1.0.0+20240101")).toBeNull();
   });
 
   it("returns null when there is no trailing digit run", () => {
@@ -102,6 +109,71 @@ describe("parseOutArg", () => {
     // e.g. `--allow-overwrite --out` where the real path is missing would parse
     // path as undefined here; the CLI guards on the resolved absolute path anyway.
     expect(parseOutArg(["x", "--out"])?.index).toBe(1);
+  });
+});
+
+describe("planPackageStep", () => {
+  const pkg = { name: "builderforce-ai", version: "1.0.0" };
+
+  it("inserts a default --out and does not bump when the artifact is free", () => {
+    const plan = planPackageStep(pkg, ["--target", "win32-x64"], () => false);
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    expect(plan.bumpedTo).toBeNull();
+    expect(plan.args).toContain("--out");
+    expect(plan.args).toContain("builderforce-ai-1.0.0.vsix");
+    expect(plan.warning).toBeNull();
+  });
+
+  it("hard-errors on a collision without an opt-in flag", () => {
+    const plan = planPackageStep(pkg, [], () => true);
+    expect(plan.ok).toBe(false);
+    if (plan.ok) return;
+    expect(plan.error).toMatch(/already exists/);
+  });
+
+  it("auto-bumps to the first free version on collision", () => {
+    const taken = new Set(["builderforce-ai-1.0.0.vsix"]);
+    const plan = planPackageStep(pkg, ["--auto-bump"], (p) => taken.has(p));
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    expect(plan.bumpedTo).toBe("1.0.1");
+    expect(plan.args[plan.args.indexOf("--out") + 1]).toBe("builderforce-ai-1.0.1.vsix");
+  });
+
+  it("refuses --auto-bump combined with a caller-supplied --out", () => {
+    const plan = planPackageStep(pkg, ["--auto-bump", "--out", "custom.vsix"], () => true);
+    expect(plan.ok).toBe(false);
+    if (plan.ok) return;
+    expect(plan.error).toMatch(/cannot be combined/);
+  });
+
+  it("detects the --out=<path> joined form and refuses --auto-bump with it", () => {
+    const plan = planPackageStep(pkg, ["--auto-bump", "--out=custom.vsix"], () => true);
+    expect(plan.ok).toBe(false);
+    if (plan.ok) return;
+    expect(plan.error).toMatch(/cannot be combined/);
+  });
+
+  it("--allow-overwrite takes precedence over --auto-bump and warns", () => {
+    const plan = planPackageStep(pkg, ["--allow-overwrite", "--auto-bump"], () => true);
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    expect(plan.bumpedTo).toBeNull();
+    expect(plan.warning).toMatch(/takes precedence/);
+  });
+
+  it("returns a clear error for a missing --out value", () => {
+    const plan = planPackageStep(pkg, ["--out"], () => false);
+    expect(plan.ok).toBe(false);
+    if (plan.ok) return;
+    expect(plan.error).toMatch(/Missing value after --out/);
+  });
+
+  it("does not mutate the caller's args array", () => {
+    const args = ["--auto-bump", "--out", "x.vsix"];
+    planPackageStep(pkg, args, () => true);
+    expect(args).toEqual(["--auto-bump", "--out", "x.vsix"]);
   });
 });
 
