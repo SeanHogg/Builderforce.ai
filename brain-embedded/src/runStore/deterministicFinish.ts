@@ -222,10 +222,10 @@ async function finishCloseOut(run: BrainRunContext): Promise<void> {
       const out = await run.req.git.outgoing('');
       if (!out.unavailable) {
         const reviewed = await runReviewGate(run, out.diffHash, { repo: '', diff: out.diff ?? '', tool: 'settle-close-out' });
-        if (!reviewed.ok) {
+        if (!reviewed.verdict.ok) {
           pushTrace(run.c, {
             ts: nowIso(), category: 'message', label: 'finish.review_gate',
-            result: `The independent review did not approve (the change landed without this run pushing it): ${reviewed.reason}`,
+            result: `The independent review did not approve (the change landed without this run pushing it): ${reviewed.verdict.reason}`,
           });
         }
       }

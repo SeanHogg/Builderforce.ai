@@ -31,6 +31,8 @@
 import {
   DEFAULT_EVIDENCE_POLICY,
   fileIsUnchecked,
+  MAX_BLOCKING_REVIEW_ROUNDS,
+  applyReviewRoundCap,
   outgoingGate,
   reviewGate,
   shellPublishHint,
@@ -151,7 +153,7 @@ export async function runOutgoingGate(
   repo: string,
   tool = 'git_push',
   args?: unknown,
-): Promise<{ verdict: GateVerdict; diffHash: string | null; gated: boolean }> {
+): Promise<{ verdict: GateVerdict; diffHash: string | null; gated: boolean; advisories?: readonly string[] }> {
   const git = run.req.git;
   if (!git) return { verdict: { ok: true, unavailable: [] }, diffHash: null, gated: false };
   const pullRequest = tool === 'open_pull_request';
@@ -181,11 +183,28 @@ export async function runOutgoingGate(
   // Failing evidence refuses on its own — no reviewer sub-run is spent on a change that cannot ship.
   if (!verdict.ok) return { verdict, diffHash, gated: true };
   const reviewed = await runReviewGate(run, diffHash, { repo, diff: diff ?? '', tool });
-  if (!reviewed.ok) return { verdict: reviewed, diffHash, gated: true };
-  return { verdict, diffHash, gated: true };
+  if (!reviewed.verdict.ok) return { verdict: reviewed.verdict, diffHash, gated: true };
+  // On pass, the publish leaves the machine: this repo's review rounds reset.
+  if (reviewed.reviewed) run.c.shipReviewRounds = run.c.shipReviewRounds.filter((r) => r.repo !== repo);
+  return { verdict, diffHash, gated: true, advisories: reviewed.advisories };
 }
 
 // ── Review gate (OD-1) ──────────────────────────────────────────────────────
+
+/** One recorded review-gate round — the {@link RunCell.shipReviewRounds} entry shape. */
+export interface ReviewRound {
+  repo: string;
+  round: number;
+  verdict: ReviewVerdict;
+}
+
+/** What a review sub-run decided: the ok/refusal gate verdict plus the deduped advisories. */
+export interface ReviewGateResult {
+  verdict: GateVerdict;
+  /** True when THIS call ran a review sub-run (false when a standing approval was reused). */
+  reviewed: boolean;
+  advisories: readonly string[];
+}
 
 /** The latest review-gate-approved verdict, or null while none satisfies the gate. */
 export function approvedReviewFor(run: BrainRunContext, currentDiffHash: string): ReviewVerdict | null {
@@ -195,30 +214,93 @@ export function approvedReviewFor(run: BrainRunContext, currentDiffHash: string)
   return null;
 }
 
+/** The rounds recorded for one repo, oldest first. */
+function roundsFor(run: BrainRunContext, repo: string): ReviewRound[] {
+  return run.c.shipReviewRounds.filter((r) => r.repo === repo);
+}
+
+/** The repo's next review round: 1 + the changes_requested rounds already recorded for it. */
+function nextRoundOf(run: BrainRunContext, repo: string): number {
+  return roundsFor(run, repo).filter((r) => r.verdict.verdict === 'changes_requested').length + 1;
+}
+
+/** The cap's check list: the deduped UNION of ALL the repo's earlier rounds' blocking findings. */
+function priorBlockingOf(repoRounds: readonly ReviewRound[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const r of repoRounds) {
+    for (const f of r.verdict.findings) {
+      const key = f.toLowerCase().replace(/\s+/g, ' ').trim();
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        out.push(f);
+      }
+    }
+  }
+  return out;
+}
+
+/** The advisories deduped across ALL of the repo's recorded rounds (oldest first). */
+function advisoriesFor(repoRounds: readonly ReviewRound[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const r of repoRounds) {
+    for (const a of r.verdict.advisories ?? []) {
+      if (!seen.has(a)) {
+        seen.add(a);
+        out.push(a);
+      }
+    }
+  }
+  return out;
+}
+
 /**
- * Ask the reviewer port for one independent review and gate it with the PURE
- * `reviewGate` (no review / reviewer is an author model / `changes_requested` / the
- * diff moved on ⇒ refuse). An approved verdict is REMEMBERED on the run, so a later
- * `complete` review-record or push can match it to the current diff.
+ * Ask the reviewer port for one independent review round and gate it with the PURE gates:
+ * the review runs with this repo's `round` number and the union of its earlier blocking
+ * findings; the resolution-only {@link applyReviewRoundCap} demotes a finding that matches
+ * no prior blocker from {@link MAX_BLOCKING_REVIEW_ROUNDS} on; then `reviewGate` refuses on
+ * no review / an author model / `changes_requested` / a moved diff. The CAPPED verdict is
+ * recorded EVERY round (per repo), approved verdicts also land on `shipReviews`, and every
+ * round is traced `ship.review_round`.
  */
 export async function runReviewGate(
   run: BrainRunContext,
   currentDiffHash: string,
   change: { repo: string; diff: string; tool: string } = { repo: '', diff: '', tool: 'git_push' },
-): Promise<GateVerdict> {
+): Promise<ReviewGateResult> {
+  const none = (verdict: GateVerdict): ReviewGateResult => ({ verdict, reviewed: false, advisories: [] });
   const reviewer = run.req.reviewer;
-  if (!reviewer) return { ok: true, unavailable: [] };
+  if (!reviewer) return none({ ok: true, unavailable: [] });
   // An approved review of THIS diff already stands — the same bytes need no second sub-run.
-  if (approvedReviewFor(run, currentDiffHash)) return { ok: true, unavailable: [] };
+  if (approvedReviewFor(run, currentDiffHash)) return none({ ok: true, unavailable: [] });
   const authors = authorModelsOf(run);
   const evidence = evidenceSummary(run);
-  const res = await reviewer.review({ repo: change.repo, diff: change.diff, evidence, authorModels: authors });
+  const repoRounds = roundsFor(run, change.repo);
+  const round = nextRoundOf(run, change.repo);
+  const priorBlocking = priorBlockingOf(repoRounds);
+  const res = await reviewer.review({ repo: change.repo, diff: change.diff, evidence, authorModels: authors, priorBlocking, round });
   if ('refused' in res) {
-    return { ok: false, reason: `${change.tool} refused: ${res.refused}` };
+    return none({ ok: false, reason: `${change.tool} refused: ${res.refused}` });
   }
-  const verdict = reviewGate(res, authors, currentDiffHash);
-  if (verdict.ok) run.c.shipReviews.push(res);
-  return verdict;
+  const capped = applyReviewRoundCap(res, priorBlocking, round);
+  const verdict = reviewGate(capped, authors, currentDiffHash);
+  run.c.shipReviewRounds.push({ repo: change.repo, round, verdict: capped });
+  if (verdict.ok) run.c.shipReviews.push(capped);
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: 'message',
+    label: 'ship.review_round',
+    args: {
+      repo: change.repo,
+      round,
+      reviewer: capped.reviewerModel,
+      blocking: capped.findings.length,
+      advisory: (capped.advisories ?? []).length,
+      capped: round >= MAX_BLOCKING_REVIEW_ROUNDS && capped.verdict !== res.verdict,
+    },
+  });
+  return { verdict, reviewed: true, advisories: advisoriesFor(roundsFor(run, change.repo)) };
 }
 
 /** A short evidence summary handed to the reviewer (and the `complete` gate). */
@@ -265,14 +347,16 @@ export async function shipGatePreflight(run: BrainRunContext, name: string, args
   try {
     if (publish) {
       // git_push (base branch) and open_pull_request: the outgoing + review gates hold.
-      const { verdict, diffHash, gated } = await runOutgoingGate(run, repoArgOf(args), name, args);
+      const { verdict, diffHash, gated, advisories } = await runOutgoingGate(run, repoArgOf(args), name, args);
       if (!verdict.ok) return { refusal: { ok: false, error: verdict.reason } };
-      return gated ? { evidence: approvalEvidence(run, verdict.unavailable, diffHash) } : {};
+      return gated ? { evidence: approvalEvidence(run, verdict.unavailable, diffHash, advisories) } : {};
     }
     // builtin_reviews_record complete: refused unless a reviewGate-approved review exists
-    // for the CURRENT diff. The approving reviewer is attached so the record names it.
-    const { diffHash } = await run.req.git.outgoing(repoArgOf(args));
-    const approved = diffHash ? approvedReviewFor(run, diffHash) : null;
+    // for the CURRENT diff. With more than one model served, the review itself runs HERE
+    // over the same runReviewGate the push gate uses — never a bare "push first" refusal.
+    const repo = repoArgOf(args);
+    const out = await run.req.git.outgoing(repo);
+    const approved = out.diffHash ? approvedReviewFor(run, out.diffHash) : null;
     if (!approved) {
       const authors = authorModelsOf(run);
       // No model other than the author is available — the review sub-run can never be
@@ -291,15 +375,11 @@ export async function shipGatePreflight(run: BrainRunContext, name: string, args
           },
         };
       }
-      return {
-        refusal: {
-          ok: false,
-          error:
-            'builtin_reviews_record refused: no reviewGate-approved independent review exists for the current diff. ' +
-            'The push gate runs one review sub-run by a model that did not author the change (PRD 45 OD-1) — ' +
-            'push (or open a pull request) so the host records the review, then record complete again.',
-        },
-      };
+      const reviewed = await runReviewGate(run, out.diffHash, { repo, diff: out.diff ?? '', tool: 'builtin_reviews_record' });
+      if (!reviewed.verdict.ok) return { refusal: { ok: false, error: reviewed.verdict.reason } };
+      (args as Record<string, unknown>).reviewerRef = approvedReviewFor(run, out.diffHash)?.reviewerModel;
+      (args as Record<string, unknown>).evidence = evidenceSummary(run);
+      return {};
     }
     (args as Record<string, unknown>).reviewerRef = approved.reviewerModel;
     (args as Record<string, unknown>).evidence = evidenceSummary(run);
@@ -412,12 +492,14 @@ function anyFailingEvidence(run: BrainRunContext): boolean {
  * what the checks proved, what could not run (never reported as verified), and who reviewed.
  * (A change nothing could be checked on never reaches here: {@link runOutgoingGate} refuses it.)
  */
-function approvalEvidence(run: BrainRunContext, unavailable: readonly string[], diffHash: string | null): string {
+function approvalEvidence(run: BrainRunContext, unavailable: readonly string[], diffHash: string | null, advisories?: readonly string[]): string {
   const checks = unavailable.length
     ? `checks passed · ${unavailable.length} check${unavailable.length === 1 ? '' : 's'} could not run here (not verified)`
     : 'checks passed';
   const reviewer = diffHash ? approvedReviewFor(run, diffHash)?.reviewerModel : undefined;
-  return reviewer ? `${checks} · reviewed by ${reviewer}` : checks;
+  const head = reviewer ? `${checks} · reviewed by ${reviewer}` : checks;
+  if (!advisories?.length) return head;
+  return `${head} · ${advisories.length} advisory note${advisories.length === 1 ? '' : 's'} (never blocking): ${advisories.join('; ')}`;
 }
 
 /** The `repo` argument a git tool carries (empty string when unnamed). */

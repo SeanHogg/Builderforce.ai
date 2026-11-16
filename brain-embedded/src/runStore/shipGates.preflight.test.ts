@@ -25,12 +25,12 @@ const approving = (model = 'reviewer-model'): ReviewerPort & { review: ReturnTyp
 });
 
 const runWith = (req: Partial<BrainRunContext['req']>): BrainRunContext =>
-  ({ req, evidence: createEvidenceLedger(), c: { authorModels: new Set(['author-model']), shipReviews: [] } }) as unknown as BrainRunContext;
+  ({ req, evidence: createEvidenceLedger(), c: { authorModels: new Set(['author-model']), shipReviews: [], shipReviewRounds: [], trace: [], runTraceFrom: 0, listeners: new Set() } }) as unknown as BrainRunContext;
 
 const PUSH = { allowBaseBranch: true };
 
 /** A run cell the completion gate can trace onto (`pushTrace` publishes a snapshot). */
-const cell = (c: Record<string, unknown>) => ({ authorModels: new Set(), shipReviews: [], trace: [], runTraceFrom: 0, listeners: new Set(), ...c });
+const cell = (c: Record<string, unknown>) => ({ authorModels: new Set(), shipReviews: [], shipReviewRounds: [], trace: [], runTraceFrom: 0, listeners: new Set(), ...c });
 
 describe('shipGatePreflight', () => {
   it('is inert without a git port — every call proceeds exactly as before', async () => {

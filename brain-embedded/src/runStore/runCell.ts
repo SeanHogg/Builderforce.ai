@@ -255,11 +255,15 @@ export interface RunCell {
    */
   shipReviews: ReviewVerdict[];
   /**
-   * EVERY review-gate verdict this run has returned, approved and changes_requested,
+   * Per-REPO review-gate rounds this run has returned, approved and changes_requested,
    * newest last — including rounds the gate refused. `shipReviews` stays approved-only.
+   * Keyed by the repo the review ran against (empty string when unnamed), so one repo's
+   * round count never leaks into another's: `runReviewGate` computes the repo's NEXT round
+   * from these, and the cap checks the deduped union of the repo's earlier blocking
+   * findings. A successful gated push of the repo REMOVES its entries — the rounds reset.
    * A port refusal (`{ refused }`) is not a verdict and is not stored here.
    */
-  shipReviewRounds: ReviewVerdict[];
+  shipReviewRounds: Array<{ repo: string; round: number; verdict: ReviewVerdict }>;
   /** Cached immutable snapshot; identity changes only when something changed. */
   snapshot: BrainRunSnapshot;
 }
