@@ -35,6 +35,8 @@
       "@builderforce/sarif": ["../../packages/sarif/src/index.ts"],
       "@builderforce/agent-tools/code-mask": ["../../packages/agent-tools/src/knowledge/codeMask.ts"],
       "@builderforce/agent-tools/sampling": ["../../packages/agent-tools/src/sampling.ts"],
+      "@builderforce/agent-tools/node-git-remote": ["../../packages/agent-tools/src/node-git-remote.ts"],
+      "@builderforce/agent-tools/node-git-history": ["../../packages/agent-tools/src/node-git-history.ts"],
       "@builderforce/secret-redaction": ["../../packages/secret-redaction/src/index.ts"],
       "@builderforce/run-guards": ["../../packages/run-guards/src/index.ts"],
       "@builderforce/run-policy": ["../../packages/run-policy/src/index.ts"],

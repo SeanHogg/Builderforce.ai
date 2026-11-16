@@ -34,6 +34,8 @@
       "@builderforce/agent-tools/node-posix-shell": ["../../../packages/agent-tools/src/node-posix-shell.ts"],
       "@builderforce/agent-tools/node-research": ["../../../packages/agent-tools/src/node-research.ts"],
       "@builderforce/agent-tools/node-symbols": ["../../../packages/agent-tools/src/node-symbols.ts"],
+      "@builderforce/agent-tools/node-git-remote": ["../../../packages/agent-tools/src/node-git-remote.ts"],
+      "@builderforce/agent-tools/node-git-history": ["../../../packages/agent-tools/src/node-git-history.ts"],
       "@builderforce/cost-levers": ["../../../packages/cost-levers/src/index.ts"],
       "@builderforce/kimi-oauth": ["../../../packages/kimi-oauth/src/index.ts"],
       "@builderforce/learned-routing": ["../../../packages/learned-routing/src/index.ts"],
