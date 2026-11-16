@@ -444,10 +444,6 @@ Synapse lives in [builderforce-inference](https://github.com/SeanHogg/builderfor
   - Done when: knowledge work starts only from the Visualizer's Run, every graph build runs in a worker, and live tracking ships deltas, not full rebuilds.
   - *Blocker: the end-state design awaits the user's review.*
 
-- **[vscode] The `clients/vscode` lockfile fails `pnpm install --frozen-lockfile`** (`ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY` on `vitest@4.1.10`; already the case at `cde1f7bbc`).
-  - Dependabot `3a48f26a8` wrote 24 importer blocks for projects outside clients/vscode. Pruning them (281 deleted lines) makes frozen install pass. The change is in the working copy.
-  - *Blocker: the user hasn't yet approved committing it; the automated permission check denied the agent's commit.*
-
 - **The editor can act in a tenant where the person has no connections.** One VS Code session ran in tenant #1 as `contributor`, while its Kimi, Anthropic, MiniMax, Moonshot and xAI accounts and chats #195/#198 belonged to another workspace. *Blocker: which tenant the key is bound to and why it was selected needs the live membership and key rows.*
 - **Direct calls for xAI, MiniMax, Moonshot and Anthropic accounts are not built.** The half-built attempt in a6937d561 was removed: only Kimi has a server credential source (`localCredential.ts`). Add a source per provider, then its runtime entry, to let these accounts run from the person's machine.
 - **Shipped VSIX webview still calls `GET /api/boards/:boardId/swimlanes/:laneId/agents`.** The committed bundle `clients/vscode/media/webview/index.js` predates the board's move to `/lane-agents`. The route is kept as a cached compatibility shim in `boardRoutes.ts`; delete it once a rebuilt VSIX ships. *Blocker: VSIX rebuild and release is owned by the VS Code session.*

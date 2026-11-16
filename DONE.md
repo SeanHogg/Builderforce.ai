@@ -1,3 +1,10 @@
+## ✅ RESOLVED 2026-11-15: the `clients/vscode` lockfile passes `pnpm install --frozen-lockfile`
+
+- `clients/vscode/pnpm-lock.yaml` previously failed `pnpm install --frozen-lockfile` with `ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY` on `vitest@4.1.10` (already the case at `cde1f7bbc`).
+- That lockfile no longer exists — `clients/vscode` is covered by the workspace root `Builderforce.ai/pnpm-lock.yaml`.
+- Verified empirically: `pnpm install --frozen-lockfile` now passes inside `clients/vscode`.
+- The stale ROADMAP register entry has been removed.
+
 ## ✅ RESOLVED 2026-11-15: compiler outputs no longer shadow their sources
 
 - Commit `28af68822` added 2,938 `.js`/`.js.map` files beside their `.ts` sources, all from one run of the clients/vscode root project with emit forced on (2026-11-14 07:38; every tsconfig involved is already `noEmit`, so the run used an explicit override). Vite and vitest resolve `.js` before `.ts`, so these stale copies could be loaded instead of the real code.
