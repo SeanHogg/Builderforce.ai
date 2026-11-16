@@ -1,17 +1,19 @@
 import { getTranslations } from 'next-intl/server';
-import { ProjectHealthPanel } from '@/components/project360/ProjectHealthPanel';
-import { ProjectSpendWidget } from '@/components/project360/ProjectSpendWidget';
-import { ProjectRunDeltas } from '@/components/runDelta/ProjectRunDeltas';
+import { ProjectAnalyticsPanel } from '@/components/project360/ProjectAnalyticsPanel';
 
 export const runtime = 'edge';
 
 /**
- * Project 360 — the web surface for the whole-picture project health view. A child
- * route of `/projects/[id]` (the bare `/projects/[id]` still redirects into the IDE;
- * this deeper segment renders on its own).
+ * Project 360 / Analytics — the single consolidated Analytics surface
+ * (PRD: consolidate Analytics with Diagnostics; the page stays "Analytics",
+ * the diagnostics capabilities are retained on the same page).
  *
- * A server component: the id comes from route params, so the page itself has no
- * reason to run in the browser; the two panels below are the client leaves.
+ * The page itself is a thin server shell: the id comes from route params, so
+ * there is no reason to run it in the browser. The whole composition — health
+ * pulse + insights, the five dimension bars, the diagnostics scoreboard, run
+ * deltas, spend, and the full interactive health wheel — lives in the single
+ * {@link ProjectAnalyticsPanel} client component, so every Analytics signal
+ * renders from one place and the leaf components can't drift between surfaces.
  */
 export default async function Project360Page({ params }: { params: Promise<{ id: string }> }) {
   const { id: rawId } = await params;
@@ -21,21 +23,8 @@ export default async function Project360Page({ params }: { params: Promise<{ id:
     return <div style={{ padding: 24, color: 'var(--text-muted)' }}>{t('invalidProject')}</div>;
   }
   return (
-    <div style={{ minHeight: '100dvh', background: 'var(--bg-base)', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ flex: '1 1 auto', minHeight: 0 }}>
-        <ProjectHealthPanel projectId={id} />
-      </div>
-      {/* What the project's agent runs changed, over time (PRD 41 §C11.3): the trend and
-          the run list sit beside health because they ARE health, measured per run. */}
-      <div style={{ padding: '16px 16px 0', flex: '0 0 auto' }}>
-        <ProjectRunDeltas projectId={id} />
-      </div>
-      {/* Cost belongs on the whole-picture view: "is this project healthy" and "what
-          is it costing" are the same question asked twice, and the number was
-          previously only reachable from an account-wide FinOps lens. */}
-      <div style={{ padding: 16, flex: '0 0 auto' }}>
-        <ProjectSpendWidget projectId={id} />
-      </div>
+    <div style={{ minHeight: '100dvh', background: 'var(--bg-base)' }}>
+      <ProjectAnalyticsPanel projectId={id} />
     </div>
   );
 }
