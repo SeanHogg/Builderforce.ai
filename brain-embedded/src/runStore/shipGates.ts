@@ -184,8 +184,9 @@ export async function runOutgoingGate(
   if (!verdict.ok) return { verdict, diffHash, gated: true };
   const reviewed = await runReviewGate(run, diffHash, { repo, diff: diff ?? '', tool });
   if (!reviewed.verdict.ok) return { verdict: reviewed.verdict, diffHash, gated: true };
-  // On pass, the publish leaves the machine: this repo's review rounds reset.
-  if (reviewed.reviewed) run.c.shipReviewRounds = run.c.shipReviewRounds.filter((r) => r.repo !== repo);
+  // The actual publish (push/PR) may still fail after this gate passes — this repo's review
+  // rounds reset only when the publish SUCCEEDS, in `shipGateAdvisory` (the one place that
+  // sees the real publish result), never here at gate-pass time.
   return { verdict, diffHash, gated: true, advisories: reviewed.advisories };
 }
 
@@ -203,6 +204,8 @@ export interface ReviewGateResult {
   verdict: GateVerdict;
   /** True when THIS call ran a review sub-run (false when a standing approval was reused). */
   reviewed: boolean;
+  /** The recorded (cap-applied) verdict of the sub-run — null when no sub-run ran. */
+  review: ReviewVerdict | null;
   advisories: readonly string[];
 }
 
@@ -219,9 +222,14 @@ function roundsFor(run: BrainRunContext, repo: string): ReviewRound[] {
   return run.c.shipReviewRounds.filter((r) => r.repo === repo);
 }
 
-/** The repo's next review round: 1 + the changes_requested rounds already recorded for it. */
+/**
+ * The repo's next review round: 1 + EVERY round already recorded for it — approved and
+ * changes_requested alike. Counting only changes_requested lets the counter stall (a
+ * cap-demoted approval is not changes_requested) and regress, so the resolution-only cap
+ * could be dodged; every recorded round advances the sequence.
+ */
 function nextRoundOf(run: BrainRunContext, repo: string): number {
-  return roundsFor(run, repo).filter((r) => r.verdict.verdict === 'changes_requested').length + 1;
+  return roundsFor(run, repo).length + 1;
 }
 
 /** The cap's check list: the deduped UNION of ALL the repo's earlier rounds' blocking findings. */
@@ -269,7 +277,7 @@ export async function runReviewGate(
   currentDiffHash: string,
   change: { repo: string; diff: string; tool: string } = { repo: '', diff: '', tool: 'git_push' },
 ): Promise<ReviewGateResult> {
-  const none = (verdict: GateVerdict): ReviewGateResult => ({ verdict, reviewed: false, advisories: [] });
+  const none = (verdict: GateVerdict): ReviewGateResult => ({ verdict, reviewed: false, review: null, advisories: [] });
   const reviewer = run.req.reviewer;
   if (!reviewer) return none({ ok: true, unavailable: [] });
   // An approved review of THIS diff already stands — the same bytes need no second sub-run.
@@ -285,8 +293,13 @@ export async function runReviewGate(
   }
   const capped = applyReviewRoundCap(res, priorBlocking, round);
   const verdict = reviewGate(capped, authors, currentDiffHash);
+  // A cap that DEMOTED the verdict approved findings the reviewer still raised: it is not a
+  // genuine approval and is never written to `shipReviews` — `approvedReviewFor` must not
+  // match a later call to it (a `complete` review-record would then name a reviewer who
+  // actually still flagged the diff). The push passes on THIS call's verdict alone.
+  const capApproved = capped.verdict === 'approved' && res.verdict !== 'approved';
   run.c.shipReviewRounds.push({ repo: change.repo, round, verdict: capped });
-  if (verdict.ok) run.c.shipReviews.push(capped);
+  if (verdict.ok && !capApproved) run.c.shipReviews.push(capped);
   pushTrace(run.c, {
     ts: nowIso(),
     category: 'message',
@@ -300,7 +313,7 @@ export async function runReviewGate(
       capped: round >= MAX_BLOCKING_REVIEW_ROUNDS && capped.verdict !== res.verdict,
     },
   });
-  return { verdict, reviewed: true, advisories: advisoriesFor(roundsFor(run, change.repo)) };
+  return { verdict, reviewed: true, review: capped, advisories: advisoriesFor(roundsFor(run, change.repo)) };
 }
 
 /** A short evidence summary handed to the reviewer (and the `complete` gate). */
@@ -375,9 +388,15 @@ export async function shipGatePreflight(run: BrainRunContext, name: string, args
           },
         };
       }
+      // Nothing verifiable to review (uncomputable diff, or empty diff on an up-to-date
+      // base branch): there is no review sub-run to gate — record nothing, proceed.
+      if (out.unavailable || !out.diffHash || !(out.diff ?? '').trim()) return {};
       const reviewed = await runReviewGate(run, out.diffHash, { repo, diff: out.diff ?? '', tool: 'builtin_reviews_record' });
       if (!reviewed.verdict.ok) return { refusal: { ok: false, error: reviewed.verdict.reason } };
-      (args as Record<string, unknown>).reviewerRef = approvedReviewFor(run, out.diffHash)?.reviewerModel;
+      // A genuine approval only: a cap-demoted approval is never in `shipReviews`
+      // ({@link runReviewGate}), so a recorded `reviewerRef` always names a reviewer who
+      // actually approved these bytes.
+      (args as Record<string, unknown>).reviewerRef = reviewed.review?.reviewerModel;
       (args as Record<string, unknown>).evidence = evidenceSummary(run);
       return {};
     }
@@ -563,6 +582,17 @@ export async function shipGateAdvisory(run: BrainRunContext, name: string, args:
     const command = (args as { command?: unknown } | null)?.command;
     if (typeof command === 'string') return shellPublishHint(command);
     return null;
+  }
+  // A publish that actually SUCCEEDED (this is the only place that sees the real publish
+  // result): the repo's review rounds reset — they counted toward THIS change only. Runs
+  // whether the approval was fresh or reused, so a prior cycle's rounds never leak into the
+  // next change for the same repo. On a failed publish the rounds stay (finding #3: a
+  // gate-pass must not wipe the round history when the push never left the machine).
+  const publishSucceeded =
+    (name === 'git_push' || name === 'open_pull_request') && !isFailed(out);
+  if (publishSucceeded) {
+    const repo = repoArgOf(args);
+    run.c.shipReviewRounds = run.c.shipReviewRounds.filter((r) => r.repo !== repo);
   }
   // git_commit: NO refusal — run the full tier EARLY on the committed paths so the push
   // is fast, and return failures as an advisory. Commits are local and reversible.
