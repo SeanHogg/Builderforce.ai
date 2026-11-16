@@ -245,10 +245,13 @@ export function ChatHistoryList({ loading, total, children, filter, labels: over
   const labels = { ...DEFAULT_CHAT_HISTORY_LABELS, ...overrides };
   const hasRows = Array.isArray(children) ? children.length > 0 : children != null && children !== false;
   // The status line is a live SIBLING of the rows, not a child of role="list" (a list
-  // may only own listitems).
-  const status = loading ? labels.loading : !hasRows ? (total === 0 ? labels.empty : labels.noMatch) : null;
+  // may only own listitems). A refresh that already has rows must not insert that
+  // line: it sits above the rows and pushes every chat down. `aria-busy` is enough
+  // to say the region is refreshing — an extra node, even clipped, lives in this
+  // scrolling box and can change its scroll height.
+  const status = hasRows ? null : loading ? labels.loading : total === 0 ? labels.empty : labels.noMatch;
   return (
-    <div id={id} className={['bf-history', className].filter(Boolean).join(' ')}>
+    <div id={id} className={['bf-history', className].filter(Boolean).join(' ')} aria-busy={loading || undefined}>
       {filter != null && <div className="bf-history__filter">{filter}</div>}
       {status != null && <div className="bf-history__status" role="status">{status}</div>}
       {hasRows && <div role="list" className="bf-history__rows">{children}</div>}

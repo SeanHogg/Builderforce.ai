@@ -8,7 +8,7 @@
  * broken version too, so each case here asserts on the WRITES the adapter received.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { BrainProvider, type BrainPersistenceAdapter } from './config';
 import { useBrainChats } from './useBrainChats';
@@ -121,5 +121,32 @@ describe('useBrainChats — Archive (#5299)', () => {
 
     expect(result.current.error).toBe('offline');
     expect(result.current.chats.map((c) => c.id)).toEqual([1]);
+  });
+});
+
+describe('useBrainChats — reload does not flash loading over rows', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('keeps loading false on a refresh that already has chats', async () => {
+    let release: (rows: BrainChat[]) => void = () => {};
+    const pending = new Promise<BrainChat[]>((resolve) => { release = resolve; });
+    const { result, listChats } = harness([chat(1)]);
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.chats.map((c) => c.id)).toEqual([1]);
+
+    listChats.mockImplementation(() => pending);
+    let refreshing: Promise<void> = Promise.resolve();
+    act(() => { refreshing = result.current.reload(); });
+    // The status line hosts render from this flag sits above the rows. Flipping
+    // it true inserts that line and shifts the list, so a refresh must not.
+    expect(result.current.loading).toBe(false);
+    expect(result.current.chats.map((c) => c.id)).toEqual([1]);
+
+    await act(async () => {
+      release([chat(1), chat(2)]);
+      await refreshing;
+    });
+    expect(result.current.loading).toBe(false);
+    expect(result.current.chats.map((c) => c.id)).toEqual([1, 2]);
   });
 });

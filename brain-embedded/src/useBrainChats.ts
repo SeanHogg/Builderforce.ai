@@ -44,6 +44,11 @@ export interface UseBrainChats {
    * Empty (never loading) on a persistence with no {@link BrainPersistenceAdapter.listArchivedChats}.
    */
   archivedChats: BrainChat[];
+  /**
+   * True only while a load has nothing on screen yet. A refresh that already has
+   * live or archived chats keeps this false — hosts render it as a status line
+   * above the rows, and flipping it inserts that line and shifts the list.
+   */
   loading: boolean;
   error: string;
   activeChatId: number | null;
@@ -119,6 +124,8 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
   // closure (and without re-creating the callback on every list change).
   const chatsRef = useRef<BrainChat[]>(chats);
   chatsRef.current = chats;
+  const archivedChatsRef = useRef<BrainChat[]>(archivedChats);
+  archivedChatsRef.current = archivedChats;
   // Chats we've already auto-titled this session — a single-flight guard so the
   // first-turn hook firing twice (e.g. StrictMode / rapid re-render) can't double-rename.
   const autoTitledRef = useRef<Set<number>>(new Set());
@@ -154,7 +161,12 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
   }, [pinnedProjectId, filterProjectId]);
 
   const reload = useCallback(async () => {
-    setLoading(true);
+    // Keep rows on screen during a refresh. Hosts render `loading` as a status
+    // line above the chats; flipping it true inserts that line and shifts the
+    // whole list. Only a load with nothing shown yet (first load, or a retry
+    // after an empty failure) is blocking.
+    const blocking = chatsRef.current.length === 0 && archivedChatsRef.current.length === 0;
+    if (blocking) setLoading(true);
     setError('');
     try {
       const params =
