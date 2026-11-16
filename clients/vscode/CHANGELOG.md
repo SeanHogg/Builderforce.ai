@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.186] — The @/# pickers no longer starve when a late policy frame arrives
+
+- **Fixed: the composer's `@` (mention) and `#` (ticket) typeaheads both read the platform policy non-reactively, so a `platform.policy` frame arriving after the webview mounted left both pickers frozen on the default-denied (offline) source — and both `@` and `#` stopped working at once while signed in.** The picker hooks now read the offline decision through the reactive `useCapability('connected')` hook, which subscribes to `subscribeWebviewPolicy` and re-renders the roster on the correct source (server vs local fallback) whenever a late frame lands. The local candidates (live sub-agents, persona agents, the device's own tickets) are always listed — a union, never a swap — so a late or denied frame can never starve the pickers. A new mounted test (`webview/src/chat/pickerPolicyFlip.test.tsx`) drives a real late `platform.policy` frame into the actual `useTicketRail` hook and asserts the roster re-derives to the union.
+
 ## [2026.10.185] — The ▶ on a chat under 100% actually continues the work
 
 - **Fixed: clicking the Resume (▶) on a chat under 100% with no journaled interrupted run only opened the chat — nothing was sent, no run started.** The open-only path went through `onOpenChat` alone, skipping the composer's send. Now ▶ always continues the work through the composer: a journaled run sends its full journaled continuation, and an open-only chat sends a continuation scoped to its linked tickets ("Continue this chat's unfinished work. Linked tickets: N done, M open (P% complete). Continue only this chat's task…") — so the run picks up this chat's work and never another session's.

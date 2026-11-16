@@ -44,7 +44,7 @@ export default defineConfig({
   test: {
     // The harness drives the run loop headlessly — no DOM, no extension host.
     environment: 'node',
-    include: ['harness/**/*.test.ts', 'src/**/*.test.ts', 'webview/src/**/*.test.ts'],
+    include: ['harness/**/*.test.ts', 'src/**/*.test.ts', 'webview/src/**/*.test.ts', 'webview/src/**/*.test.tsx'],
     passWithNoTests: true,
     // The default worker count is the runner's CPU count (4 on the release job's
     // `ubuntu-latest`). Each worker independently re-imports this suite's aliased
