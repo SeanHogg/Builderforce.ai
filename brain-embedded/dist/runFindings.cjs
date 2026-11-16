@@ -1290,13 +1290,18 @@ function markdownOutline(path, content) {
 var SYMBOL_TOOLS = [findSymbolTool, fileOutlineTool];
 
 // ../packages/agent-tools/src/fileRead.ts
-var OUTLINE_FIRST_MIN_CHARS = 16e3;
-var OUTLINE_FIRST_MIN_LINES = 300;
+var WHOLE_READ_MAX_CHARS = 64e3;
+var WIDEN_WINDOW_MIN_LINES = 150;
 var OUTLINE_FIRST_PREFIX_LINES = 40;
 function outlineFirstApplies(content, leverOn) {
   if (leverOn !== true) return false;
-  const lines = content.split("\n").length;
-  return content.length >= OUTLINE_FIRST_MIN_CHARS || lines >= OUTLINE_FIRST_MIN_LINES;
+  return content.length > WHOLE_READ_MAX_CHARS;
+}
+function widensToWholeFile(content, opts, sourceTruncated) {
+  if (sourceTruncated) return false;
+  if (opts.offset === void 0 && opts.limit === void 0) return false;
+  if (content.length > WHOLE_READ_MAX_CHARS) return false;
+  return content.split("\n").length >= WIDEN_WINDOW_MIN_LINES;
 }
 var READ_FILE_MAX_PATHS = 8;
 var MARKDOWN_OUTLINE_MIN_CHARS = 16e3;
@@ -1334,7 +1339,19 @@ async function readOneFile(path, opts, caps, leverOn) {
       content: head.content,
       truncated: true,
       offset: 1,
-      note: (symbols.length > 0 ? `This file is larger than one read: \`outline\` lists its ${symbols.length} definitions with line numbers. ` : "This file is larger than one read. ") + `The first ${OUTLINE_FIRST_PREFIX_LINES} lines follow. To read a specific span, call read_file again with \`offset\` (1-based line) and a small \`limit\`.`
+      note: (symbols.length > 0 ? `This file is larger than one read: \`outline\` lists its ${symbols.length} definitions with line numbers. ` : "This file is larger than one read. ") + `The first ${OUTLINE_FIRST_PREFIX_LINES} lines follow. To read a span, call read_file again with \`offset\` (the outline's line) and no \`limit\` \u2014 each read returns as much as fits.`
+    };
+  }
+  if (widensToWholeFile(content, opts, r.truncated === true)) {
+    const whole = windowFileContent(content, { offset: 1 });
+    return {
+      ok: true,
+      path: r.path ?? path,
+      content: whole.content,
+      truncated: whole.truncated,
+      totalLines: whole.totalLines,
+      offset: 1,
+      note: `Returned the whole file (${whole.totalLines} lines) \u2014 it fits in one read, so later windows of it are already covered. Do not read it again unless you change it.`
     };
   }
   const win = windowFileContent(content, { offset: opts.offset, limit: opts.limit });
@@ -1351,7 +1368,7 @@ async function readOneFile(path, opts, caps, leverOn) {
     const outline = markdownOutline(data.path ?? path, content);
     if (outline.length > 0) {
       data.outline = outline;
-      const pointer = "This document is larger than one read: `outline` lists its headings with their line numbers \u2014 page by heading line with offset (and a small limit) instead of reading it window by window.";
+      const pointer = "This document is larger than one read: `outline` lists its headings with their line numbers \u2014 page by heading line with offset instead of reading it window by window.";
       note = note ? `${note} ${pointer}` : pointer;
     }
   }

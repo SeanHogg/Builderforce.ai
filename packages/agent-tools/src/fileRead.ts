@@ -14,19 +14,38 @@ import { fileWindowNote, windowFileContent } from "./fileWindow.js";
 import { extractSymbols } from "./symbols.js";
 import { markdownOutline } from "./symbol-tools.js";
 
-// B2 thresholds (PRD 45 §4.7): a first whole-file read of a file at or over EITHER size
-// answers in outline. Kept beside the Markdown-outline precedent (16K chars) so a long
-// generated file with short lines still answers in outline. The DECISION lives in
-// `@builderforce/tool-output-policy` (`shouldOutlineFirst`); the host passes the lever
-// answer on `ToolContext.outlineFirstReads` and this applies the shape.
-const OUTLINE_FIRST_MIN_CHARS = 16_000;
-const OUTLINE_FIRST_MIN_LINES = 300;
+/**
+ * The largest file `read_file` hands back WHOLE, whatever window was asked for — the same
+ * figure as `@builderforce/tool-output-policy` `READ_FILE_MAX_CHARS` (the most one read
+ * result may hold on a large-window model). A file at or under it costs one read.
+ *
+ * Chat #133542: B2 used to answer any file over 300 lines / 16K chars with an outline and
+ * 40 lines, then told the model to "call read_file again with offset and a small limit" —
+ * so a 520-line file was read in five slices, and every slice counted as new ground. Now
+ * only a file too large for one read is outlined, and a small window of a file that fits
+ * returns the whole file, so later windows of it are already covered.
+ */
+export const WHOLE_READ_MAX_CHARS = 64_000;
+
+/** Lines a file needs before a window of it is widened to the whole file: a short file's
+ *  explicit window is cheap and precise, so it is served as asked. */
+export const WIDEN_WINDOW_MIN_LINES = 150;
+
 const OUTLINE_FIRST_PREFIX_LINES = 40;
 
+/** B2 outline-first: only for a file too large to return whole (the lever rides on
+ *  `ToolContext.outlineFirstReads`; the DECISION to pull it lives in tool-output-policy). */
 function outlineFirstApplies(content: string, leverOn: boolean | undefined): boolean {
   if (leverOn !== true) return false;
-  const lines = content.split("\n").length;
-  return content.length >= OUTLINE_FIRST_MIN_CHARS || lines >= OUTLINE_FIRST_MIN_LINES;
+  return content.length > WHOLE_READ_MAX_CHARS;
+}
+
+/** A window request of a file that fits whole in one read: serve the whole file instead. */
+function widensToWholeFile(content: string, opts: FileReadOptions, sourceTruncated: boolean): boolean {
+  if (sourceTruncated) return false;
+  if (opts.offset === undefined && opts.limit === undefined) return false;
+  if (content.length > WHOLE_READ_MAX_CHARS) return false;
+  return content.split("\n").length >= WIDEN_WINDOW_MIN_LINES;
 }
 
 /** The most files one `read_file` call reads with `paths[]`. */
@@ -106,7 +125,20 @@ export async function readOneFile(
         (symbols.length > 0
           ? `This file is larger than one read: \`outline\` lists its ${symbols.length} definitions with line numbers. `
           : "This file is larger than one read. ") +
-        `The first ${OUTLINE_FIRST_PREFIX_LINES} lines follow. To read a specific span, call read_file again with \`offset\` (1-based line) and a small \`limit\`.`,
+        `The first ${OUTLINE_FIRST_PREFIX_LINES} lines follow. To read a span, call read_file again with \`offset\` (the outline's line) and no \`limit\` — each read returns as much as fits.`,
+    } as Record<string, unknown>;
+  }
+
+  if (widensToWholeFile(content, opts, r.truncated === true)) {
+    const whole = windowFileContent(content, { offset: 1 });
+    return {
+      ok: true,
+      path: r.path ?? path,
+      content: whole.content,
+      truncated: whole.truncated,
+      totalLines: whole.totalLines,
+      offset: 1,
+      note: `Returned the whole file (${whole.totalLines} lines) — it fits in one read, so later windows of it are already covered. Do not read it again unless you change it.`,
     } as Record<string, unknown>;
   }
 
@@ -126,7 +158,7 @@ export async function readOneFile(
     const outline = markdownOutline(data.path ?? path, content);
     if (outline.length > 0) {
       data.outline = outline;
-      const pointer = "This document is larger than one read: `outline` lists its headings with their line numbers — page by heading line with offset (and a small limit) instead of reading it window by window.";
+      const pointer = "This document is larger than one read: `outline` lists its headings with their line numbers — page by heading line with offset instead of reading it window by window.";
       note = note ? `${note} ${pointer}` : pointer;
     }
   }

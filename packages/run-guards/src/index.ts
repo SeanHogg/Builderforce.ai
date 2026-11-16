@@ -66,6 +66,8 @@ export {
 export { progressTraceStep, type ProgressAdvisorySource, type ProgressTraceStep, type ProgressTripOverride } from "./progressTrace.js";
 // "Now I have everything I need", then another read (PRD 35 WS8p).
 export { UNKEPT_READY_AT, UnkeptClaimTracker, claimsReady, type UnkeptClaimState } from "./readinessClaim.js";
+// Turn after turn of reads (new files or not) and no change: `read_only_streak`.
+export { READ_ONLY_STREAK_TURNS, READ_ONLY_STREAK_CALLS, ReadOnlyStreak, type ReadOnlyStreakState } from "./readOnlyStreak.js";
 // B4: the one-off batching nudge after SERIAL_SINGLE_CALLS_AT single-readonly turns
 // (PRD 45 §4.7) — advisory only, never a trip.
 export {
@@ -117,6 +119,9 @@ export {
 export {
   DEFAULT_EVIDENCE_POLICY,
   fileIsUnchecked,
+  MAX_BLOCKING_REVIEW_ROUNDS,
+  applyReviewRoundCap,
+  findingMatchesPrior,
   outgoingGate,
   reviewGate,
   shellPublishHint,

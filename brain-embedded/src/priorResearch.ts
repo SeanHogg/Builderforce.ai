@@ -36,6 +36,7 @@ const HEADER = [
   '## Already done earlier in this chat',
   'Earlier turns of this conversation already ran the tool calls below (newest first, each result trimmed). Their results are NOT in the transcript above — this list is the record of them.',
   'Build on it. Do not repeat a call listed here to rediscover what it already answered; re-run one only when you need a part of its result that is not shown, or when the target may have changed since (for example, a file this chat has edited).',
+  'Files listed here were already read in this chat; re-read one only if you changed it or need lines not shown.',
 ].join('\n');
 
 function clip(text: string, max: number): string {

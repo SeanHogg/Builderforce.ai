@@ -33,6 +33,13 @@ describe('priorResearchDigest', () => {
     expect(digest).toContain('pointerEvents');
   });
 
+  it('tells a continued run the files it lists were already read and need no re-read unless changed (chat #133542)', () => {
+    const digest = priorResearchDigest([
+      step('tool', 'read_file', { path: 'brain-embedded/src/runStore/shipGates.ts' }, { ok: true, content: 'export {}' }),
+    ])!;
+    expect(digest).toContain('Files listed here were already read in this chat; re-read one only if you changed it or need lines not shown.');
+  });
+
   it('lists a repeated call once, with its newest result', () => {
     const digest = priorResearchDigest([
       step('tool', 'search_code', { query: 'bubble', path: 'frontend/src' }, 'OLD RESULT'),

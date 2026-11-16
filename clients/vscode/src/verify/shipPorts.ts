@@ -53,9 +53,30 @@ export interface ShipPortsDeps {
 export function parseReviewReply(text: string): ReviewSubRunResult | { failed: string } {
   const json = /\{[\s\S]*\}/.exec(text)?.[0];
   try {
-    const parsed = JSON.parse(json ?? "") as { verdict?: unknown; findings?: unknown };
-    const findings = Array.isArray(parsed.findings) ? parsed.findings.filter((f): f is string => typeof f === "string") : [];
-    if (parsed.verdict === "approved" || parsed.verdict === "changes_requested") return { verdict: parsed.verdict, findings };
+    const parsed = JSON.parse(json ?? "") as {
+      verdict?: unknown;
+      findings?: unknown;
+      blocking?: unknown;
+      advisory?: unknown;
+      advisories?: unknown;
+    };
+    const strings = (v: unknown): string[] =>
+      Array.isArray(v) ? v.filter((f): f is string => typeof f === "string") : [];
+    // The new shape names its lists. A legacy `{verdict, findings}` reply maps findings to
+    // blocking. Either way the verdict is computed from the blocking list — a model that
+    // says "approved" while listing a defect, or "changes_requested" with nothing blocking,
+    // does not get to decide.
+    const hasNew = Array.isArray(parsed.blocking) || Array.isArray(parsed.advisory) || Array.isArray(parsed.advisories);
+    const hasLegacy = parsed.verdict === "approved" || parsed.verdict === "changes_requested" || Array.isArray(parsed.findings);
+    if (hasNew || hasLegacy) {
+      const blocking = hasNew ? strings(parsed.blocking) : strings(parsed.findings);
+      const advisories = [...strings(parsed.advisory), ...strings(parsed.advisories)];
+      return {
+        verdict: blocking.length > 0 ? "changes_requested" : "approved",
+        findings: blocking,
+        ...(advisories.length ? { advisories } : {}),
+      };
+    }
   } catch {
     /* not JSON — falls through to the reviewer-failure note below */
   }

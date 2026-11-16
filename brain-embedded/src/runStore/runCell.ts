@@ -254,6 +254,12 @@ export interface RunCell {
    * `complete` review-record and the push gate match one to the current diffHash.
    */
   shipReviews: ReviewVerdict[];
+  /**
+   * EVERY review-gate verdict this run has returned, approved and changes_requested,
+   * newest last — including rounds the gate refused. `shipReviews` stays approved-only.
+   * A port refusal (`{ refused }`) is not a verdict and is not stored here.
+   */
+  shipReviewRounds: ReviewVerdict[];
   /** Cached immutable snapshot; identity changes only when something changed. */
   snapshot: BrainRunSnapshot;
 }
@@ -323,6 +329,7 @@ export function makeCell(): RunCell {
     publishHold: null,
     authorModels: new Set<string>(),
     shipReviews: [],
+    shipReviewRounds: [],
     finishClosedOut: false,
     snapshot: EMPTY_SNAPSHOT,
   };

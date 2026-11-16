@@ -8,7 +8,7 @@
 import { ASK_USER_TOOL, ASK_USER_TOOL_SPEC } from '@builderforce/agent-loop';
 import { initialRunPolicy } from '@builderforce/run-policy';
 import { deviceLeverOn } from './deviceLevers';
-import { toolNamesMentionedIn, memoryReplayable } from '@builderforce/agent-stall';
+import { asksForChange, toolNamesMentionedIn, memoryReplayable } from '@builderforce/agent-stall';
 import type { CompletionMetadata } from '../streamChatCompletion';
 import { HAND_OFF_TOOL_SPEC } from '../planHandoff';
 import { canChangeCodeHere, canShipHere, canReviewInPreview, localToolsIn, memoryToolsIn, studioToolsIn } from '../localWorkspaceTools';
@@ -371,7 +371,7 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
     // The A3 progress detector — a run that says it is ready and keeps reading, circles,
     // undoes its own edit or repeats a failure is steered, then forced, then asked
     // about (`progressGuard.ts`, PRD 35 WS8p).
-    progress: new RunProgressGuard(),
+    progress: new RunProgressGuard(undefined, asksForChange(userRequest)),
     // What the run did and read, restated in front of every turn (its `brief()`) —
     // the host's recorder when it keeps one, so the ledger and its code map agree.
     knowledge: recorderFor(userRequest, req.knowledge),

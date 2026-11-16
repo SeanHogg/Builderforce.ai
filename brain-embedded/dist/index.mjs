@@ -289,6 +289,7 @@ import {
   parseShellFileRead,
   parseStepMessage,
   parseSyncId,
+  perFileResults,
   planInRunVerify,
   planScopeClash,
   policyGateCallKey,
@@ -319,6 +320,7 @@ import {
   shippedToBaseBranch,
   shortenTarget,
   shouldRecoverStalledTurn,
+  singleReadsOf,
   sliceReadFile,
   splitForParallel,
   splitLayoutLine,
@@ -357,7 +359,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-XVJ7OMDV.mjs";
+} from "./chunk-4UBWKU3M.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useEffect, useMemo } from "react";
@@ -14901,6 +14903,7 @@ function makeCell() {
     publishHold: null,
     authorModels: /* @__PURE__ */ new Set(),
     shipReviews: [],
+    shipReviewRounds: [],
     finishClosedOut: false,
     snapshot: EMPTY_SNAPSHOT
   };
@@ -18201,8 +18204,18 @@ var RunProgressGuard = class {
   steer;
   /** The B1 / B4 advisory the last turn produced, waiting to be traced. */
   advisory = null;
-  constructor(on = deviceLeverOn("a3_progress_detector")) {
-    this.detector = on ? new ProgressDetector({}, { isReadOnly: isReadOnlyCall, isUnscopedMutation, isPlatformProgress: isMutatingPlatformTool }) : null;
+  /**
+   * @param on the A3 lever.
+   * @param expectsChange the run was asked for a CHANGE (`asksForChange` over its request).
+   *   Only then does a read-only streak trip — a review reads and answers.
+   */
+  constructor(on = deviceLeverOn("a3_progress_detector"), expectsChange = false) {
+    this.detector = on ? new ProgressDetector({}, {
+      isReadOnly: isReadOnlyCall,
+      isUnscopedMutation,
+      isPlatformProgress: isMutatingPlatformTool,
+      expectsChange: () => expectsChange
+    }) : null;
   }
   /** What the turn said before its calls. */
   noteTurnText(text2) {
@@ -19159,7 +19172,7 @@ ${c.priorResearch}`;
     // The A3 progress detector — a run that says it is ready and keeps reading, circles,
     // undoes its own edit or repeats a failure is steered, then forced, then asked
     // about (`progressGuard.ts`, PRD 35 WS8p).
-    progress: new RunProgressGuard(),
+    progress: new RunProgressGuard(void 0, asksForChange(userRequest)),
     // What the run did and read, restated in front of every turn (its `brief()`) —
     // the host's recorder when it keeps one, so the ledger and its code map agree.
     knowledge: recorderFor(userRequest, req.knowledge),
@@ -19978,6 +19991,155 @@ function computeProgressLine(trace4) {
   return needs.length === 0 ? base : `${base} \xB7 push needs: ${needs.join("; ")}`;
 }
 
+// src/run/readLedgerSection.ts
+var READ_LEDGER_MAX_FILES = 40;
+var READ_LEDGER_HEADER = "Files already in your context this run \u2014 a file marked unchanged is still above you: do not read it again, act on it.";
+var STATE_TEXT = {
+  unchanged: "unchanged",
+  changed: "changed since (by this run)",
+  unknown: "may have changed (a shell command ran since)"
+};
+function normalizePath2(value) {
+  return value.trim().split("\\").join("/").replace(/^\.\/+/, "").replace(/\/+$/, "");
+}
+function objectOf(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+function positiveInt(value) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : null;
+}
+function changedPaths2(args) {
+  const a = objectOf(args);
+  if (!a) return [];
+  const out = [];
+  for (const key of ["path", "file", "filePath"]) {
+    if (typeof a[key] === "string" && a[key].trim()) out.push(normalizePath2(a[key]));
+  }
+  for (const list2 of [a.edits, a.paths]) {
+    if (!Array.isArray(list2)) continue;
+    for (const item of list2) {
+      const p = typeof item === "string" ? item : item?.path;
+      if (typeof p === "string" && p.trim()) out.push(normalizePath2(p));
+    }
+  }
+  return out;
+}
+function isRanRead(data) {
+  if (!data) return false;
+  if (data.covered === true || data.replayed === true || data.skipped === true || data.derived === true) return false;
+  return data.ok === true || typeof data.content === "string" || Array.isArray(data.files);
+}
+function servedSpan2(entry, args, trimmed) {
+  const content = typeof entry.content === "string" ? entry.content : "";
+  if (!content) return null;
+  const start = positiveInt(entry.offset) ?? positiveInt(args.offset) ?? 1;
+  if (trimmed) return { start, end: null };
+  const body = content.endsWith("\n") ? content.slice(0, -1) : content;
+  let end = start + Math.max(1, body.split("\n").length) - 1;
+  const total = positiveInt(entry.totalLines);
+  if (entry.truncated !== true && total !== null && total >= start) end = total;
+  return { start, end };
+}
+function mergeSpans(spans) {
+  const known = spans.filter((s) => s.end !== null).sort((a, b) => a.start - b.start);
+  const merged = [];
+  for (const span of known) {
+    const last = merged.at(-1);
+    if (last && span.start <= last.end + 1) last.end = Math.max(last.end, span.end);
+    else merged.push({ ...span });
+  }
+  const open2 = spans.filter((s) => s.end === null && !merged.some((m) => s.start >= m.start && s.start <= m.end));
+  const firstOpen = /* @__PURE__ */ new Map();
+  for (const s of open2) firstOpen.set(s.start, s);
+  return [...merged, ...firstOpen.values()].sort((a, b) => a.start - b.start);
+}
+function rangesText(spans) {
+  const merged = mergeSpans(spans);
+  const known = merged.filter((s) => s.end !== null).map((s) => s.start === s.end ? `${s.start}` : `${s.start}\u2013${s.end}`);
+  const open2 = merged.filter((s) => s.end === null).map((s) => `from line ${s.start} (window trimmed)`);
+  return [known.length > 0 ? `lines ${known.join(", ")}` : "", ...open2].filter(Boolean).join(", ");
+}
+function ledgerOf(trace4) {
+  const files = /* @__PURE__ */ new Map();
+  const noteRead = (path, at, span) => {
+    const prior = files.get(path);
+    const fresh = !prior || prior.state !== "unchanged";
+    const entry = fresh ? { path, spans: [], state: "unchanged", at, failed: false } : prior;
+    entry.at = at;
+    entry.failed = false;
+    if (span) entry.spans.push(span);
+    files.set(path, entry);
+  };
+  const noteFailure = (path, at) => {
+    const prior = files.get(path);
+    files.set(path, { path, spans: prior?.spans ?? [], state: prior?.state ?? "unchanged", at, failed: true });
+  };
+  trace4.forEach((ev, at) => {
+    if (ev.category !== "tool") return;
+    if (ev.label === "read_file") {
+      const args = objectOf(ev.args) ?? {};
+      const data = objectOf(ev.result);
+      const trimmed = ev.truncated === true;
+      const singles = singleReadsOf("read_file", args);
+      if (singles) {
+        if (ev.isError || data?.ok === false) {
+          for (const s of singles) if (typeof s.path === "string") noteFailure(normalizePath2(s.path), at);
+          return;
+        }
+        if (!isRanRead(data)) return;
+        const entries = perFileResults(data) ?? [];
+        singles.forEach((single, i) => {
+          if (typeof single.path !== "string") return;
+          const path2 = normalizePath2(single.path);
+          const entry = objectOf(entries[i]);
+          if (!entry || entry.ok === false) noteFailure(path2, at);
+          else noteRead(path2, at, servedSpan2(entry, single, trimmed));
+        });
+        return;
+      }
+      const raw = typeof args.path === "string" ? args.path : "";
+      if (!raw.trim()) return;
+      const path = normalizePath2(raw);
+      if (ev.isError || data?.ok === false) {
+        noteFailure(path, at);
+        return;
+      }
+      if (!isRanRead(data)) return;
+      noteRead(path, at, typeof args.key === "string" ? null : servedSpan2(data, args, trimmed));
+      return;
+    }
+    if (isUnscopedMutation(ev.label, ev.args)) {
+      for (const entry of files.values()) if (entry.state === "unchanged") entry.state = "unknown";
+      return;
+    }
+    if (isCodeChangeTool(ev.label) && !ev.isError) {
+      for (const path of changedPaths2(ev.args)) {
+        const entry = files.get(path);
+        if (entry) entry.state = "changed";
+      }
+    }
+  });
+  return [...files.values()].filter((f) => !f.failed).sort((a, b) => b.at - a.at).slice(0, READ_LEDGER_MAX_FILES);
+}
+function readLedgerSection(trace4) {
+  const files = ledgerOf(trace4);
+  if (files.length === 0) return "";
+  const lines = files.map((f) => {
+    const ranges = rangesText(f.spans);
+    return `- ${[f.path, ranges, STATE_TEXT[f.state]].filter(Boolean).join(" \xB7 ")}`;
+  });
+  return [READ_LEDGER_HEADER, ...lines].join("\n");
+}
+
 // src/run/brainTurnTail.ts
 function progressLine(run, tools) {
   if (tools <= 0) return "";
@@ -19985,8 +20147,9 @@ function progressLine(run, tools) {
 }
 function runBrief(run, tools) {
   const brief = tools > 0 ? run.knowledge.brief() ?? "" : "";
+  const reads = tools > 0 ? readLedgerSection(runTrace(run.c)) : "";
   const progress = progressLine(run, tools);
-  return [brief, progress].map((section) => section.trim()).filter(Boolean).join("\n\n");
+  return [brief, reads, progress].map((section) => section.trim()).filter(Boolean).join("\n\n");
 }
 function withRunBrief(run, menu) {
   const ledger = runBrief(run, (menu?.tools ?? run.allTools ?? []).length);
@@ -22321,7 +22484,8 @@ var MAX_ENTRIES = 40;
 var HEADER = [
   "## Already done earlier in this chat",
   "Earlier turns of this conversation already ran the tool calls below (newest first, each result trimmed). Their results are NOT in the transcript above \u2014 this list is the record of them.",
-  "Build on it. Do not repeat a call listed here to rediscover what it already answered; re-run one only when you need a part of its result that is not shown, or when the target may have changed since (for example, a file this chat has edited)."
+  "Build on it. Do not repeat a call listed here to rediscover what it already answered; re-run one only when you need a part of its result that is not shown, or when the target may have changed since (for example, a file this chat has edited).",
+  "Files listed here were already read in this chat; re-read one only if you changed it or need lines not shown."
 ].join("\n");
 function clip(text2, max) {
   return text2.length > max ? `${text2.slice(0, max - 1)}\u2026` : text2;

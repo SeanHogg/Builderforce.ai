@@ -7,6 +7,7 @@
  *  - `repeated_failure` — the identical call failing {@link FAILURE_HARD_AT} times ({@link FailureTally});
  *  - `circling_read` — one target read {@link REVISIT_HARD_AT} times with nothing changing it ({@link VisitTally});
  *  - `unkept_ready` — {@link UNKEPT_READY_AT} turns that said the run had what it needed, then only read ({@link UnkeptClaimTracker});
+ *  - `read_only_streak` — {@link READ_ONLY_STREAK_TURNS} all-read-only turns (or {@link READ_ONLY_STREAK_CALLS} read-only calls) in a row, new files or not ({@link ReadOnlyStreak});
  *  - `no_progress` — {@link NO_PROGRESS_TURNS} turns with no new file, no change the run had not already made, and no test change ({@link NoProgressTracker}).
  *
  * A turn that showed any of them is a TRIP, and trips escalate: the first is a steer
@@ -29,12 +30,13 @@ import { UNKEPT_READY_AT, UnkeptClaimTracker, type UnkeptClaimState } from "./re
 import { ReadinessAdvisory, type ReadinessAdvisoryState } from "./readinessAdvisory.js";
 import { BatchingNudge, type BatchingNudgeState, turnCallsOf } from "./batchingNudge.js";
 import { ReverifyTracker, type ReverifyState } from "./reverifyTracker.js";
+import { READ_ONLY_STREAK_CALLS, READ_ONLY_STREAK_TURNS, ReadOnlyStreak, type ReadOnlyStreakState } from "./readOnlyStreak.js";
 
 /** Ground-progress, signal-free turns in a row that clear the trip ladder: trips far apart are
  *  separate stuck stretches, and only back-to-back ones should end in a pause. */
 export const LADDER_RESET_TURNS = 8;
 
-export type ProgressSignalKind = "edit_revert" | "repeated_failure" | "circling_read" | "reverifying" | "unkept_ready" | "no_progress";
+export type ProgressSignalKind = "edit_revert" | "repeated_failure" | "circling_read" | "reverifying" | "unkept_ready" | "read_only_streak" | "no_progress";
 
 /** Strongest first — a turn reports only its strongest signal. */
 const SIGNAL_RANK: Readonly<Record<ProgressSignalKind, number>> = {
@@ -43,7 +45,8 @@ const SIGNAL_RANK: Readonly<Record<ProgressSignalKind, number>> = {
   circling_read: 2,
   reverifying: 3,
   unkept_ready: 4,
-  no_progress: 5,
+  read_only_streak: 5,
+  no_progress: 6,
 };
 
 export interface ProgressSignal {
@@ -70,6 +73,8 @@ export interface ProgressDetectorState extends ReverifyState {
   edits?: EditRevertState;
   progress?: NoProgressState;
   claims?: UnkeptClaimState;
+  /** The current all-read-only streak. Omitted when zero. */
+  readOnlyStreak?: ReadOnlyStreakState;
   /** Trips so far this run. */
   trips?: number;
   /** Trips so far this run, by the signal that caused each (run telemetry, PRD 35 §8.2). */
@@ -94,6 +99,10 @@ export interface ProgressDetectorPorts extends NoProgressPorts {
   isUnscopedMutation?(tool: string, args: unknown): boolean;
   /** A file deletion. Default: `delete_file`. */
   isDelete?(tool: string): boolean;
+  /** The run was asked for a CHANGE. Only then is a read-only streak a stall — a review
+   *  or analysis run legitimately reads many files and answers. Default: none — the
+   *  `read_only_streak` signal is off. */
+  expectsChange?(): boolean;
 }
 
 /** A dispatched call's result, as the detector reads it. */
@@ -124,6 +133,7 @@ export class ProgressDetector {
   private readonly edits: EditRevertTracker;
   private readonly progress: NoProgressTracker;
   private readonly claims: UnkeptClaimTracker;
+  private readonly readOnlyStreak: ReadOnlyStreak;
   private trips: number;
   private tripsBySignal: Partial<Record<ProgressSignalKind, number>>;
   private unkeptTurns: number;
@@ -146,6 +156,7 @@ export class ProgressDetector {
     this.edits = new EditRevertTracker(state.edits);
     this.progress = new NoProgressTracker(state.progress, ports);
     this.claims = new UnkeptClaimTracker(state.claims);
+    this.readOnlyStreak = new ReadOnlyStreak(state.readOnlyStreak);
     this.trips = state.trips ?? 0;
     this.tripsBySignal = { ...(state.tripsBySignal ?? {}) };
     this.unkeptTurns = state.unkeptTurns ?? 0;
@@ -171,7 +182,10 @@ export class ProgressDetector {
     this.turnCalls.push({ tool, args, result });
     // Kept or not is about what the model CHOSE to do: a failed edit still acted.
     // Without an `isReadOnly` port nothing is judged read-only, so no claim goes unkept.
-    this.claims.observe(this.ports.isReadOnly?.(tool, args) === true);
+    const readOnly = this.ports.isReadOnly?.(tool, args) === true;
+    this.claims.observe(readOnly);
+    // Same rule for the streak: without the port no call is read-only, so it never fills.
+    this.readOnlyStreak.observe(readOnly);
     const ok = succeeded(result);
     const unscoped = (this.ports.isUnscopedMutation ?? ((t) => t === "run_command"))(tool, args);
     const wrote = ok && (changesContent(args) || (unscoped && this.ports.isReadOnly?.(tool, args) !== true));
@@ -246,6 +260,12 @@ export class ProgressDetector {
     const unkept = this.claims.endTurn();
     if (unkept > unkeptBefore) this.unkeptTurns += 1;
     if (unkept >= UNKEPT_READY_AT) this.raise({ kind: "unkept_ready", count: unkept });
+    // New files do not excuse this one either: turn after turn of reads and nothing done
+    // (chat #132309 run #3 — 14 turns, 46 reads of new files, 0 changes).
+    const streak = this.readOnlyStreak.endTurn();
+    if (this.ports.expectsChange?.() === true && (streak.turns >= READ_ONLY_STREAK_TURNS || streak.calls >= READ_ONLY_STREAK_CALLS)) {
+      this.raise({ kind: "read_only_streak", count: streak.calls });
+    }
     if (!this.turnSignal && idle >= NO_PROGRESS_TURNS) this.raise({ kind: "no_progress", count: idle });
     const signal = this.turnSignal;
     this.turnSignal = null;
@@ -283,6 +303,7 @@ export class ProgressDetector {
     // One stuck stretch is one trip: start every window over.
     this.progress.reset();
     this.claims.reset();
+    this.readOnlyStreak.reset();
     this.visits.forget(() => true);
     this.failures.reset();
     const note = progressSteerNote(signal, this.trips);
@@ -318,6 +339,7 @@ export class ProgressDetector {
       edits: this.edits.snapshot(),
       progress: this.progress.snapshot(),
       ...(this.claims.snapshot().unkept ? { claims: this.claims.snapshot() } : {}),
+      ...(this.readOnlyStreak.snapshot().turns ? { readOnlyStreak: this.readOnlyStreak.snapshot() } : {}),
       ...(this.trips ? { trips: this.trips } : {}),
       ...(Object.keys(this.tripsBySignal).length ? { tripsBySignal: { ...this.tripsBySignal } } : {}),
       ...(this.unkeptTurns ? { unkeptTurns: this.unkeptTurns } : {}),
@@ -357,6 +379,8 @@ export function progressAdvice(signal: ProgressSignal): string {
       return `this turn only re-checked ${signal.count === 1 ? "a file" : `${signal.count} files`} you already wrote and verified. Re-running the same type-check, build or read on ground you shipped does not make it more correct — it burns budget. The work is done: report the result and stop, or move on to the next task. Only re-verify when something actually changed the code.`;
     case "unkept_ready":
       return `you have said ${signal.count} times that you have what you need — or that you are about to write — and then only read. Act on it now: make the change, spawn or hand off the work, or ask about what genuinely blocks you. Reading more is not the next step.`;
+    case "read_only_streak":
+      return `you have made ${signal.count} read-only calls in a row without changing anything. Everything you read is still in your context. If the task is a change, make the first concrete edit NOW with what you already have — do not read another file first. If it is analysis only, write the answer now.`;
     case "no_progress":
       return `the last ${signal.count} turns touched no new file and changed nothing about the tests. Re-read the task, pick the next concrete step that changes code or runs a check, and do it now — or finish and explain what is blocking you.`;
   }
@@ -370,6 +394,7 @@ export function progressPauseQuestion(signal: ProgressSignal, trip: number): str
     circling_read: `keeps re-reading ${signal.target ?? "the same file"} without acting`,
     reverifying: "keeps re-checking files it already wrote and verified instead of reporting the result",
     unkept_ready: "keeps saying it has everything it needs, then reads more instead of acting",
+    read_only_streak: "keeps reading without making the requested change",
     no_progress: "has stopped making progress (no new files, no test changes)",
   };
   return `This run ${what[signal.kind]} — progress check ${trip}, after earlier warnings. How should it proceed? Reply with guidance to continue, or stop the run.`;

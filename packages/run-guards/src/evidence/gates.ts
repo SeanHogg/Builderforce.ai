@@ -295,18 +295,88 @@ export function outgoingGate(
   return unavailable.length ? { ok: true, unavailable } : pass();
 }
 
+/**
+ * How many review rounds may raise NEW blocking findings. From this round on the review is
+ * resolution-only: a finding that does not match a prior blocking finding cannot block
+ * (it becomes an advisory). 1-based — round 3 is the first capped round.
+ */
+export const MAX_BLOCKING_REVIEW_ROUNDS = 3;
+
 /** OD-1: an independent review verdict, produced by a different model over the diff. */
 export interface ReviewVerdict {
   reviewerModel: string;
   verdict: "approved" | "changes_requested";
   diffHash: string;
+  /**
+   * BLOCKING findings only: a defect that would ship broken behaviour, data loss, a security
+   * hole, a failing build or test, or a stated requirement left unmet. An advisory never
+   * belongs here — an advisory-only review is a pass.
+   */
   findings: readonly string[];
+  /** Style, speculative, hardening and documentation notes. Never a reason to refuse. */
+  advisories?: readonly string[];
+}
+
+/** A finding reduced to the words that decide whether two rounds raised the same defect. */
+function findingKey(finding: string): string {
+  return finding.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+/** `file:line` when the finding names one (`src/a.ts:12`), else null. The only location token two wordings of one defect share. */
+function findingLocation(finding: string): string | null {
+  const m = /([\w./\\-]+\.\w+):(\d+)/.exec(finding);
+  return m ? `${m[1]!.replace(/\\/g, "/").toLowerCase()}:${m[2]}` : null;
+}
+
+/**
+ * Did this round raise the SAME defect as an earlier one? Equality or containment of the
+ * normalised text, or the same `file:line`. One function — the cap and the loop diagnostic
+ * both read it, so neither grows a second similarity.
+ */
+export function findingMatchesPrior(finding: string, prior: readonly string[]): boolean {
+  const key = findingKey(finding);
+  if (!key) return false;
+  const loc = findingLocation(finding);
+  return prior.some((p) => {
+    const pk = findingKey(p);
+    if (!pk) return false;
+    if (key === pk || key.includes(pk) || pk.includes(key)) return true;
+    const pl = findingLocation(p);
+    return loc !== null && pl === loc;
+  });
+}
+
+/**
+ * The resolution-only cap, applied in CODE (the prompt asks for it; this is what enforces it).
+ * Before round {@link MAX_BLOCKING_REVIEW_ROUNDS} the verdict is unchanged. From that round on,
+ * a blocking finding that does not match a prior blocking finding moves to `advisories`; when
+ * none remain, the verdict is `approved`. A prior blocker that is still unresolved stays blocking.
+ */
+export function applyReviewRoundCap(
+  verdict: ReviewVerdict,
+  priorBlocking: readonly string[],
+  round: number,
+): ReviewVerdict {
+  if (round < MAX_BLOCKING_REVIEW_ROUNDS || verdict.findings.length === 0) return verdict;
+  const still: string[] = [];
+  const moved: string[] = [];
+  for (const finding of verdict.findings) {
+    (findingMatchesPrior(finding, priorBlocking) ? still : moved).push(finding);
+  }
+  if (moved.length === 0) return verdict;
+  return {
+    ...verdict,
+    verdict: still.length > 0 ? "changes_requested" : "approved",
+    findings: still,
+    advisories: [...(verdict.advisories ?? []), ...moved],
+  };
 }
 
 /**
  * OD-1. Refuses when there is no review, the reviewer is one of the author models,
- * the verdict is changes_requested (findings become the reason), or the diff changed
- * after the review was recorded.
+ * the verdict is changes_requested WITH blocking findings (every one is named, numbered —
+ * a cap hid the rest and the author fixed them one push at a time), or the diff changed
+ * after the review was recorded. Advisory-only is a pass: an advisory never blocks.
  */
 export function reviewGate(
   review: ReviewVerdict | undefined,
@@ -331,10 +401,11 @@ export function reviewGate(
         "on the current diff and push again.",
     );
   }
-  if (review.verdict === "changes_requested") {
+  if (review.verdict === "changes_requested" && review.findings.length > 0) {
+    const listed = review.findings.map((f, i) => `${i + 1}. ${f}`).join("; ");
     return refuse(
       `git_push refused: reviewer ${review.reviewerModel} requested changes. Findings: ` +
-        `${review.findings.slice(0, 5).join("; ") || "(none recorded)"}. Address them and push again.`,
+        `${listed}. Address them and push again.`,
     );
   }
   return pass();

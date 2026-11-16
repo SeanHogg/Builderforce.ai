@@ -61,9 +61,21 @@ export interface GitPort {
   onBaseBranch?(repo: string, paths: readonly string[]): Promise<boolean>;
 }
 
-/** The reviewer port: OD-1, one review sub-run by a model that did not author the change. */
+/**
+ * The reviewer port: OD-1, one review sub-run by a model that did not author the change.
+ * `priorBlocking` is the latest round's blocking findings (so a re-review resolves those
+ * instead of starting blank); `round` is 1-based. Both are optional — a host that has not
+ * adopted rounds omits them and the reviewer behaves as a first pass.
+ */
 export interface ReviewerPort {
-  review(input: { repo: string; diff: string; evidence: string; authorModels: readonly string[] }): Promise<ReviewVerdict | { refused: string }>;
+  review(input: {
+    repo: string;
+    diff: string;
+    evidence: string;
+    authorModels: readonly string[];
+    priorBlocking?: readonly string[];
+    round?: number;
+  }): Promise<ReviewVerdict | { refused: string }>;
 }
 
 /**

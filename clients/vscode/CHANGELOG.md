@@ -2,6 +2,13 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.181] — The agent makes the change instead of re-reading files
+
+- **Files come back whole.** A file that fits in one read is returned whole on the first read, and a request for a small window of it returns the whole file too. The agent no longer reads one file in five slices.
+- **The agent sees what it already has.** Every turn lists the files already read in this run and whether each is unchanged, changed, or may have changed. That includes the turn right after you send a message mid-run, so "make the changes" no longer sets off another round of reading.
+- **A run that only reads is steered to act.** After 6 turns or 18 calls in a row that only read, the run is told to make the first edit with what it already has, or to give its answer. If it keeps reading, it moves to a stronger model and then pauses to ask you.
+- **Nits no longer block a push.** The pre-push reviewer now separates blocking defects from advisory notes, and only blocking defects refuse the push. All of them are listed at once, so they can be fixed in one pass.
+
 ## [2026.10.180] — An interrupted chat shows a Resume action, unless it is already done
 
 - **Resume (▶) on interrupted chats.** Every chat-history row whose run was interrupted and whose tickets are not yet 100% complete now carries a Resume (▶) action — the same one-click resume the dedicated interrupted rows use. A chat whose linked tickets are all complete (or whose resume is already in flight, or is already running) stays as a dedicated interrupted row instead, so nothing is listed twice and Resume is never a no-op. The rule lives in `interruptedRowPolicy.ts` and is covered by 17 unit tests.

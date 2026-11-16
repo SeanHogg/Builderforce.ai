@@ -281,7 +281,14 @@ interface ReviewVerdict {
     reviewerModel: string;
     verdict: "approved" | "changes_requested";
     diffHash: string;
+    /**
+     * BLOCKING findings only: a defect that would ship broken behaviour, data loss, a security
+     * hole, a failing build or test, or a stated requirement left unmet. An advisory never
+     * belongs here — an advisory-only review is a pass.
+     */
     findings: readonly string[];
+    /** Style, speculative, hardening and documentation notes. Never a reason to refuse. */
+    advisories?: readonly string[];
 }
 
 /**
@@ -1812,13 +1819,20 @@ interface GitPort {
      */
     onBaseBranch?(repo: string, paths: readonly string[]): Promise<boolean>;
 }
-/** The reviewer port: OD-1, one review sub-run by a model that did not author the change. */
+/**
+ * The reviewer port: OD-1, one review sub-run by a model that did not author the change.
+ * `priorBlocking` is the latest round's blocking findings (so a re-review resolves those
+ * instead of starting blank); `round` is 1-based. Both are optional — a host that has not
+ * adopted rounds omits them and the reviewer behaves as a first pass.
+ */
 interface ReviewerPort {
     review(input: {
         repo: string;
         diff: string;
         evidence: string;
         authorModels: readonly string[];
+        priorBlocking?: readonly string[];
+        round?: number;
     }): Promise<ReviewVerdict | {
         refused: string;
     }>;

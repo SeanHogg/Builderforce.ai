@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_EVIDENCE_POLICY,
   fileIsUnchecked,
+  applyReviewRoundCap,
   outgoingGate,
   reviewGate,
   shellPublishHint,
@@ -329,6 +330,53 @@ describe("reviewGate (OD-1)", () => {
 
   it("passes on an approved, current, different-model review", () => {
     expect(reviewGate(review(), ["sonnet-author"], "d1")).toEqual(ok);
+  });
+
+  it("advisory-only is a pass — an advisory never blocks", () => {
+    const v = reviewGate(
+      review({ verdict: "approved", findings: [], advisories: ["style: rename the helper", "-o=<path> may not be accepted"] }),
+      [],
+      "d1",
+    );
+    expect(v).toEqual(ok);
+  });
+
+  it("lists every blocking finding, numbered, with no 5-cap", () => {
+    const findings = ["a.ts:1 one", "b.ts:2 two", "c.ts:3 three", "d.ts:4 four", "e.ts:5 five", "f.ts:6 six", "g.ts:7 seven"];
+    const v = reviewGate(review({ verdict: "changes_requested", findings }), [], "d1");
+    expect(v.ok).toBe(false);
+    if (!v.ok) {
+      for (const [i, f] of findings.entries()) expect(v.reason).toContain(`${i + 1}. ${f}`);
+      expect(v.reason).toContain("g.ts:7 seven");
+    }
+  });
+
+  it("a changes_requested verdict with no blocking findings passes", () => {
+    expect(reviewGate(review({ verdict: "changes_requested", findings: [], advisories: ["nit"] }), [], "d1")).toEqual(ok);
+  });
+
+  it("applyReviewRoundCap: from round 3 a new finding becomes an advisory and an unresolved prior still blocks", () => {
+    const prior = ["src/a.ts:12 writeFileSync runs before the signal handlers"];
+    const fresh = review({
+      verdict: "changes_requested",
+      findings: ["src/b.ts:4 the version regex fails on CRLF", ...prior],
+      advisories: ["docs gap"],
+    });
+    const capped = applyReviewRoundCap(fresh, prior, 3);
+    expect(capped.verdict).toBe("changes_requested");
+    expect(capped.findings).toEqual(prior);
+    expect(capped.advisories).toEqual(["docs gap", "src/b.ts:4 the version regex fails on CRLF"]);
+    // Round 2 still lets a new finding block.
+    expect(applyReviewRoundCap(fresh, prior, 2).findings).toEqual(fresh.findings);
+    // Nothing unresolved → approved.
+    const resolved = applyReviewRoundCap(
+      review({ verdict: "changes_requested", findings: ["src/c.ts:9 a brand new nit"] }),
+      prior,
+      3,
+    );
+    expect(resolved.verdict).toBe("approved");
+    expect(resolved.findings).toEqual([]);
+    expect(resolved.advisories).toEqual(["src/c.ts:9 a brand new nit"]);
   });
 });
 

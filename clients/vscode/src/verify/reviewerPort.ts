@@ -23,13 +23,16 @@
  * guidance (never a pass — OD-3).
  */
 
-import { reviewGate, type ReviewVerdict } from "@builderforce/run-guards";
+import { MAX_BLOCKING_REVIEW_ROUNDS, reviewGate, type ReviewVerdict } from "@builderforce/run-guards";
 import type { ReviewerPort } from "./types";
 
 /** The shape the reviewer sub-run reports back (the model's own structured verdict). */
 export interface ReviewSubRunResult {
   verdict: "approved" | "changes_requested";
+  /** Blocking findings only. An empty list is an approval, whatever a `verdict` field said. */
   findings: readonly string[];
+  /** Style, speculative, hardening and documentation notes. Never blocking. */
+  advisories?: readonly string[];
 }
 
 /**
@@ -134,10 +137,60 @@ function refusalFor(authorModels: readonly string[]): string {
  * Compose the ReviewerPort. The sub-run is given the diff and the evidence summary
  * ONLY — never the model's own narration of what it did.
  */
+/**
+ * The review sub-run's prompt. Blocking and advisory are separate lists so a speculative
+ * nit cannot refuse the push. A re-review is handed the previous round's blocking findings
+ * and asked to resolve those, not to start blank.
+ */
+function reviewPrompt(input: {
+  diff: string;
+  evidence: string;
+  priorBlocking?: readonly string[];
+  round?: number;
+}): string {
+  const prior = (input.priorBlocking ?? []).filter((f) => f.trim());
+  const lines = [
+    "You are reviewing a change before it ships. Review ONLY the diff and the check evidence below — do not trust any narration of what was done.",
+    "",
+    "## Diff",
+    input.diff,
+    "",
+    "## Evidence",
+    input.evidence,
+    "",
+    'Reply with a JSON object: {"blocking": string[], "advisory": string[]}.',
+    "Blocking: a defect that would ship broken behaviour, data loss, a security hole, a failing build or test, or a stated requirement left unmet. Each one names file:line and the failure scenario.",
+    'Advisory: style, speculative "may not", hardening and documentation gaps.',
+    "Report EVERY blocking defect you can see in this ONE pass — the author fixes them together; there is no later round for defects visible now.",
+  ];
+  if (prior.length) {
+    lines.push(
+      "",
+      "These blocking findings were raised last round:",
+      ...prior.map((f, i) => `${i + 1}. ${f}`),
+      "For each, say whether the current diff resolves it. Raise a NEW blocking finding only if the change since then introduced it, or it is severe (data loss / security / broken build).",
+    );
+  }
+  if ((input.round ?? 1) >= MAX_BLOCKING_REVIEW_ROUNDS) {
+    lines.push(
+      "",
+      "This review is resolution-only: only an unresolved prior blocking finding may block. Anything new is advisory.",
+    );
+  }
+  return lines.join("\n");
+}
+
 export function createReviewerPort(deps: ReviewerDeps): ReviewerPort {
   const timeoutMs = deps.reviewTimeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS;
   return {
-    async review(input: { repo: string; diff: string; evidence: string; authorModels: readonly string[] }) {
+    async review(input: {
+      repo: string;
+      diff: string;
+      evidence: string;
+      authorModels: readonly string[];
+      priorBlocking?: readonly string[];
+      round?: number;
+    }) {
       const authors = input.authorModels;
       // Every non-author model the account can reach, in preference order (the review pin
       // first, then run-available models, then the catalog auto-switch). A reviewer that
@@ -162,12 +215,7 @@ export function createReviewerPort(deps: ReviewerDeps): ReviewerPort {
       const candidates = (await reviewerCandidates(deps, pick, authors)).slice(0, 1);
 
       const diffHash = deps.hashDiff(input.diff);
-      const prompt =
-        `You are reviewing a change before it ships. Review ONLY the diff and the ` +
-        `check evidence below — do not trust any narration of what was done.\n\n` +
-        `## Diff\n${input.diff}\n\n## Evidence\n${input.evidence}\n\n` +
-        `Reply with a JSON object: {"verdict": "approved" | "changes_requested", "findings": string[]}. ` +
-        `List concrete defects as findings; an empty findings list means approved.`;
+      const prompt = reviewPrompt(input);
 
       const failures: string[] = [];
       for (const candidate of candidates) {
@@ -190,27 +238,27 @@ export function createReviewerPort(deps: ReviewerDeps): ReviewerPort {
           verdict: attempt.verdict,
           diffHash,
           findings: attempt.findings,
+          ...(attempt.advisories?.length ? { advisories: [...attempt.advisories] } : {}),
         };
-        // The SAME gate the push uses: an author model or a stale diffHash is refused here too.
-        const gate = reviewGate(verdict, authors, diffHash);
-        if (!gate.ok) return { refused: gate.reason };
+        // Author-model and stale-hash only. A changes_requested verdict is RETURNED, not
+        // converted to a refusal — the host remembers it and applies the round cap. Checking
+        // a copy with no blocking findings reuses reviewGate without letting a defect become
+        // a port refusal.
+        const identity = reviewGate({ ...verdict, verdict: "approved", findings: [] }, authors, diffHash);
+        if (!identity.ok) return { refused: identity.reason };
 
-        // Auto-switch: the findings are the one verdict field that reaches the model/user
-        // through runReviewGate (a changes_requested reason, or the pass path), so name the
-        // switched-to reviewer there.
+        // Auto-switch and retry notes are advisories. In findings they would block the push.
+        const notes: string[] = [];
         if (candidate.switched) {
-          verdict.findings = [
+          notes.push(
             `(auto-switched reviewer: the review stage pin and this run's models are all author ` +
               `models, so the gate reviewed on ${candidate.model} from your model catalog instead.)`,
-            ...verdict.findings,
-          ];
+          );
         }
         if (failures.length) {
-          verdict.findings = [
-            `(earlier reviewer attempt(s) failed transiently and were retried: ${failures.join("; ")})`,
-            ...verdict.findings,
-          ];
+          notes.push(`(earlier reviewer attempt(s) failed transiently and were retried: ${failures.join("; ")})`);
         }
+        if (notes.length) verdict.advisories = [...notes, ...(verdict.advisories ?? [])];
         return verdict;
       }
 

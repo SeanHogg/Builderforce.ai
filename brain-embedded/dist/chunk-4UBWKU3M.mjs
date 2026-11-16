@@ -2588,13 +2588,18 @@ function markdownOutline(path, content) {
 var SYMBOL_TOOLS = [findSymbolTool, fileOutlineTool];
 
 // ../packages/agent-tools/src/fileRead.ts
-var OUTLINE_FIRST_MIN_CHARS = 16e3;
-var OUTLINE_FIRST_MIN_LINES = 300;
+var WHOLE_READ_MAX_CHARS = 64e3;
+var WIDEN_WINDOW_MIN_LINES = 150;
 var OUTLINE_FIRST_PREFIX_LINES = 40;
 function outlineFirstApplies(content, leverOn) {
   if (leverOn !== true) return false;
-  const lines = content.split("\n").length;
-  return content.length >= OUTLINE_FIRST_MIN_CHARS || lines >= OUTLINE_FIRST_MIN_LINES;
+  return content.length > WHOLE_READ_MAX_CHARS;
+}
+function widensToWholeFile(content, opts, sourceTruncated) {
+  if (sourceTruncated) return false;
+  if (opts.offset === void 0 && opts.limit === void 0) return false;
+  if (content.length > WHOLE_READ_MAX_CHARS) return false;
+  return content.split("\n").length >= WIDEN_WINDOW_MIN_LINES;
 }
 var READ_FILE_MAX_PATHS = 8;
 var MARKDOWN_OUTLINE_MIN_CHARS = 16e3;
@@ -2632,7 +2637,19 @@ async function readOneFile(path, opts, caps, leverOn) {
       content: head.content,
       truncated: true,
       offset: 1,
-      note: (symbols.length > 0 ? `This file is larger than one read: \`outline\` lists its ${symbols.length} definitions with line numbers. ` : "This file is larger than one read. ") + `The first ${OUTLINE_FIRST_PREFIX_LINES} lines follow. To read a specific span, call read_file again with \`offset\` (1-based line) and a small \`limit\`.`
+      note: (symbols.length > 0 ? `This file is larger than one read: \`outline\` lists its ${symbols.length} definitions with line numbers. ` : "This file is larger than one read. ") + `The first ${OUTLINE_FIRST_PREFIX_LINES} lines follow. To read a span, call read_file again with \`offset\` (the outline's line) and no \`limit\` \u2014 each read returns as much as fits.`
+    };
+  }
+  if (widensToWholeFile(content, opts, r.truncated === true)) {
+    const whole = windowFileContent(content, { offset: 1 });
+    return {
+      ok: true,
+      path: r.path ?? path,
+      content: whole.content,
+      truncated: whole.truncated,
+      totalLines: whole.totalLines,
+      offset: 1,
+      note: `Returned the whole file (${whole.totalLines} lines) \u2014 it fits in one read, so later windows of it are already covered. Do not read it again unless you change it.`
     };
   }
   const win = windowFileContent(content, { offset: opts.offset, limit: opts.limit });
@@ -2649,7 +2666,7 @@ async function readOneFile(path, opts, caps, leverOn) {
     const outline = markdownOutline(data.path ?? path, content);
     if (outline.length > 0) {
       data.outline = outline;
-      const pointer = "This document is larger than one read: `outline` lists its headings with their line numbers \u2014 page by heading line with offset (and a small limit) instead of reading it window by window.";
+      const pointer = "This document is larger than one read: `outline` lists its headings with their line numbers \u2014 page by heading line with offset instead of reading it window by window.";
       note = note ? `${note} ${pointer}` : pointer;
     }
   }
@@ -7326,6 +7343,46 @@ var ReverifyTracker = class {
   }
 };
 
+// ../packages/run-guards/src/readOnlyStreak.ts
+var READ_ONLY_STREAK_TURNS = 6;
+var READ_ONLY_STREAK_CALLS = 18;
+var ReadOnlyStreak = class {
+  turns;
+  calls;
+  turnCalls = 0;
+  acted = false;
+  constructor(state) {
+    this.turns = state?.turns ?? 0;
+    this.calls = state?.calls ?? 0;
+  }
+  /** One call of the current turn. `readOnly` = it only read. */
+  observe(readOnly) {
+    this.turnCalls += 1;
+    if (!readOnly) this.acted = true;
+  }
+  /** The turn's calls all ran. Returns the streak after it. */
+  endTurn() {
+    if (this.acted || this.turnCalls === 0) {
+      this.turns = 0;
+      this.calls = 0;
+    } else {
+      this.turns += 1;
+      this.calls += this.turnCalls;
+    }
+    this.turnCalls = 0;
+    this.acted = false;
+    return { turns: this.turns, calls: this.calls };
+  }
+  /** Start over (a trip, a steer, a human). */
+  reset() {
+    this.turns = 0;
+    this.calls = 0;
+  }
+  snapshot() {
+    return { turns: this.turns, calls: this.calls };
+  }
+};
+
 // ../packages/run-guards/src/progressDetector.ts
 var LADDER_RESET_TURNS = 8;
 var SIGNAL_RANK = {
@@ -7334,7 +7391,8 @@ var SIGNAL_RANK = {
   circling_read: 2,
   reverifying: 3,
   unkept_ready: 4,
-  no_progress: 5
+  read_only_streak: 5,
+  no_progress: 6
 };
 function succeeded(result) {
   if (result.isError) return false;
@@ -7357,6 +7415,7 @@ var ProgressDetector = class {
     this.edits = new EditRevertTracker(state.edits);
     this.progress = new NoProgressTracker(state.progress, ports);
     this.claims = new UnkeptClaimTracker(state.claims);
+    this.readOnlyStreak = new ReadOnlyStreak(state.readOnlyStreak);
     this.trips = state.trips ?? 0;
     this.tripsBySignal = { ...state.tripsBySignal ?? {} };
     this.unkeptTurns = state.unkeptTurns ?? 0;
@@ -7373,6 +7432,7 @@ var ProgressDetector = class {
   edits;
   progress;
   claims;
+  readOnlyStreak;
   trips;
   tripsBySignal;
   unkeptTurns;
@@ -7398,7 +7458,9 @@ var ProgressDetector = class {
   /** One call of the current turn ran. */
   observe(tool, args, result) {
     this.turnCalls.push({ tool, args, result });
-    this.claims.observe(this.ports.isReadOnly?.(tool, args) === true);
+    const readOnly = this.ports.isReadOnly?.(tool, args) === true;
+    this.claims.observe(readOnly);
+    this.readOnlyStreak.observe(readOnly);
     const ok = succeeded(result);
     const unscoped = (this.ports.isUnscopedMutation ?? ((t) => t === "run_command"))(tool, args);
     const wrote = ok && (changesContent(args) || unscoped && this.ports.isReadOnly?.(tool, args) !== true);
@@ -7456,6 +7518,10 @@ var ProgressDetector = class {
     const unkept = this.claims.endTurn();
     if (unkept > unkeptBefore) this.unkeptTurns += 1;
     if (unkept >= UNKEPT_READY_AT) this.raise({ kind: "unkept_ready", count: unkept });
+    const streak = this.readOnlyStreak.endTurn();
+    if (this.ports.expectsChange?.() === true && (streak.turns >= READ_ONLY_STREAK_TURNS || streak.calls >= READ_ONLY_STREAK_CALLS)) {
+      this.raise({ kind: "read_only_streak", count: streak.calls });
+    }
     if (!this.turnSignal && idle >= NO_PROGRESS_TURNS) this.raise({ kind: "no_progress", count: idle });
     const signal = this.turnSignal;
     this.turnSignal = null;
@@ -7477,6 +7543,7 @@ var ProgressDetector = class {
     this.tripsBySignal[signal.kind] = (this.tripsBySignal[signal.kind] ?? 0) + 1;
     this.progress.reset();
     this.claims.reset();
+    this.readOnlyStreak.reset();
     this.visits.forget(() => true);
     this.failures.reset();
     const note = progressSteerNote(signal, this.trips);
@@ -7508,6 +7575,7 @@ var ProgressDetector = class {
       edits: this.edits.snapshot(),
       progress: this.progress.snapshot(),
       ...this.claims.snapshot().unkept ? { claims: this.claims.snapshot() } : {},
+      ...this.readOnlyStreak.snapshot().turns ? { readOnlyStreak: this.readOnlyStreak.snapshot() } : {},
       ...this.trips ? { trips: this.trips } : {},
       ...Object.keys(this.tripsBySignal).length ? { tripsBySignal: { ...this.tripsBySignal } } : {},
       ...this.unkeptTurns ? { unkeptTurns: this.unkeptTurns } : {},
@@ -7542,6 +7610,8 @@ function progressAdvice(signal) {
       return `this turn only re-checked ${signal.count === 1 ? "a file" : `${signal.count} files`} you already wrote and verified. Re-running the same type-check, build or read on ground you shipped does not make it more correct \u2014 it burns budget. The work is done: report the result and stop, or move on to the next task. Only re-verify when something actually changed the code.`;
     case "unkept_ready":
       return `you have said ${signal.count} times that you have what you need \u2014 or that you are about to write \u2014 and then only read. Act on it now: make the change, spawn or hand off the work, or ask about what genuinely blocks you. Reading more is not the next step.`;
+    case "read_only_streak":
+      return `you have made ${signal.count} read-only calls in a row without changing anything. Everything you read is still in your context. If the task is a change, make the first concrete edit NOW with what you already have \u2014 do not read another file first. If it is analysis only, write the answer now.`;
     case "no_progress":
       return `the last ${signal.count} turns touched no new file and changed nothing about the tests. Re-read the task, pick the next concrete step that changes code or runs a check, and do it now \u2014 or finish and explain what is blocking you.`;
   }
@@ -7553,6 +7623,7 @@ function progressPauseQuestion(signal, trip) {
     circling_read: `keeps re-reading ${signal.target ?? "the same file"} without acting`,
     reverifying: "keeps re-checking files it already wrote and verified instead of reporting the result",
     unkept_ready: "keeps saying it has everything it needs, then reads more instead of acting",
+    read_only_streak: "keeps reading without making the requested change",
     no_progress: "has stopped making progress (no new files, no test changes)"
   };
   return `This run ${what[signal.kind]} \u2014 progress check ${trip}, after earlier warnings. How should it proceed? Reply with guidance to continue, or stop the run.`;
@@ -8001,9 +8072,10 @@ function reviewGate(review, authorModels, currentDiffHash) {
       "git_push refused: the diff changed after the review was recorded. Re-run the review on the current diff and push again."
     );
   }
-  if (review.verdict === "changes_requested") {
+  if (review.verdict === "changes_requested" && review.findings.length > 0) {
+    const listed = review.findings.map((f, i) => `${i + 1}. ${f}`).join("; ");
     return refuse(
-      `git_push refused: reviewer ${review.reviewerModel} requested changes. Findings: ${review.findings.slice(0, 5).join("; ") || "(none recorded)"}. Address them and push again.`
+      `git_push refused: reviewer ${review.reviewerModel} requested changes. Findings: ${listed}. Address them and push again.`
     );
   }
   return pass();
@@ -10633,6 +10705,8 @@ export {
   REVISIT_HARD_AT,
   revisitAdvisory,
   withAdvisory,
+  singleReadsOf,
+  perFileResults,
   canonicalReadArgs,
   ReadCoverage,
   parseShellFileRead,
@@ -10791,4 +10865,4 @@ export {
   toolCallArgBytes,
   createComposingActivity
 };
-//# sourceMappingURL=chunk-XVJ7OMDV.mjs.map
+//# sourceMappingURL=chunk-4UBWKU3M.mjs.map

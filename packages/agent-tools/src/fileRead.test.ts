@@ -3,6 +3,7 @@ import type { CapabilityProvider, RepoReadResult } from "./capabilities.js";
 import { MARKDOWN_OUTLINE_MIN_CHARS, READ_FILE_MAX_PATHS, readFileTool } from "./core-tools.js";
 import { markdownOutline } from "./symbol-tools.js";
 import { RunKnowledgeRecorder } from "./run-knowledge.js";
+import { WHOLE_READ_MAX_CHARS, WIDEN_WINDOW_MIN_LINES } from "./fileRead.js";
 
 function provider(files: Record<string, string>): CapabilityProvider {
   return {
@@ -105,12 +106,12 @@ describe("read_file on a large Markdown document", () => {
 // (the VSIX `builderforce.agent.outlineFirstReads` setting, default true). Off/absent =
 // the read behaves exactly as before. The lever rides on `ToolContext.outlineFirstReads`.
 describe("read_file B2 outline-first reads", () => {
-  // A code file over the 16K-char threshold, with enough lines to also clear the 300-line
-  // clause — so BOTH thresholds are exercised. Uses `function` declarations so the symbol
-  // extractor returns a definition outline.
+  // A code file too large to return whole (over WHOLE_READ_MAX_CHARS, 64K chars) — only
+  // such a file is outlined first. Uses `function` declarations so the symbol extractor
+  // returns a definition outline.
   function bigCode(): string {
     const fns = Array.from(
-      { length: 400 },
+      { length: 700 },
       (_, i) => `export function fn${i}(): number {\n  // ${"y".repeat(90)}\n  return ${i};\n}`,
     );
     return fns.join("\n");
@@ -118,7 +119,7 @@ describe("read_file B2 outline-first reads", () => {
 
   it("a first whole-file read of a large file returns outline + first 40 lines when the lever is on", async () => {
     const code = bigCode();
-    expect(code.length).toBeGreaterThan(16000);
+    expect(code.length).toBeGreaterThan(WHOLE_READ_MAX_CHARS);
     const r = await readB2({ "src/big.ts": code }, { path: "src/big.ts" }, true);
     expect(r.ok).toBe(true);
     expect(Array.isArray(r.outline)).toBe(true);
@@ -156,5 +157,40 @@ describe("read_file B2 outline-first reads", () => {
     expect(Array.isArray(big!.outline)).toBe(true);
     expect(small!.outline).toBeUndefined();
     expect(small!.content).toBe("export const x = 1;");
+  });
+});
+
+describe("read_file returns a file that fits in one read whole", () => {
+  // ~520 lines, ~25 KB: the shape of shipGates.ts in chat #133542.
+  const midFile = Array.from({ length: 520 }, (_, i) => `const line${i} = "${"z".repeat(40)}";`).join("\n");
+
+  it("regression: chat #133542 — a first read of a 520-line file is not outlined, it returns every line", async () => {
+    expect(midFile.length).toBeLessThan(WHOLE_READ_MAX_CHARS);
+    const r = await readB2({ "src/mid.ts": midFile }, { path: "src/mid.ts" }, true);
+    expect(r.outline).toBeUndefined();
+    expect(r.truncated).toBe(false);
+    expect(r.totalLines).toBe(520);
+    expect(String(r.content).split("\n").length).toBe(520);
+  });
+
+  it("regression: chat #133542 — a small window of a file that fits is widened to the whole file", async () => {
+    const r = await read({ "src/mid.ts": midFile }, { path: "src/mid.ts", offset: 180, limit: 180 });
+    expect(r.offset).toBe(1);
+    expect(r.truncated).toBe(false);
+    expect(String(r.content).split("\n").length).toBe(520);
+    expect(String(r.note)).toMatch(/whole file/);
+  });
+
+  it("a short file's explicit window is served as asked", async () => {
+    const short = Array.from({ length: WIDEN_WINDOW_MIN_LINES - 1 }, (_, i) => `l${i}`).join("\n");
+    const r = await read({ "a.ts": short }, { path: "a.ts", offset: 10, limit: 5 });
+    expect(r.offset).toBe(10);
+    expect(String(r.content).split("\n").length).toBe(5);
+  });
+
+  it("never tells the model to read with a small limit", async () => {
+    const big = Array.from({ length: 700 }, (_, i) => `export function fn${i}(): number {\n  // ${"y".repeat(90)}\n  return ${i};\n}`).join("\n");
+    const r = await readB2({ "src/big.ts": big }, { path: "src/big.ts" }, true);
+    expect(String(r.note)).not.toMatch(/small/);
   });
 });

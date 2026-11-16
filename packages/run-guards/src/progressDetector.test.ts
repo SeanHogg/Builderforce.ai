@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ProgressDetector, type ProgressAction } from "./progressDetector.js";
-import { NO_PROGRESS_TURNS } from "./noProgress.js";
+import { NO_PROGRESS_TURNS, NoProgressTracker } from "./noProgress.js";
+import { READ_ONLY_STREAK_CALLS, READ_ONLY_STREAK_TURNS } from "./readOnlyStreak.js";
 import { REVISIT_HARD_AT } from "./visitTally.js";
 import { FAILURE_HARD_AT } from "./failureTally.js";
 import { MAX_REVERIFY_PATHS } from "./reverifyTracker.js";
@@ -166,5 +167,106 @@ describe("ProgressDetector", () => {
       tripped ||= d.endTurn() !== null;
     }
     expect(tripped).toBe(true);
+  });
+});
+
+describe("ProgressDetector: read_only_streak", () => {
+  let n = 0;
+  /** The streak judges only a run asked for a change (`expectsChange`). */
+  const changePorts = { ...ports, expectsChange: () => true };
+  /** One turn of `k` reads, each of a path never read before (ground for no_progress). */
+  const readTurn = (d: ProgressDetector, k = 1) => {
+    for (let i = 0; i < k; i++) d.observe("read_file", { path: `src/new${n++}.ts` }, okData);
+    return d.endTurn();
+  };
+
+  it("trips on the 6th all-read-only turn", () => {
+    const d = new ProgressDetector({}, changePorts);
+    for (let i = 0; i < READ_ONLY_STREAK_TURNS - 1; i++) expect(readTurn(d)).toBeNull();
+    expect(readTurn(d)).toMatchObject({ kind: "steer", signal: { kind: "read_only_streak", count: READ_ONLY_STREAK_TURNS } });
+    expect(d.steerNote()).toContain("read-only calls in a row");
+  });
+
+  it("trips on 18 read-only calls across 4 turns", () => {
+    const d = new ProgressDetector({}, changePorts);
+    expect(readTurn(d, 5)).toBeNull();
+    expect(readTurn(d, 5)).toBeNull();
+    expect(readTurn(d, 5)).toBeNull();
+    expect(readTurn(d, 3)).toMatchObject({ kind: "steer", signal: { kind: "read_only_streak", count: READ_ONLY_STREAK_CALLS } });
+  });
+
+  it("an edit on turn 5 resets the streak", () => {
+    const d = new ProgressDetector({}, changePorts);
+    for (let i = 0; i < 4; i++) expect(readTurn(d)).toBeNull();
+    d.observe("edit_file", { path: "src/written.ts", old_string: "x", new_string: "y" }, okData);
+    expect(d.endTurn()).toBeNull();
+    for (let i = 0; i < READ_ONLY_STREAK_TURNS - 1; i++) expect(readTurn(d)).toBeNull();
+    expect(trip(readTurn(d))?.kind).toBe("read_only_streak");
+  });
+
+  it("a no-call turn (a final answer) resets the streak", () => {
+    const d = new ProgressDetector({}, changePorts);
+    for (let i = 0; i < 5; i++) expect(readTurn(d)).toBeNull();
+    expect(d.endTurn()).toBeNull();
+    for (let i = 0; i < READ_ONLY_STREAK_TURNS - 1; i++) expect(readTurn(d)).toBeNull();
+    expect(trip(readTurn(d))?.kind).toBe("read_only_streak");
+  });
+
+  it("a trip resets the streak; the second stretch escalates, the third pauses", () => {
+    const d = new ProgressDetector({}, changePorts);
+    const kinds: string[] = [];
+    for (let stretch = 0; stretch < 3; stretch++) {
+      for (let i = 0; i < READ_ONLY_STREAK_TURNS - 1; i++) expect(readTurn(d)).toBeNull();
+      const a = readTurn(d);
+      expect(trip(a)?.kind).toBe("read_only_streak");
+      kinds.push(a!.kind);
+    }
+    expect(kinds).toEqual(["steer", "escalate", "pause"]);
+    expect(d.snapshot().tripsBySignal).toEqual({ read_only_streak: 3 });
+  });
+
+  it("resumes the count across a JSON snapshot round trip", () => {
+    const d = new ProgressDetector({}, changePorts);
+    expect(d.snapshot().readOnlyStreak).toBeUndefined();
+    for (let i = 0; i < 3; i++) expect(readTurn(d)).toBeNull();
+    expect(d.snapshot().readOnlyStreak).toEqual({ turns: 3, calls: 3 });
+    const resumed = new ProgressDetector(JSON.parse(JSON.stringify(d.snapshot())), changePorts);
+    expect(readTurn(resumed)).toBeNull();
+    expect(readTurn(resumed)).toBeNull();
+    expect(trip(readTurn(resumed))?.kind).toBe("read_only_streak");
+  });
+
+  it("never fires without an isReadOnly port", () => {
+    const d = new ProgressDetector();
+    for (let i = 0; i < 20; i++) expect(readTurn(d, 3)).toBeNull();
+  });
+
+  it("never fires on a run that was not asked for a change (a review reads and answers)", () => {
+    const d = new ProgressDetector({}, ports);
+    for (let i = 0; i < 20; i++) expect(trip(readTurn(d, 3))?.kind).not.toBe("read_only_streak");
+  });
+
+  it("regression: chat #132309 run #3 — 14 turns of 3-4 reads of NEW files trips by turn 6, where no_progress never fills", () => {
+    const d = new ProgressDetector({}, changePorts);
+    const ground = new NoProgressTracker();
+    const kinds: Array<string | undefined> = [];
+    let p = 0;
+    for (let t = 0; t < 14; t++) {
+      d.noteTurnText("I'll read the remaining files and fix them.");
+      const k = t % 2 ? 4 : 3;
+      for (let i = 0; i < k; i++) {
+        const args = { path: `clients/vscode/src/file${p++}.ts` };
+        d.observe("read_file", args, okData);
+        ground.observe("read_file", args, { ok: true, wrote: false });
+      }
+      // The pre-existing window: every turn reached new files, so it never goes idle.
+      expect(ground.endTurn()).toBe(0);
+      kinds.push(trip(d.endTurn())?.kind);
+    }
+    const first = kinds.findIndex(Boolean);
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(first).toBeLessThan(READ_ONLY_STREAK_TURNS);
+    expect(kinds[first]).toBe("read_only_streak");
+    expect(kinds).not.toContain("no_progress");
   });
 });

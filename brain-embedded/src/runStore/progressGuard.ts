@@ -53,9 +53,19 @@ export class RunProgressGuard {
   /** The B1 / B4 advisory the last turn produced, waiting to be traced. */
   private advisory: ProgressAction | null = null;
 
-  constructor(on = deviceLeverOn('a3_progress_detector')) {
+  /**
+   * @param on the A3 lever.
+   * @param expectsChange the run was asked for a CHANGE (`asksForChange` over its request).
+   *   Only then does a read-only streak trip — a review reads and answers.
+   */
+  constructor(on = deviceLeverOn('a3_progress_detector'), expectsChange = false) {
     this.detector = on
-      ? new ProgressDetector({}, { isReadOnly: isReadOnlyCall, isUnscopedMutation, isPlatformProgress: isMutatingPlatformTool })
+      ? new ProgressDetector({}, {
+          isReadOnly: isReadOnlyCall,
+          isUnscopedMutation,
+          isPlatformProgress: isMutatingPlatformTool,
+          expectsChange: () => expectsChange,
+        })
       : null;
   }
 
