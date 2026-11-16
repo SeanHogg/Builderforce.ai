@@ -33,7 +33,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/three": "^0.185.4",
-    "esbuild": "^0.24.0",
+    "esbuild": "^0.28.2",
     "fake-indexeddb": "6.2.5",
     "fflate": "^0.8.2",
     "jsdom": "^28.1.0",
@@ -45,6 +45,6 @@
     "troika-three-text": "^0.52.5",
     "typescript": "^7.0.2",
     "unpdf": "^1.8.1",
-    "vitest": "^4.0.3"
+    "vitest": "^4.1.12"
   }
 }

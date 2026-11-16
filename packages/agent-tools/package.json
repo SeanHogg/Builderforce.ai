@@ -46,6 +46,13 @@
     "@types/node": "^24.19.2",
     "npm": "^12.2.2",
     "typescript": "^7.0.2",
-    "vitest": "^4.0.18"
+    "vitest": "^4.1.12"
+  },
+  "pnpm": {
+    "overrides": {
+      "source-map-js": "^1.2.2",
+      "vite": "^8.1.6",
+      "postcss": "^8.5.23"
+    }
   }
 }

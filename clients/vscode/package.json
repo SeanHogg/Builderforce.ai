@@ -1395,7 +1395,14 @@
       "qs": "^6.16.1",
       "katex": "^0.18.2",
       "browserslist": "^4.28.7",
-      "baseline-browser-mapping": "^2.11.0"
+      "baseline-browser-mapping": "^2.11.0",
+      "vite": "^6.4.4",
+      "postcss-selector-parser": "^6.1.5",
+      "zod": "^4.6.6",
+      "body-parser": "^2.4.0",
+      "ip-address": "^10.7.4",
+      "glob": "^14.0.2",
+      "diff": "^8.0.3"
     }
   }
 }

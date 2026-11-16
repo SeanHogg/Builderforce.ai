@@ -26,7 +26,8 @@
   "pnpm": {
     "overrides": {
       "sharp": "0.35.4",
-      "undici": "7.30.0"
+      "undici": "7.30.0",
+      "hono": "^4.13.16"
     }
   }
 }
