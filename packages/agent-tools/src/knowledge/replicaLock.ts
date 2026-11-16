@@ -124,6 +124,21 @@ async function takeExclusive(files: ReplicaLockFiles, name: string, pid: Owner, 
     return create(name, text).catch(() => false);
 }
 
+/** Arms the refresh AFTER the current turn, so acquiring under fake timers never runs a tick before the caller holds the lock. */
+function armRefresh(tick: () => void, ms: number): () => void {
+    let timer: ReturnType<typeof setInterval> | undefined;
+    let cancelled = false;
+    queueMicrotask(() => {
+        if (cancelled) return;
+        timer = setInterval(tick, ms);
+        (timer as { unref?: () => void }).unref?.();
+    });
+    return () => {
+        cancelled = true;
+        if (timer) clearInterval(timer);
+    };
+}
+
 /** The lock for `rootId`, or undefined when another live holder has it. */
 export async function acquireReplicaLock(
     files: KnowledgeFiles,
