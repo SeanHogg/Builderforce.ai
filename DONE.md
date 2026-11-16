@@ -370,7 +370,7 @@ Brain chat #195 — auto-captured delta for a change to `Builderforce.ai/api/src
   - The VS Code host op is `knowledge/agentRuns.ts`, with a memo keyed by `updatedAt` and capped by an LRU of 60. Reports are project-scoped.
   - The three cameras the stopped run left half-written are finished: 4+1, Architecture Style and Key Features. Style is scored as weighted checks per style, with evidence.
 - **Runtime.**
-  - The VSIX binds the PRD 45 verifier, git and reviewer ports in both entry points.
+  - The VSIX binds the PRD 45 verifier, git and reviewer ports in both entry points (`clients/vscode/src/verify/shipPorts.ts`, spread onto the host request by `brainRunHost.ts` and `nativeBrainRun.ts`).
   - Each edit result carries post-edit diagnostics and a bracket-balance note.
   - The ship gate sits in `callPreflight`:
     - It hashes `HEAD` blobs.
