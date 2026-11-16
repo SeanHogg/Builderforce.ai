@@ -122,8 +122,9 @@ describe("createShipPorts", () => {
     const verdict = await ports.reviewer.review({ repo: ROOT, diff: "diff", evidence: "", authorModels: ["author-model"] });
     expect(asked).toEqual([{ model: "pool-model" }]);
     expect(verdict).toMatchObject({ reviewerModel: "pool-model", verdict: "approved" });
-    // The switch is named in the findings so the user sees what happened.
-    if (!("refused" in verdict)) expect(verdict.findings[0]).toContain("pool-model");
+    // The switch is named in the advisories so the user sees what happened (never in
+    // `findings` — an advisory must not block the push).
+    if (!("refused" in verdict)) expect(verdict.advisories?.join(" ")).toContain("pool-model");
   });
 
   it("prefers a BYO catalog model over a gateway-pool model for the auto-switch", async () => {

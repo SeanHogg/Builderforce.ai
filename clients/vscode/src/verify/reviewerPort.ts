@@ -162,6 +162,7 @@ function reviewPrompt(input: {
     "Blocking: a defect that would ship broken behaviour, data loss, a security hole, a failing build or test, or a stated requirement left unmet. Each one names file:line and the failure scenario.",
     'Advisory: style, speculative "may not", hardening and documentation gaps.',
     "Report EVERY blocking defect you can see in this ONE pass — the author fixes them together; there is no later round for defects visible now.",
+    "Be EXHAUSTIVE across the WHOLE diff, not just the most severe spot: a single push is the ONLY chance to surface a defect, so stopping after the first one leaves the rest to a later round the author will not get. Sweep every changed file, every hunk, every edge (CRLF, empty input, missing files, flag forms) before you reply.",
   ];
   if (prior.length) {
     lines.push(

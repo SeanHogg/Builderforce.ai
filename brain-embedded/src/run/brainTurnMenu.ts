@@ -46,7 +46,7 @@ export async function brainTurnMenu(run: BrainRunContext, env: TurnEnv, catalogS
       category: 'message',
       label: 'tools.selected',
       args: { step: env.step },
-      result: `${selected.length} of ${catalogSize} tools advertised this turn (relevance-selected; ${run.usedTools.size} pinned from earlier calls)`,
+      result: `${selected.length} of ${catalogSize} tools advertised this turn (nothing trimmed — the full catalog was offered; ${run.usedTools.size} pinned from earlier calls)`,
     });
     return { tools: [...(selected as unknown as ToolSchema[]), ...(routerToolSpecs(catalogSize) as unknown as ToolSchema[])], ...(tail.length > 0 ? { tail } : {}) };
   }
