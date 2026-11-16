@@ -4,6 +4,7 @@ import {
   nextFreeVersion,
   parseOutArg,
   planPackageStep,
+  planPublishArgs,
   rewriteVersionLine,
 } from "../vsce-platform.lib.mjs";
 
@@ -105,10 +106,15 @@ describe("parseOutArg", () => {
     expect(parseOutArg(["-o=e.vsix"])).toEqual({ index: 0, path: "e.vsix", joined: true });
   });
 
-  it("does not treat a value that merely equals --out as a flag", () => {
-    // e.g. `--allow-overwrite --out` where the real path is missing would parse
-    // path as undefined here; the CLI guards on the resolved absolute path anyway.
+  it("returns path undefined for a trailing flag with no value", () => {
     expect(parseOutArg(["x", "--out"])?.index).toBe(1);
+    expect(parseOutArg(["x", "--out"])?.path).toBeUndefined();
+  });
+
+  it("returns path undefined when the value is itself another flag", () => {
+    // `--out --target x` must not silently swallow `--target` as the output path.
+    const parsed = parseOutArg(["--out", "--target", "x"]);
+    expect(parsed?.path).toBeUndefined();
   });
 });
 

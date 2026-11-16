@@ -63,8 +63,11 @@ export function parseOutArg(args) {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === "--out" || arg === "-o") {
-      // A trailing flag with no value yields path === undefined; callers must guard.
-      return { index: i, path: args[i + 1], joined: false };
+      // A separate-value flag whose value is missing (trailing) or is itself another
+      // flag (`--out --target x`) yields path === undefined; callers must guard.
+      const value = args[i + 1];
+      const path = value === undefined || value.startsWith("-") ? undefined : value;
+      return { index: i, path, joined: false };
     }
     if (arg.startsWith("--out=")) {
       return { index: i, path: arg.slice("--out=".length), joined: true };
@@ -179,4 +182,25 @@ export function planPackageStep({ name, version }, rawArgs, artifactExists) {
   }
   args[outValueIndex] = artifactPathFor(candidate);
   return { ok: true, args, outPath: artifactPathFor(candidate), bumpedTo: candidate, warning };
+}
+
+/**
+ * How a `publish` invocation proceeds with respect to this script's own flags.
+ * --auto-bump only resolves a LOCAL artifact collision, which does not exist for
+ * publish (the marketplace version is authoritative), so it is refused outright
+ * rather than silently stripped — a caller must never believe a publish was bumped.
+ * --allow-overwrite is a packaging concern too; it is stripped (with the other flags,
+ * vsce would fail on an unknown option) and publish proceeds unchanged.
+ *
+ *   { ok: true, args }      publish with `args` (flags handled).
+ *   { ok: false, error }    refuse; `error` is user-facing.
+ */
+export function planPublishArgs(rawArgs) {
+  const args = [...rawArgs];
+  if (args.includes("--auto-bump")) {
+    return { ok: false, error: "--auto-bump is only supported for `package`, not `publish`." };
+  }
+  const allowIdx = args.indexOf("--allow-overwrite");
+  if (allowIdx !== -1) args.splice(allowIdx, 1);
+  return { ok: true, args };
 }
