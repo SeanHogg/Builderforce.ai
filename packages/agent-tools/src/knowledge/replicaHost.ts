@@ -366,11 +366,20 @@ export function createReplicaHost(opts: ReplicaHostOptions = {}): ReplicaHost {
         },
     };
 
-    /** One timer per linked root: every `GENERATION_CHECK_INTERVAL_MS` it starts a pump unless one or a review is running. */
+    /**
+     * One timer per linked root: every `GENERATION_CHECK_INTERVAL_MS` it starts a pump unless one or a review is running.
+     * Armed a turn AFTER the pump that asked for it. `setInterval` during `startReplicaPump` is queued before that pump's
+     * own `await lock.acquire` resumes, so under fake timers the quiet tick runs (and starts a second pump, or reads
+     * `Date.now`) before the first pump has the lock — the pump the test is waiting on then never runs.
+     */
     function armQuietCheck(held: Entry): void {
         if (held.quiet) return;
-        held.quiet = setInterval(() => { void quietTick(held).catch((error) => report('replica quiet check', error)); }, GENERATION_CHECK_INTERVAL_MS);
-        (held.quiet as { unref?: () => void }).unref?.();
+        held.quiet = 0 as unknown as ReturnType<typeof setInterval>; // claimed, so a re-entrant start does not arm a second one
+        queueMicrotask(() => {
+            if (held.quiet !== (0 as unknown as ReturnType<typeof setInterval>)) return; // stopped before the timer existed
+            held.quiet = setInterval(() => { void quietTick(held).catch((error) => report('replica quiet check', error)); }, GENERATION_CHECK_INTERVAL_MS);
+            (held.quiet as { unref?: () => void }).unref?.();
+        });
     }
 
     async function quietTick(held: Entry): Promise<void> {
