@@ -92,10 +92,14 @@ function spawnClaude(bin: string, args: string[]): import("node:child_process").
   if (process.platform === "win32" && /\.(cmd|bat)$/i.test(resolved)) {
     // Batch shims are not executables — CreateProcess can't run them directly. Drive
     // the command interpreter with ONE pre-quoted command line (no raw-arg string
-    // building): every argv element is individually double-quoted so spaces and cmd
-    // metacharacters (& | ^ > <) inside caller-influenced values stay literal.
-    const comspec = process.env.COMSPEC ?? "cmd.exe";
-    const quote = (s: string) => `"${s.replace(/"/g, "'")}"`;
+    // building). Neutralize cmd's expansion triggers on every element:
+    //   - `%` → `%%`: cmd collapses `%%` to a literal `%` during command-line parsing,
+    //     BEFORE variable matching, so a caller value like `%PATH%` reaches the child
+    //     verbatim instead of being expanded by cmd (arg corruption / env leakage).
+    //   - `"` → `'`: a caller value can't break out of its own double-quoted span.
+    //   `& | ^ < >` are already inert inside double quotes; `!` is safe because delayed
+    //   expansion is off by default (`/v:off`) and we never enable it.
+    const quote = (s: string) => `"${s.replace(/%/g, "%%").replace(/"/g, "'")}"`;
     const cmdLine = [quote(resolved), ...args.map(quote)].join(" ");
     return spawn(process.env.COMSPEC ?? "cmd.exe", ["/d", "/s", "/c", cmdLine], {
       ...options,
