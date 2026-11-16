@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, resolve } from "node:path";
-import { nextFreeVersion, rewriteVersionLine } from "./vsce-platform.lib.mjs";
+import { nextFreeVersion, parseOutArg, rewriteVersionLine } from "./vsce-platform.lib.mjs";
 
 const operation = process.argv[2];
 if (operation !== "package" && operation !== "publish") {
@@ -103,27 +103,6 @@ if (autoBump && operation === "publish") {
   throw new Error("--auto-bump is only supported for `package`, not `publish`.");
 }
 
-/**
- * Locate a caller-supplied output path among the forwarded args. Handles the separate
- * value forms (`--out <path>`, `-o <path>`) and the joined form (`--out=<path>`).
- * Returns { index, path }, or null when the caller did not supply one.
- */
-function findCallerOut(args) {
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg === "--out" || arg === "-o") {
-      return { index: i, path: args[i + 1] };
-    }
-    if (arg.startsWith("--out=")) {
-      return { index: i, path: arg.slice("--out=".length) };
-    }
-    if (arg.startsWith("-o=")) {
-      return { index: i, path: arg.slice("-o=".length) };
-    }
-  }
-  return null;
-}
-
 let result;
 let succeeded = false;
 /** The version package.json held before any auto-bump; null when no bump happened. */
@@ -142,22 +121,26 @@ try {
     };
 
     /**
-     * Artifact path for a given version, resolved against process.cwd() for the
-     * existence check. Assumes an unscoped package name; builderforce-ai is unscoped.
+     * THE single source for an artifact path: both the initial collision check and
+     * the auto-bump free-version search derive from this one function, so they can
+     * never disagree about what path belongs to a version. Kept relative for the
+     * default (what vsce has always printed/passed); resolved only where an absolute
+     * path is needed for existence checks. Assumes an unscoped package name;
+     * builderforce-ai is unscoped.
      */
-    const artifactExists = (version) =>
-      existsSync(resolve(`${manifest.name}-${version}.vsix`));
+    const artifactPathFor = (version) =>
+      `${manifest.name}-${version}.vsix`;
 
-    // Keep the default artifact path RELATIVE (what vsce has always printed/passed);
-    // resolve() only for the existence checks.
-    const callerOut = findCallerOut(forwardedArgs);
+    const callerOut = parseOutArg(forwardedArgs);
     let defaultOutValueIndex = -1;
     const outPath = callerOut
       ? callerOut.path
-      : `${manifest.name}-${manifest.version}.vsix`;
+      : artifactPathFor(manifest.version);
     if (!callerOut) {
-      defaultOutValueIndex = forwardedArgs.length + 1;
       forwardedArgs.push("--out", outPath);
+      // The value slot we just pushed — computed AFTER the push so no later arg
+      // mutation can silently shift it before the auto-bump overwrite below.
+      defaultOutValueIndex = forwardedArgs.length - 1;
     }
     const absolute = resolve(outPath);
 
@@ -186,7 +169,10 @@ try {
       // overwrite any existing artifact, including a bumped version that was
       // itself already packaged.
       const originalVersion = manifest.version;
-      const candidate = nextFreeVersion(originalVersion, artifactExists);
+      const candidate = nextFreeVersion(
+        originalVersion,
+        (v) => existsSync(resolve(artifactPathFor(v))),
+      );
       if (!candidate) {
         throw new Error(
           `Auto-bump could not find a free version after 100 attempts starting from ${originalVersion}. `
@@ -196,7 +182,7 @@ try {
       setPackageVersion(candidate);
       // Keep the artifact path passed to vsce in sync with the bumped version by
       // construction: we pushed our own --out, so we know the exact value slot.
-      forwardedArgs[defaultOutValueIndex] = `${manifest.name}-${candidate}.vsix`;
+      forwardedArgs[defaultOutValueIndex] = artifactPathFor(candidate);
       autoBumpedFrom = originalVersion;
       console.warn(
         `${basename(absolute)} already exists (version ${originalVersion} already packaged). `
@@ -212,7 +198,11 @@ try {
   );
   if (result.error) throw result.error;
   // Set only after every check above has passed: any throw leaves this false and the
-  // finally block rolls the bump back, as does a non-zero exit status.
+  // finally block rolls the bump back, as does a non-zero exit status. A signal kill
+  // (status null) is surfaced explicitly — silent status-1 exits hide why vsce died.
+  if (result.signal) {
+    throw new Error(`vsce exited due to signal ${result.signal}.`);
+  }
   succeeded = (result.status ?? 1) === 0;
 } finally {
   // Roll the version bump back unless the package step fully succeeded, so the tree is

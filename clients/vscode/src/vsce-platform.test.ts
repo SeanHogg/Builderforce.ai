@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   bumpPatchVersion,
   nextFreeVersion,
+  parseOutArg,
   rewriteVersionLine,
 } from "../vsce-platform.lib.mjs";
 
@@ -48,6 +49,59 @@ describe("rewriteVersionLine", () => {
 
   it("throws when no version line exists", () => {
     expect(() => rewriteVersionLine('{"name":"x"}', "1.0.0")).toThrow();
+  });
+
+  it("rewrites the TOP-LEVEL version even when a nested version line comes first", () => {
+    // A nested "version" key (e.g. inside a config block) appearing BEFORE the
+    // top-level one must not be rewritten — only the least-indented key wins.
+    const original = [
+      "{",
+      '  "name": "builderforce-ai",',
+      '  "config": {',
+      '    "version": "9.9.9"',
+      "  },",
+      '  "version": "2026.10.178",',
+      '  "publisher": "builderforce"',
+      "}",
+      "",
+    ].join("\n");
+    const rewritten = rewriteVersionLine(original, "2026.10.179");
+    expect(rewritten).toContain('    "version": "9.9.9"');
+    expect(rewritten).toContain('  "version": "2026.10.179"');
+  });
+
+  it("preserves spacing, key order, and trailing newline of the version line", () => {
+    const original = '{\n  "name": "x",\n\t"version" : "1.0.0" ,\n}\n';
+    const rewritten = rewriteVersionLine(original, "2.0.0");
+    expect(rewritten).toBe('{\n  "name": "x",\n\t"version" : "2.0.0" ,\n}\n');
+  });
+});
+
+describe("parseOutArg", () => {
+  it("returns null when no output flag is present", () => {
+    expect(parseOutArg(["--no-dependencies"])).toBeNull();
+    expect(parseOutArg([])).toBeNull();
+  });
+
+  it("parses the separate value forms (--out <path>, -o <path>)", () => {
+    expect(parseOutArg(["--out", "a.vsix"])).toEqual({ index: 0, path: "a.vsix", joined: false });
+    expect(parseOutArg(["-o", "b.vsix"])).toEqual({ index: 0, path: "b.vsix", joined: false });
+    expect(parseOutArg(["--target", "win32-x64", "--out", "c.vsix"])).toEqual({
+      index: 2,
+      path: "c.vsix",
+      joined: false,
+    });
+  });
+
+  it("parses the joined forms (--out=<path>, -o=<path>)", () => {
+    expect(parseOutArg(["--out=d.vsix"])).toEqual({ index: 0, path: "d.vsix", joined: true });
+    expect(parseOutArg(["-o=e.vsix"])).toEqual({ index: 0, path: "e.vsix", joined: true });
+  });
+
+  it("does not treat a value that merely equals --out as a flag", () => {
+    // e.g. `--allow-overwrite --out` where the real path is missing would parse
+    // path as undefined here; the CLI guards on the resolved absolute path anyway.
+    expect(parseOutArg(["x", "--out"])?.index).toBe(1);
   });
 });
 

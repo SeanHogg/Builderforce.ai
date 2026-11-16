@@ -17,17 +17,56 @@ export function bumpPatchVersion(version) {
 }
 
 /**
- * Rewrite ONLY the `"version"` line of a package.json text, leaving every other byte
- * (key order, indentation, other fields, trailing newline) untouched. Throws when no
- * version line is found — silently rewriting nothing would package the OLD version
- * while claiming the new one.
+ * Rewrite ONLY the top-level `"version"` line of a package.json text, leaving every
+ * other byte (key order, indentation, other fields, trailing newline) untouched.
+ * When several `"version"` keys exist (e.g. a nested one inside a config block), the
+ * one with the LEAST indentation — the top-level key — wins, so a nested version line
+ * appearing earlier in the file is never rewritten by mistake. Throws when no version
+ * line is found — silently rewriting nothing would package the OLD version while
+ * claiming the new one.
  */
 export function rewriteVersionLine(text, version) {
-  const versionLine = /^([ \t]*"version"[ \t]*:[ \t]*")([^"]*)("[ \t]*,?[ \t]*)$/m;
-  if (!versionLine.test(text)) {
+  const versionLine = /^(\s*)"version"(\s*):(\s*)"([^"]*)"(\s*,?\s*)$/;
+  const lines = text.split("\n");
+  let best = -1;
+  let bestIndent = Infinity;
+  for (let i = 0; i < lines.length; i++) {
+    const m = versionLine.exec(lines[i]);
+    if (!m) continue;
+    if (m[1].length < bestIndent) {
+      bestIndent = m[1].length;
+      best = i;
+    }
+  }
+  if (best === -1) {
     throw new Error('Could not locate a "version" line in package.json to rewrite.');
   }
-  return text.replace(versionLine, `$1${version}$3`);
+  lines[best] = lines[best].replace(versionLine, (_m, ind, sp1, sp2, _v, trail) =>
+    `${ind}"version"${sp1}:${sp2}"${version}"${trail}`,
+  );
+  return lines.join("\n");
+}
+
+/**
+ * Locate a caller-supplied output path among forwarded CLI args. Handles the separate
+ * value forms (`--out <path>`, `-o <path>`) and the joined forms (`--out=<path>`,
+ * `-o=<path>`). Returns { index, path, joined }, or null when the caller did not
+ * supply one. Extraction into the lib keeps this parsing unit-testable.
+ */
+export function parseOutArg(args) {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--out" || arg === "-o") {
+      return { index: i, path: args[i + 1], joined: false };
+    }
+    if (arg.startsWith("--out=")) {
+      return { index: i, path: arg.slice("--out=".length), joined: true };
+    }
+    if (arg.startsWith("-o=")) {
+      return { index: i, path: arg.slice("-o=".length), joined: true };
+    }
+  }
+  return null;
 }
 
 /**
