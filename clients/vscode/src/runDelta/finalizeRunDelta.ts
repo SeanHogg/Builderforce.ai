@@ -258,6 +258,10 @@ async function repoDelta(
     value: {
       runId, repository, changeSetId: set.id, chatId: run.chatId, mode: run.mode, delta,
       computedMs: Date.now() - started,
+      // The change set's own repo key (its payload's, not parsed from its UUID id): the record id, the payload's
+      // repoKey, the blast-score row and the prediction row are all keyed by (runId, repoKey); without it the UUID
+      // id is unparseable and every one collapses to `run-delta:<runId>:`.
+      repoKey: cs.repoKey,
       ...(dropped.length > 0 ? { overridesDropped: redactDropped(dropped) } : {}),
       ...(run.projectId !== undefined ? { projectId: run.projectId } : {}),
     },
