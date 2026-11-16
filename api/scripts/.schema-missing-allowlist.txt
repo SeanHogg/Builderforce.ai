@@ -1,0 +1,17 @@
+# Schema-missing allowlist — migrated tables with no pgTable() declaration that the
+# drift check should treat as intentionally unmapped.
+#
+# Each non-comment line is a bare table name. check-schema-drift.mjs tolerates a
+# "Table X is created by a migration but has no pgTable() declaration" finding when
+# X is listed here. Use this ONLY for a table whose Drizzle declaration was removed
+# in the same push that drops the table (the PRD 39 expand → move → contract
+# sequence), or a pure join/audit table written only by SQL migrations.
+#
+# creation_session_comments — PRD 39 §2 push 3 (migration 1350): the canvas-comment
+# fold's CONTRACT step drops this table and removes its pgTable from
+# schema/canvas.ts in the same commit. The read/write path has run off kernel
+# `annotations` since push 2 (application/canvas/canvasComments.ts); the migration
+# that created the table (0388) still exists in api/migrations/ for fresh installs
+# that must replay up to the drop, so the drift check's "created but undeclared"
+# finding is the intended end state, not a gap.
+creation_session_comments
