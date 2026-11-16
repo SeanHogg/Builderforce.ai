@@ -43,9 +43,9 @@ export interface RunPredictionValue {
 export const isRunPredictionValue = (p: unknown): p is RunPredictionValue =>
   !!p && typeof p === "object" && (p as { kind?: unknown }).kind === "prediction";
 
-/** `changeset:<runId>:<repoKey>` → the row id `run-delta-prediction:<runId>:<repoKey>`. */
-export const runPredictionId = (changeSetId: string): string =>
-  `run-delta-prediction:${runDeltaKey(changeSetId).slice("run-delta:".length)}`;
+/** `changeset:<runId>:<repoKey>` (or a UUID id + payload) → the row id `run-delta-prediction:<runId>:<repoKey>`. */
+export const runPredictionId = (changeSetId: string, payload?: { runId?: string; repoKey?: string }): string =>
+  `run-delta-prediction:${runDeltaKey(changeSetId, payload).slice("run-delta:".length)}`;
 
 /** Stores a run's predictions once. Returns false when they were already stored for this run and repository. */
 export async function storeRunPrediction(store: LocalFirstStore, deviceId: string, value: RunPredictionValue): Promise<boolean> {

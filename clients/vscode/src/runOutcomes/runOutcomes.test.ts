@@ -23,7 +23,7 @@ const label = (over: Partial<RunOutcomeLabel>): RunOutcomeLabel => ({
 
 describe("run-outcome record (PRD 41 §D1)", () => {
   it("has a UUID-shaped id derived from the change set's run and repository key", () => {
-    expect(runOutcomeIdOfChangeSet("changeset:run-1:abc123")).toBe(runOutcomeId("run-1", "abc123"));
+    expect(runOutcomeIdOfChangeSet("changeset:run-1:abc123", { runId: "run-1", repoKey: "abc123" })).toBe(runOutcomeId("run-1", "abc123"));
     expect(runOutcomeId("run-1", "abc123")).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   });
 

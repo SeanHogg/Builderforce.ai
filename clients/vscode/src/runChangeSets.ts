@@ -15,10 +15,10 @@
  *   • Hashes are evidence, not diffs: patch/artifact upload is a separate manifest
  *     concern, and nothing here ever applies a change set to another checkout.
  *
- * Records are written once (`changeset:<runId>:<repo>`) and never overwritten — a
+ * Records are written once (`stableEntityId('changeset:<runId>:<repoKey>')`, a UUID) and never overwritten — a
  * retried finalization returns the stored record.
  *
- * A second record, `changeset-lifecycle:<runId>`, is the restart boundary. It stores
+ * A second record, `changeset-lifecycle:<runId>` (also a UUID), is the restart boundary. It stores
  * a content hash of the baseline before the run and a finalization only when the set
  * closes. A set with a baseline and no finalization is partial; a finalized set is
  * finished. A restart reads that record. Nothing here fetches or applies a patch.
@@ -33,6 +33,7 @@ import { createHash } from "node:crypto";
 import {
   defineRecordIndex,
   newLocalRecord,
+  stableEntityId,
   type ChangeSetValue,
   type EntityDestination,
   type LocalFirstStore,
@@ -66,6 +67,12 @@ export interface LocalChangeSetValue extends ChangeSetValue {
   /** Always stamped by the writer (the agent that ran), so required locally. */
   author: string;
   capturedAt: string;
+  /**
+   * The raw 16-hex repo key (the id's last field). Written on every new record; absent on records
+   * stored before the field existed, which readers re-derive by parsing the legacy
+   * `changeset:<runId>:<repoKey>` text id.
+   */
+  repoKey: string;
   files: Array<{ path: string; beforeHash?: string; afterHash?: string; patchManifestId?: string; attribution: ChangeAttribution; status: string }>;
 }
 
@@ -102,10 +109,40 @@ export function syncedChangeSetPayload(payload: LocalChangeSetValue): LocalChang
   return { ...payload, repository: syncedRepositoryIdentity(payload.repository) };
 }
 
-/** The change-set record id is derived from the run and repo, so re-finalizing dedupes. */
+/**
+ * Every synced client id is a UUID (`isJournalEventId`), so the record id is the
+ * deterministic UUID `stableEntityId('changeset:<runId>:<repoKey>')` — the same run and
+ * repo key, written twice (here or on another device) is one record. Old records under
+ * the legacy `changeset:<runId>:<repoKey>` text id stay readable.
+ */
 export function runChangeSetId(runId: string, repoRoot: string): string {
-  const repoKey = createHash("sha256").update(normalizePath(repoRoot)).digest("hex").slice(0, 16);
-  return `changeset:${runId}:${repoKey}`;
+  return stableEntityId(`changeset:${runId}:${runChangeSetRepoKey(repoRoot)}`);
+}
+
+/** The raw 16-hex repo key a repository root names: the last field of the natural key, and the payload's `repoKey`. */
+export function runChangeSetRepoKey(repoRoot: string): string {
+  return createHash("sha256").update(normalizePath(repoRoot)).digest("hex").slice(0, 16);
+}
+
+/**
+ * The run id a change set names: a payload `runId` wins; a legacy `changeset:<runId>:<repoKey>`
+ * text id is parsed as the fallback (a UUID id is not parseable, so callers must prefer the payload).
+ */
+export function changeSetRunId(value: { id: string; runId?: string }): string {
+  if (typeof value.runId === "string" && value.runId !== "") return value.runId;
+  if (!value.id.startsWith("changeset:")) return "";
+  const body = value.id.slice("changeset:".length);
+  return body.slice(0, body.lastIndexOf(":"));
+}
+
+/**
+ * The raw 16-hex repo key a change set names: a payload `repoKey` wins; a legacy
+ * `changeset:<runId>:<repoKey>` text id is parsed (after its last colon) as the fallback.
+ */
+export function changeSetRepoKey(value: { id: string; repoKey?: string }): string {
+  if (typeof value.repoKey === "string" && value.repoKey !== "") return value.repoKey;
+  const body = value.id.startsWith("changeset:") ? value.id.slice("changeset:".length) : "";
+  return body.slice(body.lastIndexOf(":") + 1);
 }
 
 /** One committed change-set record and the repository root it describes. */
@@ -194,7 +231,8 @@ export async function finalizeRunChangeSetRepos(
     );
     if (!changes.length) continue;
 
-    const id = runChangeSetId(args.runId, repo.root);
+    const repoKey = runChangeSetRepoKey(repo.root);
+    const id = stableEntityId(`changeset:${args.runId}:${repoKey}`);
     const existing = await store.read((tx) => tx.get<LocalChangeSetValue>("change-set", id));
     if (existing) {
       committed.push({ id, root: repo.root });
@@ -212,6 +250,7 @@ export async function finalizeRunChangeSetRepos(
       payload: {
         runId: args.runId,
         repository,
+        repoKey,
         ...(repo.branch ?? baseline?.branch ? { branch: repo.branch ?? baseline?.branch } : {}),
         ...(baseCommit ? { baseCommit } : {}),
         files: changes.map((change) => ({

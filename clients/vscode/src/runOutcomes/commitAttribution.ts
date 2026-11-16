@@ -51,7 +51,7 @@ export async function recentRunContent(store: LocalFirstStore, repository: strin
           const hash = f.afterHash ? fingerprintHash(f.afterHash as `sha256:${string}`) : undefined;
           if (hash) files.set(f.path, hash);
         }
-        if (files.size > 0) out.push({ outcomeId: runOutcomeIdOfChangeSet(row.id), files });
+        if (files.size > 0) out.push({ outcomeId: runOutcomeIdOfChangeSet(row.id, row.payload), files });
       });
     }
   });

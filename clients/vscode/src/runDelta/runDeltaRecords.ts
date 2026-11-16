@@ -18,6 +18,7 @@ import { createHash } from "node:crypto";
 import { defineRecordIndex, newLocalRecord, scanByIndex, stableEntityId, type EntityDestination, type LocalFirstStore, type LocalFirstTransaction } from "@builderforce/local-first";
 import type { ComputedRunDeltaCard, RunDelta } from "@builderforce/run-delta";
 import { syncedRepositoryIdentity } from "../repoIdentity";
+import { changeSetRepoKey, changeSetRunId } from "../runChangeSets";
 import { droppedOverrides } from "./droppedOverrides";
 import { readRunHolds, withHold, type RunHoldState } from "./runHoldState";
 import type { RunPredictionValue } from "./runDeltaPredictions";
@@ -119,11 +120,13 @@ export function redactDropped(codes: readonly string[]): string[] {
   return codes.length > MAX_DROPPED ? [...out, `truncated:${codes.length - MAX_DROPPED}`] : out;
 }
 
-/** `changeset:<runId>:<repoKey>` → the natural key `run-delta:<runId>:<repoKey>`: the same run and repository key. */
-export function runDeltaKey(changeSetId: string): string {
-  const repoKey = changeSetId.slice(changeSetId.lastIndexOf(":") + 1);
-  const runId = changeSetId.slice("changeset:".length, changeSetId.lastIndexOf(":"));
-  return `run-delta:${runId}:${repoKey}`;
+/**
+ * The natural key `run-delta:<runId>:<repoKey>` for the same run and repository key as a change
+ * set. The run id and repo key are read from the change set's payload (always written since the
+ * UUID-id change), with the legacy `changeset:<runId>:<repoKey>` text id parsed as the fallback.
+ */
+export function runDeltaKey(changeSetId: string, payload?: { runId?: string; repoKey?: string }): string {
+  return `run-delta:${changeSetRunId({ id: changeSetId, runId: payload?.runId })}:${changeSetRepoKey({ id: changeSetId, repoKey: payload?.repoKey })}`;
 }
 
 /** The synced record id: `stableEntityId(runDeltaKey(...))` — every client entity id the sync accepts is a UUID. */
@@ -167,7 +170,7 @@ export async function storeRunDelta(
   /** False once the computation was abandoned: checked inside the transaction, so nothing lands after that. */
   live: () => boolean = () => true,
 ): Promise<boolean> {
-  const key = runDeltaKey(stored.value.changeSetId);
+  const key = runDeltaKey(stored.value.changeSetId, stored.value);
   const id = stableEntityId(key);
   let written = false;
   await store.transact(async (tx) => {
@@ -209,7 +212,7 @@ export async function storeRunDelta(
 export async function reviseRunDelta(
   store: LocalFirstStore, deps: { at: string }, stored: StoredRunDelta,
 ): Promise<boolean> {
-  const key = runDeltaKey(stored.value.changeSetId);
+  const key = runDeltaKey(stored.value.changeSetId, stored.value);
   const id = stableEntityId(key);
   let written = false;
   await store.transact(async (tx) => {

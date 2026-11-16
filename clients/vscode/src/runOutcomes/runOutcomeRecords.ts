@@ -17,6 +17,7 @@ import {
   defineRecordIndex, journalWrite, newLocalRecord, scanByIndex, stableEntityId,
   type EntityDestination, type LocalFirstStore, type LocalFirstTransaction, type LocalRecord,
 } from "@builderforce/local-first";
+import { changeSetRepoKey, changeSetRunId } from "../runChangeSets";
 import {
   isRunOutcomeRecordValue, mergeLabels, runOutcomeKey,
   type CommitAttribution, type RunFeatures, type RunOutcomeLabel, type RunOutcomeRecordValue,
@@ -32,9 +33,9 @@ export const RUN_OUTCOMES_BY_REPOSITORY = defineRecordIndex<RunOutcomeRecordValu
 export const runOutcomeId = (runId: string, repoKey: string): string => stableEntityId(runOutcomeKey(runId, repoKey));
 
 /** `changeset:<runId>:<repoKey>` → its run-outcome record id. */
-export function runOutcomeIdOfChangeSet(changeSetId: string): string {
-  const repoKey = changeSetId.slice(changeSetId.lastIndexOf(":") + 1);
-  const runId = changeSetId.slice("changeset:".length, changeSetId.lastIndexOf(":"));
+export function runOutcomeIdOfChangeSet(changeSetId: string, payload?: { runId?: string; repoKey?: string }): string {
+  const repoKey = changeSetRepoKey({ id: changeSetId, repoKey: payload?.repoKey });
+  const runId = changeSetRunId({ id: changeSetId, runId: payload?.runId });
   return runOutcomeId(runId, repoKey);
 }
 

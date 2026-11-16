@@ -92,7 +92,7 @@ export async function recordRunOutcomeAtEnd(deps: RunOutcomeDeps, stored: Stored
     if (!inputs) return;
     const features = freezeRunFeatures(inputs);
     await recordRunFeatures(deps.store, {
-      id: runOutcomeIdOfChangeSet(stored.value.changeSetId), features, deviceId: deps.deviceId(), at: inputs.finalizedAt,
+      id: runOutcomeIdOfChangeSet(stored.value.changeSetId, stored.value), features, deviceId: deps.deviceId(), at: inputs.finalizedAt,
       ...(deps.destination ? { destination: deps.destination } : {}),
     });
   } catch (error) {

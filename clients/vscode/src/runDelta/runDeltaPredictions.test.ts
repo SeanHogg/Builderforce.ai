@@ -106,7 +106,7 @@ describe("naturalness at run end (PRD 41 §D6)", () => {
     expect(row.afterHashes).toEqual({ "src/c.ts": sha(after).slice("sha256:".length) });
     expect(row.baselinePicks.every((p) => p.startsWith("src/") && p.endsWith(".ts"))).toBe(true); // no node_modules, no .md
     expect(row.root).toBe(root);
-    expect(await store.read((tx) => tx.get("run-delta", runPredictionId("changeset:run-1:k1")))).toBeTruthy();
+    expect(await store.read((tx) => tx.get("run-delta", runPredictionId("changeset:run-1:k1", { runId: "run-1", repoKey: "k1" })))).toBeTruthy();
     expect(await store.read((tx) => tx.pending())).toEqual([]); // put, never journaled
   }, 60_000); // real git processes are slow on Windows
 
