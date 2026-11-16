@@ -10,6 +10,7 @@ import { createHash } from "node:crypto";
 import {
   defineRecordIndex,
   newLocalRecord,
+  stableEntityId,
   type ChangeSetValue,
   type EntityDestination,
   type LocalFirstStore,
@@ -19,12 +20,10 @@ import { syncedRepositoryIdentity } from "./repoIdentity";
 import type { RunChangeBaseline } from "./runChangeBaseline";
 
 /**
- * One per run. Distinct from {@link runChangeSetId} so the immutable per-repo diff
- * is never overwritten when the set opens or closes.
- */
-/**
  * The lifecycles of runs still in flight (a baseline and no finalization), grouped by the UTC day of their baseline
  * ({@link isoDay}): the run delta's overlap test reads only these, and only the days a live run can have started on.
+ * One per run. Distinct from {@link runChangeSetId} so the immutable per-repo diff is never overwritten when the
+ * set opens or closes.
  */
 export const OPEN_CHANGE_SET_LIFECYCLES = defineRecordIndex<ChangeSetLifecycleValue>(
   "change-set", "vscode.changeSet.openLifecycleDay",
@@ -39,7 +38,7 @@ export function isoDay(iso: string): string {
 }
 
 export function changeSetLifecycleId(runId: string): string {
-  return `changeset-lifecycle:${runId}`;
+  return stableEntityId(`changeset-lifecycle:${runId}`);
 }
 
 export type ChangeSetCompleteness = "partial" | "finished" | "absent";
