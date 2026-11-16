@@ -31,6 +31,12 @@ export interface InterruptedResumeView {
 export interface ResumeTarget {
   runId: string;
   chatId: number;
+  /**
+   * True when the target is a JOURNALED interrupted run (its continuation is sent through
+   * the composer). False when the chat is under 100% but has no journaled interrupted run:
+   * Resume just OPENS the chat so the person continues the work themselves — no turn is sent.
+   */
+  journaled: boolean;
 }
 
 /** A chat's completion, as the row knows it (`BrainChat.ticketProgressPct`). */
@@ -49,10 +55,13 @@ export function pendingChatIds(runs: readonly InterruptedRunRef[], pending: Read
 }
 
 /**
- * The normal row's Resume target for a chat: the chat is interrupted (a run lists it)
- * AND not complete, with no resume already pending for it and its chat not running.
- * Returns undefined when the row must NOT offer Resume — an interrupted-but-complete
- * chat (dedicated row), a running chat, or a resume already in flight.
+ * The normal row's Resume target for a chat: the chat is NOT complete (under 100%), with
+ * no resume already pending for it and its chat not running. Returns undefined when the
+ * row must NOT offer Resume — a complete chat, a running chat, or a resume already in
+ * flight. When the chat has a JOURNALED interrupted run the target carries it (its
+ * continuation is sent through the composer, journaled: true); when it has none the
+ * target is OPEN-ONLY (journaled: false) — the play button opens the chat so the person
+ * continues the work, and no turn is sent (there is nothing journaled to continue).
  */
 export function resumableInterruptedRun(
   chatId: number,
@@ -61,15 +70,17 @@ export function resumableInterruptedRun(
   interrupted: InterruptedResumeView,
 ): ResumeTarget | undefined {
   if (isCompleteProgress(progressPct)) return undefined;
+  if (interrupted.isRunning(chatId)) return undefined;
   const run = runs.find((r) => r.chatId != null && Number(r.chatId) === chatId);
-  if (!run) return undefined;
-  const targetChatId = Number(run.chatId);
-  if (!Number.isInteger(targetChatId)) return undefined;
-  // Same refusal the dedicated interrupted rows use: running, or a resume already
-  // pending in this chat (one resume per chat — `interruptedResume.ts`).
-  if (interrupted.isRunning(targetChatId)) return undefined;
-  if (!interrupted.pending.has(run.runId) && pendingChatIds(runs, interrupted.pending).has(targetChatId)) return undefined;
-  return { runId: run.runId, chatId: targetChatId };
+  if (!run) {
+    // Under 100% but nothing journaled: still offer Resume, as an OPEN-ONLY action.
+    return { runId: `open-${chatId}`, chatId, journaled: false };
+  }
+  // Same refusal the dedicated interrupted rows use: a resume already pending in this
+  // chat (one resume per chat — `interruptedResume.ts`). The pending run itself still
+  // resolves (its button shows the in-flight state).
+  if (!interrupted.pending.has(run.runId) && pendingChatIds(runs, interrupted.pending).has(chatId)) return undefined;
+  return { runId: run.runId, chatId, journaled: true };
 }
 
 /**

@@ -54,16 +54,23 @@ describe('pendingChatIds', () => {
 });
 
 describe('resumableInterruptedRun', () => {
-  it('returns the run for an interrupted, incomplete chat', () => {
-    expect(resumableInterruptedRun(101, 50, RUNS, quiet())).toEqual({ runId: 'run-1', chatId: 101 });
+  it('returns a journaled run for an interrupted, incomplete chat', () => {
+    expect(resumableInterruptedRun(101, 50, RUNS, quiet())).toEqual({ runId: 'run-1', chatId: 101, journaled: true });
   });
 
-  it('returns undefined for an interrupted but 100% complete chat (Resume would be a no-op)', () => {
+  it('returns an OPEN-ONLY target for an incomplete chat with NO journaled run', () => {
+    // Under 100% but nothing journaled: still offers Resume, as open-only (the play button
+    // opens the chat; no continuation is sent).
+    expect(resumableInterruptedRun(999, 50, RUNS, quiet())).toEqual({ runId: 'open-999', chatId: 999, journaled: false });
+  });
+
+  it('returns undefined for a complete chat even with a journaled run (Resume would be a no-op)', () => {
     expect(resumableInterruptedRun(101, 100, RUNS, quiet())).toBeUndefined();
   });
 
-  it('returns undefined for a chat with no interrupted run', () => {
-    expect(resumableInterruptedRun(999, 50, RUNS, quiet())).toBeUndefined();
+  it('returns undefined for a chat with unknown progress (no Resume on unknown)', () => {
+    expect(resumableInterruptedRun(101, undefined, RUNS, quiet())).toBeUndefined();
+    expect(resumableInterruptedRun(999, undefined, RUNS, quiet())).toBeUndefined();
   });
 
   it('returns undefined when the chat is already running', () => {
@@ -74,17 +81,20 @@ describe('resumableInterruptedRun', () => {
   it('returns the PENDING run itself when a resume is in flight in its chat (one per chat)', () => {
     // run-2 of chat 102 is pending; run-1 of chat 101 must not also offer Resume into 101? No —
     // the guard is per CHAT: a pending resume in chat 102 does not block chat 101.
-    expect(resumableInterruptedRun(101, 50, RUNS, { pending: new Set(['run-2']), isRunning: () => false })).toEqual({ runId: 'run-1', chatId: 101 });
+    expect(resumableInterruptedRun(101, 50, RUNS, { pending: new Set(['run-2']), isRunning: () => false })).toEqual({ runId: 'run-1', chatId: 101, journaled: true });
     // But a second run in the SAME chat is not targeted while the first is pending: the row
     // resolves to the pending run (its button shows the in-flight state), never the other run.
     const sameChat: InterruptedRunRef[] = [{ runId: 'run-a', chatId: '101' }, { runId: 'run-b', chatId: '101' }];
     const target = resumableInterruptedRun(101, 50, sameChat, { pending: new Set(['run-a']), isRunning: () => false });
-    expect(target).toEqual({ runId: 'run-a', chatId: 101 });
+    expect(target).toEqual({ runId: 'run-a', chatId: 101, journaled: true });
     expect(target).not.toEqual(expect.objectContaining({ runId: 'run-b' }));
   });
 
-  it('ignores runs whose chat id is not an integer', () => {
-    expect(resumableInterruptedRun(101, 50, [{ runId: 'run-x', chatId: 'nope' }], quiet())).toBeUndefined();
+  it('returns an OPEN-ONLY target for a non-integer run chat id (row falls back to open)', () => {
+    // A journaled run whose chat id is not an integer cannot be resumed by id; an incomplete
+    // chat still offers open-only Resume.
+    const target = resumableInterruptedRun(101, 50, [{ runId: 'run-x', chatId: 'nope' }], quiet());
+    expect(target).toEqual({ runId: 'open-101', chatId: 101, journaled: false });
   });
 });
 

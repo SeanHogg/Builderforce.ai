@@ -2,6 +2,14 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.184] — Every chat under 100% gets a Resume ▶, not just the interrupted ones
+
+- **Fixed: chats under 100% showed no Resume (▶) action unless they had a journaled interrupted run.** The play button had been coupled to the recovery journal, so a chat that finished its turn normally but still had open tickets offered no way to continue. Now **any chat under 100% that isn't running shows the ▶ action.** When the chat has a journaled interrupted run, ▶ resumes it (opens the chat and sends the continuation, as before). When it doesn't, ▶ simply opens the chat so you pick the work back up — no turn is sent.
+
+## [2026.10.183] — A push is checked against your code as it is now
+
+- **Fixed: `git_push` kept refusing with a typecheck error that was already fixed.** The pre-push checker saved each file's result by that file's own contents. A typecheck covers the whole package, though, so an unchanged file could keep an old failure caused by a sibling file after that sibling was fixed. Failing results are no longer saved: a failure is checked again on every push, and only passing results are reused.
+
 ## [2026.10.182] — The agent stops recalling the same facts over and over
 
 - **Fixed: a run could repeat the same `recall_facts` call before every search, indefinitely.** A repeat of the same recall in one run now returns a short note pointing back to the earlier result instead of running again, and the agent is told to recall once per topic instead of before every read. Saving a new fact clears this, so the next recall picks it up.

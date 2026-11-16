@@ -191,8 +191,15 @@ export function VsCodeChatHistory({ id, chats, total, loading, activeId, titleOf
             resumeAction={target ? {
               runId: target.runId,
               chatId: target.chatId,
-              pending: interrupted.pending.has(target.runId),
-              onResume: () => { void interrupted.resume({ runId: target.runId, chatId: target.chatId }); },
+              journaled: target.journaled,
+              pending: target.journaled && interrupted.pending.has(target.runId),
+              onResume: () => {
+                // A journaled run resumes fully (open its chat, send the continuation);
+                // an open-only target (under 100%, nothing journaled) just opens the chat
+                // so the person continues the work — no turn is sent.
+                if (target.journaled) void interrupted.resume({ runId: target.runId, chatId: target.chatId });
+                else onOpenChat(target.chatId);
+              },
             } : undefined}
           />
         );
@@ -201,10 +208,13 @@ export function VsCodeChatHistory({ id, chats, total, loading, activeId, titleOf
   );
 }
 
-/** The interrupted-run Resume affordance for a normal row: which run, its resume action, and whether that resume is in flight. */
+/** The interrupted-run Resume affordance for a normal row: which run (or open-only target), its resume action, and whether that resume is in flight. */
 interface ResumeAction {
+  /** The journaled run's id, or `open-<chatId>` for an open-only (no journaled run) target. */
   runId: string;
   chatId: number;
+  /** True when a journaled run's continuation is sent; false when the action only opens the chat. */
+  journaled: boolean;
   /** True while `interrupted.resume` has this run pending (the play button disables). */
   pending: boolean;
   onResume: () => void;
@@ -225,9 +235,9 @@ function VsCodeChatHistoryRow({
 }) {
   const t = makeT(bundle);
   const status = runStatus(chat.id);
-  // A resume is in flight for this row's interrupted run: the play button disables
-  // (like the dedicated interrupted rows) until it is claimed or fails.
-  const interruptedPending = resumeAction != null && resumeAction.pending;
+  // A resume is in flight for this row's journaled run: the play button disables (like
+  // the dedicated interrupted rows) until it is claimed or fails.
+  const interruptedPending = resumeAction != null && resumeAction.journaled && resumeAction.pending;
   // Live count while sub-agents are announced; the session's announced total once
   // they settle — so a chat that HAD agents still says so, and the chip re-renders
   // the moment the host announces (or settles) a child, unlike a one-shot read.
