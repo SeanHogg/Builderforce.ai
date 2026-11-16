@@ -65,10 +65,11 @@ export function parseReviewReply(text: string): ReviewSubRunResult | { failed: s
     const strings = (v: unknown): string[] =>
       Array.isArray(v) ? v.filter((f): f is string => typeof f === "string") : [];
     // The structured resolution answer (1-based indices into the prior blocking list the
-    // reviewer was shown). Either key is accepted; non-integer / out-of-range entries are
-    // dropped later by `priorsNamed` in the round cap, so only the array shape is checked here.
+    // reviewer was shown). Either key is accepted; integers ONLY — a 1-based index can
+    // never be fractional or below 1 — out-of-range/duplicate entries are dropped later
+    // by `priorsNamed` in the round cap.
     const indices = (v: unknown): number[] | undefined =>
-      Array.isArray(v) ? v.filter((i): i is number => typeof i === "number" && Number.isFinite(i)) : undefined;
+      Array.isArray(v) ? v.filter((i): i is number => typeof i === "number" && Number.isInteger(i) && i >= 1) : undefined;
     const unresolved = indices(parsed.unresolved) ?? indices(parsed.unresolvedPrior);
     // The new shape names its lists. A legacy `{verdict, findings}` reply maps findings to
     // blocking. Either way the verdict is computed from the blocking list — a model that

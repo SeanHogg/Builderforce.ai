@@ -6,7 +6,7 @@ import * as path from "path";
 import { describe, expect, it } from "vitest";
 import type { BrainStreamFn } from "@seanhogg/builderforce-brain-embedded";
 import { createShipPorts, parseReviewReply, catalogModelIds } from "./shipPorts";
-import { MAX_REVIEW_DIFF_CHARS } from "./reviewerPort";
+import { REVIEW_DIFF_BUDGET_CHARS, budgetReviewDiff } from "./reviewerPort";
 import type { VscodeLike } from "./pathDiagnostics";
 import type { GitRunner } from "./gitPort";
 import type { ModelChoices } from "../gateway";
@@ -196,8 +196,8 @@ describe("parseReviewReply", () => {
     expect(parseReviewReply('{"blocking":["a.ts:1 one"]}')).toEqual({ verdict: "changes_requested", findings: ["a.ts:1 one"] });
   });
 
-  it("drops non-numeric and non-finite unresolved entries instead of failing the reply", () => {
-    expect(parseReviewReply('{"blocking":[],"unresolved":[1,"two",null,3.5]}')).toEqual({ verdict: "approved", findings: [], unresolvedPrior: [1, 3.5] });
+  it("drops non-integer, sub-1 and non-numeric unresolved entries instead of failing the reply", () => {
+    expect(parseReviewReply('{"blocking":[],"unresolved":[1,"two",null,3.5,0,-2]}')).toEqual({ verdict: "approved", findings: [], unresolvedPrior: [1] });
   });
 });
 
@@ -246,15 +246,30 @@ describe("review prompt (rounds, resolution, diff budget)", () => {
     expect(prompt).toContain("resolution-only");
   });
 
-  it("truncates an over-budget diff for the reviewer with a visible marker", async () => {
+  it("budgets an over-budget diff to whole per-file chunks and names the omitted files", async () => {
     let prompt = "";
     const stream: BrainStreamFn = async (opts) => {
       prompt = String(opts.messages[0]?.content ?? "");
       return { text: '{"blocking":[]}', toolCalls: [], finishReason: "stop" };
     };
-    const big = "x".repeat(MAX_REVIEW_DIFF_CHARS + 500);
+    const file = (n: string, body: string) => `diff --git a/src/${n} b/src/${n}\nindex 000..111 100644\n--- a/src/${n}\n+++ b/src/${n}\n${body}`;
+    const big =
+      file("a.ts", "+" + "a".repeat(30_000) + "\n") +
+      file("b.ts", "+" + "b".repeat(30_000) + "\n") +
+      file("c.ts", "+c\n");
+    expect(big.length).toBeGreaterThan(REVIEW_DIFF_BUDGET_CHARS);
     await make(stream).reviewer.review({ repo: ROOT, diff: big, evidence: "", authorModels: ["author-model"] });
-    expect(prompt).toContain("[diff truncated at ");
-    expect(prompt).not.toContain(big);
+    // Whole-file chunks: a.ts fits the budget alone; b.ts would overflow it, so it is
+    // omitted by name; c.ts is omitted too.
+    expect(prompt).toContain("[partial view:");
+    expect(prompt).toContain("omitted entirely: src/b.ts, src/c.ts");
+    expect(prompt).not.toContain("+c\n");
+    expect(prompt).not.toContain("+" + "b".repeat(100));
+    expect(prompt).toContain("+" + "a".repeat(100));
+  });
+
+  it("keeps the full diff when it fits the budget", () => {
+    const diff = "diff --git a/src/x.ts b/src/x.ts\n+x\n";
+    expect(budgetReviewDiff(diff)).toBe(diff);
   });
 });

@@ -397,11 +397,20 @@ export async function buildStoredGraph(args: StoredGraphArgs): Promise<Knowledge
         ...roots.map((r) => ({ ref: r.id, hash: r.hash })),
     ];
     // A UI-thread host (the VS Code extension host) never calls this: it builds in its graph worker.
+    // The yield seam hands the loop back to the event loop every N files so a UI host that DOES
+    // build here keeps the bridge responsive; absent (library / non-UI hosts) it never yields.
+    const yieldEvery = args.yieldEvery && args.yieldEvery > 0 ? Math.floor(args.yieldEvery) : 0;
+    const yieldDelay = args.yieldDelay ?? (() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+    let sinceYield = 0;
     for (const w of wanted) {
         // A deleted file has no content hash: there is nothing of it to fetch.
         if (!w.hash) continue;
         const hit = (await store.getExtracted?.(w.hash))?.find((e) => e.sourceRef === w.ref);
         if (hit) extracted.push(hit);
+        if (yieldEvery > 0 && ++sinceYield >= yieldEvery) {
+            sinceYield = 0;
+            await yieldDelay();
+        }
     }
     const [facts, relations, systems] = await Promise.all([store.facts({ rootId }), store.relations({ rootId }), readSystems(manifest, rootId)]);
     // The ONE graph builder for code: the default layers are resolved over the whole file graph (folder, name, import direction).

@@ -145,12 +145,47 @@ function refusalFor(authorModels: readonly string[]): string {
  * ONLY — never the model's own narration of what it did.
  */
 /**
- * The review prompt's diff budget: beyond this the diff is truncated for the reviewer with
- * a visible marker, so a wall-sized change cannot overflow the review sub-run's context.
- * The verdict's `diffHash` is still computed over the FULL diff (`hashDiff(input.diff)`),
- * so the gate's stale-diff check is unaffected — only what the reviewer reads is capped.
+ * The review prompt's diff budget: beyond this the reviewer is shown only WHOLE per-file
+ * chunks (split on `diff --git`) that fit the budget, then the remaining files by name and
+ * a note that the view is partial — a wall-sized change cannot overflow the review
+ * sub-run's context, and no single file is ever half-shown. The verdict's `diffHash` is
+ * still computed over the FULL diff (`hashDiff(input.diff)`), so the gate's stale-diff
+ * check is unaffected — only what the reviewer reads is capped.
  */
-export const MAX_REVIEW_DIFF_CHARS = 24_000;
+export const REVIEW_DIFF_BUDGET_CHARS = 60_000;
+
+/**
+ * Budget the diff for the reviewer's prompt: include whole per-file chunks (split on
+ * `diff --git`, separators kept) until the budget runs out, then list the remaining
+ * files by name and state the view is partial. Returns the full diff when it fits.
+ */
+export function budgetReviewDiff(diff: string, budget = REVIEW_DIFF_BUDGET_CHARS): string {
+  if (diff.length <= budget) return diff;
+  const chunks = diff.split(/(?=^diff --git )/m);
+  const kept: string[] = [];
+  let used = 0;
+  let i = 0;
+  for (; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    if (used + chunk.length > budget && kept.length > 0) break;
+    if (used + chunk.length > budget && kept.length === 0) {
+      // A single chunk bigger than the whole budget: keep it truncated rather than nothing.
+      kept.push(chunk.slice(0, budget));
+      used = budget;
+      i++;
+      break;
+    }
+    kept.push(chunk);
+    used += chunk.length;
+  }
+  const rest = chunks.slice(i);
+  const names = rest.map((c) => /^diff --git a\/(.+?) b\//.exec(c)?.[1] ?? c.split("\n", 1)[0]).filter(Boolean);
+  const omitted =
+    names.length > 0
+      ? `\n… [partial view: ${used} of ${diff.length} chars shown — ${names.length} file(s) omitted entirely: ${names.join(", ")}]`
+      : `\n… [partial view: ${used} of ${diff.length} chars shown]`;
+  return kept.join("") + omitted;
+}
 
 /**
  * The review sub-run's prompt. Blocking and advisory are separate lists so a speculative
@@ -166,8 +201,7 @@ function reviewPrompt(input: {
   round?: number;
 }): string {
   const prior = (input.priorBlocking ?? []).filter((f) => f.trim());
-  const truncated = input.diff.length > MAX_REVIEW_DIFF_CHARS;
-  const diff = truncated ? `${input.diff.slice(0, MAX_REVIEW_DIFF_CHARS)}\n… [diff truncated at ${MAX_REVIEW_DIFF_CHARS} chars — ${input.diff.length} total; the gate hashed the full diff]` : input.diff;
+  const diff = budgetReviewDiff(input.diff);
   const lines = [
     "You are reviewing a change before it ships. Review ONLY the diff and the check evidence below — do not trust any narration of what was done.",
     "",
