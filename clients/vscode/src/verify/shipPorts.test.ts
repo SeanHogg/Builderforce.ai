@@ -6,6 +6,7 @@ import * as path from "path";
 import { describe, expect, it } from "vitest";
 import type { BrainStreamFn } from "@seanhogg/builderforce-brain-embedded";
 import { createShipPorts, parseReviewReply, catalogModelIds } from "./shipPorts";
+import { MAX_REVIEW_DIFF_CHARS } from "./reviewerPort";
 import type { VscodeLike } from "./pathDiagnostics";
 import type { GitRunner } from "./gitPort";
 import type { ModelChoices } from "../gateway";
@@ -183,5 +184,77 @@ describe("parseReviewReply", () => {
   it("never reads a non-JSON reply as approval — it is a failure, not a changes_requested verdict", () => {
     expect(parseReviewReply("Looks good to me!")).toEqual({ failed: "The reviewer did not return a JSON verdict; review again." });
     expect(parseReviewReply('{"verdict":"changes_requested","findings":["x"]}')).toEqual({ verdict: "changes_requested", findings: ["x"] });
+  });
+
+  it("keeps the structured resolution answer: unresolved indices become unresolvedPrior", () => {
+    const reply = parseReviewReply('{"blocking":["a.ts:1 one"],"advisory":["nit"],"unresolved":[1]}');
+    expect(reply).toEqual({ verdict: "changes_requested", findings: ["a.ts:1 one"], advisories: ["nit"], unresolvedPrior: [1] });
+    // Accepts the explicit-key alias too, and an empty list is preserved ("reviewer answered: none left").
+    expect(parseReviewReply('{"blocking":[],"unresolved":[]}')).toEqual({ verdict: "approved", findings: [], unresolvedPrior: [] });
+    expect(parseReviewReply('{"blocking":[],"unresolvedPrior":[2]}')).toEqual({ verdict: "approved", findings: [], unresolvedPrior: [2] });
+    // No resolution key → field absent (cap falls back to text match).
+    expect(parseReviewReply('{"blocking":["a.ts:1 one"]}')).toEqual({ verdict: "changes_requested", findings: ["a.ts:1 one"] });
+  });
+
+  it("drops non-numeric and non-finite unresolved entries instead of failing the reply", () => {
+    expect(parseReviewReply('{"blocking":[],"unresolved":[1,"two",null,3.5]}')).toEqual({ verdict: "approved", findings: [], unresolvedPrior: [1, 3.5] });
+  });
+});
+
+describe("review prompt (rounds, resolution, diff budget)", () => {
+  // A verify-stage pin so a reviewer model is always picked and the sub-run's prompt is sent.
+  const settings = { phaseModels: { verify: "reviewer-model" as const } };
+  const make = (stream: BrainStreamFn) =>
+    createShipPorts({ vscode: fakeVscode([]), git: async () => ({ stdout: "", exitCode: 0 }) })({ root: ROOT, stream, settings });
+
+  it("asks a re-review to resolve the prior blockers with a numbered list and an unresolved field", async () => {
+    let prompt = "";
+    const stream: BrainStreamFn = async (opts) => {
+      prompt = String(opts.messages[0]?.content ?? "");
+      return { text: '{"blocking":[]}', toolCalls: [], finishReason: "stop" };
+    };
+    const review = await make(stream).reviewer.review({
+      repo: ROOT,
+      diff: "diff",
+      evidence: "ev",
+      authorModels: ["author-model"],
+      priorBlocking: ["a.ts:1 first blocker", "b.ts:2 second blocker"],
+      round: 2,
+    });
+    expect("refused" in review).toBe(false);
+    expect(prompt).toContain('"unresolved": number[]');
+    expect(prompt).toContain("1. a.ts:1 first blocker");
+    expect(prompt).toContain("2. b.ts:2 second blocker");
+    // Round 2 is below the cap: no resolution-only line yet.
+    expect(prompt).not.toContain("resolution-only");
+  });
+
+  it("adds the resolution-only instruction at and past the cap round", async () => {
+    let prompt = "";
+    const stream: BrainStreamFn = async (opts) => {
+      prompt = String(opts.messages[0]?.content ?? "");
+      return { text: '{"blocking":[]}', toolCalls: [], finishReason: "stop" };
+    };
+    await make(stream).reviewer.review({
+      repo: ROOT,
+      diff: "diff",
+      evidence: "",
+      authorModels: ["author-model"],
+      priorBlocking: ["a.ts:1 first blocker"],
+      round: 3,
+    });
+    expect(prompt).toContain("resolution-only");
+  });
+
+  it("truncates an over-budget diff for the reviewer with a visible marker", async () => {
+    let prompt = "";
+    const stream: BrainStreamFn = async (opts) => {
+      prompt = String(opts.messages[0]?.content ?? "");
+      return { text: '{"blocking":[]}', toolCalls: [], finishReason: "stop" };
+    };
+    const big = "x".repeat(MAX_REVIEW_DIFF_CHARS + 500);
+    await make(stream).reviewer.review({ repo: ROOT, diff: big, evidence: "", authorModels: ["author-model"] });
+    expect(prompt).toContain("[diff truncated at ");
+    expect(prompt).not.toContain(big);
   });
 });

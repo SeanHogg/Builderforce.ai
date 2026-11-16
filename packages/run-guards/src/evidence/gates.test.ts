@@ -3,6 +3,7 @@ import {
   DEFAULT_EVIDENCE_POLICY,
   fileIsUnchecked,
   applyReviewRoundCap,
+  findingMatchesPrior,
   outgoingGate,
   reviewGate,
   shellPublishHint,
@@ -377,6 +378,72 @@ describe("reviewGate (OD-1)", () => {
     expect(resolved.verdict).toBe("approved");
     expect(resolved.findings).toEqual([]);
     expect(resolved.advisories).toEqual(["src/c.ts:9 a brand new nit"]);
+  });
+
+  it("a structured unresolvedPrior answer is authoritative: only named priors block, even reworded", () => {
+    const prior = [
+      "src/a.ts:12 writeFileSync runs before the signal handlers",
+      "src/b.ts:40 the cache key ignores the tenant id",
+    ];
+    // The reviewer re-words finding 2 but says only #1 is still unresolved, and raises a new one.
+    const fresh = review({
+      verdict: "changes_requested",
+      findings: ["src/a.ts:12 writeFileSync runs before the signal handlers", "src/b.ts:40 cache key still drops the tenant"],
+      unresolvedPrior: [1],
+    });
+    const capped = applyReviewRoundCap(fresh, prior, 3);
+    expect(capped.verdict).toBe("changes_requested");
+    // Only the NAMED prior stays blocking — the reworded #2 is advisory, and no new finding blocks.
+    expect(capped.findings).toEqual([prior[0]]);
+    expect(capped.advisories).toEqual(["src/b.ts:40 cache key still drops the tenant"]);
+    // An empty unresolvedPrior list (nothing still unresolved) approves, whatever else was listed.
+    const none = applyReviewRoundCap(
+      review({ verdict: "changes_requested", findings: ["src/d.ts:7 looks broken still"], unresolvedPrior: [] }),
+      prior,
+      3,
+    );
+    expect(none.verdict).toBe("approved");
+    expect(none.findings).toEqual([]);
+  });
+
+  it("unresolvedPrior indices are 1-based: out-of-range and duplicate entries are dropped", () => {
+    const prior = ["src/a.ts:12 one", "src/b.ts:40 two"];
+    const fresh = review({
+      verdict: "changes_requested",
+      findings: ["src/a.ts:12 one", "src/b.ts:40 two"],
+      unresolvedPrior: [0, 1, 1, 3, 2.5],
+    });
+    const capped = applyReviewRoundCap(fresh, prior, 3);
+    expect(capped.findings).toEqual(["src/a.ts:12 one"]);
+  });
+});
+
+describe("findingMatchesPrior", () => {
+  it("matches the same normalised wording", () => {
+    expect(findingMatchesPrior("src/a.ts:12  writeFileSync  runs before the handlers", ["src/a.ts:12 writeFileSync runs before the handlers"])).toBe(true);
+  });
+
+  it("matches on the shared file:line even when the wording differs", () => {
+    expect(findingMatchesPrior("src/a.ts:12 the version regex fails on CRLF", ["src/a.ts:12 writeFileSync runs before the signal handlers"])).toBe(true);
+  });
+
+  it("matches containment when the shorter wording is long enough to be the same defect", () => {
+    const prior = ["src/b.ts:4 the version regex fails on CRLF line endings in package.json"];
+    expect(findingMatchesPrior("src/b.ts:4 the version regex fails on CRLF line endings in package.json and lockfile", prior)).toBe(true);
+  });
+
+  it("does NOT collapse different findings on one short shared word", () => {
+    const prior = ["src/c.ts:9 error path returns undefined"];
+    expect(findingMatchesPrior("src/d.ts:20 error message is unhelpful", prior)).toBe(false);
+    expect(findingMatchesPrior("error", prior)).toBe(false);
+  });
+
+  it("normalises backslashes in the location", () => {
+    expect(findingMatchesPrior("src\\a.ts:12 the version regex fails", ["src/a.ts:12 writeFileSync runs before the signal handlers"])).toBe(true);
+  });
+
+  it("an empty finding matches nothing", () => {
+    expect(findingMatchesPrior("   ", ["src/a.ts:12 x"])).toBe(false);
   });
 });
 

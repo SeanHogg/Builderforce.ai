@@ -33,6 +33,13 @@ export interface ReviewSubRunResult {
   findings: readonly string[];
   /** Style, speculative, hardening and documentation notes. Never blocking. */
   advisories?: readonly string[];
+  /**
+   * The reviewer's resolution answer: 1-based indices into the prior blocking list it was
+   * shown, naming which of those findings are STILL unresolved this round. Propagated onto
+   * the recorded {@link ReviewVerdict.unresolvedPrior} so {@link applyReviewRoundCap} can
+   * trust the reviewer's own resolution list instead of falling back to text matching.
+   */
+  unresolvedPrior?: readonly number[];
 }
 
 /**
@@ -138,9 +145,19 @@ function refusalFor(authorModels: readonly string[]): string {
  * ONLY — never the model's own narration of what it did.
  */
 /**
+ * The review prompt's diff budget: beyond this the diff is truncated for the reviewer with
+ * a visible marker, so a wall-sized change cannot overflow the review sub-run's context.
+ * The verdict's `diffHash` is still computed over the FULL diff (`hashDiff(input.diff)`),
+ * so the gate's stale-diff check is unaffected — only what the reviewer reads is capped.
+ */
+export const MAX_REVIEW_DIFF_CHARS = 24_000;
+
+/**
  * The review sub-run's prompt. Blocking and advisory are separate lists so a speculative
  * nit cannot refuse the push. A re-review is handed the previous round's blocking findings
- * and asked to resolve those, not to start blank.
+ * and asked to resolve those, not to start blank; at and past the cap it is additionally
+ * asked for a structured resolution answer (`unresolved` indices) so the code-side cap can
+ * trust which prior blockers it says remain, instead of guessing by text similarity.
  */
 function reviewPrompt(input: {
   diff: string;
@@ -149,16 +166,18 @@ function reviewPrompt(input: {
   round?: number;
 }): string {
   const prior = (input.priorBlocking ?? []).filter((f) => f.trim());
+  const truncated = input.diff.length > MAX_REVIEW_DIFF_CHARS;
+  const diff = truncated ? `${input.diff.slice(0, MAX_REVIEW_DIFF_CHARS)}\n… [diff truncated at ${MAX_REVIEW_DIFF_CHARS} chars — ${input.diff.length} total; the gate hashed the full diff]` : input.diff;
   const lines = [
     "You are reviewing a change before it ships. Review ONLY the diff and the check evidence below — do not trust any narration of what was done.",
     "",
     "## Diff",
-    input.diff,
+    diff,
     "",
     "## Evidence",
     input.evidence,
     "",
-    'Reply with a JSON object: {"blocking": string[], "advisory": string[]}.',
+    'Reply with a JSON object: {"blocking": string[], "advisory": string[]' + (prior.length ? ', "unresolved": number[]' : "") + "}.",
     "Blocking: a defect that would ship broken behaviour, data loss, a security hole, a failing build or test, or a stated requirement left unmet. Each one names file:line and the failure scenario.",
     'Advisory: style, speculative "may not", hardening and documentation gaps.',
     "Report EVERY blocking defect you can see in this ONE pass — the author fixes them together; there is no later round for defects visible now.",
@@ -170,6 +189,7 @@ function reviewPrompt(input: {
       "These blocking findings were raised last round:",
       ...prior.map((f, i) => `${i + 1}. ${f}`),
       "For each, say whether the current diff resolves it. Raise a NEW blocking finding only if the change since then introduced it, or it is severe (data loss / security / broken build).",
+      'In "unresolved" list the 1-based numbers of the findings above that are STILL unresolved in this diff (empty array if all are resolved).',
     );
   }
   if ((input.round ?? 1) >= MAX_BLOCKING_REVIEW_ROUNDS) {
@@ -240,6 +260,7 @@ export function createReviewerPort(deps: ReviewerDeps): ReviewerPort {
           diffHash,
           findings: attempt.findings,
           ...(attempt.advisories?.length ? { advisories: [...attempt.advisories] } : {}),
+          ...(attempt.unresolvedPrior ? { unresolvedPrior: [...attempt.unresolvedPrior] } : {}),
         };
         // Author-model and stale-hash only. A changes_requested verdict is RETURNED, not
         // converted to a refusal — the host remembers it and applies the round cap. Checking

@@ -59,9 +59,17 @@ export function parseReviewReply(text: string): ReviewSubRunResult | { failed: s
       blocking?: unknown;
       advisory?: unknown;
       advisories?: unknown;
+      unresolved?: unknown;
+      unresolvedPrior?: unknown;
     };
     const strings = (v: unknown): string[] =>
       Array.isArray(v) ? v.filter((f): f is string => typeof f === "string") : [];
+    // The structured resolution answer (1-based indices into the prior blocking list the
+    // reviewer was shown). Either key is accepted; non-integer / out-of-range entries are
+    // dropped later by `priorsNamed` in the round cap, so only the array shape is checked here.
+    const indices = (v: unknown): number[] | undefined =>
+      Array.isArray(v) ? v.filter((i): i is number => typeof i === "number" && Number.isFinite(i)) : undefined;
+    const unresolved = indices(parsed.unresolved) ?? indices(parsed.unresolvedPrior);
     // The new shape names its lists. A legacy `{verdict, findings}` reply maps findings to
     // blocking. Either way the verdict is computed from the blocking list — a model that
     // says "approved" while listing a defect, or "changes_requested" with nothing blocking,
@@ -75,6 +83,7 @@ export function parseReviewReply(text: string): ReviewSubRunResult | { failed: s
         verdict: blocking.length > 0 ? "changes_requested" : "approved",
         findings: blocking,
         ...(advisories.length ? { advisories } : {}),
+        ...(unresolved ? { unresolvedPrior: unresolved } : {}),
       };
     }
   } catch {
