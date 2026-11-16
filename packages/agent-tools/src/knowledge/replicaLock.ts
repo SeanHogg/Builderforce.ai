@@ -196,9 +196,9 @@ export async function acquireReplicaLock(
             busy = false;
         }
     };
-    const timer = setInterval(() => { void refresh(); }, LOCK_REFRESH_MS);
-    (timer as { unref?: () => void }).unref?.();
-    const stop = (): void => clearInterval(timer);
+    // Deferred one turn (see `armRefresh`): a refresh must not run inside the acquire that is still returning the lock.
+    const schedule = lockFiles.schedule ?? armRefresh;
+    const stop = schedule(() => { void refresh(); }, LOCK_REFRESH_MS);
     return {
         lost: lost.signal,
         isFresh: fresh,
