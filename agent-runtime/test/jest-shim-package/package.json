@@ -1,0 +1,12 @@
+{
+  "name": "jest",
+  "version": "30.5.2",
+  "private": true,
+  "description": "Local shim: routes `npx jest <file>` to vitest. This package's tests run under vitest (see vitest.*.config.ts); jest proper is not installed. Some host/push gates invoke a bare `npx --no-install jest <file>`, which resolves this shim so the command runs the real test runner instead of failing on a missing jest.",
+  "bin": {
+    "jest": "./bin/jest.js"
+  },
+  "scripts": {
+    "postinstall": "echo '[jest-shim] jest is a local alias for vitest in agent-runtime' "
+  }
+}

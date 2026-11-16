@@ -22,6 +22,8 @@ ui/test-results/
 *.bun-build
 **/ModuleCache/
 bin/
+# The jest→vitest shim ships a committed bin; don't let the blanket bin/ rule above drop it.
+!test/jest-shim-package/bin/
 bin/docs-list
 Core/
 vendor/
