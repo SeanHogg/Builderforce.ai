@@ -158,9 +158,8 @@ export default function LoginPageClient() {
           {t('navSignUp')}
         </Link>
       }
-      heading={t('heading')}
-      subtitle={t('subtitle')}
       pills={[t('pillLora'), t('pillRegistry'), t('pillEval')]}
+      pillsPosition="right"
       panel="login"
       visual="standard"
       faqHeading={t('commonQuestions')}

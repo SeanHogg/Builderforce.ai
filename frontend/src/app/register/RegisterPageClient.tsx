@@ -99,9 +99,8 @@ export default function RegisterPageClient() {
           {tr('navSignIn')}
         </Link>
       }
-      heading={tr('heading')}
-      subtitle={tr('subtitle')}
       pills={[tr('pillLora'), tr('pillRegistry'), tr('pillEval')]}
+      pillsPosition="right"
       panel={panel}
       visual={accountType}
       panelKey={accountType}

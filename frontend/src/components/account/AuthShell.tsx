@@ -16,9 +16,13 @@ import { resolveAuthPanel, type AuthPanelId } from '@/lib/content/auth';
 export interface AuthShellProps {
   /** The nav's right-hand action (Sign up / Sign in). */
   navAction: ReactNode;
-  heading: string;
-  subtitle: string;
+  /** Left-column heading — omit to hide it (e.g. login shows it on the marketing panel). */
+  heading?: string;
+  /** Left-column subtitle under the heading. */
+  subtitle?: string;
   pills: string[];
+  /** Where the feature pills render: the form column (default) or the marketing panel. */
+  pillsPosition?: 'left' | 'right';
   /** Which marketing copy the right-hand panel shows. */
   panel: AuthPanelId;
   visual: 'standard' | 'freelancer' | 'sales';
@@ -35,10 +39,24 @@ export interface AuthShellProps {
 }
 
 export function AuthShell({
-  navAction, heading, subtitle, pills, panel, visual, faqHeading, panelKey, children, footer, overlay,
+  navAction, heading, subtitle, pills, pillsPosition = 'left', panel, visual, faqHeading, panelKey, children, footer, overlay,
 }: AuthShellProps) {
   const tRoot = useTranslations();
   const marketing = resolveAuthPanel(tRoot, panel);
+  const pillsRow = pills.length > 0 ? (
+    <div style={{ display: 'flex', gap: 8, justifyContent: pillsPosition === 'right' ? 'flex-start' : 'center', flexWrap: 'wrap', marginBottom: 28 }}>
+      {pills.map(f => (
+        <span key={f} style={{
+          fontSize: 'var(--font-size-small)', fontWeight: 600,
+          background: 'var(--surface-coral-soft)',
+          color: 'var(--coral-bright)',
+          border: '1px solid var(--border-accent)',
+          borderRadius: 'var(--radius-full)', padding: '4px 12px',
+          fontFamily: 'var(--font-display)',
+        }}>{f}</span>
+      ))}
+    </div>
+  ) : null;
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'var(--text-primary)', position: 'relative', zIndex: 1 }}>
@@ -68,25 +86,20 @@ export function AuthShell({
         <div style={{ display: 'grid', gridTemplateColumns: '1fr', minHeight: 'calc(100vh - 60px)', alignItems: 'start' }} className="auth-split-grid">
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 20px', minHeight: 'calc(100vh - 60px)' }}>
             <div style={{ width: '100%', maxWidth: 420 }}>
-              <div style={{ textAlign: 'center', marginBottom: 28 }}>
-                <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--font-size-section)', fontWeight: 700, marginBottom: 6, color: 'var(--text-primary)' }}>
-                  {heading}
-                </h1>
-                <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)' }}>{subtitle}</p>
-              </div>
+              {(heading || subtitle) && (
+                <div style={{ textAlign: 'center', marginBottom: 28 }}>
+                  {heading && (
+                    <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--font-size-section)', fontWeight: 700, marginBottom: 6, color: 'var(--text-primary)' }}>
+                      {heading}
+                    </h1>
+                  )}
+                  {subtitle && (
+                    <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)' }}>{subtitle}</p>
+                  )}
+                </div>
+              )}
 
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 28 }}>
-                {pills.map(f => (
-                  <span key={f} style={{
-                    fontSize: 'var(--font-size-small)', fontWeight: 600,
-                    background: 'var(--surface-coral-soft)',
-                    color: 'var(--coral-bright)',
-                    border: '1px solid var(--border-accent)',
-                    borderRadius: 'var(--radius-full)', padding: '4px 12px',
-                    fontFamily: 'var(--font-display)',
-                  }}>{f}</span>
-                ))}
-              </div>
+              {pillsPosition === 'left' && pillsRow}
 
               {children}
 
@@ -105,6 +118,8 @@ export function AuthShell({
             borderLeft: '1px solid var(--border-subtle)',
           }}>
             <div key={panelKey} className="auth-marketing-content">
+              {pillsPosition === 'right' && pillsRow}
+
               <span style={{
                 display: 'inline-block', marginBottom: 12,
                 fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
