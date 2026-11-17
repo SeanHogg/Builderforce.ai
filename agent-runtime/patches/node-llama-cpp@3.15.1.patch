@@ -1,0 +1,23 @@
+diff --git a/dist/bindings/utils/cloneLlamaCppRepo.js b/dist/bindings/utils/cloneLlamaCppRepo.js
+index c946cc229eb4f3d39ba2c43e55ff553e854e08b6..5cecc59c62427353ec0a1734781557efe2c1b1dd 100644
+--- a/dist/bindings/utils/cloneLlamaCppRepo.js
++++ b/dist/bindings/utils/cloneLlamaCppRepo.js
+@@ -1,5 +1,5 @@
+ import path from "path";
+-import simpleGit from "simple-git";
++import { simpleGit } from "simple-git";
+ import chalk from "chalk";
+ import fs from "fs-extra";
+ import which from "which";
+diff --git a/dist/utils/gitReleaseBundles.js b/dist/utils/gitReleaseBundles.js
+index 0985cd26f0771dc2be05a39d03a907fb018cdc88..ca9d22874898b0d0e5e5bb1aba48659316303c19 100644
+--- a/dist/utils/gitReleaseBundles.js
++++ b/dist/utils/gitReleaseBundles.js
+@@ -1,6 +1,6 @@
+ import path from "path";
+ import fs from "fs-extra";
+-import simpleGit from "simple-git";
++import { simpleGit } from "simple-git";
+ import { currentReleaseGitBundlePath, builtinLlamaCppGitHubRepo, llamaCppDirectory, enableRecursiveClone } from "../config.js";
+ import { getBinariesGithubRelease } from "../bindings/utils/binariesGithubRelease.js";
+ import { isGithubReleaseNeedsResolving } from "./resolveGithubRelease.js";
