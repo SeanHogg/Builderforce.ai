@@ -45,6 +45,8 @@ export default defineConfig({
     testTimeout: 10_000,
   },
   resolve: {
-    alias: [...sourcePackageAliases(repoRoot), ...memoryAliases],
+    // Sibling memory first: the registry's set ends in a pin of every memory specifier to
+    // this package's install, and the first matching alias wins.
+    alias: [...memoryAliases, ...sourcePackageAliases(repoRoot)],
   },
 });

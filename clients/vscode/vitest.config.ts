@@ -35,7 +35,7 @@ export default defineConfig({
     // agent-tools' node-only export condition (the shared workspace-containment
     // resolver), and losing it takes out the whole harness suite the moment
     // `localCapabilities.ts` imports it.
-    alias: sourcePackageAliases(repoRoot),
+    alias: sourcePackageAliases(repoRoot, { installDir: here }),
     // Source-only packages with PEERS and no install of their own (the knowledge graph
     // view, client and browser host) import these bare: ONE copy, this package's.
     // Memory is pinned by the plugin above, not deduped.

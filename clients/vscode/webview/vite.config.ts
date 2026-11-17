@@ -242,7 +242,7 @@ export default defineConfig({
       // Derived from the manifests (`scripts/sourcePackages.mjs`) rather than
       // listed: this config compiles the frontend's whole import closure, so a
       // package listed for the web and forgotten here fails the release build.
-      ...sourcePackageAliases(REPO_ROOT),
+      ...sourcePackageAliases(REPO_ROOT, { installDir: INSTALL_DIR }),
       // The frontend's own path alias, so its modules resolve unchanged.
       { find: /^@\//, replacement: FRONTEND_SRC + '/' },
     ],

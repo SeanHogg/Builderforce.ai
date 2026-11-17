@@ -70,7 +70,9 @@ export default {
   // `HEADLINE_ORDER` at runtime) have no install anywhere, the frontend's included, so the rule above cannot find them:
   // they resolve through the registry's aliases, as every host's do. Aliases run before plugins, so a peer import is
   // still the host's.
-  resolve: { alias: sourcePackageAliases(path.resolve(HERE, '../..')) },
+  // The source packages' OWN npm imports (`@seanhogg/builderforce-memory/retrieval` from run-delta) come from outside this
+  // package, so the rule above does not see them: the registry pins those to the host's install too.
+  resolve: { alias: sourcePackageAliases(path.resolve(HERE, '../..'), { installDir: FRONTEND }) },
   test: {
     environment: 'jsdom',
     include: ['src/**/*.test.{ts,tsx}'],

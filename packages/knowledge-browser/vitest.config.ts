@@ -56,7 +56,7 @@ const peersFromHost = {
 export default {
   root: HERE,
   plugins: [peersFromHost],
-  resolve: { alias: sourcePackageAliases(REPO) },
+  resolve: { alias: sourcePackageAliases(REPO, { installDir: FRONTEND }) },
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],

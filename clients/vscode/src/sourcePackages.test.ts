@@ -72,6 +72,21 @@ describe('source-only shared packages', () => {
     expect(unaliased).toEqual([]);
   });
 
+  it('pins the npm imports of aliased-in sources to the consumer install', () => {
+    // Aliasing a package in compiles it from `packages/<name>/src`, which CI never installs:
+    // its `@seanhogg/builderforce-memory/stats` must resolve from the consumer, so the ONE
+    // registry carries the pin and every vite/vitest config inherits it.
+    const pins = (webviewConfig.resolve?.alias as unknown as { find: string | RegExp; customResolver?: unknown }[]).filter(
+      (entry) => typeof entry.customResolver === 'function',
+    );
+    expect(pins).toHaveLength(1);
+    const find = pins[0]!.find as RegExp;
+    for (const specifier of ['@seanhogg/builderforce-memory', '@seanhogg/builderforce-memory/stats', '@seanhogg/builderforce-memory-engine/ml/tasks/check-scheduler']) {
+      expect(find.test(specifier)).toBe(true);
+    }
+    expect(find.test('@seanhogg/builderforce-memory-mcp')).toBe(false);
+  });
+
   it('aliases the canvas bundle at package source, not at a copy', () => {
     const alias = webviewConfig.resolve?.alias as { find: string | RegExp; replacement: string }[];
     const replacements = alias

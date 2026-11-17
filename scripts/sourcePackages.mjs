@@ -81,14 +81,48 @@ export function readSourcePackages(repoRoot) {
  * Anchoring each specifier keeps subpath exports resolvable and makes the
  * entries order-independent.
  *
+ * The set ALSO pins the npm packages those sources import (`PINNED_INSTALL_PACKAGES`,
+ * subpaths included) to one install. Aliasing a package in means compiling it from
+ * `packages/<name>/src`, whose bare imports Vite resolves from that directory — and
+ * CI never installs `packages/*`, so `@seanhogg/builderforce-memory/stats` imported by
+ * `packages/prefetch` failed to load every brain-embedded suite while passing locally
+ * (where those installs happen to exist). The `tsconfig` side of the same rule is
+ * guard rule 9 (`scripts/lib/npmSubpaths.mjs`).
+ *
  * @param {string} repoRoot Absolute path to the repository root.
- * @returns {{ find: RegExp, replacement: string }[]}
+ * @param {{ installDir?: string }} [options] `installDir`: the consumer whose install
+ *   serves those npm imports. Defaults to the working directory, which is the consumer
+ *   for every `npm test`/`vitest run` here; a package that installs nothing and borrows
+ *   its host's (`knowledge-graph-view` → `frontend`) names the host.
+ * @returns {{ find: RegExp, replacement: string, customResolver?: any }[]} `customResolver` is a Vite `ResolverFunction`; typed loosely so this JS module needs no `vite` types.
  */
-export function sourcePackageAliases(repoRoot) {
-  return readSourcePackages(repoRoot).map(({ specifier, entry }) => ({
+export function sourcePackageAliases(repoRoot, { installDir = process.cwd() } = {}) {
+  const sources = readSourcePackages(repoRoot).map(({ specifier, entry }) => ({
     find: new RegExp(`^${escapeRegExp(specifier)}$`),
     replacement: entry,
   }));
+  return [...sources, pinnedInstallAlias(installDir)];
+}
+
+/**
+ * A `resolve.alias` entry that re-resolves every pinned specifier as if `installDir`
+ * imported it, through Vite's own resolver (so `exports`, subpaths and conditions hold).
+ * When that install does not have it, the entry steps aside (`null`) and Vite's normal
+ * resolution runs, so a consumer without the package fails exactly as it would have.
+ *
+ * @param {string} installDir
+ * @returns {{ find: RegExp, replacement: string, customResolver: any }}
+ */
+function pinnedInstallAlias(installDir) {
+  const anchor = path.join(installDir, 'package.json');
+  return {
+    find: pinnedInstallFilter(),
+    replacement: '$&',
+    /** @this {{ resolve: (source: string, importer: string, options: object) => Promise<unknown> }} */
+    async customResolver(source, _importer, options) {
+      return (await this.resolve(source, anchor, { ...options, skipSelf: true })) ?? null;
+    },
+  };
 }
 
 /**
