@@ -317,6 +317,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
         windowSources: {
           cloud: gatewayModelWindows(surface),
           ...(ports.localProbes ? { probes: ports.localProbes } : {}),
+          ...(ports.localModels ? { models: ports.localModels } : {}),
         },
         // Summaries (the fold, the hand-off note) try Synapse / the local engines first (PRD 42 · C2).
         ...(onDeviceTasks ? { onDeviceTasks } : {}),

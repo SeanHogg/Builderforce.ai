@@ -46,9 +46,24 @@ export interface RunWindowSources {
   cloud?: (ref: string) => number | undefined;
   /** The live local runtimes, asked only when the target is a local ref. */
   probes?: () => readonly LocalRuntimeProbe[] | Promise<readonly LocalRuntimeProbe[]>;
+  /** The local rows the host already HOLDS — read synchronously, so the transport's sync
+   *  `window()` sees them too. A `declared` runtime (Kimi Code) is never probed: its window
+   *  (`max_context_size`) arrives only this way. */
+  models?: () => readonly LocalModel[];
 }
 
-/** {@link contextWindowOf} over a run's sources. A probe that fails leaves the catalog row. */
+/** {@link contextWindowOf} over a run's sources WITHOUT the async probes — the sync view
+ *  the model transport's `window()` answers from. */
+export function heldContextWindow(modelRef: string | undefined, sources: RunWindowSources = {}): number | undefined {
+  return contextWindowOf(modelRef, heldSources(modelRef, sources));
+}
+
+function heldSources(modelRef: string | undefined, sources: RunWindowSources): ModelWindowSources {
+  const models = sources.models && modelRef && isLocalModelRef(modelRef) ? sources.models() : undefined;
+  return { ...(sources.cloud ? { cloud: sources.cloud } : {}), ...(models ? { models } : {}) };
+}
+
+/** {@link contextWindowOf} over a run's sources. A probe that fails leaves the held rows, then the catalog row. */
 export async function resolveContextWindow(modelRef: string | undefined, sources: RunWindowSources = {}): Promise<number | undefined> {
   if (!modelRef) return undefined;
   let probes: readonly LocalRuntimeProbe[] | undefined;
@@ -59,5 +74,5 @@ export async function resolveContextWindow(modelRef: string | undefined, sources
       probes = undefined; // an unreachable runtime reports no live window: the catalog row answers
     }
   }
-  return contextWindowOf(modelRef, { ...(sources.cloud ? { cloud: sources.cloud } : {}), ...(probes ? { probes } : {}) });
+  return contextWindowOf(modelRef, { ...heldSources(modelRef, sources), ...(probes ? { probes } : {}) });
 }

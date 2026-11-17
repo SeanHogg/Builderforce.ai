@@ -1359,8 +1359,11 @@ async function readOneFile(path, opts, caps, leverOn) {
       note: (symbols.length > 0 ? `This file is larger than one read: \`outline\` lists its ${symbols.length} definitions with line numbers. ` : "This file is larger than one read. ") + `The first ${OUTLINE_FIRST_PREFIX_LINES} lines follow. To read a span, call read_file again with \`offset\` (the outline's line) and no \`limit\` \u2014 each read returns as much as fits.`
     };
   }
-  const limitDropped = opts.limit !== void 0 && dropsLimit(content, opts, r.truncated === true);
-  const win = windowFileContent(content, { offset: opts.offset, limit: limitDropped ? void 0 : opts.limit });
+  const limitDropped = dropsLimit(content, opts, r.truncated === true);
+  const fromLine = opts.offset !== void 0 && opts.offset > 1 ? Math.floor(opts.offset) : 1;
+  const limit = limitDropped ? Math.max(opts.limit, content.split("\n").length - fromLine + 1) : opts.limit;
+  const win = windowFileContent(content, { offset: opts.offset, limit });
+  const extended = limitDropped && !win.truncated && win.returnedLines > opts.limit;
   const data = {
     ok: true,
     path: r.path ?? path,
@@ -1370,15 +1373,17 @@ async function readOneFile(path, opts, caps, leverOn) {
     offset: win.offset
   };
   let note = fileWindowNote(win);
-  if (limitDropped && !win.truncated) {
+  if (extended) {
     note = `Extended the window to the end of the file (lines ${win.offset}\u2013${win.totalLines}) \u2014 the rest fits in one read. Lines already returned need not be read again.`;
   }
   if (opts.offset === void 0 && isMarkdown(data.path ?? path) && (content.length > MARKDOWN_OUTLINE_MIN_CHARS || win.truncated)) {
     const outline = markdownOutline(data.path ?? path, content);
     if (outline.length > 0) {
       data.outline = outline;
-      const pointer = "This document is larger than one read: `outline` lists its headings with their line numbers \u2014 page by heading line with offset instead of reading it window by window.";
-      note = note ? `${note} ${pointer}` : pointer;
+      if (!(limitDropped && !win.truncated)) {
+        const pointer = "This document is larger than one read: `outline` lists its headings with their line numbers \u2014 page by heading line with offset instead of reading it window by window.";
+        note = note ? `${note} ${pointer}` : pointer;
+      }
     }
   }
   if (note) data.note = note;

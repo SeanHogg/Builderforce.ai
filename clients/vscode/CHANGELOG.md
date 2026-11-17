@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.189] — Agent runs read a large file once instead of looping, and Kimi Code runs use Kimi's real context window
+
+- **Fixed: `read_file` re-served line 1 whenever the model paged with `offset`.** On a small read budget the run looped over the same window (chat #149169 read one PRD six times). A widened read now keeps the requested offset and only drops `limit`, so paging moves forward.
+- **Fixed: `local/kimi-code/*` runs had an unknown context window.** Kimi's `max_context_size` (262,144 for kimi-for-coding) now reaches the run, so file reads, window fit and @-mention budgets are sized to it instead of the small defaults.
+
 ## [2026.10.188] — A deleted ticket no longer drags the chat's % complete down
 
 - **Fixed: the chat rail's "% complete" rollup counted tickets the server had deleted, dragging the percentage down.** Deleted tickets are now excluded from both the brain-ui rollup and the rail's per-ticket progress mapping, so the shown % only counts work that still exists.

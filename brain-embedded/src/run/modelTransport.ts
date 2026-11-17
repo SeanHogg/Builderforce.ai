@@ -13,7 +13,7 @@
  * The turn's `max_tokens` is the surface's Effort (`TurnSession.maxTokens`), not the policy's role cap.
  *
  * Also answers the one question the agent asks of a transport: `window(model)` — the model's context
- * window from what the host already knows (its gateway catalog, the shipped local catalog), sync;
+ * window from what the host already knows (its gateway catalog, the local rows it holds, the shipped local catalog), sync;
  * `undefined` keeps today's caps. The host's BYO health check (PRD 35 E7) is not asked here: the
  * preamble ran it before turn 1 and the run's preflight module only reports its verdict
  * (`preflightRecorded.ts`).
@@ -27,7 +27,7 @@ import { turnInterruption } from '../finishReason';
 import { withImages } from './runMessages';
 import { turnPriceMc } from '../localChat/turnCost';
 import type { BrainStreamFn } from '../runStore/runTypes';
-import { contextWindowOf, type RunWindowSources } from '../windowFit/modelWindow';
+import { heldContextWindow, type RunWindowSources } from '../windowFit/modelWindow';
 
 /** What the surface fixes for every call of the run (the request's own routing choices). */
 export type BrainCallDefaults = Partial<
@@ -88,8 +88,9 @@ export interface BrainModelTransportDeps {
   stream: BrainStreamFn;
   /** Per-call routing the request fixed for the whole run. */
   call?: BrainCallDefaults;
-  /** What the host knows about model windows — its gateway catalog and live local runtimes. */
-  windows?: Pick<RunWindowSources, 'cloud'>;
+  /** What the host knows about model windows, SYNCHRONOUSLY — its gateway catalog and the local rows it holds
+   *  (a declared runtime's, e.g. Kimi Code's `max_context_size`). The async probes stay the window fit's. */
+  windows?: Pick<RunWindowSources, 'cloud' | 'models'>;
 }
 
 /** The agent's transcript row in the stream's wire shape. */
@@ -214,7 +215,7 @@ export function brainModelTransport(deps: BrainModelTransportDeps): ModelTranspo
       await session.completed(result);
       return toCompletion(result, asked.model);
     },
-    window: (model) => contextWindowOf(model, windows?.cloud ? { cloud: windows.cloud } : {}),
+    window: (model) => heldContextWindow(model, windows),
   };
 }
 

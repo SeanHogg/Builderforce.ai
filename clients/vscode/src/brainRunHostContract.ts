@@ -20,7 +20,7 @@ import type {
   OnDeviceTasks,
   ServedRead,
 } from "@seanhogg/builderforce-brain-embedded";
-import type { LocalRuntimeProbe } from "@builderforce/local-inference";
+import type { LocalModel, LocalRuntimeProbe } from "@builderforce/local-inference";
 import type { RunDeltaCardPayload, RunDeltaSummary } from "@builderforce/run-delta";
 import type { Prediction } from "@builderforce/run-delta/predict";
 import type { PolicyGate, RunKnowledgeLog } from "@builderforce/agent-tools";
@@ -74,6 +74,10 @@ export interface BrainRunHostPorts {
   /** The live on-device runtimes, asked only when a turn moves onto a local model so the
    *  window gate packs for that runtime's real window. Omitted ⇒ the catalog row. */
   localProbes?(): Promise<readonly LocalRuntimeProbe[]>;
+  /** The local rows this host already holds, read synchronously — a declared runtime's
+   *  (Kimi Code's, with its `max_context_size`), which no probe reports. Feeds both the
+   *  window gate and the agent's sync `window()`. Omitted ⇒ probes and the catalog only. */
+  localModels?(): readonly LocalModel[];
   /** The editor's on-device task port (`modelRouting.ts`): a run's summaries try it before
    *  the run's model (PRD 42 · C2). Omitted ⇒ they go through `stream` as before. */
   onDeviceTasks?: OnDeviceTasks;

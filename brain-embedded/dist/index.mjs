@@ -361,7 +361,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-M2RAC6DR.mjs";
+} from "./chunk-IF37ZKYC.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useEffect, useMemo } from "react";
@@ -6723,6 +6723,13 @@ function contextWindowOf(modelRef, sources = {}) {
   }
   return positive(sources.cloud?.(modelRef));
 }
+function heldContextWindow(modelRef, sources = {}) {
+  return contextWindowOf(modelRef, heldSources(modelRef, sources));
+}
+function heldSources(modelRef, sources) {
+  const models = sources.models && modelRef && isLocalModelRef(modelRef) ? sources.models() : void 0;
+  return { ...sources.cloud ? { cloud: sources.cloud } : {}, ...models ? { models } : {} };
+}
 async function resolveContextWindow(modelRef, sources = {}) {
   if (!modelRef) return void 0;
   let probes;
@@ -6733,7 +6740,7 @@ async function resolveContextWindow(modelRef, sources = {}) {
       probes = void 0;
     }
   }
-  return contextWindowOf(modelRef, { ...sources.cloud ? { cloud: sources.cloud } : {}, ...probes ? { probes } : {} });
+  return contextWindowOf(modelRef, { ...heldSources(modelRef, sources), ...probes ? { probes } : {} });
 }
 
 // src/localTargetStream.ts
@@ -20729,7 +20736,7 @@ function brainModelTransport(deps) {
       await session.completed(result);
       return toCompletion(result, asked.model);
     },
-    window: (model) => contextWindowOf(model, windows?.cloud ? { cloud: windows.cloud } : {})
+    window: (model) => heldContextWindow(model, windows)
   };
 }
 

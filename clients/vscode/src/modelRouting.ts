@@ -50,6 +50,7 @@ import {
   formatLocalModelRef,
   type LocalFirstAccount,
   type LocalFirstAttemptRecord,
+  type LocalModel,
   type LocalRuntimeProbe,
 } from "@builderforce/local-inference";
 import {
@@ -64,7 +65,7 @@ import { hasImageParts, IMAGE_NEEDS_GATEWAY, textOnly } from "./chatContent";
 import { authorizeLocalEndpoint } from "./localEndpointAuth";
 import { editorAccounts } from "./providerConnect";
 import { logLine } from "./errorReporter";
-import { probeLocalFirstRuntimes, probeOnDeviceRuntimes, type LocalModelsConfig } from "./localModels";
+import { declaredLocalModels, probeLocalFirstRuntimes, probeOnDeviceRuntimes, type LocalModelsConfig } from "./localModels";
 import { resolveEffectiveModelChoice } from "./modelState";
 import { createNativeStream } from "./nativeBrainRun";
 import { gatewayWorkspaceHeaders } from "./gatewayAuth";
@@ -180,6 +181,15 @@ async function withLocalFirst(choice: ModelRoute, config: LocalModelsConfig, req
  */
 export function localWindowProbes(): Promise<LocalRuntimeProbe[]> {
   return probeLocalFirstRuntimes(getLocalModelsConfig());
+}
+
+/**
+ * The local rows this host holds without a probe — a declared runtime's (Kimi Code's, its
+ * `max_context_size` as `contextTokens`), read synchronously from the memoized install, so
+ * the agent's sync `window()` and the window gate both know a `local/kimi-code/*` window.
+ */
+export function localWindowModels(): LocalModel[] {
+  return declaredLocalModels(getLocalModelsConfig());
 }
 
 /**

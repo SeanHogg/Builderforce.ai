@@ -17,7 +17,7 @@ import { editorRunSettings } from "./editorRunSettings";
 import { deviceLedgerPorts } from "./runUsageLedgerPorts";
 import { auditToolCatalog } from "./auditToolCatalog";
 import { brainToolCatalog } from "./brainToolCatalog";
-import { localWindowProbes, onDeviceTasks, onDeviceTasksObserving, resolveModelRoute, routeStream } from "./modelRouting";
+import { localWindowModels, localWindowProbes, onDeviceTasks, onDeviceTasksObserving, resolveModelRoute, routeStream } from "./modelRouting";
 import { refreshPendingChanges } from "./gitChanges";
 import { editorRunSetupPorts } from "./runSetupPorts";
 import { recordEditorRunEnd } from "./editorRunEnd";
@@ -191,6 +191,7 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     workspaceRoot,
     stream: streamForRoute,
     localProbes: localWindowProbes,
+    localModels: localWindowModels,
     onDeviceTasks,
     // Each served task call is a `utility` row in the run's chat (the same ledger as its model calls).
     onDeviceTasksFor: (run) => onDeviceTasksObserving(utilityUsageObserver(local.usage, run, (error) => hostLog(`[usage ledger] utility write failed: ${String(error)}`))),

@@ -213,6 +213,13 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 
 Source: [offline-first review](./docs/design/vsix-offline-first-architecture-review.md).
 
+- **Local model context windows are still unknown on three paths (found 2026-11-17 while fixing chat #149169). VSIX 2026.10.189 fixed the Kimi Code CLI install.**
+  - `clients/vscode/src/modelRouting.ts` `localWindowProbes()` returns `[]` unless `localModels.localFirst` is on, so a pinned Ollama, Synapse or FreeToken model gets only the shipped catalog window.
+  - The transport's sync `window()` (`brain-embedded/src/run/modelTransport.ts`) never sees live probe windows such as Ollama's `num_ctx`.
+  - Kimi rows from the workspace connection (`localCredentialSnapshot("kimi")`) carry no `max_context_size`.
+
+  Fixing these sizes reads, window fit and mention budgets to the real model instead of the 16K / 8K defaults. **Blocker:** an operator decision. `routeStream` reuses `localWindowProbes()` as Hybrid's local-first candidate set, so probing whenever local-first is off would change routing.
+
 - **Three local ticket writers.** `frontend/src/lib/localFirst/workManagement.ts` (web), `packages/local-first/src/localWork.ts` `createLocalWork` (used by `localTools.ts` `executeDomainTool`) and `clients/vscode/src/localTicketRepository.ts` (VSIX) each build the ticket record, its create event and its dependencies separately. Only the VSIX writer carries `chatClientId`, `taskType` or server references. Fix: move the VSIX repository's rules into `packages/local-first` as the one ticket and project repository, port the web and `executeDomainTool` callers onto it, and delete the two thinner copies with their tests run unchanged. Fixing it means a chat-created ticket links on every local host, not only the editor. The chat-link fix landed in f6cad9f14, so this is unblocked.
 - **Typed ids, contract push still to come: `sync_entity_mappings.server_id` and the wire's `serverId` text are still dual-written beside `sync_id`.** The expand push (migration 1339, `docs/design/typed-entity-ids.md` §4) added `sync_id bigint`. The api reader prefers `server_id` (`api/src/application/sync/syncIds.ts mappedServerKey`) because rows written by the old Worker leave `sync_id` stale. The contract push will:
   - drop `server_id` from mappings, after a backfill re-run;

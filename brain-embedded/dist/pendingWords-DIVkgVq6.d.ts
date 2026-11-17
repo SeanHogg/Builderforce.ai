@@ -1,5 +1,5 @@
-import { B as BrainTraceEvent, U as UsageSurface, a as BrainMessage, P as PackageDirProbe } from './brainTriage-BXwQw04C.cjs';
-import { L as LocalRuntimeId, a as LocalEndpoint, b as LocalRuntimeProbe, c as LocalModel } from './probe-BGCNrsPi.cjs';
+import { B as BrainTraceEvent, U as UsageSurface, a as BrainMessage, P as PackageDirProbe } from './brainTriage-BXwQw04C.js';
+import { L as LocalRuntimeId, a as LocalEndpoint, b as LocalRuntimeProbe, c as LocalModel } from './probe-BGCNrsPi.js';
 import { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import { ConsolidateOptions, ConsolidatedMemory } from '@seanhogg/builderforce-memory/working';
 
@@ -1518,8 +1518,12 @@ interface RunWindowSources {
     cloud?: (ref: string) => number | undefined;
     /** The live local runtimes, asked only when the target is a local ref. */
     probes?: () => readonly LocalRuntimeProbe[] | Promise<readonly LocalRuntimeProbe[]>;
+    /** The local rows the host already HOLDS — read synchronously, so the transport's sync
+     *  `window()` sees them too. A `declared` runtime (Kimi Code) is never probed: its window
+     *  (`max_context_size`) arrives only this way. */
+    models?: () => readonly LocalModel[];
 }
-/** {@link contextWindowOf} over a run's sources. A probe that fails leaves the catalog row. */
+/** {@link contextWindowOf} over a run's sources. A probe that fails leaves the held rows, then the catalog row. */
 declare function resolveContextWindow(modelRef: string | undefined, sources?: RunWindowSources): Promise<number | undefined>;
 
 /**

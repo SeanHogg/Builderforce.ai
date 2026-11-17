@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { LOCAL_MODEL_PREFIX, parseLocalModelRef } from "@builderforce/local-inference";
-import { resolveLocalChatEndpoint, listLocalModels, localModelOptions } from "./localModels";
+import { resolveLocalChatEndpoint, listLocalModels, localModelOptions, declaredLocalModels } from "./localModels";
+import { parseKimiCodeConfig } from "./kimiCodeInstall";
 
 /**
  * The editor's binding of `@builderforce/local-inference`: the endpoints it hands the
@@ -201,6 +202,19 @@ describe("kimi-code as a locally-served provider", () => {
     ]);
     // Only the two on-device engines were probed; Kimi contributed no round trip.
     expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it("carries the install's max_context_size onto the row as its window", () => {
+    // Kimi is never probed, so its config's `max_context_size` is the ONLY source of a
+    // `local/kimi-code/*` window; without it every window-sized budget falls back to its default.
+    const install = parseKimiCodeConfig(`[models."kimi-code/kimi-for-coding"]\nmodel = "kimi-for-coding"\ndisplay_name = "K2.7 Coding"\nmax_context_size = 262144\n`);
+    const rows = declaredLocalModels({ ...kimiConfig, kimiCodeModels: install.models });
+    expect(rows.find((m) => m.ref === "local/kimi-code/kimi-for-coding")).toMatchObject({ contextTokens: 262144 });
+  });
+
+  it("leaves a Kimi row's window unset when the install declares none", () => {
+    const [row] = declaredLocalModels({ ...kimiConfig, kimiCodeModels: [{ model: "k3", displayName: "K3" }] });
+    expect(row).not.toHaveProperty("contextTokens");
   });
 
   it("offers no Kimi rows when no install was discovered", async () => {

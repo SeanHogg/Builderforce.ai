@@ -14,7 +14,7 @@ import { desktopCompressProse } from "./desktopContext";
 import { logLine } from "./errorReporter";
 import { getBaseUrl } from "./gateway";
 import { hostCostLeverOn } from "./hostCostLevers";
-import { localWindowProbes, resolveModelRoute, type ModelRoute } from "./modelRouting";
+import { localWindowModels, localWindowProbes, resolveModelRoute, type ModelRoute } from "./modelRouting";
 import { createAttachmentIngress, uploadRefusal, type AttachmentIngress, type OutgoingFile, type UploadedAttachment } from "./attachmentIngress";
 import { currentInferenceMode } from "./inferenceModeSetting";
 import type { IngressDeps } from "./contextIngress";
@@ -31,8 +31,8 @@ export async function routeMentionBudget(route: ModelRoute): Promise<MentionBudg
   if (route.local) {
     try {
       const pin = route.local;
-      contextWindowTokens = (await localWindowProbes())
-        .flatMap((p) => p.models)
+      // The declared rows (Kimi Code's `max_context_size`) are never probed: they come from the install.
+      contextWindowTokens = [...(await localWindowProbes()).flatMap((p) => p.models), ...localWindowModels()]
         .find((m) => m.provider === pin.provider && m.model === pin.model && isServableLocalModel(m))?.contextTokens;
     } catch { /* unknown window: the default local row */ }
   }

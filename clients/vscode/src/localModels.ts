@@ -39,6 +39,7 @@ import {
   type LocalRuntimeProbe,
 } from "@builderforce/local-inference";
 import { hostPageEngines } from "./pageEngineBridge";
+import type { KimiCodeModel } from "./kimiCodeInstall";
 
 // Re-exported for the editor modules that already reach the local path through this
 // file (the panel's proxy fence, the Synapse catalog, the model-state pin check, the
@@ -58,8 +59,8 @@ export interface LocalModelsConfig {
    *  contributes no models — the normal case for a developer running none. */
   endpoints: LocalEndpoints;
   /** Models the Kimi Code install declares. There is no `/v1/models` to probe — Kimi's
-   *  catalog is in its own config, already read. */
-  kimiCodeModels?: readonly { model: string; displayName: string }[];
+   *  catalog is in its own config, already read, window (`max_context_size`) included. */
+  kimiCodeModels?: readonly KimiCodeModel[];
 }
 
 /** The global fetch, read at CALL time so a harness that swaps it is honoured. */
@@ -86,15 +87,24 @@ export function resolveLocalChatEndpoint(
 export async function listLocalModels(config: LocalModelsConfig, fetchImpl: FetchLike = globalFetch): Promise<LocalModel[]> {
   if (!config.enabled) return [];
   const probes = await probeLocalRuntimes(fetchImpl, config.endpoints);
-  const kimi: LocalModel[] = config.endpoints["kimi-code"]
-    ? (config.kimiCodeModels ?? []).map((entry) => ({
-        ref: formatLocalModelRef("kimi-code", entry.model),
-        provider: "kimi-code" as const,
-        model: entry.model,
-        label: entry.displayName,
-      }))
-    : [];
-  return [...probes.flatMap((p) => p.models.filter(isServableLocalModel)), ...kimi];
+  return [...probes.flatMap((p) => p.models.filter(isServableLocalModel)), ...declaredLocalModels(config)];
+}
+
+/**
+ * The rows a `declared` runtime (Kimi Code) contributes — read off its install, never
+ * probed, so they are available SYNCHRONOUSLY. The one conversion from the install's model
+ * table to a {@link LocalModel}: the picker lists them and a run's window gate reads their
+ * `contextTokens` (Kimi's `max_context_size`) — there is no probe that could report it.
+ */
+export function declaredLocalModels(config: LocalModelsConfig): LocalModel[] {
+  if (!config.endpoints["kimi-code"]) return [];
+  return (config.kimiCodeModels ?? []).map((entry) => ({
+    ref: formatLocalModelRef("kimi-code", entry.model),
+    provider: "kimi-code" as const,
+    model: entry.model,
+    label: entry.displayName,
+    ...(entry.maxContextSize !== undefined ? { contextTokens: entry.maxContextSize } : {}),
+  }));
 }
 
 /**
