@@ -7,6 +7,7 @@ import {
 import type { BrainChat } from "@seanhogg/builderforce-brain-embedded";
 import { readRailFromFacts } from "./buildRail";
 import { mergeLocalTicketSummary, withLocalTickets } from "./localTicketSummary";
+import { railTicketProgress } from "./railPayloads";
 
 const CHAT = "chat-client-1";
 

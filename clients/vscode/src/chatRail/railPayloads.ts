@@ -11,6 +11,7 @@
  * never disagree about what names a ticket.
  */
 
+import { isClosedTaskStatus } from "@builderforce/agent-loop";
 import { TASK_TABLE_KINDS, tierRefText, type EntityScope, type LocalFirstTransaction, type ServerMapping, type TicketValue } from "@builderforce/local-first";
 import type { RailRun, RailTicketParent } from "./railProtocol";
 
@@ -65,9 +66,15 @@ export function railTicketProgress(payload: TicketValue & Partial<Pick<RailTicke
   // An empty or whitespace-only status is the same "not started yet" as undefined: the record has
   // not been assigned a lane. Only a real lane (a non-blank string) is drawn verbatim.
   const status = typeof payload.status === "string" && payload.status.trim() !== "" ? payload.status : "backlog";
+  // The status ladder is authoritative once closed: a ticket whose lane is a closed (done) lane
+  // is complete by definition and always reads 100 — never demoted by a stale progressPct still
+  // on the record from an earlier open-lane snapshot (the unsupported-delivery cap, an old
+  // in_review 75, …). Same rule as the server (taskTierTicketHealth) and the shared rollup
+  // (agent-loop chatTicketHealth); the stored percent is trusted only while the lane is open.
+  if (isClosedTaskStatus(status)) return { status, progressPct: 100, done: 1, total: 1 };
   return {
     status,
-    progressPct: payload.progressPct ?? (status === "done" ? 100 : 0),
+    progressPct: payload.progressPct ?? 0,
     done: payload.done ?? 0,
     total: payload.total ?? 0,
   };
