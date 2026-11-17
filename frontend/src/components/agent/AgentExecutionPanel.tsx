@@ -14,7 +14,6 @@ import {
   type AgentHost,
   type Approval,
   type Execution,
-  type ExecutionTraceToolEvent,
   type ExecutionLlmTurn,
   type TaskFileChange,
   type TaskRepoStatus,
@@ -32,6 +31,7 @@ import { statusColor } from '@/lib/statusTone';
 import { ExecutionChip } from './ExecutionChip';
 import { EvermindRunChip } from './EvermindRunChip';
 import { useExecutionStream, type ExecutionFileChange } from './useExecutionStream';
+import { parseResult, filesFromResult } from './executionResultFiles';
 import { useExecutionTrace } from './useExecutionTrace';
 import { agentMessageText, isGenuineToolCall, runDispatchType, runProvenance } from './executionTraceEvents';
 import { ObservabilityContent } from '../ObservabilityContent';
@@ -56,37 +56,6 @@ import { settledRunStatus } from '@/lib/runDeltaSettle';
  * recorded as a PRD revision server-side, so the spec evolves with each run).
  * Reused by both the project and task "Agent / Capabilities" surfaces.
  */
-
-interface AgentResult {
-  summary?: string;
-  output?: string;
-  files?: Array<{ path: string; status?: string }>;
-  changedFiles?: string[];
-}
-
-function parseResult(raw: unknown): AgentResult | null {
-  if (typeof raw !== 'string' || !raw.trim()) return null;
-  try { return JSON.parse(raw) as AgentResult; } catch { return { output: raw }; }
-}
-
-/** File paths an agent touched, merged from the result blob and tool-call args. */
-function filesFromResult(result: AgentResult | null, toolEvents: ExecutionTraceToolEvent[]): ExecutionFileChange[] {
-  const map = new Map<string, ExecutionFileChange>();
-  const add = (path: string, change: ExecutionFileChange['change']) => {
-    if (path) map.set(path, { path, change, ts: '' });
-  };
-  result?.files?.forEach((f) => f.path && add(f.path, (f.status as ExecutionFileChange['change']) ?? 'modified'));
-  result?.changedFiles?.forEach((p) => add(p, 'modified'));
-  for (const ev of toolEvents) {
-    if (!/write|create_file|edit|apply|patch|save|delete|remove|rm/i.test(ev.toolName)) continue;
-    try {
-      const args = ev.args ? JSON.parse(ev.args) as Record<string, unknown> : {};
-      const path = (args.path ?? args.file ?? args.filename) as string | undefined;
-      if (path) add(path, /delete|remove|rm/i.test(ev.toolName) ? 'deleted' : 'modified');
-    } catch { /* ignore unparseable args */ }
-  }
-  return [...map.values()];
-}
 
 type SubTab = 'output' | 'changes' | 'tools' | 'thinking' | 'model' | 'logs' | 'timeline' | 'pull-request' | 'preview';
 const card: React.CSSProperties = { border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 14, marginBottom: 12 };

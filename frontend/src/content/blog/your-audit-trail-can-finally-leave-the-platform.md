@@ -1,3 +1,11 @@
+---
+title: Your audit trail can finally leave the platform
+date: 2026-11-15
+description: Agent-run spans went to your collector but your audit trail could not. Any OpenTelemetry exporter now also ships sign-ins, role and membership changes, API keys, exports, integrations, approvals and agent tool calls as OTLP logs to your SIEM — at-least-once, with the event id as the dedup key, off the request path, and tenant-scoped by construction.
+tags: [observability, security, audit, enterprise, product]
+author: Sean Hogg
+---
+
 # Your audit trail can finally leave the platform
 
 Agent-run spans already went to your own OpenTelemetry collector — Honeycomb, Datadog, Grafana, whatever you run. Your audit trail could not. Sign-ins, role changes, API keys, approval decisions, agent tool calls: all recorded, none of it exportable. A security team with a SIEM saw agent work as an island and the audit trail as a second island.

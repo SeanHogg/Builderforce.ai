@@ -1,6 +1,4 @@
-'use client';
-
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { getTeamPeopleScores, type PersonScore, type ScoredMeasure, type TeamPeopleScores } from '@/lib/personScores';
 import { faultMessage } from '@/lib/apiClient';
@@ -18,26 +16,26 @@ import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, t
  */
 export function TeamPeopleView({ teamId }: { teamId: number }) {
   const t = useTranslations('workforce.teams.people');
-  const [data, setData] = useState<TeamPeopleScores | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // One settled read per team: loading is "the last read is not for this team", so a
+  // team switch shows the loading line again without a synchronous reset in the effect.
+  const [read, setRead] = useState<{ teamId: number; data: TeamPeopleScores | null; error: string | null } | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setData(await getTeamPeopleScores(teamId));
-    } catch (e) {
-      setError(faultMessage(e, t('errLoad')));
-    } finally {
-      setLoading(false);
-    }
+  useEffect(() => {
+    let live = true;
+    getTeamPeopleScores(teamId).then(
+      (data) => { if (live) setRead({ teamId, data, error: null }); },
+      (e: unknown) => { if (live) setRead({ teamId, data: null, error: faultMessage(e, t('errLoad')) }); },
+    );
+    return () => { live = false; };
   }, [teamId, t]);
 
-  useEffect(() => { void load(); }, [load]);
+  const settled = read?.teamId === teamId ? read : null;
+  const loading = settled == null;
+  const data = settled?.data ?? null;
+  const error = settled?.error ?? null;
 
   if (loading) return <p style={tdMutedStyle}>{t('loading')}</p>;
-  if (error) return <p style={{ ...tdMutedStyle, color: 'var(--error, #c0392b)' }}>{error}</p>;
+  if (error) return <p style={{ ...tdMutedStyle, color: 'var(--error)' }}>{error}</p>;
   if (!data) return null;
 
   if (data.people.length === 0) {
@@ -137,7 +135,7 @@ function MeasureRow({ measure, t }: { measure: ScoredMeasure; t: T }) {
       </td>
       <td style={tdStyle}>
         {measure.outsideLimits ? (
-          <strong style={{ color: 'var(--error, #c0392b)' }}>{t('outsideLimits')}</strong>
+          <strong style={{ color: 'var(--error)' }}>{t('outsideLimits')}</strong>
         ) : (
           <span style={tdMutedStyle}>{t('withinLimits')}</span>
         )}
@@ -160,7 +158,7 @@ function IntervalBar({ low, high, mean }: { low: number; high: number; mean: num
       style={{ position: 'relative', display: 'inline-block', width: 120, height: 10, verticalAlign: 'middle' }}
     >
       <span style={{ position: 'absolute', left: 0, top: 4, width: '100%', height: 2, background: 'var(--border-subtle)' }} />
-      <span style={{ position: 'absolute', left: `${left}%`, top: 2, width: `${width}%`, height: 6, background: 'var(--accent, #4a7dff)', borderRadius: 2 }} />
+      <span style={{ position: 'absolute', left: `${left}%`, top: 2, width: `${width}%`, height: 6, background: 'var(--accent)', borderRadius: 'var(--radius-full)' }} />
       <span style={{ position: 'absolute', left: `${mark}%`, top: 0, width: 2, height: 10, background: 'var(--text-primary)' }} />
     </span>
   );

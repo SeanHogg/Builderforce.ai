@@ -127,7 +127,7 @@ export function DataList<Row>({
 
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         {totalCount === 0 ? (
-          <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)', fontSize: 13 }}>
+          <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' }}>
             {empty ?? t('noResults')}
           </div>
         ) : (

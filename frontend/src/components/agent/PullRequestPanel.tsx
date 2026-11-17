@@ -291,7 +291,7 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
 
       {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 8 }}>{error}</div>}
       {gateReasons && (
-        <div role="alert" style={{ fontSize: 12, marginTop: 8, padding: '8px 12px', border: '1px solid var(--danger-border)', borderRadius: 'var(--radius-sm)', background: 'var(--danger-bg)', color: 'var(--danger-text)' }}>
+        <div role="alert" style={{ fontSize: 'var(--font-size-small)', marginTop: 8, padding: '8px 12px', border: '1px solid var(--danger-border)', borderRadius: 'var(--radius-sm)', background: 'var(--danger-bg)', color: 'var(--danger-text)' }}>
           <div style={{ fontWeight: 600 }}>{tGate('title')}</div>
           <div>{tGate('intro')}</div>
           <GateReasonList reasons={gateReasons} />

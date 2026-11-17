@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * PROJECT SPEND — what this project's AI work cost.
  *

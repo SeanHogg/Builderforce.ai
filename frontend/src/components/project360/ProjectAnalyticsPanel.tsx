@@ -19,7 +19,7 @@
  * ProjectRunDeltas, cost → ProjectSpendWidget, diagnostics → toolsApi.projectScore.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import type { Project360 } from '@seanhogg/builderforce-brain-ui';
@@ -39,38 +39,34 @@ const card: React.CSSProperties = {
 };
 
 const SEV_ORDER = { high: 0, medium: 1, low: 2 } as const;
+const NO_DIAGNOSTICS: ProjectDiagnostic[] = [];
 
 export function ProjectAnalyticsPanel({ projectId }: { projectId: number }) {
   const t = useTranslations('projectAnalytics');
   const fmt = useFormat();
-  const [health, setHealth] = useState<Project360 | null>(null);
-  const [diagnostics, setDiagnostics] = useState<ProjectDiagnostic[]>([]);
-  const [diagLoading, setDiagLoading] = useState(true);
-
-  const loadHealth = useCallback(async () => {
-    try {
-      setHealth(await getProject360(projectId));
-    } catch {
-      setHealth(null); // health is best-effort here; the dedicated panel surfaces faults
-    }
-  }, [projectId]);
-
-  const loadDiagnostics = useCallback(async () => {
-    setDiagLoading(true);
-    try {
-      const score = await toolsApi.projectScore(projectId);
-      setDiagnostics(score.diagnostics ?? []);
-    } catch {
-      setDiagnostics([]); // diagnostics are optional; a failure hides the strip, not the page
-    } finally {
-      setDiagLoading(false);
-    }
-  }, [projectId]);
+  // Each read is stamped with the project it answered, so a project switch reads as
+  // "not loaded yet" without a synchronous reset inside the effect.
+  const [healthRead, setHealthRead] = useState<{ projectId: number; health: Project360 | null } | null>(null);
+  const [diagRead, setDiagRead] = useState<{ projectId: number; diagnostics: ProjectDiagnostic[] } | null>(null);
 
   useEffect(() => {
-    void loadHealth();
-    void loadDiagnostics();
-  }, [loadHealth, loadDiagnostics]);
+    let live = true;
+    getProject360(projectId).then(
+      (health) => { if (live) setHealthRead({ projectId, health }); },
+      // health is best-effort here; the dedicated panel surfaces faults
+      () => { if (live) setHealthRead({ projectId, health: null }); },
+    );
+    toolsApi.projectScore(projectId).then(
+      (score) => { if (live) setDiagRead({ projectId, diagnostics: score.diagnostics ?? [] }); },
+      // diagnostics are optional; a failure hides the strip, not the page
+      () => { if (live) setDiagRead({ projectId, diagnostics: [] }); },
+    );
+    return () => { live = false; };
+  }, [projectId]);
+
+  const health = healthRead?.projectId === projectId ? healthRead.health : null;
+  const diagLoading = diagRead?.projectId !== projectId;
+  const diagnostics = diagRead?.projectId === projectId ? diagRead.diagnostics : NO_DIAGNOSTICS;
 
   // The insights strip shows the highest-severity gaps as one-line actions.
   const insights = (health?.gaps ?? [])
@@ -146,10 +142,10 @@ export function ProjectAnalyticsPanel({ projectId }: { projectId: number }) {
                       alignSelf: 'center',
                       background:
                         g.severity === 'high'
-                          ? 'var(--status-bad, #e5484d)'
+                          ? 'var(--error)'
                           : g.severity === 'medium'
-                            ? 'var(--status-warn, #f5a524)'
-                            : 'var(--status-good, #30a46c)',
+                            ? 'var(--warning)'
+                            : 'var(--success)',
                     }}
                   />
                   <span style={{ minWidth: 0 }}>
@@ -197,12 +193,12 @@ export function ProjectAnalyticsPanel({ projectId }: { projectId: number }) {
                 <div
                   style={{
                     height: 6,
-                    borderRadius: 3,
+                    borderRadius: 'var(--radius-full)',
                     background: 'var(--surface-interactive, var(--border-subtle))',
                     overflow: 'hidden',
                   }}
                 >
-                  <div style={{ height: '100%', width: `${d.score}%`, background: d.color, borderRadius: 3 }} />
+                  <div style={{ height: '100%', width: `${d.score}%`, background: d.color, borderRadius: 'var(--radius-full)' }} />
                 </div>
               </div>
             ))}

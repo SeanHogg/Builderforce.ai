@@ -1,7 +1,6 @@
 import { fetchPublishedAsset } from '@/infrastructure/http/publishedAsset';
 import { getOrSetClientCached } from '@/infrastructure/http/readThrough';
 import { DEFAULT_LOCALE, type Locale } from './config';
-import { namespacesForPath } from './routeNamespaces.generated';
 import enMessages from './messages/en.json';
 
 /**
@@ -172,6 +171,8 @@ export async function loadCatalog(locale: Locale, origin = ''): Promise<Messages
     const manifest = await loadManifest(origin);
     const all = manifest[locale];
     if (!all?.length) return flat;
+    // The route map loads with the chunks it names, off the root layout's first paint.
+    const { namespacesForPath } = await import('./routeNamespaces.generated');
     const wanted = new Set(namespacesForPath(window.location.pathname));
     const namespaces = all.filter((ns) => wanted.has(ns));
     if (!namespaces.length) return flat;

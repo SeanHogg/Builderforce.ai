@@ -303,8 +303,12 @@ const BASELINE = {
    * Release run red. All fifteen name roles now on the same mapping (11 = eyebrow,
    * 12/13 = small, 14 = body). `PersonasClient` +21 against `personas/page` −21 is the
    * page-split move again, not work.
+   *
+   * 3241 → 3240 (2026-11-17): `PullRequestPanel`'s gate-error alert (12) and
+   * `DataList`'s empty row (13) had taken the tree to 3242 and turned the Release run
+   * red. Both name `--font-size-small` now; the net is one lower than before.
    */
-  offScaleFontSizes: 3241,
+  offScaleFontSizes: 3240,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

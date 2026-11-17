@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * A project's Run deltas (PRD 41 §C11.3): the trend of its agent runs (verdict by dimension, blast radius score) and the
  * run list, newest first, each row opening that run's delta in the slide-out panel. The ONE `RunDeltaHistory` view the
@@ -46,38 +44,54 @@ export function ProjectRunDeltas({ projectId }: { projectId: number }) {
   const pageRead = useRef<AbortController | null>(null);
   const selectRead = useRef<AbortController | null>(null);
 
-  const loadPage = useCallback(async (after?: string) => {
+  // The read itself: aborts the one in flight and writes state only once it answers.
+  const fetchPage = useCallback((after?: string): Promise<void> => {
     pageRead.current?.abort();
     const controller = new AbortController();
     pageRead.current = controller;
-    setPage({ ...IDLE, loading: true });
-    try {
-      const next = await listProjectRunDeltas(projectId, { limit: PAGE, ...(after ? { cursor: after } : {}), signal: controller.signal });
-      if (controller.signal.aborted) return;
-      setItems((current) => (after ? [...current, ...next.items] : next.items));
-      setCursor(next.nextCursor);
-      setPage(IDLE);
-    } catch (e) {
-      if (controller.signal.aborted) return;
-      if (isRunDeltaUnavailable(e)) { setUnavailable(true); setPage(IDLE); return; }
-      setPage({ loading: false, failed: true, failedCursor: after });
-    }
+    return listProjectRunDeltas(projectId, { limit: PAGE, ...(after ? { cursor: after } : {}), signal: controller.signal }).then(
+      (next) => {
+        if (controller.signal.aborted) return;
+        setItems((current) => (after ? [...current, ...next.items] : next.items));
+        setCursor(next.nextCursor);
+        setPage(IDLE);
+      },
+      (e: unknown) => {
+        if (controller.signal.aborted) return;
+        if (isRunDeltaUnavailable(e)) { setUnavailable(true); setPage(IDLE); return; }
+        setPage({ loading: false, failed: true, failedCursor: after });
+      },
+    );
   }, [projectId]);
 
-  // A different project starts over: no rows, no cursor, nothing open, no read of the previous project left running.
-  useEffect(() => {
+  /** A reader-asked page ("show older runs" / retry): shows the loading row, then reads. */
+  const loadPage = useCallback((after?: string) => {
+    setPage({ ...IDLE, loading: true });
+    return fetchPage(after);
+  }, [fetchPage]);
+
+  // A different project starts over: no rows, no cursor, nothing open. Reset while rendering (not in the effect),
+  // so the first paint for the new project is already the loading state.
+  const [shownProject, setShownProject] = useState(projectId);
+  if (shownProject !== projectId) {
+    setShownProject(projectId);
     setItems([]);
     setCursor(undefined);
+    setPage({ ...IDLE, loading: true });
     setUnavailable(false);
     setSelected(undefined);
     setOpen(null);
     setOpenError(false);
-    void loadPage();
+  }
+
+  // ...and no read of the previous project left running.
+  useEffect(() => {
+    void fetchPage();
     return () => {
       pageRead.current?.abort();
       selectRead.current?.abort();
     };
-  }, [loadPage]);
+  }, [fetchPage]);
 
   const select = useCallback(async (item: RunDeltaSummary) => {
     selectRead.current?.abort();
