@@ -144,19 +144,13 @@
   "worker:markPaint:maxReadsPerStep": 2699,
   "worker:markPaint:reads": 5398,
   "worker:markPaint:steps": 2,
-  "worker:markSet:maxReadsPerStep": 165363,
-  "worker:markSet:reads": 165363,
-  "worker:markSet:steps": 2,
   "worker:partitionMatrix:maxReadsPerStep": 0,
   "worker:partitionMatrix:reads": 0,
   "worker:partitionMatrix:steps": 1,
   "worker:placement:maxReadsPerStep": 78955,
   "worker:placement:reads": 1055715,
   "worker:placement:steps": 180,
-  "worker:stageIncident:maxReadsPerStep": 119040,
-  "worker:stageIncident:reads": 238080,
-  "worker:stageIncident:steps": 2,
-  "worker:surface:maxReadsPerStep": 123901,
-  "worker:surface:reads": 123901,
-  "worker:surface:steps": 1
+  "worker:stage:maxReadsPerStep": 527344,
+  "worker:stage:reads": 527344,
+  "worker:stage:steps": 5
 }

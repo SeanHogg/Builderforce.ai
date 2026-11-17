@@ -63,8 +63,24 @@ function wireMetrics(report: RenderReport, into: Metrics): void {
     into['wire:maxMessageBytes'] = report.wire.maxMessageBytes;
 }
 
+/**
+ * Stage kinds (`markSet`, `surface`, `stageIncident`) build the SAME per-graph model (`buildStageModel`), which memoises the
+ * shared `buildStations`/`buildLines` pass. Which of them runs FIRST absorbs that shared cost into its own `reads` and its
+ * own `maxReadsPerStep`; the boot dispatch order is not deterministic, so per-kind attribution flips between runs while the
+ * COMBINED totals are stable (each kind runs a fixed number of times per profile). They are one unit of work, counted once
+ * as `worker:stage`, so `reads` / `steps` / `maxReadsPerStep` are SUMMED over the group — all order-independent. All other
+ * kinds keep their own per-kind rows (max for maxReadsPerStep: each runs once).
+ */
+const STAGE_GROUP: ReadonlySet<string> = new Set(['markSet', 'surface', 'stageIncident']);
+
 function taskMetrics(report: RenderReport, into: Metrics): void {
     for (const t of report.tasks) {
+        if (STAGE_GROUP.has(t.kind)) {
+            into['worker:stage:reads'] = (into['worker:stage:reads'] ?? 0) + t.totalReads;
+            into['worker:stage:maxReadsPerStep'] = (into['worker:stage:maxReadsPerStep'] ?? 0) + t.maxReadsPerStep;
+            into['worker:stage:steps'] = (into['worker:stage:steps'] ?? 0) + t.steps;
+            continue;
+        }
         into[`worker:${t.kind}:reads`] = (into[`worker:${t.kind}:reads`] ?? 0) + t.totalReads;
         into[`worker:${t.kind}:maxReadsPerStep`] = Math.max(into[`worker:${t.kind}:maxReadsPerStep`] ?? 0, t.maxReadsPerStep);
         into[`worker:${t.kind}:steps`] = (into[`worker:${t.kind}:steps`] ?? 0) + t.steps;
