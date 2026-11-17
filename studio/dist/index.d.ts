@@ -33,11 +33,13 @@ declare class VideoEngine {
      *  re-deriving it from `MODEL_REGISTRY` on every call. */
     private readonly engineKind;
     private readonly webditBundle;
-    /** Track the probed device so we can lazy-create a refinement-pass engine
-     *  later with the same hardware target — needed for the two-pass quality
-     *  chain (draft model → dispose → refinement model). Only meaningful on
-     *  the lcm-diffusion path (refinement across engine families is rejected
-     *  in `create()` before either engine is constructed). */
+    /** Shared session budget + refinement-weight prefetch (lcm-diffusion only). */
+    private readonly lcmResidency;
+    /** The probed device this instance runs on (its GPUDevice runs the Mamba
+     *  state advance). The refinement-pass engine is built on the same target by
+     *  `lcmResidency.createEngine` — the two-pass quality chain (draft model →
+     *  dispose → refinement model) is lcm-diffusion only (cross-family
+     *  refinement is rejected in `create()` before either engine is built). */
     private readonly probed;
     private constructor();
     /**

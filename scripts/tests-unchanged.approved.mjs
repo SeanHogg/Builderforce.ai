@@ -21,6 +21,13 @@ export const APPROVED_BY = 'planning model';
  */
 export const APPROVED_PERMANENT = [
   {
+    file: 'brain-embedded/src/run/brainCloseOut.test.ts',
+    blob: 'b6d6df92d116604a91c4ae1ccb7b01cc39448a69',
+    changed: "Four expectations: a close-out over a self-review now finishes with reviewRecorded false (was true) and records no review, while the ticket still moves to done.",
+    reason: "Intended change (5e1c0144c, chat #230): the ship close-out records a review only when an approved INDEPENDENT review of the shipped diff exists; a self-review the review gate refuses is no longer recorded as one. The old assertions pinned that bug.",
+    approvedBy: APPROVED_BY,
+  },
+  {
     file: 'packages/agent-run/test/learnedFacts.test.ts',
     blob: 'b76814c49245835147a6bef295b59ad3407f7410',
     changed: "The readChangedExcerpt case is not carried.",

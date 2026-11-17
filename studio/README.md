@@ -66,6 +66,25 @@ const result = await engine.generate({
 
 WASM binaries load from a CDN at runtime via `configureOnnxRuntime()` so nothing multi-MB ships in your bundle.
 
+## Weight caching, residency and prefetch
+
+These come from [`@seanhogg/builderforce-webcontainers/ml`](https://www.npmjs.com/package/@seanhogg/builderforce-webcontainers)
+(only that subpath is imported — never the package root), wired in `src/engine/residency/`. It is a
+build-time dev dependency: tsup bundles it into Studio's output, so consumers do not install it.
+
+- **Weight caching** — `createModelCache` (`valueFormat: 'raw'`) over the same `builderforce-studio-weights`
+  IndexedDB database Studio has always used. Values stay raw `ArrayBuffer`s, so weights cached by earlier
+  versions keep loading without a re-download and older Studio builds still read new writes.
+- **VRAM residency** — `createMemoryManager` budgets every ORT session (text encoder, UNet, VAE). The
+  draft and refinement engines share one budget, so loading the refinement model evicts and releases
+  the draft's sessions whenever both cannot fit.
+- **Refinement-weight prefetch** — once the draft model is up, `createPrefetcher` warms the refinement
+  model's weights into that IndexedDB store (holding no bytes in memory); the refinement pass waits for
+  any in-flight warm, then reads the weights from the store instead of downloading again.
+
+Studio runs no local text LLM, so the package's KV cache, knowledge memory, inference client, adaptive
+controller and learner are not used.
+
 ## Model weights (R2 proxy) — operator workflow
 
 At runtime the engine fetches each ONNX weight file from, in order:

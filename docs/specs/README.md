@@ -29,6 +29,7 @@ sequence is a PRD that shipped. Index last rewritten 2026-10-25.
 | 39 | [Platform close-out](./39-prd-platform-closeout.md) | Partly built | OTHER › Infrastructure |
 | 40 | [Portable knowledge packs](./40-prd-knowledge-packs.md) | Design for review | Make › Cloud and IDE agent runs |
 | 41 | [Offline understanding and the run delta](./41-prd-offline-understanding-and-run-delta.md) | Design for review | Make › Cloud and IDE agent runs; Local-first |
+| 47 | [One Collection view: Card \| List, selection, bulk Delete/Archive/Merge, server paging and sort](./47-prd-collection-view.md) | Design for review | OTHER › Code health |
 
 Numbers are never reused; a gap in the sequence is a PRD that shipped. Index last rewritten 2026-11-08.
 

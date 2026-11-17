@@ -38,7 +38,8 @@ import type {
   WeightSource,
 } from '../types';
 import { probeDevice } from './device-router';
-import { DiffusionEngine } from './diffusion-engine';
+import type { DiffusionEngine } from './diffusion-engine';
+import { LcmResidency } from './residency/lcm-residency';
 import { MODEL_REGISTRY } from './diffusion-models';
 import { reportProgress } from './progress';
 import { throwIfAborted } from './abort';
@@ -83,11 +84,11 @@ const DEFAULT_MOTION_AMOUNT = 0.15;
 const DEFAULT_REFINEMENT_STRENGTH = 0.4;
 
 export class VideoEngine {
-  /** Track the probed device so we can lazy-create a refinement-pass engine
-   *  later with the same hardware target — needed for the two-pass quality
-   *  chain (draft model → dispose → refinement model). Only meaningful on
-   *  the lcm-diffusion path (refinement across engine families is rejected
-   *  in `create()` before either engine is constructed). */
+  /** The probed device this instance runs on (its GPUDevice runs the Mamba
+   *  state advance). The refinement-pass engine is built on the same target by
+   *  `lcmResidency.createEngine` — the two-pass quality chain (draft model →
+   *  dispose → refinement model) is lcm-diffusion only (cross-family
+   *  refinement is rejected in `create()` before either engine is built). */
   private readonly probed: import('./device-router').ProbedDevice;
 
   private constructor(
@@ -101,6 +102,8 @@ export class VideoEngine {
      *  re-deriving it from `MODEL_REGISTRY` on every call. */
     private readonly engineKind: 'lcm-diffusion' | 'webdit-dit',
     private readonly webditBundle: LoadedBundle | null,
+    /** Shared session budget + refinement-weight prefetch (lcm-diffusion only). */
+    private readonly lcmResidency: LcmResidency | null,
   ) {
     this.probed = probed;
   }
@@ -146,18 +149,11 @@ export class VideoEngine {
     const height = options.height ?? DEFAULT_HEIGHT;
     const weightSources = options.weightSources ?? DEFAULT_WEIGHT_SOURCES;
 
-    const diffusion = new DiffusionEngine({
-      model: options.model,
-      probed,
-      apiKey: options.apiKey,
-      weightSources,
-      r2Base: deriveR2Base(options.baseUrl),
-      width,
-      height,
-      onProgress: options.onProgress,
-    });
-
+    const residency = new LcmResidency({ ...options, probed, weightSources, r2Base: deriveR2Base(options.baseUrl) });
+    const diffusion = residency.createEngine(options.model, { width, height, onProgress: options.onProgress });
     await diffusion.init();
+    // Warm the refinement weights only once the draft is up (no-op without one).
+    residency.prefetchRefinement();
 
     const state =
       options.mambaState ?? emptyState({ dim: 64, order: 4, channels: 16 });
@@ -170,6 +166,7 @@ export class VideoEngine {
       probed,
       'lcm-diffusion',
       null,
+      residency,
     );
   }
 
@@ -219,6 +216,7 @@ export class VideoEngine {
       probed,
       'webdit-dit',
       bundle,
+      null,
     );
   }
 
@@ -975,12 +973,9 @@ export class VideoEngine {
       onProgress,
     );
     await this.lcmDiffusion.dispose();
-    this.diffusion = new DiffusionEngine({
-      model: this.opts.refinementModel!,
-      probed: this.probed,
-      apiKey: this.opts.apiKey,
-      weightSources: this.opts.weightSources ?? DEFAULT_WEIGHT_SOURCES,
-      r2Base: deriveR2Base(this.opts.baseUrl),
+    // Same shared residency (its admissions evict whatever draft state is left)
+    // and the refinement weights warmed into the weight store since create().
+    this.diffusion = this.lcmResidency!.createEngine(this.opts.refinementModel!, {
       width: opts.width,
       height: opts.height,
       onProgress,
@@ -1143,6 +1138,7 @@ export class VideoEngine {
    *  dispose the engine cannot be reused — create a new one with
    *  VideoEngine.create. */
   async dispose(): Promise<void> {
+    this.lcmResidency?.dispose();
     await this.diffusion?.dispose();
     await this.webditBundle?.unload();
   }

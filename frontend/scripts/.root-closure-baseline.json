@@ -78,6 +78,7 @@
     "components/charts/Sparkline.tsx",
     "components/charts/TrendChart.tsx",
     "components/charts/chartColors.ts",
+    "components/confirmContext.ts",
     "components/dashboard/InsightStat.tsx",
     "components/dataTableStyles.ts",
     "components/freelance/talentFields.ts",

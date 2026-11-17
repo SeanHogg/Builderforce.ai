@@ -12,6 +12,11 @@ export default defineConfig(libraryConfig({
     // the consumer provides it if they use it, so it is not bundled.
     '@mlc-ai/web-llm',
   ],
+  // @seanhogg/builderforce-webcontainers is ESM-only, so the CJS build cannot
+  // require() it. Studio imports only its pure `./ml` subpath (weight cache,
+  // residency, prefetch), which tree-shakes to a few KB: BUNDLED into both
+  // formats, and the package is a devDependency so consumers never install
+  // the dev runtime (esbuild-wasm) just to run the studio.
   // @webdit/* is private (never published), so it is BUNDLED into dist rather than
   // listed as a runtime dependency. Its own third-party imports (onnxruntime-web,
   // @huggingface/transformers) stay external above and are studio peers.
@@ -26,7 +31,7 @@ export default defineConfig(libraryConfig({
   // installing anything (it is a `link:` devDependency, resolved by `paths`).
   dts: { resolve: [/^@webdit\//, /^@builderforce\/voice-provenance/] },
   extra: {
-    noExternal: [/^@webdit\//, /^@builderforce\/voice-provenance/],
+    noExternal: [/^@webdit\//, /^@builderforce\/voice-provenance/, /^@seanhogg\/builderforce-webcontainers/],
     splitting: true,
   },
 }));

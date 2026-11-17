@@ -2,7 +2,10 @@
  * Weight cache — IndexedDB-backed storage for downloaded ONNX model files.
  *
  * Used by diffusion-engine to avoid re-downloading multi-GB weights on every
- * page load. Falls back to direct fetch when IDB is unavailable.
+ * page load. Falls back to direct fetch when IDB is unavailable. Persistence is
+ * `residency/weight-store.ts` (the webcontainers ML model cache over Studio's
+ * existing `builderforce-studio-weights` DB); this module owns only the source
+ * chain, progress and abort.
  *
  * Source chain (configured per VideoEngine instance via `weightSources`):
  *   1. r2-proxy        → https://api.builderforce.ai/api/studio/weights/<path>
@@ -13,15 +16,12 @@
  */
 
 import type { WeightSource } from '../types';
-
-const DB_NAME = 'builderforce-studio-weights';
-const DB_VERSION = 1;
-const STORE_NAME = 'weights';
+import { weightStore } from './residency/weight-store';
 
 const DEFAULT_R2_BASE = 'https://api.builderforce.ai/api/studio/weights';
 const HF_BASE = 'https://huggingface.co';
 
-interface FetchOptions {
+export interface FetchOptions {
   /** Canonical cache key — typically the model file path like 'lcm-dreamshaper-v7/unet/model.onnx'. */
   cacheKey: string;
   /** HuggingFace repo to fall back to when r2-proxy misses. */
@@ -37,19 +37,21 @@ interface FetchOptions {
   /** Progress callback in bytes downloaded. */
   onProgress?: (bytesLoaded: number, bytesTotal: number | null) => void;
   signal?: AbortSignal;
+  /** Called when the downloaded bytes could not be persisted to the store. */
+  onPersistFailed?: () => void;
 }
 
 export async function getOrFetchWeight(opts: FetchOptions): Promise<ArrayBuffer> {
-  const cached = await readFromIdb(opts.cacheKey);
+  const store = weightStore();
+  const cached = await store.read(opts.cacheKey);
   if (cached) {
     opts.onProgress?.(cached.byteLength, cached.byteLength);
     return cached;
   }
 
   const buffer = await fetchFromAnySource(opts);
-  await writeToIdb(opts.cacheKey, buffer).catch(() => {
-    // IDB write failure is non-fatal — the consumer just re-downloads next time.
-  });
+  // A failed write is non-fatal — the consumer just re-downloads next time.
+  if (!(await store.write(opts.cacheKey, buffer))) opts.onPersistFailed?.();
   return buffer;
 }
 
@@ -114,36 +116,3 @@ function resolveSource(
   };
 }
 
-async function openDb(): Promise<IDBDatabase | null> {
-  if (typeof indexedDB === 'undefined') return null;
-  return new Promise((resolve) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      req.result.createObjectStore(STORE_NAME);
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => resolve(null);
-  });
-}
-
-async function readFromIdb(key: string): Promise<ArrayBuffer | null> {
-  const db = await openDb();
-  if (!db) return null;
-  return new Promise((resolve) => {
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const req = tx.objectStore(STORE_NAME).get(key);
-    req.onsuccess = () => resolve((req.result as ArrayBuffer | undefined) ?? null);
-    req.onerror = () => resolve(null);
-  });
-}
-
-async function writeToIdb(key: string, value: ArrayBuffer): Promise<void> {
-  const db = await openDb();
-  if (!db) return;
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    tx.objectStore(STORE_NAME).put(value, key);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error ?? new Error('IDB write failed'));
-  });
-}

@@ -45,6 +45,10 @@
  * got easier; only the noise around it went away.
  *
  * Deliberate raises, so a name in the baseline always has an argument:
+ *   +1 file (2026-11-17, confirm contract split) — `components/confirmContext.ts` (~43 lines, imports
+ *     only `react`). Not new first-paint work: it is the context + `useConfirm()` hook moved OUT of
+ *     `components/ConfirmProvider.tsx` (already here; it re-exports everything) in f5a82a41f, so the
+ *     VS Code webview can import the confirm contract without the dialog. Same code, one more file.
  *   +1 file (2026-11-08, server-safe markdown) — `lib/markdownRender.ts` (~110 lines). Not new
  *     first-paint work: `components/DocumentMarkdown.tsx` (already here, via LegalDocPreview)
  *     used to import `react-markdown`, a package leaf this guard does not count. That package

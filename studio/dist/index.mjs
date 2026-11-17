@@ -4,24 +4,1688 @@ import {
 } from "./chunk-Q5Y27QLY.mjs";
 
 // src/engine/diffusion-engine.ts
-import * as ort3 from "onnxruntime-web";
+import * as ort4 from "onnxruntime-web";
 import { AutoTokenizer } from "@huggingface/transformers";
 
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/shared/idb.js
+var blockedOpens = /* @__PURE__ */ new WeakMap();
+function isBlocked(factory, name) {
+  return blockedOpens.get(factory)?.has(name) ?? false;
+}
+function markBlocked(factory, name) {
+  let names = blockedOpens.get(factory);
+  if (!names) {
+    names = /* @__PURE__ */ new Set();
+    blockedOpens.set(factory, names);
+  }
+  names.add(name);
+}
+function clearBlocked(factory, name) {
+  blockedOpens.get(factory)?.delete(name);
+}
+function openRaw(factory, name, version, storeName) {
+  return new Promise((resolve) => {
+    if (isBlocked(factory, name)) {
+      resolve(void 0);
+      return;
+    }
+    let request;
+    try {
+      request = version === void 0 ? factory.open(name) : factory.open(name, version);
+    } catch {
+      resolve(void 0);
+      return;
+    }
+    let gaveUp = false;
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(storeName))
+        db.createObjectStore(storeName);
+    };
+    request.onsuccess = () => {
+      const db = request.result;
+      if (gaveUp) {
+        db.close();
+        clearBlocked(factory, name);
+        return;
+      }
+      db.onversionchange = () => db.close();
+      resolve(db);
+    };
+    request.onerror = () => {
+      if (gaveUp)
+        clearBlocked(factory, name);
+      resolve(void 0);
+    };
+    request.onblocked = () => {
+      if (!gaveUp)
+        markBlocked(factory, name);
+      gaveUp = true;
+      resolve(void 0);
+    };
+  });
+}
+function storeOf(db, storeName, onClosed) {
+  let closed = false;
+  const close = () => {
+    if (closed)
+      return;
+    closed = true;
+    db.close();
+    onClosed?.();
+  };
+  db.onversionchange = close;
+  db.onclose = close;
+  return {
+    run(mode, fn) {
+      return new Promise((resolve, reject) => {
+        let tx;
+        let req;
+        try {
+          tx = db.transaction(storeName, mode);
+        } catch (error) {
+          reject(error);
+          return;
+        }
+        const failure = () => tx.error ?? req?.error ?? new Error(`IndexedDB transaction on ${storeName} failed`);
+        tx.oncomplete = () => resolve(req.result);
+        tx.onabort = () => reject(failure());
+        tx.onerror = () => reject(failure());
+        try {
+          req = fn(tx.objectStore(storeName));
+        } catch (error) {
+          try {
+            tx.abort();
+          } catch {
+          }
+          reject(error);
+        }
+      });
+    },
+    close
+  };
+}
+async function openIdbStore(factory, config, onClosed) {
+  if (!factory)
+    return void 0;
+  let db = await openRaw(factory, config.dbName, config.version, config.storeName);
+  if (!db) {
+    db = await openRaw(factory, config.dbName, void 0, config.storeName);
+    if (!db)
+      return void 0;
+  }
+  if (!db.objectStoreNames.contains(config.storeName)) {
+    const next = db.version + 1;
+    db.close();
+    db = await openRaw(factory, config.dbName, next, config.storeName);
+    if (!db || !db.objectStoreNames.contains(config.storeName))
+      return void 0;
+  }
+  return storeOf(db, config.storeName, onClosed);
+}
+function lazyIdbStore(factory, config) {
+  let opened;
+  return () => {
+    if (opened)
+      return opened;
+    const attempt = openIdbStore(factory, config, () => {
+      if (opened === attempt)
+        opened = void 0;
+    });
+    opened = attempt;
+    void attempt.then((store) => {
+      if (!store && opened === attempt)
+        opened = void 0;
+    });
+    return attempt;
+  };
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/inference/modelCache.js
+function isArrayBuffer(value) {
+  return value instanceof ArrayBuffer || Object.prototype.toString.call(value) === "[object ArrayBuffer]";
+}
+function toEntry(id, value) {
+  if (value === void 0 || value === null)
+    return void 0;
+  if (isArrayBuffer(value))
+    return { id, bytes: value, size: value.byteLength, storedAt: 0 };
+  return value;
+}
+function createModelCache(options = {}) {
+  const factory = options.indexedDB ?? globalThis.indexedDB;
+  const config = {
+    dbName: options.dbName ?? "bfwc-inference-models",
+    storeName: options.storeName ?? "models",
+    version: options.dbVersion ?? 1
+  };
+  const raw = options.valueFormat === "raw";
+  const open = lazyIdbStore(factory, config);
+  return {
+    async get(id) {
+      const store = await open();
+      if (!store)
+        return void 0;
+      return toEntry(id, await store.run("readonly", (s) => s.get(id)));
+    },
+    async put(id, entry) {
+      const store = await open();
+      if (!store)
+        return;
+      const value = raw ? entry.bytes : { ...entry, id, storedAt: Date.now() };
+      await store.run("readwrite", (s) => s.put(value, id));
+    },
+    async has(id) {
+      const store = await open();
+      if (!store)
+        return false;
+      return await store.run("readonly", (s) => s.count(id)) > 0;
+    },
+    async delete(id) {
+      await (await open())?.run("readwrite", (s) => s.delete(id));
+    },
+    async keys() {
+      const store = await open();
+      if (!store)
+        return [];
+      return (await store.run("readonly", (s) => s.getAllKeys())).map(String);
+    }
+  };
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/shared/hardwareProbe.js
+var SIMD_PROBE = new Uint8Array([
+  0,
+  97,
+  115,
+  109,
+  1,
+  0,
+  0,
+  0,
+  1,
+  4,
+  1,
+  96,
+  0,
+  0,
+  3,
+  2,
+  1,
+  0,
+  10,
+  9,
+  1,
+  7,
+  0,
+  65,
+  0,
+  253,
+  15,
+  26,
+  11
+]);
+var GIB = 1024 * 1024 * 1024;
+function probeDeviceMemoryBytes() {
+  const deviceMemory = globalThis.navigator?.deviceMemory;
+  return typeof deviceMemory === "number" && deviceMemory > 0 ? deviceMemory * GIB : void 0;
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/estimates.js
+var DEFAULT_THROUGHPUT = {
+  // A RAM hit is not a reload; callers should not ask. Kept non-zero for safety.
+  ram: 1e6,
+  // VRAM copy over the optional GPU path. Hint only.
+  vram: 2e5,
+  // IndexedDB read on a typical laptop-class disk.
+  storage: 5e4,
+  // Re-download. Slow, and the reason cost-aware keeps hot weights.
+  network: 2e3
+};
+function estimateReloadCostMs(input) {
+  const bytes = Number.isFinite(input.bytes) && input.bytes > 0 ? input.bytes : 0;
+  const throughput = input.bytesPerMs && input.bytesPerMs > 0 ? input.bytesPerMs : DEFAULT_THROUGHPUT[input.from];
+  return bytes / throughput;
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/shared/clock.js
+function now() {
+  const g = globalThis;
+  return g.performance?.now?.() ?? Date.now();
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/envProbe.js
+var DEFAULT_RAM_BYTES = 4 * 1024 * 1024 * 1024;
+function probeRamBytes() {
+  return probeDeviceMemoryBytes() ?? DEFAULT_RAM_BYTES;
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/eviction.js
+function byNumber(pick, direction2) {
+  const sign = direction2 === "asc" ? 1 : -1;
+  return (a, b) => {
+    const delta = pick(a) - pick(b);
+    if (delta !== 0)
+      return sign * delta;
+    return a.admittedAt - b.admittedAt;
+  };
+}
+function retentionValue(entry) {
+  const footprint = entry.bytes > 0 ? entry.bytes : 1;
+  const expectedReload = clamp01(entry.reuseProbability) * Math.max(0, entry.reloadCostMs);
+  return expectedReload / footprint;
+}
+function costAwareStrategy() {
+  return {
+    name: "cost-aware",
+    rank(candidates) {
+      return [...candidates].sort(byNumber((e) => retentionValue(e), "asc"));
+    }
+  };
+}
+function clamp01(value) {
+  if (Number.isNaN(value))
+    return 0;
+  return Math.min(1, Math.max(0, value));
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/pressure.js
+function detectPressure(input) {
+  const budget = input.byteBudget > 0 ? input.byteBudget : 1;
+  const used = Math.max(0, input.usedBytes);
+  const utilization = used / budget;
+  const threshold = clamp012(input.pressureThreshold);
+  const watermark = Math.min(threshold, clamp012(input.targetWatermark));
+  const pressured = utilization >= threshold;
+  const targetBytes = watermark * budget;
+  const reclaimBytes = pressured ? Math.max(0, Math.ceil(used - targetBytes)) : 0;
+  return {
+    utilization,
+    pressured,
+    reclaimBytes,
+    vramBytes: Math.max(0, input.vramBytes),
+    ramBytes: Math.max(0, input.ramBytes),
+    storageQuotaBytes: Math.max(0, input.storageQuotaBytes)
+  };
+}
+function planWorkspace(input) {
+  const minBytes = Math.max(0, input.bounds.minBytes);
+  const maxBytes = Math.max(minBytes, input.bounds.maxBytes);
+  const current = clamp(input.currentBytes, minBytes, maxBytes);
+  const residual = Math.max(0, input.byteBudget - Math.max(0, input.usedBytes));
+  const ceiling = Math.min(maxBytes, current + residual);
+  if (input.pressure.pressured) {
+    const shrinkBy = Math.max(input.pressure.reclaimBytes, Math.ceil((current - minBytes) / 2));
+    const next = clamp(current - shrinkBy, minBytes, ceiling);
+    return {
+      nextBytes: next,
+      deltaBytes: next - current,
+      reason: next < current ? `pressure at ${(input.pressure.utilization * 100).toFixed(1)}% \u2014 shrink workspace by ${current - next} bytes` : "pressure but workspace already at its floor"
+    };
+  }
+  if (input.onHit && current < ceiling) {
+    const step = input.growStepBytes && input.growStepBytes > 0 ? input.growStepBytes : Math.max(1, Math.ceil((maxBytes - minBytes) / 8));
+    const next = clamp(current + step, minBytes, ceiling);
+    return {
+      nextBytes: next,
+      deltaBytes: next - current,
+      reason: next > current ? `headroom \u2014 grow workspace by ${next - current} bytes` : "workspace already at its ceiling"
+    };
+  }
+  return { nextBytes: current, deltaBytes: 0, reason: "workspace held" };
+}
+function clamp(value, min, max) {
+  if (Number.isNaN(value))
+    return min;
+  return Math.min(max, Math.max(min, value));
+}
+function clamp012(value) {
+  if (Number.isNaN(value))
+    return 0;
+  return Math.min(1, Math.max(0, value));
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/spillTier.js
+function resolveStorageBudget(configured2, storageQuotaBytes, byteBudget) {
+  if (configured2 === 0)
+    return 0;
+  if (typeof configured2 === "number" && Number.isFinite(configured2) && configured2 > 0)
+    return configured2;
+  if (storageQuotaBytes > 0)
+    return storageQuotaBytes;
+  return byteBudget * 4;
+}
+function createSpillTier(options) {
+  const { storage, budgetBytes } = options;
+  const enabled = storage !== void 0 && budgetBytes > 0;
+  const index = /* @__PURE__ */ new Map();
+  let committed = 0;
+  let reserved = 0;
+  function setIndex(record) {
+    removeIndex(record.id);
+    index.set(record.id, record);
+    committed += record.bytes;
+  }
+  function removeIndex(id) {
+    const record = index.get(id);
+    if (!record)
+      return void 0;
+    index.delete(id);
+    committed -= record.bytes;
+    return record;
+  }
+  async function deleteQuietly(record) {
+    try {
+      await storage?.delete(record);
+    } catch {
+    }
+  }
+  function fits(incomingBytes) {
+    return committed + reserved + incomingBytes <= budgetBytes;
+  }
+  async function trim(incomingBytes) {
+    const ordered = [...index.values()].sort((a, b) => a.spilledAt - b.spilledAt || a.id.localeCompare(b.id));
+    for (const oldest of ordered) {
+      if (fits(incomingBytes))
+        return;
+      if (index.get(oldest.id) !== oldest)
+        continue;
+      removeIndex(oldest.id);
+      await deleteQuietly(oldest);
+    }
+  }
+  return {
+    enabled,
+    get: (id) => index.get(id),
+    has: (id) => index.has(id),
+    get count() {
+      return index.size;
+    },
+    bytes: () => committed,
+    async retain(entry, reason) {
+      if (!enabled || !storage)
+        return false;
+      if (!(entry.bytes >= 0) || entry.bytes > budgetBytes)
+        return false;
+      const previous = removeIndex(entry.id);
+      if (previous)
+        await deleteQuietly(previous);
+      await trim(entry.bytes);
+      if (!fits(entry.bytes))
+        return false;
+      reserved += entry.bytes;
+      try {
+        const stored = await storage.spill({ ...entry, tier: "storage" }, options.now());
+        setIndex(stored);
+        options.onSpill(entry, reason);
+        return true;
+      } catch {
+        return false;
+      } finally {
+        reserved -= entry.bytes;
+      }
+    },
+    async forget(id) {
+      const record = removeIndex(id);
+      if (!record)
+        return false;
+      await deleteQuietly(record);
+      return true;
+    },
+    async reload(id) {
+      const record = index.get(id);
+      if (!record || !storage)
+        return void 0;
+      let restored;
+      try {
+        restored = await storage.reload(record);
+      } catch {
+        restored = void 0;
+      }
+      if (!restored) {
+        if (index.get(id) === record)
+          removeIndex(id);
+        return void 0;
+      }
+      return { ...restored, id, tier: "ram", bytes: record.bytes };
+    }
+  };
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/victims.js
+function quotaApplies(quota, entry) {
+  if (quota.group !== entry.group)
+    return false;
+  if (quota.component !== void 0 && quota.component !== entry.component)
+    return false;
+  return true;
+}
+function selectVictims(query) {
+  const { incoming, except } = query;
+  const applicable = query.quotas.filter((quota) => quotaApplies(quota, incoming));
+  const quotaUsed = applicable.map(() => 0);
+  let total = 0;
+  const evictable = [];
+  for (const entry of query.residents) {
+    if (except.has(entry.id))
+      continue;
+    total += entry.bytes;
+    for (let i = 0; i < applicable.length; i++) {
+      if (quotaApplies(applicable[i], entry))
+        quotaUsed[i] = (quotaUsed[i] ?? 0) + entry.bytes;
+    }
+    if (!entry.pinned)
+      evictable.push(entry);
+  }
+  const fits = () => {
+    if (total + query.workspaceBytes + incoming.bytes > query.byteBudget)
+      return false;
+    for (let i = 0; i < applicable.length; i++) {
+      if ((quotaUsed[i] ?? 0) + incoming.bytes > applicable[i].byteCap)
+        return false;
+    }
+    return true;
+  };
+  if (fits())
+    return [];
+  const ranked = query.strategy.rank(evictable);
+  const sameGroup = ranked.filter((entry) => entry.group === incoming.group);
+  const rest = ranked.filter((entry) => entry.group !== incoming.group);
+  const chosen = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const candidate of [...sameGroup, ...rest]) {
+    if (seen.has(candidate.id))
+      continue;
+    seen.add(candidate.id);
+    total -= candidate.bytes;
+    for (let i = 0; i < applicable.length; i++) {
+      if (quotaApplies(applicable[i], candidate))
+        quotaUsed[i] = (quotaUsed[i] ?? 0) - candidate.bytes;
+    }
+    chosen.push(candidate);
+    if (fits())
+      return chosen.map((entry) => ({ ...entry }));
+  }
+  return void 0;
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/workspace.js
+function createWorkspaceController(options) {
+  const { bounds, byteBudget } = options;
+  const active = bounds.maxBytes > 0 || bounds.minBytes > 0;
+  function clamp3(bytes) {
+    if (!active)
+      return 0;
+    const cap = Math.min(bounds.maxBytes, byteBudget);
+    const floor = Math.min(bounds.minBytes, cap);
+    const value = Number.isFinite(bytes) ? bytes : floor;
+    return Math.min(cap, Math.max(floor, value));
+  }
+  let current = clamp3(options.initialBytes ?? bounds.minBytes);
+  return {
+    bytes: () => current,
+    apply({ onHit, pressure, residentBytes }) {
+      if (!active)
+        return void 0;
+      const decision = planWorkspace({
+        currentBytes: current,
+        bounds,
+        pressure,
+        byteBudget,
+        usedBytes: residentBytes + current,
+        onHit
+      });
+      if (decision.deltaBytes === 0)
+        return void 0;
+      const next = clamp3(decision.nextBytes);
+      if (next === current)
+        return void 0;
+      if (residentBytes + next > byteBudget)
+        return void 0;
+      const delta = next - current;
+      current = next;
+      return {
+        kind: delta > 0 ? "workspace-grow" : "workspace-shrink",
+        bytes: Math.abs(delta),
+        reason: decision.reason
+      };
+    }
+  };
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/manager.js
+var DEFAULT_PRESSURE = 0.85;
+var DEFAULT_WATERMARK = 0.7;
+var DEFAULT_EVENT_LIMIT = 256;
+function createMemoryManager(options) {
+  if (!(options.byteBudget > 0) || !Number.isFinite(options.byteBudget)) {
+    throw new Error("createMemoryManager: byteBudget must be a finite number > 0");
+  }
+  const byteBudget = options.byteBudget;
+  const strategy = options.strategy ?? costAwareStrategy();
+  const pressureThreshold = options.pressureThreshold ?? DEFAULT_PRESSURE;
+  const targetWatermark = Math.min(pressureThreshold, options.targetWatermark ?? DEFAULT_WATERMARK);
+  const eventLogLimit = options.eventLogLimit ?? DEFAULT_EVENT_LIMIT;
+  const now2 = options.now ?? (() => Date.now());
+  const ramBytes = options.ramBytes ?? probeRamBytes();
+  const vramBytes = Math.max(0, options.vramBudgetBytes ?? 0);
+  const storageQuotaBytes = options.storageQuotaBytes ?? 0;
+  const quotas = options.quotas ?? [];
+  const residents = /* @__PURE__ */ new Map();
+  const log = [];
+  let residentTotal = 0;
+  let seq = 0;
+  let hits = 0;
+  let misses = 0;
+  let admissions = 0;
+  let evictions = 0;
+  let spills = 0;
+  let reloads = 0;
+  const spill = createSpillTier({
+    storage: options.storage,
+    budgetBytes: resolveStorageBudget(options.storageBudgetBytes, storageQuotaBytes, byteBudget),
+    now: now2,
+    onSpill(entry, reason) {
+      spills += 1;
+      record({ kind: "spill", id: entry.id, bytes: entry.bytes, reason });
+    }
+  });
+  const workspace = createWorkspaceController({
+    bounds: {
+      minBytes: Math.max(0, options.workspace?.minBytes ?? 0),
+      maxBytes: Math.max(0, options.workspace?.maxBytes ?? 0)
+    },
+    byteBudget,
+    initialBytes: options.workspace?.initialBytes
+  });
+  function putResident(entry) {
+    const previous = residents.get(entry.id);
+    if (previous)
+      residentTotal -= previous.bytes;
+    residents.set(entry.id, entry);
+    residentTotal += entry.bytes;
+  }
+  function removeResident(id) {
+    const previous = residents.get(id);
+    if (!previous)
+      return;
+    residents.delete(id);
+    residentTotal -= previous.bytes;
+  }
+  function usedBytes() {
+    return residentTotal + workspace.bytes();
+  }
+  function record(event) {
+    log.push({ ...event, at: now2() });
+    if (log.length > eventLogLimit)
+      log.splice(0, log.length - eventLogLimit);
+  }
+  function pressureNow() {
+    return detectPressure({
+      usedBytes: usedBytes(),
+      byteBudget,
+      pressureThreshold,
+      targetWatermark,
+      ramBytes,
+      vramBytes,
+      storageQuotaBytes
+    });
+  }
+  function applyWorkspace(onHit) {
+    const change = workspace.apply({ onHit, pressure: pressureNow(), residentBytes: residentTotal });
+    if (change)
+      record(change);
+  }
+  function drop(entry, reason) {
+    removeResident(entry.id);
+    evictions += 1;
+    strategy.observe?.({ kind: "evict", entry });
+    record({ kind: "evict", id: entry.id, bytes: entry.bytes, reason });
+  }
+  function placeTier(entry) {
+    if (entry.tier === "vram" && vramBytes > 0)
+      return "vram";
+    return "ram";
+  }
+  function rate() {
+    const total = hits + misses;
+    return total === 0 ? 0 : hits / total;
+  }
+  function notAdmitted(spilledOk, spilledReason, rejectedReason) {
+    return {
+      admitted: false,
+      spilled: spilledOk,
+      replaced: false,
+      evicted: [],
+      reason: spilledOk ? spilledReason : rejectedReason
+    };
+  }
+  const manager = {
+    async admit(entry, admitOptions) {
+      if (!(entry.bytes >= 0) || !Number.isFinite(entry.bytes)) {
+        return { admitted: false, spilled: false, replaced: false, evicted: [], reason: "invalid footprint" };
+      }
+      const wantSpill = admitOptions?.spill !== false && spill.enabled;
+      if (entry.bytes > byteBudget) {
+        const spilledOk = wantSpill && await spill.retain(entry, "entry exceeds the hard byte budget");
+        return notAdmitted(spilledOk, "spilled: entry larger than byte budget", "rejected: entry larger than byte budget");
+      }
+      const existing = residents.get(entry.id);
+      const except = /* @__PURE__ */ new Set();
+      if (existing)
+        except.add(existing.id);
+      const victims = selectVictims({
+        incoming: entry,
+        residents: residents.values(),
+        except,
+        strategy,
+        quotas,
+        byteBudget,
+        workspaceBytes: workspace.bytes()
+      });
+      if (!victims) {
+        const spilledOk = wantSpill && await spill.retain(entry, "pinned residents fill the budget");
+        return notAdmitted(spilledOk, "spilled: budget held by pinned residents", "rejected: budget held by pinned residents");
+      }
+      const spilledVictims = [];
+      for (const victim of victims) {
+        const live = residents.get(victim.id);
+        if (!live)
+          continue;
+        drop(live, `make room for ${entry.id}`);
+        spilledVictims.push(live);
+      }
+      if (existing)
+        removeResident(existing.id);
+      const tick = ++seq;
+      const tracked = {
+        ...entry,
+        tier: placeTier(entry),
+        pinned: admitOptions?.pin === true || entry.pinned === true,
+        admittedAt: existing?.admittedAt ?? tick,
+        lastUsedAt: tick,
+        hits: 0,
+        arcList: "t1"
+      };
+      putResident(tracked);
+      const forgettingPriorSpill = spill.forget(entry.id);
+      admissions += 1;
+      strategy.observe?.({ kind: "admit", entry: tracked });
+      record({
+        kind: "admit",
+        id: entry.id,
+        bytes: entry.bytes,
+        reason: victims.length > 0 ? `admitted after evicting ${victims.length}` : "admitted within budget"
+      });
+      await forgettingPriorSpill;
+      if (wantSpill) {
+        for (const live of spilledVictims) {
+          await spill.retain(live, `evicted to make room for ${entry.id}`);
+        }
+      }
+      const reading = pressureNow();
+      if (reading.pressured) {
+        record({
+          kind: "pressure",
+          bytes: reading.reclaimBytes,
+          reason: `utilization ${(reading.utilization * 100).toFixed(1)}%`
+        });
+        applyWorkspace(false);
+      }
+      return {
+        admitted: true,
+        spilled: false,
+        replaced: existing !== void 0,
+        evicted: victims,
+        reason: victims.length > 0 ? `evicted ${victims.length} to fit` : "fit within budget"
+      };
+    },
+    get(id) {
+      const entry = residents.get(id);
+      if (!entry) {
+        misses += 1;
+        const spilled = spill.get(id);
+        const ghost = {
+          id,
+          group: spilled?.group ?? "",
+          component: spilled?.component,
+          bytes: spilled?.bytes ?? 0,
+          reloadCostMs: spilled?.reloadCostMs ?? 0,
+          reuseProbability: spilled?.reuseProbability ?? 0,
+          tier: "storage",
+          admittedAt: 0,
+          lastUsedAt: 0,
+          hits: 0
+        };
+        strategy.observe?.({ kind: "miss", entry: ghost });
+        record({ kind: "miss", id, reason: spilled ? "miss: spilled to storage" : "miss: not resident" });
+        return { hit: false };
+      }
+      const tick = ++seq;
+      const touched = {
+        ...entry,
+        lastUsedAt: tick,
+        hits: entry.hits + 1,
+        arcList: entry.hits + 1 > 1 ? "t2" : "t1"
+      };
+      putResident(touched);
+      hits += 1;
+      strategy.observe?.({ kind: "hit", entry: touched });
+      record({ kind: "hit", id, reason: `hit #${touched.hits}` });
+      applyWorkspace(true);
+      return { hit: true, entry: snapshot(touched) };
+    },
+    hitRate() {
+      return rate();
+    },
+    async reload(id) {
+      const already = residents.get(id);
+      if (already)
+        return { hit: true, entry: snapshot(already) };
+      const restored = spill.has(id) ? await spill.reload(id) : void 0;
+      if (!restored) {
+        misses += 1;
+        return { hit: false };
+      }
+      const result = await manager.admit(restored, { spill: false });
+      if (!result.admitted) {
+        misses += 1;
+        return { hit: false };
+      }
+      reloads += 1;
+      record({ kind: "reload", id, reason: "reloaded from browser storage" });
+      const entry = residents.get(id);
+      return entry ? { hit: true, entry: snapshot(entry) } : { hit: false };
+    },
+    pin(id) {
+      const entry = residents.get(id);
+      if (!entry)
+        return false;
+      putResident({ ...entry, pinned: true });
+      record({ kind: "pin", id, reason: "pinned" });
+      return true;
+    },
+    unpin(id) {
+      const entry = residents.get(id);
+      if (!entry)
+        return false;
+      putResident({ ...entry, pinned: false });
+      record({ kind: "unpin", id, reason: "unpinned" });
+      return true;
+    },
+    async release(id) {
+      const entry = residents.get(id);
+      if (entry) {
+        drop(entry, "released");
+        return true;
+      }
+      return spill.forget(id);
+    },
+    pressure() {
+      return pressureNow();
+    },
+    stats() {
+      return {
+        hits,
+        misses,
+        admissions,
+        evictions,
+        spills,
+        reloads,
+        usedBytes: usedBytes(),
+        byteBudget,
+        workspaceBytes: workspace.bytes(),
+        residentCount: residents.size,
+        spilledCount: spill.count,
+        spilledBytes: spill.bytes(),
+        hitRate: rate()
+      };
+    },
+    events() {
+      return log;
+    },
+    residentIds() {
+      return [...residents.keys()];
+    },
+    peek(id) {
+      const entry = residents.get(id);
+      return entry ? snapshot(entry) : void 0;
+    }
+  };
+  return manager;
+}
+function snapshot(entry) {
+  return { ...entry };
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/admission.js
+function createAdmissionGate(options) {
+  const { ledger } = options;
+  const counters = ledger.counters;
+  function refuse(target, strategy, outcome, skipReason) {
+    if (outcome === "throttled")
+      counters.throttled += 1;
+    else
+      counters.skipped += 1;
+    ledger.record({ id: target.id, strategy, outcome, durationMs: 0, skipReason });
+    return { admit: false, result: outcome === "duplicate" ? "duplicate" : "throttled", skipReason };
+  }
+  return function decideAdmission(target, strategy) {
+    counters.attempts += 1;
+    if (!options.isEnabled())
+      return refuse(target, strategy, "skipped", "disabled");
+    if (options.isPressure()) {
+      options.relievePressure();
+      return refuse(target, strategy, "throttled", "pressure");
+    }
+    if (!options.isKnown(target.id))
+      return refuse(target, strategy, "skipped", "unknown-target");
+    if (options.isResident(target.id))
+      return refuse(target, strategy, "duplicate", "already-loaded");
+    if (options.isLoading(target.id))
+      return refuse(target, strategy, "duplicate", "already-loading");
+    if (options.speculativeCount() >= options.maxConcurrent) {
+      return refuse(target, strategy, "skipped", "concurrency-limit");
+    }
+    return { admit: true };
+  };
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/loadRegistry.js
+function abortErrorOf(signal) {
+  const reason = signal.reason;
+  if (reason instanceof Error)
+    return reason;
+  if (typeof DOMException === "function")
+    return new DOMException("aborted", "AbortError");
+  const error = new Error("aborted");
+  error.name = "AbortError";
+  return error;
+}
+function isAbortError(error) {
+  return typeof error === "object" && error !== null && error.name === "AbortError";
+}
+function createLoadRegistry(options) {
+  const inFlight = /* @__PURE__ */ new Map();
+  function settle(rec) {
+    rec.completed = true;
+    rec.loadMs = Math.max(0, options.now() - rec.startedAt);
+    if (inFlight.get(rec.id) === rec)
+      inFlight.delete(rec.id);
+  }
+  function start(target, startOptions) {
+    const controller = new AbortController();
+    const startedAt = options.now();
+    const signal = startOptions.signal;
+    const forward = () => controller.abort();
+    let promise;
+    if (signal?.aborted) {
+      controller.abort();
+      promise = Promise.reject(abortErrorOf(signal));
+    } else {
+      signal?.addEventListener("abort", forward, { once: true });
+      promise = (async () => options.loader(target, controller.signal))();
+    }
+    const rec = {
+      id: target.id,
+      controller,
+      promise,
+      bytes: target.bytes,
+      strategy: startOptions.strategy,
+      speculative: startOptions.speculative,
+      joined: false,
+      completed: false,
+      loadMs: 0,
+      startedAt
+    };
+    inFlight.set(target.id, rec);
+    promise.then((value) => {
+      signal?.removeEventListener("abort", forward);
+      settle(rec);
+      options.onLoaded(rec, value);
+    }, (error) => {
+      signal?.removeEventListener("abort", forward);
+      settle(rec);
+      options.onFailed(rec, rec.controller.signal.aborted || isAbortError(error));
+    });
+    return rec;
+  }
+  return {
+    get: (id) => inFlight.get(id),
+    has: (id) => inFlight.has(id),
+    get size() {
+      return inFlight.size;
+    },
+    start,
+    speculativeCount() {
+      let count = 0;
+      for (const rec of inFlight.values())
+        if (rec.speculative)
+          count += 1;
+      return count;
+    },
+    dropUnjoined() {
+      let dropped = 0;
+      for (const rec of [...inFlight.values()]) {
+        if (!rec.speculative || rec.joined)
+          continue;
+        rec.controller.abort();
+        dropped += 1;
+      }
+      return dropped;
+    },
+    abortSpeculative() {
+      for (const rec of [...inFlight.values()]) {
+        if (rec.speculative)
+          rec.controller.abort();
+      }
+    },
+    async whenIdle() {
+      while (inFlight.size > 0) {
+        await Promise.allSettled([...inFlight.values()].map((rec) => rec.promise));
+      }
+    }
+  };
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/predictor.js
+function targetFor(index, id) {
+  const known = index.get(id);
+  if (known)
+    return known;
+  return { id, bytes: 0 };
+}
+function predictFromGraph(rootId, graph, index) {
+  if (!graph || graph.edges.length === 0)
+    return [];
+  const out = [];
+  const seen = /* @__PURE__ */ new Set([rootId]);
+  const confidence = /* @__PURE__ */ new Map([[rootId, 1]]);
+  let frontier = [rootId];
+  for (let depth = 0; depth < 8 && frontier.length > 0; depth += 1) {
+    const next = [];
+    for (const from of frontier) {
+      const fromConfidence = confidence.get(from) ?? 1;
+      for (const edge of graph.edges) {
+        if (edge.from !== from)
+          continue;
+        if (seen.has(edge.to))
+          continue;
+        const weight = clamp013(edge.weight ?? 1);
+        const conf = clamp013(fromConfidence * weight);
+        seen.add(edge.to);
+        confidence.set(edge.to, conf);
+        next.push(edge.to);
+        out.push({
+          target: targetFor(index, edge.to),
+          strategy: "static-graph",
+          confidence: conf,
+          reason: `static graph: ${from} -> ${edge.to} (depth ${depth + 1})`
+        });
+      }
+    }
+    frontier = next;
+  }
+  return out;
+}
+function predictFromHistory(history, index) {
+  if (history.length < 2)
+    return [];
+  const last = history[history.length - 1];
+  if (last === void 0)
+    return [];
+  const counts = /* @__PURE__ */ new Map();
+  let total = 0;
+  for (let i = 1; i < history.length; i += 1) {
+    const from = history[i - 1];
+    const to = history[i];
+    if (from !== last || to === void 0)
+      continue;
+    counts.set(to, (counts.get(to) ?? 0) + 1);
+    total += 1;
+  }
+  if (total === 0)
+    return [];
+  const out = [];
+  for (const [id, count] of counts) {
+    if (id === last)
+      continue;
+    const probability = count / total;
+    const confidence = clamp013(probability * (1 - 1 / (total + 1)));
+    out.push({
+      target: targetFor(index, id),
+      strategy: "history",
+      confidence,
+      reason: `history: ${count}/${total} accesses followed ${last} with ${id}`
+    });
+  }
+  return out.sort((a, b) => b.confidence - a.confidence);
+}
+function predictFromContext(context, index) {
+  const out = [];
+  const profile = context.profile;
+  for (const id of profile?.expects ?? []) {
+    if (id === context.target)
+      continue;
+    out.push({
+      target: targetFor(index, id),
+      strategy: "context",
+      confidence: 1,
+      reason: `context: workload explicitly expects ${id}`
+    });
+  }
+  const stageExpectation = {
+    prefill: "stage:decode",
+    decode: "stage:postprocess",
+    postprocess: void 0
+  };
+  const nextStage = profile?.stage ? stageExpectation[profile.stage] : void 0;
+  if (nextStage && index.has(nextStage)) {
+    out.push({
+      target: targetFor(index, nextStage),
+      strategy: "context",
+      confidence: 0.6,
+      reason: `context: stage ${profile?.stage} implies ${nextStage}`
+    });
+  }
+  const labels = profile?.labels ?? [];
+  if (labels.length > 0) {
+    for (const candidate of index.values()) {
+      const candidateLabels = candidate.meta?.labels;
+      if (!Array.isArray(candidateLabels))
+        continue;
+      const overlap = labels.filter((l) => candidateLabels.includes(l));
+      if (overlap.length === 0)
+        continue;
+      out.push({
+        target: candidate,
+        strategy: "context",
+        confidence: clamp013(0.3 + 0.2 * overlap.length),
+        reason: `context: shares workload label(s) ${overlap.join(", ")}`
+      });
+    }
+  }
+  return out;
+}
+function mergePredictions(groups, minConfidence) {
+  const best = /* @__PURE__ */ new Map();
+  for (const group of groups) {
+    for (const prediction of group) {
+      if (prediction.confidence < minConfidence)
+        continue;
+      const existing = best.get(prediction.target.id);
+      if (!existing || prediction.confidence > existing.confidence) {
+        best.set(prediction.target.id, prediction);
+      }
+    }
+  }
+  return [...best.values()].sort((a, b) => b.confidence - a.confidence);
+}
+function clamp013(value) {
+  if (!Number.isFinite(value))
+    return 0;
+  return Math.min(1, Math.max(0, value));
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/residentStore.js
+function isUnclaimedPrefetch(entry) {
+  return entry.source === "prefetch" && !entry.claimed;
+}
+function createResidentStore(options) {
+  const entries = /* @__PURE__ */ new Map();
+  const maxEntries = Math.max(1, options.maxEntries);
+  let used = 0;
+  function over() {
+    return used > options.budgetBytes || entries.size > maxEntries;
+  }
+  function remove(id) {
+    const entry = entries.get(id);
+    if (!entry)
+      return false;
+    entries.delete(id);
+    used -= entry.bytes;
+    return true;
+  }
+  function enforce() {
+    if (!over())
+      return;
+    for (const [id, entry] of [...entries]) {
+      if (!over())
+        return;
+      if (isUnclaimedPrefetch(entry))
+        remove(id);
+    }
+    for (const id of [...entries.keys()]) {
+      if (!over())
+        return;
+      remove(id);
+    }
+  }
+  return {
+    get(id) {
+      const entry = entries.get(id);
+      if (!entry)
+        return void 0;
+      entries.delete(id);
+      entries.set(id, entry);
+      return entry;
+    },
+    peek: (id) => entries.get(id),
+    has: (id) => entries.has(id),
+    set(id, value) {
+      remove(id);
+      if (!(Number.isFinite(value.bytes) && value.bytes > 0))
+        value.bytes = 0;
+      entries.set(id, value);
+      used += value.bytes;
+      enforce();
+    },
+    delete: remove,
+    markClaimed(id) {
+      const entry = entries.get(id);
+      if (entry)
+        entry.claimed = true;
+    },
+    releaseUnclaimed() {
+      let released = 0;
+      for (const [id, entry] of [...entries]) {
+        if (!isUnclaimedPrefetch(entry))
+          continue;
+        remove(id);
+        released += 1;
+      }
+      return released;
+    },
+    enforce,
+    bytes: () => used,
+    ids: () => [...entries.keys()]
+  };
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/selfTuner.js
+function createSelfTuner(options) {
+  const maxTracked = Math.max(1, options.maxTrackedLoads);
+  let outstanding = [];
+  let retiredWasteMs = 0;
+  let avoidedMs = 0;
+  let measured = 0;
+  let negativeStreak = 0;
+  let disabledAt = 0;
+  let selfTunedOff = false;
+  let trips = 0;
+  function wasteMs() {
+    let total = retiredWasteMs;
+    for (const load of outstanding)
+      total += load.loadMs;
+    return total;
+  }
+  return {
+    noteSpeculativeLoad(id, loadMs) {
+      outstanding.push({ id, loadMs });
+      while (outstanding.length > maxTracked) {
+        const oldest = outstanding.shift();
+        if (oldest)
+          retiredWasteMs += oldest.loadMs;
+      }
+    },
+    markClaimed(id) {
+      if (outstanding.some((load) => load.id === id)) {
+        outstanding = outstanding.filter((load) => load.id !== id);
+      }
+    },
+    creditAvoidedWait(loadMs, actualWaitMs) {
+      avoidedMs += Math.max(0, loadMs - actualWaitMs);
+    },
+    evaluate(enabled) {
+      measured += 1;
+      if (!enabled && selfTunedOff && options.retryAfterMs > 0 && options.now() - disabledAt >= options.retryAfterMs) {
+        selfTunedOff = false;
+        negativeStreak = 0;
+        avoidedMs = 0;
+        outstanding = [];
+        retiredWasteMs = 0;
+        return "reenable";
+      }
+      if (measured < options.minSamples)
+        return "none";
+      negativeStreak = wasteMs() > avoidedMs ? negativeStreak + 1 : 0;
+      if (negativeStreak >= options.disableAfter && !selfTunedOff) {
+        selfTunedOff = true;
+        trips += 1;
+        disabledAt = options.now();
+        return "disable";
+      }
+      return "none";
+    },
+    get selfTunedOff() {
+      return selfTunedOff;
+    },
+    get trips() {
+      return trips;
+    }
+  };
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/stats.js
+function createPrefetchLedger(options) {
+  const counters = {
+    hits: 0,
+    misses: 0,
+    prefetchHits: 0,
+    attempts: 0,
+    completed: 0,
+    throttled: 0,
+    cancelled: 0,
+    failed: 0,
+    skipped: 0,
+    totalWaitMs: 0,
+    waitSamples: 0,
+    totalLoadMs: 0,
+    loadSamples: 0,
+    peakConcurrent: 0
+  };
+  const log = [];
+  return {
+    counters,
+    record(event) {
+      const full = { ...event, at: options.now() };
+      log.push(full);
+      if (log.length > options.eventLogLimit)
+        log.splice(0, log.length - options.eventLogLimit);
+      options.onEvent?.(full);
+    },
+    events: () => log,
+    noteWait(waitMs) {
+      counters.totalWaitMs += waitMs;
+      counters.waitSamples += 1;
+    },
+    noteLoad(loadMs) {
+      counters.totalLoadMs += loadMs;
+      counters.loadSamples += 1;
+    },
+    noteConcurrency(count) {
+      if (count > counters.peakConcurrent)
+        counters.peakConcurrent = count;
+    },
+    snapshot(live) {
+      const total = counters.hits + counters.misses;
+      return {
+        hits: counters.hits,
+        misses: counters.misses,
+        prefetchHits: counters.prefetchHits,
+        attempts: counters.attempts,
+        completed: counters.completed,
+        throttled: counters.throttled,
+        cancelled: counters.cancelled,
+        failed: counters.failed,
+        skipped: counters.skipped,
+        hitRate: total === 0 ? 0 : counters.hits / total,
+        totalWaitMs: counters.totalWaitMs,
+        waitMs: counters.waitSamples === 0 ? 0 : counters.totalWaitMs / counters.waitSamples,
+        avgLoadMs: counters.loadSamples === 0 ? 0 : counters.totalLoadMs / counters.loadSamples,
+        inFlight: live.inFlight,
+        maxConcurrent: counters.peakConcurrent,
+        residentBytes: live.residentBytes,
+        selfTunedOff: live.selfTunedOff,
+        selfTuneTrips: live.selfTuneTrips
+      };
+    }
+  };
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/targetIndex.js
+function createTargetIndex(declared, maxLearned) {
+  const index = /* @__PURE__ */ new Map();
+  for (const target of declared)
+    index.set(target.id, target);
+  const learned = /* @__PURE__ */ new Set();
+  const cap = Math.max(1, maxLearned);
+  return {
+    index,
+    remember(target) {
+      if (index.has(target.id))
+        return;
+      index.set(target.id, target);
+      learned.add(target.id);
+      while (learned.size > cap) {
+        const oldest = learned.values().next().value;
+        if (oldest === void 0)
+          break;
+        learned.delete(oldest);
+        index.delete(oldest);
+      }
+    }
+  };
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/prefetcher.js
+var DEFAULT_MAX_CONCURRENT = 2;
+var DEFAULT_MAX_TARGETS_PER_REQUEST = 8;
+var DEFAULT_HISTORY_WINDOW = 32;
+var DEFAULT_MIN_CONFIDENCE = 0.2;
+var DEFAULT_EVENT_LIMIT2 = 128;
+var DEFAULT_DISABLE_AFTER = 3;
+var DEFAULT_MIN_SAMPLES = 3;
+var DEFAULT_MAX_RESIDENT_ENTRIES = 1024;
+var DEFAULT_MAX_KNOWN_TARGETS = 1024;
+var DEFAULT_MAX_TRACKED_LOADS = 256;
+function createPrefetcher(config) {
+  const loader = config.loader;
+  if (typeof loader !== "function") {
+    throw new Error("createPrefetcher: config.loader is required");
+  }
+  const shouldThrottle = config.shouldThrottle ?? (() => false);
+  const maxConcurrent = Math.max(1, config.maxConcurrent ?? DEFAULT_MAX_CONCURRENT);
+  const maxTargetsPerRequest = Math.max(1, config.maxTargetsPerRequest ?? DEFAULT_MAX_TARGETS_PER_REQUEST);
+  const historyWindow = Math.max(2, config.historyWindow ?? DEFAULT_HISTORY_WINDOW);
+  const minConfidence = config.minConfidence ?? DEFAULT_MIN_CONFIDENCE;
+  const now2 = config.now ?? now;
+  const targets = createTargetIndex(config.targets ?? [], config.maxKnownTargets ?? DEFAULT_MAX_KNOWN_TARGETS);
+  const index = targets.index;
+  const history = [];
+  const ledger = createPrefetchLedger({
+    now: now2,
+    eventLogLimit: Math.max(1, config.eventLogLimit ?? DEFAULT_EVENT_LIMIT2),
+    onEvent: config.onEvent
+  });
+  const counters = ledger.counters;
+  const resident = createResidentStore({
+    budgetBytes: config.residentBudgetBytes ?? Number.POSITIVE_INFINITY,
+    maxEntries: config.maxResidentEntries ?? DEFAULT_MAX_RESIDENT_ENTRIES
+  });
+  const tuner = createSelfTuner({
+    now: now2,
+    disableAfter: Math.max(1, config.tuning?.disableAfter ?? DEFAULT_DISABLE_AFTER),
+    minSamples: Math.max(1, config.tuning?.minSamples ?? DEFAULT_MIN_SAMPLES),
+    retryAfterMs: Math.max(0, config.tuning?.retryAfterMs ?? 0),
+    maxTrackedLoads: config.tuning?.maxTrackedLoads ?? DEFAULT_MAX_TRACKED_LOADS
+  });
+  const loads = createLoadRegistry({
+    loader,
+    now: now2,
+    onLoaded(rec, value) {
+      counters.completed += 1;
+      ledger.noteLoad(rec.loadMs);
+      resident.set(rec.id, {
+        value,
+        bytes: rec.bytes,
+        loadedAt: now2(),
+        loadMs: rec.loadMs,
+        source: rec.speculative ? "prefetch" : "demand",
+        claimed: false
+      });
+      if (rec.speculative)
+        tuner.noteSpeculativeLoad(rec.id, rec.loadMs);
+      ledger.record({ id: rec.id, strategy: rec.strategy, outcome: "loaded", durationMs: rec.loadMs });
+    },
+    onFailed(rec, aborted) {
+      if (aborted)
+        counters.cancelled += 1;
+      else
+        counters.failed += 1;
+      ledger.record({
+        id: rec.id,
+        strategy: rec.strategy,
+        outcome: aborted ? "cancelled" : "failed",
+        durationMs: rec.loadMs
+      });
+    }
+  });
+  let enabled = config.enabled !== false;
+  function isPressure() {
+    try {
+      return shouldThrottle() === true;
+    } catch {
+      return false;
+    }
+  }
+  function relievePressure() {
+    loads.dropUnjoined();
+    resident.releaseUnclaimed();
+  }
+  const decideAdmission = createAdmissionGate({
+    ledger,
+    maxConcurrent,
+    isEnabled: () => enabled,
+    isPressure,
+    relievePressure,
+    isKnown: (id) => index.has(id),
+    isResident: (id) => resident.has(id),
+    isLoading: (id) => loads.has(id),
+    speculativeCount: () => loads.speculativeCount()
+  });
+  function startSpeculative(target, strategy, signal) {
+    const rec = loads.start(target, { speculative: true, strategy, signal });
+    ledger.noteConcurrency(loads.speculativeCount());
+    return rec;
+  }
+  function evaluateTuner() {
+    const action = tuner.evaluate(enabled);
+    if (action === "reenable") {
+      enabled = true;
+      return;
+    }
+    if (action === "disable") {
+      enabled = false;
+      relievePressure();
+      ledger.record({ id: "*", strategy: "explicit", outcome: "throttled", durationMs: 0, skipReason: "disabled" });
+    }
+  }
+  function markClaimed(id) {
+    tuner.markClaimed(id);
+    resident.markClaimed(id);
+  }
+  function pushHistory(id) {
+    history.push(id);
+    while (history.length > historyWindow)
+      history.shift();
+  }
+  function startPredictions(predictions) {
+    const acted = [];
+    for (const prediction of predictions) {
+      if (acted.length >= maxTargetsPerRequest)
+        break;
+      const verdict = decideAdmission(prediction.target, prediction.strategy);
+      if (verdict.admit)
+        startSpeculative(prediction.target, prediction.strategy);
+      if (verdict.admit || verdict.result === "duplicate")
+        acted.push(prediction);
+    }
+    return acted;
+  }
+  function autoPredict(targetId) {
+    const predictions = mergePredictions([predictFromGraph(targetId, config.graph, index), predictFromHistory(history, index)], minConfidence);
+    return predictions.length === 0 ? [] : startPredictions(predictions);
+  }
+  function demandLoad(target, signal) {
+    return loads.start(target, { speculative: false, strategy: "explicit", signal }).promise;
+  }
+  async function request(target, options) {
+    targets.remember(target);
+    const startedAt = now2();
+    let hit = false;
+    let value;
+    let creditEntry;
+    const residentEntry = resident.get(target.id);
+    const inFlightRecord = loads.get(target.id);
+    if (residentEntry) {
+      hit = true;
+      value = residentEntry.value;
+      creditEntry = residentEntry;
+      markClaimed(target.id);
+    } else if (inFlightRecord) {
+      hit = true;
+      inFlightRecord.joined = true;
+      try {
+        value = await inFlightRecord.promise;
+        creditEntry = resident.peek(target.id);
+        markClaimed(target.id);
+      } catch {
+        hit = false;
+        value = await demandLoad(target, options?.signal);
+      }
+    } else {
+      value = await demandLoad(target, options?.signal);
+    }
+    const waitMs = Math.max(0, now2() - startedAt);
+    if (hit) {
+      counters.hits += 1;
+      if (creditEntry?.source === "prefetch")
+        counters.prefetchHits += 1;
+    } else {
+      counters.misses += 1;
+    }
+    ledger.noteWait(waitMs);
+    if (creditEntry?.source === "prefetch")
+      tuner.creditAvoidedWait(creditEntry.loadMs, waitMs);
+    pushHistory(target.id);
+    evaluateTuner();
+    const predicted = autoPredict(target.id);
+    return { hit, value, waitMs, predicted };
+  }
+  function predict(context, options) {
+    const predictions = mergePredictions([
+      predictFromGraph(context.target, config.graph, index),
+      predictFromHistory(history, index),
+      predictFromContext(context, index)
+    ], minConfidence);
+    if (predictions.length === 0)
+      return [];
+    const signal = options?.signal;
+    if (signal?.aborted)
+      return [];
+    const acted = startPredictions(predictions);
+    if (signal) {
+      const started = [];
+      for (const prediction of acted) {
+        const rec = loads.get(prediction.target.id);
+        if (rec && rec.speculative)
+          started.push(rec);
+      }
+      if (started.length > 0) {
+        const forward = () => {
+          for (const rec of started)
+            rec.controller.abort();
+        };
+        signal.addEventListener("abort", forward, { once: true });
+        void Promise.allSettled(started.map((rec) => rec.promise)).then(() => {
+          signal.removeEventListener("abort", forward);
+        });
+      }
+    }
+    return acted;
+  }
+  function prefetch(target, options) {
+    targets.remember(target);
+    const strategy = options?.strategy ?? "explicit";
+    const verdict = decideAdmission(target, strategy);
+    if (!verdict.admit)
+      return Promise.resolve(verdict.result);
+    const rec = startSpeculative(target, strategy, options?.signal);
+    return rec.promise.then(() => "loaded", () => rec.controller.signal.aborted ? "cancelled" : "failed");
+  }
+  function cancelAll() {
+    loads.abortSpeculative();
+    resident.releaseUnclaimed();
+  }
+  function cancel(targetId) {
+    const rec = loads.get(targetId);
+    if (rec && rec.speculative)
+      rec.controller.abort();
+    const entry = resident.peek(targetId);
+    if (entry && entry.source === "prefetch" && !entry.claimed)
+      resident.delete(targetId);
+  }
+  function stats() {
+    return ledger.snapshot({
+      inFlight: loads.size,
+      residentBytes: resident.bytes(),
+      selfTunedOff: tuner.selfTunedOff,
+      selfTuneTrips: tuner.trips
+    });
+  }
+  return {
+    request,
+    requestById(id, options) {
+      const target = index.get(id);
+      if (!target)
+        return Promise.reject(new Error(`unknown prefetch target: ${id} (use request(target))`));
+      return request(target, options);
+    },
+    predict,
+    prefetch,
+    cancelAll,
+    cancel,
+    release: (targetId) => resident.delete(targetId),
+    stats,
+    hitRate: () => stats().hitRate,
+    waitMs: () => stats().waitMs,
+    events: () => ledger.events(),
+    residentIds: () => resident.ids(),
+    isEnabled: () => enabled,
+    setEnabled(next) {
+      enabled = next;
+      if (!enabled)
+        cancelAll();
+    },
+    whenIdle: () => loads.whenIdle()
+  };
+}
+
+// src/engine/residency/weight-store.ts
+var WEIGHT_DB = {
+  dbName: "builderforce-studio-weights",
+  storeName: "weights",
+  dbVersion: 1
+};
+function createWeightStore(indexedDB) {
+  const factory = indexedDB ?? globalThis.indexedDB;
+  const cache = createModelCache({ ...WEIGHT_DB, indexedDB: factory, valueFormat: "raw" });
+  return {
+    async read(key) {
+      try {
+        const entry = await cache.get(key);
+        return entry?.bytes ?? null;
+      } catch {
+        return null;
+      }
+    },
+    async has(key) {
+      try {
+        return await cache.has(key);
+      } catch {
+        return false;
+      }
+    },
+    async write(key, bytes) {
+      try {
+        await cache.put(key, { bytes, size: bytes.byteLength });
+        return await cache.has(key);
+      } catch {
+        return false;
+      }
+    },
+    canPersist: () => factory !== void 0
+  };
+}
+var shared = null;
+function weightStore() {
+  shared ??= createWeightStore();
+  return shared;
+}
+
 // src/engine/weight-cache.ts
-var DB_NAME = "builderforce-studio-weights";
-var DB_VERSION = 1;
-var STORE_NAME = "weights";
 var DEFAULT_R2_BASE = "https://api.builderforce.ai/api/studio/weights";
 var HF_BASE = "https://huggingface.co";
 async function getOrFetchWeight(opts) {
-  const cached = await readFromIdb(opts.cacheKey);
+  const store = weightStore();
+  const cached = await store.read(opts.cacheKey);
   if (cached) {
     opts.onProgress?.(cached.byteLength, cached.byteLength);
     return cached;
   }
   const buffer = await fetchFromAnySource(opts);
-  await writeToIdb(opts.cacheKey, buffer).catch(() => {
-  });
+  if (!await store.write(opts.cacheKey, buffer)) opts.onPersistFailed?.();
   return buffer;
 }
 async function fetchFromAnySource(opts) {
@@ -75,37 +1739,125 @@ function resolveSource(source, opts) {
     headers: {}
   };
 }
-async function openDb() {
-  if (typeof indexedDB === "undefined") return null;
-  return new Promise((resolve) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      req.result.createObjectStore(STORE_NAME);
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => resolve(null);
-  });
+
+// src/engine/residency/session-residency.ts
+var SESSION_COMPONENTS = ["text_encoder", "unet", "vae_decoder"];
+var MIB = 1024 * 1024;
+var RESIDENT_BUDGET_FRACTION = 0.8;
+function residencyBudgetBytes(probed) {
+  const total = probed.approxMemoryMb !== null ? probed.approxMemoryMb * MIB : probeRamBytes();
+  return Math.max(1, Math.floor(total * RESIDENT_BUDGET_FRACTION));
 }
-async function readFromIdb(key) {
-  const db = await openDb();
-  if (!db) return null;
-  return new Promise((resolve) => {
-    const tx = db.transaction(STORE_NAME, "readonly");
-    const req = tx.objectStore(STORE_NAME).get(key);
-    req.onsuccess = () => resolve(req.result ?? null);
-    req.onerror = () => resolve(null);
-  });
+function sessionResidentId(modelId, component) {
+  return `${modelId}/${component}`;
 }
-async function writeToIdb(key, value) {
-  const db = await openDb();
-  if (!db) return;
-  await new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readwrite");
-    tx.objectStore(STORE_NAME).put(value, key);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error ?? new Error("IDB write failed"));
-  });
+var SessionResidency = class {
+  manager;
+  tier;
+  /** Eviction callbacks of the currently tracked sessions, by resident id. */
+  owners = /* @__PURE__ */ new Map();
+  /** In-flight {@link whileInUse} runs per model id. */
+  holds = /* @__PURE__ */ new Map();
+  constructor(probed, byteBudget = residencyBudgetBytes(probed)) {
+    const onGpu = probed.kind === "webgpu" || probed.kind === "webnn";
+    this.tier = onGpu ? "vram" : "ram";
+    this.manager = createMemoryManager({ byteBudget, vramBudgetBytes: onGpu ? byteBudget : 0 });
+  }
+  /** Admit one freshly created session (pinned until {@link settle}), then
+   *  release whatever the admission evicted. */
+  async admit(args) {
+    const id = sessionResidentId(args.modelId, args.component);
+    const result = await this.manager.admit(
+      {
+        id,
+        group: args.modelId,
+        component: args.component,
+        bytes: args.bytes,
+        // An evicted session is rebuilt from the IndexedDB weight store.
+        reloadCostMs: estimateReloadCostMs({ bytes: args.bytes, from: "storage" }),
+        // A live engine runs every one of its sessions on every frame.
+        reuseProbability: 1,
+        tier: this.tier,
+        payload: args.session
+      },
+      { pin: true, spill: false }
+    );
+    if (result.admitted) this.owners.set(id, args.onEvicted);
+    await this.releaseEvicted(result.evicted);
+    return result;
+  }
+  /** Init of `modelId` finished: unpin its sessions so a later model's
+   *  admissions may evict them (unless a run currently holds them). */
+  settle(modelId) {
+    if (!this.holds.has(modelId)) this.setPinned(modelId, false);
+  }
+  /** Run `work` with `modelId`'s sessions pinned, so no admission can evict
+   *  (and release) a session mid-run. Re-entrant: the last run out unpins. */
+  async whileInUse(modelId, work) {
+    this.holds.set(modelId, (this.holds.get(modelId) ?? 0) + 1);
+    this.setPinned(modelId, true);
+    try {
+      return await work();
+    } finally {
+      const left = (this.holds.get(modelId) ?? 1) - 1;
+      if (left > 0) this.holds.set(modelId, left);
+      else {
+        this.holds.delete(modelId);
+        this.setPinned(modelId, false);
+      }
+    }
+  }
+  setPinned(modelId, pinned) {
+    for (const id of this.manager.residentIds()) {
+      if (this.manager.peek(id)?.group !== modelId) continue;
+      if (pinned) this.manager.pin(id);
+      else this.manager.unpin(id);
+    }
+  }
+  /** Drop every resident of `modelId` from the budget and release `sessions`
+   *  (the engine's own references — it may hold sessions the budget rejected).
+   *  Release errors are swallowed so one bad session cannot block the rest. */
+  async releaseModel(modelId, sessions) {
+    for (const component of SESSION_COMPONENTS) {
+      const id = sessionResidentId(modelId, component);
+      this.owners.delete(id);
+      await this.manager.release(id);
+    }
+    await Promise.all(sessions.map((s) => releaseQuietly(s)));
+  }
+  /** Whether the budget is under memory pressure right now — background work
+   *  (the refinement weight warm) backs off while it is. */
+  isPressured() {
+    return this.manager.pressure().pressured;
+  }
+  /** Ids currently charged against the budget. */
+  residentIds() {
+    return this.manager.residentIds();
+  }
+  async releaseEvicted(evicted) {
+    await Promise.all(
+      evicted.map(async (entry) => {
+        const onEvicted = this.owners.get(entry.id);
+        this.owners.delete(entry.id);
+        onEvicted?.();
+        await releaseQuietly(entry.payload);
+      })
+    );
+  }
+};
+async function releaseQuietly(session) {
+  if (!session) return;
+  try {
+    await session.release();
+  } catch {
+  }
 }
+
+// src/engine/residency/session-loader.ts
+import * as ort3 from "onnxruntime-web";
+
+// src/engine/ort-session.ts
+import * as ort2 from "onnxruntime-web";
 
 // src/engine/diffusion-models.ts
 var MODEL_REGISTRY = {
@@ -305,97 +2057,6 @@ var MODEL_REGISTRY = {
   }
 };
 
-// src/engine/diffusion-schedule.ts
-var TRAIN_TIMESTEPS = 1e3;
-var ALPHAS_CUMPROD = computeAlphasCumprod(85e-5, 0.012, TRAIN_TIMESTEPS);
-function computeAlphasCumprod(betaStart, betaEnd, T) {
-  const out = new Float32Array(T);
-  const sqrtStart = Math.sqrt(betaStart);
-  const sqrtEnd = Math.sqrt(betaEnd);
-  let running = 1;
-  for (let t = 0; t < T; t++) {
-    const sqrtBeta = sqrtStart + (sqrtEnd - sqrtStart) * (t / (T - 1));
-    const beta = sqrtBeta * sqrtBeta;
-    running *= 1 - beta;
-    out[t] = running;
-  }
-  return out;
-}
-function alphaCumprodAt(timestep) {
-  const t = Number.isFinite(timestep) ? Math.round(timestep) : TRAIN_TIMESTEPS - 1;
-  return ALPHAS_CUMPROD[Math.min(TRAIN_TIMESTEPS - 1, Math.max(0, t))];
-}
-function noiseScaleAt(timestep) {
-  return Math.sqrt(1 - alphaCumprodAt(timestep));
-}
-function gaussianNoise(length, seed) {
-  const out = new Float32Array(length);
-  let state = seed >>> 0 || 1;
-  for (let i = 0; i < length; i++) {
-    state = state * 1664525 + 1013904223 >>> 0;
-    const u1 = (state + 1) / 4294967296;
-    state = state * 1664525 + 1013904223 >>> 0;
-    const u2 = (state + 1) / 4294967296;
-    out[i] = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-  }
-  return out;
-}
-function forwardDiffuse(clean, timestep, seed) {
-  const alpha = alphaCumprodAt(timestep);
-  const sqrtAlpha = Math.sqrt(alpha);
-  const sqrtOneMinusAlpha = Math.sqrt(1 - alpha);
-  const noise = gaussianNoise(clean.length, seed);
-  const out = new Float32Array(clean.length);
-  for (let i = 0; i < clean.length; i++) out[i] = sqrtAlpha * clean[i] + sqrtOneMinusAlpha * noise[i];
-  return out;
-}
-var RENOISE_SEED_STRIDE = 7919;
-function lcmStep(sample, noisePred, timestep, nextTimestep, seed, stepIndex) {
-  const alpha = alphaCumprodAt(timestep);
-  const sqrtAlpha = Math.sqrt(alpha);
-  const sqrtOneMinusAlpha = Math.sqrt(1 - alpha);
-  if (nextTimestep === null) {
-    for (let j = 0; j < sample.length; j++) {
-      sample[j] = (sample[j] - sqrtOneMinusAlpha * noisePred[j]) / sqrtAlpha;
-    }
-    return;
-  }
-  const alphaNext = alphaCumprodAt(nextTimestep);
-  const sqrtAlphaNext = Math.sqrt(alphaNext);
-  const sqrtOneMinusAlphaNext = Math.sqrt(1 - alphaNext);
-  const noise = gaussianNoise(sample.length, seed + stepIndex * RENOISE_SEED_STRIDE);
-  for (let j = 0; j < sample.length; j++) {
-    const x0 = (sample[j] - sqrtOneMinusAlpha * noisePred[j]) / sqrtAlpha;
-    sample[j] = sqrtAlphaNext * x0 + sqrtOneMinusAlphaNext * noise[j];
-  }
-}
-function applyGuidance(cond, uncond, guidance) {
-  for (let i = 0; i < cond.length; i++) {
-    cond[i] = uncond[i] + guidance * (cond[i] - uncond[i]);
-  }
-}
-var DEFAULT_LCM_GUIDANCE_SCALE = 8.5;
-function lcmGuidanceCondEmbedding(descriptor) {
-  const dim = descriptor.lcmGuidanceEmbedDim ?? 256;
-  const w = (descriptor.lcmGuidanceScale ?? DEFAULT_LCM_GUIDANCE_SCALE) - 1;
-  return guidanceScaleEmbedding(w, dim);
-}
-function guidanceScaleEmbedding(w, dim) {
-  const half = Math.floor(dim / 2);
-  const out = new Float32Array(dim);
-  const logBase = Math.log(1e4) / Math.max(1, half - 1);
-  const wScaled = w * 1e3;
-  for (let i = 0; i < half; i++) {
-    const freq = Math.exp(-logBase * i);
-    out[i] = Math.sin(wScaled * freq);
-    if (half + i < dim) out[half + i] = Math.cos(wScaled * freq);
-  }
-  return out;
-}
-
-// src/engine/ort-session.ts
-import * as ort2 from "onnxruntime-web";
-
 // src/engine/onnx-runtime-config.ts
 import * as ort from "onnxruntime-web";
 import { env as hfEnv } from "@huggingface/transformers";
@@ -537,6 +2198,270 @@ function reportProgress(label, onProgress) {
   onProgress?.(label);
 }
 
+// src/engine/residency/session-loader.ts
+function sessionBufferBytes(bufs) {
+  return bufs.modelBuf.byteLength + (bufs.externalData?.buf.byteLength ?? 0);
+}
+async function fetchSessionBuffers(file, component, fetchWeight, onProgress) {
+  reportProgress(`Downloading ${component} (${file.model})\u2026`, onProgress);
+  const modelBuf = await fetchWeight(file.model);
+  let externalData = null;
+  if (file.externalData) {
+    reportProgress(`Downloading ${component} weight data (${file.externalData})\u2026`, onProgress);
+    const dataBuf = await fetchWeight(file.externalData);
+    externalData = { name: basename(file.externalData), buf: dataBuf };
+  }
+  return { component, modelBuf, externalData };
+}
+async function createAdmittedSession(bufs, baseOptions, ctx) {
+  const options = { ...baseOptions };
+  if (bufs.externalData) {
+    options.externalData = [
+      { path: bufs.externalData.name, data: new Uint8Array(bufs.externalData.buf) }
+    ];
+  }
+  reportProgress(`Creating ${bufs.component} ORT session\u2026`, ctx.onProgress);
+  let session;
+  try {
+    session = await ort3.InferenceSession.create(new Uint8Array(bufs.modelBuf), options);
+  } catch (err) {
+    throw ctx.explain(err, `${bufs.component} session create`);
+  }
+  reportProgress(`${bufs.component} ready.`, ctx.onProgress);
+  await ctx.residency.admit({
+    modelId: ctx.modelId,
+    component: bufs.component,
+    bytes: sessionBufferBytes(bufs),
+    session,
+    onEvicted: ctx.onEvicted
+  });
+  return session;
+}
+
+// src/engine/residency/weight-prefetch.ts
+function weightRequest(descriptor, file, source) {
+  return {
+    cacheKey: `${descriptor.id}/${file}`,
+    hfRepo: descriptor.hfRepo,
+    hfPath: file,
+    sources: source.weightSources,
+    apiKey: source.apiKey,
+    r2Base: source.r2Base
+  };
+}
+function modelWeightFiles(descriptor) {
+  if (descriptor.engine !== "lcm-diffusion") return [];
+  const { textEncoder, unet, vaeDecoder } = descriptor.files;
+  return [textEncoder, unet, vaeDecoder].flatMap((f) => f.externalData ? [f.model, f.externalData] : [f.model]);
+}
+function modelTargets(model, source) {
+  const descriptor = MODEL_REGISTRY[model];
+  if (descriptor.engine !== "lcm-diffusion") return [];
+  return modelWeightFiles(descriptor).map((file) => {
+    const request = weightRequest(descriptor, file, source);
+    return { id: request.cacheKey, bytes: 0, kind: "weights", meta: { request } };
+  });
+}
+var WeightPrefetch = class {
+  prefetcher;
+  lifetime = new AbortController();
+  targets;
+  load;
+  canPersist;
+  /** Ids queued for a warm that neither began nor was claimed by a fetch. */
+  pending = /* @__PURE__ */ new Set();
+  progress = /* @__PURE__ */ new Map();
+  /** The one warm in flight (warms are sequential). */
+  active = null;
+  started = false;
+  stopped = false;
+  constructor(refinementModel, source, deps = {}) {
+    this.load = deps.load ?? getOrFetchWeight;
+    this.canPersist = deps.canPersist ?? (() => weightStore().canPersist());
+    const isStored = deps.isStored ?? ((key) => weightStore().has(key));
+    this.targets = modelTargets(refinementModel, source);
+    this.prefetcher = createPrefetcher({
+      // Warm only: resolve to a byte count so no buffer stays resident here.
+      loader: async (target, signal) => {
+        const request = target.meta?.request;
+        if (!request) throw new Error(`WeightPrefetch: unknown weight target '${target.id}'`);
+        if (await isStored(request.cacheKey)) return 0;
+        const progress = this.progressOf(target.id);
+        const bytes = await this.load({
+          ...request,
+          signal,
+          onProgress: (loaded, total) => {
+            progress.latest = [loaded, total];
+            for (const listener of progress.listeners) listener(loaded, total);
+          },
+          onPersistFailed: () => this.stop("weight store cannot persist")
+        });
+        return bytes.byteLength;
+      },
+      targets: this.targets,
+      maxConcurrent: 1,
+      shouldThrottle: deps.shouldThrottle
+    });
+  }
+  /** Start warming the refinement model's files, one at a time. Call after the
+   *  draft engine's init resolved. No-op when repeated, after dispose, or when
+   *  the weight store cannot persist (a warm would only be thrown away). */
+  start() {
+    if (this.started || this.stopped || this.lifetime.signal.aborted || !this.canPersist()) return;
+    this.started = true;
+    for (const target of this.targets) this.pending.add(target.id);
+    void this.targets.reduce((chain, target) => chain.then(() => this.warm(target)), Promise.resolve());
+  }
+  async warm(target) {
+    if (!this.pending.delete(target.id) || this.stopped || this.lifetime.signal.aborted) return;
+    const done = this.prefetcher.prefetch(target, { signal: this.lifetime.signal }).then((outcome) => {
+      if (outcome === "throttled") this.stopped = true;
+    });
+    this.active = { id: target.id, done };
+    try {
+      await done;
+    } finally {
+      this.active = null;
+      this.progress.delete(target.id);
+      this.prefetcher.release(target.id);
+    }
+  }
+  /** Fetch one weight file: join its in-flight warm (forwarding the warm's
+   *  progress), else claim it from the queue; then read it through the store. */
+  async fetch(request) {
+    const key = request.cacheKey;
+    this.pending.delete(key);
+    const active = this.active;
+    if (active?.id === key) {
+      const unsubscribe = request.onProgress ? this.subscribe(key, request.onProgress) : void 0;
+      try {
+        await active.done;
+      } finally {
+        unsubscribe?.();
+      }
+    }
+    return this.load({ ...request, signal: this.lifetime.signal });
+  }
+  progressOf(id) {
+    let entry = this.progress.get(id);
+    if (!entry) {
+      entry = { latest: null, listeners: /* @__PURE__ */ new Set() };
+      this.progress.set(id, entry);
+    }
+    return entry;
+  }
+  subscribe(id, listener) {
+    const entry = this.progressOf(id);
+    if (entry.latest) listener(...entry.latest);
+    entry.listeners.add(listener);
+    return () => entry.listeners.delete(listener);
+  }
+  /** Stop warming: nothing further starts, anything in flight is cancelled. */
+  stop(reason) {
+    this.stopped = true;
+    this.pending.clear();
+    this.prefetcher.cancelAll(reason);
+  }
+  /** Ids the prefetcher still holds a (byte-count) record for — diagnostics / tests. */
+  residentIds() {
+    return this.prefetcher.residentIds();
+  }
+  /** Abort every in-flight warm and drop every record. Idempotent. */
+  dispose() {
+    this.lifetime.abort();
+    this.stop("engine disposed");
+    for (const id of this.prefetcher.residentIds()) this.prefetcher.release(id);
+  }
+};
+
+// src/engine/diffusion-schedule.ts
+var TRAIN_TIMESTEPS = 1e3;
+var ALPHAS_CUMPROD = computeAlphasCumprod(85e-5, 0.012, TRAIN_TIMESTEPS);
+function computeAlphasCumprod(betaStart, betaEnd, T) {
+  const out = new Float32Array(T);
+  const sqrtStart = Math.sqrt(betaStart);
+  const sqrtEnd = Math.sqrt(betaEnd);
+  let running = 1;
+  for (let t = 0; t < T; t++) {
+    const sqrtBeta = sqrtStart + (sqrtEnd - sqrtStart) * (t / (T - 1));
+    const beta = sqrtBeta * sqrtBeta;
+    running *= 1 - beta;
+    out[t] = running;
+  }
+  return out;
+}
+function alphaCumprodAt(timestep) {
+  const t = Number.isFinite(timestep) ? Math.round(timestep) : TRAIN_TIMESTEPS - 1;
+  return ALPHAS_CUMPROD[Math.min(TRAIN_TIMESTEPS - 1, Math.max(0, t))];
+}
+function noiseScaleAt(timestep) {
+  return Math.sqrt(1 - alphaCumprodAt(timestep));
+}
+function gaussianNoise(length, seed) {
+  const out = new Float32Array(length);
+  let state = seed >>> 0 || 1;
+  for (let i = 0; i < length; i++) {
+    state = state * 1664525 + 1013904223 >>> 0;
+    const u1 = (state + 1) / 4294967296;
+    state = state * 1664525 + 1013904223 >>> 0;
+    const u2 = (state + 1) / 4294967296;
+    out[i] = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  }
+  return out;
+}
+function forwardDiffuse(clean, timestep, seed) {
+  const alpha = alphaCumprodAt(timestep);
+  const sqrtAlpha = Math.sqrt(alpha);
+  const sqrtOneMinusAlpha = Math.sqrt(1 - alpha);
+  const noise = gaussianNoise(clean.length, seed);
+  const out = new Float32Array(clean.length);
+  for (let i = 0; i < clean.length; i++) out[i] = sqrtAlpha * clean[i] + sqrtOneMinusAlpha * noise[i];
+  return out;
+}
+var RENOISE_SEED_STRIDE = 7919;
+function lcmStep(sample, noisePred, timestep, nextTimestep, seed, stepIndex) {
+  const alpha = alphaCumprodAt(timestep);
+  const sqrtAlpha = Math.sqrt(alpha);
+  const sqrtOneMinusAlpha = Math.sqrt(1 - alpha);
+  if (nextTimestep === null) {
+    for (let j = 0; j < sample.length; j++) {
+      sample[j] = (sample[j] - sqrtOneMinusAlpha * noisePred[j]) / sqrtAlpha;
+    }
+    return;
+  }
+  const alphaNext = alphaCumprodAt(nextTimestep);
+  const sqrtAlphaNext = Math.sqrt(alphaNext);
+  const sqrtOneMinusAlphaNext = Math.sqrt(1 - alphaNext);
+  const noise = gaussianNoise(sample.length, seed + stepIndex * RENOISE_SEED_STRIDE);
+  for (let j = 0; j < sample.length; j++) {
+    const x0 = (sample[j] - sqrtOneMinusAlpha * noisePred[j]) / sqrtAlpha;
+    sample[j] = sqrtAlphaNext * x0 + sqrtOneMinusAlphaNext * noise[j];
+  }
+}
+function applyGuidance(cond, uncond, guidance) {
+  for (let i = 0; i < cond.length; i++) {
+    cond[i] = uncond[i] + guidance * (cond[i] - uncond[i]);
+  }
+}
+var DEFAULT_LCM_GUIDANCE_SCALE = 8.5;
+function lcmGuidanceCondEmbedding(descriptor) {
+  const dim = descriptor.lcmGuidanceEmbedDim ?? 256;
+  const w = (descriptor.lcmGuidanceScale ?? DEFAULT_LCM_GUIDANCE_SCALE) - 1;
+  return guidanceScaleEmbedding(w, dim);
+}
+function guidanceScaleEmbedding(w, dim) {
+  const half = Math.floor(dim / 2);
+  const out = new Float32Array(dim);
+  const logBase = Math.log(1e4) / Math.max(1, half - 1);
+  const wScaled = w * 1e3;
+  for (let i = 0; i < half; i++) {
+    const freq = Math.exp(-logBase * i);
+    out[i] = Math.sin(wScaled * freq);
+    if (half + i < dim) out[half + i] = Math.cos(wScaled * freq);
+  }
+  return out;
+}
+
 // src/engine/abort.ts
 function throwIfAborted(signal) {
   if (signal?.aborted) throw new DOMException("Generation aborted", "AbortError");
@@ -568,6 +2493,7 @@ var PROMPT_EMBEDDING_CACHE_SIZE = 8;
 var DiffusionEngine = class {
   constructor(opts) {
     this.opts = opts;
+    this.residency = opts.residency ?? new SessionResidency(opts.probed);
   }
   opts;
   tokenizer = null;
@@ -577,6 +2503,7 @@ var DiffusionEngine = class {
   disposed = false;
   /** Insertion-ordered, so the first key is the least recently used. */
   promptEmbeddings = /* @__PURE__ */ new Map();
+  residency;
   // -------------------------------------------------------------------------
   async init() {
     const d = this.descriptor;
@@ -604,14 +2531,16 @@ var DiffusionEngine = class {
       this.tokenizer = await AutoTokenizer.from_pretrained(d.tokenizerRepo);
       reportProgress("Tokenizer ready.", onProgress);
       reportProgress(`Loading ${d.id} weights (UNet + text-encoder + VAE)\u2026`, onProgress);
+      const fetchWeight = (file) => this.fetchWeight(file);
       const downloads = await Promise.all([
-        this.fetchSessionBuffers(d.files.textEncoder, "text_encoder"),
-        this.fetchSessionBuffers(d.files.unet, "unet"),
-        this.fetchSessionBuffers(d.files.vaeDecoder, "vae_decoder")
+        fetchSessionBuffers(d.files.textEncoder, "text_encoder", fetchWeight, onProgress),
+        fetchSessionBuffers(d.files.unet, "unet", fetchWeight, onProgress),
+        fetchSessionBuffers(d.files.vaeDecoder, "vae_decoder", fetchWeight, onProgress)
       ]);
       this.textEncoderSession = await this.createSessionFromBuffers(downloads[0], sessionOptions);
       this.unetSession = await this.createSessionFromBuffers(downloads[1], sessionOptions);
       this.vaeSession = await this.createSessionFromBuffers(downloads[2], sessionOptions);
+      this.residency.settle(this.opts.model);
       reportProgress("All ORT sessions created.", onProgress);
       assertSessionMatchesSpec("unet", this.unetSession, d.unetInputs);
       assertSessionMatchesSpec("text_encoder", this.textEncoderSession, d.textEncoderInputs);
@@ -675,7 +2604,7 @@ var DiffusionEngine = class {
       this.promptEmbeddings.set(prompt, cached);
       return new Float32Array(cached);
     }
-    const embedding = await this.encodePrompt(prompt);
+    const embedding = await this.residency.whileInUse(this.opts.model, () => this.encodePrompt(prompt));
     this.promptEmbeddings.set(prompt, embedding);
     if (this.promptEmbeddings.size > PROMPT_EMBEDDING_CACHE_SIZE) {
       const oldest = this.promptEmbeddings.keys().next().value;
@@ -694,6 +2623,9 @@ var DiffusionEngine = class {
    * native one-shot generation up to a small numerical constant.
    */
   async denoise(inputs) {
+    return this.residency.whileInUse(this.opts.model, () => this.runDenoise(inputs));
+  }
+  async runDenoise(inputs) {
     if (!this.unetSession || !this.vaeSession) {
       throw new Error("DiffusionEngine.init() not called");
     }
@@ -763,7 +2695,7 @@ var DiffusionEngine = class {
       );
     }
     const { latentH, latentW } = this.latentDims;
-    return this.runVaeDecode(latent, latentH, latentW);
+    return this.residency.whileInUse(this.opts.model, () => this.runVaeDecode(latent, latentH, latentW));
   }
   // -------------------------------------------------------------------------
   // Internals
@@ -811,15 +2743,13 @@ var DiffusionEngine = class {
     this.vaeSession = null;
     this.tokenizer = null;
     this.promptEmbeddings.clear();
-    await Promise.all(
-      sessions.map(async (s) => {
-        if (!s) return;
-        try {
-          await s.release();
-        } catch {
-        }
-      })
-    );
+    await this.residency.releaseModel(this.opts.model, sessions);
+  }
+  /** The residency budget evicted (and is about to release) one of our sessions. */
+  forgetEvicted(component) {
+    if (component === "text_encoder") this.textEncoderSession = null;
+    else if (component === "unet") this.unetSession = null;
+    else this.vaeSession = null;
   }
   /** The uncached text-encoder pass behind {@link embedPrompt}. */
   async encodePrompt(prompt) {
@@ -861,51 +2791,16 @@ var DiffusionEngine = class {
     }
     return new Float32Array(hidden);
   }
-  /** Fetch the model + (optional) external-data buffers for one session.
-   *  Pure I/O — no ORT calls. Split from session creation so the engine can
-   *  parallelize downloads while still serialising the ORT create step. */
-  async fetchSessionBuffers(file, label) {
-    const onProgress = this.opts.onProgress;
-    reportProgress(`Downloading ${label} (${file.model})\u2026`, onProgress);
-    const modelBuf = await this.fetchWeight(file.model);
-    let externalData = null;
-    if (file.externalData) {
-      reportProgress(`Downloading ${label} weight data (${file.externalData})\u2026`, onProgress);
-      const dataBuf = await this.fetchWeight(file.externalData);
-      externalData = { name: basename(file.externalData), buf: dataBuf };
-    }
-    return { label, modelBuf, externalData };
-  }
-  /** Create an ORT session from already-downloaded buffers. Caller MUST call
-   *  this serially across sessions when any of them carry external data —
-   *  ORT-web's external-data mount Map is global and the `finally` of every
-   *  session create unmounts it, so concurrent creates race. The init() call
-   *  site enforces serial creation. */
-  async createSessionFromBuffers(bufs, baseOptions) {
-    const onProgress = this.opts.onProgress;
-    const options = { ...baseOptions };
-    if (bufs.externalData) {
-      options.externalData = [
-        { path: bufs.externalData.name, data: new Uint8Array(bufs.externalData.buf) }
-      ];
-    }
-    reportProgress(`Creating ${bufs.label} ORT session\u2026`, onProgress);
-    try {
-      const session = await ort3.InferenceSession.create(
-        new Uint8Array(bufs.modelBuf),
-        options
-      );
-      reportProgress(`${bufs.label} ready.`, onProgress);
-      return session;
-    } catch (err) {
-      throw explainOrtError(
-        err,
-        `${bufs.label} session create`,
-        this.descriptor.id,
-        this.descriptor.minVramMb,
-        this.opts.probed.approxMemoryMb
-      );
-    }
+  /** Create + admit one session — serially only (session-loader's SERIAL-CREATE INVARIANT). */
+  createSessionFromBuffers(bufs, baseOptions) {
+    const d = this.descriptor;
+    return createAdmittedSession(bufs, baseOptions, {
+      residency: this.residency,
+      modelId: this.opts.model,
+      onProgress: this.opts.onProgress,
+      onEvicted: () => this.forgetEvicted(bufs.component),
+      explain: (err, phase) => explainOrtError(err, phase, d.id, d.minVramMb, this.opts.probed.approxMemoryMb)
+    });
   }
   /** Wrap session.run() so DXGI_ERROR_DEVICE_HUNG, std::bad_alloc, "Device is
    *  lost", and similar runtime ORT failures become actionable messages
@@ -924,16 +2819,13 @@ var DiffusionEngine = class {
       );
     }
   }
+  /** One weight file — via the prefetcher when wired, else the weight cache. */
   async fetchWeight(file) {
-    return getOrFetchWeight({
-      cacheKey: `${this.opts.model}/${file}`,
-      hfRepo: this.descriptor.hfRepo,
-      hfPath: file,
-      sources: this.opts.weightSources,
-      apiKey: this.opts.apiKey,
-      r2Base: this.opts.r2Base,
+    const request = {
+      ...weightRequest(this.descriptor, file, this.opts),
       onProgress: (loaded, total) => this.opts.onWeightProgress?.(file, loaded, total)
-    });
+    };
+    return this.opts.weightPrefetch ? this.opts.weightPrefetch.fetch(request) : getOrFetchWeight(request);
   }
   buildUnetFeeds(args) {
     const ctx = { descriptor: this.descriptor, ...args };
@@ -973,11 +2865,48 @@ var DiffusionEngine = class {
     const scaled = new Float32Array(latent.length);
     const scale = this.descriptor.vaeScalingFactor;
     for (let i = 0; i < latent.length; i++) scaled[i] = latent[i] / scale;
-    const input = new ort3.Tensor("float32", scaled, [1, 4, h, w]);
+    const input = new ort4.Tensor("float32", scaled, [1, 4, h, w]);
     const out = await this.runSession(session, { latent_sample: input }, "vae_decoder");
     const pixels = pickFirstFloat32(out);
     if (!pixels) throw new Error("VAE decoder returned no Float32 output");
     return pixels;
+  }
+};
+
+// src/engine/residency/lcm-residency.ts
+var LcmResidency = class {
+  constructor(opts) {
+    this.opts = opts;
+    this.sessions = new SessionResidency(opts.probed);
+    const refinement = opts.refinementModel;
+    this.prefetch = refinement && refinement !== opts.model ? new WeightPrefetch(refinement, opts, { shouldThrottle: () => this.sessions.isPressured() }) : null;
+  }
+  opts;
+  sessions;
+  prefetch;
+  /** A DiffusionEngine for `model`, wired to the shared residency (and, for the
+   *  refinement model, to the weight warm). */
+  createEngine(model, view) {
+    const { probed, apiKey, weightSources, r2Base, refinementModel } = this.opts;
+    return new DiffusionEngine({
+      model,
+      probed,
+      apiKey,
+      weightSources,
+      r2Base,
+      ...view,
+      residency: this.sessions,
+      weightPrefetch: model === refinementModel ? this.prefetch ?? void 0 : void 0
+    });
+  }
+  /** Begin warming the refinement model's weights in the background. Call only
+   *  after the draft engine's init has resolved. */
+  prefetchRefinement() {
+    this.prefetch?.start();
+  }
+  /** Stop background warms and drop their records. Idempotent. */
+  dispose() {
+    this.prefetch?.dispose();
   }
 };
 
@@ -1218,12 +3147,12 @@ function shiftLatent(latent, shape, dx, dy) {
   if (dx === 0 && dy === 0) return new Float32Array(latent);
   const out = new Float32Array(latent.length);
   const idx = (c, y, x) => c * (height * width) + y * width + x;
-  const clamp2 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+  const clamp3 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
   for (let c = 0; c < channels; c++) {
     for (let y = 0; y < height; y++) {
-      const srcY = clamp2(y - dy, 0, height - 1);
+      const srcY = clamp3(y - dy, 0, height - 1);
       for (let x = 0; x < width; x++) {
-        const srcX = clamp2(x - dx, 0, width - 1);
+        const srcX = clamp3(x - dx, 0, width - 1);
         out[idx(c, y, x)] = latent[idx(c, srcY, srcX)];
       }
     }
@@ -1242,17 +3171,17 @@ function scaleLatent(latent, shape, scale) {
   const cx = (width - 1) / 2;
   const cy = (height - 1) / 2;
   const idx = (c, y, x) => c * (height * width) + y * width + x;
-  const clamp2 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+  const clamp3 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
   for (let c = 0; c < channels; c++) {
     for (let y = 0; y < height; y++) {
       const srcYf = cy + (y - cy) / scale;
-      const y0 = clamp2(Math.floor(srcYf), 0, height - 1);
-      const y1 = clamp2(y0 + 1, 0, height - 1);
+      const y0 = clamp3(Math.floor(srcYf), 0, height - 1);
+      const y1 = clamp3(y0 + 1, 0, height - 1);
       const wy = srcYf - Math.floor(srcYf);
       for (let x = 0; x < width; x++) {
         const srcXf = cx + (x - cx) / scale;
-        const x0 = clamp2(Math.floor(srcXf), 0, width - 1);
-        const x1 = clamp2(x0 + 1, 0, width - 1);
+        const x0 = clamp3(Math.floor(srcXf), 0, width - 1);
+        const x1 = clamp3(x0 + 1, 0, width - 1);
         const wx = srcXf - Math.floor(srcXf);
         const top = latent[idx(c, y0, x0)] * (1 - wx) + latent[idx(c, y0, x1)] * wx;
         const bot = latent[idx(c, y1, x0)] * (1 - wx) + latent[idx(c, y1, x1)] * wx;
@@ -1805,7 +3734,7 @@ function parseVerdict(text) {
   }
   if (!obj || typeof obj !== "object") return null;
   const rec = obj;
-  const score = typeof rec.score === "number" ? clamp01(rec.score) : null;
+  const score = typeof rec.score === "number" ? clamp014(rec.score) : null;
   if (score === null) return null;
   const issues = Array.isArray(rec.issues) ? rec.issues.filter((i) => Boolean(i) && typeof i === "object").map((i) => ({
     kind: ISSUE_KINDS.includes(i.kind) ? i.kind : "other",
@@ -1813,7 +3742,7 @@ function parseVerdict(text) {
   })) : [];
   return { score, issues };
 }
-function clamp01(x) {
+function clamp014(x) {
   if (!Number.isFinite(x)) return 0;
   if (x < 0) return 0;
   if (x > 1) return 1;
@@ -2017,14 +3946,14 @@ function pixelsToRgba(pixels, width, height) {
     const r = pixels[0 * channelSize + i];
     const g = pixels[1 * channelSize + i];
     const b = pixels[2 * channelSize + i];
-    out[i * 4 + 0] = clamp((r + 1) * 127.5);
-    out[i * 4 + 1] = clamp((g + 1) * 127.5);
-    out[i * 4 + 2] = clamp((b + 1) * 127.5);
+    out[i * 4 + 0] = clamp2((r + 1) * 127.5);
+    out[i * 4 + 1] = clamp2((g + 1) * 127.5);
+    out[i * 4 + 2] = clamp2((b + 1) * 127.5);
     out[i * 4 + 3] = 255;
   }
   return out;
 }
-function clamp(v) {
+function clamp2(v) {
   return v < 0 ? 0 : v > 255 ? 255 : Math.round(v);
 }
 
@@ -2157,13 +4086,14 @@ var DEFAULT_COHERENCE_STRENGTH = 0.5;
 var DEFAULT_MOTION_AMOUNT = 0.15;
 var DEFAULT_REFINEMENT_STRENGTH = 0.4;
 var VideoEngine = class _VideoEngine {
-  constructor(opts, diffusion, mambaState, activeDevice, probed, engineKind, webditBundle) {
+  constructor(opts, diffusion, mambaState, activeDevice, probed, engineKind, webditBundle, lcmResidency) {
     this.opts = opts;
     this.diffusion = diffusion;
     this.mambaState = mambaState;
     this.activeDevice = activeDevice;
     this.engineKind = engineKind;
     this.webditBundle = webditBundle;
+    this.lcmResidency = lcmResidency;
     this.probed = probed;
   }
   opts;
@@ -2172,11 +4102,12 @@ var VideoEngine = class _VideoEngine {
   activeDevice;
   engineKind;
   webditBundle;
-  /** Track the probed device so we can lazy-create a refinement-pass engine
-   *  later with the same hardware target — needed for the two-pass quality
-   *  chain (draft model → dispose → refinement model). Only meaningful on
-   *  the lcm-diffusion path (refinement across engine families is rejected
-   *  in `create()` before either engine is constructed). */
+  lcmResidency;
+  /** The probed device this instance runs on (its GPUDevice runs the Mamba
+   *  state advance). The refinement-pass engine is built on the same target by
+   *  `lcmResidency.createEngine` — the two-pass quality chain (draft model →
+   *  dispose → refinement model) is lcm-diffusion only (cross-family
+   *  refinement is rejected in `create()` before either engine is built). */
   probed;
   /**
    * Construct an engine bound to the host's best available hardware. Returns
@@ -2203,17 +4134,10 @@ var VideoEngine = class _VideoEngine {
     const width = options.width ?? DEFAULT_WIDTH;
     const height = options.height ?? DEFAULT_HEIGHT;
     const weightSources = options.weightSources ?? DEFAULT_WEIGHT_SOURCES;
-    const diffusion = new DiffusionEngine({
-      model: options.model,
-      probed,
-      apiKey: options.apiKey,
-      weightSources,
-      r2Base: deriveR2Base(options.baseUrl),
-      width,
-      height,
-      onProgress: options.onProgress
-    });
+    const residency = new LcmResidency({ ...options, probed, weightSources, r2Base: deriveR2Base(options.baseUrl) });
+    const diffusion = residency.createEngine(options.model, { width, height, onProgress: options.onProgress });
     await diffusion.init();
+    residency.prefetchRefinement();
     const state = options.mambaState ?? emptyState({ dim: 64, order: 4, channels: 16 });
     return new _VideoEngine(
       { ...options, weightSources, width, height },
@@ -2222,7 +4146,8 @@ var VideoEngine = class _VideoEngine {
       probed.kind,
       probed,
       "lcm-diffusion",
-      null
+      null,
+      residency
     );
   }
   /**
@@ -2262,7 +4187,8 @@ var VideoEngine = class _VideoEngine {
       probed.kind,
       probed,
       "webdit-dit",
-      bundle
+      bundle,
+      null
     );
   }
   /**
@@ -2328,8 +4254,8 @@ var VideoEngine = class _VideoEngine {
       coherenceMode,
       coherenceStrength,
       seed,
-      motionAmount: clamp012(args.motionAmount ?? DEFAULT_MOTION_AMOUNT),
-      imgToImgStrength: clamp012(args.imgToImgStrength ?? 0),
+      motionAmount: clamp015(args.motionAmount ?? DEFAULT_MOTION_AMOUNT),
+      imgToImgStrength: clamp015(args.imgToImgStrength ?? 0),
       anchorRefreshInterval: normaliseRefreshInterval(args.anchorRefreshInterval),
       cameraMotion: args.cameraMotion,
       interpolationFactor: normaliseFactor(args.interpolationFactor),
@@ -2349,7 +4275,7 @@ var VideoEngine = class _VideoEngine {
         seed,
         width,
         height,
-        refinementStrength: clamp012(args.refinementStrength ?? DEFAULT_REFINEMENT_STRENGTH),
+        refinementStrength: clamp015(args.refinementStrength ?? DEFAULT_REFINEMENT_STRENGTH),
         onProgress,
         onFrame: args.onFrame,
         signal: args.signal
@@ -2436,7 +4362,7 @@ var VideoEngine = class _VideoEngine {
         guidance,
         coherenceMode,
         coherenceStrength,
-        motionAmount: clamp012(args.motionAmount ?? DEFAULT_MOTION_AMOUNT),
+        motionAmount: clamp015(args.motionAmount ?? DEFAULT_MOTION_AMOUNT),
         interpolationFactor,
         interpolationBackend: args.interpolationBackend ?? "latent-slerp",
         width,
@@ -2469,7 +4395,7 @@ var VideoEngine = class _VideoEngine {
           seed: seedBase,
           width,
           height,
-          refinementStrength: clamp012(DEFAULT_REFINEMENT_STRENGTH),
+          refinementStrength: clamp015(DEFAULT_REFINEMENT_STRENGTH),
           onProgress,
           onFrame: args.onFrame,
           signal: args.signal
@@ -2836,12 +4762,7 @@ var VideoEngine = class _VideoEngine {
       onProgress
     );
     await this.lcmDiffusion.dispose();
-    this.diffusion = new DiffusionEngine({
-      model: this.opts.refinementModel,
-      probed: this.probed,
-      apiKey: this.opts.apiKey,
-      weightSources: this.opts.weightSources ?? DEFAULT_WEIGHT_SOURCES,
-      r2Base: deriveR2Base(this.opts.baseUrl),
+    this.diffusion = this.lcmResidency.createEngine(this.opts.refinementModel, {
       width: opts.width,
       height: opts.height,
       onProgress
@@ -2960,6 +4881,7 @@ var VideoEngine = class _VideoEngine {
    *  dispose the engine cannot be reused — create a new one with
    *  VideoEngine.create. */
   async dispose() {
+    this.lcmResidency?.dispose();
     await this.diffusion?.dispose();
     await this.webditBundle?.unload();
   }
@@ -2977,7 +4899,7 @@ var VideoEngine = class _VideoEngine {
     return this.diffusion;
   }
 };
-function clamp012(x) {
+function clamp015(x) {
   if (!Number.isFinite(x)) return DEFAULT_MOTION_AMOUNT;
   if (x < 0) return 0;
   if (x > 1) return 1;

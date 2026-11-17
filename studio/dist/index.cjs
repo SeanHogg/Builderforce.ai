@@ -1,27 +1,1691 @@
-"use strict";Object.defineProperty(exports, "__esModule", {value: true}); function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { newObj[key] = obj[key]; } } } newObj.default = obj; return newObj; } } function _nullishCoalesce(lhs, rhsFn) { if (lhs != null) { return lhs; } else { return rhsFn(); } } function _optionalChain(ops) { let lastAccessLHS = undefined; let value = ops[0]; let i = 1; while (i < ops.length) { const op = ops[i]; const fn = ops[i + 1]; i += 2; if ((op === 'optionalAccess' || op === 'optionalCall') && value == null) { return undefined; } if (op === 'access' || op === 'optionalAccess') { lastAccessLHS = value; value = fn(value); } else if (op === 'call' || op === 'optionalCall') { value = fn((...args) => value.call(lastAccessLHS, ...args)); lastAccessLHS = undefined; } } return value; } var _class; var _class2; var _class3;
+"use strict";Object.defineProperty(exports, "__esModule", {value: true}); function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { newObj[key] = obj[key]; } } } newObj.default = obj; return newObj; } } function _nullishCoalesce(lhs, rhsFn) { if (lhs != null) { return lhs; } else { return rhsFn(); } } function _optionalChain(ops) { let lastAccessLHS = undefined; let value = ops[0]; let i = 1; while (i < ops.length) { const op = ops[i]; const fn = ops[i + 1]; i += 2; if ((op === 'optionalAccess' || op === 'optionalCall') && value == null) { return undefined; } if (op === 'access' || op === 'optionalAccess') { lastAccessLHS = value; value = fn(value); } else if (op === 'call' || op === 'optionalCall') { value = fn((...args) => value.call(lastAccessLHS, ...args)); lastAccessLHS = undefined; } } return value; } async function _asyncOptionalChain(ops) { let lastAccessLHS = undefined; let value = ops[0]; let i = 1; while (i < ops.length) { const op = ops[i]; const fn = ops[i + 1]; i += 2; if ((op === 'optionalAccess' || op === 'optionalCall') && value == null) { return undefined; } if (op === 'access' || op === 'optionalAccess') { lastAccessLHS = value; value = await fn(value); } else if (op === 'call' || op === 'optionalCall') { value = await fn((...args) => value.call(lastAccessLHS, ...args)); lastAccessLHS = undefined; } } return value; } var _class; var _class2; var _class3; var _class4; var _class5;
 
 
 var _chunkVKVEFIZWcjs = require('./chunk-VKVEFIZW.cjs');
 
 // src/engine/diffusion-engine.ts
-var _onnxruntimeweb = require('onnxruntime-web'); var ort3 = _interopRequireWildcard(_onnxruntimeweb); var ort2 = _interopRequireWildcard(_onnxruntimeweb); var ort = _interopRequireWildcard(_onnxruntimeweb);
+var _onnxruntimeweb = require('onnxruntime-web'); var ort4 = _interopRequireWildcard(_onnxruntimeweb); var ort3 = _interopRequireWildcard(_onnxruntimeweb); var ort2 = _interopRequireWildcard(_onnxruntimeweb); var ort = _interopRequireWildcard(_onnxruntimeweb);
 var _transformers = require('@huggingface/transformers');
 
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/shared/idb.js
+var blockedOpens = /* @__PURE__ */ new WeakMap();
+function isBlocked(factory, name) {
+  return _nullishCoalesce(_optionalChain([blockedOpens, 'access', _2 => _2.get, 'call', _3 => _3(factory), 'optionalAccess', _4 => _4.has, 'call', _5 => _5(name)]), () => ( false));
+}
+function markBlocked(factory, name) {
+  let names = blockedOpens.get(factory);
+  if (!names) {
+    names = /* @__PURE__ */ new Set();
+    blockedOpens.set(factory, names);
+  }
+  names.add(name);
+}
+function clearBlocked(factory, name) {
+  _optionalChain([blockedOpens, 'access', _6 => _6.get, 'call', _7 => _7(factory), 'optionalAccess', _8 => _8.delete, 'call', _9 => _9(name)]);
+}
+function openRaw(factory, name, version, storeName) {
+  return new Promise((resolve) => {
+    if (isBlocked(factory, name)) {
+      resolve(void 0);
+      return;
+    }
+    let request;
+    try {
+      request = version === void 0 ? factory.open(name) : factory.open(name, version);
+    } catch (e2) {
+      resolve(void 0);
+      return;
+    }
+    let gaveUp = false;
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(storeName))
+        db.createObjectStore(storeName);
+    };
+    request.onsuccess = () => {
+      const db = request.result;
+      if (gaveUp) {
+        db.close();
+        clearBlocked(factory, name);
+        return;
+      }
+      db.onversionchange = () => db.close();
+      resolve(db);
+    };
+    request.onerror = () => {
+      if (gaveUp)
+        clearBlocked(factory, name);
+      resolve(void 0);
+    };
+    request.onblocked = () => {
+      if (!gaveUp)
+        markBlocked(factory, name);
+      gaveUp = true;
+      resolve(void 0);
+    };
+  });
+}
+function storeOf(db, storeName, onClosed) {
+  let closed = false;
+  const close = () => {
+    if (closed)
+      return;
+    closed = true;
+    db.close();
+    _optionalChain([onClosed, 'optionalCall', _10 => _10()]);
+  };
+  db.onversionchange = close;
+  db.onclose = close;
+  return {
+    run(mode, fn) {
+      return new Promise((resolve, reject) => {
+        let tx;
+        let req;
+        try {
+          tx = db.transaction(storeName, mode);
+        } catch (error) {
+          reject(error);
+          return;
+        }
+        const failure = () => _nullishCoalesce(_nullishCoalesce(tx.error, () => ( _optionalChain([req, 'optionalAccess', _11 => _11.error]))), () => ( new Error(`IndexedDB transaction on ${storeName} failed`)));
+        tx.oncomplete = () => resolve(req.result);
+        tx.onabort = () => reject(failure());
+        tx.onerror = () => reject(failure());
+        try {
+          req = fn(tx.objectStore(storeName));
+        } catch (error) {
+          try {
+            tx.abort();
+          } catch (e3) {
+          }
+          reject(error);
+        }
+      });
+    },
+    close
+  };
+}
+async function openIdbStore(factory, config, onClosed) {
+  if (!factory)
+    return void 0;
+  let db = await openRaw(factory, config.dbName, config.version, config.storeName);
+  if (!db) {
+    db = await openRaw(factory, config.dbName, void 0, config.storeName);
+    if (!db)
+      return void 0;
+  }
+  if (!db.objectStoreNames.contains(config.storeName)) {
+    const next = db.version + 1;
+    db.close();
+    db = await openRaw(factory, config.dbName, next, config.storeName);
+    if (!db || !db.objectStoreNames.contains(config.storeName))
+      return void 0;
+  }
+  return storeOf(db, config.storeName, onClosed);
+}
+function lazyIdbStore(factory, config) {
+  let opened;
+  return () => {
+    if (opened)
+      return opened;
+    const attempt = openIdbStore(factory, config, () => {
+      if (opened === attempt)
+        opened = void 0;
+    });
+    opened = attempt;
+    void attempt.then((store) => {
+      if (!store && opened === attempt)
+        opened = void 0;
+    });
+    return attempt;
+  };
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/inference/modelCache.js
+function isArrayBuffer(value) {
+  return value instanceof ArrayBuffer || Object.prototype.toString.call(value) === "[object ArrayBuffer]";
+}
+function toEntry(id, value) {
+  if (value === void 0 || value === null)
+    return void 0;
+  if (isArrayBuffer(value))
+    return { id, bytes: value, size: value.byteLength, storedAt: 0 };
+  return value;
+}
+function createModelCache(options = {}) {
+  const factory = _nullishCoalesce(options.indexedDB, () => ( globalThis.indexedDB));
+  const config = {
+    dbName: _nullishCoalesce(options.dbName, () => ( "bfwc-inference-models")),
+    storeName: _nullishCoalesce(options.storeName, () => ( "models")),
+    version: _nullishCoalesce(options.dbVersion, () => ( 1))
+  };
+  const raw = options.valueFormat === "raw";
+  const open = lazyIdbStore(factory, config);
+  return {
+    async get(id) {
+      const store = await open();
+      if (!store)
+        return void 0;
+      return toEntry(id, await store.run("readonly", (s) => s.get(id)));
+    },
+    async put(id, entry) {
+      const store = await open();
+      if (!store)
+        return;
+      const value = raw ? entry.bytes : { ...entry, id, storedAt: Date.now() };
+      await store.run("readwrite", (s) => s.put(value, id));
+    },
+    async has(id) {
+      const store = await open();
+      if (!store)
+        return false;
+      return await store.run("readonly", (s) => s.count(id)) > 0;
+    },
+    async delete(id) {
+      await await _asyncOptionalChain([(await open()), 'optionalAccess', async _12 => _12.run, 'call', async _13 => _13("readwrite", (s) => s.delete(id))]);
+    },
+    async keys() {
+      const store = await open();
+      if (!store)
+        return [];
+      return (await store.run("readonly", (s) => s.getAllKeys())).map(String);
+    }
+  };
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/shared/hardwareProbe.js
+var SIMD_PROBE = new Uint8Array([
+  0,
+  97,
+  115,
+  109,
+  1,
+  0,
+  0,
+  0,
+  1,
+  4,
+  1,
+  96,
+  0,
+  0,
+  3,
+  2,
+  1,
+  0,
+  10,
+  9,
+  1,
+  7,
+  0,
+  65,
+  0,
+  253,
+  15,
+  26,
+  11
+]);
+var GIB = 1024 * 1024 * 1024;
+function probeDeviceMemoryBytes() {
+  const deviceMemory = _optionalChain([globalThis, 'access', _14 => _14.navigator, 'optionalAccess', _15 => _15.deviceMemory]);
+  return typeof deviceMemory === "number" && deviceMemory > 0 ? deviceMemory * GIB : void 0;
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/estimates.js
+var DEFAULT_THROUGHPUT = {
+  // A RAM hit is not a reload; callers should not ask. Kept non-zero for safety.
+  ram: 1e6,
+  // VRAM copy over the optional GPU path. Hint only.
+  vram: 2e5,
+  // IndexedDB read on a typical laptop-class disk.
+  storage: 5e4,
+  // Re-download. Slow, and the reason cost-aware keeps hot weights.
+  network: 2e3
+};
+function estimateReloadCostMs(input) {
+  const bytes = Number.isFinite(input.bytes) && input.bytes > 0 ? input.bytes : 0;
+  const throughput = input.bytesPerMs && input.bytesPerMs > 0 ? input.bytesPerMs : DEFAULT_THROUGHPUT[input.from];
+  return bytes / throughput;
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/shared/clock.js
+function now() {
+  const g = globalThis;
+  return _nullishCoalesce(_optionalChain([g, 'access', _16 => _16.performance, 'optionalAccess', _17 => _17.now, 'optionalCall', _18 => _18()]), () => ( Date.now()));
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/envProbe.js
+var DEFAULT_RAM_BYTES = 4 * 1024 * 1024 * 1024;
+function probeRamBytes() {
+  return _nullishCoalesce(probeDeviceMemoryBytes(), () => ( DEFAULT_RAM_BYTES));
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/eviction.js
+function byNumber(pick, direction2) {
+  const sign = direction2 === "asc" ? 1 : -1;
+  return (a, b) => {
+    const delta = pick(a) - pick(b);
+    if (delta !== 0)
+      return sign * delta;
+    return a.admittedAt - b.admittedAt;
+  };
+}
+function retentionValue(entry) {
+  const footprint = entry.bytes > 0 ? entry.bytes : 1;
+  const expectedReload = clamp01(entry.reuseProbability) * Math.max(0, entry.reloadCostMs);
+  return expectedReload / footprint;
+}
+function costAwareStrategy() {
+  return {
+    name: "cost-aware",
+    rank(candidates) {
+      return [...candidates].sort(byNumber((e) => retentionValue(e), "asc"));
+    }
+  };
+}
+function clamp01(value) {
+  if (Number.isNaN(value))
+    return 0;
+  return Math.min(1, Math.max(0, value));
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/pressure.js
+function detectPressure(input) {
+  const budget = input.byteBudget > 0 ? input.byteBudget : 1;
+  const used = Math.max(0, input.usedBytes);
+  const utilization = used / budget;
+  const threshold = clamp012(input.pressureThreshold);
+  const watermark = Math.min(threshold, clamp012(input.targetWatermark));
+  const pressured = utilization >= threshold;
+  const targetBytes = watermark * budget;
+  const reclaimBytes = pressured ? Math.max(0, Math.ceil(used - targetBytes)) : 0;
+  return {
+    utilization,
+    pressured,
+    reclaimBytes,
+    vramBytes: Math.max(0, input.vramBytes),
+    ramBytes: Math.max(0, input.ramBytes),
+    storageQuotaBytes: Math.max(0, input.storageQuotaBytes)
+  };
+}
+function planWorkspace(input) {
+  const minBytes = Math.max(0, input.bounds.minBytes);
+  const maxBytes = Math.max(minBytes, input.bounds.maxBytes);
+  const current = clamp(input.currentBytes, minBytes, maxBytes);
+  const residual = Math.max(0, input.byteBudget - Math.max(0, input.usedBytes));
+  const ceiling = Math.min(maxBytes, current + residual);
+  if (input.pressure.pressured) {
+    const shrinkBy = Math.max(input.pressure.reclaimBytes, Math.ceil((current - minBytes) / 2));
+    const next = clamp(current - shrinkBy, minBytes, ceiling);
+    return {
+      nextBytes: next,
+      deltaBytes: next - current,
+      reason: next < current ? `pressure at ${(input.pressure.utilization * 100).toFixed(1)}% \u2014 shrink workspace by ${current - next} bytes` : "pressure but workspace already at its floor"
+    };
+  }
+  if (input.onHit && current < ceiling) {
+    const step = input.growStepBytes && input.growStepBytes > 0 ? input.growStepBytes : Math.max(1, Math.ceil((maxBytes - minBytes) / 8));
+    const next = clamp(current + step, minBytes, ceiling);
+    return {
+      nextBytes: next,
+      deltaBytes: next - current,
+      reason: next > current ? `headroom \u2014 grow workspace by ${next - current} bytes` : "workspace already at its ceiling"
+    };
+  }
+  return { nextBytes: current, deltaBytes: 0, reason: "workspace held" };
+}
+function clamp(value, min, max) {
+  if (Number.isNaN(value))
+    return min;
+  return Math.min(max, Math.max(min, value));
+}
+function clamp012(value) {
+  if (Number.isNaN(value))
+    return 0;
+  return Math.min(1, Math.max(0, value));
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/spillTier.js
+function resolveStorageBudget(configured2, storageQuotaBytes, byteBudget) {
+  if (configured2 === 0)
+    return 0;
+  if (typeof configured2 === "number" && Number.isFinite(configured2) && configured2 > 0)
+    return configured2;
+  if (storageQuotaBytes > 0)
+    return storageQuotaBytes;
+  return byteBudget * 4;
+}
+function createSpillTier(options) {
+  const { storage, budgetBytes } = options;
+  const enabled = storage !== void 0 && budgetBytes > 0;
+  const index = /* @__PURE__ */ new Map();
+  let committed = 0;
+  let reserved = 0;
+  function setIndex(record) {
+    removeIndex(record.id);
+    index.set(record.id, record);
+    committed += record.bytes;
+  }
+  function removeIndex(id) {
+    const record = index.get(id);
+    if (!record)
+      return void 0;
+    index.delete(id);
+    committed -= record.bytes;
+    return record;
+  }
+  async function deleteQuietly(record) {
+    try {
+      await _optionalChain([storage, 'optionalAccess', _19 => _19.delete, 'call', _20 => _20(record)]);
+    } catch (e4) {
+    }
+  }
+  function fits(incomingBytes) {
+    return committed + reserved + incomingBytes <= budgetBytes;
+  }
+  async function trim(incomingBytes) {
+    const ordered = [...index.values()].sort((a, b) => a.spilledAt - b.spilledAt || a.id.localeCompare(b.id));
+    for (const oldest of ordered) {
+      if (fits(incomingBytes))
+        return;
+      if (index.get(oldest.id) !== oldest)
+        continue;
+      removeIndex(oldest.id);
+      await deleteQuietly(oldest);
+    }
+  }
+  return {
+    enabled,
+    get: (id) => index.get(id),
+    has: (id) => index.has(id),
+    get count() {
+      return index.size;
+    },
+    bytes: () => committed,
+    async retain(entry, reason) {
+      if (!enabled || !storage)
+        return false;
+      if (!(entry.bytes >= 0) || entry.bytes > budgetBytes)
+        return false;
+      const previous = removeIndex(entry.id);
+      if (previous)
+        await deleteQuietly(previous);
+      await trim(entry.bytes);
+      if (!fits(entry.bytes))
+        return false;
+      reserved += entry.bytes;
+      try {
+        const stored = await storage.spill({ ...entry, tier: "storage" }, options.now());
+        setIndex(stored);
+        options.onSpill(entry, reason);
+        return true;
+      } catch (e5) {
+        return false;
+      } finally {
+        reserved -= entry.bytes;
+      }
+    },
+    async forget(id) {
+      const record = removeIndex(id);
+      if (!record)
+        return false;
+      await deleteQuietly(record);
+      return true;
+    },
+    async reload(id) {
+      const record = index.get(id);
+      if (!record || !storage)
+        return void 0;
+      let restored;
+      try {
+        restored = await storage.reload(record);
+      } catch (e6) {
+        restored = void 0;
+      }
+      if (!restored) {
+        if (index.get(id) === record)
+          removeIndex(id);
+        return void 0;
+      }
+      return { ...restored, id, tier: "ram", bytes: record.bytes };
+    }
+  };
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/victims.js
+function quotaApplies(quota, entry) {
+  if (quota.group !== entry.group)
+    return false;
+  if (quota.component !== void 0 && quota.component !== entry.component)
+    return false;
+  return true;
+}
+function selectVictims(query) {
+  const { incoming, except } = query;
+  const applicable = query.quotas.filter((quota) => quotaApplies(quota, incoming));
+  const quotaUsed = applicable.map(() => 0);
+  let total = 0;
+  const evictable = [];
+  for (const entry of query.residents) {
+    if (except.has(entry.id))
+      continue;
+    total += entry.bytes;
+    for (let i = 0; i < applicable.length; i++) {
+      if (quotaApplies(applicable[i], entry))
+        quotaUsed[i] = (_nullishCoalesce(quotaUsed[i], () => ( 0))) + entry.bytes;
+    }
+    if (!entry.pinned)
+      evictable.push(entry);
+  }
+  const fits = () => {
+    if (total + query.workspaceBytes + incoming.bytes > query.byteBudget)
+      return false;
+    for (let i = 0; i < applicable.length; i++) {
+      if ((_nullishCoalesce(quotaUsed[i], () => ( 0))) + incoming.bytes > applicable[i].byteCap)
+        return false;
+    }
+    return true;
+  };
+  if (fits())
+    return [];
+  const ranked = query.strategy.rank(evictable);
+  const sameGroup = ranked.filter((entry) => entry.group === incoming.group);
+  const rest = ranked.filter((entry) => entry.group !== incoming.group);
+  const chosen = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const candidate of [...sameGroup, ...rest]) {
+    if (seen.has(candidate.id))
+      continue;
+    seen.add(candidate.id);
+    total -= candidate.bytes;
+    for (let i = 0; i < applicable.length; i++) {
+      if (quotaApplies(applicable[i], candidate))
+        quotaUsed[i] = (_nullishCoalesce(quotaUsed[i], () => ( 0))) - candidate.bytes;
+    }
+    chosen.push(candidate);
+    if (fits())
+      return chosen.map((entry) => ({ ...entry }));
+  }
+  return void 0;
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/workspace.js
+function createWorkspaceController(options) {
+  const { bounds, byteBudget } = options;
+  const active = bounds.maxBytes > 0 || bounds.minBytes > 0;
+  function clamp3(bytes) {
+    if (!active)
+      return 0;
+    const cap = Math.min(bounds.maxBytes, byteBudget);
+    const floor = Math.min(bounds.minBytes, cap);
+    const value = Number.isFinite(bytes) ? bytes : floor;
+    return Math.min(cap, Math.max(floor, value));
+  }
+  let current = clamp3(_nullishCoalesce(options.initialBytes, () => ( bounds.minBytes)));
+  return {
+    bytes: () => current,
+    apply({ onHit, pressure, residentBytes }) {
+      if (!active)
+        return void 0;
+      const decision = planWorkspace({
+        currentBytes: current,
+        bounds,
+        pressure,
+        byteBudget,
+        usedBytes: residentBytes + current,
+        onHit
+      });
+      if (decision.deltaBytes === 0)
+        return void 0;
+      const next = clamp3(decision.nextBytes);
+      if (next === current)
+        return void 0;
+      if (residentBytes + next > byteBudget)
+        return void 0;
+      const delta = next - current;
+      current = next;
+      return {
+        kind: delta > 0 ? "workspace-grow" : "workspace-shrink",
+        bytes: Math.abs(delta),
+        reason: decision.reason
+      };
+    }
+  };
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/manager.js
+var DEFAULT_PRESSURE = 0.85;
+var DEFAULT_WATERMARK = 0.7;
+var DEFAULT_EVENT_LIMIT = 256;
+function createMemoryManager(options) {
+  if (!(options.byteBudget > 0) || !Number.isFinite(options.byteBudget)) {
+    throw new Error("createMemoryManager: byteBudget must be a finite number > 0");
+  }
+  const byteBudget = options.byteBudget;
+  const strategy = _nullishCoalesce(options.strategy, () => ( costAwareStrategy()));
+  const pressureThreshold = _nullishCoalesce(options.pressureThreshold, () => ( DEFAULT_PRESSURE));
+  const targetWatermark = Math.min(pressureThreshold, _nullishCoalesce(options.targetWatermark, () => ( DEFAULT_WATERMARK)));
+  const eventLogLimit = _nullishCoalesce(options.eventLogLimit, () => ( DEFAULT_EVENT_LIMIT));
+  const now2 = _nullishCoalesce(options.now, () => ( (() => Date.now())));
+  const ramBytes = _nullishCoalesce(options.ramBytes, () => ( probeRamBytes()));
+  const vramBytes = Math.max(0, _nullishCoalesce(options.vramBudgetBytes, () => ( 0)));
+  const storageQuotaBytes = _nullishCoalesce(options.storageQuotaBytes, () => ( 0));
+  const quotas = _nullishCoalesce(options.quotas, () => ( []));
+  const residents = /* @__PURE__ */ new Map();
+  const log = [];
+  let residentTotal = 0;
+  let seq = 0;
+  let hits = 0;
+  let misses = 0;
+  let admissions = 0;
+  let evictions = 0;
+  let spills = 0;
+  let reloads = 0;
+  const spill = createSpillTier({
+    storage: options.storage,
+    budgetBytes: resolveStorageBudget(options.storageBudgetBytes, storageQuotaBytes, byteBudget),
+    now: now2,
+    onSpill(entry, reason) {
+      spills += 1;
+      record({ kind: "spill", id: entry.id, bytes: entry.bytes, reason });
+    }
+  });
+  const workspace = createWorkspaceController({
+    bounds: {
+      minBytes: Math.max(0, _nullishCoalesce(_optionalChain([options, 'access', _21 => _21.workspace, 'optionalAccess', _22 => _22.minBytes]), () => ( 0))),
+      maxBytes: Math.max(0, _nullishCoalesce(_optionalChain([options, 'access', _23 => _23.workspace, 'optionalAccess', _24 => _24.maxBytes]), () => ( 0)))
+    },
+    byteBudget,
+    initialBytes: _optionalChain([options, 'access', _25 => _25.workspace, 'optionalAccess', _26 => _26.initialBytes])
+  });
+  function putResident(entry) {
+    const previous = residents.get(entry.id);
+    if (previous)
+      residentTotal -= previous.bytes;
+    residents.set(entry.id, entry);
+    residentTotal += entry.bytes;
+  }
+  function removeResident(id) {
+    const previous = residents.get(id);
+    if (!previous)
+      return;
+    residents.delete(id);
+    residentTotal -= previous.bytes;
+  }
+  function usedBytes() {
+    return residentTotal + workspace.bytes();
+  }
+  function record(event) {
+    log.push({ ...event, at: now2() });
+    if (log.length > eventLogLimit)
+      log.splice(0, log.length - eventLogLimit);
+  }
+  function pressureNow() {
+    return detectPressure({
+      usedBytes: usedBytes(),
+      byteBudget,
+      pressureThreshold,
+      targetWatermark,
+      ramBytes,
+      vramBytes,
+      storageQuotaBytes
+    });
+  }
+  function applyWorkspace(onHit) {
+    const change = workspace.apply({ onHit, pressure: pressureNow(), residentBytes: residentTotal });
+    if (change)
+      record(change);
+  }
+  function drop(entry, reason) {
+    removeResident(entry.id);
+    evictions += 1;
+    _optionalChain([strategy, 'access', _27 => _27.observe, 'optionalCall', _28 => _28({ kind: "evict", entry })]);
+    record({ kind: "evict", id: entry.id, bytes: entry.bytes, reason });
+  }
+  function placeTier(entry) {
+    if (entry.tier === "vram" && vramBytes > 0)
+      return "vram";
+    return "ram";
+  }
+  function rate() {
+    const total = hits + misses;
+    return total === 0 ? 0 : hits / total;
+  }
+  function notAdmitted(spilledOk, spilledReason, rejectedReason) {
+    return {
+      admitted: false,
+      spilled: spilledOk,
+      replaced: false,
+      evicted: [],
+      reason: spilledOk ? spilledReason : rejectedReason
+    };
+  }
+  const manager = {
+    async admit(entry, admitOptions) {
+      if (!(entry.bytes >= 0) || !Number.isFinite(entry.bytes)) {
+        return { admitted: false, spilled: false, replaced: false, evicted: [], reason: "invalid footprint" };
+      }
+      const wantSpill = _optionalChain([admitOptions, 'optionalAccess', _29 => _29.spill]) !== false && spill.enabled;
+      if (entry.bytes > byteBudget) {
+        const spilledOk = wantSpill && await spill.retain(entry, "entry exceeds the hard byte budget");
+        return notAdmitted(spilledOk, "spilled: entry larger than byte budget", "rejected: entry larger than byte budget");
+      }
+      const existing = residents.get(entry.id);
+      const except = /* @__PURE__ */ new Set();
+      if (existing)
+        except.add(existing.id);
+      const victims = selectVictims({
+        incoming: entry,
+        residents: residents.values(),
+        except,
+        strategy,
+        quotas,
+        byteBudget,
+        workspaceBytes: workspace.bytes()
+      });
+      if (!victims) {
+        const spilledOk = wantSpill && await spill.retain(entry, "pinned residents fill the budget");
+        return notAdmitted(spilledOk, "spilled: budget held by pinned residents", "rejected: budget held by pinned residents");
+      }
+      const spilledVictims = [];
+      for (const victim of victims) {
+        const live = residents.get(victim.id);
+        if (!live)
+          continue;
+        drop(live, `make room for ${entry.id}`);
+        spilledVictims.push(live);
+      }
+      if (existing)
+        removeResident(existing.id);
+      const tick = ++seq;
+      const tracked = {
+        ...entry,
+        tier: placeTier(entry),
+        pinned: _optionalChain([admitOptions, 'optionalAccess', _30 => _30.pin]) === true || entry.pinned === true,
+        admittedAt: _nullishCoalesce(_optionalChain([existing, 'optionalAccess', _31 => _31.admittedAt]), () => ( tick)),
+        lastUsedAt: tick,
+        hits: 0,
+        arcList: "t1"
+      };
+      putResident(tracked);
+      const forgettingPriorSpill = spill.forget(entry.id);
+      admissions += 1;
+      _optionalChain([strategy, 'access', _32 => _32.observe, 'optionalCall', _33 => _33({ kind: "admit", entry: tracked })]);
+      record({
+        kind: "admit",
+        id: entry.id,
+        bytes: entry.bytes,
+        reason: victims.length > 0 ? `admitted after evicting ${victims.length}` : "admitted within budget"
+      });
+      await forgettingPriorSpill;
+      if (wantSpill) {
+        for (const live of spilledVictims) {
+          await spill.retain(live, `evicted to make room for ${entry.id}`);
+        }
+      }
+      const reading = pressureNow();
+      if (reading.pressured) {
+        record({
+          kind: "pressure",
+          bytes: reading.reclaimBytes,
+          reason: `utilization ${(reading.utilization * 100).toFixed(1)}%`
+        });
+        applyWorkspace(false);
+      }
+      return {
+        admitted: true,
+        spilled: false,
+        replaced: existing !== void 0,
+        evicted: victims,
+        reason: victims.length > 0 ? `evicted ${victims.length} to fit` : "fit within budget"
+      };
+    },
+    get(id) {
+      const entry = residents.get(id);
+      if (!entry) {
+        misses += 1;
+        const spilled = spill.get(id);
+        const ghost = {
+          id,
+          group: _nullishCoalesce(_optionalChain([spilled, 'optionalAccess', _34 => _34.group]), () => ( "")),
+          component: _optionalChain([spilled, 'optionalAccess', _35 => _35.component]),
+          bytes: _nullishCoalesce(_optionalChain([spilled, 'optionalAccess', _36 => _36.bytes]), () => ( 0)),
+          reloadCostMs: _nullishCoalesce(_optionalChain([spilled, 'optionalAccess', _37 => _37.reloadCostMs]), () => ( 0)),
+          reuseProbability: _nullishCoalesce(_optionalChain([spilled, 'optionalAccess', _38 => _38.reuseProbability]), () => ( 0)),
+          tier: "storage",
+          admittedAt: 0,
+          lastUsedAt: 0,
+          hits: 0
+        };
+        _optionalChain([strategy, 'access', _39 => _39.observe, 'optionalCall', _40 => _40({ kind: "miss", entry: ghost })]);
+        record({ kind: "miss", id, reason: spilled ? "miss: spilled to storage" : "miss: not resident" });
+        return { hit: false };
+      }
+      const tick = ++seq;
+      const touched = {
+        ...entry,
+        lastUsedAt: tick,
+        hits: entry.hits + 1,
+        arcList: entry.hits + 1 > 1 ? "t2" : "t1"
+      };
+      putResident(touched);
+      hits += 1;
+      _optionalChain([strategy, 'access', _41 => _41.observe, 'optionalCall', _42 => _42({ kind: "hit", entry: touched })]);
+      record({ kind: "hit", id, reason: `hit #${touched.hits}` });
+      applyWorkspace(true);
+      return { hit: true, entry: snapshot(touched) };
+    },
+    hitRate() {
+      return rate();
+    },
+    async reload(id) {
+      const already = residents.get(id);
+      if (already)
+        return { hit: true, entry: snapshot(already) };
+      const restored = spill.has(id) ? await spill.reload(id) : void 0;
+      if (!restored) {
+        misses += 1;
+        return { hit: false };
+      }
+      const result = await manager.admit(restored, { spill: false });
+      if (!result.admitted) {
+        misses += 1;
+        return { hit: false };
+      }
+      reloads += 1;
+      record({ kind: "reload", id, reason: "reloaded from browser storage" });
+      const entry = residents.get(id);
+      return entry ? { hit: true, entry: snapshot(entry) } : { hit: false };
+    },
+    pin(id) {
+      const entry = residents.get(id);
+      if (!entry)
+        return false;
+      putResident({ ...entry, pinned: true });
+      record({ kind: "pin", id, reason: "pinned" });
+      return true;
+    },
+    unpin(id) {
+      const entry = residents.get(id);
+      if (!entry)
+        return false;
+      putResident({ ...entry, pinned: false });
+      record({ kind: "unpin", id, reason: "unpinned" });
+      return true;
+    },
+    async release(id) {
+      const entry = residents.get(id);
+      if (entry) {
+        drop(entry, "released");
+        return true;
+      }
+      return spill.forget(id);
+    },
+    pressure() {
+      return pressureNow();
+    },
+    stats() {
+      return {
+        hits,
+        misses,
+        admissions,
+        evictions,
+        spills,
+        reloads,
+        usedBytes: usedBytes(),
+        byteBudget,
+        workspaceBytes: workspace.bytes(),
+        residentCount: residents.size,
+        spilledCount: spill.count,
+        spilledBytes: spill.bytes(),
+        hitRate: rate()
+      };
+    },
+    events() {
+      return log;
+    },
+    residentIds() {
+      return [...residents.keys()];
+    },
+    peek(id) {
+      const entry = residents.get(id);
+      return entry ? snapshot(entry) : void 0;
+    }
+  };
+  return manager;
+}
+function snapshot(entry) {
+  return { ...entry };
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/admission.js
+function createAdmissionGate(options) {
+  const { ledger } = options;
+  const counters = ledger.counters;
+  function refuse(target, strategy, outcome, skipReason) {
+    if (outcome === "throttled")
+      counters.throttled += 1;
+    else
+      counters.skipped += 1;
+    ledger.record({ id: target.id, strategy, outcome, durationMs: 0, skipReason });
+    return { admit: false, result: outcome === "duplicate" ? "duplicate" : "throttled", skipReason };
+  }
+  return function decideAdmission(target, strategy) {
+    counters.attempts += 1;
+    if (!options.isEnabled())
+      return refuse(target, strategy, "skipped", "disabled");
+    if (options.isPressure()) {
+      options.relievePressure();
+      return refuse(target, strategy, "throttled", "pressure");
+    }
+    if (!options.isKnown(target.id))
+      return refuse(target, strategy, "skipped", "unknown-target");
+    if (options.isResident(target.id))
+      return refuse(target, strategy, "duplicate", "already-loaded");
+    if (options.isLoading(target.id))
+      return refuse(target, strategy, "duplicate", "already-loading");
+    if (options.speculativeCount() >= options.maxConcurrent) {
+      return refuse(target, strategy, "skipped", "concurrency-limit");
+    }
+    return { admit: true };
+  };
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/loadRegistry.js
+function abortErrorOf(signal) {
+  const reason = signal.reason;
+  if (reason instanceof Error)
+    return reason;
+  if (typeof DOMException === "function")
+    return new DOMException("aborted", "AbortError");
+  const error = new Error("aborted");
+  error.name = "AbortError";
+  return error;
+}
+function isAbortError(error) {
+  return typeof error === "object" && error !== null && error.name === "AbortError";
+}
+function createLoadRegistry(options) {
+  const inFlight = /* @__PURE__ */ new Map();
+  function settle(rec) {
+    rec.completed = true;
+    rec.loadMs = Math.max(0, options.now() - rec.startedAt);
+    if (inFlight.get(rec.id) === rec)
+      inFlight.delete(rec.id);
+  }
+  function start(target, startOptions) {
+    const controller = new AbortController();
+    const startedAt = options.now();
+    const signal = startOptions.signal;
+    const forward = () => controller.abort();
+    let promise;
+    if (_optionalChain([signal, 'optionalAccess', _43 => _43.aborted])) {
+      controller.abort();
+      promise = Promise.reject(abortErrorOf(signal));
+    } else {
+      _optionalChain([signal, 'optionalAccess', _44 => _44.addEventListener, 'call', _45 => _45("abort", forward, { once: true })]);
+      promise = (async () => options.loader(target, controller.signal))();
+    }
+    const rec = {
+      id: target.id,
+      controller,
+      promise,
+      bytes: target.bytes,
+      strategy: startOptions.strategy,
+      speculative: startOptions.speculative,
+      joined: false,
+      completed: false,
+      loadMs: 0,
+      startedAt
+    };
+    inFlight.set(target.id, rec);
+    promise.then((value) => {
+      _optionalChain([signal, 'optionalAccess', _46 => _46.removeEventListener, 'call', _47 => _47("abort", forward)]);
+      settle(rec);
+      options.onLoaded(rec, value);
+    }, (error) => {
+      _optionalChain([signal, 'optionalAccess', _48 => _48.removeEventListener, 'call', _49 => _49("abort", forward)]);
+      settle(rec);
+      options.onFailed(rec, rec.controller.signal.aborted || isAbortError(error));
+    });
+    return rec;
+  }
+  return {
+    get: (id) => inFlight.get(id),
+    has: (id) => inFlight.has(id),
+    get size() {
+      return inFlight.size;
+    },
+    start,
+    speculativeCount() {
+      let count = 0;
+      for (const rec of inFlight.values())
+        if (rec.speculative)
+          count += 1;
+      return count;
+    },
+    dropUnjoined() {
+      let dropped = 0;
+      for (const rec of [...inFlight.values()]) {
+        if (!rec.speculative || rec.joined)
+          continue;
+        rec.controller.abort();
+        dropped += 1;
+      }
+      return dropped;
+    },
+    abortSpeculative() {
+      for (const rec of [...inFlight.values()]) {
+        if (rec.speculative)
+          rec.controller.abort();
+      }
+    },
+    async whenIdle() {
+      while (inFlight.size > 0) {
+        await Promise.allSettled([...inFlight.values()].map((rec) => rec.promise));
+      }
+    }
+  };
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/predictor.js
+function targetFor(index, id) {
+  const known = index.get(id);
+  if (known)
+    return known;
+  return { id, bytes: 0 };
+}
+function predictFromGraph(rootId, graph, index) {
+  if (!graph || graph.edges.length === 0)
+    return [];
+  const out = [];
+  const seen = /* @__PURE__ */ new Set([rootId]);
+  const confidence = /* @__PURE__ */ new Map([[rootId, 1]]);
+  let frontier = [rootId];
+  for (let depth = 0; depth < 8 && frontier.length > 0; depth += 1) {
+    const next = [];
+    for (const from of frontier) {
+      const fromConfidence = _nullishCoalesce(confidence.get(from), () => ( 1));
+      for (const edge of graph.edges) {
+        if (edge.from !== from)
+          continue;
+        if (seen.has(edge.to))
+          continue;
+        const weight = clamp013(_nullishCoalesce(edge.weight, () => ( 1)));
+        const conf = clamp013(fromConfidence * weight);
+        seen.add(edge.to);
+        confidence.set(edge.to, conf);
+        next.push(edge.to);
+        out.push({
+          target: targetFor(index, edge.to),
+          strategy: "static-graph",
+          confidence: conf,
+          reason: `static graph: ${from} -> ${edge.to} (depth ${depth + 1})`
+        });
+      }
+    }
+    frontier = next;
+  }
+  return out;
+}
+function predictFromHistory(history, index) {
+  if (history.length < 2)
+    return [];
+  const last = history[history.length - 1];
+  if (last === void 0)
+    return [];
+  const counts = /* @__PURE__ */ new Map();
+  let total = 0;
+  for (let i = 1; i < history.length; i += 1) {
+    const from = history[i - 1];
+    const to = history[i];
+    if (from !== last || to === void 0)
+      continue;
+    counts.set(to, (_nullishCoalesce(counts.get(to), () => ( 0))) + 1);
+    total += 1;
+  }
+  if (total === 0)
+    return [];
+  const out = [];
+  for (const [id, count] of counts) {
+    if (id === last)
+      continue;
+    const probability = count / total;
+    const confidence = clamp013(probability * (1 - 1 / (total + 1)));
+    out.push({
+      target: targetFor(index, id),
+      strategy: "history",
+      confidence,
+      reason: `history: ${count}/${total} accesses followed ${last} with ${id}`
+    });
+  }
+  return out.sort((a, b) => b.confidence - a.confidence);
+}
+function predictFromContext(context, index) {
+  const out = [];
+  const profile = context.profile;
+  for (const id of _nullishCoalesce(_optionalChain([profile, 'optionalAccess', _50 => _50.expects]), () => ( []))) {
+    if (id === context.target)
+      continue;
+    out.push({
+      target: targetFor(index, id),
+      strategy: "context",
+      confidence: 1,
+      reason: `context: workload explicitly expects ${id}`
+    });
+  }
+  const stageExpectation = {
+    prefill: "stage:decode",
+    decode: "stage:postprocess",
+    postprocess: void 0
+  };
+  const nextStage = _optionalChain([profile, 'optionalAccess', _51 => _51.stage]) ? stageExpectation[profile.stage] : void 0;
+  if (nextStage && index.has(nextStage)) {
+    out.push({
+      target: targetFor(index, nextStage),
+      strategy: "context",
+      confidence: 0.6,
+      reason: `context: stage ${_optionalChain([profile, 'optionalAccess', _52 => _52.stage])} implies ${nextStage}`
+    });
+  }
+  const labels = _nullishCoalesce(_optionalChain([profile, 'optionalAccess', _53 => _53.labels]), () => ( []));
+  if (labels.length > 0) {
+    for (const candidate of index.values()) {
+      const candidateLabels = _optionalChain([candidate, 'access', _54 => _54.meta, 'optionalAccess', _55 => _55.labels]);
+      if (!Array.isArray(candidateLabels))
+        continue;
+      const overlap = labels.filter((l) => candidateLabels.includes(l));
+      if (overlap.length === 0)
+        continue;
+      out.push({
+        target: candidate,
+        strategy: "context",
+        confidence: clamp013(0.3 + 0.2 * overlap.length),
+        reason: `context: shares workload label(s) ${overlap.join(", ")}`
+      });
+    }
+  }
+  return out;
+}
+function mergePredictions(groups, minConfidence) {
+  const best = /* @__PURE__ */ new Map();
+  for (const group of groups) {
+    for (const prediction of group) {
+      if (prediction.confidence < minConfidence)
+        continue;
+      const existing = best.get(prediction.target.id);
+      if (!existing || prediction.confidence > existing.confidence) {
+        best.set(prediction.target.id, prediction);
+      }
+    }
+  }
+  return [...best.values()].sort((a, b) => b.confidence - a.confidence);
+}
+function clamp013(value) {
+  if (!Number.isFinite(value))
+    return 0;
+  return Math.min(1, Math.max(0, value));
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/residentStore.js
+function isUnclaimedPrefetch(entry) {
+  return entry.source === "prefetch" && !entry.claimed;
+}
+function createResidentStore(options) {
+  const entries = /* @__PURE__ */ new Map();
+  const maxEntries = Math.max(1, options.maxEntries);
+  let used = 0;
+  function over() {
+    return used > options.budgetBytes || entries.size > maxEntries;
+  }
+  function remove(id) {
+    const entry = entries.get(id);
+    if (!entry)
+      return false;
+    entries.delete(id);
+    used -= entry.bytes;
+    return true;
+  }
+  function enforce() {
+    if (!over())
+      return;
+    for (const [id, entry] of [...entries]) {
+      if (!over())
+        return;
+      if (isUnclaimedPrefetch(entry))
+        remove(id);
+    }
+    for (const id of [...entries.keys()]) {
+      if (!over())
+        return;
+      remove(id);
+    }
+  }
+  return {
+    get(id) {
+      const entry = entries.get(id);
+      if (!entry)
+        return void 0;
+      entries.delete(id);
+      entries.set(id, entry);
+      return entry;
+    },
+    peek: (id) => entries.get(id),
+    has: (id) => entries.has(id),
+    set(id, value) {
+      remove(id);
+      if (!(Number.isFinite(value.bytes) && value.bytes > 0))
+        value.bytes = 0;
+      entries.set(id, value);
+      used += value.bytes;
+      enforce();
+    },
+    delete: remove,
+    markClaimed(id) {
+      const entry = entries.get(id);
+      if (entry)
+        entry.claimed = true;
+    },
+    releaseUnclaimed() {
+      let released = 0;
+      for (const [id, entry] of [...entries]) {
+        if (!isUnclaimedPrefetch(entry))
+          continue;
+        remove(id);
+        released += 1;
+      }
+      return released;
+    },
+    enforce,
+    bytes: () => used,
+    ids: () => [...entries.keys()]
+  };
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/selfTuner.js
+function createSelfTuner(options) {
+  const maxTracked = Math.max(1, options.maxTrackedLoads);
+  let outstanding = [];
+  let retiredWasteMs = 0;
+  let avoidedMs = 0;
+  let measured = 0;
+  let negativeStreak = 0;
+  let disabledAt = 0;
+  let selfTunedOff = false;
+  let trips = 0;
+  function wasteMs() {
+    let total = retiredWasteMs;
+    for (const load of outstanding)
+      total += load.loadMs;
+    return total;
+  }
+  return {
+    noteSpeculativeLoad(id, loadMs) {
+      outstanding.push({ id, loadMs });
+      while (outstanding.length > maxTracked) {
+        const oldest = outstanding.shift();
+        if (oldest)
+          retiredWasteMs += oldest.loadMs;
+      }
+    },
+    markClaimed(id) {
+      if (outstanding.some((load) => load.id === id)) {
+        outstanding = outstanding.filter((load) => load.id !== id);
+      }
+    },
+    creditAvoidedWait(loadMs, actualWaitMs) {
+      avoidedMs += Math.max(0, loadMs - actualWaitMs);
+    },
+    evaluate(enabled) {
+      measured += 1;
+      if (!enabled && selfTunedOff && options.retryAfterMs > 0 && options.now() - disabledAt >= options.retryAfterMs) {
+        selfTunedOff = false;
+        negativeStreak = 0;
+        avoidedMs = 0;
+        outstanding = [];
+        retiredWasteMs = 0;
+        return "reenable";
+      }
+      if (measured < options.minSamples)
+        return "none";
+      negativeStreak = wasteMs() > avoidedMs ? negativeStreak + 1 : 0;
+      if (negativeStreak >= options.disableAfter && !selfTunedOff) {
+        selfTunedOff = true;
+        trips += 1;
+        disabledAt = options.now();
+        return "disable";
+      }
+      return "none";
+    },
+    get selfTunedOff() {
+      return selfTunedOff;
+    },
+    get trips() {
+      return trips;
+    }
+  };
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/stats.js
+function createPrefetchLedger(options) {
+  const counters = {
+    hits: 0,
+    misses: 0,
+    prefetchHits: 0,
+    attempts: 0,
+    completed: 0,
+    throttled: 0,
+    cancelled: 0,
+    failed: 0,
+    skipped: 0,
+    totalWaitMs: 0,
+    waitSamples: 0,
+    totalLoadMs: 0,
+    loadSamples: 0,
+    peakConcurrent: 0
+  };
+  const log = [];
+  return {
+    counters,
+    record(event) {
+      const full = { ...event, at: options.now() };
+      log.push(full);
+      if (log.length > options.eventLogLimit)
+        log.splice(0, log.length - options.eventLogLimit);
+      _optionalChain([options, 'access', _56 => _56.onEvent, 'optionalCall', _57 => _57(full)]);
+    },
+    events: () => log,
+    noteWait(waitMs) {
+      counters.totalWaitMs += waitMs;
+      counters.waitSamples += 1;
+    },
+    noteLoad(loadMs) {
+      counters.totalLoadMs += loadMs;
+      counters.loadSamples += 1;
+    },
+    noteConcurrency(count) {
+      if (count > counters.peakConcurrent)
+        counters.peakConcurrent = count;
+    },
+    snapshot(live) {
+      const total = counters.hits + counters.misses;
+      return {
+        hits: counters.hits,
+        misses: counters.misses,
+        prefetchHits: counters.prefetchHits,
+        attempts: counters.attempts,
+        completed: counters.completed,
+        throttled: counters.throttled,
+        cancelled: counters.cancelled,
+        failed: counters.failed,
+        skipped: counters.skipped,
+        hitRate: total === 0 ? 0 : counters.hits / total,
+        totalWaitMs: counters.totalWaitMs,
+        waitMs: counters.waitSamples === 0 ? 0 : counters.totalWaitMs / counters.waitSamples,
+        avgLoadMs: counters.loadSamples === 0 ? 0 : counters.totalLoadMs / counters.loadSamples,
+        inFlight: live.inFlight,
+        maxConcurrent: counters.peakConcurrent,
+        residentBytes: live.residentBytes,
+        selfTunedOff: live.selfTunedOff,
+        selfTuneTrips: live.selfTuneTrips
+      };
+    }
+  };
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/targetIndex.js
+function createTargetIndex(declared, maxLearned) {
+  const index = /* @__PURE__ */ new Map();
+  for (const target of declared)
+    index.set(target.id, target);
+  const learned = /* @__PURE__ */ new Set();
+  const cap = Math.max(1, maxLearned);
+  return {
+    index,
+    remember(target) {
+      if (index.has(target.id))
+        return;
+      index.set(target.id, target);
+      learned.add(target.id);
+      while (learned.size > cap) {
+        const oldest = learned.values().next().value;
+        if (oldest === void 0)
+          break;
+        learned.delete(oldest);
+        index.delete(oldest);
+      }
+    }
+  };
+}
+
+// node_modules/.pnpm/@seanhogg+builderforce-webc_fa3108083b42d2730311a1594d8981b1/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/prefetcher.js
+var DEFAULT_MAX_CONCURRENT = 2;
+var DEFAULT_MAX_TARGETS_PER_REQUEST = 8;
+var DEFAULT_HISTORY_WINDOW = 32;
+var DEFAULT_MIN_CONFIDENCE = 0.2;
+var DEFAULT_EVENT_LIMIT2 = 128;
+var DEFAULT_DISABLE_AFTER = 3;
+var DEFAULT_MIN_SAMPLES = 3;
+var DEFAULT_MAX_RESIDENT_ENTRIES = 1024;
+var DEFAULT_MAX_KNOWN_TARGETS = 1024;
+var DEFAULT_MAX_TRACKED_LOADS = 256;
+function createPrefetcher(config) {
+  const loader = config.loader;
+  if (typeof loader !== "function") {
+    throw new Error("createPrefetcher: config.loader is required");
+  }
+  const shouldThrottle = _nullishCoalesce(config.shouldThrottle, () => ( (() => false)));
+  const maxConcurrent = Math.max(1, _nullishCoalesce(config.maxConcurrent, () => ( DEFAULT_MAX_CONCURRENT)));
+  const maxTargetsPerRequest = Math.max(1, _nullishCoalesce(config.maxTargetsPerRequest, () => ( DEFAULT_MAX_TARGETS_PER_REQUEST)));
+  const historyWindow = Math.max(2, _nullishCoalesce(config.historyWindow, () => ( DEFAULT_HISTORY_WINDOW)));
+  const minConfidence = _nullishCoalesce(config.minConfidence, () => ( DEFAULT_MIN_CONFIDENCE));
+  const now2 = _nullishCoalesce(config.now, () => ( now));
+  const targets = createTargetIndex(_nullishCoalesce(config.targets, () => ( [])), _nullishCoalesce(config.maxKnownTargets, () => ( DEFAULT_MAX_KNOWN_TARGETS)));
+  const index = targets.index;
+  const history = [];
+  const ledger = createPrefetchLedger({
+    now: now2,
+    eventLogLimit: Math.max(1, _nullishCoalesce(config.eventLogLimit, () => ( DEFAULT_EVENT_LIMIT2))),
+    onEvent: config.onEvent
+  });
+  const counters = ledger.counters;
+  const resident = createResidentStore({
+    budgetBytes: _nullishCoalesce(config.residentBudgetBytes, () => ( Number.POSITIVE_INFINITY)),
+    maxEntries: _nullishCoalesce(config.maxResidentEntries, () => ( DEFAULT_MAX_RESIDENT_ENTRIES))
+  });
+  const tuner = createSelfTuner({
+    now: now2,
+    disableAfter: Math.max(1, _nullishCoalesce(_optionalChain([config, 'access', _58 => _58.tuning, 'optionalAccess', _59 => _59.disableAfter]), () => ( DEFAULT_DISABLE_AFTER))),
+    minSamples: Math.max(1, _nullishCoalesce(_optionalChain([config, 'access', _60 => _60.tuning, 'optionalAccess', _61 => _61.minSamples]), () => ( DEFAULT_MIN_SAMPLES))),
+    retryAfterMs: Math.max(0, _nullishCoalesce(_optionalChain([config, 'access', _62 => _62.tuning, 'optionalAccess', _63 => _63.retryAfterMs]), () => ( 0))),
+    maxTrackedLoads: _nullishCoalesce(_optionalChain([config, 'access', _64 => _64.tuning, 'optionalAccess', _65 => _65.maxTrackedLoads]), () => ( DEFAULT_MAX_TRACKED_LOADS))
+  });
+  const loads = createLoadRegistry({
+    loader,
+    now: now2,
+    onLoaded(rec, value) {
+      counters.completed += 1;
+      ledger.noteLoad(rec.loadMs);
+      resident.set(rec.id, {
+        value,
+        bytes: rec.bytes,
+        loadedAt: now2(),
+        loadMs: rec.loadMs,
+        source: rec.speculative ? "prefetch" : "demand",
+        claimed: false
+      });
+      if (rec.speculative)
+        tuner.noteSpeculativeLoad(rec.id, rec.loadMs);
+      ledger.record({ id: rec.id, strategy: rec.strategy, outcome: "loaded", durationMs: rec.loadMs });
+    },
+    onFailed(rec, aborted) {
+      if (aborted)
+        counters.cancelled += 1;
+      else
+        counters.failed += 1;
+      ledger.record({
+        id: rec.id,
+        strategy: rec.strategy,
+        outcome: aborted ? "cancelled" : "failed",
+        durationMs: rec.loadMs
+      });
+    }
+  });
+  let enabled = config.enabled !== false;
+  function isPressure() {
+    try {
+      return shouldThrottle() === true;
+    } catch (e7) {
+      return false;
+    }
+  }
+  function relievePressure() {
+    loads.dropUnjoined();
+    resident.releaseUnclaimed();
+  }
+  const decideAdmission = createAdmissionGate({
+    ledger,
+    maxConcurrent,
+    isEnabled: () => enabled,
+    isPressure,
+    relievePressure,
+    isKnown: (id) => index.has(id),
+    isResident: (id) => resident.has(id),
+    isLoading: (id) => loads.has(id),
+    speculativeCount: () => loads.speculativeCount()
+  });
+  function startSpeculative(target, strategy, signal) {
+    const rec = loads.start(target, { speculative: true, strategy, signal });
+    ledger.noteConcurrency(loads.speculativeCount());
+    return rec;
+  }
+  function evaluateTuner() {
+    const action = tuner.evaluate(enabled);
+    if (action === "reenable") {
+      enabled = true;
+      return;
+    }
+    if (action === "disable") {
+      enabled = false;
+      relievePressure();
+      ledger.record({ id: "*", strategy: "explicit", outcome: "throttled", durationMs: 0, skipReason: "disabled" });
+    }
+  }
+  function markClaimed(id) {
+    tuner.markClaimed(id);
+    resident.markClaimed(id);
+  }
+  function pushHistory(id) {
+    history.push(id);
+    while (history.length > historyWindow)
+      history.shift();
+  }
+  function startPredictions(predictions) {
+    const acted = [];
+    for (const prediction of predictions) {
+      if (acted.length >= maxTargetsPerRequest)
+        break;
+      const verdict = decideAdmission(prediction.target, prediction.strategy);
+      if (verdict.admit)
+        startSpeculative(prediction.target, prediction.strategy);
+      if (verdict.admit || verdict.result === "duplicate")
+        acted.push(prediction);
+    }
+    return acted;
+  }
+  function autoPredict(targetId) {
+    const predictions = mergePredictions([predictFromGraph(targetId, config.graph, index), predictFromHistory(history, index)], minConfidence);
+    return predictions.length === 0 ? [] : startPredictions(predictions);
+  }
+  function demandLoad(target, signal) {
+    return loads.start(target, { speculative: false, strategy: "explicit", signal }).promise;
+  }
+  async function request(target, options) {
+    targets.remember(target);
+    const startedAt = now2();
+    let hit = false;
+    let value;
+    let creditEntry;
+    const residentEntry = resident.get(target.id);
+    const inFlightRecord = loads.get(target.id);
+    if (residentEntry) {
+      hit = true;
+      value = residentEntry.value;
+      creditEntry = residentEntry;
+      markClaimed(target.id);
+    } else if (inFlightRecord) {
+      hit = true;
+      inFlightRecord.joined = true;
+      try {
+        value = await inFlightRecord.promise;
+        creditEntry = resident.peek(target.id);
+        markClaimed(target.id);
+      } catch (e8) {
+        hit = false;
+        value = await demandLoad(target, _optionalChain([options, 'optionalAccess', _66 => _66.signal]));
+      }
+    } else {
+      value = await demandLoad(target, _optionalChain([options, 'optionalAccess', _67 => _67.signal]));
+    }
+    const waitMs = Math.max(0, now2() - startedAt);
+    if (hit) {
+      counters.hits += 1;
+      if (_optionalChain([creditEntry, 'optionalAccess', _68 => _68.source]) === "prefetch")
+        counters.prefetchHits += 1;
+    } else {
+      counters.misses += 1;
+    }
+    ledger.noteWait(waitMs);
+    if (_optionalChain([creditEntry, 'optionalAccess', _69 => _69.source]) === "prefetch")
+      tuner.creditAvoidedWait(creditEntry.loadMs, waitMs);
+    pushHistory(target.id);
+    evaluateTuner();
+    const predicted = autoPredict(target.id);
+    return { hit, value, waitMs, predicted };
+  }
+  function predict(context, options) {
+    const predictions = mergePredictions([
+      predictFromGraph(context.target, config.graph, index),
+      predictFromHistory(history, index),
+      predictFromContext(context, index)
+    ], minConfidence);
+    if (predictions.length === 0)
+      return [];
+    const signal = _optionalChain([options, 'optionalAccess', _70 => _70.signal]);
+    if (_optionalChain([signal, 'optionalAccess', _71 => _71.aborted]))
+      return [];
+    const acted = startPredictions(predictions);
+    if (signal) {
+      const started = [];
+      for (const prediction of acted) {
+        const rec = loads.get(prediction.target.id);
+        if (rec && rec.speculative)
+          started.push(rec);
+      }
+      if (started.length > 0) {
+        const forward = () => {
+          for (const rec of started)
+            rec.controller.abort();
+        };
+        signal.addEventListener("abort", forward, { once: true });
+        void Promise.allSettled(started.map((rec) => rec.promise)).then(() => {
+          signal.removeEventListener("abort", forward);
+        });
+      }
+    }
+    return acted;
+  }
+  function prefetch(target, options) {
+    targets.remember(target);
+    const strategy = _nullishCoalesce(_optionalChain([options, 'optionalAccess', _72 => _72.strategy]), () => ( "explicit"));
+    const verdict = decideAdmission(target, strategy);
+    if (!verdict.admit)
+      return Promise.resolve(verdict.result);
+    const rec = startSpeculative(target, strategy, _optionalChain([options, 'optionalAccess', _73 => _73.signal]));
+    return rec.promise.then(() => "loaded", () => rec.controller.signal.aborted ? "cancelled" : "failed");
+  }
+  function cancelAll() {
+    loads.abortSpeculative();
+    resident.releaseUnclaimed();
+  }
+  function cancel(targetId) {
+    const rec = loads.get(targetId);
+    if (rec && rec.speculative)
+      rec.controller.abort();
+    const entry = resident.peek(targetId);
+    if (entry && entry.source === "prefetch" && !entry.claimed)
+      resident.delete(targetId);
+  }
+  function stats() {
+    return ledger.snapshot({
+      inFlight: loads.size,
+      residentBytes: resident.bytes(),
+      selfTunedOff: tuner.selfTunedOff,
+      selfTuneTrips: tuner.trips
+    });
+  }
+  return {
+    request,
+    requestById(id, options) {
+      const target = index.get(id);
+      if (!target)
+        return Promise.reject(new Error(`unknown prefetch target: ${id} (use request(target))`));
+      return request(target, options);
+    },
+    predict,
+    prefetch,
+    cancelAll,
+    cancel,
+    release: (targetId) => resident.delete(targetId),
+    stats,
+    hitRate: () => stats().hitRate,
+    waitMs: () => stats().waitMs,
+    events: () => ledger.events(),
+    residentIds: () => resident.ids(),
+    isEnabled: () => enabled,
+    setEnabled(next) {
+      enabled = next;
+      if (!enabled)
+        cancelAll();
+    },
+    whenIdle: () => loads.whenIdle()
+  };
+}
+
+// src/engine/residency/weight-store.ts
+var WEIGHT_DB = {
+  dbName: "builderforce-studio-weights",
+  storeName: "weights",
+  dbVersion: 1
+};
+function createWeightStore(indexedDB) {
+  const factory = _nullishCoalesce(indexedDB, () => ( globalThis.indexedDB));
+  const cache = createModelCache({ ...WEIGHT_DB, indexedDB: factory, valueFormat: "raw" });
+  return {
+    async read(key) {
+      try {
+        const entry = await cache.get(key);
+        return _nullishCoalesce(_optionalChain([entry, 'optionalAccess', _74 => _74.bytes]), () => ( null));
+      } catch (e9) {
+        return null;
+      }
+    },
+    async has(key) {
+      try {
+        return await cache.has(key);
+      } catch (e10) {
+        return false;
+      }
+    },
+    async write(key, bytes) {
+      try {
+        await cache.put(key, { bytes, size: bytes.byteLength });
+        return await cache.has(key);
+      } catch (e11) {
+        return false;
+      }
+    },
+    canPersist: () => factory !== void 0
+  };
+}
+var shared = null;
+function weightStore() {
+  shared ??= createWeightStore();
+  return shared;
+}
+
 // src/engine/weight-cache.ts
-var DB_NAME = "builderforce-studio-weights";
-var DB_VERSION = 1;
-var STORE_NAME = "weights";
 var DEFAULT_R2_BASE = "https://api.builderforce.ai/api/studio/weights";
 var HF_BASE = "https://huggingface.co";
 async function getOrFetchWeight(opts) {
-  const cached = await readFromIdb(opts.cacheKey);
+  const store = weightStore();
+  const cached = await store.read(opts.cacheKey);
   if (cached) {
-    _optionalChain([opts, 'access', _2 => _2.onProgress, 'optionalCall', _3 => _3(cached.byteLength, cached.byteLength)]);
+    _optionalChain([opts, 'access', _75 => _75.onProgress, 'optionalCall', _76 => _76(cached.byteLength, cached.byteLength)]);
     return cached;
   }
   const buffer = await fetchFromAnySource(opts);
-  await writeToIdb(opts.cacheKey, buffer).catch(() => {
-  });
+  if (!await store.write(opts.cacheKey, buffer)) _optionalChain([opts, 'access', _77 => _77.onPersistFailed, 'optionalCall', _78 => _78()]);
   return buffer;
 }
 async function fetchFromAnySource(opts) {
@@ -52,7 +1716,7 @@ async function fetchFromSource(source, opts) {
     if (done) break;
     chunks.push(value);
     received += value.byteLength;
-    _optionalChain([opts, 'access', _4 => _4.onProgress, 'optionalCall', _5 => _5(received, total)]);
+    _optionalChain([opts, 'access', _79 => _79.onProgress, 'optionalCall', _80 => _80(received, total)]);
   }
   const buf = new Uint8Array(received);
   let offset = 0;
@@ -75,37 +1739,125 @@ function resolveSource(source, opts) {
     headers: {}
   };
 }
-async function openDb() {
-  if (typeof indexedDB === "undefined") return null;
-  return new Promise((resolve) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      req.result.createObjectStore(STORE_NAME);
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => resolve(null);
-  });
+
+// src/engine/residency/session-residency.ts
+var SESSION_COMPONENTS = ["text_encoder", "unet", "vae_decoder"];
+var MIB = 1024 * 1024;
+var RESIDENT_BUDGET_FRACTION = 0.8;
+function residencyBudgetBytes(probed) {
+  const total = probed.approxMemoryMb !== null ? probed.approxMemoryMb * MIB : probeRamBytes();
+  return Math.max(1, Math.floor(total * RESIDENT_BUDGET_FRACTION));
 }
-async function readFromIdb(key) {
-  const db = await openDb();
-  if (!db) return null;
-  return new Promise((resolve) => {
-    const tx = db.transaction(STORE_NAME, "readonly");
-    const req = tx.objectStore(STORE_NAME).get(key);
-    req.onsuccess = () => resolve(_nullishCoalesce(req.result, () => ( null)));
-    req.onerror = () => resolve(null);
-  });
+function sessionResidentId(modelId, component) {
+  return `${modelId}/${component}`;
 }
-async function writeToIdb(key, value) {
-  const db = await openDb();
-  if (!db) return;
-  await new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readwrite");
-    tx.objectStore(STORE_NAME).put(value, key);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(_nullishCoalesce(tx.error, () => ( new Error("IDB write failed"))));
-  });
+var SessionResidency = (_class = class {
+  
+  
+  /** Eviction callbacks of the currently tracked sessions, by resident id. */
+  __init() {this.owners = /* @__PURE__ */ new Map()}
+  /** In-flight {@link whileInUse} runs per model id. */
+  __init2() {this.holds = /* @__PURE__ */ new Map()}
+  constructor(probed, byteBudget = residencyBudgetBytes(probed)) {;_class.prototype.__init.call(this);_class.prototype.__init2.call(this);
+    const onGpu = probed.kind === "webgpu" || probed.kind === "webnn";
+    this.tier = onGpu ? "vram" : "ram";
+    this.manager = createMemoryManager({ byteBudget, vramBudgetBytes: onGpu ? byteBudget : 0 });
+  }
+  /** Admit one freshly created session (pinned until {@link settle}), then
+   *  release whatever the admission evicted. */
+  async admit(args) {
+    const id = sessionResidentId(args.modelId, args.component);
+    const result = await this.manager.admit(
+      {
+        id,
+        group: args.modelId,
+        component: args.component,
+        bytes: args.bytes,
+        // An evicted session is rebuilt from the IndexedDB weight store.
+        reloadCostMs: estimateReloadCostMs({ bytes: args.bytes, from: "storage" }),
+        // A live engine runs every one of its sessions on every frame.
+        reuseProbability: 1,
+        tier: this.tier,
+        payload: args.session
+      },
+      { pin: true, spill: false }
+    );
+    if (result.admitted) this.owners.set(id, args.onEvicted);
+    await this.releaseEvicted(result.evicted);
+    return result;
+  }
+  /** Init of `modelId` finished: unpin its sessions so a later model's
+   *  admissions may evict them (unless a run currently holds them). */
+  settle(modelId) {
+    if (!this.holds.has(modelId)) this.setPinned(modelId, false);
+  }
+  /** Run `work` with `modelId`'s sessions pinned, so no admission can evict
+   *  (and release) a session mid-run. Re-entrant: the last run out unpins. */
+  async whileInUse(modelId, work) {
+    this.holds.set(modelId, (_nullishCoalesce(this.holds.get(modelId), () => ( 0))) + 1);
+    this.setPinned(modelId, true);
+    try {
+      return await work();
+    } finally {
+      const left = (_nullishCoalesce(this.holds.get(modelId), () => ( 1))) - 1;
+      if (left > 0) this.holds.set(modelId, left);
+      else {
+        this.holds.delete(modelId);
+        this.setPinned(modelId, false);
+      }
+    }
+  }
+  setPinned(modelId, pinned) {
+    for (const id of this.manager.residentIds()) {
+      if (_optionalChain([this, 'access', _81 => _81.manager, 'access', _82 => _82.peek, 'call', _83 => _83(id), 'optionalAccess', _84 => _84.group]) !== modelId) continue;
+      if (pinned) this.manager.pin(id);
+      else this.manager.unpin(id);
+    }
+  }
+  /** Drop every resident of `modelId` from the budget and release `sessions`
+   *  (the engine's own references — it may hold sessions the budget rejected).
+   *  Release errors are swallowed so one bad session cannot block the rest. */
+  async releaseModel(modelId, sessions) {
+    for (const component of SESSION_COMPONENTS) {
+      const id = sessionResidentId(modelId, component);
+      this.owners.delete(id);
+      await this.manager.release(id);
+    }
+    await Promise.all(sessions.map((s) => releaseQuietly(s)));
+  }
+  /** Whether the budget is under memory pressure right now — background work
+   *  (the refinement weight warm) backs off while it is. */
+  isPressured() {
+    return this.manager.pressure().pressured;
+  }
+  /** Ids currently charged against the budget. */
+  residentIds() {
+    return this.manager.residentIds();
+  }
+  async releaseEvicted(evicted) {
+    await Promise.all(
+      evicted.map(async (entry) => {
+        const onEvicted = this.owners.get(entry.id);
+        this.owners.delete(entry.id);
+        _optionalChain([onEvicted, 'optionalCall', _85 => _85()]);
+        await releaseQuietly(entry.payload);
+      })
+    );
+  }
+}, _class);
+async function releaseQuietly(session) {
+  if (!session) return;
+  try {
+    await session.release();
+  } catch (e12) {
+  }
 }
+
+// src/engine/residency/session-loader.ts
+
+
+// src/engine/ort-session.ts
+
 
 // src/engine/diffusion-models.ts
 var MODEL_REGISTRY = {
@@ -305,6 +2057,323 @@ var MODEL_REGISTRY = {
   }
 };
 
+// src/engine/onnx-runtime-config.ts
+
+
+function versionMatchedCdn() {
+  const version = _optionalChain([ort, 'access', _86 => _86.env, 'optionalAccess', _87 => _87.versions, 'optionalAccess', _88 => _88.common]);
+  return version ? `https://cdn.jsdelivr.net/npm/onnxruntime-web@${version}/dist/` : "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/";
+}
+var configured = false;
+var hostWasmBase = null;
+var lastOptionWasmCdn = null;
+function setOrtWasmBase(url) {
+  hostWasmBase = url ? url.endsWith("/") ? url : `${url}/` : null;
+  if (configured) applyWasmPaths(_nullishCoalesce(_nullishCoalesce(lastOptionWasmCdn, () => ( hostWasmBase)), () => ( versionMatchedCdn())));
+}
+var webgpuEnv = null;
+var appliedWasmPaths = null;
+var appliedNumThreads = null;
+function applyToWebGpuOrt() {
+  if (!webgpuEnv) return;
+  if (appliedWasmPaths) webgpuEnv.wasm.wasmPaths = appliedWasmPaths;
+  if (appliedNumThreads !== null) webgpuEnv.wasm.numThreads = appliedNumThreads;
+}
+async function configureWebGpuOrt() {
+  const mod = await Promise.resolve().then(() => _interopRequireWildcard(require("onnxruntime-web/webgpu")));
+  webgpuEnv = _optionalChain([mod, 'access', _89 => _89.env, 'optionalAccess', _90 => _90.wasm]) ? mod.env : null;
+  applyToWebGpuOrt();
+}
+function applyWasmPaths(wasmPaths) {
+  if (_optionalChain([_transformers.env, 'access', _91 => _91.backends, 'optionalAccess', _92 => _92.onnx, 'optionalAccess', _93 => _93.wasm])) _transformers.env.backends.onnx.wasm.wasmPaths = wasmPaths;
+  ort.env.wasm.wasmPaths = wasmPaths;
+  appliedWasmPaths = wasmPaths;
+  applyToWebGpuOrt();
+}
+function configureOnnxRuntime(opts = {}) {
+  if (configured) return;
+  configured = true;
+  lastOptionWasmCdn = _nullishCoalesce(opts.wasmCdn, () => ( null));
+  const wasmPaths = _nullishCoalesce(_nullishCoalesce(opts.wasmCdn, () => ( hostWasmBase)), () => ( versionMatchedCdn()));
+  const numThreads = _nullishCoalesce(opts.numThreads, () => ( 1));
+  _transformers.env.allowLocalModels = false;
+  if (_optionalChain([_transformers.env, 'access', _94 => _94.backends, 'optionalAccess', _95 => _95.onnx, 'optionalAccess', _96 => _96.wasm])) _transformers.env.backends.onnx.wasm.numThreads = numThreads;
+  applyWasmPaths(wasmPaths);
+  ort.env.wasm.numThreads = numThreads;
+  appliedNumThreads = numThreads;
+  applyToWebGpuOrt();
+}
+
+// src/engine/ort-session.ts
+configureOnnxRuntime();
+function materializeTensor(dtype, raw) {
+  const shape = [...raw.shape];
+  if (dtype === "float32") {
+    return new ort2.Tensor("float32", raw.data, shape);
+  }
+  if (dtype === "int32") {
+    const out = new Int32Array(raw.data.length);
+    for (let i = 0; i < raw.data.length; i++) out[i] = raw.data[i] | 0;
+    return new ort2.Tensor("int32", out, shape);
+  }
+  if (dtype === "int64") {
+    const out = new BigInt64Array(raw.data.length);
+    for (let i = 0; i < raw.data.length; i++) out[i] = BigInt(raw.data[i] | 0);
+    return new ort2.Tensor("int64", out, shape);
+  }
+  throw new Error(`Unsupported dtype: ${dtype}`);
+}
+function pickFirstFloat32(result) {
+  for (const value of Object.values(result)) {
+    const data = value.data;
+    if (data instanceof Float32Array) return data;
+  }
+  return null;
+}
+function checkMemoryForModel(approxMemoryMb, minVramMb, modelId) {
+  if (approxMemoryMb === null) return null;
+  if (approxMemoryMb >= minVramMb) return null;
+  return `Insufficient memory for ${modelId}: device reports ~${(approxMemoryMb / 1024).toFixed(1)} GB available, model needs at least ~${(minVramMb / 1024).toFixed(1)} GB. ${lighterModelHint(modelId, approxMemoryMb)}`;
+}
+function lighterModelHint(failingModelId, availableMb) {
+  const failing = MODEL_REGISTRY[failingModelId];
+  const failingMin = _nullishCoalesce(_optionalChain([failing, 'optionalAccess', _97 => _97.minVramMb]), () => ( Infinity));
+  const alternatives = Object.values(MODEL_REGISTRY).filter((m) => m.id !== failingModelId).filter((m) => failing === void 0 || m.engine === failing.engine).filter((m) => m.minVramMb < failingMin).filter((m) => availableMb === null || m.minVramMb <= availableMb).sort((a, b) => a.minVramMb - b.minVramMb).map((m) => m.id);
+  if (alternatives.length === 0) {
+    return "No lighter model is available \u2014 close other GPU-heavy tabs and retry.";
+  }
+  return `Try a lighter model (${alternatives.join(", ")}) or close other GPU-heavy tabs.`;
+}
+function explainOrtError(err, label, modelId, minVramMb, availableMemoryMb = null) {
+  const message = err instanceof Error ? err.message : String(err);
+  if (/bad_alloc|out of memory|memory access out of bounds/i.test(message)) {
+    return new Error(
+      `Out of memory during ${label} for ${modelId} (needs ~${(minVramMb / 1024).toFixed(1)} GB). ${lighterModelHint(modelId, availableMemoryMb)} Original error: ${message}`
+    );
+  }
+  if (/DXGI_ERROR_DEVICE_HUNG|Device.*is lost|GPUDevice.*lost|mapAsync.*lost/i.test(message)) {
+    return new Error(
+      `GPU device was lost during ${label} for ${modelId} \u2014 typically a Windows TDR (driver timeout, ~2 s per kernel). The model is too heavy for this GPU at the current resolution. Try a lower resolution (e.g. 256\xD7256), pick a lighter model, or switch the device target to CPU. Original error: ${message}`
+    );
+  }
+  if (/InsertedPrecisionFreeCast|SimplifiedLayerNormFusion|graph_utils\.cc/.test(message)) {
+    return new Error(
+      `${label} ORT session refused to load due to a graph-fusion crash. This usually means graphOptimizationLevel is too aggressive \u2014 verify buildOrtSessionOptions still pins 'basic'. Original error: ${message}`
+    );
+  }
+  return err instanceof Error ? err : new Error(message);
+}
+function buildOrtSessionOptions(device) {
+  const base = {
+    graphOptimizationLevel: "basic",
+    // Drop ORT's `[W:` warnings (e.g. "VerifyEachNodeIsAssignedToAnEp: some
+    // nodes were not assigned to the preferred EP"). These are informational
+    // — every shape-op fallback to CPU logs one per session. With 3 sessions
+    // and per-frame reuse, the console becomes unreadable. Severity 3 = error,
+    // so real failures still log; warnings are silenced.
+    logSeverityLevel: 3
+  };
+  if (device === "webnn") return { ...base, executionProviders: ["webnn", "wasm"] };
+  if (device === "webgpu") return { ...base, executionProviders: ["webgpu", "wasm"] };
+  return { ...base, executionProviders: ["wasm"] };
+}
+function basename(path) {
+  const i = path.lastIndexOf("/");
+  return i === -1 ? path : path.slice(i + 1);
+}
+function assertSessionMatchesSpec(sessionLabel, session, specs) {
+  const declared = specs.map((s) => s.name);
+  const actual = session.inputNames;
+  const missing = declared.filter((n) => !actual.includes(n));
+  if (missing.length > 0) {
+    throw new Error(
+      `Registry/model mismatch on ${sessionLabel}: declared input(s) [${missing.join(", ")}] are not in the model's inputNames [${actual.join(", ")}]. Update MODEL_REGISTRY in diffusion-models.ts to match the actual export.`
+    );
+  }
+}
+
+// src/engine/progress.ts
+function reportProgress(label, onProgress) {
+  console.info(`[builderforce-studio] ${label}`);
+  _optionalChain([onProgress, 'optionalCall', _98 => _98(label)]);
+}
+
+// src/engine/residency/session-loader.ts
+function sessionBufferBytes(bufs) {
+  return bufs.modelBuf.byteLength + (_nullishCoalesce(_optionalChain([bufs, 'access', _99 => _99.externalData, 'optionalAccess', _100 => _100.buf, 'access', _101 => _101.byteLength]), () => ( 0)));
+}
+async function fetchSessionBuffers(file, component, fetchWeight, onProgress) {
+  reportProgress(`Downloading ${component} (${file.model})\u2026`, onProgress);
+  const modelBuf = await fetchWeight(file.model);
+  let externalData = null;
+  if (file.externalData) {
+    reportProgress(`Downloading ${component} weight data (${file.externalData})\u2026`, onProgress);
+    const dataBuf = await fetchWeight(file.externalData);
+    externalData = { name: basename(file.externalData), buf: dataBuf };
+  }
+  return { component, modelBuf, externalData };
+}
+async function createAdmittedSession(bufs, baseOptions, ctx) {
+  const options = { ...baseOptions };
+  if (bufs.externalData) {
+    options.externalData = [
+      { path: bufs.externalData.name, data: new Uint8Array(bufs.externalData.buf) }
+    ];
+  }
+  reportProgress(`Creating ${bufs.component} ORT session\u2026`, ctx.onProgress);
+  let session;
+  try {
+    session = await ort3.InferenceSession.create(new Uint8Array(bufs.modelBuf), options);
+  } catch (err) {
+    throw ctx.explain(err, `${bufs.component} session create`);
+  }
+  reportProgress(`${bufs.component} ready.`, ctx.onProgress);
+  await ctx.residency.admit({
+    modelId: ctx.modelId,
+    component: bufs.component,
+    bytes: sessionBufferBytes(bufs),
+    session,
+    onEvicted: ctx.onEvicted
+  });
+  return session;
+}
+
+// src/engine/residency/weight-prefetch.ts
+function weightRequest(descriptor, file, source) {
+  return {
+    cacheKey: `${descriptor.id}/${file}`,
+    hfRepo: descriptor.hfRepo,
+    hfPath: file,
+    sources: source.weightSources,
+    apiKey: source.apiKey,
+    r2Base: source.r2Base
+  };
+}
+function modelWeightFiles(descriptor) {
+  if (descriptor.engine !== "lcm-diffusion") return [];
+  const { textEncoder, unet, vaeDecoder } = descriptor.files;
+  return [textEncoder, unet, vaeDecoder].flatMap((f) => f.externalData ? [f.model, f.externalData] : [f.model]);
+}
+function modelTargets(model, source) {
+  const descriptor = MODEL_REGISTRY[model];
+  if (descriptor.engine !== "lcm-diffusion") return [];
+  return modelWeightFiles(descriptor).map((file) => {
+    const request = weightRequest(descriptor, file, source);
+    return { id: request.cacheKey, bytes: 0, kind: "weights", meta: { request } };
+  });
+}
+var WeightPrefetch = (_class2 = class {
+  
+  __init3() {this.lifetime = new AbortController()}
+  
+  
+  
+  /** Ids queued for a warm that neither began nor was claimed by a fetch. */
+  __init4() {this.pending = /* @__PURE__ */ new Set()}
+  __init5() {this.progress = /* @__PURE__ */ new Map()}
+  /** The one warm in flight (warms are sequential). */
+  __init6() {this.active = null}
+  __init7() {this.started = false}
+  __init8() {this.stopped = false}
+  constructor(refinementModel, source, deps = {}) {;_class2.prototype.__init3.call(this);_class2.prototype.__init4.call(this);_class2.prototype.__init5.call(this);_class2.prototype.__init6.call(this);_class2.prototype.__init7.call(this);_class2.prototype.__init8.call(this);
+    this.load = _nullishCoalesce(deps.load, () => ( getOrFetchWeight));
+    this.canPersist = _nullishCoalesce(deps.canPersist, () => ( (() => weightStore().canPersist())));
+    const isStored = _nullishCoalesce(deps.isStored, () => ( ((key) => weightStore().has(key))));
+    this.targets = modelTargets(refinementModel, source);
+    this.prefetcher = createPrefetcher({
+      // Warm only: resolve to a byte count so no buffer stays resident here.
+      loader: async (target, signal) => {
+        const request = _optionalChain([target, 'access', _102 => _102.meta, 'optionalAccess', _103 => _103.request]);
+        if (!request) throw new Error(`WeightPrefetch: unknown weight target '${target.id}'`);
+        if (await isStored(request.cacheKey)) return 0;
+        const progress = this.progressOf(target.id);
+        const bytes = await this.load({
+          ...request,
+          signal,
+          onProgress: (loaded, total) => {
+            progress.latest = [loaded, total];
+            for (const listener of progress.listeners) listener(loaded, total);
+          },
+          onPersistFailed: () => this.stop("weight store cannot persist")
+        });
+        return bytes.byteLength;
+      },
+      targets: this.targets,
+      maxConcurrent: 1,
+      shouldThrottle: deps.shouldThrottle
+    });
+  }
+  /** Start warming the refinement model's files, one at a time. Call after the
+   *  draft engine's init resolved. No-op when repeated, after dispose, or when
+   *  the weight store cannot persist (a warm would only be thrown away). */
+  start() {
+    if (this.started || this.stopped || this.lifetime.signal.aborted || !this.canPersist()) return;
+    this.started = true;
+    for (const target of this.targets) this.pending.add(target.id);
+    void this.targets.reduce((chain, target) => chain.then(() => this.warm(target)), Promise.resolve());
+  }
+  async warm(target) {
+    if (!this.pending.delete(target.id) || this.stopped || this.lifetime.signal.aborted) return;
+    const done = this.prefetcher.prefetch(target, { signal: this.lifetime.signal }).then((outcome) => {
+      if (outcome === "throttled") this.stopped = true;
+    });
+    this.active = { id: target.id, done };
+    try {
+      await done;
+    } finally {
+      this.active = null;
+      this.progress.delete(target.id);
+      this.prefetcher.release(target.id);
+    }
+  }
+  /** Fetch one weight file: join its in-flight warm (forwarding the warm's
+   *  progress), else claim it from the queue; then read it through the store. */
+  async fetch(request) {
+    const key = request.cacheKey;
+    this.pending.delete(key);
+    const active = this.active;
+    if (_optionalChain([active, 'optionalAccess', _104 => _104.id]) === key) {
+      const unsubscribe = request.onProgress ? this.subscribe(key, request.onProgress) : void 0;
+      try {
+        await active.done;
+      } finally {
+        _optionalChain([unsubscribe, 'optionalCall', _105 => _105()]);
+      }
+    }
+    return this.load({ ...request, signal: this.lifetime.signal });
+  }
+  progressOf(id) {
+    let entry = this.progress.get(id);
+    if (!entry) {
+      entry = { latest: null, listeners: /* @__PURE__ */ new Set() };
+      this.progress.set(id, entry);
+    }
+    return entry;
+  }
+  subscribe(id, listener) {
+    const entry = this.progressOf(id);
+    if (entry.latest) listener(...entry.latest);
+    entry.listeners.add(listener);
+    return () => entry.listeners.delete(listener);
+  }
+  /** Stop warming: nothing further starts, anything in flight is cancelled. */
+  stop(reason) {
+    this.stopped = true;
+    this.pending.clear();
+    this.prefetcher.cancelAll(reason);
+  }
+  /** Ids the prefetcher still holds a (byte-count) record for — diagnostics / tests. */
+  residentIds() {
+    return this.prefetcher.residentIds();
+  }
+  /** Abort every in-flight warm and drop every record. Idempotent. */
+  dispose() {
+    this.lifetime.abort();
+    this.stop("engine disposed");
+    for (const id of this.prefetcher.residentIds()) this.prefetcher.release(id);
+  }
+}, _class2);
+
 // src/engine/diffusion-schedule.ts
 var TRAIN_TIMESTEPS = 1e3;
 var ALPHAS_CUMPROD = computeAlphasCumprod(85e-5, 0.012, TRAIN_TIMESTEPS);
@@ -393,153 +2462,9 @@ function guidanceScaleEmbedding(w, dim) {
   return out;
 }
 
-// src/engine/ort-session.ts
-
-
-// src/engine/onnx-runtime-config.ts
-
-
-function versionMatchedCdn() {
-  const version = _optionalChain([ort, 'access', _6 => _6.env, 'optionalAccess', _7 => _7.versions, 'optionalAccess', _8 => _8.common]);
-  return version ? `https://cdn.jsdelivr.net/npm/onnxruntime-web@${version}/dist/` : "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/";
-}
-var configured = false;
-var hostWasmBase = null;
-var lastOptionWasmCdn = null;
-function setOrtWasmBase(url) {
-  hostWasmBase = url ? url.endsWith("/") ? url : `${url}/` : null;
-  if (configured) applyWasmPaths(_nullishCoalesce(_nullishCoalesce(lastOptionWasmCdn, () => ( hostWasmBase)), () => ( versionMatchedCdn())));
-}
-var webgpuEnv = null;
-var appliedWasmPaths = null;
-var appliedNumThreads = null;
-function applyToWebGpuOrt() {
-  if (!webgpuEnv) return;
-  if (appliedWasmPaths) webgpuEnv.wasm.wasmPaths = appliedWasmPaths;
-  if (appliedNumThreads !== null) webgpuEnv.wasm.numThreads = appliedNumThreads;
-}
-async function configureWebGpuOrt() {
-  const mod = await Promise.resolve().then(() => _interopRequireWildcard(require("onnxruntime-web/webgpu")));
-  webgpuEnv = _optionalChain([mod, 'access', _9 => _9.env, 'optionalAccess', _10 => _10.wasm]) ? mod.env : null;
-  applyToWebGpuOrt();
-}
-function applyWasmPaths(wasmPaths) {
-  if (_optionalChain([_transformers.env, 'access', _11 => _11.backends, 'optionalAccess', _12 => _12.onnx, 'optionalAccess', _13 => _13.wasm])) _transformers.env.backends.onnx.wasm.wasmPaths = wasmPaths;
-  ort.env.wasm.wasmPaths = wasmPaths;
-  appliedWasmPaths = wasmPaths;
-  applyToWebGpuOrt();
-}
-function configureOnnxRuntime(opts = {}) {
-  if (configured) return;
-  configured = true;
-  lastOptionWasmCdn = _nullishCoalesce(opts.wasmCdn, () => ( null));
-  const wasmPaths = _nullishCoalesce(_nullishCoalesce(opts.wasmCdn, () => ( hostWasmBase)), () => ( versionMatchedCdn()));
-  const numThreads = _nullishCoalesce(opts.numThreads, () => ( 1));
-  _transformers.env.allowLocalModels = false;
-  if (_optionalChain([_transformers.env, 'access', _14 => _14.backends, 'optionalAccess', _15 => _15.onnx, 'optionalAccess', _16 => _16.wasm])) _transformers.env.backends.onnx.wasm.numThreads = numThreads;
-  applyWasmPaths(wasmPaths);
-  ort.env.wasm.numThreads = numThreads;
-  appliedNumThreads = numThreads;
-  applyToWebGpuOrt();
-}
-
-// src/engine/ort-session.ts
-configureOnnxRuntime();
-function materializeTensor(dtype, raw) {
-  const shape = [...raw.shape];
-  if (dtype === "float32") {
-    return new ort2.Tensor("float32", raw.data, shape);
-  }
-  if (dtype === "int32") {
-    const out = new Int32Array(raw.data.length);
-    for (let i = 0; i < raw.data.length; i++) out[i] = raw.data[i] | 0;
-    return new ort2.Tensor("int32", out, shape);
-  }
-  if (dtype === "int64") {
-    const out = new BigInt64Array(raw.data.length);
-    for (let i = 0; i < raw.data.length; i++) out[i] = BigInt(raw.data[i] | 0);
-    return new ort2.Tensor("int64", out, shape);
-  }
-  throw new Error(`Unsupported dtype: ${dtype}`);
-}
-function pickFirstFloat32(result) {
-  for (const value of Object.values(result)) {
-    const data = value.data;
-    if (data instanceof Float32Array) return data;
-  }
-  return null;
-}
-function checkMemoryForModel(approxMemoryMb, minVramMb, modelId) {
-  if (approxMemoryMb === null) return null;
-  if (approxMemoryMb >= minVramMb) return null;
-  return `Insufficient memory for ${modelId}: device reports ~${(approxMemoryMb / 1024).toFixed(1)} GB available, model needs at least ~${(minVramMb / 1024).toFixed(1)} GB. ${lighterModelHint(modelId, approxMemoryMb)}`;
-}
-function lighterModelHint(failingModelId, availableMb) {
-  const failing = MODEL_REGISTRY[failingModelId];
-  const failingMin = _nullishCoalesce(_optionalChain([failing, 'optionalAccess', _17 => _17.minVramMb]), () => ( Infinity));
-  const alternatives = Object.values(MODEL_REGISTRY).filter((m) => m.id !== failingModelId).filter((m) => failing === void 0 || m.engine === failing.engine).filter((m) => m.minVramMb < failingMin).filter((m) => availableMb === null || m.minVramMb <= availableMb).sort((a, b) => a.minVramMb - b.minVramMb).map((m) => m.id);
-  if (alternatives.length === 0) {
-    return "No lighter model is available \u2014 close other GPU-heavy tabs and retry.";
-  }
-  return `Try a lighter model (${alternatives.join(", ")}) or close other GPU-heavy tabs.`;
-}
-function explainOrtError(err, label, modelId, minVramMb, availableMemoryMb = null) {
-  const message = err instanceof Error ? err.message : String(err);
-  if (/bad_alloc|out of memory|memory access out of bounds/i.test(message)) {
-    return new Error(
-      `Out of memory during ${label} for ${modelId} (needs ~${(minVramMb / 1024).toFixed(1)} GB). ${lighterModelHint(modelId, availableMemoryMb)} Original error: ${message}`
-    );
-  }
-  if (/DXGI_ERROR_DEVICE_HUNG|Device.*is lost|GPUDevice.*lost|mapAsync.*lost/i.test(message)) {
-    return new Error(
-      `GPU device was lost during ${label} for ${modelId} \u2014 typically a Windows TDR (driver timeout, ~2 s per kernel). The model is too heavy for this GPU at the current resolution. Try a lower resolution (e.g. 256\xD7256), pick a lighter model, or switch the device target to CPU. Original error: ${message}`
-    );
-  }
-  if (/InsertedPrecisionFreeCast|SimplifiedLayerNormFusion|graph_utils\.cc/.test(message)) {
-    return new Error(
-      `${label} ORT session refused to load due to a graph-fusion crash. This usually means graphOptimizationLevel is too aggressive \u2014 verify buildOrtSessionOptions still pins 'basic'. Original error: ${message}`
-    );
-  }
-  return err instanceof Error ? err : new Error(message);
-}
-function buildOrtSessionOptions(device) {
-  const base = {
-    graphOptimizationLevel: "basic",
-    // Drop ORT's `[W:` warnings (e.g. "VerifyEachNodeIsAssignedToAnEp: some
-    // nodes were not assigned to the preferred EP"). These are informational
-    // — every shape-op fallback to CPU logs one per session. With 3 sessions
-    // and per-frame reuse, the console becomes unreadable. Severity 3 = error,
-    // so real failures still log; warnings are silenced.
-    logSeverityLevel: 3
-  };
-  if (device === "webnn") return { ...base, executionProviders: ["webnn", "wasm"] };
-  if (device === "webgpu") return { ...base, executionProviders: ["webgpu", "wasm"] };
-  return { ...base, executionProviders: ["wasm"] };
-}
-function basename(path) {
-  const i = path.lastIndexOf("/");
-  return i === -1 ? path : path.slice(i + 1);
-}
-function assertSessionMatchesSpec(sessionLabel, session, specs) {
-  const declared = specs.map((s) => s.name);
-  const actual = session.inputNames;
-  const missing = declared.filter((n) => !actual.includes(n));
-  if (missing.length > 0) {
-    throw new Error(
-      `Registry/model mismatch on ${sessionLabel}: declared input(s) [${missing.join(", ")}] are not in the model's inputNames [${actual.join(", ")}]. Update MODEL_REGISTRY in diffusion-models.ts to match the actual export.`
-    );
-  }
-}
-
-// src/engine/progress.ts
-function reportProgress(label, onProgress) {
-  console.info(`[builderforce-studio] ${label}`);
-  _optionalChain([onProgress, 'optionalCall', _18 => _18(label)]);
-}
-
 // src/engine/abort.ts
 function throwIfAborted(signal) {
-  if (_optionalChain([signal, 'optionalAccess', _19 => _19.aborted])) throw new DOMException("Generation aborted", "AbortError");
+  if (_optionalChain([signal, 'optionalAccess', _106 => _106.aborted])) throw new DOMException("Generation aborted", "AbortError");
 }
 
 // src/engine/diffusion-engine.ts
@@ -565,18 +2490,20 @@ var KNOWN_UNET_INPUTS = new Set(
   Object.keys(UNET_INPUT_BUILDERS)
 );
 var PROMPT_EMBEDDING_CACHE_SIZE = 8;
-var DiffusionEngine = (_class = class {
-  constructor(opts) {;_class.prototype.__init.call(this);_class.prototype.__init2.call(this);_class.prototype.__init3.call(this);_class.prototype.__init4.call(this);_class.prototype.__init5.call(this);_class.prototype.__init6.call(this);
+var DiffusionEngine = (_class3 = class {
+  constructor(opts) {;_class3.prototype.__init9.call(this);_class3.prototype.__init10.call(this);_class3.prototype.__init11.call(this);_class3.prototype.__init12.call(this);_class3.prototype.__init13.call(this);_class3.prototype.__init14.call(this);
     this.opts = opts;
+    this.residency = _nullishCoalesce(opts.residency, () => ( new SessionResidency(opts.probed)));
   }
   
-  __init() {this.tokenizer = null}
-  __init2() {this.textEncoderSession = null}
-  __init3() {this.unetSession = null}
-  __init4() {this.vaeSession = null}
-  __init5() {this.disposed = false}
+  __init9() {this.tokenizer = null}
+  __init10() {this.textEncoderSession = null}
+  __init11() {this.unetSession = null}
+  __init12() {this.vaeSession = null}
+  __init13() {this.disposed = false}
   /** Insertion-ordered, so the first key is the least recently used. */
-  __init6() {this.promptEmbeddings = /* @__PURE__ */ new Map()}
+  __init14() {this.promptEmbeddings = /* @__PURE__ */ new Map()}
+  
   // -------------------------------------------------------------------------
   async init() {
     const d = this.descriptor;
@@ -604,14 +2531,16 @@ var DiffusionEngine = (_class = class {
       this.tokenizer = await _transformers.AutoTokenizer.from_pretrained(d.tokenizerRepo);
       reportProgress("Tokenizer ready.", onProgress);
       reportProgress(`Loading ${d.id} weights (UNet + text-encoder + VAE)\u2026`, onProgress);
+      const fetchWeight = (file) => this.fetchWeight(file);
       const downloads = await Promise.all([
-        this.fetchSessionBuffers(d.files.textEncoder, "text_encoder"),
-        this.fetchSessionBuffers(d.files.unet, "unet"),
-        this.fetchSessionBuffers(d.files.vaeDecoder, "vae_decoder")
+        fetchSessionBuffers(d.files.textEncoder, "text_encoder", fetchWeight, onProgress),
+        fetchSessionBuffers(d.files.unet, "unet", fetchWeight, onProgress),
+        fetchSessionBuffers(d.files.vaeDecoder, "vae_decoder", fetchWeight, onProgress)
       ]);
       this.textEncoderSession = await this.createSessionFromBuffers(downloads[0], sessionOptions);
       this.unetSession = await this.createSessionFromBuffers(downloads[1], sessionOptions);
       this.vaeSession = await this.createSessionFromBuffers(downloads[2], sessionOptions);
+      this.residency.settle(this.opts.model);
       reportProgress("All ORT sessions created.", onProgress);
       assertSessionMatchesSpec("unet", this.unetSession, d.unetInputs);
       assertSessionMatchesSpec("text_encoder", this.textEncoderSession, d.textEncoderInputs);
@@ -640,7 +2569,7 @@ var DiffusionEngine = (_class = class {
     if (this.opts.probed.kind === "webgpu" && this.opts.probed.gpuDevice) {
       try {
         this.opts.probed.gpuDevice.destroy();
-      } catch (e2) {
+      } catch (e13) {
       }
     }
   }
@@ -675,7 +2604,7 @@ var DiffusionEngine = (_class = class {
       this.promptEmbeddings.set(prompt, cached);
       return new Float32Array(cached);
     }
-    const embedding = await this.encodePrompt(prompt);
+    const embedding = await this.residency.whileInUse(this.opts.model, () => this.encodePrompt(prompt));
     this.promptEmbeddings.set(prompt, embedding);
     if (this.promptEmbeddings.size > PROMPT_EMBEDDING_CACHE_SIZE) {
       const oldest = this.promptEmbeddings.keys().next().value;
@@ -694,6 +2623,9 @@ var DiffusionEngine = (_class = class {
    * native one-shot generation up to a small numerical constant.
    */
   async denoise(inputs) {
+    return this.residency.whileInUse(this.opts.model, () => this.runDenoise(inputs));
+  }
+  async runDenoise(inputs) {
     if (!this.unetSession || !this.vaeSession) {
       throw new Error("DiffusionEngine.init() not called");
     }
@@ -704,7 +2636,7 @@ var DiffusionEngine = (_class = class {
     const sample = new Float32Array(inputs.latent);
     for (let i = 0; i < timesteps.length; i++) {
       throwIfAborted(inputs.signal);
-      _optionalChain([inputs, 'access', _20 => _20.onStep, 'optionalCall', _21 => _21(i + 1, timesteps.length)]);
+      _optionalChain([inputs, 'access', _107 => _107.onStep, 'optionalCall', _108 => _108(i + 1, timesteps.length)]);
       const t = timesteps[i];
       const noisePred = await this.runUnet({
         sample,
@@ -763,7 +2695,7 @@ var DiffusionEngine = (_class = class {
       );
     }
     const { latentH, latentW } = this.latentDims;
-    return this.runVaeDecode(latent, latentH, latentW);
+    return this.residency.whileInUse(this.opts.model, () => this.runVaeDecode(latent, latentH, latentW));
   }
   // -------------------------------------------------------------------------
   // Internals
@@ -811,15 +2743,13 @@ var DiffusionEngine = (_class = class {
     this.vaeSession = null;
     this.tokenizer = null;
     this.promptEmbeddings.clear();
-    await Promise.all(
-      sessions.map(async (s) => {
-        if (!s) return;
-        try {
-          await s.release();
-        } catch (e3) {
-        }
-      })
-    );
+    await this.residency.releaseModel(this.opts.model, sessions);
+  }
+  /** The residency budget evicted (and is about to release) one of our sessions. */
+  forgetEvicted(component) {
+    if (component === "text_encoder") this.textEncoderSession = null;
+    else if (component === "unet") this.unetSession = null;
+    else this.vaeSession = null;
   }
   /** The uncached text-encoder pass behind {@link embedPrompt}. */
   async encodePrompt(prompt) {
@@ -850,7 +2780,7 @@ var DiffusionEngine = (_class = class {
       { [inputIdsSpec.name]: idTensor },
       "text_encoder"
     );
-    const hidden = _nullishCoalesce(_optionalChain([out, 'access', _22 => _22.last_hidden_state, 'optionalAccess', _23 => _23.data]), () => ( pickFirstFloat32(out)));
+    const hidden = _nullishCoalesce(_optionalChain([out, 'access', _109 => _109.last_hidden_state, 'optionalAccess', _110 => _110.data]), () => ( pickFirstFloat32(out)));
     if (!hidden) {
       throw new Error("Text encoder returned no Float32 output");
     }
@@ -861,51 +2791,16 @@ var DiffusionEngine = (_class = class {
     }
     return new Float32Array(hidden);
   }
-  /** Fetch the model + (optional) external-data buffers for one session.
-   *  Pure I/O — no ORT calls. Split from session creation so the engine can
-   *  parallelize downloads while still serialising the ORT create step. */
-  async fetchSessionBuffers(file, label) {
-    const onProgress = this.opts.onProgress;
-    reportProgress(`Downloading ${label} (${file.model})\u2026`, onProgress);
-    const modelBuf = await this.fetchWeight(file.model);
-    let externalData = null;
-    if (file.externalData) {
-      reportProgress(`Downloading ${label} weight data (${file.externalData})\u2026`, onProgress);
-      const dataBuf = await this.fetchWeight(file.externalData);
-      externalData = { name: basename(file.externalData), buf: dataBuf };
-    }
-    return { label, modelBuf, externalData };
-  }
-  /** Create an ORT session from already-downloaded buffers. Caller MUST call
-   *  this serially across sessions when any of them carry external data —
-   *  ORT-web's external-data mount Map is global and the `finally` of every
-   *  session create unmounts it, so concurrent creates race. The init() call
-   *  site enforces serial creation. */
-  async createSessionFromBuffers(bufs, baseOptions) {
-    const onProgress = this.opts.onProgress;
-    const options = { ...baseOptions };
-    if (bufs.externalData) {
-      options.externalData = [
-        { path: bufs.externalData.name, data: new Uint8Array(bufs.externalData.buf) }
-      ];
-    }
-    reportProgress(`Creating ${bufs.label} ORT session\u2026`, onProgress);
-    try {
-      const session = await ort3.InferenceSession.create(
-        new Uint8Array(bufs.modelBuf),
-        options
-      );
-      reportProgress(`${bufs.label} ready.`, onProgress);
-      return session;
-    } catch (err) {
-      throw explainOrtError(
-        err,
-        `${bufs.label} session create`,
-        this.descriptor.id,
-        this.descriptor.minVramMb,
-        this.opts.probed.approxMemoryMb
-      );
-    }
+  /** Create + admit one session — serially only (session-loader's SERIAL-CREATE INVARIANT). */
+  createSessionFromBuffers(bufs, baseOptions) {
+    const d = this.descriptor;
+    return createAdmittedSession(bufs, baseOptions, {
+      residency: this.residency,
+      modelId: this.opts.model,
+      onProgress: this.opts.onProgress,
+      onEvicted: () => this.forgetEvicted(bufs.component),
+      explain: (err, phase) => explainOrtError(err, phase, d.id, d.minVramMb, this.opts.probed.approxMemoryMb)
+    });
   }
   /** Wrap session.run() so DXGI_ERROR_DEVICE_HUNG, std::bad_alloc, "Device is
    *  lost", and similar runtime ORT failures become actionable messages
@@ -924,16 +2819,13 @@ var DiffusionEngine = (_class = class {
       );
     }
   }
+  /** One weight file — via the prefetcher when wired, else the weight cache. */
   async fetchWeight(file) {
-    return getOrFetchWeight({
-      cacheKey: `${this.opts.model}/${file}`,
-      hfRepo: this.descriptor.hfRepo,
-      hfPath: file,
-      sources: this.opts.weightSources,
-      apiKey: this.opts.apiKey,
-      r2Base: this.opts.r2Base,
-      onProgress: (loaded, total) => _optionalChain([this, 'access', _24 => _24.opts, 'access', _25 => _25.onWeightProgress, 'optionalCall', _26 => _26(file, loaded, total)])
-    });
+    const request = {
+      ...weightRequest(this.descriptor, file, this.opts),
+      onProgress: (loaded, total) => _optionalChain([this, 'access', _111 => _111.opts, 'access', _112 => _112.onWeightProgress, 'optionalCall', _113 => _113(file, loaded, total)])
+    };
+    return this.opts.weightPrefetch ? this.opts.weightPrefetch.fetch(request) : getOrFetchWeight(request);
   }
   buildUnetFeeds(args) {
     const ctx = { descriptor: this.descriptor, ...args };
@@ -973,13 +2865,50 @@ var DiffusionEngine = (_class = class {
     const scaled = new Float32Array(latent.length);
     const scale = this.descriptor.vaeScalingFactor;
     for (let i = 0; i < latent.length; i++) scaled[i] = latent[i] / scale;
-    const input = new ort3.Tensor("float32", scaled, [1, 4, h, w]);
+    const input = new ort4.Tensor("float32", scaled, [1, 4, h, w]);
     const out = await this.runSession(session, { latent_sample: input }, "vae_decoder");
     const pixels = pickFirstFloat32(out);
     if (!pixels) throw new Error("VAE decoder returned no Float32 output");
     return pixels;
   }
-}, _class);
+}, _class3);
+
+// src/engine/residency/lcm-residency.ts
+var LcmResidency = class {
+  constructor(opts) {
+    this.opts = opts;
+    this.sessions = new SessionResidency(opts.probed);
+    const refinement = opts.refinementModel;
+    this.prefetch = refinement && refinement !== opts.model ? new WeightPrefetch(refinement, opts, { shouldThrottle: () => this.sessions.isPressured() }) : null;
+  }
+  
+  
+  
+  /** A DiffusionEngine for `model`, wired to the shared residency (and, for the
+   *  refinement model, to the weight warm). */
+  createEngine(model, view) {
+    const { probed, apiKey, weightSources, r2Base, refinementModel } = this.opts;
+    return new DiffusionEngine({
+      model,
+      probed,
+      apiKey,
+      weightSources,
+      r2Base,
+      ...view,
+      residency: this.sessions,
+      weightPrefetch: model === refinementModel ? _nullishCoalesce(this.prefetch, () => ( void 0)) : void 0
+    });
+  }
+  /** Begin warming the refinement model's weights in the background. Call only
+   *  after the draft engine's init has resolved. */
+  prefetchRefinement() {
+    _optionalChain([this, 'access', _114 => _114.prefetch, 'optionalAccess', _115 => _115.start, 'call', _116 => _116()]);
+  }
+  /** Stop background warms and drop their records. Idempotent. */
+  dispose() {
+    _optionalChain([this, 'access', _117 => _117.prefetch, 'optionalAccess', _118 => _118.dispose, 'call', _119 => _119()]);
+  }
+};
 
 // src/engine/frame-interpolator.ts
 function slerp(a, b, t) {
@@ -1151,7 +3080,7 @@ async function selectiveScanStep(a, device) {
   if (device && a.channels * a.order > 0) {
     try {
       return await selectiveScanStepGpu(device, a);
-    } catch (e4) {
+    } catch (e14) {
     }
   }
   return selectiveScanStepCpu(a);
@@ -1218,12 +3147,12 @@ function shiftLatent(latent, shape, dx, dy) {
   if (dx === 0 && dy === 0) return new Float32Array(latent);
   const out = new Float32Array(latent.length);
   const idx = (c, y, x) => c * (height * width) + y * width + x;
-  const clamp2 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+  const clamp3 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
   for (let c = 0; c < channels; c++) {
     for (let y = 0; y < height; y++) {
-      const srcY = clamp2(y - dy, 0, height - 1);
+      const srcY = clamp3(y - dy, 0, height - 1);
       for (let x = 0; x < width; x++) {
-        const srcX = clamp2(x - dx, 0, width - 1);
+        const srcX = clamp3(x - dx, 0, width - 1);
         out[idx(c, y, x)] = latent[idx(c, srcY, srcX)];
       }
     }
@@ -1242,17 +3171,17 @@ function scaleLatent(latent, shape, scale) {
   const cx = (width - 1) / 2;
   const cy = (height - 1) / 2;
   const idx = (c, y, x) => c * (height * width) + y * width + x;
-  const clamp2 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+  const clamp3 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
   for (let c = 0; c < channels; c++) {
     for (let y = 0; y < height; y++) {
       const srcYf = cy + (y - cy) / scale;
-      const y0 = clamp2(Math.floor(srcYf), 0, height - 1);
-      const y1 = clamp2(y0 + 1, 0, height - 1);
+      const y0 = clamp3(Math.floor(srcYf), 0, height - 1);
+      const y1 = clamp3(y0 + 1, 0, height - 1);
       const wy = srcYf - Math.floor(srcYf);
       for (let x = 0; x < width; x++) {
         const srcXf = cx + (x - cx) / scale;
-        const x0 = clamp2(Math.floor(srcXf), 0, width - 1);
-        const x1 = clamp2(x0 + 1, 0, width - 1);
+        const x0 = clamp3(Math.floor(srcXf), 0, width - 1);
+        const x1 = clamp3(x0 + 1, 0, width - 1);
         const wx = srcXf - Math.floor(srcXf);
         const top = latent[idx(c, y0, x0)] * (1 - wx) + latent[idx(c, y0, x1)] * wx;
         const bot = latent[idx(c, y1, x0)] * (1 - wx) + latent[idx(c, y1, x1)] * wx;
@@ -1591,8 +3520,8 @@ Target length: ${opts.totalFrames} frames.`,
     signal: opts.signal
   });
   return {
-    treatment: typeof _optionalChain([parsed, 'optionalAccess', _27 => _27.treatment]) === "string" ? parsed.treatment : opts.request,
-    characters: Array.isArray(_optionalChain([parsed, 'optionalAccess', _28 => _28.characters])) ? parsed.characters : []
+    treatment: typeof _optionalChain([parsed, 'optionalAccess', _120 => _120.treatment]) === "string" ? parsed.treatment : opts.request,
+    characters: Array.isArray(_optionalChain([parsed, 'optionalAccess', _121 => _121.characters])) ? parsed.characters : []
   };
 }
 async function shotPlannerPass(client, model, opts, director) {
@@ -1611,7 +3540,7 @@ Distribute exactly ${opts.totalFrames} frames across the shots.`,
     schema: SHOT_PLANNER_SCHEMA,
     signal: opts.signal
   });
-  return { shots: Array.isArray(_optionalChain([parsed, 'optionalAccess', _29 => _29.shots])) ? parsed.shots : [] };
+  return { shots: Array.isArray(_optionalChain([parsed, 'optionalAccess', _122 => _122.shots])) ? parsed.shots : [] };
 }
 function cameraMoveToMotion(move) {
   switch (move) {
@@ -1693,20 +3622,20 @@ async function structuredCall(client, args) {
       signal: args.signal
     });
   } catch (err) {
-    if (_optionalChain([args, 'access', _30 => _30.signal, 'optionalAccess', _31 => _31.aborted]) || _optionalChain([err, 'optionalAccess', _32 => _32.name]) === "AbortError") throw err;
+    if (_optionalChain([args, 'access', _123 => _123.signal, 'optionalAccess', _124 => _124.aborted]) || _optionalChain([err, 'optionalAccess', _125 => _125.name]) === "AbortError") throw err;
     return null;
   }
-  const text = _optionalChain([completion, 'access', _33 => _33.choices, 'optionalAccess', _34 => _34[0], 'optionalAccess', _35 => _35.message, 'optionalAccess', _36 => _36.content]);
+  const text = _optionalChain([completion, 'access', _126 => _126.choices, 'optionalAccess', _127 => _127[0], 'optionalAccess', _128 => _128.message, 'optionalAccess', _129 => _129.content]);
   if (!text || typeof text !== "string") return null;
   try {
     return JSON.parse(text);
-  } catch (e5) {
+  } catch (e15) {
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
     if (start !== -1 && end > start) {
       try {
         return JSON.parse(text.slice(start, end + 1));
-      } catch (e6) {
+      } catch (e16) {
         return null;
       }
     }
@@ -1777,11 +3706,11 @@ ${characterBlock}`
       max_tokens: 600,
       signal: opts.signal
     });
-    const text = _optionalChain([completion, 'access', _37 => _37.choices, 'optionalAccess', _38 => _38[0], 'optionalAccess', _39 => _39.message, 'optionalAccess', _40 => _40.content]);
+    const text = _optionalChain([completion, 'access', _130 => _130.choices, 'optionalAccess', _131 => _131[0], 'optionalAccess', _132 => _132.message, 'optionalAccess', _133 => _133.content]);
     const verdict = parseVerdict(typeof text === "string" ? text : null);
     if (!verdict) return permissive();
     return { ok: verdict.score >= threshold, score: verdict.score, issues: verdict.issues };
-  } catch (e7) {
+  } catch (e17) {
     return permissive();
   }
 }
@@ -1793,19 +3722,19 @@ function parseVerdict(text) {
   let obj;
   try {
     obj = JSON.parse(text);
-  } catch (e8) {
+  } catch (e18) {
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
     if (start === -1 || end <= start) return null;
     try {
       obj = JSON.parse(text.slice(start, end + 1));
-    } catch (e9) {
+    } catch (e19) {
       return null;
     }
   }
   if (!obj || typeof obj !== "object") return null;
   const rec = obj;
-  const score = typeof rec.score === "number" ? clamp01(rec.score) : null;
+  const score = typeof rec.score === "number" ? clamp014(rec.score) : null;
   if (score === null) return null;
   const issues = Array.isArray(rec.issues) ? rec.issues.filter((i) => Boolean(i) && typeof i === "object").map((i) => ({
     kind: ISSUE_KINDS.includes(i.kind) ? i.kind : "other",
@@ -1813,7 +3742,7 @@ function parseVerdict(text) {
   })) : [];
   return { score, issues };
 }
-function clamp01(x) {
+function clamp014(x) {
   if (!Number.isFinite(x)) return 0;
   if (x < 0) return 0;
   if (x > 1) return 1;
@@ -1847,10 +3776,10 @@ async function expandPrompt(opts) {
       signal: opts.signal
     });
   } catch (err) {
-    if (_optionalChain([opts, 'access', _41 => _41.signal, 'optionalAccess', _42 => _42.aborted]) || _optionalChain([err, 'optionalAccess', _43 => _43.name]) === "AbortError") throw err;
+    if (_optionalChain([opts, 'access', _134 => _134.signal, 'optionalAccess', _135 => _135.aborted]) || _optionalChain([err, 'optionalAccess', _136 => _136.name]) === "AbortError") throw err;
     return opts.prompt;
   }
-  const text = _optionalChain([completion, 'access', _44 => _44.choices, 'optionalAccess', _45 => _45[0], 'optionalAccess', _46 => _46.message, 'optionalAccess', _47 => _47.content, 'optionalAccess', _48 => _48.trim, 'call', _49 => _49()]);
+  const text = _optionalChain([completion, 'access', _137 => _137.choices, 'optionalAccess', _138 => _138[0], 'optionalAccess', _139 => _139.message, 'optionalAccess', _140 => _140.content, 'optionalAccess', _141 => _141.trim, 'call', _142 => _142()]);
   if (!text) {
     return opts.prompt;
   }
@@ -1879,8 +3808,8 @@ async function firstSupportedCodec(candidates, opts, probe) {
         bitrate: _nullishCoalesce(opts.bitrate, () => ( 2e6)),
         framerate: opts.fps
       });
-      if (_optionalChain([res, 'optionalAccess', _50 => _50.supported])) return codec;
-    } catch (e10) {
+      if (_optionalChain([res, 'optionalAccess', _143 => _143.supported])) return codec;
+    } catch (e20) {
     }
   }
   return null;
@@ -1955,7 +3884,7 @@ var UnsupportedVideoEncodingError = class extends Error {
   }
 };
 function videoExtensionForMime(mimeType) {
-  return _nullishCoalesce(_optionalChain([ENCODING_TABLE, 'access', _51 => _51.find, 'call', _52 => _52((r) => r.mimeType === mimeType.split(";")[0].trim()), 'optionalAccess', _53 => _53.extension]), () => ( "mp4"));
+  return _nullishCoalesce(_optionalChain([ENCODING_TABLE, 'access', _144 => _144.find, 'call', _145 => _145((r) => r.mimeType === mimeType.split(";")[0].trim()), 'optionalAccess', _146 => _146.extension]), () => ( "mp4"));
 }
 async function muxFramesToVideo(frames, opts) {
   if (typeof VideoEncoder === "undefined") {
@@ -1980,7 +3909,7 @@ async function muxFramesToVideo(frames, opts) {
   });
   const microsPerFrame = Math.round(1e6 / opts.fps);
   for (let i = 0; i < frames.length; i++) {
-    if (_optionalChain([opts, 'access', _54 => _54.signal, 'optionalAccess', _55 => _55.aborted])) {
+    if (_optionalChain([opts, 'access', _147 => _147.signal, 'optionalAccess', _148 => _148.aborted])) {
       encoder.close();
       throw new DOMException("Mux aborted", "AbortError");
     }
@@ -2017,14 +3946,14 @@ function pixelsToRgba(pixels, width, height) {
     const r = pixels[0 * channelSize + i];
     const g = pixels[1 * channelSize + i];
     const b = pixels[2 * channelSize + i];
-    out[i * 4 + 0] = clamp((r + 1) * 127.5);
-    out[i * 4 + 1] = clamp((g + 1) * 127.5);
-    out[i * 4 + 2] = clamp((b + 1) * 127.5);
+    out[i * 4 + 0] = clamp2((r + 1) * 127.5);
+    out[i * 4 + 1] = clamp2((g + 1) * 127.5);
+    out[i * 4 + 2] = clamp2((b + 1) * 127.5);
     out[i * 4 + 3] = 255;
   }
   return out;
 }
-function clamp(v) {
+function clamp2(v) {
   return v < 0 ? 0 : v > 255 ? 255 : Math.round(v);
 }
 
@@ -2122,7 +4051,7 @@ async function runWebDitDenoise(bundle, args) {
     );
     frames[i] = bitmap;
     muxFrames[i] = { rgba };
-    _optionalChain([args, 'access', _56 => _56.onFrame, 'optionalCall', _57 => _57(frameOffset + i, bitmap, args.mambaState)]);
+    _optionalChain([args, 'access', _149 => _149.onFrame, 'optionalCall', _150 => _150(frameOffset + i, bitmap, args.mambaState)]);
   }
   return { frames, muxFrames, width: result.width, height: result.height };
 }
@@ -2157,13 +4086,14 @@ var DEFAULT_COHERENCE_STRENGTH = 0.5;
 var DEFAULT_MOTION_AMOUNT = 0.15;
 var DEFAULT_REFINEMENT_STRENGTH = 0.4;
 var VideoEngine = class _VideoEngine {
-  constructor(opts, diffusion, mambaState, activeDevice, probed, engineKind, webditBundle) {
+  constructor(opts, diffusion, mambaState, activeDevice, probed, engineKind, webditBundle, lcmResidency) {
     this.opts = opts;
     this.diffusion = diffusion;
     this.mambaState = mambaState;
     this.activeDevice = activeDevice;
     this.engineKind = engineKind;
     this.webditBundle = webditBundle;
+    this.lcmResidency = lcmResidency;
     this.probed = probed;
   }
   
@@ -2172,11 +4102,12 @@ var VideoEngine = class _VideoEngine {
   
   
   
-  /** Track the probed device so we can lazy-create a refinement-pass engine
-   *  later with the same hardware target — needed for the two-pass quality
-   *  chain (draft model → dispose → refinement model). Only meaningful on
-   *  the lcm-diffusion path (refinement across engine families is rejected
-   *  in `create()` before either engine is constructed). */
+  
+  /** The probed device this instance runs on (its GPUDevice runs the Mamba
+   *  state advance). The refinement-pass engine is built on the same target by
+   *  `lcmResidency.createEngine` — the two-pass quality chain (draft model →
+   *  dispose → refinement model) is lcm-diffusion only (cross-family
+   *  refinement is rejected in `create()` before either engine is built). */
   
   /**
    * Construct an engine bound to the host's best available hardware. Returns
@@ -2203,17 +4134,10 @@ var VideoEngine = class _VideoEngine {
     const width = _nullishCoalesce(options.width, () => ( DEFAULT_WIDTH));
     const height = _nullishCoalesce(options.height, () => ( DEFAULT_HEIGHT));
     const weightSources = _nullishCoalesce(options.weightSources, () => ( DEFAULT_WEIGHT_SOURCES));
-    const diffusion = new DiffusionEngine({
-      model: options.model,
-      probed,
-      apiKey: options.apiKey,
-      weightSources,
-      r2Base: deriveR2Base(options.baseUrl),
-      width,
-      height,
-      onProgress: options.onProgress
-    });
+    const residency = new LcmResidency({ ...options, probed, weightSources, r2Base: deriveR2Base(options.baseUrl) });
+    const diffusion = residency.createEngine(options.model, { width, height, onProgress: options.onProgress });
     await diffusion.init();
+    residency.prefetchRefinement();
     const state = _nullishCoalesce(options.mambaState, () => ( emptyState({ dim: 64, order: 4, channels: 16 })));
     return new _VideoEngine(
       { ...options, weightSources, width, height },
@@ -2222,7 +4146,8 @@ var VideoEngine = class _VideoEngine {
       probed.kind,
       probed,
       "lcm-diffusion",
-      null
+      null,
+      residency
     );
   }
   /**
@@ -2262,7 +4187,8 @@ var VideoEngine = class _VideoEngine {
       probed.kind,
       probed,
       "webdit-dit",
-      bundle
+      bundle,
+      null
     );
   }
   /**
@@ -2291,7 +4217,7 @@ var VideoEngine = class _VideoEngine {
       prompt: args.prompt,
       signal: args.signal
     });
-    _optionalChain([args, 'access', _58 => _58.onPromptExpanded, 'optionalCall', _59 => _59(resolvedPrompt)]);
+    _optionalChain([args, 'access', _151 => _151.onPromptExpanded, 'optionalCall', _152 => _152(resolvedPrompt)]);
     if (this.engineKind === "webdit-dit") {
       reportProgress("Generating via WebDiT diffusion-transformer engine\u2026", onProgress);
       const result = await generateWebDitClip(this.webditBundle, {
@@ -2328,8 +4254,8 @@ var VideoEngine = class _VideoEngine {
       coherenceMode,
       coherenceStrength,
       seed,
-      motionAmount: clamp012(_nullishCoalesce(args.motionAmount, () => ( DEFAULT_MOTION_AMOUNT))),
-      imgToImgStrength: clamp012(_nullishCoalesce(args.imgToImgStrength, () => ( 0))),
+      motionAmount: clamp015(_nullishCoalesce(args.motionAmount, () => ( DEFAULT_MOTION_AMOUNT))),
+      imgToImgStrength: clamp015(_nullishCoalesce(args.imgToImgStrength, () => ( 0))),
       anchorRefreshInterval: normaliseRefreshInterval(args.anchorRefreshInterval),
       cameraMotion: args.cameraMotion,
       interpolationFactor: normaliseFactor(args.interpolationFactor),
@@ -2349,14 +4275,14 @@ var VideoEngine = class _VideoEngine {
         seed,
         width,
         height,
-        refinementStrength: clamp012(_nullishCoalesce(args.refinementStrength, () => ( DEFAULT_REFINEMENT_STRENGTH))),
+        refinementStrength: clamp015(_nullishCoalesce(args.refinementStrength, () => ( DEFAULT_REFINEMENT_STRENGTH))),
         onProgress,
         onFrame: args.onFrame,
         signal: args.signal
       });
     }
-    const finalFrames = _nullishCoalesce(_optionalChain([refined, 'optionalAccess', _60 => _60.frames]), () => ( clip.frames));
-    const finalMuxFrames = _nullishCoalesce(_optionalChain([refined, 'optionalAccess', _61 => _61.muxFrames]), () => ( clip.muxFrames));
+    const finalFrames = _nullishCoalesce(_optionalChain([refined, 'optionalAccess', _153 => _153.frames]), () => ( clip.frames));
+    const finalMuxFrames = _nullishCoalesce(_optionalChain([refined, 'optionalAccess', _154 => _154.muxFrames]), () => ( clip.muxFrames));
     reportProgress(`Encoding ${finalFrames.length} frames to MP4\u2026`, onProgress);
     const { blob } = await muxFramesToVideo(finalMuxFrames, {
       width,
@@ -2436,7 +4362,7 @@ var VideoEngine = class _VideoEngine {
         guidance,
         coherenceMode,
         coherenceStrength,
-        motionAmount: clamp012(_nullishCoalesce(args.motionAmount, () => ( DEFAULT_MOTION_AMOUNT))),
+        motionAmount: clamp015(_nullishCoalesce(args.motionAmount, () => ( DEFAULT_MOTION_AMOUNT))),
         interpolationFactor,
         interpolationBackend: _nullishCoalesce(args.interpolationBackend, () => ( "latent-slerp")),
         width,
@@ -2457,7 +4383,7 @@ var VideoEngine = class _VideoEngine {
       allMuxFrames.push(...clip.muxFrames);
       allLatents.push(...clip.latents);
       globalIdx += clip.frames.length;
-      _optionalChain([args, 'access', _62 => _62.onShot, 'optionalCall', _63 => _63(s, shot, validation)]);
+      _optionalChain([args, 'access', _155 => _155.onShot, 'optionalCall', _156 => _156(s, shot, validation)]);
     }
     let finalFrames = allFrames;
     let finalMuxFrames = allMuxFrames;
@@ -2469,7 +4395,7 @@ var VideoEngine = class _VideoEngine {
           seed: seedBase,
           width,
           height,
-          refinementStrength: clamp012(DEFAULT_REFINEMENT_STRENGTH),
+          refinementStrength: clamp015(DEFAULT_REFINEMENT_STRENGTH),
           onProgress,
           onFrame: args.onFrame,
           signal: args.signal
@@ -2545,7 +4471,7 @@ var VideoEngine = class _VideoEngine {
       allFrames.push(...shotResult.frames);
       allMuxFrames.push(...shotResult.muxFrames);
       globalIdx += shotResult.frames.length;
-      _optionalChain([args, 'access', _64 => _64.onShot, 'optionalCall', _65 => _65(s, shot, null)]);
+      _optionalChain([args, 'access', _157 => _157.onShot, 'optionalCall', _158 => _158(s, shot, null)]);
     }
     reportProgress(`Encoding ${allFrames.length} frames to MP4\u2026`, onProgress);
     const { blob } = await muxFramesToVideo(allMuxFrames, {
@@ -2621,8 +4547,8 @@ var VideoEngine = class _VideoEngine {
         signal: args.signal,
         onProgress: args.onProgress
       }) : null;
-      const score = _nullishCoalesce(_optionalChain([validation, 'optionalAccess', _66 => _66.score]), () => ( 1));
-      const prevBestScore = _nullishCoalesce(_optionalChain([best, 'optionalAccess', _67 => _67.validation, 'optionalAccess', _68 => _68.score]), () => ( -1));
+      const score = _nullishCoalesce(_optionalChain([validation, 'optionalAccess', _159 => _159.score]), () => ( 1));
+      const prevBestScore = _nullishCoalesce(_optionalChain([best, 'optionalAccess', _160 => _160.validation, 'optionalAccess', _161 => _161.score]), () => ( -1));
       if (!best || score > prevBestScore) {
         if (best) closeClip(best.clip);
         best = { clip, validation, state: this.mambaState };
@@ -2707,7 +4633,7 @@ var VideoEngine = class _VideoEngine {
         if (cameraMotion && (cameraMotion.dx !== 0 || cameraMotion.dy !== 0)) {
           transformed = shiftLatent(transformed, latentShape, cameraMotion.dx, cameraMotion.dy);
         }
-        if (_optionalChain([cameraMotion, 'optionalAccess', _69 => _69.zoom]) && cameraMotion.zoom !== 1) {
+        if (_optionalChain([cameraMotion, 'optionalAccess', _162 => _162.zoom]) && cameraMotion.zoom !== 1) {
           transformed = scaleLatent(transformed, latentShape, cameraMotion.zoom);
         }
         const shifted = transformed;
@@ -2755,7 +4681,7 @@ var VideoEngine = class _VideoEngine {
       });
       keyframes.push({ outputIndex: frameIdx, latent: finalLatent });
       keyframeOutputs.push({ rgba, bitmap, pixels });
-      _optionalChain([onFrame, 'optionalCall', _70 => _70(frameOffset + frameIdx, bitmap, this.mambaState)]);
+      _optionalChain([onFrame, 'optionalCall', _163 => _163(frameOffset + frameIdx, bitmap, this.mambaState)]);
     }
     const slots = buildInterpolatedSequence(keyframes);
     const frames = new Array(frameCount);
@@ -2811,7 +4737,7 @@ var VideoEngine = class _VideoEngine {
       );
       frames[slot.outputIndex] = bitmap;
       muxFrames[slot.outputIndex] = { rgba };
-      _optionalChain([onFrame, 'optionalCall', _71 => _71(frameOffset + slot.outputIndex, bitmap, this.mambaState)]);
+      _optionalChain([onFrame, 'optionalCall', _164 => _164(frameOffset + slot.outputIndex, bitmap, this.mambaState)]);
     }
     return { frames, muxFrames, latents };
   }
@@ -2836,12 +4762,7 @@ var VideoEngine = class _VideoEngine {
       onProgress
     );
     await this.lcmDiffusion.dispose();
-    this.diffusion = new DiffusionEngine({
-      model: this.opts.refinementModel,
-      probed: this.probed,
-      apiKey: this.opts.apiKey,
-      weightSources: _nullishCoalesce(this.opts.weightSources, () => ( DEFAULT_WEIGHT_SOURCES)),
-      r2Base: deriveR2Base(this.opts.baseUrl),
+    this.diffusion = this.lcmResidency.createEngine(this.opts.refinementModel, {
       width: opts.width,
       height: opts.height,
       onProgress
@@ -2887,13 +4808,13 @@ var VideoEngine = class _VideoEngine {
       );
       try {
         clip.frames[i].close();
-      } catch (e11) {
+      } catch (e21) {
       }
       frames[i] = bitmap;
       muxFrames[i] = { rgba };
       outLatents[i] = refinedLatent;
       refinedCount++;
-      _optionalChain([opts, 'access', _72 => _72.onFrame, 'optionalCall', _73 => _73(i, bitmap, this.mambaState)]);
+      _optionalChain([opts, 'access', _165 => _165.onFrame, 'optionalCall', _166 => _166(i, bitmap, this.mambaState)]);
     }
     reportProgress(`Refinement pass complete (${refinedCount}/${latents.length} frames refined).`, onProgress);
     return { frames, muxFrames, latents: outLatents };
@@ -2943,7 +4864,7 @@ var VideoEngine = class _VideoEngine {
         passThreshold: ctx.passThreshold,
         signal: ctx.signal
       });
-    } catch (e12) {
+    } catch (e22) {
       return null;
     }
   }
@@ -2960,8 +4881,9 @@ var VideoEngine = class _VideoEngine {
    *  dispose the engine cannot be reused — create a new one with
    *  VideoEngine.create. */
   async dispose() {
-    await _optionalChain([this, 'access', _74 => _74.diffusion, 'optionalAccess', _75 => _75.dispose, 'call', _76 => _76()]);
-    await _optionalChain([this, 'access', _77 => _77.webditBundle, 'optionalAccess', _78 => _78.unload, 'call', _79 => _79()]);
+    _optionalChain([this, 'access', _167 => _167.lcmResidency, 'optionalAccess', _168 => _168.dispose, 'call', _169 => _169()]);
+    await _optionalChain([this, 'access', _170 => _170.diffusion, 'optionalAccess', _171 => _171.dispose, 'call', _172 => _172()]);
+    await _optionalChain([this, 'access', _173 => _173.webditBundle, 'optionalAccess', _174 => _174.unload, 'call', _175 => _175()]);
   }
   /**
    * Non-null accessor for the lcm-diffusion engine. Every internal caller of
@@ -2977,7 +4899,7 @@ var VideoEngine = class _VideoEngine {
     return this.diffusion;
   }
 };
-function clamp012(x) {
+function clamp015(x) {
   if (!Number.isFinite(x)) return DEFAULT_MOTION_AMOUNT;
   if (x < 0) return 0;
   if (x > 1) return 1;
@@ -2987,7 +4909,7 @@ function closeClip(clip) {
   for (const bm of clip.frames) {
     try {
       bm.close();
-    } catch (e13) {
+    } catch (e23) {
     }
   }
 }
@@ -3468,18 +5390,18 @@ var DEFAULTS = {
   charsPerSecond: 14,
   hiddenDim: 256
 };
-var SSMAcousticModel = (_class2 = class {
+var SSMAcousticModel = (_class4 = class {
   
   /** Hashed character-embedding table [vocab][hiddenDim]. */
   
   /** Speaker-embedding → hidden projection (sign matrix), built lazily per
    *  speaker-dim so a mismatched embedding can't silently mis-multiply. */
-  __init7() {this.speakerProj = null}
+  __init15() {this.speakerProj = null}
   /** Per-quantizer output projection: hidden → codebookSize logits. */
   
   /** SSM per-channel decay (diagonal A), stable in [0.5, 0.99). */
   
-  constructor(options = {}) {;_class2.prototype.__init7.call(this);
+  constructor(options = {}) {;_class4.prototype.__init15.call(this);
     this.cfg = {
       sampleRate: _nullishCoalesce(options.sampleRate, () => ( DEFAULTS.sampleRate)),
       numMels: _nullishCoalesce(options.numMels, () => ( DEFAULTS.numMels)),
@@ -3590,7 +5512,7 @@ var SSMAcousticModel = (_class2 = class {
     }
     return out;
   }
-}, _class2);
+}, _class4);
 function alignWords(text, numFrames, hopLength, sampleRate) {
   if (text.words.length === 0) return [];
   const totalChars = Math.max(1, text.tokens.length);
@@ -3742,7 +5664,7 @@ function markSynthesizedPcm(samples, sampleRate) {
   const watermarkId = newWatermarkId();
   try {
     return { pcm: embedWatermark(samples, sampleRate, watermarkId), watermarkId };
-  } catch (e14) {
+  } catch (e24) {
     return { pcm: samples, watermarkId: null };
   }
 }
@@ -3773,14 +5695,14 @@ var VoiceCloneEngine = class {
   /** Speak `text` in `speaker`'s voice. */
   async synthesize(options) {
     const activeDevice = await this.resolveDevice(options.device);
-    _optionalChain([options, 'access', _80 => _80.signal, 'optionalAccess', _81 => _81.throwIfAborted, 'call', _82 => _82()]);
+    _optionalChain([options, 'access', _176 => _176.signal, 'optionalAccess', _177 => _177.throwIfAborted, 'call', _178 => _178()]);
     const text = tokenizeText(options.text);
     const { codec, wordTimestamps } = this.acoustic.generate(
       text,
       options.speaker,
       _nullishCoalesce(options.speed, () => ( 1))
     );
-    _optionalChain([options, 'access', _83 => _83.signal, 'optionalAccess', _84 => _84.throwIfAborted, 'call', _85 => _85()]);
+    _optionalChain([options, 'access', _179 => _179.signal, 'optionalAccess', _180 => _180.throwIfAborted, 'call', _181 => _181()]);
     const { samples } = this.codec.decode(codec);
     peakNormalize(samples, 0.95);
     const durationMs = Math.round(samples.length / this.sampleRate * 1e3);
@@ -3800,7 +5722,7 @@ var VoiceCloneEngine = class {
   async resolveDevice(requested) {
     if (requested) return requested;
     const probed = await _chunkVKVEFIZWcjs.probeDevice.call(void 0, "auto");
-    return _nullishCoalesce(_optionalChain([probed, 'optionalAccess', _86 => _86.kind]), () => ( "cpu"));
+    return _nullishCoalesce(_optionalChain([probed, 'optionalAccess', _182 => _182.kind]), () => ( "cpu"));
   }
 };
 function peakNormalize(samples, target) {
@@ -3815,10 +5737,10 @@ function peakNormalize(samples, target) {
 }
 
 // src/engine/voice/provider.ts
-var SSMVoiceProvider = (_class3 = class {
-  __init8() {this.id = "ssm-webgpu"}
+var SSMVoiceProvider = (_class5 = class {
+  __init16() {this.id = "ssm-webgpu"}
   
-  constructor(options) {;_class3.prototype.__init8.call(this);
+  constructor(options) {;_class5.prototype.__init16.call(this);
     this.engine = new VoiceCloneEngine(options);
   }
   /** Expose the engine for enrolment (`provider.engine.enroll(...)`). */
@@ -3834,7 +5756,7 @@ var SSMVoiceProvider = (_class3 = class {
   synthesize(options) {
     return this.engine.synthesize(options);
   }
-}, _class3);
+}, _class5);
 async function resolveVoiceProvider(providers) {
   if (providers.length === 0) {
     return { provider: null, reason: "No clone provider is configured." };

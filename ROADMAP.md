@@ -289,6 +289,8 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
   - The root export breaks: `dist/inference/worker.js` is overwritten by an IIFE bundle. The worker URL 404s. An AbortSignal is posted to the worker (DataCloneError). The adaptive SIMD probe is always false. Prefetch, kv-cache and learner state grows without bound.
   - Studio keeps its own private IndexedDB weight cache, has no VRAM residency budget, and doesn't prefetch the refinement model.
   - Fix in progress: move the ML surface to the `./ml` subpath, fix the review findings, publish 2026.10.14. Studio then uses `createModelCache` (same IDB database, legacy-compatible), `createMemoryManager` for its ORT sessions, and `createPrefetcher` for the refinement weights.
+  - Status 2026-11-17: the WebContainers fixes are done and verified (typecheck, 231 tests, build, exports, frozen lockfile) but uncommitted. The Studio integration is written (raw-format weight store, `SessionResidency` with in-use pins, a sequential pressure-gated refinement warm) but not yet built or tested.
+  - *Blocker: approval to push the `v2026.10.14` tag (that push publishes to npm; the auto-mode permission check denied it).* After it publishes: refresh `studio/pnpm-lock.yaml`, verify and review Studio, bump Studio's version, commit.
 
 ### Mobile `[canvas]`
 
@@ -509,6 +511,12 @@ RESOLVED 2026-11-01 (commit 67f461953): the pending-turn wiring and `servedBy` a
   - The API "OpenAPI" is `api/src/openapi/schema.ts`: TypeScript interfaces documenting 9 endpoints, against 2,554 route registrations in 280 modules under `presentation/routes`; only 12 modules have zod request schemas (`*.schemas.ts`). There is no machine-readable spec, so there is no contract testing and no Postman export.
   
   Fixing this unblocks the visualizer's Coverage lens and API view. *The visualizer's Coverage and API panels shipped on 2026-11-05 (VS Code 2026.10.130). They show coverage as "Not set up" and every route as undocumented until this is fixed in the repo: v8 coverage with `all: true` per package, and an OpenAPI 3.1 document generated from the routes.*
+- **[PRD 47](./docs/specs/47-prd-collection-view.md) One Collection view:**
+  - ~120 collection surfaces render every row with private grids and tables. `DataTable` has no consumers.
+  - Bulk actions fan out one request per id, which causes the 429s (`useCreationLibraryActions.ts:82-96`, `TaskMgmtContent.tsx:978-1002`).
+  - The api has no page, sort or bulk contract.
+  - Next: W0 (contracts, `components/collection/*`, `POST /api/collections/:entity/bulk`, `archived_at` expand migration), then W1 (projects, tasks gains Card, workforce roles, creation library).
+  - Done when the `check:collection-surfaces` and `check:bulk-fanout` allowlists are empty.
 - **`builderforceApi.ts` 9,965 lines.** Split to `lib/api/<domain>.ts`. Board rosters (`boardRostersApi.ts`) and Discovery (`discoveryApi.ts`) are out; their changes are uncommitted.
 - **Unused primitives:** ~21 `fetchProjects()` callers, 128 raw storage sites, 76 `canEdit` guards, 55 `smoothstep` literals; `stage.connect` has no production caller.
 - **Canvas real-browser pass** misses the `+` command bar, bottom nav and Brain-not-covering.

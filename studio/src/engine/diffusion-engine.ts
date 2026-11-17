@@ -14,6 +14,7 @@
  *   • `diffusion-schedule.ts` — DDPM schedule, noise, the LCM step (pure math)
  *   • `ort-session.ts`        — tensor typing, session options, error translation
  *   • `progress.ts` / `abort.ts` — the shared progress sink and cancel check
+ *   • `residency/`            — session loading, the VRAM/RAM budget, weight prefetch
  *
  * The shared denoise() primitive runs an LCM-style consistency-model step
  * that works for both backbones — SD-Turbo with timesteps=[999] degrades to
@@ -23,9 +24,12 @@
 
 import * as ort from 'onnxruntime-web';
 import { AutoTokenizer, type PreTrainedTokenizer } from '@huggingface/transformers';
-import type { ActiveDevice, DiffusionModelId, LcmModelDescriptor, OnnxFile, WeightSource } from '../types';
+import type { ActiveDevice, DiffusionModelId, LcmModelDescriptor, WeightSource } from '../types';
 import type { ProbedDevice } from './device-router';
 import { getOrFetchWeight } from './weight-cache';
+import { SessionResidency, type SessionComponent } from './residency/session-residency';
+import { createAdmittedSession, fetchSessionBuffers, type SessionBuffers } from './residency/session-loader';
+import { weightRequest, type WeightFetcher } from './residency/weight-prefetch';
 import { MODEL_REGISTRY } from './diffusion-models';
 import {
   applyGuidance,
@@ -37,7 +41,6 @@ import {
 } from './diffusion-schedule';
 import {
   assertSessionMatchesSpec,
-  basename,
   buildOrtSessionOptions,
   checkMemoryForModel,
   explainOrtError,
@@ -110,6 +113,12 @@ export interface DiffusionEngineOptions {
   onWeightProgress?: (file: string, loaded: number, total: number | null) => void;
   /** Phase progress (downloads, session creation, denoise steps). */
   onProgress?: (label: string) => void;
+  /** Session VRAM/RAM budget. Share one between a draft and a refinement engine
+   *  so refinement admissions evict the draft's sessions; created when absent. */
+  residency?: SessionResidency;
+  /** Route weight fetches through a prefetcher (the refinement engine waits
+   *  for, then reads, the weights VideoEngine warmed into the weight store). */
+  weightPrefetch?: WeightFetcher;
 }
 
 export interface DenoiseInputs {
@@ -141,12 +150,6 @@ export interface DenoiseResult {
   latent: Float32Array;
 }
 
-interface SessionBuffers {
-  label: string;
-  modelBuf: ArrayBuffer;
-  externalData: { name: string; buf: ArrayBuffer } | null;
-}
-
 /**
  * How many distinct prompt embeddings an engine remembers. A storyboard reuses
  * its negative prompt on every shot and often repeats a shot prompt; the CLIP
@@ -163,8 +166,11 @@ export class DiffusionEngine {
   private disposed = false;
   /** Insertion-ordered, so the first key is the least recently used. */
   private readonly promptEmbeddings = new Map<string, Float32Array>();
+  private readonly residency: SessionResidency;
 
-  constructor(private readonly opts: DiffusionEngineOptions) {}
+  constructor(private readonly opts: DiffusionEngineOptions) {
+    this.residency = opts.residency ?? new SessionResidency(opts.probed);
+  }
 
   // -------------------------------------------------------------------------
 
@@ -208,10 +214,11 @@ export class DiffusionEngine {
       reportProgress(`Loading ${d.id} weights (UNet + text-encoder + VAE)…`, onProgress);
 
       // Phase 1: download all model + sidecar weights in parallel (network-bound).
+      const fetchWeight = (file: string) => this.fetchWeight(file);
       const downloads = await Promise.all([
-        this.fetchSessionBuffers(d.files.textEncoder, 'text_encoder'),
-        this.fetchSessionBuffers(d.files.unet, 'unet'),
-        this.fetchSessionBuffers(d.files.vaeDecoder, 'vae_decoder'),
+        fetchSessionBuffers(d.files.textEncoder, 'text_encoder', fetchWeight, onProgress),
+        fetchSessionBuffers(d.files.unet, 'unet', fetchWeight, onProgress),
+        fetchSessionBuffers(d.files.vaeDecoder, 'vae_decoder', fetchWeight, onProgress),
       ]);
 
       // Phase 2: create ORT sessions SERIALLY. ORT-web mounts external-data
@@ -226,6 +233,7 @@ export class DiffusionEngine {
       this.textEncoderSession = await this.createSessionFromBuffers(downloads[0], sessionOptions);
       this.unetSession = await this.createSessionFromBuffers(downloads[1], sessionOptions);
       this.vaeSession = await this.createSessionFromBuffers(downloads[2], sessionOptions);
+      this.residency.settle(this.opts.model);
       reportProgress('All ORT sessions created.', onProgress);
 
       // Validate the loaded models' input names match what the registry declares.
@@ -310,7 +318,7 @@ export class DiffusionEngine {
       this.promptEmbeddings.set(prompt, cached);
       return new Float32Array(cached);
     }
-    const embedding = await this.encodePrompt(prompt);
+    const embedding = await this.residency.whileInUse(this.opts.model, () => this.encodePrompt(prompt));
     this.promptEmbeddings.set(prompt, embedding);
     if (this.promptEmbeddings.size > PROMPT_EMBEDDING_CACHE_SIZE) {
       const oldest = this.promptEmbeddings.keys().next().value;
@@ -331,6 +339,11 @@ export class DiffusionEngine {
    * native one-shot generation up to a small numerical constant.
    */
   async denoise(inputs: DenoiseInputs): Promise<DenoiseResult> {
+    // Pinned for the run: no admission may evict + release a session mid-loop.
+    return this.residency.whileInUse(this.opts.model, () => this.runDenoise(inputs));
+  }
+
+  private async runDenoise(inputs: DenoiseInputs): Promise<DenoiseResult> {
     if (!this.unetSession || !this.vaeSession) {
       throw new Error('DiffusionEngine.init() not called');
     }
@@ -411,7 +424,7 @@ export class DiffusionEngine {
       );
     }
     const { latentH, latentW } = this.latentDims;
-    return this.runVaeDecode(latent, latentH, latentW);
+    return this.residency.whileInUse(this.opts.model, () => this.runVaeDecode(latent, latentH, latentW));
   }
 
   // -------------------------------------------------------------------------
@@ -466,18 +479,15 @@ export class DiffusionEngine {
     this.vaeSession = null;
     this.tokenizer = null;
     this.promptEmbeddings.clear();
+    // Drops them from the residency budget, then releases each (errors swallowed).
+    await this.residency.releaseModel(this.opts.model, sessions);
+  }
 
-    await Promise.all(
-      sessions.map(async (s) => {
-        if (!s) return;
-        try {
-          await s.release();
-        } catch {
-          // release() can throw if the session was never fully created;
-          // we still want to continue tearing down the other resources.
-        }
-      }),
-    );
+  /** The residency budget evicted (and is about to release) one of our sessions. */
+  private forgetEvicted(component: SessionComponent): void {
+    if (component === 'text_encoder') this.textEncoderSession = null;
+    else if (component === 'unet') this.unetSession = null;
+    else this.vaeSession = null;
   }
 
   /** The uncached text-encoder pass behind {@link embedPrompt}. */
@@ -528,60 +538,19 @@ export class DiffusionEngine {
     return new Float32Array(hidden);
   }
 
-  /** Fetch the model + (optional) external-data buffers for one session.
-   *  Pure I/O — no ORT calls. Split from session creation so the engine can
-   *  parallelize downloads while still serialising the ORT create step. */
-  private async fetchSessionBuffers(
-    file: OnnxFile,
-    label: string,
-  ): Promise<SessionBuffers> {
-    const onProgress = this.opts.onProgress;
-    reportProgress(`Downloading ${label} (${file.model})…`, onProgress);
-    const modelBuf = await this.fetchWeight(file.model);
-    let externalData: { name: string; buf: ArrayBuffer } | null = null;
-    if (file.externalData) {
-      reportProgress(`Downloading ${label} weight data (${file.externalData})…`, onProgress);
-      const dataBuf = await this.fetchWeight(file.externalData);
-      externalData = { name: basename(file.externalData), buf: dataBuf };
-    }
-    return { label, modelBuf, externalData };
-  }
-
-  /** Create an ORT session from already-downloaded buffers. Caller MUST call
-   *  this serially across sessions when any of them carry external data —
-   *  ORT-web's external-data mount Map is global and the `finally` of every
-   *  session create unmounts it, so concurrent creates race. The init() call
-   *  site enforces serial creation. */
-  private async createSessionFromBuffers(
+  /** Create + admit one session — serially only (session-loader's SERIAL-CREATE INVARIANT). */
+  private createSessionFromBuffers(
     bufs: SessionBuffers,
     baseOptions: ort.InferenceSession.SessionOptions,
   ): Promise<ort.InferenceSession> {
-    const onProgress = this.opts.onProgress;
-    const options: ort.InferenceSession.SessionOptions = { ...baseOptions };
-    if (bufs.externalData) {
-      // The .onnx graph references its sidecar by basename (e.g.
-      // 'model.onnx_data'); ORT matches the externalData `path` against it.
-      options.externalData = [
-        { path: bufs.externalData.name, data: new Uint8Array(bufs.externalData.buf) },
-      ];
-    }
-    reportProgress(`Creating ${bufs.label} ORT session…`, onProgress);
-    try {
-      const session = await ort.InferenceSession.create(
-        new Uint8Array(bufs.modelBuf),
-        options,
-      );
-      reportProgress(`${bufs.label} ready.`, onProgress);
-      return session;
-    } catch (err) {
-      throw explainOrtError(
-        err,
-        `${bufs.label} session create`,
-        this.descriptor.id,
-        this.descriptor.minVramMb,
-        this.opts.probed.approxMemoryMb,
-      );
-    }
+    const d = this.descriptor;
+    return createAdmittedSession(bufs, baseOptions, {
+      residency: this.residency,
+      modelId: this.opts.model,
+      onProgress: this.opts.onProgress,
+      onEvicted: () => this.forgetEvicted(bufs.component),
+      explain: (err, phase) => explainOrtError(err, phase, d.id, d.minVramMb, this.opts.probed.approxMemoryMb),
+    });
   }
 
   /** Wrap session.run() so DXGI_ERROR_DEVICE_HUNG, std::bad_alloc, "Device is
@@ -606,16 +575,13 @@ export class DiffusionEngine {
     }
   }
 
+  /** One weight file — via the prefetcher when wired, else the weight cache. */
   private async fetchWeight(file: string): Promise<ArrayBuffer> {
-    return getOrFetchWeight({
-      cacheKey: `${this.opts.model}/${file}`,
-      hfRepo: this.descriptor.hfRepo,
-      hfPath: file,
-      sources: this.opts.weightSources,
-      apiKey: this.opts.apiKey,
-      r2Base: this.opts.r2Base,
-      onProgress: (loaded, total) => this.opts.onWeightProgress?.(file, loaded, total),
-    });
+    const request = {
+      ...weightRequest(this.descriptor, file, this.opts),
+      onProgress: (loaded: number, total: number | null) => this.opts.onWeightProgress?.(file, loaded, total),
+    };
+    return this.opts.weightPrefetch ? this.opts.weightPrefetch.fetch(request) : getOrFetchWeight(request);
   }
 
   private buildUnetFeeds(args: {
