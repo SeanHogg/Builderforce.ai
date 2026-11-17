@@ -149,7 +149,9 @@ export class VideoEngine {
     const height = options.height ?? DEFAULT_HEIGHT;
     const weightSources = options.weightSources ?? DEFAULT_WEIGHT_SOURCES;
 
-    const residency = new LcmResidency({ ...options, probed, weightSources, r2Base: deriveR2Base(options.baseUrl) });
+    const { model, refinementModel, apiKey } = options;
+    const r2Base = deriveR2Base(options.baseUrl);
+    const residency = new LcmResidency({ probed, model, refinementModel, apiKey, weightSources, r2Base });
     const diffusion = residency.createEngine(options.model, { width, height, onProgress: options.onProgress });
     await diffusion.init();
     // Warm the refinement weights only once the draft is up (no-op without one).
@@ -227,7 +229,11 @@ export class VideoEngine {
    * are slerp-interpolated in latent space (one cheap VAE decode each). Returns
    * the muxed MP4 plus the updated state.
    */
-  async generate(args: GenerateOptions): Promise<GenerateResult> {
+  generate(args: GenerateOptions): Promise<GenerateResult> {
+    return this.whileBusy(() => this.runGenerate(args));
+  }
+
+  private async runGenerate(args: GenerateOptions): Promise<GenerateResult> {
     const start = performance.now();
     const descriptor = MODEL_REGISTRY[this.opts.model];
     const steps = args.steps ?? descriptor.defaultSteps;
@@ -371,7 +377,16 @@ export class VideoEngine {
    * When `validate` is set, each shot's first keyframe is checked by the VLM
    * frame validator (advisory — never blocks generation).
    */
-  async generateStoryboard(args: StoryboardGenerateOptions): Promise<StoryboardGenerateResult> {
+  generateStoryboard(args: StoryboardGenerateOptions): Promise<StoryboardGenerateResult> {
+    return this.whileBusy(() => this.runStoryboard(args));
+  }
+
+  /** Generation marks the engine busy, so the refinement weight warm yields to it. */
+  private whileBusy<T>(work: () => Promise<T>): Promise<T> {
+    return this.lcmResidency ? this.lcmResidency.run(work) : work();
+  }
+
+  private async runStoryboard(args: StoryboardGenerateOptions): Promise<StoryboardGenerateResult> {
     const start = performance.now();
     const descriptor = MODEL_REGISTRY[this.opts.model];
     const width = this.opts.width ?? DEFAULT_WIDTH;
@@ -973,8 +988,8 @@ export class VideoEngine {
       onProgress,
     );
     await this.lcmDiffusion.dispose();
-    // Same shared residency (its admissions evict whatever draft state is left)
-    // and the refinement weights warmed into the weight store since create().
+    // Same shared session budget, and the refinement weights the idle-time warm
+    // stored since create() (any file it did not reach downloads now).
     this.diffusion = this.lcmResidency!.createEngine(this.opts.refinementModel!, {
       width: opts.width,
       height: opts.height,

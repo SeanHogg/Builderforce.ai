@@ -1,3 +1,24 @@
+## ✅ RESOLVED 2026-11-17: the WebContainers ML modules ship (2026.10.14), and Studio uses them (studio 2026.11.2)
+
+- **WebContainers 2026.10.14 is on npm.** The phase 1–8 ML modules (inference, adaptive, memory, prefetch, kvcache, learning) now live under the `./ml` subpath, and the root export is back to the dev runtime only. The worker bundle is `./ml/worker.js`.
+- **Review fixes in the package:**
+  - The worker bundle no longer overwrites `worker.js`.
+  - An AbortSignal is no longer posted to the worker.
+  - The SIMD probe works.
+  - Prefetch, kv-cache and learner state are bounded.
+  - The IndexedDB helper handles blocked, versionchange and late-success opens without leaking.
+  - `createModelCache` gained `valueFormat: 'raw'` and custom db/store names.
+- **Studio's weight cache** goes through `createModelCache` on the same `builderforce-studio-weights` database. It still stores raw ArrayBuffers, so old and new builds read each other's entries.
+- **Session budget:** `SessionResidency` (`createMemoryManager`) budgets live ORT sessions at 0.8 × the device memory hint and reports pressure and headroom. Sessions are pinned for life and never evicted.
+- **Refinement weight warm:** `WeightPrefetch` (`createPrefetcher`) runs only when a refinement model is set.
+  - It warms one file at a time, only while the engine is idle (`EngineActivity` around `generate` / `generateStoryboard`).
+  - A warm that is in flight when generation starts is cancelled and requeued.
+  - It pauses under memory pressure.
+  - It skips any file whose size × 2 exceeds the headroom.
+  - It retries a transient persist failure once.
+  - It never overlaps draft generation, which is an OOM risk for multi-GB UNet weights.
+- **Out of scope by design:** kvcache, knowledge memory, the inference client, the adaptive controller and the learner. Studio runs no local text LLM.
+
 ## ✅ RESOLVED 2026-11-16: the progress guard no longer pauses a finished, verified run (VS Code 2026.10.187)
 
 - Chat #146477: the run edited AuthShell, the login page and the register page, and `tsc` passed, yet three progress checks fired and parked it on `ask_user`. The second check's change-tools-only turn made the model invent an edit.

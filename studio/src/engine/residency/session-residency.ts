@@ -4,26 +4,22 @@
  * Owns a `createMemoryManager` from `@seanhogg/builderforce-webcontainers/ml`.
  * Every ORT session a DiffusionEngine creates is admitted as one resident
  * (`${modelId}/${component}`, group = modelId) charged at the byte size of the
- * weights it was built from (model + external-data sidecar). When an admission
- * does not fit, the manager evicts residents; this class then tells the owning
- * engine (so it drops its reference) and calls `release()` on the evicted
- * session — release errors are swallowed exactly as DiffusionEngine's own
- * teardown always has.
+ * weights it was built from (model + external-data sidecar).
  *
- * One instance is shared between a VideoEngine's draft and refinement engines,
- * which is what enforces the max(draft, refinement) rule: admitting refinement
- * sessions evicts (and releases) draft sessions whenever both cannot fit.
+ * Sessions are admitted PINNED for their whole life, so the manager never
+ * evicts a live session: a session is only ever freed by its owning engine,
+ * through {@link SessionResidency.releaseModel} (dispose, or a failed init).
+ * An admission that does not fit beside the pinned residents is rejected by
+ * the manager; the session still exists and stays owned by its engine
+ * (released by `releaseModel`), it is simply not budget-tracked.
  *
- * A model's sessions are admitted PINNED while that model initialises — the
- * manager evicts same-group residents first, so unpinned it would evict the
- * text encoder to fit the UNet of the SAME engine. `settle(modelId)` unpins
- * them once init completes, making them evictable by the next model.
- * `whileInUse(modelId, work)` re-pins them for the duration of one run, so a
- * concurrent admission cannot evict + release a session a denoise is using.
- *
- * An admission that cannot fit even after evicting every unpinned resident is
- * rejected by the manager; the session still exists and stays owned by its
- * engine (released by `releaseModel`), it is simply not budget-tracked.
+ * One instance is shared between a VideoEngine's draft and refinement engines.
+ * The max(draft, refinement) rule is enforced by the VideoEngine itself — the
+ * refinement pass disposes the draft engine before creating the refinement
+ * one — so the budget only ever holds one model's sessions at a time. What the
+ * budget is for is reporting: {@link SessionResidency.isPressured} and
+ * {@link SessionResidency.headroomBytes} let background work (the refinement
+ * weight warm) back off from memory the live sessions need.
  */
 
 import {
@@ -32,7 +28,6 @@ import {
   probeRamBytes,
   type AdmitResult,
   type MemoryManager,
-  type TrackedEntry,
 } from '@seanhogg/builderforce-webcontainers/ml';
 import type { ProbedDevice } from '../device-router';
 
@@ -49,11 +44,12 @@ export interface ReleasableSession {
 const MIB = 1024 * 1024;
 
 /**
- * Fraction of the probed memory the resident sessions may occupy. The other
- * 20 % is headroom for what the budget does not count: latents, UNet
+ * Fraction of the device memory hint the resident sessions may occupy. The
+ * other 20 % is headroom for what the budget does not count: latents, UNet
  * activations, ORT's per-run workspace, the tokenizer and the page itself.
- * Applied to `probed.approxMemoryMb` when the device reports it, otherwise to
- * `probeRamBytes()` (navigator.deviceMemory, else the manager's 4 GiB default).
+ * The hint is the probed VRAM (`probed.approxMemoryMb`) when the device
+ * reports it, otherwise `probeRamBytes()` — navigator.deviceMemory, else the
+ * manager's 4 GiB default.
  */
 export const RESIDENT_BUDGET_FRACTION = 0.8;
 
@@ -74,18 +70,11 @@ export interface AdmitSessionArgs {
   /** Downloaded weight bytes the session was created from, sidecars included. */
   bytes: number;
   session: ReleasableSession;
-  /** Called when the budget evicts this session, BEFORE it is released, so the
-   *  owner can drop its reference. */
-  onEvicted: () => void;
 }
 
 export class SessionResidency {
   private readonly manager: MemoryManager;
   private readonly tier: 'vram' | 'ram';
-  /** Eviction callbacks of the currently tracked sessions, by resident id. */
-  private readonly owners = new Map<string, () => void>();
-  /** In-flight {@link whileInUse} runs per model id. */
-  private readonly holds = new Map<string, number>();
 
   constructor(probed: Pick<ProbedDevice, 'kind' | 'approxMemoryMb'>, byteBudget = residencyBudgetBytes(probed)) {
     const onGpu = probed.kind === 'webgpu' || probed.kind === 'webnn';
@@ -93,17 +82,15 @@ export class SessionResidency {
     this.manager = createMemoryManager({ byteBudget, vramBudgetBytes: onGpu ? byteBudget : 0 });
   }
 
-  /** Admit one freshly created session (pinned until {@link settle}), then
-   *  release whatever the admission evicted. */
+  /** Charge one freshly created session against the budget. Pinned for its
+   *  whole life: the manager never evicts it. */
   async admit(args: AdmitSessionArgs): Promise<AdmitResult> {
-    const id = sessionResidentId(args.modelId, args.component);
-    const result = await this.manager.admit(
+    return this.manager.admit(
       {
-        id,
+        id: sessionResidentId(args.modelId, args.component),
         group: args.modelId,
         component: args.component,
         bytes: args.bytes,
-        // An evicted session is rebuilt from the IndexedDB weight store.
         reloadCostMs: estimateReloadCostMs({ bytes: args.bytes, from: 'storage' }),
         // A live engine runs every one of its sessions on every frame.
         reuseProbability: 1,
@@ -112,40 +99,6 @@ export class SessionResidency {
       },
       { pin: true, spill: false },
     );
-    if (result.admitted) this.owners.set(id, args.onEvicted);
-    await this.releaseEvicted(result.evicted);
-    return result;
-  }
-
-  /** Init of `modelId` finished: unpin its sessions so a later model's
-   *  admissions may evict them (unless a run currently holds them). */
-  settle(modelId: string): void {
-    if (!this.holds.has(modelId)) this.setPinned(modelId, false);
-  }
-
-  /** Run `work` with `modelId`'s sessions pinned, so no admission can evict
-   *  (and release) a session mid-run. Re-entrant: the last run out unpins. */
-  async whileInUse<T>(modelId: string, work: () => Promise<T>): Promise<T> {
-    this.holds.set(modelId, (this.holds.get(modelId) ?? 0) + 1);
-    this.setPinned(modelId, true);
-    try {
-      return await work();
-    } finally {
-      const left = (this.holds.get(modelId) ?? 1) - 1;
-      if (left > 0) this.holds.set(modelId, left);
-      else {
-        this.holds.delete(modelId);
-        this.setPinned(modelId, false);
-      }
-    }
-  }
-
-  private setPinned(modelId: string, pinned: boolean): void {
-    for (const id of this.manager.residentIds()) {
-      if (this.manager.peek(id)?.group !== modelId) continue;
-      if (pinned) this.manager.pin(id);
-      else this.manager.unpin(id);
-    }
   }
 
   /** Drop every resident of `modelId` from the budget and release `sessions`
@@ -153,33 +106,21 @@ export class SessionResidency {
    *  Release errors are swallowed so one bad session cannot block the rest. */
   async releaseModel(modelId: string, sessions: ReadonlyArray<ReleasableSession | null>): Promise<void> {
     for (const component of SESSION_COMPONENTS) {
-      const id = sessionResidentId(modelId, component);
-      this.owners.delete(id);
-      await this.manager.release(id);
+      await this.manager.release(sessionResidentId(modelId, component));
     }
     await Promise.all(sessions.map((s) => releaseQuietly(s)));
   }
 
   /** Whether the budget is under memory pressure right now — background work
-   *  (the refinement weight warm) backs off while it is. */
+   *  (the refinement weight warm) pauses while it is. */
   isPressured(): boolean {
     return this.manager.pressure().pressured;
   }
 
-  /** Ids currently charged against the budget. */
-  residentIds(): string[] {
-    return this.manager.residentIds();
-  }
-
-  private async releaseEvicted(evicted: readonly TrackedEntry[]): Promise<void> {
-    await Promise.all(
-      evicted.map(async (entry) => {
-        const onEvicted = this.owners.get(entry.id);
-        this.owners.delete(entry.id);
-        onEvicted?.();
-        await releaseQuietly(entry.payload as ReleasableSession | undefined);
-      }),
-    );
+  /** Budget bytes not charged to a live session (never negative). */
+  headroomBytes(): number {
+    const { byteBudget, usedBytes } = this.manager.stats();
+    return Math.max(0, byteBudget - usedBytes);
   }
 }
 

@@ -75,12 +75,18 @@ build-time dev dependency: tsup bundles it into Studio's output, so consumers do
 - **Weight caching** — `createModelCache` (`valueFormat: 'raw'`) over the same `builderforce-studio-weights`
   IndexedDB database Studio has always used. Values stay raw `ArrayBuffer`s, so weights cached by earlier
   versions keep loading without a re-download and older Studio builds still read new writes.
-- **VRAM residency** — `createMemoryManager` budgets every ORT session (text encoder, UNet, VAE). The
-  draft and refinement engines share one budget, so loading the refinement model evicts and releases
-  the draft's sessions whenever both cannot fit.
+- **Session budget** — `createMemoryManager` accounts for every live ORT session (text encoder, UNet,
+  VAE) against 0.8 × the device memory hint: the probed VRAM when the device reports it, otherwise
+  `navigator.deviceMemory` (4 GiB when that is unavailable). Live sessions are never evicted; the
+  refinement pass disposes the draft engine before loading the refinement model, so memory stays at
+  max(draft, refinement). The budget's pressure and headroom gate the prefetch below.
 - **Refinement-weight prefetch** — once the draft model is up, `createPrefetcher` warms the refinement
-  model's weights into that IndexedDB store (holding no bytes in memory); the refinement pass waits for
-  any in-flight warm, then reads the weights from the store instead of downloading again.
+  model's weights into that IndexedDB store one file at a time, and only while the engine is idle:
+  a warm in flight is cancelled when `generate()` / `generateStoryboard()` starts and resumes once it
+  finishes, the warm pauses while the budget is pressured, and a file whose size is more than half the
+  budget headroom is skipped (it downloads on demand instead). A download that cannot be persisted is
+  retried once at the next idle; a second failure stops the warm. The refinement pass reads warmed
+  weights from the store instead of downloading again.
 
 Studio runs no local text LLM, so the package's KV cache, knowledge memory, inference client, adaptive
 controller and learner are not used.

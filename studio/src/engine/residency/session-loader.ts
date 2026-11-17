@@ -13,7 +13,8 @@
  * on a GLOBAL Map on the wasm Module and the `finally` of every session create
  * unmounts it, so concurrent creates race ("Module.MountedFiles is not
  * available"). DiffusionEngine.init() awaits each create in turn; the
- * runSessionCreatesSequentially test in diffusion-engine.test.ts locks that.
+ * 'DiffusionEngine.init session-create serialisation (external-data race
+ * guard)' suite in diffusion-engine.test.ts locks that.
  */
 
 import * as ort from 'onnxruntime-web';
@@ -55,8 +56,6 @@ export interface CreateSessionContext {
   residency: SessionResidency;
   modelId: string;
   onProgress?: (label: string) => void;
-  /** The owner drops its reference when the budget evicts this session. */
-  onEvicted: () => void;
   /** Translate an ORT create failure into an actionable error. */
   explain: (err: unknown, phase: string) => Error;
 }
@@ -89,7 +88,6 @@ export async function createAdmittedSession(
     component: bufs.component,
     bytes: sessionBufferBytes(bufs),
     session,
-    onEvicted: ctx.onEvicted,
   });
   return session;
 }

@@ -27,7 +27,7 @@ import { AutoTokenizer, type PreTrainedTokenizer } from '@huggingface/transforme
 import type { ActiveDevice, DiffusionModelId, LcmModelDescriptor, WeightSource } from '../types';
 import type { ProbedDevice } from './device-router';
 import { getOrFetchWeight } from './weight-cache';
-import { SessionResidency, type SessionComponent } from './residency/session-residency';
+import { SessionResidency } from './residency/session-residency';
 import { createAdmittedSession, fetchSessionBuffers, type SessionBuffers } from './residency/session-loader';
 import { weightRequest, type WeightFetcher } from './residency/weight-prefetch';
 import { MODEL_REGISTRY } from './diffusion-models';
@@ -113,11 +113,11 @@ export interface DiffusionEngineOptions {
   onWeightProgress?: (file: string, loaded: number, total: number | null) => void;
   /** Phase progress (downloads, session creation, denoise steps). */
   onProgress?: (label: string) => void;
-  /** Session VRAM/RAM budget. Share one between a draft and a refinement engine
-   *  so refinement admissions evict the draft's sessions; created when absent. */
+  /** Session VRAM/RAM budget (accounting only — live sessions are never
+   *  evicted). Shared between a draft and a refinement engine; created when absent. */
   residency?: SessionResidency;
-  /** Route weight fetches through a prefetcher (the refinement engine waits
-   *  for, then reads, the weights VideoEngine warmed into the weight store). */
+  /** Route weight fetches through a prefetcher (the refinement engine reads
+   *  the weights VideoEngine warmed into the weight store while idle). */
   weightPrefetch?: WeightFetcher;
 }
 
@@ -228,12 +228,11 @@ export class DiffusionEngine {
       // race: the first session's finally wipes the data the second is still
       // mid-deserialize. Symptom is "Module.MountedFiles is not available" on a
       // tensor like `up_blocks.2.resnets.1.conv2.weight`.
-      // The runSessionCreatesSequentially regression test in diffusion-engine.test.ts
-      // locks this invariant — do not switch back to Promise.all here.
+      // The 'DiffusionEngine.init session-create serialisation' suite in
+      // diffusion-engine.test.ts locks this invariant — do not switch back to Promise.all here.
       this.textEncoderSession = await this.createSessionFromBuffers(downloads[0], sessionOptions);
       this.unetSession = await this.createSessionFromBuffers(downloads[1], sessionOptions);
       this.vaeSession = await this.createSessionFromBuffers(downloads[2], sessionOptions);
-      this.residency.settle(this.opts.model);
       reportProgress('All ORT sessions created.', onProgress);
 
       // Validate the loaded models' input names match what the registry declares.
@@ -318,7 +317,7 @@ export class DiffusionEngine {
       this.promptEmbeddings.set(prompt, cached);
       return new Float32Array(cached);
     }
-    const embedding = await this.residency.whileInUse(this.opts.model, () => this.encodePrompt(prompt));
+    const embedding = await this.encodePrompt(prompt);
     this.promptEmbeddings.set(prompt, embedding);
     if (this.promptEmbeddings.size > PROMPT_EMBEDDING_CACHE_SIZE) {
       const oldest = this.promptEmbeddings.keys().next().value;
@@ -339,11 +338,6 @@ export class DiffusionEngine {
    * native one-shot generation up to a small numerical constant.
    */
   async denoise(inputs: DenoiseInputs): Promise<DenoiseResult> {
-    // Pinned for the run: no admission may evict + release a session mid-loop.
-    return this.residency.whileInUse(this.opts.model, () => this.runDenoise(inputs));
-  }
-
-  private async runDenoise(inputs: DenoiseInputs): Promise<DenoiseResult> {
     if (!this.unetSession || !this.vaeSession) {
       throw new Error('DiffusionEngine.init() not called');
     }
@@ -424,7 +418,7 @@ export class DiffusionEngine {
       );
     }
     const { latentH, latentW } = this.latentDims;
-    return this.residency.whileInUse(this.opts.model, () => this.runVaeDecode(latent, latentH, latentW));
+    return this.runVaeDecode(latent, latentH, latentW);
   }
 
   // -------------------------------------------------------------------------
@@ -481,13 +475,6 @@ export class DiffusionEngine {
     this.promptEmbeddings.clear();
     // Drops them from the residency budget, then releases each (errors swallowed).
     await this.residency.releaseModel(this.opts.model, sessions);
-  }
-
-  /** The residency budget evicted (and is about to release) one of our sessions. */
-  private forgetEvicted(component: SessionComponent): void {
-    if (component === 'text_encoder') this.textEncoderSession = null;
-    else if (component === 'unet') this.unetSession = null;
-    else this.vaeSession = null;
   }
 
   /** The uncached text-encoder pass behind {@link embedPrompt}. */
@@ -548,7 +535,6 @@ export class DiffusionEngine {
       residency: this.residency,
       modelId: this.opts.model,
       onProgress: this.opts.onProgress,
-      onEvicted: () => this.forgetEvicted(bufs.component),
       explain: (err, phase) => explainOrtError(err, phase, d.id, d.minVramMb, this.opts.probed.approxMemoryMb),
     });
   }
