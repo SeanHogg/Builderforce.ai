@@ -6,7 +6,7 @@ import { resolveStateDir } from "../config/paths.js";
 import type { BuilderForceAgentsConfig } from "../config/types.js";
 import { readLoggingConfig } from "./config.js";
 import type { ConsoleStyle } from "./console.js";
-import { type LogLevel, levelToMinLevel, normalizeLogLevel } from "./levels.js";
+import { type LogLevel, levelToMinLevel, levelToTslogMinLevel, normalizeLogLevel } from "./levels.js";
 import { loggingState } from "./state.js";
 
 /** Default log directory: ~/.builderforce/logs (global .builderforce only). */
@@ -99,7 +99,7 @@ function buildLogger(settings: ResolvedSettings): TsLogger<LogObj> {
   }
   const logger = new TsLogger<LogObj>({
     name: "builderforce",
-    minLevel: levelToMinLevel(settings.level),
+    minLevel: levelToTslogMinLevel(settings.level),
     type: "hidden", // no ansi formatting
   });
 
@@ -135,7 +135,7 @@ export function getChildLogger(
   opts?: { level?: LogLevel },
 ): TsLogger<LogObj> {
   const base = getLogger();
-  const minLevel = opts?.level ? levelToMinLevel(opts.level) : undefined;
+  const minLevel = opts?.level ? levelToTslogMinLevel(opts.level) : undefined;
   const name = bindings ? JSON.stringify(bindings) : undefined;
   return base.getSubLogger({
     name,

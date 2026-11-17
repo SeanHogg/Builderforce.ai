@@ -6,7 +6,13 @@ import { resolveStateDir } from "../config/paths.js";
 import type { BuilderForceAgentsConfig } from "../config/types.js";
 import { readLoggingConfig } from "./config.js";
 import type { ConsoleStyle } from "./console.js";
-import { type LogLevel, levelToMinLevel, normalizeLogLevel } from "./levels.js";
+import {
+  type LogLevel,
+  levelToMinLevel,
+  levelToTslogMinLevel,
+  normalizeLogLevel,
+  TSLOG_FATAL_LEVEL_ID,
+} from "./levels.js";
 import { loggingState } from "./state.js";
 
 /** Default log directory: ~/.builderforce/logs (global .builderforce only). */
@@ -84,6 +90,10 @@ function resolveSettings(): ResolvedSettings {
   return { enabled, level, file, format };
 }
 
+function isSilentSettings(settings: ResolvedSettings): boolean {
+  return !settings.enabled || settings.level === "silent";
+}
+
 function settingsChanged(a: ResolvedSettings | null, b: ResolvedSettings) {
   if (!a) {
     return true;
@@ -105,12 +115,13 @@ export function isFileLogLevelEnabled(level: LogLevel): boolean {
 }
 
 function buildLogger(settings: ResolvedSettings): TsLogger<LogObj> {
-  // If user has disabled file logging, return a no-op logger with silent
-  // level.  This keeps callers happy while avoiding touching the filesystem.
-  if (!settings.enabled) {
+  // Disabled or silent: a transport-less hidden logger. Nothing is written
+  // anywhere and the filesystem is never touched (an out-of-range tslog
+  // minLevel would only trigger tslog's config warning).
+  if (isSilentSettings(settings)) {
     return new TsLogger<LogObj>({
       name: "builderforce",
-      minLevel: levelToMinLevel("silent"),
+      minLevel: TSLOG_FATAL_LEVEL_ID,
       type: "hidden",
     });
   }
@@ -122,7 +133,7 @@ function buildLogger(settings: ResolvedSettings): TsLogger<LogObj> {
   }
   const logger = new TsLogger<LogObj>({
     name: "builderforce",
-    minLevel: levelToMinLevel(settings.level),
+    minLevel: levelToTslogMinLevel(settings.level),
     type: "hidden", // no ansi formatting
   });
 
@@ -175,7 +186,7 @@ export function getChildLogger(
   opts?: { level?: LogLevel },
 ): TsLogger<LogObj> {
   const base = getLogger();
-  const minLevel = opts?.level ? levelToMinLevel(opts.level) : undefined;
+  const minLevel = opts?.level ? levelToTslogMinLevel(opts.level) : undefined;
   const name = bindings ? JSON.stringify(bindings) : undefined;
   return base.getSubLogger({
     name,
@@ -255,7 +266,8 @@ export function onLoggerReset(hook: () => void): () => void {
 export function registerLogTransport(transport: LogTransport): () => void {
   externalTransports.add(transport);
   const logger = loggingState.cachedLogger as TsLogger<LogObj> | null;
-  if (logger) {
+  const cachedSettings = loggingState.cachedSettings as ResolvedSettings | null;
+  if (logger && !(cachedSettings && isSilentSettings(cachedSettings))) {
     attachExternalTransport(logger, transport);
   }
   return () => {

@@ -3,7 +3,7 @@
  * and an argument cmd.exe could expand is refused before anything starts.
  */
 import { describe, expect, it } from "vitest";
-import { launchPlan, spawnEnvFor, systemCmdPath } from "./execRunner";
+import { combineOutputTail, launchPlan, spawnEnvFor, systemCmdPath } from "./execRunner";
 import { targetedTestCommand } from "./targetedTests";
 
 /** The injected console node: proves launchPlan uses the resolver, not process.execPath or a bare name. */
@@ -122,5 +122,18 @@ describe("systemCmdPath", () => {
 
   it("with no environment it is C:\\Windows\\System32\\cmd.exe", () => {
     expect(systemCmdPath({})).toBe("C:\\Windows\\System32\\cmd.exe");
+  });
+});
+
+describe("combineOutputTail", () => {
+  it("regression: a verbose stdout never crowds stderr (the reason) out of the tail", () => {
+    const tail = combineOutputTail("x".repeat(10_000), "y".repeat(10_000), 100);
+    expect(tail).toBe("x".repeat(50) + "y".repeat(50));
+  });
+
+  it("budget one stream does not use goes to the other, and the tail never exceeds the limit", () => {
+    expect(combineOutputTail("x".repeat(10), "y".repeat(10_000), 100)).toBe("x".repeat(10) + "y".repeat(90));
+    expect(combineOutputTail("x".repeat(10_000), "boom", 100)).toBe("x".repeat(96) + "boom");
+    expect(combineOutputTail("", "", 100)).toBe("");
   });
 });

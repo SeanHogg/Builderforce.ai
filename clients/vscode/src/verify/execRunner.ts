@@ -14,8 +14,9 @@
  * (`%`, `"`, a line break) is refused before anything starts. Every other program
  * (`node` — resolved to an absolute console node — and `git`) is spawned directly, no shell.
  *
- * Output is capped, not ignored: a ring buffer keeps the last ~2 KB of combined
- * stdout/stderr, and the shell hands the tail to the CALLER (a failing check record
+ * Output is capped, not ignored: a ring buffer per stream keeps the last ~2 KB of stdout
+ * and of stderr, combined into one ~2 KB tail ({@link combineOutputTail}) that never lets
+ * one stream crowd out the other, and the shell hands the tail to the CALLER (a failing check record
  * carries it, so a refusal can quote why the check failed — never just "exit 1").
  * Pass records need no tail: the caller records it only on a fail. The cap is a ring
  * buffer, never unbounded: a verbose check can never overflow memory or be misreported.
@@ -47,6 +48,17 @@ export const DID_NOT_FINISH = 124;
 
 /** The most combined output kept on a check: a bounded ring, never unbounded. */
 export const OUTPUT_TAIL_LIMIT = 2048;
+
+/**
+ * The combined tail of a run, at most `limit` chars: the end of stdout followed by the end of
+ * stderr. When both overflow, each keeps half; budget one stream does not use goes to the
+ * other — so stderr is never crowded out by a verbose stdout, nor stdout by a verbose stderr.
+ */
+export function combineOutputTail(stdout: string, stderr: string, limit: number = OUTPUT_TAIL_LIMIT): string {
+  const errKeep = Math.min(stderr.length, Math.max(Math.floor(limit / 2), limit - stdout.length));
+  const outKeep = Math.min(stdout.length, limit - errKeep);
+  return stdout.slice(stdout.length - outKeep) + stderr.slice(stderr.length - errKeep);
+}
 
 /** The package-manager shims that are `.cmd` batch files on Windows. */
 const WINDOWS_SHIMS = new Set(["pnpm", "npm", "yarn", "npx"]);
@@ -263,13 +275,17 @@ export const execRunner: Runner = (argv, options) =>
       settled = true;
       if (timer) clearTimeout(timer);
       // The tail rides every result; the CALLER records it on a failing check only.
+      const tail = combineOutputTail(stdoutTail, stderrTail);
       resolve({ exitCode, tail: tail.trim() ? tail : undefined });
     };
     let child: ReturnType<typeof spawn>;
-    // A bounded ring of the last OUTPUT_TAIL_LIMIT chars of combined stdout+stderr:
-    // kept only so a FAILING check can say WHY — the slice (not the accumulation) is
-    // stored, so memory is flat no matter how verbose the command.
-    let tail = "";
+    // A bounded ring PER STREAM of the last OUTPUT_TAIL_LIMIT chars: kept only so a FAILING
+    // check can say WHY — the slice (not the accumulation) is stored, so memory is flat no
+    // matter how verbose the command. Per stream, not one interleaved ring: stdout and stderr
+    // are independent pipes whose data events arrive in no fixed order, so a single ring let
+    // late stdout chunks push the stderr (usually the reason) out of the tail entirely.
+    let stdoutTail = "";
+    let stderrTail = "";
     const env = spawnEnvFor(plan);
     try {
       child = spawn(plan.file, plan.args, {
@@ -284,11 +300,12 @@ export const execRunner: Runner = (argv, options) =>
     } catch {
       return resolve({ exitCode: 1, tail: "" }); // failed to start — non-zero, and never a pass
     }
-    const onData = (chunk: unknown): void => {
-      tail = (tail + String(chunk)).slice(-OUTPUT_TAIL_LIMIT);
-    };
-    child.stdout?.on("data", onData);
-    child.stderr?.on("data", onData);
+    child.stdout?.on("data", (chunk: unknown) => {
+      stdoutTail = (stdoutTail + String(chunk)).slice(-OUTPUT_TAIL_LIMIT);
+    });
+    child.stderr?.on("data", (chunk: unknown) => {
+      stderrTail = (stderrTail + String(chunk)).slice(-OUTPUT_TAIL_LIMIT);
+    });
     const timer = options.timeout
       ? setTimeout(() => {
           // Kill the process and everything it started (cmd.exe → pnpm → tsc); never started: nothing to kill.
