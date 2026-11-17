@@ -110,6 +110,30 @@ describe.skipIf(!hasBash || !hasGit)("hostile free text reaches git / gh byte-fo
     }
   });
 
+  it("regression: a FOREIGN repo's checkout at ../<branch>-wt on a same-named branch is refused, nothing committed there", async () => {
+    const root = mkdtempSync(join(tmpdir(), "bf-commit-foreign-"));
+    const dir = join(root, "work");
+    const foreign = join(root, "ticket-x-wt");
+    try {
+      // A different repository, sitting exactly where the ticket worktree would go, on `ticket/x`.
+      expect(git(root, "init", "-q", "ticket-x-wt").status).toBe(0);
+      expect(git(foreign, "commit", "-q", "--allow-empty", "-m", "foreign-init").status).toBe(0);
+      expect(git(foreign, "checkout", "-q", "-b", "ticket/x").status).toBe(0);
+      expect(git(root, "init", "-q", "work").status).toBe(0);
+      expect(git(dir, "commit", "-q", "--allow-empty", "-m", "init").status).toBe(0);
+      writeFileSync(join(dir, "a.ts"), "1");
+      const out = data(await gitCommitTool.execute({ message: "m", paths: ["a.ts"], branch: "ticket/x" }, bashShell(dir) as never));
+      expect(out.ok).toBe(false);
+      expect(out.output).toContain("WORKTREE_FOREIGN");
+      expect(out.error).toContain("DIFFERENT repository");
+      expect(git(foreign, "log", "-1", "--format=%B").stdout.trim()).toBe("foreign-init");
+      expect(existsSync(join(foreign, "a.ts"))).toBe(false);
+      expect(git(dir, "log", "-1", "--format=%B").stdout.trim()).toBe("init");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("regression: a pull-request title and body are handed to gh as literal arguments", async () => {
     const root = mkdtempSync(join(tmpdir(), "bf-pr-"));
     const dir = join(root, "work");

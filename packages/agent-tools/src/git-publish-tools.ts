@@ -100,10 +100,20 @@ function buildCommitCommand(opts: { message: string; paths: string[]; branch?: s
       ? [
           'ORIG="$(git rev-parse --show-toplevel)"',
           `WT="$ORIG/../$(echo "${branch}" | tr '/' '-')-wt"`,
+          // This checkout's git-common-dir, physical and absolute: the identity of the
+          // repository. A worktree of THIS repo shares it; a foreign checkout does not.
+          'COMMON="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)"',
           // Reuse the worktree when the branch already has one there; create it from HEAD
-          // otherwise. The last arm tolerates a worktree that is already registered at
-          // that path ("already registered" would otherwise fail the whole commit).
-          `git worktree add "$WT" -b "${branch}" 2>/dev/null || git worktree add "$WT" "${branch}" 2>/dev/null || [ "$(git -C "$WT" rev-parse --abbrev-ref HEAD 2>/dev/null)" = "${branch}" ] || { echo WORKTREE_FAILED; exit 12; }`,
+          // otherwise. The reuse arm tolerates a worktree that is already registered at
+          // that path ("already registered" would otherwise fail the whole commit) — but
+          // ONLY when it belongs to this repository. A foreign repo's checkout sitting at
+          // `../<branch>-wt` on a same-named branch would otherwise receive the commit (and
+          // the agent's files copied into it), so it is refused instead.
+          `git worktree add "$WT" -b "${branch}" 2>/dev/null || git worktree add "$WT" "${branch}" 2>/dev/null || {`
+            + ` [ "$(git -C "$WT" rev-parse --abbrev-ref HEAD 2>/dev/null)" = ${shellQuote(branch)} ] || { echo WORKTREE_FAILED; exit 12; };`
+            + ` WT_COMMON="$(cd "$WT" 2>/dev/null && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P)" || WT_COMMON="";`
+            + ` [ "$WT_COMMON" = "$COMMON" ] || { echo "WORKTREE_FOREIGN: $WT"; exit 13; };`
+            + ' }',
           'cd "$WT"',
         ]
       : opts.allowBaseBranch
@@ -276,6 +286,14 @@ function publishToolResult(action: string, r: { ok: boolean; stdout?: string; ex
   }
   if (r.exitCode === 11 || /\bNO_SUCH_BRANCH\b/.test(out)) {
     return fail("no local branch by that name — it has already been deleted. Nothing to do.");
+  }
+  const foreign = /WORKTREE_FOREIGN:([^\n]*)/.exec(out);
+  if (r.exitCode === 13 || foreign) {
+    const at = (foreign?.[1] ?? "").trim();
+    return fail(
+      `the ticket branch's worktree path${at ? ` (${at})` : ""} is already a checkout of a DIFFERENT repository on a branch of the same name — `
+      + "nothing was committed there, and the checkout was not switched. Do not commit into it. Tell the human which directory is in the way (it must be moved or removed), or re-try git_commit with a different `branch` name.",
+    );
   }
   if (r.exitCode === 12 || /\bWORKTREE_FAILED\b/.test(out)) {
     return fail("the ticket branch's worktree could not be created or reused — nothing was committed and the checkout was not switched. Run git_status, then re-try git_commit with the same branch (a stale worktree can be cleared with `git worktree prune`).");
