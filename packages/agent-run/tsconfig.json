@@ -29,30 +29,10 @@
       "@builderforce/run-policy": ["../run-policy/src/index.ts"],
       "@builderforce/spend-contract": ["../spend-contract/src/index.ts"],
       "@builderforce/tool-output-policy": ["../tool-output-policy/src/index.ts"],
-      "@seanhogg/builderforce-memory/working": [
-        "./node_modules/@seanhogg/builderforce-memory/dist/working/index.d.ts",
-        "../../../builderforce-memory/packages/memory/dist/working/index.d.ts",
-        "../../../../../../builderforce-memory/packages/memory/dist/working/index.d.ts"
-      ],
-      "@seanhogg/builderforce-memory/handoff": [
-        "./node_modules/@seanhogg/builderforce-memory/dist/handoff/index.d.ts",
-        "../../../builderforce-memory/packages/memory/dist/handoff/index.d.ts",
-        "../../../../../../builderforce-memory/packages/memory/dist/handoff/index.d.ts"
-      ],
-      "@seanhogg/builderforce-memory/knowledge": [
-        "./node_modules/@seanhogg/builderforce-memory/dist/knowledge/index.d.ts",
-        "../../../builderforce-memory/packages/memory/dist/knowledge/index.d.ts",
-        "../../../../../../builderforce-memory/packages/memory/dist/knowledge/index.d.ts"
-      ],
-      "@seanhogg/builderforce-memory/knowledge/pack": [
-        "./node_modules/@seanhogg/builderforce-memory/dist/knowledge/pack/index.d.ts",
-        "../../../builderforce-memory/packages/memory/dist/knowledge/pack/index.d.ts",
-        "../../../../../../builderforce-memory/packages/memory/dist/knowledge/pack/index.d.ts"
-      ],
-      "@seanhogg/builderforce-memory/ingest": [
-        "./node_modules/@seanhogg/builderforce-memory/dist/ingest/index.d.ts",
-        "../../../builderforce-memory/packages/memory/dist/ingest/index.d.ts",
-        "../../../../../../builderforce-memory/packages/memory/dist/ingest/index.d.ts"
+      "@seanhogg/builderforce-memory/*": [
+        "./node_modules/@seanhogg/builderforce-memory/dist/*/index.d.ts",
+        "../../../builderforce-memory/packages/memory/dist/*/index.d.ts",
+        "../../../../../../builderforce-memory/packages/memory/dist/*/index.d.ts"
       ]
     }
   },

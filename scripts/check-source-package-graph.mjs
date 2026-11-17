@@ -16,7 +16,7 @@
  * `.claude/hooks/source-package-graph-guard.mjs` PostToolUse hook runs this file,
  * so the editor, `npm test` and CI can never disagree about what the rule is.
  *
- * EIGHT RULES:
+ * NINE RULES:
  *
  *  1. DECLARED EXTERNALS. Every non-builtin import in a source-only package's
  *     `src/` that is not another source-only package must appear in that
@@ -54,6 +54,13 @@
  *     an `X.ts`/`X.tsx` in a source-only package's `src/` or a consuming project's
  *     sources: bundlers resolve `.js` first, so a stale emit replaces the source.
  *
+ *  9. NPM SUBPATHS RESOLVE. Rule 3 for the OTHER half of what those packages
+ *     import: an npm subpath (`@seanhogg/builderforce-memory/stats`) in a
+ *     source-only package a project compiles resolves from the package's real
+ *     dir, which CI never installs — so it must resolve through the project's
+ *     `paths`, onto an install whose manifest declares it, at a file that exists
+ *     when that install is present (`scripts/lib/npmSubpaths.mjs`).
+ *
  * Projects are DISCOVERED, not listed: the guard walks the repo for tsconfigs and
  * checks every one that resolves or imports these packages. The list it replaced
  * named three projects and there are nine.
@@ -63,7 +70,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { collectSourceFiles, createImportScanner, loadTypeScript, toPosix } from './lib/moduleImports.mjs';
+import { collectSourceFiles, createImportScanner, loadTypeScript, packageRoot, toPosix } from './lib/moduleImports.mjs';
 import {
   declaredNames,
   linkedPackageNames,
@@ -72,6 +79,7 @@ import {
 } from './lib/declaredDependencies.mjs';
 import { SKIP_DIRS } from './lib/skipDirs.mjs';
 import { findTsconfigProjects, resolveThroughPaths, resolvesTo } from './lib/tsconfigPaths.mjs';
+import { suggestedSubpathTarget, unresolvedNpmSubpaths } from './lib/npmSubpaths.mjs';
 import { sourcePackageGraph } from './sourcePackageGraph.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -162,6 +170,7 @@ if (relevant.length === 0) {
   process.exit(1);
 }
 
+const sourcePackageDirs = graph.nodes.map((node) => node.dir);
 for (const project of relevant) {
   // Rule 3 + 2: everything the project imports, PLUS everything those packages
   // import, must resolve. The closure is the whole point — a project that
@@ -179,6 +188,28 @@ for (const project of relevant) {
         ? `${project.relative} resolves a package that imports '${specifier}', but has no paths entry for it.`
         : `${project.relative} compiles sources that import '${specifier}', but has no paths entry for it.`,
       remedy: `Add "${specifier}": ["${pathsTargetFor(project, specifier)}"] to compilerOptions.paths in ${project.relative}.`,
+    });
+  }
+
+  // Rule 9: an npm subpath those packages import resolves through THIS project's
+  // `paths` onto an install it declares — the packages' own dirs are never installed in CI.
+  const compiled = new Set([...required].map((specifier) => graph.bySpecifier.get(specifier)).filter(Boolean));
+  for (const problem of unresolvedNpmSubpaths({ project, nodes: compiled, sourcePackageDirs, repoRoot })) {
+    const { specifier } = problem.site;
+    const suggested = suggestedSubpathTarget(project.dir, specifier, repoRoot) ?? `./node_modules/${specifier}`;
+    failures.push({
+      rule: 'npm subpaths resolve',
+      detail:
+        `${project.relative} compiles ${problem.site.relative}:${problem.site.line}, which imports '${specifier}'` +
+        (problem.kind === 'unmapped'
+          ? ', but has no paths entry for it (the package dir it is imported from is not installed in CI).'
+          : problem.kind === 'undeclared-install'
+            ? `, mapped into ${problem.ownerDir}/node_modules, whose package.json does not declare it.`
+            : `, mapped to ${toPosix(relative(repoRoot, problem.target ?? ''))}, which does not exist.`),
+      remedy:
+        problem.kind === 'undeclared-install'
+          ? `Declare '${packageRoot(specifier)}' in ${problem.ownerDir}/package.json and refresh its lockfile.`
+          : `Add "${specifier}": ["${suggested}"] to compilerOptions.paths in ${project.relative} — the declaration its install's \`exports\` names (a uniform \`<pkg>/*\` wildcard covers a package whose layout is uniform).`,
     });
   }
 

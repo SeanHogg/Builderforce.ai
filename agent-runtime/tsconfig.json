@@ -46,17 +46,11 @@
       "@builderforce/prefetch": ["../packages/prefetch/src/index.ts"],
       "@builderforce/repo-map": ["../packages/repo-map/src/index.ts"],
       "@builderforce/knowledge-client": ["../packages/knowledge-client/src/index.ts"],
-      // `@builderforce/knowledge-client` is source-only with memory as a PEER and no install
-      // of its own (as in frontend/ and clients/*/tsconfig.json): the memory subpath it
-      // reaches resolves from THIS package's install.
-      "@seanhogg/builderforce-memory/knowledge": ["./node_modules/@seanhogg/builderforce-memory/dist/knowledge/index.d.ts"],
-      "@seanhogg/builderforce-memory/knowledge/pack": ["./node_modules/@seanhogg/builderforce-memory/dist/knowledge/pack/index.d.ts"],
-      // The same install serves the subpaths `@builderforce/agent-tools` reaches (the run's
-      // working memory, the ingest hashes): agent-tools has no install in a checkout that
-      // typechecks from here, so they resolve from THIS package's install.
-      "@seanhogg/builderforce-memory/working": ["./node_modules/@seanhogg/builderforce-memory/dist/working/index.d.ts"],
-      "@seanhogg/builderforce-memory/ingest": ["./node_modules/@seanhogg/builderforce-memory/dist/ingest/index.d.ts"],
-      "@seanhogg/builderforce-memory/handoff": ["./node_modules/@seanhogg/builderforce-memory/dist/handoff/index.d.ts"],
+      // The source-only packages compiled here (knowledge-client, agent-tools, prefetch, ...)
+      // install nothing of their own, so every memory subpath they reach resolves from THIS
+      // package's install: ONE wildcard (memory's layout is uniform, `dist/<sub>/index.d.ts`),
+      // so a new subpath needs no entry. The guard holds it (scripts/check-source-package-graph.mjs, rule 9).
+      "@seanhogg/builderforce-memory/*": ["./node_modules/@seanhogg/builderforce-memory/dist/*/index.d.ts"],
       // agent-tools' symbol extractor loads `web-tree-sitter` lazily; its install lives with
       // agent-tools (a declared dependency there), so the types resolve from it.
       "web-tree-sitter": ["../packages/agent-tools/node_modules/web-tree-sitter/tree-sitter-web.d.ts"],

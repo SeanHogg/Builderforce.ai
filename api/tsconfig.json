@@ -15,11 +15,8 @@
       "@builderforce/agent-tools/*": ["../packages/agent-tools/src/*"],
       "@builderforce/agent-loop": ["../packages/agent-loop/src/index.ts"],
       "@builderforce/agent-run": ["../packages/agent-run/src/index.ts"],
-      "@seanhogg/builderforce-memory/working": ["./node_modules/@seanhogg/builderforce-memory/dist/working/index.d.ts"],
-      "@seanhogg/builderforce-memory/handoff": ["./node_modules/@seanhogg/builderforce-memory/dist/handoff/index.d.ts"],
-      "@seanhogg/builderforce-memory/knowledge": ["./node_modules/@seanhogg/builderforce-memory/dist/knowledge/index.d.ts"],
-      "@seanhogg/builderforce-memory/knowledge/pack": ["./node_modules/@seanhogg/builderforce-memory/dist/knowledge/pack/index.d.ts"],
-      "@seanhogg/builderforce-memory/ingest": ["./node_modules/@seanhogg/builderforce-memory/dist/ingest/index.d.ts"],
+      "@seanhogg/builderforce-memory/*": ["./node_modules/@seanhogg/builderforce-memory/dist/*/index.d.ts"],
+      "@seanhogg/builderforce-memory-engine/ml/tasks/check-scheduler": ["./node_modules/@seanhogg/builderforce-memory-engine/dist/ml/tasks/check_scheduler.d.ts"],
 
       "@builderforce/agent-skills": ["../packages/agent-skills/src/index.ts"],
       "@builderforce/agent-stall": ["../packages/agent-stall/src/index.ts"],

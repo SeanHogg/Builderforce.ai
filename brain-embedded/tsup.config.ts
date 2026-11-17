@@ -3,8 +3,21 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'tsup';
 import { libraryConfig, REACT_EXTERNALS } from '../scripts/tsup.base.mjs';
 import { sourcePackageAliasMap } from '../scripts/sourcePackages.mjs';
+import { readTsconfig } from '../scripts/lib/tsconfigPaths.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
+/**
+ * This package's own `tsconfig` `paths`, absolute. `dts.compilerOptions` below REPLACES
+ * the tsconfig's `paths` (tsup merges compilerOptions shallowly), so without this the
+ * declaration program lost the npm subpaths the source-only packages import
+ * (`@seanhogg/builderforce-memory/stats` from `packages/prefetch`, which has no install)
+ * and the dts build failed with TS2307 in CI. Spread from the ONE list, never re-typed.
+ */
+const tsconfigPaths = Object.fromEntries(
+  Object.entries(readTsconfig(path.join(root, 'tsconfig.json')).compilerOptions.paths ?? {}).map(
+    ([specifier, targets]) => [specifier, (targets as string[]).map((target) => path.resolve(root, target))],
+  ),
+);
 /**
  * The source-only packages, derived from their manifests. esbuild resolves a bare
  * import from the REAL path of the importing file, so a linked package that itself
@@ -56,6 +69,7 @@ export default defineConfig(libraryConfig({
     compilerOptions: {
       rootDir: '..',
       paths: {
+        ...tsconfigPaths,
         ...Object.fromEntries(Object.entries(sourceAliases).map(([specifier, entry]) => [specifier, [entry]])),
         '@seanhogg/bfi-web': [bfiWebPath],
       },

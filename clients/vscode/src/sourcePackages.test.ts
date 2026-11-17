@@ -1,7 +1,9 @@
-import { existsSync } from 'node:fs';
-import { dirname, relative, resolve, sep } from 'node:path';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { suggestedSubpathTarget, unresolvedNpmSubpaths } from '../../../scripts/lib/npmSubpaths.mjs';
 import { readSourcePackages } from '../../../scripts/sourcePackages.mjs';
 import { sourcePackageGraph } from '../../../scripts/sourcePackageGraph.mjs';
 import webviewConfig from '../webview/vite.config';
@@ -95,4 +97,93 @@ describe('source-only shared packages', () => {
     const graph = await sourcePackageGraph(repoRoot);
     expect(graph.cycles()).toEqual([]);
   }, 60_000);
+});
+
+/**
+ * Rule 9 (`scripts/lib/npmSubpaths.mjs`): an npm subpath a source-only package imports
+ * resolves from `packages/<name>/`, which CI never installs, so each consumer maps it
+ * through its own `paths`. `/stats`, `/retrieval` and the engine's
+ * `ml/tasks/check-scheduler` reached one consumer's `paths` and not seven others, and
+ * the Release workflow went red in six jobs. Fixtures, not the live repo, so each
+ * failure kind is pinned whatever the repo currently maps.
+ */
+describe('npm subpaths a source-only package imports', () => {
+  const memory = '@seanhogg/builderforce-memory';
+  const engine = '@seanhogg/builderforce-memory-engine';
+  const created: string[] = [];
+  afterEach(() => {
+    for (const dir of created.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+
+  function fixture(paths: Record<string, string[]>, declared: string[] = [memory, engine]) {
+    const root = mkdtempSync(join(tmpdir(), 'npm-subpaths-'));
+    created.push(root);
+    const app = join(root, 'app');
+    const pkg = join(root, 'packages', 'stats-user');
+    mkdirSync(join(pkg, 'src'), { recursive: true });
+    mkdirSync(app, { recursive: true });
+    writeFileSync(
+      join(app, 'package.json'),
+      JSON.stringify({ dependencies: Object.fromEntries(declared.map((name) => [name, '^1.0.0'])) }),
+    );
+    // A local install of memory with the uniform layout, and of the engine with its real,
+    // NON-uniform one: `./ml/tasks/check-scheduler` → `dist/ml/tasks/check_scheduler.d.ts`.
+    const memoryDir = join(app, 'node_modules', '@seanhogg', 'builderforce-memory');
+    mkdirSync(join(memoryDir, 'dist', 'stats'), { recursive: true });
+    writeFileSync(join(memoryDir, 'package.json'), JSON.stringify({ exports: { './stats': { types: './dist/stats/index.d.ts' } } }));
+    writeFileSync(join(memoryDir, 'dist', 'stats', 'index.d.ts'), 'export {};\n');
+    const engineDir = join(app, 'node_modules', '@seanhogg', 'builderforce-memory-engine');
+    mkdirSync(join(engineDir, 'dist', 'ml', 'tasks'), { recursive: true });
+    writeFileSync(
+      join(engineDir, 'package.json'),
+      JSON.stringify({ exports: { './ml/tasks/check-scheduler': { types: './dist/ml/tasks/check_scheduler.d.ts' } } }),
+    );
+    writeFileSync(join(engineDir, 'dist', 'ml', 'tasks', 'check_scheduler.d.ts'), 'export {};\n');
+
+    const site = (specifier: string, isTest = false) => ({
+      specifier,
+      file: join(pkg, 'src', 'a.ts'),
+      relative: 'packages/stats-user/src/a.ts',
+      line: 1,
+      isTest,
+    });
+    const node = {
+      dir: pkg,
+      externals: [site(`${memory}/stats`), site(`${engine}/ml/tasks/check-scheduler`), site(memory), site(`${memory}/eval`, true)],
+    };
+    const problems = unresolvedNpmSubpaths({ project: { dir: app, paths }, nodes: [node], sourcePackageDirs: [pkg], repoRoot: root });
+    return { app, root, problems: problems.map((problem: { kind: string; site: { specifier: string } }) => `${problem.kind} ${problem.site.specifier}`) };
+  }
+
+  const wildcard = { [`${memory}/*`]: ['./node_modules/@seanhogg/builderforce-memory/dist/*/index.d.ts'] };
+  const scheduler = { [`${engine}/ml/tasks/check-scheduler`]: ['./node_modules/@seanhogg/builderforce-memory-engine/dist/ml/tasks/check_scheduler.d.ts'] };
+
+  it('passes a consumer that maps every subpath onto a file its own install has', () => {
+    expect(fixture({ ...wildcard, ...scheduler }).problems).toEqual([]);
+  });
+
+  it('reports the regression: a consumer missing a subpath its compiled packages import', () => {
+    // Package roots and test-only imports are not held to it.
+    expect(fixture(wildcard).problems).toEqual([`unmapped ${engine}/ml/tasks/check-scheduler`]);
+    expect(fixture({}).problems).toEqual([`unmapped ${memory}/stats`, `unmapped ${engine}/ml/tasks/check-scheduler`]);
+  });
+
+  it('reports a wildcard that does not fit a non-uniform layout', () => {
+    const uniformEngine = { [`${engine}/*`]: ['./node_modules/@seanhogg/builderforce-memory-engine/dist/*/index.d.ts'] };
+    expect(fixture({ ...wildcard, ...uniformEngine }).problems).toEqual([`missing-file ${engine}/ml/tasks/check-scheduler`]);
+  });
+
+  it('reports a mapping into an install the consumer does not declare', () => {
+    expect(fixture({ ...wildcard, ...scheduler }, [memory]).problems).toEqual([`undeclared-install ${engine}/ml/tasks/check-scheduler`]);
+  });
+
+  it('suggests the declaration the install exports, not a guessed layout', () => {
+    const { app, root } = fixture({});
+    expect(suggestedSubpathTarget(app, `${engine}/ml/tasks/check-scheduler`, root)).toBe(
+      './node_modules/@seanhogg/builderforce-memory-engine/dist/ml/tasks/check_scheduler.d.ts',
+    );
+    expect(suggestedSubpathTarget(join(app, 'harness'), `${memory}/stats`, root)).toBe(
+      '../node_modules/@seanhogg/builderforce-memory/dist/stats/index.d.ts',
+    );
+  });
 });

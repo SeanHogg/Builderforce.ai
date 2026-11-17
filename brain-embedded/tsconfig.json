@@ -49,7 +49,13 @@
       "@builderforce/spend-contract": ["../packages/spend-contract/src/index.ts"],
       "@builderforce/tool-output-policy": ["../packages/tool-output-policy/src/index.ts"],
       "@builderforce/workload": ["../packages/workload/src/index.ts"],
-      "@builderforce/write-outbox": ["../packages/write-outbox/src/index.ts"]
+      "@builderforce/write-outbox": ["../packages/write-outbox/src/index.ts"],
+
+      // Those packages install nothing of their own (CI never installs `packages/*`), so the
+      // memory subpaths they import resolve from THIS package's install — ONE wildcard, since
+      // memory's layout is uniform (`dist/<sub>/index.d.ts`). The tsup declaration build
+      // spreads these same `paths` (tsup.config.ts), so the two cannot drift.
+      "@seanhogg/builderforce-memory/*": ["./node_modules/@seanhogg/builderforce-memory/dist/*/index.d.ts"]
     }
   },
   "include": ["src/**/*"],
