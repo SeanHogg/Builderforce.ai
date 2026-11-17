@@ -87,16 +87,26 @@ describe("git_commit: a nonexistent model-supplied path", () => {
 
 describe.skipIf(!hasBash || !hasGit)("hostile free text reaches git / gh byte-for-byte (bash -c)", () => {
   it("regression: a commit message with substitutions, quotes and 2>nul is committed verbatim", async () => {
-    const dir = tempRepo("bf-commit-msg-");
+    // A named branch commits in a sibling worktree (`<repo>/../ticket-x-wt`), never in the
+    // checkout itself — so the repo gets its own root (the worktree is created, and removed,
+    // inside it rather than leaking into the shared tmpdir) and the commit is read off the
+    // ticket branch, not off the checkout's HEAD (which stays on `init` by design).
+    const root = mkdtempSync(join(tmpdir(), "bf-commit-msg-"));
+    const dir = join(root, "work");
+    const wt = join(root, "ticket-x-wt");
     try {
+      expect(git(root, "init", "-q", "work").status).toBe(0);
+      expect(git(dir, "commit", "-q", "--allow-empty", "-m", "init").status).toBe(0);
       writeFileSync(join(dir, "a.ts"), "1");
       const out = data(await gitCommitTool.execute({ message: HOSTILE_TEXT, paths: ["a.ts"], branch: "ticket/x" }, bashShell(dir) as never));
       expect(out.ok).toBe(true);
-      expect(git(dir, "log", "-1", "--format=%B").stdout.trim()).toBe(HOSTILE_TEXT);
-      noPwned(dir);
-      expect(existsSync(join(dir, "nul"))).toBe(false);
+      expect(git(dir, "log", "-1", "--format=%B", "ticket/x").stdout.trim()).toBe(HOSTILE_TEXT);
+      for (const d of [dir, wt]) {
+        noPwned(d);
+        expect(existsSync(join(d, "nul"))).toBe(false);
+      }
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
     }
   });
 
