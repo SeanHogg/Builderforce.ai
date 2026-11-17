@@ -36,6 +36,8 @@ describe("read_file paged through the transcript budget", () => {
     expect(doc.length).toBeGreaterThan(36_000);
     const caps = provider({ "docs/prd.md": doc });
 
+    // Read coverage as the run loop keeps it (`recordServedRead`): record + cache what was SERVED.
+    const coverage = new ReadCoverage(AGENT_READ_TRAITS);
     const seen = new Set<number>();
     let requested: number | undefined;
     let reads = 0;
@@ -44,9 +46,14 @@ describe("read_file paged through the transcript budget", () => {
       expect(reads).toBeLessThanOrEqual(4);
       // The model's shape of call from the chat: a windowed read with a limit.
       const args: Record<string, unknown> = { path: "docs/prd.md", limit: 180, ...(requested !== undefined ? { offset: requested } : {}) };
+      // Every continuation asks for lines not yet served, so coverage must let it run.
+      expect(coverage.coveredRead("read_file", args)).toBeNull();
       const data = (await readFileTool.execute(args, { caps })).data;
       const shaped = shapeToolResult("read_file", data, { maxChars: 16_000 });
       expect(shaped.content.length).toBeLessThanOrEqual(16_000);
+      expect(shaped.served).toBeDefined();
+      coverage.record("read_file", args);
+      coverage.cacheResult("read_file", args, { result: shaped.served, served: shaped.served, anchor: `call-${reads}` });
       const served = JSON.parse(shaped.content) as { offset: number; content: string; truncated: boolean; totalLines: number };
 
       expect(served.offset).toBe(requested ?? 1);
