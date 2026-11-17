@@ -225,6 +225,12 @@ export const CAPABILITIES = {
   // revert) and "Find fixes now". Mirrors requireRole(MANAGER) on
   // POST /api/replay/prescriptions/*; reading fixes is any member.
   'insights.actOnFixes':     'manager',
+
+  // Collections — the ONE bulk bar over every collection surface (PRD 47).
+  // Viewing + selecting is open to any member; the destructive bulk actions
+  // (delete / archive / restore / merge, any count, one request) are manager+,
+  // mirroring the server requireRole(MANAGER) on POST /api/collections/:entity/bulk.
+  'collections.manage':    'manager',
 } as const satisfies Record<string, TenantRole>;
 
 export type Capability = keyof typeof CAPABILITIES;

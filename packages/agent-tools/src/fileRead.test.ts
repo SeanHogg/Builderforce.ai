@@ -160,7 +160,7 @@ describe("read_file B2 outline-first reads", () => {
   });
 });
 
-describe("read_file returns a file that fits in one read whole", () => {
+describe("read_file runs a window of a file that fits in one read from its offset to the end of the file", () => {
   // ~520 lines, ~25 KB: the shape of shipGates.ts in chat #133542.
   const midFile = Array.from({ length: 520 }, (_, i) => `const line${i} = "${"z".repeat(40)}";`).join("\n");
 
@@ -173,12 +173,73 @@ describe("read_file returns a file that fits in one read whole", () => {
     expect(String(r.content).split("\n").length).toBe(520);
   });
 
-  it("regression: chat #133542 — a small window of a file that fits is widened to the whole file", async () => {
+  it("regression: chat #133542 — a small window of a file that fits drops its limit and runs from its offset to EOF", async () => {
     const r = await read({ "src/mid.ts": midFile }, { path: "src/mid.ts", offset: 180, limit: 180 });
-    expect(r.offset).toBe(1);
+    expect(r.offset).toBe(180);
     expect(r.truncated).toBe(false);
-    expect(String(r.content).split("\n").length).toBe(520);
-    expect(String(r.note)).toMatch(/whole file/);
+    const lines = String(r.content).split("\n");
+    expect(lines.length).toBe(341);
+    expect(lines[0]).toBe(midFile.split("\n")[179]);
+    expect(lines[lines.length - 1]).toBe(midFile.split("\n")[519]);
+    expect(String(r.note)).toMatch(/end of the file/);
+    expect(String(r.note)).not.toMatch(/whole file/);
+  });
+
+  // ~506 lines, ~38 KB: the shape of docs/specs/47-prd-collection-view.md in chat #149169.
+  const prdDoc = (() => {
+    const out: string[] = [];
+    for (let i = 1; i <= 506; i++) out.push(i % 50 === 1 ? `## Section ${i}` : `Line ${i} ${"p".repeat(66)}`);
+    return out.join("\n");
+  })();
+
+  it("regression: chat #149169 — a window of a doc that fits keeps its requested offset", async () => {
+    expect(prdDoc.length).toBeGreaterThan(36_000);
+    expect(prdDoc.length).toBeLessThan(WHOLE_READ_MAX_CHARS);
+    const r = await read({ "docs/prd.md": prdDoc }, { path: "docs/prd.md", offset: 181, limit: 180 });
+    expect(r.offset).toBe(181);
+    const lines = String(r.content).split("\n");
+    expect(lines[0]).toBe(prdDoc.split("\n")[180]);
+    expect(lines.length).toBe(506 - 180);
+    expect(r.truncated).toBe(false);
+  });
+
+  it("regression: chat #149169 — a first read of a large Markdown doc with only a limit still gets its outline", async () => {
+    const r = await read({ "docs/prd.md": prdDoc }, { path: "docs/prd.md", limit: 260 });
+    expect(r.offset).toBe(1);
+    expect(r.totalLines).toBe(506);
+    expect(String(r.content).split("\n").length).toBe(506);
+    expect(Array.isArray(r.outline)).toBe(true);
+    expect((r.outline as unknown[]).length).toBeGreaterThan(0);
+    // It returned the whole doc, so the note must not also call it "larger than one read".
+    expect(String(r.note)).toMatch(/end of the file/);
+    expect(String(r.note)).not.toMatch(/larger than one read/);
+  });
+
+  it("does not claim it extended a window that already reached EOF, or one past EOF", async () => {
+    const tail = await read({ "docs/prd.md": prdDoc }, { path: "docs/prd.md", offset: 400, limit: 180 });
+    expect(tail.offset).toBe(400);
+    expect(String(tail.content).split("\n").length).toBe(107);
+    expect(tail.truncated).toBe(false);
+    expect(tail.note).toBeUndefined();
+
+    const past = await read({ "docs/prd.md": prdDoc }, { path: "docs/prd.md", offset: 600, limit: 180 });
+    expect(past.content).toBe("");
+    expect(past.truncated).toBe(false);
+    expect(past.note).toBeUndefined();
+  });
+
+  it("dropping the limit never shrinks a window below the requested limit (many short lines)", async () => {
+    const shortLines = Array.from({ length: 3000 }, (_, i) => `l${i}`).join("\n");
+    expect(shortLines.length).toBeLessThan(WHOLE_READ_MAX_CHARS);
+    const r = await read({ "a.txt": shortLines }, { path: "a.txt", offset: 1, limit: 3000 });
+    expect(r.offset).toBe(1);
+    expect(String(r.content).split("\n").length).toBe(3000);
+    expect(r.truncated).toBe(false);
+
+    const mid = await read({ "a.txt": shortLines }, { path: "a.txt", offset: 500, limit: 10 });
+    expect(mid.offset).toBe(500);
+    expect(String(mid.content).split("\n").length).toBe(2501);
+    expect(mid.truncated).toBe(false);
   });
 
   it("a short file's explicit window is served as asked", async () => {

@@ -15,20 +15,26 @@ import { extractSymbols } from "./symbols.js";
 import { markdownOutline } from "./symbol-tools.js";
 
 /**
- * The largest file `read_file` hands back WHOLE, whatever window was asked for — the same
+ * The largest file whose window `read_file` extends to the end of the file — the same
  * figure as `@builderforce/tool-output-policy` `READ_FILE_MAX_CHARS` (the most one read
- * result may hold on a large-window model). A file at or under it costs one read.
+ * result may hold on a large-window model).
  *
  * Chat #133542: B2 used to answer any file over 300 lines / 16K chars with an outline and
  * 40 lines, then told the model to "call read_file again with offset and a small limit" —
  * so a 520-line file was read in five slices, and every slice counted as new ground. Now
- * only a file too large for one read is outlined, and a small window of a file that fits
- * returns the whole file, so later windows of it are already covered.
+ * only a file too large for one read is outlined, and a window of a file that fits drops
+ * its `limit`: it runs from the requested offset to the end of the file.
+ *
+ * Chat #149169: that widening used to restart the window at line 1. On a 16K transcript
+ * budget the pager served lines 1–180 and said "continue at offset 181"; the next read
+ * was widened back to line 1, so the model never saw past line 180. The rule now: a
+ * window ALWAYS starts at the requested offset — widening only drops `limit`, and the
+ * transcript pager cuts the result to the run's real budget and continues by offset.
  */
 export const WHOLE_READ_MAX_CHARS = 64_000;
 
-/** Lines a file needs before a window of it is widened to the whole file: a short file's
- *  explicit window is cheap and precise, so it is served as asked. */
+/** Lines a file needs before a window of it drops its `limit`: a short file's explicit
+ *  window is cheap and precise, so it is served as asked. */
 export const WIDEN_WINDOW_MIN_LINES = 150;
 
 const OUTLINE_FIRST_PREFIX_LINES = 40;
@@ -40,10 +46,11 @@ function outlineFirstApplies(content: string, leverOn: boolean | undefined): boo
   return content.length > WHOLE_READ_MAX_CHARS;
 }
 
-/** A window request of a file that fits whole in one read: serve the whole file instead. */
-function widensToWholeFile(content: string, opts: FileReadOptions, sourceTruncated: boolean): boolean {
+/** A window request of a file that fits in one read: drop `limit` (never `offset`), so the
+ *  window runs from the requested offset to the end of the file. */
+function dropsLimit(content: string, opts: FileReadOptions, sourceTruncated: boolean): boolean {
   if (sourceTruncated) return false;
-  if (opts.offset === undefined && opts.limit === undefined) return false;
+  if (opts.limit === undefined) return false;
   if (content.length > WHOLE_READ_MAX_CHARS) return false;
   return content.split("\n").length >= WIDEN_WINDOW_MIN_LINES;
 }
@@ -129,20 +136,14 @@ export async function readOneFile(
     } as Record<string, unknown>;
   }
 
-  if (widensToWholeFile(content, opts, r.truncated === true)) {
-    const whole = windowFileContent(content, { offset: 1 });
-    return {
-      ok: true,
-      path: r.path ?? path,
-      content: whole.content,
-      truncated: whole.truncated,
-      totalLines: whole.totalLines,
-      offset: 1,
-      note: `Returned the whole file (${whole.totalLines} lines) — it fits in one read, so later windows of it are already covered. Do not read it again unless you change it.`,
-    } as Record<string, unknown>;
-  }
-
-  const win = windowFileContent(content, { offset: opts.offset, limit: opts.limit });
+  // Dropping the limit runs the window to EOF explicitly — never the 2,000-line default,
+  // which would SHRINK a long window of a file of many short lines.
+  const limitDropped = dropsLimit(content, opts, r.truncated === true);
+  const fromLine = opts.offset !== undefined && opts.offset > 1 ? Math.floor(opts.offset) : 1;
+  const limit = limitDropped ? Math.max(opts.limit!, content.split("\n").length - fromLine + 1) : opts.limit;
+  const win = windowFileContent(content, { offset: opts.offset, limit });
+  // Only say the window was extended when it actually returned more than was asked for.
+  const extended = limitDropped && !win.truncated && win.returnedLines > opts.limit!;
   const data: RepoReadResult & { outline?: Array<{ heading: string; line: number }> } = {
     ok: true,
     path: r.path ?? path,
@@ -152,14 +153,21 @@ export async function readOneFile(
     offset: win.offset,
   };
   let note = fileWindowNote(win);
+  if (extended) {
+    note = `Extended the window to the end of the file (lines ${win.offset}–${win.totalLines}) — the rest fits in one read. Lines already returned need not be read again.`;
+  }
   // A first read of a long document: hand over its headings with their lines, so the next
   // read pages straight to the section it needs.
   if (opts.offset === undefined && isMarkdown(data.path ?? path) && (content.length > MARKDOWN_OUTLINE_MIN_CHARS || win.truncated)) {
     const outline = markdownOutline(data.path ?? path, content);
     if (outline.length > 0) {
       data.outline = outline;
-      const pointer = "This document is larger than one read: `outline` lists its headings with their line numbers — page by heading line with offset instead of reading it window by window.";
-      note = note ? `${note} ${pointer}` : pointer;
+      // A window already extended to EOF returned the whole document — the outline still
+      // helps, but "larger than one read" would contradict the note.
+      if (!(limitDropped && !win.truncated)) {
+        const pointer = "This document is larger than one read: `outline` lists its headings with their line numbers — page by heading line with offset instead of reading it window by window.";
+        note = note ? `${note} ${pointer}` : pointer;
+      }
     }
   }
   if (note) data.note = note;

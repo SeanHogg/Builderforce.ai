@@ -350,11 +350,16 @@ var UNSUPPORTED_DELIVERY_PROGRESS_CAP = 75;
 function isExcludedFromChatHealth(status) {
   return isCancelledTaskStatus(status);
 }
-function effectiveProgressPct(t) {
-  const raw = Number.isFinite(t.progressPct) ? t.progressPct : 0;
-  if (isClosedTaskStatus(t.status)) return raw;
-  if (t.unsupportedDelivery === true && raw >= 100) return UNSUPPORTED_DELIVERY_PROGRESS_CAP;
+function effectiveTicketProgress(status, progressPct, unsupportedDelivery, whenClosed = "passthrough") {
+  const raw = typeof progressPct === "number" && Number.isFinite(progressPct) ? progressPct : 0;
+  if (isClosedTaskStatus(status)) {
+    return whenClosed === "complete" ? Math.max(raw, 100) : raw;
+  }
+  if (unsupportedDelivery === true && raw >= 100) return UNSUPPORTED_DELIVERY_PROGRESS_CAP;
   return raw;
+}
+function effectiveProgressPct(t) {
+  return effectiveTicketProgress(t.status, t.progressPct, t.unsupportedDelivery);
 }
 function rollupChatTicketHealth(tickets) {
   let done = 0;
@@ -363,6 +368,7 @@ function rollupChatTicketHealth(tickets) {
   let counted = 0;
   let completedTickets = 0;
   for (const tk of tickets) {
+    if (tk.exists === false) continue;
     if (isExcludedFromChatHealth(tk.status)) continue;
     const pct = effectiveProgressPct(tk);
     const weight = Number.isFinite(tk.total) && tk.total > 0 ? tk.total : 1;

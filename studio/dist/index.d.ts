@@ -67,6 +67,7 @@ declare class VideoEngine {
      * the muxed MP4 plus the updated state.
      */
     generate(args: GenerateOptions): Promise<GenerateResult>;
+    private runGenerate;
     /**
      * Render a full storyboard (the Director / Shot-Planner output) into one MP4.
      * Each shot is generated as its own clip — the shot's composed prompt (shot
@@ -77,6 +78,9 @@ declare class VideoEngine {
      * frame validator (advisory — never blocks generation).
      */
     generateStoryboard(args: StoryboardGenerateOptions): Promise<StoryboardGenerateResult>;
+    /** Generation marks the engine busy, so the refinement weight warm yields to it. */
+    private whileBusy;
+    private runStoryboard;
     /**
      * webdit-dit storyboard rendering. Each shot is generated independently via
      * `runWebDitDenoise` (no cross-shot Mamba carry — webdit's DiT models are

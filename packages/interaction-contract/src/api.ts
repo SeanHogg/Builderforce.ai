@@ -18,3 +18,4 @@ export * from './api/analysis';
 export * from './api/prescriptions';
 export * from './api/review';
 export * from './api/paths';
+export * from './api/collection';

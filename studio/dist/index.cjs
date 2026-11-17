@@ -1,4 +1,4 @@
-"use strict";Object.defineProperty(exports, "__esModule", {value: true}); function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { newObj[key] = obj[key]; } } } newObj.default = obj; return newObj; } } function _nullishCoalesce(lhs, rhsFn) { if (lhs != null) { return lhs; } else { return rhsFn(); } } function _optionalChain(ops) { let lastAccessLHS = undefined; let value = ops[0]; let i = 1; while (i < ops.length) { const op = ops[i]; const fn = ops[i + 1]; i += 2; if ((op === 'optionalAccess' || op === 'optionalCall') && value == null) { return undefined; } if (op === 'access' || op === 'optionalAccess') { lastAccessLHS = value; value = fn(value); } else if (op === 'call' || op === 'optionalCall') { value = fn((...args) => value.call(lastAccessLHS, ...args)); lastAccessLHS = undefined; } } return value; } async function _asyncOptionalChain(ops) { let lastAccessLHS = undefined; let value = ops[0]; let i = 1; while (i < ops.length) { const op = ops[i]; const fn = ops[i + 1]; i += 2; if ((op === 'optionalAccess' || op === 'optionalCall') && value == null) { return undefined; } if (op === 'access' || op === 'optionalAccess') { lastAccessLHS = value; value = await fn(value); } else if (op === 'call' || op === 'optionalCall') { value = await fn((...args) => value.call(lastAccessLHS, ...args)); lastAccessLHS = undefined; } } return value; } var _class; var _class2; var _class3; var _class4; var _class5;
+"use strict";Object.defineProperty(exports, "__esModule", {value: true}); function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { newObj[key] = obj[key]; } } } newObj.default = obj; return newObj; } } function _nullishCoalesce(lhs, rhsFn) { if (lhs != null) { return lhs; } else { return rhsFn(); } } function _optionalChain(ops) { let lastAccessLHS = undefined; let value = ops[0]; let i = 1; while (i < ops.length) { const op = ops[i]; const fn = ops[i + 1]; i += 2; if ((op === 'optionalAccess' || op === 'optionalCall') && value == null) { return undefined; } if (op === 'access' || op === 'optionalAccess') { lastAccessLHS = value; value = fn(value); } else if (op === 'call' || op === 'optionalCall') { value = fn((...args) => value.call(lastAccessLHS, ...args)); lastAccessLHS = undefined; } } return value; } async function _asyncOptionalChain(ops) { let lastAccessLHS = undefined; let value = ops[0]; let i = 1; while (i < ops.length) { const op = ops[i]; const fn = ops[i + 1]; i += 2; if ((op === 'optionalAccess' || op === 'optionalCall') && value == null) { return undefined; } if (op === 'access' || op === 'optionalAccess') { lastAccessLHS = value; value = await fn(value); } else if (op === 'call' || op === 'optionalCall') { value = await fn((...args) => value.call(lastAccessLHS, ...args)); lastAccessLHS = undefined; } } return value; } var _class; var _class2; var _class3; var _class4; var _class5; var _class6;
 
 
 var _chunkVKVEFIZWcjs = require('./chunk-VKVEFIZW.cjs');
@@ -1751,29 +1751,23 @@ function residencyBudgetBytes(probed) {
 function sessionResidentId(modelId, component) {
   return `${modelId}/${component}`;
 }
-var SessionResidency = (_class = class {
+var SessionResidency = class {
   
   
-  /** Eviction callbacks of the currently tracked sessions, by resident id. */
-  __init() {this.owners = /* @__PURE__ */ new Map()}
-  /** In-flight {@link whileInUse} runs per model id. */
-  __init2() {this.holds = /* @__PURE__ */ new Map()}
-  constructor(probed, byteBudget = residencyBudgetBytes(probed)) {;_class.prototype.__init.call(this);_class.prototype.__init2.call(this);
+  constructor(probed, byteBudget = residencyBudgetBytes(probed)) {
     const onGpu = probed.kind === "webgpu" || probed.kind === "webnn";
     this.tier = onGpu ? "vram" : "ram";
     this.manager = createMemoryManager({ byteBudget, vramBudgetBytes: onGpu ? byteBudget : 0 });
   }
-  /** Admit one freshly created session (pinned until {@link settle}), then
-   *  release whatever the admission evicted. */
+  /** Charge one freshly created session against the budget. Pinned for its
+   *  whole life: the manager never evicts it. */
   async admit(args) {
-    const id = sessionResidentId(args.modelId, args.component);
-    const result = await this.manager.admit(
+    return this.manager.admit(
       {
-        id,
+        id: sessionResidentId(args.modelId, args.component),
         group: args.modelId,
         component: args.component,
         bytes: args.bytes,
-        // An evicted session is rebuilt from the IndexedDB weight store.
         reloadCostMs: estimateReloadCostMs({ bytes: args.bytes, from: "storage" }),
         // A live engine runs every one of its sessions on every frame.
         reuseProbability: 1,
@@ -1782,69 +1776,27 @@ var SessionResidency = (_class = class {
       },
       { pin: true, spill: false }
     );
-    if (result.admitted) this.owners.set(id, args.onEvicted);
-    await this.releaseEvicted(result.evicted);
-    return result;
-  }
-  /** Init of `modelId` finished: unpin its sessions so a later model's
-   *  admissions may evict them (unless a run currently holds them). */
-  settle(modelId) {
-    if (!this.holds.has(modelId)) this.setPinned(modelId, false);
-  }
-  /** Run `work` with `modelId`'s sessions pinned, so no admission can evict
-   *  (and release) a session mid-run. Re-entrant: the last run out unpins. */
-  async whileInUse(modelId, work) {
-    this.holds.set(modelId, (_nullishCoalesce(this.holds.get(modelId), () => ( 0))) + 1);
-    this.setPinned(modelId, true);
-    try {
-      return await work();
-    } finally {
-      const left = (_nullishCoalesce(this.holds.get(modelId), () => ( 1))) - 1;
-      if (left > 0) this.holds.set(modelId, left);
-      else {
-        this.holds.delete(modelId);
-        this.setPinned(modelId, false);
-      }
-    }
-  }
-  setPinned(modelId, pinned) {
-    for (const id of this.manager.residentIds()) {
-      if (_optionalChain([this, 'access', _81 => _81.manager, 'access', _82 => _82.peek, 'call', _83 => _83(id), 'optionalAccess', _84 => _84.group]) !== modelId) continue;
-      if (pinned) this.manager.pin(id);
-      else this.manager.unpin(id);
-    }
   }
   /** Drop every resident of `modelId` from the budget and release `sessions`
    *  (the engine's own references — it may hold sessions the budget rejected).
    *  Release errors are swallowed so one bad session cannot block the rest. */
   async releaseModel(modelId, sessions) {
     for (const component of SESSION_COMPONENTS) {
-      const id = sessionResidentId(modelId, component);
-      this.owners.delete(id);
-      await this.manager.release(id);
+      await this.manager.release(sessionResidentId(modelId, component));
     }
     await Promise.all(sessions.map((s) => releaseQuietly(s)));
   }
   /** Whether the budget is under memory pressure right now — background work
-   *  (the refinement weight warm) backs off while it is. */
+   *  (the refinement weight warm) pauses while it is. */
   isPressured() {
     return this.manager.pressure().pressured;
   }
-  /** Ids currently charged against the budget. */
-  residentIds() {
-    return this.manager.residentIds();
+  /** Budget bytes not charged to a live session (never negative). */
+  headroomBytes() {
+    const { byteBudget, usedBytes } = this.manager.stats();
+    return Math.max(0, byteBudget - usedBytes);
   }
-  async releaseEvicted(evicted) {
-    await Promise.all(
-      evicted.map(async (entry) => {
-        const onEvicted = this.owners.get(entry.id);
-        this.owners.delete(entry.id);
-        _optionalChain([onEvicted, 'optionalCall', _85 => _85()]);
-        await releaseQuietly(entry.payload);
-      })
-    );
-  }
-}, _class);
+};
 async function releaseQuietly(session) {
   if (!session) return;
   try {
@@ -2061,7 +2013,7 @@ var MODEL_REGISTRY = {
 
 
 function versionMatchedCdn() {
-  const version = _optionalChain([ort, 'access', _86 => _86.env, 'optionalAccess', _87 => _87.versions, 'optionalAccess', _88 => _88.common]);
+  const version = _optionalChain([ort, 'access', _81 => _81.env, 'optionalAccess', _82 => _82.versions, 'optionalAccess', _83 => _83.common]);
   return version ? `https://cdn.jsdelivr.net/npm/onnxruntime-web@${version}/dist/` : "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/";
 }
 var configured = false;
@@ -2081,11 +2033,11 @@ function applyToWebGpuOrt() {
 }
 async function configureWebGpuOrt() {
   const mod = await Promise.resolve().then(() => _interopRequireWildcard(require("onnxruntime-web/webgpu")));
-  webgpuEnv = _optionalChain([mod, 'access', _89 => _89.env, 'optionalAccess', _90 => _90.wasm]) ? mod.env : null;
+  webgpuEnv = _optionalChain([mod, 'access', _84 => _84.env, 'optionalAccess', _85 => _85.wasm]) ? mod.env : null;
   applyToWebGpuOrt();
 }
 function applyWasmPaths(wasmPaths) {
-  if (_optionalChain([_transformers.env, 'access', _91 => _91.backends, 'optionalAccess', _92 => _92.onnx, 'optionalAccess', _93 => _93.wasm])) _transformers.env.backends.onnx.wasm.wasmPaths = wasmPaths;
+  if (_optionalChain([_transformers.env, 'access', _86 => _86.backends, 'optionalAccess', _87 => _87.onnx, 'optionalAccess', _88 => _88.wasm])) _transformers.env.backends.onnx.wasm.wasmPaths = wasmPaths;
   ort.env.wasm.wasmPaths = wasmPaths;
   appliedWasmPaths = wasmPaths;
   applyToWebGpuOrt();
@@ -2097,7 +2049,7 @@ function configureOnnxRuntime(opts = {}) {
   const wasmPaths = _nullishCoalesce(_nullishCoalesce(opts.wasmCdn, () => ( hostWasmBase)), () => ( versionMatchedCdn()));
   const numThreads = _nullishCoalesce(opts.numThreads, () => ( 1));
   _transformers.env.allowLocalModels = false;
-  if (_optionalChain([_transformers.env, 'access', _94 => _94.backends, 'optionalAccess', _95 => _95.onnx, 'optionalAccess', _96 => _96.wasm])) _transformers.env.backends.onnx.wasm.numThreads = numThreads;
+  if (_optionalChain([_transformers.env, 'access', _89 => _89.backends, 'optionalAccess', _90 => _90.onnx, 'optionalAccess', _91 => _91.wasm])) _transformers.env.backends.onnx.wasm.numThreads = numThreads;
   applyWasmPaths(wasmPaths);
   ort.env.wasm.numThreads = numThreads;
   appliedNumThreads = numThreads;
@@ -2137,7 +2089,7 @@ function checkMemoryForModel(approxMemoryMb, minVramMb, modelId) {
 }
 function lighterModelHint(failingModelId, availableMb) {
   const failing = MODEL_REGISTRY[failingModelId];
-  const failingMin = _nullishCoalesce(_optionalChain([failing, 'optionalAccess', _97 => _97.minVramMb]), () => ( Infinity));
+  const failingMin = _nullishCoalesce(_optionalChain([failing, 'optionalAccess', _92 => _92.minVramMb]), () => ( Infinity));
   const alternatives = Object.values(MODEL_REGISTRY).filter((m) => m.id !== failingModelId).filter((m) => failing === void 0 || m.engine === failing.engine).filter((m) => m.minVramMb < failingMin).filter((m) => availableMb === null || m.minVramMb <= availableMb).sort((a, b) => a.minVramMb - b.minVramMb).map((m) => m.id);
   if (alternatives.length === 0) {
     return "No lighter model is available \u2014 close other GPU-heavy tabs and retry.";
@@ -2195,12 +2147,12 @@ function assertSessionMatchesSpec(sessionLabel, session, specs) {
 // src/engine/progress.ts
 function reportProgress(label, onProgress) {
   console.info(`[builderforce-studio] ${label}`);
-  _optionalChain([onProgress, 'optionalCall', _98 => _98(label)]);
+  _optionalChain([onProgress, 'optionalCall', _93 => _93(label)]);
 }
 
 // src/engine/residency/session-loader.ts
 function sessionBufferBytes(bufs) {
-  return bufs.modelBuf.byteLength + (_nullishCoalesce(_optionalChain([bufs, 'access', _99 => _99.externalData, 'optionalAccess', _100 => _100.buf, 'access', _101 => _101.byteLength]), () => ( 0)));
+  return bufs.modelBuf.byteLength + (_nullishCoalesce(_optionalChain([bufs, 'access', _94 => _94.externalData, 'optionalAccess', _95 => _95.buf, 'access', _96 => _96.byteLength]), () => ( 0)));
 }
 async function fetchSessionBuffers(file, component, fetchWeight, onProgress) {
   reportProgress(`Downloading ${component} (${file.model})\u2026`, onProgress);
@@ -2232,8 +2184,7 @@ async function createAdmittedSession(bufs, baseOptions, ctx) {
     modelId: ctx.modelId,
     component: bufs.component,
     bytes: sessionBufferBytes(bufs),
-    session,
-    onEvicted: ctx.onEvicted
+    session
   });
   return session;
 }
@@ -2262,109 +2213,191 @@ function modelTargets(model, source) {
     return { id: request.cacheKey, bytes: 0, kind: "weights", meta: { request } };
   });
 }
-var WeightPrefetch = (_class2 = class {
+var WeightPrefetch = (_class = class {
   
-  __init3() {this.lifetime = new AbortController()}
+  __init() {this.lifetime = new AbortController()}
   
   
   
-  /** Ids queued for a warm that neither began nor was claimed by a fetch. */
-  __init4() {this.pending = /* @__PURE__ */ new Set()}
-  __init5() {this.progress = /* @__PURE__ */ new Map()}
-  /** The one warm in flight (warms are sequential). */
-  __init6() {this.active = null}
-  __init7() {this.started = false}
-  __init8() {this.stopped = false}
-  constructor(refinementModel, source, deps = {}) {;_class2.prototype.__init3.call(this);_class2.prototype.__init4.call(this);_class2.prototype.__init5.call(this);_class2.prototype.__init6.call(this);_class2.prototype.__init7.call(this);_class2.prototype.__init8.call(this);
+  
+  
+  
+  
+  /** Targets still to warm, in order. */
+  __init2() {this.queue = []}
+  /** Ids a fetch has claimed — never warmed (or requeued) again. */
+  __init3() {this.claimed = /* @__PURE__ */ new Set()}
+  /** Ids already retried after a failed persist. */
+  __init4() {this.retried = /* @__PURE__ */ new Set()}
+  __init5() {this.active = null}
+  __init6() {this.started = false}
+  __init7() {this.stopped = false}
+  constructor(refinementModel, source, deps) {;_class.prototype.__init.call(this);_class.prototype.__init2.call(this);_class.prototype.__init3.call(this);_class.prototype.__init4.call(this);_class.prototype.__init5.call(this);_class.prototype.__init6.call(this);_class.prototype.__init7.call(this);
+    this.activity = deps.activity;
+    this.headroomBytes = deps.headroomBytes;
+    this.isPressured = _nullishCoalesce(deps.isPressured, () => ( (() => false)));
     this.load = _nullishCoalesce(deps.load, () => ( getOrFetchWeight));
+    this.isStored = _nullishCoalesce(deps.isStored, () => ( ((key) => weightStore().has(key))));
     this.canPersist = _nullishCoalesce(deps.canPersist, () => ( (() => weightStore().canPersist())));
-    const isStored = _nullishCoalesce(deps.isStored, () => ( ((key) => weightStore().has(key))));
     this.targets = modelTargets(refinementModel, source);
     this.prefetcher = createPrefetcher({
-      // Warm only: resolve to a byte count so no buffer stays resident here.
-      loader: async (target, signal) => {
-        const request = _optionalChain([target, 'access', _102 => _102.meta, 'optionalAccess', _103 => _103.request]);
-        if (!request) throw new Error(`WeightPrefetch: unknown weight target '${target.id}'`);
-        if (await isStored(request.cacheKey)) return 0;
-        const progress = this.progressOf(target.id);
-        const bytes = await this.load({
-          ...request,
-          signal,
-          onProgress: (loaded, total) => {
-            progress.latest = [loaded, total];
-            for (const listener of progress.listeners) listener(loaded, total);
-          },
-          onPersistFailed: () => this.stop("weight store cannot persist")
-        });
-        return bytes.byteLength;
-      },
+      loader: (target, signal) => this.warmLoad(target, signal),
       targets: this.targets,
-      maxConcurrent: 1,
-      shouldThrottle: deps.shouldThrottle
+      maxConcurrent: 1
     });
   }
-  /** Start warming the refinement model's files, one at a time. Call after the
-   *  draft engine's init resolved. No-op when repeated, after dispose, or when
-   *  the weight store cannot persist (a warm would only be thrown away). */
+  get halted() {
+    return this.stopped || this.lifetime.signal.aborted;
+  }
+  /** Start warming the refinement model's files, one at a time, while idle.
+   *  Call after the draft engine's init resolved. No-op when repeated, after
+   *  dispose, or when the weight store cannot persist. */
   start() {
-    if (this.started || this.stopped || this.lifetime.signal.aborted || !this.canPersist()) return;
+    if (this.started || this.halted || !this.canPersist()) return;
     this.started = true;
-    for (const target of this.targets) this.pending.add(target.id);
-    void this.targets.reduce((chain, target) => chain.then(() => this.warm(target)), Promise.resolve());
+    this.queue = [...this.targets];
+    void this.drain();
+  }
+  async drain() {
+    while (!this.halted) {
+      const target = this.queue[0];
+      if (!target) return;
+      await this.untilIdle();
+      if (this.halted) return;
+      if (this.activity.isBusy()) continue;
+      if (this.queue[0] !== target) continue;
+      if (this.isPressured()) {
+        await this.nextIdle();
+        continue;
+      }
+      this.queue.shift();
+      const result = await this.warm(target);
+      if (this.halted) return;
+      if (result === "requeue") {
+        this.requeue(target);
+      } else if (result === "pause") {
+        this.requeue(target);
+        await this.nextIdle();
+      } else if (result === "persist-failed") {
+        if (this.retried.has(target.id) || !this.canPersist()) {
+          this.stop("weight store cannot persist");
+          return;
+        }
+        this.retried.add(target.id);
+        this.requeue(target);
+        await this.nextIdle();
+      }
+    }
+  }
+  requeue(target) {
+    if (!this.claimed.has(target.id)) this.queue.unshift(target);
   }
   async warm(target) {
-    if (!this.pending.delete(target.id) || this.stopped || this.lifetime.signal.aborted) return;
-    const done = this.prefetcher.prefetch(target, { signal: this.lifetime.signal }).then((outcome) => {
-      if (outcome === "throttled") this.stopped = true;
+    const warm = {
+      id: target.id,
+      settled: Promise.resolve(),
+      cancelledByBusy: false,
+      tooLarge: false,
+      persistFailed: false
+    };
+    const offBusy = this.activity.onBusy(() => {
+      warm.cancelledByBusy = true;
+      this.prefetcher.cancel(target.id);
     });
-    this.active = { id: target.id, done };
+    if (this.activity.isBusy()) {
+      offBusy();
+      return "requeue";
+    }
+    this.active = warm;
+    const outcome = this.prefetcher.prefetch(target, { signal: this.lifetime.signal });
+    warm.settled = outcome.then(() => void 0);
     try {
-      await done;
+      return classify(await outcome, warm);
     } finally {
-      this.active = null;
-      this.progress.delete(target.id);
+      offBusy();
+      if (this.active === warm) this.active = null;
       this.prefetcher.release(target.id);
     }
   }
-  /** Fetch one weight file: join its in-flight warm (forwarding the warm's
-   *  progress), else claim it from the queue; then read it through the store. */
+  /** The prefetch loader: warm one file into the store, resolving to its size
+   *  so no buffer stays resident in the prefetcher. */
+  async warmLoad(target, signal) {
+    const request = _optionalChain([target, 'access', _97 => _97.meta, 'optionalAccess', _98 => _98.request]);
+    if (!request) throw new Error(`WeightPrefetch: unknown weight target '${target.id}'`);
+    const warm = _optionalChain([this, 'access', _99 => _99.active, 'optionalAccess', _100 => _100.id]) === target.id ? this.active : null;
+    if (await this.isStored(request.cacheKey)) return 0;
+    signal.throwIfAborted();
+    const bytes = await this.load({
+      ...request,
+      signal,
+      onProgress: (_loaded, total) => {
+        if (warm && !warm.tooLarge && total !== null && total * 2 > this.headroomBytes()) {
+          warm.tooLarge = true;
+          this.prefetcher.cancel(target.id);
+        }
+      },
+      onPersistFailed: () => {
+        if (warm) warm.persistFailed = true;
+      }
+    });
+    return bytes.byteLength;
+  }
+  /** Fetch one weight file: claim it from the warm queue, wait out a warm of
+   *  it that is still settling, then read it through the store. */
   async fetch(request) {
     const key = request.cacheKey;
-    this.pending.delete(key);
+    this.claimed.add(key);
+    this.queue = this.queue.filter((target) => target.id !== key);
     const active = this.active;
-    if (_optionalChain([active, 'optionalAccess', _104 => _104.id]) === key) {
-      const unsubscribe = request.onProgress ? this.subscribe(key, request.onProgress) : void 0;
-      try {
-        await active.done;
-      } finally {
-        _optionalChain([unsubscribe, 'optionalCall', _105 => _105()]);
-      }
-    }
+    if (_optionalChain([active, 'optionalAccess', _101 => _101.id]) === key) await active.settled;
     return this.load({ ...request, signal: this.lifetime.signal });
   }
-  progressOf(id) {
-    let entry = this.progress.get(id);
-    if (!entry) {
-      entry = { latest: null, listeners: /* @__PURE__ */ new Set() };
-      this.progress.set(id, entry);
-    }
-    return entry;
+  /** Resolves when the engine is idle, or the warm is disposed. */
+  untilIdle() {
+    if (!this.activity.isBusy()) return Promise.resolve();
+    return this.abortable((done) => {
+      void this.activity.whenIdle().then(done);
+      return () => {
+      };
+    });
   }
-  subscribe(id, listener) {
-    const entry = this.progressOf(id);
-    if (entry.latest) listener(...entry.latest);
-    entry.listeners.add(listener);
-    return () => entry.listeners.delete(listener);
+  /** Resolves at the next busy → idle transition (the current one when busy
+   *  now), or when the warm is disposed. */
+  nextIdle() {
+    return this.abortable((done) => {
+      let off = () => {
+      };
+      const afterBusy = () => {
+        off();
+        void this.activity.whenIdle().then(done);
+      };
+      if (this.activity.isBusy()) afterBusy();
+      else off = this.activity.onBusy(afterBusy);
+      return () => off();
+    });
+  }
+  /** A promise resolved by `arm`'s `done` callback or by dispose, whichever
+   *  comes first; `arm` returns its own cleanup. */
+  abortable(arm) {
+    const { signal } = this.lifetime;
+    if (signal.aborted) return Promise.resolve();
+    return new Promise((resolve) => {
+      let cleanup = () => {
+      };
+      const done = () => {
+        cleanup();
+        signal.removeEventListener("abort", done);
+        resolve();
+      };
+      signal.addEventListener("abort", done, { once: true });
+      cleanup = arm(done);
+    });
   }
   /** Stop warming: nothing further starts, anything in flight is cancelled. */
   stop(reason) {
     this.stopped = true;
-    this.pending.clear();
+    this.queue = [];
     this.prefetcher.cancelAll(reason);
-  }
-  /** Ids the prefetcher still holds a (byte-count) record for — diagnostics / tests. */
-  residentIds() {
-    return this.prefetcher.residentIds();
   }
   /** Abort every in-flight warm and drop every record. Idempotent. */
   dispose() {
@@ -2372,7 +2405,13 @@ var WeightPrefetch = (_class2 = class {
     this.stop("engine disposed");
     for (const id of this.prefetcher.residentIds()) this.prefetcher.release(id);
   }
-}, _class2);
+}, _class);
+function classify(outcome, warm) {
+  if (outcome === "loaded") return warm.persistFailed ? "persist-failed" : "done";
+  if (outcome === "cancelled") return warm.cancelledByBusy && !warm.tooLarge ? "requeue" : "skip";
+  if (outcome === "failed") return "skip";
+  return "pause";
+}
 
 // src/engine/diffusion-schedule.ts
 var TRAIN_TIMESTEPS = 1e3;
@@ -2464,7 +2503,7 @@ function guidanceScaleEmbedding(w, dim) {
 
 // src/engine/abort.ts
 function throwIfAborted(signal) {
-  if (_optionalChain([signal, 'optionalAccess', _106 => _106.aborted])) throw new DOMException("Generation aborted", "AbortError");
+  if (_optionalChain([signal, 'optionalAccess', _102 => _102.aborted])) throw new DOMException("Generation aborted", "AbortError");
 }
 
 // src/engine/diffusion-engine.ts
@@ -2490,19 +2529,19 @@ var KNOWN_UNET_INPUTS = new Set(
   Object.keys(UNET_INPUT_BUILDERS)
 );
 var PROMPT_EMBEDDING_CACHE_SIZE = 8;
-var DiffusionEngine = (_class3 = class {
-  constructor(opts) {;_class3.prototype.__init9.call(this);_class3.prototype.__init10.call(this);_class3.prototype.__init11.call(this);_class3.prototype.__init12.call(this);_class3.prototype.__init13.call(this);_class3.prototype.__init14.call(this);
+var DiffusionEngine = (_class2 = class {
+  constructor(opts) {;_class2.prototype.__init8.call(this);_class2.prototype.__init9.call(this);_class2.prototype.__init10.call(this);_class2.prototype.__init11.call(this);_class2.prototype.__init12.call(this);_class2.prototype.__init13.call(this);
     this.opts = opts;
     this.residency = _nullishCoalesce(opts.residency, () => ( new SessionResidency(opts.probed)));
   }
   
-  __init9() {this.tokenizer = null}
-  __init10() {this.textEncoderSession = null}
-  __init11() {this.unetSession = null}
-  __init12() {this.vaeSession = null}
-  __init13() {this.disposed = false}
+  __init8() {this.tokenizer = null}
+  __init9() {this.textEncoderSession = null}
+  __init10() {this.unetSession = null}
+  __init11() {this.vaeSession = null}
+  __init12() {this.disposed = false}
   /** Insertion-ordered, so the first key is the least recently used. */
-  __init14() {this.promptEmbeddings = /* @__PURE__ */ new Map()}
+  __init13() {this.promptEmbeddings = /* @__PURE__ */ new Map()}
   
   // -------------------------------------------------------------------------
   async init() {
@@ -2540,7 +2579,6 @@ var DiffusionEngine = (_class3 = class {
       this.textEncoderSession = await this.createSessionFromBuffers(downloads[0], sessionOptions);
       this.unetSession = await this.createSessionFromBuffers(downloads[1], sessionOptions);
       this.vaeSession = await this.createSessionFromBuffers(downloads[2], sessionOptions);
-      this.residency.settle(this.opts.model);
       reportProgress("All ORT sessions created.", onProgress);
       assertSessionMatchesSpec("unet", this.unetSession, d.unetInputs);
       assertSessionMatchesSpec("text_encoder", this.textEncoderSession, d.textEncoderInputs);
@@ -2604,7 +2642,7 @@ var DiffusionEngine = (_class3 = class {
       this.promptEmbeddings.set(prompt, cached);
       return new Float32Array(cached);
     }
-    const embedding = await this.residency.whileInUse(this.opts.model, () => this.encodePrompt(prompt));
+    const embedding = await this.encodePrompt(prompt);
     this.promptEmbeddings.set(prompt, embedding);
     if (this.promptEmbeddings.size > PROMPT_EMBEDDING_CACHE_SIZE) {
       const oldest = this.promptEmbeddings.keys().next().value;
@@ -2623,9 +2661,6 @@ var DiffusionEngine = (_class3 = class {
    * native one-shot generation up to a small numerical constant.
    */
   async denoise(inputs) {
-    return this.residency.whileInUse(this.opts.model, () => this.runDenoise(inputs));
-  }
-  async runDenoise(inputs) {
     if (!this.unetSession || !this.vaeSession) {
       throw new Error("DiffusionEngine.init() not called");
     }
@@ -2636,7 +2671,7 @@ var DiffusionEngine = (_class3 = class {
     const sample = new Float32Array(inputs.latent);
     for (let i = 0; i < timesteps.length; i++) {
       throwIfAborted(inputs.signal);
-      _optionalChain([inputs, 'access', _107 => _107.onStep, 'optionalCall', _108 => _108(i + 1, timesteps.length)]);
+      _optionalChain([inputs, 'access', _103 => _103.onStep, 'optionalCall', _104 => _104(i + 1, timesteps.length)]);
       const t = timesteps[i];
       const noisePred = await this.runUnet({
         sample,
@@ -2695,7 +2730,7 @@ var DiffusionEngine = (_class3 = class {
       );
     }
     const { latentH, latentW } = this.latentDims;
-    return this.residency.whileInUse(this.opts.model, () => this.runVaeDecode(latent, latentH, latentW));
+    return this.runVaeDecode(latent, latentH, latentW);
   }
   // -------------------------------------------------------------------------
   // Internals
@@ -2745,12 +2780,6 @@ var DiffusionEngine = (_class3 = class {
     this.promptEmbeddings.clear();
     await this.residency.releaseModel(this.opts.model, sessions);
   }
-  /** The residency budget evicted (and is about to release) one of our sessions. */
-  forgetEvicted(component) {
-    if (component === "text_encoder") this.textEncoderSession = null;
-    else if (component === "unet") this.unetSession = null;
-    else this.vaeSession = null;
-  }
   /** The uncached text-encoder pass behind {@link embedPrompt}. */
   async encodePrompt(prompt) {
     if (!this.tokenizer || !this.textEncoderSession) {
@@ -2780,7 +2809,7 @@ var DiffusionEngine = (_class3 = class {
       { [inputIdsSpec.name]: idTensor },
       "text_encoder"
     );
-    const hidden = _nullishCoalesce(_optionalChain([out, 'access', _109 => _109.last_hidden_state, 'optionalAccess', _110 => _110.data]), () => ( pickFirstFloat32(out)));
+    const hidden = _nullishCoalesce(_optionalChain([out, 'access', _105 => _105.last_hidden_state, 'optionalAccess', _106 => _106.data]), () => ( pickFirstFloat32(out)));
     if (!hidden) {
       throw new Error("Text encoder returned no Float32 output");
     }
@@ -2798,7 +2827,6 @@ var DiffusionEngine = (_class3 = class {
       residency: this.residency,
       modelId: this.opts.model,
       onProgress: this.opts.onProgress,
-      onEvicted: () => this.forgetEvicted(bufs.component),
       explain: (err, phase) => explainOrtError(err, phase, d.id, d.minVramMb, this.opts.probed.approxMemoryMb)
     });
   }
@@ -2823,7 +2851,7 @@ var DiffusionEngine = (_class3 = class {
   async fetchWeight(file) {
     const request = {
       ...weightRequest(this.descriptor, file, this.opts),
-      onProgress: (loaded, total) => _optionalChain([this, 'access', _111 => _111.opts, 'access', _112 => _112.onWeightProgress, 'optionalCall', _113 => _113(file, loaded, total)])
+      onProgress: (loaded, total) => _optionalChain([this, 'access', _107 => _107.opts, 'access', _108 => _108.onWeightProgress, 'optionalCall', _109 => _109(file, loaded, total)])
     };
     return this.opts.weightPrefetch ? this.opts.weightPrefetch.fetch(request) : getOrFetchWeight(request);
   }
@@ -2871,23 +2899,65 @@ var DiffusionEngine = (_class3 = class {
     if (!pixels) throw new Error("VAE decoder returned no Float32 output");
     return pixels;
   }
+}, _class2);
+
+// src/engine/residency/engine-activity.ts
+var EngineActivity = (_class3 = class {constructor() { _class3.prototype.__init14.call(this);_class3.prototype.__init15.call(this);_class3.prototype.__init16.call(this); }
+  __init14() {this.busy = 0}
+  __init15() {this.busyListeners = /* @__PURE__ */ new Set()}
+  __init16() {this.idleWaiters = []}
+  /** Run `work` with the engine marked busy. */
+  async run(work) {
+    this.busy += 1;
+    if (this.busy === 1) {
+      for (const listener of [...this.busyListeners]) listener();
+    }
+    try {
+      return await work();
+    } finally {
+      this.busy -= 1;
+      if (this.busy === 0) {
+        const waiters = this.idleWaiters;
+        this.idleWaiters = [];
+        for (const resolve of waiters) resolve();
+      }
+    }
+  }
+  isBusy() {
+    return this.busy > 0;
+  }
+  whenIdle() {
+    if (this.busy === 0) return Promise.resolve();
+    return new Promise((resolve) => this.idleWaiters.push(resolve));
+  }
+  onBusy(listener) {
+    this.busyListeners.add(listener);
+    return () => {
+      this.busyListeners.delete(listener);
+    };
+  }
 }, _class3);
 
 // src/engine/residency/lcm-residency.ts
-var LcmResidency = class {
-  constructor(opts) {
+var LcmResidency = (_class4 = class {
+  constructor(opts) {;_class4.prototype.__init17.call(this);
     this.opts = opts;
     this.sessions = new SessionResidency(opts.probed);
     const refinement = opts.refinementModel;
-    this.prefetch = refinement && refinement !== opts.model ? new WeightPrefetch(refinement, opts, { shouldThrottle: () => this.sessions.isPressured() }) : null;
+    this.prefetch = refinement && refinement !== opts.model ? new WeightPrefetch(refinement, opts, {
+      activity: this.activity,
+      headroomBytes: () => this.sessions.headroomBytes(),
+      isPressured: () => this.sessions.isPressured()
+    }) : null;
   }
   
   
+  __init17() {this.activity = new EngineActivity()}
   
   /** A DiffusionEngine for `model`, wired to the shared residency (and, for the
    *  refinement model, to the weight warm). */
   createEngine(model, view) {
-    const { probed, apiKey, weightSources, r2Base, refinementModel } = this.opts;
+    const { probed, apiKey, weightSources, r2Base } = this.opts;
     return new DiffusionEngine({
       model,
       probed,
@@ -2896,19 +2966,23 @@ var LcmResidency = class {
       r2Base,
       ...view,
       residency: this.sessions,
-      weightPrefetch: model === refinementModel ? _nullishCoalesce(this.prefetch, () => ( void 0)) : void 0
+      weightPrefetch: this.prefetch && model === this.opts.refinementModel ? this.prefetch : void 0
     });
   }
-  /** Begin warming the refinement model's weights in the background. Call only
-   *  after the draft engine's init has resolved. */
+  /** Run one generation with the engine marked busy — the weight warm yields to it. */
+  run(work) {
+    return this.activity.run(work);
+  }
+  /** Begin warming the refinement model's weights while idle. Call only after
+   *  the draft engine's init has resolved. */
   prefetchRefinement() {
-    _optionalChain([this, 'access', _114 => _114.prefetch, 'optionalAccess', _115 => _115.start, 'call', _116 => _116()]);
+    _optionalChain([this, 'access', _110 => _110.prefetch, 'optionalAccess', _111 => _111.start, 'call', _112 => _112()]);
   }
   /** Stop background warms and drop their records. Idempotent. */
   dispose() {
-    _optionalChain([this, 'access', _117 => _117.prefetch, 'optionalAccess', _118 => _118.dispose, 'call', _119 => _119()]);
+    _optionalChain([this, 'access', _113 => _113.prefetch, 'optionalAccess', _114 => _114.dispose, 'call', _115 => _115()]);
   }
-};
+}, _class4);
 
 // src/engine/frame-interpolator.ts
 function slerp(a, b, t) {
@@ -3520,8 +3594,8 @@ Target length: ${opts.totalFrames} frames.`,
     signal: opts.signal
   });
   return {
-    treatment: typeof _optionalChain([parsed, 'optionalAccess', _120 => _120.treatment]) === "string" ? parsed.treatment : opts.request,
-    characters: Array.isArray(_optionalChain([parsed, 'optionalAccess', _121 => _121.characters])) ? parsed.characters : []
+    treatment: typeof _optionalChain([parsed, 'optionalAccess', _116 => _116.treatment]) === "string" ? parsed.treatment : opts.request,
+    characters: Array.isArray(_optionalChain([parsed, 'optionalAccess', _117 => _117.characters])) ? parsed.characters : []
   };
 }
 async function shotPlannerPass(client, model, opts, director) {
@@ -3540,7 +3614,7 @@ Distribute exactly ${opts.totalFrames} frames across the shots.`,
     schema: SHOT_PLANNER_SCHEMA,
     signal: opts.signal
   });
-  return { shots: Array.isArray(_optionalChain([parsed, 'optionalAccess', _122 => _122.shots])) ? parsed.shots : [] };
+  return { shots: Array.isArray(_optionalChain([parsed, 'optionalAccess', _118 => _118.shots])) ? parsed.shots : [] };
 }
 function cameraMoveToMotion(move) {
   switch (move) {
@@ -3622,10 +3696,10 @@ async function structuredCall(client, args) {
       signal: args.signal
     });
   } catch (err) {
-    if (_optionalChain([args, 'access', _123 => _123.signal, 'optionalAccess', _124 => _124.aborted]) || _optionalChain([err, 'optionalAccess', _125 => _125.name]) === "AbortError") throw err;
+    if (_optionalChain([args, 'access', _119 => _119.signal, 'optionalAccess', _120 => _120.aborted]) || _optionalChain([err, 'optionalAccess', _121 => _121.name]) === "AbortError") throw err;
     return null;
   }
-  const text = _optionalChain([completion, 'access', _126 => _126.choices, 'optionalAccess', _127 => _127[0], 'optionalAccess', _128 => _128.message, 'optionalAccess', _129 => _129.content]);
+  const text = _optionalChain([completion, 'access', _122 => _122.choices, 'optionalAccess', _123 => _123[0], 'optionalAccess', _124 => _124.message, 'optionalAccess', _125 => _125.content]);
   if (!text || typeof text !== "string") return null;
   try {
     return JSON.parse(text);
@@ -3706,7 +3780,7 @@ ${characterBlock}`
       max_tokens: 600,
       signal: opts.signal
     });
-    const text = _optionalChain([completion, 'access', _130 => _130.choices, 'optionalAccess', _131 => _131[0], 'optionalAccess', _132 => _132.message, 'optionalAccess', _133 => _133.content]);
+    const text = _optionalChain([completion, 'access', _126 => _126.choices, 'optionalAccess', _127 => _127[0], 'optionalAccess', _128 => _128.message, 'optionalAccess', _129 => _129.content]);
     const verdict = parseVerdict(typeof text === "string" ? text : null);
     if (!verdict) return permissive();
     return { ok: verdict.score >= threshold, score: verdict.score, issues: verdict.issues };
@@ -3776,10 +3850,10 @@ async function expandPrompt(opts) {
       signal: opts.signal
     });
   } catch (err) {
-    if (_optionalChain([opts, 'access', _134 => _134.signal, 'optionalAccess', _135 => _135.aborted]) || _optionalChain([err, 'optionalAccess', _136 => _136.name]) === "AbortError") throw err;
+    if (_optionalChain([opts, 'access', _130 => _130.signal, 'optionalAccess', _131 => _131.aborted]) || _optionalChain([err, 'optionalAccess', _132 => _132.name]) === "AbortError") throw err;
     return opts.prompt;
   }
-  const text = _optionalChain([completion, 'access', _137 => _137.choices, 'optionalAccess', _138 => _138[0], 'optionalAccess', _139 => _139.message, 'optionalAccess', _140 => _140.content, 'optionalAccess', _141 => _141.trim, 'call', _142 => _142()]);
+  const text = _optionalChain([completion, 'access', _133 => _133.choices, 'optionalAccess', _134 => _134[0], 'optionalAccess', _135 => _135.message, 'optionalAccess', _136 => _136.content, 'optionalAccess', _137 => _137.trim, 'call', _138 => _138()]);
   if (!text) {
     return opts.prompt;
   }
@@ -3808,7 +3882,7 @@ async function firstSupportedCodec(candidates, opts, probe) {
         bitrate: _nullishCoalesce(opts.bitrate, () => ( 2e6)),
         framerate: opts.fps
       });
-      if (_optionalChain([res, 'optionalAccess', _143 => _143.supported])) return codec;
+      if (_optionalChain([res, 'optionalAccess', _139 => _139.supported])) return codec;
     } catch (e20) {
     }
   }
@@ -3884,7 +3958,7 @@ var UnsupportedVideoEncodingError = class extends Error {
   }
 };
 function videoExtensionForMime(mimeType) {
-  return _nullishCoalesce(_optionalChain([ENCODING_TABLE, 'access', _144 => _144.find, 'call', _145 => _145((r) => r.mimeType === mimeType.split(";")[0].trim()), 'optionalAccess', _146 => _146.extension]), () => ( "mp4"));
+  return _nullishCoalesce(_optionalChain([ENCODING_TABLE, 'access', _140 => _140.find, 'call', _141 => _141((r) => r.mimeType === mimeType.split(";")[0].trim()), 'optionalAccess', _142 => _142.extension]), () => ( "mp4"));
 }
 async function muxFramesToVideo(frames, opts) {
   if (typeof VideoEncoder === "undefined") {
@@ -3909,7 +3983,7 @@ async function muxFramesToVideo(frames, opts) {
   });
   const microsPerFrame = Math.round(1e6 / opts.fps);
   for (let i = 0; i < frames.length; i++) {
-    if (_optionalChain([opts, 'access', _147 => _147.signal, 'optionalAccess', _148 => _148.aborted])) {
+    if (_optionalChain([opts, 'access', _143 => _143.signal, 'optionalAccess', _144 => _144.aborted])) {
       encoder.close();
       throw new DOMException("Mux aborted", "AbortError");
     }
@@ -4051,7 +4125,7 @@ async function runWebDitDenoise(bundle, args) {
     );
     frames[i] = bitmap;
     muxFrames[i] = { rgba };
-    _optionalChain([args, 'access', _149 => _149.onFrame, 'optionalCall', _150 => _150(frameOffset + i, bitmap, args.mambaState)]);
+    _optionalChain([args, 'access', _145 => _145.onFrame, 'optionalCall', _146 => _146(frameOffset + i, bitmap, args.mambaState)]);
   }
   return { frames, muxFrames, width: result.width, height: result.height };
 }
@@ -4134,7 +4208,9 @@ var VideoEngine = class _VideoEngine {
     const width = _nullishCoalesce(options.width, () => ( DEFAULT_WIDTH));
     const height = _nullishCoalesce(options.height, () => ( DEFAULT_HEIGHT));
     const weightSources = _nullishCoalesce(options.weightSources, () => ( DEFAULT_WEIGHT_SOURCES));
-    const residency = new LcmResidency({ ...options, probed, weightSources, r2Base: deriveR2Base(options.baseUrl) });
+    const { model, refinementModel, apiKey } = options;
+    const r2Base = deriveR2Base(options.baseUrl);
+    const residency = new LcmResidency({ probed, model, refinementModel, apiKey, weightSources, r2Base });
     const diffusion = residency.createEngine(options.model, { width, height, onProgress: options.onProgress });
     await diffusion.init();
     residency.prefetchRefinement();
@@ -4198,7 +4274,10 @@ var VideoEngine = class _VideoEngine {
    * are slerp-interpolated in latent space (one cheap VAE decode each). Returns
    * the muxed MP4 plus the updated state.
    */
-  async generate(args) {
+  generate(args) {
+    return this.whileBusy(() => this.runGenerate(args));
+  }
+  async runGenerate(args) {
     const start = performance.now();
     const descriptor = MODEL_REGISTRY[this.opts.model];
     const steps = _nullishCoalesce(args.steps, () => ( descriptor.defaultSteps));
@@ -4217,7 +4296,7 @@ var VideoEngine = class _VideoEngine {
       prompt: args.prompt,
       signal: args.signal
     });
-    _optionalChain([args, 'access', _151 => _151.onPromptExpanded, 'optionalCall', _152 => _152(resolvedPrompt)]);
+    _optionalChain([args, 'access', _147 => _147.onPromptExpanded, 'optionalCall', _148 => _148(resolvedPrompt)]);
     if (this.engineKind === "webdit-dit") {
       reportProgress("Generating via WebDiT diffusion-transformer engine\u2026", onProgress);
       const result = await generateWebDitClip(this.webditBundle, {
@@ -4281,8 +4360,8 @@ var VideoEngine = class _VideoEngine {
         signal: args.signal
       });
     }
-    const finalFrames = _nullishCoalesce(_optionalChain([refined, 'optionalAccess', _153 => _153.frames]), () => ( clip.frames));
-    const finalMuxFrames = _nullishCoalesce(_optionalChain([refined, 'optionalAccess', _154 => _154.muxFrames]), () => ( clip.muxFrames));
+    const finalFrames = _nullishCoalesce(_optionalChain([refined, 'optionalAccess', _149 => _149.frames]), () => ( clip.frames));
+    const finalMuxFrames = _nullishCoalesce(_optionalChain([refined, 'optionalAccess', _150 => _150.muxFrames]), () => ( clip.muxFrames));
     reportProgress(`Encoding ${finalFrames.length} frames to MP4\u2026`, onProgress);
     const { blob } = await muxFramesToVideo(finalMuxFrames, {
       width,
@@ -4309,7 +4388,14 @@ var VideoEngine = class _VideoEngine {
    * When `validate` is set, each shot's first keyframe is checked by the VLM
    * frame validator (advisory — never blocks generation).
    */
-  async generateStoryboard(args) {
+  generateStoryboard(args) {
+    return this.whileBusy(() => this.runStoryboard(args));
+  }
+  /** Generation marks the engine busy, so the refinement weight warm yields to it. */
+  whileBusy(work) {
+    return this.lcmResidency ? this.lcmResidency.run(work) : work();
+  }
+  async runStoryboard(args) {
     const start = performance.now();
     const descriptor = MODEL_REGISTRY[this.opts.model];
     const width = _nullishCoalesce(this.opts.width, () => ( DEFAULT_WIDTH));
@@ -4383,7 +4469,7 @@ var VideoEngine = class _VideoEngine {
       allMuxFrames.push(...clip.muxFrames);
       allLatents.push(...clip.latents);
       globalIdx += clip.frames.length;
-      _optionalChain([args, 'access', _155 => _155.onShot, 'optionalCall', _156 => _156(s, shot, validation)]);
+      _optionalChain([args, 'access', _151 => _151.onShot, 'optionalCall', _152 => _152(s, shot, validation)]);
     }
     let finalFrames = allFrames;
     let finalMuxFrames = allMuxFrames;
@@ -4471,7 +4557,7 @@ var VideoEngine = class _VideoEngine {
       allFrames.push(...shotResult.frames);
       allMuxFrames.push(...shotResult.muxFrames);
       globalIdx += shotResult.frames.length;
-      _optionalChain([args, 'access', _157 => _157.onShot, 'optionalCall', _158 => _158(s, shot, null)]);
+      _optionalChain([args, 'access', _153 => _153.onShot, 'optionalCall', _154 => _154(s, shot, null)]);
     }
     reportProgress(`Encoding ${allFrames.length} frames to MP4\u2026`, onProgress);
     const { blob } = await muxFramesToVideo(allMuxFrames, {
@@ -4547,8 +4633,8 @@ var VideoEngine = class _VideoEngine {
         signal: args.signal,
         onProgress: args.onProgress
       }) : null;
-      const score = _nullishCoalesce(_optionalChain([validation, 'optionalAccess', _159 => _159.score]), () => ( 1));
-      const prevBestScore = _nullishCoalesce(_optionalChain([best, 'optionalAccess', _160 => _160.validation, 'optionalAccess', _161 => _161.score]), () => ( -1));
+      const score = _nullishCoalesce(_optionalChain([validation, 'optionalAccess', _155 => _155.score]), () => ( 1));
+      const prevBestScore = _nullishCoalesce(_optionalChain([best, 'optionalAccess', _156 => _156.validation, 'optionalAccess', _157 => _157.score]), () => ( -1));
       if (!best || score > prevBestScore) {
         if (best) closeClip(best.clip);
         best = { clip, validation, state: this.mambaState };
@@ -4633,7 +4719,7 @@ var VideoEngine = class _VideoEngine {
         if (cameraMotion && (cameraMotion.dx !== 0 || cameraMotion.dy !== 0)) {
           transformed = shiftLatent(transformed, latentShape, cameraMotion.dx, cameraMotion.dy);
         }
-        if (_optionalChain([cameraMotion, 'optionalAccess', _162 => _162.zoom]) && cameraMotion.zoom !== 1) {
+        if (_optionalChain([cameraMotion, 'optionalAccess', _158 => _158.zoom]) && cameraMotion.zoom !== 1) {
           transformed = scaleLatent(transformed, latentShape, cameraMotion.zoom);
         }
         const shifted = transformed;
@@ -4681,7 +4767,7 @@ var VideoEngine = class _VideoEngine {
       });
       keyframes.push({ outputIndex: frameIdx, latent: finalLatent });
       keyframeOutputs.push({ rgba, bitmap, pixels });
-      _optionalChain([onFrame, 'optionalCall', _163 => _163(frameOffset + frameIdx, bitmap, this.mambaState)]);
+      _optionalChain([onFrame, 'optionalCall', _159 => _159(frameOffset + frameIdx, bitmap, this.mambaState)]);
     }
     const slots = buildInterpolatedSequence(keyframes);
     const frames = new Array(frameCount);
@@ -4737,7 +4823,7 @@ var VideoEngine = class _VideoEngine {
       );
       frames[slot.outputIndex] = bitmap;
       muxFrames[slot.outputIndex] = { rgba };
-      _optionalChain([onFrame, 'optionalCall', _164 => _164(frameOffset + slot.outputIndex, bitmap, this.mambaState)]);
+      _optionalChain([onFrame, 'optionalCall', _160 => _160(frameOffset + slot.outputIndex, bitmap, this.mambaState)]);
     }
     return { frames, muxFrames, latents };
   }
@@ -4814,7 +4900,7 @@ var VideoEngine = class _VideoEngine {
       muxFrames[i] = { rgba };
       outLatents[i] = refinedLatent;
       refinedCount++;
-      _optionalChain([opts, 'access', _165 => _165.onFrame, 'optionalCall', _166 => _166(i, bitmap, this.mambaState)]);
+      _optionalChain([opts, 'access', _161 => _161.onFrame, 'optionalCall', _162 => _162(i, bitmap, this.mambaState)]);
     }
     reportProgress(`Refinement pass complete (${refinedCount}/${latents.length} frames refined).`, onProgress);
     return { frames, muxFrames, latents: outLatents };
@@ -4881,9 +4967,9 @@ var VideoEngine = class _VideoEngine {
    *  dispose the engine cannot be reused — create a new one with
    *  VideoEngine.create. */
   async dispose() {
-    _optionalChain([this, 'access', _167 => _167.lcmResidency, 'optionalAccess', _168 => _168.dispose, 'call', _169 => _169()]);
-    await _optionalChain([this, 'access', _170 => _170.diffusion, 'optionalAccess', _171 => _171.dispose, 'call', _172 => _172()]);
-    await _optionalChain([this, 'access', _173 => _173.webditBundle, 'optionalAccess', _174 => _174.unload, 'call', _175 => _175()]);
+    _optionalChain([this, 'access', _163 => _163.lcmResidency, 'optionalAccess', _164 => _164.dispose, 'call', _165 => _165()]);
+    await _optionalChain([this, 'access', _166 => _166.diffusion, 'optionalAccess', _167 => _167.dispose, 'call', _168 => _168()]);
+    await _optionalChain([this, 'access', _169 => _169.webditBundle, 'optionalAccess', _170 => _170.unload, 'call', _171 => _171()]);
   }
   /**
    * Non-null accessor for the lcm-diffusion engine. Every internal caller of
@@ -5390,18 +5476,18 @@ var DEFAULTS = {
   charsPerSecond: 14,
   hiddenDim: 256
 };
-var SSMAcousticModel = (_class4 = class {
+var SSMAcousticModel = (_class5 = class {
   
   /** Hashed character-embedding table [vocab][hiddenDim]. */
   
   /** Speaker-embedding → hidden projection (sign matrix), built lazily per
    *  speaker-dim so a mismatched embedding can't silently mis-multiply. */
-  __init15() {this.speakerProj = null}
+  __init18() {this.speakerProj = null}
   /** Per-quantizer output projection: hidden → codebookSize logits. */
   
   /** SSM per-channel decay (diagonal A), stable in [0.5, 0.99). */
   
-  constructor(options = {}) {;_class4.prototype.__init15.call(this);
+  constructor(options = {}) {;_class5.prototype.__init18.call(this);
     this.cfg = {
       sampleRate: _nullishCoalesce(options.sampleRate, () => ( DEFAULTS.sampleRate)),
       numMels: _nullishCoalesce(options.numMels, () => ( DEFAULTS.numMels)),
@@ -5512,7 +5598,7 @@ var SSMAcousticModel = (_class4 = class {
     }
     return out;
   }
-}, _class4);
+}, _class5);
 function alignWords(text, numFrames, hopLength, sampleRate) {
   if (text.words.length === 0) return [];
   const totalChars = Math.max(1, text.tokens.length);
@@ -5695,14 +5781,14 @@ var VoiceCloneEngine = class {
   /** Speak `text` in `speaker`'s voice. */
   async synthesize(options) {
     const activeDevice = await this.resolveDevice(options.device);
-    _optionalChain([options, 'access', _176 => _176.signal, 'optionalAccess', _177 => _177.throwIfAborted, 'call', _178 => _178()]);
+    _optionalChain([options, 'access', _172 => _172.signal, 'optionalAccess', _173 => _173.throwIfAborted, 'call', _174 => _174()]);
     const text = tokenizeText(options.text);
     const { codec, wordTimestamps } = this.acoustic.generate(
       text,
       options.speaker,
       _nullishCoalesce(options.speed, () => ( 1))
     );
-    _optionalChain([options, 'access', _179 => _179.signal, 'optionalAccess', _180 => _180.throwIfAborted, 'call', _181 => _181()]);
+    _optionalChain([options, 'access', _175 => _175.signal, 'optionalAccess', _176 => _176.throwIfAborted, 'call', _177 => _177()]);
     const { samples } = this.codec.decode(codec);
     peakNormalize(samples, 0.95);
     const durationMs = Math.round(samples.length / this.sampleRate * 1e3);
@@ -5722,7 +5808,7 @@ var VoiceCloneEngine = class {
   async resolveDevice(requested) {
     if (requested) return requested;
     const probed = await _chunkVKVEFIZWcjs.probeDevice.call(void 0, "auto");
-    return _nullishCoalesce(_optionalChain([probed, 'optionalAccess', _182 => _182.kind]), () => ( "cpu"));
+    return _nullishCoalesce(_optionalChain([probed, 'optionalAccess', _178 => _178.kind]), () => ( "cpu"));
   }
 };
 function peakNormalize(samples, target) {
@@ -5737,10 +5823,10 @@ function peakNormalize(samples, target) {
 }
 
 // src/engine/voice/provider.ts
-var SSMVoiceProvider = (_class5 = class {
-  __init16() {this.id = "ssm-webgpu"}
+var SSMVoiceProvider = (_class6 = class {
+  __init19() {this.id = "ssm-webgpu"}
   
-  constructor(options) {;_class5.prototype.__init16.call(this);
+  constructor(options) {;_class6.prototype.__init19.call(this);
     this.engine = new VoiceCloneEngine(options);
   }
   /** Expose the engine for enrolment (`provider.engine.enroll(...)`). */
@@ -5756,7 +5842,7 @@ var SSMVoiceProvider = (_class5 = class {
   synthesize(options) {
     return this.engine.synthesize(options);
   }
-}, _class5);
+}, _class6);
 async function resolveVoiceProvider(providers) {
   if (providers.length === 0) {
     return { provider: null, reason: "No clone provider is configured." };

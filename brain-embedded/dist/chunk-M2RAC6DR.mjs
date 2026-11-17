@@ -2634,9 +2634,9 @@ function outlineFirstApplies(content, leverOn) {
   if (leverOn !== true) return false;
   return content.length > WHOLE_READ_MAX_CHARS;
 }
-function widensToWholeFile(content, opts, sourceTruncated) {
+function dropsLimit(content, opts, sourceTruncated) {
   if (sourceTruncated) return false;
-  if (opts.offset === void 0 && opts.limit === void 0) return false;
+  if (opts.limit === void 0) return false;
   if (content.length > WHOLE_READ_MAX_CHARS) return false;
   return content.split("\n").length >= WIDEN_WINDOW_MIN_LINES;
 }
@@ -2679,19 +2679,8 @@ async function readOneFile(path, opts, caps, leverOn) {
       note: (symbols.length > 0 ? `This file is larger than one read: \`outline\` lists its ${symbols.length} definitions with line numbers. ` : "This file is larger than one read. ") + `The first ${OUTLINE_FIRST_PREFIX_LINES} lines follow. To read a span, call read_file again with \`offset\` (the outline's line) and no \`limit\` \u2014 each read returns as much as fits.`
     };
   }
-  if (widensToWholeFile(content, opts, r.truncated === true)) {
-    const whole = windowFileContent(content, { offset: 1 });
-    return {
-      ok: true,
-      path: r.path ?? path,
-      content: whole.content,
-      truncated: whole.truncated,
-      totalLines: whole.totalLines,
-      offset: 1,
-      note: `Returned the whole file (${whole.totalLines} lines) \u2014 it fits in one read, so later windows of it are already covered. Do not read it again unless you change it.`
-    };
-  }
-  const win = windowFileContent(content, { offset: opts.offset, limit: opts.limit });
+  const limitDropped = opts.limit !== void 0 && dropsLimit(content, opts, r.truncated === true);
+  const win = windowFileContent(content, { offset: opts.offset, limit: limitDropped ? void 0 : opts.limit });
   const data = {
     ok: true,
     path: r.path ?? path,
@@ -2701,6 +2690,9 @@ async function readOneFile(path, opts, caps, leverOn) {
     offset: win.offset
   };
   let note = fileWindowNote(win);
+  if (limitDropped && !win.truncated) {
+    note = `Extended the window to the end of the file (lines ${win.offset}\u2013${win.totalLines}) \u2014 the rest fits in one read. Lines already returned need not be read again.`;
+  }
   if (opts.offset === void 0 && isMarkdown(data.path ?? path) && (content.length > MARKDOWN_OUTLINE_MIN_CHARS || win.truncated)) {
     const outline = markdownOutline(data.path ?? path, content);
     if (outline.length > 0) {
@@ -11097,4 +11089,4 @@ export {
   toolCallArgBytes,
   createComposingActivity
 };
-//# sourceMappingURL=chunk-Q5H4RNNE.mjs.map
+//# sourceMappingURL=chunk-M2RAC6DR.mjs.map

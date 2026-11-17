@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.188] — A deleted ticket no longer drags the chat's % complete down
+
+- **Fixed: the chat rail's "% complete" rollup counted tickets the server had deleted, dragging the percentage down.** Deleted tickets are now excluded from both the brain-ui rollup and the rail's per-ticket progress mapping, so the shown % only counts work that still exists.
+
 ## [2026.10.187] — A finished run ends with its report instead of asking you how to proceed
 
 - **Fixed: a run that had made its changes and passed its type-check could still be paused with "This run has stopped making progress — progress check 3".** The guard that spots stuck runs missed edits made to several files in one call. It also missed type-checks run in the background, so it counted the wrap-up turns as no progress. On its second warning it also forced an edit-only turn, which made the model invent an edit. Now each file in a multi-file edit counts as a change, and a background check counts once its result comes back. A run whose changes have passed a check is first asked to finish if it is done, then gets a final turn with no tools to write its report. A run that has already changed code is never forced into an edit-only turn.
