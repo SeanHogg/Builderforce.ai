@@ -16,6 +16,7 @@ import type { RunWindowSources } from '../windowFit/modelWindow';
 import type { OnDeviceTasks } from '../onDevice/onDeviceTasks';
 import type { RunKnowledgeLog } from '@builderforce/agent-tools';
 import type { ServedRead } from './hostRunContext';
+import type { PackageDirProbe } from '../handOffParallelism';
 import type { PrefetchPort } from '@builderforce/prefetch';
 import type { ModelPreflightResult } from '@builderforce/agent-run';
 import type { CheckRecord, EvidencePolicy, OutgoingFile, ReviewVerdict } from '@builderforce/run-guards';
@@ -279,6 +280,13 @@ export interface BrainRunRequest {
    * of one is an exact repeat / covered window, not a second read. Best-effort.
    */
   servedReads?: () => Promise<readonly ServedRead[] | undefined>;
+  /**
+   * Whether a workspace-relative directory holds a package.json — lets a `hand_off` stage a
+   * task that consumes another task's package after it (`handOffParallelism.ts`). Node-only by
+   * nature, so it is the HOST's: brain-embedded ships in browser bundles and never touches the
+   * filesystem itself. Absent ⇒ a task's package is its deepest common parent directory.
+   */
+  isPackageDir?: PackageDirProbe;
   /**
    * The host's deterministic-first PREFETCH port (`@builderforce/prefetch`): its action
    * registry, one executor per action and the gate's ports. Consulted once before the

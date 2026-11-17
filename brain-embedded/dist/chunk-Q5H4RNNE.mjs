@@ -3319,10 +3319,16 @@ function buildCommitCommand(opts) {
     ...branch ? [
       'ORIG="$(git rev-parse --show-toplevel)"',
       `WT="$ORIG/../$(echo "${branch}" | tr '/' '-')-wt"`,
+      // This checkout's git-common-dir, physical and absolute: the identity of the
+      // repository. A worktree of THIS repo shares it; a foreign checkout does not.
+      'COMMON="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)"',
       // Reuse the worktree when the branch already has one there; create it from HEAD
-      // otherwise. The last arm tolerates a worktree that is already registered at
-      // that path ("already registered" would otherwise fail the whole commit).
-      `git worktree add "$WT" -b "${branch}" 2>/dev/null || git worktree add "$WT" "${branch}" 2>/dev/null || [ "$(git -C "$WT" rev-parse --abbrev-ref HEAD 2>/dev/null)" = "${branch}" ] || { echo WORKTREE_FAILED; exit 12; }`,
+      // otherwise. The reuse arm tolerates a worktree that is already registered at
+      // that path ("already registered" would otherwise fail the whole commit) — but
+      // ONLY when it belongs to this repository. A foreign repo's checkout sitting at
+      // `../<branch>-wt` on a same-named branch would otherwise receive the commit (and
+      // the agent's files copied into it), so it is refused instead.
+      `git worktree add "$WT" -b "${branch}" 2>/dev/null || git worktree add "$WT" "${branch}" 2>/dev/null || { [ "$(git -C "$WT" rev-parse --abbrev-ref HEAD 2>/dev/null)" = ${shellQuote(branch)} ] || { echo WORKTREE_FAILED; exit 12; }; WT_COMMON="$(cd "$WT" 2>/dev/null && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P)" || WT_COMMON=""; [ "$WT_COMMON" = "$COMMON" ] || { echo "WORKTREE_FOREIGN: $WT"; exit 13; }; }`,
       'cd "$WT"'
     ] : opts.allowBaseBranch ? [] : ['[ "$CUR" != "$BASE" ] || { echo ON_BASE_BRANCH; exit 5; }'],
     // A path is "there" if it is on disk OR tracked by git — the second arm is what
@@ -3449,6 +3455,13 @@ function publishToolResult(action, r) {
   }
   if (r.exitCode === 11 || /\bNO_SUCH_BRANCH\b/.test(out)) {
     return fail("no local branch by that name \u2014 it has already been deleted. Nothing to do.");
+  }
+  const foreign = /WORKTREE_FOREIGN:([^\n]*)/.exec(out);
+  if (r.exitCode === 13 || foreign) {
+    const at2 = (foreign?.[1] ?? "").trim();
+    return fail(
+      `the ticket branch's worktree path${at2 ? ` (${at2})` : ""} is already a checkout of a DIFFERENT repository on a branch of the same name \u2014 nothing was committed there, and the checkout was not switched. Do not commit into it. Tell the human which directory is in the way (it must be moved or removed), or re-try git_commit with a different \`branch\` name.`
+    );
   }
   if (r.exitCode === 12 || /\bWORKTREE_FAILED\b/.test(out)) {
     return fail("the ticket branch's worktree could not be created or reused \u2014 nothing was committed and the checkout was not switched. Run git_status, then re-try git_commit with the same branch (a stale worktree can be cleared with `git worktree prune`).");
@@ -9525,35 +9538,7 @@ function gatewayRoutingArgs(routing) {
 }
 
 // src/handOffParallelism.ts
-import nodeModule from "module";
-var packageLookRoot;
-function lookRoot() {
-  if (packageLookRoot === void 0) {
-    packageLookRoot = null;
-    try {
-      const require2 = nodeModule.createRequire(import.meta.url ?? "file:///");
-      const path = require2("node:path");
-      const { fileURLToPath } = require2("node:url");
-      packageLookRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-    } catch {
-      packageLookRoot = typeof process !== "undefined" && typeof process.cwd === "function" ? process.cwd() : null;
-    }
-  }
-  return packageLookRoot;
-}
-var hasPackageJson = (dir) => {
-  const root = lookRoot();
-  if (root === null) return false;
-  try {
-    const require2 = nodeModule.createRequire(import.meta.url ?? "file:///");
-    const { existsSync } = require2("node:fs");
-    const path = require2("node:path");
-    return existsSync(path.join(root, dir, "package.json"));
-  } catch {
-    return false;
-  }
-};
-function taskPackageDir(task) {
+function taskPackageDir(task, isPackageDir) {
   const paths = task.paths;
   if (paths.length === 0) return null;
   const dirs = paths.map((p) => p.replace(/\\/g, "/").replace(/\/$/, "")).map((p) => p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : ".");
@@ -9570,7 +9555,8 @@ function taskPackageDir(task) {
   let dir = common;
   for (; ; ) {
     if (dir === null || dir === "" || dir === ".") return common;
-    if (hasPackageJson(dir)) return dir;
+    if (!isPackageDir) return common;
+    if (isPackageDir(dir)) return dir;
     const up = dir.includes("/") ? dir.slice(0, dir.lastIndexOf("/")) : ".";
     if (up === dir || up === ".") return common;
     dir = up;
@@ -9588,9 +9574,9 @@ var refText = (t) => t.brief?.trim() ? `${t.brief} ${t.title}` : t.title;
 var normPaths = (t) => t.paths.map((p) => p.replace(/\\/g, "/"));
 var scopeOf = (t) => ({ label: t.title, paths: normPaths(t) });
 var pathDisjoint = (a, b) => overlappingScopes([scopeOf(a), scopeOf(b)]) === null;
-function computeOrderDependencies(tasks) {
+function computeOrderDependencies(tasks, isPackageDir) {
   const deps = [];
-  const packageOf = tasks.map(taskPackageDir);
+  const packageOf = tasks.map((t) => taskPackageDir(t, isPackageDir));
   for (let j = 0; j < tasks.length; j += 1) {
     for (let i = 0; i < j; i += 1) {
       const packageDir = packageOf[i];
@@ -9607,9 +9593,9 @@ function canRunInParallel(tasks) {
   if (tasks.length < 2 || tasks.some((t) => t.paths.length === 0)) return false;
   return planScopeClash(tasks) === null;
 }
-function splitForParallel(tasks) {
+function splitForParallel(tasks, isPackageDir) {
   const all = tasks.map((_, i) => i);
-  const order = computeOrderDependencies(tasks);
+  const order = computeOrderDependencies(tasks, isPackageDir);
   const consumedBefore = (index) => order.some((d) => d.consumer === index);
   let lead = 0;
   while (lead < tasks.length && tasks[lead].paths.length > 0 && !consumedBefore(lead) && overlappingScopes(tasks.slice(0, lead + 1).map(scopeOf)) === null) lead += 1;
@@ -11111,4 +11097,4 @@ export {
   toolCallArgBytes,
   createComposingActivity
 };
-//# sourceMappingURL=chunk-76UMK5K7.mjs.map
+//# sourceMappingURL=chunk-Q5H4RNNE.mjs.map

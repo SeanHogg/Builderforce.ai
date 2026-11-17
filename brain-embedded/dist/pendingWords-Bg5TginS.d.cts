@@ -1,5 +1,5 @@
-import { B as BrainTraceEvent, U as UsageSurface, a as BrainMessage } from './brainTriage-I5tIR9e1.js';
-import { L as LocalRuntimeId, a as LocalEndpoint, b as LocalRuntimeProbe, c as LocalModel } from './probe-BGCNrsPi.js';
+import { B as BrainTraceEvent, U as UsageSurface, a as BrainMessage, P as PackageDirProbe } from './brainTriage-BXwQw04C.cjs';
+import { L as LocalRuntimeId, a as LocalEndpoint, b as LocalRuntimeProbe, c as LocalModel } from './probe-BGCNrsPi.cjs';
 import { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import { ConsolidateOptions, ConsolidatedMemory } from '@seanhogg/builderforce-memory/working';
 
@@ -2046,6 +2046,13 @@ interface BrainRunRequest {
      * of one is an exact repeat / covered window, not a second read. Best-effort.
      */
     servedReads?: () => Promise<readonly ServedRead[] | undefined>;
+    /**
+     * Whether a workspace-relative directory holds a package.json — lets a `hand_off` stage a
+     * task that consumes another task's package after it (`handOffParallelism.ts`). Node-only by
+     * nature, so it is the HOST's: brain-embedded ships in browser bundles and never touches the
+     * filesystem itself. Absent ⇒ a task's package is its deepest common parent directory.
+     */
+    isPackageDir?: PackageDirProbe;
     /**
      * The host's deterministic-first PREFETCH port (`@builderforce/prefetch`): its action
      * registry, one executor per action and the gate's ports. Consulted once before the

@@ -87,7 +87,7 @@ import {
   thoughtTextOf,
   trimRepetitionLoop,
   within
-} from "./chunk-VG2BVO4F.mjs";
+} from "./chunk-6LA2S4K3.mjs";
 import {
   BrainRequestError,
   LOCAL_ENGINE_FAILURE_CODES,
@@ -361,7 +361,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-76UMK5K7.mjs";
+} from "./chunk-Q5H4RNNE.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useEffect, useMemo } from "react";
@@ -4481,6 +4481,9 @@ async function usageRowsByChat(tx, deviceId, clientIds) {
 }
 
 // src/localFirstPersistence.ts
+function reportServerSpendFailure(error) {
+  console.warn(`BuilderForce chat spend: server spend read failed (${errorMessage(error)})`);
+}
 var chatValue = (record2) => record2.payload.chat;
 var MESSAGE_ID_CHECK_LIMIT = 64;
 function createLocalBrainPersistence(options) {
@@ -4535,7 +4538,7 @@ function createLocalBrainPersistence(options) {
     let server = null;
     if (bound.length > 0 && options.serverSpend) {
       server = options.serverSpendSync?.() ?? null;
-      if (!server) void options.serverSpend(bound).catch(() => void 0);
+      if (!server) void options.serverSpend(bound).catch(reportServerSpendFailure);
     }
     return inputs.map(({ record: record2, serverId, usage, imported }) => {
       const chat = chatValue(record2);
@@ -17055,7 +17058,7 @@ async function executeHandOff(plan, ports) {
   const tickets = plan.tasks.map((t, i) => ({ title: t.title, ...ids[i] != null ? { id: ids[i] } : {} }));
   const all = plan.tasks.map((_, i) => i);
   const canFanOut = ports.toolNames.has(FAN_OUT_TOOL);
-  const split = canFanOut ? splitForParallel(plan.tasks) : { parallel: [], inline: all, clash: null };
+  const split = canFanOut ? splitForParallel(plan.tasks, ports.isPackageDir) : { parallel: [], inline: all, clash: null };
   const briefContext = { summary: plan.summary, request: ports.request, knowledge: ports.knowledge };
   const brief = (i) => childTaskBrief(plan.tasks[i], briefContext, ids[i]);
   await ports.postPlan?.(planMessage(plan, ids, split)).catch(() => void 0);
@@ -17681,7 +17684,13 @@ async function finishCloseOut(run) {
           });
         }
       }
-    } catch {
+    } catch (e) {
+      pushTrace(run.c, {
+        ts: nowIso(),
+        category: "message",
+        label: "finish.review_gate",
+        result: `The settle-time review could not run: ${errorMessage(e)}`
+      });
     }
   }
   if (!await hasLinkedTicket(run)) return;
@@ -17700,7 +17709,10 @@ async function finishCloseOut(run) {
     // The diff the change was reviewed against: `approvedReviewFor` matches the run's remembered
     // `shipReviews` to it, so the close-out records its review only over a review that approved
     // THESE bytes (chat #230). Best-effort: an uncomputable diff simply means no review in hand.
-    reviewedDiffHash: (await run.req.git?.outgoing("").catch(() => null))?.diffHash ?? null
+    reviewedDiffHash: (await run.req.git?.outgoing("").catch((e) => {
+      pushTrace(run.c, { ts: nowIso(), category: "message", label: "finish.review_diff", result: `The reviewed diff could not be computed: ${errorMessage(e)}` });
+      return null;
+    }))?.diffHash ?? null
   };
   const verified = verificationOf(run.evidence, view.touchedFiles).verified;
   await deterministicFinish({ ...input, verified, hasTicket: true }, run);
@@ -19107,10 +19119,7 @@ async function prepareBrainRun(chatId, c, req, runKey, reportRunRow) {
   const catalog = canAskUser ? [...toolSpecs ?? [], ASK_USER_TOOL_SPEC, HAND_OFF_TOOL_SPEC] : toolSpecs;
   const allTools = catalog && catalog.length > 0 ? catalog : void 0;
   const runMode = normalizeChatMode(req.chatMode ?? "work");
-  try {
-    seedConfigLog(c, { model: req.model, modelStrict: req.modelStrict, routingMode: req.routingMode, runMode });
-  } catch {
-  }
+  seedConfigLog(c, { model: req.model, modelStrict: req.modelStrict, routingMode: req.routingMode, runMode });
   const serverChatId = resolveServerChatId(chatId, req);
   const pipeline = decideRunPipeline(req, latestUserText(convo), { followUp: isFollowUpTurn(convo) });
   if (pipeline) {
@@ -19646,6 +19655,8 @@ function callPreflight(run) {
         // …and the goal, in the user's words: a child sees none of this conversation.
         request: run.goal,
         ...req.projectId != null ? { projectId: req.projectId } : {},
+        // The host's package.json probe: a task consuming another's package is staged after it.
+        ...req.isPackageDir ? { isPackageDir: req.isPackageDir } : {},
         afterCreate: async (toolName, out) => {
           if (isTicketRecordingTool(toolName) || createLinkedToChat(toolName, out)) c.ticketRecorded = true;
         },

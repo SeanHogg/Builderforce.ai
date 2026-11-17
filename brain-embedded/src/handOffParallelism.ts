@@ -19,14 +19,6 @@
  * slices are kept apart. Pure.
  */
 
-// The package.json probe below is Node-only, but this module ALSO ships inside the browser
-// webview bundle (the frontend's canvas closure imports brain-embedded's index). A static
-// `import from 'node:…'` breaks THAT build: Vite externalizes the builtins for the browser and
-// Rollup rejects the named export ("fileURLToPath is not exported by __vite-browser-external").
-// So the builtins are reached lazily through createRequire, the import below is a DEFAULT import
-// on purpose (defaults survive Vite's browser externalization; named imports fail the build), and
-// every use sits behind a try/catch that falls back to the directory-only answers.
-import nodeModule from 'node:module';
 import { overlappingScopes } from '@builderforce/agent-tools';
 
 /** What the split reads of a task. */
@@ -73,47 +65,21 @@ export interface ParallelSplit {
 }
 
 /**
- * Where a task's `paths` are looked for a package.json — the checkout root, derived lazily so the
- * CJS bundle (where `import.meta.url` is empty) and non-node hosts never touch it at load time.
+ * Whether a workspace-relative directory holds a package.json. The HOST answers it (a Node host
+ * probes its own checkout; a test probes the repo). This module also ships inside the browser
+ * bundles (the frontend and the VS Code webview import brain-embedded's index), so it never
+ * reaches for the filesystem itself: a Node builtin anywhere in its graph fails those builds
+ * (`Module not found: Can't resolve 'module'`), which `scripts/check-browser-dist.mjs` guards.
  */
-let packageLookRoot: string | null | undefined;
-function lookRoot(): string | null {
-  if (packageLookRoot === undefined) {
-    packageLookRoot = null;
-    try {
-      // Node only: resolve fs/path/url through createRequire so the module also loads in a browser
-      // (where `node:module` is externalized and `require` is undefined — the try/catch leaves the
-      // root null and the probe below answers false).
-      const require = nodeModule.createRequire(import.meta.url ?? 'file:///');
-      const path = require('node:path') as typeof import('node:path');
-      const { fileURLToPath } = require('node:url') as typeof import('node:url');
-      packageLookRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-    } catch {
-      packageLookRoot = typeof process !== 'undefined' && typeof process.cwd === 'function' ? process.cwd() : null;
-    }
-  }
-  return packageLookRoot;
-}
-
-const hasPackageJson = (dir: string): boolean => {
-  const root = lookRoot();
-  if (root === null) return false;
-  try {
-    const require = nodeModule.createRequire(import.meta.url ?? 'file:///');
-    const { existsSync } = require('node:fs') as typeof import('node:fs');
-    const path = require('node:path') as typeof import('node:path');
-    return existsSync(path.join(root, dir, 'package.json'));
-  } catch {
-    return false;
-  }
-};
+export type PackageDirProbe = (dir: string) => boolean;
 
 /**
  * The package a task works in: the longest common directory prefix of its `paths` whose
- * directory holds a package.json; the deepest common parent when no prefix is a package.
+ * directory holds a package.json (asked of the host's {@link PackageDirProbe}); the deepest
+ * common parent when no prefix is a package or the host gave no probe.
  * Null for a task that owns no paths — it produces nothing another task can import.
  */
-export function taskPackageDir(task: ScopedTask): string | null {
+export function taskPackageDir(task: ScopedTask, isPackageDir?: PackageDirProbe): string | null {
   const paths = task.paths;
   if (paths.length === 0) return null;
   const dirs = paths.map((p) => p.replace(/\\/g, '/').replace(/\/$/, '')).map((p) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '.'));
@@ -130,7 +96,8 @@ export function taskPackageDir(task: ScopedTask): string | null {
   let dir: string | null = common;
   for (;;) {
     if (dir === null || dir === '' || dir === '.') return common;
-    if (hasPackageJson(dir)) return dir;
+    if (!isPackageDir) return common;
+    if (isPackageDir(dir)) return dir;
     const up: string = dir.includes('/') ? dir.slice(0, dir.lastIndexOf('/')) : '.';
     if (up === dir || up === '.') return common;
     dir = up;
@@ -148,9 +115,8 @@ export function referencesPackage(text: string, dir: string): boolean {
   const normText = normalizeRef(text);
   if (normText === '') return false;
   const normDir = normalizeRef(dir);
-  // basename without the node:path module (the module also loads in the browser webview, where the
-  // builtin is externalized): after normalization the separator is always '/', so the basename is
-  // the segment after the last '/'.
+  // basename without node:path (this module ships in browser bundles): after normalization the
+  // separator is always '/', so the basename is the segment after the last '/'.
   const base = normDir.slice(normDir.lastIndexOf('/') + 1);
   return normText.includes(normDir) || (base !== '' && normText.includes(base));
 }
@@ -172,9 +138,9 @@ const pathDisjoint = (a: ScopedTask, b: ScopedTask): boolean =>
  * against exports that do not exist yet. Each pair where `consumer`'s brief names `producer`'s
  * package yields one dependency; pairs whose paths already overlap are left to the clash.
  */
-export function computeOrderDependencies(tasks: readonly ScopedTask[]): OrderDependency[] {
+export function computeOrderDependencies(tasks: readonly ScopedTask[], isPackageDir?: PackageDirProbe): OrderDependency[] {
   const deps: OrderDependency[] = [];
-  const packageOf = tasks.map(taskPackageDir);
+  const packageOf = tasks.map((t) => taskPackageDir(t, isPackageDir));
   for (let j = 0; j < tasks.length; j += 1) {
     for (let i = 0; i < j; i += 1) {
       const packageDir = packageOf[i];
@@ -216,9 +182,9 @@ export function canRunInParallel(tasks: readonly ScopedTask[]): boolean {
  * the package an earlier task changes cannot run beside it or any task after that earlier one —
  * it goes inline, after the parallel stage, and everything after it follows in plan order.
  */
-export function splitForParallel(tasks: readonly ScopedTask[]): ParallelSplit {
+export function splitForParallel(tasks: readonly ScopedTask[], isPackageDir?: PackageDirProbe): ParallelSplit {
   const all = tasks.map((_, i) => i);
-  const order = computeOrderDependencies(tasks);
+  const order = computeOrderDependencies(tasks, isPackageDir);
   const consumedBefore = (index: number): boolean => order.some((d) => d.consumer === index);
   let lead = 0;
   while (

@@ -3,7 +3,7 @@
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bareImports, packageNameOf, undeclaredImports } from './distImports.mjs';
+import { bareImports, packageNameOf, staticBuiltinImports, undeclaredImports } from './distImports.mjs';
 
 const pkg = { dependencies: { 'mp4-muxer': '^5' }, peerDependencies: { 'onnxruntime-web': '>=1', '@scope/peer': '*' } };
 
@@ -40,4 +40,28 @@ test('a quoted import in a doc comment, or code after a bare from/import token, 
   assert.deepEqual([...bareImports(doc)], []);
   const minified = 'var a={from:"x"};function f(){return import"a"+g(e,{checkoutEveryNms:r,blockClass:s=".x"})}';
   assert.deepEqual([...bareImports(minified)].sort(), ['a']);
+});
+
+test('regression (next build "Can\'t resolve \'module\'"): static builtin imports in ESM output are seen, bare or node:-prefixed', () => {
+  const src = [
+    '// src/handOffParallelism.ts',
+    'import nodeModule from "module";',
+    "import { readFile } from 'node:fs/promises';",
+    'import "node:path";',
+    'export * from "url";',
+    'import {\n  a,\n  b\n} from "os";',
+    'import { x } from "./chunk-ABC.mjs";',
+    'import React from "react";',
+  ].join('\n');
+  assert.deepEqual(staticBuiltinImports(src), ['module', 'node:fs/promises', 'node:path', 'os', 'url']);
+});
+
+test('builtins named inside strings or non-import statements are not static imports', () => {
+  const src = [
+    'const cmd = `node -e "require(\'fs\').mkdirSync(1)"`;',
+    'export const KEY = "path";',
+    'var m = __toESM(require("module"), 1);',
+    ' * import fs from "fs";',
+  ].join('\n');
+  assert.deepEqual(staticBuiltinImports(src), []);
 });

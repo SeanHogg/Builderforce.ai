@@ -65,6 +65,30 @@ export function bareImports(source) {
 }
 
 /**
+ * A STATEMENT-level import/re-export at the start of a line: `import x from "m"`, `import "m"`,
+ * `export * from "m"`. Line-anchored on purpose: built output carries code inside strings
+ * (`node -e "require('fs')…"` shell commands), which is not an import of the bundle.
+ */
+const STATIC_IMPORT = /^[ \t]*(?:import|export)\b[^'";]*?\bfrom[ \t]*(["'])([^"'\n]+)\1|^[ \t]*import[ \t]*(["'])([^"'\n]+)\3/gm;
+
+/**
+ * The Node builtins a built ESM file imports statically (`fs`, `node:module`, …), sorted.
+ * A browser bundler (Next's webpack, Vite) cannot resolve them, so a package that ships into
+ * a browser must have none in its ESM output.
+ *
+ * @param {string} source
+ * @returns {string[]}
+ */
+export function staticBuiltinImports(source) {
+  const found = new Set();
+  for (const match of withoutCommentLines(source).matchAll(STATIC_IMPORT)) {
+    const specifier = match[2] ?? match[4];
+    if (BUILTINS.has(specifier) || BUILTINS.has(packageNameOf(specifier))) found.add(specifier);
+  }
+  return [...found].sort();
+}
+
+/**
  * Imports of `source` that the package does not declare.
  *
  * @param {string} source

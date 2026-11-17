@@ -147,6 +147,8 @@ export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatC
         // …and the goal, in the user's words: a child sees none of this conversation.
         request: run.goal,
         ...(req.projectId != null ? { projectId: req.projectId } : {}),
+        // The host's package.json probe: a task consuming another's package is staged after it.
+        ...(req.isPackageDir ? { isPackageDir: req.isPackageDir } : {}),
         afterCreate: async (toolName, out) => {
           // A hand-off ticket filed with the editor's own create tool, or a server create
           // linked to this chat in its own call, is recorded work too.

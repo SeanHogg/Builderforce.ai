@@ -30,7 +30,7 @@ import { BACKGROUND_NEXT, INLINE_NEXT, MIXED_BACKGROUND_NEXT, MIXED_PARALLEL_NEX
 import { ticketStatusMove, ticketToolVocabulary } from './ticketToolVocabulary';
 import { entityIdsOf, toolResultRecord } from './toolResultRecord';
 import { FAN_OUT_TOOL, fanOut, inlineTaskList } from './handOffFanOut';
-import { modeOf, splitForParallel, splitLayoutLine, type HandOffDecision, type HandOffMode, type ParallelSplit, type ScopeClash } from './handOffParallelism';
+import { modeOf, splitForParallel, splitLayoutLine, type HandOffDecision, type HandOffMode, type PackageDirProbe, type ParallelSplit, type ScopeClash } from './handOffParallelism';
 
 export { canRunInParallel } from './handOffParallelism';
 export type { HandOffDecision, HandOffMode, ScopeClash } from './handOffParallelism';
@@ -224,6 +224,8 @@ export interface HandOffPorts {
   postPlan?(text: string): Promise<void>;
   /** Told how the plan was finally carried out (after any fan-out refusal), for the run's record. */
   decided?(decision: HandOffDecision): void;
+  /** The host's package.json probe, so a consumer task is staged after its producer ({@link PackageDirProbe}). */
+  isPackageDir?: PackageDirProbe;
   now?(): number;
 }
 
@@ -327,7 +329,7 @@ export async function executeHandOff(plan: HandOffPlan, ports: HandOffPorts): Pr
   const tickets = plan.tasks.map((t, i) => ({ title: t.title, ...(ids[i] != null ? { id: ids[i] } : {}) }));
   const all = plan.tasks.map((_, i) => i);
   const canFanOut = ports.toolNames.has(FAN_OUT_TOOL);
-  const split: ParallelSplit = canFanOut ? splitForParallel(plan.tasks) : { parallel: [], inline: all, clash: null };
+  const split: ParallelSplit = canFanOut ? splitForParallel(plan.tasks, ports.isPackageDir) : { parallel: [], inline: all, clash: null };
   const briefContext: BriefContext = { summary: plan.summary, request: ports.request, knowledge: ports.knowledge };
   const brief = (i: number): string => childTaskBrief(plan.tasks[i]!, briefContext, ids[i]);
   await ports.postPlan?.(planMessage(plan, ids, split)).catch(() => undefined);

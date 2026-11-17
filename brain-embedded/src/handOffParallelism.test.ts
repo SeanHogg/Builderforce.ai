@@ -1,5 +1,12 @@
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { handOffModeSentence, modeOf, planScopeClash, referencesPackage, scopeClashCorrective, splitForParallel, splitLayoutLine, taskPackageDir, type ScopedTask } from './handOffParallelism';
+import { handOffModeSentence, modeOf, planScopeClash, referencesPackage, scopeClashCorrective, splitForParallel, splitLayoutLine, taskPackageDir, type PackageDirProbe, type ScopedTask } from './handOffParallelism';
+
+/** What a Node host injects: a package.json probe over the checkout (here, this repository). */
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const isPackageDir: PackageDirProbe = (dir) => existsSync(path.join(REPO_ROOT, dir, 'package.json'));
 
 const t = (title: string, ...paths: string[]): ScopedTask => ({ title, paths });
 
@@ -60,7 +67,7 @@ describe('order dependencies — a consumer runs after its producer (chat #80006
       },
       { title: 'Wire the VS Code host', paths: ['clients/vscode/webview/src/chat'] },
     ];
-    const split = splitForParallel(plan);
+    const split = splitForParallel(plan, isPackageDir);
     expect(split.parallel).toEqual([]);
     expect(split.inline).toEqual([0, 1, 2]);
     expect(split.clash).toBeNull();
@@ -74,7 +81,7 @@ describe('order dependencies — a consumer runs after its producer (chat #80006
       { title: 'Wire the web host', brief: 'imports the new RunDelta/CopiedNote exports from @builderforce/knowledge-graph-view', paths: ['frontend/src/components/runDelta'] },
       { title: 'Docs', paths: ['docs/run-delta.md'] },
     ];
-    const split = splitForParallel(plan);
+    const split = splitForParallel(plan, isPackageDir);
     expect(split.parallel).toEqual([]);
     expect(split.inline).toEqual([0, 1, 2]);
     expect(split.order).toHaveLength(1);
@@ -95,7 +102,7 @@ describe('order dependencies — a consumer runs after its producer (chat #80006
       { title: 'Add file', paths: ['a.ts'] },
       { title: 'Write notes v1.2', brief: 'capture what we shipped in notes v1.2', paths: ['docs/notes.md'] },
     ];
-    const split = splitForParallel(plan);
+    const split = splitForParallel(plan, isPackageDir);
     expect(split.parallel).toEqual([0, 1]);
     expect(split.inline).toEqual([]);
     expect(split.clash).toBeNull();
@@ -108,7 +115,7 @@ describe('order dependencies — a consumer runs after its producer (chat #80006
       { title: 'Kernel exports', paths: ['packages/agent-loop/src/kernel.ts'] },
       { title: 'Surface', brief: 'render the kernel state exported by the agent-loop package', paths: ['packages/brain-ui/src/kernel.ts'] },
     ];
-    const split = splitForParallel(plan);
+    const split = splitForParallel(plan, isPackageDir);
     expect(split.parallel).toEqual([]);
     expect(split.inline).toEqual([0, 1]);
     expect(split.clash).toBeNull();
@@ -119,12 +126,18 @@ describe('order dependencies — a consumer runs after its producer (chat #80006
   });
 
   it('taskPackageDir finds the package root and falls back to the deepest common parent', () => {
-    expect(taskPackageDir({ title: 'A', paths: ['packages/knowledge-graph-view/src/delta'] })).toBe('packages/knowledge-graph-view');
-    expect(taskPackageDir({ title: 'A', paths: ['packages/knowledge-graph-view/src/a.ts', 'packages/knowledge-graph-view/src/b.ts'] })).toBe('packages/knowledge-graph-view');
+    expect(taskPackageDir({ title: 'A', paths: ['packages/knowledge-graph-view/src/delta'] }, isPackageDir)).toBe('packages/knowledge-graph-view');
+    expect(taskPackageDir({ title: 'A', paths: ['packages/knowledge-graph-view/src/a.ts', 'packages/knowledge-graph-view/src/b.ts'] }, isPackageDir)).toBe('packages/knowledge-graph-view');
+    expect(taskPackageDir({ title: 'A', paths: [] }, isPackageDir)).toBeNull();
+    expect(taskPackageDir({ title: 'A', paths: ['src/surface/style', 'src/surface/features'] }, isPackageDir)).toBe('src/surface');
+    expect(taskPackageDir({ title: 'A', paths: ['docs/run-delta.md'] }, isPackageDir)).toBe('docs');
+    expect(taskPackageDir({ title: 'A', paths: ['frontend/src/components/runDelta'] }, isPackageDir)).toBe('frontend');
+  });
+
+  it('regression (CI next build "Can\'t resolve \'module\'"): with no host probe the package is the deepest common parent — no filesystem', () => {
+    expect(taskPackageDir({ title: 'A', paths: ['packages/knowledge-graph-view/src/delta'] })).toBe('packages/knowledge-graph-view/src');
+    expect(taskPackageDir({ title: 'A', paths: ['packages/knowledge-graph-view/src/a.ts', 'packages/knowledge-graph-view/src/b.ts'] })).toBe('packages/knowledge-graph-view/src');
     expect(taskPackageDir({ title: 'A', paths: [] })).toBeNull();
-    expect(taskPackageDir({ title: 'A', paths: ['src/surface/style', 'src/surface/features'] })).toBe('src/surface');
-    expect(taskPackageDir({ title: 'A', paths: ['docs/run-delta.md'] })).toBe('docs');
-    expect(taskPackageDir({ title: 'A', paths: ['frontend/src/components/runDelta'] })).toBe('frontend');
   });
 
   it('referencesPackage matches the directory or its basename, normalized', () => {
