@@ -284,6 +284,11 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
   - The release notes and marketing for the six editors, the drawing block, Room voice and video, and the voice marketplace and provenance are not written yet.
 - **CORS still accepts localhost in production.** Return URLs are now gated. *Blocker: operator decision on whether local development against the production API is supported.*
 - **Podcast uploads:** `.m4a` / `audio/mp4` are rejected by the asset allow-list.
+- **WebContainers ML modules unshipped and unused by Studio (2026-11-17, in flight).**
+  - Phase 1–8 modules in `builderforce-webcontainers` (inference, adaptive, memory, prefetch, kvcache, learning) are on main but in no release; npm has 2026.10.12.
+  - The root export breaks: `dist/inference/worker.js` is overwritten by an IIFE bundle. The worker URL 404s. An AbortSignal is posted to the worker (DataCloneError). The adaptive SIMD probe is always false. Prefetch, kv-cache and learner state grows without bound.
+  - Studio keeps its own private IndexedDB weight cache, has no VRAM residency budget, and doesn't prefetch the refinement model.
+  - Fix in progress: move the ML surface to the `./ml` subpath, fix the review findings, publish 2026.10.14. Studio then uses `createModelCache` (same IDB database, legacy-compatible), `createMemoryManager` for its ORT sessions, and `createPrefetcher` for the refinement weights.
 
 ### Mobile `[canvas]`
 
