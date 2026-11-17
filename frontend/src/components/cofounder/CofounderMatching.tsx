@@ -29,7 +29,7 @@ import {
   saveCofounderProfile,
   type CofounderMatch,
   type CofounderProfile,
-} from '@/lib/founderOpsApi';
+} from '@/lib/cofounderApi';
 import { FounderPaperwork } from './FounderPaperwork';
 import styles from './CofounderMatching.module.css';
 import { usePanelTask } from '@/hooks/usePanelTask';
