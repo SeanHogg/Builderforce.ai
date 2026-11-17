@@ -81,17 +81,42 @@ export function isExcludedFromChatHealth(status?: string | null): boolean {
 }
 
 /**
- * 100 is the completion signal. Unsupported delivery may not emit it — but the
- * cap applies only BEFORE the lane closes. A ticket whose status is a closed
- * (done) lane is complete by definition: the status ladder is authoritative
- * and must never be demoted by delivery evidence, so a done ticket always
- * reads 100 and always counts as completed.
+ * The ONE "what does this ticket's progress read" rule, shared by the rail
+ * (`railTicketProgress`), the server's epic branch (taskTierTicketHealth), and
+ * this rollup.
+ *
+ * The unsupported-delivery cap applies only BEFORE the lane closes and only to a
+ * claimed-complete ticket: an open ticket whose raw progress is 100 but whose
+ * delivery is unsupported reads the cap rung (75); the cap never raises a lower
+ * figure. A closed (done) lane is handled by `whenClosed`, because "closed" means
+ * two different things to the two consumers of this rule:
+ *
+ * - `'passthrough'` (the default — the rollup and the server's epic branch): a
+ *   done lane passes its raw percent through unchanged. Delivery evidence only
+ *   CAPS a claimed-complete ticket; it never floors one, so a done ticket still
+ *   carrying a pre-close capped percent (75) reads 75 until the record refreshes.
+ * - `'complete'` (the rail / every UI surface): a done lane IS complete by
+ *   definition — the status ladder is authoritative once closed — so a stale or
+ *   demoted record percent must never win; the lane reads 100. This is the
+ *   UI/UX contract behind a chip that shows DONE beside a 75% ring: the badge
+ *   (status) and the ring (percent) cannot disagree.
  */
-function effectiveProgressPct(t: ChatTicketHealthInput): number {
-  const raw = Number.isFinite(t.progressPct) ? t.progressPct : 0;
-  if (isClosedTaskStatus(t.status)) return raw;
-  if (t.unsupportedDelivery === true && raw >= 100) return UNSUPPORTED_DELIVERY_PROGRESS_CAP;
+export function effectiveTicketProgress(
+  status: string | null | undefined,
+  progressPct: number | null | undefined,
+  unsupportedDelivery?: boolean,
+  whenClosed: "passthrough" | "complete" = "passthrough",
+): number {
+  const raw = typeof progressPct === "number" && Number.isFinite(progressPct) ? progressPct : 0;
+  if (isClosedTaskStatus(status)) {
+    return whenClosed === "complete" ? Math.max(raw, 100) : raw;
+  }
+  if (unsupportedDelivery === true && raw >= 100) return UNSUPPORTED_DELIVERY_PROGRESS_CAP;
   return raw;
+}
+
+function effectiveProgressPct(t: ChatTicketHealthInput): number {
+  return effectiveTicketProgress(t.status, t.progressPct, t.unsupportedDelivery);
 }
 
 /** Roll a chat's linked tickets up into its one progress figure. */

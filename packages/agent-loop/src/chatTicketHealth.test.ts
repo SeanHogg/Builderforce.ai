@@ -1,5 +1,42 @@
 import { describe, it, expect } from 'vitest';
-import { chatProgressIsStale, displayChatProgressPct, rollupChatTicketHealth } from './chatTicketHealth';
+import { chatProgressIsStale, displayChatProgressPct, effectiveTicketProgress, rollupChatTicketHealth } from './chatTicketHealth';
+
+/** The ONE consolidated closed-lane rule the rail and the server's epic branch delegate to. */
+describe('effectiveTicketProgress', () => {
+  it("'complete' mode (the UI): a done lane floors to 100, so a stale record percent can't demote it", () => {
+    // The UI/UX bug: chip badge reads DONE while the ring shows 75 — a stale
+    // progressPct from an earlier open-lane snapshot won over the done lane.
+    expect(effectiveTicketProgress('done', 75, undefined, 'complete')).toBe(100);
+    expect(effectiveTicketProgress('done', 0, undefined, 'complete')).toBe(100);
+    expect(effectiveTicketProgress('done', 100, undefined, 'complete')).toBe(100);
+  });
+
+  it("'complete' mode is not demoted by the unsupported-delivery cap", () => {
+    expect(effectiveTicketProgress('done', 100, true, 'complete')).toBe(100);
+    expect(effectiveTicketProgress('done', 75, true, 'complete')).toBe(100);
+  });
+
+  it("'passthrough' mode (rollup/server): a done lane passes its raw percent through", () => {
+    // A done ticket still carrying a pre-close capped percent reads it until the
+    // record refreshes; delivery evidence caps, never floors.
+    expect(effectiveTicketProgress('done', 75)).toBe(75);
+    expect(effectiveTicketProgress('done', 75, true)).toBe(75);
+    expect(effectiveTicketProgress('done', 100, true)).toBe(100);
+  });
+
+  it('caps a claimed-complete OPEN ticket at the unsupported-delivery rung', () => {
+    expect(effectiveTicketProgress('in_review', 100, true)).toBe(75);
+    expect(effectiveTicketProgress('in_review', 80, true)).toBe(80); // never raises a lower figure
+    expect(effectiveTicketProgress('in_review', 100, false)).toBe(100);
+  });
+
+  it('treats a missing / blank status as open (only a closed lane wins)', () => {
+    expect(effectiveTicketProgress(undefined, 75)).toBe(75);
+    expect(effectiveTicketProgress(null, 75)).toBe(75);
+    expect(effectiveTicketProgress('', 75)).toBe(75);
+    expect(effectiveTicketProgress('in_progress', 50)).toBe(50);
+  });
+});
 
 describe('rollupChatTicketHealth', () => {
   it('aggregates leaf ticket progressPct correctly (the VSIX bug)', () => {

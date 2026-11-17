@@ -29,6 +29,7 @@ export { subagentReportMessage, type SubagentReportLike } from "./subagentReport
 // re-exports it, so the declaration-rollup one-hop rule does not apply.
 export {
   rollupChatTicketHealth,
+  effectiveTicketProgress,
   isExcludedFromChatHealth,
   displayChatProgressPct,
   chatProgressIsStale,

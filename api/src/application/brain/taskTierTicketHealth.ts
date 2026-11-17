@@ -5,7 +5,7 @@
  * queries however many task-tier links a chat carries.
  */
 import { and, eq, inArray, or, sql } from 'drizzle-orm';
-import { TASK_CLOSED_STATUSES, UNSUPPORTED_DELIVERY_PROGRESS_CAP } from '@builderforce/agent-loop';
+import { effectiveTicketProgress, TASK_CLOSED_STATUSES } from '@builderforce/agent-loop';
 import { DEFAULT_EVIDENCE_POLICY, fileIsUnchecked } from '@builderforce/run-guards';
 import { tasks, projects, executions, taskFileChanges } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -234,12 +234,10 @@ export async function addTaskTierHealth(
       ? Math.round((done / total) * 100)
       : (r.completedAt != null || DONE_STATUS.has(r.status) ? 100 : 0);
     const unsupportedDelivery = unsupported.has(id);
-    // The unsupported-delivery cap applies only BEFORE the lane closes: a done
-    // epic is complete by definition (the status ladder is authoritative once
-    // closed), so it must not be demoted to the in_review rung.
-    const progressPct = unsupportedDelivery && !DONE_STATUS.has(r.status)
-      ? Math.min(claimed, UNSUPPORTED_DELIVERY_PROGRESS_CAP)
-      : claimed;
+    // Delegate to the shared closed-lane rule (agent-loop `effectiveTicketProgress`):
+    // the unsupported-delivery cap applies only BEFORE the lane closes — a done
+    // epic is complete by definition and must not be demoted to the in_review rung.
+    const progressPct = effectiveTicketProgress(r.status, claimed, unsupportedDelivery);
     const parent = parentByChild.get(id);
     out.set(ticketKey('epic', String(id)), {
       kind: 'epic', ref: String(id), label: r.title, status: r.status, progressPct, done, total, exists: true,
