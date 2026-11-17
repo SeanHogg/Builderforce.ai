@@ -128,6 +128,30 @@ describe('rollupChatTicketHealth', () => {
     ])).toEqual({ pct: 100, done: 0, total: 0, openTickets: 0, completedTickets: 0 });
   });
 
+  it('excludes a deleted ticket (exists: false) so 6 done + 1 deleted is 100% · 6/6', () => {
+    // The screenshot bug: a chat with 6 done tickets and one whose platform row was
+    // DELETED read 86% · 6/7. The server reports the deleted link as the '(deleted)'
+    // placeholder (status 'unknown', progressPct 0); that is removed work, not open
+    // work, so the rollup must skip it exactly like a cancelled lane.
+    const result = rollupChatTicketHealth([
+      { progressPct: 100, done: 1, total: 1, status: 'done', exists: true },
+      { progressPct: 100, done: 1, total: 1, status: 'done', exists: true },
+      { progressPct: 100, done: 1, total: 1, status: 'done', exists: true },
+      { progressPct: 100, done: 1, total: 1, status: 'done', exists: true },
+      { progressPct: 100, done: 1, total: 1, status: 'done', exists: true },
+      { progressPct: 100, done: 1, total: 1, status: 'done', exists: true },
+      // The '(deleted)' placeholder a health miss produces:
+      { progressPct: 0, done: 0, total: 0, status: 'unknown', exists: false },
+    ]);
+    expect(result).toEqual({ pct: 100, done: 6, total: 6, openTickets: 0, completedTickets: 6 });
+  });
+
+  it('treats an all-deleted list as 100% (nothing left owed), like all-cancelled', () => {
+    expect(rollupChatTicketHealth([
+      { progressPct: 0, done: 0, total: 0, status: 'unknown', exists: false },
+    ])).toEqual({ pct: 100, done: 0, total: 0, openTickets: 0, completedTickets: 0 });
+  });
+
   it('accepts US spelling canceled', () => {
     expect(rollupChatTicketHealth([
       { progressPct: 50, done: 0, total: 1, status: 'in_progress' },

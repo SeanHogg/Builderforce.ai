@@ -51,6 +51,8 @@ export interface RailTicketProgress {
   progressPct: number;
   done: number;
   total: number;
+  /** False when the platform no longer resolves the ticket (deleted): the shared rollup skips it. */
+  exists?: boolean;
 }
 
 /**
@@ -62,7 +64,7 @@ export interface RailTicketProgress {
  * it) is drawn as `backlog` — the not-started lane the board shows — so the rail never renders an
  * empty or undefined status chip.
  */
-export function railTicketProgress(payload: TicketValue & Partial<Pick<RailTicketPayload, "progressPct" | "done" | "total">>): RailTicketProgress {
+export function railTicketProgress(payload: TicketValue & Partial<Pick<RailTicketPayload, "progressPct" | "done" | "total" | "exists">>): RailTicketProgress {
   // An empty or whitespace-only status is the same "not started yet" as undefined: the record has
   // not been assigned a lane. Only a real lane (a non-blank string) is drawn verbatim.
   const status = typeof payload.status === "string" && payload.status.trim() !== "" ? payload.status : "backlog";
@@ -72,13 +74,14 @@ export function railTicketProgress(payload: TicketValue & Partial<Pick<RailTicke
   // unsupported-delivery cap applies only pre-close. Same rule as the server's
   // taskTierTicketHealth and the shared rollup; no local copy.
   if (effectiveTicketProgress(status, payload.progressPct, undefined, "complete") >= 100) {
-    return { status, progressPct: 100, done: 1, total: 1 };
+    return { status, progressPct: 100, done: 1, total: 1, exists: payload.exists };
   }
   return {
     status,
     progressPct: payload.progressPct ?? 0,
     done: payload.done ?? 0,
     total: payload.total ?? 0,
+    exists: payload.exists,
   };
 }
 

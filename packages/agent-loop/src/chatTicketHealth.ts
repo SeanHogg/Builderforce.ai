@@ -24,6 +24,11 @@
  *   drag "3 done + 1 cancelled" down to 75%, and so the "4/6" counter counts only
  *   work that was delivered. An all-cancelled list is 100% (nothing owed). An empty
  *   list is 0%.
+ * - A DELETED ticket (`exists: false`, the server's `(deleted)` placeholder) is skipped
+ *   exactly like cancelled: the target no longer resolves, so it is removed work, not
+ *   remaining work. Without this, "6 done + 1 deleted" read 86% · 6/7 — the deleted
+ *   placeholder's `progressPct: 0` dragged the headline down and the "6/7" counter
+ *   counted it. An all-deleted list is 100% (nothing owed), like all-cancelled.
  * - `done`/`total` are still returned for the "4/6" counter beside the percent.
  *
  * OPEN / COMPLETED TICKETS
@@ -46,6 +51,14 @@ export interface ChatTicketHealthInput {
   total: number;
   /** Lane key. Cancelled work is skipped — it is off the board, not remaining. */
   status?: string | null;
+  /**
+   * False when the referenced ticket no longer resolves (the platform deleted it).
+   *   A deleted item is removed work, not remaining work: it is skipped exactly like
+   *   a cancelled lane, so its placeholder `progressPct: 0` cannot drag the headline
+   *   down or sit in the open/completed ticket counts. Absent/undefined means the
+   *   ticket exists (every producer that knows the flag passes it).
+   */
+  exists?: boolean;
   /**
    * The reported `progressPct` is not backed by delivery evidence. Lowers a 100
    * to {@link UNSUPPORTED_DELIVERY_PROGRESS_CAP}; never raises a lower figure.
@@ -127,6 +140,10 @@ export function rollupChatTicketHealth(tickets: readonly ChatTicketHealthInput[]
   let counted = 0;
   let completedTickets = 0;
   for (const tk of tickets) {
+    // A deleted ticket (`exists: false`) is removed work, not remaining work: skip it
+    // exactly like a cancelled lane. (The server's `(deleted)` placeholder reports
+    // status 'unknown' / progressPct 0, which would otherwise count as an open 0% ticket.)
+    if (tk.exists === false) continue;
     if (isExcludedFromChatHealth(tk.status)) continue;
     const pct = effectiveProgressPct(tk);
     const weight = Number.isFinite(tk.total) && tk.total > 0 ? tk.total : 1;

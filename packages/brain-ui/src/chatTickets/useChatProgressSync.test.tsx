@@ -49,6 +49,22 @@ describe('useChatProgressSync', () => {
     expect(run([{ id: 7, title: 'implement', ticketCount: 2, ticketProgressPct: 75 }], [LIVE])).not.toHaveBeenCalled();
   });
 
+  it('treats a deleted ticket (exists: false) as removed, not open work', () => {
+    // A linked ticket whose platform row was deleted reports as the '(deleted)'
+    // placeholder (exists: false, status 'unknown', progressPct 0). It must not read
+    // as an open ticket: 2 done + 1 deleted rolls up to 100% · 2/2, so a snapshot that
+    // already says 100% / 2 done is NOT stale. (The TicketLinkVM the panel hands the
+    // sync carries `exists`, so the deleted flag reaches the shared rollup.)
+    const withDeleted: ChatTicketHealthInput[] = [
+      { progressPct: 100, done: 1, total: 1, status: 'done', exists: true },
+      { progressPct: 100, done: 1, total: 1, status: 'done', exists: true },
+      { progressPct: 0, done: 0, total: 0, status: 'unknown', exists: false },
+    ];
+    expect(
+      run([{ id: 7, title: 'implement', ticketCount: 3, ticketProgressPct: 100, ticketOpenCount: 0, ticketDoneCount: 2 }], [withDeleted]),
+    ).not.toHaveBeenCalled();
+  });
+
   it('asks when the percent agrees but the open/done counts are behind', () => {
     expect(
       run([{ id: 7, title: 'implement', ticketCount: 2, ticketProgressPct: 75, ticketOpenCount: 2, ticketDoneCount: 0 }], [LIVE]),
