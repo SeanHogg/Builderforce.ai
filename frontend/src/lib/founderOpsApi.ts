@@ -826,7 +826,11 @@ export const saveCofounderProfile = (body: Partial<CofounderProfile> & { headlin
   apiRequest<{ id: number }>('/api/cofounder/profile', { method: 'PUT', body: JSON.stringify(body) });
 
 export const cofounderMatches = () =>
-  apiRequest<{ profile: CofounderProfile; matches: CofounderMatch[] }>('/api/cofounder/matches');
+  // 409 means the caller has no profile yet — the NORMAL first visit, not a fault.
+  // CofounderMatching renders the profile editor from its catch, so declaring the
+  // status expected keeps the transport from raising the global error toast /
+  // support-ticket prompt for a state the surface handles itself.
+  apiRequest<{ profile: CofounderProfile; matches: CofounderMatch[] }>('/api/cofounder/matches', { expectedErrors: [409] });
 
 export const requestIntroduction = (toProfileId: number, message: string) =>
   apiRequest<{ id: number }>('/api/cofounder/introductions', {
