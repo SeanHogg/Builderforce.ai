@@ -30,13 +30,17 @@ function newScript(): ReaperFakeDbScript {
       paused: h.reapedPausedRows.length > 0,
       park_age: false,
     }),
-    // Each batched sweep binds its own status value first; the principal revocation
-    // (status 'revoked') binds execution ids and reaps nothing.
+    // Hung HOST runs are pulled as candidates first (§4b fleet failover) and, when not
+    // re-dispatched (none of these advertise write-ahead), failed one by one by id.
+    hostCandidates: h.reapedRunningRows,
+    // Each batched sweep binds its own status value first; a per-row host fail binds
+    // `id = $1 AND status = 'running'`; the principal revocation (status 'revoked')
+    // binds execution ids and reaps nothing.
     onUpdate: (set, params) => {
       if (set.status !== 'failed') return [];
       if (params[0] === 'paused') return h.reapedPausedRows;
       if (params.includes('submitted')) return h.reapedQueuedRows;
-      if (params[0] === 'running') return h.reapedRunningRows;
+      if (params.includes('running')) return h.reapedRunningRows.filter((r) => params.includes(r.id));
       return [];
     },
   });

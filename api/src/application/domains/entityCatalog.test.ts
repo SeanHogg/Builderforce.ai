@@ -367,7 +367,23 @@ describe('the entity catalog', () => {
     // Ceiling moved 54 → 55 (2026-11-07) with pack sync's incremental digests (1302, PRD 41 A11 rule 4b), adjudicated:
     //  - `knowledge_sync_buckets` is the stored digest of each of a root's 4,096 manifest buckets, recomputed only for the
     //    buckets a pack touched inside its transaction; a hand edit would make the root digest lie.
-    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(55);
+    //
+    // Ceiling moved 55 → 63 (2026-11-17) with run outcomes (1342), run deltas (1344) and the human-scoring switch
+    // (1349), PRD 41 — adjudicated, each with a bespoke single writer:
+    //  - `run_features`, `run_commit_attributions`, `run_outcome_labels` are the PRIMARY-track MIRROR of the
+    //    operational endpoint's run-outcome tables (transactional 0032): empty in production wherever the
+    //    operational endpoint is split out — the reason the 1217 replay mirrors and `brain_chat_steps` are exempt.
+    //    Written only by `runOutcomes/runOutcomeStore.ts`; a hand-edited label is a training signal nobody observed.
+    //  - `run_outcome_training_consent` and `person_score_settings` are ONE-ROW-PER-TENANT governance decisions
+    //    keyed by `tenant_id` (no identity of their own; no row = the plan default), read through
+    //    `runOutcomes/trainingStore.ts` (its single upsert records `decided_by`) and `people/personScoreRead.ts`.
+    //    Flipping either is a DPIA-gated admin decision that records who decided; a generic PATCH would be a
+    //    consent decision with no accountable decider.
+    //  - `run_deltas` is a DIGEST-keyed record written only by the sync mirror importer inside the push
+    //    transaction (`runDelta/runDeltaStore.ts`), its evidence an R2 blob under that digest; a hand edit would
+    //    make the digest lie. `run_delta_dimensions` / `run_delta_findings` are its cascaded children with no
+    //    identity of their own (the findings also carry a model-stamped embedding the backfill sweep owns).
+    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(63);
   });
 
   it('declares nothing that no migration creates', () => {

@@ -84,12 +84,13 @@ describe('read_file tool — large-file pagination', () => {
   });
 
   it('honors offset so the model can walk to the end of the file', async () => {
-    const body = Array.from({ length: 5000 }, (_, i) => `item ${i + 1}`).join('\n');
+    // Large enough (> WHOLE_READ_MAX_CHARS) that a window is NOT widened to the whole file.
+    const body = Array.from({ length: 5000 }, (_, i) => `roadmap item ${i + 1}`).join('\n');
     const r = await readFile(body, { offset: 4001 });
     expect(r.ok).toBe(true);
     expect(r.offset).toBe(4001);
     expect(r.truncated).toBe(false); // 1000 lines left, fits in one window
-    expect(r.content!.split('\n')[0]).toBe('item 4001');
+    expect(r.content!.split('\n')[0]).toBe('roadmap item 4001');
     expect(r.note).toBeUndefined();
   });
 
