@@ -38,6 +38,8 @@ export class RunGuards {
   private readonly postEdit: boolean;
   private readonly levers: GuardLevers;
   private pendingPause: string | undefined;
+  /** A3's `finish`: the next turn offers no tools — the verified run's final report. */
+  private finishDue: boolean;
   /** This turn's post-edit verdicts — the D1 code unit's verifier. */
   private turnEdits: VerifyResult[] = [];
   /** D7: the sandbox checks' failures from the last turn, for the next turn's tail. */
@@ -63,6 +65,7 @@ export class RunGuards {
       : null;
     this.postEdit = !!levers.d7_deterministic_handlers;
     this.pendingPause = resume?.pendingPause;
+    this.finishDue = resume?.finishDue === true;
     this.checksNote = resume?.checksNote ?? "";
     this.escalations = resume?.escalations ?? 0;
   }
@@ -89,6 +92,7 @@ export class RunGuards {
       // The cascade's seed facts serve A3's escalation too; with both levers off nothing persists.
       ...(this.cascade.on || this.progress ? { cascade: this.cascade.snapshot() } : {}),
       ...(this.pendingPause ? { pendingPause: this.pendingPause } : {}),
+      ...(this.finishDue ? { finishDue: true as const } : {}),
       ...(this.checksNote ? { checksNote: this.checksNote } : {}),
       ...(this.escalations ? { escalations: this.escalations } : {}),
     };
@@ -196,6 +200,11 @@ export class RunGuards {
       }
     } else if (action.kind === "pause") {
       this.pendingPause = action.question;
+    } else if (action.kind === "finish") {
+      // The change is made and verified: the next turn offers no tools (`finalTurn`) and its
+      // tail carries the detector's note (its steer), so the model reports and the run ends.
+      // Never an escalation, never a pause.
+      this.finishDue = true;
     }
     // The same mapping as the advisory; this host records the outcome it took and the model.
     const s = progressTraceStep(action, {
@@ -203,6 +212,16 @@ export class RunGuards {
       detail: { trip: action.trip, signal: action.signal, outcome, model: ports.model?.get().model ?? null },
     });
     await ports.onEvent?.({ tool: s.label, detail: s.args, result: s.result });
+  }
+
+  /** A3's `finish`: whether the next turn is the verified run's final report (no tools). A peek — {@link finalTurnDone} spends it. */
+  get finalTurnDue(): boolean {
+    return this.finishDue;
+  }
+
+  /** The final turn was answered: the finish is spent. */
+  finalTurnDone(): void {
+    this.finishDue = false;
   }
 
   /** A3: a pause parked the run — the next dispatched call returns it, once. */
@@ -312,6 +331,14 @@ export function createGuardsHook(ports: GuardPorts = {}): GuardsHook {
     },
     isReadOnly(ctx: PolicyContext, name: string) {
       return sessionOf(ctx, ports).isReadOnly(name);
+    },
+    finalTurn(ctx: PolicyContext) {
+      return sessionOf(ctx, ports).finalTurnDue;
+    },
+    finalTurnDone(ctx: PolicyContext) {
+      const g = sessionOf(ctx, ports);
+      g.finalTurnDone();
+      ctx.state.guards = g.snapshot();
     },
     async seed(ctx: PolicyContext) {
       const ladder = ports.ladder?.() ?? ports.cascade?.ladder;

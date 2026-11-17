@@ -38,6 +38,8 @@ export interface PolicyContext {
   messages: readonly RunMessage[];
   /** The tool schemas the surface can run, before the tools policy narrows them. */
   tools: readonly ToolSchema[];
+  /** A3's final turn: it advertises no tools, yet it is the run's own turn — its role and model are the run's, not `chat`'s. */
+  finalTurn?: true;
   /** The turn's assistant content, when the hook runs after the model answered. */
   content?: string;
   /** The turn's text as the surface's stall judgement reads it (`DeliveryLedger.judged`); absent ⇒ {@link content}. */
@@ -185,6 +187,14 @@ export interface GuardsHook {
   observe(ctx: PolicyContext, call: PolicyToolCall, result: unknown): Promise<{ data: unknown } | void> | { data: unknown } | void;
   /** The turn's calls all ran; `content` is what the turn said (A3's readiness claims, WS8p). */
   endTurn?(ctx: PolicyContext, content: string): Promise<void> | void;
+  /**
+   * Before a turn's menu is built: true when this turn must offer NO tools — A3's `finish`
+   * (the run's change is made and verified), so the model writes its final report and the
+   * run ends. A peek: it stays owed until {@link finalTurnDone}. Absent ⇒ never.
+   */
+  finalTurn?(ctx: PolicyContext): boolean;
+  /** The final turn {@link finalTurn} asked for was answered: the finish is spent. */
+  finalTurnDone?(ctx: PolicyContext): void;
   /** D8: whether a call only reads, so a run of them may dispatch together. Absent ⇒ sequential. */
   isReadOnly?(ctx: PolicyContext, name: string): boolean;
   /** D1 + D2: the model state a FRESH run starts in (weak-first unless the router says skip). Nothing ⇒ unchanged. */

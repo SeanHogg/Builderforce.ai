@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.187] — A finished run ends with its report instead of asking you how to proceed
+
+- **Fixed: a run that had made its changes and passed its type-check could still be paused with "This run has stopped making progress — progress check 3".** The guard that spots stuck runs missed edits made to several files in one call. It also missed type-checks run in the background, so it counted the wrap-up turns as no progress. On its second warning it also forced an edit-only turn, which made the model invent an edit. Now each file in a multi-file edit counts as a change, and a background check counts once its result comes back. A run whose changes have passed a check is first asked to finish if it is done, then gets a final turn with no tools to write its report. A run that has already changed code is never forced into an edit-only turn.
+
 ## [2026.10.186] — The @/# pickers no longer starve when a late policy frame arrives
 
 - **Fixed: the composer's `@` (mention) and `#` (ticket) typeaheads both read the platform policy non-reactively, so a `platform.policy` frame arriving after the webview mounted left both pickers frozen on the default-denied (offline) source — and both `@` and `#` stopped working at once while signed in.** The picker hooks now read the offline decision through the reactive `useCapability('connected')` hook, which subscribes to `subscribeWebviewPolicy` and re-renders the roster on the correct source (server vs local fallback) whenever a late frame lands. The local candidates (live sub-agents, persona agents, the device's own tickets) are always listed — a union, never a swap — so a late or denied frame can never starve the pickers. A new mounted test (`webview/src/chat/pickerPolicyFlip.test.tsx`) drives a real late `platform.policy` frame into the actual `useTicketRail` hook and asserts the roster re-derives to the union.

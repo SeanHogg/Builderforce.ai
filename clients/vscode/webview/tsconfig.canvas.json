@@ -124,6 +124,8 @@
       "@builderforce/agent-stall": ["../../../packages/agent-stall/src/index.ts"],
       "@builderforce/agent-tools": ["../../../packages/agent-tools/src/index.ts"],
       "@builderforce/agent-tools/node-desktop": ["../../../packages/agent-tools/src/node-desktop.ts"],
+      "@builderforce/agent-tools/node-git-history": ["../../../packages/agent-tools/src/node-git-history.ts"],
+      "@builderforce/agent-tools/node-git-remote": ["../../../packages/agent-tools/src/node-git-remote.ts"],
       "@builderforce/agent-tools/node-path": ["../../../packages/agent-tools/src/node-path.ts"],
       "@builderforce/agent-tools/node-posix-shell": ["../../../packages/agent-tools/src/node-posix-shell.ts"],
       "@builderforce/agent-tools/node-research": ["../../../packages/agent-tools/src/node-research.ts"],

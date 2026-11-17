@@ -14,7 +14,14 @@
  *     planning, the change tools alone once coding. A run asked a QUESTION is never
  *     forced to change anything, so it is steered again instead;
  *   • pause — `ask_user` alone with the detector's question. Where the run cannot ask
- *     (a sub-agent), it is steered again.
+ *     (a sub-agent), it is steered again;
+ *   • finish — the run's change is made and a check passed after it, so an idle-shaped
+ *     trip is wrap-up: the next turn offers NO tools and carries the detector's note, so
+ *     the model writes its final report and the run ends. Never a forced edit, never
+ *     `ask_user` (VS Code chat #146477).
+ *
+ * Escalation never forces the change tools on a run that already changed code
+ * (`forcedProgressTurn` returns null once the run has changed code (`codeChanged`)): its note opens the turn instead.
  *
  * Lever `a3_progress_detector` (on at 100%; `COST_LEVER_A3_PROGRESS_DETECTOR=off` turns it
  * off on this device). Trace: `loop.progress_check`, `loop.progress_advisory` for a B1/B4
@@ -94,10 +101,11 @@ export class RunProgressGuard {
     }
     // The detector's second note says the run moved to a stronger model; here the second
     // step is a forced turn, whose brief carries the advice instead.
-    if (action.kind === 'escalate') this.detector?.setSteer(undefined);
-    // Only an escalation or pause waits for a later turn's menu — a steer rides the next
-    // turn's opening note, it is never forced.
-    if (action.kind === 'escalate' || action.kind === 'pause') this.due = action;
+    // A finish's note is its no-tools turn's brief, so it is not shown twice.
+    if (action.kind === 'escalate' || action.kind === 'finish') this.detector?.setSteer(undefined);
+    // Only an escalation, pause or finish waits for a later turn's menu — a steer rides the
+    // next turn's opening note, it is never forced.
+    if (action.kind === 'escalate' || action.kind === 'pause' || action.kind === 'finish') this.due = action;
     return action;
   }
 
@@ -150,6 +158,12 @@ function traceStep(run: BrainRunContext, step: number, s: ProgressTraceStep): vo
 export function progressGuardTurn(run: BrainRunContext, step: number, selected: readonly BrainToolSpec[]): ForcedTurn | null {
   const due = run.progress.takeDue();
   if (!due) return null;
+  // The change is made and verified: the next turn is the final report — no tools, so it
+  // can neither invent an edit nor ask the person; its answer ends the run.
+  if (due.kind === 'finish') {
+    trace(run, step, due, 'finish');
+    return { tools: [], brief: { role: 'user', content: due.note } };
+  }
   const advice = `PROGRESS CHECK ${due.trip}: ${progressAdvice(due.signal)}`;
   if (due.kind === 'pause') {
     if (!run.canAskUser) {
@@ -176,12 +190,20 @@ export function progressGuardTurn(run: BrainRunContext, step: number, selected: 
   return out.turn;
 }
 
-function trace(run: BrainRunContext, step: number, due: TripAction, forced: 'hand_off' | 'change' | 'ask_user'): void {
+const FORCED_MENU: Readonly<Record<'hand_off' | 'change' | 'ask_user', string>> = {
+  ask_user: 'ask_user alone',
+  hand_off: 'hand_off alone',
+  change: 'the change tools alone',
+};
+
+function trace(run: BrainRunContext, step: number, due: TripAction, forced: 'hand_off' | 'change' | 'ask_user' | 'finish'): void {
   pushTrace(run.c, {
     ts: nowIso(),
     category: 'message',
     label: 'loop.progress_forced',
     args: { step, trip: due.trip, signal: due.signal.kind, forced },
-    result: `progress check ${due.trip} (${due.signal.kind}) — this turn offers ${forced === 'ask_user' ? 'ask_user alone' : forced === 'hand_off' ? 'hand_off alone' : 'the change tools alone'} and requires a call.`,
+    result: forced === 'finish'
+      ? `progress check ${due.trip} (${due.signal.kind}) — the change is made and verified: this turn offers no tools and the run writes its final report.`
+      : `progress check ${due.trip} (${due.signal.kind}) — this turn offers ${FORCED_MENU[forced]} and requires a call.`,
   });
 }

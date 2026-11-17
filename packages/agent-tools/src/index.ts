@@ -10,6 +10,8 @@
 export * from "./capabilities.js";
 export * from "./modelRoles.js";
 export * from "./edit.js";
+// THE shape reader of a write call (path, body, replacements, `edits[]` batches) — run-guards reads it too.
+export * from "./callShape.js";
 export * from "./editBalance.js";
 // Path overlap — the rule a planner's hand-off uses to decide which tasks may run side
 // by side in one working tree.

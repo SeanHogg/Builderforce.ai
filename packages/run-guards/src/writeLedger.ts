@@ -11,6 +11,7 @@
  * naming the path forgets it; an unscoped mutation forgets everything. Pure.
  */
 import { callFingerprint, pathArgOf } from "./fingerprint.js";
+import { changedPathsOf } from "./callChanges.js";
 
 interface ContentWrite {
   path: string;
@@ -51,8 +52,11 @@ export class WriteLedger {
       this.written.set(write.path, write.fingerprint);
       return;
     }
+    // Every path the call names or changes — a batched `edits: [...]` call changes files
+    // it does not name at the top level ({@link changedPathsOf}).
     const path = pathArgOf(args);
     if (path) this.written.delete(path);
+    for (const changed of changedPathsOf(args)) this.written.delete(changed);
   }
 }
 

@@ -1,5 +1,5 @@
-import { B as BrainTraceEvent, U as UsageSurface, a as BrainMessage } from './brainTriage-I5tIR9e1.js';
-import { L as LocalRuntimeId, a as LocalEndpoint, b as LocalRuntimeProbe, c as LocalModel } from './probe-BGCNrsPi.js';
+import { B as BrainTraceEvent, U as UsageSurface, a as BrainMessage } from './brainTriage-I5tIR9e1.cjs';
+import { L as LocalRuntimeId, a as LocalEndpoint, b as LocalRuntimeProbe, c as LocalModel } from './probe-BGCNrsPi.cjs';
 import { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import { ConsolidateOptions, ConsolidatedMemory } from '@seanhogg/builderforce-memory/working';
 
@@ -159,6 +159,63 @@ interface LocalFirstAttemptRecord {
     outcome: LocalFirstOutcome;
     /** Why it did not serve (`failed`: the error's message; `refused`: an empty answer). */
     detail?: string;
+}
+
+/** What one completed run did, as the note format understands it. */
+interface RunActivity {
+    /** Paths the run created. Duplicates are collapsed. */
+    created?: readonly string[];
+    /** Paths the run modified. Duplicates are collapsed. */
+    edited?: readonly string[];
+    /**
+     * Paths the run READ. The note lists the most-read few, so the next run in this
+     * workspace sees where the last one had to look; duplicates are kept here because
+     * how often a file was re-read is how much the run depended on it.
+     */
+    read?: readonly string[];
+    /** Paths the run deleted. Duplicates are collapsed. */
+    deleted?: readonly string[];
+    /** Tool names the run invoked. Duplicates are collapsed. */
+    tools?: readonly string[];
+    /**
+     * The run's own prompt — what it was asked to do. When present, the summary
+     * describes THAT rather than falling back to a fixed template, so two runs
+     * that both edited a test file do not read as the same "Test suite created".
+     */
+    prompt?: string;
+}
+
+/**
+ * run-knowledge — the TOOL VOCABULARY of a run's memory.
+ *
+ * Short-term vs long-term memory is a memory concept and lives in
+ * `@seanhogg/builderforce-memory/working`: {@link WorkingMemory} is what this run has
+ * read, searched and changed (restated before every turn by its `brief`), and
+ * `consolidate` / `mergeConsolidated` turn it into the per-area code map the next run
+ * recalls. That package knows observations, never tool names.
+ *
+ * This module is the one place that maps the platform's tool names onto those
+ * observations — every runtime's spelling (shared `write_file`, on-prem native
+ * `write`/`create`, …) — so the editor, on-prem and the cloud engine record a run the
+ * same way. {@link RunKnowledgeRecorder} is that adapter: it owns the run's
+ * {@link WorkingMemory} and the tool names a run note lists.
+ */
+
+/**
+ * The recorder's CONTRACT — what a loop or host hands across a package boundary. A
+ * structural interface, not the class: a bundled `.d.ts` (brain-embedded's) carries its
+ * own copy of a class, and two copies of a class with private fields are different
+ * types, so a host's recorder could not be passed to the loop by its class.
+ */
+interface RunKnowledgeLog {
+    setPrompt(prompt: string): void;
+    record(name: string, args?: unknown): void;
+    readonly isEmpty: boolean;
+    readonly activity: RunActivity;
+    /** The short-term brief for the next turn (`WorkingMemory.brief`), or null while not worth it. */
+    brief(): string | null;
+    /** The long-term code map this run consolidates into (`consolidate`), or null. */
+    consolidate(opts?: ConsolidateOptions): ConsolidatedMemory | null;
 }
 
 /**
@@ -1559,63 +1616,6 @@ interface OnDeviceTasks {
     translate(text: string, o: TranslateOptions): Promise<string | null>;
     /** Structured output. The result is validated against `schema` before it is returned; invalid → null. */
     json<T>(o: JsonTaskOptions): Promise<T | null>;
-}
-
-/** What one completed run did, as the note format understands it. */
-interface RunActivity {
-    /** Paths the run created. Duplicates are collapsed. */
-    created?: readonly string[];
-    /** Paths the run modified. Duplicates are collapsed. */
-    edited?: readonly string[];
-    /**
-     * Paths the run READ. The note lists the most-read few, so the next run in this
-     * workspace sees where the last one had to look; duplicates are kept here because
-     * how often a file was re-read is how much the run depended on it.
-     */
-    read?: readonly string[];
-    /** Paths the run deleted. Duplicates are collapsed. */
-    deleted?: readonly string[];
-    /** Tool names the run invoked. Duplicates are collapsed. */
-    tools?: readonly string[];
-    /**
-     * The run's own prompt — what it was asked to do. When present, the summary
-     * describes THAT rather than falling back to a fixed template, so two runs
-     * that both edited a test file do not read as the same "Test suite created".
-     */
-    prompt?: string;
-}
-
-/**
- * run-knowledge — the TOOL VOCABULARY of a run's memory.
- *
- * Short-term vs long-term memory is a memory concept and lives in
- * `@seanhogg/builderforce-memory/working`: {@link WorkingMemory} is what this run has
- * read, searched and changed (restated before every turn by its `brief`), and
- * `consolidate` / `mergeConsolidated` turn it into the per-area code map the next run
- * recalls. That package knows observations, never tool names.
- *
- * This module is the one place that maps the platform's tool names onto those
- * observations — every runtime's spelling (shared `write_file`, on-prem native
- * `write`/`create`, …) — so the editor, on-prem and the cloud engine record a run the
- * same way. {@link RunKnowledgeRecorder} is that adapter: it owns the run's
- * {@link WorkingMemory} and the tool names a run note lists.
- */
-
-/**
- * The recorder's CONTRACT — what a loop or host hands across a package boundary. A
- * structural interface, not the class: a bundled `.d.ts` (brain-embedded's) carries its
- * own copy of a class, and two copies of a class with private fields are different
- * types, so a host's recorder could not be passed to the loop by its class.
- */
-interface RunKnowledgeLog {
-    setPrompt(prompt: string): void;
-    record(name: string, args?: unknown): void;
-    readonly isEmpty: boolean;
-    readonly activity: RunActivity;
-    /** The short-term brief for the next turn (`WorkingMemory.brief`), or null while not worth it. */
-    brief(): string | null;
-    /** The long-term code map this run consolidates into (`consolidate`), or null. */
-    consolidate(opts?: ConsolidateOptions): ConsolidatedMemory | null;
 }
 
 /**

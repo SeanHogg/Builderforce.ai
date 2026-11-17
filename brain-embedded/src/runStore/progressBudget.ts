@@ -48,10 +48,11 @@ export function changeBrief(reason: string, canAskUser: boolean): string {
 
 const HAND_OFF_DUE_BRIEF = handOffBrief(`ANALYSIS IS OVER. You have spent ${PLAN_TURN_BUDGET} turns analysing without changing anything.`);
 
-/** A turn a budget decides: the tools it offers, a call required, and the brief. */
+/** A turn a progress rule decides: the tools it offers, a call required, and the brief — or,
+ *  for A3's `finish`, NO tools and no call required: the final report. */
 export interface ForcedTurn {
   tools: BrainToolSpec[];
-  toolChoice: 'required';
+  toolChoice?: 'required';
   brief: ChatCompletionMessage;
 }
 
@@ -115,7 +116,10 @@ export function changeToolsOf(run: BrainRunContext, selected: readonly BrainTool
  * (`cacheServedStreak.ts`) and A3's escalation (`progressGuard.ts`): while planning,
  * `hand_off` alone (when it can be offered and has not been forced yet); otherwise the
  * change tools alone, which ends a planning run that could not hand off. Reports the
- * policy event. Null when this turn offers no change tool to force.
+ * policy event. Null when this turn offers no change tool to force — and when the run has
+ * ALREADY changed code (`codeChanged`): forcing the change tools on a run whose
+ * edits are in makes it invent one (VS Code chat #146477 replaced "Create Your account"
+ * with "REMOVED"), so the caller shows its note instead.
  */
 export function forcedProgressTurn(
   run: BrainRunContext,
@@ -126,6 +130,9 @@ export function forcedProgressTurn(
     reportToPolicy(run, { type: 'hand_off_forced' });
     return { forced: 'hand_off', turn: { tools: [HAND_OFF_TOOL_SPEC], toolChoice: 'required', brief: { role: 'user', content: handOffBrief(reason) } } };
   }
+  // The run already changed code itself: never force another change. (A hand-off alone is not a change made HERE — that run
+  // is still forced, so `progressed` is not the test.)
+  if (run.c.codeChanged) return null;
   // No change tool on this turn's menu: nothing to force yet.
   const tools = changeToolsOf(run, selected.filter((t) => t.function.name !== HAND_OFF_TOOL));
   if (!tools) return null;

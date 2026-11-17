@@ -29,6 +29,8 @@ export interface LoopGuardState {
   cascade?: CascadeSessionState;
   /** A3: a pause the next dispatched call parks the run on. */
   pendingPause?: string;
+  /** A3: the run's change is made and verified — the next turn is its final report, with no tools. */
+  finishDue?: true;
   /** D7: the sandbox checks' failures, for the NEXT turn's tail. */
   checksNote?: string;
   escalations?: number;            // A3 + D1: moves up the tier ladder this run — §8.2 escalations

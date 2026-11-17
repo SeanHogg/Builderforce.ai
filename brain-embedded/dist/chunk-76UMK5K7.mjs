@@ -1028,6 +1028,59 @@ function delegationRole(raw) {
   return isModelRole(raw) ? raw : "code";
 }
 
+// ../packages/agent-tools/src/callShape.ts
+function callPathOf(args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return null;
+  const a = args;
+  for (const p of [a.path, a.file_path, a.filePath]) {
+    if (typeof p === "string" && p.trim()) return p.trim().replace(/\\/g, "/").replace(/^\.\//, "");
+  }
+  return null;
+}
+function str(a, ...keys) {
+  for (const k of keys) {
+    const v = a[k];
+    if (typeof v === "string") return v;
+  }
+  return void 0;
+}
+function entryOf(e, fallback, batched) {
+  const content = str(e, "content");
+  const before = str(e, "old_string", "oldString", "find");
+  const after = str(e, "new_string", "newString", "replace");
+  return {
+    path: callPathOf(e) ?? fallback,
+    batched,
+    ...content !== void 0 ? { content } : {},
+    ...before !== void 0 ? { before } : {},
+    ...after !== void 0 ? { after } : {}
+  };
+}
+function callWriteEntriesOf(args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return [];
+  const a = args;
+  const top = entryOf(a, null, false);
+  const out = [top];
+  if (Array.isArray(a.edits)) {
+    for (const raw of a.edits) {
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) out.push(entryOf(raw, top.path, true));
+    }
+  }
+  return out;
+}
+function callChangesOf(args) {
+  const out = [];
+  for (const e of callWriteEntriesOf(args)) {
+    if (!e.path) continue;
+    if (e.content !== void 0) out.push({ path: e.path, content: e.content });
+    else if (e.before !== void 0 && e.after !== void 0 && e.before !== e.after) out.push({ path: e.path, from: e.before, to: e.after });
+  }
+  return out;
+}
+function changedPathsOf(args) {
+  return [...new Set(callChangesOf(args).map((c) => c.path))];
+}
+
 // ../packages/agent-tools/src/edit.ts
 var toLF = (s) => s.replace(/\r\n/g, "\n");
 var countNewlines = (s) => s.split("\n").length - 1;
@@ -1127,37 +1180,23 @@ function applyStringEdit(content, oldString, newString, replaceAll = false) {
     ...nearest ? { nearest } : {}
   };
 }
-var editStr = (v) => typeof v === "string" ? v : void 0;
-function editPathOf(a) {
-  const p = a.path ?? a.file_path ?? a.filePath;
-  return typeof p === "string" && p.trim() ? p.trim().replace(/\\/g, "/").replace(/^\.\//, "") : null;
-}
 function editedFilesOf(toolName, args) {
-  const a = args && typeof args === "object" && !Array.isArray(args) ? args : {};
-  const top = editPathOf(a);
+  const entries = callWriteEntriesOf(args);
+  const top = entries[0] ?? null;
   const out = [];
   if (toolName === "edit_file") {
-    const replacement = (e, fallback) => {
-      const path = editPathOf(e) ?? fallback;
-      const before = editStr(e.old_string);
-      const after = editStr(e.new_string);
-      if (path && (before !== void 0 || after !== void 0)) {
-        out.push({ path, ...before !== void 0 ? { before } : {}, ...after !== void 0 ? { after } : {} });
-      } else if (path && e !== a) {
-        out.push({ path });
-      }
-    };
-    if ("old_string" in a || "new_string" in a) replacement(a, null);
-    if (Array.isArray(a.edits)) {
-      for (const raw of a.edits) {
-        if (raw && typeof raw === "object") replacement(raw, top);
+    for (const e of entries) {
+      if (!e.path) continue;
+      if (e.before !== void 0 || e.after !== void 0) {
+        out.push({ path: e.path, ...e.before !== void 0 ? { before: e.before } : {}, ...e.after !== void 0 ? { after: e.after } : {} });
+      } else if (e.batched) {
+        out.push({ path: e.path });
       }
     }
-  } else if (toolName === "write_file" && top) {
-    const after = editStr(a.content);
-    out.push({ path: top, ...after !== void 0 ? { after } : {} });
+  } else if (toolName === "write_file" && top?.path) {
+    out.push({ path: top.path, ...top.content !== void 0 ? { after: top.content } : {} });
   }
-  if (out.length === 0 && top) out.push({ path: top });
+  if (out.length === 0 && top?.path) out.push({ path: top.path });
   return out;
 }
 function editedPathsOf(toolName, args) {
@@ -5250,15 +5289,15 @@ var skillProposeTool = defineTool({
   },
   requires: ["skill.author"],
   async execute(args, ctx) {
-    const str4 = (v) => typeof v === "string" ? v.trim() : "";
-    const slug = str4(args.slug);
-    const name = str4(args.name);
-    const description = str4(args.description);
-    const body = str4(args.body);
+    const str5 = (v) => typeof v === "string" ? v.trim() : "";
+    const slug = str5(args.slug);
+    const name = str5(args.name);
+    const description = str5(args.description);
+    const body = str5(args.body);
     if (!slug || !name || !description || !body) {
       return { data: { ok: false, error: "slug, name, description and body are all required" } };
     }
-    const evidence = str4(args.evidence);
+    const evidence = str5(args.evidence);
     const r = await ctx.caps.skillAuthor.propose({
       slug,
       name,
@@ -5406,12 +5445,12 @@ var spawnAgentTool = withDelegationNote(defineTool({
   },
   requires: ["orchestrate"],
   async execute(args, ctx) {
-    const str4 = (v) => typeof v === "string" ? v.trim() : "";
-    const label = str4(args.label);
-    const task = str4(args.task);
+    const str5 = (v) => typeof v === "string" ? v.trim() : "";
+    const label = str5(args.label);
+    const task = str5(args.task);
     if (!task) return { data: { ok: false, error: "task is required \u2014 the child sees none of your conversation" } };
     const role = delegationRole(args.role);
-    const asAgent = str4(args.as_agent);
+    const asAgent = str5(args.as_agent);
     const r = await ctx.caps.orchestration.spawn({
       label: label || task.slice(0, 60),
       task,
@@ -5429,20 +5468,20 @@ function parseWorkstreams(raw) {
   if (raw.length > MAX_WORKSTREAMS) {
     return `at most ${MAX_WORKSTREAMS} workstreams per call \u2014 run the rest in a second call once these are back`;
   }
-  const str4 = (v) => typeof v === "string" ? v.trim() : "";
+  const str5 = (v) => typeof v === "string" ? v.trim() : "";
   const out = [];
   for (const [i, item] of raw.entries()) {
     const w = item ?? {};
-    const task = str4(w.task);
+    const task = str5(w.task);
     if (!task) return `workstream ${i + 1} has no task \u2014 each child sees none of your conversation`;
-    const ticket = str4(w.ticket);
-    const role = str4(w.role);
+    const ticket = str5(w.ticket);
+    const role = str5(w.role);
     out.push({
-      label: str4(w.label) || task.slice(0, 60),
+      label: str5(w.label) || task.slice(0, 60),
       task,
       ...ticket ? { ticket } : {},
       ...role ? { role } : {},
-      asAgent: str4(w.as_agent)
+      asAgent: str5(w.as_agent)
     });
   }
   return out;
@@ -6480,9 +6519,7 @@ function contentHash3(text) {
   return `${text.length.toString(36)}.${h.toString(36)}`;
 }
 function pathArgOf(args) {
-  if (!args || typeof args !== "object" || Array.isArray(args)) return null;
-  const path = args.path;
-  return typeof path === "string" && path.trim() ? path.trim() : null;
+  return callPathOf(args);
 }
 
 // ../packages/run-guards/src/failureTally.ts
@@ -6529,6 +6566,95 @@ function repeatedFailureAdvisory(tool, attempts, reason) {
 
 // ../packages/run-guards/src/streak.ts
 var BACK_TO_BACK_AT = 3;
+
+// ../packages/run-guards/src/verifiedWork.ts
+var VerifiedWork = class {
+  wrote;
+  verified;
+  offered;
+  constructor(state = {}) {
+    this.wrote = state.wrote === true;
+    this.verified = this.wrote && state.verified === true;
+    this.offered = state.finishOffered === true;
+  }
+  /** A successful write (a file change, or a mutating command that is not a check). */
+  noteWrite() {
+    this.wrote = true;
+    this.verified = false;
+    this.offered = false;
+  }
+  /** A `finish` was offered. Until the run writes again, it is not offered twice. */
+  noteFinishOffered() {
+    this.offered = true;
+  }
+  /** A `finish` was already offered since the last write. */
+  get finishOffered() {
+    return this.offered;
+  }
+  /** A check answered. Only a check after a write verifies anything. */
+  noteCheck(passed) {
+    if (this.wrote) this.verified = passed;
+  }
+  /** The run's change is made and a check passed after its last write. */
+  get isVerified() {
+    return this.wrote && this.verified;
+  }
+  snapshot() {
+    return {
+      ...this.wrote ? { wrote: true } : {},
+      ...this.isVerified ? { verified: true } : {},
+      ...this.offered ? { finishOffered: true } : {}
+    };
+  }
+};
+
+// ../packages/run-guards/src/checkCommand.ts
+var WRAPPERS = /* @__PURE__ */ new Set(["pnpm", "npm", "npx", "yarn", "bun", "bunx"]);
+var WRAPPER_VERBS = /* @__PURE__ */ new Set(["exec", "run", "dlx", "x", "run-script"]);
+var VALUE_FLAGS = /* @__PURE__ */ new Set(["--filter", "-F", "-C", "--dir", "--prefix", "-w", "--workspace", "--cwd"]);
+var RUNNERS = /* @__PURE__ */ new Set(["tsc", "tsgo", "vitest", "jest", "pytest", "mocha", "eslint", "biome", "ruff", "mypy", "playwright"]);
+var CHECK_SCRIPT = /^(test|tests|lint|typecheck|type-check|check)(:[\w.-]+)?$/i;
+var SUBCOMMAND_RUNNERS = { cargo: /* @__PURE__ */ new Set(["test", "check", "clippy"]), go: /* @__PURE__ */ new Set(["test", "vet"]) };
+var VCS_BOOKKEEPING = /* @__PURE__ */ new Set(["add", "commit", "status", "diff", "log", "push", "show", "fetch"]);
+function shellCommandOf(args) {
+  if (!args || typeof args !== "object") return "";
+  const a = args;
+  return typeof a.command === "string" ? a.command : typeof a.cmd === "string" ? a.cmd : "";
+}
+function tokensOf(segment) {
+  return segment.trim().split(/\s+/).filter(Boolean).map((t) => t.replace(/^["']|["']$/g, ""));
+}
+function executableTokensOf(command) {
+  const segments = command.split(/&&|\|\||;/).map(tokensOf).filter((t2) => t2.length > 0 && t2[0] !== "cd" && t2[0] !== "pushd");
+  let t = segments[0] ?? [];
+  let i = 0;
+  while (i < t.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t[i]) || t[i] === "env")) i += 1;
+  t = t.slice(i);
+  if (t.length > 0 && WRAPPERS.has(t[0])) {
+    let j = 1;
+    for (; ; ) {
+      const tok = t[j];
+      if (tok === void 0) break;
+      if (VALUE_FLAGS.has(tok)) j += 2;
+      else if (tok.startsWith("-")) j += 1;
+      else if (WRAPPER_VERBS.has(tok)) j += 1;
+      else break;
+    }
+    t = t.slice(j);
+  }
+  return t.map((tok, k) => k === 0 ? tok.split(/[\\/]/).pop() ?? tok : tok);
+}
+function runsCheck(command) {
+  const [exe, sub] = executableTokensOf(command);
+  if (!exe) return false;
+  if (RUNNERS.has(exe) || CHECK_SCRIPT.test(exe)) return true;
+  const subs = SUBCOMMAND_RUNNERS[exe];
+  return !!subs && !!sub && subs.has(sub);
+}
+function isVcsBookkeeping(command) {
+  const [exe, sub] = executableTokensOf(command);
+  return exe === "git" && !!sub && VCS_BOOKKEEPING.has(sub);
+}
 
 // ../packages/run-guards/src/multiRead.ts
 function singleReadsOf(tool, args) {
@@ -6931,6 +7057,7 @@ var WriteLedger = class {
     }
     const path = pathArgOf(args);
     if (path) this.written.delete(path);
+    for (const changed of changedPathsOf(args)) this.written.delete(changed);
   }
 };
 function repeatedWriteNote(tool, path) {
@@ -6940,28 +7067,11 @@ function repeatedWriteNote(tool, path) {
 // ../packages/run-guards/src/editRevert.ts
 var MAX_HISTORY_PER_PATH = 16;
 var MAX_PATHS2 = 200;
-function stringArg(args, ...keys) {
-  for (const key of keys) {
-    const v = args[key];
-    if (typeof v === "string") return v;
-  }
-  return void 0;
-}
-function changeOf(args) {
-  const path = pathArgOf(args);
-  if (!path) return null;
-  const a = args;
-  const content = stringArg(a, "content");
-  if (content !== void 0) return { path, sig: `w:${contentHash3(content)}` };
-  const from = stringArg(a, "old_string", "oldString", "find");
-  const to = stringArg(a, "new_string", "newString", "replace");
-  if (from === void 0 || to === void 0 || from === to) return null;
-  const f = contentHash3(from);
-  const t = contentHash3(to);
-  return { path, sig: `e:${f}>${t}`, inverse: `e:${t}>${f}` };
-}
-function changesContent(args) {
-  return changeOf(args) !== null;
+function signatureOf(change) {
+  if ("content" in change) return { path: change.path, sig: `w:${contentHash3(change.content)}` };
+  const f = contentHash3(change.from);
+  const t = contentHash3(change.to);
+  return { path: change.path, sig: `e:${f}>${t}`, inverse: `e:${t}>${f}` };
 }
 var EditRevertTracker = class {
   history;
@@ -6969,9 +7079,10 @@ var EditRevertTracker = class {
     this.history = new Map((state ?? []).map(([p, h]) => [p, [...h]]));
   }
   /**
-   * Record a call that ran. A successful content change is appended to its path's
-   * history and returned as a revert when it restores earlier content; a failed one, or
-   * a deletion (`deleted: true`), forgets the path — its content is unknown.
+   * Record a call that ran. Each successful content change (a batch carries several, in
+   * order) is appended to its path's history; the first that restores earlier content is
+   * returned as the revert. A failed call, or a deletion (`deleted: true`), forgets every
+   * path it names — their content is unknown (a batch is atomic: none of it applied).
    */
   record(tool, args, outcome) {
     if (outcome.deleted) {
@@ -6979,12 +7090,19 @@ var EditRevertTracker = class {
       if (path) this.history.delete(path);
       return null;
     }
-    const change = changeOf(args);
-    if (!change) return null;
+    const changes = callChangesOf(args);
     if (!outcome.ok) {
-      this.history.delete(change.path);
+      for (const change of changes) this.history.delete(change.path);
       return null;
     }
+    let revert = null;
+    for (const change of changes) {
+      const found = this.recordChange(tool, signatureOf(change));
+      revert ??= found;
+    }
+    return revert;
+  }
+  recordChange(tool, change) {
     const past = this.history.get(change.path) ?? [];
     let revert = null;
     if (change.sig.startsWith("w:")) {
@@ -7015,15 +7133,33 @@ var CHURN_TURNS = 12;
 var REGROUND_TURNS = 8;
 var MAX_SEEN = 500;
 var TEST_PATH = /(^|\/)(__tests__|tests?|spec)\/|\.(test|spec)\.[a-z0-9]+$|_test\.(go|py)$/i;
-var TEST_COMMAND = /\b(test|tests|vitest|jest|pytest|mocha|tsc|tsgo|typecheck|lint|eslint|cargo\s+test|go\s+test)\b/i;
 function isCheckCallDefault(tool, args) {
   if (tool === "run_checks" || tool === "run_tests") return true;
-  if (tool !== "run_command" || !args || typeof args !== "object") return false;
-  const command = args.command;
-  return typeof command === "string" && TEST_COMMAND.test(command);
+  if (tool !== "run_command") return false;
+  return runsCheck(shellCommandOf(args));
 }
 function isTestPath(path) {
   return TEST_PATH.test(path.split("\\").join("/"));
+}
+var JOB_POLL_TOOLS = /* @__PURE__ */ new Set(["command_status", "command_stop"]);
+var MAX_CHECK_JOBS = 16;
+function recordOf(result) {
+  return result && typeof result === "object" && !Array.isArray(result) ? result : null;
+}
+function startedJobOf(result) {
+  const r = recordOf(result);
+  if (!r || r.background !== true || r.status !== "running" || typeof r.id !== "string" || !r.id.trim()) return null;
+  return r.id.trim();
+}
+function finishedJob2(result) {
+  const status = recordOf(result)?.status;
+  return typeof status === "string" && status !== "running";
+}
+function checkPassed(ok, result, poll) {
+  if (!ok) return false;
+  const r = recordOf(result);
+  if (typeof r?.exitCode === "number" && r.exitCode !== 0) return false;
+  return !poll || r?.status === "exited";
 }
 function resultDigest(result) {
   let text;
@@ -7039,6 +7175,7 @@ var NoProgressTracker = class {
   changes;
   idleTurns;
   lastCheck;
+  checkJobs;
   groundThisTurn = false;
   churnThisTurn = false;
   churnTurns;
@@ -7055,6 +7192,7 @@ var NoProgressTracker = class {
     this.idleTurns = state?.idleTurns ?? 0;
     this.churnTurns = state?.churnTurns ?? 0;
     this.lastCheck = state?.lastCheck;
+    this.checkJobs = (state?.checkJobs ?? []).slice(-MAX_CHECK_JOBS);
     this.turn = 0;
     this.lastSeenAt = new Map(Object.entries(state?.lastSeenAt ?? {}));
     this.targetOf = ports.targetOf ?? ((_tool, args) => pathArgOf(args));
@@ -7068,8 +7206,8 @@ var NoProgressTracker = class {
    * differently each time is the run fixing things, not repeating a failure.
    */
   observe(tool, args, outcome) {
-    const path = this.targetOf(tool, args);
-    if (path) {
+    const targets = [...new Set([this.targetOf(tool, args), ...changedPathsOf(args)].filter((p) => !!p))];
+    for (const path of targets) {
       if (!this.seen.has(path)) {
         this.seen.add(path);
         if (this.seen.size > MAX_SEEN) this.seen.delete(this.seen.values().next().value);
@@ -7080,9 +7218,9 @@ var NoProgressTracker = class {
       }
       this.lastSeenAt.set(path, this.turn);
     }
-    if (outcome.ok && !path && this.isPlatformProgress?.(tool, args)) this.groundThisTurn = true;
+    if (outcome.ok && targets.length === 0 && this.isPlatformProgress?.(tool, args)) this.groundThisTurn = true;
     if (outcome.ok && outcome.wrote) {
-      if (path && isTestPath(path)) this.groundThisTurn = true;
+      if (targets.some(isTestPath)) this.groundThisTurn = true;
       const fingerprint = contentHash3(callFingerprint(tool, args));
       if (!this.changes.has(fingerprint)) {
         this.changes.add(fingerprint);
@@ -7090,12 +7228,29 @@ var NoProgressTracker = class {
         this.churnThisTurn = true;
       }
     }
-    if (!this.isCheckCall(tool, args)) return { checkChanged: false };
+    const poll = this.isCheckJobPoll(tool, args);
+    if (!poll && !this.isCheckCall(tool, args)) return { checkChanged: false };
+    const job = startedJobOf(outcome.result);
+    if (!poll && job) {
+      this.rememberJob(job);
+      return { checkChanged: false, check: "pending" };
+    }
+    if (poll && !finishedJob2(outcome.result)) return { checkChanged: false, check: "pending" };
+    const check = checkPassed(outcome.ok, outcome.result, poll) && (poll || !isReadOnlyShellCall(tool, args)) ? "passed" : "failed";
     const digest = resultDigest(outcome.result);
-    if (digest === this.lastCheck) return { checkChanged: false };
+    if (digest === this.lastCheck) return { checkChanged: false, check };
     this.groundThisTurn = true;
     this.lastCheck = digest;
-    return { checkChanged: true };
+    return { checkChanged: true, check };
+  }
+  /** A poll of a background job a check command started ({@link JOB_POLL_TOOLS}). */
+  isCheckJobPoll(tool, args) {
+    if (!JOB_POLL_TOOLS.has(tool) || !args || typeof args !== "object") return false;
+    const id = args.id;
+    return typeof id === "string" && this.checkJobs.includes(id.trim());
+  }
+  rememberJob(id) {
+    this.checkJobs = [...this.checkJobs.filter((j) => j !== id), id].slice(-MAX_CHECK_JOBS);
   }
   /** The turn's calls all ran. Returns the idle-turn streak after it. */
   endTurn() {
@@ -7135,7 +7290,8 @@ var NoProgressTracker = class {
       ...this.lastSeenAt.size ? { lastSeenAt: Object.fromEntries(this.lastSeenAt) } : {},
       ...this.changes.size ? { changes: [...this.changes] } : {},
       ...this.churnTurns ? { churnTurns: this.churnTurns } : {},
-      ...this.lastCheck ? { lastCheck: this.lastCheck } : {}
+      ...this.lastCheck ? { lastCheck: this.lastCheck } : {},
+      ...this.checkJobs.length ? { checkJobs: [...this.checkJobs] } : {}
     };
   }
 };
@@ -7385,6 +7541,7 @@ var ReadOnlyStreak = class {
 
 // ../packages/run-guards/src/progressDetector.ts
 var LADDER_RESET_TURNS = 8;
+var FINISHABLE_SIGNALS = /* @__PURE__ */ new Set(["no_progress", "reverifying", "read_only_streak", "unkept_ready"]);
 var SIGNAL_RANK = {
   edit_revert: 0,
   repeated_failure: 1,
@@ -7425,6 +7582,7 @@ var ProgressDetector = class {
     this.batching = new BatchingNudge(state.batching);
     this.reverify = new ReverifyTracker(state);
     this.turnCalls = [];
+    this.work = new VerifiedWork(state.work);
   }
   ports;
   visits;
@@ -7448,6 +7606,8 @@ var ProgressDetector = class {
   reverify;
   /** Every call of the current turn, for the B4 batching nudge's read-only count. */
   turnCalls;
+  /** Made a change and saw a check pass after it — turns an idle-shaped trip into `finish`. */
+  work;
   raise(signal) {
     if (!this.turnSignal || SIGNAL_RANK[signal.kind] < SIGNAL_RANK[this.turnSignal.kind]) this.turnSignal = signal;
   }
@@ -7463,21 +7623,24 @@ var ProgressDetector = class {
     this.readOnlyStreak.observe(readOnly);
     const ok = succeeded(result);
     const unscoped = (this.ports.isUnscopedMutation ?? ((t) => t === "run_command"))(tool, args);
-    const wrote = ok && (changesContent(args) || unscoped && this.ports.isReadOnly?.(tool, args) !== true);
+    const changed = changedPathsOf(args);
+    const wrote = ok && (changed.length > 0 || unscoped && this.ports.isReadOnly?.(tool, args) !== true);
+    const isDelete = (this.ports.isDelete ?? ((t) => t === "delete_file"))(tool);
     if (unscoped) {
       this.visits.markAllMayHaveChanged();
       this.edits.reset();
       if (wrote) this.reverify.wroteAnything();
-    } else if ((this.ports.isDelete ?? ((t) => t === "delete_file"))(tool)) {
+    } else if (isDelete) {
       this.edits.record(tool, args, { ok, deleted: ok });
       this.forgetVisitsOf(pathArgOf(args));
-    } else if (changesContent(args)) {
+    } else if (changed.length > 0) {
       const revert = this.edits.record(tool, args, { ok });
       if (revert) this.raise({ kind: "edit_revert", tool, target: revert.path });
       if (ok) {
-        const path = pathArgOf(args);
-        this.forgetVisitsOf(path);
-        if (path) this.reverify.wrote(path);
+        for (const path of changed) {
+          this.forgetVisitsOf(path);
+          this.reverify.wrote(path);
+        }
       }
     } else if (ok && this.ports.isReadOnly?.(tool, args)) {
       const target = visitTargetOf(args);
@@ -7487,7 +7650,11 @@ var ProgressDetector = class {
         if (visit.count >= REVISIT_HARD_AT && !visit.mayHaveChanged) this.raise({ kind: "circling_read", tool, target, count: visit.count });
       }
     }
-    const { checkChanged } = this.progress.observe(tool, args, { ok, wrote, result: result.data });
+    const { checkChanged, check } = this.progress.observe(tool, args, { ok, wrote, result: result.data });
+    const bookkeeping = tool === "run_command" && isVcsBookkeeping(shellCommandOf(args));
+    const workWrite = wrote && !isReadOnlyShellCall(tool, args) && !bookkeeping || ok && isDelete;
+    if (workWrite && check === void 0) this.work.noteWrite();
+    if (check === "passed" || check === "failed") this.work.noteCheck(check === "passed");
     if (ok || checkChanged) this.failures.clear(tool, args);
     else {
       const attempts = this.failures.record(tool, args);
@@ -7546,6 +7713,19 @@ var ProgressDetector = class {
     this.readOnlyStreak.reset();
     this.visits.forget(() => true);
     this.failures.reset();
+    if (this.work.isVerified && FINISHABLE_SIGNALS.has(signal.kind)) {
+      if (this.trips === 1) {
+        const note2 = progressVerifiedSteerNote(signal);
+        this.steer = note2;
+        return { kind: "steer", trip: this.trips, signal, note: note2 };
+      }
+      if (!this.work.finishOffered) {
+        this.work.noteFinishOffered();
+        const note2 = progressFinishNote(signal);
+        this.steer = note2;
+        return { kind: "finish", trip: this.trips, signal, note: note2 };
+      }
+    }
     const note = progressSteerNote(signal, this.trips);
     if (this.trips === 1) {
       this.steer = note;
@@ -7590,10 +7770,25 @@ var ProgressDetector = class {
         const b = this.batching.snapshot();
         return b.streak || b.fired ? { batching: b } : {};
       })(),
-      ...this.reverify.snapshot()
+      ...this.reverify.snapshot(),
+      ...(() => {
+        const w = this.work.snapshot();
+        return w.wrote ? { work: w } : {};
+      })()
     };
   }
+  /** The run's change is made and a check passed after its last write. */
+  get workVerified() {
+    return this.work.isVerified;
+  }
 };
+function progressVerifiedSteerNote(signal) {
+  return `Progress check (first warning): your last change is made and a check passed after it, but ${signal.kind === "no_progress" ? `the last ${signal.count ?? NO_PROGRESS_TURNS} turns changed nothing` : "the last turns changed nothing"}. If the request is fully done, write the final report now \u2014 what you changed, how it was verified, anything left open \u2014 and make no more tool calls. Otherwise make the next change the request still needs.`;
+}
+function progressFinishNote(signal) {
+  const what = signal.kind === "no_progress" ? `the last ${signal.count ?? NO_PROGRESS_TURNS} turns changed nothing` : signal.kind === "reverifying" ? "this turn only re-checked work you already verified" : "the last turns only looked around";
+  return `Progress check: your change is made and a check passed after your last edit \u2014 ${what}. The work is done. Write the final report NOW: what you changed (files), how it was verified, and anything left open. Make no more tool calls.`;
+}
 function progressSteerNote(signal, trip) {
   const head = `Progress check (${trip === 1 ? "first warning" : "second warning \u2014 the run has been moved to a stronger model"}): `;
   return `${head}${progressAdvice(signal)}`;
@@ -7646,7 +7841,8 @@ function progressTraceStep(action, override = {}) {
   return {
     label: "loop.progress_check",
     args: override.detail ?? { trip: action.trip, signal: action.signal.kind, action: action.kind },
-    result: `progress check ${action.trip}: ${action.signal.kind} \u2192 ${outcome}`
+    // A finish is the verified run's wrap-up, not a stall — the row says so.
+    result: `progress check ${action.trip}: ${action.signal.kind} \u2192 ${outcome}${outcome === "finish" ? " (the change is made and verified \u2014 the run writes its final report, no more tool calls)" : ""}`
   };
 }
 
@@ -8912,7 +9108,7 @@ var PHASES = ["started", "completed", "failed", "paused", "resumed", "cancelled"
 function isPhase(v) {
   return typeof v === "string" && PHASES.includes(v);
 }
-function str3(v) {
+function str4(v) {
   return typeof v === "string" && v.trim() ? v : void 0;
 }
 function parseChatActivity(msg) {
@@ -8925,9 +9121,9 @@ function parseChatActivity(msg) {
   } catch {
     return null;
   }
-  const ticketKind = str3(meta.ticketKind) ?? "task";
-  const ticketRef = str3(meta.ticketRef) ?? "";
-  const agentName = str3(meta.agentName) ?? str3(meta.agentRef) ?? "";
+  const ticketKind = str4(meta.ticketKind) ?? "task";
+  const ticketRef = str4(meta.ticketRef) ?? "";
+  const agentName = str4(meta.agentName) ?? str4(meta.agentRef) ?? "";
   if (meta.runMilestone != null && isPhase(meta.phase)) {
     return {
       kind: "milestone",
@@ -8936,9 +9132,9 @@ function parseChatActivity(msg) {
       ticketKind,
       ticketRef,
       executionId: typeof meta.executionId === "number" ? meta.executionId : null,
-      ...str3(meta.toStatus) ? { toStatus: str3(meta.toStatus) } : {},
-      ...str3(meta.note) ? { note: str3(meta.note) } : {},
-      ...str3(meta.question) ? { question: str3(meta.question) } : {}
+      ...str4(meta.toStatus) ? { toStatus: str4(meta.toStatus) } : {},
+      ...str4(meta.note) ? { note: str4(meta.note) } : {},
+      ...str4(meta.question) ? { question: str4(meta.question) } : {}
     };
   }
   if (meta.agentDispatch === true) {
@@ -9866,8 +10062,8 @@ function memoryAnswersInTrace(events) {
   return out;
 }
 function cap(s, n = 2e3) {
-  const str4 = typeof s === "string" ? s : JSON.stringify(s ?? "");
-  return str4.length > n ? str4.slice(0, n) + `\u2026 (+${str4.length - n} chars)` : str4;
+  const str5 = typeof s === "string" ? s : JSON.stringify(s ?? "");
+  return str5.length > n ? str5.slice(0, n) + `\u2026 (+${str5.length - n} chars)` : str5;
 }
 function isEvermindModel(model) {
   return /(^|\/)evermind\b|^project_evermind:|^tenant_model:/i.test(model);
@@ -10915,4 +11111,4 @@ export {
   toolCallArgBytes,
   createComposingActivity
 };
-//# sourceMappingURL=chunk-QSSXZN4K.mjs.map
+//# sourceMappingURL=chunk-76UMK5K7.mjs.map

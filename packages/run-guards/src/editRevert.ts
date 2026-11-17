@@ -12,10 +12,13 @@
  *    consecutive write is a repeat, the write ledger's business, not a revert);
  *  - a find/replace edit (`old_string`/`new_string`, or `find`/`replace`) is the inverse
  *    of an earlier edit of that path since its last full write.
+ * Each entry of a batched `edits: [...]` call is one such change ({@link callChangesOf}),
+ * so a revert split across two batches — or a batch and a lone edit — is seen too.
  *
  * Only hashes are kept, so the state stays small enough to ride durable storage. Pure.
  */
 import { contentHash, pathArgOf } from "./fingerprint.js";
+import { callChangesOf, type CallChange } from "./callChanges.js";
 
 /** Per path, the run's successful changes in order: `w:<hash>` or `e:<old>><new>`. */
 export type EditRevertState = Array<[string, string[]]>;
@@ -30,32 +33,18 @@ export interface EditRevert {
 const MAX_HISTORY_PER_PATH = 16;
 const MAX_PATHS = 200;
 
-function stringArg(args: Record<string, unknown>, ...keys: string[]): string | undefined {
-  for (const key of keys) {
-    const v = args[key];
-    if (typeof v === "string") return v;
-  }
-  return undefined;
+/** The change signature of one file change: `w:<hash>` for a whole body, `e:<old>><new>` for a replacement. */
+function signatureOf(change: CallChange): { path: string; sig: string; inverse?: string } {
+  if ("content" in change) return { path: change.path, sig: `w:${contentHash(change.content)}` };
+  const f = contentHash(change.from);
+  const t = contentHash(change.to);
+  return { path: change.path, sig: `e:${f}>${t}`, inverse: `e:${t}>${f}` };
 }
 
-/** The change signature of a call, or null when the call changes no file content by shape. */
-function changeOf(args: unknown): { path: string; sig: string; inverse?: string } | null {
-  const path = pathArgOf(args);
-  if (!path) return null;
-  const a = args as Record<string, unknown>;
-  const content = stringArg(a, "content");
-  if (content !== undefined) return { path, sig: `w:${contentHash(content)}` };
-  const from = stringArg(a, "old_string", "oldString", "find");
-  const to = stringArg(a, "new_string", "newString", "replace");
-  if (from === undefined || to === undefined || from === to) return null;
-  const f = contentHash(from);
-  const t = contentHash(to);
-  return { path, sig: `e:${f}>${t}`, inverse: `e:${t}>${f}` };
-}
-
-/** Whether a call changes file content by its shape (a full write or a find/replace edit). */
+/** Whether a call changes file content by its shape — a full write or a find/replace edit,
+ *  alone or in an `edits` batch ({@link callChangesOf}). */
 export function changesContent(args: unknown): boolean {
-  return changeOf(args) !== null;
+  return callChangesOf(args).length > 0;
 }
 
 export class EditRevertTracker {
@@ -66,9 +55,10 @@ export class EditRevertTracker {
   }
 
   /**
-   * Record a call that ran. A successful content change is appended to its path's
-   * history and returned as a revert when it restores earlier content; a failed one, or
-   * a deletion (`deleted: true`), forgets the path — its content is unknown.
+   * Record a call that ran. Each successful content change (a batch carries several, in
+   * order) is appended to its path's history; the first that restores earlier content is
+   * returned as the revert. A failed call, or a deletion (`deleted: true`), forgets every
+   * path it names — their content is unknown (a batch is atomic: none of it applied).
    */
   record(tool: string, args: unknown, outcome: { ok: boolean; deleted?: boolean }): EditRevert | null {
     if (outcome.deleted) {
@@ -76,12 +66,20 @@ export class EditRevertTracker {
       if (path) this.history.delete(path);
       return null;
     }
-    const change = changeOf(args);
-    if (!change) return null;
+    const changes = callChangesOf(args);
     if (!outcome.ok) {
-      this.history.delete(change.path);
+      for (const change of changes) this.history.delete(change.path);
       return null;
     }
+    let revert: EditRevert | null = null;
+    for (const change of changes) {
+      const found = this.recordChange(tool, signatureOf(change));
+      revert ??= found;
+    }
+    return revert;
+  }
+
+  private recordChange(tool: string, change: { path: string; sig: string; inverse?: string }): EditRevert | null {
     const past = this.history.get(change.path) ?? [];
     let revert: EditRevert | null = null;
     if (change.sig.startsWith("w:")) {

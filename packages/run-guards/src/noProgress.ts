@@ -25,9 +25,23 @@
  *    going nowhere and the turn is idle. Replaying an identical change, or flipping
  *    between two versions, is never progress (`edit_revert` names the oscillation).
  * A turn with none of them is idle; {@link NO_PROGRESS_TURNS} idle turns in a row trip it.
+ *
+ * The paths a call touches are its own target AND every file it changes
+ * ({@link changedPathsOf}) — a batched `edit_file({ edits: [...] })` reaches several files
+ * none of which is at its top level (chat #146477).
+ *
+ * A check run in the BACKGROUND answers later: `run_command` returns a job id and the
+ * result arrives through a poll (`command_status` / `command_stop`). The start is not
+ * judged; its job id is remembered (bounded, in the state) and the poll that reports the
+ * job finished is judged as the check — its answer is the check's digest. Every judged
+ * check also reports whether it PASSED (ok, exit code 0 when it reports one, and for a
+ * poll a job that `exited`), which the progress detector's verified-work tracker reads.
  * Pure; the state is plain JSON.
  */
 import { callFingerprint, contentHash, pathArgOf } from "./fingerprint.js";
+import { changedPathsOf } from "./callChanges.js";
+import { runsCheck, shellCommandOf } from "./checkCommand.js";
+import { isReadOnlyShellCall } from "./readOnlyShell.js";
 
 /** Idle turns in a row that count as no progress (no new path, no change the run had not
  *  already made, no test movement). Four is past an honest "read, think,
@@ -49,7 +63,6 @@ export const REGROUND_TURNS = 8;
 const MAX_SEEN = 500;
 
 const TEST_PATH = /(^|\/)(__tests__|tests?|spec)\/|\.(test|spec)\.[a-z0-9]+$|_test\.(go|py)$/i;
-const TEST_COMMAND = /\b(test|tests|vitest|jest|pytest|mocha|tsc|tsgo|typecheck|lint|eslint|cargo\s+test|go\s+test)\b/i;
 
 export interface NoProgressState {
   seen: string[];
@@ -64,6 +77,18 @@ export interface NoProgressState {
   churnTurns?: number;
   /** The last check/test result digest, so an unchanged re-run is not progress. */
   lastCheck?: string;
+  /** Job ids of checks started in the background (newest last, bounded), so the poll that
+   *  brings a job's answer back is judged as the check. Absent in an older snapshot. */
+  checkJobs?: string[];
+}
+
+/** What one observed call meant for the check window. */
+export interface NoProgressObservation {
+  /** The call was a check whose answer CHANGED. */
+  checkChanged: boolean;
+  /** The call was a check (or a poll of a background check): `passed` / `failed` when it
+   *  answered, `pending` when the answer is still to come. Absent for any other call. */
+  check?: "passed" | "failed" | "pending";
 }
 
 export interface NoProgressPorts {
@@ -84,14 +109,50 @@ export interface NoProgressPorts {
 /** The default check/test classifier. */
 export function isCheckCallDefault(tool: string, args: unknown): boolean {
   if (tool === "run_checks" || tool === "run_tests") return true;
-  if (tool !== "run_command" || !args || typeof args !== "object") return false;
-  const command = (args as { command?: unknown }).command;
-  return typeof command === "string" && TEST_COMMAND.test(command);
+  if (tool !== "run_command") return false;
+  // The runner must be what the command RUNS: `ls tests/` or `git commit -m "fix tests"` only mention one.
+  return runsCheck(shellCommandOf(args));
 }
 
 /** Whether a path names a test file. */
 export function isTestPath(path: string): boolean {
   return TEST_PATH.test(path.split("\\").join("/"));
+}
+
+/** The tools that poll a background shell job by its `id` (`@builderforce/agent-tools`
+ *  shell-tools): `command_status` reports it, `command_stop` kills it and reports its end. */
+const JOB_POLL_TOOLS: ReadonlySet<string> = new Set(["command_status", "command_stop"]);
+
+/** Background check jobs remembered — a run rarely has more than a few in flight. */
+const MAX_CHECK_JOBS = 16;
+
+function recordOf(result: unknown): Record<string, unknown> | null {
+  return result && typeof result === "object" && !Array.isArray(result) ? (result as Record<string, unknown>) : null;
+}
+
+/** The job id of a command that went to the background (`run_command` `background: true`,
+ *  or one that outlived its `yieldMs`): `{ background: true, id, status: "running" }`. */
+function startedJobOf(result: unknown): string | null {
+  const r = recordOf(result);
+  if (!r || r.background !== true || r.status !== "running" || typeof r.id !== "string" || !r.id.trim()) return null;
+  return r.id.trim();
+}
+
+/** A poll's answer for a job that is no longer running (`exited`, `killed`, `unknown`). */
+function finishedJob(result: unknown): boolean {
+  const status = recordOf(result)?.status;
+  return typeof status === "string" && status !== "running";
+}
+
+/**
+ * Whether a check's answer is a PASS: the call succeeded, its exit code (when it reports
+ * one) is 0, and — for a background job's poll — the job exited on its own.
+ */
+function checkPassed(ok: boolean, result: unknown, poll: boolean): boolean {
+  if (!ok) return false;
+  const r = recordOf(result);
+  if (typeof r?.exitCode === "number" && r.exitCode !== 0) return false;
+  return !poll || r?.status === "exited";
 }
 
 function resultDigest(result: unknown): string {
@@ -109,6 +170,7 @@ export class NoProgressTracker {
   private readonly changes: Set<string>;
   private idleTurns: number;
   private lastCheck: string | undefined;
+  private checkJobs: string[];
   private groundThisTurn = false;
   private churnThisTurn = false;
   private churnTurns: number;
@@ -126,6 +188,7 @@ export class NoProgressTracker {
     this.idleTurns = state?.idleTurns ?? 0;
     this.churnTurns = state?.churnTurns ?? 0;
     this.lastCheck = state?.lastCheck;
+    this.checkJobs = (state?.checkJobs ?? []).slice(-MAX_CHECK_JOBS);
     this.turn = 0;
     this.lastSeenAt = new Map(Object.entries(state?.lastSeenAt ?? {}));
     this.targetOf = ports.targetOf ?? ((_tool, args) => pathArgOf(args));
@@ -139,9 +202,11 @@ export class NoProgressTracker {
    * whether the call was a check whose result CHANGED — a failing check that answers
    * differently each time is the run fixing things, not repeating a failure.
    */
-  observe(tool: string, args: unknown, outcome: { ok: boolean; wrote: boolean; result?: unknown }): { checkChanged: boolean } {
-    const path = this.targetOf(tool, args);
-    if (path) {
+  observe(tool: string, args: unknown, outcome: { ok: boolean; wrote: boolean; result?: unknown }): NoProgressObservation {
+    // The call's own target plus every file it changes: one batched `edits: [...]` call
+    // reaches several paths, none of them at its top level.
+    const targets = [...new Set([this.targetOf(tool, args), ...changedPathsOf(args)].filter((p): p is string => !!p))];
+    for (const path of targets) {
       if (!this.seen.has(path)) {
         this.seen.add(path);
         if (this.seen.size > MAX_SEEN) this.seen.delete(this.seen.values().next().value as string);
@@ -158,9 +223,9 @@ export class NoProgressTracker {
     }
     // An external side effect (a ticket created/updated, a dispatch) advances the work —
     // a turn that only moved the platform is not idle.
-    if (outcome.ok && !path && this.isPlatformProgress?.(tool, args)) this.groundThisTurn = true;
+    if (outcome.ok && targets.length === 0 && this.isPlatformProgress?.(tool, args)) this.groundThisTurn = true;
     if (outcome.ok && outcome.wrote) {
-      if (path && isTestPath(path)) this.groundThisTurn = true;
+      if (targets.some(isTestPath)) this.groundThisTurn = true;
       const fingerprint = contentHash(callFingerprint(tool, args));
       if (!this.changes.has(fingerprint)) {
         this.changes.add(fingerprint);
@@ -168,13 +233,36 @@ export class NoProgressTracker {
         this.churnThisTurn = true;
       }
     }
-    if (!this.isCheckCall(tool, args)) return { checkChanged: false };
+    const poll = this.isCheckJobPoll(tool, args);
+    if (!poll && !this.isCheckCall(tool, args)) return { checkChanged: false };
+    // A check started in the background has no answer yet: remember its job, and judge
+    // the poll that brings the answer back instead.
+    const job = startedJobOf(outcome.result);
+    if (!poll && job) {
+      this.rememberJob(job);
+      return { checkChanged: false, check: "pending" };
+    }
+    // A poll of a job still running is not an answer either.
+    if (poll && !finishedJob(outcome.result)) return { checkChanged: false, check: "pending" };
+    // A shell call that provably only reads is never a pass, whatever it mentions.
+    const check = checkPassed(outcome.ok, outcome.result, poll) && (poll || !isReadOnlyShellCall(tool, args)) ? "passed" : "failed";
     const digest = resultDigest(outcome.result);
-    if (digest === this.lastCheck) return { checkChanged: false };
+    if (digest === this.lastCheck) return { checkChanged: false, check };
     // The first check of a run is progress too: it is new evidence.
     this.groundThisTurn = true;
     this.lastCheck = digest;
-    return { checkChanged: true };
+    return { checkChanged: true, check };
+  }
+
+  /** A poll of a background job a check command started ({@link JOB_POLL_TOOLS}). */
+  private isCheckJobPoll(tool: string, args: unknown): boolean {
+    if (!JOB_POLL_TOOLS.has(tool) || !args || typeof args !== "object") return false;
+    const id = (args as { id?: unknown }).id;
+    return typeof id === "string" && this.checkJobs.includes(id.trim());
+  }
+
+  private rememberJob(id: string): void {
+    this.checkJobs = [...this.checkJobs.filter((j) => j !== id), id].slice(-MAX_CHECK_JOBS);
   }
 
   /** The turn's calls all ran. Returns the idle-turn streak after it. */
@@ -221,6 +309,7 @@ export class NoProgressTracker {
       ...(this.changes.size ? { changes: [...this.changes] } : {}),
       ...(this.churnTurns ? { churnTurns: this.churnTurns } : {}),
       ...(this.lastCheck ? { lastCheck: this.lastCheck } : {}),
+      ...(this.checkJobs.length ? { checkJobs: [...this.checkJobs] } : {}),
     };
   }
 }

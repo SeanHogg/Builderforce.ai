@@ -9,6 +9,9 @@
  */
 
 export { callFingerprint, contentHash, pathArgOf } from "./fingerprint.js";
+export { callChangesOf, changedPathsOf, type CallChange } from "./callChanges.js";
+export { VerifiedWork, type VerifiedWorkState } from "./verifiedWork.js";
+export { executableTokensOf, isVcsBookkeeping, runsCheck, shellCommandOf } from "./checkCommand.js";
 export {
   REVISIT_HARD_AT,
   REVISIT_NUDGE_AT,
@@ -46,13 +49,17 @@ export {
   NoProgressTracker,
   isCheckCallDefault,
   isTestPath,
+  type NoProgressObservation,
   type NoProgressPorts,
   type NoProgressState,
 } from "./noProgress.js";
 export {
+  FINISHABLE_SIGNALS,
   LADDER_RESET_TURNS,
   ProgressDetector,
   progressAdvice,
+  progressFinishNote,
+  progressVerifiedSteerNote,
   progressPauseQuestion,
   progressSteerNote,
   type ObservedResult,

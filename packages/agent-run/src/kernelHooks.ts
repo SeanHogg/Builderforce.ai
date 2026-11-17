@@ -136,11 +136,19 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
         progress: { rungs: state.stall?.rungs ?? {} },
         cache: run.cache,
       });
-      const advertised = menu?.tools ?? (await selectNow());
+      // A3's `finish` (the guards' `finalTurn`): the run's change is made and verified, so this turn offers NO tools — the model writes
+      // its final report and the run ends. An empty menu is a decision the turn honours, and a forced tool choice cannot apply to it.
+      // A turn the SURFACE already forced (its own required call) wins this step: the finish is not dropped — it stays pending in the
+      // guards' state and takes the next step. It is only spent in `afterTurn`, once the final turn was actually answered, so a run
+      // evicted between the snapshot and the answer still owes it.
+      const platformForced = menu?.toolChoice === "required";
+      const finalTurn = !platformForced && hooks.guards.finalTurn?.(policyContext(input, state, base, ctx.step, ctx.stepInCall)) === true;
+      const advertised = finalTurn ? [] : (menu?.tools ?? (await selectNow()));
       run.selection = {
         tools: advertised,
-        ...(menu?.toolChoice ? { toolChoice: menu.toolChoice } : {}),
+        ...(menu?.toolChoice && !finalTurn ? { toolChoice: menu.toolChoice } : {}),
         ...(menu?.tail && menu.tail.length > 0 ? { tail: menu.tail } : {}),
+        ...(finalTurn ? { final: true as const } : {}),
       };
       const view = advertised ? { ...base, tools: [...advertised] } : base;
       const compacted = await hooks.compaction.compact(policyContext(input, state, view, ctx.step, ctx.stepInCall));
@@ -174,6 +182,8 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       const usage = meta?.usage;
       run.facts.model = meta?.model;
       run.facts.interruption = meta?.interrupted;
+      // A3's final turn was answered: the finish it owed is spent (see `beforeTurn`).
+      if (run.selection?.final) hooks.guards.finalTurnDone?.(contextAt(ctx.step, ctx.stepInCall));
       tallyTurn(tally, model, usage);
       if (run.budget?.afterTurn(usage)) await emit(ports.events, { kind: "budget.unpriced", step: ctx.step, ...(model ? { model } : {}) });
       await emit(ports.events, { kind: "model.completed", step: ctx.step, ...(model ? { model } : {}), ...(usage ? { usage } : {}) });

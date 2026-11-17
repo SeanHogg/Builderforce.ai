@@ -3,7 +3,7 @@
  * ONE reading every guard here (and the post-hoc run report) uses, so a live advisory
  * and the report written about the same run can never disagree on what "identical" means.
  */
-import { stableStringify } from "@builderforce/agent-tools";
+import { callPathOf, stableStringify } from "@builderforce/agent-tools";
 
 /** Same tool, same arguments in any key order. Never throws (a cyclic argument object
  *  falls back to its string form). */
@@ -31,9 +31,8 @@ export function contentHash(text: string): string {
   return `${text.length.toString(36)}.${h.toString(36)}`;
 }
 
-/** The `path` a call names, trimmed, or null. */
+/** The path a call names (`path`, else the `file_path` / `filePath` aliases) — trimmed, `/`-separated, without a leading `./` — or
+ *  null. THE shape reader's ({@link callPathOf}), so a guard and the run view name a file the same way. */
 export function pathArgOf(args: unknown): string | null {
-  if (!args || typeof args !== "object" || Array.isArray(args)) return null;
-  const path = (args as { path?: unknown }).path;
-  return typeof path === "string" && path.trim() ? path.trim() : null;
+  return callPathOf(args);
 }

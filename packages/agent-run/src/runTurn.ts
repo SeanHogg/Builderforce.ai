@@ -31,6 +31,8 @@ export interface TurnSelection {
   tools: readonly ToolSchema[] | void;
   toolChoice?: "required";
   tail?: readonly string[];
+  /** A3's `finish`: the verified run's final report — no tools, the run's own role, and never judged as a stall. */
+  final?: true;
 }
 
 /** What a surface's own tool answered, for the no-progress count: from its read cache, or only conversational. */
@@ -65,6 +67,12 @@ function adoptServedModel(policy: RunPolicy, state: RunState, served: string | u
 }
 
 /** What a request carries beyond the transcript and the tools: the turn's ask of the transport. */
+function withoutToolChoiceIf(drop: boolean, fields: Partial<ModelRequest>): Partial<ModelRequest> {
+  if (!drop || !("toolChoice" in fields)) return fields;
+  const { toolChoice: _dropped, ...rest } = fields;
+  return rest;
+}
+
 function askFields(ask: Partial<TurnAsk> | undefined): Partial<ModelRequest> {
   if (!ask) return {};
   return {
@@ -110,7 +118,8 @@ export async function completeTurn(
   }
   // The model policy is asked about the tools this turn will ADVERTISE: a turn with none
   // is conversation, and asks for the `chat` role.
-  const mctx = { ...pctx, tools };
+  // A3's final turn has no tools but is NOT conversation: it keeps the run's role and model (`PolicyContext.finalTurn`).
+  const mctx = { ...pctx, tools, ...(made?.final ? { finalTurn: true as const } : {}) };
   const decision = await hooks.model.resolve(mctx);
   // The model ASKED for: the policy's pick - absent on purpose after a pin was released -
   // else, only when no policy spoke, the pin. Never the model a previous turn was served,
@@ -135,8 +144,9 @@ export async function completeTurn(
     ...(askedModel ? { model: askedModel, strict: ask?.strict ?? false } : {}),
     ...(tools.length > 0 ? { tools } : {}),
     ...(decision?.maxTokens !== undefined ? { maxTokens: decision.maxTokens } : {}),
-    ...askFields(ask),
-    ...(made?.toolChoice && !ask?.toolChoice ? { toolChoice: made.toolChoice } : {}),
+    // A tool choice means nothing without tools (and a provider may refuse it): a turn advertising none never sends one.
+    ...withoutToolChoiceIf(tools.length === 0, askFields(ask)),
+    ...(tools.length > 0 && made?.toolChoice && !ask?.toolChoice ? { toolChoice: made.toolChoice } : {}),
     ...(reasoning ? { reasoning } : {}),
   });
 

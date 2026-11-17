@@ -20,7 +20,8 @@ import type { BrainRunContext } from '../runStore/brainRunContext';
 
 /**
  * The turn a progress rule decides, or null: the plan budget's hand-off turn (decided BEFORE selection, so a forced turn that did
- * not hand off already selects as code), else the change budget, else a run circling its read cache, else A3's escalation or pause.
+ * not hand off already selects as code), else the change budget, else a run circling its read cache, else A3's escalation, pause
+ * or finish (a verified run's final report, with no tools).
  */
 function forcedTurnFor(run: BrainRunContext, step: number, selected: BrainToolSpec[], handOffTurn: ForcedTurn | null): ForcedTurn | null {
   return handOffTurn ?? changeBudgetTurn(run, step, selected) ?? noProgressTurn(run, step, selected) ?? progressGuardTurn(run, step, selected);
@@ -36,7 +37,8 @@ export async function brainTurnMenu(run: BrainRunContext, env: TurnEnv, catalogS
   // A3's steer (or an escalation it could not force here) opens the turn.
   const steer = run.progress.steerNote();
   const tail = [...(forced ? [userTextOf(forced.brief)] : []), ...(steer ? [steer] : [])];
-  if (forced) return { tools: forced.tools as unknown as ToolSchema[], toolChoice: forced.toolChoice, tail };
+  // A3's `finish` is a forced turn with NO tools: an empty menu is a decision (the kernel asks a no-tool turn), never "not my concern".
+  if (forced) return { tools: forced.tools as unknown as ToolSchema[], ...(forced.toolChoice ? { toolChoice: forced.toolChoice } : {}), tail };
   // The ROUTER rides along whenever selection trimmed something, so the tools that missed the cut stay REACHABLE. A catalog at or under
   // the limit is never trimmed (the agent's `selectToolsForTurn`): `hand_off` leaving the menu is not a trim. The limit is the turn's role's
   // (a code or verify turn is capped far below the wide default), so the router rides every turn the cap trimmed.

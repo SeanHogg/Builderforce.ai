@@ -59,6 +59,10 @@ export function noToolCallsHook(run: KernelRun, deps: NoToolCallsDeps): NonNulla
     if (judged !== undefined) pctx.judged = judged;
     // A surface that judges a stall against the menu the turn advertised, not everything it could run, says so (`DeliveryLedger.stall.menu`).
     if (ports.delivery?.stall?.menu && run.selection?.tools) pctx.tools = [...run.selection.tools];
+    // A3's final turn offered NO tools on purpose: it is judged against that empty menu, and never as a stall — a nudge or a forced
+    // tool choice would hand the tools back to a run whose work is done and verified.
+    const finalTurn = run.selection?.final === true;
+    if (finalTurn) pctx.tools = [];
     // What the person (or a child) steered in while this turn was written comes first, before any judgement of the turn: a surface that
     // says so (`stall.steersFirst`) never spends a gate or a re-prompt on a turn a steer has already outdated, nor strands the steer.
     const steersFirst = ports.delivery?.stall?.steersFirst === true;
@@ -78,7 +82,7 @@ export function noToolCallsHook(run: KernelRun, deps: NoToolCallsDeps): NonNulla
     }
     // A turn the person interrupted is not judged: what they steered in is taken first (below), so a steer is never lost to a stall
     // that ends the run, and never spends a re-prompt.
-    const stalled = run.watch.hasInterrupt() ? undefined : await (hooks.stall.recoverAsync ? hooks.stall.recoverAsync(pctx) : hooks.stall.recover(pctx));
+    const stalled = run.watch.hasInterrupt() || finalTurn ? undefined : await (hooks.stall.recoverAsync ? hooks.stall.recoverAsync(pctx) : hooks.stall.recover(pctx));
     // The surface keeps what the model said BEFORE the stall is recorded: the step that says the turn was sent back follows the turn it is
     // about in the chat (a re-prompt or a failover keeps it; a stall with nothing left to try settles the run on it).
     if (stalled?.action === "steer" || stalled?.action === "escalate") await sentBack(ctx.step, turn.content, stalled.action === "escalate" ? "reply" : "block");

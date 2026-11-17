@@ -162,6 +162,47 @@ function delegationRole(raw) {
   return isModelRole(raw) ? raw : "code";
 }
 
+// ../packages/agent-tools/src/callShape.ts
+function callPathOf(args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return null;
+  const a = args;
+  for (const p of [a.path, a.file_path, a.filePath]) {
+    if (typeof p === "string" && p.trim()) return p.trim().replace(/\\/g, "/").replace(/^\.\//, "");
+  }
+  return null;
+}
+function str(a, ...keys) {
+  for (const k of keys) {
+    const v = a[k];
+    if (typeof v === "string") return v;
+  }
+  return void 0;
+}
+function entryOf(e, fallback, batched) {
+  const content = str(e, "content");
+  const before = str(e, "old_string", "oldString", "find");
+  const after = str(e, "new_string", "newString", "replace");
+  return {
+    path: callPathOf(e) ?? fallback,
+    batched,
+    ...content !== void 0 ? { content } : {},
+    ...before !== void 0 ? { before } : {},
+    ...after !== void 0 ? { after } : {}
+  };
+}
+function callWriteEntriesOf(args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return [];
+  const a = args;
+  const top = entryOf(a, null, false);
+  const out = [top];
+  if (Array.isArray(a.edits)) {
+    for (const raw of a.edits) {
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) out.push(entryOf(raw, top.path, true));
+    }
+  }
+  return out;
+}
+
 // ../packages/agent-tools/src/edit.ts
 var toLF = (s) => s.replace(/\r\n/g, "\n");
 var countNewlines = (s) => s.split("\n").length - 1;
@@ -261,37 +302,23 @@ function applyStringEdit(content, oldString, newString, replaceAll = false) {
     ...nearest ? { nearest } : {}
   };
 }
-var editStr = (v) => typeof v === "string" ? v : void 0;
-function editPathOf(a) {
-  const p = a.path ?? a.file_path ?? a.filePath;
-  return typeof p === "string" && p.trim() ? p.trim().replace(/\\/g, "/").replace(/^\.\//, "") : null;
-}
 function editedFilesOf(toolName, args) {
-  const a = args && typeof args === "object" && !Array.isArray(args) ? args : {};
-  const top = editPathOf(a);
+  const entries = callWriteEntriesOf(args);
+  const top = entries[0] ?? null;
   const out = [];
   if (toolName === "edit_file") {
-    const replacement = (e, fallback) => {
-      const path = editPathOf(e) ?? fallback;
-      const before = editStr(e.old_string);
-      const after = editStr(e.new_string);
-      if (path && (before !== void 0 || after !== void 0)) {
-        out.push({ path, ...before !== void 0 ? { before } : {}, ...after !== void 0 ? { after } : {} });
-      } else if (path && e !== a) {
-        out.push({ path });
-      }
-    };
-    if ("old_string" in a || "new_string" in a) replacement(a, null);
-    if (Array.isArray(a.edits)) {
-      for (const raw of a.edits) {
-        if (raw && typeof raw === "object") replacement(raw, top);
+    for (const e of entries) {
+      if (!e.path) continue;
+      if (e.before !== void 0 || e.after !== void 0) {
+        out.push({ path: e.path, ...e.before !== void 0 ? { before: e.before } : {}, ...e.after !== void 0 ? { after: e.after } : {} });
+      } else if (e.batched) {
+        out.push({ path: e.path });
       }
     }
-  } else if (toolName === "write_file" && top) {
-    const after = editStr(a.content);
-    out.push({ path: top, ...after !== void 0 ? { after } : {} });
+  } else if (toolName === "write_file" && top?.path) {
+    out.push({ path: top.path, ...top.content !== void 0 ? { after: top.content } : {} });
   }
-  if (out.length === 0 && top) out.push({ path: top });
+  if (out.length === 0 && top?.path) out.push({ path: top.path });
   return out;
 }
 function editedPathsOf(toolName, args) {
@@ -3762,15 +3789,15 @@ var skillProposeTool = defineTool({
   },
   requires: ["skill.author"],
   async execute(args, ctx) {
-    const str3 = (v) => typeof v === "string" ? v.trim() : "";
-    const slug = str3(args.slug);
-    const name = str3(args.name);
-    const description = str3(args.description);
-    const body = str3(args.body);
+    const str4 = (v) => typeof v === "string" ? v.trim() : "";
+    const slug = str4(args.slug);
+    const name = str4(args.name);
+    const description = str4(args.description);
+    const body = str4(args.body);
     if (!slug || !name || !description || !body) {
       return { data: { ok: false, error: "slug, name, description and body are all required" } };
     }
-    const evidence = str3(args.evidence);
+    const evidence = str4(args.evidence);
     const r = await ctx.caps.skillAuthor.propose({
       slug,
       name,
@@ -3913,12 +3940,12 @@ var spawnAgentTool = withDelegationNote(defineTool({
   },
   requires: ["orchestrate"],
   async execute(args, ctx) {
-    const str3 = (v) => typeof v === "string" ? v.trim() : "";
-    const label = str3(args.label);
-    const task = str3(args.task);
+    const str4 = (v) => typeof v === "string" ? v.trim() : "";
+    const label = str4(args.label);
+    const task = str4(args.task);
     if (!task) return { data: { ok: false, error: "task is required \u2014 the child sees none of your conversation" } };
     const role = delegationRole(args.role);
-    const asAgent = str3(args.as_agent);
+    const asAgent = str4(args.as_agent);
     const r = await ctx.caps.orchestration.spawn({
       label: label || task.slice(0, 60),
       task,
@@ -3936,20 +3963,20 @@ function parseWorkstreams(raw) {
   if (raw.length > MAX_WORKSTREAMS) {
     return `at most ${MAX_WORKSTREAMS} workstreams per call \u2014 run the rest in a second call once these are back`;
   }
-  const str3 = (v) => typeof v === "string" ? v.trim() : "";
+  const str4 = (v) => typeof v === "string" ? v.trim() : "";
   const out = [];
   for (const [i, item] of raw.entries()) {
     const w = item ?? {};
-    const task = str3(w.task);
+    const task = str4(w.task);
     if (!task) return `workstream ${i + 1} has no task \u2014 each child sees none of your conversation`;
-    const ticket = str3(w.ticket);
-    const role = str3(w.role);
+    const ticket = str4(w.ticket);
+    const role = str4(w.role);
     out.push({
-      label: str3(w.label) || task.slice(0, 60),
+      label: str4(w.label) || task.slice(0, 60),
       task,
       ...ticket ? { ticket } : {},
       ...role ? { role } : {},
-      asAgent: str3(w.as_agent)
+      asAgent: str4(w.as_agent)
     });
   }
   return out;

@@ -16,6 +16,8 @@
  * stays pure CRLF. {@link conformToExistingEol} is the same rule for a whole-file write.
  */
 
+import { callWriteEntriesOf } from "./callShape.js";
+
 /** Result of {@link applyStringEdit}. `content` is the new file text when `ok`. */
 export interface StringEditResult {
   ok: boolean;
@@ -244,14 +246,6 @@ export interface EditedFile {
   after?: string;
 }
 
-const editStr = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
-
-/** A call's or entry's path (`path`, `file_path` or `filePath`), trimmed, `/`-separated, without a leading `./`. */
-function editPathOf(a: Record<string, unknown>): string | null {
-  const p = a.path ?? a.file_path ?? a.filePath;
-  return typeof p === "string" && p.trim() ? p.trim().replace(/\\/g, "/").replace(/^\.\//, "") : null;
-}
-
 /**
  * Every file ONE write call changed, from its arguments — THE reading of "what an edit wrote" (the run view's
  * written paths, the post-edit balance note and diagnostics, the `bracket_break` detector).
@@ -260,33 +254,25 @@ function editPathOf(a: Record<string, unknown>): string | null {
  *   - `write_file`: `{ path, after: content }`;
  *   - anything else, or an edit with no readable replacement: the call's path alone.
  * Rows are per replacement, so a path may repeat; callers wanting files dedupe. Pure — success is the caller's.
+ * The arguments are read through THE shape reader ({@link callWriteEntriesOf}, `callShape.ts`), which the run guards share.
  */
 export function editedFilesOf(toolName: string, args: unknown): EditedFile[] {
-  const a = (args && typeof args === "object" && !Array.isArray(args) ? args : {}) as Record<string, unknown>;
-  const top = editPathOf(a);
+  const entries = callWriteEntriesOf(args);
+  const top = entries[0] ?? null;
   const out: EditedFile[] = [];
   if (toolName === "edit_file") {
-    const replacement = (e: Record<string, unknown>, fallback: string | null): void => {
-      const path = editPathOf(e) ?? fallback;
-      const before = editStr(e.old_string);
-      const after = editStr(e.new_string);
-      if (path && (before !== undefined || after !== undefined)) {
-        out.push({ path, ...(before !== undefined ? { before } : {}), ...(after !== undefined ? { after } : {}) });
-      } else if (path && e !== a) {
-        out.push({ path });
-      }
-    };
-    if ("old_string" in a || "new_string" in a) replacement(a, null);
-    if (Array.isArray(a.edits)) {
-      for (const raw of a.edits) {
-        if (raw && typeof raw === "object") replacement(raw as Record<string, unknown>, top);
+    for (const e of entries) {
+      if (!e.path) continue;
+      if (e.before !== undefined || e.after !== undefined) {
+        out.push({ path: e.path, ...(e.before !== undefined ? { before: e.before } : {}), ...(e.after !== undefined ? { after: e.after } : {}) });
+      } else if (e.batched) {
+        out.push({ path: e.path });
       }
     }
-  } else if (toolName === "write_file" && top) {
-    const after = editStr(a.content);
-    out.push({ path: top, ...(after !== undefined ? { after } : {}) });
+  } else if (toolName === "write_file" && top?.path) {
+    out.push({ path: top.path, ...(top.content !== undefined ? { after: top.content } : {}) });
   }
-  if (out.length === 0 && top) out.push({ path: top });
+  if (out.length === 0 && top?.path) out.push({ path: top.path });
   return out;
 }
 

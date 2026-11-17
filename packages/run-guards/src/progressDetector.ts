@@ -17,15 +17,39 @@
  * {@link LADDER_RESET_TURNS} ground-progress turns (new files, test or check movement; churn alone does not count) in a row clear the ladder, so unrelated
  * stretches far apart each start from a steer instead of adding up to a pause.
  *
+ * A FINISHED run is not a stuck one. Once the run has VERIFIED work — a successful write
+ * and a passing check after its last write ({@link VerifiedWork}; a background check counts
+ * when its poll reports the job exited 0) — a trip on an idle-shaped signal
+ * ({@link FINISHABLE_SIGNALS}: `no_progress`, `reverifying`, `read_only_streak`,
+ * `unkept_ready`) is likely its wrap-up. The FIRST such trip is a steer that says so ("if
+ * the request is fully done, report now; otherwise make the next change") — a verified first
+ * part of a multi-part task must not end the task. From the second trip on the action is
+ * `finish` instead of the ladder's rung: the host's next turn is the final report, with no
+ * tools — never a forced edit, never a question for the human (VS Code chat #146477: a
+ * finished, type-checked change was escalated, forced to invent an edit, then paused).
+ * A finish is offered once per write: a run that goes idle AGAIN after one, with no new
+ * write, climbs the normal ladder (escalate, then pause). `edit_revert`, `repeated_failure`
+ * and `circling_read` keep the ladder. A `finish` is still a trip (counted in `trips` and
+ * `tripsBySignal`). A check passes only when its runner is the command's executable
+ * (`checkCommand.ts`), and VCS bookkeeping (`git add/commit/status/diff/log/push`) is not a write.
+ *
+ * Every write is read through {@link changedPathsOf}, so a batched `edit_file({ edits })`
+ * call counts as a write of each file it changes — for visits, read-backs, edit reverts
+ * and the no-progress window alike.
+ *
  * Pure and host-agnostic: the host says which calls only read and which mutate
  * unscoped. Its state is plain JSON, so the cloud durable loop — one model turn per
  * tick — carries it in its loop state and every tick judges the whole run.
  */
 import { FAILURE_HARD_AT, FailureTally, failureReason, type FailureTallyState } from "./failureTally.js";
-import { EditRevertTracker, changesContent, type EditRevertState } from "./editRevert.js";
+import { EditRevertTracker, type EditRevertState } from "./editRevert.js";
 import { NO_PROGRESS_TURNS, NoProgressTracker, type NoProgressPorts, type NoProgressState } from "./noProgress.js";
 import { REVISIT_HARD_AT, VisitTally, type VisitTallyState } from "./visitTally.js";
 import { pathArgOf } from "./fingerprint.js";
+import { changedPathsOf } from "./callChanges.js";
+import { isReadOnlyShellCall } from "./readOnlyShell.js";
+import { isVcsBookkeeping, shellCommandOf } from "./checkCommand.js";
+import { VerifiedWork, type VerifiedWorkState } from "./verifiedWork.js";
 import { UNKEPT_READY_AT, UnkeptClaimTracker, type UnkeptClaimState } from "./readinessClaim.js";
 import { ReadinessAdvisory, type ReadinessAdvisoryState } from "./readinessAdvisory.js";
 import { BatchingNudge, type BatchingNudgeState, turnCallsOf } from "./batchingNudge.js";
@@ -37,6 +61,11 @@ import { READ_ONLY_STREAK_CALLS, READ_ONLY_STREAK_TURNS, ReadOnlyStreak, type Re
 export const LADDER_RESET_TURNS = 8;
 
 export type ProgressSignalKind = "edit_revert" | "repeated_failure" | "circling_read" | "reverifying" | "unkept_ready" | "read_only_streak" | "no_progress";
+
+/** The idle-shaped signals a run with VERIFIED work trips by wrapping up: it is told to
+ *  finish instead of climbing the ladder. `edit_revert`, `repeated_failure` and
+ *  `circling_read` name a concrete fault and keep the ladder. */
+export const FINISHABLE_SIGNALS: ReadonlySet<ProgressSignalKind> = new Set<ProgressSignalKind>(["no_progress", "reverifying", "read_only_streak", "unkept_ready"]);
 
 /** Strongest first — a turn reports only its strongest signal. */
 const SIGNAL_RANK: Readonly<Record<ProgressSignalKind, number>> = {
@@ -62,6 +91,10 @@ export type ProgressAction =
   | { kind: "steer"; trip: number; signal: ProgressSignal; note: string }
   | { kind: "escalate"; trip: number; signal: ProgressSignal; note: string }
   | { kind: "pause"; trip: number; signal: ProgressSignal; question: string }
+  /** The run's change is made and a check passed after it, so an idle-shaped trip is
+   *  wrap-up, not a stall: the host's next turn is the final report — no tools, never a
+   *  forced edit, never a question for the human ({@link FINISHABLE_SIGNALS}). */
+  | { kind: "finish"; trip: number; signal: ProgressSignal; note: string }
   /** B1: a one-off note on the next turn — the FIRST unkept readiness claim. Never a
    *  trip: it does not touch the ladder, the trip count or `tripsBySignal`. */
   | { kind: "advisory"; note: string };
@@ -90,6 +123,8 @@ export interface ProgressDetectorState extends ReverifyState {
   advisory?: ReadinessAdvisoryState;
   /** B4: the batching nudge's plain-JSON state (streak + one-shot fired flag). */
   batching?: BatchingNudgeState;
+  /** Whether the run wrote, and a check passed after its last write ({@link VerifiedWork}). Omitted when empty. */
+  work?: VerifiedWorkState;
 }
 
 export interface ProgressDetectorPorts extends NoProgressPorts {
@@ -149,6 +184,8 @@ export class ProgressDetector {
   private readonly reverify: ReverifyTracker;
   /** Every call of the current turn, for the B4 batching nudge's read-only count. */
   private turnCalls: Array<{ tool: string; args: unknown; result: ObservedResult }>;
+  /** Made a change and saw a check pass after it — turns an idle-shaped trip into `finish`. */
+  private readonly work: VerifiedWork;
 
   constructor(state: ProgressDetectorState = {}, private readonly ports: ProgressDetectorPorts = {}) {
     this.visits = new VisitTally(state.visits);
@@ -166,6 +203,7 @@ export class ProgressDetector {
     this.batching = new BatchingNudge(state.batching);
     this.reverify = new ReverifyTracker(state);
     this.turnCalls = [];
+    this.work = new VerifiedWork(state.work);
   }
 
   private raise(signal: ProgressSignal): void {
@@ -188,22 +226,26 @@ export class ProgressDetector {
     this.readOnlyStreak.observe(readOnly);
     const ok = succeeded(result);
     const unscoped = (this.ports.isUnscopedMutation ?? ((t) => t === "run_command"))(tool, args);
-    const wrote = ok && (changesContent(args) || (unscoped && this.ports.isReadOnly?.(tool, args) !== true));
+    // Every file the call changes — one, or several in a batched `edits: [...]` call.
+    const changed = changedPathsOf(args);
+    const wrote = ok && (changed.length > 0 || (unscoped && this.ports.isReadOnly?.(tool, args) !== true));
+    const isDelete = (this.ports.isDelete ?? ((t) => t === "delete_file"))(tool);
     if (unscoped) {
       this.visits.markAllMayHaveChanged();
       this.edits.reset();
       // Any file may now differ, so no read-back is a look at unchanged bytes.
       if (wrote) this.reverify.wroteAnything();
-    } else if ((this.ports.isDelete ?? ((t) => t === "delete_file"))(tool)) {
+    } else if (isDelete) {
       this.edits.record(tool, args, { ok, deleted: ok });
       this.forgetVisitsOf(pathArgOf(args));
-    } else if (changesContent(args)) {
+    } else if (changed.length > 0) {
       const revert = this.edits.record(tool, args, { ok });
       if (revert) this.raise({ kind: "edit_revert", tool, target: revert.path });
       if (ok) {
-        const path = pathArgOf(args);
-        this.forgetVisitsOf(path);
-        if (path) this.reverify.wrote(path);
+        for (const path of changed) {
+          this.forgetVisitsOf(path);
+          this.reverify.wrote(path);
+        }
       }
     } else if (ok && this.ports.isReadOnly?.(tool, args)) {
       const target = visitTargetOf(args);
@@ -214,7 +256,16 @@ export class ProgressDetector {
       }
     }
 
-    const { checkChanged } = this.progress.observe(tool, args, { ok, wrote, result: result.data });
+    const { checkChanged, check } = this.progress.observe(tool, args, { ok, wrote, result: result.data });
+    // Verified work: a write (a check command is not one, though the shell may run it as
+    // an unscoped mutation, and neither is a shell command that provably only reads — a
+    // host whose `isReadOnly` port knows only tool names still runs `git status` that way),
+    // then a check that answered after it.
+    // VCS bookkeeping (`git add/commit/status/diff/log/push`) records the work; it changes nothing the check judged.
+    const bookkeeping = tool === "run_command" && isVcsBookkeeping(shellCommandOf(args));
+    const workWrite = (wrote && !isReadOnlyShellCall(tool, args) && !bookkeeping) || (ok && isDelete);
+    if (workWrite && check === undefined) this.work.noteWrite();
+    if (check === "passed" || check === "failed") this.work.noteCheck(check === "passed");
     // A failing check whose answer changed is the run fixing things, not a repeat.
     if (ok || checkChanged) this.failures.clear(tool, args);
     else {
@@ -306,6 +357,23 @@ export class ProgressDetector {
     this.readOnlyStreak.reset();
     this.visits.forget(() => true);
     this.failures.reset();
+    // Verified work that went idle is wrap-up — or the pause between two parts of a larger task.
+    if (this.work.isVerified && FINISHABLE_SIGNALS.has(signal.kind)) {
+      // The first trip only asks: a multi-part task's next part is not ended by a verified first part.
+      if (this.trips === 1) {
+        const note = progressVerifiedSteerNote(signal);
+        this.steer = note;
+        return { kind: "steer", trip: this.trips, signal, note };
+      }
+      // From the second on: end with the report, never force more — once per write. A run told to finish
+      // that goes idle again is not finishing, and the ladder below takes over.
+      if (!this.work.finishOffered) {
+        this.work.noteFinishOffered();
+        const note = progressFinishNote(signal);
+        this.steer = note;
+        return { kind: "finish", trip: this.trips, signal, note };
+      }
+    }
     const note = progressSteerNote(signal, this.trips);
     if (this.trips === 1) {
       this.steer = note;
@@ -355,8 +423,32 @@ export class ProgressDetector {
         return b.streak || b.fired ? { batching: b } : {};
       })(),
       ...this.reverify.snapshot(),
+      ...((): Record<string, unknown> => {
+        const w = this.work.snapshot();
+        return w.wrote ? { work: w } : {};
+      })(),
     };
   }
+
+  /** The run's change is made and a check passed after its last write. */
+  get workVerified(): boolean {
+    return this.work.isVerified;
+  }
+}
+
+/** The FIRST trip of a run with verified work: finish if the request is done, else take its next part. */
+export function progressVerifiedSteerNote(signal: ProgressSignal): string {
+  return `Progress check (first warning): your last change is made and a check passed after it, but ${signal.kind === "no_progress" ? `the last ${signal.count ?? NO_PROGRESS_TURNS} turns changed nothing` : "the last turns changed nothing"}. If the request is fully done, write the final report now — what you changed, how it was verified, anything left open — and make no more tool calls. Otherwise make the next change the request still needs.`;
+}
+
+/** What a run with verified work is told when it trips an idle-shaped signal again. */
+export function progressFinishNote(signal: ProgressSignal): string {
+  const what = signal.kind === "no_progress"
+    ? `the last ${signal.count ?? NO_PROGRESS_TURNS} turns changed nothing`
+    : signal.kind === "reverifying"
+      ? "this turn only re-checked work you already verified"
+      : "the last turns only looked around";
+  return `Progress check: your change is made and a check passed after your last edit — ${what}. The work is done. Write the final report NOW: what you changed (files), how it was verified, and anything left open. Make no more tool calls.`;
 }
 
 /** What the run is told on a trip: the diagnosis, the evidence, the moves that remain. */

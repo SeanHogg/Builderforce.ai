@@ -361,7 +361,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-QSSXZN4K.mjs";
+} from "./chunk-76UMK5K7.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useEffect, useMemo } from "react";
@@ -1429,7 +1429,7 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-haiku-latest": [1e-7, 5e-7],
   "~anthropic/claude-opus-latest": [4e-6, 2e-5],
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
-  "~deepseek/deepseek-flash-latest": [2e-8, 108e-9],
+  "~deepseek/deepseek-flash-latest": [36e-9, 5e-7],
   "~deepseek/deepseek-pro-latest": [999e-10, 8e-6],
   "~deepseek/deepseek-v4-flash-latest": [434e-10, 3e-7],
   "~google/gemini-flash-latest": [15e-7, 75e-7],
@@ -1509,14 +1509,14 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v3.2": [26e-8, 38e-8],
   "deepseek/deepseek-v3.2-exp": [27e-8, 41e-8],
   "deepseek/deepseek-v4-flash": [9e-8, 18e-8],
-  "deepseek/deepseek-v4-flash-0731": [434e-10, 3e-7],
+  "deepseek/deepseek-v4-flash-0731": [6e-8, 18e-8],
   "deepseek/deepseek-v4-flash-0731:batch": [48e-9, 144e-9],
   "deepseek/deepseek-v4-flash-vision-exp": [44e-8, 132e-8],
   "deepseek/deepseek-v4-pro": [9e-7, 15e-7],
   "deepseek/deepseek-v4-pro-0813": [111e-9, 444e-8],
-  "deepseek/deepseek-v4.1-flash": [507e-10, 2028e-10],
-  "deepseek/deepseek-v4.1-flash-1017": [2e-8, 108e-9],
-  "deepseek/deepseek-v4.1-flash-1017:batch": [36e-9, 318e-9],
+  "deepseek/deepseek-v4.1-flash": [14e-8, 42e-8],
+  "deepseek/deepseek-v4.1-flash-1017": [36e-9, 5e-7],
+  "deepseek/deepseek-v4.1-flash-1017:batch": [36e-9, 15e-8],
   "deepseek/deepseek-v4.1-flash:batch": [112e-9, 336e-9],
   "dots-studio/dots-3-note-preview:free": [0, 0],
   "elorian/glimpse": [6e-7, 3e-6],
@@ -1562,7 +1562,7 @@ var PRICE_SNAPSHOT = {
   "google/gemma-3-12b-it": [5e-8, 15e-8],
   "google/gemma-3-27b-it": [8e-8, 35e-8],
   "google/gemma-3-4b-it": [5e-8, 1e-7],
-  "google/gemma-4-26b-a4b-it": [675e-10, 225e-9],
+  "google/gemma-4-26b-a4b-it": [765e-10, 255e-9],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
   "google/gemma-4-31b-it": [2e-7, 4e-7],
   "google/gemma-4-31b-it:free": [0, 0],
@@ -1592,7 +1592,7 @@ var PRICE_SNAPSHOT = {
   "meta-llama/llama-4-scout": [1e-7, 3e-7],
   "meta-llama/llama-guard-4-12b": [18e-8, 18e-8],
   "meta/muse-ember": [1e-7, 5e-7],
-  "meta/muse-glimmer-30b": [3e-7, 12e-7],
+  "meta/muse-glimmer-30b": [35e-8, 15e-7],
   "meta/muse-glimmer-30b:batch": [24e-8, 96e-8],
   "meta/muse-spark-1.1": [125e-8, 425e-8],
   "meta/muse-spark-1.2": [125e-8, 425e-8],
@@ -1602,11 +1602,11 @@ var PRICE_SNAPSHOT = {
   "meta/muse-spark-open": [125e-8, 425e-8],
   "meta/muse-wonder": [4e-6, 2e-5],
   "microsoft/phi-4": [7e-8, 14e-8],
-  "minimax/minimax-m2.5": [27e-8, 95e-8],
+  "minimax/minimax-m2.5": [295e-9, 12e-7],
   "minimax/minimax-m2.7": [21e-8, 84e-8],
   "minimax/minimax-m3": [3e-7, 12e-7],
   "minimax/minimax-m3:batch": [224e-9, 88e-8],
-  "minimax/minimax-m3.1-flash": [75e-9, 3e-7],
+  "minimax/minimax-m3.1-flash": [15e-8, 6e-7],
   "mistralai/codestral-2508": [3e-7, 9e-7],
   "mistralai/devstral-2512": [4e-7, 2e-6],
   "mistralai/ministral-14b-2512": [2e-7, 2e-7],
@@ -1639,7 +1639,7 @@ var PRICE_SNAPSHOT = {
   "moonshotai/kimi-k3": [192e-9, 16e-6],
   "moonshotai/kimi-k3:batch": [228e-8, 114e-7],
   "moonshotai/kimi-k3.1-pro": [2403e-10, 84023e-10],
-  "moonshotai/kimi-k3.1-pro:batch": [408e-9, 6111e-9],
+  "moonshotai/kimi-k3.1-pro:batch": [372e-9, 5583e-9],
   "morph/morph-v3-fast": [8e-7, 12e-7],
   "morph/morph-v3-fast:batch": [4e-7, 6e-7],
   "morph/morph-v3-large": [9e-7, 19e-7],
@@ -1652,7 +1652,7 @@ var PRICE_SNAPSHOT = {
   "nvidia/nemotron-3-nano-30b-a3b": [6e-8, 24e-8],
   "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free": [0, 0],
   "nvidia/nemotron-3-super-120b-a12b": [75e-9, 4e-7],
-  "nvidia/nemotron-3-ultra-550b-a55b": [6e-7, 24e-7],
+  "nvidia/nemotron-3-ultra-550b-a55b": [5e-7, 22e-7],
   "nvidia/nemotron-3-ultra-550b-a55b:free": [0, 0],
   "nvidia/nemotron-3.5-content-safety": [2e-7, 2e-7],
   "nvidia/nemotron-3.5-lightning": [7e-8, 2e-7],
@@ -1717,7 +1717,7 @@ var PRICE_SNAPSHOT = {
   "openai/gpt-5.6-luna-pro": [2e-7, 12e-7],
   "openai/gpt-5.6-luna-pro:batch": [1e-7, 6e-7],
   "openai/gpt-5.6-luna:batch": [1e-7, 6e-7],
-  "openai/gpt-5.6-sol": [44e-7, 22e-6],
+  "openai/gpt-5.6-sol": [4e-6, 2e-5],
   "openai/gpt-5.6-sol-pro": [4e-6, 2e-5],
   "openai/gpt-5.6-sol-pro:batch": [2e-6, 1e-5],
   "openai/gpt-5.6-sol:batch": [2e-6, 1e-5],
@@ -1797,8 +1797,8 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3.5-122b-a10b": [26e-8, 208e-8],
   "qwen/qwen3.5-27b": [26e-8, 26e-7],
   "qwen/qwen3.5-35b-a3b": [14e-8, 1e-6],
-  "qwen/qwen3.5-397b-a17b": [6e-7, 36e-7],
-  "qwen/qwen3.5-9b": [66e-9, 97e-9],
+  "qwen/qwen3.5-397b-a17b": [45e-8, 3e-6],
+  "qwen/qwen3.5-9b": [167e-9, 245e-9],
   "qwen/qwen3.5-flash-02-23": [65e-9, 26e-8],
   "qwen/qwen3.5-plus-02-15": [26e-8, 156e-8],
   "qwen/qwen3.5-plus-20260420": [3e-7, 18e-7],
@@ -1818,6 +1818,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3.8-max-0902:batch": [115e-8, 345e-8],
   "qwen/qwen3.8-max-prime": [4e-6, 12e-6],
   "qwen/qwen3.8-omni-flash": [15e-8, 47e-8],
+  "qwen/qwen4-max": [1425e-9, 4275e-9],
   "recursive/flint-v1.0:free": [0, 0],
   "reflection/beam-1.0-501b-a23b": [3e-7, 1e-6],
   "rekaai/reka-edge": [1e-7, 1e-7],
@@ -1841,6 +1842,7 @@ var PRICE_SNAPSHOT = {
   "tencent/hy3": [132e-9, 528e-9],
   "tencent/hy3-preview": [18e-8, 6e-7],
   "tencent/hy4": [417e-9, 12505e-10],
+  "tencent/hy4-flash": [35e-9, 1405e-10],
   "tencent/hy4-preview": [834e-9, 2501e-9],
   "thedrummer/cydonia-24b-v4.1": [3e-7, 5e-7],
   "thedrummer/skyfall-36b-v2": [55e-8, 8e-7],
@@ -1874,7 +1876,7 @@ var PRICE_SNAPSHOT = {
   "xiaomi/mimo-v2.6-pro": [435e-9, 87e-8],
   "xiaomi/mimo-v2.6-pro-ultraspeed": [435e-8, 87e-7],
   "z-ai/glm-4.5": [6e-7, 22e-7],
-  "z-ai/glm-4.5-air": [2e-7, 11e-7],
+  "z-ai/glm-4.5-air": [13e-8, 85e-8],
   "z-ai/glm-4.5v": [6e-7, 18e-7],
   "z-ai/glm-4.6": [5e-7, 2e-6],
   "z-ai/glm-4.6v": [3e-7, 9e-7],
@@ -1884,13 +1886,14 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-5-turbo": [12e-7, 4e-6],
   "z-ai/glm-5.1": [14e-7, 44e-7],
   "z-ai/glm-5.2": [7e-9, 68e-7],
-  "z-ai/glm-5.3": [84e-9, 36e-7],
+  "z-ai/glm-5.2:batch": [322e-9, 989e-9],
+  "z-ai/glm-5.3": [699e-10, 14e-7],
   "z-ai/glm-5.3-flash": [399e-10, 784e-10],
-  "z-ai/glm-5.3-flash:batch": [5e-8, 18e-8],
+  "z-ai/glm-5.3-flash:batch": [24e-9, 69e-9],
   "z-ai/glm-5.3-flashx": [37e-8, 125e-8],
   "z-ai/glm-5.3-flashx-legal": [37e-8, 125e-8],
-  "z-ai/glm-5.3-prime": [28e-7, 88e-7],
-  "z-ai/glm-5.3:batch": [45e-8, 2e-6],
+  "z-ai/glm-5.3-prime": [168e-8, 528e-8],
+  "z-ai/glm-5.3:batch": [281e-9, 125e-8],
   "z-ai/glm-5v-turbo": [12e-7, 4e-6]
 };
 
@@ -10746,7 +10749,7 @@ function turnRouting(state, hasTools2) {
 }
 var modelHook = {
   resolve(ctx) {
-    const routing = turnRouting(ctx.state.model, ctx.tools.length > 0);
+    const routing = turnRouting(ctx.state.model, ctx.tools.length > 0 || ctx.finalTurn === true);
     const maxTokens = ctx.policy.modelHandoff ? replyAsk(ctx) : cappedMaxTokens(routing.role, void 0);
     return {
       role: routing.role,
@@ -10757,7 +10760,7 @@ var modelHook = {
     };
   },
   turnFields(ctx) {
-    const ask2 = nextTurn(ctx.state.model, { hasTools: ctx.tools.length > 0 });
+    const ask2 = nextTurn(ctx.state.model, { hasTools: ctx.tools.length > 0 || ctx.finalTurn === true });
     return {
       role: ask2.role,
       phase: ctx.state.model.phase,
@@ -12065,6 +12068,8 @@ var RunGuards = class {
   postEdit;
   levers;
   pendingPause;
+  /** A3's `finish`: the next turn offers no tools — the verified run's final report. */
+  finishDue;
   /** This turn's post-edit verdicts — the D1 code unit's verifier. */
   turnEdits = [];
   /** D7: the sandbox checks' failures from the last turn, for the next turn's tail. */
@@ -12083,6 +12088,7 @@ var RunGuards = class {
     this.progress = levers.a3_progress_detector ? new ProgressDetector(resume?.progress, { isReadOnly: (tool) => isReadOnlyCloudTool(tool) }) : null;
     this.postEdit = !!levers.d7_deterministic_handlers;
     this.pendingPause = resume?.pendingPause;
+    this.finishDue = resume?.finishDue === true;
     this.checksNote = resume?.checksNote ?? "";
     this.escalations = resume?.escalations ?? 0;
   }
@@ -12105,6 +12111,7 @@ var RunGuards = class {
       // The cascade's seed facts serve A3's escalation too; with both levers off nothing persists.
       ...this.cascade.on || this.progress ? { cascade: this.cascade.snapshot() } : {},
       ...this.pendingPause ? { pendingPause: this.pendingPause } : {},
+      ...this.finishDue ? { finishDue: true } : {},
       ...this.checksNote ? { checksNote: this.checksNote } : {},
       ...this.escalations ? { escalations: this.escalations } : {}
     };
@@ -12191,12 +12198,22 @@ var RunGuards = class {
       }
     } else if (action.kind === "pause") {
       this.pendingPause = action.question;
+    } else if (action.kind === "finish") {
+      this.finishDue = true;
     }
     const s = progressTraceStep(action, {
       outcome,
       detail: { trip: action.trip, signal: action.signal, outcome, model: ports.model?.get().model ?? null }
     });
     await ports.onEvent?.({ tool: s.label, detail: s.args, result: s.result });
+  }
+  /** A3's `finish`: whether the next turn is the verified run's final report (no tools). A peek — {@link finalTurnDone} spends it. */
+  get finalTurnDue() {
+    return this.finishDue;
+  }
+  /** The final turn was answered: the finish is spent. */
+  finalTurnDone() {
+    this.finishDue = false;
   }
   /** A3: a pause parked the run — the next dispatched call returns it, once. */
   consumePendingPause() {
@@ -12269,6 +12286,14 @@ function createGuardsHook(ports = {}) {
     },
     isReadOnly(ctx, name) {
       return sessionOf(ctx, ports).isReadOnly(name);
+    },
+    finalTurn(ctx) {
+      return sessionOf(ctx, ports).finalTurnDue;
+    },
+    finalTurnDone(ctx) {
+      const g = sessionOf(ctx, ports);
+      g.finalTurnDone();
+      ctx.state.guards = g.snapshot();
     },
     async seed(ctx) {
       const ladder = ports.ladder?.() ?? ports.cascade?.ladder;
@@ -13768,6 +13793,11 @@ function adoptServedModel(policy, state, served) {
   if (policy.modelStart?.plain) return;
   if (served && served !== "default" && !state.model.strictPin) state.model = { ...state.model, model: served };
 }
+function withoutToolChoiceIf(drop, fields) {
+  if (!drop || !("toolChoice" in fields)) return fields;
+  const { toolChoice: _dropped, ...rest } = fields;
+  return rest;
+}
 function askFields(ask2) {
   if (!ask2) return {};
   return {
@@ -13788,7 +13818,7 @@ async function completeTurn(input, state, hooks, ctx, offered, transcript, pack,
     state.advertisedSignature = advertisedSet;
     await emit(input.ports.events, { kind: "context.tools", step: ctx.step, advertised: tools.length, catalog: offered.length, toolsTokens: toolsTokensOf(tools), loaded: state.loadedTools ?? [] });
   }
-  const mctx = { ...pctx, tools };
+  const mctx = { ...pctx, tools, ...made?.final ? { finalTurn: true } : {} };
   const decision = await hooks.model.resolve(mctx);
   const model = decision ? decision.model : input.policy.pinnedModel;
   const brief = await hooks.memory.brief(pctx);
@@ -13806,8 +13836,9 @@ async function completeTurn(input, state, hooks, ctx, offered, transcript, pack,
     ...askedModel ? { model: askedModel, strict: ask2?.strict ?? false } : {},
     ...tools.length > 0 ? { tools } : {},
     ...decision?.maxTokens !== void 0 ? { maxTokens: decision.maxTokens } : {},
-    ...askFields(ask2),
-    ...made?.toolChoice && !ask2?.toolChoice ? { toolChoice: made.toolChoice } : {},
+    // A tool choice means nothing without tools (and a provider may refuse it): a turn advertising none never sends one.
+    ...withoutToolChoiceIf(tools.length === 0, askFields(ask2)),
+    ...tools.length > 0 && made?.toolChoice && !ask2?.toolChoice ? { toolChoice: made.toolChoice } : {},
     ...reasoning ? { reasoning } : {}
   });
   let asked = model;
@@ -14131,6 +14162,8 @@ function noToolCallsHook(run, deps) {
     const judged = ports.delivery?.judged?.(turn.content);
     if (judged !== void 0) pctx.judged = judged;
     if (ports.delivery?.stall?.menu && run.selection?.tools) pctx.tools = [...run.selection.tools];
+    const finalTurn = run.selection?.final === true;
+    if (finalTurn) pctx.tools = [];
     const steersFirst = ports.delivery?.stall?.steersFirst === true;
     if (steersFirst) {
       const steered = await deps.takeJoined(ctx);
@@ -14145,7 +14178,7 @@ function noToolCallsHook(run, deps) {
       await requeue2(pctx, ctx.step, turn.content, children);
       return { action: "continue" };
     }
-    const stalled2 = run.watch.hasInterrupt() ? void 0 : await (hooks.stall.recoverAsync ? hooks.stall.recoverAsync(pctx) : hooks.stall.recover(pctx));
+    const stalled2 = run.watch.hasInterrupt() || finalTurn ? void 0 : await (hooks.stall.recoverAsync ? hooks.stall.recoverAsync(pctx) : hooks.stall.recover(pctx));
     if (stalled2?.action === "steer" || stalled2?.action === "escalate") await sentBack(ctx.step, turn.content, stalled2.action === "escalate" ? "reply" : "block");
     else if (stalled2?.action === "pause" && policy.stallExhausted === "settle") await sentBack(ctx.step, turn.content, "settled");
     if (stalled2) await emit(ports.events, { kind: "stall.recovered", step: ctx.step, action: stalled2.action, ...stalled2.note ? { note: stalled2.note } : {}, ...stalled2.detail ? { detail: stalled2.detail } : {} });
@@ -14261,11 +14294,14 @@ function kernelHooks(run) {
         progress: { rungs: state.stall?.rungs ?? {} },
         cache: run.cache
       });
-      const advertised = menu?.tools ?? await selectNow();
+      const platformForced = menu?.toolChoice === "required";
+      const finalTurn = !platformForced && hooks.guards.finalTurn?.(policyContext(input, state, base, ctx.step, ctx.stepInCall)) === true;
+      const advertised = finalTurn ? [] : menu?.tools ?? await selectNow();
       run.selection = {
         tools: advertised,
-        ...menu?.toolChoice ? { toolChoice: menu.toolChoice } : {},
-        ...menu?.tail && menu.tail.length > 0 ? { tail: menu.tail } : {}
+        ...menu?.toolChoice && !finalTurn ? { toolChoice: menu.toolChoice } : {},
+        ...menu?.tail && menu.tail.length > 0 ? { tail: menu.tail } : {},
+        ...finalTurn ? { final: true } : {}
       };
       const view = advertised ? { ...base, tools: [...advertised] } : base;
       const compacted = await hooks.compaction.compact(policyContext(input, state, view, ctx.step, ctx.stepInCall));
@@ -14296,6 +14332,7 @@ function kernelHooks(run) {
       const usage = meta?.usage;
       run.facts.model = meta?.model;
       run.facts.interruption = meta?.interrupted;
+      if (run.selection?.final) hooks.guards.finalTurnDone?.(contextAt(ctx.step, ctx.stepInCall));
       tallyTurn(tally, model, usage);
       if (run.budget?.afterTurn(usage)) await emit(ports.events, { kind: "budget.unpriced", step: ctx.step, ...model ? { model } : {} });
       await emit(ports.events, { kind: "model.completed", step: ctx.step, ...model ? { model } : {}, ...usage ? { usage } : {} });
@@ -18231,6 +18268,7 @@ function forcedProgressTurn(run, selected, reason) {
     reportToPolicy(run, { type: "hand_off_forced" });
     return { forced: "hand_off", turn: { tools: [HAND_OFF_TOOL_SPEC], toolChoice: "required", brief: { role: "user", content: handOffBrief(reason) } } };
   }
+  if (run.c.codeChanged) return null;
   const tools = changeToolsOf(run, selected.filter((t) => t.function.name !== HAND_OFF_TOOL));
   if (!tools) return null;
   if (offersHandOff(run.policy)) reportToPolicy(run, { type: "plan_budget_spent" });
@@ -18300,8 +18338,8 @@ var RunProgressGuard = class {
       this.advisory = action;
       return null;
     }
-    if (action.kind === "escalate") this.detector?.setSteer(void 0);
-    if (action.kind === "escalate" || action.kind === "pause") this.due = action;
+    if (action.kind === "escalate" || action.kind === "finish") this.detector?.setSteer(void 0);
+    if (action.kind === "escalate" || action.kind === "pause" || action.kind === "finish") this.due = action;
     return action;
   }
   /** The note the next turn opens with ("" when none) — a trip steer, or the B1 advisory. */
@@ -18340,6 +18378,10 @@ function traceStep(run, step, s) {
 function progressGuardTurn(run, step, selected) {
   const due = run.progress.takeDue();
   if (!due) return null;
+  if (due.kind === "finish") {
+    trace2(run, step, due, "finish");
+    return { tools: [], brief: { role: "user", content: due.note } };
+  }
   const advice = `PROGRESS CHECK ${due.trip}: ${progressAdvice(due.signal)}`;
   if (due.kind === "pause") {
     if (!run.canAskUser) {
@@ -18364,13 +18406,18 @@ function progressGuardTurn(run, step, selected) {
   trace2(run, step, due, out.forced);
   return out.turn;
 }
+var FORCED_MENU = {
+  ask_user: "ask_user alone",
+  hand_off: "hand_off alone",
+  change: "the change tools alone"
+};
 function trace2(run, step, due, forced) {
   pushTrace(run.c, {
     ts: nowIso(),
     category: "message",
     label: "loop.progress_forced",
     args: { step, trip: due.trip, signal: due.signal.kind, forced },
-    result: `progress check ${due.trip} (${due.signal.kind}) \u2014 this turn offers ${forced === "ask_user" ? "ask_user alone" : forced === "hand_off" ? "hand_off alone" : "the change tools alone"} and requires a call.`
+    result: forced === "finish" ? `progress check ${due.trip} (${due.signal.kind}) \u2014 the change is made and verified: this turn offers no tools and the run writes its final report.` : `progress check ${due.trip} (${due.signal.kind}) \u2014 this turn offers ${FORCED_MENU[forced]} and requires a call.`
   });
 }
 
@@ -20253,7 +20300,7 @@ async function brainTurnMenu(run, env, catalogSize) {
   const forced = forcedTurnFor(run, env.step, selected, handOffTurn);
   const steer = run.progress.steerNote();
   const tail = [...forced ? [userTextOf(forced.brief)] : [], ...steer ? [steer] : []];
-  if (forced) return { tools: forced.tools, toolChoice: forced.toolChoice, tail };
+  if (forced) return { tools: forced.tools, ...forced.toolChoice ? { toolChoice: forced.toolChoice } : {}, tail };
   if (catalogSize > roleToolLimit(run.policy.phase)) {
     pushTrace(run.c, {
       ts: nowIso(),

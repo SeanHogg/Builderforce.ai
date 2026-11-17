@@ -46,6 +46,7 @@ export function progressTraceStep(action: ProgressAction, override: ProgressTrip
   return {
     label: "loop.progress_check",
     args: override.detail ?? { trip: action.trip, signal: action.signal.kind, action: action.kind },
-    result: `progress check ${action.trip}: ${action.signal.kind} → ${outcome}`,
+    // A finish is the verified run's wrap-up, not a stall — the row says so.
+    result: `progress check ${action.trip}: ${action.signal.kind} → ${outcome}${outcome === "finish" ? " (the change is made and verified — the run writes its final report, no more tool calls)" : ""}`,
   };
 }

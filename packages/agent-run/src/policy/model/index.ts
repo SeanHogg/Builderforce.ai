@@ -336,7 +336,8 @@ export function turnRouting(state: RunPolicyState, hasTools: boolean): TurnReque
 export const modelHook: ModelHook = {
   resolve(ctx) {
     // The model slice already IS the run-policy state; drive it, never redefine it.
-    const routing = turnRouting(ctx.state.model, ctx.tools.length > 0);
+    // A3's final turn has no tools but keeps the run's role (`PolicyContext.finalTurn`).
+    const routing = turnRouting(ctx.state.model, ctx.tools.length > 0 || ctx.finalTurn === true);
     // A run that hands off between models asks for no cap of its own (its role is not a reason to bound a channel's reply) unless its
     // window forces one (`replyAsk`). Any other run asks for the role cap.
     const maxTokens = ctx.policy.modelHandoff ? replyAsk(ctx) : cappedMaxTokens(routing.role, undefined);
@@ -349,7 +350,7 @@ export const modelHook: ModelHook = {
     };
   },
   turnFields(ctx) {
-    const ask = nextTurn(ctx.state.model, { hasTools: ctx.tools.length > 0 });
+    const ask = nextTurn(ctx.state.model, { hasTools: ctx.tools.length > 0 || ctx.finalTurn === true });
     return {
       role: ask.role,
       phase: ctx.state.model.phase,

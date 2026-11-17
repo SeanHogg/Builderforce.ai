@@ -1,3 +1,17 @@
+## ✅ RESOLVED 2026-11-16: the progress guard no longer pauses a finished, verified run (VS Code 2026.10.187)
+
+- Chat #146477: the run edited AuthShell, the login page and the register page, and `tsc` passed, yet three progress checks fired and parked it on `ask_user`. The second check's change-tools-only turn made the model invent an edit.
+- **Batched edits now count.** `packages/agent-tools/src/callShape.ts` is the one reader of which files a call changes, re-exported by run-guards `callChanges.ts`. It covers `edit_file({edits:[…]})` and the `file_path` aliases, and normalises paths. editRevert, noProgress, progressDetector, writeLedger and `editedFilesOf` all use it.
+- A check pass must come from a real runner (`run-guards/src/checkCommand.ts`). It replaces the loose `TEST_COMMAND` regex, which matched `ls tests/`.
+- **Background checks now count.** The detector remembers the job ids of background check commands and judges the `command_status` poll that reports the result.
+- **New `finish` action.** `verifiedWork.ts` marks a run verified once a write is followed by a passing check. A pass must come from a real test or type-check runner, and git bookkeeping does not count as a write.
+  - On a verified run, the first trip is a steer: finish if done, otherwise make the next change.
+  - From the second trip on, the run gets a no-tools final turn on its own model. It is bound in brain-embedded, in agent-run's guards and kernel, and in the cloud adapter.
+  - A repeated finish falls back to the normal escalate-then-pause ladder.
+- **No forced edits after a change.** `forcedProgressTurn` no longer forces change-tools-only turns once the run has changed code.
+- `handOffForcedClash.e2e.test.ts` was updated for the read-only-streak escalation that shipped on 2026-11-15.
+- Tests: `progressFinish.test.ts` in run-guards and agent-run, and `progressGuard.finish.test.ts`. They include a regression replay of the incident.
+
 ## ✅ RESOLVED 2026-11-15: the `clients/vscode` lockfile passes `pnpm install --frozen-lockfile`
 
 - `clients/vscode/pnpm-lock.yaml` previously failed `pnpm install --frozen-lockfile` with `ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY` on `vitest@4.1.10` (already the case at `cde1f7bbc`).
