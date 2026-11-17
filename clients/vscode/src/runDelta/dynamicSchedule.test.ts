@@ -1,4 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// `runDeltaRecords` reaches `runChangeSets` → `gitChanges` → `vscode`; the editor's Git
+// extension is not in this harness, so both are stubbed the way the sibling
+// `runDelta.test.ts` stubs them. `gitChanges` instantiates `vscode.EventEmitter` at load,
+// so mocking `vscode` alone is not enough — the module itself has to be replaced.
+vi.mock("vscode", () => ({ workspace: { workspaceFolders: [] }, l10n: { t: (m: string) => m } }));
+vi.mock("../gitChanges", () => ({
+  refreshPendingChanges: () => undefined,
+  detectPendingChanges: async () => ({ total: 0, repos: [] }),
+}));
+vi.mock("./folderWorkingSet", () => ({
+  listWorkingSet: async () => [],
+  workingSetStatus: async () => "clean",
+}));
+
 import { createMemoryLocalFirstStore, scanByIndex } from "@builderforce/local-first";
 import type { DynamicCheckOutcome } from "@builderforce/run-delta/predict";
 import { sanitizeProductEvent } from "../telemetry/productEventChannel";

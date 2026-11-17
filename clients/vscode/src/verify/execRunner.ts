@@ -139,6 +139,13 @@ const PACKAGE_NAME_RE = /^(@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i;
 
 function resolvePackageBin(cwd: string, pkg: string): string | null {
   if (!PACKAGE_NAME_RE.test(pkg)) return null;
+  // Only an ABSOLUTE cwd may seed the walk-up: a relative one resolves against whatever
+  // directory the process happens to run in, so a synthetic/foreign path (a Windows "C:\r"
+  // evaluated on a POSIX host, where it is one relative directory name) would walk up INTO
+  // THE REAL CWD and find that machine's own node_modules — resolving the caller's test
+  // double to an unrelated real binary. Production callers always pass an absolute workspace
+  // root; anything else falls through to the npx-cli path.
+  if (!path.isAbsolute(cwd)) return null;
   let dir = cwd;
   for (let i = 0; i < 32; i += 1) {
     const candidate = path.join(dir, "node_modules", pkg, "package.json");
@@ -292,7 +299,13 @@ export const execRunner: Runner = (argv, options) =>
         }, options.timeout)
       : undefined;
     child.on("error", () => settle(1));
-    child.on("exit", (code) => settle(typeof code === "number" ? code : 1));
+    // Settle on "close", not "exit": "exit" fires the instant the process dies, but the
+    // piped stdio can still hold undrained output — settling there drops the trailing
+    // bytes from the tail (a large-output check that ends on stderr lost its last chunk
+    // on POSIX timing, where the final data events land after "exit"). "close" fires only
+    // when the streams are drained, so the ring buffer is complete. The timeout path
+    // settles directly and is unaffected.
+    child.on("close", (code) => settle(typeof code === "number" ? code : 1));
   });
 
 /** git's own budget per plumbing query. */

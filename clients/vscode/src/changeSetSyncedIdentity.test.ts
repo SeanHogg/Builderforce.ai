@@ -30,7 +30,7 @@ vi.mock("@builderforce/agent-tools/node-git-history", async (importOriginal) => 
   },
 }));
 
-import { recordChangeSetBaseline, recordChangeSetFinalization } from "./changeSetLifecycle";
+import { recordChangeSetBaseline, recordChangeSetFinalization, changeSetLifecycleId } from "./changeSetLifecycle";
 import { finalizeRunChangeSets, type LocalChangeSetValue } from "./runChangeSets";
 
 const dirs: string[] = [];
@@ -72,7 +72,7 @@ describe("synced repository identity", () => {
     await recordChangeSetBaseline(store, { deviceId: "device-1" }, { runId: "run-2", baseline, author: "agent:test" });
     await recordChangeSetFinalization(store, { deviceId: "device-1" }, { runId: "run-2", baseline, author: "agent:test", changeSetIds: [] });
 
-    const events = (await store.export()).events.filter((e) => e.clientEntityId === "changeset-lifecycle:run-2");
+    const events = (await store.export()).events.filter((e) => e.clientEntityId === changeSetLifecycleId("run-2"));
     expect(events).toHaveLength(2);
     for (const event of events) {
       const text = JSON.stringify(event.payload);

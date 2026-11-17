@@ -1,6 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
 import { chatTicketLinkId, createMemoryLocalFirstStore, newLocalRecord, type ExecutionValue, type LocalFirstStore } from "@builderforce/local-first";
 import { RUN_DELTA_RELEASE_REFUSED, type RunDelta } from "@builderforce/run-delta";
+
+// `runDeltaRecords` reaches `runChangeSets` → `gitChanges` → `vscode`; the editor's Git
+// extension is not in this harness, so both are stubbed (see `runDelta.test.ts`).
+// `gitChanges` instantiates `vscode.EventEmitter` at load, so mocking `vscode` alone is
+// not enough — the module itself has to be replaced.
+vi.mock("vscode", () => ({ workspace: { workspaceFolders: [] }, l10n: { t: (m: string) => m } }));
+vi.mock("../gitChanges", () => ({
+  refreshPendingChanges: () => undefined,
+  detectPendingChanges: async () => ({ total: 0, repos: [] }),
+}));
+vi.mock("./folderWorkingSet", () => ({
+  listWorkingSet: async () => [],
+  workingSetStatus: async () => "clean",
+}));
+
 import { installRunRecovery } from "../installRunRecovery";
 import { recordLocalAuditGate } from "../localAuditGate";
 import { getLocalAuditRun, startLocalAuditRun } from "../localAuditStore";
