@@ -28,6 +28,7 @@ import { recordShipReview, verificationOf, type CloseOutInput } from '../run/bra
 import type { BrainRunContext } from './brainRunContext';
 import type { BrainRunRequest } from './runTypes';
 import { nowIso, pushTrace, runTrace } from './runCells';
+import { errorMessage } from '../pageEngines/types';
 import { onBaseBranch, shippedToBaseBranch } from '../shipVerification';
 import { approvedReviewFor, runReviewGate } from './shipGates';
 
@@ -229,7 +230,14 @@ async function finishCloseOut(run: BrainRunContext): Promise<void> {
           });
         }
       }
-    } catch { /* the close-out is best-effort; the finish gate below is the authority */ }
+    } catch (e) {
+      // The close-out is best-effort; the finish gate below is the authority — but the
+      // reason the settle review could not run is recorded on the run trace.
+      pushTrace(run.c, {
+        ts: nowIso(), category: 'message', label: 'finish.review_gate',
+        result: `The settle-time review could not run: ${errorMessage(e)}`,
+      });
+    }
   }
   if (!(await hasLinkedTicket(run))) return;
   const openPlaceholders = run.placeholderLedger.outstanding().length;
@@ -240,7 +248,10 @@ async function finishCloseOut(run: BrainRunContext): Promise<void> {
     // The diff the change was reviewed against: `approvedReviewFor` matches the run's remembered
     // `shipReviews` to it, so the close-out records its review only over a review that approved
     // THESE bytes (chat #230). Best-effort: an uncomputable diff simply means no review in hand.
-    reviewedDiffHash: (await run.req.git?.outgoing('').catch(() => null))?.diffHash ?? null,
+    reviewedDiffHash: (await run.req.git?.outgoing('').catch((e: unknown) => {
+      pushTrace(run.c, { ts: nowIso(), category: 'message', label: 'finish.review_diff', result: `The reviewed diff could not be computed: ${errorMessage(e)}` });
+      return null;
+    }))?.diffHash ?? null,
   };
   // Verified from the run's own evidence, as the startRun settle does: a driver-run finish
   // with no passing check must not move its tickets to done.

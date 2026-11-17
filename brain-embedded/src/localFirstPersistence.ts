@@ -29,6 +29,13 @@ import {
 } from './localChat/records';
 import { importedUsageIds, ledgerSpend, usageRowsByChat } from './localChat/ledgerSpend';
 import type { RunUsageValue } from './localChat/usageLedger';
+import { errorMessage } from './pageEngines/types';
+
+/** A background server-spend seed that failed: the projection keeps the device's ledger
+ *  figure, but the reason must not vanish (same shape as `pageEngines/engineFailure.ts`). */
+function reportServerSpendFailure(error: unknown): void {
+  console.warn(`BuilderForce chat spend: server spend read failed (${errorMessage(error)})`);
+}
 
 export interface LocalBrainPersistenceOptions {
   store: LocalFirstStore;
@@ -152,7 +159,7 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
       server = options.serverSpendSync?.() ?? null;
       // Cache miss: seed it in the background. Never awaited — an offline read must
       // not wait on the network; the next projection picks the figure up.
-      if (!server) void options.serverSpend(bound).catch(() => undefined);
+      if (!server) void options.serverSpend(bound).catch(reportServerSpendFailure);
     }
     return inputs.map(({ record, serverId, usage, imported }) => {
       const chat = chatValue(record);

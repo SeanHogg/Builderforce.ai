@@ -1,5 +1,5 @@
 import { and, desc, eq, getTableColumns, inArray, or, sql, type SQL } from 'drizzle-orm';
-import { acrossTenants } from '../database/tenantScope';
+import { acrossTenants, scopedToTenant } from '../database/tenantScope';
 import { IExecutionRepository, type ExecutionReadOptions, type LandContext, type LandFields, type NonTerminalStatus, type TerminalStatus } from '../../domain/execution/IExecutionRepository';
 import { Execution, ExecutionProps } from '../../domain/execution/Execution';
 import {
@@ -190,6 +190,19 @@ export class ExecutionRepository implements IExecutionRepository {
       });
     await this.hooks.onReaped?.(failed);
     return failed;
+  }
+
+  /**
+   * The reaper's PRD 39 §4b host-failover re-dispatch: hand a stranded RUNNING run back to `submitted` on another host of its tenant,
+   * clearing `startedAt` so the failover host's claim starts it afresh. Non-terminal and guarded `status = 'running'` - a run that
+   * landed (or was already re-dispatched) in between is left untouched, so this can never resurrect a landed run. The id binds
+   * first, the tenant predicate after it.
+   */
+  async redispatchToHost(id: ExecutionId, tenantId: TenantId, agentHostId: AgentHostId): Promise<void> {
+    await this.db
+      .update(executionsTable)
+      .set({ status: 'submitted', agentHostId, startedAt: sql`null`, updatedAt: sql`now()` })
+      .where(and(eq(executionsTable.id, id), scopedToTenant(executionsTable, tenantId, eq(executionsTable.status, 'running'))));
   }
 
   /**

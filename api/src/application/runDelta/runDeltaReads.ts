@@ -9,6 +9,7 @@
  * immutable, so the only invalidation is "a delta arrived".
  */
 
+import { isLocalId } from '@builderforce/local-first';
 import type { RunDeltaSummary, StoredRunDelta } from '@builderforce/run-delta';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -19,9 +20,6 @@ import { listProjectRunDeltas, runDeltasOfRun, type RunDeltaCursor } from './run
 export const RUN_DELTA_PAGE_DEFAULT = 50;
 export const RUN_DELTA_PAGE_MAX = 100;
 const KV_TTL_SECONDS = 300;
-
-/** A `run_deltas.id` (gen_random_uuid): strict 8-4-4-4-12 hex. */
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const runDeltaVersionKey =(tenantId: number): string => `run-deltas-version:tenant:${tenantId}`;
 
@@ -38,7 +36,7 @@ export function decodeRunDeltaCursor(raw: string | undefined | null): RunDeltaCu
     const bar = text.indexOf('|');
     const computedAt = text.slice(0, bar);
     const id = text.slice(bar + 1);
-    if (bar <= 0 || Number.isNaN(Date.parse(computedAt)) || !UUID.test(id)) return null;
+    if (bar <= 0 || Number.isNaN(Date.parse(computedAt)) || !isLocalId(id)) return null; // run_deltas.id is gen_random_uuid
     return { computedAt, id };
   } catch {
     return null;

@@ -106,13 +106,9 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
   const runMode = normalizeChatMode(req.chatMode ?? 'work');
   // The chat's config log (`configLog.ts`): seed the model + run mode in force as this run
   // begins. The settings are GLOBAL (host-level), so a later change arrives through the
-  // request's `configChange` hook and is appended mid-run. Best-effort — never throws into
-  // the run.
-  try {
-    seedConfigLog(c, { model: req.model, modelStrict: req.modelStrict, routingMode: req.routingMode, runMode });
-  } catch {
-    // ignore — the config log is advisory
-  }
+  // request's `configChange` hook and is appended mid-run. A pure in-memory append onto
+  // the cell's always-initialised `configLog`, so there is nothing to catch.
+  seedConfigLog(c, { model: req.model, modelStrict: req.modelStrict, routingMode: req.routingMode, runMode });
   // The SERVER chat (PRD 36): on a local-first host `chatId` is a view key that never
   // leaves the machine, so an unbound chat sends no chat id at all — never its own number,
   // which named (and billed) whichever server chat happened to share it.

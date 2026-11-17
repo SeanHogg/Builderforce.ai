@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  sharp: ^0.35.5
+  sharp: 0.35.5
   esbuild: ^0.28.2
   source-map-js: ^1.2.2
 

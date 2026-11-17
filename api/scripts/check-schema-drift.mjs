@@ -277,6 +277,9 @@ let allowed = 0;
 for (const { table, cols } of drizzleTables) {
   const migrated = migratedColumns.get(table);
   if (!migrated) {
+    // A table born on a sibling track (e.g. tool_intents, transactional-migrations/0034)
+    // never exists on the primary; its columns are verified against THAT track below.
+    if (siblingTracks.some(({ columns }) => columns.has(table))) continue;
     const msg = `Table '${table}' is declared in schema.ts but never created by any migration.`;
     if (allowlist.has(msg)) { allowed++; continue; }
     errors.push(msg);

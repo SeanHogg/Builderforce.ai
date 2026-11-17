@@ -1,4 +1,5 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * The write-ahead PROTOCOL STORE (PRD 39 §4b) — the server side of per-run tool-call
@@ -26,29 +27,29 @@ import type { Db } from '../../infrastructure/database/connection';
 import { executions, toolIntents } from '../../infrastructure/database/schema';
 
 /** Flip a run's payload to advertise write-ahead support when its host claims it (§4b). */
-export async function recordWriteAheadAck(db: Db, executionId: number): Promise<boolean> {
+export async function recordWriteAheadAck(db: Db, tenantId: number, executionId: number): Promise<boolean> {
   try {
     await db
       .update(executions)
       .set({ payload: sql`coalesce(${executions.payload}, '{}')::jsonb || '{"writeAhead":1}'`, updatedAt: sql`now()` })
-      .where(and(eq(executions.id, executionId), eq(executions.status, 'running')));
+      .where(scopedToTenant(executions, tenantId, eq(executions.id, executionId), eq(executions.status, 'running')));
     return true;
   } catch (error) {
-    reportCaughtError(error, { source: 'application/runtime/writeAheadIntents.ts', operation: 'recordWriteAheadAck', context: { logMessage: '[write-ahead] failed to stamp support on run payload', details: { executionId, error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) } } });
+    reportCaughtError(error, { source: 'application/runtime/writeAheadIntents.ts', operation: 'recordWriteAheadAck', context: { logMessage: '[write-ahead] failed to stamp support on run payload', details: { tenantId, executionId, error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) } } });
     return false;
   }
 }
 
 /** Server ack of a non-allowlisted intent: delete it. False = no such intent (never run). */
-export async function recordIntentAck(db: Db, executionId: number, seq: number): Promise<boolean> {
+export async function recordIntentAck(db: Db, tenantId: number, executionId: number, seq: number): Promise<boolean> {
   try {
     const result = await db
       .delete(toolIntents)
-      .where(and(eq(toolIntents.executionId, executionId), eq(toolIntents.seq, seq)))
+      .where(scopedToTenant(toolIntents, tenantId, eq(toolIntents.executionId, executionId), eq(toolIntents.seq, seq)))
       .returning({ id: toolIntents.id });
     return result.length > 0;
   } catch (error) {
-    reportCaughtError(error, { source: 'application/runtime/writeAheadIntents.ts', operation: 'recordIntentAck', context: { logMessage: '[write-ahead] intent ack delete failed', details: { executionId, seq, error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) } } });
+    reportCaughtError(error, { source: 'application/runtime/writeAheadIntents.ts', operation: 'recordIntentAck', context: { logMessage: '[write-ahead] intent ack delete failed', details: { tenantId, executionId, seq, error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) } } });
     return false;
   }
 }

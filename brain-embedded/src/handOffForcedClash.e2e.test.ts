@@ -104,16 +104,67 @@ function expectCarriedOut(r: Awaited<ReturnType<typeof runReadingPlanner>>): voi
 }
 
 describe('an overlapping hand_off on the FORCED turn', () => {
-  it('is carried out on the analysis budget\'s turn, not sent back — the budget cannot dead-end on the overlap correction', async () => {
+  it('is carried out, not sent back — the analysis budget cannot dead-end on the overlap correction', async () => {
     // A3 off: nothing but the analysis budget ends the reading.
     process.env[A3_LEVER] = 'off';
-    const r = await runReadingPlanner(7078);
+    const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+    const results: string[] = [];
+    const turns: Array<{ role: string; tools: string[]; toolChoice: unknown }> = [];
+    let reads = 0;
+    let handOffs = 0;
+    let nextTicket = 500;
+    // A planner that reads until the budget forces the hand-off, then hands off the overlapping plan.
+    const stream: BrainStreamFn = async (opts) => {
+      for (const m of opts.messages ?? []) if (m.role === 'tool' && typeof m.content === 'string') results.push(m.content);
+      const tools = (opts.tools ?? []).map((t) => t.function.name);
+      turns.push({ role: String(opts.role), tools, toolChoice: opts.tool_choice });
+      if (tools.length === 1 && tools[0] === 'hand_off') {
+        handOffs += 1;
+        return { text: '', toolCalls: [{ id: `h${handOffs}`, name: 'hand_off', args: JSON.stringify(PLAN) }], finishReason: 'tool_calls', resolvedModel: 'direct/m/planner' };
+      }
+      if (opts.role === 'plan') {
+        reads += 1;
+        return { text: '', toolCalls: [{ id: `r${reads}`, name: 'read_file', args: JSON.stringify({ path: `src/file${reads}.ts` }) }], finishReason: 'tool_calls', resolvedModel: 'direct/m/planner' };
+      }
+      return { text: 'Done.', toolCalls: [], finishReason: 'stop', resolvedModel: 'direct/m/coder' };
+    };
+    await startRun(7078, {
+      resolvedSystemPrompt: 'sys',
+      tools: TOOLS,
+      projectId: 11,
+      runTool: async (name, args) => {
+        calls.push({ name, args: (args ?? {}) as Record<string, unknown> });
+        if (name === 'read_file') return { ok: true, path: (args as { path?: string }).path, content: 'export const x = 1;' };
+        if (name === 'builtin_tasks_create') return { id: (nextTicket += 1) };
+        if (name === 'spawn_agents') return { ok: true, workstreams: (args as { workstreams: unknown[] }).workstreams.map(() => ({ ok: true })) };
+        return { ok: true };
+      },
+      stream,
+      persistence: { sendMessages: async () => [] },
+      userTurn: 'split the knowledge surface into style and features',
+    });
+    const trace = getRunTrace(7078);
 
-    // The hand-off came on the budget's forced turn: after the budget's reads, hand_off alone and required.
-    expect(r.forcedAt).toBe(PLAN_TURN_BUDGET);
-    expect(r.trace.some((e) => e.label === 'loop.hand_off_due')).toBe(true);
-    expect(r.trace.some((e) => e.label === 'loop.progress_forced')).toBe(false);
-    expectCarriedOut(r);
+    // 1. The hand-off came on the forced turn: after the budget's reads, hand_off alone and required.
+    const forcedAt = turns.findIndex((t) => t.tools.length === 1 && t.tools[0] === 'hand_off');
+    expect(forcedAt).toBe(PLAN_TURN_BUDGET);
+    expect(turns[forcedAt]!.toolChoice).toBe('required');
+    expect(trace.some((e) => e.label === 'loop.hand_off_due')).toBe(true);
+    expect(trace.some((e) => e.label === 'loop.progress_forced')).toBe(false);
+
+    // 2. The overlap correction stood down: no clash trace, no refusal, one hand-off only.
+    expect(handOffs).toBe(1);
+    expect(trace.some((e) => e.label === 'hand_off.scope_clash')).toBe(false);
+    expect(results.some((r) => r.includes('hand_off not filed'))).toBe(false);
+    // Planning did not dead-end: the budget was not spent with nothing filed.
+    expect(trace.some((e) => e.label === 'loop.plan_budget_spent')).toBe(false);
+
+    // 3. The overlapping plan was carried out as is: every task filed once. Order beats parallelism:
+    //    the parent-directory task comes first, so its children may not start before it — all inline.
+    expect(calls.filter((c) => c.name === 'builtin_tasks_create')).toHaveLength(3);
+    expect(calls.some((c) => c.name === 'spawn_agents')).toBe(false);
+    const mode = trace.find((e) => e.label === 'hand_off.mode');
+    expect(mode?.args).toMatchObject({ mode: 'inline', parallelTasks: [], inlineTasks: ['Restructure the surface', 'Restyle', 'Feature panels'] });
   });
 
   it('is carried out on the read-only streak\'s escalation turn, which comes before the analysis budget', async () => {

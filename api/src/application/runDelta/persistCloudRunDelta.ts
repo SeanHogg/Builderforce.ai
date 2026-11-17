@@ -129,8 +129,9 @@ export async function persistCloudRunDelta(db: Db, args: PersistCloudRunDeltaArg
     return null;
   }
 
-  // Bump the run-delta read caches only after the rows committed.
-  await bumpRunDeltaReads(args.env, tenantId).catch(() => undefined);
+  // Bump the run-delta read caches only after the rows committed. Never rejects:
+  // bumpCacheVersionSafe reports its own failure.
+  await bumpRunDeltaReads(args.env, tenantId);
   return recordId;
 }
 

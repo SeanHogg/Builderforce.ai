@@ -70,7 +70,7 @@
   },
   "pnpm": {
     "overrides": {
-      "sharp": "^0.35.5",
+      "sharp": "0.35.5",
       "adm-zip": "0.6.1",
       "esbuild": "^0.28.2",
       "protobufjs": "^7.6.5",

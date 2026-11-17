@@ -9,8 +9,12 @@
 -- can be removed in Push 2 without cascading surprises; the columns stay as plain
 -- integer compatibility references.
 
--- 1. Backfill `skills.agent_registration_id` from the folded legacy rows. The column
---    already exists (declared in schema); this only populates it, idempotently.
+-- 1. Add `skills.agent_registration_id` (no earlier migration created it) and backfill
+--    it from the folded legacy rows, idempotently.
+ALTER TABLE skills
+  ADD COLUMN IF NOT EXISTS agent_registration_id UUID
+  REFERENCES agent_registrations(id) ON DELETE SET NULL;
+
 UPDATE skills s
 SET agent_registration_id = r.id
 FROM agent_registrations r
@@ -46,6 +50,12 @@ ALTER TABLE executions          DROP CONSTRAINT IF EXISTS executions_agent_id_ag
 ALTER TABLE skills              DROP CONSTRAINT IF EXISTS skills_agent_id_agents_id_fk;
 ALTER TABLE agent_dispatches    DROP CONSTRAINT IF EXISTS agent_dispatches_agent_id_agents_id_fk;
 ALTER TABLE agent_registrations DROP CONSTRAINT IF EXISTS agent_registrations_legacy_agent_id_agents_id_fk;
+-- A database built from the SQL migrations (0208 / 0394 declare the FKs inline) carries
+-- Postgres's default `<table>_<column>_fkey` names instead; drop those too.
+ALTER TABLE executions          DROP CONSTRAINT IF EXISTS executions_agent_id_fkey;
+ALTER TABLE skills              DROP CONSTRAINT IF EXISTS skills_agent_id_fkey;
+ALTER TABLE agent_dispatches    DROP CONSTRAINT IF EXISTS agent_dispatches_agent_id_fkey;
+ALTER TABLE agent_registrations DROP CONSTRAINT IF EXISTS agent_registrations_legacy_agent_id_fkey;
 
 COMMENT ON COLUMN executions.agent_id IS
   'DEPRECATED compatibility reference (no FK); use agent_registration_id.';

@@ -28,6 +28,7 @@
  */
 import { and, eq, gt, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
+import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import {
   approvalActions,
   authUserSessions,
@@ -360,7 +361,7 @@ export async function runOtelAuditSweep(
 ): Promise<OtelAuditSweepResult> {
   const result: OtelAuditSweepResult = { tenants: 0, sent: 0, failed: 0 };
   try {
-    const rows = await db.select().from(otelExporters).where(eq(otelExporters.enabled, true)).limit(500);
+    const rows = await db.select().from(otelExporters).where(acrossTenants(otelExporters, 'scheduled_sweep', eq(otelExporters.enabled, true))).limit(500);
     for (const row of rows) {
       if (!signalsIncludeAudit(row.signals)) continue;
       result.tenants += 1;

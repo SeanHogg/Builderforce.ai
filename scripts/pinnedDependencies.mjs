@@ -47,9 +47,10 @@
 export const PINNED_DEPENDENCIES = [
   {
     name: 'sharp',
-    version: '0.35.4',
+    version: '0.35.5',
     reason:
-      'GHSA advisories affect every sharp below 0.35.4. It is transitive in ten '
+      'GHSA advisories affect every sharp below 0.35.4, and the Dependabot advisory '
+      + 'sweep (577f2d170) moved every project to 0.35.5. It is transitive in ten '
       + 'lockfiles here (next, @huggingface/transformers, miniflare, astro) and a '
       + 'direct dependency in two, so an override is the only thing that reaches it.',
   },

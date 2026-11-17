@@ -4,8 +4,11 @@ import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { legacyAliasNotice } from '../middleware/legacyAlias';
-import { agentRegistrations, skills } from '../../infrastructure/database/schema';
-import { and, eq, inArray } from 'drizzle-orm';
+import {
+  LegacyAgentRegistry,
+  type LegacyAgentRow,
+  type LegacySkillRow,
+} from '../../application/agent/legacyAgentRegistry';
 
 /**
  * Legacy agent & skill discovery routes, now served from the canonical
@@ -22,7 +25,7 @@ import { and, eq, inArray } from 'drizzle-orm';
  * PRD 39 §3 push 1: a numeric `:id` is the folded `legacy_agent_id`
  * (migration 0394), so the response is unchanged for a tenant with legacy rows
  * while no `agents` table sits behind it. Writes stay closed. `/api/agent-registrations`
- * is the successor.
+ * is the successor. Every read is tenant-scoped in {@link LegacyAgentRegistry}.
  */
 
 const SUCCESSOR = '/api/agent-registrations';
@@ -33,11 +36,8 @@ const legacyRegistry: MiddlewareHandler<HonoEnv>[] = [
   async (c, next) => { await next(); c.header('Sunset', 'Wed, 31 Dec 2026 23:59:59 GMT'); },
 ];
 
-/** One folded agent row, shaped exactly like the legacy domain `toPlain()` projection. */
-type AgentRow = typeof agentRegistrations.$inferSelect;
-
 /** Strips nothing the legacy route did not already strip; matches the old projection. */
-function serializeAgent(row: AgentRow): Record<string, unknown> {
+function serializeAgent(row: LegacyAgentRow): Record<string, unknown> {
   return {
     id: row.legacyAgentId,
     tenantId: row.tenantId,
@@ -51,7 +51,7 @@ function serializeAgent(row: AgentRow): Record<string, unknown> {
   };
 }
 
-function serializeSkill(row: typeof skills.$inferSelect): Record<string, unknown> {
+function serializeSkill(row: LegacySkillRow): Record<string, unknown> {
   return {
     id: row.id,
     agentId: row.agentId,
@@ -65,24 +65,12 @@ function serializeSkill(row: typeof skills.$inferSelect): Record<string, unknown
 
 export function createAgentRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
+  const registry = new LegacyAgentRegistry(db);
   router.use('*', authMiddleware, ...legacyRegistry);
-
-  const tenantId = (c: { get(key: 'tenantId'): number }) => c.get('tenantId');
-
-  const findByLegacyId = async (c: { get(key: 'tenantId'): number }, id: number) => {
-    const [row] = await db
-      .select().from(agentRegistrations)
-      .where(and(eq(agentRegistrations.legacyAgentId, id), eq(agentRegistrations.tenantId, tenantId(c))))
-      .limit(1);
-    return row ?? null;
-  };
 
   // List agents for caller's tenant — ordered by the numeric id the clients sort on.
   router.get('/', async (c) => {
-    const rows = await db
-      .select().from(agentRegistrations)
-      .where(eq(agentRegistrations.tenantId, tenantId(c)))
-      .orderBy(agentRegistrations.legacyAgentId);
+    const rows = await registry.listAgents(c.get('tenantId'));
     return c.json(rows.map(serializeAgent));
   });
 
@@ -98,7 +86,7 @@ export function createAgentRoutes(db: Db): Hono<HonoEnv> {
 
   // Get a single agent by its legacy (numeric) id — tenant-scoped (404 cross-tenant).
   router.get('/:id', async (c) => {
-    const row = await findByLegacyId(c, Number(c.req.param('id')));
+    const row = await registry.findAgent(c.get('tenantId'), Number(c.req.param('id')));
     if (!row) return c.json({ error: 'Agent not found' }, 404);
     return c.json(serializeAgent(row));
   });
@@ -107,25 +95,17 @@ export function createAgentRoutes(db: Db): Hono<HonoEnv> {
   // Sets status on the canonical registration; the response still carries the
   // legacy projection (id = legacy_agent_id) so old clients see the same shape.
   router.delete('/:id', requireRole(TenantRole.MANAGER), async (c) => {
-    const row = await findByLegacyId(c, Number(c.req.param('id')));
-    if (!row) return c.json({ error: 'Agent not found' }, 404);
-    const [updated] = await db
-      .update(agentRegistrations)
-      .set({ status: 'inactive', updatedAt: new Date() })
-      .where(eq(agentRegistrations.id, row.id))
-      .returning();
-    return c.json(serializeAgent(updated!));
+    const updated = await registry.deactivateAgent(c.get('tenantId'), Number(c.req.param('id')));
+    if (!updated) return c.json({ error: 'Agent not found' }, 404);
+    return c.json(serializeAgent(updated));
   });
 
   // List skills for a specific agent, gated by tenant-scoped ownership.
   router.get('/:id/skills', async (c) => {
-    const id = Number(c.req.param('id'));
-    const row = await findByLegacyId(c, id);
+    const tenantId = c.get('tenantId');
+    const row = await registry.findAgent(tenantId, Number(c.req.param('id')));
     if (!row) return c.json({ error: 'Agent not found' }, 404);
-    const rows = await db
-      .select().from(skills)
-      .where(eq(skills.agentRegistrationId, row.id))
-      .orderBy(skills.id);
+    const rows = await registry.listAgentSkills(tenantId, row.id);
     return c.json(rows.map(serializeSkill));
   });
 
@@ -143,21 +123,13 @@ export function createAgentRoutes(db: Db): Hono<HonoEnv> {
 /** Standalone skill discovery endpoint — joins skills to the tenant through the registration. */
 export function createSkillRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
+  const registry = new LegacyAgentRegistry(db);
   router.use('*', authMiddleware, ...legacyRegistry);
 
   // GET /api/skills – every skill on the caller's tenant's registrations (the same read
   // as /api/agents/:id/skills without the agent filter).
   router.get('/', async (c) => {
-    const registrations = await db
-      .select({ id: agentRegistrations.id })
-      .from(agentRegistrations)
-      .where(eq(agentRegistrations.tenantId, c.get('tenantId')));
-    const registrationIds = registrations.map((r) => r.id);
-    if (registrationIds.length === 0) return c.json([]);
-    const rows = await db
-      .select().from(skills)
-      .where(inArray(skills.agentRegistrationId, registrationIds))
-      .orderBy(skills.id);
+    const rows = await registry.listTenantSkills(c.get('tenantId'));
     return c.json(rows.map(serializeSkill));
   });
 

@@ -33,7 +33,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { brainChats, knowledgeDocuments } from './canvas';
-import { agentHostDirectoryStatusEnum, agentHostStatusEnum, artifactTypeEnum, assignmentScopeEnum, executionStatusEnum, managedAgentHostRequestStatusEnum, objects, pricingModelEnum, tsvector, vector, workflowStatusEnum, workflowTypeEnum } from './kernel';
+import { agentHostDirectoryStatusEnum, agentHostStatusEnum, agentTypeEnum, artifactTypeEnum, assignmentScopeEnum, executionStatusEnum, managedAgentHostRequestStatusEnum, objects, pricingModelEnum, tsvector, vector, workflowStatusEnum, workflowTypeEnum } from './kernel';
 import {
   boards,
   projectFacts,
@@ -313,13 +313,33 @@ export const managerSystemicFindings = pgTable('manager_systemic_findings', {
   byLookup: index('idx_manager_systemic_lookup').on(t.tenantId, t.projectId, t.status, t.lastSeenAt),
 }));
 
+/**
+ * LEGACY numeric agents table — PRD 39 push 1 (migrations 1347/1348) moved every read to
+ * `agent_registrations` through `legacy_agent_id` and dropped the inbound FKs. The table
+ * itself is dropped in push 2 (expand/contract), and this declaration is removed in that
+ * same commit; until then the table still exists, so it stays declared. Read by nothing.
+ */
+export const agents = pgTable('agents', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
+  name:       varchar('name', { length: 255 }).notNull(),
+  type:       agentTypeEnum('type').notNull(),
+  endpoint:   varchar('endpoint', { length: 500 }).notNull(),
+  apiKeyHash: varchar('api_key_hash', { length: 64 }),
+  isActive:   boolean('is_active').notNull().default(true),
+  config:     text('config'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+});
+
 
 /**
  * Canonical registry for callable agents, independent of their implementation.
  * `framework` describes what built the agent; `protocol` describes how Builderforce
- * communicates with it. The legacy numeric `agents` table was retired by PRD 39 push 1
- * (migrations 1347/1348): reads route through `legacy_agent_id` and the inbound FKs were
- * dropped, so no Drizzle declaration for it remains.
+ * communicates with it. The legacy numeric `agents` table above is read by nothing
+ * (PRD 39 push 1, migrations 1347/1348): reads route through `legacy_agent_id` and the
+ * inbound FKs were dropped.
  */
 export const agentRegistrations = pgTable('agent_registrations', {
   id:                     uuid('id').primaryKey().defaultRandom(),
@@ -457,6 +477,9 @@ export const skills = pgTable('skills', {
    *  `agentRegistrationId`, the canonical owner link (backfilled in 1347). */
   agentId:      integer('agent_id').notNull(),
   agentRegistrationId: uuid('agent_registration_id').references(() => agentRegistrations.id, { onDelete: 'set null' }),
+  /** Tenant scope (migration 1351). Inherited from `agents` until 1347 dropped that FK;
+   *  nullable for the expand push, backfilled from the registration / legacy agent. */
+  tenantId:     integer('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
   name:         varchar('name', { length: 255 }).notNull(),
   description:  text('description'),
   inputSchema:  text('input_schema'),

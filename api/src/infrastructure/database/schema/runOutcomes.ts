@@ -140,18 +140,3 @@ export const runOutcomeTrainingConsent = pgTable('run_outcome_training_consent',
   decidedBy:   varchar('decided_by', { length: 128 }),
   decidedAt:   timestamp('decided_at', { withTimezone: true }).notNull().defaultNow(),
 });
-
-/**
- * A tenant's human-scoring switch (PRD 41 §D14.6, WS22). No row = the plan default:
- * ON for `free`, OFF for every paid tier (the "enterprise default-off" done-check; the
- * plan enum has free/pro/teams, so the paid tiers are the enterprise equivalent).
- * AGENT scoring cannot be disabled — the setting gates HUMAN contributors only, and a
- * human-score endpoint returns 404 for a tenant with the setting off. A tenant admin
- * flips it (the route shows the DPIA notice); the row records who decided.
- */
-export const personScoreSettings = pgTable('person_score_settings', {
-  tenantId:          integer('tenant_id').primaryKey(),
-  humanScoringEnabled: boolean('human_scoring_enabled').notNull(),
-  updatedBy:         varchar('updated_by', { length: 128 }),
-  updatedAt:         timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});

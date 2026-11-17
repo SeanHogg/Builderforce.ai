@@ -29,7 +29,8 @@ import type { Env } from '../../env';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { executionPauseState, executions, pullRequests, tasks } from '../../infrastructure/database/schema';
 import { insertToolAudit } from '../audit/toolAuditWrite';
-import { acrossTenants } from '../../infrastructure/database/tenantScope';
+import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { asAgentHostId, asExecutionId, asTenantId } from '../../domain/shared/types';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { runFailureEventRow } from './recordRunFailureEvent';
 import type { LandedRun } from './executionLandedEffects';
@@ -167,7 +168,7 @@ export async function reapStaleExecutions(
   const hostFailedWithReason: ReapedRow[] = [];
   let redispatchedHost = 0;
   for (const row of hostCandidates) {
-    if (await redispatchHostRun(env, db, row)) {
+    if (await redispatchHostRun(env, db, executionRepo, row)) {
       redispatchedHost += 1;
     } else {
       hostFailed.push(row);
@@ -440,7 +441,7 @@ interface HostCandidateRow extends ReapedRow {
  * `reaperRequeued` payload flag as the cloud self-heal, so a run is never
  * re-dispatched twice.
  */
-async function redispatchHostRun(env: Env, db: Db, row: HostCandidateRow): Promise<boolean> {
+async function redispatchHostRun(env: Env, db: Db, executionRepo: ExecutionRepository, row: HostCandidateRow): Promise<boolean> {
   const advertised = parseWriteAheadSupport(row.payload) != null;
   // Only a write-ahead host is even a candidate; old hosts are failed exactly as today.
   if (!advertised) return false;
@@ -473,20 +474,14 @@ async function redispatchHostRun(env: Env, db: Db, row: HostCandidateRow): Promi
   }
 
   // Persist the once-only flag BEFORE re-dispatch so a mid-dispatch crash cannot loop.
-  const requeuedPayload = markReaperRequeued(row.payload);
-  await db
-    .update(executions)
-    .set({ payload: requeuedPayload, updatedAt: sql`now()` })
-    .where(and(eq(executions.id, row.id), eq(executions.status, 'running')));
+  const requeuedPayload = await persistRequeuedFlag(db, row);
 
   const delivered = await dispatchToAgentHost(env, target, hostRedispatchMessage(row, requeuedPayload));
   if (!delivered) return false;
 
-  // Flip the stranded row back to submitted so the failover host can claim and re-run it.
-  await db
-    .update(executions)
-    .set({ status: 'submitted', agentHostId: target, startedAt: sql`null`, updatedAt: sql`now()` })
-    .where(and(eq(executions.id, row.id), eq(executions.status, 'running')));
+  // Flip the stranded row back to submitted so the failover host can claim and re-run it —
+  // through the repository's guarded transition, so a run that landed meanwhile stays landed.
+  await executionRepo.redispatchToHost(asExecutionId(row.id), asTenantId(row.tenant_id), asAgentHostId(target));
 
   // Explain the resurrection on the Observability timeline so it is not silent.
   try {
@@ -508,6 +503,21 @@ async function redispatchHostRun(env: Env, db: Db, row: HostCandidateRow): Promi
     } } });
   }
   return true;
+}
+
+/**
+ * Stamp the ONCE-only `reaperRequeued` flag on a still-RUNNING run's payload and return the
+ * stamped payload — shared by the host-failover re-dispatch and the cloud self-heal so both
+ * paths persist the flag the same way. A payload-only write (no status), scoped to the row's
+ * own tenant; the id binds first.
+ */
+async function persistRequeuedFlag(db: Db, row: Pick<ReapedRow, 'id' | 'tenant_id' | 'payload'>): Promise<string> {
+  const requeuedPayload = markReaperRequeued(row.payload);
+  await db
+    .update(executions)
+    .set({ payload: requeuedPayload, updatedAt: sql`now()` })
+    .where(and(eq(executions.id, row.id), scopedToTenant(executions, row.tenant_id, eq(executions.status, 'running'))));
+  return requeuedPayload;
 }
 
 /** Per-run record of WHY a failover re-dispatch was refused, surfaced as the failure reason. */
@@ -565,13 +575,9 @@ function tsToMs(ts: Date | string | null | undefined): number | null {
 async function requeueCloudRun(env: Env, db: Db, row: CloudCandidateRow): Promise<boolean> {
   if (!env.CLOUD_RUNNER) return false;
 
-  const requeuedPayload = markReaperRequeued(row.payload);
   // Persist the one-retry flag first — its absence is the only thing that makes a
   // run eligible, so writing it up-front is what guarantees "at most one retry".
-  await db
-    .update(executions)
-    .set({ payload: requeuedPayload, updatedAt: sql`now()` })
-    .where(and(eq(executions.id, row.id), eq(executions.status, 'running')));
+  const requeuedPayload = await persistRequeuedFlag(db, row);
 
   // Shared dispatch contract + kickoff (cloudSelfHeal) so the durable `/start` body
   // matches every other self-heal path.

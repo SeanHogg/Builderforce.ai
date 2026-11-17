@@ -6,8 +6,9 @@
  * `run_delta_dimensions` for the security count), over the rolling 90-day window
  * (§D14.2). Pure reads — no scoring here; {@link personScore.ts} does the maths.
  *
- * Enterprise default-off (§D14.6): a tenant's human-scoring switch comes from
- * `person_score_settings`, defaulting by plan (`free` ⇒ on, every paid tier ⇒ off). Agent
+ * Enterprise default-off (§D14.6): a tenant's human-scoring switch is the kernel
+ * `settings` row (scope 'tenant', feature {@link PERSON_SCORE_SETTINGS_FEATURE}, value
+ * `{ humanScoringEnabled }`), defaulting by plan (`free` ⇒ on, every paid tier ⇒ off). Agent
  * scoring cannot be disabled, so the route filters contributors by kind, not the read.
  */
 import { and, eq, gte, inArray, or } from 'drizzle-orm';
@@ -16,11 +17,11 @@ import {
   contributors,
   devTeamMembers,
   devTeams,
-  personScoreSettings,
   runDeltaDimensions,
   runDeltas,
   runFeatures,
   runOutcomeLabels,
+  settings,
   tenants,
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -152,15 +153,27 @@ export function bucketsOf(contributorId: number, userId: string | null, runs: re
   return [...byRole.entries()].map(([role, bucketRuns]) => ({ personId: String(contributorId), role, runs: bucketRuns }));
 }
 
-/** The tenant's human-scoring switch (§D14.6): explicit row, else the plan default. */
+/** The kernel `settings.feature` holding the tenant's human-scoring switch (§D14.6). */
+export const PERSON_SCORE_SETTINGS_FEATURE = 'person_score';
+
+/**
+ * The tenant's human-scoring switch (§D14.6): the tenant-scope `settings` row's
+ * `humanScoringEnabled` when it is a boolean, else the plan default. Read on the core
+ * (primary) database — the kernel `settings` table lives there.
+ */
 export async function humanScoringEnabled(core: Db, tenantId: number): Promise<boolean> {
-  const ops = runOutcomesDatabase(core);
-  const [row] = await ops
-    .select({ enabled: personScoreSettings.humanScoringEnabled })
-    .from(personScoreSettings)
-    .where(eq(personScoreSettings.tenantId, tenantId))
+  const [row] = await core
+    .select({ value: settings.value })
+    .from(settings)
+    .where(and(
+      eq(settings.tenantId, tenantId),
+      eq(settings.scope, 'tenant'),
+      eq(settings.scopeRef, ''),
+      eq(settings.feature, PERSON_SCORE_SETTINGS_FEATURE),
+    ))
     .limit(1);
-  if (row) return row.enabled;
+  const stored = (row?.value as { humanScoringEnabled?: unknown } | null | undefined)?.humanScoringEnabled;
+  if (typeof stored === 'boolean') return stored;
   const [tenant] = await core.select({ plan: tenants.plan }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
   // crossTenantConsent shares the shape (free ⇒ on, every paid tier ⇒ off).
   return crossTenantConsent(undefined, tenant?.plan);
