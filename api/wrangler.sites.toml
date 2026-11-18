@@ -11,6 +11,10 @@ main = "src/sitesWorker.ts"
 compatibility_date = "2026-01-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Bundles through api/tsconfig.json paths for every file — see wrangler.toml and rule 10 of
+# scripts/check-source-package-graph.mjs.
+tsconfig = "tsconfig.json"
+
 # Wildcard subdomain hosting — moved here from api/wrangler.toml. The single-label
 # apex keeps it on the free Universal SSL cert. More-specific bindings still win:
 # `api.builderforce.ai` (the API's custom domain) and any www/app frontend binding

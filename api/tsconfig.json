@@ -15,8 +15,8 @@
       "@builderforce/agent-tools/*": ["../packages/agent-tools/src/*"],
       "@builderforce/agent-loop": ["../packages/agent-loop/src/index.ts"],
       "@builderforce/agent-run": ["../packages/agent-run/src/index.ts"],
-      "@seanhogg/builderforce-memory/*": ["./node_modules/@seanhogg/builderforce-memory/dist/*/index.d.ts"],
-      "@seanhogg/builderforce-memory-engine/ml/tasks/check-scheduler": ["./node_modules/@seanhogg/builderforce-memory-engine/dist/ml/tasks/check_scheduler.d.ts"],
+      "@seanhogg/builderforce-memory/*": ["./node_modules/@seanhogg/builderforce-memory/dist/*/index.d.ts", "./node_modules/@seanhogg/builderforce-memory/dist/*/index.js"],
+      "@seanhogg/builderforce-memory-engine/ml/tasks/check-scheduler": ["./node_modules/@seanhogg/builderforce-memory-engine/dist/ml/tasks/check_scheduler.d.ts", "./node_modules/@seanhogg/builderforce-memory-engine/dist/ml/tasks/check_scheduler.js"],
 
       "@builderforce/agent-skills": ["../packages/agent-skills/src/index.ts"],
       "@builderforce/agent-stall": ["../packages/agent-stall/src/index.ts"],
