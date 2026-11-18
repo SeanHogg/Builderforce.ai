@@ -133,7 +133,7 @@ function within(reads: SourceRead[], room: number, what: string): SourceRead[] {
  * A fetch that lets at most `limit` calls through; past that it answers 429 without a
  * call, so a read or a page beyond the budget is a miss — never a subrequest.
  */
-export function providerCallBudget(base: FetchLike, limit: number): { fetch: FetchLike; used: () => number } {
+function providerCallBudget(base: FetchLike, limit: number): { fetch: FetchLike; used: () => number } {
   let used = 0;
   return {
     fetch: (input, init) => {
@@ -145,12 +145,22 @@ export function providerCallBudget(base: FetchLike, limit: number): { fetch: Fet
   };
 }
 
-/** Read each `reads` entry into `files` under its key; a miss or a failed read is skipped. */
+/**
+ * Read each `reads` entry into `files` under its key; a miss or a failed read is skipped.
+ * So is a TRUNCATED read (past the read cap, or a paged read that stopped early): a
+ * partial `.sln` or `package.json` must not be taken for the whole file, so detection
+ * treats it as unread — and logs it.
+ */
 async function readInto(ctx: RepoReadContext, io: BlueprintSourceIo, reads: readonly SourceRead[], files: Map<string, string>): Promise<void> {
   const results = await mapWithConcurrency([...reads], READ_CONCURRENCY, (read) => io.readRepoFile(ctx, read.path));
   results.forEach((result, i) => {
     const read = reads[i];
-    if (result.ok && read !== undefined) files.set(read.key, result.content);
+    if (!result.ok || read === undefined) return;
+    if (result.truncated) {
+      console.warn(`[blueprint] ${read.path} was read only in part; detection skips it`);
+      return;
+    }
+    files.set(read.key, result.content);
   });
 }
 
@@ -204,16 +214,19 @@ export async function readBlueprintSources(
       const key = repoRelativePath(raw);
       return key === null ? null : readFor(tree, key);
     });
-  // ALIASED KEYS: a named file whose provider path was already read under another key
-  // (the solution's `WEB/Web.csproj`, read by a glob as the tree's `web/Web.csproj`) gets
-  // that content under the named key too — so `files` may hold one file under two keys,
-  // each the spelling some detector asked for. It is never re-read.
-  const contentByPath = new Map([...exactReads, ...globReads].filter((r) => files.has(r.key)).map((r) => [r.path, files.get(r.key)!] as const));
+  const followReads = within(take(named), MAX_PROVIDER_CALLS - spent(), 'files are named by the read ones');
+  if (followReads.length > 0) await readInto(ctx, io, followReads, files);
+
+  // ALIASED KEYS: every named key gets the content of its provider path, whichever key read
+  // it — a glob's `web/Web.csproj` for a solution's `WEB/Web.csproj`, or one follow read for
+  // two solutions spelling the same project differently. So `files` may hold one file under
+  // several keys, each the spelling some detector asked for. Nothing is read twice.
+  const contentByPath = new Map(
+    [...exactReads, ...globReads, ...followReads].filter((r) => files.has(r.key)).map((r) => [r.path, files.get(r.key)!] as const),
+  );
   for (const read of named) {
     const known = read && !files.has(read.key) ? contentByPath.get(read.path) : undefined;
     if (read && known !== undefined) files.set(read.key, known);
   }
-  const followReads = within(take(named), MAX_PROVIDER_CALLS - spent(), 'files are named by the read ones');
-  if (followReads.length > 0) await readInto(ctx, io, followReads, files);
   return files;
 }

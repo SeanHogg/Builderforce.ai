@@ -84,10 +84,14 @@ export async function readRepoFile(ctx: RepoReadContext, path: string): Promise<
   // GitHub keeps its richer inline path below (no-regression). [1248]
   if (ctx.provider !== 'github') {
     try {
-      const content = await sourceOf(ctx).getFileContent(path, ctx.ref);
-      if (content == null) return { ok: false, reason: `file not found on ${ctx.ref}: ${path}` };
-      const truncated = content.length > MAX_FILE_CHARS;
-      return { ok: true, path, content: truncated ? content.slice(0, MAX_FILE_CHARS) : content, truncated };
+      const src = sourceOf(ctx);
+      // A paged source says when its read stopped short (`readFile`); that is truncation too.
+      const file = src.readFile
+        ? await src.readFile(path, ctx.ref)
+        : await src.getFileContent(path, ctx.ref).then((content) => (content == null ? null : { content, truncated: false }));
+      if (file == null) return { ok: false, reason: `file not found on ${ctx.ref}: ${path}` };
+      const capped = file.content.length > MAX_FILE_CHARS;
+      return { ok: true, path, content: capped ? file.content.slice(0, MAX_FILE_CHARS) : file.content, truncated: capped || file.truncated };
     } catch (e) {
       return { ok: false, reason: e instanceof Error ? e.message : `read not implemented for provider '${ctx.provider}'` };
     }

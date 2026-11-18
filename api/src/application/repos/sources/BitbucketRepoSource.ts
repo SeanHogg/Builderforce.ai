@@ -19,6 +19,7 @@
 import {
   type FetchLike,
   type RepoCommit,
+  type RepoFileRead,
   type RepoSource,
   type RepoSourceConfig,
   type RepoTreeEntry,
@@ -170,8 +171,16 @@ export class BitbucketRepoSource implements RepoSource {
    * callers get one string, exactly as they do from every other provider.
    */
   async getFileContent(path: string, ref: string): Promise<string | null> {
+    return (await this.readFile(path, ref))?.content ?? null;
+  }
+
+  /** `getFileContent`, saying whether the content is incomplete (`/browse` stopped before its last page). */
+  async readFile(path: string, ref: string): Promise<RepoFileRead | null> {
     const res = await this.fetchFn(this.api.fileContent(path, ref), { headers: this.headers });
-    if (res.ok) return res.text().catch(() => null);
+    if (res.ok) {
+      const content = await res.text().catch(() => null);
+      return content === null ? null : { content, truncated: false };
+    }
     if (!this.isServer) return null;
     // Server's own "no such file" (a 404 whose JSON names NoSuchPathException) is a miss:
     // `/browse` would only spend subrequests to say the same. Any other 404 — an HTML page
@@ -180,8 +189,12 @@ export class BitbucketRepoSource implements RepoSource {
     return this.browseFileContent(path, ref);
   }
 
-  /** Reassemble a file from Server's line-paginated `/browse` pages. */
-  private async browseFileContent(path: string, ref: string): Promise<string | null> {
+  /**
+   * Reassemble a file from Server's line-paginated `/browse` pages. Stopping before the
+   * last page — the page cap, or a page refused (a 429 from a call budget) after the first —
+   * returns what was read, marked `truncated`.
+   */
+  private async browseFileContent(path: string, ref: string): Promise<RepoFileRead | null> {
     const pagesText: string[] = [];
     let start: number | null = 0;
     let pages = 0;
@@ -190,14 +203,14 @@ export class BitbucketRepoSource implements RepoSource {
       const url: string = `${this.api.fileWrite(path)}?at=${encodeURIComponent(ref)}`
         + `&limit=${SERVER_PAGE_LIMIT}&start=${start}`;
       const { ok, body } = await this.getJson<unknown>(url);
-      if (!ok) return pagesText.length > 0 ? pagesText.join('\n') : null;
+      if (!ok) return pagesText.length > 0 ? { content: pagesText.join('\n'), truncated: true } : null;
       const page = parseBitbucketServerBrowse(body);
       if (page.text === null) return null; // a directory, or an unreadable/binary blob
       pagesText.push(page.text);
       start = page.nextPageStart;
       pages += 1;
     }
-    return pagesText.join('\n');
+    return { content: pagesText.join('\n'), truncated: start !== null };
   }
 
   async listCommits(ref: string, limit: number): Promise<RepoCommit[]> {

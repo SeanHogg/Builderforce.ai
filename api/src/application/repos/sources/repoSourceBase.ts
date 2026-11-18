@@ -38,6 +38,12 @@ export interface RepoCommit {
   date: string;
 }
 
+/** A file read: its content, and whether that content stops short of the whole file. */
+export interface RepoFileRead {
+  content: string;
+  truncated: boolean;
+}
+
 export interface RepoSource {
   getDefaultBranch(): Promise<string>;
   /** { language: bytes } — empty object when the provider has no languages API. */
@@ -46,6 +52,11 @@ export interface RepoSource {
   getTree(ref: string): Promise<{ entries: RepoTreeEntry[]; truncated: boolean }>;
   /** File content at `ref`, or null when binary / too large / missing. */
   getFileContent(path: string, ref: string): Promise<string | null>;
+  /**
+   * `getFileContent` plus whether the content is incomplete (a paged read that stopped
+   * early). Sources whose reads are never paged need not implement it.
+   */
+  readFile?(path: string, ref: string): Promise<RepoFileRead | null>;
   listCommits(ref: string, limit: number): Promise<RepoCommit[]>;
 }
 

@@ -19,6 +19,8 @@ const CTX: RepoReadContext = { provider: 'github', host: null, owner: 'acme', re
 interface StubOptions {
   /** Paths whose read fails with a provider error. */
   failing?: string[];
+  /** Paths whose read comes back truncated (read only in part). */
+  truncated?: string[];
   /** Whether the tree listing fails — a provider without listing. */
   treeListingFails?: boolean;
   /** Whether the tree listing is truncated (a repo past the provider's listing limit). */
@@ -35,7 +37,7 @@ function stubIo(repo: Record<string, string>, opts: StubOptions = {}): Blueprint
       const content = repo[path];
       return content === undefined
         ? { ok: false, reason: `file not found on abc: ${path}` }
-        : { ok: true, path, content, truncated: false };
+        : { ok: true, path, content, truncated: opts.truncated?.includes(path) === true };
     },
     listRepoTree: async (): Promise<ListFilesResult> => {
       io.listCalls += 1;
@@ -235,6 +237,29 @@ describe('readBlueprintSources', () => {
     for (const bad of ['', '/etc/x', '../x', 'a/../../x', 'a//b', './a', 'a/./b', 'C:/x', '..', 'a/.../x', 'a/ . /x', 'a\\b', 'a/%2e%2e/x', 'a/\u0001x', 'a/\u007fx']) {
       expect(repoRelativePath(bad)).toBeNull();
     }
+  });
+
+  it('one follow read serves every spelling two solutions name for the same project', async () => {
+    const io = stubIo({
+      'A.sln': sln(['deep\\x\\y\\Web\\Web.csproj']),
+      'B.sln': sln(['DEEP\\x\\y\\Web\\Web.csproj']),
+      'deep/x/y/Web/Web.csproj': WEB,
+    });
+    const files = await readBlueprintSources(CTX, io);
+    expect(io.readCalls.filter((p) => p.endsWith('Web.csproj'))).toEqual(['deep/x/y/Web/Web.csproj']);
+    expect(files.get('deep/x/y/Web/Web.csproj')).toBe(WEB);
+    expect(files.get('DEEP/x/y/Web/Web.csproj')).toBe(WEB);
+  });
+
+  it('a truncated read (a partial .sln or package.json) is treated as unread, not as the whole file', async () => {
+    const io = stubIo({
+      'package.json': '{"name":"web","dep',
+      'Shop.sln': sln(['web\\Web.csproj']),
+      'web/Web.csproj': WEB,
+    }, { truncated: ['package.json', 'Shop.sln'] });
+    const files = await readBlueprintSources(CTX, io);
+    expect(files.has('package.json')).toBe(false);
+    expect(files.has('Shop.sln')).toBe(false);
   });
 
   it('the second pass reads only named files the full tree holds', async () => {
