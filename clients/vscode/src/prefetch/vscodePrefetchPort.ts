@@ -1,5 +1,5 @@
 /**
- * The editor's PreFetch port (docs/design/deterministic-prefetch.md) — what both editor
+ * The editor's PreFetch port (DONE.md, deterministic-first PreFetch archive) — what both editor
  * surfaces (the panel's run host via `runSetupPorts.ts`, the native participant) hand a
  * run as `BrainRunRequest.prefetch`. It only ASSEMBLES:
  *

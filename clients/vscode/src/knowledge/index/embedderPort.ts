@@ -1,5 +1,5 @@
 /**
- * The editor's embedder for the knowledge index (docs/design/deterministic-knowledge-index.md,
+ * The editor's embedder for the knowledge index (DONE.md, deterministic knowledge index archive,
  * "Where it runs"): Synapse (`bfi-node`) → the Evermind CPU embed → a resident Ollama
  * embedding model, the first that is WARM — judged the way the PreFetch logprob port
  * judges its engine (a model is resident now), never by loading one on a request's path.

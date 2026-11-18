@@ -1,5 +1,5 @@
 /**
- * Application — the server's two sync-id rules (docs/design/typed-entity-ids.md §4, Phase B).
+ * Application — the server's two sync-id rules (docs/specs/platform.md, Typed entity ids §4, Phase B).
  *
  * `sync_entity_mappings` holds `server_id` text (every mapping, kept for older devices) and,
  * since migration 1339, `sync_id` bigint: the server row's integer key, NULL when the entity has

@@ -1,5 +1,5 @@
 /**
- * The confidence gate — a cascade, cheapest tier first (docs/design/deterministic-prefetch.md):
+ * The confidence gate — a cascade, cheapest tier first (DONE.md, deterministic-first PreFetch archive):
  *
  *   1. exact: the composer's `/` action, or a rule pattern — p = 1;
  *   2. lexical similarity to each action's `examples`, scored by its logistic head;

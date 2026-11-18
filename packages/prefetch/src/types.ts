@@ -1,5 +1,5 @@
 /**
- * The deterministic-first PreFetch contract (docs/design/deterministic-prefetch.md).
+ * The deterministic-first PreFetch contract (DONE.md, deterministic-first PreFetch archive).
  *
  * Actions are REGISTRY DATA. A host supplies one executor per action id; the gate never
  * runs a tool itself. A new tool is a registry row plus an executor, never a gate branch.

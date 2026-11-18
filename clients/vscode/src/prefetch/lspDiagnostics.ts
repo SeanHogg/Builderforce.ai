@@ -1,5 +1,5 @@
 /**
- * The editor-only half of `diag.typecheck` (docs/design/deterministic-prefetch.md): the
+ * The editor-only half of `diag.typecheck` (DONE.md, deterministic-first PreFetch archive): the
  * problems the language servers ALREADY reported (`vscode.languages.getDiagnostics`) for
  * the files the person is working in, and those files themselves (the open documents in
  * the workspace) — the focus every scoped PreFetch action reads.

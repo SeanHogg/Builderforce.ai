@@ -1,5 +1,5 @@
 /**
- * THE entity id resolver (docs/design/typed-entity-ids.md §3): LocalId ↔ SyncId through the
+ * THE entity id resolver (docs/specs/platform.md, Typed entity ids §3): LocalId ↔ SyncId through the
  * store's mapping rows. Every caller that held its own lookup (a `/^\d+$/` test, `Number(ref)`,
  * a `serverId` read) asks this instead; it never invents a SyncId from an id's shape.
  *

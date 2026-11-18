@@ -24,7 +24,7 @@ export interface ResultEntityIds {
 }
 
 /**
- * THE reader of an entity id off a tool result (docs/design/typed-entity-ids.md §5). Nothing
+ * THE reader of an entity id off a tool result (docs/specs/platform.md, Typed entity ids §5). Nothing
  * else reads `id` / `taskId` / `syncId` off a result.
  *
  * - `syncId`: the result's `syncId`, else `taskId` (`builtin_tickets_from_delta` answers

@@ -82,7 +82,7 @@ export interface TicketStatusMove {
 
 /**
  * The tool and arguments that move ticket `ref` to `status`, chosen from the {@link EntityRef}
- * (docs/design/typed-entity-ids.md §6.4), never from a string's shape beyond `parseEntityRef`:
+ * (docs/specs/platform.md, Typed entity ids §6.4), never from a string's shape beyond `parseEntityRef`:
  *
  * - a LocalId → `ticket-move` (only the editor's tool can address a ticket that has not synced);
  * - a SyncId → the filing vocabulary's tool: `ticket-move` in the editor (it takes a synced id

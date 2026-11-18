@@ -1,6 +1,6 @@
 /**
  * regression: `LocalChatIdentity.localIdFor` resolves a SERVER chat id inside the active account
- * when the host passes its scope (typed-entity-ids §3). Two accounts each numbered a chat 40; the
+ * when the host passes its scope (platform.md typed entity ids §3). Two accounts each numbered a chat 40; the
  * scoped lookup never hands one account's caller the other's chat.
  */
 

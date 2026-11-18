@@ -185,13 +185,158 @@ The credit ledger, tier rates and viewer projection are **scoped per Segment**.
 
 ## Design — Typed entity ids
 
-> Reference doc stays at `docs/design/typed-entity-ids.md` (code cites it). Verified 2026-11-17: Shipped except the items below.
+> Consolidated 2026-11-18 from `docs/design/typed-entity-ids.md` (DESIGN v2, revised after an Opus review on 2026-11-10). Verified against code 2026-11-18: Shipped except the items below. §1–§6 are the standing id contract the code cites by § number and stay here as reference (drift fixed in place and marked); §4's server contract push and §7 are open; §8 (done checks) is archived word for word in DONE.md ("Typed entity ids: LocalId (UUID) and SyncId (bigint): finished sections archived on consolidation (2026-11-18)").
 
-### §4 Storage — Server contract push (drop `server_id` on mappings)
-**Remaining (verified 2026-11-17):** `api/src/application/sync/syncIds.ts mappedServerKey` still prefers `server_id`; drop `sync_entity_mappings.server_id` after a backfill re-run, read `sync_id` first, stop sending `serverId` text, drop `ServerMapping.serverId` on the device. Gate: `/api/sync` push telemetry shows no client below the version that reads `syncId` (already ROADMAP).
+Where this came from: editor run #70776 and chat #61651 guessed the same id in dozens of places, and the guesses disagreed:
+- `Number(ref)` skipped local tickets;
+- reading `.id` when the result carried `taskId` produced 17 duplicate delta tickets;
+- the transport silently drops a numeric `serverId` (`httpSyncTransport.ts:163`).
 
-### §7 Not in scope (logged) — api non-sync UUID sweep
-**Remaining (verified 2026-11-17):** 26 api files validate route/param ids with their own UUID regex, allowlisted in `scripts/entity-id-parsing.allowlist.mjs:31-58` under `API_NON_SYNC_UUID_SWEEP`. Move each onto `isLocalId` from `packages/local-first/src/entityId.ts` and delete the allowlist block. **Not in ROADMAP.**
+### 1. The rule (reference)
+
+| Concept | Type | Minted by | Shape |
+|---|---|---|---|
+| **LocalId** | `string` branded `LocalId` | the device that creates the entity | a UUID of any version. The check is case-insensitive, and minting is lower-case. |
+| **SyncId** | `number` branded `SyncId` | the server, when it imports the entity | a positive safe integer, stored as Postgres `bigint` |
+
+- Each entity created on a device has exactly one LocalId, and it never changes.
+- After a sync receipt, the entity has a mapping row per destination, holding `syncId: SyncId | null` and `serverVersion`.
+- A mapping row exists for **every** imported entity:
+  - its `syncId` is null when the server row has no integer key (mirror records, usage, tier tickets);
+  - nothing may invent a SyncId or guess one from an id's shape.
+- Before the receipt there is no mapping row and no SyncId.
+- An entity that was created on the server gets its LocalId when a device first ingests it (`ingestServerRecords`).
+- One SyncId can map to several LocalIds. This happens with chat-ticket links re-linked under a new UUID, chats adopted by hint, and messages adopted by eventKey.
+  - `localIdOf` returns the **earliest** mapping, in insertion order.
+  - The server never reads a mapping by its server id.
+- Brain chat **steps** and **messages** share entity type `message` but come from different tables, so a step's SyncId and a message's SyncId can be the same number. A step's mapping carries `syncId: null`, because its id is not a message id.
+- Tier tickets (portfolio, objective, initiative, roadmap, spec):
+  - they are real local `ticket` records with minted LocalIds;
+  - their mapping holds `syncId: null` plus `externalRef: "kind:ref"`;
+  - `mappingByExternalRef` replaces the `"kind:ref"`-in-`serverId` lookup (`railRows.ts:65`, `railLinks.ts:33`, `ingestServerRecords.ts:128`);
+  - they are never created locally (`localDomainTools.ts:243`).
+
+(Verified 2026-11-18: `mappingByExternalRef` in `packages/local-first/src/entityIdResolver.ts`, used by `ingestServerRecords.ts` and `clients/vscode/src/chatRail/railPayloads.ts`. The "earliest mapping" order is persisted with the row: `compareMappingAge` / `earliestMapping` in `packages/local-first/src/records.ts`.)
+
+### 2. The one primitive: `packages/local-first/src/entityId.ts` (reference)
+
+This file **absorbs** `clientEntityIdentity.ts` (G04): its `UUID_RE`, `INTEGER_ID_RE` and `mintClientEntityId` move here. The unused `rememberServerId` / `clientIdFor` are deleted, and so is `clientEntityIdentity.ts`. `entityId.ts` has no dependencies and is exported from `index.ts`.
+
+```ts
+export type LocalId = string & { readonly __brand: 'LocalId' };
+export type SyncId  = number & { readonly __brand: 'SyncId' };
+export function mintLocalId(): LocalId;                 // crypto.randomUUID(), lower-case
+export function isLocalId(v: unknown): v is LocalId;    // THE UUID check (case-insensitive)
+export function parseSyncId(v: unknown): SyncId | null; // positive safe int, or /^[1-9]\d*$/ text
+export type EntityRef = { local: LocalId } | { sync: SyncId } | { tier: { kind: string; ref: string } };
+export function parseEntityRef(v: unknown): EntityRef | null; // "kind:ref" → tier
+export function syncIdText(id: SyncId): string;        // the one place a SyncId becomes wire/payload text
+```
+
+- **`isJournalEventId`** stays as an alias of `isLocalId`. It is case-insensitive, so it does not change what `storeTransaction.ts:105` accepts.
+- **Payload fields that hold a mixed id shape stay strings**, because they are hashed on the wire. They are read through `parseEntityRef`:
+  - `TicketValue.projectId` and `parentTicketId` hold a client id or decimal text;
+  - `ChatTicketLinkValue.chatServerId` and `ticketServerId` are written via `syncIdText`.
+- **Branded types do not survive a round-trip.** A value read back from JSON, `postMessage` or IndexedDB has lost its brand, so it goes through `isLocalId` / `parseSyncId` again.
+
+(Verified 2026-11-18: `entityId.ts:14-105`; `clientEntityIdentity.ts` is gone. As built the file also exports `CLIENT_ID_NOT_UUID`, `isIntegerIdText` and `tierRefText`, and `isJournalEventId` is exported from `storeContract.ts`.)
+
+### 3. The one resolver: `packages/local-first/src/entityIdResolver.ts` (reference)
+
+```ts
+export interface EntityIdResolver {
+  syncIdOf(type: SyncEntityType, local: LocalId, destination?: EntityDestination): Promise<SyncId | null>;
+  localIdOf(type: SyncEntityType, sync: SyncId, destination?: EntityDestination): Promise<LocalId | null>;
+  resolve(type: SyncEntityType, ref: EntityRef, destination?: EntityDestination): Promise<{ localId: LocalId | null; syncId: SyncId | null }>;
+}
+export function entityIdResolver(store: LocalFirstStore): EntityIdResolver;
+```
+
+- `destination` is optional. When it is omitted, the resolver looks in any destination of the active account, because tool-argument callers (`resolveLocalReference`, `ticketClientId`) have no destination to pass.
+- `mappingByServerId` honours the destination (it ignores it today, at `storeTransaction.ts:185`).
+- These callers move onto the resolver, and each one's own lookup is deleted:
+  - **vscode:**
+    - `localTicketIdBridge`;
+    - `localDomainTools` (`resolveLocalReference`, `localTicketId`, `serverIdOf`, `SERVER_ID_NUMERIC`, lines 255/274/440);
+    - `localTicketScope.ticketClientId`;
+    - `chatTicketGuard`;
+    - `ticketChatOwnership`;
+    - `chatRail/buildRail.ts:48,69`, `resolveChat.ts:24,33`, `railLinks.ts:33`;
+    - `chatChangedFiles.ts:39`.
+  - **local-first:** `chatTicketLink.ts:99` (`linkServerIds`), `journalRules.importPayload`, `ledgerSpend.ts:93`, `localFirstPersistence.ts:117`.
+  - **brain-embedded:** `localChat/chatIdentity.boundServerId`, `types.ts:97`.
+- Chat **view keys** (brain-embedded's numeric `localId`, chrome's negative `LocalChat.id`) are not LocalIds. They get a `ViewKey` type alias, and no field is renamed: `LocalChat.id` is an IndexedDB keyPath.
+
+(Verified 2026-11-18: `entityIdResolver.ts:21-48`; as built `entityIdResolver` takes `Pick<LocalFirstStore, 'read'>` and `SyncEntityType` is an alias of `LocalEntityType`. The vscode callers now go through `clients/vscode/src/localEntityRefs.ts`; `ViewKey` is in `brain-embedded/src/types.ts`. The line numbers in the caller list are the 2026-11-10 ones.)
+
+### 4. Storage
+
+#### Device (Phase A) (reference)
+
+- `ServerMapping` becomes `{ destination, entityType, clientEntityId, syncId: SyncId | null, serverVersion, externalRef?: string, serverId?: string }`.
+- **No upgrade step and no deletes.** One tolerant normaliser, `normalizeServerMapping(raw)` in `records.ts`, applies `syncId = parseSyncId(raw.syncId) ?? parseSyncId(raw.serverId) ?? null`, and moves a `"kind:ref"` `serverId` to `externalRef`. It runs:
+  - in the VS Code journal store, both on load and when a delta is applied (`durableLocalFirstStore`);
+  - in the chrome/web snapshot store, on load (`indexedDb.ts`).
+- Writes put both `syncId` and `serverId` (text) for one release, so an older extension window that shares the journal still reads the row.
+- `sync.ts:346` writes the mapping **whenever `receipt.serverVersion` is present**, even with no id. This fixes mirror and usage records re-queuing as imports.
+- `httpSyncTransport.ts:163` reads `syncId ?? serverId`, as a number or decimal text, so the silent drop is fixed.
+- `SyncReceipt` (which the api re-exports) gains `syncId?: number` and keeps `serverId?: string`.
+
+(Drift fixed 2026-11-18: as built, `ServerMapping.syncId` is optional in the type (`syncId?: SyncId | null`, a reader treats `undefined` as `null`) and the row also carries a persisted insertion order (`packages/local-first/src/records.ts:178-206`). The normaliser (`records.ts:217`) runs on every `putMapping` (`storeContract.ts:114`) and in the event-backlog migration (`eventBacklogMigration.ts:114`), so every store reads normalised rows. The wire read is `wireSyncId` in `sync.ts:99-103`; an explicit `syncId: null` is kept.)
+
+#### Server (Phase B, this release: expand only) (reference)
+
+- Migration `1339_sync_entity_mappings_sync_id.sql`:
+  - adds `sync_id bigint NULL` to **`sync_entity_mappings` only**. The `sync_changes`, `sync_events` and `sync_records` log tables keep `server_id` text and are parsed at the edge;
+  - backfills `WHERE server_id ~ '^[1-9][0-9]*$'`;
+  - adds a **plain** (not unique) index on `(tenant_id, entity_type, sync_id)`.
+- Writers dual-write `server_id` and `sync_id`. Readers use `COALESCE(parseSyncId(server_id), sync_id)`, because a revived chat-ticket link gets a new link row id without touching `sync_id`, so `sync_id` can be stale while `server_id` cannot.
+- Every importer's `serverNumericId` becomes `parseSyncId` (`handleSyncPush.ts:99`, `importers/index.ts:102 mappedChat`).
+- Mirror and usage imports keep their mapping rows and leave `sync_id` NULL. `server_id` stays as it is today, so older devices keep working.
+- Receipts emit `syncId` (a number, when the id is an integer) alongside `serverId` text.
+- Pull sends `syncId` on rows (`syncPersist.ts rowToRecord`/`changeRecord`). This is a fix: pull never sent the id before. Ingest goes through `localIdOf`, and its earliest-mapping rule settles a rail-ingested twin.
+- Entity tables keep int4 `serial` ids, since every int4 is a valid SyncId.
+
+(Drift fixed 2026-11-18: the design said readers use `COALESCE(sync_id, parseSyncId(server_id))`. The built reader is the reverse order, `mappedServerKey` in `api/src/application/sync/syncIds.ts:32-34` (`parseSyncId(row.serverId) ?? row.syncId`), for the reason now given in the bullet; the order flips to `sync_id` first at the contract push below. Pull: `api/src/application/sync/syncPersist.ts:46,108`.)
+
+#### 4. Storage — Server contract push (drop `server_id` on mappings)
+
+- **Contract push (drop `server_id` on mappings).**
+  - Gate: the `/api/sync` push telemetry shows no client below the version that reads `syncId`, measured by the extension version on the request (`x-builderforce-client-version`).
+  - It is a Gap Register entry, and that gate is its blocker.
+
+**Remaining (verified 2026-11-18):**
+- `api/src/application/sync/syncIds.ts:33-34` `mappedServerKey` still prefers `server_id`, and every mapping still dual-writes it (`syncIds.ts:4-16`; `api/src/infrastructure/database/schema/sync.ts:77`).
+- To do at the push: re-run the backfill, read `sync_id` first, drop `sync_entity_mappings.server_id` (expand/contract across two pushes), stop sending `serverId` text on receipts and pulled rows, and drop `serverId` from the device's `ServerMapping`. Already in ROADMAP ("Typed ids, contract push still to come").
+
+### 5. Tool results: one id shape (reference)
+
+- **Results.** Each tool that creates or returns a syncable entity adds `localId?` / `syncId?` to the result:
+  - `builtin_tasks_create` adds `syncId`;
+  - `builtin_tickets_from_delta` adds `syncId`;
+  - local `ticket-create` / `project-create` add `localId` and `syncId` and keep `id` / `serverId`;
+  - `builtin_chats_list_tickets` rows add `syncId` for task tiers.
+- **Consumers.** One reader, `entityIdsOf(result)` in `brain-embedded/src/toolResultRecord.ts`, built on `parseEntityRef`. It reads `syncId`, then `taskId`, then a numeric `id`, and `localId` or a UUID `id`. It replaces:
+  - `ticketToolVocabulary.serverTicketId`;
+  - the readers in `runBackstops.recordCodeChangeTicket`, `planHandoff.fileTickets`, `chatWorkLinking` and `localTicketCloseOut`.
+- **Arguments.** `builtinMcpService` gets a new `idArg(v, name)` (`parseSyncId`, with a clear error on a non-id) for id arguments only. `num()` stays for `limit`, `offset` and `position`.
+
+(Verified 2026-11-18: `api/src/application/llm/builtinToolIds.ts` (`idArg`, `syncIdField`, `withTicketSyncIds`), used at `builtinMcpService.ts:179,1173,1196,1277`; `entityIdsOf` at `brain-embedded/src/toolResultRecord.ts:38`; `serverTicketId` no longer exists.)
+
+### 6. Sequence: a ticket created in the editor, then dispatched (reference)
+
+1. `ticket-create` mints a LocalId and returns `{ id, localId }`.
+2. A sync pass imports the ticket. The receipt carries `{ syncId: tasks.id, serverId: "<text>" }`, and the device writes `ServerMapping{ syncId }`.
+3. The model calls `builtin_kanban_coordinate { taskId: <LocalId> }`. The bridge calls `resolver.syncIdOf`, and gets either the number or `null`. On `null` the call fails with "not synced yet" rather than guessing.
+4. At close-out, `ticketStatusMove` picks between `ticket-move` and `builtin_tasks_update` from the `EntityRef`, not from the shape of a string.
+
+### 7. Not in scope (logged) — api non-sync UUID sweep
+
+- The api's sweep of UUID regexes outside sync (about 15 copies) gets its own DRY entry.
+- (The v1 claim about the web writer's `eventId` was wrong. `storeTransaction.ts:104` turns a non-UUID into an idempotency key, so there is no bug there.)
+
+**Remaining (verified 2026-11-18):**
+- 26 api files (not about 15) validate route/param ids with their own UUID regex, allowlisted in `scripts/entity-id-parsing.allowlist.mjs:31-59` under `API_NON_SYNC_UUID_SWEEP` (`:12`). Move each onto `isLocalId` from `packages/local-first/src/entityId.ts` and delete the allowlist block. ROADMAP "Typed ids: the §7 api UUID sweep (26 allowlisted files) has no entry".
 
 ---
 

@@ -1,5 +1,5 @@
 /**
- * The context pack's KNOWLEDGE part (docs/design/deterministic-knowledge-index.md,
+ * The context pack's KNOWLEDGE part (DONE.md, deterministic knowledge index archive,
  * "Consumers"): the workspace root's knowledge index asked about the request — exact +
  * lexical hits (dense only while an embedder is warm), expanded one hop over the graph's
  * neighbours — rendered with paths into the pack's volatile tail, beside the pre-search

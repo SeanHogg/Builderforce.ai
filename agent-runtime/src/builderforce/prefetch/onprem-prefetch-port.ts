@@ -1,5 +1,5 @@
 /**
- * The ON-PREM PreFetch port (docs/design/deterministic-prefetch.md) — the SAME shared
+ * The ON-PREM PreFetch port (DONE.md, deterministic-first PreFetch archive) — the SAME shared
  * rows and executors the editor runs (`@builderforce/agent-tools/prefetch`), over this
  * runtime's own seams, never a copy:
  *

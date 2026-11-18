@@ -1,5 +1,5 @@
 /**
- * The id-shaped regexes `check:entity-id-parsing` lets stand, as DATA (docs/design/typed-entity-ids.md §7, §8).
+ * The id-shaped regexes `check:entity-id-parsing` lets stand, as DATA (docs/specs/platform.md, Typed entity ids §7; DONE.md, Typed entity ids archive §8).
  *
  * Each entry `{ file, kind, reason }` covers every `kind` ('uuid' | 'integer') finding in `file`. Two reasons qualify:
  * the regex is not about an entity id at all, or it is in the api's non-sync UUID sweep, which §7 logs as its own DRY entry
@@ -9,7 +9,7 @@
  */
 
 /** §7: the api's UUID checks outside sync. Each validates a route/param id; they move onto `isLocalId` with the §7 DRY entry. */
-const API_NON_SYNC_UUID_SWEEP = 'typed-entity-ids §7: api non-sync UUID sweep (own DRY entry); moves onto isLocalId then';
+const API_NON_SYNC_UUID_SWEEP = 'platform.md typed entity ids §7: api non-sync UUID sweep (own DRY entry); moves onto isLocalId then';
 
 export const ALLOWLIST = [
   // ── Not an entity id ────────────────────────────────────────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 /**
- * On-prem's knowledge index per root (docs/design/deterministic-knowledge-index.md,
+ * On-prem's knowledge index per root (DONE.md, deterministic knowledge index archive,
  * "Where it runs") — the same seam as the editor's (`getHostKnowledgeIndex(rootId)`), over
  * this runtime's own ports: the disk (atomic writes under
  * `<workspace>/.builderforce/knowledge/`), the SSM memory service's embed while it is warm

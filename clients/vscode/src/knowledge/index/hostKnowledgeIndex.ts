@@ -1,5 +1,5 @@
 /**
- * The editor's knowledge index per root (docs/design/deterministic-knowledge-index.md,
+ * The editor's knowledge index per root (DONE.md, deterministic knowledge index archive,
  * "Where it runs"; PRD 38 §4.7) — the PINNED seam the knowledge host (review runner,
  * graph panel, stores) imports:
  *

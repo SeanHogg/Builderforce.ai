@@ -1,5 +1,5 @@
 /**
- * The editor's PreFetch REGISTRY and EXECUTORS (docs/design/deterministic-prefetch.md) —
+ * The editor's PreFetch REGISTRY and EXECUTORS (DONE.md, deterministic-first PreFetch archive) —
  * split from `vscodePrefetchPort.ts`, which only assembles the port:
  *
  *   - the editor's own rows: `symbols.where-defined` (`whereDefinedAnswer`, the symbol

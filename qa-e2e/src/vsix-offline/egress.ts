@@ -12,7 +12,7 @@
  *      and is asserted through the recorder below — any platform/npm request
  *      that escapes the guard still cannot leave the machine.
  *   2. This module is the socket counter. Two mechanisms, following the G27
- *      packaged-acceptance design (`docs/design/local-first-closure-g03-g21-g23-g27.md`):
+ *      packaged-acceptance design (`docs/specs/make.md`, Design — Local-first closure, §3 G27):
  *        - a loopback CONNECT recorder the whole instance is pointed at with
  *          Electron's `--proxy-server` flag: every attempted egress is logged
  *          with its target host:port and the socket is destroyed (fail closed);

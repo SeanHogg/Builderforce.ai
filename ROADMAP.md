@@ -18,7 +18,7 @@ Vocabulary is spec data, ratcheted by `frontend/scripts/check-methodology.mjs`.
 
 Enabling work never outranks a broken Idea→Real journey.
 
-**North-star metric:** share of ideas reaching a graded proof. Contract: [OUTCOME-METRICS.md](./docs/design/creation-canvas/OUTCOME-METRICS.md).
+**North-star metric:** share of ideas reaching a graded proof. Contract: [measure.md › Creation outcome metrics](./docs/specs/measure.md#design--creation-outcome-metrics).
 
 ## Claim-to-Proof
 
@@ -200,9 +200,11 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 
 ### Local-first `[agents]` `[platform]`
 
+- **PreFetch done-checks 5–6 are unmeasured:** no turn-2 cache-hit probe (≥ 90%) and no gate-latency measurement. [make.md › Deterministic-first PreFetch](./docs/specs/make.md#done-checks--remaining-prefetch).
+- **The API chatter inventory and per-surface request budget are not built** (delivery step 6 of the local-first review): no inventory of what each surface calls on open, no budget enforced. [make.md › Web, Rovr, and VSIX local-first review](./docs/specs/make.md#design--web-rovr-and-vsix-local-first-architecture-and-batch-sync-review).
 - **The platform transport policy is not re-verified for the webview realm and sockets (G02).** Confirm that the shared policy covers the webview realm, WebSockets, `vscode` request APIs and child-process network, or log each gap. [make.md › Local-first review](./docs/specs/make.md#gaps-and-required-changes--still-open)
 - **Offline memory, in builderforce-memory.** Open: M07 cache persistence, M08 asset resolver, M10 router, M11 mutation guard. Partial: M03–M05, M09. `clients/vscode/src/cognition.ts` is still server-bound. Done when the review's acceptance 5–7 pass. [make.md › Design Shared offline memory scope](./docs/specs/make.md#shared-offline-memory-scope--still-open)
-Source: [offline-first review](./docs/design/vsix-offline-first-architecture-review.md).
+Source: [offline-first review](./docs/specs/make.md#design--web-rovr-and-vsix-local-first-architecture-and-batch-sync-review).
 
 
 
@@ -314,7 +316,7 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 ## 📊 Measure — grade the proof
 
 - **[finance] An installed vertical dashboard shows nowhere else.** `FinanceLens.tsx` never reads the preset, and `toPublicProfile` carries no benchmark band for the marketplace company profile. [measure.md › PRD 25](./docs/specs/measure.md#66-where-it-appears).
-- **Cost per creation outcome is permanently "Not measured" (found by the 2026-11-17 PRD verification).** Nothing sends `costUsdMillicents`; there is also no sales-brief presentation export. [measure.md › Creation outcome metrics](./docs/specs/measure.md#design--creation-outcome-metrics).
+- **Cost per creation outcome is permanently "Not measured" (found by the 2026-11-17 PRD verification).** Nothing sends `costUsdMillicents`; there is also no sales-brief presentation export. [measure.md › Creation outcome metrics](./docs/specs/measure.md#metric-definitions--cost-per-delivered-outcome).
 - **[growth] `experiment` cards are never measured.** `builtin_canvas_bind_ab_test` doesn't exist and `experiment` isn't in `CONNECTED_CANVAS_ACTIONS`. Bind to `ab_tests` (the Insights traffic split exists), enforce `ab_test_segments` at serve time, cover external sites. [measure.md › Design Instrumentation rollout](./docs/specs/measure.md#instrumentation-rollout)
 - **[platform] Three metric families have no writer:** `channel_performance`, `arr_projections`, `quota_attainment`. All 17 seats have rollups.
 - **[finance] Vertical KPIs ([PRD 25](./docs/specs/measure.md)).** Slice B `growth.*`, LTV tranches, benchmark seeds; C exit waterfall; D remaining eight verticals' KPIs.
@@ -507,7 +509,7 @@ RESOLVED 2026-11-01 (commit 67f461953): the pending-turn wiring and `servedBy` a
 - **No lint caps `--grad-brand` at two per page** (hero + CTA). Add it over `.mk-band` usage. [platform.md › PRD 21](./docs/specs/platform.md#11104-what-this-adds-to-checkdesign-tokens-open-item).
 - **412 files hand-roll `border: 1px solid var(--border-subtle)`** instead of `<Surface>`. Sweep surface by surface, shell-touched surfaces first. [platform.md › PRD 21](./docs/specs/platform.md#27--291-migrate-onto-the-primitives).
 - **3,240 off-scale font sizes** (`check-design-scale.mjs` `offScaleFontSizes`), including the `.ui-page-header__description` primitive at 14px. Sweep onto `--font-size-*` and lower the baseline each pass. [platform.md › PRD 21](./docs/specs/platform.md#23-typography--all-sans-adoption).
-- **Typed ids, contract push still to come: `sync_entity_mappings.server_id` and the wire's `serverId` text are still dual-written beside `sync_id`.** The expand push (migration 1339, `docs/design/typed-entity-ids.md` §4) added `sync_id bigint`. The api reader prefers `server_id` (`api/src/application/sync/syncIds.ts mappedServerKey`) because rows written by the old Worker leave `sync_id` stale. The contract push will: [platform.md › Design §4](./docs/specs/platform.md#4-storage--server-contract-push-drop-server_id-on-mappings)
+- **Typed ids, contract push still to come: `sync_entity_mappings.server_id` and the wire's `serverId` text are still dual-written beside `sync_id`.** The expand push (migration 1339, `docs/specs/platform.md` › Typed entity ids §4) added `sync_id bigint`. The api reader prefers `server_id` (`api/src/application/sync/syncIds.ts mappedServerKey`) because rows written by the old Worker leave `sync_id` stale. The contract push will: [platform.md › Design §4](./docs/specs/platform.md#4-storage--server-contract-push-drop-server_id-on-mappings)
   - drop `server_id` from mappings, after a backfill re-run;
   - flip `mappedServerKey` to read `sync_id` first;
   - stop sending `serverId` text on receipts;
@@ -515,7 +517,7 @@ RESOLVED 2026-11-01 (commit 67f461953): the pending-turn wiring and `servedBy` a
 
   Blocker: the `/api/sync` push telemetry has to show no client below the version that reads `syncId`, and that takes a release in the field.
 - **`clearCommentPins` has no caller (found by the 2026-11-17 PRD verification).** `api/src/application/canvas/canvasComments.ts:274` carries the SET NULL obligation its header says is "called" when a canvas object is deleted; nothing calls it, so pins can point at deleted objects. Wire it into the object-delete path.
-- **Typed ids: the §7 api UUID sweep (26 allowlisted files) has no entry (found by the 2026-11-17 PRD verification).** Design: `docs/design/typed-entity-ids.md` §7. [platform.md › Design §7](./docs/specs/platform.md#7-not-in-scope-logged--api-non-sync-uuid-sweep)
+- **Typed ids: the §7 api UUID sweep (26 allowlisted files) has no entry (found by the 2026-11-17 PRD verification).** Design: `docs/specs/platform.md` › Typed entity ids §7. [platform.md › Design §7](./docs/specs/platform.md#7-not-in-scope-logged--api-non-sync-uuid-sweep)
 - **No guard enforces the read-through cache rule (found by the 2026-11-17 PRD verification)** (`getOrSetCached` for read-heavy paths, PRD 20). [platform.md › PRD 20](./docs/specs/platform.md#prd-20--the-consolidated-data-model-the-api-on-it-and-the-experience-on-that).
 - **Layering ratchet at 96;** 81 presentation modules import the schema. Worst: `creationSessionRoutes`, `adminRoutes`, `qaRoutes`. [platform.md › PRD 22 §11.1](./docs/specs/platform.md#111-presentation-depends-on-use-cases)
 - **198 unscoped tenant queries in 87 files** (baseline `api/scripts/.tenant-scope-baseline.txt`, 2026-11-18). [run.md › SOC 2 Type I Compliance §3](./docs/specs/run.md#3-identified-gaps-open)

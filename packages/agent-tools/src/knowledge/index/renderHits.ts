@@ -1,6 +1,6 @@
 /**
  * Knowledge-index recall as text — ONE renderer for both places hits reach a turn
- * (docs/design/deterministic-knowledge-index.md, "Consumers"):
+ * (DONE.md, deterministic knowledge index archive, "Consumers"):
  *
  *   - `knowledge.ask`'s ANSWER (the hits, settled with no model) and its PREFETCH
  *     fallback (the same hits as context for the model);

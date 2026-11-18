@@ -1,5 +1,5 @@
 /**
- * The host's embedder for the knowledge index (docs/design/deterministic-knowledge-index.md,
+ * The host's embedder for the knowledge index (DONE.md, deterministic knowledge index archive,
  * "Where it runs"): Synapse (`bfi-node`) first, then the Evermind CPU embed, then a
  * resident Ollama embedding model — the FIRST that is warm right now. None warm ⇒ no
  * embedder: the index serves exact + lexical and says so (`tiers`), and never mixes

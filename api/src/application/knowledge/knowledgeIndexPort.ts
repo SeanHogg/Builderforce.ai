@@ -1,5 +1,5 @@
 /**
- * KnowledgeIndexPort — the ONE cloud vector engine (design: deterministic-knowledge-index.md,
+ * KnowledgeIndexPort — the ONE cloud vector engine (design: DONE.md, deterministic knowledge index archive,
  * WS4). Every cloud search — the project graph's `GET …/knowledge/search` and the durable
  * run's `semantic_search` over the repository — runs on memory's deterministic knowledge
  * index; the brute-force cosine loop `repoSymbolVectors.ts` used to carry is gone.

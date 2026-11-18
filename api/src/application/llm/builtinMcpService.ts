@@ -1191,7 +1191,7 @@ const CATALOG: BuiltinTool[] = [
       // A ticket created straight into a staffed lane auto-runs, same as the board's
       // POST path (a create lands in the Backlog lane — fires only if that lane is staffed).
       const autoRun = await fireLaneAutoRun(ctx, created);
-      // `syncId`: the ONE id field a caller reads (typed-entity-ids §5); `id` stays.
+      // `syncId`: the ONE id field a caller reads (platform.md typed entity ids §5); `id` stays.
       const createdPlain = created.toPlain() as { id?: unknown };
       return { ...createdPlain, ...syncIdField(createdPlain.id), ...(autoRun ? { autoRun } : {}) };
     },
@@ -1273,7 +1273,7 @@ const CATALOG: BuiltinTool[] = [
         createdBy: ctx.userId ?? null,
         createTicket: typeof a.createTicket === 'boolean' ? a.createTicket : true,
       });
-      // `syncId`: the ticket the delta landed on, as the ONE id field (typed-entity-ids §5).
+      // `syncId`: the ticket the delta landed on, as the ONE id field (platform.md typed entity ids §5).
       return { ...recorded, ...syncIdField(recorded.taskId) };
     },
   },

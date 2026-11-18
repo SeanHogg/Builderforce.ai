@@ -32,7 +32,7 @@ still open. If the section is missing there, it shipped, and you'll find it in D
 | 22 | Browser performance & code health | platform | Partly built |
 | 23 | Manager PR review & ticket recovery | make | Mostly built, dry-run only |
 | 25 / 25a | Vertical KPI dashboards | measure | Partly built (Slice A) |
-| 26 | Advisor platform | run ([redirect](./26-prd-advisor-platform.md) kept for board links) | Partly built |
+| 26 | Advisor platform | [run](./run.md#prd-26--advisor-platform-epic-2522) | Partly built |
 | 30 | Prompt-driven marketing campaign | reach | Partly built |
 | 31 | Customer app platform | make | Partly built |
 | 33 | Insights: session replay | measure | Shipped in code; provisioning open |
@@ -61,5 +61,5 @@ still open. If the section is missing there, it shipped, and you'll find it in D
   (`api/src/application/repos/commitPrdToRepo.ts`). These are snapshots and may cite retired PRD paths;
   use the table above.
 
-Design references live in [`../design/`](../design/). Code headers cite them, and their open items are
-carried in the domain files. Implementation guides (email, multi-auth) live in [`../guides/`](../guides/).
+The end-state design docs were folded into the domain files on 2026-11-18. [`../design/`](../design/) keeps only
+the one-agent-one-kernel diagram and the Creation Canvas release-evidence folder and images. Implementation guides (email, multi-auth) live in [`../guides/`](../guides/).

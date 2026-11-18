@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The tested-wording rule for PUBLIC marketing copy (docs/marketing/CLAIMS-PROCESS.md).
+ * The tested-wording rule for PUBLIC marketing copy (docs/specs/reach.md › Design — Marketing claims review process).
  *
  * An absolute — every, always, never, zero, entire, guarantee(s/d), unlimited, 100% —
  * in public copy is a product guarantee the Claim-to-Proof register may not back.

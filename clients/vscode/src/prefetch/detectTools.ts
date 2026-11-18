@@ -1,7 +1,7 @@
 /**
  * Which deterministic tools the open workspace HAS, for the PreFetch gate — a registry
  * row that `requires` a tool is offered only when it was detected
- * (docs/design/deterministic-prefetch.md). The detection itself is shared
+ * (DONE.md, deterministic-first PreFetch archive). The detection itself is shared
  * (`@builderforce/agent-tools/prefetch` `detectTools` over the Node probe: `package.json`
  * dependencies and devDependencies, the workspace's `node_modules/.bin`, lockfiles and the
  * PATH, all read in-process — nothing is spawned); this module MEMOISES it per workspace

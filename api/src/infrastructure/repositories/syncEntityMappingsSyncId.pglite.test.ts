@@ -1,5 +1,5 @@
 /**
- * Migration 1339 (typed-entity-ids §4, expand only) against REAL Postgres (PGlite), executed from
+ * Migration 1339 (platform.md typed entity ids §4, expand only) against REAL Postgres (PGlite), executed from
  * its file: `sync_entity_mappings.sync_id` is added, backfilled from decimal `server_id` text
  * only, never for a run step (a `message` whose id is a `brain_chat_steps` id >= STEP_ID_FLOOR),
  * and indexed by a PLAIN (non-unique) index. The Drizzle schema declares the same column/index.

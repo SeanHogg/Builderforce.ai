@@ -3,7 +3,7 @@ import type { PrefetchConfirm, PrefetchResult } from '@seanhogg/builderforce-bra
 import { stringsFrom, type LabelLookup } from '../labelCatalog';
 
 /**
- * The PreFetch chips (docs/design/deterministic-prefetch.md) — ONE component family every
+ * The PreFetch chips (DONE.md, deterministic-first PreFetch archive) — ONE component family every
  * surface (the VS Code chat, the web Brain panel, Rovr) renders in the SAME composer
  * transcript, never a modal or a panel of its own:
  *

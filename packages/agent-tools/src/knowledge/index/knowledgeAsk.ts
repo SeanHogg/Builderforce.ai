@@ -1,5 +1,5 @@
 /**
- * `knowledge.ask` (PRD 38 §4.9; docs/design/deterministic-knowledge-index.md, "Consumers")
+ * `knowledge.ask` (PRD 38 §4.9; DONE.md, deterministic knowledge index archive, "Consumers")
  * — questions about a reviewed root, answered from its knowledge index plus one hop of
  * graph expansion: "where is billing handled", "which file owns webhooks", "what does the
  * lease say about termination", "where do we retry".

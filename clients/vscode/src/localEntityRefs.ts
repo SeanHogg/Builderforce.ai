@@ -1,7 +1,7 @@
 /**
  * How the local domain tools (`localDomainTools.ts`) read an entity reference a tool call hands
  * them, and which ids a write's result reports — both through the ONE entity id primitive and
- * resolver in `@builderforce/local-first` (docs/design/typed-entity-ids.md §2–§3, §5). No regex,
+ * resolver in `@builderforce/local-first` (docs/specs/platform.md, Typed entity ids §2–§3, §5). No regex,
  * no `Number()` guess: a SyncId is `parseSyncId`, a LocalId is `isLocalId`, and the mapping is
  * read by `entityIdResolver`.
  */

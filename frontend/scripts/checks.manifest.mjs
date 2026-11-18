@@ -31,7 +31,7 @@ export default [
   ['check:root-closure', 'check-root-closure.mjs'],
   ['check:primitives', 'check-primitive-duplication.mjs'],
   ['check:blog-index', 'publish-blog-content.mjs', '--check'],
-  // The marketing release gate (docs/marketing/CLAIMS-PROCESS.md): the tested-wording
+  // The marketing release gate (docs/specs/reach.md › Design — Marketing claims review process): the tested-wording
   // ratchet on public copy, and the vendor-fact rule on comparison content.
   ['check:public-copy-absolutes', 'check-public-copy-absolutes.mjs'],
   ['check:compare-vendor-facts', 'check-compare-vendor-facts.mjs'],

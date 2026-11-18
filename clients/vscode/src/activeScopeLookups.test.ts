@@ -1,6 +1,6 @@
 /**
  * regression: the editor's id lookups resolve a SyncId in the ACTIVE account only
- * (docs/design/typed-entity-ids.md §3). Two tenants each numbered a chat and a ticket 40; the
+ * (docs/specs/platform.md, Typed entity ids §3). Two tenants each numbered a chat and a ticket 40; the
  * older mapping belongs to tenant A, so an unscoped lookup used to hand tenant B's caller A's row.
  */
 

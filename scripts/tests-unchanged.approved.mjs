@@ -144,7 +144,7 @@ export const APPROVED_THIS_PUSH = [
   {
     file: 'brain-embedded/src/ticketToolVocabulary.test.ts',
     changed: "The 'reads an account id from a number or its decimal text, and nothing else' case (serverTicketId) and its import are removed.",
-    reason: 'serverTicketId absorbed by parseSyncId/entityIdsOf — typed-entity-ids §5; the parse is covered by entityId.test.ts',
+    reason: 'serverTicketId absorbed by parseSyncId/entityIdsOf — platform.md typed entity ids §5; the parse is covered by entityId.test.ts',
     approvedBy: APPROVED_BY,
     cases: 1,
   },

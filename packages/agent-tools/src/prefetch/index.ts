@@ -1,6 +1,6 @@
 /**
  * `@builderforce/agent-tools/prefetch` — the SHARED deterministic-first PreFetch actions
- * (docs/design/deterministic-prefetch.md): the registry rows and executors every surface
+ * (DONE.md, deterministic-first PreFetch archive): the registry rows and executors every surface
  * with a workspace and a shell runs identically — the editor (VSIX) and on-prem
  * (agent-runtime) — plus tool detection. ONE copy; a surface adds only what is its own
  * (the editor's LSP diagnostics) and its probe for detection
