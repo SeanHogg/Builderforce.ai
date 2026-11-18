@@ -269,22 +269,12 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 
 - **The browser run tier is incomplete (PRD 31 W9).** No detector writes `kind: 'python'` or `'php'`. The phase 5, FastAPI and Slim exit tests are not recorded. .NET (6c) and Rust (6d) are unreleased, and no `kind: 'training'` service runs Python. *Blocker: D7, free-plan gating, for phase 5.* [make.md › PRD 31 W9](./docs/specs/make.md#4-w9-browser-run-tier-full-stack-apps-on-our-webcontainers-runtime)
 - **Browser-run apps need the mandatory Security Shield.** Build PRD 31 W10: runtime-minted identity, origin separation, ingress and service-graph decisions at the page-side chokepoints, an authenticated database gateway, egress CSP, quotas and VFS scoping, with incidents flowing into `security_incidents` and the SIEM export. Done when every gap fixture (inventory tracked out of source control in `SECURITY-FINDINGS.local.md`) is green across Node, Python and PHP. **Blocker (ops, Cloudflare):** per-application preview origins (`<key>.preview.builderforce.ai`, control 1) are built and routed (`*.preview.builderforce.ai/*` on the API worker) but off behind `PREVIEW_PER_APP_ORIGINS` (API `[vars]`) and `NEXT_PUBLIC_PREVIEW_PER_APP_ORIGINS` (frontend build env) until a proxied `*.preview` DNS record and a certificate covering `*.preview.builderforce.ai` exist (Advanced Certificate or Total TLS; Universal SSL covers one level), and `preview.builderforce.ai` is on the Public Suffix List; until then applications share `preview.builderforce.ai` under the runtime's named opt-out `sharedPreviewOrigin: 'unprotected'`. [make.md › PRD 31 W10](./docs/specs/make.md#4-w10-security-shield-mandatory-protection-for-every-browser-run-app).
-  - **Status (2026-11-18): phases 1–4 are mostly shipped.**
-    - Webcontainers 24f6d1d and 2026.11.4 shipped SW routing integrity, port ownership and the service graph, gateway auth, VFS scoping, and quotas.
-    - Builderforce shipped the worker egress CSP, migration 1354 and the shield ingest route.
-  - **In flight for 2026.11.5:**
-    - origin separation per (project, app);
-    - refusing same-origin mode;
-    - the per-attach nonce;
-    - the SW-stamped preview CSP;
-    - signed `?policy=` worker URLs;
-    - `SecurityEventSink`;
-    - loopback and host body limits;
-    - per-app pip records.
-    - After that release, Builderforce wires the sink adapter to `/api/security/shield-incidents`, policy-id minting, and per-app preview-origin serving.
-  - **Blocker for live origin separation:** wildcard DNS plus a Worker route for `*.preview.builderforce.ai`. This is an ops change in Cloudflare.
-  - **Contract push (blocked until 1354 is deployed):** drop `uq_security_incidents_finding_ref` and fold the change into the ledger.
-  - **Still open:** phases 5, 6 and 8 (signature engine, automated response, adversarial and scale validation) and the Phase 0 baseline latency fixtures.
+  - Phases 1–4 are shipped (see DONE.md, 2026-11-18). Still open:
+    - **Live per-app origins:** blocked on the ops step above.
+    - **Contract push:** drop `uq_security_incidents_finding_ref` and fold it into the ledger. *Blocker: migration 1354 must be deployed first.*
+    - **ApplicationSpec has no `name`:** the origin key hashes the service ids and roots instead. Two apps in one project with identical services would share an origin. Add `name` to core `ApplicationSpec` and key on it.
+    - **Container-ingress answers on the shared preview host** carry only `nosniff` and `Origin-Agent-Cluster`, not the document CSP. Move container ingress off the runtime host so the full CSP can apply.
+    - **Phases 5, 6 and 8:** the signature engine, automated response, and adversarial and scale validation, plus the Phase 0 baseline latency fixtures.
 - **Apps cannot declare external APIs, so worker egress is the default allowlist only (W10 control 6, found 2026-11-18).** `POST /api/runtime/worker-policy` mints signed per-app policies, but neither `AppBlueprint` nor `builderforce.json` has an external-API field, so `declaredExternalApiOrigins` (`api/src/application/runtime/workerEgressDeclarations.ts`) returns none. Add the declaration (read-only origins; write-capable APIs never default), read it through `getOrSetCached` per project, and invalidate on its write path. [make.md › PRD 31 W10](./docs/specs/make.md#4-w10-security-shield-mandatory-protection-for-every-browser-run-app)
 - **The wrangler detector cannot read real configs (found by the 2026-11-17 PRD verification).** `api/src/application/blueprint/detectors/wranglerDetector.ts` regex-matches inline `kv_namespaces = [...]` / `r2_buckets = [...]`, so `[[kv_namespaces]]`, `[[r2_buckets]]` and `[[durable_objects.bindings]]` table arrays are missed and the hired.video blueprint acceptance fails; `content.includes('ai')` (line 84) flags any file containing the letters. Parse TOML properly. [make.md › PRD 31](./docs/specs/make.md#prd-31--build-run-and-ship-a-real-app-on-builderforce).
 - **`POST /api/projects` stores `companyId` without checking the company belongs to the tenant (found by the 2026-11-17 PRD verification)** (PRD 31 W8). Validate tenancy before the write. [make.md › PRD 31 §4](./docs/specs/make.md#4-w8-company--project-in-one-step)

@@ -1,3 +1,46 @@
+## ✅ RESOLVED 2026-11-18: PRD 31 §W10 Security Shield phases 1–4 (browser run tier)
+
+These close the 2026-11-18 browser-run-tier findings, which are tracked out of source control.
+
+**webcontainers**
+- **24f6d1d:** SW routing integrity: relay-only attach, id→client and client→preview binding, and a 32 MiB body limit.
+- **v2026.11.4:**
+  - Identity is assigned at spawn; `SecurityContext` is the record.
+  - Port ownership plus the `dependsOn` service graph.
+  - An authenticated database gateway with per-service credentials.
+  - VFS scoping per service root, with protected paths.
+  - Spawn count and depth quotas, attribution for detached children, and `killApplication`.
+- **v2026.11.5** (bce8f64, 497bf07, fb6e56f, e24c0b4, dbcf2ef):
+  - **Origins:** per-application preview origins, mandatory unless the embedder opts out with `sharedPreviewOrigin: 'unprotected'`; same-origin mode is refused.
+  - **Attach:** the nonce is acknowledged and recovers from staleness. Egress is never taken from an attach.
+  - **CSP:** the SW stamps the preview CSP plus `nosniff` and `Origin-Agent-Cluster` on every response, and narrows cookie `Domain`. The relay page cannot fetch.
+  - **Policy:** signed `?policy=` on worker URLs.
+  - **Events:** one `SecurityEvent` / `SecurityEventSink` across every page-side denial.
+  - **Limits:** body limits on loopback and host requests, and a WebSocket message cap.
+  - **Misc:**
+    - page-assigned listening URLs;
+    - `messageerror` surfaced as a process error;
+    - required per-app identity through every process kind (per-app pip records, a workspace-only PHP platform);
+    - stable application ids.
+
+**Builderforce**
+- **Incidents:**
+  - Migration 1354: a NULLS NOT DISTINCT index for `finding:` and `shield:` refs, plus attestation and evidence columns.
+  - The `/api/security/shield-incidents` ingest: developer+, server-side severity covering all 20 reason codes, and a per-project cap.
+  - A read-only "Client-attested" badge.
+- **Egress and CSP:**
+  - The worker egress CSP: no `'self'` or `/__bfwc/`; GitHub read hosts and NuGet read hosts allowed; the .NET worker path-scoped to `/dotnet/`.
+  - The CSP-report endpoint plus its CORS preflight.
+- **Policy minting:** `POST /api/runtime/worker-policy`. The server derives the origin key and signs a payload bound to tenant, project, application and host (0a0305c19).
+- **Bump:** webcontainers ^2026.11.5 with `runtime`, and .NET and Rust providers.
+- **Port reallocation:** token-level, propagated to dependents, and declining any service that can't bind.
+- **Preview hosts (f4226c68a):**
+  - Per-app preview hosts serve exactly the package's README headers.
+  - `sw.js` is gated by its signed policy.
+  - The `PREVIEW_PER_APP_ORIGINS` flag defaults to off.
+  - Every package reason code goes through the shield sink to the incident route, with localized copy in all five locales.
+  - Snippets are updated.
+
 ## ✅ RESOLVED 2026-11-18: PRD 31 §W9 phases 6c (.NET) and 6d (Rust) released in builderforce-webcontainers v2026.11.4
 
 - **6c .NET** — Mono `browser-wasm` runtime: Roslyn compiles inside the runtime (`dotnet build`/`run`), ASP.NET Core minimal APIs run on an in-memory `IServer`, `Npgsql` (async) reaches the Postgres wire gateway over virtual TCP. SDK pinned at 10.0.115 (`global.json`, `packages.lock.json`); the ~73 MiB bundle ships a format-2 manifest with a sha256 per file. Exit test: a minimal-API service builds in the browser and does CRUD.
