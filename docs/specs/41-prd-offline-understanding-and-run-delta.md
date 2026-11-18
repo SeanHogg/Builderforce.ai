@@ -2003,7 +2003,7 @@ granted. A policy check on autonomous runs can then block finalization.
   - WS19: naturalness, §D6.
   - WS20: SPRT and Thompson scheduling, §D9.
 - **Review rounds still open (the code is on main since 7674bbd64, swept in mid-round):** WS4 (FileFacts v3, `FactIndex`), WS8 (security dimension), WS9 (the remaining rules and C8.3) and the L3 analyzer tier.
-- **WS7 open items:** change-set records use non-UUID ids and never sync; the server does not normalise repository identity on write.
+- **WS7 open items:** ~~change-set records use non-UUID ids and never sync~~ (fixed 2026-11-18 on main: change-set/lifecycle ids are `stableEntityId('changeset:<runId>:<repoKey>')` UUIDs, and the run-delta key derivations read `runId`/`repoKey` from the payload — `runDelta`, `runDeltaPredictions`, `changeSetSyncedIdentity` suites green); the server does not normalise repository identity on write.
 - **Not started:** WS5, WS13, WS17, WS21, WS22.
 - **WS18:** *Blocker: needs at least 500 final WS16 labels.*
 
