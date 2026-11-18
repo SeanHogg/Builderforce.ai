@@ -10,8 +10,8 @@ import {
   tensor,
   tidy,
   type Backend,
-  type BackendTensor,
 } from "../src/autograd";
+import { counting } from "./helpers/counting-backend";
 import { probeGpu } from "./helpers/gpu";
 import { values } from "./helpers/op-cases";
 
@@ -22,32 +22,6 @@ import { values } from "./helpers/op-cases";
  * step itself. Checked on the CPU through a handle-counting wrapper (runs in
  * CI) and on WebGPU through the pool's live bytes.
  */
-
-function counting(inner: Backend): { backend: Backend; live: () => number } {
-  const live = new Set<object>();
-  const note = (value: unknown) => {
-    if (value && typeof value === "object") {
-      if ("shape" in value && "dtype" in value) live.add(value);
-      else for (const v of Object.values(value)) if (v && typeof v === "object" && "shape" in v) live.add(v);
-    }
-    return value;
-  };
-  const backend = new Proxy(inner, {
-    get(target, prop, receiver) {
-      const member = Reflect.get(target, prop, receiver);
-      if (typeof member !== "function") return member;
-      if (prop === "release") {
-        return (h: BackendTensor) => {
-          live.delete(h);
-          return member.call(target, h);
-        };
-      }
-      if (prop === "download") return member.bind(target);
-      return (...args: unknown[]) => note(member.apply(target, args));
-    },
-  });
-  return { backend, live: () => live.size };
-}
 
 function setup(backend: Backend, scoped = true) {
   manualSeed(99);

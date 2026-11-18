@@ -40,6 +40,24 @@ export function addInPlace(target: Tensor, src: Tensor): void {
   for (let i = 0; i < t.length; i++) t[i]! += s[i]!;
 }
 
+/** target ← src, bit-exact; a no-op on shared storage. */
+export function copyInPlace(target: Tensor, src: Tensor): void {
+  if (target.dtype !== src.dtype) throw new Error(`copy_inplace: ${src.dtype} into ${target.dtype}`);
+  if (!target.isContiguous() || target.data.length !== target.size) throw new Error("copy_inplace: target must be a contiguous tensor");
+  const s = src.contiguous();
+  if (s.size !== target.size) throw new Error(`copy_inplace: ${s.size} values into ${target.size}`);
+  if (s.data === target.data) return;
+  (target.data as Float32Array | Int32Array).set(s.data as Float32Array | Int32Array);
+}
+
+/** float32 ⇄ int32; float → int truncates toward zero. */
+export function cast(a: Tensor, dtype: "float32" | "int32"): Tensor {
+  const c = a.contiguous();
+  if (c.dtype === dtype) return Tensor.contiguous(c.data.slice() as Float32Array | Int32Array, c.shape, dtype);
+  const data = dtype === "int32" ? Int32Array.from(c.data as Float32Array, (v) => Math.trunc(v)) : Float32Array.from(c.data as Int32Array);
+  return Tensor.contiguous(data, c.shape, dtype);
+}
+
 export function sgdStep(param: Tensor, grad: Tensor, buf: Tensor | null, s: SgdStep): void {
   const w = own(param, "sgd");
   const g = f32(grad);

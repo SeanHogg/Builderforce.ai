@@ -1,5 +1,6 @@
 import { contiguousStrides, normalizeAxis, productOf } from "../../shape";
-import type { DeviceTensor } from "../device-tensor";
+import type { EngineDType } from "../../backend/backend";
+import { DeviceTensor } from "../device-tensor";
 import { carryHostIndices } from "../index-check";
 import { backendOf, record } from "../record";
 
@@ -16,8 +17,19 @@ export function reshape(x: DeviceTensor, shape: readonly number[]): DeviceTensor
   if (productOf(resolved) !== x.size) {
     throw new Error(`reshape: ${JSON.stringify(shape)} does not hold ${x.size} elements`);
   }
-  const out = record("reshape", be.reshape(x.handle, resolved), [x], (gy) => [be.reshape(gy, x.shape)]);
+  const out = record("reshape", be.reshape(x.handle, resolved), [x], (gy) => [be.reshape(gy, x.shape)], [], []);
   return carryHostIndices(x, out);
+}
+
+/**
+ * float32 ⇄ int32 (`.float()` / `.long()`); float → int truncates toward zero.
+ * Graph-free, as in PyTorch: an integer result carries no gradient and an
+ * integer input has none to receive. Same dtype is a view that keeps the graph.
+ */
+export function cast(x: DeviceTensor, dtype: EngineDType): DeviceTensor {
+  if (x.dtype === dtype) return reshape(x, x.shape);
+  const be = backendOf("cast", x);
+  return new DeviceTensor(be, be.cast(x.handle, dtype), false);
 }
 
 function swapped(x: DeviceTensor, a: number, b: number): { shape: number[]; strides: number[] } {
@@ -40,5 +52,5 @@ export function transpose(x: DeviceTensor, dim0 = -2, dim1 = -1): DeviceTensor {
     [back[a], back[b]] = [back[b]!, back[a]!];
     [gStrides[a], gStrides[b]] = [gStrides[b]!, gStrides[a]!];
     return [be.stridedCopy(gy, back, gStrides, 0)];
-  });
+  }, [], []);
 }

@@ -7,6 +7,34 @@ import { GRID_INDEX, MAIN, type KernelEntry } from "./common";
  * Parameter block: [n].
  */
 export const CAST_KERNELS = {
+  /** float32 → int32, truncating toward zero (WGSL `i32()`; out-of-range values saturate). Parameter block: [n]. */
+  cast_f32_to_i32: {
+    bindings: 3,
+    dispatch: "grid",
+    wgsl: `
+@group(0) @binding(0) var<storage, read> a: array<f32>;
+@group(0) @binding(1) var<storage, read_write> out: array<i32>;
+@group(0) @binding(2) var<storage, read> p: array<u32>;
+${MAIN} {
+  ${GRID_INDEX}
+  if (idx >= p[0]) { return; }
+  out[idx] = i32(a[idx]);
+}`,
+  },
+  /** int32 → float32. Parameter block: [n]. */
+  cast_i32_to_f32: {
+    bindings: 3,
+    dispatch: "grid",
+    wgsl: `
+@group(0) @binding(0) var<storage, read> a: array<i32>;
+@group(0) @binding(1) var<storage, read_write> out: array<f32>;
+@group(0) @binding(2) var<storage, read> p: array<u32>;
+${MAIN} {
+  ${GRID_INDEX}
+  if (idx >= p[0]) { return; }
+  out[idx] = f32(a[idx]);
+}`,
+  },
   cast_f32_to_f16: {
     bindings: 3,
     dispatch: "grid",

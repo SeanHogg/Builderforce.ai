@@ -531,6 +531,10 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@seanhogg/builderforce-memory-engine@2026.10.65':
+    resolution: {integrity: sha512-lzZJmvS80wE4SuM4mUfxncWKPBeCFn/HU2xNMhkfTxOG6YHxe4RexaN7YJWMgWGT/9BGSyJpSRhnjOSJ0itz8Q==}
+    engines: {node: '>=18.0.0'}
+
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
@@ -1390,6 +1394,8 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.68.3':
     optional: true
 
+  '@seanhogg/builderforce-memory-engine@2026.10.65': {}
+
   '@standard-schema/spec@1.1.0': {}
 
   '@types/chai@5.2.3':
@@ -1525,7 +1531,9 @@ snapshots:
 
   '@webdit/shared@file:../shared': {}
 
-  '@webdit/torch@file:../torch': {}
+  '@webdit/torch@file:../torch':
+    dependencies:
+      '@seanhogg/builderforce-memory-engine': 2026.10.65
 
   '@webgpu/types@0.1.74': {}
 

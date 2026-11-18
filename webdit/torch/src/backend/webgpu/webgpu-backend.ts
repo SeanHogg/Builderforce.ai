@@ -1,4 +1,4 @@
-import { productOf, type Shape } from "../../shape";
+import { contiguousStrides, productOf, type Shape } from "../../shape";
 import type {
   AdamWStep,
   Backend,
@@ -12,6 +12,7 @@ import type {
   UnaryOp,
 } from "../backend";
 import { matmulShape, rowsOf, sameShape } from "../shape-rules";
+import { bumpVersion } from "../storage-version";
 import { BufferPool, type PoolStats } from "./buffer-pool";
 import { requestEngineDevice, type EngineDevice, type WebGPUDeviceOptions } from "./device";
 import { DeviceHealth } from "./device-health";
@@ -138,6 +139,29 @@ export class WebGPUBackend implements Backend<GpuTensor> {
   addInPlace(target: GpuTensor, src: GpuTensor): void {
     if (target.size !== src.size) throw new Error(`add_inplace: ${src.size} values into ${target.size}`);
     this.dispatcher.run("add_inplace", [bind(target), bind(src)], u32(target.size), target.size);
+    bumpVersion(target.storage);
+  }
+
+  copyInPlace(target: GpuTensor, src: GpuTensor): void {
+    if (target.dtype !== src.dtype) throw new Error(`copy_inplace: ${src.dtype} into ${target.dtype}`);
+    if (target.size !== src.size) throw new Error(`copy_inplace: ${src.size} values into ${target.size}`);
+    bumpVersion(target.storage);
+    // Views of one storage hold the same values; binding one buffer read and read_write is also invalid.
+    if (target.storage === src.storage || target.size === 0) return;
+    this.dispatcher.run("copy_inplace", [bind(target), bind(src)], u32(target.size), target.size);
+  }
+
+  /** A handle's storage: the refcounted buffer every reshape view shares. */
+  storageOf(h: GpuTensor): object {
+    return h.storage;
+  }
+
+  cast(a: GpuTensor, dtype: EngineDType): GpuTensor {
+    if (a.dtype === "float16") throw new Error("cast: packed fp16 storage — convert with fromF16 first");
+    if (a.dtype === dtype) return this.stridedCopy(a, a.shape, contiguousStrides(a.shape), 0);
+    const out = this.alloc(a.shape, dtype);
+    if (a.size > 0) this.dispatcher.run(dtype === "int32" ? "cast_f32_to_i32" : "cast_i32_to_f32", [bind(a), bind(out)], u32(a.size), a.size);
+    return out;
   }
 
   matmul(a: GpuTensor, b: GpuTensor, transA: boolean, transB: boolean): GpuTensor {
@@ -316,17 +340,22 @@ export class WebGPUBackend implements Backend<GpuTensor> {
       this.loraParams(rows, cols, rank, scale),
       Math.max(a.size, b.size),
     );
+    bumpVersion(ga.storage);
+    bumpVersion(gb.storage);
   }
 
   adamwStep(param: GpuTensor, grad: GpuTensor, m: GpuTensor, v: GpuTensor, s: AdamWStep): void {
     const p = new Float32Array(TRAINER_PARAM_FLOATS);
     p.set([s.lr, s.beta1, s.beta2, s.eps, s.weightDecay, s.gradScale, s.step, s.keepGrad ? 1 : 0], 4);
     this.dispatcher.run("adamw", [bind(param), bind(grad), bind(m), bind(v)], p, param.size);
+    for (const h of s.keepGrad ? [param, m, v] : [param, grad, m, v]) bumpVersion(h.storage);
   }
 
   sgdStep(param: GpuTensor, grad: GpuTensor, momentumBuf: GpuTensor | null, s: SgdStep): void {
     const p = Float32Array.from([s.lr, s.momentum, s.weightDecay, momentumBuf ? 1 : 0]);
     this.dispatcher.run("sgd", [bind(param), bind(grad), bind(momentumBuf ?? this.dummy)], p, param.size);
+    bumpVersion(param.storage);
+    if (momentumBuf) bumpVersion(momentumBuf.storage);
   }
 
   /**
