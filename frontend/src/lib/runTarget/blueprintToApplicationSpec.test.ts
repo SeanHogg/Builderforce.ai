@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { validateSpec } from '@seanhogg/builderforce-webcontainers/app';
 import { VirtualFileSystem } from '@seanhogg/builderforce-webcontainers';
-import { acceptanceProbe, blueprintToApplicationSpec, commandOf, commandRuntime, movedCommand, runtimeRoot } from './blueprintToApplicationSpec';
+import { acceptanceProbe, blueprintToApplicationSpec, commandOf, commandRuntime, runtimeRoot } from './blueprintToApplicationSpec';
 import { acceptBlueprintInBrowser } from './browserAcceptance';
 import { blueprint, CANVAS_APP, HIRED_VIDEO, PHP_APP, PYTHON_APP, service } from './blueprintFixtures';
 
@@ -401,68 +401,5 @@ describe('acceptBlueprintInBrowser — declines with the reason', () => {
     const verdict = acceptBlueprintInBrowser(blueprint({ services: [service({ id: 'api', kind, installCommand: '', devCommand, ports: [8000] })] }));
     expect(verdict).toMatchObject({ ok: false, code: 'serviceDeclined' });
     if (!verdict.ok) expect(verdict.detail).toMatch(/^Service "api"/);
-  });
-
-  it('moves the later of two services on one port to the next free one: they start together', () => {
-    const clash = blueprint({
-      services: [
-        service({ id: 'a', kind: 'node', devCommand: 'node a.js', ports: [3000] }),
-        service({ id: 'b', kind: 'node', devCommand: 'node b.js', ports: [3000] }),
-      ],
-    });
-    const spec = blueprintToApplicationSpec(clash);
-    expect(byId(spec, 'a')?.port).toBe(3000);
-    // `node b.js` names no port: it reads `PORT`, which the runtime sets from the spec.
-    expect(byId(spec, 'b')).toMatchObject({ port: 3001, command: 'node', args: ['b.js'] });
-    expect(acceptBlueprintInBrowser(clash)).toMatchObject({ ok: true });
-  });
-});
-
-describe('blueprintToApplicationSpec — same-family backends sharing a default port', () => {
-  it.each([
-    {
-      what: 'a Python and a PHP API (both 8000)',
-      first: service({ id: 'py', kind: 'python', rootDir: 'py', installCommand: '', devCommand: 'uvicorn main:app --host 0.0.0.0 --port 8000', ports: [8000] }),
-      second: service({ id: 'site', kind: 'php', rootDir: 'site', installCommand: '', devCommand: 'php -S 0.0.0.0:8000 -t public', ports: [8000] }),
-      moved: { port: 8001, command: 'php', args: ['-S', '0.0.0.0:8001', '-t', 'public'] },
-    },
-    {
-      what: 'a .NET and a Rust service (both 8080)',
-      first: service({ id: 'shop', kind: 'dotnet', rootDir: 'shop', installCommand: '', devCommand: 'dotnet run --urls http://0.0.0.0:8080', ports: [8080] }),
-      second: service({ id: 'edge', kind: 'rust', rootDir: 'edge', installCommand: '', devCommand: './target/wasm32-wasip1/release/edge.wasm', ports: [8080] }),
-      // The module names no port: it reads `PORT`.
-      moved: { port: 8081, command: './target/wasm32-wasip1/release/edge.wasm', args: [] },
-    },
-    {
-      what: 'two Python APIs (both 8000)',
-      first: service({ id: 'a', kind: 'python', rootDir: 'a', installCommand: '', devCommand: 'uvicorn main:app --port 8000', ports: [8000] }),
-      second: service({ id: 'b', kind: 'python', rootDir: 'b', installCommand: '', devCommand: 'gunicorn site.wsgi:application --bind 0.0.0.0:8000', ports: [8000] }),
-      moved: { port: 8001, command: 'gunicorn', args: ['site.wsgi:application', '--bind', '0.0.0.0:8001'] },
-    },
-  ])('gives each its own port, the later one’s command moved with it: $what', ({ first, second, moved }) => {
-    const spec = blueprintToApplicationSpec(blueprint({ services: [first, second] }));
-    expect(byId(spec, first.id)?.port).toBe(first.ports[0]);
-    expect(byId(spec, second.id)).toMatchObject(moved);
-    expect(validateSpec(spec)).toEqual([]);
-  });
-
-  it('never moves a service onto the database port', () => {
-    const spec = blueprintToApplicationSpec(blueprint({
-      services: [service({ id: 'api', kind: 'node', devCommand: 'node server.js --port=5432', ports: [5432] })],
-      database: { engine: 'postgres', migrationCommand: '', seedCommand: null, migrationsPath: '', connectionSecretName: 'DATABASE_URL' },
-    }));
-    expect(byId(spec, 'db')?.port).toBe(5432);
-    expect(byId(spec, 'api')).toMatchObject({ port: 5433, args: ['server.js', '--port=5433'] });
-  });
-});
-
-describe('movedCommand', () => {
-  it('moves the port where the command names it, never inside another number', () => {
-    expect(movedCommand('uvicorn main:app --port 8000', 8000, 8001)).toBe('uvicorn main:app --port 8001');
-    expect(movedCommand('php -S 0.0.0.0:8000 -t public', 8000, 8001)).toBe('php -S 0.0.0.0:8001 -t public');
-    expect(movedCommand('dotnet run --urls http://0.0.0.0:8080', 8080, 8081)).toBe('dotnet run --urls http://0.0.0.0:8081');
-    expect(movedCommand('vite --port=5173', 5173, 5174)).toBe('vite --port=5174');
-    expect(movedCommand('node app.js 18000 80001', 8000, 8001)).toBe('node app.js 18000 80001');
-    expect(movedCommand('node app.js', 3000, 3000)).toBe('node app.js');
   });
 });

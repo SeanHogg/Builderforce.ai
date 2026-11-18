@@ -1351,7 +1351,19 @@ W1 runs the app in a cloud container. W9 runs the **same blueprint** in the user
 | Lifecycle | `startPreviewRuntime` (shield start) and `startApplicationRuntime` / `superviseService` (identity, mandatory readiness) |
 
 **Controls the shield must enforce** (each gets a failing fixture in Phase 0 and goes green in the phase named):
-1. **Origin separation (P2).** Preview documents are served from an origin distinct from the relay frame and the process Workers (e.g. a per-preview subdomain); if that cannot ship first, the preview iframe drops `allow-same-origin`. Relay mode isolates apps from the host, not from each other — origin separation does that.
+1. **Origin separation (P2).** Preview documents are served from an origin distinct from the relay frame and the process Workers (e.g. a per-preview subdomain); if that cannot ship first, the preview iframe drops `allow-same-origin`. Relay mode isolates apps from the host, not from each other — origin separation does that. **Decided 2026-11-18:**
+- **The trust boundary is the application.** Each application gets its own origin, `https://<key>.preview.<domain>`, where `<key>` is derived page-side from (runtime id, stable application name) and never from app input. One app's preview, relay frame and Workers may share that origin, because they are all the same app's code.
+- **What the controls guarantee:**
+  - No crossing between apps.
+  - No crossing between an app and the workspace or the host.
+  - No egress outside policy.
+- **How they are enforced:**
+  - **Origin is mandatory for applications:** per-app origins are required, and the only opt-out is the explicit `sharedPreviewOrigin: 'unprotected'`.
+  - **The relay page cannot fetch:** it runs under `connect-src 'none'` with `frame-ancestors` set to the host only.
+  - **Every SW response is stamped:** with the preview CSP and `nosniff`.
+  - **Non-SW responses carry the default CSP:** the embedder sends it on every response from a preview origin that the SW does not serve.
+  - **Attach takes no egress:** egress never comes from an attach message.
+  - **The nonce recovers:** a stale nonce triggers a fresh re-attach instead of a lockout.
 2. **Service-worker routing integrity (P2).** The service worker accepts attach/re-attach only from the relay client it registered, with a fresh per-attach nonce, and binds each preview id to the client that attached it; every routed request is checked against that binding.
 3. **Ingress inspection on every path (P2).** Preview HTTP, WebSocket upgrades, in-runtime loopback HTTP and the host API all pass the same decision: normalisation, protocol and size validation (a request-body limit), bounded inspection, OWASP-CRS-derived signatures, per-app and per-source rate limits.
 4. **Port ownership and the service graph (P3).** `PortRegistry.listen` records the owning (app, service); `dial` and `request` are allowed only along the app's declared `dependsOn` edges (or to its own ports).

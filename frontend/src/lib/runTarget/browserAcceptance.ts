@@ -31,7 +31,7 @@ import {
   type ServiceSpec,
 } from '@seanhogg/builderforce-webcontainers/app';
 import { PREVIEW_PHP_OPTIONS } from '@/lib/browserRuntime/previewPhpOptions';
-import { acceptanceProbe, blueprintToApplicationSpec, shellRuntimeProbes } from './blueprintToApplicationSpec';
+import { acceptanceProbe, mapBlueprint, shellRuntimeProbes } from './blueprintToApplicationSpec';
 import type { Acceptance } from './runTarget';
 
 /** A runtime provider's accept check: the service, and the project's files when known. */
@@ -65,7 +65,9 @@ function noProvider(service: ServiceSpec): string {
 /** The spec to run, or the first reason the browser cannot run it (judged on `files` too, when given). */
 export function acceptBlueprintInBrowser(blueprint: AppBlueprint | null, files?: VirtualFileSystem): BrowserAcceptance {
   if (!blueprint || blueprint.services.length === 0) return { ok: false, code: 'noBlueprint' };
-  const spec = blueprintToApplicationSpec(blueprint);
+  const { spec, declined } = mapBlueprint(blueprint);
+  // A service whose port had to move but whose command cannot be told so never runs on the wrong port.
+  if (declined[0]) return { ok: false, code: 'serviceDeclined', detail: declined[0] };
   for (const service of spec.services) {
     const accepts = BROWSER_RUNTIMES[service.runtime];
     const code = service.type === 'database' ? 'databaseDeclined' : 'serviceDeclined';

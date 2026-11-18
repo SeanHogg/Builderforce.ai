@@ -26,7 +26,7 @@ import {
 } from '@seanhogg/builderforce-webcontainers/assets';
 import { PREVIEW_HOST } from '../../application/runtime/previewIngress';
 import {
-  PREVIEW_SCRIPT_PREFIX, REPORTING_ENDPOINTS_HEADER, relayCsp, serviceWorkerCsp, workerScriptCsp,
+  PREVIEW_SCRIPT_PREFIX, PREVIEW_WORKER_SCRIPTS, REPORTING_ENDPOINTS_HEADER, relayCsp, serviceWorkerCsp, workerScriptCsp,
 } from '../../application/runtime/workerCsp';
 import {
   DEFAULT_WORKER_EGRESS_POLICY, resolveWorkerEgressPolicy, type WorkerEgressPolicy,
@@ -60,25 +60,40 @@ interface PreviewAsset {
   csp: CspKind;
 }
 
+/**
+ * Each script the relay may start (`PREVIEW_WORKER_SCRIPTS`, the ONE list its CSP names)
+ * and its source. Keyed by that list's own type, so a script added there without a
+ * source here fails to compile, and nothing is served that the relay may not start.
+ * - `sw.js`: the service worker.
+ * - `process-worker.js`: node, npm, the shell. The relay starts it HERE, so a project's
+ *   code runs on this origin and never on builderforce.ai.
+ * - Python (Pyodide), PHP (php-wasm), .NET and Rust processes, started by the same relay
+ *   beside the Node ones: the same origin and the same egress CSP. They import their
+ *   interpreters from jsDelivr at run time, which the worker CSP allows.
+ */
+const WORKER_SOURCES: Readonly<Record<(typeof PREVIEW_WORKER_SCRIPTS)[number], string>> = {
+  'sw.js': serviceWorkerSource,
+  'process-worker.js': processWorkerSource,
+  'python-worker.js': pythonWorkerSource,
+  'php-worker.js': phpWorkerSource,
+  'dotnet-worker.js': dotnetWorkerSource,
+  'rust-worker.js': rustWorkerSource,
+};
+
+const SCRIPT_TYPE = 'text/javascript; charset=utf-8';
+
 const ASSETS: Record<string, PreviewAsset> = {
   // Short: a deploy that changes the relay reaches open tabs on their next boot.
   // Only the relay is framed, so only it carries `frame-ancestors`.
   'relay.html': { body: relayHtml, contentType: 'text/html; charset=utf-8', cacheControl: 'public, max-age=300', csp: 'relay' },
-  // Browsers re-check a worker script on navigation; never let a cache answer for it.
-  'sw.js': { body: serviceWorkerSource, contentType: 'text/javascript; charset=utf-8', cacheControl: 'no-cache', csp: 'service-worker' },
-  // The process worker (node, npm, the shell). The relay starts it HERE, so a
-  // project's code runs on this origin and never on builderforce.ai. Versioned by
-  // the package, so a short cache is enough.
-  'process-worker.js': { body: processWorkerSource, contentType: 'text/javascript; charset=utf-8', cacheControl: 'public, max-age=300', csp: 'process-worker' },
-  // Python (Pyodide) and PHP (php-wasm) processes, started by the relay beside the
-  // Node ones. They import their interpreters from jsDelivr at run time, which the
-  // worker CSP allows.
-  'python-worker.js': { body: pythonWorkerSource, contentType: 'text/javascript; charset=utf-8', cacheControl: 'public, max-age=300', csp: 'process-worker' },
-  'php-worker.js': { body: phpWorkerSource, contentType: 'text/javascript; charset=utf-8', cacheControl: 'public, max-age=300', csp: 'process-worker' },
-  // .NET and Rust processes, started by the same relay: the same origin and the same
-  // egress CSP as the other process Workers.
-  'dotnet-worker.js': { body: dotnetWorkerSource, contentType: 'text/javascript; charset=utf-8', cacheControl: 'public, max-age=300', csp: 'process-worker' },
-  'rust-worker.js': { body: rustWorkerSource, contentType: 'text/javascript; charset=utf-8', cacheControl: 'public, max-age=300', csp: 'process-worker' },
+  ...Object.fromEntries(PREVIEW_WORKER_SCRIPTS.map((file): [string, PreviewAsset] => [
+    file,
+    file === 'sw.js'
+      // Browsers re-check a service worker script on navigation; never let a cache answer for it.
+      ? { body: WORKER_SOURCES[file], contentType: SCRIPT_TYPE, cacheControl: 'no-cache', csp: 'service-worker' }
+      // Process Workers are versioned by the package, so a short cache is enough.
+      : { body: WORKER_SOURCES[file], contentType: SCRIPT_TYPE, cacheControl: 'public, max-age=300', csp: 'process-worker' },
+  ])),
 };
 
 function cspFor(kind: CspKind, corsOrigins: string | undefined, policy: WorkerEgressPolicy): string {

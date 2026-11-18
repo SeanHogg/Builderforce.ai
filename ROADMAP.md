@@ -269,6 +269,22 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 
 - **The browser run tier is incomplete (PRD 31 W9).** No detector writes `kind: 'python'` or `'php'`. The phase 5, FastAPI and Slim exit tests are not recorded. .NET (6c) and Rust (6d) are unreleased, and no `kind: 'training'` service runs Python. *Blocker: D7, free-plan gating, for phase 5.* [make.md › PRD 31 W9](./docs/specs/make.md#4-w9-browser-run-tier-full-stack-apps-on-our-webcontainers-runtime)
 - **Browser-run apps need the mandatory Security Shield.** Build PRD 31 W10: runtime-minted identity, origin separation, ingress and service-graph decisions at the page-side chokepoints, an authenticated database gateway, egress CSP, quotas and VFS scoping, with incidents flowing into `security_incidents` and the SIEM export. Done when every gap fixture (inventory tracked out of source control in `SECURITY-FINDINGS.local.md`) is green across Node, Python and PHP. [make.md › PRD 31 W10](./docs/specs/make.md#4-w10-security-shield-mandatory-protection-for-every-browser-run-app).
+  - **Status (2026-11-18): phases 1–4 are mostly shipped.**
+    - Webcontainers 24f6d1d and 2026.11.4 shipped SW routing integrity, port ownership and the service graph, gateway auth, VFS scoping, and quotas.
+    - Builderforce shipped the worker egress CSP, migration 1354 and the shield ingest route.
+  - **In flight for 2026.11.5:**
+    - origin separation per (project, app);
+    - refusing same-origin mode;
+    - the per-attach nonce;
+    - the SW-stamped preview CSP;
+    - signed `?policy=` worker URLs;
+    - `SecurityEventSink`;
+    - loopback and host body limits;
+    - per-app pip records.
+    - After that release, Builderforce wires the sink adapter to `/api/security/shield-incidents`, policy-id minting, and per-app preview-origin serving.
+  - **Blocker for live origin separation:** wildcard DNS plus a Worker route for `*.preview.builderforce.ai`. This is an ops change in Cloudflare.
+  - **Contract push (blocked until 1354 is deployed):** drop `uq_security_incidents_finding_ref` and fold the change into the ledger.
+  - **Still open:** phases 5, 6 and 8 (signature engine, automated response, adversarial and scale validation) and the Phase 0 baseline latency fixtures.
 - **The wrangler detector cannot read real configs (found by the 2026-11-17 PRD verification).** `api/src/application/blueprint/detectors/wranglerDetector.ts` regex-matches inline `kv_namespaces = [...]` / `r2_buckets = [...]`, so `[[kv_namespaces]]`, `[[r2_buckets]]` and `[[durable_objects.bindings]]` table arrays are missed and the hired.video blueprint acceptance fails; `content.includes('ai')` (line 84) flags any file containing the letters. Parse TOML properly. [make.md › PRD 31](./docs/specs/make.md#prd-31--build-run-and-ship-a-real-app-on-builderforce).
 - **`POST /api/projects` stores `companyId` without checking the company belongs to the tenant (found by the 2026-11-17 PRD verification)** (PRD 31 W8). Validate tenancy before the write. [make.md › PRD 31 §4](./docs/specs/make.md#4-w8-company--project-in-one-step)
 - **Live container preview off.** Host and deploy are in place; `preview.builderforce.ai` answers "not enabled". *Blocker: the `PREVIEW_INGRESS_ENABLED` secret.* Unblocks the QR live path and the native simulator. [make.md › PRD 31 §4](./docs/specs/make.md#4-w1-run-loop-container--live-preview--agent-highest-leverage)

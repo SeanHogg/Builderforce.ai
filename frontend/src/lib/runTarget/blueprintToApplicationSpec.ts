@@ -15,15 +15,20 @@
  *   with, on the runtime of its command (`npm install` → node, `pip install -r …` → python,
  *   `composer install` → php) — Laravel's root holds both npm's and composer's. A service,
  *   migration or seed depends on the install in its root for its command's runtime.
- * - Every service gets its own port: one that collides with an earlier service's (two
- *   same-family backends on their kind's default — Python and PHP 8000, .NET and Rust
- *   8080) moves to the next free port, and its dev command's literal port with it.
+ * - Every service gets its own port (`servicePorts`): one that collides (two same-family
+ *   backends on their kind's default — Python and PHP 8000, .NET and Rust 8080) moves to
+ *   the next free port, its dev command told so, and its dependents' `localhost:OLD`
+ *   with it; a service whose command cannot be told is declined (`mapBlueprint`).
  * - Only browser-only frontends (an SPA, Vite) are `frontend`: they never depend on the
  *   database, so they never receive `DATABASE_URL`. SSR frameworks (Next, Remix,
  *   SvelteKit, Astro) run server code, so they are backends and do.
  */
-import { serviceDevPort, type AppBlueprint, type AppService, type ServiceKind } from '@builderforce/creation-canvas-contract';
-import { isDotnetCommand, isPhpCommand, isPythonCommand, isRustCommand, type ApplicationSpec, type ReadinessSpec, type ServiceRole, type ServiceSpec } from '@seanhogg/builderforce-webcontainers/app';
+import type { AppBlueprint, AppService, ServiceKind } from '@builderforce/creation-canvas-contract';
+import type { ApplicationSpec, ReadinessSpec, ServiceRole, ServiceSpec } from '@seanhogg/builderforce-webcontainers/app';
+import { COMMAND_RUNTIMES, commandOf, commandRuntime, commandWords, ENV_PREFIX, PROCESS_RUNTIME, shellSegments } from './commandLine';
+import { allocatePorts, bindService, propagateMoves } from './servicePorts';
+
+export { commandOf, commandRuntime, commandWords } from './commandLine';
 
 /** Which runtime provider runs each blueprint kind, and whether its code runs only in the browser. */
 export const KIND_RUNTIME: Readonly<Record<ServiceKind, { runtime: string; role: ServiceRole }>> = {
@@ -47,27 +52,8 @@ export const KIND_RUNTIME: Readonly<Record<ServiceKind, { runtime: string; role:
   rust: { runtime: 'rust', role: 'backend' },
 };
 
-/**
- * The runtimes whose commands run as processes of the ONE preview runtime, each with
- * the runtime's OWN test of which commands are its (`isPythonCommand`: python, pip,
- * uvicorn, flask …; `isPhpCommand`: php, composer; `isDotnetCommand`: dotnet, `./app.cs`;
- * `isRustCommand`: cargo, wasmtime, a `.wasm` module). Anything else — a Node binary, the
- * shell (which hands these children to their runtimes itself) — is `node`.
- */
-const COMMAND_RUNTIMES: ReadonlyArray<{ runtime: string; owns: (command: string) => boolean }> = [
-  { runtime: 'python', owns: isPythonCommand },
-  { runtime: 'php', owns: isPhpCommand },
-  { runtime: 'dotnet', owns: isDotnetCommand },
-  { runtime: 'rust', owns: isRustCommand },
-];
-const PROCESS_RUNTIME = 'node';
 /** Kinds on these runtimes run whatever their command is; any other kind is declined by its kind. */
 const PROCESS_RUNTIMES = new Set([PROCESS_RUNTIME, ...COMMAND_RUNTIMES.map((entry) => entry.runtime)]);
-
-/** The runtime a command runs on: the one that owns it, else Node. */
-export function commandRuntime(command: string): string {
-  return COMMAND_RUNTIMES.find((entry) => entry.owns(command))?.runtime ?? PROCESS_RUNTIME;
-}
 
 /** Database engines PGlite stands in for, mapped to the engine name the runtime takes. */
 const POSTGRES_ENGINES: Readonly<Record<string, string>> = { postgres: 'postgres', neon: 'postgres' };
@@ -77,36 +63,6 @@ export const BROWSER_DATABASE_PORT = 5432;
 
 /** Ids the database and its steps always get, so a service can never take them. */
 export const RESERVED_IDS = { db: 'db', migrate: 'db-migrate', seed: 'db-seed' } as const;
-
-/** Commands that run as they are; any other first word is a package binary, run through `npx`. */
-const RUNNERS = new Set(['node', 'npm', 'npx', 'pnpm', 'yarn', 'bun', 'bfsh']);
-
-/** Shell operators (incl. a bare `&`), substitutions and redirects need the shell (`bfsh -c`). */
-const SHELL_SYNTAX = /[&|;<>`$]/;
-/** A leading `NAME=value` environment assignment needs the shell too. */
-const ENV_PREFIX = /^[A-Za-z_][A-Za-z0-9_]*=/;
-
-/** Split a command line into words, honouring single and double quotes. */
-export function commandWords(line: string): string[] {
-  const words: string[] = [];
-  const pattern = /"([^"]*)"|'([^']*)'|(\S+)/g;
-  for (const match of line.matchAll(pattern)) words.push(match[1] ?? match[2] ?? match[3] ?? '');
-  return words;
-}
-
-/**
- * `npm run dev` → `npm ['run','dev']`; `vite --port 5173` → `npx ['vite',…]`; `a && b` → `bfsh ['-c','a && b']`.
- * A Python or PHP command (`uvicorn main:app`, `php -S …`, `composer install`) runs as it is, on its runtime.
- */
-export function commandOf(line: string): { command: string; args: string[] } | null {
-  const trimmed = line.trim();
-  if (!trimmed) return null;
-  if (SHELL_SYNTAX.test(trimmed) || ENV_PREFIX.test(trimmed)) return { command: 'bfsh', args: ['-c', trimmed] };
-  const [first, ...rest] = commandWords(trimmed);
-  if (!first) return null;
-  const asIs = RUNNERS.has(first) || commandRuntime(first) !== PROCESS_RUNTIME;
-  return asIs ? { command: first, args: rest } : { command: 'npx', args: [first, ...rest] };
-}
 
 /** The runtime a service of `kind` running `command` is on: its command's, for a process runtime; else its kind's. */
 function serviceRuntime(kind: ServiceKind, command: string | undefined): string {
@@ -124,9 +80,6 @@ export function acceptanceProbe(service: ServiceSpec): ServiceSpec {
   return { ...service, args: commandWords(service.args[1] ?? '') };
 }
 
-/** Where a shell line splits into commands (`&&`, `||`, `;`, `|`, `&`). */
-const SHELL_SEPARATORS = /&&|\|\||[;|&]/;
-
 /**
  * The commands of a shell line that belong to a language runtime (`pip install -r
  * requirements.txt && python app.py`), each as a service on that runtime — so the
@@ -135,8 +88,8 @@ const SHELL_SEPARATORS = /&&|\|\||[;|&]/;
  */
 export function shellRuntimeProbes(service: ServiceSpec): ServiceSpec[] {
   if (service.command !== 'bfsh' || service.args?.[0] !== '-c') return [];
-  return (service.args[1] ?? '').split(SHELL_SEPARATORS).flatMap((segment) => {
-    const words = commandWords(segment);
+  return shellSegments(service.args[1] ?? '').flatMap((segment) => {
+    const words = commandWords(segment.text);
     while (words[0] !== undefined && ENV_PREFIX.test(words[0])) words.shift();
     const [first, ...rest] = words;
     const runtime = first ? commandRuntime(first) : PROCESS_RUNTIME;
@@ -177,28 +130,18 @@ function oneOff(id: string, line: string, root: string, dependsOn: string[]): Se
 
 const unique = (ids: string[]): string[] => [...new Set(ids)];
 
-/** The next port from `wanted` up that no service holds yet; it is then held. */
-function freePort(wanted: number, held: Set<number>): number {
-  let port = wanted;
-  while (held.has(port)) port++;
-  held.add(port);
-  return port;
-}
-
-/**
- * A dev command moved off `from` onto `to`: the port where the command names it
- * (`--port 8000`, `--port=8000`, `0.0.0.0:8000`, `--urls http://0.0.0.0:8080`), never
- * inside another number. A command that names no port reads `PORT`, which the runtime sets.
- */
-export function movedCommand(line: string, from: number, to: number): string {
-  return from === to ? line : line.replace(new RegExp(`(?<=[\\s:=])${from}(?!\\d)`, 'g'), String(to));
-}
-
 export function roleOfService(service: AppService): ServiceRole {
   return service.role ?? KIND_RUNTIME[service.kind]?.role ?? 'backend';
 }
 
-export function blueprintToApplicationSpec(blueprint: AppBlueprint): ApplicationSpec {
+/** The application to run, and why any of its services cannot run as mapped (`"<id>: <reason>"`). */
+export interface MappedBlueprint {
+  spec: ApplicationSpec;
+  declined: string[];
+}
+
+/** The ONE mapping; `declined` names a service whose port could not be moved (its command cannot be told). */
+export function mapBlueprint(blueprint: AppBlueprint): MappedBlueprint {
   const taken = new Set<string>(Object.values(RESERVED_IDS));
   const ids = new Map(blueprint.services.map((service) => [service.id, safeId(service.id, taken)]));
   const backends = blueprint.services.filter((service) => roleOfService(service) === 'backend');
@@ -249,27 +192,31 @@ export function blueprintToApplicationSpec(blueprint: AppBlueprint): Application
     if (seed) { tasks.push(seed); databaseDeps.push(seed.id); }
   }
 
-  // Every service gets its own port in the ONE runtime: two Python APIs (8000), a PHP
-  // and a Python API (8000), a .NET and a Rust service (8080) — the later one moves to
-  // the next free port, its command with it. The database's port is held first.
-  const heldPorts = new Set<number>(database ? [BROWSER_DATABASE_PORT] : []);
-  const services: ServiceSpec[] = blueprint.services.map((service) => {
+  // Every service gets its own port in the ONE runtime: the database's and the declared
+  // ones first, then the defaults — a later Python or PHP API (8000), a .NET or Rust
+  // service (8080) moves to the next free port, its command told so, or is declined.
+  const grants = allocatePorts(blueprint.services, database ? [BROWSER_DATABASE_PORT] : []);
+  const declined: string[] = [];
+  const moves: Array<{ id: string; from: number; to: number }> = [];
+  const services: ServiceSpec[] = blueprint.services.map((service, index) => {
+    const id = ids.get(service.id)!;
     const serviceRole = roleOfService(service);
     const root = runtimeRoot(service.rootDir);
-    const devPort = serviceDevPort(service);
-    const port = devPort === undefined ? undefined : freePort(devPort, heldPorts);
+    const { line, port, move, declined: why } = bindService(id, service.devCommand, grants[index]);
+    if (why) declined.push(why);
+    if (move) moves.push({ id, ...move });
     const declared = (service.dependsOn ?? []).map((dep) => ids.get(dep) ?? dep);
     const defaults = service.dependsOn
       ? []
       : serviceRole === 'frontend' ? backends.map((backend) => ids.get(backend.id)!) : [];
-    const command = commandOf(devPort === undefined || port === undefined ? service.devCommand : movedCommand(service.devCommand, devPort, port));
+    const command = commandOf(line);
     const dependsOn = unique([
       // Its own command's runtime's install in its root (a Vite frontend: npm's; a PHP API: composer's).
       ...installOf(root, commandRuntime(command?.command ?? '')), ...declared, ...defaults,
       ...(serviceRole === 'backend' ? databaseDeps : []),
     ]);
     return {
-      id: ids.get(service.id)!,
+      id,
       type: 'application',
       runtime: serviceRuntime(service.kind, command?.command),
       role: serviceRole,
@@ -287,8 +234,15 @@ export function blueprintToApplicationSpec(blueprint: AppBlueprint): Application
   );
 
   return {
-    projectId: String(blueprint.projectId),
-    services: [...installs.values(), ...tasks, ...services],
-    ...(Object.keys(env).length > 0 ? { env } : {}),
+    spec: {
+      projectId: String(blueprint.projectId),
+      services: propagateMoves([...installs.values(), ...tasks, ...services], moves, env),
+      ...(Object.keys(env).length > 0 ? { env } : {}),
+    },
+    declined,
   };
+}
+
+export function blueprintToApplicationSpec(blueprint: AppBlueprint): ApplicationSpec {
+  return mapBlueprint(blueprint).spec;
 }
