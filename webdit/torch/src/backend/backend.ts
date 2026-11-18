@@ -11,7 +11,7 @@ import type { Shape } from "../shape";
  *    waits) — readback is the only await, and it is explicit;
  *  - `release` gives a handle's storage back (pooled on WebGPU); a handle is
  *    never used after it is released;
- *  - in-place methods (`*Step`, `loraBackward`, `addInPlace`) mutate the handles they name and
+ *  - in-place methods (`*Step`, `loraBackward`, `addInPlace`, `copyInPlace`) mutate the handles they name and
  *    nothing else.
  */
 
@@ -24,13 +24,14 @@ export interface BackendTensor {
   readonly dtype: string;
 }
 
-export type UnaryOp = "relu" | "gelu" | "exp" | "log";
+/** `gelu` is the tanh approximation; `gelu_erf` the exact (erf) GELU, PyTorch's default. */
+export type UnaryOp = "relu" | "gelu" | "gelu_erf" | "exp" | "log";
 
 /**
- * Broadcasting binary ops. `relu_backward` / `gelu_backward` take `(x, gy)` of
- * the same shape and return the input gradient.
+ * Broadcasting binary ops. `relu_backward` / `gelu_backward` /
+ * `gelu_erf_backward` take `(x, gy)` of the same shape and return the input gradient.
  */
-export type BinaryOp = "add" | "sub" | "mul" | "div" | "relu_backward" | "gelu_backward";
+export type BinaryOp = "add" | "sub" | "mul" | "div" | "relu_backward" | "gelu_backward" | "gelu_erf_backward";
 
 export interface LayerNormForward<H> {
   y: H;
@@ -107,6 +108,14 @@ export interface Backend<H extends BackendTensor = BackendTensor> {
   binary(op: BinaryOp, a: H, b: H): H;
   /** target += src, in place (same shape) — gradient accumulation into `.grad`. */
   addInPlace(target: H, src: H): void;
+  /**
+   * target ← src in place, bit-exact (same size and dtype) — `Tensor.copy_`,
+   * `load_state_dict`. A no-op when both handles share storage (a view of
+   * itself), so copying a tensor onto an alias of itself never corrupts it.
+   */
+  copyInPlace(target: H, src: H): void;
+  /** A fresh float32 ⇄ int32 conversion (float → int truncates toward zero, as PyTorch). */
+  cast(a: H, dtype: EngineDType): H;
   /**
    * Batched matmul over the last two dims. `transA` / `transB` swap an
    * operand's last two dims. Batch dims must be equal, or one operand 2D.

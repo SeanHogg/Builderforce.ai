@@ -41,3 +41,14 @@ fn gelu_d(x: f32) -> f32 {
   let t = gelu_t(x);
   return 0.5 * (1.0 + t) + 0.5 * x * (1.0 - t * t) * GELU_C * (1.0 + 3.0 * 0.044715 * x * x);
 }`;
+
+/** Exact (erf) GELU and its derivative — the same A&S 7.1.26 erf as the CPU backend's `erf`. */
+export const GELU_ERF_FNS = `
+fn erf_f(x: f32) -> f32 {
+  let a = abs(x);
+  let t = 1.0 / (1.0 + 0.3275911 * a);
+  let y = 1.0 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * exp(-a * a);
+  return select(y, -y, x < 0.0);
+}
+fn gelu_erf_f(x: f32) -> f32 { return 0.5 * x * (1.0 + erf_f(x * 0.7071067811865476)); }
+fn gelu_erf_d(x: f32) -> f32 { return 0.5 * (1.0 + erf_f(x * 0.7071067811865476)) + x * exp(-0.5 * x * x) * 0.3989422804014327; }`;

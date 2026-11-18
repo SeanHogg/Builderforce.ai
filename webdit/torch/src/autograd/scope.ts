@@ -13,8 +13,9 @@ import { DeviceTensor } from "./device-tensor";
  * still reference tensors the scope disposed. Parameters, their `.grad`, and
  * optimizer state are never scope-owned.
  *
- * `tidy` is synchronous. A host whose step spans awaits (the Pyodide handle
- * driver) brackets it with `startScope()` / `endScope(kept)` itself.
+ * `tidy` is synchronous. A host whose step spans awaits brackets it with
+ * `startScope()` / `endScope(kept)` itself; one whose step is many separate
+ * calls (the Pyodide bridge) re-enters a `HostScope` around each call.
  */
 
 const scopes: Array<Set<DeviceTensor>> = [];
@@ -43,6 +44,90 @@ export function endScope(kept: Iterable<DeviceTensor> = []): void {
   for (const t of scope) {
     if (survivors.has(t)) parent?.add(t);
     else t.dispose();
+  }
+}
+
+/**
+ * A scope that outlives any one call. A host whose "step" is not one JS call
+ * (the Pyodide bridge: a Python loop calls in op by op) enters it around each
+ * synchronous call with `run`, so exactly the tensors made inside those calls
+ * join it — tensors the rest of the realm makes never do. Members are disposed
+ * only by `prune`, never by leaving `run`.
+ */
+export class HostScope {
+  private readonly members = new MemberSet();
+
+  run<T>(fn: () => T): T {
+    const depth = scopes.length;
+    scopes.push(this.members);
+    let completed = false;
+    try {
+      const result = fn();
+      completed = true;
+      return result;
+    } finally {
+      const balanced = scopes.length === depth + 1 && scopes[depth] === this.members;
+      scopes.length = depth; // restore the stack either way
+      // Only a call that RETURNED reports imbalance; a throwing call keeps its own error.
+      if (completed && !balanced) throw new Error("HostScope.run: the scope stack was left unbalanced inside the call");
+    }
+  }
+
+  /** Make `t` a member (a tensor its owner gave up, e.g. a dropped `.grad`). */
+  adopt(t: DeviceTensor): void {
+    this.members.add(t);
+  }
+
+  has(t: DeviceTensor): boolean {
+    return this.members.has(t);
+  }
+
+  /** Dispose one member now; false when `t` is not a member. */
+  discard(t: DeviceTensor): boolean {
+    if (!this.members.delete(t)) return false;
+    t.dispose();
+    return true;
+  }
+
+  /**
+   * Dispose every member `retain` rejects; returns how many were disposed.
+   * `beforeDispose` sees each one first (to rescue state it owns, e.g. a `.grad` still referenced).
+   */
+  prune(retain: (t: DeviceTensor) => boolean, beforeDispose?: (t: DeviceTensor) => void): number {
+    let disposed = 0;
+    for (const t of [...this.members]) {
+      if (retain(t)) continue;
+      beforeDispose?.(t);
+      this.members.delete(t);
+      t.dispose();
+      disposed++;
+    }
+    return disposed;
+  }
+
+  get size(): number {
+    return this.members.size;
+  }
+
+  /** Bytes the members' values occupy (4 per element). */
+  get bytes(): number {
+    return this.members.bytes;
+  }
+}
+
+/** A Set that keeps the byte total of its tensors as they join and leave (the engine's `trackInScope` adds through it). */
+class MemberSet extends Set<DeviceTensor> {
+  bytes = 0;
+
+  override add(t: DeviceTensor): this {
+    if (!this.has(t)) this.bytes += t.size * 4;
+    return super.add(t);
+  }
+
+  override delete(t: DeviceTensor): boolean {
+    const had = super.delete(t);
+    if (had) this.bytes -= t.size * 4;
+    return had;
   }
 }
 

@@ -753,7 +753,10 @@ jobs:
   # include reaches (api/vitest.config.ts covers only `<pkg>/src`). Same shape as a
   # verify-kernel leg. The CPU suites (gradient checks, engine, optimizers, training) always
   # run; the WebGPU suites need a GPU adapter through Dawn's Node binding and SKIP, with the
-  # probe's reason in the log, on a runner without one.
+  # probe's reason in the log, on a runner without one. Node 26: the Pyodide suites (the
+  # Python `torch` package) need JSPI, which Node 24's V8 keeps behind a flag; the suites
+  # assert it is present rather than passing vacuously (vitest.config.ts also adds the
+  # flag on a Node that lacks it).
   verify-webdit-torch:
     name: Verify @webdit/torch
     runs-on: ubuntu-latest
@@ -769,7 +772,9 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: 26
+
+      - run: pnpm run gen:python --check
 
       - uses: ./.github/actions/pnpm-store-cache
         with:

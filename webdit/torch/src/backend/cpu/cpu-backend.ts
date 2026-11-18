@@ -22,6 +22,23 @@ export function geluGrad(x: number): number {
 }
 
 /**
+ * erf by Abramowitz & Stegun 7.1.26 (|error| ≤ 1.5e-7, below float32 resolution
+ * near 1). The WGSL `erf_f` in kernels/common.ts is the same polynomial, so the
+ * two backends agree on the exact GELU.
+ */
+export function erf(x: number): number {
+  const s = x < 0 ? -1 : 1;
+  const a = Math.abs(x);
+  const t = 1 / (1 + 0.3275911 * a);
+  const y = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-a * a);
+  return s * y;
+}
+
+/** Exact (erf) GELU, PyTorch's default `approximate="none"`. */
+export const geluErf = (x: number) => 0.5 * x * (1 + erf(x * Math.SQRT1_2));
+export const geluErfGrad = (x: number) => 0.5 * (1 + erf(x * Math.SQRT1_2)) + (x * Math.exp(-0.5 * x * x)) / Math.sqrt(2 * Math.PI);
+
+/**
  * The reference backend. Handles are the library's own CPU `Tensor`s, so the
  * forward math is the same code the inference path (`ops/*`, `nn/*`) runs;
  * only the backward/update kernels are new, in `row-kernels.ts` and
@@ -68,6 +85,8 @@ export class CpuBackend implements Backend<Tensor> {
         return relu(a);
       case "gelu":
         return gelu(a);
+      case "gelu_erf":
+        return unaryF32(a, geluErf, "gelu_erf");
       case "exp":
         return exp(a);
       case "log":
@@ -93,6 +112,8 @@ export class CpuBackend implements Backend<Tensor> {
         return binaryF32(a, b, (x, g) => (x > 0 ? g : 0), "relu_backward");
       case "gelu_backward":
         return binaryF32(a, b, (x, g) => g * geluGrad(x), "gelu_backward");
+      case "gelu_erf_backward":
+        return binaryF32(a, b, (x, g) => g * geluErfGrad(x), "gelu_erf_backward");
     }
   }
 
@@ -139,6 +160,12 @@ export class CpuBackend implements Backend<Tensor> {
   }
   addInPlace(target: Tensor, src: Tensor): void {
     updates.addInPlace(target, src);
+  }
+  copyInPlace(target: Tensor, src: Tensor): void {
+    updates.copyInPlace(target, src);
+  }
+  cast(a: Tensor, dtype: EngineDType): Tensor {
+    return updates.cast(a, dtype);
   }
 
   loraMerge(base: Tensor, a: Tensor, b: Tensor, scale: number): Tensor {

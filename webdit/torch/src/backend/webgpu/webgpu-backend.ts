@@ -1,4 +1,4 @@
-import { productOf, type Shape } from "../../shape";
+import { contiguousStrides, productOf, type Shape } from "../../shape";
 import type {
   AdamWStep,
   Backend,
@@ -138,6 +138,22 @@ export class WebGPUBackend implements Backend<GpuTensor> {
   addInPlace(target: GpuTensor, src: GpuTensor): void {
     if (target.size !== src.size) throw new Error(`add_inplace: ${src.size} values into ${target.size}`);
     this.dispatcher.run("add_inplace", [bind(target), bind(src)], u32(target.size), target.size);
+  }
+
+  copyInPlace(target: GpuTensor, src: GpuTensor): void {
+    if (target.dtype !== src.dtype) throw new Error(`copy_inplace: ${src.dtype} into ${target.dtype}`);
+    if (target.size !== src.size) throw new Error(`copy_inplace: ${src.size} values into ${target.size}`);
+    // Views of one storage hold the same values; binding one buffer read and read_write is also invalid.
+    if (target.storage === src.storage || target.size === 0) return;
+    this.dispatcher.run("copy_inplace", [bind(target), bind(src)], u32(target.size), target.size);
+  }
+
+  cast(a: GpuTensor, dtype: EngineDType): GpuTensor {
+    if (a.dtype === "float16") throw new Error("cast: packed fp16 storage — convert with fromF16 first");
+    if (a.dtype === dtype) return this.stridedCopy(a, a.shape, contiguousStrides(a.shape), 0);
+    const out = this.alloc(a.shape, dtype);
+    if (a.size > 0) this.dispatcher.run(dtype === "int32" ? "cast_f32_to_i32" : "cast_i32_to_f32", [bind(a), bind(out)], u32(a.size), a.size);
+    return out;
   }
 
   matmul(a: GpuTensor, b: GpuTensor, transA: boolean, transB: boolean): GpuTensor {

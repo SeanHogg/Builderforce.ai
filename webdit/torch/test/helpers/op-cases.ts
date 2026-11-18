@@ -67,6 +67,7 @@ export const OP_CASES: OpCase[] = [
   { name: "mean (last, keepDims)", inputs: [f([2, 3, 4])], build: ([a]) => F.mean(a!, -1, true) },
   { name: "relu", inputs: [f([3, 4], { awayFromZero: 0.05 })], build: ([a]) => F.relu(a!) },
   { name: "gelu", inputs: [f([3, 4], { lo: -3, hi: 3 })], build: ([a]) => F.gelu(a!) },
+  { name: "gelu (exact erf)", inputs: [f([3, 4], { lo: -3, hi: 3 })], build: ([a]) => F.gelu(a!, "none") },
   { name: "exp", inputs: [f([2, 3])], build: ([a]) => F.exp(a!) },
   { name: "log", inputs: [f([2, 3], { lo: 0.5, hi: 2 })], build: ([a]) => F.log(a!) },
   { name: "softmax", inputs: [f([3, 5], { lo: -2, hi: 2 })], build: ([a]) => F.softmax(a!) },

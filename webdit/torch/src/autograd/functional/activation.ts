@@ -9,10 +9,11 @@ export function relu(x: DeviceTensor): DeviceTensor {
   return record("relu", be.unary("relu", x.handle), [x], (gy) => [be.binary("relu_backward", x.handle, gy)]);
 }
 
-/** Tanh-approximated GELU (PyTorch `approximate="tanh"`). */
-export function gelu(x: DeviceTensor): DeviceTensor {
+/** GELU: `"tanh"` (default here) is PyTorch's `approximate="tanh"`; `"none"` is the exact erf form, PyTorch's default. */
+export function gelu(x: DeviceTensor, approximate: "tanh" | "none" = "tanh"): DeviceTensor {
   const be = backendOf("gelu", x);
-  return record("gelu", be.unary("gelu", x.handle), [x], (gy) => [be.binary("gelu_backward", x.handle, gy)]);
+  const [fwd, bwd] = approximate === "none" ? (["gelu_erf", "gelu_erf_backward"] as const) : (["gelu", "gelu_backward"] as const);
+  return record("gelu", be.unary(fwd, x.handle), [x], (gy) => [be.binary(bwd, x.handle, gy)]);
 }
 
 export function exp(x: DeviceTensor): DeviceTensor {
