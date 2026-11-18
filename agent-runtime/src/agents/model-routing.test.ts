@@ -55,9 +55,15 @@ describe("resolveRoleRoutedModel", () => {
     ).resolves.toBe("builderforcellm/auto");
   });
 
-  it("a plan turn keeps the operator's lead", async () => {
+  it("a plan turn leads with the strongest model", async () => {
     await expect(
       resolveRoleRoutedModel({ cfg, lead: "builderforcellm/auto", role: "plan", view }),
+    ).resolves.toBe("anthropic/claude-opus-5-5");
+  });
+
+  it("a chat turn keeps the operator's lead", async () => {
+    await expect(
+      resolveRoleRoutedModel({ cfg, lead: "builderforcellm/auto", role: "chat", view }),
     ).resolves.toBe("builderforcellm/auto");
   });
 });
