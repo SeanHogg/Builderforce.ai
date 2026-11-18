@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CollectionDescriptor } from './descriptor';
 import type { Page, PageQuery } from './collectionTypes';
 import { resolveLocalCompare } from './useCollectionSort';
@@ -65,47 +65,42 @@ export function useServerSource<Row>(
   fetchPage: CollectionFetchPage<Row>,
   query: PageQuery,
 ): CollectionSource<Row> {
-  const [state, setState] = useState<{ page: Page<Row>; query: PageQuery } | null>(null);
-  const [loading, setLoading] = useState(true);
-  // A monotonically increasing token so a slow fetch can't clobber a newer one.
-  const requestSeq = useRef(0);
+  const { page: pageNumber, pageSize, sort, dir, archived, q } = query;
+  // Bumped by `refetch` so the same query runs again.
+  const [reload, setReload] = useState(0);
+  const [state, setState] = useState<{ page: Page<Row> } | null>(null);
+  // The request the last fetch SETTLED (resolved or failed). `loading` is derived:
+  // the current request has not settled yet — no setState inside the effect body.
+  const [settledKey, setSettledKey] = useState<string | null>(null);
+  const requestKey = `${pageNumber}|${pageSize}|${sort}|${dir}|${archived}|${q ?? ''}|${reload}`;
   const fetchRef = useRef(fetchPage);
-  fetchRef.current = fetchPage;
+  useEffect(() => {
+    fetchRef.current = fetchPage;
+  }, [fetchPage]);
 
   useEffect(() => {
-    const seq = ++requestSeq.current;
+    // The cleanup cancels a superseded fetch, so a slow one can't clobber a newer one.
     let cancelled = false;
-    setLoading(true);
     fetchRef
-      .current(query)
-      .then((page) => {
-        if (cancelled || seq !== requestSeq.current) return;
-        setState({ page, query });
-        setLoading(false);
+      .current({ page: pageNumber, pageSize, sort, dir, archived, q })
+      .then((next) => {
+        if (cancelled) return;
+        setState({ page: next });
+        setSettledKey(requestKey);
       })
       .catch(() => {
-        if (cancelled || seq !== requestSeq.current) return;
+        if (cancelled) return;
         // Keep the previous page on error; the surface's error handling is its
         // own, but a failed refetch never blanks the collection.
-        setLoading(false);
+        setSettledKey(requestKey);
       });
     return () => {
       cancelled = true;
     };
-  }, [query.page, query.pageSize, query.sort, query.dir, query.archived, query.q]);
+  }, [requestKey, pageNumber, pageSize, sort, dir, archived, q]);
 
-  const refetch = () => {
-    const seq = ++requestSeq.current;
-    setLoading(true);
-    fetchRef
-      .current(query)
-      .then((page) => {
-        if (seq !== requestSeq.current) return;
-        setState({ page, query });
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  };
+  const refetch = useCallback(() => setReload((n) => n + 1), []);
+  const loading = settledKey !== requestKey;
 
   // While loading, KEEP THE PREVIOUS PAGE rendered (state stays until the new
   // one resolves) — the PRD "keeps the previous page while loading" contract.

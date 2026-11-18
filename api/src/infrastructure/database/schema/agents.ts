@@ -1034,6 +1034,8 @@ export const workflows = pgTable('workflows', {
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   completedAt:  timestamp('completed_at'),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+  /** Archive (PRD 47 §3.3, migration 1352). NULL = active. */
+  archivedAt:   timestamp('archived_at'),
 });
 
 
@@ -1072,6 +1074,8 @@ export const workflowDefinitions = pgTable('workflow_definitions', {
   parentDefinitionId:   uuid('parent_definition_id').references((): AnyPgColumn => workflowDefinitions.id, { onDelete: 'set null' }),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+  /** Archive (PRD 47 §3.3, migration 1352). NULL = active. */
+  archivedAt:  timestamp('archived_at'),
 });
 
 

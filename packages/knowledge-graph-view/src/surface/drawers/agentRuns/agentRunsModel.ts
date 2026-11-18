@@ -7,7 +7,7 @@ import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { pathOf } from '../../../graphModel';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../../labels';
 import type { ThemeTone } from '../../../scene/themeColors';
-import type { AgentRunEvidence, AgentRunFile, AgentRunFinding, AgentRunReport, AgentRunSeverity, AgentRunSummary, AgentRunTurn, AgentRunTurnKind } from '../../../types';
+import type { AgentRunEvidence, AgentRunFinding, AgentRunReport, AgentRunSeverity, AgentRunSummary, AgentRunTurn, AgentRunTurnKind } from '../../../types';
 
 type Words = KnowledgeGraphLabels['surface']['agentRuns'];
 

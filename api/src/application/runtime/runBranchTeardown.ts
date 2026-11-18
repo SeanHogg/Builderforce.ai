@@ -70,7 +70,16 @@ export async function gatherTeardownFacts(
   // on the automatic teardown sweep (which runs on every cancelled run; see the ROADMAP gap entry on run-branch residue for its per-task-attribution hazard).
   let changedPaths: string[] | null = null;
   if (args.mode === 'revert') {
-    const diff = await listBranchDiff({ ...target, ref: repoCtx.branch }, repoCtx.base, repoCtx.branch).catch(() => null);
+    // A diff that throws leaves `changedPaths` null — the revert rules then treat the
+    // branch's file set as unproven and refuse — but the failure itself is recorded.
+    const diff = await listBranchDiff({ ...target, ref: repoCtx.branch }, repoCtx.base, repoCtx.branch).catch((error: unknown) => {
+      reportCaughtError(error, {
+        source: 'application/runtime/runBranchTeardown.ts',
+        operation: 'gatherTeardownFacts',
+        context: { logMessage: '[run-teardown] branch diff failed; revert rules run without changed paths', details: { taskId: args.taskId, branch: repoCtx.branch } },
+      });
+      return null;
+    });
     changedPaths = diff?.ok && !diff.truncated ? diff.files.map((f) => f.path) : null;
   }
 

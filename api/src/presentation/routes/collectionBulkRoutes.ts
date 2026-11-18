@@ -19,27 +19,24 @@ import { z } from 'zod';
 import { BULK_MAX, type BulkAction } from '@builderforce/interaction-contract';
 import type { HonoEnv } from '../../env';
 import { parseBody } from './requestBody';
+import { RequestValidationError } from '../../domain/shared/errors';
 import { runBulkAction } from '../../application/collections/runBulkAction';
 import { idempotentReplay } from '../middleware/idempotentReplay';
 
-const BulkBody = z.object({
+/** The bulk body. `merge` must keep the target: the port receives the REST of ids as sources. */
+export const BulkBody: z.ZodType<{ action: BulkAction; ids: string[]; targetId?: string; dryRun?: boolean }> = z.object({
   action: z.enum(['delete', 'archive', 'restore', 'merge']),
   ids: z.array(z.string().min(1).max(64)).min(1).max(BULK_MAX),
   targetId: z.string().min(1).max(64).optional(),
   dryRun: z.boolean().optional(),
-});
-
-/** Parse + validate the bulk body. Exported so the route and its test share it. */
-export function parseBulkBody(body: unknown):
-  { action: BulkAction; ids: string[]; targetId?: string; dryRun?: boolean } {
-  const parsed = BulkBody.parse(body);
-  // `merge` must keep the target: the port receives the REST of ids as sources.
-  if (parsed.action === 'merge') {
-    if (!parsed.targetId) throw new Error("bulk 'merge' requires a targetId");
-    if (!parsed.ids.includes(parsed.targetId)) throw new Error("bulk 'merge' targetId must be one of ids");
+}).superRefine((body, ctx) => {
+  if (body.action !== 'merge') return;
+  if (!body.targetId) {
+    ctx.addIssue({ code: 'custom', path: ['targetId'], message: "bulk 'merge' requires a targetId" });
+  } else if (!body.ids.includes(body.targetId)) {
+    ctx.addIssue({ code: 'custom', path: ['targetId'], message: "bulk 'merge' targetId must be one of ids" });
   }
-  return { action: parsed.action, ids: parsed.ids, targetId: parsed.targetId, dryRun: parsed.dryRun };
-}
+});
 
 export function createCollectionBulkRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -50,13 +47,17 @@ export function createCollectionBulkRoutes(): Hono<HonoEnv> {
 
   router.post('/:entity/bulk', async (c) => {
     const entity = c.req.param('entity');
-    let body: ReturnType<typeof parseBulkBody>;
+    let body: z.infer<typeof BulkBody>;
     try {
-      body = parseBulkBody(await c.req.json().catch(() => null));
-    } catch {
+      body = await parseBody(c, BulkBody);
+    } catch (error) {
+      // Only a refused body is answered here (with which field failed); anything
+      // else is a real fault and goes to the global handler.
+      if (!(error instanceof RequestValidationError)) throw error;
       return c.json({
         error: 'Invalid bulk request: action + ids[1..1000] (+ targetId for merge) required',
         code: 'bulk_request_invalid',
+        issues: error.issues,
       }, 400);
     }
     const result = await runBulkAction(c, { entity, ...body });
