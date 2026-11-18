@@ -1,6 +1,6 @@
 /**
  * Label LOG-PROBABILITIES from a warm on-device model — the PreFetch gate's tier 3
- * (`@builderforce/prefetch`, docs/design/deterministic-prefetch.md).
+ * (`@builderforce/prefetch`, DONE.md, deterministic-first PreFetch archive).
  *
  * One forward pass: the labels are given single-letter codes, the model is asked for the
  * code with `max_tokens: 1`, and the first token's `top_logprobs` are read back per code.

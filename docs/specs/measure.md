@@ -283,9 +283,6 @@ For each of `fintech`, `healthtech`, `medtech`, `biotech`, `climate_energy`, `ha
 | C | Three exits modelled from a real cap table match the recorded spreadsheet case; the deck market slide binds to a `marketSize` object; guards green; release note + blog |
 | D | Eight presets filled with their tiles and milestone bars; seeds sourced where a band exists; two design partners per vertical running for a month; release notes + blog |
 
-### §9 Sources
-
-
 ### 9. Sources
 
 - Carta product and pricing: [Carta best cap table software guide](https://carta.com/best-cap-table-software/), [Carta finance solutions](https://carta.com/solutions/finance/), [Contrary Research on Carta](https://research.contrary.com/company/carta), [Spendflo pricing breakdown](https://www.spendflo.com/blog/how-much-does-carta-cost-a-breakdown-of-plans-and-pricing), [Pulley vs Carta pricing](https://sparklaun.ch/compare/carta-pulley), [Costbench Carta pricing](https://costbench.com/software/equity-management/carta/), [JustPricing Carta review](https://justpricing.com/carta-pricing)
@@ -330,15 +327,81 @@ Prerequisites: Stripe secrets and webhook; `CLOUDFLARE_API_TOKEN` with R2/DNS/Ro
 
 ## Design — Creation outcome metrics
 
-> Consolidated 2026-11-17 from `docs/design/creation-canvas/OUTCOME-METRICS.md`. Verified against code 2026-11-17: Mostly built.
-> This document is the north-star metric contract that ROADMAP.md:21 links to. Repoint that link to `docs/specs/measure.md` when this fragment lands.
-> Its finished sections are archived in DONE.md ("Design — Creation outcome metrics — finished sections, archived 2026-11-17").
-> The standing rules below stay in force, because every new metric must follow them:
-> - Every metric is declared exactly once, in `api/src/application/outcomes/outcomeMetricContract.ts`, with both its session and its aggregate halves.
-> - The ledger has a single write path, `outcomeLedger.ts`.
-> - `OUTCOME_DEFINITION_VERSION` rides every payload.
-> - Diagnostics such as stars, downloads, workflow counts, MCP connections and active agents are never value.
-> - Cost and latency stay `Not measured` until authoritative telemetry is attached. The UI never substitutes zero.
+> Consolidated 2026-11-18 from `docs/design/creation-canvas/OUTCOME-METRICS.md`. Verified against code 2026-11-18: built. This is the north-star metric contract, kept as reference; it has three open gaps (cost is never sent, no presentation export of the sales brief, no live experiment-traffic binding).
+> The whole document was also archived word for word in DONE.md on 2026-11-17 ("Design: Creation outcome metrics — finished sections archived on consolidation"). The text below is the living contract.
+
+### Purpose
+
+Builderforce measures whether one Creation Session moved a user from an idea to a **graded proof** — a Build whose kill condition was measured, not merely a deliverable that was produced. Runtime activity is useful diagnostic evidence, but it is not value by itself, and a deliverable nobody graded is a launch with extra steps.
+
+The same outcome ledger serves three consumers:
+
+1. The session scorecard opened from the outcome icon: this session versus an aggregated tenant baseline.
+2. Project and tenant value reviews: outcomes, speed, quality, reuse, intervention, cost, and latency.
+3. A privacy-safe sales deck: platform-level value generation without tenant content or identifying session data.
+
+### Where the definitions live
+
+Every metric is declared exactly once, in `api/src/application/outcomes/outcomeMetricContract.ts`. A metric carries both halves of its own definition — the **session** value (TypeScript, from the shared fact row) and the **aggregate** value (a SQL expression over the same facts) — so the session scorecard and every rollup compute the same number from the same rows. The single write path into the ledger is `api/src/application/outcomes/outcomeLedger.ts`; the presentation contract (labels, units, comparison arithmetic) is `frontend/src/lib/outcomeMetrics.ts`, shared by both the in-canvas scorecard and the superadmin Value outcomes panel.
+
+`OUTCOME_DEFINITION_VERSION` rides every payload, so a deck states which definition set produced the figure it quotes.
+
+### Correlation contract
+
+Every meaningful action emits a `started` event and exactly one terminal event with the same `correlationId` and `action`. Terminal phases are `succeeded`, `failed`, `validated`, or `reused`.
+
+Each event carries:
+
+- scope: `sessionId`, `projectId` when applicable, and server-derived `tenantId`;
+- actor: user, agent, Brain, or system;
+- action and phase;
+- optional artifact ID, metric key/value/unit, duration, cost, and non-sensitive metadata;
+- occurrence time.
+
+The API derives tenant and user identity rather than trusting client-supplied scope. Named agent/Brain actors are accepted only from session roles allowed to perform the action. A project ID is accepted only when it is linked to the session; a session ID supplied by a producer outside the canvas is accepted only when `resolveOutcomeSession` proves it is a live board in the caller's tenant that the caller belongs to. The unique `(session, correlation, action, phase)` key makes retries idempotent.
+
+`correlation_coverage = terminal events with a matching started event / terminal events` is itself a first-class quality metric. A feature is not considered fully instrumented while this falls below 100% for its meaningful actions.
+
+#### The proof lifecycle in the ledger
+
+The method — Read → Prove → Build → Measure — records itself through `api/src/application/realization/proofOutcomes.ts`:
+
+| Action | Emitted by | Meaning |
+|---|---|---|
+| `idea.read` | `POST /api/realizations/plan` | The idea was read into a spec and the proof forms were ranked. Nothing else is persisted by that call. |
+| `proof.choose` | `POST /api/realizations` | A proof form was chosen. Carries the target's effort and fidelity. |
+| `proof.build` | `POST /api/realizations/:id/build` | The proof was built. `succeeded` carries `metadata.reachable` when it published an address a person can open. |
+| `proof.grade` | build success (`started`), verdict rollup (`validated`), park (`failed`) | The kill condition was measured. `metricValue` is 1 for met and 0 for missed — both are grades. Abandoning terminates as `failed`, because parking an idea is a judgement, not a measurement. |
+
+A proof records nothing when it has no `realizations.session_id`: the ledger's grain is the session, and a proof started outside a board never entered that grain. Measurement is best-effort and can never fail a build; a lost write shows up honestly as `correlationCoverage` below 100%.
+
+### Metric definitions
+
+The north-star metric is **ideas reaching a graded proof**. Metrics are grouped by the act of the method they measure, and every surface renders them in this order.
+
+| Metric | Family | Session value | Aggregate value | Direction |
+|---|---|---:|---:|---|
+| **Ideas reaching a graded proof** (north star) | Measure | 0 or 1 | sessions with a graded proof / eligible sessions | Higher |
+| Time to a chosen proof form | Read → Prove | first `proof.choose` − first prompt | mean seconds | Lower |
+| Ideas that Read before they Build | Read → Prove | 0 or 1, only once a build started | read-first builders / builders | Higher |
+| Time to first meaningful artifact | Read → Prove | first non-chat artifact − first prompt | mean seconds | Lower |
+| Proofs reaching a real, reachable artifact | Build | reachable builds / build attempts | same ratio over cohort | Higher |
+| Sessions reaching a real deliverable | Build | 0 or 1 | delivered sessions / eligible sessions | Higher |
+| Artifact validation pass rate | Build | passed validations / validations | same ratio over cohort | Higher |
+| Delivery success rate | Build | successful deliveries / attempts | same ratio over cohort | Higher |
+| Delivery retry rate | Build | failed attempts followed by another attempt / attempts | same ratio over cohort | Lower |
+| Proofs whose kill condition was graded | Measure | graded proofs / proofs built | same ratio over cohort | Higher |
+| Sessions inviting a human or agent | Collaboration | 0 or 1 | collaborative sessions / eligible sessions | Higher |
+| Agent group-chat participation | Collaboration | distinct contributing agents | mean and distribution | Higher, with quality guardrail |
+| Successful synthesis | Collaboration | 0 or 1 after agent turns | synthesized group sessions / group sessions | Higher |
+| Sessions resumed in 7/30 days | Compounding value | 0 or 1 for each window | resumed sessions / eligible sessions | Higher |
+| Outputs reused as inputs | Compounding value | reuse events | sum and per-session mean | Higher |
+| Human intervention per delivery | Efficiency | intervention events / successful deliveries | same ratio over cohort | Lower, with safety guardrails |
+| Cost per delivered outcome | Efficiency | attributed cost / successful deliveries | same ratio over cohort | Lower |
+| Latency per delivered outcome | Efficiency | outcome duration | mean seconds | Lower |
+| Correlation coverage | Measurement integrity | matched terminal events / terminal events | same ratio over cohort | Higher; target 100% |
+
+“Real deliverable” requires a successful canonical delivery action such as publish, project handoff, or workflow execution. Creating a draft canvas object does not qualify. “Successful synthesis” requires an explicit Brain synthesis after participating agent turns; agent message volume alone does not qualify. “Graded” requires a measured verdict — met **or** missed; a proof that was abandoned was not graded, and the artifact validation pass rate deliberately excludes proof grading, because a missed kill condition is a finding rather than a defect.
 
 ### Metric definitions — Cost per delivered outcome
 
@@ -346,15 +409,33 @@ Prerequisites: Stripe secrets and webhook; `CLOUDFLARE_API_TOKEN` with R2/DNS/Ro
 |---|---|---:|---:|---|
 | Cost per delivered outcome | Efficiency | attributed cost / successful deliveries | same ratio over cohort | Lower |
 
-**Remaining (verified 2026-11-17):**
-- The metric is defined at `outcomeMetricContract.ts:435-446`, and the ledger accepts `costUsdMillicents` (`outcomeLedger.ts:58,94,111`; `api/src/presentation/routes/creationSessionRoutes.ts:337,1188`).
-- No producer ever sends it. The only references outside the ledger are the route schema and the client type at `frontend/src/lib/builderforceApi.ts:8880`, so the metric is permanently "Not measured".
-- The fix is to attach authoritative run cost to delivery outcomes. The source is the run's LLM usage, which `costMetrics/costMetricsStore.ts` already aggregates.
+**Remaining (verified 2026-11-18):**
+- The metric is defined (`api/src/application/outcomes/outcomeMetricContract.ts:435-446`, key `costPerDelivery`). Its session fact sums `creation_outcome_events.cost_usd_millicents` (`outcomeMetricContract.ts:237`), and the ledger accepts `costUsdMillicents` (`outcomeLedger.ts:58,94,111`; `api/src/presentation/routes/creationSessionRoutes.ts:337,1188`).
+- No producer ever sends it. Outside the ledger, the only references are the route schema and the client type (`frontend/src/lib/builderforceApi.ts:8880`), so the metric is permanently "Not measured".
+- The fix: attach the authoritative run cost to delivery outcomes. The source is the run's LLM usage, which `api/src/application/costMetrics/costMetricsStore.ts:205,225` already aggregates from `llm_usage_log.cost_usd_millicents`.
+
+### Diagnostics that are not value
+
+GitHub stars, package downloads, workflow counts, MCP connections, and active-agent counts remain operational or acquisition diagnostics. They are not evidence of customer value, they are absent from the metric registry, and they do not lead roadmap prioritization or any value review.
+
+### Aggregation and sales-deck rules
+
+- Session is the source grain. Project, tenant, and platform values are derived, never separately hand-entered.
+- Project rollups include only sessions explicitly linked to that project.
+- Tenant comparisons expose aggregates, sample size, scope, and time window—not peer session titles, prompts, artifacts, or users.
+- The session scorecard's baseline is a cohort aggregate over the workspace's most recently active boards (`OUTCOME_BASELINE_COHORT`), computed with the same expressions the rollups use, and excludes the session being scored.
+- Platform sales-deck figures use minimum cohort thresholds, suppress small segments, and include denominator, time window, and data freshness.
+- Cost and latency remain `Not measured` until authoritative telemetry is attached. The UI never substitutes zero for missing data.
+- Historical definitions are versioned. A deck states the definition version so a changing qualification rule cannot silently rewrite prior claims.
 
 ### Instrumentation rollout
 
-A rendered presentation export of the sales brief remains follow-up work. Binding live experiment traffic is a different ticket, because an authored table is not a measured split.
+The outcome ledger and scorecard are the foundation. Session open, prompt evaluation, validation, delivery, output reuse, and the full proof lifecycle (read, choose, build, grade) are correlated actions today. The superadmin Value outcomes dashboard supplies platform, tenant, and project cohorts; equal-period comparisons; trends including graded proofs; and a content-free sales brief guarded by a ten-session external-use threshold and stamped with its definition version. Canvas card acts share that contract through `packages/creation-canvas-contract/src/canvasActionOutcomes.ts`: the runner (and the poll / gate paths that are not card acts) emit `started` then one terminal with the same `correlationId`. `idea.explore`/`test`/`reveal` map onto `idea.read` / `proof.choose` / `proof.grade`; `form.publish` and `poll.publish` map onto `artifact.publish` + `proof.build` with `metadata.reachable` derived from the join URL (`/f/{slug}`, `/p/{slug}`). Unmapped connected acts still record as `{kind}.{action}` so coverage never depends on remembering a case. Notice-only refusals (no questions, unpublished, nothing to grade) do not start a correlation. Binding live experiment traffic is a different ticket — an authored table is not a measured split. A rendered presentation export remains follow-up work.
 
-**Remaining (verified 2026-11-17):**
-- No presentation export of the sales brief exists. The brief is assembled from `outcomeMetricContract.ts` and `frontend/src/lib/outcomeMetrics.ts`, and nothing renders it as slides or a PDF.
-- No live experiment-traffic binding exists. The experiment-measurement owner should track this (ROADMAP Measure, "`experiment` cards measured").
+**Remaining (verified 2026-11-18):**
+- There is no presentation export of the sales brief. The brief's wording comes from `outcomeMetricContract.ts:93,146` and its presentation from `frontend/src/lib/outcomeMetrics.ts:15`. Nothing renders it as slides or a PDF.
+- Live experiment traffic is not bound. `experiment` is not in `CONNECTED_CANVAS_ACTIONS` (`frontend/src/domains/canvas/domain/canvasChange.ts:59-132`). This is tracked in ROADMAP Measure, "`experiment` cards are never measured".
+
+*Verified 2026-11-18:* `OUTCOME_DEFINITION_VERSION` (`outcomeMetricContract.ts:65`, currently `2026.10-prescription-verify`); `OUTCOME_BASELINE_COHORT` (`:72`, 500 boards); the metric registry (`:264-467`; its families are `read-prove`, `build`, `measure`, `collaboration`, `compounding`, `efficiency`, `integrity`, in the table's order); proof actions (`api/src/application/realization/proofOutcomes.ts:53`); `resolveOutcomeSession` (`outcomeLedger.ts:129`, used by `api/src/presentation/routes/realizationRoutes.ts:53`); latency comes from the recorded `durationMs`. No drift in the contract text. The registry's labels are worded slightly differently from the table: "Successful agent synthesis", "Sessions resumed within 7 days" and "within 30 days" (two keys), "Created outputs reused as inputs", "Human interventions per delivery" and "Actions with a correlated outcome". The table names the concepts; `outcomeMetrics.ts` owns the labels on screen.
+
+---

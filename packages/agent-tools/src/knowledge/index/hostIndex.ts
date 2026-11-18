@@ -1,5 +1,5 @@
 /**
- * One root's knowledge index on a host (docs/design/deterministic-knowledge-index.md,
+ * One root's knowledge index on a host (DONE.md, deterministic knowledge index archive,
  * "Where it runs", "Sequence") — the editor and on-prem both hold theirs through this,
  * with their own files, embedders and idle scheduler injected:
  *

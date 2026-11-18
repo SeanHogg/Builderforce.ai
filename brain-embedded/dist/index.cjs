@@ -5,9 +5,9 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
-var __export = (target, all) => {
+var __export = (target2, all) => {
   for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
+    __defProp(target2, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -17,12 +17,12 @@ var __copyProps = (to, from, except, desc) => {
   }
   return to;
 };
-var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+var __toESM = (mod, isNodeMode, target2) => (target2 = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
   // If the importer is in node compatibility mode or this is not an ESM
   // file that has been converted to a CommonJS file using a Babel-
   // compatible transform (i.e. "__esModule" has not been set), then set
   // "default" to the CommonJS "module.exports" for node compatibility.
-  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target2, "default", { value: mod, enumerable: true }) : target2,
   mod
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
@@ -1914,8 +1914,8 @@ function parseNamedBody(name, body, seq) {
   const jsonStart = body.indexOf("{");
   if (jsonStart >= 0) {
     try {
-      const obj2 = JSON.parse(body.slice(jsonStart));
-      return { id: `xmltc_${seq}`, name, args: JSON.stringify(obj2 ?? {}) };
+      const obj3 = JSON.parse(body.slice(jsonStart));
+      return { id: `xmltc_${seq}`, name, args: JSON.stringify(obj3 ?? {}) };
     } catch {
     }
   }
@@ -1948,14 +1948,14 @@ function parseInner(inner, seq) {
   if (jsonStart >= 0) {
     const maybeName = trimmed.slice(0, jsonStart).trim();
     try {
-      const obj2 = JSON.parse(trimmed.slice(jsonStart));
+      const obj3 = JSON.parse(trimmed.slice(jsonStart));
       if (maybeName) {
-        return { id: `xmltc_${seq}`, name: maybeName, args: JSON.stringify(obj2 ?? {}) };
+        return { id: `xmltc_${seq}`, name: maybeName, args: JSON.stringify(obj3 ?? {}) };
       }
-      if (obj2 && typeof obj2 === "object" && typeof obj2.name === "string") {
-        const a = obj2.arguments ?? obj2.parameters ?? obj2.input ?? {};
+      if (obj3 && typeof obj3 === "object" && typeof obj3.name === "string") {
+        const a = obj3.arguments ?? obj3.parameters ?? obj3.input ?? {};
         const argsStr = typeof a === "string" ? a : JSON.stringify(a ?? {});
-        return { id: `xmltc_${seq}`, name: obj2.name, args: argsStr };
+        return { id: `xmltc_${seq}`, name: obj3.name, args: argsStr };
       }
     } catch {
       if (maybeName) return { id: `xmltc_${seq}`, name: maybeName, args: "{}" };
@@ -5113,6 +5113,9 @@ var POSITIVE_TONE = [
   "accelerated"
 ];
 
+// ../packages/creation-canvas-contract/src/viewport.ts
+var CANVAS_VIEWPORTS = ["desktop", "tablet", "mobile"];
+
 // ../packages/creation-canvas-contract/src/website.ts
 var WEBSITE_SECTION_KINDS = ["hero", "features", "content", "stats", "testimonial", "cta"];
 var WEBSITE_ADDABLE_SECTION_KINDS = WEBSITE_SECTION_KINDS.filter((kind) => kind !== "hero");
@@ -5217,6 +5220,56 @@ var BRAND_BOUND_KINDS = [
   "mockupSet"
 ];
 var BRAND_BOUND_SET = new Set(BRAND_BOUND_KINDS);
+
+// ../packages/creation-canvas-contract/src/runtimeTools.ts
+var RUNTIME_LOG_LINES = { default: 80, max: 400 };
+var S = { type: "string" };
+var N = { type: "number" };
+var target = {
+  projectId: { ...N, description: "The project whose app is running." },
+  executionId: { ...N, description: "The run holding a container preview, when there is one." }
+};
+var service = { ...S, description: 'The service to act on (e.g. "web", "api"). Default: the first one that serves pages.' };
+var obj = (properties, required) => ({ type: "object", properties, required });
+var RUNTIME_TOOLS = [
+  {
+    tool: "runtime.preview_status",
+    mutates: false,
+    description: "Where the app is running (the user's browser or a cloud container), why the other target did not run it, and each service's state (starting, live, failed, stopped) with its last error.",
+    parameters: obj(target, ["projectId"])
+  },
+  {
+    tool: "runtime.preview_url",
+    mutates: false,
+    description: "The URL a browser loads to see one service of the running app.",
+    parameters: obj({ ...target, serviceId: service }, ["projectId"])
+  },
+  {
+    tool: "runtime.preview_logs",
+    mutates: false,
+    description: "The tail of a service's dev-server output \u2014 read it after an edit to see a compile error or a crash.",
+    parameters: obj({ ...target, serviceId: service, lines: { ...N, description: `Lines to return (default ${RUNTIME_LOG_LINES.default}, at most ${RUNTIME_LOG_LINES.max}).` } }, ["projectId"])
+  },
+  {
+    tool: "runtime.preview_restart",
+    mutates: true,
+    description: "Restart one service of the running app (the others keep running) \u2014 after a change a hot reload cannot apply.",
+    parameters: obj({ ...target, serviceId: service }, ["projectId"])
+  },
+  {
+    tool: "runtime.preview_screenshot",
+    mutates: false,
+    description: "Capture what a service of the running app shows right now, as an image \u2014 confirm an edit landed as intended.",
+    parameters: obj({ ...target, serviceId: service, viewport: { ...S, enum: [...CANVAS_VIEWPORTS], description: "Default desktop." } }, ["projectId"])
+  },
+  {
+    tool: "runtime.run_verify",
+    // It runs commands in the app's environment: gated, confirmed and audited like a write.
+    mutates: true,
+    description: "Run the app's declared verify commands (type-check, tests) where the app runs, and report each command's exit code and output tail. `command` runs one command instead of the declared ones.",
+    parameters: obj({ ...target, command: { ...S, description: "One command to run instead of the declared verify commands." } }, ["projectId"])
+  }
+];
 
 // ../packages/creation-canvas-contract/src/objectKinds.ts
 var FOUNDER_OBJECT_KINDS = [
@@ -10860,16 +10913,16 @@ function rustImplTarget(line) {
   const m = /^\s*(?:unsafe\s+)?impl\b(?:\s*<[^>]*>)?\s+([^{]*)/.exec(line);
   if (!m) return void 0;
   const text2 = group(m, 1).replace(/\bwhere\b.*$/, "");
-  const target = text2.includes(" for ") ? text2.slice(text2.indexOf(" for ") + 5) : text2;
-  return /(?:[A-Za-z_]\w*::)*([A-Za-z_]\w*)/.exec(target.replace(/^[\s&]+(?:mut\s+|dyn\s+)?/, ""))?.[1];
+  const target2 = text2.includes(" for ") ? text2.slice(text2.indexOf(" for ") + 5) : text2;
+  return /(?:[A-Za-z_]\w*::)*([A-Za-z_]\w*)/.exec(target2.replace(/^[\s&]+(?:mut\s+|dyn\s+)?/, ""))?.[1];
 }
 function extractRust(lines, out) {
   let block;
   eachLine(lines, out, (line, lineNo) => {
     if (/^\}/.test(line)) block = void 0;
-    const target = rustImplTarget(line);
-    if (target) {
-      block = target;
+    const target2 = rustImplTarget(line);
+    if (target2) {
+      block = target2;
       return;
     }
     const m = /^(\s*)(pub(?:\([^)]*\))?\s+)?(?:(?:async|unsafe|const|extern(?:\s+"[^"]*")?)\s+)*(fn|struct|enum|trait|mod|type)\s+([A-Za-z_]\w*)/.exec(line);
@@ -11588,8 +11641,8 @@ function switchOf(sub, rest) {
   if (creates) return { ...created ? { target: created } : {}, creates: true };
   if (detach) return { ...positional[0] ? { target: positional[0] } : {}, creates: false };
   if (positional.length !== 1 || positional[0] === ".") return void 0;
-  const target = positional[0];
-  return sub === "checkout" && target !== "-" && !endsOptions ? { target, creates: false, ambiguous: true } : { target, creates: false };
+  const target2 = positional[0];
+  return sub === "checkout" && target2 !== "-" && !endsOptions ? { target: target2, creates: false, ambiguous: true } : { target: target2, creates: false };
 }
 function enter(base, dir) {
   const clean = dir.replace(/[\\/]+$/, "").replace(/^(\.\/)+/, "") || ".";
@@ -11872,12 +11925,12 @@ var unanswered = (r) => !r.ok && r.exitCode === void 0;
 function unreadableRefusal(command, why) {
   return `Refused: \`${command}\` switches branches, but this checkout's state could not be read (${why ?? "git timed out or its output was too large"}), so it could not be verified clean \u2014 the command was not run. Pass the checkout as \`cwd\` and retry, or commit (git_commit with \`branch\`) first.`;
 }
-async function namesCommit(git, target) {
-  if (UNSAFE.test(target)) return true;
-  const sha = await git(`rev-parse --verify --quiet "${target}^{commit}"`);
+async function namesCommit(git, target2) {
+  if (UNSAFE.test(target2)) return true;
+  const sha = await git(`rev-parse --verify --quiet "${target2}^{commit}"`);
   if (unanswered(sha)) return true;
   if (succeeded2(sha) && /^[0-9a-f]{7,64}\r?$/m.test(sha.stdout ?? "")) return true;
-  const remote = await git(`for-each-ref --count=1 "--format=%(refname)" "refs/remotes/*/${target}"`);
+  const remote = await git(`for-each-ref --count=1 "--format=%(refname)" "refs/remotes/*/${target2}"`);
   if (unanswered(remote)) return true;
   return succeeded2(remote) && /^refs\/remotes\//m.test(remote.stdout ?? "");
 }
@@ -15101,27 +15154,27 @@ function probedTarget(ref, probes) {
   }
   return null;
 }
-async function fittedFor(target, opts, fit, probes) {
+async function fittedFor(target2, opts, fit, probes) {
   if (!fit) return opts.messages;
-  const contextTokens = contextWindowOf(target.ref, { probes });
+  const contextTokens = contextWindowOf(target2.ref, { probes });
   return fit(opts.messages, {
-    ref: target.ref,
+    ref: target2.ref,
     ...contextTokens ? { contextTokens } : {},
     ...opts.tools ? { tools: opts.tools } : {},
     ...opts.maxTokens ? { maxTokens: opts.maxTokens } : {},
     ...opts.conversationKey !== void 0 ? { conversation: opts.conversationKey } : {}
   });
 }
-async function streamOnLocal(target, opts, handlers, transport, messages, picked) {
-  const account = localRuntime(target.provider).onDevice ? void 0 : "own";
-  const named = handlers.onModel ? { ...handlers, onModel: () => handlers.onModel?.(target.ref, account) } : handlers;
+async function streamOnLocal(target2, opts, handlers, transport, messages, picked) {
+  const account = localRuntime(target2.provider).onDevice ? void 0 : "own";
+  const named = handlers.onModel ? { ...handlers, onModel: () => handlers.onModel?.(target2.ref, account) } : handlers;
   let served;
   try {
-    served = await streamChatCompletion({ ...opts, messages, model: target.model, modelStrict: opts.modelStrict || picked, transport }, named);
+    served = await streamChatCompletion({ ...opts, messages, model: target2.model, modelStrict: opts.modelStrict || picked, transport }, named);
   } catch (e) {
-    throw withModelRef(e, target.ref);
+    throw withModelRef(e, target2.ref);
   }
-  return { ...served, resolvedModel: target.ref, resolvedVendor: `local/${target.provider}`, ...account ? { account } : {} };
+  return { ...served, resolvedModel: target2.ref, resolvedVendor: `local/${target2.provider}`, ...account ? { account } : {} };
 }
 function committingHandlers(handlers, commit, servedAs) {
   if (servedAs) handlers.onModel?.(servedAs, void 0);
@@ -15151,11 +15204,11 @@ function createLocalStream(endpoint, model, fetchImpl, route = {}) {
       if (parsed) {
         const ref = formatLocalModelRef(parsed.provider, parsed.model);
         const sameRuntime = pin && parsed.provider === pin.provider ? { ref, provider: parsed.provider, model: parsed.model, endpoint } : null;
-        const target = probedTarget(ref, probes) ?? sameRuntime;
-        if (target) {
-          const t = target.endpoint === endpoint ? transport : localTransport(target.endpoint, fetchImpl, { runtime: target.provider });
-          const messages2 = await fittedFor(target, opts, route.fit, probes);
-          return streamOnLocal(target, opts, committingHandlers(handlers, () => void 0, target.ref), t, messages2, true);
+        const target2 = probedTarget(ref, probes) ?? sameRuntime;
+        if (target2) {
+          const t = target2.endpoint === endpoint ? transport : localTransport(target2.endpoint, fetchImpl, { runtime: target2.provider });
+          const messages2 = await fittedFor(target2, opts, route.fit, probes);
+          return streamOnLocal(target2, opts, committingHandlers(handlers, () => void 0, target2.ref), t, messages2, true);
         }
       } else if (route.cloud) {
         return route.cloud(opts, handlers);
@@ -15511,15 +15564,15 @@ function createHandoffFit(options = {}) {
     packs.set(key, memo);
     while (packs.size > HANDOFF_FIT_MEMOS) packs.delete(packs.keys().next().value);
   };
-  return async (messages, target) => {
-    if (!target.contextTokens) return messages;
+  return async (messages, target2) => {
+    if (!target2.contextTokens) return messages;
     const fitInput = {
-      to: target.ref,
-      contextTokens: target.contextTokens,
-      ...target.tools ? { tools: target.tools } : {},
-      ...target.maxTokens ? { maxTokens: target.maxTokens } : {}
+      to: target2.ref,
+      contextTokens: target2.contextTokens,
+      ...target2.tools ? { tools: target2.tools } : {},
+      ...target2.maxTokens ? { maxTokens: target2.maxTokens } : {}
     };
-    const key = `${target.conversation ?? "-"}|${target.ref}|${target.contextTokens}`;
+    const key = `${target2.conversation ?? "-"}|${target2.ref}|${target2.contextTokens}`;
     const memo = packs.get(key);
     const reused = memo ? reusePack(memo, messages, packBudgetTokens(fitInput)) : null;
     if (reused) {
@@ -16927,10 +16980,10 @@ function walk2(value, schema, path, errs, max) {
     }
   }
   if (isPlainObject(value)) {
-    const obj2 = value;
+    const obj3 = value;
     if (Array.isArray(schema.required)) {
       for (const field2 of schema.required) {
-        if (typeof field2 === "string" && !(field2 in obj2)) {
+        if (typeof field2 === "string" && !(field2 in obj3)) {
           errs.push({ path: joinPath3(path, field2), message: "required field missing" });
           if (errs.length >= max) return;
         }
@@ -16938,12 +16991,12 @@ function walk2(value, schema, path, errs, max) {
     }
     if (schema.properties) {
       for (const [k, sub] of Object.entries(schema.properties)) {
-        if (k in obj2 && errs.length < max) walk2(obj2[k], sub, joinPath3(path, k), errs, max);
+        if (k in obj3 && errs.length < max) walk2(obj3[k], sub, joinPath3(path, k), errs, max);
       }
     }
     if (schema.additionalProperties === false && schema.properties) {
       const known = new Set(Object.keys(schema.properties));
-      for (const k of Object.keys(obj2)) {
+      for (const k of Object.keys(obj3)) {
         if (!known.has(k)) {
           errs.push({ path: joinPath3(path, k), message: "additional property not allowed" });
           if (errs.length >= max) return;
@@ -16951,9 +17004,9 @@ function walk2(value, schema, path, errs, max) {
       }
     } else if (typeof schema.additionalProperties === "object" && schema.additionalProperties !== null) {
       const known = new Set(schema.properties ? Object.keys(schema.properties) : []);
-      for (const k of Object.keys(obj2)) {
+      for (const k of Object.keys(obj3)) {
         if (!known.has(k) && errs.length < max) {
-          walk2(obj2[k], schema.additionalProperties, joinPath3(path, k), errs, max);
+          walk2(obj3[k], schema.additionalProperties, joinPath3(path, k), errs, max);
         }
       }
     }
@@ -18879,14 +18932,14 @@ var VisitTally = class {
     return [...this.visits.entries()].map(([k, v]) => [k, { ...v, priorArgs: [...v.priorArgs] }]);
   }
 };
-function revisitAdvisory(tool, target, visit) {
+function revisitAdvisory(tool, target2, visit) {
   if (visit.count < REVISIT_NUDGE_AT) return null;
   if (visit.mayHaveChanged) return null;
   const shape = visit.priorArgs.length > 1 ? ` The argument sets you have already used on it: ${visit.priorArgs.map((a) => `\`${a}\``).join(", ")}.` : "";
   if (visit.count >= REVISIT_HARD_AT) {
-    return `STOP RE-READING. This is call ${visit.count} of \`${tool}\` against ${target} in this run, and the previous ${visit.count - 1} results are all still above you in this conversation.${shape} Re-reading it again will return content you already have and will not move the task forward \u2014 this pattern is how a run exhausts its tool budget without producing a single change. Do ONE of these now: (a) if you still need more of the file, continue from the \`offset\` the last result's note gave you and page forward in order \u2014 never re-open a window you already have; (b) otherwise stop reading and make the edit, or state plainly what is blocking you. Do not issue another partial read of this target.`;
+    return `STOP RE-READING. This is call ${visit.count} of \`${tool}\` against ${target2} in this run, and the previous ${visit.count - 1} results are all still above you in this conversation.${shape} Re-reading it again will return content you already have and will not move the task forward \u2014 this pattern is how a run exhausts its tool budget without producing a single change. Do ONE of these now: (a) if you still need more of the file, continue from the \`offset\` the last result's note gave you and page forward in order \u2014 never re-open a window you already have; (b) otherwise stop reading and make the edit, or state plainly what is blocking you. Do not issue another partial read of this target.`;
   }
-  return `You have now read ${target} ${visit.count} times in this run with \`${tool}\`, and every earlier result is still above you in this conversation.${shape} If you are looking for something you have not found, another window over the same lines is unlikely to surface it \u2014 page forward from the \`offset\` the last result's note gave you, or search for the specific symbol with search_code. If you already have what you need, act on it rather than re-reading.`;
+  return `You have now read ${target2} ${visit.count} times in this run with \`${tool}\`, and every earlier result is still above you in this conversation.${shape} If you are looking for something you have not found, another window over the same lines is unlikely to surface it \u2014 page forward from the \`offset\` the last result's note gave you, or search for the specific symbol with search_code. If you already have what you need, act on it rather than re-reading.`;
 }
 function withAdvisory(result, advisory) {
   if (result && typeof result === "object" && !Array.isArray(result)) {
@@ -18995,8 +19048,8 @@ var ReadCoverage = class _ReadCoverage {
     return `${tool}:${stableStringify(canonicalReadArgs(tool, args))}`;
   }
   /** Was this visit ABOUT `target` — the target itself, or a question asked of it? */
-  visitedScopeIs(visited, target) {
-    return visited === target || (visited?.startsWith(`${target}${this.traits.questionSeparator}`) ?? false);
+  visitedScopeIs(visited, target2) {
+    return visited === target2 || (visited?.startsWith(`${target2}${this.traits.questionSeparator}`) ?? false);
   }
   /** Has this exact read already SUCCEEDED this run, with nothing since that could have changed its answer? */
   isRepeat(tool, args) {
@@ -19043,10 +19096,10 @@ var ReadCoverage = class _ReadCoverage {
       }
       return worst;
     }
-    const target = this.traits.visitTarget(args) ?? null;
-    this.exact.set(_ReadCoverage.exactKey(tool, args), { tool, args: canonicalReadArgs(tool, args), target });
-    if (!target) return null;
-    return this.visits.record(`${tool}:${target}`, args);
+    const target2 = this.traits.visitTarget(args) ?? null;
+    this.exact.set(_ReadCoverage.exactKey(tool, args), { tool, args: canonicalReadArgs(tool, args), target: target2 });
+    if (!target2) return null;
+    return this.visits.record(`${tool}:${target2}`, args);
   }
   /**
    * A non-read call has run. Forget exactly the reads it could have changed — no more,
@@ -19070,11 +19123,11 @@ var ReadCoverage = class _ReadCoverage {
       return;
     }
     if (t.isCodeChangeTool(tool)) {
-      const target = t.activityTarget(args);
-      if (!target) return;
-      this.visits.forget((key) => this.visitedScopeIs(key.slice(key.indexOf(":") + 1), target));
+      const target2 = t.activityTarget(args);
+      if (!target2) return;
+      this.visits.forget((key) => this.visitedScopeIs(key.slice(key.indexOf(":") + 1), target2));
       for (const [key, read2] of [...this.exact.entries()]) {
-        if (this.visitedScopeIs(read2.target, target) || TREE_WIDE_READ_TOOLS.has(read2.tool)) this.exact.delete(key);
+        if (this.visitedScopeIs(read2.target, target2) || TREE_WIDE_READ_TOOLS.has(read2.tool)) this.exact.delete(key);
       }
       return;
     }
@@ -19351,8 +19404,8 @@ function writesViaRedirect(segment) {
   const re = /(\d*)>>?\s*(&\d+|\S+)?/g;
   let m = re.exec(unquoted);
   while (m) {
-    const target = m[2] ?? "";
-    if (!/^(&\d+|\/dev\/null|nul|NUL|\$null)$/.test(target)) return true;
+    const target2 = m[2] ?? "";
+    if (!/^(&\d+|\/dev\/null|nul|NUL|\$null)$/.test(target2)) return true;
     m = re.exec(unquoted);
   }
   return false;
@@ -19950,11 +20003,11 @@ var ReverifyTracker = class {
     this.readBackSinceWrite.delete(path);
   }
   /** A successful read-only call visited `target`. */
-  read(target) {
+  read(target2) {
     this.readsThisTurn += 1;
-    if (this.writtenPaths.has(target)) {
-      if (!this.readBackSinceWrite.has(target)) this.allRepeatReadBacks = false;
-      addBounded(this.readBackSinceWrite, target);
+    if (this.writtenPaths.has(target2)) {
+      if (!this.readBackSinceWrite.has(target2)) this.allRepeatReadBacks = false;
+      addBounded(this.readBackSinceWrite, target2);
     } else {
       this.allRepeatReadBacks = false;
     }
@@ -20118,11 +20171,11 @@ var ProgressDetector = class {
         }
       }
     } else if (ok && this.ports.isReadOnly?.(tool, args)) {
-      const target = visitTargetOf(args);
-      if (target) {
-        this.reverify.read(target);
-        const visit = this.visits.record(`${tool}:${target}`, args);
-        if (visit.count >= REVISIT_HARD_AT && !visit.mayHaveChanged) this.raise({ kind: "circling_read", tool, target, count: visit.count });
+      const target2 = visitTargetOf(args);
+      if (target2) {
+        this.reverify.read(target2);
+        const visit = this.visits.record(`${tool}:${target2}`, args);
+        if (visit.count >= REVISIT_HARD_AT && !visit.mayHaveChanged) this.raise({ kind: "circling_read", tool, target: target2, count: visit.count });
       }
     }
     const { checkChanged, check } = this.progress.observe(tool, args, { ok, wrote, result: result.data });
@@ -20140,8 +20193,8 @@ var ProgressDetector = class {
   forgetVisitsOf(path) {
     if (!path) return;
     this.visits.forget((key) => {
-      const target = key.slice(key.indexOf(":") + 1);
-      return target === path || target.startsWith(`${path} \u220B `);
+      const target2 = key.slice(key.indexOf(":") + 1);
+      return target2 === path || target2.startsWith(`${path} \u220B `);
     });
   }
   /** Every call of the turn ran. The trip this turn caused, if any — or, earlier and
@@ -20664,8 +20717,8 @@ function covers(test, file, policy) {
     if (dirName && dirOf2(test.absPath) === dirOf2(dir) && basenameOf(test.absPath).startsWith(dirName + ".")) return true;
   }
   if (coverage.includes("import") && test.imports?.length) {
-    const target = moduleKey(file.absPath);
-    if (test.imports.some((i) => moduleKey(i) === target)) return true;
+    const target2 = moduleKey(file.absPath);
+    if (test.imports.some((i) => moduleKey(i) === target2)) return true;
   }
   return false;
 }
@@ -21221,7 +21274,7 @@ async function fetchMcpToolEntries(transport, skipExtensionIds = []) {
   const skip = new Set(skipExtensionIds);
   return (body.tools ?? []).filter((t) => !skip.has(t.extensionId));
 }
-function mcpActionsFrom(entries, transport, onToolResult) {
+function mcpActionsFrom(entries, transport, onToolResult, localTools) {
   return entries.map((entry) => ({
     name: entry.name,
     description: entry.description,
@@ -21233,6 +21286,12 @@ function mcpActionsFrom(entries, transport, onToolResult) {
     run: (args) => {
       const mutating = entry.mutates !== false;
       const exec = async () => {
+        const local = localTools?.(entry);
+        if (local) {
+          const out2 = await local(args);
+          onToolResult?.({ name: entry.name, tool: entry.tool, extensionId: entry.extensionId, mutating, ok: !isErrorResult(out2) });
+          return out2;
+        }
         const token = transport.getToken();
         const headers = { "Content-Type": "application/json" };
         if (token) headers.Authorization = `Bearer ${token}`;
@@ -21280,6 +21339,8 @@ function useMcpExtensions(options) {
   const skipKey = (options?.skipExtensionIds ?? []).join(",");
   const onToolResultRef = (0, import_react4.useRef)(options?.onToolResult);
   onToolResultRef.current = options?.onToolResult;
+  const localToolsRef = (0, import_react4.useRef)(options?.localTools);
+  localToolsRef.current = options?.localTools;
   (0, import_react4.useEffect)(() => {
     let cancelled = false;
     fetchMcpToolEntries(transport, skipKey ? skipKey.split(",") : []).then((tools) => {
@@ -21298,7 +21359,7 @@ function useMcpExtensions(options) {
     };
   }, [transport, skipKey]);
   const actions = (0, import_react4.useMemo)(
-    () => mcpActionsFrom(entries, transport, (info) => onToolResultRef.current?.(info)),
+    () => mcpActionsFrom(entries, transport, (info) => onToolResultRef.current?.(info), (entry) => localToolsRef.current?.(entry)),
     [entries, transport]
   );
   useRegisterBrainActions(actions);
@@ -28262,15 +28323,15 @@ function createOutbox(opts) {
     },
     async repairDeadLetter(id) {
       if (typeof id !== "string" || id.trim() === "") return false;
-      let target;
+      let target2;
       for (const l of lanes.values()) {
-        target = l.entries.find((entry) => entry.id === id && entry.deadLetter);
-        if (target) break;
+        target2 = l.entries.find((entry) => entry.id === id && entry.deadLetter);
+        if (target2) break;
       }
-      if (!target?.deadLetter) return false;
-      const previousLetter = target.deadLetter;
-      const previousBatch = target.batch;
-      const repaired = repairDeadLetter([target], id);
+      if (!target2?.deadLetter) return false;
+      const previousLetter = target2.deadLetter;
+      const previousBatch = target2.batch;
+      const repaired = repairDeadLetter([target2], id);
       if (!repaired) return false;
       const failureBefore = storeFailure;
       await persist((s) => s.put([repaired]));
@@ -29067,8 +29128,8 @@ function callSignature(ev) {
   return callFingerprint(ev.label, ev.args);
 }
 function targetSignature(ev) {
-  const target = subjectOf(ev);
-  return target ? `${ev.label}:${target}` : null;
+  const target2 = subjectOf(ev);
+  return target2 ? `${ev.label}:${target2}` : null;
 }
 function subjectOf(ev) {
   return visitTarget(ev.args)?.replace(/\\/g, "/").replace(/^\.\//, "");
@@ -29126,16 +29187,16 @@ function progressOf(events, editIntent) {
     } else {
       current = { sig: sig2, streak: { label: ev.label, count: 1, failed: failed5 ? 1 : 0 } };
     }
-    const target = targetSignature(ev);
-    if (target) {
+    const target2 = targetSignature(ev);
+    if (target2) {
       targetedCalls += 1;
-      targetCounts.set(target, (targetCounts.get(target) ?? 0) + 1);
-      const seen = sinceEdit.get(target) ?? 0;
+      targetCounts.set(target2, (targetCounts.get(target2) ?? 0) + 1);
+      const seen = sinceEdit.get(target2) ?? 0;
       if (seen > 0) {
         revisits += 1;
-        revisitsOf.set(target, (revisitsOf.get(target) ?? 0) + 1);
+        revisitsOf.set(target2, (revisitsOf.get(target2) ?? 0) + 1);
       }
-      sinceEdit.set(target, seen + 1);
+      sinceEdit.set(target2, seen + 1);
     }
     if (isMutationTool(ev.label)) {
       mutationsAttempted += 1;
@@ -30903,15 +30964,15 @@ function asHits(raw) {
   });
 }
 function resultField(result, key) {
-  let obj2 = result;
-  if (typeof obj2 === "string") {
+  let obj3 = result;
+  if (typeof obj3 === "string") {
     try {
-      obj2 = JSON.parse(obj2);
+      obj3 = JSON.parse(obj3);
     } catch {
       return void 0;
     }
   }
-  return obj2 && typeof obj2 === "object" ? obj2[key] : void 0;
+  return obj3 && typeof obj3 === "object" ? obj3[key] : void 0;
 }
 
 // src/completionGuard.ts
@@ -31181,10 +31242,10 @@ async function shipGatePreflight(run, name, args) {
 var COMPLETION_GATE_BUDGET_MS = 2e4;
 function wroteThisRun(absPath, touched) {
   const norm = (p) => p.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
-  const target = norm(absPath);
+  const target2 = norm(absPath);
   return touched.some((t) => {
     const p = norm(t);
-    return !!p && (target === p || target.endsWith(`/${p}`));
+    return !!p && (target2 === p || target2.endsWith(`/${p}`));
   });
 }
 async function completionGateRefusal(run) {
@@ -31865,21 +31926,21 @@ function handleRouterCall(catalog, name, args) {
     };
   }
   if (name === TOOL_ROUTER_DESCRIBE) {
-    const target2 = typeof a.name === "string" ? a.name : "";
-    const spec2 = describeTool(catalog, target2);
+    const target3 = typeof a.name === "string" ? a.name : "";
+    const spec2 = describeTool(catalog, target3);
     return {
-      result: spec2 ? { name: target2, description: spec2.function?.description ?? "", parameters: spec2.function?.parameters ?? {} } : { error: `Unknown tool "${target2}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` }
+      result: spec2 ? { name: target3, description: spec2.function?.description ?? "", parameters: spec2.function?.parameters ?? {} } : { error: `Unknown tool "${target3}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` }
     };
   }
-  const target = typeof a.name === "string" ? a.name : "";
-  if (!target) return { result: { error: `${TOOL_ROUTER_INVOKE} requires a "name".` } };
-  if (isRouterTool(target)) {
-    return { result: { error: `${target} cannot be invoked through the router.` } };
+  const target2 = typeof a.name === "string" ? a.name : "";
+  if (!target2) return { result: { error: `${TOOL_ROUTER_INVOKE} requires a "name".` } };
+  if (isRouterTool(target2)) {
+    return { result: { error: `${target2} cannot be invoked through the router.` } };
   }
-  if (!describeTool(catalog, target)) {
-    return { result: { error: `Unknown tool "${target}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` } };
+  if (!describeTool(catalog, target2)) {
+    return { result: { error: `Unknown tool "${target2}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` } };
   }
-  return { dispatch: { name: target, args: asToolArgs(a.args) ?? {} } };
+  return { dispatch: { name: target2, args: asToolArgs(a.args) ?? {} } };
 }
 
 // src/runStore/brainRunContext.ts
@@ -33436,8 +33497,8 @@ function callPreflight(run) {
         if (cached2 && !(0, import_working14.stillInWorkingContext)(c, cached2.anchor)) {
           const replayNote = `Replayed from this run's read cache: this exact ${call2.name} call succeeded earlier in the run, but its result was compressed out of the working context, so here it is again \u2014 served from memory, not re-read. Act on it now; do not request it again.`;
           const visit = readCoverage2.record(call2.name, args);
-          const target = visit ? visitTarget(args) : void 0;
-          const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
+          const target2 = visit ? visitTarget(args) : void 0;
+          const revisit = visit && target2 ? revisitAdvisory(call2.name, target2, visit) : null;
           const replayed = trimToolResult(call2.name, cached2.result ?? null, {
             advisory: revisit ? `${replayNote}
 
@@ -33467,8 +33528,8 @@ ${revisit}` : replayNote,
       const covered = readCoverage2.coveredRead(call2.name, args);
       if (covered) {
         const visit = readCoverage2.record(call2.name, args);
-        const target = visit ? visitTarget(args) : void 0;
-        const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
+        const target2 = visit ? visitTarget(args) : void 0;
+        const revisit = visit && target2 ? revisitAdvisory(call2.name, target2, visit) : null;
         const note = revisit ? `${covered.note}
 
 ${revisit}` : covered.note;
@@ -33496,8 +33557,8 @@ ${revisit}` : covered.note;
       const derived = readCoverage2.derivedSearch(call2.name, args);
       if (derived) {
         const visit = readCoverage2.record(call2.name, args);
-        const target = visit ? visitTarget(args) : void 0;
-        const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
+        const target2 = visit ? visitTarget(args) : void 0;
+        const revisit = visit && target2 ? revisitAdvisory(call2.name, target2, visit) : null;
         const served = trimToolResult(call2.name, derived, { advisory: revisit, contextWindowTokens: await run.windowFit.contextWindow?.() });
         run.pending.replayed(call2.id, { name: call2.name, args, result: derived });
         pushTrace(c, {
@@ -33657,14 +33718,14 @@ function callRunner(run) {
       }
       if (isReadTool) {
         const visit = readCoverage2.record(call2.name, args);
-        const target = visit ? visitTarget(args) : void 0;
-        advisory = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
+        const target2 = visit ? visitTarget(args) : void 0;
+        advisory = visit && target2 ? revisitAdvisory(call2.name, target2, visit) : null;
         if (advisory) {
           pushTrace(c, {
             ts: nowIso(),
             category: "message",
             label: "tools.revisit_guard",
-            args: { step: iter, tool: call2.name, target, visits: visit.count },
+            args: { step: iter, tool: call2.name, target: target2, visits: visit.count },
             result: advisory
           });
         }
@@ -34125,9 +34186,9 @@ function brainPlatformTools(run) {
           return { result: pre.result };
         }
         traceUnadvertised(raw.name, step);
-        const target = pre && "rewrite" in pre ? pre.rewrite : call2;
-        prepared.set(raw.id, { call: target, ctx });
-        return pre && "rewrite" in pre ? { rewrite: { name: target.name, args: target.args } } : void 0;
+        const target2 = pre && "rewrite" in pre ? pre.rewrite : call2;
+        prepared.set(raw.id, { call: target2, ctx });
+        return pre && "rewrite" in pre ? { rewrite: { name: target2.name, args: target2.args } } : void 0;
       },
       async execute(name, args, env) {
         const id = env.callId ?? `brain-${env.step}-${ran.size + 1}`;
@@ -37050,8 +37111,8 @@ function resumeStateOf(ask2, events) {
     for (const file of codeChangesOf(ev.label, args, ev.result) ?? []) if (!files.includes(file)) files.push(file);
   }
   const steps = tools.filter((ev) => ev.label !== TASK_STATE_TOOL).slice(-RESUME_STEPS).map((ev) => {
-    const target = activityTarget(ev.args);
-    return `${ev.label}${target ? ` on ${target}` : ""} \u2014 ${failed4(ev) ? "failed" : "ok"}`;
+    const target2 = activityTarget(ev.args);
+    return `${ev.label}${target2 ? ` on ${target2}` : ""} \u2014 ${failed4(ev) ? "failed" : "ok"}`;
   });
   const plan = renderTaskState(task);
   const asked = ask2?.trim();

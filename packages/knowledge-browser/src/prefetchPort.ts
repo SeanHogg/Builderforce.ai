@@ -1,5 +1,5 @@
 /**
- * THE browser `PrefetchPort` (docs/design/deterministic-prefetch.md; PRD 38 §3.1 "from any
+ * THE browser `PrefetchPort` (DONE.md, deterministic-first PreFetch archive; PRD 38 §3.1 "from any
  * host") — what the web chat and Rovr hand a Brain run as `BrainRunRequest.prefetch`, so
  * `/review <dir>`, `/graph` and knowledge questions settle in brain-embedded's gate
  * (`prefetchGate.ts`) the way they do in the editor. ONE port for both browser hosts; each

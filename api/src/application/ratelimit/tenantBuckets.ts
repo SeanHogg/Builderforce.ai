@@ -2,12 +2,16 @@
  * The per-tenant rate-limit BUCKETS — plan allowances and bucket keys, shared by
  * the request middleware and the one handler that spends a fan-out budget itself.
  *
- * A tenant has three independent sliding windows, each a hard cap:
+ * A tenant has four independent sliding windows, each a hard cap:
  *
  *   `${tenantId}`           every counted request            1× plan rpm
  *   `${tenantId}:board`     board fan-out writes             4× plan rpm
  *   `${tenantId}:dispatch`  directed-agent replies + mention 1× plan rpm (in UNITS:
  *                           notifies spent by a chat turn     one per agent/human)
+ *   `${tenantId}:shield`    runtime Security Shield incident  SHIELD_INGEST_RPM, flat — spent by
+ *                           reports (client-attested)         the ingest route ON TOP of the tenant
+ *                                                             window, so a runtime under attack cannot
+ *                                                             flood incidents within the tenant budget
  *
  * TOTAL CEILING (decision, 2026-10-19): board writes are deliberately NOT also
  * counted against the tenant key — doing so would put the twelve-ticket fan-out
@@ -39,6 +43,11 @@ export const DISPATCH_RPM_MULTIPLIER = 1;
 export const tenantBucketKey = (tenantId: number): string => String(tenantId);
 export const boardBucketKey = (tenantId: number): string => `${tenantId}:board`;
 export const dispatchBucketKey = (tenantId: number): string => `${tenantId}:dispatch`;
+export const shieldIngestBucketKey = (tenantId: number): string => `${tenantId}:shield`;
+
+/** Runtime-shield incident reports per tenant per minute. Flat: the runtime batches and dedupes
+ *  before it reports, and every accepted report is at most one incident write. */
+export const SHIELD_INGEST_RPM = 60;
 
 /** The tenant's plan rpm; an unrecognised plan string falls back to FREE (an
  *  `undefined` limit would make the DO deny every request). Throws on lookup error. */

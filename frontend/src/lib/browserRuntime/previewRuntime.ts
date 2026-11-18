@@ -4,8 +4,8 @@
  * run on this one instance.
  *
  * Relay mode: the preview is served from `preview.builderforce.ai`, never from
- * the app's own origin — and so are the processes (`node`, `npm`, the shell),
- * which the relay starts on that origin. Canvas projects run AI-written code and
+ * the app's own origin — and so are the processes (`node`, `npm`, the shell,
+ * `python`/`pip`/`uvicorn`, `php`/`composer`), which the relay starts on that origin. Canvas projects run AI-written code and
  * arbitrary npm packages; on builderforce.ai they could read the user's session.
  * The API serves the relay page and workers there
  * (`api/src/presentation/middleware/browserPreviewOrigin.ts`).
@@ -18,6 +18,7 @@
  */
 import type { PreviewRuntime } from '@seanhogg/builderforce-webcontainers';
 import { recordedFailure } from '@/lib/reportError';
+import { PREVIEW_PHP_OPTIONS } from './previewPhpOptions';
 import { attachPreviewSignals } from './previewSignals';
 import { measureFiles, setPreviewRunningProbe, timeWrite } from './writeTiming';
 
@@ -118,7 +119,7 @@ export function releaseSharedPreviewRuntime(ownerId: string): void {
 
 function bootRuntime(): Promise<PreviewRuntime> {
   booting ??= import('@seanhogg/builderforce-webcontainers')
-    .then(({ startPreviewRuntime }) => startPreviewRuntime({ relayUrl: RELAY_URL, attribution: false }))
+    .then(({ startPreviewRuntime }) => startPreviewRuntime({ relayUrl: RELAY_URL, attribution: false, php: PREVIEW_PHP_OPTIONS }))
     .then((runtime) => {
       // The preview's errors and console reach the workspace through the runtime's own
       // channel, attached once for the page (`previewSignals.ts`).

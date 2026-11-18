@@ -6,6 +6,7 @@ import { canvasNoticesFrom, type CanvasNoticeTranslator } from './canvasNotices'
 const mocks = vi.hoisted(() => ({
   streamChatCompletion: vi.fn(),
   ensureGuestToken: vi.fn(async () => true),
+  runBrowserRuntimeTool: vi.fn(),
 }));
 
 vi.mock('@seanhogg/builderforce-brain-embedded', async (importOriginal) => ({
@@ -20,6 +21,11 @@ vi.mock('@seanhogg/builderforce-brain-embedded', async (importOriginal) => ({
 vi.mock('@/lib/brain/runtime', () => ({ brainConfig: { transport: {} } }));
 vi.mock('@/lib/brain/guestRuntime', () => ({ guestBrainConfig: { transport: {} } }));
 vi.mock('@/lib/guestRoomApi', () => ({ ensureGuestToken: mocks.ensureGuestToken }));
+// The browser executor of the `runtime.*` tools — the seam a browser run is reached through.
+vi.mock('@/lib/runTarget/runtimeTools/browserRuntimeTools', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/runTarget/runtimeTools/browserRuntimeTools')>()),
+  runBrowserRuntimeTool: mocks.runBrowserRuntimeTool,
+}));
 
 const { runCreationCanvasAi } = await import('./creationCanvasAi');
 const { StreamInterruptedError, RepetitionLoopError } = await import('@seanhogg/builderforce-brain-embedded');
@@ -1310,6 +1316,59 @@ describe('an anonymous Local-only canvas turn', () => {
       const advertised = mocks.streamChatCompletion.mock.calls[0][0].tools.map((t: { function: { name: string } }) => t.function.name);
       expect(advertised).toEqual(['builtin_web_search', 'builtin_web_fetch', 'builtin_geo_geocode']);
     } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+/**
+ * Gap B: a canvas turn's catalog `runtime.*` tool is answered WHERE THE APP RUNS. With a
+ * browser run held by this tab, the call reaches the browser executor and never the
+ * gateway relay (which would answer "not reachable" for a run only this tab holds).
+ */
+describe('a canvas turn calling a built-in runtime tool', () => {
+  it('routes runtime.* to the browser run held by this tab instead of relaying it', async () => {
+    const brain = await import('@seanhogg/builderforce-brain-embedded');
+    const actual = await vi.importActual<typeof import('@seanhogg/builderforce-brain-embedded')>('@seanhogg/builderforce-brain-embedded');
+    const { publishActiveRun, withdrawActiveRun } = await import('@/lib/runTarget/activeRun');
+    vi.mocked(brain.fetchMcpToolEntries).mockResolvedValueOnce([{
+      extensionId: 'builtin',
+      tool: 'runtime.preview_status',
+      name: 'builtin_runtime_preview_status',
+      description: 'Where the app is running.',
+      parameters: { type: 'object', properties: { projectId: { type: 'number' } }, required: ['projectId'] },
+      mutates: false,
+    }]);
+    vi.mocked(brain.mcpActionsFrom).mockImplementationOnce(actual.mcpActionsFrom);
+    const relay = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', relay);
+    const session = { targetId: 'browser' } as unknown as import('@/lib/runTarget/runTarget').RunSession;
+    publishActiveRun({ projectId: '42', session, declined: [], blueprint: null });
+    mocks.runBrowserRuntimeTool.mockReset().mockResolvedValueOnce({ target: 'browser', services: [] });
+    try {
+      mocks.streamChatCompletion.mockReset()
+        .mockResolvedValueOnce({
+          text: '',
+          toolCalls: [{ id: 'status-1', name: 'builtin_runtime_preview_status', args: JSON.stringify({ projectId: 42 }) }],
+        })
+        .mockResolvedValueOnce({ text: 'The app is running in your browser.', toolCalls: [] });
+
+      const answer = await runTurn({
+        prompt: 'is my app running? check builtin_runtime_preview_status',
+        canvasSnapshot: '{"objects":[]}',
+        persistence: 'server',
+        canvasActions: [],
+      });
+
+      expect(answer).toBe('The app is running in your browser.');
+      expect(mocks.runBrowserRuntimeTool).toHaveBeenCalledOnce();
+      const [run, tool, args] = mocks.runBrowserRuntimeTool.mock.calls[0];
+      expect(run.session).toBe(session);
+      expect(tool).toBe('runtime.preview_status');
+      expect(args).toEqual({ projectId: 42 });
+      expect(relay).not.toHaveBeenCalled();
+    } finally {
+      withdrawActiveRun('42', session);
       vi.unstubAllGlobals();
     }
   });

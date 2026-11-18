@@ -1,5 +1,5 @@
 /**
- * THE entity id primitive (docs/design/typed-entity-ids.md §2).
+ * THE entity id primitive (docs/specs/platform.md, Typed entity ids §2).
  *
  * - A **LocalId** is the UUID the device that created an entity minted. It never changes.
  * - A **SyncId** is the positive integer the server assigned when it imported the entity.

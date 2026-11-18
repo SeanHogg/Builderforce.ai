@@ -8,7 +8,7 @@
  * before the run id was stamped falls back to its chat and run key. How the run ended
  * is its `run-outcome` record, written once at run end under the same id.
  *
- * The report's GATE column (docs/design/deterministic-prefetch.md) reads the same rows:
+ * The report's GATE column (DONE.md, deterministic-first PreFetch archive) reads the same rows:
  * an ANSWERED run is its `deterministic` row (`answeredBy`), every other gated run's calls
  * carry `gateRoute` (`prefetch` / `llm`), and whether the decision was accepted is the
  * run-outcome record's `gateAccepted` — no other store.

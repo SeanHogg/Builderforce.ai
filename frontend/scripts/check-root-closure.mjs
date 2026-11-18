@@ -45,6 +45,17 @@
  * got easier; only the noise around it went away.
  *
  * Deliberate raises, so a name in the baseline always has an argument:
+ *   +1 file (2026-11-18, Brain runtime tools route to the run target) —
+ *     `lib/runTarget/runtimeTools/runtimeToolRoute.ts` (~30 lines, imports only the
+ *     `@builderforce/creation-canvas-contract` package ROOT — not a leaf entry point — which
+ *     is fine because that root is already in the first-paint closure through modules already
+ *     here (`lib/builderforceApi.ts`, `lib/brain/messageExport.ts`, `domains/canvas/domain/canvasBoard.ts`),
+ *     so the route adds no package code). `components/brain/McpExtensionsBridge.tsx`
+ *     (already here) must hand brain-embedded a SYNCHRONOUS `localTools` router — the catalog
+ *     decides per entry, at action-build time, whether a tool is answered locally — so the
+ *     "is this a built-in runtime.* tool" test cannot sit behind `import()`. The router itself
+ *     (`runtimeToolRouter.ts`) and the WebContainers runtime behind it load only through an
+ *     `import()` inside the returned runner, so none of the run-target modules is in the closure.
  *   +1 file (2026-11-17, confirm contract split) — `components/confirmContext.ts` (~43 lines, imports
  *     only `react`). Not new first-paint work: it is the context + `useConfirm()` hook moved OUT of
  *     `components/ConfirmProvider.tsx` (already here; it re-exports everything) in f5a82a41f, so the

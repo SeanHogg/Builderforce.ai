@@ -1,6 +1,6 @@
 /**
  * `@builderforce/agent-tools/knowledge-index` — the HOST-AGNOSTIC half of a local host's
- * knowledge index (docs/design/deterministic-knowledge-index.md, WS3): the registry of
+ * knowledge index (DONE.md, deterministic knowledge index archive, WS3): the registry of
  * every root's index over injected files, warm embedders and an idle scheduler; the
  * code-pack seed; the
  * `knowledge.ask` row and executor; the hit renderer. The editor

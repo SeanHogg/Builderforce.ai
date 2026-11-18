@@ -1,7 +1,8 @@
 /**
  * The `browser` RunTarget (PRD 31 §W9) — the blueprint's services run in this tab on
- * our WebContainers application runtime: Node services on the `node` provider, the
- * database as PGlite (persistent, host origin) on the `pglite` provider.
+ * our WebContainers application runtime: Node services on the `node` provider, Python
+ * (Pyodide) on `python`, PHP (php-wasm) on `php`, the database as PGlite (persistent,
+ * host origin) on the `pglite` provider.
  *
  * It runs on THE page's one preview runtime, holding its lease
  * (`bootSharedPreviewRuntime(owner)`) — never a second instance. So:
@@ -15,6 +16,7 @@
  */
 import type { AppBlueprint } from '@builderforce/creation-canvas-contract';
 import { bootSharedPreviewRuntime, releaseSharedPreviewRuntime, replaceProjectFiles } from '@/lib/browserRuntime/previewRuntime';
+import { PREVIEW_PHP_OPTIONS } from '@/lib/browserRuntime/previewPhpOptions';
 import { recordedFailure } from '@/lib/reportError';
 import { PREVIEW_CAPTURE_SCRIPT } from '@/lib/previewCapture/captureScript';
 import { acceptBlueprintInBrowser } from './browserAcceptance';
@@ -55,8 +57,20 @@ async function startSerialised(blueprint: AppBlueprint | null, context: RunConte
   if (unreadable.length > 0) return { ok: false, code: 'noFiles', detail: unreadableDetail(unreadable) };
   if (Object.keys(files).length === 0) return { ok: false, code: 'noFiles' };
 
-  const app = await import('@seanhogg/builderforce-webcontainers/app');
+  const [app, { VirtualFileSystem }] = await Promise.all([
+    import('@seanhogg/builderforce-webcontainers/app'),
+    import('@seanhogg/builderforce-webcontainers'),
+  ]);
   if (token !== generation) return superseded();
+  // What only the files tell (a native-only Python package, a PHP extension php-wasm
+  // lacks) is judged now, on the loaded files — BEFORE the current run is disposed or the
+  // shared runtime is booted and taken from the workspace — so a decline names it and
+  // costs nothing, rather than a start that never gets going.
+  const projectFiles = new VirtualFileSystem();
+  projectFiles.writeTree(files);
+  const judged = acceptBlueprintInBrowser(blueprint, projectFiles);
+  if (!judged.ok) return judged;
+
   await disposeCurrent();
   // The capture script belongs to the run: it leaves the preview pages when the run does.
   let booted: { setPreviewScripts(scripts: string[]): void } | null = null;
@@ -75,8 +89,14 @@ async function startSerialised(blueprint: AppBlueprint | null, context: RunConte
   // Every page the app serves answers the agent's `preview_screenshot` from inside itself.
   runtime.setPreviewScripts([PREVIEW_CAPTURE_SCRIPT]);
 
-  const application = app.startApplicationRuntime(accepted.spec, {
-    providers: [app.createNodeProvider(runtime), app.createPgliteProvider(runtime)],
+  const application = app.startApplicationRuntime(judged.spec, {
+    providers: [
+      app.createNodeProvider(runtime),
+      app.createPgliteProvider(runtime),
+      app.createPythonProvider(runtime, { fs: runtime.fs }),
+      // The same PHP options the runtime booted with, and the PHP its processes report.
+      app.createPhpProvider(runtime, { fs: runtime.fs, php: PREVIEW_PHP_OPTIONS, platform: runtime.phpPlatform }),
+    ],
   });
   const handle = browserRunSession(application, () => {
     if (current !== handle) return;

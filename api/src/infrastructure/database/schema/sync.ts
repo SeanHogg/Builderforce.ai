@@ -1,6 +1,6 @@
 /**
  * Schema — Synchronization, the server half of the versioned batch sync protocol
- * (docs/design/vsix-offline-first-architecture-review.md, G15–G18, G25; migration
+ * (DONE.md, Web, Rovr, and VSIX local-first review archive, G15–G18, G25; migration
  * 1247).
  *
  * The sync context owns DELIVERY facts, not domain rules: which event was accepted,
@@ -74,7 +74,7 @@ export const syncEvents = pgTable('sync_events', {
  * Client entity UUID → server id + current version (the optimistic-concurrency counter).
  *
  * `sync_id` (migration 1339, expand): the server row's integer key — the SyncId of
- * docs/design/typed-entity-ids.md — NULL when the entity has none (mirror, usage, tier
+ * docs/specs/platform.md, Typed entity ids — NULL when the entity has none (mirror, usage, tier
  * tickets, run steps). `server_id` text stays until the contract push drops it.
  */
 export const syncEntityMappings = pgTable('sync_entity_mappings', {

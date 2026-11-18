@@ -21,6 +21,20 @@ export const APPROVED_BY = 'planning model';
  */
 export const APPROVED_PERMANENT = [
   {
+    file: 'agent-runtime/src/agents/candidate-ranking.test.ts',
+    blob: '9b955f3fde1d576bd1a4693080820b196bd84901',
+    changed: "\"plan keeps the operator's order exactly\" becomes \"plan and review lead with the strongest tier\"; the balanced-order and learned-evidence cases move from `plan` to `chat`. Every other expectation is unchanged.",
+    reason: "Intended change (6e6911185, BYO role routing, chat #153027): MODEL_ROLE_OBJECTIVE makes plan and review strongest-first (+1); chat (0) is now the balanced role that keeps the operator's order. User-approved 2026-11-18.",
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'agent-runtime/src/agents/model-routing.test.ts',
+    blob: 'e60e8e87b4cfaf1a9a15923d6b8749a3cc578443',
+    changed: "\"a plan turn keeps the operator's lead\" now expects the strongest model; the keeps-the-lead case is kept under `chat`.",
+    reason: "Intended change (6e6911185, BYO role routing, chat #153027): plan is strongest-first; chat is the balanced role. User-approved 2026-11-18.",
+    approvedBy: APPROVED_BY,
+  },
+  {
     file: 'api/src/application/runtime/cloudAdapter.sharedTask.test.ts',
     blob: 'af4f9ea349fcacd0efb94f8433ccb1e1c6c6ca13',
     changed: "The host fixture's `verifyPin: undefined` becomes `reviewPin: undefined`; every expectation is unchanged.",
@@ -130,7 +144,7 @@ export const APPROVED_THIS_PUSH = [
   {
     file: 'brain-embedded/src/ticketToolVocabulary.test.ts',
     changed: "The 'reads an account id from a number or its decimal text, and nothing else' case (serverTicketId) and its import are removed.",
-    reason: 'serverTicketId absorbed by parseSyncId/entityIdsOf — typed-entity-ids §5; the parse is covered by entityId.test.ts',
+    reason: 'serverTicketId absorbed by parseSyncId/entityIdsOf — platform.md typed entity ids §5; the parse is covered by entityId.test.ts',
     approvedBy: APPROVED_BY,
     cases: 1,
   },

@@ -25,6 +25,8 @@ export const SERVICE_KINDS = {
   SVELTEKIT: 'sveltekit', // SvelteKit
   REMIX: 'remix',         // Remix
   ASTRO: 'astro',         // Astro
+  PYTHON: 'python',       // Python server (FastAPI, Flask, Django …)
+  PHP: 'php',             // PHP server (`php -S`, Slim, Laravel …)
 } as const;
 
 export type ServiceKind = typeof SERVICE_KINDS[keyof typeof SERVICE_KINDS];
@@ -49,6 +51,9 @@ export const SERVICE_KIND_DEV_PORTS: Readonly<Record<ServiceKind, number | null>
   sveltekit: 5173,
   remix: 5173,
   astro: 4321,
+  // uvicorn, `fastapi run` and Django default to 8000 (`php -S` names its own); Flask's 5000 is declared in `ports`.
+  python: 8000,
+  php: 8000,
 };
 
 /**
@@ -75,8 +80,8 @@ export interface AppService {
   kind: ServiceKind;
   /** Root directory of this service (relative to repo root). */
   rootDir: string;
-  /** Detected package manager (npm/pnpm/yarn/bun). */
-  packageManager: 'npm' | 'pnpm' | 'yarn' | 'bun';
+  /** Detected package manager (npm/pnpm/yarn/bun; pip for a Python service, composer for PHP). */
+  packageManager: 'npm' | 'pnpm' | 'yarn' | 'bun' | 'pip' | 'composer';
   /** Install command (with flags for CI/frozen lockfile). */
   installCommand: string;
   /** Dev server command. */

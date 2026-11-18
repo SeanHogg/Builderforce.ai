@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { validateSpec } from '@seanhogg/builderforce-webcontainers/app';
-import { acceptanceProbe, blueprintToApplicationSpec, commandOf, runtimeRoot } from './blueprintToApplicationSpec';
+import { VirtualFileSystem } from '@seanhogg/builderforce-webcontainers';
+import { acceptanceProbe, blueprintToApplicationSpec, commandOf, commandRuntime, runtimeRoot } from './blueprintToApplicationSpec';
 import { acceptBlueprintInBrowser } from './browserAcceptance';
-import { blueprint, CANVAS_APP, HIRED_VIDEO, service } from './blueprintFixtures';
+import { blueprint, CANVAS_APP, HIRED_VIDEO, PHP_APP, PYTHON_APP, service } from './blueprintFixtures';
 
 const byId = (spec: ReturnType<typeof blueprintToApplicationSpec>, id: string) => spec.services.find((s) => s.id === id);
 
@@ -33,6 +34,27 @@ describe('commandOf', () => {
 
   it('has nothing to run for an empty command', () => {
     expect(commandOf('  ')).toBeNull();
+  });
+
+  it.each([
+    ['python app.py', 'python', ['app.py']],
+    ['uvicorn main:app --port 8000', 'uvicorn', ['main:app', '--port', '8000']],
+    ['pip install -r requirements.txt', 'pip', ['install', '-r', 'requirements.txt']],
+    ['flask run -p 5000', 'flask', ['run', '-p', '5000']],
+    ['php -S 0.0.0.0:8000 -t public', 'php', ['-S', '0.0.0.0:8000', '-t', 'public']],
+    ['composer install', 'composer', ['install']],
+  ])('runs the Python/PHP command %s as it is, never through npx', (line, command, args) => {
+    expect(commandOf(line)).toEqual({ command, args });
+  });
+});
+
+describe('commandRuntime', () => {
+  it.each([
+    ['node', 'node'], ['npm', 'node'], ['npx', 'node'], ['bfsh', 'node'],
+    ['python', 'python'], ['python3', 'python'], ['pip', 'python'], ['uvicorn', 'python'], ['gunicorn', 'python'], ['flask', 'python'],
+    ['php', 'php'], ['composer', 'php'],
+  ])('%s runs on %s', (command, runtime) => {
+    expect(commandRuntime(command)).toBe(runtime);
   });
 });
 
@@ -123,6 +145,150 @@ describe('blueprintToApplicationSpec — the hired.video shape', () => {
   });
 });
 
+/** A project tree the runtime's own file checks read (requirements.txt, composer.json). */
+function projectFiles(files: Record<string, string>): VirtualFileSystem {
+  const fs = new VirtualFileSystem();
+  fs.writeTree(files);
+  return fs;
+}
+
+/** A language app's expected mapping. */
+interface LanguageRow {
+  name: string;
+  app: typeof PYTHON_APP;
+  runtime: string;
+  order: string[];
+  install: { command: string; args: string[] };
+  migrate: { command: string; args: string[] };
+  api: Record<string, unknown>;
+  files: Record<string, string>;
+}
+
+describe.each<LanguageRow>([
+  {
+    name: 'a Python app (FastAPI on uvicorn)', app: PYTHON_APP, runtime: 'python',
+    order: ['web-install', 'api-install', 'db', 'db-migrate', 'web', 'api'],
+    install: { command: 'pip', args: ['install', '-r', 'requirements.txt'] },
+    migrate: { command: 'python', args: ['-m', 'alembic', 'upgrade', 'head'] },
+    api: { command: 'uvicorn', args: ['main:app', '--port', '8000'], port: 8000, readiness: { kind: 'http', path: '/health' } },
+    files: { 'api/requirements.txt': 'fastapi\npg8000\n', 'api/main.py': 'app = None\n' },
+  },
+  {
+    name: 'a PHP app (php -S + Composer)', app: PHP_APP, runtime: 'php',
+    order: ['api-install', 'db', 'db-migrate', 'api'],
+    install: { command: 'composer', args: ['install'] },
+    migrate: { command: 'php', args: ['migrate.php'] },
+    api: { command: 'php', args: ['-S', '0.0.0.0:8000', '-t', 'public', 'public/index.php'], port: 8000, readiness: { kind: 'port' } },
+    files: { 'api/composer.json': '{"require":{"php":">=8.1","slim/slim":"^4.0"}}', 'api/public/index.php': '<?php echo 1;' },
+  },
+])('blueprintToApplicationSpec — $name', ({ app, runtime, order, install, migrate, api, files }) => {
+  const spec = blueprintToApplicationSpec(app);
+
+  it('is a valid application spec, in the same order as a Node app', () => {
+    expect(validateSpec(spec)).toEqual([]);
+    expect(spec.services.map((s) => s.id)).toEqual(order);
+  });
+
+  it('runs the install, the migration and the API on the language runtime', () => {
+    expect(byId(spec, 'api-install')).toMatchObject({ runtime, root: '/api', ...install, readiness: { kind: 'exit-zero' } });
+    expect(byId(spec, 'db-migrate')).toMatchObject({ runtime, root: '/api', ...migrate, dependsOn: ['db', 'api-install'] });
+    expect(byId(spec, 'api')).toMatchObject({ runtime, role: 'backend', root: '/api', ...api, dependsOn: ['api-install', 'db', 'db-migrate'] });
+  });
+
+  it('keeps the database on PGlite', () => {
+    expect(byId(spec, 'db')).toMatchObject({ runtime: 'pglite', database: { engine: 'postgres', provider: 'pglite', persistent: true } });
+  });
+
+  it('is accepted by the browser runtime, with and without the project files', () => {
+    expect(acceptBlueprintInBrowser(app)).toMatchObject({ ok: true });
+    expect(acceptBlueprintInBrowser(app, projectFiles(files))).toMatchObject({ ok: true });
+  });
+});
+
+/** Laravel's root package.json (Vite) beside composer.json + artisan; a Flask app beside a root package.json. */
+describe.each<{ name: string; app: ReturnType<typeof blueprint>; backend: string; runtime: string; install: { command: string; args: string[] }; migrate: { command: string; args: string[] } | null }>([
+  {
+    name: 'Laravel at the root (package.json + composer.json + artisan)',
+    app: blueprint({
+      services: [
+        service({ id: 'main', kind: 'vite-react', devCommand: 'vite', ports: [5173], isPrimary: true }),
+        service({ id: 'php', kind: 'php', installCommand: 'composer install', devCommand: 'php -S 0.0.0.0:8000 -t public', ports: [8000] }),
+      ],
+      database: { engine: 'postgres', migrationCommand: 'php artisan migrate --force', seedCommand: null, migrationsPath: 'database/migrations', connectionSecretName: 'DATABASE_URL' },
+    }),
+    backend: 'php', runtime: 'php',
+    install: { command: 'composer', args: ['install'] },
+    migrate: { command: 'php', args: ['artisan', 'migrate', '--force'] },
+  },
+  {
+    name: 'Flask at the root beside a package.json',
+    app: blueprint({
+      services: [
+        service({ id: 'web', kind: 'vite-react', devCommand: 'vite', ports: [5173], isPrimary: true }),
+        service({ id: 'python', kind: 'python', installCommand: 'pip install -r requirements.txt', devCommand: 'flask --app app:app run --host 0.0.0.0 --port 8000', ports: [8000] }),
+      ],
+    }),
+    backend: 'python', runtime: 'python',
+    install: { command: 'pip', args: ['install', '-r', 'requirements.txt'] },
+    migrate: null,
+  },
+])('blueprintToApplicationSpec — $name', ({ app, backend, runtime, install, migrate }) => {
+  const spec = blueprintToApplicationSpec(app);
+  const frontend = app.services[0]!.id;
+
+  it('installs with BOTH npm and the language package manager in the one root', () => {
+    expect(validateSpec(spec)).toEqual([]);
+    expect(byId(spec, `${frontend}-install`)).toMatchObject({ runtime: 'node', root: '/', command: 'npm', args: ['install'] });
+    expect(byId(spec, `${backend}-install`)).toMatchObject({ runtime, root: '/', ...install });
+  });
+
+  it('starts each service after its own runtime’s install', () => {
+    expect(byId(spec, backend)).toMatchObject({ runtime, root: '/' });
+    expect(byId(spec, backend)?.dependsOn).toContain(`${backend}-install`);
+    expect(byId(spec, backend)?.dependsOn).not.toContain(`${frontend}-install`);
+    expect(byId(spec, frontend)?.dependsOn).toEqual([`${frontend}-install`, backend]);
+  });
+
+  it('runs the migration after its command’s runtime install', () => {
+    if (!migrate) {
+      expect(byId(spec, 'db-migrate')).toBeUndefined();
+      return;
+    }
+    expect(byId(spec, 'db-migrate')).toMatchObject({ runtime, root: '/', ...migrate, dependsOn: ['db', `${backend}-install`] });
+    expect(byId(spec, backend)?.dependsOn).toEqual([`${backend}-install`, 'db', 'db-migrate']);
+  });
+});
+
+describe('blueprintToApplicationSpec — a Python or PHP service behind the shell', () => {
+  it('runs a shelled Python line on node: the shell hands python to its runtime itself', () => {
+    const shelled = blueprint({ services: [service({ id: 'api', kind: 'python', installCommand: '', devCommand: 'pip install -r requirements.txt && python app.py', ports: [8000] })] });
+    const spec = blueprintToApplicationSpec(shelled);
+    expect(byId(spec, 'api')).toMatchObject({ runtime: 'node', command: 'bfsh', args: ['-c', 'pip install -r requirements.txt && python app.py'] });
+    expect(acceptBlueprintInBrowser(shelled)).toMatchObject({ ok: true });
+  });
+
+  it('judges a shelled Python line on the project files too: psycopg2 declines, by name', () => {
+    const shelled = blueprint({ services: [service({ id: 'api', kind: 'python', installCommand: '', devCommand: 'pip install -r requirements.txt && python app.py', ports: [8000] })] });
+    expect(acceptBlueprintInBrowser(shelled, projectFiles({ 'requirements.txt': 'flask\n', 'app.py': 'app = None\n' }))).toMatchObject({ ok: true });
+    const verdict = acceptBlueprintInBrowser(shelled, projectFiles({ 'requirements.txt': 'flask\npsycopg2\n', 'app.py': 'app = None\n' }));
+    expect(verdict).toMatchObject({ ok: false, code: 'serviceDeclined' });
+    if (!verdict.ok) expect(verdict.detail).toMatch(/psycopg2/);
+  });
+
+  it('keeps a Worker on workerd whatever language its command is in', () => {
+    const worker = blueprint({ services: [service({ id: 'edge', kind: 'worker', devCommand: 'python worker.py', ports: [8787] })] });
+    expect(blueprintToApplicationSpec(worker).services.at(-1)?.runtime).toBe('workerd');
+  });
+
+  it.each([
+    ['python', 'uvicorn main:app'],
+    ['php', 'php -S 0.0.0.0:8000 -t public'],
+  ] as const)('falls back to the %s kind’s dev port when none is declared', (kind, devCommand) => {
+    const spec = blueprintToApplicationSpec(blueprint({ services: [service({ id: 'api', kind, installCommand: '', devCommand, ports: [] })] }));
+    expect(byId(spec, 'api')?.port).toBe(8000);
+  });
+});
+
 describe('blueprintToApplicationSpec — dev ports, SSR roles, reserved ids', () => {
   it('uses the kind’s dev port when the blueprint carries the detector’s old placeholder list', () => {
     // What package.json detection stored before it knew the framework's port.
@@ -209,6 +375,31 @@ describe('acceptBlueprintInBrowser — declines with the reason', () => {
     const spec = blueprintToApplicationSpec(shelled);
     expect(acceptanceProbe(spec.services[1]!).args).toEqual(['cd', 'api', '&&', 'wrangler', 'dev']);
     expect(acceptBlueprintInBrowser(shelled)).toMatchObject({ ok: false, code: 'serviceDeclined' });
+  });
+
+  it.each<{ what: string; app: typeof PYTHON_APP; files: Record<string, string>; named: RegExp }>([
+    {
+      what: 'a Python requirement with no browser wheel (psycopg2), by name', app: PYTHON_APP,
+      files: { 'api/requirements.txt': 'fastapi\npsycopg2==2.9.9\n' }, named: /psycopg2/,
+    },
+    {
+      what: 'a Composer requirement php-wasm lacks (ext-pgsql), by name', app: PHP_APP,
+      files: { 'api/composer.json': '{"require":{"ext-pgsql":"*"}}' }, named: /pgsql/,
+    },
+  ])('declines $what — judged on the project files', ({ app, files, named }) => {
+    expect(acceptBlueprintInBrowser(app)).toMatchObject({ ok: true });
+    const verdict = acceptBlueprintInBrowser(app, projectFiles(files));
+    expect(verdict).toMatchObject({ ok: false, code: 'serviceDeclined' });
+    if (!verdict.ok) expect(verdict.detail).toMatch(named);
+  });
+
+  it.each([
+    ['interactive Python (no script)', 'python', 'python'],
+    ['interactive PHP', 'php', 'php -a'],
+  ] as const)('declines %s in the runtime’s own words', (_what, kind, devCommand) => {
+    const verdict = acceptBlueprintInBrowser(blueprint({ services: [service({ id: 'api', kind, installCommand: '', devCommand, ports: [8000] })] }));
+    expect(verdict).toMatchObject({ ok: false, code: 'serviceDeclined' });
+    if (!verdict.ok) expect(verdict.detail).toMatch(/^Service "api"/);
   });
 
   it('declines services that cannot start together (two on one port)', () => {

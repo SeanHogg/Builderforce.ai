@@ -138,7 +138,8 @@ export function hostMatchesPattern(host: string, pattern: string): boolean {
   return h === p;
 }
 
-function isDeniedName(h: string): boolean {
+/** A name that reaches the host/platform or a metadata service (also used by the preview workers' CSP policy). */
+export function isDeniedName(h: string): boolean {
   return ALWAYS_DENIED_NAMES.some((p) => hostMatchesPattern(h, p));
 }
 

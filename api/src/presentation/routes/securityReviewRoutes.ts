@@ -11,6 +11,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  *   GET  /api/security/audits/:id          → one audit run + its finding tickets
  *   POST /api/security/audits/run          { projectId? } dispatch an audit now (manager+)
  *   POST /api/security/internal/web-scan-stage   container → API stage ingest (HMAC)
+ *   POST /api/security/shield-incidents    runtime Security Shield report (member; runtimeShieldRoutes.ts)
  *
  * Access config + audit results are manager-gated: they name what the Security agent
  * found, which is exactly the need-to-know surface the config restricts. The one
@@ -39,6 +40,7 @@ import type { TlsObservation } from '../../application/security/tlsCertificateSc
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { parseBody, parseOptionalBody, z, zNumberLike } from './requestBody';
+import { createRuntimeShieldRoutes } from './runtimeShieldRoutes';
 
 /**
  * What the web-scan container posts back — {@link WebScanStageIngestPayload}, which
@@ -94,6 +96,9 @@ export function createSecurityReviewRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.use('*', authMiddleware);
+
+  // POST /shield-incidents — the browser runtime's Security Shield reports (runtimeShieldRoutes.ts).
+  router.route('/shield-incidents', createRuntimeShieldRoutes(db));
 
   // POST /review — not cached: each call reviews caller-supplied code (unbounded,
   // one-shot compute), so there is nothing stable to cache.

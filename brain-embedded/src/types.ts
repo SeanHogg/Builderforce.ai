@@ -9,7 +9,7 @@ import type { SpendSavingsSummary } from './spendSavings';
 
 /**
  * A chat's VIEW KEY: the numeric id a chat is addressed by in this package (a local chat's
- * device-only key, or a server chat's own id). Not a LocalId (docs/design/typed-entity-ids.md
+ * device-only key, or a server chat's own id). Not a LocalId (docs/specs/platform.md, Typed entity ids
  * §3); an alias only — no field is renamed.
  */
 export type ViewKey = number;

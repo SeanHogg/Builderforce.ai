@@ -1,3 +1,2530 @@
+## ✅ RESOLVED 2026-11-18: implementation guides, API contracts and the merge process folded into platform.md
+
+- **What changed:** `docs/guides/EMAIL_IMPLEMENTATION.md`, `docs/guides/MULTI_AUTH_IMPLEMENTATION.md`, `docs/guides/progress-handling.md`, `docs/specs/API-CONTRACTS.md` and `docs/specs/MERGE_PROCESS.md` were re-verified against the code and folded into `docs/specs/platform.md`. Still-true reference text (corrected where the code had moved on) and the open items live there; superseded and finished sections are archived word for word below. `docs/guides/` and the orphaned `docs/api/event-payload.schema.json` (it documented a ticket-progress push stream that never existed) are removed.
+
+### Email Implementation Guide: finished sections archived on consolidation (2026-11-18)
+
+Source: docs/guides/EMAIL_IMPLEMENTATION.md
+
+**Status on archive (verified 2026-11-18).** These sections describe the hired.video-era email service. Builderforce built the same ideas in a different shape, so every section below is either built or superseded and none is open:
+- Provider interface — built: `EmailMessage`/`EmailProvider` (`api/src/infrastructure/email/EmailService.ts:25-34`); Resend is primary over direct `fetch` (`:53-97`), SendPulse is an API-key quota fallback (`:115-168`, `getEmailProvider` `:180-189`). The SendPulse OAuth2 `client_credentials` token flow and `EMAIL_CLIENTID`/`EMAIL_SECRET`/`EMAIL_FROM`/`FRONTEND_URL` no longer exist; the env is `RESEND_API_KEY`, `SENDPULSE_API_KEY`, `NOTIFICATION_EMAIL_FROM`, `APP_URL` (`api/src/env.ts:717-724`, `:791`).
+- Layout + body templates — superseded by `HEADER` + `footer()` + `deliver()` (`EmailService.ts:261-348`) rendering copy from the five-locale catalog `emailMessages.ts`; `ctaButton` is `cta()` (`:250`).
+- Templates 1–4 — superseded: sign-up verification is a 6-digit emailed code (`sendVerificationCodeEmail`, `:389`; `email_otp_challenges`, `api/src/application/auth/EmailVerificationService.ts`); there is no self-serve password reset email — a magic link (`sendMagicLinkEmail`, `:364`) or the admin reset link (`sendAdminPasswordResetEmail`, `:547`) signs the user in; 2FA is TOTP + recovery codes (`/api/auth/mfa/*`, `authRoutes.ts:1082-1138`), not an emailed code. Template 5 is `sendWorkspaceInviteEmail` (`:577`).
+- Token tables `email_verification_tokens`, `password_reset_tokens`, `two_factor_codes` — never created here; one-time codes live in `email_otp_challenges`, links in `magic_link_tokens` (`identity.ts:776`).
+- Error handling — superseded by `EmailDeliveryError` and the `email_delivery_failures` ledger (`api/src/application/email/sendEmail.ts:100-111`).
+- Postmark / non-edge adapters — illustrative only, never planned.
+- The fire-and-forget rule and the add-an-email checklist stay in `docs/specs/platform.md` ("Design — Email Implementation Guide").
+
+**Email Implementation Guide** (the doc's opening, kept for context):
+
+This document covers the complete email architecture used in hired.video — provider setup, templates, token management, and patterns for adapting this system to any TypeScript application.
+
+---
+
+#### Architecture Overview
+
+The email system uses a **Provider Interface pattern** to decouple sending logic from the rest of the application. Swapping providers (SendPulse → Resend, Postmark, etc.) means changing a single implementation class.
+
+```
+EmailProvider (interface)
+    └── SendPulseEmailProvider (implementation)
+            └── sendpulse.com REST API (OAuth2 + SMTP endpoint)
+```
+
+##### Core types
+
+```typescript
+interface EmailMessage {
+  to: string;
+  subject: string;
+  html: string;
+  fromName?: string;
+  fromEmail?: string;
+}
+
+interface EmailProvider {
+  send(message: EmailMessage): Promise<void>;
+}
+```
+
+---
+
+#### SendPulse Setup
+
+##### 1. Create an account and API key
+
+1. Go to [sendpulse.com](https://sendpulse.com) → **Settings → API**
+2. Generate a Client ID and Client Secret
+3. Verify your sender domain/address under **Email → Senders**
+
+##### 2. Environment variables
+
+```bash
+# .env / wrangler secrets
+EMAIL_CLIENTID=your_sendpulse_client_id
+EMAIL_SECRET=your_sendpulse_client_secret
+EMAIL_FROM=noreply@yourdomain.com
+FRONTEND_URL=https://yourdomain.com
+```
+
+For Cloudflare Workers (wrangler), store secrets via:
+```bash
+wrangler secret put EMAIL_CLIENTID --env production
+wrangler secret put EMAIL_SECRET --env production
+```
+
+For non-sensitive values, use `[vars]` in `wrangler.toml`:
+```toml
+[vars]
+EMAIL_FROM = "noreply@yourdomain.com"
+FRONTEND_URL = "https://yourdomain.com"
+```
+
+##### 3. SendPulse OAuth2 token flow
+
+SendPulse uses OAuth2 `client_credentials` grant. Tokens expire after 3600 seconds. Cache them in memory and refresh 60 seconds before expiry.
+
+```typescript
+// Token cache (module-level singleton)
+let cachedToken: string | null = null;
+let tokenExpiresAt: number | null = null;
+
+async function getSendPulseToken(clientId: string, clientSecret: string): Promise<string> {
+  const now = Date.now();
+  // Refresh if expired or within 60s of expiry
+  if (cachedToken && tokenExpiresAt && now < tokenExpiresAt - 60_000) {
+    return cachedToken;
+  }
+
+  const response = await fetch('https://api.sendpulse.com/oauth/access_token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      grant_type: 'client_credentials',
+      client_id: clientId,
+      client_secret: clientSecret,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`SendPulse token request failed: ${response.status}`);
+  }
+
+  const data = await response.json() as { access_token: string; expires_in: number };
+  cachedToken = data.access_token;
+  tokenExpiresAt = now + data.expires_in * 1000;
+  return cachedToken;
+}
+```
+
+##### 4. Sending an email via SendPulse SMTP API
+
+SendPulse's SMTP endpoint requires the HTML body base64-encoded.
+
+```typescript
+async function sendViaSendPulse(
+  message: EmailMessage,
+  clientId: string,
+  clientSecret: string,
+  fromEmail: string,
+): Promise<void> {
+  const token = await getSendPulseToken(clientId, clientSecret);
+
+  const payload = {
+    email: {
+      html: btoa(unescape(encodeURIComponent(message.html))), // base64 encode UTF-8 HTML
+      text: '',
+      subject: message.subject,
+      from: {
+        name: message.fromName ?? 'Your App',
+        email: message.fromEmail ?? fromEmail,
+      },
+      to: [{ name: message.to, email: message.to }],
+    },
+  };
+
+  const response = await fetch('https://api.sendpulse.com/smtp/emails', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`SendPulse send failed: ${response.status} — ${body}`);
+  }
+}
+```
+
+> **Note on `btoa` encoding:** `btoa(unescape(encodeURIComponent(html)))` handles non-ASCII characters correctly. In Node.js you can use `Buffer.from(html).toString('base64')` instead.
+
+---
+
+#### Template System
+
+##### Layout + body composition
+
+All emails share a **layout** (header + footer) with the body swapped per email type. The layout is composed at render time — there are no external template files.
+
+```typescript
+const LAYOUT_HEADER = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0; padding:0; background:#f8fafc; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc; padding:40px 20px;">
+    <tr><td align="center">
+      <!-- Header bar -->
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#1e293b; border-radius:8px 8px 0 0; padding:24px 40px;">
+        <tr>
+          <td>
+            <a href="{{AppUrl}}" style="color:#ffffff; font-size:22px; font-weight:700; text-decoration:none;">
+              YourApp
+            </a>
+          </td>
+        </tr>
+      </table>
+      <!-- Body wrapper -->
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff; padding:40px;">
+        <tr><td>
+`;
+
+const LAYOUT_FOOTER = `
+        </td></tr>
+      </table>
+      <!-- Footer -->
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#f1f5f9; border-radius:0 0 8px 8px; padding:24px 40px;">
+        <tr>
+          <td style="color:#64748b; font-size:13px; text-align:center;">
+            <p style="margin:0 0 8px;">© {{Year}} YourApp. All rights reserved.</p>
+            <p style="margin:0; font-size:12px;">
+              You received this email because you have an account at YourApp.<br>
+              This is a transactional email — it cannot be unsubscribed from.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>
+`;
+```
+
+##### Variable substitution
+
+```typescript
+function render(body: string, vars: Record<string, string>): string {
+  let out = LAYOUT_HEADER + body + LAYOUT_FOOTER;
+  for (const [key, value] of Object.entries(vars)) {
+    out = out.replaceAll(`{{${key}}}`, value);
+  }
+  // Always inject year and app URL
+  out = out.replaceAll('{{Year}}', new Date().getFullYear().toString());
+  out = out.replaceAll('{{AppUrl}}', process.env.FRONTEND_URL ?? '');
+  return out;
+}
+```
+
+---
+
+#### Email Templates
+
+##### Reusable button component
+
+```typescript
+function ctaButton(href: string, label: string): string {
+  return `
+    <table cellpadding="0" cellspacing="0" style="margin:24px 0;">
+      <tr>
+        <td style="background:#2563eb; border-radius:6px;">
+          <a href="${href}" style="display:inline-block; padding:14px 28px; color:#ffffff; font-size:16px; font-weight:600; text-decoration:none; border-radius:6px;">
+            ${label}
+          </a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:8px 0 0; font-size:13px; color:#64748b;">
+      Or copy this link: <a href="${href}" style="color:#2563eb;">${href}</a>
+    </p>
+  `;
+}
+```
+
+---
+
+##### Template 1: Email Verification
+
+**Trigger:** User registers
+**Variables:** `RecipientName`, `VerifyUrl`
+
+```typescript
+const VERIFY_EMAIL_BODY = `
+  <h2 style="margin:0 0 8px; color:#1e293b; font-size:24px;">Verify your email</h2>
+  <p style="margin:0 0 16px; color:#475569;">Hi {{RecipientName}},</p>
+  <p style="margin:0 0 24px; color:#475569; line-height:1.6;">
+    Thanks for creating an account. Click the button below to verify your email address.
+    This link expires in <strong>24 hours</strong>.
+  </p>
+  {{VerifyButton}}
+  <p style="margin:24px 0 0; color:#94a3b8; font-size:13px;">
+    If you didn't create an account, you can safely ignore this email.
+  </p>
+`;
+
+export async function sendVerificationEmail(
+  to: string,
+  recipientName: string,
+  token: string,
+  env: Env,
+): Promise<void> {
+  const verifyUrl = `${env.FRONTEND_URL}/verify-email?token=${token}`;
+  const html = render(VERIFY_EMAIL_BODY, {
+    RecipientName: recipientName,
+    VerifyButton: ctaButton(verifyUrl, 'Verify Email Address'),
+  });
+  await sendViaSendPulse(
+    { to, subject: 'Verify your email address', html },
+    env.EMAIL_CLIENTID,
+    env.EMAIL_SECRET,
+    env.EMAIL_FROM,
+  );
+}
+```
+
+---
+
+##### Template 2: Password Reset
+
+**Trigger:** `POST /auth/forgot-password`
+**Variables:** `RecipientName`, `ResetUrl`
+**Token expiry:** 1 hour (enforced in DB)
+
+```typescript
+const PASSWORD_RESET_BODY = `
+  <h2 style="margin:0 0 8px; color:#1e293b; font-size:24px;">Reset your password</h2>
+  <p style="margin:0 0 16px; color:#475569;">Hi {{RecipientName}},</p>
+  <p style="margin:0 0 24px; color:#475569; line-height:1.6;">
+    We received a request to reset your password. Click the button below.
+    This link expires in <strong>1 hour</strong>.
+  </p>
+  {{ResetButton}}
+  <p style="margin:24px 0 0; color:#94a3b8; font-size:13px;">
+    If you didn't request a password reset, no action is needed — your account is safe.
+  </p>
+`;
+
+export async function sendPasswordResetEmail(
+  to: string,
+  recipientName: string,
+  token: string,
+  env: Env,
+): Promise<void> {
+  const resetUrl = `${env.FRONTEND_URL}/reset-password?token=${token}`;
+  const html = render(PASSWORD_RESET_BODY, {
+    RecipientName: recipientName,
+    ResetButton: ctaButton(resetUrl, 'Reset Password'),
+  });
+  await sendViaSendPulse(
+    { to, subject: 'Reset your password', html },
+    env.EMAIL_CLIENTID,
+    env.EMAIL_SECRET,
+    env.EMAIL_FROM,
+  );
+}
+```
+
+---
+
+##### Template 3: Two-Factor Authentication Code
+
+**Trigger:** Login when `mfaEnabled = true`
+**Variables:** `RecipientName`, `TwoFactorCode`, `CodeExpiryMinutes`
+**Token expiry:** 10 minutes (enforced in DB)
+
+```typescript
+const TWO_FACTOR_BODY = `
+  <h2 style="margin:0 0 8px; color:#1e293b; font-size:24px;">Your login code</h2>
+  <p style="margin:0 0 16px; color:#475569;">Hi {{RecipientName}},</p>
+  <p style="margin:0 0 24px; color:#475569; line-height:1.6;">
+    Use this code to complete your sign-in. It expires in <strong>{{CodeExpiryMinutes}} minutes</strong>.
+  </p>
+  <table cellpadding="0" cellspacing="0" style="margin:24px 0;">
+    <tr>
+      <td style="background:#f1f5f9; border:2px dashed #cbd5e1; border-radius:8px; padding:20px 40px;">
+        <span style="font-size:36px; font-weight:700; letter-spacing:12px; color:#1e293b; font-family:monospace;">
+          {{TwoFactorCode}}
+        </span>
+      </td>
+    </tr>
+  </table>
+  <p style="margin:0; color:#94a3b8; font-size:13px;">
+    If you didn't try to sign in, someone may have your password. Change it immediately.
+  </p>
+`;
+
+export async function sendTwoFactorEmail(
+  to: string,
+  recipientName: string,
+  code: string,
+  expiryMinutes: number = 10,
+  env: Env,
+): Promise<void> {
+  const html = render(TWO_FACTOR_BODY, {
+    RecipientName: recipientName,
+    TwoFactorCode: code,
+    CodeExpiryMinutes: String(expiryMinutes),
+  });
+  await sendViaSendPulse(
+    { to, subject: `${code} is your login code`, html },
+    env.EMAIL_CLIENTID,
+    env.EMAIL_SECRET,
+    env.EMAIL_FROM,
+  );
+}
+```
+
+---
+
+##### Template 4: Resend Email Verification
+
+Same structure as the initial verification email but with different copy.
+
+```typescript
+const RESEND_VERIFY_BODY = `
+  <h2 style="margin:0 0 8px; color:#1e293b; font-size:24px;">New verification link</h2>
+  <p style="margin:0 0 16px; color:#475569;">Hi {{RecipientName}},</p>
+  <p style="margin:0 0 24px; color:#475569; line-height:1.6;">
+    Here's a new link to verify your email. This link expires in <strong>24 hours</strong>.
+    Your previous verification link is now invalid.
+  </p>
+  {{VerifyButton}}
+`;
+```
+
+---
+
+##### Template 5: Team Invitation (if applicable)
+
+```typescript
+const TEAM_INVITE_BODY = `
+  <h2 style="margin:0 0 8px; color:#1e293b; font-size:24px;">You've been invited</h2>
+  <p style="margin:0 0 16px; color:#475569;">Hi there,</p>
+  <p style="margin:0 0 24px; color:#475569; line-height:1.6;">
+    <strong>{{InviterName}}</strong> has invited you to join their team on YourApp
+    as a <strong>{{Role}}</strong>. Click the button below to accept.
+    This invitation expires in <strong>7 days</strong>.
+  </p>
+  {{InviteButton}}
+  <p style="margin:24px 0 0; color:#94a3b8; font-size:13px;">
+    If you weren't expecting this invitation, you can ignore this email.
+  </p>
+`;
+```
+
+---
+
+#### Token Management
+
+All one-time tokens follow the same DB pattern.
+
+##### Schema (Drizzle ORM)
+
+```typescript
+export const emailVerificationTokens = pgTable('email_verification_tokens', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  token: varchar('token', { length: 64 }).notNull().unique(),
+  expiresAt: timestamp('expires_at').notNull(),
+  used: boolean('used').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const passwordResetTokens = pgTable('password_reset_tokens', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  token: varchar('token', { length: 64 }).notNull().unique(),
+  expiresAt: timestamp('expires_at').notNull(),
+  used: boolean('used').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const twoFactorCodes = pgTable('two_factor_codes', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  code: varchar('code', { length: 6 }).notNull(),
+  expiresAt: timestamp('expires_at').notNull(),
+  used: boolean('used').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+```
+
+##### Token generation
+
+```typescript
+import { randomBytes } from 'crypto'; // Node.js / Cloudflare Workers
+
+function generateToken(bytes: number = 32): string {
+  return randomBytes(bytes).toString('hex'); // 64-char hex string
+}
+
+function generate2FACode(): string {
+  return String(Math.floor(100000 + Math.random() * 900000)); // 6-digit numeric
+}
+```
+
+##### Token validation pattern
+
+```typescript
+// Generic: works for email verification, password reset, magic links
+async function validateToken(
+  db: Database,
+  table: TokenTable,
+  token: string,
+): Promise<{ userId: string } | null> {
+  const record = await db.query.table.findFirst({
+    where: and(
+      eq(table.token, token),
+      eq(table.used, false),
+      gt(table.expiresAt, new Date()),
+    ),
+  });
+
+  if (!record) return null;
+
+  // Mark used immediately to prevent replay attacks
+  await db.update(table).set({ used: true }).where(eq(table.id, record.id));
+
+  return { userId: record.userId };
+}
+```
+
+##### Rate limiting resend requests
+
+Prevent resend abuse at the DB level without a cache:
+
+```typescript
+async function canResendVerification(db: Database, userId: string): Promise<boolean> {
+  const oneMinuteAgo = new Date(Date.now() - 60_000);
+  const recent = await db.query.emailVerificationTokens.findFirst({
+    where: and(
+      eq(emailVerificationTokens.userId, userId),
+      gt(emailVerificationTokens.createdAt, oneMinuteAgo),
+    ),
+    orderBy: desc(emailVerificationTokens.createdAt),
+  });
+  return !recent; // true = can resend
+}
+```
+
+---
+
+#### Error Handling Strategy
+
+| Scenario | Handling |
+|---|---|
+| Token request fails (network) | Throw — caller will catch and log |
+| Token request fails (401 bad credentials) | Throw with descriptive message |
+| Send fails (invalid email address) | Throw — log, don't retry automatically |
+| Send fails (rate limit / 429) | Throw — implement exponential backoff if needed |
+| Email send failure on registration | Log, don't fail the registration response (user can resend) |
+| Email send failure on password reset | Log — the user will just see "if your email exists, we sent a link" |
+| 2FA send failure | Surface as error to user ("Failed to send code — try again") |
+
+---
+
+#### Adapting to Other Providers
+
+The `EmailProvider` interface makes switching trivial:
+
+##### Resend
+
+```typescript
+import { Resend } from 'resend';
+
+class ResendEmailProvider implements EmailProvider {
+  private client: Resend;
+  constructor(apiKey: string) {
+    this.client = new Resend(apiKey);
+  }
+  async send(message: EmailMessage): Promise<void> {
+    await this.client.emails.send({
+      from: message.fromEmail ?? 'noreply@yourdomain.com',
+      to: message.to,
+      subject: message.subject,
+      html: message.html,
+    });
+  }
+}
+```
+
+##### Postmark
+
+```typescript
+import * as postmark from 'postmark';
+
+class PostmarkEmailProvider implements EmailProvider {
+  private client: postmark.ServerClient;
+  constructor(serverToken: string) {
+    this.client = new postmark.ServerClient(serverToken);
+  }
+  async send(message: EmailMessage): Promise<void> {
+    await this.client.sendEmail({
+      From: message.fromEmail ?? 'noreply@yourdomain.com',
+      To: message.to,
+      Subject: message.subject,
+      HtmlBody: message.html,
+    });
+  }
+}
+```
+
+##### Provider factory
+
+```typescript
+function getEmailProvider(env: Env): EmailProvider {
+  switch (env.EMAIL_PROVIDER ?? 'sendpulse') {
+    case 'resend':
+      return new ResendEmailProvider(env.RESEND_API_KEY);
+    case 'postmark':
+      return new PostmarkEmailProvider(env.POSTMARK_SERVER_TOKEN);
+    case 'sendpulse':
+    default:
+      return new SendPulseEmailProvider(env.EMAIL_CLIENTID, env.EMAIL_SECRET, env.EMAIL_FROM);
+  }
+}
+```
+
+---
+
+#### Adapting to Non-Edge Runtimes
+
+##### Node.js / Express
+
+- Replace `c.executionCtx.waitUntil(...)` with `Promise.resolve().then(...)` or a job queue (BullMQ, etc.)
+- Replace `btoa(unescape(encodeURIComponent(html)))` with `Buffer.from(html).toString('base64')`
+- Replace `randomBytes` import from `'crypto'` (already the same)
+- Token caching in module-level variables works as-is
+
+##### Next.js (App Router)
+
+- Use `after()` (Next.js 15+) or a background job for fire-and-forget email
+- Keep the service layer as-is; just inject env vars from `process.env`
+
+---
+
+#### Full Service File Structure
+
+```
+api/src/services/email.ts
+├── Token cache (module-level variables)
+├── getSendPulseToken()
+├── sendViaSendPulse()
+├── render()
+├── ctaButton()
+├── buildVerifyUrl()
+├── buildPasswordResetUrl()
+├── LAYOUT_HEADER
+├── LAYOUT_FOOTER
+├── VERIFY_EMAIL_BODY
+├── RESEND_VERIFY_BODY
+├── PASSWORD_RESET_BODY
+├── TWO_FACTOR_BODY
+├── sendVerificationEmail()          ← exported
+├── sendResendVerificationEmail()    ← exported
+├── sendPasswordResetEmail()         ← exported
+└── sendTwoFactorEmail()             ← exported
+```
+
+Only the `send*` functions should be imported by routes. Everything else is internal.
+
+---
+
+### Multi-Auth Implementation Guide: finished sections archived on consolidation (2026-11-18)
+
+Source: docs/guides/MULTI_AUTH_IMPLEMENTATION.md
+
+**Status on archive (verified 2026-11-18).** Built. The routes were ported from this guide and still carry its comments: `api/src/presentation/routes/oauthRoutes.ts` (providers `:79-139`, signed state `:165-205` over `infrastructure/auth/oauthState.ts`, initiate `:308`, callback `:356`, magic link `:609`/`:675`, `linked-accounts` `:725`, `unlink` `:749`, `add-password` `:782`); tables `oauth_accounts` and `magic_link_tokens` (`api/src/infrastructure/database/schema/identity.ts:753`, `:776`); PBKDF2-SHA256 100k (`api/src/infrastructure/auth/HashService.ts:54`, `:62`); pages `frontend/src/app/auth/callback/page.tsx` and `frontend/src/app/auth/magic-link/page.tsx`; the Settings connect button sends `link_token` (`frontend/src/lib/auth/credentials.ts:286`). Drift from the text below, all deliberate:
+- The callback never puts the JWT in the URL: it redirects to `/auth/callback?code=` with a 60-second exchange code, swapped at `POST /api/auth/oauth/exchange` (`oauthRoutes.ts:535-604`).
+- The web JWT (`signWebJwt`, `api/src/infrastructure/auth/JwtService.ts:163`) lives 24 h (30 days with "trust this device"), carries `{ sub, email, username, sa?, act?, jti, sid, mfa?, amr }`, and every issued token is persisted as a revocable session (`persistWebSessionToken`, `auth_user_sessions`/`auth_tokens`, `identity.ts:217`, `:230`).
+- Password login is `POST /api/auth/web/login` with TOTP MFA (`authRoutes.ts:651`, `:740`); sign-up verification is an emailed 6-digit code (`email_otp_challenges`); `refresh_tokens`, `email_verification_tokens`, `password_reset_tokens`, `two_factor_codes` were never created.
+- `users` has `display_name`, `username`, `email_verified_at`, `is_suspended`, `locale`, `account_type` instead of `name`, `email_verified`, `role`, `is_active`; there is no `job_seeker` default role.
+- `API_URL` is not used (callback from the request origin); `FRONTEND_URL` is `APP_URL`; `redirect` is open-redirect-guarded; the chosen locale and the return origin ride the signed state.
+The Security Checklist, Environment Variables and Provider Setup sections stay in `docs/specs/platform.md` ("Design — Multi-Auth Implementation Guide") with this drift corrected.
+
+**Multi-Auth Implementation Guide** (the doc's opening, kept for context; its Table of Contents is dropped):
+
+A complete reference for implementing email/password, OAuth social login, and magic link authentication in a Hono + Cloudflare Workers + Drizzle ORM + React SPA stack. Every pattern here is derived from a working production implementation.
+
+---
+
+#### Architecture Overview
+
+```
+Browser
+  │
+  ├─ Email/Password ──────────────────────────────▶ POST /api/auth/login
+  │                                                  Returns JWT in JSON body
+  │
+  ├─ OAuth (login/signup) ────────────────────────▶ GET /api/auth/oauth/:provider?redirect=/dashboard
+  │                                                  302 → provider consent screen
+  │                                                  Provider → GET /api/auth/oauth/:provider/callback
+  │                                                  API finds/creates user by email, issues JWT
+  │                                                  302 → /auth/callback?token=JWT
+  │                                                  Frontend page writes token to localStorage
+  │
+  ├─ OAuth (connect from Settings) ───────────────▶ GET /api/auth/oauth/:provider?redirect=/settings&link_token=JWT
+  │                                                  JWT is verified, userId embedded in HMAC state
+  │                                                  Provider → GET /api/auth/oauth/:provider/callback
+  │                                                  API links provider to existing user (no email lookup)
+  │                                                  302 → /auth/callback?token=NEW_JWT
+  │
+  └─ Magic Link ──────────────────────────────────▶ POST /api/auth/magic-link
+                                                     Email sent with /auth/magic-link?token=...
+                                                     Frontend page calls GET /api/auth/magic-link/verify
+                                                     Returns JWT in JSON body
+```
+
+**Key design decisions:**
+
+- JWT stored in `localStorage` (not HttpOnly cookies) — required if you also support a browser extension or non-browser clients that share the same API
+- OAuth state is HMAC-signed (no DB) — works correctly in stateless edge runtimes
+- `passwordHash` is nullable — users who sign up via OAuth have no password
+- Magic link tokens are single-use and invalidated immediately on verify
+- All "not found" paths return the same generic message to prevent email enumeration
+- Connect flow (adding a provider to an existing account) uses `link_token` to bypass email matching — critical when the provider email differs from the account email
+
+---
+
+#### Database Schema
+
+##### Core users table
+
+```sql
+CREATE TABLE users (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email           VARCHAR(255) NOT NULL UNIQUE,
+  name            VARCHAR(255) NOT NULL,
+  password_hash   TEXT,                         -- NULL for OAuth-only users
+  email_verified  BOOLEAN NOT NULL DEFAULT FALSE,
+  role            VARCHAR(50)  NOT NULL DEFAULT 'job_seeker',
+  is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+  is_suspended    BOOLEAN NOT NULL DEFAULT FALSE,
+  mfa_enabled     BOOLEAN NOT NULL DEFAULT FALSE,
+  last_login_at   TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+##### OAuth accounts (one user → many providers)
+
+```sql
+CREATE TABLE oauth_accounts (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider            VARCHAR(50)  NOT NULL,   -- 'google' | 'linkedin' | 'github' | 'microsoft'
+  provider_account_id VARCHAR(255) NOT NULL,   -- the `sub` or `id` from the provider
+  email               VARCHAR(255),
+  display_name        VARCHAR(255),
+  avatar_url          TEXT,
+  access_token        TEXT,
+  refresh_token       TEXT,
+  token_expires_at    TIMESTAMPTZ,
+  scope               TEXT,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+##### Magic link tokens
+
+```sql
+CREATE TABLE magic_link_tokens (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email      VARCHAR(255) NOT NULL,
+  token      TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used       BOOLEAN NOT NULL DEFAULT FALSE,
+  redirect   VARCHAR(500) NOT NULL DEFAULT '/dashboard',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+##### Supporting tables (also needed)
+
+```sql
+-- Tracks active sessions; populated on every login
+CREATE TABLE refresh_tokens (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token      TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  revoked    BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Email verification tokens
+CREATE TABLE email_verification_tokens (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token      TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used       BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Password reset tokens
+CREATE TABLE password_reset_tokens (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token      TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used       BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- TOTP / email 2FA codes
+CREATE TABLE two_factor_codes (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code       VARCHAR(10) NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used       BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+---
+
+#### Password Authentication
+
+##### Hashing — PBKDF2 via Web Crypto API
+
+Works natively in Cloudflare Workers (no bcrypt npm dependency needed).
+
+```typescript
+async function hashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt, iterations: 100_000, hash: "SHA-256" },
+    keyMaterial, 256
+  );
+  const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, "0")).join("");
+  const hashHex = Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return `${saltHex}:${hashHex}`;
+}
+
+async function verifyPassword(password: string, stored: string | null | undefined): Promise<boolean> {
+  if (!stored) return false;           // OAuth-only accounts have no password
+  const [saltHex, hashHex] = stored.split(":");
+  if (!saltHex || !hashHex) return false;
+  const salt = new Uint8Array(saltHex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
+  const encoder = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt, iterations: 100_000, hash: "SHA-256" },
+    keyMaterial, 256
+  );
+  const candidateHex = Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return candidateHex === hashHex;
+}
+```
+
+> **Note:** Always return the same error message for wrong email AND wrong password — `"Invalid email or password"`. Never leak which one was wrong.
+
+##### Login endpoint
+
+```typescript
+// POST /api/auth/login
+app.post("/login", async (c) => {
+  const { email, password } = await c.req.json();
+
+  const [user] = await db.select().from(users)
+    .where(eq(users.email, email.toLowerCase()))
+    .limit(1);
+
+  if (!user || !user.isActive) {
+    return c.json({ error: "Invalid email or password" }, 401);
+  }
+
+  const valid = await verifyPassword(password, user.passwordHash);
+  if (!valid) {
+    return c.json({ error: "Invalid email or password" }, 401);
+  }
+
+  // Optional: 2FA step (see auth.ts)
+
+  const token = await createJwt(user.id, user.email, user.role, !!user.emailVerified);
+  return c.json({ token, user: { id: user.id, email: user.email } });
+});
+```
+
+---
+
+#### OAuth Social Login
+
+##### How it works
+
+```
+1. User clicks "Sign in with Google"
+2. Frontend redirects to: GET /api/auth/oauth/google?redirect=/dashboard
+3. API builds provider authorization URL with HMAC-signed state, redirects browser
+4. User authenticates with Google
+5. Google redirects to: GET /api/auth/oauth/google/callback?code=...&state=...
+6. API verifies state, exchanges code for access token, fetches user profile
+7. API upserts user + oauth_accounts row
+8. API issues JWT, redirects to: /auth/callback?token=JWT&redirect=/dashboard
+9. Frontend /auth/callback page calls loginWithToken(token), then navigates
+```
+
+##### HMAC-signed state (no DB required)
+
+Protects against CSRF without needing session storage — critical for stateless edge runtimes.
+
+```typescript
+async function createOAuthState(redirect: string): Promise<string> {
+  const secret = getEnv("JWT_SECRET");
+  const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+    .map(b => b.toString(16).padStart(2, "0")).join("");
+  const payload = JSON.stringify({ nonce, redirect: redirect || "/dashboard", ts: Date.now() });
+
+  const key = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
+  const sigHex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+
+  return btoa(payload + "|" + sigHex);
+}
+
+async function verifyOAuthState(state: string): Promise<{ redirect: string } | null> {
+  try {
+    const secret = getEnv("JWT_SECRET");
+    const decoded = atob(state);
+    const sepIdx = decoded.lastIndexOf("|");
+    const payload = decoded.slice(0, sepIdx);
+    const sigHex = decoded.slice(sepIdx + 1);
+
+    const key = await crypto.subtle.importKey(
+      "raw", new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" }, false, ["verify"]
+    );
+    const sigBytes = new Uint8Array(sigHex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
+    const valid = await crypto.subtle.verify("HMAC", key, sigBytes, new TextEncoder().encode(payload));
+
+    if (!valid) return null;
+    const { redirect, ts } = JSON.parse(payload);
+    if (Date.now() - ts > 10 * 60 * 1000) return null;   // 10-minute window
+    return { redirect };
+  } catch {
+    return null;
+  }
+}
+```
+
+##### Provider configuration
+
+```typescript
+interface ProviderCfg {
+  authUrl: string;
+  tokenUrl: string;
+  userInfoUrl: string;
+  scopes: string[];
+  clientId: () => string;
+  clientSecret: () => string;
+  parseUser: (d: any) => { id: string; email: string; name: string; avatar?: string };
+  extraAuthParams?: Record<string, string>;
+}
+
+const PROVIDERS: Record<string, ProviderCfg> = {
+  google: {
+    authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+    tokenUrl: "https://oauth2.googleapis.com/token",
+    userInfoUrl: "https://www.googleapis.com/oauth2/v3/userinfo",
+    scopes: ["openid", "email", "profile"],
+    clientId: () => getEnv("GOOGLE_CLIENT_ID"),
+    clientSecret: () => getEnv("GOOGLE_CLIENT_SECRET"),
+    extraAuthParams: { access_type: "offline", prompt: "select_account" },
+    parseUser: (d) => ({ id: d.sub, email: d.email, name: d.name ?? d.email, avatar: d.picture }),
+  },
+  linkedin: {
+    authUrl: "https://www.linkedin.com/oauth/v2/authorization",
+    tokenUrl: "https://www.linkedin.com/oauth/v2/accessToken",
+    userInfoUrl: "https://api.linkedin.com/v2/userinfo",   // OpenID Connect endpoint
+    scopes: ["openid", "profile", "email"],
+    clientId: () => getEnv("LINKEDIN_CLIENT_ID"),
+    clientSecret: () => getEnv("LINKEDIN_CLIENT_SECRET"),
+    parseUser: (d) => ({
+      id: d.sub,
+      email: d.email,
+      name: d.name ?? (`${d.given_name ?? ""} ${d.family_name ?? ""}`.trim() || d.email),
+      avatar: d.picture,
+    }),
+  },
+  github: {
+    authUrl: "https://github.com/login/oauth/authorize",
+    tokenUrl: "https://github.com/login/oauth/access_token",
+    userInfoUrl: "https://api.github.com/user",
+    scopes: ["read:user", "user:email"],
+    clientId: () => getEnv("GITHUB_CLIENT_ID"),
+    clientSecret: () => getEnv("GITHUB_CLIENT_SECRET"),
+    parseUser: (d) => ({
+      id: String(d.id),
+      email: d.email ?? "",
+      name: d.name ?? d.login ?? d.email,
+      avatar: d.avatar_url,
+    }),
+  },
+  microsoft: {
+    authUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+    tokenUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+    userInfoUrl: "https://graph.microsoft.com/v1.0/me",
+    scopes: ["openid", "profile", "email", "User.Read"],
+    clientId: () => getEnv("MICROSOFT_CLIENT_ID"),
+    clientSecret: () => getEnv("MICROSOFT_CLIENT_SECRET"),
+    parseUser: (d) => ({
+      id: d.id,
+      email: d.mail ?? d.userPrincipalName ?? "",
+      name: d.displayName ?? d.mail,
+    }),
+  },
+};
+```
+
+> **GitHub gotcha:** GitHub may not return email in `/user` if the user has set it private. Always call `/user/emails` as a fallback:
+>
+> ```typescript
+> async function getGitHubEmail(accessToken: string): Promise<string> {
+>   const res = await fetch("https://api.github.com/user/emails", {
+>     headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+>   });
+>   if (!res.ok) return "";
+>   const emails = await res.json() as Array<{ email: string; primary: boolean; verified: boolean }>;
+>   return emails.find(e => e.primary && e.verified)?.email ?? emails[0]?.email ?? "";
+> }
+> ```
+
+##### HMAC state — including userId for the connect flow
+
+The state payload carries an optional `linkUserId`. When present in the callback, it tells the API to link the new provider to that specific user rather than doing email-based lookup. This is critical when the provider uses a different email address than the user's account.
+
+```typescript
+async function createOAuthState(redirect: string, linkUserId?: string): Promise<string> {
+  const secret = getEnv("JWT_SECRET");
+  const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+    .map(b => b.toString(16).padStart(2, "0")).join("");
+  const payload = JSON.stringify({
+    nonce,
+    redirect: redirect || "/dashboard",
+    ts: Date.now(),
+    ...(linkUserId ? { linkUserId } : {}),
+  });
+  const key = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
+  const sigHex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return btoa(payload + "|" + sigHex);
+}
+
+async function verifyOAuthState(state: string): Promise<{ redirect: string; linkUserId?: string } | null> {
+  try {
+    const secret = getEnv("JWT_SECRET");
+    const decoded = atob(state);
+    const sepIdx = decoded.lastIndexOf("|");
+    const payload = decoded.slice(0, sepIdx);
+    const sigHex = decoded.slice(sepIdx + 1);
+    const key = await crypto.subtle.importKey(
+      "raw", new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" }, false, ["verify"]
+    );
+    const sigBytes = new Uint8Array(sigHex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
+    const valid = await crypto.subtle.verify("HMAC", key, sigBytes, new TextEncoder().encode(payload));
+    if (!valid) return null;
+    const { redirect, ts, linkUserId } = JSON.parse(payload);
+    if (Date.now() - ts > 10 * 60 * 1000) return null;
+    return { redirect, linkUserId };
+  } catch {
+    return null;
+  }
+}
+```
+
+##### Initiate route
+
+```typescript
+// GET /api/auth/oauth/:provider
+app.get("/:provider", async (c) => {
+  const name = c.req.param("provider").toLowerCase();
+  const cfg = PROVIDERS[name];
+  if (!cfg || !cfg.clientId()) return c.json({ error: "Provider not available" }, 503);
+
+  const redirect = c.req.query("redirect") || "/dashboard";
+
+  // Optional: if the user is already logged in (connecting from Settings),
+  // verify their JWT and embed the userId in state so the callback can link
+  // to the existing account without relying on email matching.
+  let linkUserId: string | undefined;
+  const linkToken = c.req.query("link_token");
+  if (linkToken) {
+    try {
+      const { jwtVerify } = await import("jose");
+      const { payload } = await jwtVerify(
+        linkToken,
+        new TextEncoder().encode(getEnv("JWT_SECRET")),
+        { algorithms: ["HS256"] }
+      );
+      linkUserId = payload.sub as string;
+    } catch { /* invalid token — fall through to normal login flow */ }
+  }
+
+  const state = await createOAuthState(redirect, linkUserId);
+  const callbackUrl = `${getEnv("API_URL")}/api/auth/oauth/${name}/callback`;
+
+  const params = new URLSearchParams({
+    client_id: cfg.clientId(),
+    redirect_uri: callbackUrl,
+    response_type: "code",
+    scope: cfg.scopes.join(" "),
+    state,
+    ...cfg.extraAuthParams,
+  });
+
+  return c.redirect(`${cfg.authUrl}?${params.toString()}`);
+});
+```
+
+##### Callback route — upsert user, issue JWT
+
+Three distinct paths depending on context:
+
+| Situation | How userId is resolved |
+|-----------|----------------------|
+| Provider account already in `oauth_accounts` | Use the `userId` from that row |
+| Connect flow (`linkUserId` in state) | Use `linkUserId` directly — skip email lookup |
+| New login, email exists in `users` | Link new provider to existing user |
+| New login, email not seen before | Create new user, link provider |
+
+```typescript
+// GET /api/auth/oauth/:provider/callback
+app.get("/:provider/callback", async (c) => {
+  const name = c.req.param("provider").toLowerCase();
+  const cfg = PROVIDERS[name];
+  const frontendBase = getEnv("FRONTEND_URL").split(",")[0].trim();
+
+  const code = c.req.query("code");
+  const state = c.req.query("state");
+  if (!code || !state) return c.redirect(`${frontendBase}/login?error=missing_params`);
+
+  const stateData = await verifyOAuthState(state);
+  if (!stateData) return c.redirect(`${frontendBase}/login?error=invalid_state`);
+
+  const callbackUrl = `${getEnv("API_URL")}/api/auth/oauth/${name}/callback`;
+
+  let tokens, providerUser;
+  try {
+    tokens = await exchangeCode(cfg, code, callbackUrl);
+    const raw = await fetchUserInfo(cfg, tokens.access_token);
+    providerUser = cfg.parseUser(raw);
+    if (name === "github" && !providerUser.email) {
+      providerUser.email = await getGitHubEmail(tokens.access_token);
+    }
+  } catch {
+    return c.redirect(`${frontendBase}/login?error=auth_failed`);
+  }
+
+  // Email is required for new login/signup; the connect flow (linkUserId) can proceed without it
+  if (!providerUser.email && !stateData.linkUserId) {
+    return c.redirect(`${frontendBase}/login?error=no_email`);
+  }
+
+  // 1. Check if this provider account is already linked to any user
+  const [existingOAuth] = await db.select().from(oauthAccounts)
+    .where(and(
+      eq(oauthAccounts.provider, name),
+      eq(oauthAccounts.providerAccountId, providerUser.id)
+    )).limit(1);
+
+  let userId: string;
+
+  if (existingOAuth) {
+    // Provider already linked — guard against linking to a different account
+    if (stateData.linkUserId && existingOAuth.userId !== stateData.linkUserId) {
+      return c.redirect(`${frontendBase}/settings?error=already_linked_other`);
+    }
+    userId = existingOAuth.userId;
+    await db.update(oauthAccounts).set({
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token ?? null,
+      updatedAt: new Date(),
+    }).where(eq(oauthAccounts.id, existingOAuth.id));
+
+  } else if (stateData.linkUserId) {
+    // Connect flow: user is logged in and adding a new provider.
+    // Use their existing userId directly — do NOT do email lookup.
+    // This is the key fix for multi-provider linking when emails differ.
+    userId = stateData.linkUserId;
+    await db.insert(oauthAccounts).values({
+      userId,
+      provider: name,
+      providerAccountId: providerUser.id,
+      email: providerUser.email?.toLowerCase() ?? null,
+      displayName: providerUser.name,
+      avatarUrl: providerUser.avatar ?? null,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token ?? null,
+    });
+
+  } else {
+    // Login/signup flow: find or create user by email
+    const [existing] = await db.select({ id: users.id }).from(users)
+      .where(eq(users.email, providerUser.email!.toLowerCase())).limit(1);
+
+    if (existing) {
+      userId = existing.id;
+    } else {
+      // New user — email pre-verified via OAuth
+      const [newUser] = await db.insert(users).values({
+        email: providerUser.email!.toLowerCase(),
+        name: providerUser.name,
+        passwordHash: null,
+        emailVerified: true,
+        role: "job_seeker",
+      }).returning({ id: users.id });
+      userId = newUser.id;
+    }
+
+    await db.insert(oauthAccounts).values({
+      userId,
+      provider: name,
+      providerAccountId: providerUser.id,
+      email: providerUser.email!.toLowerCase(),
+      displayName: providerUser.name,
+      avatarUrl: providerUser.avatar ?? null,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token ?? null,
+    });
+  }
+
+  const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  if (!user || !user.isActive || user.isSuspended) {
+    return c.redirect(`${frontendBase}/login?error=account_disabled`);
+  }
+
+  const jwt = await createJwt(user.id, user.email, user.role, true);
+  return c.redirect(
+    `${frontendBase}/auth/callback?token=${encodeURIComponent(jwt)}&redirect=${encodeURIComponent(stateData.redirect)}`
+  );
+});
+```
+
+---
+
+#### Magic Links
+
+##### Send endpoint
+
+```typescript
+// POST /api/auth/magic-link
+app.post("/magic-link", async (c) => {
+  const { email, redirect = "/dashboard" } = await c.req.json();
+  const normalizedEmail = email.toLowerCase().trim();
+
+  const [user] = await db.select({ id: users.id, name: users.name, isActive: users.isActive })
+    .from(users).where(eq(users.email, normalizedEmail)).limit(1);
+
+  // Always return 200 — never reveal whether the email exists
+  if (user?.isActive) {
+    const token = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+      .map(b => b.toString(16).padStart(2, "0")).join("");
+
+    // Invalidate any existing unused tokens for this email
+    await db.update(magicLinkTokens)
+      .set({ used: true })
+      .where(and(eq(magicLinkTokens.email, normalizedEmail), eq(magicLinkTokens.used, false)));
+
+    await db.insert(magicLinkTokens).values({
+      email: normalizedEmail,
+      token,
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000),  // 15 minutes
+      redirect,
+    });
+
+    // Fire-and-forget in Cloudflare Workers
+    c.executionCtx.waitUntil(
+      sendMagicLinkEmail(normalizedEmail, user.name, token)
+    );
+  }
+
+  return c.json({ message: "If an account exists for that email, a sign-in link has been sent" });
+});
+```
+
+##### Verify endpoint
+
+```typescript
+// GET /api/auth/magic-link/verify?token=...
+app.get("/magic-link/verify", async (c) => {
+  const token = c.req.query("token");
+  if (!token) return c.json({ error: "Token required" }, 400);
+
+  const [row] = await db.select().from(magicLinkTokens)
+    .where(and(eq(magicLinkTokens.token, token), eq(magicLinkTokens.used, false)))
+    .limit(1);
+
+  if (!row || row.expiresAt <= new Date()) {
+    return c.json({ error: "Magic link is invalid or has expired" }, 400);
+  }
+
+  // Mark used immediately — single use
+  await db.update(magicLinkTokens).set({ used: true }).where(eq(magicLinkTokens.id, row.id));
+
+  const [user] = await db.select().from(users)
+    .where(eq(users.email, row.email)).limit(1);
+
+  if (!user || !user.isActive || user.isSuspended) {
+    return c.json({ error: "Account not found or disabled" }, 401);
+  }
+
+  const jwt = await createJwt(user.id, user.email, user.role, !!user.emailVerified);
+  return c.json({
+    token: jwt,
+    user: { id: user.id, email: user.email, name: user.name },
+    redirect: row.redirect || "/dashboard",
+  });
+});
+```
+
+##### Email template
+
+The magic link email should include:
+- A large, prominent CTA button linking to: `{FRONTEND_URL}/auth/magic-link?token={token}`
+- Token expiry warning (e.g., "This link expires in 15 minutes")
+- Plain-text fallback URL below the button
+
+---
+
+#### JWT Token Strategy
+
+```typescript
+async function createJwt(
+  sub: string,
+  email: string,
+  role: string,
+  emailVerified: boolean
+): Promise<string> {
+  const secret = new TextEncoder().encode(getEnv("JWT_SECRET"));
+  return new SignJWT({ email, roles: [role], emailVerified, mustChangePassword: false })
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject(sub)         // user UUID
+    .setIssuedAt()
+    .setExpirationTime("7d")
+    .sign(secret);
+}
+```
+
+**JWT payload shape:**
+
+```json
+{
+  "sub": "user-uuid",
+  "email": "user@example.com",
+  "roles": ["job_seeker"],
+  "emailVerified": true,
+  "mustChangePassword": false,
+  "iat": 1700000000,
+  "exp": 1700604800
+}
+```
+
+**Verification (middleware):**
+
+```typescript
+import { jwtVerify } from "jose";
+
+async function authMiddleware(c, next) {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return c.json({ error: "Unauthorized" }, 401);
+
+  try {
+    const token = authHeader.slice(7);
+    const secret = new TextEncoder().encode(getEnv("JWT_SECRET"));
+    const { payload } = await jwtVerify(token, secret, { algorithms: ["HS256"] });
+    c.set("user", payload);
+    await next();
+  } catch {
+    return c.json({ error: "Invalid or expired token" }, 401);
+  }
+}
+```
+
+---
+
+#### Frontend Integration
+
+##### Why `/auth/callback` exists
+
+The API issues the JWT and redirects the browser. But only browser JavaScript can write to `localStorage`. So the API redirects to a thin frontend page that does nothing except:
+
+1. Read `?token=` from the URL
+2. Call `loginWithToken(token)` to store it
+3. Navigate to the redirect path
+
+```typescript
+// pages/OAuthCallback.tsx
+export default function OAuthCallback() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { loginWithToken } = useAuth();
+
+  useEffect(() => {
+    const token = searchParams.get("token");
+    const redirect = searchParams.get("redirect") || "/dashboard";
+    const errorParam = searchParams.get("error");
+
+    if (errorParam) {
+      // map error codes to human messages, then navigate to /login
+      return;
+    }
+
+    loginWithToken(token)
+      .then(() => navigate(redirect));
+  }, []);
+
+  return <LoadingSpinner />;
+}
+```
+
+##### `loginWithToken` in AuthContext
+
+```typescript
+const loginWithToken = async (token: string) => {
+  localStorage.setItem("auth_token", token);
+  const profile = await apiClient.get("/api/auth/me");
+  setUser(profile.data);
+};
+```
+
+##### Magic link verify page
+
+```typescript
+// pages/MagicLinkVerify.tsx
+export default function MagicLinkVerify() {
+  const [searchParams] = useSearchParams();
+  const { loginWithToken } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const token = searchParams.get("token");
+    apiClient.get(`/api/auth/magic-link/verify?token=${token}`)
+      .then(async res => {
+        await loginWithToken(res.data.token);
+        navigate(res.data.redirect || "/dashboard");
+      })
+      .catch(() => setStatus("error"));
+  }, []);
+}
+```
+
+##### OAuth buttons (React)
+
+Two different button implementations depending on context:
+
+**Login / Signup page** — no existing session:
+
+```typescript
+const API_BASE = import.meta.env.VITE_API_URL;   // e.g. https://api.example.com (no trailing /api)
+
+function OAuthButton({ provider, redirect }: { provider: string; redirect: string }) {
+  return (
+    <button onClick={() => {
+      window.location.href =
+        `${API_BASE}/api/auth/oauth/${provider}?redirect=${encodeURIComponent(redirect)}`;
+    }}>
+      Sign in with {provider}
+    </button>
+  );
+}
+```
+
+**Settings page (Connect)** — user is already logged in, pass `link_token`:
+
+```typescript
+function ConnectProviderButton({ provider }: { provider: string }) {
+  return (
+    <button onClick={() => {
+      const token = localStorage.getItem("auth_token") ?? "";
+      window.location.href =
+        `${API_BASE}/api/auth/oauth/${provider}?redirect=/settings&link_token=${encodeURIComponent(token)}`;
+    }}>
+      Connect
+    </button>
+  );
+}
+```
+
+> **Why `link_token` matters:** Without it, the callback resolves the user by email. If your Google account uses a different email than your LinkedIn account, it creates a second user instead of linking to the existing one. Passing the JWT lets the API skip email lookup entirely and link directly to the authenticated user.
+
+> **Common mistake:** `VITE_API_URL` is the base domain without `/api`. The `/api` prefix is part of every endpoint path — include it in the path, not the base.
+
+##### Routes to add
+
+```typescript
+// App.tsx / router
+<Route path="/auth/callback"   element={<OAuthCallback />} />
+<Route path="/auth/magic-link" element={<MagicLinkVerify />} />
+```
+
+---
+
+#### Account Management
+
+##### How 1-to-many linking works
+
+A user can connect multiple providers. Each provider is a separate row in `oauth_accounts` — all pointing to the same `user_id`. The flows are:
+
+```
+User signs up via LinkedIn
+  → users row created (passwordHash = null)
+  → oauth_accounts row: { provider: "linkedin", userId: X }
+
+User clicks Connect → Google in Settings (different email)
+  → GET /api/auth/oauth/google?link_token=JWT
+  → API verifies JWT, puts userId=X in HMAC state
+  → callback: linkUserId=X found in state → inserts oauth_accounts { provider: "google", userId: X }
+  → Both providers now linked to the same user
+
+User signs in with either provider → same account, same JWT
+```
+
+> **The bug without `link_token`:** If email matching is used for the connect flow, a user whose Google account has a different email than their primary account gets a brand new user created instead of linking — silently losing their existing session data.
+
+##### List linked providers + whether account has a password
+
+```
+GET /api/auth/linked-accounts   (requires JWT)
+
+Response:
+{
+  "accounts": [
+    { "provider": "google", "email": "user@gmail.com", "displayName": "..." }
+  ],
+  "hasPassword": false
+}
+```
+
+##### Unlink a provider
+
+```
+DELETE /api/auth/unlink/:provider   (requires JWT)
+
+Safety check: refuse if it would remove the user's only sign-in method.
+```
+
+```typescript
+app.delete("/unlink/:provider", async (c) => {
+  const userId = c.var.user.sub;
+  const [user] = await db.select({ passwordHash: users.passwordHash }).from(users)
+    .where(eq(users.id, userId)).limit(1);
+  const allLinked = await db.select().from(oauthAccounts)
+    .where(eq(oauthAccounts.userId, userId));
+
+  // Block if no password AND this is their last linked provider
+  if (!user?.passwordHash && allLinked.length <= 1) {
+    return c.json({ error: "Cannot disconnect your only sign-in method. Add a password first." }, 403);
+  }
+
+  await db.delete(oauthAccounts)
+    .where(and(eq(oauthAccounts.userId, userId), eq(oauthAccounts.provider, provider)));
+
+  return c.json({ success: true });
+});
+```
+
+##### Set password for OAuth-only accounts
+
+```
+POST /api/auth/add-password   (requires JWT)
+Body: { "password": "..." }
+```
+
+```typescript
+app.post("/add-password", async (c) => {
+  const userId = c.var.user.sub;
+  const [user] = await db.select({ passwordHash: users.passwordHash }).from(users)
+    .where(eq(users.id, userId)).limit(1);
+
+  if (user?.passwordHash) return c.json({ error: "Account already has a password" }, 409);
+
+  const hash = await hashPassword(body.password);
+  await db.update(users).set({ passwordHash: hash }).where(eq(users.id, userId));
+
+  return c.json({ success: true });
+});
+```
+
+---
+
+### Progress Handling Guide: finished sections archived on consolidation (2026-11-18)
+
+Source: docs/guides/progress-handling.md
+
+**Status on archive (verified 2026-11-18).** Retired, never built: both examples subscribe through `api.subscribeToTicketProgress(...)`, a push API that does not exist anywhere in the repository (no route, client or SDK). Ticket progress is a read model — `GET /api/brain/chats/:id/tickets` (`api/src/presentation/routes/brainRoutes.ts:409`) answers `TicketHealth` derived live on every read (`api/src/application/brain/chatTicketTypes.ts:64-122`), so `progressPct: 100` repeats on every read rather than arriving once. The corrected rule, terminal-status table, error cases, UI considerations and checklist stay in `docs/specs/platform.md` ("Design — Progress Handling Guide").
+
+#### Pattern: Register and Cleanup Progress Listener
+
+The correct pattern is to register a progress listener and tear it down (unsubscribe or remove the event handler) when `progressPct=100` is received.
+
+##### Example: JavaScript/TypeScript Client
+
+```typescript
+interface ProgressEvent {
+  kind: "task" | "epic" | "goal" | "objective" | "initiative" | "portfolio" | "roadmap" | "spec";
+  ref: string;
+  label: string;
+  status: string;
+  progressPct: number;
+  done: number;
+  total: number;
+  exists: boolean;
+}
+
+async function monitorTicketCompletion(ticketId: string): Promise<void> {
+  let cleanupRequired = false;
+
+  const onProgress = (data: ProgressEvent): void => {
+    if (data.progressPct === 100) {
+      // ↓ 100% is received: clean up the listener
+      cleanupRequired = true;
+      console.log(`✅ ${data.label} COMPLETE`);
+      return;
+    }
+
+    // Track progress for intermediate steps
+    console.log(`${data.label}: ${data.progressPct}% (${data.done}/${data.total})`);
+  };
+
+  // Subscribe to progress events
+  const subscription = api.subscribeToTicketProgress(ticketId, onProgress);
+
+  await new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      if (!cleanupRequired) {
+        subscription.unsubscribe();
+        console.log(`⚠️ No completion signal received for ${ticketId}`);
+      }
+      resolve(undefined);
+    }, 30000); // 30-second timeout for cleanup
+  });
+}
+
+// Example usage:
+await monitorTicketCompletion("42");
+```
+
+The key points in this example:
+- **Cleanup is triggered by the 100% signal**: The listener removes itself or its subscription when completion is detected
+- **Terminal guarantee**: Once 100% is hit, no more progress events of this type arrive
+- **Finite cleanup**: Even without a 100% signal, an optimal solution optionally exhaustively removes the subscription after a timeout
+
+#### Frontend / UI Considerations
+
+*(Only this example is archived; the section's list stays in platform.md.)*
+
+##### Example: React Component
+
+```tsx
+import { useEffect, useState } from 'react';
+
+interface ProgressEvent {
+  progressPct: number;
+  label: string;
+  status: string;
+}
+
+export function TicketProgress({ ticketId }: { ticketId: string }) {
+  const [progress, setProgress] = useState<ProgressEvent | undefined>(undefined);
+  const [isComplete, setIsComplete] = useState(false);
+
+  useEffect(() => {
+    const subscription = api.subscribeToTicketProgress(ticketId, (event) => {
+      setProgress(event);
+
+      if (event.progressPct === 100) {
+        setIsComplete(true);
+        subscription.unsubscribe(); // ← CLEANUP: remove listener
+      }
+    });
+
+    return () => subscription.unsubscribe(); // ← Fallback cleanup
+  }, [ticketId]);
+
+  if (isComplete) {
+    return <span className="status-complete">✅ Done</span>;
+  }
+
+  const pct = progress?.progressPct ?? 0;
+  return <span className="status-progress">{pct}% complete</span>;
+}
+```
+
+## ✅ RESOLVED 2026-11-18: design docs folded into the domain PRDs; PRD 26 redirect removed
+
+- **What changed:** the end-state design docs under `docs/design/` (deterministic knowledge index, deterministic PreFetch, local-first closure G03/G21/G23/G27, the Web/Rovr/VSIX local-first review, cost-lever parity, typed entity ids) and the Creation Canvas set (`docs/design/creation-canvas/` README, delivery architecture, operations, outcome metrics) plus `docs/marketing/CLAIMS-PROCESS.md` were re-verified against the code and folded into `docs/specs/{idea,make,measure,reach,platform}.md`. Open sections and still-true reference material (contracts, runbooks, the claims process) live in the domain file; finished sections are archived word for word below. Code citations now name the domain file or this archive (applied migrations and generated `dist` files keep their old text).
+- **Removed:** `docs/specs/26-prd-advisor-platform.md` (the open work is in run.md › PRD 26). Kept as files: `docs/design/one-agent-one-kernel.html`, `docs/design/creation-canvas/evidence/README.md` (read by `qa-e2e`) and its images, compliance evidence, the partnership request, `docs/specs/tasks/` and `docs/specs/data-model/`.
+
+### Creation Canvas: finished sections archived on consolidation (2026-11-18)
+
+Source: docs/design/creation-canvas/OPERATIONS.md
+
+Already archived on 2026-11-17 and not repeated here:
+- `README.md` lines 1–244, plus the mockups. See "✅ RESOLVED 2026-11-17 — Design: Creation Canvas — finished sections archived on consolidation".
+- All of `DELIVERY-ARCHITECTURE.md`, in the same entry.
+- All of `OUTCOME-METRICS.md`. See "✅ RESOLVED 2026-11-17 — Design: Creation outcome metrics — finished sections archived on consolidation".
+- `CLAIMS-PROCESS.md` has no finished sections. All of it is reference and lives in reach.md.
+
+**Verified 2026-11-18:**
+- Rollout gate 3 is overtaken. No `creation_sessions_nav` flag exists anywhere in the code (`git grep` finds only OPERATIONS.md and idea.md), and Create is already the default nav group (`frontend/src/lib/navGroups.ts:142`).
+- The 2026-08-02 release-candidate evidence is a dated snapshot. The tooling it names still exists (`qa-e2e/package.json:13-15`, `qa-e2e/tests/creation-canvas.spec.ts`, `creation-canvas-release.spec.ts`).
+
+#### OPERATIONS.md — Rollout gates, item 3 (source line 25), word for word
+
+3. Default navigation: enable `creation_sessions_nav` only after web and the current VSIX pass the shared session smoke suite.
+
+#### OPERATIONS.md — Repository release-candidate evidence — 2026-08-02 (source lines 28–35), word for word
+
+- API: TypeScript and all schema, migration, layering, tenant-scope, source, dispatch, and prompt-tool ratchets pass; 400 test files and 4,347 tests pass (one environment-specific test skipped).
+- Web: TypeScript, the complete frontend test suite, and the optimized Next production build pass. `/create`, `/create/new`, `/create/[sessionId]`, `/create/invitations/[token]`, and `/creation-canvas` register as dynamic Edge surfaces.
+- VSIX: extension and native webview production bundles compile; 23 tests pass against the shared Creation Canvas object/command contract.
+- Acceptance project: `qa-e2e/tests/creation-canvas.spec.ts` and `creation-canvas-release.spec.ts` typecheck and cover guest creation, durable restore, legacy adaptation, Canvas-native Workflow/Voice, Brain review, structured accessibility, reduced motion, forced colors, zoom, and 360px review.
+- Capacity/evidence: `pnpm canvas:capacity` exercises an explicitly named disposable Session with 25 simulated presence editors by default; `pnpm canvas:audit -- <evidence.json>` refuses GA until every PRD threshold, artifact, and owner sign-off is recorded. See `docs/design/creation-canvas/evidence/README.md`.
+- Database repair: migrations 0388 and 0389 both define the presence `last_seen_at` column with forward-compatible guards, and schema drift verification passes.
+
+### Deterministic knowledge index (LEANN-style): finished sections archived on consolidation (2026-11-18)
+
+Source: docs/design/deterministic-knowledge-index.md lines 227–277 (Done-checks 1, 2, 3, 5, 7, 8; Workstreams; Open decisions). Lines 1–225 were archived on 2026-11-17 ("Design: deterministic knowledge index — finished sections archived on consolidation"). Done-checks 4 and 6, the memory-recall consumer and the open decision 2 follow-up stay open in `docs/specs/make.md` › Design — Deterministic knowledge index (LEANN-style).
+
+- **Verified 2026-11-18:**
+  - Done-checks 1, 2, 8 — builderforce-memory `packages/memory/tests/knowledge-index.determinism.test.ts:15,36,108`.
+  - Done-check 3 — `packages/memory/tests/retrieval-order.test.ts`; the migrated rankers use `retrieval/order.ts`.
+  - Done-check 5 — `knowledge-index.determinism.test.ts:72` (lean recall@10 within 2 points), `knowledge-index.exact.test.ts:45`.
+  - Done-check 7 — `api/src/application/knowledge/knowledgeIndexPort.ts`; `api/src/application/repos/repoSymbolVectors.ts` is kept as the embedding cache and searches through `r2KnowledgeIndexPort` (the deviation recorded on 2026-11-17).
+  - WS1–WS4 and open decisions 1–3, taken as proposed — the 2026-10-28 DONE.md entry "The knowledge graph, deterministic prefetch and the deterministic knowledge index".
+
+#### Done-checks
+
+1. **Order-free:**
+   - Build the same 5k cards in 3 shuffled orders, then `compact()`.
+   - Identical digest, and identical results for 200 fixed queries.
+2. **Cross-platform:**
+   - Int8 traversal gives identical candidates for CPU and WebGPU embeddings of the same text.
+   - The final lists are identical after quantization (a fixture test with recorded
+     embeddings).
+3. **Tie-break:** every migrated ranker returns id-ascending order on equal scores. Existing
+   retrieval tests run **unchanged**. A test that relied on input-order ties is a named
+   behaviour change, recorded in DONE.md.
+5. **Lean:** int8 + CSR is ≤ 30% of float32 on the fixture. In lean mode, recall@10 stays
+   within 2 points of full mode.
+7. **One engine:** cloud `semantic_search` runs through the index, the brute-force loop is
+   gone, and its tests pass unchanged.
+8. **Explicit tiers:** with no embedder, results carry only `exact` / `lexical` tiers, never
+   mislabelled.
+
+#### Workstreams
+
+| WS | Scope |
+|---|---|
+| WS1 | `retrieval/order.ts` and the migration of every ranker; `hnsw.ts` hash-derived levels and canonical build; the `bf-index` comparator. Release builderforce-memory via tag. |
+| WS2 | Knowledge-index engine: CSR, pruning, int8, cascade, `expand`, digest, serialize, lean mode; `toCards`. Release. |
+| WS3 | Builderforce: the VS Code and on-prem host index per root; the contextPack/preSearch source; the `knowledge.ask` executor; the graph-view search and `similarPairs` ports. |
+| WS4 | API: `KnowledgeIndexPort`; the R2 index per scope digest; `repoSymbolVectors.ts` folded in and deleted; the search route. |
+
+The order is WS1, then WS2, then WS3 and WS4 in parallel. WS1–2 run beside PRD 38 WS1, in the
+same memory release train. Sonnet verifies each with targeted test files only.
+
+#### Open decisions for the operator
+
+1. **The cloud embedder.** Keep bge-m3 on Workers AI (proposed: it is already paid for and
+   multilingual), or use the Evermind embedder in the container, so that cloud and local
+   share a fingerprint and an index built locally can be uploaded and reused.
+2. **Desktop `bf-index`.**
+   - Option (a), proposed: in this program, it gets the shared comparator and its search
+     stays brute force; full parity is a follow-up register entry.
+   - Option (b): port the graph index to Rust now.
+3. **Symbol-level cards.** Index exported symbols as their own cards from day one (about 3×
+   the cards, sharper "where is X" answers), or code files and areas only, with symbols left
+   to the exact `keys` map (proposed). Doc sections are always cards.
+
+(All three were taken as proposed on 2026-10-28. Decision 2's follow-up — full graph-index parity in Rust — stays open in make.md.)
+
+### Deterministic-first PreFetch: finished sections archived on consolidation (2026-11-18)
+
+Source: docs/design/deterministic-prefetch.md lines 146–158 (Done-checks 1–4, 7, 8). Lines 1–144 were archived on 2026-11-17 ("Design: deterministic-first PreFetch — finished sections archived on consolidation"). Done-checks 5 and 6 stay open in `docs/specs/make.md` › Design — Deterministic-first PreFetch.
+
+- **Verified 2026-11-18:** checks 1–4 — `brain-embedded/src/runStore/prefetchGate.test.ts`, `prefetchGate.codepack.test.ts`, `prefetchGate.confirm.test.ts`, `packages/prefetch/src/classify.test.ts`; check 7 — `brain-embedded/src/localChat/gateLedger.ts`, `gateReport.test.ts`; check 8 — every file in `packages/prefetch/src` is under 400 lines and the gate runs inside the one preamble (`brain-embedded/src/runStore/prefetchGate.ts`).
+
+#### Done-checks
+
+1. "where is X defined" still answers with no model. The existing tests run unchanged.
+2. `/dup` and "find duplicate code" both settle via jscpd with `skippedLlm: true` and a
+   savings row.
+3. An ambiguous request ("make this better") routes to the LLM. Tier 3 is never consulted
+   when no local engine is warm.
+4. A write action never runs without the confirm chip.
+7. The Pipeline route report shows the answer/prefetch/llm split.
+8. No file is over 400 lines, and there is no second flow.
+
+### Local-first closure: G03, G21 + G23, G27: finished sections archived on consolidation (2026-11-18)
+
+Source: docs/design/local-first-closure-g03-g21-g23-g27.md lines 1–278 (header, §1 G03, §2 G21 + G23), lines 370–429 (corrections C0–C9) and sequencing steps 1–3b. §3 (G27), corrections C10–C11 and step 4 stay open in `docs/specs/make.md` › Design — Local-first closure: G03, G21 + G23, G27. The 2026-11-17 entry "Design: local-first closure G03/G21/G23" recorded the verification but archived no text; this is the text.
+
+- **Verified 2026-11-18:**
+  - §1 G03 — `packages/agent-tools/src/node-local-sqlite.ts` (the one loader/opener, C5), `packages/agent-tools/src/node-knowledge-store.ts`, `clients/vscode/src/knowledge/factStoreNode.ts`, builderforce-memory `packages/memory/src/knowledge/stores/rowDelta.ts`; `requireNodeSqlite`, `localRecordTransaction.ts` and `commitOfflineSet` are gone (only a guard test, `agent-runtime/src/memory/sqlite-openers.test.ts:20`, names them); `agent-runtime/package.json:223-225` `engines.node >=22.13.0`.
+  - §2 G21 + G23 — `packages/local-first/src/ingestServerRecords.ts`, `clients/vscode/src/chatRail/*` (`railService.ts`, `refreshRail.ts`, `railWatch.ts`), `api/src/application/sync/importers/importSyncedChatTicketLink.ts`, `clients/vscode/package.json:103` (`builderforce.localWork`), `clients/vscode/src/localWork/localWorkTreeProvider.ts`, `clients/vscode/src/sync/syncSummary.ts`.
+  - Already summarized in the DONE.md entries of 2026-11-08 ("a folder's knowledge lives in one SQLite file…", "a bound chat shows its tickets and runs offline…").
+
+**Local-first closure: G03, G21 + G23, G27 (end state, rev 2)**
+
+Status: design rev 2, 2026-11-08. Rev 1 was sent back by an Opus review with REWORK (19 findings).
+Each finding is folded in below and cited as [R#].
+
+This design closes three ROADMAP › Local-first entries. Sources:
+
+- [vsix-offline-first-architecture-review.md](./vsix-offline-first-architecture-review.md)
+- [PRD 41 §B4](../../DONE.md) (archived)
+
+Not covered here:
+
+- the per-hash upload migration (the replica stack moving into agent-tools; it owns `replica.json`,
+  `dirty.json`, `analysis-pending.json` and `runs/`);
+- the heal;
+- sync residuals and recovered runs (shipped separately);
+- Kimi `k3`.
+
+---
+
+#### 1. G03: the SQLite store becomes the knowledge system of record (PRD 41 B4)
+
+##### Today
+
+- `localRecordTransaction.ts` opens `node:sqlite` correctly. Its only API, `commitOfflineSet`, has no
+  caller.
+- `agent-runtime` has its own loader, `requireNodeSqlite`, used three ways:
+  - `qmd-manager.ts:800` opens read-only with `busy_timeout = 1`;
+  - `manager-sync-ops.ts:253` uses `allowExtension`;
+  - one more caller.
+- VS Code keeps every root as three whole files under `.builderforce/knowledge/<stem>.*`: the
+  snapshot (rewritten on flush), the manifest and `extracted.jsonl`.
+- On-prem has no local snapshot store. It reviews into `linked.client.store`, and only its manifest
+  is local (`onPremKnowledge.ts:162-168`) [R1].
+
+##### End state
+
+**One loader and one opener** [R7], in agent-tools Node subpath
+`@builderforce/agent-tools/node-local-sqlite`:
+
+- `loadNodeSqlite()` keeps the experimental-warning filter.
+- `openLocalSqlite(path, { readOnly?, allowExtension?, busyTimeoutMs })`:
+  - It runs `quick_check` and refuses a corrupt file with `local_record_store_corrupt`.
+  - It asks for WAL. If the pragma does not return `wal` (a network share, `\\wsl$`), it falls back to
+    `journal_mode = DELETE` and reports which mode it got [R4].
+  - Read-only opens skip both the WAL request and the check.
+- Every `requireNodeSqlite` caller moves to it, and `requireNodeSqlite` is deleted.
+- `localRecordTransaction.ts` and `commitOfflineSet` are deleted. The journaled store owns the
+  records it was meant to hold.
+- `agent-runtime` `engines.node` rises to `>=22.13.0`.
+- A VS Code integration assertion, pinned to 1.101.0, proves `node:sqlite` loads in that Electron
+  build. Missing it fails loudly.
+
+**One atomic Node writer** [R2]: `writeFileAtomic(path, bytes)` in
+`@builderforce/agent-tools/node-local-sqlite`. It writes a temp file, fsyncs it, renames it over the
+target and fsyncs the directory. It is passed explicitly as `writeDurably`'s writer, and callers
+check `written`.
+
+**The fact store** is `@builderforce/agent-tools/node-knowledge-store`. Layout: one store per
+workspace folder at `<folder>/.builderforce/cache/knowledge/` [R19]:
+
+- `index.sqlite`, with these tables:
+  - `meta(k PRIMARY KEY, v)`: `format`, `generation`.
+  - `scope(root_id PRIMARY KEY, json)`.
+  - `fact(root_id, key, json, PK(root_id, key))`.
+  - `relation(root_id, from_ref, to_ref, kind, json, PK(root_id, from_ref, to_ref, kind))`.
+  - `recheck(root_id, hash, PK(root_id, hash))` [R3].
+  - `manifest(source_id PRIMARY KEY, json)`, holding the review's `IngestManifest` per source id
+    [R5].
+  - `extracted_ref(hash PRIMARY KEY, object, written_at)`.
+- `objects/<aa>/<sha256>.json`: `Extracted[]` per content hash, write-once through
+  `writeFileAtomic`. A reference row is inserted only after its object write succeeds. Objects are
+  shared across roots (content-addressed).
+
+**The builderforce-memory contract** [R3]. `LocalSnapshotStoreOptions.rows?: RowPersistence`:
+
+```ts
+interface RowChange {
+  upserts: { scopes: ScopeRecord[]; facts: StoredFact[]; relations: StoredRelation[];
+             extracted: Array<[hash: string, entries: Extracted[]]>; recheck: Array<[rootId: string, hash: string]> };
+  deletes: { scopes: string[]; facts: Array<[rootId: string, key: string]>;
+             relations: Array<[rootId: string, from: string, to: string, kind: string]>;
+             extracted: string[]; recheck: Array<[rootId: string, hash: string]> };
+}
+interface RowPersistence {
+  load(): Promise<KnowledgeSnapshot | undefined>;   // undefined → empty (first open)
+  apply(change: RowChange): Promise<{ generation: number; reloaded?: KnowledgeSnapshot }>;
+}
+```
+
+How the store uses it:
+
+- With `rows`, `extractedLog` and `SnapshotPersistence` are not used. Browser and MCP hosts keep
+  those.
+- Dirty tracking lives in a new module, `stores/rowDelta.ts`. `LocalSnapshotStore` is already 395
+  lines and must not grow.
+- **Swap-then-merge-back:** the dirty set is swapped out before `apply`. If `apply` fails, it is
+  merged back under any newer marks, so nothing is lost or reordered. `apply` stays outside the
+  mutation queue, as persistence does today.
+- `canonicalDump(store)` exports the existing private `serialize()` [R8]. It is the projection read
+  by `packPush.ts` and `portablePack.ts`.
+- No `snapshot.json` is kept on disk. This deviation is recorded in PRD 41 B4 in the same pass [R8].
+- Memory ships contract and regression tests:
+  - the export snapshot and the type contract;
+  - `regression:` a delta after N mutations equals the full dump;
+  - a mutation made during `apply` is persisted on the next apply;
+  - `apply` fails, then a retry persists everything;
+  - `recheck` survives a reload.
+- Publish only after those pass. Then bump every consumer and refresh every lockfile, including
+  `packages/*` [R18].
+
+**Concurrency: two windows on one folder** [R4]:
+
+- `apply` runs inside `BEGIN IMMEDIATE` and reads `meta.generation`:
+  - If it equals the generation this store last saw, apply the delta and bump the generation.
+  - Otherwise, apply the delta, bump the generation, and return `reloaded`: a full read of the rows.
+    The memory store replaces its in-memory maps with that read, so a window picks up the other
+    window's writes.
+  - Row-level upserts touch only keys this window dirtied, so a stale window cannot bring back a row
+    another window deleted, unless it edited that row itself (last writer wins per row).
+- The sweep deletes an object file only if:
+  - no `extracted_ref` references it;
+  - its mtime is older than a 1-hour grace period;
+  - the deletion is checked inside `BEGIN IMMEDIATE`.
+
+  PRD 41 C1 run pins and delta retention will add to this predicate when C1 lands. That is noted in
+  PRD 41 and is not part of this closure.
+
+**Manifest in the same transaction as facts** [R5]:
+
+- `nodeIngestManifest(store)` is an `IngestManifest` factory over the same connection.
+- Its writes are buffered and committed in the same `apply` transaction as the fact delta of the
+  next flush. A manifest can never run ahead of the facts it describes, as PRD 41:443 requires.
+
+**Migration** [R6]: `migrateLegacyKnowledge(files, store)`, run per legacy root id through
+`migratingRootFiles` (`fileManifest.ts:107`):
+
+1. Write the objects first.
+2. In one transaction, import the snapshot rows, the manifest and the recheck set, and set
+   `meta.format`. Chunk the import (≤ 2,000 rows per statement batch, measured and logged) so the
+   synchronous `node:sqlite` never blocks the host for long.
+3. Rename the legacy `<stem>.json`, the manifest and `extracted.jsonl` to `*.migrated`. A later open
+   that finds `format` set and legacy files present still renames them (crash between commit and
+   rename).
+4. A legacy snapshot that does not parse is kept as `.corrupt`. `format` is set and the store
+   starts empty.
+
+The other files in `.builderforce/knowledge/` (replica, dirty, analysis-pending, runs) are owned by
+the replica-stack migration and are untouched here.
+
+**Workspace hygiene** (PRD 41 B4):
+
+- Write `.builderforce/cache/.gitignore` containing `*`.
+- Contribute `configurationDefaults` for `files.watcherExclude` and `search.exclude` on
+  `**/.builderforce/cache/**`.
+- Our own watcher ignores the path.
+
+**Hosts:**
+
+- **VS Code:** `knowledgeService.ts` builds the Node store. The knowledge index reads through it.
+- **On-prem:** only the manifest moves, to `nodeIngestManifest` over its own
+  `.builderforce/cache/knowledge/index.sqlite`. On-prem keeps reviewing into the platform store, and
+  gaining a local snapshot store is not in scope [R1].
+- **Browser hosts:** unchanged.
+
+##### Done-checks (G03)
+
+- No write remains to the three legacy knowledge files in the VSIX or on-prem.
+- One SQLite loader and one opener exist.
+- Memory is published with its contract and regression tests, and every consumer and lockfile is
+  bumped.
+- Unit tests:
+  - migration import and rename;
+  - a crash after commit still renames;
+  - a corrupt `index.sqlite` is refused;
+  - the WAL fallback;
+  - a second store on the same file sees the first store's writes after a generation mismatch;
+  - the sweep keeps referenced and young objects;
+  - the manifest and facts commit together.
+- Opus reviews.
+
+---
+
+#### 2. G21 + G23: a local copy for the rail, a local work list, and sync status
+
+##### Today
+
+- The rail (`ChatTicketsPanel.tsx`, 402 lines) reads tickets and runs live from the webview.
+- `chatStateReads.ts` caps at 25 tickets, drops ids and `linkType`, and returns `[]` on failure
+  [R10].
+- `syncStatusPresenter.ts` has no caller.
+- No local-to-server link importer exists: the api importers cover ticket, chat, message, project
+  and usage only [R11].
+- There is no local record list UI [R13].
+
+##### End state
+
+**One ingestion path for server-observed records** [R9]:
+
+- `ingestServerRecords(store, records)` lives in `packages/local-first`, extracted from
+  `applyServerCursor`'s record-apply step so that both callers share it.
+- It writes records with `provenance { source: 'imported', evidence: 'server-observed' }` and the
+  server-id mapping, in ONE store transaction (`put` + `putMapping`, with `mappingByServerId` for
+  stable client ids).
+- `deriveRecordSyncStatus` learns that imported + mapped + no pending events = `synced`.
+- The rail reads feed it, and the G18 pull feeds it when it is wired.
+- The word "mirror" is not used: it already means something else on the server.
+
+**Rail reads that can feed it** [R10]:
+
+- The host calls brain-embedded `readChatTicketLinks` / `readChatRunHistory` with raw DTOs (ids,
+  `linkType`, no cap beyond the API's own paging).
+- A failed read is a distinct error, and nothing is ingested on failure. The last copy stays.
+- Runs ingest as entity type `execution`.
+
+**Local link entity and server importer** [R11]:
+
+- Local entity type `chat-ticket-link` (many-to-many with an attribute):
+  - Its deterministic id is derived from the two client ids.
+  - The payload carries `linkType`.
+  - Unlink is a tombstone.
+- It syncs. The api gains the importer `importSyncedChatTicketLink`, which writes through
+  `upsertChatTicketLink` / unlink with the existing mapping lookups, and an accepted-types entry.
+- This crosses local-first, the api and the VSIX, so Opus reviews it.
+
+**Host rail service.** `clients/vscode/src/chatRail/`:
+
+- `readRail(chatId: string | number)` answers from the store only:
+  - tickets, links, runs;
+  - each ticket's `presentRecordSyncStatus` (with `mapped` from the store's mappings);
+  - `freshness: { lastIngestedAt?: string; source: 'device' | 'server-observed' }`.
+- `refreshRail` runs the gated reads and ingests the results.
+- A store subscription re-posts when a commit touches the chat, its links or its tickets.
+- Bridge message: `local.chatRail`.
+
+**The adapter split** [R12]:
+
+- In the webview, `listTickets` / `listRuns` come from `local.chatRail`, and only their bearer-fetch
+  path is deleted.
+- `linkTicket` / `unlinkTicket` write the local `chat-ticket-link` record, which syncs through the
+  importer.
+- Merge, invite and run stay platform-gated as today.
+- The adapter's chat id widens to `string | number`, so a local chat works.
+- The badge, freshness line and summary are new small components beside the panel. The panel gains
+  only the optional props. Web passes none and renders as today.
+
+**Local work list (G05 UI)** [R13]:
+
+- A native VS Code tree view, `builderforce.localWork`. Projects contain tickets.
+- It reads `createLocalWorkRepository` over the host store, and shows each row's presented sync
+  status as an icon and description.
+- Actions: create ticket, set status, archive, open the bound chat.
+- It works with the platform denied. All strings go through `vscode.l10n.t` and every bundle.
+
+**Sync summary (G23).** `clients/vscode/src/sync/syncSummary.ts` is derived from the store:
+
+- mode and destination;
+- queued items and bytes;
+- conflict count;
+- dead-letter count;
+- last successful push (from receipts);
+- last successful pull. The store has no such timestamp today, so `meta.lastPullAt` is written by
+  the pull path [R19].
+
+It is shown in a status-bar item and in the rail header. Local completion never waits on upload.
+
+##### Done-checks (G21 + G23)
+
+- The presenter has production callers.
+- With the network denied, a chat read once shows its tickets, link types, runs, statuses and
+  freshness.
+- A local link reaches the server through the importer after a granted push.
+- The local work tree works offline.
+- Ingesting the same reads twice is idempotent.
+- A failed read ingests nothing.
+- Imported records present as `synced`.
+
+#### Rev 2 approval corrections (Opus, APPROVE WITH CHANGES). These override the sections above. (C0–C9; C10 and C11 stay open with §3 in make.md.)
+
+**C0 (G03, as implemented in memory 2026.10.56): two corrections to the `RowChange` types.**
+- `upserts.facts` is `[rootId, StoredFact][]` and `upserts.relations` is `[rootId, StoredRelation][]`,
+  because `StoredFact` and `StoredRelation` carry no root.
+- `recheck` is one global `string[]` of hashes. The SQLite `recheck` table therefore has no
+  `root_id` column.
+
+**C1 (G03): no object files.**
+- Extract bodies live in an `extracted(hash PRIMARY KEY, json)` table in `index.sqlite`.
+- `objects/`, `extracted_ref`, the object sweep and the atomic Node writer are all dropped from this
+  closure. Object files are what made a writer necessary; with them gone, it is not needed.
+- Reload returns rows. Extract bodies load lazily per hash.
+- This deviation from PRD 41 B4 (no `objects/` directory, no `snapshot.json`) is recorded in PRD 41.
+
+**C2 (G03 reload).**
+- `reloaded` is applied inside the mutation queue. It rebuilds the `relByPath` index, then re-applies
+  the current dirty set on top.
+- A window that never writes polls `PRAGMA data_version` before reads, and on window focus, so it
+  still picks up another window's writes.
+
+**C3 (G03 manifest).**
+- `get` reads through the buffer.
+- A `set` with no dirty facts triggers a manifest-only apply.
+- The review runner puts a file's facts before `manifest.set` for that file.
+- On-prem `nodeIngestManifest` commits directly, because on-prem has no fact store.
+
+**C4 (G03 migration).**
+- Yield with `setImmediate` between import chunks.
+- Another window that gets `SQLITE_BUSY` during migration retries after `format` is set, rather than
+  failing.
+
+**C5 (G03 WAL).** Use `journal_mode = DELETE` for UNC and `\\wsl$` paths as well as when the WAL
+pragma fails. `requireNodeSqlite` has two callers.
+
+**C6 (G21 ingestion).** `ingestServerRecords(store, rows: { entityType, serverId, payload, updatedAt,
+destination }[])` lives in `packages/local-first`. It is not extracted from the pure
+`applyServerCursor`. It:
+- resolves the client id with `mappingByServerId`, minting one when there is none;
+- normalizes through `materialize`, exported from `applyServerCursor.ts` (not copied);
+- commits `put` and `putMapping` in one store transaction;
+- skips any record that has a pending local event;
+- for a complete rail list, tombstones each local `chat-ticket-link` of that chat that the server no
+  longer lists.
+
+**C7 (G21 status).**
+- The synced rule keys on provenance: `evidence === 'server-observed'` with no events and no
+  receipts gives `synced`.
+- A regression test proves a local record with no events still gives `local`.
+
+**C8 (G21 importer).**
+- A link event `dependsOn` both the chat's events and the ticket's events.
+- `importSyncedChatTicketLink` resolves both server ids through mappings. It returns
+  `dependency_pending` until both exist, then calls `upsertChatTicketLink`
+  (`api/src/application/brain/chatTicketLinkWrite.ts:54`).
+- If accepted sync types are constrained in SQL, the change ships expand/contract across two pushes.
+
+**C9 (G23).** The last pull time is stored beside the cursor in the local-first store's state
+(`setCursor`), not in the knowledge `meta`.
+
+#### Sequencing (steps 1–3b; step 4 stays open in make.md)
+
+| Step | Work | Depends on | Implementer | Review |
+|---|---|---|---|---|
+| 1 | memory `rows` + `rowDelta` + `canonicalDump` + regressions; publish | — | Sonnet | Opus |
+| 2 | G03 Node store (with an `extracted` table), opener, migration, concurrency, hygiene, VSIX + on-prem manifest, consumer bump | 1 | Sonnet | Opus |
+| 3a | G21 local-first: `ingestServerRecords`, the provenance synced rule, the `chat-ticket-link` entity, the api importer, the last-pull timestamp | — | Sonnet | Opus |
+| 3b | G21 + G23 VS Code: rail service, adapter split, local work tree, sync summary | 3a | Sonnet | Sonnet |
+
+### Web, Rovr, and VSIX local-first architecture and batch sync review: finished sections archived on consolidation (2026-11-18)
+
+Source: docs/design/vsix-offline-first-architecture-review.md — header (lines 1–3), "Current architecture and reusable pieces" (32–47), the finished rows of "Gaps and required changes" (49–81) and "Additional source anchors" (83–89), the finished rows M01, M02, M06 of "Shared offline memory scope" (110–122), "Delivery sequence" steps 1–5 and its closing paragraph (236–245), "Review limits and implementation readiness" (262–266), and "Implementation status against the working tree" (268–405). The recommendation, target contracts, open gap rows (G02, G04, G05, G20, G27), the open memory rows, the API chatter inventory, delivery step 6 and the acceptance gates stay in `docs/specs/make.md` › Design — Web, Rovr, and VSIX local-first architecture and batch sync review. The 2026-11-17 entry "Design: VSIX/Web/Rovr offline-first review — finished gaps archived on consolidation" recorded the gap verification but archived no text; this is the text.
+
+- **Verified 2026-11-18:** G01 — `frontend/src/components/PlatformPolicyBoot.tsx` (called from `frontend/src/app/layout.tsx`), `clients/chrome/src/background/serviceWorker.ts`, `clients/chrome/src/host/panelServices.ts` (`createRovrPlatformPolicy`); G03/G26 — `clients/vscode/src/durableLocalFirstStore.ts`, `durableLocalFirstRecovery.ts`; G06 — `packages/local-first/src/localTools.ts` (`executeDomainTool`); G07/G08 — `clients/vscode/src/auditExecution.ts` → `startLocalAuditRun`; G09 — `configurePolicyGatesPersistence` in `clients/vscode/src/extension.ts`; G10–G18, G24, G25 — `api/src/presentation/routes/syncRoutes.ts` (`SYNC_ROUTE_BASE = '/api/sync/v1'`, `:26`; mounted from `api/src/index.ts:129`), `api/src/application/sync/importers/*` (named importers only), `api/src/application/sync/syncEnvelope.ts` (`occurredAtError`), `clients/vscode/src/installSyncCoordinator.ts`; G16 retention — `api/src/application/maintenance/sweptTables.ts:26-28,602-607` (`sync_events` 90 days, `sync_changes` 30 days; a purged event id is a new event); G19 — change sets wired (6296e81de); G21/G23 — local-first closure §2; G22 — `clients/vscode/src/installRunRecovery.ts`; M01/M02 — builderforce-memory `packages/memory/src/storage/{types,idbAdapter,nodeFileAdapter,fileTransaction,syncJournal}.ts`; M06 — `storage/factRetention.ts`. Delivery steps 1–5 — the same evidence.
+
+**Web, Rovr, and VSIX local-first architecture and batch sync review**
+
+Reviewed: 2026-10-18. Scope: the current working tree in `Builderforce.ai`, including uncommitted VSIX, provider, and audit work. Static architecture review; no live API traffic measurement, packaged VSIX validation, or implementation changes. `bf-verify-fdc` is a separate checkout and was not treated as the product source.
+
+#### Current architecture and reusable pieces
+
+| Surface | Execution | Persistence and sync today | Consequence |
+|---|---|---|---|
+| VSIX panel | Webview presents the conversation; extension host runs Brain and local workspace tools | Signed-in panel uses API persistence; host run persistence calls `postBrainMessages`; signed-out panel has an in-memory adapter; selected writes/steps use durable workspace Memento outboxes | A local model does not make the application offline or its whole history durable |
+| VSIX native participant/session adapter | Native handler shares routing/tools with host components; optional session registration adapts the native handler | Attempts server chat creation; falls back to an unlinked run when no chat is returned | Native and panel flows both need the same local application store |
+| Rovr / Chrome | Brain runs in the side panel; browser tools act on tabs | IndexedDB records for chats/messages/tasks/action ledger; service worker owns chat/task network outbox | Closest reusable local-first pattern, but not a complete cross-domain sync system |
+| Web | Embedded Brain with browser/local-first inference and gateway transport | `brainConfig.persistence = brain` API adapter; IndexedDB step queues supplement it | Local inference and durable steps do not establish offline project/ticket/audit CRUD |
+| API | Authoritative shared project/task/governance/runtime/audit services | Individual CRUD/ingest endpoints, message event keys, run outcome natural keys, and cache-backed idempotent responses | Useful foundations; inspected routes do not provide a general offline domain push/pull protocol |
+
+Primary evidence:
+
+- [VSIX host ports](../../clients/vscode/src/brainRunHostPorts.ts), [host lifecycle](../../clients/vscode/src/brainRunHost.ts), [native participant](../../clients/vscode/src/chatParticipant.ts), [webview driver](../../clients/vscode/webview/src/hostRunDriver.ts).
+- [Panel composition](../../clients/vscode/webview/src/WorkspaceApp.tsx), [in-memory persistence](../../clients/vscode/webview/src/localPersistence.ts), [API persistence](../../clients/vscode/webview/src/persistence.ts), [VSIX API client](../../clients/vscode/src/bfApi.ts).
+- [Rovr records](../../clients/chrome/src/store/records.ts), [local persistence](../../clients/chrome/src/persistence/localFirstPersistence.ts), [chat sync](../../clients/chrome/src/sync/chatSync.ts), [service worker](../../clients/chrome/src/background/serviceWorker.ts).
+- [Web Brain runtime](../../frontend/src/lib/brain/runtime.ts), [Web step durability](../../frontend/src/lib/brain/stepDurability.ts), [shared Brain configuration](../../brain-embedded/src/config.tsx), [shared model stream](../../brain-embedded/src/hostModelStream.ts).
+
+#### Gaps and required changes (finished rows)
+
+P0 blocks the requested offline contract or trustworthy synchronization. P1 is required for a complete, operable release.
+
+| ID | Priority | Observed gap / architectural risk | Required change |
+|---|---|---|---|
+| G01 | P0 | No VSIX setting establishing an API-denied default. `localModels.enabled` defaults false; `localFirst` defaults true but supports gateway fallback. | Add independent platform connectivity, inference permissions, and sync policy. Offline forbids gateway fallback regardless of saved keys/model choices. |
+| G03 | P0 | Host persistence is network-backed. Signed-out panel store explicitly disappears on panel close and never syncs. Native chat can execute unlinked. | Persist chats, turns, runs, steps, approvals, and lineage in the extension host first. Return local records to both panel and native surfaces; queue synchronization separately. Audit the existing signed-out panel-to-host persistence handoff. |
+| G06 | P0 | Most project/ticket/audit tools are dynamically fetched server MCP tools; local file tools cannot replace them. | Share domain schemas and validation; implement local adapters for the supported domain tools. Classify remaining tools as connected-only. Never enqueue arbitrary MCP calls as offline history. |
+| G07 | P0 | “Local audit” first creates a server chat and server audit session, obtains a server briefing, reports findings remotely, and checks server completion. | Package versioned audit definitions/briefing construction and local result validation. Persist local audit sessions, findings, evidence, and remediation tickets; import results later without rerunning the audit. |
+| G08 | P0 | Audit close intent invokes a cloud audit on the next activation. The pending intent contains project/audit/request IDs but no account/tenant binding. | Make close behavior explicit. Persist a local checkpoint/interrupted result, or a local next-start job. Never silently launch cloud work in offline mode; bind any later cloud job to identity and explicit dispatch permission. |
+| G09 | P0 | Governance is fetched at run start, with a 60-second fresh and 10-minute stale in-memory cache; unreadable tenant policy can refuse a run. | Persist tenant/project-scoped policy snapshots and their version, validity, and offline permissions. Enforce approved snapshots locally. Missing/expired required policy blocks affected managed operations; personal unbound work uses explicit local policy. Signing out must not remove policy from previously managed records. |
+| G10 | P0 | Tenant scopes protect many queued writes, but unknown-identity entries are unscoped and can adopt a future tenant. Rovr local chats/tasks and server mappings lack explicit account/tenant ownership fields. | Bind records and events to platform instance/account/tenant/project at creation where known. Put never-connected work in an unbound partition requiring explicit destination assignment. Do not infer ownership from whichever user signs in next. |
+| G11 | P0 | Rovr chooses `taskProjectId()` when sending a queued task; a later settings change can change its destination. VSIX fact publication also uses the currently selected project. | Snapshot destination identity/project/repository into durable intents. Changing a UI selection cannot redirect pending work. Scope local-to-server mappings by destination. |
+| G12 | P0 | Shared outbox connectivity means reachability, not an administrative ban: retry probes and explicit `flush` bypass the normal offline check; `drainWith` calls its request callback. Backlogs also replay on load/scope change. | Add an absolute send-permission gate covering every path and stopping retries when sync is disabled. Recheck at dispatch, cancel in-flight platform traffic on Disconnect, and preserve queued work. An online signal alone is insufficient. |
+| G13 | P0 | Durable queues default to 1,000 entries and drop the oldest on overflow; permanent 4xx failures are dropped. Errors can also be swallowed by store callbacks. | Separate discardable telemetry from durable user work. No automatic eviction of unsynced history/tickets/audits. Use storage budgets, visible errors, recoverable dead letters, and explicit export/delete controls. |
+| G14 | P0 | Memento stores whole queue snapshots; outbox `enqueue` returns before async persistence completes. Rovr appends records and then signals a separate worker queue, leaving a crash gap; local persistence strips prior step event keys. | Atomically commit each local domain mutation and its sync event. Preserve stable event identities through every queue boundary. Use a transactional journal/store with acknowledged durable writes before claiming data is saved. |
+| G15 | P0 | Network batching is narrow: messages per chat, activity, outcomes, and error reports. Rovr still performs chat create, task create, and links as separate requests. | Add dependency-aware domain batch ingest with client references and per-item acknowledgements. One logical sync batch should replace many CRUD round trips. |
+| G16 | P0 | General HTTP replay responses expire after 24 hours, use cache storage, and are written after successful execution. Concurrent misses and a commit/response-cache crash gap can execute twice. Fingerprinting checks method/path, not payload. | Enforce permanent or lifecycle-appropriate database uniqueness on tenant/device/event and client entity IDs, with payload hashes. Apply mutation and receipt transactionally. Existing message event keys are useful but do not cover all entities or side effects. |
+| G17 | P0 | Ordinary message append routes derive comments, notifications, directed agent replies, and learning from incoming messages. Audit/ticket routes can trigger further automation. | Separate historical import from commands. Import must not replay actions, start agents, dispatch audits, send old mentions, or create duplicate remediation tasks. Use deduplicated server effect records for any intentionally permitted post-import effect. |
+| G18 | P0 | Existing queues provide per-key order, not cross-entity dependencies, reconciliation, or optimistic concurrency across Web/Rovr/VSIX. | Add entity versions, `baseVersion`, conflict results, delete tombstones, dependency resolution, delta pull cursors, cursor expiry/resnapshot, and snapshot/pending-write merge rules. |
+| G19 | P1 | Pending Git changes are a local current-working-tree view; session notes summarize some successful local tools. Neither is a complete immutable change history. | Capture run-linked change sets with repo identity, branch/base commit, paths, before/after hashes, and optional patches/artifacts. Preserve author attribution and avoid claiming unrelated existing edits. Upload evidence; never automatically apply patches on another device. |
+| G21 | P1 | Attachment uploads, server summaries, remote creation/session/page data, project panels, OAuth/MCP management, approvals, meetings, and cloud execution have connected dependencies. | Define capability behavior for every destination. Keep local blobs and upload manifests; offer local summaries only where supported. Read cached platform data with freshness labels; show unavailable remote actions or explicit connected jobs. |
+| G22 | P1 | Host-owned runs survive closing a panel, but in-memory run state does not provide recovery after extension-host termination. Rovr execution belongs to its disposable side panel. | Journal run lifecycle and checkpoints. Recover interrupted runs as interrupted, never falsely completed. Resume only safe steps; do not replay a shell command or external action merely because no result was recorded. |
+| G23 | P1 | Existing sync feedback is uneven; dropping/refusing a batch can leave local records and sync status disagreeing. | Show mode, destination, last success, queued bytes/items, conflicts, errors, and storage pressure. Distinguish executed locally, persisted locally, uploaded, and accepted by server. Local audit completion must not await account upload. |
+| G24 | P1 | Outboxes are per stream/lane; reconnect can flush many independently. Idle reads/presence/streams remain separate from writes. | One sync coordinator per local store with a lease, bounded global concurrency, byte/item caps, debounce, jitter, Retry-After, and manual sync. Pull deltas once per sync session; piggyback configuration changes. Disable presence/attention polling by default. |
+| G25 | P1 | Local activity includes occurrence time and duration and later participates in billing; historical execution/evidence needs distinct trust semantics. | Preserve `occurredAt` and server `receivedAt`, actor/device/source, policy/audit/model versions, and sequence. Treat imported client evidence as client-reported. Validate elapsed-time claims, duplicates, clock skew, and billing windows server-side. |
+| G26 | P1 | Browser local-first stores are not equivalent to durable desktop storage, and multiple windows/tabs can compete for queue ownership. | Host-specific storage adapters with shared contracts, migrations, corruption recovery, ownership leases, privacy partitions, retention/export, and tested restart behavior. Keep secrets in credential storage; redact uploaded logs and artifacts. |
+
+Additional source anchors:
+
+- [Routing and fallback](../../clients/vscode/src/modelRouting.ts), [VSIX settings](../../clients/vscode/package.json), [platform tool relay](../../clients/vscode/src/platformTools.ts), [shared tool assembly](../../clients/vscode/src/brainToolCatalog.ts).
+- [Outbox host adapter](../../clients/vscode/src/outboxStorage.ts), [outbox behavior](../../packages/write-outbox/src/outbox.ts), [queue policy](../../packages/write-outbox/src/policy.ts), [sealing and scope rules](../../packages/write-outbox/src/sealedBatch.ts).
+- [Audit execution](../../clients/vscode/src/auditExecution.ts), [audit API](../../clients/vscode/src/systemAuditApi.ts), [server audit service](../../api/src/application/tools/AuditRunner.ts), [remediation dedupe](../../api/src/application/tools/auditRemediation.ts).
+- [Policy resolution](../../clients/vscode/src/policyGates.ts), [session cache](../../clients/vscode/src/sessionsSnapshotStore.ts), [workspace fact publishing](../../clients/vscode/src/workspaceFactsSync.ts), [Git changes](../../clients/vscode/src/gitChanges.ts).
+- [Server message routes and side effects](../../api/src/presentation/routes/brainRoutes.ts), [replay middleware](../../api/src/presentation/middleware/idempotentReplay.ts), [replay policy](../../api/src/application/shared/idempotentReplay.ts), [cache adapter](../../api/src/infrastructure/cache/idempotencyReplayStore.ts).
+
+#### Shared offline memory scope (finished rows)
+
+| ID | Finding (2026-10-18) | Required scope |
+|---|---|---|
+| M01 | `MemoryStore` owns IndexedDB directly; no production Node database adapter (Node guidance injects `fake-indexeddb`; MCP is durable only with `persistFile`). | Extract narrow storage/transaction ports without breaking the API; durable browser and VSIX Node adapters. An in-memory IDB shim is never durable storage. |
+| M02 | IndexedDB write helpers resolve on request success, not transaction commit; fact writes share no transaction with a sync journal. | Resolve a durable save only after commit; commit fact mutation, provenance, tombstone/event and journal atomically through a unit-of-work port. |
+| M06 | TTL/caps hard-delete facts (MCP default cap 10,000); the mirrored snapshot drops TTL/time/sequence and restores by fresh remember calls. | Separate evictable caches from durable knowledge and unsynced operations; preserve source time/provenance through import; never evict pending knowledge to meet a cap. |
+
+#### Delivery sequence (steps 1–5)
+
+1. **Define and enforce offline policy.** Add the API-denied default, central platform transport guard, model fallback restrictions, settings/localized status, and a complete endpoint/capability inventory. This slice alone does not establish durable offline work; do not present it as the finished feature.
+2. **Build the shared local application layer and host stores.** Stable IDs, transactional journal, migrations, account/repository partitioning, durable history, and adapters for Web, Rovr, and both VSIX chat surfaces. Move board/ticket operations and run persistence behind shared local use cases. Deliver Web offline application-shell startup alongside its storage adapter.
+3. **Move audit and change capture into local use cases.** Versioned definitions, local findings/report tools, remediation links, policy snapshots, run interruption recovery, and evidence manifests. Correct close-audit semantics.
+4. **Implement server batch import and delta sync.** Schema migrations, unique receipts, entity versions, tombstones, ID mapping, authorization, dependencies, conflicts, historical side-effect isolation, and bounded artifact upload.
+5. **Wire account visibility and complete modality parity.** Web, Rovr, and VSIX render imported historical executions/audits/change sets without showing them as live cloud runs. All three use local domain storage, the shared application use cases, and the same sync identities/versions. Rovr adopts atomic journal/protocol ownership and crash recovery; replace live destination lookup. Remove superseded API-first and memory-only paths rather than maintaining modality-specific alternatives.
+
+Do not duplicate server business rules inside presentation code. Extract host-neutral audit/task/change/sync contracts and pure rules into shared packages; keep database, filesystem, VS Code, Chrome, HTTP, and credential code behind adapters. Per repository rules, new visible strings require all supported locale catalogs and registry-to-catalog coverage.
+
+#### Review limits and implementation readiness
+
+This review identifies the cross-cutting gaps in the inspected execution, storage, tooling, audit, and transport paths. It is not a claim that every feature in the repository is offline-capable or that every network call has been dynamically exercised. A complete transport inventory and packaged network-denial tests are delivery gates.
+
+The working tree contains active unrelated edits, including changes made during this review. Revalidate the audit/provider integration against the implementation baseline before development; transient file/export mismatches observed during inspection had resolved by the final source check. No product code was changed or tests run for this architecture-only deliverable.
+
+#### Implementation status against the working tree
+
+The last sentence of the section above is the original review limit. It is no longer true of the working tree. This section records what that tree actually contains as of the follow-up on 2026-10-18, and it supersedes only that sentence. Earlier sections are unchanged: a capability described there as missing is still missing unless this section says a live path now calls it.
+
+Status words used below:
+
+- **Composed** — a live path calls it (activation, a host port, or a queue the host already drains).
+- **Library** — the module and its tests exist; no composition root imports it.
+- **Contract** — types, schema, ports, or a migration exist; there is no repository, route, or importer.
+- **Not started** — no implementation was found. A name in a comment is not an implementation.
+
+Comments in `api/migrations/1247_sync_batch_protocol.sql` and `api/src/infrastructure/database/schema/sync.ts` name a swept-table registration and import use cases (`importSyncedTicket`, `importSyncedProject`, `importMirrorRecord`). Those files are not in the tree. Treat the comments as intent.
+
+Files outside the paths named here are not evidence that a gap is closed.
+
+##### G01–G27
+
+> **Stale table (note added 2026-10-25).** This table predates commit `ed26ab8a8` (2026-10-20), which
+> wired run recovery (G22), run change sets (G19), `configurePolicyGatesPersistence` (G09), local
+> audits (G07/G08), `createSyncCoordinator` (G24/G15), local domain tools (G06) and the capability
+> matrix (G21), and the server sync routes. Read the rows below as the 2026-10-18 baseline, not the
+> current state. The gaps still open are **G03** (SQLite system of record built, not wired —
+> ROADMAP › OTHER › Agent runtime "G03 SQLite system of record"), **G05/G23** (local project/ticket/chat
+> views and the sync-status presenter — ROADMAP › OTHER › Workload-aware routing "VSIX sync status is
+> not shown"), **G04 for chats across devices** (ROADMAP › Make › Cloud and IDE agent runs "A VS Code
+> chat's history does not follow the person") and **G27** (packaged network-denied acceptance suite —
+> ROADMAP › OTHER › Agent runtime).
+
+| Gap | Status | Evidence in the working tree | Still required |
+| --- | --- | --- | --- |
+| G01 API-denied default | Partial, VSIX only | `packages/local-first/src/policy.ts` (`LOCAL_FIRST_POLICY`, every capability false). VSIX settings `builderforce.platform.*` default false in `clients/vscode/package.json`, with nls strings, read by `clients/vscode/src/platformPolicy.ts`. | Web `bootWebPlatformPolicy` is not called. Rovr `createRovrPlatformPolicy` is imported only by its test. No settings UI beyond the VSIX contribution. |
+| G02 single enforcement point | Partial, host `fetch` only | `bindPlatformPolicy` replaces `globalThis.fetch` for configured BuilderForce origins, classifies the capability, and sets `redirect: "error"`. `modelRouting.ts` checks `gateway-inference` before opening a cloud stream. `outboxStorage.ts` passes `outboxSendPermission`. | The webview is another JavaScript realm; its `fetch` is not the host's. WebSockets, `vscode` request APIs, and child-process network are not classified. Web and Rovr policy modules are not composed, so their fetches are not gated. |
+| G03 local system of record | Partial, chat messages on the host run | `localBrainApplication` (`clients/vscode/src/localFirstStore.ts`) is passed into `brainRunHostPorts` `persistence.sendMessages`, the chat participant, the webview host bridge, and step durability in `extension.ts`. | The store is one JSON snapshot (`globalStorage/local-first-v1.json`), not a transactional embedded database. Run context, tool catalogs, and platform writes still call `bfApi` / `gateway`. Signed-out work is not the record for projects, tickets, audits, or runs. |
+| G04 stable client identity | Contract | Client UUIDs and `EntityMapping` live in `packages/local-first`. `sync_entity_mappings` is in migration 1247. | No live run, step, or approval contract was changed to keep one client id across restart and sync. `localDeviceId` is written with an un-awaited `globalState.update`, so a crash can mint a second device id. |
+| G05 local projects and tickets | Library, Web only | `frontend/src/lib/localFirst/workManagement.ts` (`createLocalWorkManagement`). | Nothing in the web app imports it. VSIX has no local project or ticket repository, tree, or board. |
+| G06 local domain tools | Not started | — | Platform tool calls still target the API. No local adapter, queue, or sync handoff. |
+| G07 local audit definitions and runs | Library | `clients/vscode/src/auditDefinitions.ts`, `localAuditStore.ts` (`startLocalAuditRun`, findings, remediation, `recoverInterruptedAuditRuns`). | `auditExecution.ts` does not call them. Definitions are not loaded from the local store. |
+| G08 close means local complete | Not corrected | Recovery helper only, and it is not called. | Close-audit behaviour was not changed. A completed local audit still has no durable "closed locally" state on the live path, and no rule stops it launching a cloud audit. |
+| G09 policy snapshot, including signed out | Library, hook unwired | `policySnapshots.ts` and a fallback in `policyGates.ts` (`snapshotPermitsOfflineRun`). | `configurePolicyGatesPersistence` is never called from `extension.ts`, so the resolver still runs memory-only. Sign-out still drops the in-memory cache. |
+| G10 destination binding | Contract | `EntityDestination` / `UNBOUND_DESTINATION` in `packages/local-first/src/records.ts`. `destinationBindingError` in `api/src/domain/sync/syncProtocol.ts`. | Not enforced at project, ticket, chat, audit, or run creation. Unbound records can still be written by any caller that does not use the coordinator. |
+| G11 binding is a snapshot | Contract | `destinationKey` is pure and snapshotted on the record. The coordinator refuses an unbound batch. | `taskProjectId()` and the other live parent lookups were not replaced. No rebind operation exists. |
+| G12 outbox permission revoked | Partial, VSIX queues | `packages/write-outbox` `sendPermission` aborts automatic, manual, final, probe, and `drainWith` sends. VSIX `outboxStorage.ts` wires `outboxSendPermission`. | Only queues built through that helper are gated. A direct `fetch` that is not a platform-origin request, or a socket, is unaffected. |
+| G13 durable vs best-effort | Partial | Outbox types distinguish durable retention, dead letters, and best-effort drop. | Not every user-work queue was reclassified. Dead-letter export and repair are not a user-visible action. |
+| G14 mutation and outbox commit together | Partial | `enqueueDurable` exists. The VSIX snapshot store commits a record and its journal event in one rename. | The outbox file and the local-first snapshot are different stores. A domain write and its sync enqueue are not one commit. |
+| G15 batch sync protocol | Contract | Client `SyncPushBatch` / `SyncPullResult` / `SyncTransport` in `packages/local-first/src/sync.ts`. Server tables in migration 1247, Drizzle `schema/sync.ts`, domain rules in `domain/sync/syncProtocol.ts`, ports in `application/sync/syncPorts.ts`. | No `SyncRepository`, no service, no `POST /api/sync/v1/push` or pull route, no client transport implementation. `createSyncCoordinator` is called only from `localFirst.test.ts`. |
+| G16 idempotency and ordering | Schema only | Unique `(tenant_id, device_id, event_id)` and `(tenant_id, entity_type, client_entity_id)`. `depends_on` column. Coordinator rejects a short receipt list. | No transaction applies a mutation and writes its receipt together. `dependency_pending` is specified and not stored, which is correct, but nothing parks or resumes it on the server. Retention is not registered, so the "permanent uniqueness" rule has no retention story either. |
+| G17 bounded import use cases | Port only | `SyncEntityImporter` and `SyncImportContext` in `syncPorts.ts`. | No importer. A future route must not grow a generic entity writer. |
+| G18 cursor, tombstone, resnapshot | Client library + server codec | Coordinator conflict list and `resnapshotRequired`. `encodeSyncCursor` / `decodeSyncCursor` reject a future `v` or a non-finite `seq`. | No pull query, no server tombstone read, no client path that consumes a server cursor. |
+| G19 run change sets | Library | `clients/vscode/src/runChangeSets.ts`. | Not imported by the run host. A run still does not record a content-hashed baseline and finalization. |
+| G20 memory provenance | Not started | `memory-fact` exists only on the `LocalEntityType` union. | No local fact store, no provenance record, no separation from chat sync. |
+| G21 capability matrix | Not started | `attachment-manifest` exists only on the union. | Meetings, attachments, and cloud-only tools have no offline behaviour table in code. |
+| G22 interrupted runs | Library | `clients/vscode/src/runRecovery.ts` (`recordRunStarted`, `recoverInterruptedRuns`, `safeToResume`). | Not called from activation or the run host. A restarted host still has no interrupted-run record. |
+| G23 sync status | Not started | `platformRequestAccount` counts blocked host fetches. Nothing reads it. | No local / syncing / synced / conflict / dead-letter state on chat, ticket, audit, or run. |
+| G24 one coordinator, one lease | Library | `createSyncCoordinator` plus an IndexedDB lease and a VSIX file lock (`local-first-v1.lock`). | No host constructs the coordinator. Two entry points can still sync, because nothing syncs. |
+| G25 client and server time | Domain rule + columns | `occurred_at` / `received_at` on `sync_events`. `occurredAtError` rejects an invalid or future client time (15 minutes). | No route calls it. Historical past timestamps are intentionally allowed and untested on a server. |
+| G26 per-device durability | Partial adapters | IndexedDB adapter and lease (`packages/local-first/src/indexedDb.ts`). VSIX snapshot uses temp file + rename and a lock file. | Not equivalent stores. The VSIX lock is stolen after 30 seconds, so a long transaction can race. Corrupt snapshot throws with no recovery copy. Secrets and redaction are not specified in the store. Web multi-tab is tested only against the IndexedDB adapter. |
+| G27 packaged acceptance gate | Not met | Unit tests: `packages/local-first/src/localFirst.test.ts`, `indexedDb.test.ts`, `clients/chrome/src/platform/policy.test.ts`, `brain-embedded/src/localFirstPersistence.test.ts`. | No test disables the network and drives Web, Rovr, and a packaged VSIX through the same scenario. No test proves a blocked platform call, a durable local write, and a later batch replay. |
+
+##### What the working tree actually added
+
+Shared contract, `packages/local-first`:
+
+- Policy: eight capabilities, all denied, `authenticate` implied by synchronize, connected features, or gateway inference.
+- Records: fifteen entity types, unbound vs bound destination, journal event, receipt, mapping.
+- In-memory transactional store, used as the inner store of the VSIX snapshot.
+- Sync coordinator: lease, policy assert, dead-letter skip, one receipt per event id.
+- IndexedDB adapter. Not used by VSIX or by the web app.
+
+VSIX, composed:
+
+- Settings and nls for `builderforce.platform.*`.
+- Host `fetch` patch and model-route gate.
+- Outbox send permission on queues built by `outboxStorage.ts`.
+- Local brain persistence for host-run `sendMessages`, the participant, the webview bridge, and step durability.
+
+VSIX, present and not called from `extension.ts` or the run host:
+
+- `localAuditStore.ts`, `auditDefinitions.ts`, `policySnapshots.ts` (the configure call is missing), `runChangeSets.ts`, `runRecovery.ts`.
+
+Web and Rovr, present and not composed:
+
+- `frontend/src/lib/localFirst/{platformPolicy,store,workManagement}.ts`. `bootWebPlatformPolicy` has no caller.
+- `clients/chrome/src/platform/policy.ts`. The service worker does not import it.
+
+Server, contract only:
+
+- Migration `1247_sync_batch_protocol.sql`: `sync_events`, `sync_entity_mappings`, `sync_records`, `sync_changes`.
+- Drizzle schema re-exported from `api/src/infrastructure/database/schema.ts`.
+- Domain helpers and the `SyncStores` port. No repository, service, route, importer, or retention registration. `sweptTables.ts` does not name either log table.
+
+Write outbox:
+
+- `sendPermission`, dead letters, `enqueueDurable`, durable retention vs best-effort drop. Wired into VSIX outboxes that use `outboxStorage.ts`.
+
+##### Remaining build, in dependency order
+
+Do not start later items by calling the unwired libraries and calling the gap closed.
+
+1. **Compose the policy on every surface.** Call `bootWebPlatformPolicy` from the web boot path. Construct `createRovrPlatformPolicy` in the Rovr service worker and panel, and gate that extension's platform `fetch` the same way VSIX gates the host. Add the missing settings UI copy only where a surface has no native settings contribution.
+2. **Replace the VSIX JSON snapshot before more entity types land.** One SQLite (or equivalent) file in global storage, with a real transaction around record + journal event, a busy timeout instead of a 30-second lock steal, and a corrupt-file recovery path. Await device-id persistence before the first write that stamps it.
+3. **Wire the libraries that already match a gap, still on the local store only.** `configurePolicyGatesPersistence` from activation (G09). `recordRunStarted` / `recoverInterruptedRuns` from the run host and activation (G22). Change-set baseline and finalization around the same run (G19). Local audit start/save/close/recover from `auditExecution.ts` (G07, G08), including an explicit refusal to launch a cloud audit on local close.
+4. **Local projects, tickets, and tools (G05, G06).** A VSIX repository beside the web `workManagement` library, then tool adapters that write that repository instead of `bfApi` when the platform is denied.
+5. **Server write path (G15–G18, G25).** One repository implementing `SyncStores.transact`. Push validates protocol version, destination binding, schema version, and `occurredAt` before any insert. One transaction per event: importer outcome, mapping, projection, change row, receipt. Pull reads `sync_changes` / `sync_records` through the cursor codec. Importers are `importSyncedTicket`, `importSyncedProject`, and a mirror importer for history-only types — nothing else. Register `sync_events` (90 days) and `sync_changes` (30 days) in `sweptTables.ts`, and state that event-id uniqueness does not survive retention: a replay after purge is a new event, not a silent duplicate.
+6. **One coordinator per device store (G24), then status (G23).** Hosts call `createSyncCoordinator` only after synchronize is granted. Status is derived from the store (pending, in flight, conflict, dead letter), not from a second cache.
+7. **Acceptance suite (G27) before any claim that offline-first shipped.**
+
+##### Acceptance test plan
+
+Existing tests cover the library, not the gate in the Acceptance gates section above. The rows below are the checks that section requires, mapped onto what the tree can already run.
+
+| Check | Existing test | Missing test |
+| --- | --- | --- |
+| Fresh install, network off, no platform call, local project/ticket/chat/audit/run survive restart | Policy unit test asserts the default is denied. Persistence test covers chat messages in the embedded adapter. | Packaged VSIX and Rovr service worker with network disabled. Restart across the real store, not the memory store. |
+| No sign-in prompt and no token refresh while every `platform.*` setting is false | VSIX settings default false. No behavioural test. | Activation test that fails if `fetch` to a BuilderForce origin, or a token refresh, is attempted. |
+| Grant sync only: one batch, no inference, download, or MCP | Coordinator test rejects sync when the policy denies it. | A transport test where synchronize is the only grant, asserting the other capabilities stay denied and are not called. |
+| Revoke permission during a flush: no retry, durable rows remain | Outbox contract says `sendPermission` aborts. | A VSIX test that flips `builderforce.platform.synchronize` mid-flush and asserts the outbox row and the local record both remain. |
+| Restart mid-run: interrupted, no replay of an unrecorded shell command | `runRecovery.ts` documents `safeToResume`. | Activation test that a running execution becomes `interrupted`, and a step without `safeToResume` is not re-executed. |
+| Same event twice, dependency not yet accepted, stale version, unknown schema | Unique indexes in SQL. Coordinator rejects a short receipt list. Cursor codec rejects a bad cursor. | Repository tests: duplicate event id returns one receipt and does not double-apply; unmet `depends_on` returns `dependency_pending` and writes nothing; stale `base_version` returns `conflict`; `schema_version > 1` returns `rejected`. |
+| Denied platform call is visible and blocks completion | `platformRequestAccount` exists and is unread. | UI or log assertion, plus a completion rule that a denied sync is not "done". |
+| Web, Rovr, packaged VSIX, same scenario | None. | One scenario, three hosts, network denied, then one granted replay. |
+
+##### Risks and open questions
+
+(The FNV-1a payload-hash caveat and the decided destination-binding question are kept, still true, in make.md › "Proposed target contracts (reference)" › "Standing decisions and caveats".)
+
+- **The host `fetch` patch is not the enforcement point the acceptance gates assume.** Webview `fetch`, sockets, and non-HTTP platform clients bypass it. Until those are classified or removed, "API denied" is true only for host `fetch` to a configured origin.
+- **Two stores, one user action.** Chat text can commit in the snapshot while its sync row commits in another file. Crash between them is a lost sync, which the acceptance text treats as data loss.
+- **Lock steal.** `local-first-v1.lock` is removed after 30 seconds. A transaction slower than that can have two writers. The rename makes the last writer win and drop the other's commit.
+- **Device id race.** `void ctx.globalState.update(deviceKey, deviceId)` can lose the id. The next activation mints another, and server idempotency is per device id, so the same client event can be accepted twice under two device ids.
+- **Retention vs idempotency.** Unique event ids do not survive a purge of `sync_events`. The retention registration must say that, or a purged event is replayed as new work.
+- **Import isolation is a comment.** Shipping a generic `payload jsonb` writer because the tables already exist would violate G17. The route has to call a named importer or reject the entity type.
+- **Web connected grants.** `WEB_CONNECTED_GRANTS` exists beside the denied default. If boot applies it before the person opts in, G01 is false on the web even after `bootWebPlatformPolicy` is called. Boot must start from `LOCAL_FIRST_POLICY`.
+- **Unrelated dirty files.** Changes outside the paths in this section (packaged `brain-embedded` dist, inference routing, and any other dirty path) are not part of this design and must not be read as closing a gap.
+
+Open questions, still blocking a server route:
+
+- After retention, is a replayed event id a conflict the client must drop, or a new accept? The client coordinator cannot tell those apart today.
+- Is the VSIX snapshot an acceptable interim for chat text only, with an explicit ban on storing tickets, audits, and runs in it? This section assumes yes until a transactional store exists. If that assumption is rejected, G03 is not partial; it is not started.
+
+(Settled since: retention is registered and a purged event id is a new event (`api/src/application/maintenance/sweptTables.ts:26-28,602-607`); the JSON snapshot was replaced by the transactional `clients/vscode/src/durableLocalFirstStore.ts`; the web policy no longer references `WEB_CONNECTED_GRANTS` (asserted by `frontend/src/lib/localFirst/deniedNetworkAcceptance.test.ts:120`); the remaining webview/socket part of the first risk is G02, open in make.md.)
+
+### Cost-lever parity: finished sections archived on consolidation (2026-11-18)
+
+Source: docs/design/cost-lever-parity.md (the whole document; nothing is open). Summarized in the 2026-10-26 DONE.md entry "Cost-lever parity: spend less for the same work, and attachments the model can read"; this is the design text that entry linked to.
+
+- **Verified 2026-11-18:** WS-R — `clients/vscode/src/editorRunSettings.ts` (`stageModels`), `@builderforce/pipeline-route` (`scorePipeline`), `clients/vscode/package.json` (`builderforce.pipelineRouteReport`, `builderforce.maxRunBudgetUsd`), `api/migrations/1277_llm_usage_pipeline_route.sql`, `api/src/application/costMetrics/costMetricGroups.ts`; WS-L — `clients/vscode/src/localSemantic.ts` / `desktopContext.ts` (`catalogDesktopSemantic`), `read_compressed` and `local_research` (`agent-runtime/src/agents/node-capability-provider.ts`, `coding-tools.ts`); WS-I — `clients/vscode/src/attachmentIngress.ts` (`mentionBudget`), `builderforce.images.{maxEdge,jpegQuality}` in `clients/vscode/package.json`.
+
+**Cost-lever parity — end state (2026-10-26)**
+
+Source: TIP Code comparison audit (ROADMAP "Cost-lever parity — TIP Code comparison"). This file is the
+contract the five workstreams build against. Each workstream owns its files; a file owned by another
+stream is edited only minimally and re-read before every edit. Other sessions have uncommitted edits in
+`packages/run-policy/src/policy.ts` and `brain-embedded/src/runStore/*` — build on top, never revert.
+
+#### WS-R  Routing, stages, spend (owner: routing agent)
+
+- **Stage models.** One resolver `stageModels(settings, env)` → `{ plan?, code?, verify?, subagent?, quick? }`.
+  Sources in order: VS Code settings `builderforce.models.{plan,code,review,subagent}` → `ROLE_MODELS` env →
+  unset (gateway orders by role). `RunPolicyOptions.phaseModels.{plan,code,verify}` are ALL read by
+  `nextTurn`; the VSIX passes them instead of pinning the `code` model to the whole run. `modelForChildRun`
+  uses `subagent`.
+- **Pipeline router.** Pure package `@builderforce/pipeline-route` (no I/O): `scorePipeline(features) →
+  { score, route: 'full' | 'quick', reason }`, logistic over weighted features (`ROUTE_WEIGHTS`), threshold
+  default 0.5, `mode: 'auto' | 'always'`, phrase "full pipeline" forces full. `quick` = start in `code`, no
+  plan phase, no verify stage, model = `quick` stage model. Decided once per run in the run preamble.
+- **Ledger.** Local `RunUsageValue` gains `role`, `pipelineRoute`, `routeScore` (the existing `route`
+  field — transport local/gateway/byo — keeps its meaning, documented). Server `llm_usage_log` gains
+  `pipeline_route`, `route_score` in BOTH migration tracks (expand only).
+- **Route report.** VS Code command `builderforce.pipelineRouteReport` over the local ledger, N=30 days:
+  runs per route, cost per route, score histogram, misroute proxy (quick runs later re-run full / failed),
+  suggested threshold. Cloud cost metrics gain `model` and `route` groupings.
+- **Per-run USD cap.** Setting `builderforce.maxRunBudgetUsd` (0 = off). The run store checks the run's
+  accumulated cost before every turn and stops with a contained outcome; warns the model at 80%, like the
+  cloud `runBudget`. One shared budget primitive for cloud and run store (extract, don't copy).
+- Difficulty/local-skip thresholds become overridable options with the current constants as defaults.
+  The dead `spendMillicents: 0` in the cloud tool-time containment check is removed.
+
+#### WS-L  Local levers in the VSIX (owner: local-levers agent)
+
+- C8 compression live: VSIX uses `catalogDesktopSemantic`. On-device hosts resolve rollout levers by a
+  stable install id bucket (not a null tenant ⇒ always off).
+- `read_compressed` tool (file path → LLMLingua-2 compressed prose; refuses code files) registered when the
+  compress capability is live. `compressProse(text, kind)` exported for WS-I.
+- `local_research` tool: a LOCAL model (hybrid local tier: bfi-node/Synapse → Ollama) reads named files /
+  search hits and answers the paid model's question. Answer cache keyed by (question, file set) and
+  invalidated by file mtimes+sizes, not TTL. Deterministic pre-search (symbol index + ripgrep) feeds its prompt.
+  Time limit returns the deterministic hits as a partial success.
+- Deterministic pre-search before turn 1: identifiers in the request → symbol index + rg → a bounded hits
+  block in the run's context pack. "Where is X defined / where is X" answered with no model call when the
+  symbol index resolves every identifier.
+- Repo map: tree-sitter (web-tree-sitter WASM; TS/JS, Python, PHP, C#, Go, Rust, Java where grammars load)
+  in the VSIX symbol index with the regex extractor as fallback; `repo_map` tool served from the local index
+  without Desktop. `rescanCodebase` refreshes the index without a model route. Watcher honours skipDirs and
+  ignores `.builderforce/`. Stop aborts ripgrep; search is smart-case.
+
+#### WS-M  Code maps (owner: memory agent)
+
+- builderforce-memory `consolidate`: the 3-file minimum applies to every run; root files map to a
+  recallable area. Package README + CHANGELOG document the `volatileTail` / `<run-state>` cache rule.
+- `projectFactsWrite`: retiring prior facts is scoped to the SAME key; merged maps carry the union of anchors.
+- Staleness: a changed anchor drops that file from the map at recall, it does not hide the whole map.
+- Area recall from request text (identifiers → symbol index → dirs, plus area-name match) in the VSIX; an
+  area-targeted codemap recall in the shared run-context source for cloud and on-prem; the Claude Agent SDK
+  (V2) runner records knowledge and writes maps.
+
+#### WS-C  Prompt cache (owner: cache agent)
+
+- OpenRouter-Anthropic history breakpoint lands on the last STABLE message including tool turns.
+- Every per-turn block (forced brief included) is `<run-state>`-tagged and last.
+- packHandoff result is memoised per run and re-packed only on overflow; drop-oldest windowing drops in
+  chunks (hysteresis) so the prefix moves rarely.
+- `getStableGrounding` is computed once per rescan. Workforce recall moves out of the system prompt.
+  Tool pins append, never evict a fixed tool mid-run.
+- The workforce recall that rides the latest user message is memoised per (agent, normalised query,
+  knowledge version token), so every tool-loop turn sends it byte-identical; the cached prefix breaks at
+  that message once per user turn (and once after an ingest bumps the token), never per tool turn.
+- A history breakpoint on a `tool` message is backed by a second one on the last stable user/assistant
+  TEXT message before it (system + tool + text = 3, within Anthropic's 4 even with a tools marker).
+- **Decision (review #13): thinking stays first-turn-only on direct Anthropic.** A thinking flip
+  invalidates only the cached MESSAGES — system and tools stay cached — and on turn 2 those messages are
+  small, so the miss is cheap; first-turn planning quality wins over holding the setting constant.
+
+#### WS-I  Context ingress (owner: ingress agent, after WS-L)
+
+- Attachments reach the model in VS Code: text attachments and "Add context" are inlined into the turn under
+  a mention budget; binaries upload through the host (`signedUploadUrl` implemented in the VS Code adapter).
+- Mention budget primitive in `@builderforce/tool-output-policy`: `mentionBudget(target: 'cloud' | 'local')`.
+- Prose attachments (.md .txt .log .rst .adoc) over `minChars` compressed via `compressProse`; code never.
+- `#file` references from the VS Code chat participant are read and inlined under the same budget.
+- Images: settings `builderforce.images.{maxEdge,jpegQuality}`; small PNGs / transparency / GIF kept as-is.
+
+#### Done checks
+
+Each stream: targeted typecheck + its own tests green (Sonnet), existing tests unchanged, no new god file
+(>400 lines), settings declared in `clients/vscode/package.json` are read, i18n for any new UI string.
+
+### Typed entity ids: LocalId (UUID) and SyncId (bigint): finished sections archived on consolidation (2026-11-18)
+
+Source: docs/design/typed-entity-ids.md lines 1–3 (header) and 134–149 (§8 Done checks). §1–§6 stay in `docs/specs/platform.md` › Design — Typed entity ids as the reference id contract; §4's server contract push and §7 are open there. The 2026-11-10 DONE.md entry "typed entity ids, Phase A (LocalId UUID / SyncId bigint)" summarizes the build; this is the done-check text.
+
+- **Verified 2026-11-18:** guard — `scripts/check-entity-id-parsing.mjs`, `scripts/lib/entityIdParsing.mjs`, allowlist `scripts/entity-id-parsing.allowlist.mjs`, run from `api/scripts/checks.manifest.mjs:24`; normaliser — `packages/local-first/src/serverMappingNormalizer.test.ts`; mapping write, numeric `syncId`, `mappingByServerId` destination — `packages/local-first/src/entityIdResolver.test.ts`, `sync.ts:99-103`; server — `api/src/infrastructure/repositories/syncEntityMappingsSyncId.pglite.test.ts` (1339 backfill, non-unique index), `api/src/application/sync/syncIds.test.ts`; `entityIdsOf` — `brain-embedded/src/toolResultRecord.ts:38`, the only reader (`serverTicketId` gone; `scripts/tests-unchanged.approved.mjs:147` records the changed test).
+
+**Typed entity ids: LocalId (UUID) and SyncId (bigint)**
+
+Status: DESIGN v2, revised after an Opus review on 2026-11-10. Owner: the session planner.
+
+#### 8. Done checks
+
+- **Guard script:** `scripts/check-entity-id-parsing.mjs` fails on a UUID regex or a `/^\d+$/`-style id parse outside `entityId.ts`. An allowlist covers the api routes that are not about sync.
+- **Normaliser** tested on a fixture with decimal, numeric, `"kind:ref"` and UUID rows. Nothing is deleted, and both fields are written.
+- **Mapping write:** written from a receipt that has `serverVersion` but no id (mirror/usage regression).
+- **Numeric `syncId`** from the transport is accepted (regression).
+- **`mappingByServerId`** honours the destination (regression).
+- **Server:**
+  - the 1339 backfill is tested;
+  - the index is non-unique;
+  - receipts carry `syncId`;
+  - readers coalesce.
+- **`entityIdsOf`** is the only reader of tool-result ids.
+- **Tests that change what they check:**
+  - these assert non-numeric server ids, so their assertions change rather than just their field names (listed in the PR): `importers.test.ts:625,638-643`, `g16ApplyContract.test.ts:58,111`, `handleSyncPull.test.ts:36`;
+  - all other sync, importer, bridge and chatIdentity tests run unchanged.
+
+## ✅ RESOLVED 2026-11-18: `main` is green again (two stale "main is red" ROADMAP entries retired)
+
+- **Was:** two entries (2026-11-08) tracked red Release runs from the 3a2c752db / ee2222212 sweeps.
+- **Now:** the Release run on b87e761b3 (2026-11-18) passes every verify job — API (type-check, guards, vitest 1–4/4), frontend (type-check, lint, guards, oracles, conformance, marketing claims), VS Code (type-check, test), kernel packages, `@seanhogg/builderforce-agents` (typecheck, test:fast) and `@webdit/torch` — and publishes. The last two failures before it were fixed by 55ea3b98e (routing tests follow the strongest-first plan policy) and b87e761b3 (the `RunPlanLimitError` English fallback and the preview-capture literal hex).
+- Retired entries, word for word:
+
+  - **Release health: main is still red after the 3a2c752db sweep.** Part 1 is in DONE.md, but the fixes are not committed yet. A Haiku re-run on 2026-11-08 found these still failing.
+  - **From the autonomous-delivery pass:**
+    - `boardLiveReads.test.ts`: 5 tests fail with "load is not a function" (mock at line 4).
+    - `censusRecordedRefusals.test.ts`: "db down" propagates.
+    - api typecheck fails in `kanbanRoutes.templateGet.test.ts`, `kanbanTemplateService.guards.test.ts`, `kanbanTemplateService.ts`, `personProfile.test.ts`, `boardBudgetRoutes.test.ts`, `onReviewerVerdict.test.ts`, `prConductSweep.ts` and `reaperChatNarration.test.ts`.
+    - frontend `root-closure`: `useKanbanTemplateCheckout.ts` and `creationListings.ts` are now reachable from the root layout.
+    - frontend `react-hooks`: `PersonProfileClient.tsx` and `useKanbanTemplateCheckout.ts`.
+  - **From cloud admission, which has no owner:**
+    - `dispatchAdmission.test.ts`: the regression "rank by admission, not by id" fails (got [11,5]).
+    - `dispatchCloudRun.admission.test.ts`: the mock is missing `resolveDefaultRepoForProject`.
+    - `handleCiEventOutcome.test.ts`: the call now carries `parkIfDeferred: true`.
+  - **Owned by other sessions, in flight:**
+    - the voice/studio tenant-scope, layering and unvalidated-body checks;
+    - `hiring_ref_salts` table adoption;
+    - the `connectorManifest` typecheck;
+    - the agent-tools `@seanhogg/builderforce-memory` subpaths `/working`, `/ingest` and `AnalyzerProgress`, which break the api, frontend and VS Code typechecks;
+    - the frontend `creationCanvasAi` and `InvestorUpdateMilestonesPreview` tests;
+    - the `KnowledgeAnalyzePanel` `'use client'` check;
+    - design-scale in PersonasClient and the security and governance panels;
+    - the silent-catch ratchets.
+  - **Canvas webview has no CI typecheck.** `VoiceMarketplaceScreen.tsx` is now only in `webview/tsconfig.canvas.json`, and that project is not in `clients/vscode` `type-check`. Adding it is a one-line change, but today it fails with 14 errors in `packages/knowledge-graph-view/src/surface/useSurface.ts`, `packages/interaction-contract/src/improvementPrompt.ts` and agent-tools knowledge.
+  - *Blocker: the user stopped this pass on 2026-11-08 before the remaining fixes and the commit, and the shared packages above are mid-change in other sessions.*
+  - **`main` is red in CI (Release run 42483919152 on 970d6b6af, 16 jobs).** The old causes in this entry (deleted `src/tui/tui.ts`, oracle drift) no longer apply. The current red came from the 3a2c752db / ee2222212 sweeps of in-progress work from many sessions. Fixed and committed locally, not yet pushed: the builderforce-memory 2026.10.59 pin and lockfile refresh (4397dbab4: agent-tools tests and the `AnalyzerProgress` type errors), and in ee2222212 the publishable-deps scan (quality, replay), `externalUrl.test.ts` and the webview canvas tsconfig. Still red and owned by the sessions working in those areas: API vitest shards and guards (hiring, voice, SOC 2, classifier), API and frontend type-check, frontend build, lint and guards, and the VS Code extension test (`knowledgeLinkedDenied` acceptance, node:sqlite in the extension host). Next: push once the in-progress reviews above land and no CI run is in flight, then re-triage what is still red.
+
 ## ✅ RESOLVED 2026-11-18: PRD 22 §3.2 — browser LoRA training runs off the interaction thread (merge of `builderforce/task-6652`)
 
 - **Was:** `AITrainingPanel` built `new WebGPUTrainer(...)` in a React callback, so tokenizer training, model construction, forward/backward and safetensors packaging all ran on the interaction thread.
@@ -13811,7 +16338,7 @@ Round-4 review of the "Stop the run" fix (below) found six gaps; all closed:
 
 ## ✅ RESOLVED 2026-10-26 — Cost-lever parity: spend less for the same work, and attachments the model can read (VSIX 2026.10.102 · api · brain-embedded · agent-tools · agent-runtime · builderforce-memory 2026.10.27–28)
 
-We audited a competitor's VS Code extension (TIP Code) against ours on 13 cost levers. None was fully present in our extension, and the audit found working features that were switched off or half-wired. All of it is now built; design and contracts are in [docs/design/cost-lever-parity.md](docs/design/cost-lever-parity.md).
+We audited a competitor's VS Code extension (TIP Code) against ours on 13 cost levers. None was fully present in our extension, and the audit found working features that were switched off or half-wired. All of it is now built; design and contracts are in "Cost-lever parity" (archived in this file, 2026-11-18).
 
 - **Attachments reach the model.** In VS Code, attachments and "Add context" arrived as a `blob:vscode-webview://` link no model could read. The host now inlines text under a mention budget (`@builderforce/tool-output-policy` `mentionBudget`: cloud 48K per file and 96K per turn, local sized to the model's window). Binaries upload through `POST /api/brain/upload` with the extension's login. `#file` references in the chat participant use the same path (`clients/vscode/src/{contextIngress,attachmentIngress,chatReferences}.ts`).
 - **Compression works in the editor.** C8 was off twice: `localCapabilities` built the Desktop capability without the compressor, and rollout levers were always off for a null on-device tenant. On-device hosts now bucket by install id (`cost-levers` `isOnDeviceCostLeverOn`). Attached prose (.md .txt .log .rst .adoc) over 2,000 chars is compressed and code never is. A new `read_compressed` tool reads prose files compressed.

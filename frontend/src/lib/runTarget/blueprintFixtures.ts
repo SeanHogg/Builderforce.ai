@@ -1,7 +1,8 @@
 /**
- * Blueprint fixtures for the run-target tests: a canvas app (Vite + Express + Postgres)
- * that runs in the browser, and a hired.video-shaped app (a wrangler Worker + a Vite
- * SPA + Neon) that must go to the container.
+ * Blueprint fixtures for the run-target tests: a canvas app (Vite + Express + Postgres),
+ * a Python app (FastAPI) and a PHP app (`php -S` + Composer) that run in the browser,
+ * and a hired.video-shaped app (a wrangler Worker + a Vite SPA + Neon) that must go to
+ * the container.
  */
 import type { AppBlueprint, AppService } from '@builderforce/creation-canvas-contract';
 
@@ -60,6 +61,43 @@ export const CANVAS_APP = blueprint({
     connectionSecretName: 'DATABASE_URL',
   },
   vars: [{ name: 'API_PREFIX', defaultValue: '/api' }, { name: 'NO_DEFAULT' }],
+});
+
+/** A Python app: a Vite frontend and a FastAPI API (uvicorn, pip requirements, a Python migration) on Postgres. */
+export const PYTHON_APP = blueprint({
+  projectId: 8,
+  services: [
+    service({ id: 'web', kind: 'vite-react', rootDir: 'web', ports: [5173], isPrimary: true }),
+    service({
+      id: 'api', kind: 'python', rootDir: 'api', installCommand: 'pip install -r requirements.txt',
+      devCommand: 'uvicorn main:app --port 8000', ports: [8000], readiness: { kind: 'http', path: '/health' },
+    }),
+  ],
+  database: {
+    engine: 'postgres',
+    migrationCommand: 'python -m alembic upgrade head',
+    seedCommand: null,
+    migrationsPath: 'api/alembic',
+    connectionSecretName: 'DATABASE_URL',
+  },
+});
+
+/** A PHP app: a Slim-style API served by `php -S` with Composer dependencies, on Postgres. */
+export const PHP_APP = blueprint({
+  projectId: 9,
+  services: [
+    service({
+      id: 'api', kind: 'php', rootDir: 'api', installCommand: 'composer install',
+      devCommand: 'php -S 0.0.0.0:8000 -t public public/index.php', ports: [8000], isPrimary: true,
+    }),
+  ],
+  database: {
+    engine: 'postgres',
+    migrationCommand: 'php migrate.php',
+    seedCommand: null,
+    migrationsPath: 'api/migrations',
+    connectionSecretName: 'DATABASE_URL',
+  },
 });
 
 /** hired.video's shape: `wrangler dev` (3 DOs, R2, KV, AI, cron) + a Vite SPA + Neon. */

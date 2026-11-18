@@ -46,7 +46,7 @@ export type EntityDestination =
 export const UNBOUND_DESTINATION: EntityDestination = { kind: 'unbound' };
 
 /**
- * Where an id lookup may look (typed-entity-ids §3):
+ * Where an id lookup may look (platform.md typed entity ids §3):
  * - an `EntityDestination` — exactly that destination. `UNBOUND_DESTINATION` is the SIGNED-OUT
  *   scope: with no account there is no tenant to narrow to, so a lookup reads unbound rows only
  *   (never another account's bound ones);
@@ -171,7 +171,7 @@ export interface JournalEvent<T = unknown> {
 }
 
 /**
- * One entity's server mapping in one destination (typed-entity-ids §4). It exists for every
+ * One entity's server mapping in one destination (platform.md typed entity ids §4). It exists for every
  * entity the server imported; `syncId` is null when the server row has no integer key (mirror
  * records, usage, tier tickets). Never guess a SyncId from an id's shape — read `syncId`.
  */

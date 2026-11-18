@@ -1,5 +1,5 @@
 /**
- * The SHARED PreFetch executors' contract (docs/design/deterministic-prefetch.md) — the
+ * The SHARED PreFetch executors' contract (DONE.md, deterministic-first PreFetch archive) — the
  * deterministic actions every surface with a workspace and a shell runs the same way:
  * the editor (VSIX) and on-prem (agent-runtime). A surface-only executor (the editor's
  * LSP diagnostics) stays with its surface.

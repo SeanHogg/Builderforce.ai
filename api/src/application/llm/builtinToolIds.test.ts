@@ -1,5 +1,5 @@
 /**
- * typed-entity-ids §5: the built-in tools read id ARGUMENTS through `idArg` (THE server-id parse),
+ * platform.md typed entity ids §5: the built-in tools read id ARGUMENTS through `idArg` (THE server-id parse),
  * keep `num()` for counts, and add `syncId` to the results that return a syncable entity.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';

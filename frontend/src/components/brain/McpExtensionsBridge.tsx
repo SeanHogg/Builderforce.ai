@@ -14,10 +14,14 @@
 
 import { useMcpExtensions } from '@/lib/brain';
 import { dispatchBrainDataChanged } from '@/lib/brain/brainDataEvent';
+import { localRuntimeToolRouter } from '@/lib/runTarget/runtimeTools/runtimeToolRoute';
 import type { McpToolResultInfo } from '@seanhogg/builderforce-brain-embedded';
 
 export function McpExtensionsBridge() {
   useMcpExtensions({
+    // The catalog's `runtime.*` tools are answered where the app runs — this tab's (or
+    // another tab's) browser run, else the server — instead of always being relayed.
+    localTools: localRuntimeToolRouter,
     // Announce successful writes so the page rendering that domain refetches live
     // (the catalog-path equivalent of the native manifest's per-cap announce).
     onToolResult: (info: McpToolResultInfo) => {

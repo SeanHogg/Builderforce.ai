@@ -1,5 +1,5 @@
 /**
- * The SHARED PreFetch registry rows (docs/design/deterministic-prefetch.md, "Initial
+ * The SHARED PreFetch registry rows (DONE.md, deterministic-first PreFetch archive, "Initial
  * action registry") — data, one row per deterministic action that runs wherever the
  * workspace and a shell are (the editor and on-prem). A row is offered only when the tool
  * it `requires` was detected (`tools.ts`); a WRITE row is always confirmed first.

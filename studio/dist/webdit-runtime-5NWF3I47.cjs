@@ -1,9 +1,9 @@
-import "./chunk-3WOPFBU3.mjs";
-import "./chunk-PAJI6YLR.mjs";
+"use strict";Object.defineProperty(exports, "__esModule", {value: true}); function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { newObj[key] = obj[key]; } } } newObj.default = obj; return newObj; } } function _nullishCoalesce(lhs, rhsFn) { if (lhs != null) { return lhs; } else { return rhsFn(); } } function _optionalChain(ops) { let lastAccessLHS = undefined; let value = ops[0]; let i = 1; while (i < ops.length) { const op = ops[i]; const fn = ops[i + 1]; i += 2; if ((op === 'optionalAccess' || op === 'optionalCall') && value == null) { return undefined; } if (op === 'access' || op === 'optionalAccess') { lastAccessLHS = value; value = fn(value); } else if (op === 'call' || op === 'optionalCall') { value = fn((...args) => value.call(lastAccessLHS, ...args)); lastAccessLHS = undefined; } } return value; } var _class;require('./chunk-YIZQISMM.cjs');
+require('./chunk-K2U2AOBX.cjs');
 
 // node_modules/.pnpm/@webdit+runtime@file+..+web_9071895a3a20f5eafecc8e05e48e76a3/node_modules/@webdit/runtime/src/bundle.ts
 async function buildMiniBundle(env) {
-  const { MiniDitRunner, MiniTextEncoderRunner, MiniVaeRunner } = await import("./runners-mini-DGJBYJ4T.mjs");
+  const { MiniDitRunner, MiniTextEncoderRunner, MiniVaeRunner } = await Promise.resolve().then(() => _interopRequireWildcard(require("./runners-mini-QKBH6KTF.cjs")));
   const { ditWeights, teWeights, vaeWeights } = await readAllShards(env);
   return {
     manifest: env.manifest,
@@ -19,7 +19,7 @@ async function buildMiniBundle(env) {
   };
 }
 async function buildTorchBundle(env) {
-  const { buildTorchRunners } = await import("./runners-torch-I5LMJLSF.mjs");
+  const { buildTorchRunners } = await Promise.resolve().then(() => _interopRequireWildcard(require("./runners-torch-YO3XQ5VI.cjs")));
   const { ditWeights, teWeights, vaeWeights } = await readAllShards(env);
   const parts = buildTorchRunners(env.manifest, ditWeights, teWeights, vaeWeights);
   return {
@@ -36,7 +36,7 @@ async function buildTorchBundle(env) {
   };
 }
 async function readAllShards(env) {
-  const { parseBundleShard: parseBundleShard2 } = await import("./shard-loader-LZMBOS3M.mjs");
+  const { parseBundleShard: parseBundleShard2 } = await Promise.resolve().then(() => _interopRequireWildcard(require("./shard-loader-KM3EJ67P.cjs")));
   const m = env.manifest;
   const read = env.readShard;
   const ditWeights = /* @__PURE__ */ new Map();
@@ -66,8 +66,8 @@ async function loadBundleFromBuffers(manifest, files) {
   return buildOrtBundleFromBuffers(manifest, files, readShard);
 }
 async function buildOrtBundleFromBuffers(manifest, files, readShard) {
-  const ort = await import("onnxruntime-web/webgpu");
-  const { OrtDitRunner, OrtTextEncoderRunner, OrtVaeRunner } = await import("./runners-ort-PHTNJDIR.mjs");
+  const ort = await Promise.resolve().then(() => _interopRequireWildcard(require("onnxruntime-web/webgpu")));
+  const { OrtDitRunner, OrtTextEncoderRunner, OrtVaeRunner } = await Promise.resolve().then(() => _interopRequireWildcard(require("./runners-ort-ZS33O7ZV.cjs")));
   const m = manifest;
   const externalDataFor = async (relPath) => {
     if (!relPath) return void 0;
@@ -115,7 +115,7 @@ async function loadHfTokenizerFromBuffers(tokenizerDir, files) {
     }
     return JSON.parse(decoder.decode(buf));
   };
-  const { PreTrainedTokenizer } = await import("@huggingface/transformers");
+  const { PreTrainedTokenizer } = await Promise.resolve().then(() => _interopRequireWildcard(require("@huggingface/transformers")));
   const tokenizerJSON = readJson("tokenizer.json");
   const tokenizerConfig = readJson("tokenizer_config.json");
   const tok = new PreTrainedTokenizer(tokenizerJSON, tokenizerConfig);
@@ -137,7 +137,7 @@ async function loadMiniTokenizer() {
   const DEFAULT_MAX = 8;
   return {
     encode(text, maxLength) {
-      const MAX = maxLength ?? DEFAULT_MAX;
+      const MAX = _nullishCoalesce(maxLength, () => ( DEFAULT_MAX));
       const ids = new BigInt64Array(MAX);
       const mask = new BigInt64Array(MAX);
       for (let i = 0; i < MAX; i++) {
@@ -150,7 +150,7 @@ async function loadMiniTokenizer() {
   };
 }
 function extractTokenIds(value, name) {
-  const candidate = value?.data ?? value;
+  const candidate = _nullishCoalesce(_optionalChain([value, 'optionalAccess', _ => _.data]), () => ( value));
   if (candidate instanceof BigInt64Array) return candidate;
   if (candidate instanceof Int32Array || candidate instanceof Int16Array || candidate instanceof Uint32Array || candidate instanceof Uint16Array || Array.isArray(candidate)) {
     const arr = candidate;
@@ -244,17 +244,17 @@ function mulberry32(seed) {
 
 // node_modules/.pnpm/@webdit+runtime@file+..+web_9071895a3a20f5eafecc8e05e48e76a3/node_modules/@webdit/runtime/src/scheduler/ddim-vpred-zsnr.ts
 var NUM_TRAIN_TIMESTEPS = 1e3;
-var DdimVPredZsnrScheduler = class {
-  alphasCumprod;
-  finalAlphaCumprod = 1;
+var DdimVPredZsnrScheduler = (_class = class {
+  
+  __init() {this.finalAlphaCumprod = 1}
   // set_alpha_to_one=true
-  timesteps;
-  constructor(steps, opts = {}) {
+  
+  constructor(steps, opts = {}) {;_class.prototype.__init.call(this);
     if (steps < 1) throw new Error(`DdimVPredZsnrScheduler: steps must be >= 1, got ${steps}`);
-    const T = opts.numTrainTimesteps ?? NUM_TRAIN_TIMESTEPS;
-    const betaStart = opts.betaStart ?? 85e-5;
-    const betaEnd = opts.betaEnd ?? 0.012;
-    const snrShiftScale = opts.snrShiftScale ?? 3;
+    const T = _nullishCoalesce(opts.numTrainTimesteps, () => ( NUM_TRAIN_TIMESTEPS));
+    const betaStart = _nullishCoalesce(opts.betaStart, () => ( 85e-5));
+    const betaEnd = _nullishCoalesce(opts.betaEnd, () => ( 0.012));
+    const snrShiftScale = _nullishCoalesce(opts.snrShiftScale, () => ( 3));
     const alphasCumprod = computeAlphasCumprod(T, betaStart, betaEnd);
     rescaleZeroTerminalSnrInPlace(alphasCumprod);
     if (snrShiftScale !== 1) {
@@ -301,7 +301,7 @@ var DdimVPredZsnrScheduler = class {
       x[i] = sqrtAlphaTPrev * predOriginalSample + predSampleDirection;
     }
   }
-};
+}, _class);
 function computeAlphasCumprod(T, betaStart, betaEnd) {
   const bStartSqrt = Math.sqrt(betaStart);
   const bEndSqrt = Math.sqrt(betaEnd);
@@ -331,7 +331,7 @@ function rescaleZeroTerminalSnrInPlace(alphasCumprod) {
 
 // node_modules/.pnpm/@webdit+runtime@file+..+web_9071895a3a20f5eafecc8e05e48e76a3/node_modules/@webdit/runtime/src/scheduler/euler.ts
 var EulerScheduler = class {
-  sigmas;
+  
   constructor(steps, sigmaMin = 2e-3, sigmaMax = 14.61, rho = 7) {
     if (steps < 1) throw new Error(`EulerScheduler: steps must be >= 1, got ${steps}`);
     this.sigmas = new Float32Array(steps + 1);
@@ -360,7 +360,7 @@ var EulerScheduler = class {
 
 // node_modules/.pnpm/@webdit+runtime@file+..+web_9071895a3a20f5eafecc8e05e48e76a3/node_modules/@webdit/runtime/src/scheduler/flow-match.ts
 var FlowMatchScheduler = class {
-  sigmas;
+  
   constructor(steps) {
     this.sigmas = new Float32Array(steps + 1);
     for (let i = 0; i <= steps; i++) {
@@ -397,13 +397,13 @@ function makeScheduler(kind, steps) {
 async function runDenoiseLoop(bundle, req) {
   const t0 = performance.now();
   const m = bundle.manifest;
-  const steps = req.steps ?? m.defaults.steps;
-  const frames = req.frames ?? m.defaults.frames;
-  const height = req.height ?? m.defaults.height;
-  const width = req.width ?? m.defaults.width;
-  const guidance = req.guidanceScale ?? m.defaults.guidanceScale;
+  const steps = _nullishCoalesce(req.steps, () => ( m.defaults.steps));
+  const frames = _nullishCoalesce(req.frames, () => ( m.defaults.frames));
+  const height = _nullishCoalesce(req.height, () => ( m.defaults.height));
+  const width = _nullishCoalesce(req.width, () => ( m.defaults.width));
+  const guidance = _nullishCoalesce(req.guidanceScale, () => ( m.defaults.guidanceScale));
   const cond = await encodeText(bundle, req.prompt);
-  const uncond = await encodeText(bundle, req.negativePrompt ?? "");
+  const uncond = await encodeText(bundle, _nullishCoalesce(req.negativePrompt, () => ( "")));
   const latent = makeNoiseLatent(m, frames, height, width, req.seed);
   const scheduler = makeScheduler(m.scheduler, steps);
   for (let i = 0; i < steps; i++) {
@@ -412,7 +412,7 @@ async function runDenoiseLoop(bundle, req) {
     const eUncond = await bundle.dit.run(latent, t, uncond);
     const guided = applyClassifierFreeGuidance(eUncond, eCond, guidance);
     scheduler.step(latent, guided, i);
-    req.onProgress?.(i + 1, steps);
+    _optionalChain([req, 'access', _2 => _2.onProgress, 'optionalCall', _3 => _3(i + 1, steps)]);
   }
   const pixels = await bundle.vae.run(latent);
   const latentT = latent.dims[2];
@@ -435,8 +435,8 @@ async function encodeText(bundle, prompt) {
   );
   return bundle.textEncoder.run(inputIds, attentionMask);
 }
-export {
-  loadBundleFromBuffers,
-  runDenoiseLoop
-};
-//# sourceMappingURL=webdit-runtime-FKOIDK7V.mjs.map
+
+
+
+exports.loadBundleFromBuffers = loadBundleFromBuffers; exports.runDenoiseLoop = runDenoiseLoop;
+//# sourceMappingURL=webdit-runtime-5NWF3I47.cjs.map

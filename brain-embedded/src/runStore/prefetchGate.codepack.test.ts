@@ -9,7 +9,7 @@ import { answerDeterministically } from './prefetchGate';
 import type { BrainRunRequest } from './runTypes';
 
 /**
- * Done-check 2 (docs/design/deterministic-prefetch.md): `/dup` settles through the code
+ * Done-check 2 (DONE.md, deterministic-first PreFetch archive): `/dup` settles through the code
  * pack — the shared executor, the analyzers' output, memory's graph findings — with no
  * model call (`skippedLlm`), an avoided-call row, and the Open-in-graph chip on its step.
  */

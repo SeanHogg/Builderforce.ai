@@ -1,5 +1,5 @@
 /**
- * `@builderforce/prefetch` — deterministic-first PreFetch (docs/design/deterministic-prefetch.md).
+ * `@builderforce/prefetch` — deterministic-first PreFetch (DONE.md, deterministic-first PreFetch archive).
  *
  * The action registry, the cheapest-tier-first confidence gate and per-action calibration.
  * Pure: a host runs actions through its `PrefetchExecutors`; brain-embedded's run

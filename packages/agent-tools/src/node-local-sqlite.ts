@@ -1,6 +1,6 @@
 /**
  * node-local-sqlite.ts — the ONE loader and opener of `node:sqlite` for every Node host (VS Code extension host,
- * on-prem agent-runtime). G03 (PRD 41 B4, design `local-first-closure-g03-g21-g23-g27.md` C5).
+ * on-prem agent-runtime). G03 (PRD 41 B4, DONE.md, Local-first closure archive, C5).
  *
  * `node:sqlite` is loaded at RUNTIME, never imported: it exists from Node 22.13 (unflagged), and a host on an older
  * Node must still start. Such a host gets {@link LocalSqliteUnavailableError}, which a caller catches.

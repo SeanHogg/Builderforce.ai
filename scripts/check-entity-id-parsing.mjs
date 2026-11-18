@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Entity-id parsing guard (docs/design/typed-entity-ids.md §8).
+ * Entity-id parsing guard (DONE.md, Typed entity ids archive §8).
  *
  * Every UUID check and every whole-string integer id parse goes through ONE primitive,
  * `packages/local-first/src/entityId.ts` (`isLocalId`, `parseSyncId`, `parseEntityRef`, `isIntegerIdText`). This fails on:

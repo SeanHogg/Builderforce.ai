@@ -1,5 +1,5 @@
 /**
- * Web local-first policy (docs/design/vsix-offline-first-architecture-review.md).
+ * Web local-first policy (docs/specs/make.md, Design — Web, Rovr, and VSIX local-first review).
  *
  * Classifies a capability as local, platform, or denied before any platform
  * call. A missing snapshot is denied. A capability the snapshot does not grant

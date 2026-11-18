@@ -34,8 +34,13 @@ describe("rankCandidates — the on-prem caller of the shared router", () => {
     );
   });
 
-  it("plan keeps the operator's order exactly", () => {
-    expect(keys(rankCandidates(chain, { routing: { role: "plan", view } }))).toEqual(keys(chain));
+  it("plan and review lead with the strongest tier", () => {
+    expect(keys(rankCandidates(chain, { routing: { role: "plan", view } }))[0]).toBe("anthropic/claude-opus-5-5");
+    expect(keys(rankCandidates(chain, { routing: { role: "review", view } }))[0]).toBe("anthropic/claude-opus-5-5");
+  });
+
+  it("chat keeps the operator's order exactly", () => {
+    expect(keys(rankCandidates(chain, { routing: { role: "chat", view } }))).toEqual(keys(chain));
   });
 
   it("keeps the operator's order when the catalog cannot tier every candidate", () => {
@@ -54,7 +59,7 @@ describe("rankCandidates — the on-prem caller of the shared router", () => {
 
   it("a balanced role ignores learned evidence — the operator's order stands", () => {
     const stats = [{ model: "anthropic/claude-sonnet-5-5", n: 50, avgScore: 0.95, avgCostMc: 10 }];
-    expect(keys(rankCandidates(chain, { routing: { role: "plan", view }, stats }))).toEqual(keys(chain));
+    expect(keys(rankCandidates(chain, { routing: { role: "chat", view }, stats }))).toEqual(keys(chain));
   });
 
   it("is always a permutation of the input", () => {

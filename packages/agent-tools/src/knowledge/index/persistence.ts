@@ -1,6 +1,6 @@
 /**
  * Where a root's knowledge index lives on the host, and how it is read and written
- * (docs/design/deterministic-knowledge-index.md, "Where it runs"):
+ * (DONE.md, deterministic knowledge index archive, "Where it runs"):
  * `<workspace>/.builderforce/knowledge/<rootId>.idx` (the id made file-safe: {@link rootFileStem}),
  * the engine's own serialized bytes.
  *

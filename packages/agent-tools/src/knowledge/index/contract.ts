@@ -1,5 +1,5 @@
 /**
- * The HOST knowledge index's contract (docs/design/deterministic-knowledge-index.md,
+ * The HOST knowledge index's contract (DONE.md, deterministic knowledge index archive,
  * "Where it runs") — what the editor and the on-prem runtime hold per reviewed root over
  * memory's deterministic engine (`@seanhogg/builderforce-memory/knowledge`):
  *

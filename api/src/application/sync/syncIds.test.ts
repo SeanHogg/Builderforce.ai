@@ -1,5 +1,5 @@
 /**
- * typed-entity-ids §4 (server, Phase B): the mapping dual-writes `server_id` text and `sync_id`;
+ * platform.md typed entity ids §4 (server, Phase B): the mapping dual-writes `server_id` text and `sync_id`;
  * receipts and pulled records carry `syncId` beside `serverId`; readers coalesce
  * `sync_id` with the parsed `server_id`; mirror / usage / step rows get no SyncId.
  */

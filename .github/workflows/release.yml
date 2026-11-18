@@ -1028,7 +1028,7 @@ jobs:
               "pnpm --dir ../packages/knowledge-graph-view run test"
               "pnpm --dir ../packages/knowledge-browser run test"
               "pnpm run check"
-          # The marketing release gate (docs/marketing/CLAIMS-PROCESS.md): the Claim-to-Proof
+          # The marketing release gate (docs/specs/reach.md › Design — Marketing claims review process): the Claim-to-Proof
           # register's evidence, freshness and catalog-key contract, and the blog locale
           # contract. The tested-wording and vendor-fact rules are guards in `pnpm run check`.
           - name: marketing claims

@@ -1,5 +1,5 @@
 /**
- * ONE gate pass over a request (docs/design/deterministic-prefetch.md, "Sequence") — the
+ * ONE gate pass over a request (DONE.md, deterministic-first PreFetch archive, "Sequence") — the
  * part every run preamble shares, whatever holds the run:
  *
  *   - classify the request against the port's registry;

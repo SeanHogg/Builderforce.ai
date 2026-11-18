@@ -1,5 +1,5 @@
 /**
- * Localized copy for the PreFetch gate (docs/design/deterministic-prefetch.md): each
+ * Localized copy for the PreFetch gate (DONE.md, deterministic-first PreFetch archive): each
  * registry row's `labelKey` (`prefetch.action.<id>` — the confirm chip, the answer row and
  * the trace say which action ran), the gate's routes (`prefetch.route.<route>`, the
  * `prefetch.decision` trace step) and the chips' own copy (`prefetch.chip.<field>` —

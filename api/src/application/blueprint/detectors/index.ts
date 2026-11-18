@@ -22,11 +22,17 @@ import { dockerfileDetector } from './dockerfileDetector';
 import { envExampleDetector } from './envExampleDetector';
 import { githubWorkflowsDetector } from './githubWorkflowsDetector';
 import { builderforceJsonDetector } from './builderforceJsonDetector';
+import { pythonDetector } from './pythonDetector';
+import { phpDetector } from './phpDetector';
 
 /** All available detectors */
 export const DETECTORS: BlueprintDetector[] = [
   wranglerDetector,
   packageJsonDetector,
+  // Language services (root or a backend folder) — before the Node ORM configs, whose
+  // `database` wins when a repo has both.
+  pythonDetector,
+  phpDetector,
   viteConfigDetector,
   nextConfigDetector,
   expoConfigDetector,

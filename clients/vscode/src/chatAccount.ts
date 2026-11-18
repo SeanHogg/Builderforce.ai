@@ -44,7 +44,7 @@ export function chatAccountDestination(): EntityDestination | undefined {
 }
 
 /**
- * The scope an id lookup runs in (typed-entity-ids §3): the active workspace's tenant ON this
+ * The scope an id lookup runs in (platform.md typed entity ids §3): the active workspace's tenant ON this
  * platform instance (a tenant id that exists on staging and prod names two accounts). A SyncId is
  * only unique per tenant, so a tool or rail lookup never resolves another account's entity.
  * Signed out there is no account: the lookup reads UNBOUND rows only, never any account's.

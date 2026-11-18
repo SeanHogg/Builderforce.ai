@@ -995,4 +995,4 @@ function buildTorchRunners(manifest, ditWeights, textEncoderWeights, vaeWeights)
 
 
 exports.TorchDitRunner = TorchDitRunner; exports.TorchTextEncoderRunner = TorchTextEncoderRunner; exports.TorchVaeRunner = TorchVaeRunner; exports.buildTorchRunners = buildTorchRunners;
-//# sourceMappingURL=runners-torch-TLPYQIRB.cjs.map
+//# sourceMappingURL=runners-torch-YO3XQ5VI.cjs.map

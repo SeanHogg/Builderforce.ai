@@ -1,5 +1,5 @@
 /**
- * Recall over a REMOTE index (docs/design/deterministic-knowledge-index.md, "Consumers") —
+ * Recall over a REMOTE index (DONE.md, deterministic knowledge index archive, "Consumers") —
  * what a browser host (web, Rovr) answers `knowledge.ask` from: it keeps no local index,
  * so a question is the platform's `search` over a reviewed root plus one hop of the
  * root's server-built graph around the hits (`graph(focus)`). The shape is the local

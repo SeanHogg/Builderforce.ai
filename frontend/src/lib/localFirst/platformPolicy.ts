@@ -1,7 +1,7 @@
 /**
  * The web app's platform policy — the explicit answer to "may this page talk to
  * BuilderForce right now?", per capability, for the local-first architecture
- * (docs/design/vsix-offline-first-architecture-review.md, G01/G02/G12).
+ * (docs/specs/make.md, Design — Web, Rovr, and VSIX local-first review, G01/G02/G12).
  *
  * The policy object is the shared `@builderforce/local-first` one. What a person
  * sees is ONE choice, the INFERENCE MODE (Local only · Hybrid · Specific), and the

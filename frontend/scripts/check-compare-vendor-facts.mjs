@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The vendor-fact rule for comparison content (docs/marketing/CLAIMS-PROCESS.md §6).
+ * The vendor-fact rule for comparison content (docs/specs/reach.md › Design — Marketing claims review process, Release gate rule 6).
  *
  * Comparison copy is criteria-first. A sentence that states a vendor-specific
  * fact — a price or currency amount, a percentage, a user/customer count, a

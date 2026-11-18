@@ -1,5 +1,5 @@
 /**
- * Application — the built-in tools' ONE id shape (docs/design/typed-entity-ids.md §5).
+ * Application — the built-in tools' ONE id shape (docs/specs/platform.md, Typed entity ids §5).
  *
  * - {@link idArg} reads an id ARGUMENT (taskId, id, parentTaskId, chatId, projectId…) through
  *   THE server-id parse, `parseSyncId`. A non-id fails with a message the model can act on,

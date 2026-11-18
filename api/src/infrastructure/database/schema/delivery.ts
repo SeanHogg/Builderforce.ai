@@ -2500,11 +2500,22 @@ export const securityIncidents = pgTable('security_incidents', {
   reportedBy:      varchar('reported_by', { length: 64 }),
   assignedTo:      varchar('assigned_to', { length: 64 }),
   sourceRef:       text('source_ref'),
+  /** Who vouches for the row (mig 1354): NULL = hand-entered or server-detected; 'client-attested' = a
+   *  browser runtime reported it (the Security Shield ingest) and the server could not verify it. */
+  attestation:     varchar('attestation', { length: 20 }),
+  /** The reporter's REDACTED evidence (mig 1354) — never passwords, tokens, cookies or full bodies. */
+  evidence:        jsonb('evidence'),
   createdAt:       timestamp('created_at').notNull().defaultNow(),
   updatedAt:       timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
-  /** One auto-opened incident per finding fingerprint (mig 1321): `source_ref = finding:<fingerprint>`. */
+  /** One auto-opened incident per finding fingerprint (mig 1321): `source_ref = finding:<fingerprint>`.
+   *  Superseded by `uq_security_incidents_platform_ref`; dropped in the contract push after 1354. */
   uniqueIndex('uq_security_incidents_finding_ref').on(t.tenantId, t.segmentId, t.sourceRef).where(sql`source_ref LIKE 'finding:%'`),
+  /** One platform-opened incident per finding / runtime-shield ref (mig 1354), registry in
+   *  application/security/findingIncidentKinds.ts. Declared `NULLS NOT DISTINCT` in SQL — drizzle
+   *  cannot express that qualifier on an index — so a NULL segment still dedupes. */
+  uniqueIndex('uq_security_incidents_platform_ref').on(t.tenantId, t.segmentId, t.sourceRef)
+    .where(sql`(source_ref LIKE 'finding:%' OR source_ref LIKE 'shield:%')`),
 ]);
 
 

@@ -37,7 +37,7 @@ Prerequisites (done **with the network up**, before the denied instance launches
 ## Egress denial (the "socket counter")
 
 Two layers, per the G27 packaged-acceptance design
-(`docs/design/local-first-closure-g03-g21-g23-g27.md`):
+(`docs/specs/make.md`, Design — Local-first closure, §3 G27):
 
 - a **loopback CONNECT recorder** the whole instance is pointed at with
   Electron's `--proxy-server` flag: every attempted egress is logged and the

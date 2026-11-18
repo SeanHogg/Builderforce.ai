@@ -18,11 +18,11 @@
 - [Agent framework registrations — legacy table contract step](#agent-framework-registrations--legacy-table-contract-step)
 - [PRD 41 — Offline understanding and the run delta](#prd-41--offline-understanding-and-the-run-delta)
 - [Design — Local-first closure: G03, G21 + G23, G27](#design--local-first-closure-g03-g21--g23-g27)
-- [Design — Web, Rovr, and VSIX local-first architecture review (residue)](#design--web-rovr-and-vsix-local-first-architecture-review-residue)
-- [PRD 38 — The knowledge graph (any directory; code and docs first)](#prd-38--the-knowledge-graph-any-directory-code-and-docs-first)
-- [PRD 43 — One 3D stage for every knowledge camera](#prd-43--one-3d-stage-for-every-knowledge-camera)
+- [Design — Web, Rovr, and VSIX local-first architecture and batch sync review](#design--web-rovr-and-vsix-local-first-architecture-and-batch-sync-review)
 - [Design — Deterministic knowledge index (LEANN-style)](#design--deterministic-knowledge-index-leann-style)
 - [Design — Deterministic-first PreFetch](#design--deterministic-first-prefetch)
+- [PRD 38 — The knowledge graph (any directory; code and docs first)](#prd-38--the-knowledge-graph-any-directory-code-and-docs-first)
+- [PRD 43 — One 3D stage for every knowledge camera](#prd-43--one-3d-stage-for-every-knowledge-camera)
 - [PRD 31 — Build, run and ship a real app on Builderforce](#prd-31--build-run-and-ship-a-real-app-on-builderforce)
 - [PRD 18 — hired.video → Builderforce.ai port (Canvas runtimes and the Studio → Canvas port)](#prd-18--hiredvideo--builderforceai-port-canvas-runtimes-and-the-studio--canvas-port)
 
@@ -518,60 +518,424 @@ The loop for every workstream: implement → verify (targeted typecheck, guards,
 
 ## Design — Local-first closure: G03, G21 + G23, G27
 
-> Consolidated 2026-11-17 from `docs/design/local-first-closure-g03-g21-g23-g27.md`. Verified against code 2026-11-17: Mostly built. §1 (G03) and §2 (G21 + G23) shipped (DONE.md 2026-11-08 entries); only §3 G27 remains.
+> Consolidated 2026-11-18 from `docs/design/local-first-closure-g03-g21-g23-g27.md`. Verified against code 2026-11-18: Mostly built. §1 (G03), §2 (G21 + G23), corrections C0–C9 and sequencing steps 1–3b shipped and are archived word for word in DONE.md ("Local-first closure: G03, G21 + G23, G27: finished sections archived on consolidation (2026-11-18)"); §3 (G27), its corrections C10–C11 and sequencing step 4 are open.
+
+This design closes three ROADMAP › Local-first entries. Sources: the [Web, Rovr, and VSIX local-first architecture review](#design--web-rovr-and-vsix-local-first-architecture-and-batch-sync-review) below and [PRD 41 §B4](../../DONE.md) (archived).
 
 ### 3. G27: one scenario, three packaged drivers, the network denied at the OS
 
-**The scenario becomes a driver port:**
-- `networkDenialScenario.ts` takes a `NetworkDenialDriver` with `boot`, `act` (create a local ticket and bind a chat), `restart`, `read`, `account` and `observed`.
-- It asserts: attempted = 0; observed platform connections = 0; the records survive a restart and present as `pending`; after a grant against the fake sync server: one push and `synced`.
-- The existing in-process use becomes one driver. There is no second scenario file.
+#### Today
 
-**Shared fake sync server.** `packages/local-first/src/acceptance/fakeSyncServer.ts` (Node `http`): serves minimal `POST /api/sync/v1/push` and `pull`, recording every request; the same process is the recording listener platform hostnames resolve to.
+- `packages/local-first/src/networkDenialScenario.ts` is already "one function for web, rovr,
+  vsix", but it runs in-process [R14].
+- `test-integration/runTests.ts` runs from source with `--disable-extensions`.
+- The VS Code self-check runs once at activation, fetches `example.com`, and is not a command [R15].
+- `fakeGateway.ts` fakes the LLM stream, not sync [R15].
+- Web production is `next-on-pages` deployed with `wrangler deploy` [R16].
+- Web has no production local record store: `bootLocalWorkManagement` is called only from tests
+  [R16].
+- There is no Rovr package job in CI [R17].
 
-**Network-account command:** `builderforce.diagnostics.networkAccount` — contributed, localized, returns `platformRequestAccount()`, shows the counts. A real diagnostic, not a test hook.
+(Re-checked 2026-11-18: all still true. The self-check, `clients/vscode/src/networkDenialSelfCheck.ts:35-36`, now probes the sync push URL as well as `example.com`; it is still not a command. The web boot module `frontend/src/lib/localFirst/workManagementBoot.ts` exists but only tests import it.)
 
-**VS Code: the packaged VSIX.** `test-integration/runTests.ts` gains a `--vsix <path>` mode: install into a fresh `--extensions-dir`, launch without `--disable-extensions` with a driver test extension, drive real commands. In CI (Linux), per correction C10:
+#### End state
+
+**The scenario becomes a driver port** [R14]:
+
+- `networkDenialScenario.ts` takes a `NetworkDenialDriver` with `boot`, `act` (create a local ticket
+  and bind a chat), `restart`, `read`, `account` and `observed`.
+- It asserts:
+  - attempted = 0;
+  - observed platform connections = 0;
+  - the records survive a restart and present as `pending`;
+  - after a grant against the fake sync server: one push and `synced`.
+- The existing in-process use becomes one driver: the unit layer the three vitest files use. There
+  is no second scenario file.
+
+**Shared fake sync server.** `packages/local-first/src/acceptance/fakeSyncServer.ts` (Node `http`):
+
+- It serves minimal `POST /api/sync/v1/push` and `pull`, recording every request.
+- The same process also acts as the recording listener that platform hostnames resolve to.
+
+**Network-account command** [R15]: `builderforce.diagnostics.networkAccount`.
+
+- It is contributed and localized, and returns `platformRequestAccount()`.
+- It shows the counts to a person who runs it.
+- It is a real diagnostic, not a test hook.
+
+**VS Code: the packaged VSIX** [R14][R15]. `test-integration/runTests.ts` gains a `--vsix <path>`
+mode (same resolver, same cache):
+
+1. Install the VSIX into a fresh `--extensions-dir`.
+2. Launch without `--disable-extensions`, with a driver test extension whose `extensionDependencies`
+   names the real extension.
+3. The driver runs the scenario through real commands (local ticket create, chat bind,
+   `diagnostics.networkAccount`).
+
+In CI (Linux):
+
 ```
-sudo unshare --net --mount -- sh -c "ip link set lo up; sysctl -w net.ipv4.ip_unprivileged_port_start=0; mount --bind $HOSTS /etc/hosts; exec sudo -u $(id -un) env PATH=$PATH HOME=$HOME xvfb-run -a $(command -v node) out-integration/runTests.cjs --vsix $VSIX"
+sudo unshare --net --mount -- sh -c 'ip link set lo up; mount --bind <hosts-file> /etc/hosts; exec sudo --preserve-env -u "$USER" xvfb-run -a node out-integration/runTests.cjs --vsix <path>'
 ```
-The TCP recorder listens on :443 and :80 inside the namespace; the grant step points at the fake sync server through the API base setting.
 
-**Rovr: the packaged zip.** A CI job `package-rovr` runs `pnpm package` and uploads the zip; Playwright `launchPersistentContext` with `--load-extension` and `--host-resolver-rules` to the recorder; the side panel opens as a tab; restart relaunches the same profile.
+- The temp hosts file resolves every platform hostname to 127.0.0.1, where the fake server records
+  connections.
+- VS Code itself is downloaded before the network is cut.
 
-**Web: the production build** (correction C11). A new localized route `/[locale]/work/local` renders with zero platform reads and boots `bootLocalWorkManagement` lazily on that route only. The driver serves `frontend-output` with `wrangler dev --local` and `frontend/wrangler.toml`; Playwright uses `--host-resolver-rules` to the recorder.
+**Rovr: the packaged zip** [R17]:
 
-**CI.** Job `offline-acceptance` needs the VSIX artifact, `package-rovr` and the frontend build; runs the three drivers; is in the `needs:` of `publish-extension` and `deploy-frontend`.
+- A CI job, `package-rovr`, runs `pnpm package` and uploads the zip.
+- Playwright `launchPersistentContext` with `--load-extension=<unzipped>` and
+  `--host-resolver-rules="MAP <platform hosts> 127.0.0.1:<recorder>"`, so the MV3 service worker's
+  requests are observed too, not only the page's.
+- The side panel opens as a tab at `chrome-extension://<id>/sidepanel.html`.
+- Restart relaunches the same profile.
+
+**Web: the production build** [R16]:
+
+- Web local work is wired first (G05 web). `bootLocalWorkManagement` is booted through the same
+  `next/dynamic` pattern as `PlatformPolicyBoot`.
+- When the platform refuses, the existing ticket-create surface writes the local record and shows
+  its presented status.
+- The driver serves the `frontend-output` artifact with `wrangler dev --local`. Playwright uses
+  `--host-resolver-rules` to the recorder, plus route recording for the page.
+
+**CI.** Job `offline-acceptance`:
+
+- It needs the VSIX artifact, `package-rovr` and the frontend build.
+- It runs the three drivers.
+- It is in the `needs:` of `publish-extension` and of `deploy-frontend` [R18].
 
 #### Done-checks (G27)
+
 - Each driver passes, and each fails on a deliberately injected platform request (a negative test).
 - The scenario file is single.
 - The CI gate is required by publish and deploy.
 
-**Remaining (verified 2026-11-17):**
-- `packages/local-first/src/networkDenialScenario.ts:26-66` has no driver port (in-process only).
-- `fakeSyncServer.ts` absent; `builderforce.diagnostics.networkAccount` not contributed in `clients/vscode/package.json`; no `--vsix` mode in `test-integration/runTests.ts`.
-- A separate VSIX Playwright harness was built instead (`qa-e2e/tests/vsix-offline-acceptance.spec.ts`, own egress recorder `qa-e2e/src/vsix-offline/egress.ts`); either adopt it as the VSIX driver of the one scenario or retire it — not both.
-- No Rovr packaged driver, no `package-rovr` job, no `/[locale]/work/local` route, no `offline-acceptance` CI job.
+#### Rev 2 approval corrections for G27 (Opus, APPROVE WITH CHANGES). These override the sections above.
+
+**C10 (G27 VS Code namespace command):**
+```
+sudo unshare --net --mount -- sh -c "ip link set lo up; sysctl -w net.ipv4.ip_unprivileged_port_start=0; mount --bind $HOSTS /etc/hosts; exec sudo -u $(id -un) env PATH=$PATH HOME=$HOME xvfb-run -a $(command -v node) out-integration/runTests.cjs --vsix $VSIX"
+```
+- The TCP recorder listens on :443 and :80 inside the namespace.
+- The grant step points at the fake sync server through the API base setting
+  (`http://127.0.0.1:<port>`), not through the hosts file.
+
+**C11 (G27 Web).**
+- A new localized route, `/[locale]/work/local`, renders with zero platform reads and boots
+  `bootLocalWorkManagement` lazily on that route only.
+- The driver serves `frontend-output` with `wrangler dev --local` and `frontend/wrangler.toml`.
+
+#### Sequencing — the open step
+
+| Step | Work | Depends on | Implementer | Review |
+|---|---|---|---|---|
+| 4 | G27 driver port, fake sync server, network command, VSIX `--vsix` mode, Rovr job + driver, Web local route + driver, CI gate | 3b | Sonnet | Sonnet |
+
+**Remaining (verified 2026-11-18):**
+- No driver port: `runNetworkDenialScenario(host: NetworkDenialHost)` (`packages/local-first/src/networkDenialScenario.ts:236-238`) still runs every host in-process; there is no `NetworkDenialDriver`.
+- No `packages/local-first/src/acceptance/` folder, so no `fakeSyncServer.ts`.
+- `builderforce.diagnostics.networkAccount` is not contributed in `clients/vscode/package.json`; `platformRequestAccount()` is read only by tests (`clients/vscode/src/deniedNetworkAcceptance.test.ts:112`, `networkDenialSelfCheck.test.ts`).
+- No `--vsix` mode: `clients/vscode/test-integration/runTests.ts:95-99` still launches with `--disable-extensions`.
+- A separate VSIX Playwright harness was built instead (`qa-e2e/tests/vsix-offline-acceptance.spec.ts`, its own egress recorder `qa-e2e/src/vsix-offline/egress.ts`, `ns-listen.mjs`). Either adopt it as the VSIX driver of the one scenario or retire it — not both.
+- No `/[locale]/work/local` route (`frontend/src/app/[locale]/work/` absent); no production caller of `frontend/src/lib/localFirst/workManagementBoot.ts`.
+- `.github/workflows/release.yml` has no `package-rovr` or `offline-acceptance` job; `publish-extension` needs only `[verify-extension, package-extension]` (`release.yml:372`) and `deploy-frontend` needs `[build-frontend, verify-frontend, verify-kernel]`.
 
 ---
 
-## Design — Web, Rovr, and VSIX local-first architecture review (residue)
+## Design — Web, Rovr, and VSIX local-first architecture and batch sync review
 
-> Consolidated 2026-11-17 from `docs/design/vsix-offline-first-architecture-review.md` (static review, 2026-10-18). Verified against code 2026-11-17: Mostly built. G01, G03, G05–G19, G21–G26 are built (VSIX durable store `clients/vscode/src/durableLocalFirstStore.ts`, sync routes `api/src/presentation/routes/syncRoutes.ts`, importers `api/src/application/sync/importers/*`, `installSyncCoordinator.ts`, `installRunRecovery.ts`). Only the residue below is open; G27 lives in the closure design above.
+> Consolidated 2026-11-18 from `docs/design/vsix-offline-first-architecture-review.md` (static review, 2026-10-18, with a follow-up status section the same day). Verified against code 2026-11-18: Mostly built. G01, G03, G06–G19, G21–G26 are built (VSIX durable store `clients/vscode/src/durableLocalFirstStore.ts`, sync routes `api/src/presentation/routes/syncRoutes.ts` at `/api/sync/v1`, named importers `api/src/application/sync/importers/*`, `installSyncCoordinator.ts`, `installRunRecovery.ts`); the 2026-10-18 baseline sections, the finished gap rows, delivery steps 1–5 and the implementation-status follow-up are archived word for word in DONE.md ("Web, Rovr, and VSIX local-first architecture and batch sync review: finished sections archived on consolidation (2026-11-18)"). Open: G02, G04 (chats across devices), G05, G20, G27, the shared offline memory scope, the residual API chatter (delivery step 6) and the acceptance gates. The recommendation and the target contracts stay here as reference.
+
+### Recommendation (reference)
+
+Inference and memory implementation scope: [Shared offline memory scope](#shared-offline-memory-scope--still-open) below. Reuse the existing `builderforce-inference` engines and `builderforce-memory` knowledge/cognition/retrieval components. Across all modalities, automatic generation prefers a compatible downloaded WebLLM model on usable WebGPU; local memory recall/cache can satisfy eligible requests first. Preserve explicit pins and workload requirements, coordinate GPU resources, and prohibit gateway fallback offline.
+
+Make **Web, Rovr, and VSIX follow the same durable local-first application pattern**, with optional account sync independent of execution. This is a requirement for all three modalities, including Web domain editing. Retain the shared Brain loop, model transports, governance decisions, and outbox primitives. Add shared domain/application contracts, host-specific transactional local stores, and one versioned server sync protocol. Merely increasing queue delays or selecting a local model cannot provide the requested behavior.
+
+Interpret “offline” as **no BuilderForce API connection**, as requested. Direct provider access, Git remotes, external MCP, and model downloads need separate capability policies; they are not automatically internet-free. A direct connected account can satisfy “no BuilderForce API” while still requiring internet. A fully disconnected run requires downloaded model assets or an installed local inference runtime. If none is available, expose setup requirements and keep the request local; never silently fall back to BuilderForce.
+
+In every modality, default to local execution with account sync disabled. Signing in establishes an identity; an explicit Connect/Enable sync action starts account synchronization. Reconnection can resume previously enabled sync automatically. Internet connectivity alone must not enable sync. Connected mode should continue executing locally and synchronize in batches; permission to use gateway inference or cloud execution is a separate choice.
+
+#### Common behavior across all modalities
+
+Every supported domain operation follows the same path: presentation submits a command → shared application use case enforces domain rules → local transaction commits records and journal events → UI reads the local projection → optional sync imports/pulls account changes. Account connectivity must not select a different persistence implementation. All three use the same event identity, ownership, conflict, deduplication, import, and recovery semantics.
+
+Host-specific capabilities remain explicit: VSIX has filesystem/Git tools, Rovr has tab/browser tools, and Web has browser workers and its available workspace tools. An unsupported capability returns a consistent capability result; it must not silently substitute a server operation. Shared architecture does not imply that every host can execute every tool.
+
+| Concern | Shared requirement | Host-specific adapter |
+|---|---|---|
+| Persistence | Durable records plus atomic journal; same repository contracts | VSIX transactional host store; Web/Rovr IndexedDB |
+| Execution | Shared application lifecycle and Brain engine; local history before network | Extension host, browser worker/page, side-panel lifecycle |
+| Network policy | API-denied default; explicit sync and inference permissions | Host fetch/socket/frame/worker transport integration |
+| Sync | One protocol/coordinator, destination binding, receipts, deltas, conflicts | VSIX process ownership; Web tab/worker lease; Rovr service-worker ownership |
+| Offline startup | Installed assets and local data survive restart | Packaged extensions; Web service-worker/app-shell cache and versioned assets |
+| Recovery | Interrupted execution is durable; unsafe actions never auto-replay | Host-specific suspension, shutdown, storage quota, and restart handling |
+
+Web needs a cached executable application shell, routes, workers, localization, and already-installed model assets, in addition to IndexedDB domain storage. Initial website delivery/installation requires connectivity; subsequent offline startup must not depend on session validation, API-backed route loaders, redirects, or platform data fetches. Distinguish static application delivery from BuilderForce API access when measuring the zero-API contract. Browser storage eviction/quota and unavailable durable storage must be visible; an in-memory fallback cannot claim durable save.
 
 ### Gaps and required changes — still open
 
-| ID | Required change | Remaining (verified 2026-11-17) |
-|---|---|---|
-| G02 | Enforce a shared platform transport policy before issuing requests, opening streams/sockets, or loading platform frames; cover the webview realm, WebSockets, `vscode` request APIs and child-process network. | Host fetch and web/Rovr policies are composed; webview-realm and socket classification not re-verified — confirm or log. |
-| G04 | Stable client ids across devices for chats. | ROADMAP "VS Code chat history doesn't follow the person" (blocked on operator decision). |
-| G05 | One ticket/project repository across hosts. | Three local ticket writers remain (`frontend/src/lib/localFirst/workManagement.ts`, `packages/local-first/src/localWork.ts`, `clients/vscode/src/localTicketRepository.ts`). |
-| G20 | Persist versioned snapshots; use local memory recall and local fact operations offline. | `clients/vscode/src/cognition.ts:13` still recalls/remembers through `bfApi`. |
+P0 blocks the requested offline contract or trustworthy synchronization. P1 is required for a complete, operable release. (Only the open rows are kept; the finished rows are in DONE.md.)
+
+| ID | Priority | Observed gap / architectural risk | Required change |
+|---|---|---|---|
+| G02 | P0 | Requests originate from host API/auth/gateway clients, platform tools, webview fetch adapters, embedded frontend clients, streams, and meeting sockets. Gating only `bfApi` misses paths. | Enforce a shared platform transport policy before issuing requests, opening streams/sockets, or loading platform frames. Wire policy into host and webview; cover custom base URLs and redirects. |
+| G04 | P0 | Server numeric IDs and positive/negative ID conventions are woven through run/UI contracts. Signed-out webview adapter even allocates positive in-memory chat IDs. | Introduce stable client entity UUIDs, independent internal run keys, and durable client-to-server mappings. Do not change a live run key when its record receives a server ID. Remap all relationships explicitly. |
+| G05 | P0 | VSIX projects/tasks/objectives/session lists are API reads with short-lived memory caches. Task status/archive/delete and other CRUD remain remote operations. | Add durable local project/ticket repositories and local views with pending changes over the last synchronized snapshot. Support local project creation and later account/project binding. |
+| G20 | P1 | Project memory/context, model pins/catalogs/analytics, limbic context, and insights still use platform reads. Fact publishing is best-effort and its latest digest is process-local. | Persist versioned snapshots; use local memory recall and local fact operations offline. Sync changed facts/outcomes in batches, with provenance and conflict handling. Move learning out of ordinary historical turn ingestion and dedupe it by completed run/policy. |
+| G27 | P1 | Offline and sync behavior lack one cross-surface acceptance contract. Static review cannot establish actual production request volume. | Add network-denial and request-budget tests plus runtime request accounting. Test packaged assets, signed-in/signed-out entry points, and long-offline recovery across all three surfaces. |
+
+**Remaining (verified 2026-11-18):**
+- **G02.** The host `fetch` gate (`clients/vscode/src/platformPolicy.ts:79`, `classifyPlatformRequest`) and the webview realm's `fetch` + `WebSocket` gate (`clients/vscode/webview/src/platformPolicy.ts`, installed at `webview/src/main.tsx:35`, tested in `webview/src/platformPolicy.test.ts:65-136`) are built, and Web (`frontend/src/components/PlatformPolicyBoot.tsx`) and Rovr (`clients/chrome/src/background/serviceWorker.ts`, `clients/chrome/src/platform/guardedFetch.ts`) compose their policies. Still unclassified: `vscode` request APIs, child-process network, and the native meeting panel's own socket (`clients/vscode/src/meetings.ts:233` opens `new WebSocket(CFG.wsUrl)` in a separate webview without the gate; today it is reached only after the gated host `bfApi.joinMeeting` call, `meetings.ts:83`). Classify each or log it.
+- **G04.** Stable client ids, mappings and the typed id rule shipped (`packages/local-first/src/entityId.ts`, [Typed entity ids](./platform.md#design--typed-entity-ids)). Open only for chats across devices: `isOwnRecord` (`packages/local-first/src/journalRules.ts:64`) filters other devices' records and `openableLocalChat` (`clients/vscode/src/sessionChats.ts:49`) does not pull the transcript. ROADMAP "VS Code chat history doesn't follow the person" (blocked on an operator decision).
+- **G05.** Local repositories and the VSIX tree (`builderforce.localWork`, `clients/vscode/package.json:103`) exist, but three local ticket writers remain: `frontend/src/lib/localFirst/workManagement.ts` (320 lines), `packages/local-first/src/localWork.ts` (156), `clients/vscode/src/localTicketRepository.ts` (232). ROADMAP "Three local ticket writers".
+- **G20.** `clients/vscode/src/cognition.ts:13` still recalls/remembers through `bfApi` (`recallProjectFacts`, `rememberProjectFact`); `brain-embedded/src/evermindMemory.ts:178,185` binds recall and answer to `/api/projects/:id/evermind/recall` and `/answer`.
+- **G27.** See [Local-first closure §3](#3-g27-one-scenario-three-packaged-drivers-the-network-denied-at-the-os) above.
 
 ### Shared offline memory scope — still open
 
-M01–M11 (builderforce-memory): storage/transaction ports and scope are partly built (`MEM/storage/{nodeFileAdapter,fileTransaction,syncJournal,ScopedFactRepository}.ts`, `MEM/memory/types.ts:39,98` `scope?: MemoryScope`). The product bindings (`clients/vscode/src/cognition.ts`, `brain-embedded/src/evermindMemory.ts`) are still server-bound; M05–M11 were not re-verified on 2026-11-17. Acceptance (memory) 5–7 stand as written in the source.
+Folded from the supplementary review `offline-inference-and-memory-scope.md` (2026-10-18, static
+review of `builderforce-inference`, `builderforce-memory` and this repo), which was then removed. Its
+inference half (WebLLM-first ranking, GPU limits, model readiness, page-engine worker, distribution)
+shipped with PRD 34 and the local-models work recorded in [DONE.md](../../DONE.md). The memory half
+below is still open. **These gaps live in the `builderforce-memory` repository** (`packages/memory`,
+`packages/memory-mcp`), plus the product bindings that call it; they are tracked in
+[ROADMAP.md](../../ROADMAP.md) › Make › Local-first ("Offline memory, in builderforce-memory").
+
+**Decision.** `builderforce-inference` owns inference engines; `builderforce-memory` owns local
+knowledge, retrieval, cognition and memory-learning primitives. No modality implements its own engine,
+fact reconciliation or retrieval. Memory and inference are integrated through narrow ports. A local
+memory hit may satisfy an eligible request without loading an LLM. Today the product integration is
+more remote-dependent than the package: VSIX `src/cognition.ts` routes recall/remember through
+`bfApi`, and `brain-embedded/src/evermindMemory.ts` binds per-turn recall to the server. Those
+bindings are replaced by shared local-memory services in every modality, with the server adapter
+kept behind sync and explicit connected features.
+
+| ID | Finding (2026-10-18) | Required scope |
+|---|---|---|
+| M03 | `MemoryEntry` has no account/tenant/project/repository/chat identity or server version; default database names are global to the origin. | Explicit scope values and partitions enforced by repositories, including personal and never-connected memory; scope preserved in snapshots and cache keys. Tags are not authorization. |
+| M04 | No sync receipts, durable operation identity, base versions, conflict exchange or deletion tombstones. | Fact operations join the common sync protocol (G15/G18); evidence and base revision preserved; concurrent evidence conflicts stay explicit, not last-write-wins. |
+| M05 | Cognition mutex/version/cache and `_writeSeq` are per instance; they cannot serialise tabs, windows, MCP processes or replicas. | Repository compare-and-set/transactions, durable revisions, locking where needed, cross-context invalidation. |
+| M07 | SemanticCache L1 is process memory; remote L2 can be hit on every use; dense vectors/index are not persisted across restart. | Persist scoped answer cache/index with knowledge, embedding, model and tokenizer versions; remote L2 off when offline; rebuild derived indexes when a version changes. |
+| M08 | Sessions fetch checkpoints/tokenizer URLs; `InferenceRouter` can pick a remote transformer bridge. | Offline asset resolver and explicit network capabilities for every memory path; no remote teacher, remote embeddings or automatic download when disconnected. |
+| M09 | Local learning/checkpoint deltas exist, but no account-wide concurrent merge semantics. | Version base checkpoint, architecture, tokenizer, training config and contribution ids; sync experiences and immutable checkpoint manifests; never average weights or apply a delta to an incompatible base. |
+| M10 | The memory package carries its own SSM/transformer router and graph facilities beside Brain's agent loop and local inference planner. | One execution owner: adapt memory hooks to the shared inference policy; no competing agent loop or fallback policy. |
+| M11 | A recalled answer is not proof a current external action happened; Brain already restricts SSM generation on tool-capable runs. | Keep that guard locally; scope cache validity by knowledge/input/tool semantics; never satisfy a requested mutation with a cached action result. |
+
+**Acceptance (memory).**
+
+5. Each modality: a downloaded compatible WebLLM model is preferred when a usable GPU exists; no GPU,
+   no assets, unfit tools or device loss produce the correct local alternative or a clear setup state;
+   no API call is attempted; explicit pins obey policy.
+6. Offline memory: remember/recall/forget and local model restoration survive restart; lexical recall
+   works without a GPU; CPU semantic recall works with installed assets; GPU memory competes safely
+   with generation; no network teacher or L2 leak.
+7. Injected crashes, transaction aborts and concurrent writes across windows and MCP processes lose
+   no acknowledged knowledge, recall nothing across scopes, resurrect no deletes, duplicate no
+   learning, apply no incompatible checkpoint and evict no unsynced fact. Product restart and
+   network-denial tests supplement the package unit tests.
+
+**Remaining (verified 2026-11-18):**
+- M01, M02 and M06 are built and archived (builderforce-memory `packages/memory/src/storage/{types,idbAdapter,nodeFileAdapter,fileTransaction,syncJournal}.ts`; `storage/factRetention.ts` evicts synced records only and purges TTL expiries through `deleteWithTombstone`).
+- Partial: M03 (`memory/types.ts` `MemoryScope`, `storage/ScopedFactRepository.ts`), M04 (tombstones and the sync journal in `storage/factMutations.ts`; fact operations do not yet join the product's `/api/sync/v1` protocol), M05 (compare-and-set with `STORAGE_CONFLICT`, `ScopedFactRepository.ts:187-201`; no cross-context invalidation), M09.
+- Open: M07 (`cache/SemanticCache.ts` L1 is still an in-process vector list with an injected remote L2), M08 (no offline asset resolver in `packages/memory/src`), M10 (the package still carries its own `agent/SSMAgent.ts` and `bridges/*`), M11.
+- Product bindings still server-bound: `clients/vscode/src/cognition.ts:13`, `brain-embedded/src/evermindMemory.ts:178,185`. Acceptance 5–7 have no product-level test.
+
+### API chatter inventory — still open
+
+These are source-defined cadences, not measured production totals. They depend on authentication, focus, running work, configuration, and error state.
+
+| Path | Current behavior | Offline-default / connected-batch target |
+|---|---|---|
+| Authentication / tenant exchange | Key probe, token exchange, refresh, workspace re-scope | Nothing offline. Authenticate once per enabled sync session; reuse valid tokens and coalesce refreshes. |
+| Connection + assigned tasks | Startup calls; recurring 15-minute timer; focus can refresh assignments | Nothing offline. Include assignments in delta sync; connection state only when a connected feature needs it. |
+| Attention | 10 seconds active, 60 seconds idle, 5 minutes background, plus focus/write refresh | Local run indicators from store; connected remote attention only when explicitly relevant. |
+| Activity | Local 60-second heartbeat capture; batches of 25 or five minutes | Local capture may continue under product policy; upload only at permitted batch sync. |
+| Brain turns / steps | Direct turn persistence plus per-chat step batching | All run writes local; background history batches independent of turn completion. |
+| Tools / gates / context / model metadata | Per-run context; approximately 60-second tool/policy freshness; assorted model reads | Offline snapshots and local tools; refresh changed manifests during sync. |
+| Sessions / trees | Session snapshot revalidates after 30 seconds when read; refreshes coalesce over two seconds | Read local projection; update it from delta sync. |
+| Insights / meetings | Streams, reconnection, WebSockets and leave requests | Explicit connected features only. |
+| Facts / outcomes / errors | Fact-by-fact publishing; outcome queue; opt-in error queue | Shared scheduling; changed records batched with domain-specific retention. |
+
+Evidence: [activation timers](../../clients/vscode/src/extension.ts), [attention](../../clients/vscode/src/attention.ts), [activity](../../clients/vscode/src/activity.ts), [gateway](../../clients/vscode/src/gateway.ts), [insights](../../clients/vscode/src/insights.ts), [meetings](../../clients/vscode/src/meetings.ts), [errors](../../clients/vscode/src/errorReporter.ts).
+
+#### Delivery sequence — the open step
+
+6. **Remove residual chatter and ship with evidence.** Eliminate redundant pollers/refreshes in default mode; add sync operations UI, export/recovery, data retention, and request budgets. Reuse existing domain and outbox tests while adding failure-injection coverage.
+
+**Remaining (verified 2026-11-18):**
+- The cadences are still the 2026-10-18 ones: attention 10 s / 60 s / 5 min (`clients/vscode/src/attention.ts:178-182`); the 15-minute connection beat and assigned-task poll (`clients/vscode/src/extension.ts:807-816`). With the platform denied they are refused at the host fetch gate rather than not scheduled, and assignments are not part of delta sync.
+- No request budget is enforced anywhere (no `requestBudget` in `clients/vscode/src`, `packages/local-first/src`).
+- Sync operations UI shipped (`clients/vscode/src/sync/syncSummary.ts`); data retention for the server journal shipped (`api/src/application/maintenance/sweptTables.ts:602-607`).
+
+### Proposed target contracts (reference)
+
+#### Mandatory consolidation constraints: DRY, DDD, SOLID, and n-layer
+
+These are acceptance requirements for the implementation, not optional cleanup. Consolidate responsibilities across the three modalities before adding another independent implementation. Share business semantics and application orchestration; retain distinct adapters where VS Code, browser storage, filesystem tools, and service-worker lifecycles differ.
+
+Use explicit bounded contexts:
+
+| Context | Owns | Boundary |
+|---|---|---|
+| Work management | Projects, tickets, hierarchy, status transitions, links, version/conflict rules | An execution references a ticket; it does not own the ticket aggregate |
+| Execution | Run lifecycle, lineage, conversation events, tool activity, checkpoints, execution provenance | Inference and tool execution are ports; recording history cannot execute a command |
+| Assurance | Audit definitions/versions, findings, evidence, report completion, remediation identity | Requests ticket creation through a work-management use case; does not manipulate its storage directly |
+| Change evidence | Run-linked change sets, repository/base references, patch/blob manifests | Evidence import cannot apply code changes or pretend to push Git commits |
+| Identity and governance | Destination bindings, offline policy snapshots, permissions, local authorization decisions | Domain policy consumes explicit identity/policy values, never reads tokens or UI selection |
+| Synchronization | Delivery receipts, mappings, dependencies, cursors, reconciliation coordination | Calls owning contexts' import use cases; does not become a second owner of every domain's rules |
+
+Treat these as logical boundaries first, not a mandate for one package, process, or service per row. Map onto existing modules and extract packages only where there is a demonstrated shared responsibility. Persistence/domain events remain versioned contracts owned by their context; do not expose database rows as public contracts or force unrelated aggregates into one generic entity shape.
+
+The dependency rules are:
+
+1. **Presentation:** React components, tree providers, native chat registration, and status UI render projections and submit application commands. They do not fetch platform data, choose sync destinations, implement retry, construct storage adapters, or decide business transitions.
+2. **Application:** Focused use cases such as StartLocalRun, ChangeTicketStatus, CompleteLocalAudit, ImportRunHistory, and SynchronizeWorkspace coordinate domain behavior and narrow ports. Share applicable use cases across modalities; keep host-only lifecycle orchestration in its adapter/composition layer.
+3. **Domain:** Pure aggregates, value objects, transition rules, audit/remediation identity, conflict rules, and domain events. No VS Code, Chrome, React, fetch, credential storage, SQL, IndexedDB, or filesystem imports. Domain events describe facts; they are distinct from transport envelopes and executable commands.
+4. **Infrastructure:** Transactional local repositories, API repositories, credential providers, inference transports, blob stores, platform connectivity guard, and host lifecycle adapters implement ports defined inward. HTTP routes translate/authenticate requests and invoke application services; they do not own reconciliation policy.
+5. **Composition roots:** Wire adapters once in VSIX activation, Rovr service-worker/panel startup, Web bootstrap, and API bootstrap. Inject dependencies; remove hidden mutable singletons that decide identity or initiate network work at import time.
+
+Application services depend on consumer-specific interfaces: a ticket repository is not a global platform client, and a history importer is not a general remote command executor. Repository implementations must preserve the same domain semantics. Expose explicit transaction/unit-of-work support for local record plus journal commits rather than relying on call order between independent adapters. Shared sync orchestration must support host ownership leases and scheduling as injected capabilities.
+
+Consolidation map:
+
+- Reuse `brain-embedded` / `packages/agent-loop` for the existing shared execution engine and model protocol. Consolidate panel/native application wiring and remove their network-versus-memory persistence split. Keep UI and host bridge roles narrow.
+- Keep `packages/local-inference` and shared model stream responsible for inference mechanics. Define inference permission/fallback policy once and supply it to all callers, including scanners and child runs. An explicit connection policy must supersede a cached route.
+- Evolve `packages/write-outbox` as a delivery primitive with a hard permission gate and appropriate durability guarantees. Put domain import, entity mappings, and conflict rules above it, not inside a generic queue. Use a host-neutral sync coordinator for the actual shared protocol.
+- Extract reusable record/journal application contracts from Rovr's local-first pattern into the shared layer. Implement VSIX and IndexedDB adapters against those contracts; do not make VSIX import Chrome application code or copy its record store.
+- Extract audit definitions, pure finding validation/fingerprints, and report completion rules from server-only orchestration where needed. Keep server authorization, persistence, and remediation dispatch behind ports. Both offline and server workflows consume the same canonical rules.
+- Replace scattered host/webview API access with injected transport adapters governed by the same platform policy. Share protocol and request semantics; preserve server authentication/authorization as the authoritative boundary.
+
+Explicitly reject these antipatterns: a global `if (offline)` scattered through features; separate ticket/audit implementations per modality; a universal repository/service with unrelated methods; a sync engine that duplicates domain transitions; a generic MCP/HTTP command replay queue; UI-owned durable records; module-load network side effects; identity taken from current UI state during replay; dual writes without an atomic journal; last-write-wins for every conflict; silent eviction of unsynced user work; cache TTL used as correctness-level deduplication; and requiring the network to confirm a successful local operation.
+
+Add focused architecture checks for prohibited dependency directions and direct platform network calls outside approved adapters. Validate shared repository contracts against both local and server adapters where their behavior overlaps. Test domain invariants and transaction/crash boundaries; do not add tests that merely mirror trivial implementation details. Migrate incrementally behind existing interfaces and remove the superseded path in each completed slice, avoiding permanent parallel implementations.
+
+Dependency direction: presentation → application use cases → domain contracts; infrastructure supplies local storage, inference, and sync transports. Both VSIX chat surfaces use one application service. Web and Rovr consume the same domain/sync contracts with their own storage/lifecycle adapters.
+
+```text
+Web UI / Rovr panel / VSIX panel-native-board
+                 |
+        local application services
+                 |
+     transactional local domain store
+       records + journal + sync receipts
+          |                    |
+   local Brain/tools     sync coordinator (opt-in)
+          |                    |
+ allowed inference       batch push + delta pull
+                               |
+                    existing account domain services
+                               |
+                  Web and Rovr account projections
+```
+
+Store at least projects, tickets and links, chats/messages, executions and lineage, tool events, local approvals, audit definitions/runs/findings, change sets, memory operations, attachment manifests, server mappings, policy snapshots, sync cursors, receipts, and conflicts. A transactional embedded database is a good VSIX candidate; validate extension-host/platform/remote-workspace packaging before choosing a driver. IndexedDB adapters fit browser hosts. Memento remains appropriate for small UI preferences.
+
+#### The batch sync wire contract
+
+The versioned batch endpoint (`POST /api/sync/v1/push`) accepts:
+
+```text
+batchId, protocolVersion, deviceId, events[]
+event = eventId, clientEntityId, entityType, operation, schemaVersion,
+        localSequence, occurredAt, baseVersion?, dependsOn[], payload
+```
+
+(Drift fixed 2026-11-18: the source called this endpoint "proposed, not existing". It exists: `SYNC_ROUTE_BASE = '/api/sync/v1'`, `api/src/presentation/routes/syncRoutes.ts:26,44,51`, mounted from `api/src/index.ts:129`.)
+
+Tenant/user permissions come from authenticated server context and are checked per entity/project. Client-supplied identifiers never grant access. Stable origin/platform/account bindings remain local and are verified before sending. Large evidence blobs use content-addressed, resumable uploads referenced by manifests; avoid embedding them in JSON history batches.
+
+Return per-event `accepted | duplicate | conflict | rejected | dependency_pending`, resulting server ID/version, and a durable receipt. The client acknowledges only committed items. Persist mappings and receipts before dropping journal entries; a crash after server commit must replay safely. Resolve client references within a batch; park dependent items rather than creating broken links. Distinguish retryable service failures from actionable permanent refusals and retain rejected user data.
+
+A companion delta pull returns changed entities, tombstones, versioned configuration/policy manifests, and an opaque cursor. Bootstrap uses bounded snapshots; expired cursors require a resnapshot merged with pending local mutations. Pull before reconciling edits to existing account records, push local operations, then catch up server-generated results. Keep concurrency checks authoritative on the server because another client may write at any time.
+
+Conflict policy should be domain-specific: immutable messages/events append with dedupe; independent fields may merge under defined rules; competing ticket status/assignment/description edits surface a conflict; deletes use tombstones; audit findings preserve source evidence and shared remediation fingerprints. Never overwrite newer account state by replaying a stale full object. Reuse existing audit remediation identity logic so local tickets and server-created remediations do not duplicate one another.
+
+Suggested connected sync cadence: a configurable coarse interval plus run-completion debounce, byte/item thresholds, reconnect, and Sync now. Coalesce these triggers into one session. At 15-minute cadence an eight-hour connected session has roughly 32 scheduled opportunities, compared with roughly 480 idle attention polls at a one-minute cadence; neither figure includes paging, authentication, work, or errors. Optimize measured requests, rows, and bytes, not just timer counts. Do not generate empty sync traffic when neither backlog nor an explicitly enabled remote refresh requires it.
+
+#### Standing decisions and caveats (from the 2026-10-18 follow-up)
+
+- **FNV-1a payload hash.** `hashSyncPayload` is a non-cryptographic identity check shared with the client. It detects accidental replay differences, not a hostile payload swap. Do not treat it as an integrity proof. (Still true: `api/src/domain/sync/syncProtocol.ts:60-72`.)
+- ~~Who may bind a destination the first time — any signed-in member, or an admin?~~ **Decided 2026-10-19:** any tenant member with write access to the project (tenant role `developer` or above) may bind it on first push; reading (pull) needs any membership. The tenant is always taken from auth, and a `projectId` must be the tenant's project before the destination key is built. One named policy, `mayBindSyncDestination` in `api/src/application/sync/syncDestination.ts`, so it can be tightened to admins in one place. (Still true: `syncDestination.ts:40`.)
+
+### Acceptance gates — still open
+
+- Run the same repository, application-use-case, sync, ownership, conflict, and historical-import contract suites against Web, Rovr, and VSIX adapters. Each modality must pass local create/edit/read/restart/sync scenarios for its supported capabilities; Web is not exempt from durable offline domain editing.
+- After Web installation/asset caching, disable network and reopen the application: the real working shell, local records, supported tools, and installed inference assets load without API-dependent bootstrapping. Test browser storage loss/full/unavailable states and multiple-tab ownership. Apply equivalent restart/suspension scenarios to Rovr and VSIX.
+- Fresh packaged VSIX with no account starts a supported local-model run, creates/edits tickets, runs a supported audit, records changes, restarts, and retains complete history. Offline mode makes zero attempted BuilderForce requests, including on startup, focus, errors, retries, token expiry, explicit queue flush, shutdown, and reconnect.
+- A signed-in VSIX in offline mode has the same zero-request property. A missing model, closed WebGPU panel, failed direct credential, cloud pin, child run, scanner, or model failover cannot trigger gateway use. No-model setup explains the missing prerequisite locally.
+- Offline policy also covers embedded project/canvas/Evermind pages, uploads, streams/sockets, diagnostics, auth probes, and configured custom gateways. Direct provider/Git/MCP access follows its separately declared policy.
+- Kill the host after local commit, between record and queue work, during upload, after server commit but before acknowledgement, and during local receipt persistence. User work survives; external commands and mutations are not executed twice.
+- Accumulate more than 1,000 events and remain disconnected longer than 24 hours. No unsynced domain record is evicted; later retry produces one server entity/effect per event. Storage-full and corruption failures are visible and exportable.
+- Start work under A, switch to B, change project, sign out/restart, and enable sync. Records/mappings remain bound to A. Never-connected records require a chosen account/project destination. Test distinct accounts in the same tenant and distinct API installations.
+- Web edits a ticket while VSIX edits it offline; sync preserves both changes or reports a resolvable conflict. Cover parent/child tickets, chat links, deletes, archived records, removed membership, policy expiry, and dependency failures.
+- Import a completed run/audit: it appears across Web/Rovr/VSIX with original timing/provenance, one set of findings/remediations, and no new agent execution, shell command, cloud audit, stale mention notification, or duplicate learning.
+- Parallel windows/tabs/workers cannot lose pending mutations or double-process receipts. Test remote extension hosts, multi-root repositories, browser suspension, cursor expiry, resnapshot, client/schema version skew, oversized evidence, and resumable uploads.
+- Measure an authenticated idle editor, active local run, long-offline catch-up, and connected mixed-surface work. Report attempted requests by category, bytes, retries, and server writes; enforce agreed budgets. Do not infer these metrics from source comments.
+
+**Remaining (verified 2026-11-18):**
+- Unit and in-process acceptance layers exist per host (`clients/vscode/src/deniedNetworkAcceptance.test.ts` (mocks `vscode`), `clients/chrome/src/platform/deniedNetworkAcceptance.test.ts`, `frontend/src/lib/localFirst/deniedNetworkAcceptance.test.ts`, `packages/local-first/src/networkDenialScenario.ts`), plus the separate packaged-VSIX harness `qa-e2e/tests/vsix-offline-acceptance.spec.ts`, which no CI job runs.
+- None of the gates above runs against a packaged artifact in CI; that is the G27 work in [Local-first closure §3](#3-g27-one-scenario-three-packaged-drivers-the-network-denied-at-the-os).
+- No request-budget measurement exists (last gate).
+
+---
+
+## Design — Deterministic knowledge index (LEANN-style)
+
+> Consolidated 2026-11-18 from `docs/design/deterministic-knowledge-index.md`. Verified against code 2026-11-18: Shipped except the items below. Lines 1–225 were archived word for word on 2026-11-17 ("Design: deterministic knowledge index — finished sections archived on consolidation"); done-checks 1, 2, 3, 5, 7, 8, the workstreams and the open decisions are archived on 2026-11-18 ("Deterministic knowledge index (LEANN-style): finished sections archived on consolidation (2026-11-18)").
+
+### Consumers — memory recall
+
+- **Memory recall.** `memory_recall` with a project or root scope, and `answerFromMemory`,
+  consult the index with expansion before text recall.
+
+**Remaining (verified 2026-11-18):**
+- The `knowledge.ask` gate row runs ahead of `answerFromMemory` (`brain-embedded/src/runStore/runMemory.ts:105-107`), but builderforce-memory `packages/memory-mcp/src` never touches the knowledge index (0 hits for "knowledge"), so the `memory_recall` tool does not consult it. ROADMAP "`memory_recall` ignores the knowledge index".
+
+### Done-checks — remaining
+
+4. **Fast:** p50 ≤ 20 ms and p95 ≤ 60 ms on 50k cards, measured on CPU with the warm
+   embedder cache. The exact tier answers in under 1 ms.
+6. **Better:**
+   - On code, recall@10 on a labelled set mined from our own runs (the files actually
+     opened after a question) beats today's ripgrep + definition preSearch.
+   - On docs, recall@10 with `expand` beats recall@10 without it on a fixture of linked
+     specs.
+   - Prefetch shows fewer exploration turns on the savings ledger.
+
+**Remaining (verified 2026-11-18):**
+- No 50k-card benchmark and no p50/p95 assertion in builderforce-memory `packages/memory/tests/` (`knowledge-index.{test,determinism.test,exact.test}.ts` cover determinism, lean mode (`determinism.test.ts:72`), exact mode (`exact.test.ts:45`) and storage).
+- No labelled code recall set and no expand-vs-none docs fixture; no exploration-turn comparison on the savings ledger. ROADMAP "The knowledge index's speed and recall are unproven".
+
+### Open decision 2 follow-up
+
+2. **Desktop `bf-index`.**
+   - Option (a), proposed: in this program, it gets the shared comparator and its search
+     stays brute force; full parity is a follow-up register entry.
+   - Option (b): port the graph index to Rust now.
+
+Option (a) was taken; the follow-up is open.
+
+**Remaining (verified 2026-11-18):**
+- `builderforce-inference/crates/bf-index/src/index.rs:296-303` has the shared comparator (quantized score desc, then path, then id); `vector_candidates` is still a brute-force scan over every cached vector. ROADMAP "Desktop `bf-index` search is still brute force".
+
+---
+
+## Design — Deterministic-first PreFetch
+
+> Consolidated 2026-11-18 from `docs/design/deterministic-prefetch.md`. Verified against code 2026-11-18: Shipped except two measurements. Lines 1–144 were archived word for word on 2026-11-17 ("Design: deterministic-first PreFetch — finished sections archived on consolidation"); done-checks 1–4, 7 and 8 are archived on 2026-11-18 ("Deterministic-first PreFetch: finished sections archived on consolidation (2026-11-18)").
+
+### Done-checks — remaining (PreFetch)
+
+5. PREFETCH output appears only in the volatile tail; the cache-hit probe stays at ≥ 90%
+   on turn 2.
+6. The gate adds ≤ 30 ms p50 when tier 3 is skipped and ≤ 300 ms p95 with tier 3.
+
+**Remaining (verified 2026-11-18):**
+- Check 5, first half, is met: `brain-embedded/src/runStore/prefetchGate.test.ts:57` ("PREFETCH output goes to the volatile tail, not the transcript"). The turn-2 cache-hit probe is missing: no test in `packages/prefetch/src` or `brain-embedded/src/runStore/prefetchGate*.test.ts` measures it.
+- Check 6: no latency measurement (`p50` / `p95` appear nowhere in `packages/prefetch/src`).
 
 ---
 
@@ -755,53 +1119,6 @@ Wire `moduleAliasesDigest()` as the caller `extractorKey` (memory ≥ 2026.10.72
 ### Deferred to the editing PRD (not built here)
 
 The `stage/store.ts` edit model, delta-driven incremental layout, and the gesture → edit → reconcile pipeline. The slot-patch API (B3, B7) is what that PRD builds on.
-
----
-
-## Design — Deterministic knowledge index (LEANN-style)
-
-> Consolidated 2026-11-17 from `docs/design/deterministic-knowledge-index.md`. Verified against code 2026-11-17: Shipped except the items below. Finished sections are archived in DONE.md.
-
-### Consumers — memory recall
-
-`memory_recall` with a project or root scope, and `answerFromMemory`, consult the index with expansion before text recall.
-
-**Remaining (verified 2026-11-17):**
-- The `knowledge.ask` gate row runs ahead of `answerFromMemory` (`brain-embedded/src/runStore/runMemory.ts:105-107`), but builderforce-memory `packages/memory-mcp/src` never touches the knowledge index (0 hits), so the `memory_recall` tool does not consult it.
-
-### Done-checks — remaining
-
-4. **Fast:** p50 ≤ 20 ms and p95 ≤ 60 ms on 50k cards, measured on CPU with the warm embedder cache. The exact tier answers in under 1 ms.
-6. **Better:**
-   - On code, recall@10 on a labelled set mined from our own runs (the files actually opened after a question) beats today's ripgrep + definition preSearch.
-   - On docs, recall@10 with `expand` beats recall@10 without it on a fixture of linked specs.
-   - Prefetch shows fewer exploration turns on the savings ledger.
-
-**Remaining (verified 2026-11-17):**
-- No 50k-card benchmark in builderforce-memory `packages/memory/tests/` (`knowledge-index.*.test.ts` cover determinism, lean, storage, exact mode).
-- No labelled-set or expand-vs-none recall fixture.
-
-### Open decision 2 follow-up
-
-Desktop `bf-index` got the shared comparator only (option a); full graph-index parity in Rust is "a follow-up register entry".
-
-**Remaining (verified 2026-11-17):**
-- `builderforce-inference/crates/bf-index/src/index.rs:296` has the comparator; search is still brute force, and no ROADMAP entry exists for the parity follow-up.
-
----
-
-## Design — Deterministic-first PreFetch
-
-> Consolidated 2026-11-17 from `docs/design/deterministic-prefetch.md`. Verified against code 2026-11-17: Shipped except two measurements. Finished sections are archived in DONE.md.
-
-### Done-checks — remaining
-
-5. PREFETCH output appears only in the volatile tail; the cache-hit probe stays at ≥ 90% on turn 2.
-6. The gate adds ≤ 30 ms p50 when tier 3 is skipped and ≤ 300 ms p95 with tier 3.
-
-**Remaining (verified 2026-11-17):**
-- No cache-hit probe test found in `packages/prefetch/src` or `brain-embedded/src/runStore/prefetchGate*.test.ts`.
-- No latency measurement: `rg "p50|p95" packages/prefetch/src` → 0.
 
 ---
 
@@ -997,12 +1314,93 @@ W1 runs the app in a cloud container. W9 runs the **same blueprint** in the user
 **Engineering targets (re-base on Phase 0 numbers):** each added service < 500 ms beyond its own boot; warm database < 1 s; API→database round trip < 10 ms; cooperative shutdown < 1 s; no database/runtime work on the main thread; zero regressions in the existing suite (`run()`, `bfsh`, installs, Vite/React/Vue/Svelte/Next, HTTP/WS/streaming, cookies, relay mode, ZIP export/import, WASI); durability defaults to normal flush, relaxed is opt-in and documented.
 
 **Remaining (re-verified 2026-11-18, after merging `builderforce/task-6652`):**
-- Phases 0–4 shipped in builderforce-webcontainers **v2026.11.1** (flat-cost spawns + journal with a phase 0–1 report; `./app` application runtime; virtual TCP; PGlite on the host origin behind a Postgres wire gateway, multi-tab owner + followers; unmodified `pg` + Drizzle verified). Phase 6a (Python on Pyodide, ASGI/WSGI, `pg8000` over virtual TCP) shipped in **v2026.11.2**.
+- Phases 0–4 shipped in builderforce-webcontainers **v2026.11.1** (flat-cost spawns + journal with a phase 0–1 report; `./app` application runtime; virtual TCP; PGlite on the host origin behind a Postgres wire gateway, multi-tab owner + followers; unmodified `pg` + Drizzle verified). Phase 6a (Python on Pyodide, ASGI/WSGI, `pg8000` over virtual TCP) shipped in **v2026.11.2**. Phase 6b (PHP on php-wasm: `php -S` request-driven, Composer pure-PHP installs, PDO pgsql (`Bfwc\Pgsql\PDO`) over virtual TCP, shared interpreter worker) shipped in **v2026.11.3**.
+- Python and PHP are wired into Builderforce's browser run target (webcontainers **^2026.11.3** in api/frontend/studio): blueprint kinds `python`/`php` (dev port 8000) in `creation-canvas-contract`; `blueprintToApplicationSpec` puts a service, its install and its migration on the runtime that owns the command (the runtime's own `isPythonCommand`/`isPhpCommand`; a shelled line stays on node, whose shell hands the child over); `BROWSER_RUNTIMES` gains `acceptsPythonService`/`acceptsPhpService`, re-judged on the loaded project files at start — before the current run is disposed or the shared runtime is booted — so a native-only wheel or a missing PHP extension is declined by name before anything starts (PHP judged against the PHP `PREVIEW_PHP_OPTIONS` boots; a shelled `pip …`/`composer …` line judged by its own runtime too); `browserRunTarget` registers `createPythonProvider` and `createPhpProvider` (`platform: runtime.phpPlatform`, the same `PREVIEW_PHP_OPTIONS` the runtime boots with); the API serves `python-worker.js`/`php-worker.js` beside `process-worker.js` on the preview origin (no CSP there, so Pyodide/php-wasm/Packagist/GitHub/jsDelivr need no allow-list). The API's `pythonDetector` (requirements.txt / pyproject / Pipfile) and `phpDetector` (composer.json) write `kind: 'python'`/`'php'` at the repo root and in `api/`/`backend/`/`server/`; a root holding both a `package.json` and a language manifest (Laravel + Vite) gets one install per runtime. Open: the FastAPI and Slim CRUD browser exit tests are not recorded; .NET (6c) and Rust (6d) are not released.
 - Phase 5: the code is in — `frontend/src/lib/runTarget/**` (the `RunTarget` port, registry, browser + container adapters, blueprint → `ApplicationSpec`, `runtime.*` tool router) and `LivePreviewPanel`/`useLivePreview` read the active target. Open: the exit test (Vite + Express + Postgres canvas app on a free tenant, agent hot-reload, `preview_screenshot`) is not recorded, and D7 free-plan gating is undecided.
-- Phases 6b (PHP), 6c (.NET), 6d (Rust): not started.
+- Phases 6c (.NET), 6d (Rust): not released.
 - Phase 7: the engine (`@webdit/torch` autograd + WebGPU backend + kernel registry), the Python `torch`/`peft` surface over `@webdit/torch/pyodide`, and the browser trainer on the engine in a worker are on main (PRD 22 §3.2 closed). Open: no blueprint service of `kind: 'training'` runs a Python entry point under the application runtime yet (only the `ServiceType` exists, `builderforce-webcontainers/packages/core/src/app/spec.ts:10`), so the "train in Python in the WebContainer → adapter loads for inference" exit test is not recorded.
 
-### §4.7 MCP tool surface (spans W1–W9)
+### §4 W10: Security Shield (mandatory protection for every browser-run app)
+
+*Added 2026-11-18 from the "BuilderForce Security Shield — Technical Architecture & Implementation Plan" (protect mode, ingress + runtime monitoring), aligned against the builderforce-webcontainers runtime at v2026.11.3 and reviewed the same day. W9 runs the user's app in the browser; W10 makes everything that runtime executes protected by default — Node, Python, PHP and, once shipped, .NET — with no manifest switch to turn it off. The container tier (W1) keeps its own boundary: the non-root container + egress allowlist of make.md › PRD 09 G1. The concrete gap inventory from the audit and review (paths, evidence) is tracked out of source control in `SECURITY-FINDINGS.local.md`; this section states the controls that close it.*
+
+**Objective.** Inspect every entry point, monitor activity inside the app, correlate across both, and stop high-confidence attacks with explainable deterministic rules — without breaking legitimate developer traffic (apps that legitimately send SQL, HTML, JS and shell-like text).
+
+**Principles (binding).**
+1. **Mandatory** — an app cannot disable or bypass the shield through its spec or `builderforce.json`; it may only tighten it.
+2. **Enforce on the trusted side.** Process Workers and preview documents run the app's code, so nothing inside them (in-worker `fetch`/`http` hooks, `servedPorts`, env vars such as `BUILDERFORCE_SERVICE`, Postgres `application_name`) is a security boundary — at most it is telemetry. Enforcement lives on the page/host side (`ProcessHost`, `PortRegistry`, `ConnectionRelay`, FsSync, the database host), in the service worker for routing, and in the browser itself (origins, CSP).
+3. **Identity is assigned, never claimed.** Every process gets an (application, service, process) identity minted by the runtime at spawn and kept on the page-side process record; children inherit their parent's identity on the page side; processes started outside an application (terminal, `npm install`, instant preview) carry a `workspace` identity — never `platform`, which is reserved for the host's own calls.
+4. **Shared engine, isolated state** — one security engine per runtime host; per-application counters, policies, events and incidents.
+5. **Deterministic enforcement; behaviour is evidence.** Known signatures, protocol violations and boundary violations block; behavioural signals raise risk and throttle, never block on their own. No LLM in the request path (LLM explanation of incidents is deferred).
+6. **Fail closed at entry points, fail open on telemetry.** A dead enforcement engine holds or rejects protected traffic — never a silent allow-all; a dead event store never disables enforcement. Enforcement health and telemetry health are reported separately.
+7. **Ports, not a parallel stack.** `@seanhogg/builderforce-webcontainers` stays independent of Builderforce: policy comes in through a policy port, events leave through a `SecurityEventSink` port, and the runtime emits reason codes only. Builderforce's adapter maps them to localized copy and to the platform's existing security records — no new incident store or dashboard.
+8. **No god module.** The policy engine is an injected collaborator of `ProcessHost` (the existing `ConnectionRelay` / `ChildRelay` pattern), not inline checks in it; bounded event buffers reuse the runtime's existing ring buffer.
+
+**Trusted chokepoints** (where each flow is decided):
+
+| Flow | Decided at |
+|---|---|
+| Preview HTTP and WebSocket ingress | The service-worker router (routing, client binding) and `PortRegistry.request` / `ProcessHost.upgrade` (inspection) — the worker-side `servedPorts` endpoint is never trusted |
+| In-runtime HTTP between services | `PortRegistry.request` (loopback never reaches the service worker, so it must be decided here) |
+| Host API (`runtime.request`, `listenTcp`, `connect`) | The same decision functions, with the caller's identity |
+| Virtual TCP between services | `ConnectionRelay.dial` → `PortRegistry.connect`, against port ownership and the app's service graph |
+| Database | The gateway on the host origin (authentication, database ownership, protocol-aware statement policy) |
+| Egress (process Workers and preview documents) | The browser: CSP on every worker script and on every routed preview response |
+| Processes | `ProcessHost.spawnChild` / `ChildRelay` / `WorkerSupply` (quotas, attribution) |
+| Filesystem | FsSync on the page side (per-app snapshot and broadcast scope, protected paths, journal-driven detection) |
+| Lifecycle | `startPreviewRuntime` (shield start) and `startApplicationRuntime` / `superviseService` (identity, mandatory readiness) |
+
+**Controls the shield must enforce** (each gets a failing fixture in Phase 0 and goes green in the phase named):
+1. **Origin separation (P2).** Preview documents are served from an origin distinct from the relay frame and the process Workers (e.g. a per-preview subdomain); if that cannot ship first, the preview iframe drops `allow-same-origin`. Relay mode isolates apps from the host, not from each other — origin separation does that.
+2. **Service-worker routing integrity (P2).** The service worker accepts attach/re-attach only from the relay client it registered, with a fresh per-attach nonce, and binds each preview id to the client that attached it; every routed request is checked against that binding.
+3. **Ingress inspection on every path (P2).** Preview HTTP, WebSocket upgrades, in-runtime loopback HTTP and the host API all pass the same decision: normalisation, protocol and size validation (a request-body limit), bounded inspection, OWASP-CRS-derived signatures, per-app and per-source rate limits.
+4. **Port ownership and the service graph (P3).** `PortRegistry.listen` records the owning (app, service); `dial` and `request` are allowed only along the app's declared `dependsOn` edges (or to its own ports).
+5. **Authenticated database (P3).** The gateway authenticates every connection (cleartext or SCRAM over the virtual socket) with per-service credentials the runtime generates; it refuses a database name the app does not own (PGlite has one database, so "own" is the spec's name, not a namespace) and connections from services the graph does not allow. Frontend services never receive credentials.
+6. **Egress CSP (P4).** Worker scripts are served with `default-src`, `script-src`, `worker-src` and `connect-src` allowlists — `connect-src` alone does not cover `importScripts`, dynamic `import()` or nested Workers. Own-origin `/__bfwc/` paths are excluded from `'self'` so a Worker cannot re-enter the service worker as if it were preview ingress. Because policy is per app, worker URLs carry a signed policy id, cache keys vary by policy, and warm spares are keyed by policy (a spare created before the app is known gets the most restrictive policy). Violations are reported through the CSP `report-to` endpoint on the API — never trusted from inside the Worker. The default allowlist is read-only hosts the runtimes and installers need (npm registry, Pyodide/PyPI wheel hosts, php-wasm, Packagist, codeload/raw GitHub, jsDelivr) plus the app's declared external APIs; write-capable APIs are never default. Preview documents get an equivalent CSP stamped by the service worker on every routed response. `blob:`/`data:` Workers inherit their creator's policy (CSP3); Safari behaviour is proven by a Phase 0 fixture.
+7. **Origin storage and channels (P4).** The shared package cache moves to the page (host) side, or every entry is keyed and verified by the registry's `dist.integrity` before use, so one project cannot poison another's install. `BroadcastChannel`, IndexedDB, OPFS and Cache Storage on the process/preview origin are not shared across apps or projects (partitioned names, or not exposed to app code).
+8. **VFS confidentiality and integrity (P4).** A process's snapshot and its `fs` broadcasts are scoped to its app's subtree plus read-only shared dependencies; writes outside the subtree are refused when the journal is applied; platform paths (`/.bfwc/**`, runtime files) are read-only to apps; generated credentials never land in a file another app can read.
+9. **Process quotas and attribution (P4).** Per-app spawn count and depth quotas in `spawnChild`; every child, `detached` included, stays attributed to its app, so stopping or quarantining the app terminates the whole attributed set; restart loops beyond `restartPolicy` suspend the service.
+10. **Relay mode required (P4).** Protect mode refuses to start apps in same-origin mode (processes there share the host origin and the database's tab channel); it is not merely "degraded".
+
+**Design decisions on the proposal** (✅ adopted, ✏️ changed):
+
+| # | Proposal | Decision |
+|---|---|---|
+| 1 | ✅ Data plane / intelligence plane / control plane, in `core/src/security/**` and `browser/src/security/**`. | Adopted as module boundaries behind a `./security` subpath (like `./app`). No AI dependency in the runtime. |
+| 2 | ✏️ Intercept in `servedPorts.ts`, `workerSupply.ts`, `interpreterProcess.ts`. | **Changed:** those run inside, or hand out, untrusted Workers. Decisions are taken at the chokepoints above; worker-side hooks emit telemetry only. |
+| 3 | ✏️ A dedicated Security Worker inspects every request. | **Split:** cheap deterministic checks (identity, ownership, size/framing, rate counters) run synchronously on the page side in the request path; bounded-payload signature inspection runs in the shared Security Worker over typed messages with transferable, bounded buffers, backpressure, timeouts and versioned policy snapshots. An analyzer timeout applies the deterministic result; it never waits unbounded and never defaults to allow. |
+| 4 | ✏️ The shield starts with `startApplicationRuntime()`. | **Changed:** the chokepoints belong to the `PreviewRuntime`, which the terminal, `npm install` and instant preview share without starting an application. The shield starts in `startPreviewRuntime`; `startApplicationRuntime` mints app identities and will not start a service until enforcement health is `ok`. Identity rides a new field on the provider start context and the spawn API that app code cannot set; the readiness probe carries one too. |
+| 5 | ✏️ "Cross-tenant" isolation of VFS and database. | **Reframed:** each project already runs in its own runtime with per-(project, database) storage keys and Web Locks, but a browser profile shares the preview origin's storage across projects, and apps on one runtime share the VFS, ports and database. Controls 1, 4, 5, 7 and 8 are the isolation W10 adds. |
+| 6 | ✅ PostgreSQL inspection understands the wire protocol. | Adopted on the existing gateway frame reader: authentication, database ownership, statement classification of `Query`/`Parse`, per-service rate and transaction-duration limits — without breaking framing or transaction semantics. |
+| 7 | ✅ Resource monitoring with enforceable quotas, not fake precision. | Adopted: spawn/byte/connection/request quotas from the runtime's own counters; Worker CPU/memory reported only where the browser measures them. |
+| 8 | ✅ Risk score 0–100 for prioritisation; signatures and boundary violations enforced regardless of score. | Adopted. Thresholds start in **observe** and are calibrated on the test corpus before protect enforces them. |
+| 9 | ✏️ Persistent event store, incident store and a four-view dashboard. | **Changed (DRY):** bounded in-memory buffers + an IndexedDB event ring on the host origin (redacted evidence only — never passwords, tokens, cookies or full bodies). Incidents leave through `SecurityEventSink`; Builderforce forwards them to `security_incidents` (`detection_source = 'runtime-shield'`) through a dedicated ingest route that is authenticated, rate-limited and records the event as **client-attested**. Only quarantines and signature blocks above a severity floor open incidents (a probe does not). Dedup needs a migration: the unique partial index on `(tenant_id, segment_id, source_ref)` today covers only `finding:%` refs and `segment_id` is nullable, so it is widened to `shield:%` with a non-null key. The finding-kind seam in `criticalFindingIncidents.ts` (also needed by run.md › PRD 08) is built, not assumed. The PRD 39 §4a SIEM export then ships them. App security shows in `LivePreviewPanel`'s service status (enforcement health, held services, last blocks) and the existing security/incident surfaces; the service-communication map is an addition to the run panel. |
+| 10 | ✏️ Multi-tab: one coordinator for shared security state. | **Changed:** each tab has its own runtime, so **every tab enforces locally** — no other tab sits on a request path. Only persisted state (events, incidents, policy versions) is written through one owner per app, using a dedicated per-app Web Lock (the database lock does not exist for in-memory databases). |
+| 11 | ✅ Modes `observe` / `protect` / `strict`. | Adopted. Protect is the default; an app may only tighten (strict). Observe exists for calibration and is platform-set, never app-set. |
+
+**Contract** (`@seanhogg/builderforce-webcontainers/security`): `SecurityContext { applicationId, serviceId, processId?, requestId?, connectionId? }` (filled by the runtime), `SecurityEvent` (category `ingress | network | process | filesystem | database | resource`, rule id, severity, redacted evidence, reason code), `SecurityDecision { action: allow | monitor | throttle | reject | quarantine, riskScore, confidence, reasonCodes, policyVersion }`. `startPreviewRuntime({ security: { policy, sink } })`; `runtime.security()` returns `health()` (enforcement + telemetry), `events()` (a bounded `ReadableStream`), `incidents()` and `onDecision(cb)`; `app.security()` scopes the same to one application.
+
+**Phases** (each has an automated exit test; latency re-based on the W9 Phase-0 harness):
+
+| Phase | Contents | Exit condition |
+|---|---|---|
+| 0 | Turn every item in the gap inventory into a failing fixture, including the browser-specific ones (CSP inheritance for `blob:` workers, Safari); record baseline latency for HTTP, WS, dial and the gateway. | One red test per gap; baseline numbers recorded. |
+| 1 | Identity minted at spawn (start context + spawn API + inheritance + `workspace`); port ownership; shield start in `startPreviewRuntime`; Security Worker + typed protocol; policy port and snapshot; event schema; `SecurityEventSink`; enforcement/telemetry health. | Every runtime starts with the shield; no app service starts before enforcement health is `ok`; a killed Security Worker holds new protected requests and recovers. |
+| 2 | Controls 1–3. | Their fixtures go green; the attack corpus is blocked; the clean corpus passes. |
+| 3 | Controls 4–5. | Unauthorised service→service and frontend→database connections are denied; unmodified `pg`/Drizzle apps still pass the W9 suite. |
+| 4 | Controls 6–10. Python and PHP inherit them because they cross the same page-side chokepoints; .NET when shipped. | Every fixture is green across Node, Python and PHP. |
+| 5 | Signature engine, behavioural signals, correlation keyed on request/connection/pid causality (never time proximity alone), risk scoring, reason codes. | A scripted multi-stage attack yields one correlated incident. |
+| 6 | Automated response: throttle, deny, suspend service, quarantine app, recovery/restart — scoped to one app. | No response crosses an app boundary or stops an unrelated service. |
+| 7 | Builderforce wiring: the adapter's sink → the ingest route → `security_incidents` (with the index migration and the finding-kind seam) → SIEM export; enforcement health and blocks in `LivePreviewPanel`; the communication map; drill-down from the existing security surfaces. Reason codes map to keys in all five catalogs; theme tokens; responsive. | An operator can open any automated block from the panel and see rule, evidence, action and outcome. |
+| 8 | Scale and adversarial validation: many logical app contexts on one engine, concurrent load, queue pressure, multi-tab, evasion (encodings, fragmentation), regression suite in webcontainers CI. | Targets below hold under load; zero bypasses in supported paths. |
+
+**Targets (proposed, re-based on Phase 0):** added latency p95 ≤ 5 ms for simple HTTP inspection and ≤ 15 ms with bounded payload inspection (measured separately from total request time); no unbounded queue anywhere; ≤ 256 KB retained per app context, excluding evidence, measured as the engine's own accounted state (counters, buffers, policy refs) since the browser cannot attribute heap per context; 100% of the agreed attack corpus blocked; < 0.1% false positives on the clean corpus; zero cross-app access and zero bypasses in adversarial tests; Security Worker failure recovers automatically with no allow-all window.
+
+**Limits.** The shield sees only what crosses the runtime's origins, service worker, virtual network and runtime hooks — not arbitrary browser or OS traffic — and it ends when the tab's runtime ends.
+
+**Remaining (verified 2026-11-18):** all of it. Nothing of W10 exists in the runtime yet; on the Builderforce side the ingest route, the index migration, the finding-kind seam and the `runtime-shield` detection source are unbuilt.
+
+### §4.7 MCP tool surface (spans W1–W10)
 
 Each tool is added to the `builtinMcpService.ts` catalogs, grouped as data:
 
@@ -1028,6 +1426,7 @@ Each tool is added to the `builtinMcpService.ts` catalogs, grouped as data:
 | 1b | W9 phases 0–4 (webcontainers repo), in parallel | None |
 | 1c | W9 phase 5 (`RunTarget`) | W2 blueprint; D7 for plan gating |
 | 1d | W9 phases 6a–6d; phase 7 engine work in `@webdit/torch` in parallel (needs only 6a's Pyodide host) | None |
+| 1e | W10 phases 0–3 (bypass fixtures, identity + port ownership, mandatory shield start, ingress, internal network + gateway auth) in the webcontainers repo, then phase 4 (egress CSP, quotas, VFS boundaries). Free-tier browser runs (D7) are not marketed as protected until phase 4's exit holds. | None. It is code. |
 | 2 | W3 + W4 Cloudflare + Neon, W6 against the customer's account | A test Cloudflare account + Neon key |
 | 3 | W7 project listings + `external` + mobile (EAS) | Stripe secrets for *paid* listings only |
 | 4 | W5 hosted (WfP + Neon per app) | D1, D3, D4 |
@@ -1047,6 +1446,7 @@ Each tool is added to the `builtinMcpService.ts` catalogs, grouped as data:
 - **Workers for Platforms parity** with DO + cron + WebSocket hibernation — verify first (Phase 4 gate).
 - **Browser tier (W9):** PGlite is single-connection (serialized, per-connection transactions); IndexedDB flush latency (benchmark both durability modes); browser memory caps (watch per service, bound result sets); the Worker boundary is not a security boundary against same-origin code (relay-origin isolation + HTTP-only preview code carry it). Mitigation: exceeding limits falls back to the container target with the reason shown.
 - **Browser training (phase 7):** VRAM caps model size (LoRA/QLoRA on small bases); `torch` surface is a subset (unsupported ops error by name); JSPI and `shader-f16` not universal (test both readback bridges and an fp32 path); `device.lost` resumes from the last checkpoint.
+- **Security Shield (W10):** false positives on developer apps that legitimately send SQL/HTML/shell text (start in observe, calibrate on the clean corpus, signatures stay narrow); added latency on every request (sync checks on the page side, bounded async inspection, p95 budgets re-based on Phase 0); a stalled Security Worker must hold, not open, protected traffic (enforcement and telemetry health are separate); CSP on worker scripts can break an installer whose host isn't allowlisted (default allowlist from the runtimes' own hosts; a blocked host is reported by name).
 - **Language runtimes (phase 6):** Pyodide pure-Python/Pyodide-built wheels only (native-only declined by name); PHP extensions must be in the Wasm image; .NET Kestrel can't bind sockets (in-memory host); Rust in-browser compile unproven (prebuilt until its gate passes).
 - **Container cost:** a live preview holds an instance; per-tenant cap (2) and global budget (15) hold; run loops are `containerRuntime`-entitled.
 - **Neon quota:** per-app Neon lives in a separate Neon org/project set, never the core/apps endpoints.

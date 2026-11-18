@@ -1,6 +1,6 @@
 /**
  * The workspace repository's root, indexed on first use FROM THE CODE PACK
- * (docs/design/deterministic-knowledge-index.md, "Where it runs"): the host's warm
+ * (DONE.md, deterministic knowledge index archive, "Where it runs"): the host's warm
  * definition index (`WorkspaceSymbolIndex.filesUnder()` — paths and symbols, no file read)
  * goes through the code pack's OWN parser (`codeParser().extract`: the file node, its area,
  * its exported symbols as exact keys) → memory's `buildGraph` → `toCards`. No card is

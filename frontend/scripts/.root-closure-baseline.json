@@ -311,6 +311,7 @@
     "lib/releaseNotesApi.ts",
     "lib/replaySensitive.ts",
     "lib/reportError.ts",
+    "lib/runTarget/runtimeTools/runtimeToolRoute.ts",
     "lib/safeRedirect.ts",
     "lib/seats.ts",
     "lib/sessionListPreferences.ts",

@@ -1,5 +1,5 @@
 /**
- * regression: the editor's lookup scope (typed-entity-ids §3). Signed out it is the unbound scope,
+ * regression: the editor's lookup scope (platform.md typed entity ids §3). Signed out it is the unbound scope,
  * never "every destination"; signed in it names the platform instance, because a tenant id that
  * exists on staging and prod is two accounts.
  */

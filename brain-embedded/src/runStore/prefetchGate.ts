@@ -1,5 +1,5 @@
 /**
- * The deterministic-first PreFetch gate in the run preamble (docs/design/deterministic-prefetch.md)
+ * The deterministic-first PreFetch gate in the run preamble (DONE.md, deterministic-first PreFetch archive)
  * — the ONE place a Brain run consults `@builderforce/prefetch`, before memory and the model.
  * The pass itself (classify → ANSWER → PREFETCH) is the package's `runGate`, shared with
  * the on-prem preamble; this file is its run-cell glue:

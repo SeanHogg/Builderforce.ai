@@ -1,5 +1,5 @@
 /**
- * What `check:entity-id-parsing` looks for, and where (docs/design/typed-entity-ids.md §2, §8). Pure, so
+ * What `check:entity-id-parsing` looks for, and where (docs/specs/platform.md, Typed entity ids §2; DONE.md, Typed entity ids archive §8). Pure, so
  * `entityIdParsing.test.mjs` can pin it and `check-entity-id-parsing.mjs` (the guard) only enumerates files and reports.
  *
  * The rule: every UUID check and every "is this text a server integer id" parse goes through

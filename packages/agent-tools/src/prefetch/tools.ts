@@ -1,6 +1,6 @@
 /**
  * Which deterministic tools a workspace HAS — the PreFetch registry offers a row only when
- * its tool is detected (docs/design/deterministic-prefetch.md: "a tool that isn't
+ * its tool is detected (DONE.md, deterministic-first PreFetch archive: "a tool that isn't
  * installed in the workspace isn't offered"). Detection reads the workspace's
  * `package.json` (dependencies and devDependencies), its lockfiles and the PATH, through
  * a {@link ToolProbe} the host supplies; the host memoises the result per workspace.

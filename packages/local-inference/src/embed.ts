@@ -1,6 +1,6 @@
 /**
  * Ollama as a dense EMBEDDER for a host's knowledge index
- * (docs/design/deterministic-knowledge-index.md, "Where it runs") — only while Ollama
+ * (DONE.md, deterministic knowledge index archive, "Where it runs") — only while Ollama
  * already holds an EMBEDDING model resident (`/api/ps`, its card's `capabilities`
  * naming `embedding`). Asking never loads a model: a host's index reads warmth through
  * {@link residentModelTracker} and embeds only through what is already resident.

@@ -18,7 +18,7 @@
  * than a test-owned boundary: this is an e2e acceptance harness, not a unit test.
  *
  * Egress denial follows the G27 packaged-acceptance design
- * (docs/design/local-first-closure-g03-g21-g23-g27.md): a loopback CONNECT
+ * (docs/specs/make.md, Design — Local-first closure, §3 G27): a loopback CONNECT
  * recorder plus, where the OS allows, `unshare --net --mount` (Linux) or a
  * `netsh advfirewall` outbound block rule scoped to the Code executable (Windows).
  *

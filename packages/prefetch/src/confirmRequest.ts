@@ -1,5 +1,5 @@
 /**
- * The confirm CHIP's wire shape (docs/design/deterministic-prefetch.md: "write actions
+ * The confirm CHIP's wire shape (DONE.md, deterministic-first PreFetch archive: "write actions
  * never auto-run"). A write action is confirmed through the run's ONE human-in-the-loop
  * channel — the run cell's `pendingConfirm`, answered by `resolveRunConfirm` and declined
  * by Stop — not a second channel of its own. This is the request it raises there, and
