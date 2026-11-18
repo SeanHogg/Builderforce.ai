@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import Pagination from '@/components/Pagination';
 import { PAGE_SIZES } from './collectionTypes';

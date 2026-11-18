@@ -1,8 +1,7 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { ViewToggle } from '@/components/ViewToggle';
 import { Select } from '@/components/Select';
+import type { CollectionDescriptor } from './descriptor';
 
 /**
  * CollectionHeader — the pinned header for a Collection (PRD 47 §3.1). Holds

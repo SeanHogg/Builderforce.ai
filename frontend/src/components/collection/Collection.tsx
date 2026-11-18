@@ -25,7 +25,7 @@ import { CollectionFooter } from './CollectionFooter';
  * Layout contract (§3.2): a flex column filling the parent with `min-height:0`
  * and the body `overflow:auto`, so only the rows/cards scroll while the header,
  * bulk bar, table `<thead>` and footer stay pinned. A parent that is NOT a flex
- * column gets a `max-height: calc(100dvh - var(--shell-top))` default.
+ * column gets a `max-height: calc(100dvh - var(--shell-topbar-height))` default.
  *
  * `extraViews={{ board, calendar, gantt }}` adds those modes to the ViewToggle
  * in canonical order and renders the supplied component in the body slot; the
@@ -70,7 +70,7 @@ const rootStyle: React.CSSProperties = {
   minHeight: 0,
   flex: 1,
   // A page that is not a flex column gets this default cap (§3.2).
-  maxHeight: 'calc(100dvh - var(--shell-top))',
+  maxHeight: 'calc(100dvh - var(--shell-topbar-height))',
 };
 
 const bodyStyle: React.CSSProperties = {

@@ -1,6 +1,4 @@
-'use client';
-
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useToast } from '@/components/ToastProvider';
@@ -9,7 +7,7 @@ import { usePermission, type Capability } from '@/lib/rbac';
 import { BULK_CAPABILITIES, type BulkEntityKey } from './descriptor';
 import type { CollectionDescriptor } from './descriptor';
 import type { CollectionSelection } from './useCollectionSelection';
-import { BULK_MAX } from './collectionTypes';
+import { BULK_MAX, type BulkResult } from './collectionTypes';
 import { MergeTargetPanel } from './MergeTargetPanel';
 
 /**
@@ -44,7 +42,7 @@ export interface CollectionBulkBarProps<Row> {
     ids: string[];
     targetId?: string;
     dryRun?: boolean;
-  }) => Promise<unknown>;
+  }) => Promise<BulkResult | null>;
 }
 
 const barStyle: React.CSSProperties = {
@@ -75,8 +73,17 @@ const hintStyle: React.CSSProperties = {
   fontStyle: 'italic',
 };
 
-export function CollectionBulkBar<Row>({
+export function CollectionBulkBar<Row>(props: CollectionBulkBarProps<Row>) {
+  const entity: BulkEntityKey | null = props.descriptor.entity;
+  // Self-gating: read-only catalog or empty selection → render nothing. The
+  // body owns every hook, so they always run unconditionally (rules-of-hooks).
+  if (entity == null || props.selection.count === 0) return null;
+  return <CollectionBulkBarBody {...props} entity={entity} />;
+}
+
+function CollectionBulkBarBody<Row>({
   descriptor,
+  entity,
   selection,
   rows,
   total,
@@ -84,9 +91,8 @@ export function CollectionBulkBar<Row>({
   pageIds,
   fetchAllIds,
   archived,
-  onRefetch,
   onBulk,
-}: CollectionBulkBarProps<Row>) {
+}: CollectionBulkBarProps<Row> & { entity: BulkEntityKey }) {
   const t = useTranslations('common.collection');
   const tCommon = useTranslations('common');
   const confirm = useConfirm();
@@ -94,13 +100,16 @@ export function CollectionBulkBar<Row>({
   const [mergeOpen, setMergeOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const entity: BulkEntityKey | null = descriptor.entity;
-  // Self-gating: read-only catalog or empty selection → render nothing.
-  if (entity == null || selection.count === 0) return null;
-
   const cap = BULK_CAPABILITIES[entity];
   const { allowed, required } = usePermission(cap.permission as Capability);
-  const ids = [...selection.selected];
+  const ids = useMemo(() => [...selection.selected], [selection.selected]);
+  // Stable identity: MergeTargetPanel re-runs its dry-run preview whenever
+  // this callback changes, so an inline arrow would re-request every render.
+  const previewMerge = useCallback(
+    (targetId: string) =>
+      onBulk({ action: 'merge', ids, targetId, dryRun: true }).then((r) => r?.preview ?? null),
+    [onBulk, ids],
+  );
   const pageState = selection.pageState(pageIds);
   const wholePageSelected = pageState === 'all' && pageIds.length > 0;
   const canSelectAllMatching = wholePageSelected && total > pageSize;
@@ -221,7 +230,7 @@ export function CollectionBulkBar<Row>({
           rows={rows}
           busy={busy}
           onClose={() => setMergeOpen(false)}
-          onPreview={(targetId) => onBulk({ action: 'merge', ids, targetId, dryRun: true })}
+          onPreview={previewMerge}
           onApply={(targetId) =>
             run(async () => {
               await onBulk({ action: 'merge', ids, targetId });
