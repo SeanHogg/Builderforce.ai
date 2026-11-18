@@ -44,7 +44,7 @@ export type RunOutcome =
 /** A plan-limit refusal (the container tier's `livePreview` 402), with the declines before it. */
 export class RunPlanLimitError extends Error {
   constructor(readonly limit: unknown, readonly declined: TargetDecline[]) {
-    super(limit instanceof Error ? limit.message : 'plan limit');
+    super(limit instanceof Error ? limit.message : undefined, { cause: limit });
     this.name = 'RunPlanLimitError';
   }
 }

@@ -112,7 +112,11 @@ export const PREVIEW_CAPTURE_SCRIPT = `(function () {
       canvas.width = width;
       canvas.height = height;
       var ctx = canvas.getContext('2d');
-      ctx.fillStyle = getComputedStyle(document.body).backgroundColor || '#ffffff';
+      // An unset body background computes to fully transparent; either way the
+      // backdrop is the page's own canvas colour, which follows its color-scheme.
+      var backdrop = getComputedStyle(document.body).backgroundColor;
+      if (!backdrop || backdrop === 'transparent' || (backdrop.indexOf('rgba') === 0 && backdrop.replace(/ /g, '').slice(-3) === ',0)')) backdrop = 'Canvas';
+      ctx.fillStyle = backdrop;
       ctx.fillRect(0, 0, width, height);
       ctx.drawImage(image, 0, 0);
       try {
