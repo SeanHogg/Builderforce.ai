@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { brain, reposApi, runtimeApi, type ProjectRepository } from '@/lib/builderforceApi';
+import { repoImportApi } from '@/lib/repoImportClient';
 import type { RepoFileSource } from '@/components/brain/RepoContextPicker';
 
 /**
@@ -87,7 +88,7 @@ export function useBrainRepoContext({ repoProjectId, activeChatId, attach }: {
       list.push({
         id: `repo:${repo.id}`,
         label: `${repo.owner}/${repo.repo}`,
-        load: async () => (await reposApi.contents(repo.id)).files ?? [],
+        load: async () => (await repoImportApi.contents(repo.id)).files ?? [],
       });
     }
     return list;

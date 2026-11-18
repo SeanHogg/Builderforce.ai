@@ -19,7 +19,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { Select } from '@/components/Select';
-import type { ImportedRepoFile } from '@/lib/builderforceApi';
+import type { ImportedRepoFile } from '@/lib/repoImportClient';
 import { faultText } from '@/lib/apiClient';
 const MAX_ROWS = 300;
 

@@ -7,6 +7,7 @@
 import { CHANNEL_PLATFORMS, type ChannelPlatform, type WorkflowNodeKind as ServerWorkflowNodeKind } from '@builderforce/creation-canvas-contract';
 import type { EMBEDDED_CAPABILITY_KEYS } from './embeddedCapabilities';
 import type { TaskFileChange, TaskFileContent, TaskRepoStatus } from './taskWorkspaceTypes';
+import type { ImportedRepoFile } from './repoImportClient';
 import { createBrainRestPersistence, type ChatDiagnosticsReport } from '@seanhogg/builderforce-brain-embedded';
 import { gatewayErrorMessage, type VisionContentPart } from '@builderforce/agent-tools/knowledge';
 import { SIDE_EFFECT_GATES_WIRE_LEVEL } from '@builderforce/agent-tools';
@@ -6992,41 +6993,11 @@ export interface AddRepositoryBody {
   credentialId?: string | null;
 }
 
-export interface ImportedRepoFile {
-  path: string;
-  content: string;
-  truncated: boolean;
-}
-
-/** Why the server left a path out of an import manifest (mirrors the API's ImportSkipReason). */
-export type ImportSkipReason = 'binary' | 'noise' | 'cap' | 'unreadable' | 'too-large' | 'incomplete';
-
-export interface ImportRepoManifest {
-  ok: boolean;
-  ref: string;
-  /** Whole files only: a file read only in part is never in here — it is in `skipped`. */
-  files: ImportedRepoFile[];
-  discovered: number;
-  skipped: Array<{ path: string; reason: ImportSkipReason }>;
-  truncated: boolean;
-}
-
+// Importing a repo's files into the IDE workspace: repoImportClient.ts (repoImportApi).
 export const reposApi = {
   list: (projectId: number): Promise<ProjectRepository[]> =>
     request<{ repositories: ProjectRepository[] }>(`/api/repos/projects/${projectId}/repositories`)
       .then((r) => r.repositories ?? []),
-
-  /** Read a connected repo's files (server-side, token-scoped) for importing into
-   *  the IDE workspace. The caller persists the manifest via saveFile. */
-  contents: (id: string, ref?: string): Promise<ImportRepoManifest> =>
-    request<ImportRepoManifest>(
-      `/api/repos/repositories/${id}/contents${ref ? `?ref=${encodeURIComponent(ref)}` : ''}`,
-    ),
-
-  /** After saving an imported manifest: record the paths actually SAVED, so a later push
-   *  deletes only what was imported and then removed — never a skipped or unsaved file. */
-  recordImportBaseline: (id: string, paths: string[]): Promise<{ ok: boolean; recorded: number }> =>
-    request(`/api/repos/repositories/${id}/import-baseline`, { method: 'POST', body: JSON.stringify({ paths }) }),
 
   add: (projectId: number, body: AddRepositoryBody): Promise<ProjectRepository> =>
     request(`/api/repos/projects/${projectId}/repositories`, { method: 'POST', body: JSON.stringify(body) }),

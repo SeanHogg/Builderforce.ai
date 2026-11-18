@@ -9,8 +9,8 @@ import {
   integrationsApi,
   type ProjectRepository,
   type IntegrationCredential,
-  type ImportRepoManifest,
 } from '@/lib/builderforceApi';
+import { repoImportApi, type ImportRepoManifest } from '@/lib/repoImportClient';
 import { saveFile } from '@/lib/api';
 import { recordedFailure } from '@/lib/reportError';
 import { parseRepoIdentifier, isValidRepoSegment } from '@/lib/repoIdentifier';
@@ -229,7 +229,7 @@ export function SourceControlContent({
     // partway, so a later push never deletes a file that was skipped or never saved.
     const saved: string[] = [];
     try {
-      const manifest = await reposApi.contents(r.id, r.defaultBranch ?? undefined);
+      const manifest = await repoImportApi.contents(r.id, r.defaultBranch ?? undefined);
       if (manifest.files.length === 0) {
         setImportResult((p) => ({ ...p, [r.id]: { ok: false, message: t('noImportableFiles') } }));
         return;
@@ -250,7 +250,7 @@ export function SourceControlContent({
       setImportResult((p) => ({ ...p, [r.id]: { ok: false, message: e instanceof Error ? e.message : t('importFailed') } }));
     } finally {
       setImporting(null);
-      if (saved.length > 0) await reposApi.recordImportBaseline(r.id, saved).catch(recordedFailure('Recording the repo import baseline', undefined));
+      if (saved.length > 0) await repoImportApi.recordImportBaseline(r.id, saved).catch(recordedFailure('Recording the repo import baseline', undefined));
     }
   };
 
