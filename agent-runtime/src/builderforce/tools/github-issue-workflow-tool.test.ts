@@ -88,11 +88,26 @@ describe("runGithubIssueWorkflow — checkout safety", () => {
     expect(executeWorkflow).not.toHaveBeenCalled();
 
     const error = String(details(result).error);
-    expect(error).toContain("4 uncommitted changes");
-    expect(error).toContain("src/a.ts, notes.txt, src/b.ts");
-    expect(error).toContain("and 1 more");
+    expect(error).toContain("4 uncommitted change(s) (src/a.ts, notes.txt, src/b.ts, and 1 more)");
     expect(error).toContain("will not switch branches");
-    expect(error).toContain("git worktree add ../acme-agentNode-issue-42-fix-login-wt -b agentNode/issue-42-fix-login");
+    expect(error).toContain("Commit or stash them first");
+    expect(error).toContain("agents.defaults.workspace");
+    // Running the workflow from a worktree cannot work (its agents edit their configured workspace).
+    expect(error).not.toContain("worktree");
+  });
+
+  it("a status that throws (not a git checkout) is reported, and nothing is switched or run", async () => {
+    runExec.mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args.includes("status")) throw new Error("fatal: not a git repository");
+      return { stdout: "", stderr: "" };
+    });
+
+    const result = await runGithubIssueWorkflow({}, { issue: "acme/app#42", projectRoot: ROOT });
+
+    expect(String(details(result).error)).toContain(`Failed to read git status in ${ROOT}`);
+    expect(gitSubcommands().some((c) => c.includes("checkout"))).toBe(false);
+    expect(createWorkflow).not.toHaveBeenCalled();
+    expect(executeWorkflow).not.toHaveBeenCalled();
   });
 
   it("clean checkout: branches, runs the workflow, commits and pushes", async () => {

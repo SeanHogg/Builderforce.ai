@@ -696,8 +696,13 @@ interface RoutingByRole {
     coderReasks: number;
     /** Explicit `hand_off` calls the planner made. */
     handOffs: number;
-    /** Times the analysis budget forced the hand-off turn (`loop.hand_off_due`). */
+    /** Times a rule forced the hand-off turn: the analysis budget (`loop.hand_off_due`) or A3's escalation
+     *  (`loop.progress_forced` with `forced: 'hand_off'`, e.g. the read-only streak). */
     handOffsForced: number;
+    /** Of {@link handOffsForced}, the ones A3's progress guard forced. */
+    handOffsForcedByProgress?: number;
+    /** The progress signals behind those (e.g. `read_only_streak`), distinct, in trace order. */
+    handOffsForcedSignals?: string[];
     /** Times analysis ended without a hand-off once the budget was spent. */
     planBudgetsSpent: number;
     /** How each hand-off ran (`hand_off.mode`): side by side, inline or mixed, and the overlap that decided it. */

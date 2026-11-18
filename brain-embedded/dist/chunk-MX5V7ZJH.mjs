@@ -463,9 +463,15 @@ function localFirstPlan(input) {
   const preferredIndex = input.preferred ? candidates.findIndex((c) => c.kind === "local" && c.ref === input.preferred) : -1;
   if (preferredIndex > 0) candidates.unshift(...candidates.splice(preferredIndex, 1));
   const local = candidates.slice(0, Math.max(0, input.maxLocalAttempts ?? 1));
-  const accounts = (input.accounts ?? []).map((account) => ({ kind: "local", ...account }));
-  const leading = [...local, ...accounts];
-  return input.cloud ? [...leading, { kind: "cloud", ...input.cloud.model ? { model: input.cloud.model } : {} }] : leading;
+  const attemptOf = ({ placement: _placement, ...account }) => ({ kind: "local", ...account });
+  const accounts = input.accounts ?? [];
+  const lead = accounts.filter((a) => a.placement !== "trail").map(attemptOf);
+  const trail = accounts.filter((a) => a.placement === "trail").map(attemptOf);
+  const cloud = input.cloud ? [{ kind: "cloud", ...input.cloud.model ? { model: input.cloud.model } : {} }] : [];
+  if (input.accountFirst && trail.length > 0 && cloud.length > 0) {
+    return [...local, ...lead, { kind: "cloud", routingMode: "byo_pool" }, ...trail, ...cloud];
+  }
+  return [...local, ...lead, ...cloud, ...trail];
 }
 
 // ../packages/local-inference/src/failover.ts
@@ -1384,4 +1390,4 @@ export {
   createHfModelStore,
   catalogProbe
 };
-//# sourceMappingURL=chunk-ZJ3PNS54.mjs.map
+//# sourceMappingURL=chunk-MX5V7ZJH.mjs.map

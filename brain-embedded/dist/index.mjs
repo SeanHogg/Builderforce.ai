@@ -43,7 +43,7 @@ import {
   servedIdentity,
   servedOnDevice,
   webGpuSupport
-} from "./chunk-ZJ3PNS54.mjs";
+} from "./chunk-MX5V7ZJH.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -361,7 +361,7 @@ import {
   withAdvisory,
   withProvenanceMetadata,
   workFiledNotStaffedVerdict
-} from "./chunk-IF37ZKYC.mjs";
+} from "./chunk-3MP7CQRS.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useEffect, useMemo } from "react";
@@ -1435,7 +1435,7 @@ var PRICE_SNAPSHOT = {
   "~google/gemini-flash-latest": [15e-7, 75e-7],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
   "~moonshotai/kimi-latest": [1824e-10, 110055e-10],
-  "~openai/gpt-astra-latest": [1e-5, 5e-5],
+  "~openai/gpt-astra-latest": [8e-6, 4e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
   "~openai/gpt-sol-latest": [2e-6, 1e-5],
@@ -1514,7 +1514,7 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v4-flash-vision-exp": [44e-8, 132e-8],
   "deepseek/deepseek-v4-pro": [9e-7, 15e-7],
   "deepseek/deepseek-v4-pro-0813": [111e-9, 444e-8],
-  "deepseek/deepseek-v4.1-flash": [14e-8, 42e-8],
+  "deepseek/deepseek-v4.1-flash": [51e-9, 567e-9],
   "deepseek/deepseek-v4.1-flash-1017": [36e-9, 5e-7],
   "deepseek/deepseek-v4.1-flash-1017:batch": [36e-9, 15e-8],
   "deepseek/deepseek-v4.1-flash:batch": [112e-9, 336e-9],
@@ -1560,7 +1560,7 @@ var PRICE_SNAPSHOT = {
   "google/gemini-omni-1.2-flash": [15e-7, 9e-6],
   "google/gemma-2-27b-it": [65e-8, 65e-8],
   "google/gemma-3-12b-it": [5e-8, 15e-8],
-  "google/gemma-3-27b-it": [8e-8, 35e-8],
+  "google/gemma-3-27b-it": [8e-8, 45e-8],
   "google/gemma-3-4b-it": [5e-8, 1e-7],
   "google/gemma-4-26b-a4b-it": [765e-10, 255e-9],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
@@ -1616,16 +1616,16 @@ var PRICE_SNAPSHOT = {
   "mistralai/mistral-large-2407": [2e-6, 6e-6],
   "mistralai/mistral-large-2512": [5e-7, 15e-7],
   "mistralai/mistral-large-4-0": [7e-7, 21e-7],
-  "mistralai/mistral-medium-3": [4e-7, 2e-6],
+  "mistralai/mistral-medium-3": [44e-8, 22e-7],
   "mistralai/mistral-medium-3-5": [15e-7, 75e-7],
   "mistralai/mistral-medium-3-5:batch": [75e-8, 375e-8],
-  "mistralai/mistral-medium-3.1": [4e-7, 2e-6],
+  "mistralai/mistral-medium-3.1": [44e-8, 22e-7],
   "mistralai/mistral-nemo": [29e-9, 3e-8],
   "mistralai/mistral-saba": [2e-7, 6e-7],
   "mistralai/mistral-small-24b-instruct-2501": [5e-8, 8e-8],
   "mistralai/mistral-small-2603": [15e-8, 6e-7],
   "mistralai/mistral-small-3.1-24b-instruct": [351e-9, 555e-9],
-  "mistralai/mistral-small-3.2-24b-instruct": [1e-7, 3e-7],
+  "mistralai/mistral-small-3.2-24b-instruct": [75e-9, 2e-7],
   "mistralai/mixtral-8x22b-instruct": [2e-6, 6e-6],
   "mistralai/voxtral-small-24b-2507": [1e-7, 3e-7],
   "moondream/moondream3-preview": [3e-7, 25e-7],
@@ -1635,7 +1635,7 @@ var PRICE_SNAPSHOT = {
   "moonshotai/kimi-k2-thinking": [6e-7, 25e-7],
   "moonshotai/kimi-k2.5": [5e-7, 25e-7],
   "moonshotai/kimi-k2.6": [65e-8, 341e-8],
-  "moonshotai/kimi-k2.7-code": [6e-7, 35e-7],
+  "moonshotai/kimi-k2.7-code": [7e-7, 375e-8],
   "moonshotai/kimi-k3": [192e-9, 16e-6],
   "moonshotai/kimi-k3:batch": [228e-8, 114e-7],
   "moonshotai/kimi-k3.1-pro": [2403e-10, 84023e-10],
@@ -1745,12 +1745,20 @@ var PRICE_SNAPSHOT = {
   "openai/gpt-6.1-terra-pro": [1e-6, 5e-6],
   "openai/gpt-6.1-terra-pro:batch": [5e-7, 25e-7],
   "openai/gpt-6.1-terra:batch": [5e-7, 25e-7],
+  "openai/gpt-6.2-astra": [8e-6, 4e-5],
+  "openai/gpt-6.2-astra-pro": [8e-6, 4e-5],
+  "openai/gpt-6.2-astra-pro:batch": [4e-6, 2e-5],
+  "openai/gpt-6.2-astra:batch": [4e-6, 2e-5],
+  "openai/gpt-6.2-sol": [2e-6, 1e-5],
+  "openai/gpt-6.2-sol-pro": [2e-6, 1e-5],
+  "openai/gpt-6.2-sol-pro:batch": [1e-6, 5e-6],
+  "openai/gpt-6.2-sol:batch": [1e-6, 5e-6],
   "openai/gpt-audio": [25e-7, 1e-5],
   "openai/gpt-audio-mini": [6e-7, 24e-7],
   "openai/gpt-chat-latest": [5e-6, 3e-5],
   "openai/gpt-oss-120b": [15e-8, 6e-7],
   "openai/gpt-oss-120b:batch": [296e-10, 136e-9],
-  "openai/gpt-oss-20b": [3e-8, 13e-8],
+  "openai/gpt-oss-20b": [18e-9, 9e-8],
   "openai/gpt-oss-20b:batch": [24e-9, 112e-9],
   "openai/gpt-oss-safeguard-20b": [75e-9, 3e-7],
   "openai/o3": [2e-6, 8e-6],
@@ -1790,15 +1798,15 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3-coder-30b-a3b-instruct": [15e-8, 6e-7],
   "qwen/qwen3-coder-flash": [195e-9, 975e-9],
   "qwen/qwen3-coder-next": [12e-8, 8e-7],
-  "qwen/qwen3-next-80b-a3b-instruct": [9e-8, 11e-7],
+  "qwen/qwen3-next-80b-a3b-instruct": [1e-7, 11e-7],
   "qwen/qwen3-vl-235b-a22b-instruct": [21e-8, 19e-7],
   "qwen/qwen3-vl-30b-a3b-instruct": [15e-8, 6e-7],
   "qwen/qwen3-vl-8b-instruct": [25e-8, 75e-8],
   "qwen/qwen3.5-122b-a10b": [26e-8, 208e-8],
-  "qwen/qwen3.5-27b": [26e-8, 26e-7],
+  "qwen/qwen3.5-27b": [3e-7, 24e-7],
   "qwen/qwen3.5-35b-a3b": [14e-8, 1e-6],
   "qwen/qwen3.5-397b-a17b": [45e-8, 3e-6],
-  "qwen/qwen3.5-9b": [167e-9, 245e-9],
+  "qwen/qwen3.5-9b": [143e-9, 211e-9],
   "qwen/qwen3.5-flash-02-23": [65e-9, 26e-8],
   "qwen/qwen3.5-plus-02-15": [26e-8, 156e-8],
   "qwen/qwen3.5-plus-20260420": [3e-7, 18e-7],
@@ -1811,7 +1819,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3.7-plus": [32e-8, 128e-8],
   "qwen/qwen3.7-plus:batch": [23e-8, 92e-8],
   "qwen/qwen3.8-2.4t-a95b": [2e-6, 6e-6],
-  "qwen/qwen3.8-27b": [15e-8, 1875e-9],
+  "qwen/qwen3.8-27b": [6e-8, 22e-7],
   "qwen/qwen3.8-27b:batch": [16e-8, 2e-6],
   "qwen/qwen3.8-flash": [15e-8, 47e-8],
   "qwen/qwen3.8-max-0902": [2e-6, 6e-6],
@@ -5702,6 +5710,12 @@ function guardedPick(pick, skip, input) {
 }
 
 // ../packages/run-policy/src/policy.ts
+function reviewPhaseModel(phaseModels, legacyReviewModel) {
+  for (const candidate of [phaseModels?.review, phaseModels?.verify, legacyReviewModel]) {
+    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+  }
+  return void 0;
+}
 var PIN_RELEASE_STATUSES = [429, 413, 503];
 var DECLINE_STATUS = 400;
 var NONE = { kind: "none" };
@@ -5741,12 +5755,12 @@ function initialRunPolicy(opts = {}) {
   };
 }
 function configuredPhaseModel(options, phase) {
+  if (phase === "verify") return reviewPhaseModel(options.phaseModels, options.reviewModel);
   const fromMap = options.phaseModels?.[phase];
-  if (typeof fromMap === "string" && fromMap.trim()) return fromMap.trim();
-  if (phase === "verify" && typeof options.reviewModel === "string" && options.reviewModel.trim()) {
-    return options.reviewModel.trim();
-  }
-  return void 0;
+  return typeof fromMap === "string" && fromMap.trim() ? fromMap.trim() : void 0;
+}
+function reviewing(state) {
+  return state.phase === "verify" && state.options.fixedRole !== "verify";
 }
 function phaseDefaultModel(state) {
   if (state.phase === "verify" || state.options.fixedRole) return void 0;
@@ -5755,15 +5769,17 @@ function phaseDefaultModel(state) {
 }
 function nextTurn(state, turn) {
   const verifying = state.phase === "verify";
+  const review = reviewing(state);
   const author = state.authorModel;
-  const mapped = verifying ? configuredPhaseModel(state.options, "verify") : void 0;
+  const mapped = review ? configuredPhaseModel(state.options, "verify") : void 0;
   let model = mapped ?? state.model ?? phaseDefaultModel(state);
   if (verifying && author && model === author) model = void 0;
   const excludeModels = [...state.broken];
   if (verifying && author && !excludeModels.includes(author)) excludeModels.push(author);
   return {
-    // A coding run's verify turn is a review, not whatever fixedRole the child had.
-    role: turn.hasTools ? verifying ? "verify" : state.options.fixedRole ?? state.phase : "chat",
+    // A coding run's verify-phase turn reviews its change (the strongest models), whatever
+    // fixedRole the child had — except a child delegated the mechanical checks themselves.
+    role: turn.hasTools ? review ? "review" : state.options.fixedRole ?? state.phase : "chat",
     model,
     strict: !!model && state.strictPin,
     excludeModels
@@ -5799,7 +5815,7 @@ function reduceRunPolicy(state, event) {
     case "verify_started": {
       if (s.phase === "verify") return s;
       const author = s.authorModel ?? s.model ?? phaseDefaultModel(s);
-      const review = configuredPhaseModel(s.options, "verify");
+      const review = s.options.fixedRole === "verify" ? void 0 : configuredPhaseModel(s.options, "verify");
       const distinct = review && review !== author ? review : void 0;
       return {
         ...s,
@@ -6045,6 +6061,8 @@ var ROLE_OUTPUT_CAPS = {
   verify: 2048,
   chat: 4096,
   plan: 4096,
+  // A review writes a verdict and its findings — a plan's length, not a check's.
+  review: 4096,
   code: 8192
 };
 function roleOutputCap(role) {
@@ -6523,6 +6541,7 @@ function isArcStage(value) {
 var TYPICAL_OUTPUT_TOKENS = {
   code: 4e3,
   plan: 1500,
+  review: 1200,
   verify: 800,
   explore: 1e3,
   chat: 800,
@@ -6623,12 +6642,15 @@ function withModelRef(e, ref) {
   if (e instanceof StreamInterruptedError && e.cause !== void 0) out.cause = e.cause;
   return out;
 }
-function withFailedAccounts(e, failed4) {
-  if (!(e instanceof BrainRequestError) || failed4.length === 0) return e;
-  const prefix = failed4.map((r) => `${r.attempt.kind === "local" ? r.attempt.ref : "account"} could not take this turn (${r.detail ?? r.outcome}). `).join("");
+function withFailedAccounts(e, failed4, trailed = []) {
+  if (!(e instanceof BrainRequestError) || failed4.length + trailed.length === 0) return e;
+  const refOf = (r) => r.attempt.kind === "local" ? r.attempt.ref : "account";
+  const prefix = failed4.map((r) => `${refOf(r)} could not take this turn (${r.detail ?? r.outcome}). `).join("");
+  const trailing = trailed.map((r) => ` Then ${refOf(r)} was tried and also failed (${r.detail ?? r.outcome}).`).join("");
+  const suffix = trailing && !/[.!?]$/.test(e.message) ? `.${trailing}` : trailing;
   const out = Object.create(Object.getPrototypeOf(e));
   Object.defineProperties(out, Object.getOwnPropertyDescriptors(e));
-  Object.defineProperty(out, "message", { value: prefix + e.message, writable: true, configurable: true, enumerable: false });
+  Object.defineProperty(out, "message", { value: prefix + e.message + suffix, writable: true, configurable: true, enumerable: false });
   if (typeof e.stack === "string") {
     const nl = e.stack.indexOf("\n");
     const first = nl < 0 ? e.stack : e.stack.slice(0, nl);
@@ -6859,37 +6881,54 @@ function createLocalFirstStream(input) {
     const routed = opts.model ? { ...opts, model: void 0 } : opts;
     const cloudOpts = opts.model && !isLocalModelRef(opts.model) ? opts : routed;
     const probes = accountPool ? [] : input.probes;
-    const failedAccounts = [];
     const planned = localFirstPlan({
       probes,
       ...input.accounts?.length ? { accounts: input.accounts } : {},
       workload: localFirstWorkload(input.fit ? { ...routed, messages: coreMessages(routed.messages) } : routed),
-      cloud: input.cloud ? {} : null
+      cloud: input.cloud ? {} : null,
+      // The account pool IS the strict BYO leg already; only an Auto cloud leg is split.
+      ...!accountPool && input.freeFirst === false ? { accountFirst: true } : {}
     });
     const plan = input.gate ? await input.gate(planned, routed) : planned;
     if (plan.length === 0) throw new Error(input.noModel ?? NOT_SIGNED_IN);
+    const state = { cloudError: void 0, trailCommitted: false, servingCloud: false };
+    const failedAccounts = { lead: [], trail: [] };
     const onAttempt = (record2) => {
-      if (accountPool && record2.outcome !== "served" && record2.attempt.kind === "local") failedAccounts.push(record2);
+      if (accountPool && record2.outcome !== "served" && record2.attempt.kind === "local") {
+        (state.cloudError ? failedAccounts.trail : failedAccounts.lead).push(record2);
+      }
       input.onAttempt?.(record2);
     };
-    let cloudStarted = false;
     let ran;
     try {
       ran = await runLocalFirst(
         plan,
         async (attempt, commit) => {
+          state.servingCloud = attempt.kind === "cloud";
           if (attempt.kind === "cloud") {
-            cloudStarted = true;
-            return input.cloud(cloudOpts, committingHandlers(handlers, commit));
+            const leg = attempt.routingMode ? { ...routed, routingMode: attempt.routingMode } : cloudOpts;
+            try {
+              return await input.cloud(leg, committingHandlers(handlers, commit));
+            } catch (e) {
+              state.cloudError = { error: e };
+              throw e;
+            }
           }
+          const commitOwn = state.cloudError ? () => {
+            state.trailCommitted = true;
+            commit();
+          } : commit;
           const transport = localTransport(attempt.endpoint, input.fetch, { failFast: true, runtime: attempt.provider });
           const messages = await fittedFor(attempt, routed, input.fit, probes);
-          return streamOnLocal(attempt, routed, committingHandlers(handlers, commit, attempt.ref), transport, messages, false);
+          return streamOnLocal(attempt, routed, committingHandlers(handlers, commitOwn, attempt.ref), transport, messages, false);
         },
-        { signal: opts.signal, accept: answered, onAttempt }
+        // A cloud answer is final, as when it was always last: an empty one is not failed over.
+        { signal: opts.signal, accept: (r) => state.servingCloud || answered(r), onAttempt }
       );
     } catch (e) {
-      throw accountPool && cloudStarted ? withFailedAccounts(e, failedAccounts) : e;
+      const cloudError = state.cloudError?.error;
+      const surfaced = state.cloudError && !state.trailCommitted && !opts.signal?.aborted ? cloudError : e;
+      throw accountPool && state.cloudError && surfaced === cloudError ? withFailedAccounts(surfaced, failedAccounts.lead, failedAccounts.trail) : surfaced;
     }
     const { result, attempts } = ran;
     const summaries = attempts.map(summarizeLocalFirstAttempt);
@@ -7636,9 +7675,19 @@ function localSuccessRouterFor(store, tuning = {}) {
 }
 
 // src/hostModelStream.ts
+var NO_ACCOUNTS = { accounts: [] };
 function accountsUnavailable(error) {
   console.warn(`Hybrid: connected accounts unavailable for this call (${error instanceof Error ? error.message : String(error)})`);
-  return [];
+  return NO_ACCOUNTS;
+}
+function byoOrderQuery(call2) {
+  const projectId = call2.metadata?.projectId;
+  return {
+    ...call2.role ? { role: call2.role } : {},
+    ...typeof projectId === "number" ? { projectId } : {},
+    ...call2.arcStage ? { arcStage: call2.arcStage } : {},
+    agentic: (call2.tools?.length ?? 0) > 0
+  };
 }
 var handoffFit = createHandoffFit();
 function createHostModelStream(input) {
@@ -7662,10 +7711,11 @@ function createHostModelStream(input) {
     const cloud = localOnly ? null : await input.cloud();
     const signedIn = !localOnly && (input.signedIn ? await input.signedIn() : cloud !== null);
     const noModel = localOnly || signedIn ? NO_LOCAL_MODEL : NOT_SIGNED_IN;
-    const readAccounts = async () => input.accounts ? input.accounts().catch(accountsUnavailable) : [];
-    const localFirst = (probes, accounts, onAttempt = input.onAttempt, gate) => createLocalFirstStream({
+    const readAccounts = async (call2) => input.accounts ? input.accounts(byoOrderQuery(call2)).catch(accountsUnavailable) : NO_ACCOUNTS;
+    const localFirst = (probes, { accounts, freeFirst }, onAttempt = input.onAttempt, gate) => createLocalFirstStream({
       probes,
       ...accounts.length > 0 ? { accounts } : {},
+      ...freeFirst !== void 0 ? { freeFirst } : {},
       cloud,
       fit,
       noModel,
@@ -7683,8 +7733,8 @@ function createHostModelStream(input) {
         );
       }
       const probes = input.probes ? await input.probes() : [];
-      const accounts = mode === "hybrid" ? await readAccounts() : [];
-      if (probes.length === 0 && accounts.length === 0) {
+      const accounts = mode === "hybrid" ? await readAccounts(call2) : NO_ACCOUNTS;
+      if (probes.length === 0 && accounts.accounts.length === 0) {
         if (!cloud) throw new Error(noModel);
         return cloud(call2, h);
       }
@@ -7714,8 +7764,8 @@ function createHostModelStream(input) {
     const strict = mode === "specific";
     if (!pick) {
       if (isAccountPoolCall(opts)) {
-        const accounts = await readAccounts();
-        if (accounts.length > 0) return localFirst([], accounts)(opts, handlers);
+        const accounts = await readAccounts(opts);
+        if (accounts.accounts.length > 0) return localFirst([], accounts)(opts, handlers);
       }
       if (strict) {
         if (!cloud) throw new Error(noModel);
@@ -10702,14 +10752,14 @@ function modelDowngrade(ctx, requested, served, book2 = snapshotPriceBook()) {
 var RUN_PHASES = /* @__PURE__ */ new Set(["plan", "code", "verify"]);
 function policyRole(delegatedRole) {
   const role = typeof delegatedRole === "string" ? delegatedRole.trim() : "";
+  if (role === "verify") return { startPhase: "verify", fixedRole: "verify" };
   if (RUN_PHASES.has(role)) return { startPhase: role };
   if (isModelRole(role)) return { startPhase: "code", fixedRole: role };
   return { startPhase: "code" };
 }
 var DECLINING_MODEL_PREFIXES = ["evermind/"];
 function startOptions(pick, delegatedRole, phaseModels) {
-  const verify2 = phaseModels?.verify;
-  const reviewModel = typeof verify2 === "string" && verify2.trim() ? verify2.trim() : null;
+  const reviewModel = reviewPhaseModel(phaseModels) ?? null;
   return {
     pinnedModel: pick.model,
     strictPin: pick.strict,
@@ -13552,13 +13602,13 @@ function initialModelState(policy) {
   if (!start) return initialRunPolicy({ pinnedModel: policy.pinnedModel, ...policy.modelOptions ?? {} });
   const model = start.model ?? policy.pinnedModel ?? "";
   if (start.plain) {
-    const verify2 = start.phaseModels?.verify;
+    const review = reviewPhaseModel(start.phaseModels);
     return initialRunPolicy({
       pinnedModel: model,
       ...start.strict ? { strictPin: true } : {},
       ...start.startPhase ? { startPhase: start.startPhase } : {},
       ...policy.modelOptions ?? {},
-      ...start.phaseModels ? { phaseModels: start.phaseModels, ...verify2 ? { reviewModel: verify2 } : {} } : {}
+      ...start.phaseModels ? { phaseModels: start.phaseModels, ...review ? { reviewModel: review } : {} } : {}
     });
   }
   return initialModelRunState({
@@ -18222,7 +18272,9 @@ function decideRunPipeline(req, request, context) {
 function pipelinePolicyOptions(req, pipeline) {
   const quick = pipeline?.route === "quick";
   const startPhase = req.lineage || quick ? "code" : "plan";
-  const phaseModels = { ...req.phaseModels ?? {} };
+  const { review, ...stages } = req.phaseModels ?? {};
+  const phaseModels = { ...stages };
+  if (review?.trim()) phaseModels.verify = review.trim();
   const quickModel = req.pipeline?.quickModel?.trim();
   if (quick && quickModel) phaseModels.code = quickModel;
   return {

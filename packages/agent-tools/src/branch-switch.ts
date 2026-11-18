@@ -42,6 +42,8 @@ const BARE_REDIRECT = /^(\d*(>>?|<)|&>>?)$/;
 /** Wrappers that run their arguments as the command. */
 const PLAIN_WRAPPERS = new Set(["command", "time", "nohup", "exec"]);
 const SHELLS = new Set(["sh", "bash", "zsh", "dash"]);
+/** A shell's short-option word that includes `-c` (`-c`, `-lc`, `-ec`). */
+const SHELL_C_FLAG = /^-[a-zA-Z]*c[a-zA-Z]*$/;
 /** Deepest `sh -c` nesting read. */
 const MAX_DEPTH = 3;
 
@@ -70,12 +72,14 @@ function switchOf(sub: "checkout" | "switch", rest: readonly string[]): Omit<Bra
   let created: string | undefined;
   let creates = false;
   let detach = false;
+  let endsOptions = false;
   const positional: string[] = [];
   for (let i = 0; i < rest.length; i += 1) {
     const word = rest[i] ?? "";
     if (word === "--") {
       if (i < rest.length - 1) return undefined; // `checkout [<ref>] -- <paths>`: a file restore
-      break; // a trailing `--` names no paths
+      endsOptions = true; // a trailing `--` names no paths: what precedes it is a commit
+      break;
     }
     if (sub === "checkout" && (CHECKOUT_PATH_MODES.has(word) || word.startsWith("--pathspec-from-file"))) return undefined;
     const [flag, inline] = word.startsWith("--") && word.includes("=") ? [word.slice(0, word.indexOf("=")), word.slice(word.indexOf("=") + 1)] : [word, undefined];
@@ -107,7 +111,7 @@ function switchOf(sub: "checkout" | "switch", rest: readonly string[]): Omit<Bra
   // `git checkout <ref> <path…>` restores files from <ref>; `git checkout .` restores the tree.
   if (positional.length !== 1 || positional[0] === ".") return undefined;
   const target = positional[0] as string;
-  return sub === "checkout" && target !== "-" ? { target, creates: false, ambiguous: true } : { target, creates: false };
+  return sub === "checkout" && target !== "-" && !endsOptions ? { target, creates: false, ambiguous: true } : { target, creates: false };
 }
 
 /** `dir` entered from `base`, as the shell would: an absolute (`/x`, `C:\x`, `~`) path replaces it, a relative one nests under it. */
@@ -115,6 +119,12 @@ function enter(base: string | undefined, dir: string): string {
   const clean = dir.replace(/[\\/]+$/, "").replace(/^(\.\/)+/, "") || ".";
   if (!base || /^([\\/~]|[A-Za-z]:)/.test(clean)) return clean;
   return clean === "." ? base : `${base}/${clean}`;
+}
+
+/** Subshells a segment opens (> 0) or closes (< 0): its `(` minus its `)`, quoted text aside. */
+function parenBalance(segment: string): number {
+  const bare = segment.replace(/"[^"]*"|'[^']*'/g, "");
+  return (bare.match(/\(/g)?.length ?? 0) - (bare.match(/\)/g)?.length ?? 0);
 }
 
 /** A segment's words with a subshell's `(` / `)` taken off its first and last word. */
@@ -153,8 +163,10 @@ function peelWrappers(words: readonly string[]): string[] {
 function segmentSwitch(words: readonly string[], cdDir: string | undefined, depth: number): BranchSwitch | undefined {
   const [program, ...args] = words;
   if (program !== undefined && SHELLS.has(program)) {
-    const script = args[args.indexOf("-c") + 1];
-    if (!args.includes("-c") || script === undefined || depth >= MAX_DEPTH) return undefined;
+    // `-c`, or a cluster carrying it (`-lc`, `-ec`): the script is the next word that is not an option.
+    const flag = args.findIndex((a) => SHELL_C_FLAG.test(a));
+    const script = flag === -1 ? undefined : args.slice(flag + 1).find((a) => !a.startsWith("-"));
+    if (script === undefined || depth >= MAX_DEPTH) return undefined;
     const inner = detectIn(script, depth + 1);
     if (!inner) return undefined;
     const where = inner.dir !== undefined ? enter(cdDir, inner.dir) : cdDir;
@@ -174,14 +186,19 @@ function detectIn(command: string, depth: number): BranchSwitch | undefined {
   const segments = splitShellSegments(command.trim());
   if (!segments) return undefined;
   let cdDir: string | undefined;
+  // A `cd` inside `( … )` ends with the subshell: the directory each open `(` entered from.
+  const outer: Array<string | undefined> = [];
   for (const segment of segments) {
+    const net = parenBalance(segment);
+    for (let k = 0; k < net; k += 1) outer.push(cdDir);
     const words = peelWrappers(unwrapSubshell(commandWords(shellTokens(segment))));
     if ((words[0] === "cd" || words[0] === "pushd") && words[1] !== undefined && words[1] !== "-") {
       cdDir = enter(cdDir, words[1]);
-      continue;
+    } else {
+      const found = segmentSwitch(words, cdDir, depth);
+      if (found) return found;
     }
-    const found = segmentSwitch(words, cdDir, depth);
-    if (found) return found;
+    for (let k = 0; k < -net && outer.length > 0; k += 1) cdDir = outer.pop();
   }
   return undefined;
 }

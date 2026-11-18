@@ -15,7 +15,8 @@ import type { AgentTool, AgentToolResult } from "../model/agent-types.js";
 import { Type } from "@sinclair/typebox";
 import { jsonResult } from "../../agents/tools/common.js";
 import { runExec } from "../../process/exec.js";
-import { dirtyCheckoutRefusal, listPendingChanges } from "./git-checkout-guard.js";
+import { parsePorcelainPaths } from "@builderforce/agent-tools";
+import { dirtyCheckoutRefusal } from "./git-checkout-guard.js";
 import {
   globalOrchestrator,
   createFeatureWorkflow,
@@ -317,10 +318,10 @@ export async function runGithubIssueWorkflow(
       // per-call root, so they cannot be redirected into a worktree — refuse
       // before any git mutation or workflow run instead.
       try {
-        const pending = await listPendingChanges(projectRoot);
+        const pending = parsePorcelainPaths(await git(projectRoot, ["status", "--porcelain"]));
         if (pending.length > 0) {
           return jsonResult({
-            error: dirtyCheckoutRefusal(projectRoot, branchName, pending),
+            error: dirtyCheckoutRefusal(projectRoot, pending),
           }) as AgentToolResult<string>;
         }
       } catch (err) {

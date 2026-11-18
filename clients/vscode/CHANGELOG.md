@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.190] — The agent never switches branches over your uncommitted changes
+
+- **Fixed: an agent run could switch the branch of a checkout that had uncommitted changes.** `run_command` ran `git checkout <branch>` / `git switch` / `git checkout -b` as written, so git either carried your pending edits onto the other branch or stopped halfway. It now checks the working tree of the checkout the switch would affect (including one reached with `cd`, `pushd`, `git -C`, a subshell or `bash -c`) and, when anything is pending, refuses without running it. The refusal tells the agent what to do instead: put the work on a branch with `git_commit` and `branch` (which commits through a worktree and never moves your checkout), read another branch with `git show` / `git diff`, or work on it side by side in a git worktree. Restoring a file (`git checkout -- path`, `git checkout src/a.ts`, `--ours` / `--theirs`) still works. When the checkout's state cannot be read (the status check times out, or the directory cannot be passed to git safely) the switch is refused rather than let through.
+- **Fixed: `git_cleanup_merged` left a ticket branch's worktree behind.** It compared the worktree's unresolved path against git's resolved one, so the worktree was never removed and the branch could not be deleted. Every git tool now uses one worktree location (`../<branch>-wt`), and cleanup removes it however it was created. A worktree that still has uncommitted changes is kept (and its branch is not deleted), with a message to commit or discard them first, instead of being force-removed.
+
 ## [2026.10.189] — Agent runs read a large file once instead of looping, and Kimi Code runs use Kimi's real context window
 
 - **Fixed: `read_file` re-served line 1 whenever the model paged with `offset`.** On a small read budget the run looped over the same window (chat #149169 read one PRD six times). A widened read now keeps the requested offset and only drops `limit`, so paging moves forward.

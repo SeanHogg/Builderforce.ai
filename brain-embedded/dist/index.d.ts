@@ -1,9 +1,9 @@
 import * as react from 'react';
 import { ReactNode, SetStateAction, Dispatch } from 'react';
-import { B as BrainTraceEvent, S as StreamFailureDetail, C as ChatInputAttachment, a as BrainMessage, b as BrainRunActivity, c as BrainChat, d as SpendSavingsSummary, V as ViewKey, e as BrainModality, H as HandOffMode, f as ScopeClash, g as HandOffDecision, P as PackageDirProbe, h as ParallelSplit, R as RunProgress, i as BrainDiagnostics, j as StaffingSummary, U as UsageSurface } from './brainTriage-BXwQw04C.js';
-export { k as BrainDiagnosticsContext, l as BrainRunPhase, m as BuildBrainTriageOptions, n as ByoUnresolvedEntry, D as DispatchRefusal, E as EvermindLearnOutcome, o as EvermindLearnTarget, M as ModelScore, p as ModelTurn, q as PersonaSubagent, r as ROLE_GATE_REMEDIATION, s as RepeatStreak, t as RepeatedTarget, u as STEP_MESSAGE_ROLE, v as SavingsBreakdown, w as SavingsBySource, x as SavingsSourceKey, y as SpendBreakdown, z as UNBACKED_TICKET_CLAIM_NOTICE, A as UNBACKED_WRITE_CLAIM_NOTICE, F as USAGE_SURFACES, G as USAGE_SURFACE_HEADER, I as accountUsedInTrace, J as activityTarget, K as answeredInProseInTrace, L as attachEvermindLearn, N as buildBrainTriageReport, O as byoReasonHint, Q as byoUnresolvedInTrace, T as byoUnresolvedSummary, W as canRunInParallel, X as computeBrainDiagnostics, Y as computeRunProgress, Z as describeLiveStep, _ as describeStreamFailure, $ as detectAnnouncedButUnmadeToolCall, a0 as detectUnbackedTicketClaim, a1 as detectUnbackedWriteClaim, a2 as formatBrainDiagnostics, a3 as formatBrainProvenance, a4 as formatBytes, a5 as formatDispatchRefusals, a6 as formatEvermindLearnStep, a7 as formatModelScorecard, a8 as formatModelTurnLog, a9 as formatStaffingSummary, aa as hasEditIntent, ab as isDispatchTool, ac as isEvermindModel, ad as isFailedToolResult, ae as isMutationTool, af as isStepMessage, ag as isTicketWriteTool, ah as isUsageSurface, ai as midRunNotice, aj as modelFailoversInTrace, ak as modelScorecard, al as modelTurnLog, am as modelsUsedInTrace, an as narratedUnadvertisedInTrace, ao as parseByoUnresolved, ap as parseRoleGateRefusal, aq as serverChatIdOf, ar as shortenTarget, as as staffingSummaryInTrace, at as stallRecoveriesInTrace, au as stallUnrecoveredInTrace, av as toolActivity, aw as workFiledNotStaffedVerdict } from './brainTriage-BXwQw04C.js';
-import { C as ChatCompletionMessage, R as RunKey, B as BrainRunPersistence, a as BrainRunRequest, b as BrainTransport, c as BrainStreamFn, d as RunEndOutcome, e as CompletionUsage, S as StreamChatOptions, f as StreamHandlers, g as StreamChatResult, L as LocalFirstAccount, h as LocalFirstAttemptRecord, i as LocalFirstAttempt, j as LocalFirstWorkload, P as ProjectMemoryRequest, O as OnDeviceTasks, k as OnDeviceTaskKind, l as SummarizeOptions, m as RewriteOptions, W as WriteOptions, D as DetectedLanguage, T as TranslateOptions, J as JsonTaskOptions, n as OnDeviceObserver, o as ServedBy, p as JsonSchema, E as Effort, q as EvermindRunHooks, r as BrainToolSpec, s as ChatMode, t as RunWindowSources, u as ReasoningIntent, v as ChatRosterAgent, w as ContentPart, G as GitPort, x as TicketToolVocabulary } from './pendingWords-DIVkgVq6.js';
-export { A as ASK_USER_TOOL, y as ASK_USER_TOOL_SPEC, z as AnswerOriginCost, F as AskUserMessageLike, H as AskUserOption, I as AskUserPayload, K as AskUserToolSpec, M as AssembledToolCall, N as AvoidedRunCall, Q as BrainRunOutcome, U as CHAT_MODES, V as CHAT_MODE_ICON, X as ChatWorkDirectiveOptions, Y as CompletionMetadata, Z as EffortProfile, _ as ImageUrlContentPart, $ as LOCAL_TICKET_CREATE_TOOL, a0 as LocalFirstAttemptSummary, a1 as MAX_STOP_HOOK_ROUNDS, a2 as MemoryAnswerOptions, a3 as MemoryFirstAnswer, a4 as MemorySurface, a5 as ModelPreflightResult, a6 as ModelWindowSources, a7 as NEW_CHAT_MODE, a8 as OnDeviceEngine, a9 as OnDeviceTaskEvent, aa as PendingAskUser, ab as PrefetchResult, ac as RESTING_CHAT_MODE, ad as ReasoningLevel, ae as ReviewerPort, af as RunLineage, ag as RunOutcomeReport, ah as RunPipelineSettings, ai as RunStageModels, aj as RunStopHook, ak as RunStopInput, al as SERVER_TICKET_CREATE_TOOL, am as SERVER_TICKET_TOOLS, an as SUBAGENT_OF_META_KEY, ao as ServedOption, ap as ServedRead, aq as SubagentOrigin, ar as TextContentPart, as as UpstreamTurnEvidence, at as VerifierPort, au as askStopHook, av as askUserAnchorId, aw as askUserBlock, ax as chatConversationDirective, ay as chatModeDirective, az as chatRosterFromParticipants, aA as chatWorkDirective, aB as clearPendingWords, aC as coerceAskUserPayload, aD as contextWindowOf, aE as effortProfile, aF as isChatMode, aG as isEffort, aH as localFallbackTrace, aI as normalizeChatMode, aJ as parseAskUser, aK as parseSubagentOrigin, aL as projectMemoryHooks, aM as reasoningForRun, aN as resolveContextWindow, aO as savedChatOf, aP as selectPendingAskUser, aQ as serializeAskUser, aR as setPendingWordsOwner, aS as streamChatCompletion, aT as stripAskUser, aU as summarizeLocalFirstAttempt, aV as ticketToolVocabulary } from './pendingWords-DIVkgVq6.js';
+import { B as BrainTraceEvent, S as StreamFailureDetail, C as ChatInputAttachment, a as BrainMessage, b as BrainRunActivity, c as BrainChat, d as SpendSavingsSummary, V as ViewKey, e as BrainModality, H as HandOffMode, f as ScopeClash, g as HandOffDecision, P as PackageDirProbe, h as ParallelSplit, R as RunProgress, i as BrainDiagnostics, j as StaffingSummary, U as UsageSurface } from './brainTriage-BinfeJfQ.js';
+export { k as BrainDiagnosticsContext, l as BrainRunPhase, m as BuildBrainTriageOptions, n as ByoUnresolvedEntry, D as DispatchRefusal, E as EvermindLearnOutcome, o as EvermindLearnTarget, M as ModelScore, p as ModelTurn, q as PersonaSubagent, r as ROLE_GATE_REMEDIATION, s as RepeatStreak, t as RepeatedTarget, u as STEP_MESSAGE_ROLE, v as SavingsBreakdown, w as SavingsBySource, x as SavingsSourceKey, y as SpendBreakdown, z as UNBACKED_TICKET_CLAIM_NOTICE, A as UNBACKED_WRITE_CLAIM_NOTICE, F as USAGE_SURFACES, G as USAGE_SURFACE_HEADER, I as accountUsedInTrace, J as activityTarget, K as answeredInProseInTrace, L as attachEvermindLearn, N as buildBrainTriageReport, O as byoReasonHint, Q as byoUnresolvedInTrace, T as byoUnresolvedSummary, W as canRunInParallel, X as computeBrainDiagnostics, Y as computeRunProgress, Z as describeLiveStep, _ as describeStreamFailure, $ as detectAnnouncedButUnmadeToolCall, a0 as detectUnbackedTicketClaim, a1 as detectUnbackedWriteClaim, a2 as formatBrainDiagnostics, a3 as formatBrainProvenance, a4 as formatBytes, a5 as formatDispatchRefusals, a6 as formatEvermindLearnStep, a7 as formatModelScorecard, a8 as formatModelTurnLog, a9 as formatStaffingSummary, aa as hasEditIntent, ab as isDispatchTool, ac as isEvermindModel, ad as isFailedToolResult, ae as isMutationTool, af as isStepMessage, ag as isTicketWriteTool, ah as isUsageSurface, ai as midRunNotice, aj as modelFailoversInTrace, ak as modelScorecard, al as modelTurnLog, am as modelsUsedInTrace, an as narratedUnadvertisedInTrace, ao as parseByoUnresolved, ap as parseRoleGateRefusal, aq as serverChatIdOf, ar as shortenTarget, as as staffingSummaryInTrace, at as stallRecoveriesInTrace, au as stallUnrecoveredInTrace, av as toolActivity, aw as workFiledNotStaffedVerdict } from './brainTriage-BinfeJfQ.js';
+import { C as ChatCompletionMessage, R as RunKey, B as BrainRunPersistence, a as BrainRunRequest, b as BrainTransport, c as BrainStreamFn, d as RunEndOutcome, e as CompletionUsage, S as StreamChatOptions, f as StreamHandlers, g as StreamChatResult, L as LocalFirstAccount, h as LocalFirstAttemptRecord, i as LocalFirstAttempt, j as LocalFirstWorkload, P as ProjectMemoryRequest, k as ByoOrderQuery, l as LocalFirstAccounts, O as OnDeviceTasks, m as OnDeviceTaskKind, n as SummarizeOptions, o as RewriteOptions, W as WriteOptions, D as DetectedLanguage, T as TranslateOptions, J as JsonTaskOptions, p as OnDeviceObserver, q as ServedBy, r as JsonSchema, E as Effort, s as EvermindRunHooks, t as BrainToolSpec, u as ChatMode, v as RunWindowSources, w as ReasoningIntent, x as ChatRosterAgent, y as ContentPart, G as GitPort, z as TicketToolVocabulary } from './pendingWords-TFeSyDUG.js';
+export { A as ASK_USER_TOOL, F as ASK_USER_TOOL_SPEC, H as AnswerOriginCost, I as AskUserMessageLike, K as AskUserOption, M as AskUserPayload, N as AskUserToolSpec, Q as AssembledToolCall, U as AvoidedRunCall, V as BrainRunOutcome, X as CHAT_MODES, Y as CHAT_MODE_ICON, Z as ChatWorkDirectiveOptions, _ as CompletionMetadata, $ as EffortProfile, a0 as ImageUrlContentPart, a1 as LOCAL_TICKET_CREATE_TOOL, a2 as LocalFirstAttemptSummary, a3 as MAX_STOP_HOOK_ROUNDS, a4 as MemoryAnswerOptions, a5 as MemoryFirstAnswer, a6 as MemorySurface, a7 as ModelPreflightResult, a8 as ModelWindowSources, a9 as NEW_CHAT_MODE, aa as OnDeviceEngine, ab as OnDeviceTaskEvent, ac as PendingAskUser, ad as PrefetchResult, ae as RESTING_CHAT_MODE, af as ReasoningLevel, ag as ReviewerPort, ah as RunLineage, ai as RunOutcomeReport, aj as RunPipelineSettings, ak as RunStageModels, al as RunStopHook, am as RunStopInput, an as SERVER_TICKET_CREATE_TOOL, ao as SERVER_TICKET_TOOLS, ap as SUBAGENT_OF_META_KEY, aq as ServedOption, ar as ServedRead, as as SubagentOrigin, at as TextContentPart, au as UpstreamTurnEvidence, av as VerifierPort, aw as askStopHook, ax as askUserAnchorId, ay as askUserBlock, az as chatConversationDirective, aA as chatModeDirective, aB as chatRosterFromParticipants, aC as chatWorkDirective, aD as clearPendingWords, aE as coerceAskUserPayload, aF as contextWindowOf, aG as effortProfile, aH as isChatMode, aI as isEffort, aJ as localFallbackTrace, aK as normalizeChatMode, aL as parseAskUser, aM as parseSubagentOrigin, aN as projectMemoryHooks, aO as reasoningForRun, aP as resolveContextWindow, aQ as savedChatOf, aR as selectPendingAskUser, aS as serializeAskUser, aT as setPendingWordsOwner, aU as streamChatCompletion, aV as stripAskUser, aW as summarizeLocalFirstAttempt, aX as ticketToolVocabulary } from './pendingWords-TFeSyDUG.js';
 import { SummaryCompletion } from '@seanhogg/builderforce-memory/working';
 export { CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, ConsolidationMarkerMeta, HISTORY_TOKEN_BUDGET, consolidationMarkerContent, consolidationMarkerOf, consolidationMetadata, isConsolidationMarker, lastConsolidationIndex, scopeToConsolidation } from '@seanhogg/builderforce-memory/working';
 import { L as LocalRuntimeId, a as LocalEndpoint, b as LocalRuntimeProbe } from './probe-BGCNrsPi.js';
@@ -18,7 +18,7 @@ export { EvermindRecallItem, EvermindRecallResult, countReconciledMemories, form
 import { JudgementRequest } from '@seanhogg/builderforce-memory/knowledge';
 import { ChatErrorAction } from './chatError.js';
 export { BrainRequestError, ChatErrorActionKind, LOCAL_ENGINE_FAILURE_CODES, LocalEngineFailureCode, NOT_SIGNED_IN, NO_LOCAL_MODEL, NO_SPECIFIC_MODEL, PlatformRefusedCapability, brainRequestError, chatErrorAction } from './chatError.js';
-export { P as PersistedStep, p as parseStepMessage, s as stepSig, t as traceWithPersistedSteps } from './persistedSteps-HTSOmImy.js';
+export { P as PersistedStep, p as parseStepMessage, s as stepSig, t as traceWithPersistedSteps } from './persistedSteps-3p1dT412.js';
 
 /**
  * THE INFERENCE MODE — what a person chooses about where models run, on every host
@@ -2474,7 +2474,7 @@ interface RunUsageValue {
     /** The call's transport (see {@link UsageRoute}) — not its pipeline route. */
     route: UsageRoute;
     mode?: 'chat' | 'work';
-    /** What kind of call it was (plan / code / verify / explore / chat / utility). */
+    /** What kind of call it was (plan / code / review / verify / explore / chat / utility). */
     role?: string;
     /** The run's pipeline route and the router's score, when the run was routed. */
     pipelineRoute?: UsagePipelineRoute;
@@ -2989,8 +2989,9 @@ declare function localFirstWorkload(call: {
  * the editor's route and the web app's stream both read it.
  *
  * Device runtimes stay out of `byo_pool` here. The pool's one exception is not a device
- * model: the connected ACCOUNTS a host calls itself (Kimi) are tried before the gateway's
- * pool, with no probes (see {@link createLocalFirstStream}).
+ * model: the connected ACCOUNTS a host calls itself (Kimi) join the gateway's pool where the
+ * tenant's order places them (before it when they lead, after it when they trail), with no
+ * probes (see {@link createLocalFirstStream}).
  */
 declare function localFirstApplies(call: {
     model?: string;
@@ -3001,10 +3002,21 @@ declare function localFirstApplies(call: {
 interface LocalFirstStreamInput {
     /** The runtimes as probed WITH capabilities (`createLocalRuntimeProber({ capabilities: true })`). */
     probes: readonly LocalRuntimeProbe[];
-    /** Connected accounts this host calls itself (Kimi), tried after the device and before
-     *  the cloud — Hybrid Auto, and "use my connected accounts" (`byo_pool`, device excluded)
-     *  in Hybrid and Specific (`createHostModelStream`). */
+    /** Connected accounts this host calls itself (Kimi) — Hybrid Auto, and "use my connected
+     *  accounts" (`byo_pool`, device excluded) in Hybrid and Specific (`createHostModelStream`).
+     *  Each sits where its `placement` puts it in the tenant's precedence: a `lead` account
+     *  after the device and before the cloud, a `trail` account after the cloud, tried only
+     *  when the cloud fails before any output (the cloud's error is then the one surfaced). */
     accounts?: readonly LocalFirstAccount[];
+    /**
+     * The tenant's funding order, read with the accounts (`LocalFirstAccounts.freeFirst`).
+     * `false` (account-first) on a call open to local-first: a trailing account is tried
+     * BEFORE the plan pool — the cloud first over the tenant's other accounts only
+     * (`byo_pool`), then the trailing accounts, then the cloud as the call names it (Auto)
+     * last (`localFirstPlan`'s `accountFirst`). Absent or `true`: the one cloud leg, then the
+     * trailing accounts. Ignored for "use my connected accounts", which is the pool already.
+     */
+    freeFirst?: boolean;
     /** The gateway stream, or null when signed out (local-only). */
     cloud: StreamFn$1 | null;
     /** Lent to the local attempts; the global `fetch` by default. */
@@ -3286,8 +3298,15 @@ declare function webStorageLocalSuccessStore(key?: string): LocalSuccessStore;
  *    through `createLocalFirstStream`, which owns which calls are open to local-first
  *    (`localFirstApplies`) and the invisible failover; with nothing probed, the gateway.
  *    A connected subscription this host calls itself (`accounts` — Kimi, which refuses our
- *    cloud) is tried after this device and before the gateway, the way the gateway leads
- *    with the tenant's other connected accounts.
+ *    cloud) takes its place in the tenant's BYO order for the turn's context (the server's
+ *    order): it is tried after this device and before the gateway only when it LEADS that
+ *    order. A TRAILING one sits by the tenant's funding order: free first → after the
+ *    gateway's Auto, only when it fails before any output; account-first → device → leading
+ *    accounts → the gateway over the tenant's other accounts only (`byo_pool`, strict) →
+ *    the trailing account → the gateway's Auto (the pool) last, so the pool — which almost
+ *    never fails — cannot strand the person's own subscription. Each later leg runs only when
+ *    the one before failed before any output; with everything failing the last cloud leg's
+ *    error (Auto's) surfaces. Unreadable order: every account leads, as before.
  *    With a `localSuccess` store, the engine's `run.local-success` predictor is consulted
  *    before the local attempt — skipped when it is confident the turn would fail there —
  *    and every outcome (local served, local failed → gateway, skipped) trains it. Only
@@ -3306,9 +3325,11 @@ declare function webStorageLocalSuccessStore(key?: string): LocalSuccessStore;
  *    run, so the turn goes straight to Auto.
  *  - **Specific with a pick:** exactly that route, hard-pinned (`modelStrict`) — no local
  *    attempt and no fallback. "Use my connected accounts" (`routingMode: 'byo_pool'`) is
- *    a pick of the person's ACCOUNTS, in Hybrid too: the ones this host calls itself
- *    (`accounts` — Kimi) first, then the gateway's BYO pool, which stays strict. Never a
- *    device runtime and never the free pool; with no host accounts, exactly the pool.
+ *    a pick of the person's ACCOUNTS, in Hybrid too, in the tenant's order for the turn's
+ *    role: an account this host calls itself (`accounts` — Kimi) before the gateway's BYO
+ *    pool (which stays strict) when it leads that order, else after it as the fallback
+ *    (the gateway's error surfaces when both fail). Never a device runtime and never the
+ *    free pool; with no host accounts, exactly the pool.
  *  - **Specific with no pick:** fails `no_specific_model` — never a silent Hybrid.
  *
  * When no model can serve a turn, the error says WHY: `not_signed_in` only for a person
@@ -3342,11 +3363,13 @@ interface HostModelStreamInput {
     probes?: () => Promise<readonly LocalRuntimeProbe[]>;
     /**
      * The connected accounts this host calls itself (Kimi), read per Hybrid Auto call and per
-     * "use my connected accounts" call (Hybrid or Specific) — never prompting; an account
-     * that is not connected is simply absent. Absent = none (the web
-     * app, which cannot reach Kimi).
+     * "use my connected accounts" call (Hybrid or Specific) with the call's context
+     * ({@link byoOrderQuery}: role — absent = a coding turn — project, arc stage, agentic),
+     * each `placement`d in the tenant's order for it, with the tenant's funding order
+     * (`freeFirst`) — never prompting; an account that is not connected is simply absent.
+     * Absent = none (the web app, which cannot reach Kimi).
      */
-    accounts?: () => Promise<readonly LocalFirstAccount[]>;
+    accounts?: (query: ByoOrderQuery) => Promise<LocalFirstAccounts>;
     /** The gateway stream for this call, or null signed out. */
     cloud: () => MaybePromise<StreamFn | null>;
     /** The local fetch (page engines' shim, the editor's bridge…); the global by default. */

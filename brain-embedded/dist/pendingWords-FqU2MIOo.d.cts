@@ -1,5 +1,5 @@
-import { B as BrainTraceEvent, U as UsageSurface, a as BrainMessage, P as PackageDirProbe } from './brainTriage-BXwQw04C.js';
-import { L as LocalRuntimeId, a as LocalEndpoint, b as LocalRuntimeProbe, c as LocalModel } from './probe-BGCNrsPi.js';
+import { B as BrainTraceEvent, U as UsageSurface, a as BrainMessage, P as PackageDirProbe } from './brainTriage-BinfeJfQ.cjs';
+import { L as LocalRuntimeId, a as LocalEndpoint, b as LocalRuntimeProbe, c as LocalModel } from './probe-BGCNrsPi.cjs';
 import { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import { ConsolidateOptions, ConsolidatedMemory } from '@seanhogg/builderforce-memory/working';
 
@@ -126,15 +126,54 @@ type LocalFirstAttempt = {
     kind: 'cloud';
     /** The host's cloud choice; undefined = let the gateway route. */
     model?: string;
+    /**
+     * This leg's routing, overriding the call's; absent = the call's own. `byo_pool` is the
+     * account-first leg of {@link LocalFirstInput.accountFirst}: the tenant's other connected
+     * accounts only (strict), never the plan pool.
+     */
+    routingMode?: 'auto' | 'byo_pool';
 };
 /**
  * A connected subscription this host calls ITSELF because its provider refuses our cloud
- * (Kimi Code — registry `accountProvider`). Hybrid tries it after this device and before
- * the cloud, the way the gateway leads with the tenant's other connected accounts.
+ * (Kimi Code — registry `accountProvider`). It takes its place IN the tenant's BYO
+ * precedence rather than always leading: see {@link LocalFirstAccount.placement}.
  */
 type LocalFirstAccount = Omit<Extract<LocalFirstAttempt, {
     kind: 'local';
-}>, 'kind'>;
+}>, 'kind'> & {
+    /**
+     * Where the account sits relative to the gateway, from the tenant's precedence:
+     *  - `lead` (absent = lead): its provider is the tenant's first HEALTHY account, so it is
+     *    tried after this device and BEFORE the cloud;
+     *  - `trail`: another account ranks ahead of it, which only the gateway can call — the
+     *    cloud goes first (cascading over the tenant's server-reachable accounts in order),
+     *    and this account is tried only when the cloud fails before any output.
+     */
+    placement?: 'lead' | 'trail';
+};
+/**
+ * The call's context a host reads the tenant's BYO order with (`GET /llm/byo-order`): the
+ * server ranks per role, and may refine that by project, arc stage and whether the turn
+ * carries tools.
+ */
+interface ByoOrderQuery {
+    /** The turn role; absent = a coding turn. */
+    role?: string;
+    projectId?: number;
+    arcStage?: string;
+    /** The call carries tools (an agent turn); absent = no. */
+    agentic?: boolean;
+}
+/** The connected accounts placed for one call, with the tenant's cloud funding order. */
+interface LocalFirstAccounts {
+    accounts: readonly LocalFirstAccount[];
+    /**
+     * The tenant's funding order from the same read: `true` = the free pool first, `false` =
+     * the tenant's connected accounts first (see {@link LocalFirstInput.accountFirst}); absent
+     * = unknown (the order was unreadable — every account then leads).
+     */
+    freeFirst?: boolean;
+}
 
 /**
  * Run a local-first plan: each attempt in order, falling over to the next when one fails
@@ -609,7 +648,7 @@ interface StreamChatOptions {
      */
     prompt_cache_key?: string;
     /**
-     * What kind of call this is (plan/code/verify/explore/chat/utility), emitted as the
+     * What kind of call this is (plan/code/review/verify/explore/chat/utility), emitted as the
      * body's `role`. Under auto-routing the gateway orders the tenant's connected
      * accounts for it — analysis on the tenant's own order, code on the strongest
      * connected model. Omitted when unset, so the body stays byte-identical.
@@ -964,7 +1003,7 @@ interface RunOutcomeRequest extends RunOutcomeTelemetry {
     /** Alias for `terminalStatus`: true → completed, false → failed. */
     success?: boolean;
     actionType?: string;
-    /** The model ROLE `model` played in this run (plan · code · verify · explore · chat ·
+    /** The model ROLE `model` played in this run (plan · code · review · verify · explore · chat ·
      *  utility) — lets the router rank per role. The route validates it; unknown → dropped. */
     role?: string;
     projectId?: number | null;
@@ -2142,7 +2181,8 @@ interface BrainRunRequest {
     /**
      * The model each working phase asks for when the run holds no model of its own
      * (`@builderforce/run-policy` `phaseModels`): the host's stage models instead of one
-     * model pinned to the whole run. `verify` also overrides a pin, as the review model.
+     * model pinned to the whole run. `review` (legacy: `verify`) also overrides a pin, as
+     * the model that reviews the run's change.
      */
     phaseModels?: RunStageModels;
     /**
@@ -2194,8 +2234,12 @@ interface AvoidedRunCall {
 }
 /** How a run ended. */
 type RunEndOutcome = 'succeeded' | 'failed' | 'stopped' | 'budget-contained';
-/** The host's per-phase models — absent phase ⇒ the gateway orders by role. */
-type RunStageModels = Partial<Record<'plan' | 'code' | 'verify', string>>;
+/**
+ * The host's per-stage models — absent stage ⇒ the gateway orders by role. `review` is the
+ * model that judges the run's diff (the run's verify PHASE, `runStore/pipelineRoute.ts`);
+ * `verify` is that phase's legacy name and only applies when no `review` model is set.
+ */
+type RunStageModels = Partial<Record<'plan' | 'code' | 'review' | 'verify', string>>;
 /** How a host wants its runs routed between the full pipeline and a quick pass. */
 interface RunPipelineSettings {
     /** `auto` routes on the score; `always` keeps every run on the full pipeline. */
@@ -2258,4 +2302,4 @@ declare function replayPendingWords(chatId: number, persistence: Pick<BrainRunPe
 /** The app started: replay every chat this person left words in, not only the one that happens to be opened. */
 declare function replayAllPendingWords(persistence: Pick<BrainRunPersistence, 'sendMessages'>): Promise<number>;
 
-export { LOCAL_TICKET_CREATE_TOOL as $, ASK_USER_TOOL as A, type BrainRunPersistence as B, type ChatCompletionMessage as C, type DetectedLanguage as D, type Effort as E, type AskUserMessageLike as F, type GitPort as G, type AskUserOption as H, type AskUserPayload as I, type JsonTaskOptions as J, type AskUserToolSpec as K, type LocalFirstAccount as L, type AssembledToolCall as M, type AvoidedRunCall as N, type OnDeviceTasks as O, type ProjectMemoryRequest as P, type BrainRunOutcome as Q, type RunKey as R, type StreamChatOptions as S, type TranslateOptions as T, CHAT_MODES as U, CHAT_MODE_ICON as V, type WriteOptions as W, type ChatWorkDirectiveOptions as X, type CompletionMetadata as Y, type EffortProfile as Z, type ImageUrlContentPart as _, type BrainRunRequest as a, replayPendingWords as a$, type LocalFirstAttemptSummary as a0, MAX_STOP_HOOK_ROUNDS as a1, type MemoryAnswerOptions as a2, type MemoryFirstAnswer as a3, type MemorySurface as a4, type ModelPreflightResult as a5, type ModelWindowSources as a6, NEW_CHAT_MODE as a7, type OnDeviceEngine as a8, type OnDeviceTaskEvent as a9, chatWorkDirective as aA, clearPendingWords as aB, coerceAskUserPayload as aC, contextWindowOf as aD, effortProfile as aE, isChatMode as aF, isEffort as aG, localFallbackTrace as aH, normalizeChatMode as aI, parseAskUser as aJ, parseSubagentOrigin as aK, projectMemoryHooks as aL, reasoningForRun as aM, resolveContextWindow as aN, savedChatOf as aO, selectPendingAskUser as aP, serializeAskUser as aQ, setPendingWordsOwner as aR, streamChatCompletion as aS, stripAskUser as aT, summarizeLocalFirstAttempt as aU, ticketToolVocabulary as aV, forgetPendingWords as aW, markPendingWordsRead as aX, registerPendingWordsReplay as aY, rememberPendingWords as aZ, replayAllPendingWords as a_, type PendingAskUser as aa, type PrefetchResult as ab, RESTING_CHAT_MODE as ac, type ReasoningLevel as ad, type ReviewerPort as ae, type RunLineage as af, type RunOutcomeReport as ag, type RunPipelineSettings as ah, type RunStageModels as ai, type RunStopHook as aj, type RunStopInput as ak, SERVER_TICKET_CREATE_TOOL as al, SERVER_TICKET_TOOLS as am, SUBAGENT_OF_META_KEY as an, type ServedOption as ao, type ServedRead as ap, type SubagentOrigin as aq, type TextContentPart as ar, type UpstreamTurnEvidence as as, type VerifierPort as at, askStopHook as au, askUserAnchorId as av, askUserBlock as aw, chatConversationDirective as ax, chatModeDirective as ay, chatRosterFromParticipants as az, type BrainTransport as b, type BrainStreamFn as c, type RunEndOutcome as d, type CompletionUsage as e, type StreamHandlers as f, type StreamChatResult as g, type LocalFirstAttemptRecord as h, type LocalFirstAttempt as i, type LocalFirstWorkload as j, type OnDeviceTaskKind as k, type SummarizeOptions as l, type RewriteOptions as m, type OnDeviceObserver as n, type ServedBy as o, type JsonSchema as p, type EvermindRunHooks as q, type BrainToolSpec as r, type ChatMode as s, type RunWindowSources as t, type ReasoningIntent as u, type ChatRosterAgent as v, type ContentPart as w, type TicketToolVocabulary as x, ASK_USER_TOOL_SPEC as y, type AnswerOriginCost as z };
+export { type EffortProfile as $, ASK_USER_TOOL as A, type BrainRunPersistence as B, type ChatCompletionMessage as C, type DetectedLanguage as D, type Effort as E, ASK_USER_TOOL_SPEC as F, type GitPort as G, type AnswerOriginCost as H, type AskUserMessageLike as I, type JsonTaskOptions as J, type AskUserOption as K, type LocalFirstAccount as L, type AskUserPayload as M, type AskUserToolSpec as N, type OnDeviceTasks as O, type ProjectMemoryRequest as P, type AssembledToolCall as Q, type RunKey as R, type StreamChatOptions as S, type TranslateOptions as T, type AvoidedRunCall as U, type BrainRunOutcome as V, type WriteOptions as W, CHAT_MODES as X, CHAT_MODE_ICON as Y, type ChatWorkDirectiveOptions as Z, type CompletionMetadata as _, type BrainRunRequest as a, rememberPendingWords as a$, type ImageUrlContentPart as a0, LOCAL_TICKET_CREATE_TOOL as a1, type LocalFirstAttemptSummary as a2, MAX_STOP_HOOK_ROUNDS as a3, type MemoryAnswerOptions as a4, type MemoryFirstAnswer as a5, type MemorySurface as a6, type ModelPreflightResult as a7, type ModelWindowSources as a8, NEW_CHAT_MODE as a9, chatModeDirective as aA, chatRosterFromParticipants as aB, chatWorkDirective as aC, clearPendingWords as aD, coerceAskUserPayload as aE, contextWindowOf as aF, effortProfile as aG, isChatMode as aH, isEffort as aI, localFallbackTrace as aJ, normalizeChatMode as aK, parseAskUser as aL, parseSubagentOrigin as aM, projectMemoryHooks as aN, reasoningForRun as aO, resolveContextWindow as aP, savedChatOf as aQ, selectPendingAskUser as aR, serializeAskUser as aS, setPendingWordsOwner as aT, streamChatCompletion as aU, stripAskUser as aV, summarizeLocalFirstAttempt as aW, ticketToolVocabulary as aX, forgetPendingWords as aY, markPendingWordsRead as aZ, registerPendingWordsReplay as a_, type OnDeviceEngine as aa, type OnDeviceTaskEvent as ab, type PendingAskUser as ac, type PrefetchResult as ad, RESTING_CHAT_MODE as ae, type ReasoningLevel as af, type ReviewerPort as ag, type RunLineage as ah, type RunOutcomeReport as ai, type RunPipelineSettings as aj, type RunStageModels as ak, type RunStopHook as al, type RunStopInput as am, SERVER_TICKET_CREATE_TOOL as an, SERVER_TICKET_TOOLS as ao, SUBAGENT_OF_META_KEY as ap, type ServedOption as aq, type ServedRead as ar, type SubagentOrigin as as, type TextContentPart as at, type UpstreamTurnEvidence as au, type VerifierPort as av, askStopHook as aw, askUserAnchorId as ax, askUserBlock as ay, chatConversationDirective as az, type BrainTransport as b, replayAllPendingWords as b0, replayPendingWords as b1, type BrainStreamFn as c, type RunEndOutcome as d, type CompletionUsage as e, type StreamHandlers as f, type StreamChatResult as g, type LocalFirstAttemptRecord as h, type LocalFirstAttempt as i, type LocalFirstWorkload as j, type ByoOrderQuery as k, type LocalFirstAccounts as l, type OnDeviceTaskKind as m, type SummarizeOptions as n, type RewriteOptions as o, type OnDeviceObserver as p, type ServedBy as q, type JsonSchema as r, type EvermindRunHooks as s, type BrainToolSpec as t, type ChatMode as u, type RunWindowSources as v, type ReasoningIntent as w, type ChatRosterAgent as x, type ContentPart as y, type TicketToolVocabulary as z };

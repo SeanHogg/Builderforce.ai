@@ -1011,11 +1011,12 @@ function stableStringify(value) {
 }
 
 // ../packages/agent-tools/src/modelRoles.ts
-var MODEL_ROLES = ["plan", "code", "verify", "explore", "chat", "utility"];
+var MODEL_ROLES = ["plan", "code", "review", "verify", "explore", "chat", "utility"];
 var MODEL_ROLE_DESCRIPTIONS = {
   plan: "Deciding an approach or breaking work down \u2014 no code written yet.",
   code: "Writing or editing code. The default when no role is named.",
-  verify: "Checking work already done \u2014 reading test/build output, reviewing a diff.",
+  review: "Judging work \u2014 reviewing a diff or a plan for correctness and design.",
+  verify: "Mechanical checks \u2014 building, compiling, running tests and reading their output.",
   explore: "Investigation \u2014 locating, searching, summarising.",
   chat: "A conversational answer with no task-shaped work behind it.",
   utility: "Small, mechanical, low-stakes work \u2014 formatting, extraction, a lookup."
@@ -3022,122 +3023,233 @@ var outputFilterTool = defineTool({
   }
 });
 
-// ../packages/agent-tools/src/shell-tools.ts
-var SHELL_WAIT_MAX_MS = 10 * 60 * 1e3;
-function waitArg(v) {
-  return typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.min(Math.floor(v), SHELL_WAIT_MAX_MS) : void 0;
-}
-function cwdArg(v) {
-  if (v == null || v === "") return void 0;
-  if (typeof v !== "string") return null;
-  const dir = v.trim().split("\\").join("/").replace(/^(\.\/)+/, "").replace(/\/+$/, "");
-  if (dir === "" || dir === ".") return ".";
-  return safeRepoArg(dir);
-}
-function commandDir(command, cwd, defaultRepo) {
-  if (cwd) return cwd === "." ? void 0 : cwd;
-  if (/^\s*(cd|pushd)\s/i.test(command)) return void 0;
-  return safeRepoArg(defaultRepo) ?? void 0;
-}
-var jobNote = (id) => `Running in the background (job ${id}). Keep working; check it with command_status { "id": "${id}" } (pass waitMs to wait for it), stop it with command_stop { "id": "${id}" }.`;
-function finishedJob(st) {
-  return {
-    ok: st.status === "exited" && st.exitCode === 0,
-    ...st.exitCode !== void 0 ? { exitCode: st.exitCode } : {},
-    stdout: st.output ?? "",
-    ...st.outputId ? { outputId: st.outputId } : {},
-    ...st.status === "killed" ? { aborted: true, error: st.error ?? "the job was stopped" } : st.error ? { error: st.error } : {}
-  };
-}
-function shapeResult(command, r) {
-  return searchNoMatch(command, r);
-}
-async function runShellCommand(args, ctx) {
-  const stripped = stripTailLimit(typeof args.command === "string" ? args.command : "");
-  const command = stripped.command;
-  const tailNote = stripped.stripped ? `ran without the trailing \`| tail -${stripped.tail}\` \u2014 the full output is retained under \`outputId\`; read its head with output_filter { outputId, head: \u2026 }. ` : "";
-  if (!command.trim()) return { data: { ok: false, error: "command is required" } };
-  const cwd = cwdArg(args.cwd);
-  if (cwd === null) {
-    return { data: { ok: false, error: "`cwd` must be a directory inside the workspace, relative to its root (no `..`, no absolute path)." } };
-  }
-  const shell = ctx.caps.shell;
-  const dir = commandDir(command, cwd, shell.defaultRepo);
-  const where = dir ? { cwd: dir } : {};
-  const background = args.background === true;
-  const yieldMs = waitArg(args.yieldMs);
-  let note;
-  if (background || yieldMs !== void 0) {
-    if (shell.start && shell.poll) {
-      if (ctx.signal?.aborted) return { data: { ok: false, aborted: true, error: "stopped before the command started", ...where } };
-      const started = await (dir ? shell.start(command, { cwd: dir }) : shell.start(command));
-      if (!started.ok || !started.id) return { data: { ok: false, error: started.error ?? "the background job did not start", ...where } };
-      const id = started.id;
-      if (background) return { data: { ok: true, background: true, id, status: "running", note: jobNote(id), ...where } };
-      const st = await shell.poll(id, { waitMs: yieldMs, ...ctx.signal ? { signal: ctx.signal } : {} });
-      if (st.status === "running") {
-        const why = ctx.signal?.aborted ? "The wait was interrupted" : `Still running after ${yieldMs}ms`;
-        return { data: { ok: true, background: true, id, status: "running", output: st.output ?? "", note: `${why}, so it moved to the background. ${jobNote(id)}`, ...where } };
-      }
-      const r2 = await compressShellResult(shapeResult(command, finishedJob(st)), ctx);
-      return { data: { ...r2, ...st.status === "unknown" ? { id } : {}, ...where } };
+// ../packages/agent-tools/src/shell-segments.ts
+var CONSTRUCT_WORDS = /* @__PURE__ */ new Set(["then", "else", "fi", "do", "done", "esac", "{", "}", "(", ")"]);
+function splitShellSegments(command) {
+  const out = [];
+  let current = "";
+  let quote = null;
+  let depth = 0;
+  for (let i = 0; i < command.length; i += 1) {
+    const ch = command[i];
+    if (quote) {
+      current += ch;
+      if (ch === quote) quote = null;
+      continue;
     }
-    note = "This surface has no background shell, so the command ran in the foreground.";
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      current += ch;
+      continue;
+    }
+    if (ch === "$" && command[i + 1] === "(") {
+      depth += 1;
+      current += "$(";
+      i += 1;
+      continue;
+    }
+    if (ch === ")" && depth > 0) {
+      depth -= 1;
+      current += ch;
+      continue;
+    }
+    if (ch === "&" && (command[i - 1] === ">" || command[i - 1] === "<" || command[i + 1] === ">")) {
+      current += ch;
+      continue;
+    }
+    if (depth === 0 && (ch === ";" || ch === "\n" || ch === "|" || ch === "&")) {
+      if ((ch === "&" || ch === "|") && command[i + 1] === ch) i += 1;
+      if (current.trim()) out.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += ch;
   }
-  const ran = args.fresh === true ? await shell.run(command, { ...ctx.signal ? { signal: ctx.signal } : {}, ...where, fresh: true }) : await shellRunWithStop(ctx, command, dir);
-  const r = await compressShellResult(shapeResult(command, ran), ctx);
-  const notes = [tailNote, r.note, note].filter(Boolean).join(" ");
-  return { data: { ...r, ...where, ...notes ? { note: notes } : {} } };
+  if (quote || depth !== 0) return null;
+  if (current.trim()) out.push(current.trim());
+  return out;
 }
-async function compressedJobStatus(st, ctx) {
-  if (st.status === "running" || typeof st.output !== "string") return st;
-  const r = await compressShellResult(finishedJob(st), ctx);
-  return r.compressed && typeof r.stdout === "string" ? { ...st, output: r.stdout } : st;
-}
-function jobId(args) {
-  return typeof args.id === "string" ? args.id.trim() : "";
-}
-var commandStatusTool = defineTool({
-  name: "command_status",
-  description: "Check a BACKGROUND command started by run_command (background:true, or one that outlived its yieldMs): whether it is still running, its exit code, and the tail of its output. Pass waitMs to wait up to that long for it to finish first. Use this instead of re-running a long command.",
-  parameters: {
-    type: "object",
-    properties: {
-      id: { type: "string", description: "The job id run_command returned." },
-      waitMs: { type: "number", description: "Optional: wait up to this many milliseconds for the job to finish before answering (max 600000)." }
-    },
-    required: ["id"]
-  },
-  requires: ["shell.jobs"],
-  async execute(args, ctx) {
-    const id = jobId(args);
-    if (!id) return { data: { ok: false, error: "id is required" } };
-    const poll = ctx.caps.shell?.poll;
-    if (!poll) return { data: { ok: false, error: "background commands are not available on this surface" } };
-    const waitMs = waitArg(args.waitMs);
-    const st = await poll.call(ctx.caps.shell, id, { ...waitMs !== void 0 ? { waitMs } : {}, ...ctx.signal ? { signal: ctx.signal } : {} });
-    return { data: await compressedJobStatus(st, ctx) };
+function shellTokens(segment) {
+  const out = [];
+  const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
+  let m = re.exec(segment);
+  while (m) {
+    out.push(m[1] ?? m[2] ?? m[3] ?? "");
+    m = re.exec(segment);
   }
-});
-var commandStopTool = defineTool({
-  name: "command_stop",
-  description: "Stop a BACKGROUND command started by run_command \u2014 it and every process it started are killed. Returns its final output tail.",
-  parameters: {
-    type: "object",
-    properties: { id: { type: "string", description: "The job id run_command returned." } },
-    required: ["id"]
-  },
-  requires: ["shell.jobs"],
-  async execute(args, ctx) {
-    const id = jobId(args);
-    if (!id) return { data: { ok: false, error: "id is required" } };
-    const kill = ctx.caps.shell?.kill;
-    if (!kill) return { data: { ok: false, error: "background commands are not available on this surface" } };
-    const st = await kill.call(ctx.caps.shell, id);
-    return { data: await compressedJobStatus(st, ctx) };
+  return out;
+}
+function commandWords(words2) {
+  let i = 0;
+  while (i < words2.length) {
+    const first = words2[i] ?? "";
+    const leads = CONSTRUCT_WORDS.has(first) || /^[A-Za-z_]\w*=/.test(first) || first === "if" || first === "while" || first === "until" || first === "!";
+    if (!leads) break;
+    i += 1;
   }
-});
-var SHELL_JOB_TOOLS = [commandStatusTool, commandStopTool, outputFilterTool];
+  return words2.slice(i);
+}
+var GIT_VALUED_GLOBALS = /* @__PURE__ */ new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--super-prefix", "--config-env"]);
+function gitSubcommand(args) {
+  let i = 0;
+  let dir;
+  while (i < args.length && (args[i] ?? "").startsWith("-")) {
+    if (args[i] === "-C") dir = args[i + 1];
+    i += GIT_VALUED_GLOBALS.has(args[i] ?? "") ? 2 : 1;
+  }
+  return { ...args[i] !== void 0 ? { sub: args[i] } : {}, rest: args.slice(i + 1), ...dir !== void 0 ? { dir } : {} };
+}
+
+// ../packages/agent-tools/src/branch-switch.ts
+var CHECKOUT_CREATE = /* @__PURE__ */ new Set(["-b", "-B", "--orphan"]);
+var SWITCH_CREATE = /* @__PURE__ */ new Set(["-c", "-C", "--create", "--force-create", "--orphan"]);
+var CHECKOUT_PATH_MODES = /* @__PURE__ */ new Set(["-p", "--patch", "--ours", "--theirs", "-2", "-3"]);
+var REDIRECT = /^\d*[<>]|^&>/;
+var BARE_REDIRECT = /^(\d*(>>?|<)|&>>?)$/;
+var PLAIN_WRAPPERS = /* @__PURE__ */ new Set(["command", "time", "nohup", "exec"]);
+var SHELLS = /* @__PURE__ */ new Set(["sh", "bash", "zsh", "dash"]);
+var SHELL_C_FLAG = /^-[a-zA-Z]*c[a-zA-Z]*$/;
+var MAX_DEPTH = 3;
+function withoutRedirects(words2) {
+  const out = [];
+  for (let i = 0; i < words2.length; i += 1) {
+    const word = words2[i] ?? "";
+    if (BARE_REDIRECT.test(word)) {
+      i += 1;
+      continue;
+    }
+    if (!REDIRECT.test(word)) out.push(word);
+  }
+  return out;
+}
+function attachedCreate(sub, word) {
+  const m = (sub === "checkout" ? /^-[bB](.+)$/ : /^-[cC](.+)$/).exec(word);
+  return m?.[1];
+}
+function switchOf(sub, rest) {
+  const createFlags = sub === "checkout" ? CHECKOUT_CREATE : SWITCH_CREATE;
+  let created;
+  let creates = false;
+  let detach = false;
+  let endsOptions = false;
+  const positional = [];
+  for (let i = 0; i < rest.length; i += 1) {
+    const word = rest[i] ?? "";
+    if (word === "--") {
+      if (i < rest.length - 1) return void 0;
+      endsOptions = true;
+      break;
+    }
+    if (sub === "checkout" && (CHECKOUT_PATH_MODES.has(word) || word.startsWith("--pathspec-from-file"))) return void 0;
+    const [flag, inline] = word.startsWith("--") && word.includes("=") ? [word.slice(0, word.indexOf("=")), word.slice(word.indexOf("=") + 1)] : [word, void 0];
+    if (createFlags.has(flag)) {
+      creates = true;
+      created = inline ?? rest[i + 1];
+      if (inline === void 0) i += 1;
+      continue;
+    }
+    const attached = attachedCreate(sub, word);
+    if (attached !== void 0) {
+      creates = true;
+      created = attached;
+      continue;
+    }
+    if (word === "--detach" || sub === "switch" && word === "-d") {
+      detach = true;
+      continue;
+    }
+    if (word === "-") {
+      positional.push(word);
+      continue;
+    }
+    if (word.startsWith("-")) continue;
+    positional.push(word);
+  }
+  if (creates) return { ...created ? { target: created } : {}, creates: true };
+  if (detach) return { ...positional[0] ? { target: positional[0] } : {}, creates: false };
+  if (positional.length !== 1 || positional[0] === ".") return void 0;
+  const target = positional[0];
+  return sub === "checkout" && target !== "-" && !endsOptions ? { target, creates: false, ambiguous: true } : { target, creates: false };
+}
+function enter(base, dir) {
+  const clean = dir.replace(/[\\/]+$/, "").replace(/^(\.\/)+/, "") || ".";
+  if (!base || /^([\\/~]|[A-Za-z]:)/.test(clean)) return clean;
+  return clean === "." ? base : `${base}/${clean}`;
+}
+function parenBalance(segment) {
+  const bare = segment.replace(/"[^"]*"|'[^']*'/g, "");
+  return (bare.match(/\(/g)?.length ?? 0) - (bare.match(/\)/g)?.length ?? 0);
+}
+function unwrapSubshell(words2) {
+  const out = [...words2];
+  if (out[0]?.startsWith("(")) out[0] = out[0].replace(/^\(+/, "");
+  const last = out.length - 1;
+  if (last >= 0 && out[last]?.endsWith(")")) out[last] = out[last].replace(/\)+$/, "");
+  return commandWords(out.filter((w) => w !== ""));
+}
+function peelWrappers(words2) {
+  let out = [...words2];
+  for (let guard = 0; guard < 8; guard += 1) {
+    const [head, ...rest] = out;
+    if (head === "env") {
+      let i = 0;
+      while (i < rest.length && ((rest[i] ?? "").startsWith("-") || /^[A-Za-z_]\w*=/.test(rest[i] ?? ""))) i += rest[i] === "-u" || rest[i] === "-C" ? 2 : 1;
+      out = rest.slice(i);
+    } else if (head !== void 0 && PLAIN_WRAPPERS.has(head)) {
+      let i = 0;
+      while (i < rest.length && (rest[i] ?? "").startsWith("-")) i += 1;
+      out = rest.slice(i);
+    } else if (head === "timeout") {
+      let i = 0;
+      while (i < rest.length && (rest[i] ?? "").startsWith("-")) i += rest[i] === "-s" || rest[i] === "-k" ? 2 : 1;
+      out = rest.slice(i + 1);
+    } else {
+      return out;
+    }
+  }
+  return out;
+}
+function segmentSwitch(words2, cdDir, depth) {
+  const [program, ...args] = words2;
+  if (program !== void 0 && SHELLS.has(program)) {
+    const flag = args.findIndex((a) => SHELL_C_FLAG.test(a));
+    const script = flag === -1 ? void 0 : args.slice(flag + 1).find((a) => !a.startsWith("-"));
+    if (script === void 0 || depth >= MAX_DEPTH) return void 0;
+    const inner = detectIn(script, depth + 1);
+    if (!inner) return void 0;
+    const where2 = inner.dir !== void 0 ? enter(cdDir, inner.dir) : cdDir;
+    return { ...inner, ...where2 !== void 0 ? { dir: where2 } : {} };
+  }
+  if (program !== "git") return void 0;
+  const { sub, rest, dir } = gitSubcommand(args);
+  if (sub !== "checkout" && sub !== "switch") return void 0;
+  const found = switchOf(sub, withoutRedirects(rest));
+  if (!found) return void 0;
+  const where = dir !== void 0 ? enter(cdDir, dir) : cdDir;
+  return { ...found, ...where !== void 0 ? { dir: where } : {} };
+}
+function detectIn(command, depth) {
+  const segments = splitShellSegments(command.trim());
+  if (!segments) return void 0;
+  let cdDir;
+  const outer = [];
+  for (const segment of segments) {
+    const net = parenBalance(segment);
+    for (let k = 0; k < net; k += 1) outer.push(cdDir);
+    const words2 = peelWrappers(unwrapSubshell(commandWords(shellTokens(segment))));
+    if ((words2[0] === "cd" || words2[0] === "pushd") && words2[1] !== void 0 && words2[1] !== "-") {
+      cdDir = enter(cdDir, words2[1]);
+    } else {
+      const found = segmentSwitch(words2, cdDir, depth);
+      if (found) return found;
+    }
+    for (let k = 0; k < -net && outer.length > 0; k += 1) cdDir = outer.pop();
+  }
+  return void 0;
+}
+function detectBranchSwitch(command) {
+  return detectIn(command, 0);
+}
 
 // ../packages/agent-tools/src/git-status.ts
 var GIT_STATUS_COMMAND = "git status --short --branch";
@@ -3210,20 +3322,39 @@ function parseHeader(line) {
   return header;
 }
 var CONFLICT = /* @__PURE__ */ new Set(["DD", "AU", "UD", "UA", "DU", "AA", "UU"]);
+function porcelainEntry(line) {
+  if (line.startsWith("##")) return void 0;
+  const full = /^(..) (.+)$/.exec(line);
+  const trimmed = full ? null : /^([MADRCUT]) (.+)$/.exec(line);
+  const xy = full ? full[1] ?? "" : trimmed ? ` ${trimmed[1]}` : void 0;
+  const rest = (full ?? trimmed)?.[2] ?? "";
+  if (xy === void 0 || xy === "!!") return void 0;
+  if (xy === "??") return { xy, path: unquoteGitPath(rest) };
+  const arrow = rest.indexOf(" -> ");
+  return arrow === -1 ? { xy, path: unquoteGitPath(rest) } : { xy, path: unquoteGitPath(rest.slice(arrow + 4)), from: unquoteGitPath(rest.slice(0, arrow)) };
+}
+var NO_OUTPUT2 = "(no output)";
+function parsePorcelainPaths(stdout) {
+  if (stdout.trim() === NO_OUTPUT2) return [];
+  return stdout.split(/\r?\n/).flatMap((line) => {
+    const entry = porcelainEntry(line);
+    return entry ? [entry.path] : [];
+  });
+}
+function pendingChangesSummary(paths, named = 3) {
+  const more = paths.length > named ? `, and ${paths.length - named} more` : "";
+  return `${paths.length} uncommitted change(s) (${paths.slice(0, named).join(", ")}${more})`;
+}
 function parseEntries(lines) {
   const out = { staged: [], unstaged: [], untracked: [], conflicted: [] };
   for (const line of lines) {
-    if (line.length < 4 || line.startsWith("##")) continue;
-    const xy = line.slice(0, 2);
-    const rest = line.slice(3);
-    if (xy === "!!") continue;
+    const entry = line.length < 4 ? void 0 : porcelainEntry(line);
+    if (!entry) continue;
+    const { xy, path, from } = entry;
     if (xy === "??") {
-      out.untracked.push(unquoteGitPath(rest));
+      out.untracked.push(path);
       continue;
     }
-    const arrow = rest.indexOf(" -> ");
-    const path = unquoteGitPath(arrow === -1 ? rest : rest.slice(arrow + 4));
-    const from = arrow === -1 ? void 0 : unquoteGitPath(rest.slice(0, arrow));
     if (CONFLICT.has(xy)) {
       out.conflicted.push(path);
       continue;
@@ -3278,6 +3409,193 @@ function parseGitStatusOutput(stdout, paths) {
   return { output: statusLines.join("\n").trim(), report };
 }
 
+// ../packages/agent-tools/src/worktree-path.ts
+function worktreeNameFor(branch) {
+  return `${branch.replace(/\//g, "-")}-wt`;
+}
+function worktreePathFor(branch) {
+  return `../${worktreeNameFor(branch)}`;
+}
+function worktreeNameShell(branchVar) {
+  return `$(echo "$${branchVar}" | tr / -)-wt`;
+}
+var DIRTY_WORKTREE_EXIT = 14;
+var WORKTREE_KEPT_EXIT = 15;
+function checkConventionWorktreeShell(branchVar) {
+  return [
+    `WT="$(cd "$(git rev-parse --show-toplevel)/.." && pwd -P)/${worktreeNameShell(branchVar)}"`,
+    'WT_AT="$(git worktree list --porcelain 2>/dev/null | sed -n "s/^worktree //p" | while IFS= read -r W; do if [ "$(cd "$W" 2>/dev/null && pwd -P)" = "$WT" ]; then printf "%s\\n" "$W"; break; fi; done; true)"',
+    `if [ -n "$WT_AT" ]; then [ -z "$(git -C "$WT_AT" status --porcelain 2>/dev/null)" ] || { echo "DIRTY_WORKTREE $WT_AT"; exit ${DIRTY_WORKTREE_EXIT}; }; fi`
+  ];
+}
+function removeFoundWorktreeShell() {
+  return `if [ -n "$WT_AT" ]; then git worktree remove "$WT_AT" 2>/dev/null || { echo "WORKTREE_KEPT $WT_AT"; exit ${WORKTREE_KEPT_EXIT}; }; fi`;
+}
+
+// ../packages/agent-tools/src/branch-switch-guard.ts
+var UNSAFE = /["$`%!\n\r]/;
+function gitDirArg(dir) {
+  if (dir === void 0) return "";
+  const normal = dir.replace(/\\/g, "/");
+  if (normal.startsWith("~") || UNSAFE.test(normal)) return null;
+  return `-C "${normal}" `;
+}
+function branchSwitchRefusal(command, found, paths) {
+  const branch = found.target && found.target !== "-" ? found.target : "<branch>";
+  return `Refused: \`${command}\` switches branches, but the working tree has ${pendingChangesSummary(paths)}. Switching branches would carry them onto the other branch or abort mid-way, so branches are never switched over pending changes \u2014 the command was not run. Instead: (a) to put this work on a branch, call git_commit with \`branch\` (it commits through a worktree; this checkout is never switched), then push / open_pull_request; (b) to read another branch, use \`git show ${branch}:<path>\` or \`git diff ${branch}\`; (c) to work on another branch side by side, run \`git worktree add ${worktreePathFor(branch)} ${branch}\` from the repository's top level (\`git worktree add -b ${branch} ${worktreePathFor(branch)}\` to create it) and run your commands there; (d) to discard a file's edits, use \`git restore <path>\` (a bare \`git checkout <x>\` is read as a branch switch when \`<x>\` names a commit). If this command commits or stashes first, run that part on its own, then the switch.`;
+}
+function unverifiableRefusal(command, dir) {
+  return `Refused: \`${command}\` switches branches in \`${dir}\`, which could not be verified clean (that directory cannot be passed to git safely) \u2014 the command was not run. Pass the checkout as \`cwd\` (relative to the workspace root) and run the git command without \`cd\` / \`-C\`, so its working tree can be checked first.`;
+}
+var succeeded = (r) => r.ok && (r.exitCode ?? 0) === 0;
+var unanswered = (r) => !r.ok && r.exitCode === void 0;
+function unreadableRefusal(command, why) {
+  return `Refused: \`${command}\` switches branches, but this checkout's state could not be read (${why ?? "git timed out or its output was too large"}), so it could not be verified clean \u2014 the command was not run. Pass the checkout as \`cwd\` and retry, or commit (git_commit with \`branch\`) first.`;
+}
+async function namesCommit(git, target) {
+  if (UNSAFE.test(target)) return true;
+  const sha = await git(`rev-parse --verify --quiet "${target}^{commit}"`);
+  if (unanswered(sha)) return true;
+  if (succeeded(sha) && /^[0-9a-f]{7,64}\r?$/m.test(sha.stdout ?? "")) return true;
+  const remote = await git(`for-each-ref --count=1 "--format=%(refname)" "refs/remotes/*/${target}"`);
+  if (unanswered(remote)) return true;
+  return succeeded(remote) && /^refs\/remotes\//m.test(remote.stdout ?? "");
+}
+async function refuseBranchSwitchOverChanges(command, dir, ctx) {
+  const found = detectBranchSwitch(command);
+  if (!found) return void 0;
+  const at2 = gitDirArg(found.dir);
+  if (at2 === null) return unverifiableRefusal(command, found.dir ?? "");
+  const opts = { ...dir ? { cwd: dir } : {}, ...ctx.signal ? { signal: ctx.signal } : {}, fresh: true };
+  const git = (args) => ctx.caps.shell.run(`git ${at2}${args}`, opts);
+  const status = await git("status --porcelain --branch");
+  if (unanswered(status)) return unreadableRefusal(command, status.error);
+  if (!succeeded(status)) return void 0;
+  const paths = parsePorcelainPaths(status.stdout ?? "");
+  if (paths.length === 0) return void 0;
+  if (found.ambiguous && found.target && !await namesCommit(git, found.target)) return void 0;
+  return branchSwitchRefusal(command, found, paths);
+}
+
+// ../packages/agent-tools/src/shell-tools.ts
+var SHELL_WAIT_MAX_MS = 10 * 60 * 1e3;
+function waitArg(v) {
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.min(Math.floor(v), SHELL_WAIT_MAX_MS) : void 0;
+}
+function cwdArg(v) {
+  if (v == null || v === "") return void 0;
+  if (typeof v !== "string") return null;
+  const dir = v.trim().split("\\").join("/").replace(/^(\.\/)+/, "").replace(/\/+$/, "");
+  if (dir === "" || dir === ".") return ".";
+  return safeRepoArg(dir);
+}
+function commandDir(command, cwd, defaultRepo) {
+  if (cwd) return cwd === "." ? void 0 : cwd;
+  if (/^\s*(cd|pushd)\s/i.test(command)) return void 0;
+  return safeRepoArg(defaultRepo) ?? void 0;
+}
+var jobNote = (id) => `Running in the background (job ${id}). Keep working; check it with command_status { "id": "${id}" } (pass waitMs to wait for it), stop it with command_stop { "id": "${id}" }.`;
+function finishedJob(st) {
+  return {
+    ok: st.status === "exited" && st.exitCode === 0,
+    ...st.exitCode !== void 0 ? { exitCode: st.exitCode } : {},
+    stdout: st.output ?? "",
+    ...st.outputId ? { outputId: st.outputId } : {},
+    ...st.status === "killed" ? { aborted: true, error: st.error ?? "the job was stopped" } : st.error ? { error: st.error } : {}
+  };
+}
+function shapeResult(command, r) {
+  return searchNoMatch(command, r);
+}
+async function runShellCommand(args, ctx) {
+  const stripped = stripTailLimit(typeof args.command === "string" ? args.command : "");
+  const command = stripped.command;
+  const tailNote = stripped.stripped ? `ran without the trailing \`| tail -${stripped.tail}\` \u2014 the full output is retained under \`outputId\`; read its head with output_filter { outputId, head: \u2026 }. ` : "";
+  if (!command.trim()) return { data: { ok: false, error: "command is required" } };
+  const cwd = cwdArg(args.cwd);
+  if (cwd === null) {
+    return { data: { ok: false, error: "`cwd` must be a directory inside the workspace, relative to its root (no `..`, no absolute path)." } };
+  }
+  const shell = ctx.caps.shell;
+  const dir = commandDir(command, cwd, shell.defaultRepo);
+  const where = dir ? { cwd: dir } : {};
+  const background = args.background === true;
+  const yieldMs = waitArg(args.yieldMs);
+  let note;
+  const refused = await refuseBranchSwitchOverChanges(command, dir, ctx);
+  if (refused) return { data: { ok: false, refused: "branch-switch", error: refused, ...where } };
+  if (background || yieldMs !== void 0) {
+    if (shell.start && shell.poll) {
+      if (ctx.signal?.aborted) return { data: { ok: false, aborted: true, error: "stopped before the command started", ...where } };
+      const started = await (dir ? shell.start(command, { cwd: dir }) : shell.start(command));
+      if (!started.ok || !started.id) return { data: { ok: false, error: started.error ?? "the background job did not start", ...where } };
+      const id = started.id;
+      if (background) return { data: { ok: true, background: true, id, status: "running", note: jobNote(id), ...where } };
+      const st = await shell.poll(id, { waitMs: yieldMs, ...ctx.signal ? { signal: ctx.signal } : {} });
+      if (st.status === "running") {
+        const why = ctx.signal?.aborted ? "The wait was interrupted" : `Still running after ${yieldMs}ms`;
+        return { data: { ok: true, background: true, id, status: "running", output: st.output ?? "", note: `${why}, so it moved to the background. ${jobNote(id)}`, ...where } };
+      }
+      const r2 = await compressShellResult(shapeResult(command, finishedJob(st)), ctx);
+      return { data: { ...r2, ...st.status === "unknown" ? { id } : {}, ...where } };
+    }
+    note = "This surface has no background shell, so the command ran in the foreground.";
+  }
+  const ran = args.fresh === true ? await shell.run(command, { ...ctx.signal ? { signal: ctx.signal } : {}, ...where, fresh: true }) : await shellRunWithStop(ctx, command, dir);
+  const r = await compressShellResult(shapeResult(command, ran), ctx);
+  const notes = [tailNote, r.note, note].filter(Boolean).join(" ");
+  return { data: { ...r, ...where, ...notes ? { note: notes } : {} } };
+}
+async function compressedJobStatus(st, ctx) {
+  if (st.status === "running" || typeof st.output !== "string") return st;
+  const r = await compressShellResult(finishedJob(st), ctx);
+  return r.compressed && typeof r.stdout === "string" ? { ...st, output: r.stdout } : st;
+}
+function jobId(args) {
+  return typeof args.id === "string" ? args.id.trim() : "";
+}
+var commandStatusTool = defineTool({
+  name: "command_status",
+  description: "Check a BACKGROUND command started by run_command (background:true, or one that outlived its yieldMs): whether it is still running, its exit code, and the tail of its output. Pass waitMs to wait up to that long for it to finish first. Use this instead of re-running a long command.",
+  parameters: {
+    type: "object",
+    properties: {
+      id: { type: "string", description: "The job id run_command returned." },
+      waitMs: { type: "number", description: "Optional: wait up to this many milliseconds for the job to finish before answering (max 600000)." }
+    },
+    required: ["id"]
+  },
+  requires: ["shell.jobs"],
+  async execute(args, ctx) {
+    const id = jobId(args);
+    if (!id) return { data: { ok: false, error: "id is required" } };
+    const poll = ctx.caps.shell?.poll;
+    if (!poll) return { data: { ok: false, error: "background commands are not available on this surface" } };
+    const waitMs = waitArg(args.waitMs);
+    const st = await poll.call(ctx.caps.shell, id, { ...waitMs !== void 0 ? { waitMs } : {}, ...ctx.signal ? { signal: ctx.signal } : {} });
+    return { data: await compressedJobStatus(st, ctx) };
+  }
+});
+var commandStopTool = defineTool({
+  name: "command_stop",
+  description: "Stop a BACKGROUND command started by run_command \u2014 it and every process it started are killed. Returns its final output tail.",
+  parameters: {
+    type: "object",
+    properties: { id: { type: "string", description: "The job id run_command returned." } },
+    required: ["id"]
+  },
+  requires: ["shell.jobs"],
+  async execute(args, ctx) {
+    const id = jobId(args);
+    if (!id) return { data: { ok: false, error: "id is required" } };
+    const kill = ctx.caps.shell?.kill;
+    if (!kill) return { data: { ok: false, error: "background commands are not available on this surface" } };
+    const st = await kill.call(ctx.caps.shell, id);
+    return { data: await compressedJobStatus(st, ctx) };
+  }
+});
+var SHELL_JOB_TOOLS = [commandStatusTool, commandStopTool, outputFilterTool];
+
 // ../packages/agent-tools/src/git-script-parts.ts
 var RESOLVE_BASE = `BASE="$(git remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p')"; [ -n "$BASE" ] || BASE=main`;
 var IDENTITY_EMAIL = 'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"';
@@ -3315,7 +3633,8 @@ function buildCommitCommand(opts) {
     // is never inside the checkout being edited, and is named for the branch.
     ...branch ? [
       'ORIG="$(git rev-parse --show-toplevel)"',
-      `WT="$ORIG/../$(echo "${branch}" | tr '/' '-')-wt"`,
+      // THE worktree convention (`worktree-path.ts`) — the run_command refusal names the same path.
+      `WT="$ORIG/${worktreePathFor(branch)}"`,
       // This checkout's git-common-dir, physical and absolute: the identity of the
       // repository. A worktree of THIS repo shares it; a foreign checkout does not.
       'COMMON="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)"',
@@ -3391,6 +3710,10 @@ function buildCleanupCommand(opts) {
     '[ "$TARGET" != "$BASE" ] || { echo NOTHING_TO_CLEAN; exit 9; }',
     '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }',
     'git rev-parse --verify --quiet "$TARGET" >/dev/null || { echo NO_SUCH_BRANCH; exit 11; }',
+    // THE convention's worktree (`worktree-path.ts`) — the one git_commit and the run_command
+    // refusal both create — found and checked for uncommitted work NOW, before the fetch and the
+    // checkout below, so a refused cleanup changes nothing.
+    ...checkConventionWorktreeShell("TARGET"),
     // Was this branch ever pushed? Read BEFORE the prune, which is what removes the
     // evidence — a branch that had an upstream and no longer exists on the remote was
     // merged and deleted by the host, however it was merged.
@@ -3409,10 +3732,9 @@ function buildCleanupCommand(opts) {
     '[ "$MERGED" = 1 ] || { echo NOT_MERGED; exit 10; }',
     // The ticket branch may live in a worktree (the commit flow never switches the
     // checkout), and git refuses to delete a branch that is checked out anywhere — so
-    // remove the worktree first. Best-effort: if it is gone the branch delete below is
-    // what matters.
-    'WT="$(git rev-parse --show-toplevel)/../$(echo "$TARGET" | tr / -)-wt"',
-    'if git worktree list --porcelain 2>/dev/null | grep -q "^worktree $WT$"; then git worktree remove --force "$WT" 2>/dev/null || true; fi',
+    // remove the (clean, checked above) worktree first; one git will not remove (locked,
+    // submodules) stops here with WORKTREE_KEPT rather than failing the branch delete.
+    removeFoundWorktreeShell(),
     // `-D`, not `-d`: the merged-ness check above is STRICTER than git's own (it also
     // accepts the squash-merge case git cannot see), so `-d` would refuse exactly the
     // branches this tool exists to remove. Nothing reaches this line unmerged.
@@ -3462,6 +3784,20 @@ function publishToolResult(action, r) {
   }
   if (r.exitCode === 12 || /\bWORKTREE_FAILED\b/.test(out)) {
     return fail("the ticket branch's worktree could not be created or reused \u2014 nothing was committed and the checkout was not switched. Run git_status, then re-try git_commit with the same branch (a stale worktree can be cleared with `git worktree prune`).");
+  }
+  const dirtyWorktree = /DIRTY_WORKTREE ([^\n]*)/.exec(out);
+  if (r.exitCode === DIRTY_WORKTREE_EXIT || dirtyWorktree) {
+    const at2 = (dirtyWorktree?.[1] ?? "").trim();
+    return fail(
+      `the branch's worktree${at2 ? ` (${at2})` : ""} has uncommitted changes, so it was kept and the branch was NOT deleted \u2014 removing it would destroy that work. Commit those changes (git_commit / run_command in that worktree) or discard them there (\`git restore\` / \`git clean\`), then re-run git_cleanup_merged.`
+    );
+  }
+  const kept = /WORKTREE_KEPT ([^\n]*)/.exec(out);
+  if (r.exitCode === WORKTREE_KEPT_EXIT || kept) {
+    const at2 = (kept?.[1] ?? "").trim();
+    return fail(
+      `the branch's worktree${at2 ? ` (${at2})` : ""} could not be removed \u2014 it is locked or has submodules \u2014 so the branch was NOT deleted. Only if its contents are not needed, unlock/remove it with \`git worktree remove --force ${at2 || "<path>"}\`, then re-run git_cleanup_merged.`
+    );
   }
   if (r.exitCode === 4 || /\bDIRTY\b/.test(out)) {
     return fail("you have uncommitted changes \u2014 commit or discard them before cleaning up (this refuses to discard uncommitted work).");
@@ -4952,7 +5288,7 @@ var runChecksTool = defineTool({
 });
 var runCommandTool = defineTool({
   name: "run_command",
-  description: "Run a shell command in the checked-out repository (real shell). Use it to install dependencies and run the build, type-check, lint, and tests. Returns combined stdout/stderr and the exit code. Verify your changes this way BEFORE calling finish. Do not re-run a command to grep/head/tail its output: when the result has an outputId and the output_filter tool is available, use output_filter on it.",
+  description: "Run a shell command in the checked-out repository (real shell). Use it to install dependencies and run the build, type-check, lint, and tests. Returns combined stdout/stderr and the exit code. Verify your changes this way BEFORE calling finish. Do not re-run a command to grep/head/tail its output: when the result has an outputId and the output_filter tool is available, use output_filter on it. It refuses a branch switch (git checkout / git switch) while the working tree has uncommitted changes \u2014 use a git worktree, or git_commit with `branch`, instead.",
   parameters: {
     type: "object",
     properties: {
@@ -6340,51 +6676,6 @@ var READ_ONLY_GIT = /* @__PURE__ */ new Set([
   "check-ignore",
   "check-attr"
 ]);
-var CONSTRUCT_WORDS = /* @__PURE__ */ new Set(["then", "else", "fi", "do", "done", "esac", "{", "}", "(", ")"]);
-function splitSegments(command) {
-  const out = [];
-  let current = "";
-  let quote = null;
-  let depth = 0;
-  for (let i = 0; i < command.length; i += 1) {
-    const ch = command[i];
-    if (quote) {
-      current += ch;
-      if (ch === quote) quote = null;
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      current += ch;
-      continue;
-    }
-    if (ch === "$" && command[i + 1] === "(") {
-      depth += 1;
-      current += "$(";
-      i += 1;
-      continue;
-    }
-    if (ch === ")" && depth > 0) {
-      depth -= 1;
-      current += ch;
-      continue;
-    }
-    if (ch === "&" && (command[i - 1] === ">" || command[i - 1] === "<" || command[i + 1] === ">")) {
-      current += ch;
-      continue;
-    }
-    if (depth === 0 && (ch === ";" || ch === "\n" || ch === "|" || ch === "&")) {
-      if ((ch === "&" || ch === "|") && command[i + 1] === ch) i += 1;
-      if (current.trim()) out.push(current.trim());
-      current = "";
-      continue;
-    }
-    current += ch;
-  }
-  if (quote || depth !== 0) return null;
-  if (current.trim()) out.push(current.trim());
-  return out;
-}
 function substitutions(segment) {
   const out = [];
   let i = segment.indexOf("$(");
@@ -6400,16 +6691,6 @@ function substitutions(segment) {
   }
   return out;
 }
-function tokens(segment) {
-  const out = [];
-  const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
-  let m = re.exec(segment);
-  while (m) {
-    out.push(m[1] ?? m[2] ?? m[3] ?? "");
-    m = re.exec(segment);
-  }
-  return out;
-}
 function writesViaRedirect(segment) {
   const unquoted = segment.replace(/"[^"]*"|'[^']*'/g, '""');
   const re = /(\d*)>>?\s*(&\d+|\S+)?/g;
@@ -6422,12 +6703,7 @@ function writesViaRedirect(segment) {
   return false;
 }
 function gitIsReadOnly(args) {
-  let i = 0;
-  while (i < args.length && (args[i] ?? "").startsWith("-")) {
-    i += args[i] === "-C" || args[i] === "-c" ? 2 : 1;
-  }
-  const sub = args[i];
-  const rest = args.slice(i + 1);
+  const { sub, rest } = gitSubcommand(args);
   if (!sub) return true;
   if (READ_ONLY_GIT.has(sub)) return true;
   const flags = new Set(rest.filter((a) => a.startsWith("-")));
@@ -6473,15 +6749,7 @@ function segmentIsReadOnly(segment, depth) {
   }
   const flat = segment.replace(/\$\((?:[^()]|\([^()]*\))*\)/g, "X");
   if (writesViaRedirect(flat)) return false;
-  let words2 = tokens(flat);
-  const leads = () => {
-    const first = words2[0] ?? "";
-    return CONSTRUCT_WORDS.has(first) || /^[A-Za-z_]\w*=/.test(first) || first === "if" || first === "while" || first === "until" || first === "!";
-  };
-  while (words2.length && leads()) {
-    words2 = words2.slice(1);
-  }
-  const [program, ...args] = words2;
+  const [program, ...args] = commandWords(shellTokens(flat));
   if (program === void 0) return true;
   if (program === "for" || program === "case") return true;
   if (program === "git") return gitIsReadOnly(args);
@@ -6494,7 +6762,7 @@ function segmentIsReadOnly(segment, depth) {
 }
 function commandIsReadOnly(command, depth) {
   if (/`/.test(command)) return false;
-  const segments = splitSegments(command);
+  const segments = splitShellSegments(command);
   if (!segments || segments.length === 0) return false;
   return segments.every((s) => segmentIsReadOnly(s, depth));
 }
@@ -7561,7 +7829,7 @@ var SIGNAL_RANK = {
   read_only_streak: 5,
   no_progress: 6
 };
-function succeeded(result) {
+function succeeded2(result) {
   if (result.isError) return false;
   const d = result.data;
   return !(d && typeof d === "object" && d.ok === false);
@@ -7631,7 +7899,7 @@ var ProgressDetector = class {
     const readOnly = this.ports.isReadOnly?.(tool, args) === true;
     this.claims.observe(readOnly);
     this.readOnlyStreak.observe(readOnly);
-    const ok = succeeded(result);
+    const ok = succeeded2(result);
     const unscoped = (this.ports.isUnscopedMutation ?? ((t) => t === "run_command"))(tool, args);
     const changed = changedPathsOf(args);
     const wrote = ok && (changed.length > 0 || unscoped && this.ports.isReadOnly?.(tool, args) !== true);
@@ -8202,8 +8470,8 @@ function covers(test, file, policy) {
   return false;
 }
 function isErrorFinding(finding3) {
-  const tokens2 = finding3.trim().split(/\s+/);
-  return (tokens2[1] ?? "").toLowerCase() === "error";
+  const tokens = finding3.trim().split(/\s+/);
+  return (tokens[1] ?? "").toLowerCase() === "error";
 }
 function pass() {
   return { ok: true, unavailable: [] };
@@ -9665,6 +9933,9 @@ function routingByRole(turns, events) {
   const count = (label) => events.filter((e) => e.label === label).length;
   const roleHandoffs = events.filter((e) => e.label === "llm.role_handoff");
   const hasArg = (e, key) => !!e.args && typeof e.args === "object" && key in e.args;
+  const progressForced = events.filter((e) => e.label === "loop.progress_forced" && !!e.args && typeof e.args === "object").map((e) => e.args).filter((a) => a.forced === "hand_off");
+  const progressForcedHandOffs = progressForced.length;
+  const progressSignals = [...new Set(progressForced.map((a) => typeof a.signal === "string" ? a.signal : "").filter(Boolean))];
   return {
     roles: [...byRole.entries()].map(([role, e]) => ({
       role,
@@ -9674,11 +9945,19 @@ function routingByRole(turns, events) {
     })),
     coderReasks: roleHandoffs.filter((e) => hasArg(e, "from")).length,
     handOffs: roleHandoffs.filter((e) => hasArg(e, "via")).length,
-    handOffsForced: count("loop.hand_off_due"),
+    handOffsForced: count("loop.hand_off_due") + progressForcedHandOffs,
+    handOffsForcedByProgress: progressForcedHandOffs,
+    handOffsForcedSignals: progressSignals,
     planBudgetsSpent: count("loop.plan_budget_spent"),
     handOffModes: events.filter((e) => e.label === HAND_OFF_MODE_LABEL).map(decisionOf).filter((d) => d !== null),
     handOffClashesRefused: count(HAND_OFF_CLASH_LABEL)
   };
+}
+function forcedText(r) {
+  const byProgress = r.handOffsForcedByProgress ?? 0;
+  const byBudget = r.handOffsForced - byProgress;
+  const causes = [byBudget > 0 ? "the analysis budget" : "", byProgress > 0 ? `the progress guard${r.handOffsForcedSignals?.length ? ` (${r.handOffsForcedSignals.join(", ")})` : ""}` : ""].filter(Boolean);
+  return r.handOffsForced ? ` \xB7 ${r.handOffsForced} forced by ${causes.join(" and ")}` : "";
 }
 function formatRoutingByRole(r) {
   if (!r || r.roles.length === 0) return [];
@@ -9689,7 +9968,7 @@ function formatRoutingByRole(r) {
     lines.push(`  \u2022 ${role.role}: ${role.turns} turn(s) \u2014 ${models}${left}`);
   }
   lines.push(
-    `  \u2022 analysis \u2192 code: ${r.coderReasks} re-ask(s) on a first edit \xB7 ${r.handOffs} hand_off call(s)` + (r.handOffsForced ? ` \xB7 ${r.handOffsForced} forced by the analysis budget` : "") + (r.planBudgetsSpent ? ` \xB7 ${r.planBudgetsSpent} ended analysis with no hand-off` : "") + (r.handOffClashesRefused ? ` \xB7 ${r.handOffClashesRefused} plan(s) sent back once for overlapping paths` : "")
+    `  \u2022 analysis \u2192 code: ${r.coderReasks} re-ask(s) on a first edit \xB7 ${r.handOffs} hand_off call(s)` + forcedText(r) + (r.planBudgetsSpent ? ` \xB7 ${r.planBudgetsSpent} ended analysis with no hand-off` : "") + (r.handOffClashesRefused ? ` \xB7 ${r.handOffClashesRefused} plan(s) sent back once for overlapping paths` : "")
   );
   for (const d of r.handOffModes ?? []) lines.push(decisionLine(d));
   const plan = r.roles.find((x) => x.role === "plan")?.models[0]?.model;
@@ -10180,8 +10459,8 @@ function memoryUsageInTrace(events) {
       if (result && typeof result === "object") {
         const count = result.count;
         if (typeof count === "number") out.evermindItems += count;
-        const tokens2 = result.blockTokens;
-        if (typeof tokens2 === "number") out.evermindPromptTokens += tokens2;
+        const tokens = result.blockTokens;
+        if (typeof tokens === "number") out.evermindPromptTokens += tokens;
       }
     } else if (ev.category === "learn") {
       out.learnSteps += 1;
@@ -10709,7 +10988,7 @@ function outputOf(ev) {
   }
   return "";
 }
-function succeeded2(ev) {
+function succeeded3(ev) {
   return !ev.isError && !isFailedToolResult(ev.result);
 }
 function isPush(ev) {
@@ -10737,7 +11016,7 @@ var DEFAULT_BRANCH_CMD = gitCommandPattern("remote|symbolic-ref|branch");
 function defaultBranchFromTrace(steps) {
   for (let i = steps.length - 1; i >= 0; i -= 1) {
     const ev = steps[i];
-    if (!succeeded2(ev) || !DEFAULT_BRANCH_CMD.test(commandOf(ev))) continue;
+    if (!succeeded3(ev) || !DEFAULT_BRANCH_CMD.test(commandOf(ev))) continue;
     const out = outputOf(ev);
     const m = /HEAD branch:\s*(\S+)/.exec(out) ?? /origin\/HEAD\s*->\s*origin\/(\S+)/.exec(out) ?? /^\s*refs\/remotes\/origin\/(\S+)\s*$/m.exec(out);
     if (m?.[1] && m[1] !== "HEAD" && m[1] !== "(unknown)") return m[1];
@@ -10758,13 +11037,13 @@ function shippedToBaseBranch(events, opts) {
   const isBase = (branch) => BASE_BRANCHES.has(branch) || branch === defaultBranch;
   let pushedAt = -1;
   for (let i = 0; i < steps.length; i += 1) {
-    if (succeeded2(steps[i]) && isPush(steps[i])) pushedAt = i;
+    if (succeeded3(steps[i]) && isPush(steps[i])) pushedAt = i;
   }
   if (pushedAt < 0) return false;
   const touched = opts?.touchedFiles ?? [];
   for (let i = pushedAt; i < steps.length; i += 1) {
     const ev = steps[i];
-    if (!succeeded2(ev)) continue;
+    if (!succeeded3(ev)) continue;
     const isStatus = i === pushedAt || ev.label === "git_status" || GIT_STATUS_CMD.test(commandOf(ev));
     if (!isStatus) continue;
     const output = outputOf(ev);
@@ -11094,4 +11373,4 @@ export {
   toolCallArgBytes,
   createComposingActivity
 };
-//# sourceMappingURL=chunk-IF37ZKYC.mjs.map
+//# sourceMappingURL=chunk-3MP7CQRS.mjs.map
