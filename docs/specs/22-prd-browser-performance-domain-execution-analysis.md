@@ -256,6 +256,8 @@ for dashboard, workforce, and Canvas routes before and after the split.
 
 ### 3.2 P0 — Browser LoRA training leaves substantial CPU work on the interaction thread
 
+> **Planned fix (2026-11-17):** [PRD 31 §W9 phase 7](./31-prd-customer-app-platform.md). `WebGPUTrainer`'s kernels move into one WebGPU tensor engine in `@webdit/torch`, which runs in a worker. That engine is shared by `AITrainingPanel` and by Python training in the WebContainer.
+
 **Observed.** `frontend/src/components/AITrainingPanel.tsx:167-228` constructs and runs
 `WebGPUTrainer` directly from a React event callback:
 
