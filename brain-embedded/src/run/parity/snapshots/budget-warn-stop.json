@@ -182,6 +182,10 @@
      "role": "tool",
      "content": "{\"ok\":true,\"path\":\"f1.ts\",\"content\":\"export const a = 1;\\n\",\"totalLines\":1}",
      "tool_call_id": "c1"
+    },
+    {
+     "role": "user",
+     "content": "<run-state>\nFiles already in your context this run — a file marked unchanged is still above you: do not read it again, act on it.\n- f1.ts · lines 1 · unchanged\n</run-state>"
     }
    ],
    "metadata": {
@@ -372,6 +376,10 @@
      "role": "tool",
      "content": "{\"ok\":true,\"path\":\"f2.ts\",\"content\":\"export const a = 1;\\n\",\"totalLines\":1}",
      "tool_call_id": "c2"
+    },
+    {
+     "role": "user",
+     "content": "<run-state>\nFiles already in your context this run — a file marked unchanged is still above you: do not read it again, act on it.\n- f2.ts · lines 1 · unchanged\n- f1.ts · lines 1 · unchanged\n</run-state>"
     }
    ],
    "metadata": {
@@ -581,6 +589,10 @@
      "role": "tool",
      "content": "{\"ok\":true,\"path\":\"f3.ts\",\"content\":\"export const a = 1;\\n\",\"totalLines\":1}",
      "tool_call_id": "c3"
+    },
+    {
+     "role": "user",
+     "content": "<run-state>\nFiles already in your context this run — a file marked unchanged is still above you: do not read it again, act on it.\n- f3.ts · lines 1 · unchanged\n- f2.ts · lines 1 · unchanged\n- f1.ts · lines 1 · unchanged\n</run-state>"
     }
    ],
    "metadata": {
@@ -813,6 +825,10 @@
     {
      "role": "user",
      "content": "<run-state>\n[Run budget] This run has spent $0.80 of its $1.00 budget — over 80%. Stop exploring and converge: finish the essential change now, then answer with what you did and exactly what is left.\n</run-state>"
+    },
+    {
+     "role": "user",
+     "content": "<run-state>\nFiles already in your context this run — a file marked unchanged is still above you: do not read it again, act on it.\n- f4.ts · lines 1 · unchanged\n- f3.ts · lines 1 · unchanged\n- f2.ts · lines 1 · unchanged\n- f1.ts · lines 1 · unchanged\n</run-state>"
     }
    ],
    "metadata": {

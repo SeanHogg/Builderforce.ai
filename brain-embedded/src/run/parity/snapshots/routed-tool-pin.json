@@ -2744,6 +2744,10 @@
      "role": "tool",
      "content": "{\"ok\":true,\"path\":\"a.ts\",\"content\":\"export const a = 1;\\n\",\"totalLines\":1}",
      "tool_call_id": "c3"
+    },
+    {
+     "role": "user",
+     "content": "<run-state>\nFiles already in your context this run — a file marked unchanged is still above you: do not read it again, act on it.\n- a.ts · lines 1 · unchanged\n</run-state>"
     }
    ],
    "metadata": {
@@ -3619,7 +3623,7 @@
     "args": {
      "step": 0
     },
-    "result": "64 of 73 tools advertised this turn (relevance-selected; 0 pinned from earlier calls)",
+    "result": "64 of 73 tools advertised this turn (nothing trimmed — the full catalog was offered; 0 pinned from earlier calls)",
     "isError": false,
     "ts": "<iso>"
    },
@@ -3792,7 +3796,7 @@
     "args": {
      "step": 1
     },
-    "result": "64 of 73 tools advertised this turn (relevance-selected; 0 pinned from earlier calls)",
+    "result": "64 of 73 tools advertised this turn (nothing trimmed — the full catalog was offered; 0 pinned from earlier calls)",
     "isError": false,
     "ts": "<iso>"
    },
@@ -3883,7 +3887,7 @@
     "args": {
      "step": 2
     },
-    "result": "64 of 73 tools advertised this turn (relevance-selected; 1 pinned from earlier calls)",
+    "result": "64 of 73 tools advertised this turn (nothing trimmed — the full catalog was offered; 1 pinned from earlier calls)",
     "isError": false,
     "ts": "<iso>"
    },
@@ -3959,7 +3963,7 @@
     "args": {
      "step": 3
     },
-    "result": "64 of 73 tools advertised this turn (relevance-selected; 2 pinned from earlier calls)",
+    "result": "64 of 73 tools advertised this turn (nothing trimmed — the full catalog was offered; 2 pinned from earlier calls)",
     "isError": false,
     "ts": "<iso>"
    },
@@ -4038,7 +4042,7 @@
     "args": {
      "step": 0
     },
-    "result": "64 of 73 tools advertised this turn (relevance-selected; 0 pinned from earlier calls)"
+    "result": "64 of 73 tools advertised this turn (nothing trimmed — the full catalog was offered; 0 pinned from earlier calls)"
    },
    {
     "ts": "<iso>",
@@ -4184,7 +4188,7 @@
     "args": {
      "step": 1
     },
-    "result": "64 of 73 tools advertised this turn (relevance-selected; 0 pinned from earlier calls)"
+    "result": "64 of 73 tools advertised this turn (nothing trimmed — the full catalog was offered; 0 pinned from earlier calls)"
    },
    {
     "ts": "<iso>",
@@ -4241,7 +4245,7 @@
     "args": {
      "step": 2
     },
-    "result": "64 of 73 tools advertised this turn (relevance-selected; 1 pinned from earlier calls)"
+    "result": "64 of 73 tools advertised this turn (nothing trimmed — the full catalog was offered; 1 pinned from earlier calls)"
    },
    {
     "ts": "<iso>",
@@ -4292,7 +4296,7 @@
     "args": {
      "step": 3
     },
-    "result": "64 of 73 tools advertised this turn (relevance-selected; 2 pinned from earlier calls)"
+    "result": "64 of 73 tools advertised this turn (nothing trimmed — the full catalog was offered; 2 pinned from earlier calls)"
    },
    {
     "ts": "<iso>",

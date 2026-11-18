@@ -190,7 +190,7 @@ export const twoSteersAtTurnEnd: Scenario = {
 };
 
 export const stopDuringHandOff: Scenario = {
-  id: 'stop-during-hand-off', rows: ['R11'], loopShows: ['loop.hand_off_due'], title: 'a Stop pressed while the hand_off\'s ticket call is running ends the run cleanly',
+  id: 'stop-during-hand-off', rows: ['R11'], loopShows: ['loop.progress_forced'], title: 'a Stop pressed while the hand_off\'s ticket call is running ends the run cleanly',
   async run(h) {
     let filing = false;
     h.tools({

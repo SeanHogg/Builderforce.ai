@@ -6,7 +6,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { isVolatileContent } from '@seanhogg/builderforce-memory/handoff';
-import { PLAN_TURN_BUDGET } from '@builderforce/run-policy';
+import { READ_ONLY_STREAK_TURNS } from '@builderforce/run-guards';
 import { resetBrainRunStore, startRun, type BrainStreamFn } from '../brainRunStore';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
 
@@ -54,7 +54,8 @@ describe('the forced-turn brief is part of the tagged volatile tail', () => {
       userTurn: REQUEST,
     });
     const forced = seen.findIndex((t) => t.tools.length === 1 && t.tools[0] === 'hand_off');
-    expect(forced).toBe(PLAN_TURN_BUDGET);
+    // A3's read-only streak forces the hand-off (steer at READ_ONLY_STREAK_TURNS, escalate after as many more), before the analysis budget.
+    expect(forced).toBe(2 * READ_ONLY_STREAK_TURNS);
     const messages = seen[forced]!.messages;
     const last = messages[messages.length - 1]!;
     expect(isVolatileContent(last.content)).toBe(true);

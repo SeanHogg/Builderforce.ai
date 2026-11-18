@@ -144,7 +144,7 @@ const PLAN = {
 };
 
 export const handOffExecution: Scenario = {
-  id: 'hand-off-execution', rows: ['R11', 'T9'], loopShows: ['loop.hand_off_due', 'spawn_agents', 'edit_file'], title: 'analysis ends at the budget, the forced hand_off files a ticket per task and fans out coders, and coding follows on the code role',
+  id: 'hand-off-execution', rows: ['R11', 'T9'], loopShows: ['loop.progress_forced', 'spawn_agents', 'edit_file'], title: 'analysis ends at the budget, the forced hand_off files a ticket per task and fans out coders, and coding follows on the code role',
   async run(h) {
     let ticket = 900;
     h.tools({

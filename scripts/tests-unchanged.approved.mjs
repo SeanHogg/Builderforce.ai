@@ -87,6 +87,19 @@ export const APPROVED_PERMANENT = [
  * @type {{ file: string; changed: string; reason: string; approvedBy: string; cases?: number }[]}
  */
 export const APPROVED_THIS_PUSH = [
+  ...[
+    'brain-embedded/src/handOffExecution.e2e.test.ts',
+    'brain-embedded/src/run/turnRecordParity.test.ts',
+    'brain-embedded/src/runStore/forcedBriefTail.test.ts',
+    'brain-embedded/src/run/parity/scenarios/review.ts',
+    'brain-embedded/src/run/parity/scenarios/tools.ts',
+    'brain-embedded/src/run/parity/scenarios/turn.ts',
+  ].map((file) => ({
+    file,
+    changed: "A read-only change run's forced hand-off/change turn is expected at 2 x READ_ONLY_STREAK_TURNS (12, the read-only streak's escalation, loop.progress_forced) instead of PLAN_TURN_BUDGET (20, loop.hand_off_due); scenario loopShows name loop.progress_forced; the routing line credits the progress guard.",
+    reason: "Operator decision 2026-11-18: the read-only streak (c606ed6ad; made the spec by handOffForcedClash.e2e in 8a1b89420) wins over the 20-turn analysis budget, and the per-turn read ledger rides every tool turn. The 28 affected parity snapshots were regenerated through the authorized REGENERATE.md path the same day.",
+    approvedBy: APPROVED_BY,
+  })),
   {
     file: 'brain-embedded/src/brainRunStore.test.ts',
     changed: "One expectation: the hand-off test's `builtin_chats_link_ticket` call count is 0 (was 2). And in 'hands overlapping tasks to the coder in order instead of fanning them out' the scripted planner calls `hand_off` on turns 1 AND 2 (was turn 1 only) and the result is read from the LAST tool message (was the first); its three assertions are unchanged.",

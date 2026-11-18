@@ -23,7 +23,12 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
+import { READ_ONLY_STREAK_TURNS } from '@builderforce/run-guards';
 import { PLAN_TURN_BUDGET } from '@builderforce/run-policy';
+
+/** The turn A3's read-only streak forces: a steer after READ_ONLY_STREAK_TURNS all-read turns, the escalation after as many more —
+ *  before the analysis budget (`PLAN_TURN_BUDGET`) runs out (`handOffForcedClash.e2e.test.ts`). */
+const STREAK_FORCED_AT = 2 * READ_ONLY_STREAK_TURNS;
 import { getRunTrace, resetBrainRunStore, startRun, type BrainStreamFn } from './brainRunStore';
 import { modelTurnLog } from './modelScorecard';
 import { formatRoutingByRole, routingByRole } from './routingByRole';
@@ -124,10 +129,10 @@ describe('a change request goes from analysis to code that runs (end to end)', (
 
     // 1. Analysis ends: exactly the budget in reading turns, then the forced hand-off turn.
     const forcedAt = turns.findIndex((t) => t.tools.length === 1 && t.tools[0] === 'hand_off');
-    expect(forcedAt).toBe(PLAN_TURN_BUDGET);
-    expect(turns.slice(0, PLAN_TURN_BUDGET).every((t) => t.role === 'plan')).toBe(true);
+    expect(forcedAt).toBe(STREAK_FORCED_AT);
+    expect(turns.slice(0, STREAK_FORCED_AT).every((t) => t.role === 'plan')).toBe(true);
     expect(turns[forcedAt]!.toolChoice).toBe('required');
-    expect(trace.some((e) => e.label === 'loop.hand_off_due')).toBe(true);
+    expect(trace.find((e) => e.label === 'loop.progress_forced')?.args).toMatchObject({ trip: 2, signal: 'read_only_streak', forced: 'hand_off' });
 
     // 2. The hand-off carries the work: a ticket per task, and every child briefed in full.
     expect(calls.filter((c) => c.name === 'builtin_tasks_create').map((c) => c.args.title)).toEqual(PLAN.tasks.map((t) => t.title));
@@ -157,7 +162,7 @@ describe('a change request goes from analysis to code that runs (end to end)', (
     expect(routing.roles.find((r) => r.role === 'plan')?.models[0]?.model).toBe(FLASH);
     expect(routing.roles.find((r) => r.role === 'code')?.models[0]?.model).toBe(GROK);
     const lines = formatRoutingByRole(routing);
-    expect(lines.some((l) => l.includes('1 hand_off call(s) · 1 forced by the analysis budget'))).toBe(true);
+    expect(lines.some((l) => l.includes('1 hand_off call(s) · 1 forced by the progress guard (read_only_streak)'))).toBe(true);
     expect(lines.some((l) => l.startsWith('  ⚠'))).toBe(false);
   });
 
@@ -174,9 +179,13 @@ describe('a change request goes from analysis to code that runs (end to end)', (
     });
     const trace = getRunTrace(6102);
     const forcedAt = turns.findIndex((t) => t.tools.length === 1 && t.tools[0] === 'hand_off');
-    expect(forcedAt).toBe(PLAN_TURN_BUDGET);
-    // The very next turn is the coder's, with the full menu and no hand_off.
-    const next = turns[forcedAt + 1]!;
+    expect(forcedAt).toBe(STREAK_FORCED_AT);
+    // The streak's forced hand-off was ignored: its ladder pauses (ask_user alone, required) after as many more all-read turns,
+    // and planning ends at the analysis budget — that turn is the coder's, with the full menu and no hand_off.
+    const pausedAt = turns.findIndex((t) => t.tools.length === 1 && t.tools[0] === 'ask_user');
+    expect(pausedAt).toBe(forcedAt + READ_ONLY_STREAK_TURNS);
+    expect(turns.slice(0, PLAN_TURN_BUDGET).every((t) => t.role === 'plan')).toBe(true);
+    const next = turns[PLAN_TURN_BUDGET]!;
     expect(next.role).toBe('code');
     expect(next.tools).toContain('edit_file');
     expect(next.tools).not.toContain('hand_off');
@@ -224,7 +233,7 @@ describe('a change request goes from analysis to code that runs (end to end)', (
     const calls: Call[] = [];
     await startRun(6105, { resolvedSystemPrompt: 'sys', tools: TOOLS, projectId: 11, runTool: host(calls), stream: analysisParalysis(turns, 'hand_off'), persistence, userTurn: REQUEST });
     expect(turns[0]!.role).toBe('plan');
-    expect(turns.findIndex((t) => t.tools.length === 1 && t.tools[0] === 'hand_off')).toBe(PLAN_TURN_BUDGET);
+    expect(turns.findIndex((t) => t.tools.length === 1 && t.tools[0] === 'hand_off')).toBe(STREAK_FORCED_AT);
     expect(calls.some((c) => c.name === 'spawn_agents')).toBe(true);
     expect(calls.some((c) => c.name === 'edit_file')).toBe(true);
   });
@@ -255,12 +264,12 @@ describe('a change request goes from analysis to code that runs (end to end)', (
       lineage: { rootChatId: 77, ownerKey: 77, ownerName: 'BuilderForce', handle: 'a2', label: 'Drop the header title', agent: { ref: 'subagent:a2', name: 'Developer' }, depth: 1 },
     });
     // A sub-agent starts coding; after the budget in reads, the turn offers only change tools and requires a call.
-    expect(turns.slice(0, PLAN_TURN_BUDGET).every((t) => t.role === 'code' && t.tools.includes('read_file'))).toBe(true);
-    const forced = turns[PLAN_TURN_BUDGET]!;
+    expect(turns.slice(0, STREAK_FORCED_AT).every((t) => t.role === 'code' && t.tools.includes('read_file'))).toBe(true);
+    const forced = turns[STREAK_FORCED_AT]!;
     expect(forced.toolChoice).toBe('required');
     expect(forced.tools).toContain('edit_file');
     expect(forced.tools).not.toContain('read_file');
-    expect(getRunTrace(-6106).some((e) => e.label === 'loop.change_due')).toBe(true);
+    expect(getRunTrace(-6106).find((e) => e.label === 'loop.progress_forced')?.args).toMatchObject({ trip: 2, signal: 'read_only_streak', forced: 'change' });
     expect(calls.some((c) => c.name === 'edit_file')).toBe(true);
   });
 
