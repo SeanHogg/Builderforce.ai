@@ -46,7 +46,12 @@ const SERVER_PAGE_LIMIT = 1000;
 
 /** Whether a Server 404 is its own "no such path" answer (`errors[].exceptionName` …NoSuchPathException). */
 async function isNoSuchPath(res: Response): Promise<boolean> {
-  const body = (await res.json().catch(() => null)) as { errors?: Array<{ exceptionName?: unknown }> } | null;
+  // A body that is not JSON (an HTML proxy page, an empty 404) is exactly the case that must NOT
+  // count as "no such path" — so an unparseable body answers false, by design.
+  const body = (await res.json().then(
+    (parsed: unknown) => parsed,
+    (notJson: unknown) => ({ notJson }),
+  )) as { errors?: Array<{ exceptionName?: unknown }> } | null;
   return Array.isArray(body?.errors)
     && body.errors.some((error) => typeof error?.exceptionName === 'string' && error.exceptionName.includes('NoSuchPathException'));
 }

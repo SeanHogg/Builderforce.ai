@@ -13,6 +13,7 @@ so the catch-all cannot match.
 | `replay/r/recorder.<hash>.js` | `public, max-age=31536000, immutable` | Loader, at the URL the config answer names |
 | `replay/manifest.json` | `public, max-age=60` | `ReplayConfigService` only (API, 10 min in-process cache) |
 | `embed/v1.js` | `public, max-age=300` | `unifiedEmbedSnippet()` in `frontend/src/lib/embeddedCapabilities.ts:80` |
+| `webcontainers/dotnet/<version>/…` | `public, max-age=31536000, immutable` | The API, through the `CDN` binding: served on the preview origin at `/dotnet/<version>/…` (`dotnetBundleRoute.ts`); public here too, harmlessly (it is public on npm), but nothing loads it from this hostname. Mirrored by `.github/scripts/publish-dotnet-runtime.mjs`, manifest last, never rewritten |
 
 The loader is 5 minutes so a botched publish heals on the next page load. The
 hashed recorder is immutable because its URL is content-addressed. The manifest
