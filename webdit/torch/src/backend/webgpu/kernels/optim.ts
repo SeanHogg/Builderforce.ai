@@ -3,9 +3,9 @@ import type { KernelEntry } from "./common";
 /**
  * Optimizer kernels.
  *
- * ADAMW_WGSL moved here from the frontend's browser trainer
- * (`frontend/src/lib/webgpu-trainer.ts`), which imports it from here. It shares
- * the trainer's 16-float parameter block, whose AdamW slots are:
+ * ADAMW_WGSL moved here from the frontend's old main-thread trainer; the browser
+ * trainer now reaches it through `optim.AdamW` (`frontend/src/lib/training/**`).
+ * It keeps that trainer's 16-float parameter block, whose AdamW slots are:
  *
  *   p[4] lr  p[5] beta1  p[6] beta2  p[7] eps  p[8] weightDecay
  *   p[9] gradScale (1 / accumulated micro-batches)  p[10] step (1-based)

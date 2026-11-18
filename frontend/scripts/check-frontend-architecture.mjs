@@ -1065,7 +1065,7 @@ const presentationInfrastructureImports = production
   .map(rel);
 const directEngineConstruction = production
   .filter((file) => /^(?:app|components)\//.test(rel(file)))
-  .filter((file) => /new\s+(?:WebGPUTrainer|MambaEngine|MambaModelProvider)\s*\(/.test(source.get(file)))
+  .filter((file) => /new\s+(?:BrowserLoRATrainer|MambaEngine|MambaModelProvider)\s*\(/.test(source.get(file)))
   .map(rel);
 /**
  * Files over 800 lines, WITH their size. Membership alone was the old ratchet, and it

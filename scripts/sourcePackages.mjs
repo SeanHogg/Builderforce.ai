@@ -43,8 +43,8 @@ function escapeRegExp(value) {
 /**
  * Source-only packages that live OUTSIDE `packages/`, listed one by one (repo-relative,
  * POSIX). Each is held to every guard rule exactly like a `packages/*` entry. Only
- * `webdit/torch` is here: the frontend's browser trainer takes its WGSL kernels from
- * `@webdit/torch/kernels` (PRD 31 §W9 phase 7 — one engine, no kernel copies). The
+ * `webdit/torch` is here: the frontend's browser LoRA training worker runs on
+ * `@webdit/torch/autograd` + `/webgpu` (PRD 31 §W9 phase 7 — one engine, no copies). The
  * other `webdit/*` packages stay out — they reach consumers bundled inside studio's
  * `dist`, never by source alias.
  */

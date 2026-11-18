@@ -22,7 +22,7 @@ import { useBrainConfig } from './config';
 import type { BrainTransport } from './streamChatCompletion';
 import { useRegisterBrainActions, type BrainAction } from './BrainActionsContext';
 import { setMcpToolStatus } from './mcpToolStatus';
-import { fetchMcpToolEntries, mcpActionsFrom, type McpToolEntry, type McpToolResultInfo } from './mcpCatalog';
+import { fetchMcpToolEntries, mcpActionsFrom, type LocalToolRouter, type McpToolEntry, type McpToolResultInfo } from './mcpCatalog';
 
 export type { McpToolResultInfo };
 
@@ -57,6 +57,11 @@ export interface UseMcpExtensionsOptions {
    * only one endpoint.
    */
   transport?: BrainTransport;
+  /**
+   * Tools the host answers itself instead of relaying (see {@link LocalToolRouter}) — e.g.
+   * the run loop's `runtime.*` tools for an app running in this browser.
+   */
+  localTools?: LocalToolRouter;
 }
 
 export function useMcpExtensions(options?: UseMcpExtensionsOptions): { loading: boolean; toolCount: number; error: string | null } {
@@ -70,6 +75,8 @@ export function useMcpExtensions(options?: UseMcpExtensionsOptions): { loading: 
   // Read the result callback through a ref so the actions memo stays stable.
   const onToolResultRef = useRef(options?.onToolResult);
   onToolResultRef.current = options?.onToolResult;
+  const localToolsRef = useRef(options?.localTools);
+  localToolsRef.current = options?.localTools;
 
   useEffect(() => {
     let cancelled = false;
@@ -93,7 +100,7 @@ export function useMcpExtensions(options?: UseMcpExtensionsOptions): { loading: 
   }, [transport, skipKey]);
 
   const actions = useMemo<BrainAction[]>(
-    () => mcpActionsFrom(entries, transport, (info) => onToolResultRef.current?.(info)),
+    () => mcpActionsFrom(entries, transport, (info) => onToolResultRef.current?.(info), (entry) => localToolsRef.current?.(entry)),
     [entries, transport],
   );
 

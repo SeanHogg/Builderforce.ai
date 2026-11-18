@@ -8582,13 +8582,28 @@ function guardedPick(pick2, skip, input) {
   return fastestCandidate(slow, input.latency);
 }
 
-// ../packages/run-policy/src/policy.ts
+// ../packages/run-policy/src/phaseModels.ts
 function reviewPhaseModel(phaseModels, legacyReviewModel) {
   for (const candidate of [phaseModels?.review, phaseModels?.verify, legacyReviewModel]) {
     if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
   }
   return void 0;
 }
+function configuredPhaseModel(options, phase) {
+  if (phase === "verify") return reviewPhaseModel(options.phaseModels, options.reviewModel);
+  const fromMap = options.phaseModels?.[phase];
+  return typeof fromMap === "string" && fromMap.trim() ? fromMap.trim() : void 0;
+}
+function reviewing(state) {
+  return state.phase === "verify" && state.options.fixedRole !== "verify";
+}
+function phaseDefaultModel(state) {
+  if (state.phase === "verify" || state.options.fixedRole) return void 0;
+  const model = configuredPhaseModel(state.options, state.phase);
+  return model && !state.broken.includes(model) ? model : void 0;
+}
+
+// ../packages/run-policy/src/policy.ts
 var PIN_RELEASE_STATUSES = [429, 413, 503];
 var DECLINE_STATUS = 400;
 var NONE = { kind: "none" };
@@ -8626,19 +8641,6 @@ function initialRunPolicy(opts = {}) {
       ...opts.reviewModel !== void 0 ? { reviewModel: opts.reviewModel } : {}
     }
   };
-}
-function configuredPhaseModel(options, phase) {
-  if (phase === "verify") return reviewPhaseModel(options.phaseModels, options.reviewModel);
-  const fromMap = options.phaseModels?.[phase];
-  return typeof fromMap === "string" && fromMap.trim() ? fromMap.trim() : void 0;
-}
-function reviewing(state) {
-  return state.phase === "verify" && state.options.fixedRole !== "verify";
-}
-function phaseDefaultModel(state) {
-  if (state.phase === "verify" || state.options.fixedRole) return void 0;
-  const model = configuredPhaseModel(state.options, state.phase);
-  return model && !state.broken.includes(model) ? model : void 0;
 }
 function nextTurn(state, turn) {
   const verifying = state.phase === "verify";
@@ -24181,6 +24183,7 @@ var ROLE_CORE_TOOLS = {
   plan: ["spawn_agents", "wait_agents", "message_agent", "update_prd", "memory_recall", "memory_remember", "workspace_note", "workspace_read"]
 };
 function deferredToolRole(role) {
+  if (role === "review") return "verify";
   return role === "explore" || role === "verify" || role === "plan" ? role : "code";
 }
 function coreToolNames(role) {
@@ -24401,7 +24404,8 @@ function workCoreToolNames(role) {
   return [
     .../* @__PURE__ */ new Set([
       ...coreToolNames(role),
-      ...ROLE_COMPANION_TOOLS[role === "verify" ? "verify" : "code"]
+      // The companions follow the core row: `verify` and `review` read; every other role codes.
+      ...ROLE_COMPANION_TOOLS[deferredToolRole(role) === "verify" ? "verify" : "code"]
     ])
   ];
 }
@@ -31929,9 +31933,7 @@ function decideRunPipeline(req, request, context) {
 function pipelinePolicyOptions(req, pipeline) {
   const quick = pipeline?.route === "quick";
   const startPhase = req.lineage || quick ? "code" : "plan";
-  const { review, ...stages2 } = req.phaseModels ?? {};
-  const phaseModels = { ...stages2 };
-  if (review?.trim()) phaseModels.verify = review.trim();
+  const phaseModels = { ...req.phaseModels };
   const quickModel = req.pipeline?.quickModel?.trim();
   if (quick && quickModel) phaseModels.code = quickModel;
   return {

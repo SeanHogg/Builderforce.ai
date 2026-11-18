@@ -40,6 +40,11 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   // Agent Skills — read-only. The run's catalog block names the workspace's approved
   // skills; this is how it loads one (and a bundled file) when the task matches.
   'skills.read',
+  // The run loop (PRD 31 §W1 item 8): see the app it is changing — status, URL, the
+  // dev-server tail, a restart of one service, a screenshot, the declared verify
+  // commands. A restart touches only the preview, never source or external systems.
+  'runtime.preview_status', 'runtime.preview_url', 'runtime.preview_logs',
+  'runtime.preview_restart', 'runtime.preview_screenshot', 'runtime.run_verify',
   // Projects — read + write (no delete)
   'projects.list', 'projects.get', 'projects.create', 'projects.update', 'projects.check_key',
   // Tasks — read + write + move + assignees (no delete). "create other tasks for gaps".

@@ -84,6 +84,16 @@ export const OP_CASES: OpCase[] = [
     build: ([w, ids]) => F.embedding(ids!, w!),
   },
   {
+    name: "index_add (repeated ids, untouched rows)",
+    inputs: [f([5, 3]), { shape: [5], data: [0, 4, 2, 2, 0], int: true }],
+    build: ([src, ids]) => F.indexAdd(ids!, src!, 6),
+  },
+  {
+    name: "gather → index_add round trip",
+    inputs: [f([4, 3]), { shape: [3], data: [3, 1, 3], int: true }],
+    build: ([x, ids]) => F.indexAdd(ids!, F.mul(F.embedding(ids!, x!), F.embedding(ids!, x!)), 4),
+  },
+  {
     name: "cross_entropy (mean)",
     inputs: [f([4, 5], { lo: -2, hi: 2 }), { shape: [4], data: [1, 0, 4, 2], int: true }],
     build: ([l, t]) => F.crossEntropy(l!, t!),

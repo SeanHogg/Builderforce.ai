@@ -25,6 +25,8 @@ COPY egressTrust.mjs ./
 # api/scripts/gen-container-shared.mjs, the post-edit fast checks (D7 / D1) and the
 # background-job table (`run_command` background / `command_status`).
 COPY toolOutputPolicy.mjs postEditChecks.mjs sandboxJobs.mjs workspaceClient.mjs sandboxGit.mjs ./
+# The live preview's dev server: its output ring and restart (`preview_logs` / `preview_restart`).
+COPY previewProcess.mjs ./
 # The workspace helper: the one process that touches the working tree, run as the shell user.
 COPY workspaceAgent.mjs ./
 

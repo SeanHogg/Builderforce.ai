@@ -50,7 +50,7 @@ json.dumps({"full": list(model.state_dict().keys()), "adapter": list(get_peft_mo
       "base_model.model.out.weight",
       "base_model.model.out.bias",
     ]);
-    // The exact names exportLoRASafetensors (frontend/src/lib/webgpu-trainer.ts) writes.
+    // The exact names exportLoRASafetensors (frontend/src/lib/training/loraArtifact.ts) writes.
     expect(r.adapter).toEqual(["base_model.model.q_proj.lora_A.weight", "base_model.model.q_proj.lora_B.weight"]);
     expect(r.config).toMatchObject({ peft_type: "LORA", r: 2, lora_alpha: 4, target_modules: ["q_proj"] });
     const file = py.pyodide.FS.readFile("/tmp/adapter/adapter_model.safetensors") as Uint8Array;

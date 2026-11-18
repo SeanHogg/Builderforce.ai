@@ -6,8 +6,9 @@ import { values } from "./helpers/op-cases";
 import { expectClose } from "./helpers/run-case";
 
 /**
- * Backward compatibility of the moved kernels with their original consumer.
- * `frontend/src/lib/webgpu-trainer.ts` drives them with its OWN pipelines: one
+ * Backward compatibility of the moved kernels with their original consumer's
+ * direct-dispatch contract (the old main-thread trainer, since replaced by the
+ * engine-backed `frontend/src/lib/training/**`), which drove them with its OWN pipelines: one
  * 16-float parameter block it never writes past p[10] (so p[11] = 0), a 1-D
  * dispatch for LoRA backward and AdamW, and a 2-D one for LoRA forward. This
  * replays exactly that and checks the results against the CPU reference.

@@ -984,7 +984,7 @@ W1 runs the app in a cloud container. W9 runs the **same blueprint** in the user
 | 7 | **Python training on WebGPU.** | A PyTorch-style LoRA fine-tune runs in the WebContainer with its math on WebGPU, writes an adapter, and the adapter loads in the existing inference path. |
 
 **Python training on WebGPU (phase 7).** Constraints: PyTorch has no Wasm build; WebGPU runs in dedicated workers; the runtime refuses to require SharedArrayBuffer. Design:
-- **ONE WebGPU tensor engine.** `@webdit/torch` gains a WebGPU backend and reverse-mode autograd. The WGSL kernels in `frontend/src/lib/webgpu-trainer.ts` (LoRA forward, chain-rule backward, AdamW) **move** into it — not copied. The engine owns GPU-resident tensors and the kernel registry (matmul, softmax, layernorm, attention blocks, cross-entropy, AdamW), buffer pooling, and mixed fp16/fp32 where `shader-f16` is available.
+- **ONE WebGPU tensor engine.** `@webdit/torch` gains a WebGPU backend and reverse-mode autograd. The WGSL kernels of the old main-thread `WebGPUTrainer` (LoRA forward, chain-rule backward, AdamW) **moved** into it — not copied; the browser trainer (`frontend/src/lib/training/**`) now runs on the engine. The engine owns GPU-resident tensors and the kernel registry (matmul, softmax, layernorm, attention blocks, cross-entropy, AdamW), buffer pooling, and mixed fp16/fp32 where `shader-f16` is available.
 - **A `torch` module for Python**: a Pyodide package of thin handles to engine tensors via the JS FFI in the same Worker; tensor data never enters the Python heap. Supported: `torch.tensor`/`zeros`/`randn`, the ops above, `.backward()`, `torch.no_grad()`, `nn.Linear`/`Embedding`/`LayerNorm`/`Module`, `optim.AdamW`, `save`/`load` (safetensors), a `peft`-style `LoraConfig`. Outside that surface: a clear error naming the op, never a silent CPU fallback.
 - **Async readback without SAB:** only readback (`.item()`, `.numpy()`, `.tolist()`) waits on `mapAsync`, bridged with JSPI where available, otherwise an awaitable `item_async()` in an `asyncio` loop; losses logged every N steps.
 - **Scope:** LoRA/QLoRA of small causal LMs; frozen base quantized (4/8-bit) via the `./ml` model cache; only adapter weights + optimizer state trainable (fp32); VRAM budget from `createMemoryManager` so a run that cannot fit declines before it starts. Full-parameter training of multi-billion models goes to container/cloud.
@@ -996,14 +996,11 @@ W1 runs the app in a cloud container. W9 runs the **same blueprint** in the user
 
 **Engineering targets (re-base on Phase 0 numbers):** each added service < 500 ms beyond its own boot; warm database < 1 s; API→database round trip < 10 ms; cooperative shutdown < 1 s; no database/runtime work on the main thread; zero regressions in the existing suite (`run()`, `bfsh`, installs, Vite/React/Vue/Svelte/Next, HTTP/WS/streaming, cookies, relay mode, ZIP export/import, WASI); durability defaults to normal flush, relaxed is opt-in and documented.
 
-**Remaining (verified 2026-11-17):**
-- Phase 0: `builderforce-webcontainers/packages/browser/scripts/spawn-bench.ts` exists (untracked); numbers not recorded.
-- Phase 1: copy-on-read seeding exists (`packages/core/src/vfs.ts:62-65`); `packages/core/src/vfs/journal.ts`, `snapshots.ts`, `pack.ts` are untracked work-in-progress in the webcontainers working tree; exit not recorded.
-- Phase 2: `packages/core/src/app/{spec,serviceGraph,lifecycle,restartPolicy,runtimeProvider,serviceEnv,validateSpec}.ts`, `packages/browser/src/app/startApplicationRuntime.ts`, `./app` subpaths and `tests/app-runtime.test.ts` exist but are **uncommitted / unreleased** (another session is mid-flight).
-- Phase 3: service map exists (`core/src/app/serviceEnv.ts:4-34`); dev-server `/api` proxy and connection cleanup not found.
-- Phase 4: not started — `pglite`/gateway appear only as types in `core/src/app/spec.ts`; `core/src/node/http/index.ts:117` still `createConnection: noTcp`.
-- Phase 5: not started — `frontend/src/lib/browserRuntime/factory.ts` has no `ApplicationSpec`/blueprint mapping and no `RunTarget` port.
-- Phases 6a–6d, 7: not started; `webgpu-trainer.ts` still owns the kernels and `AITrainingPanel` still uses `WebGPUTrainer`.
+**Remaining (re-verified 2026-11-18, after merging `builderforce/task-6652`):**
+- Phases 0–4 shipped in builderforce-webcontainers **v2026.11.1** (flat-cost spawns + journal with a phase 0–1 report; `./app` application runtime; virtual TCP; PGlite on the host origin behind a Postgres wire gateway, multi-tab owner + followers; unmodified `pg` + Drizzle verified). Phase 6a (Python on Pyodide, ASGI/WSGI, `pg8000` over virtual TCP) shipped in **v2026.11.2**.
+- Phase 5: the code is in — `frontend/src/lib/runTarget/**` (the `RunTarget` port, registry, browser + container adapters, blueprint → `ApplicationSpec`, `runtime.*` tool router) and `LivePreviewPanel`/`useLivePreview` read the active target. Open: the exit test (Vite + Express + Postgres canvas app on a free tenant, agent hot-reload, `preview_screenshot`) is not recorded, and D7 free-plan gating is undecided.
+- Phases 6b (PHP), 6c (.NET), 6d (Rust): not started.
+- Phase 7: the engine (`@webdit/torch` autograd + WebGPU backend + kernel registry), the Python `torch`/`peft` surface over `@webdit/torch/pyodide`, and the browser trainer on the engine in a worker are on main (PRD 22 §3.2 closed). Open: no blueprint service of `kind: 'training'` runs a Python entry point under the application runtime yet (only the `ServiceType` exists, `builderforce-webcontainers/packages/core/src/app/spec.ts:10`), so the "train in Python in the WebContainer → adapter loads for inference" exit test is not recorded.
 
 ### §4.7 MCP tool surface (spans W1–W9)
 

@@ -491,7 +491,7 @@ Builderforce.ai is built on the open-source `@seanhogg/builderforce-memory` stac
 Builderforce.ai IDE
   └─ mamba-engine.ts  — Hybrid Local Brain (SSM state + IndexedDB)
   └─ agent-runtime.ts — step() → inference → confidence scoring → cloud escalation
-  └─ webgpu-trainer.ts — LoRA fine-tuning pipeline (Transformers.js + WebGPU)
+  └─ training/        — browser LoRA fine-tuning in a Web Worker on the @webdit/torch engine (WebGPU, CPU fallback)
 ```
 
 The on-device AI layer runs in O(n) time (vs O(n²) for attention), making it suitable for continuous low-latency state updates and fine-tuning entirely in the browser.
@@ -758,7 +758,7 @@ clients in production.
 
 | Component                             | Status | Notes                                            |
 | ------------------------------------- | ------ | ------------------------------------------------ |
-| In-browser LoRA training (WebGPU)     | ✅     | `frontend/src/lib/webgpu-trainer.ts`             |
+| In-browser LoRA training (WebGPU)     | ✅     | `frontend/src/lib/training/`                     |
 | Adapter storage in R2                 | ✅     | `artifacts/{projectId}/{jobId}/adapter.bin`      |
 | Workforce Registry (publish / browse) | ✅     | `POST /api/agents`, `GET /api/agents`            |
 | Agent package download                | ✅     | `GET /api/agents/:id/package` → v1.0 JSON        |

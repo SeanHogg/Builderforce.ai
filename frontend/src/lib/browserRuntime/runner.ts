@@ -9,6 +9,7 @@
  * concrete transport (transport.ts) is backed by the API client. The transport
  * boundary is the only thing that touches the network.
  */
+import { isToolsUnsupported, runWithTools, type BrowserToolHost, type ModelTurn, type ModelTurnCall } from './toolLoop';
 
 export interface ClaimedDispatch {
   dispatchId: string;
@@ -32,6 +33,11 @@ export interface CodeResult {
 export interface RunHandlers {
   /** Executes the in-browser coding flow for a repo-targeted dispatch. */
   code?: (dispatch: ClaimedDispatch) => Promise<CodeResult>;
+  /**
+   * Tools only this tab can answer (the `runtime.*` tools of a browser run). With a
+   * transport that speaks tool calls, a reasoning dispatch runs as a tool loop.
+   */
+  tools?: BrowserToolHost;
 }
 
 export interface ModelCall {
@@ -44,6 +50,8 @@ export interface BrowserRuntimeTransport {
   claim(): Promise<ClaimedDispatch | null>;
   /** Run one model completion through the gateway with the agent's own model. */
   callModel(call: ModelCall): Promise<string>;
+  /** One model turn that may call tools — what the tool loop drives. Optional: a transport without it runs prose-only. */
+  callModelTurn?(call: ModelTurnCall): Promise<ModelTurn>;
   /** Report the terminal result; the server advances the ticket from here. */
   report(
     dispatchId: string,
@@ -101,7 +109,7 @@ export async function runOnce(
   const prompt = buildPrompt(dispatch);
 
   try {
-    const output = await transport.callModel({ model, prompt });
+    const output = await reason(transport, handlers.tools, model, prompt);
     await transport.report(dispatch.dispatchId, { status: 'completed', output });
     return 'completed';
   } catch (err) {
@@ -110,6 +118,20 @@ export async function runOnce(
       error: err instanceof Error ? err.message : String(err),
     });
     return 'failed';
+  }
+}
+
+/**
+ * The reasoning step: a tool loop when there are tools and the transport speaks tool
+ * calls, else (or when the model turns tools down) one prose completion.
+ */
+async function reason(transport: BrowserRuntimeTransport, tools: BrowserToolHost | undefined, model: string, prompt: string): Promise<string> {
+  if (!tools || !transport.callModelTurn) return transport.callModel({ model, prompt });
+  try {
+    return await runWithTools((call) => transport.callModelTurn!(call), tools, model, prompt);
+  } catch (error) {
+    if (!isToolsUnsupported(error)) throw error;
+    return transport.callModel({ model, prompt });
   }
 }
 

@@ -4,7 +4,8 @@ import { useCallback, useState } from 'react';
 import type { PreviewRuntime } from '@seanhogg/builderforce-webcontainers';
 import type { RuntimeState } from '@/lib/types';
 import { useErrorText } from '@/i18n/useErrorMessage';
-import { bootSharedPreviewRuntime, replaceProjectFiles } from '@/lib/browserRuntime/previewRuntime';
+// Every process is tracked: when a browser run takes the runtime, the workspace's stop with it.
+import { bootSharedPreviewRuntime, replaceProjectFiles, trackWorkspaceProcess } from '@/lib/browserRuntime/previewRuntime';
 
 /** Pipe a process's output to `onOutput` (if any) without holding the stream open. */
 function forward(output: ReadableStream<string>, onOutput?: (data: string) => void): void {
@@ -40,7 +41,7 @@ export function useProjectRuntime() {
 
   /** Run a command to completion; resolves with its exit code. */
   const runCommandAndWait = useCallback(async (command: string, args: string[], onOutput?: (data: string) => void): Promise<number> => {
-    const process = (await runtime()).run(command, args);
+    const process = trackWorkspaceProcess((await runtime()).run(command, args));
     forward(process.combinedOutput, onOutput);
     return process.wait();
   }, [runtime]);
@@ -61,7 +62,7 @@ export function useProjectRuntime() {
         setState((current) => ({ ...current, url }));
         resolve(url);
       });
-      const process = booted.run('npm', ['run', 'dev']);
+      const process = trackWorkspaceProcess(booted.run('npm', ['run', 'dev']));
       forward(process.combinedOutput, (data) => { output += data; onOutput?.(data); });
       void process.wait().then((code) => {
         if (ready) return;
@@ -79,7 +80,7 @@ export function useProjectRuntime() {
 
   /** A `bfsh` shell for the terminal; resolves with the writer its keystrokes go to. */
   const startShell = useCallback(async (onOutput?: (data: string) => void, size?: { cols: number; rows: number }) => {
-    const shell = (await runtime()).run('bfsh', { terminal: size ?? { cols: 80, rows: 24 } });
+    const shell = trackWorkspaceProcess((await runtime()).run('bfsh', { terminal: size ?? { cols: 80, rows: 24 } }));
     forward(shell.combinedOutput, onOutput);
     return shell.stdin.getWriter();
   }, [runtime]);

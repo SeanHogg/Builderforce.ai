@@ -123,6 +123,8 @@ export * from './creationLibrary';
 // detected once per project + commit, used by Run loop (W1), Provision (W4),
 // Deploy (W6), and Marketplace (W7). See appBlueprint.ts.
 export * from './appBlueprint';
+// The run loop's `runtime.*` agent tools — one definition, a container and a browser executor.
+export * from './runtimeTools';
 
 export * from './slug';
 // Least squares and the trailing mean — the arithmetic every forecast shares.

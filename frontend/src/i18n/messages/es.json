@@ -18909,7 +18909,7 @@
     "dataModeWorkspace": "Espacio de trabajo: cargar y guardar a través de Builderforce",
     "datasetDescription": "Conjunto de datos para {prompt}",
     "exactBrowserLoraCpu": "LoRA exacto en el navegador · alternativa por CPU",
-    "hybridWebgpuLora": "LoRA híbrido WebGPU · núcleos de adaptador WGSL",
+    "hybridWebgpuLora": "LoRA WebGPU · autodiferenciación del motor en un worker de entrenamiento",
     "localEnforcedNotice": "Aplicado localmente: sin trabajo en la API de entrenamiento, sin petición de conjunto de datos, sin flujo de registros ni subida de artefactos.",
     "localExamplesLabel": "Ejemplos de entrenamiento locales",
     "localExamplesPlaceholder": "Pega aquí los ejemplos. Sepáralos con una línea en blanco.",
@@ -19012,6 +19012,7 @@
     "logJobCreated": "📋 Trabajo creado: {id}",
     "logWebgpuStart": "🎮 Iniciando entrenamiento WebGPU en el navegador (descenso de gradiente real en el dispositivo)…",
     "logEpochComplete": "📊 Época {epoch} completada — pérdida media: {loss}",
+    "trainingProgressStatus": "Paso {step} — pérdida {loss} · {tokensPerSecond} tokens/s",
     "logTrainingComplete": "✅ ¡Entrenamiento completado! Artefacto: {key}",
     "logTrainingError": "❌ Error de entrenamiento: {error}",
     "logCannotStart": "❌ No se puede iniciar el entrenamiento: {reason}",
@@ -29822,7 +29823,40 @@
     "open": "Abrir",
     "starting": "Iniciando…",
     "expoQrLabel": "Código QR de la vista previa de Expo",
-    "expoQr": "Abre esta vista previa en Expo Go en el teléfono."
+    "expoQr": "Abre esta vista previa en Expo Go en el teléfono.",
+    "logs": "Registros",
+    "hideLogs": "Ocultar registros",
+    "logsLabel": "Salida del servicio",
+    "logsEmpty": "Todavía no hay salida.",
+    "serviceFailed": "{service} se detuvo con un error.",
+    "runInBrowser": "Ejecutar en tu navegador",
+    "runInBrowserHint": "Inicia los servicios de la app en esta pestaña, con su propia base de datos. Nada se ejecuta en un servidor.",
+    "stopped": "La app se detuvo: el editor tomó el control del entorno de ejecución del navegador. Vuelve a ejecutarla para verla aquí.",
+    "serviceState": {
+      "starting": "Iniciando…",
+      "live": "En ejecución, pero todavía no sirve ninguna página.",
+      "failed": "Este servicio se detuvo con un error.",
+      "stopped": "Este servicio está detenido."
+    },
+    "target": {
+      "browser": "Ejecutándose en tu navegador",
+      "container": "Ejecutándose en un contenedor en la nube"
+    },
+    "declinedBy": {
+      "browser": "No en el navegador:",
+      "container": "No en un contenedor:"
+    },
+    "reason": {
+      "noBlueprint": "Todavía no se ha detectado el blueprint de la app de este proyecto.",
+      "serviceDeclined": "Un servicio necesita un entorno de ejecución que el navegador no tiene.",
+      "databaseDeclined": "La base de datos no es compatible con Postgres.",
+      "invalidSpec": "Los servicios de la app no se pueden iniciar juntos tal como están declarados.",
+      "noFiles": "El proyecto no tiene archivos que ejecutar.",
+      "noContainerPreview": "Ningún contenedor mantiene una vista previa en vivo.",
+      "blueprintUnavailable": "No se pudo leer el blueprint de la app.",
+      "runtimeUnavailable": "El entorno de ejecución no pudo iniciarse.",
+      "superseded": "Una ejecución más reciente reemplazó a esta."
+    }
   },
   "connectors": {
     "category": {

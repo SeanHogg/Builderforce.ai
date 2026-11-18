@@ -51,7 +51,7 @@ describe('previewSignals', () => {
     attachPreviewSignals(fake.runtime);
     setPreviewWorkspace(WS);
 
-    fake.emitError({ message: 'x is not a function', stack: 'TypeError: x is not a function\n  at App', href: `${BASE}about` });
+    fake.emitError({ message: 'x is not a function', stack: 'TypeError: x is not a function\n  at App', href: `${BASE}about`, source: 'error' });
     fake.emitConsole({ level: 'warn', text: 'Each child needs a key', href: BASE });
 
     expect(stores.diagnostics.readBuildFailures(WS)).toEqual([expect.objectContaining({

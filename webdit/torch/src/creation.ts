@@ -8,7 +8,8 @@ export function zeros(shape: Shape, dtype: DType = "float32"): Tensor {
 
 export function ones(shape: Shape, dtype: DType = "float32"): Tensor {
   const data = newTypedArray(dtype, productOf(shape));
-  if (dtype === "int64") (data as BigInt64Array).fill(1n);
+  // `BigInt(1)`, not `1n`: consumers compile this source at their own target (the frontend's is ES2017).
+  if (dtype === "int64") (data as BigInt64Array).fill(BigInt(1));
   else (data as Float32Array | Int32Array).fill(1);
   return Tensor.contiguous(data, shape, dtype);
 }
@@ -69,7 +70,7 @@ export function rand(shape: Shape, seed?: number): Tensor {
 export function eye(n: number, dtype: DType = "float32"): Tensor {
   const data = newTypedArray(dtype, n * n);
   for (let i = 0; i < n; i++) {
-    if (dtype === "int64") (data as BigInt64Array)[i * n + i] = 1n;
+    if (dtype === "int64") (data as BigInt64Array)[i * n + i] = BigInt(1);
     else (data as Float32Array | Int32Array)[i * n + i] = 1;
   }
   return Tensor.contiguous(data, [n, n], dtype);

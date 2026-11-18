@@ -1251,16 +1251,6 @@ Each item is deleted at the end of the wave that removes its last consumer, afte
 - `CreationCanvas.tsx` is 927 lines.
 - API presentation→infrastructure baseline: 95. Cross-context schema imports: 22. Schema-shape clusters: 1. Registry-only tables without disposition: 109.
 
-### §3.2 P0 — Browser LoRA training leaves substantial CPU work on the interaction thread
-
-> Planned fix: [PRD 31 §W9 phase 7](./make.md#prd-31--build-run-and-ship-a-real-app-on-builderforce). `WebGPUTrainer`'s kernels move into one WebGPU tensor engine in `@webdit/torch`, which runs in a worker and is shared by `AITrainingPanel` and Python training in the WebContainer.
-
-Tokenizer training, model construction, tokenisation, base-model forward/loss/backprop, the CPU `lora.fit` fallback and safetensors packaging all run in the caller's thread. Introduce a training-domain worker adapter modelled on the Mamba worker (`presentation → RunBrowserTraining → browser-training-worker-client → browser-training.worker`). The worker must request its own GPU adapter/device; a `GPUDevice` is never created on the main thread and treated as transferable.
-
-**Remaining (verified 2026-11-17):**
-- `frontend/src/components/AITrainingPanel.tsx:208` still constructs `new WebGPUTrainer(...)` in the component.
-- The only workers are `lib/mamba-worker-client.ts:42`, `lib/brain/localFirst.ts:74` and `lib/canvasNotebook.ts:335`. There is no training worker.
-
 ### §3.4 P0 — Canvas presentation owns multiple application and domain responsibilities
 
 Presentation may coordinate display state and dispatch use cases. It must not parse files, own collaboration transport, define graph invariants, or implement analytical queries.

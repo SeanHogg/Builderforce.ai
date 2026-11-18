@@ -186,7 +186,7 @@ export type { UseMcpExtensionsOptions, McpToolResultInfo } from './useMcpExtensi
 // …and the React-free half, so a headless runner (the VS Code probe / scenario
 // harness) builds the SAME tool list the hook does instead of a second copy.
 export { fetchMcpToolEntries, mcpActionsFrom } from './mcpCatalog';
-export type { McpToolEntry } from './mcpCatalog';
+export type { LocalToolRouter, McpToolEntry } from './mcpCatalog';
 // Action → advertised tool spec. The single mapping, so a headless runner shows the
 // model exactly what the React registry would.
 export { toolSpecsFor } from './toolSpecs';

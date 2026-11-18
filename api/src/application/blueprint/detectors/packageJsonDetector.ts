@@ -10,7 +10,7 @@
 
 import type { AppBlueprint, AppService, ServiceKind } from '@builderforce/creation-canvas-contract';
 import type { BlueprintDetector } from '@builderforce/creation-canvas-contract';
-import { SERVICE_KINDS } from '@builderforce/creation-canvas-contract';
+import { SERVICE_KIND_DEV_PORTS, SERVICE_KINDS } from '@builderforce/creation-canvas-contract';
 
 interface PackageJson {
   name?: string;
@@ -65,7 +65,7 @@ export function detectFromPackageJson(content: string): Partial<AppBlueprint> {
     startCommand,
     verifyCommand: null,
     outputDir: detectOutputDir(pkg, framework.kind),
-    ports: [3000, 5173, 8787], // Common ports
+    ports: detectDevPorts(devCommand, framework.kind, allDeps),
     envVars: [],
     isPrimary: true,
   };
@@ -128,6 +128,21 @@ function detectFramework(deps: Record<string, string>): { kind: ServiceKind; fra
 
   // Default to generic node
   return { kind: SERVICE_KINDS.NODE as ServiceKind, framework: 'Node.js' };
+}
+
+/** Classic Remix (`remix dev`, no Vite) serves on 3000; Vite-based Remix on Vite's 5173. */
+const CLASSIC_REMIX_PORT = 3000;
+
+/**
+ * The port the dev server listens on: an explicit `--port N` / `-p N` in the dev script,
+ * else the framework's default (`SERVICE_KIND_DEV_PORTS`, the one shared table).
+ */
+export function detectDevPorts(devCommand: string, kind: ServiceKind, deps: Record<string, string>): number[] {
+  const explicit = devCommand.match(/(?:--port[=\s]+|(?:^|\s)-p\s+)(\d{2,5})\b/);
+  if (explicit) return [Number(explicit[1])];
+  if (kind === SERVICE_KINDS.REMIX && !deps['vite']) return [CLASSIC_REMIX_PORT];
+  const port = SERVICE_KIND_DEV_PORTS[kind];
+  return port == null ? [] : [port];
 }
 
 function detectOutputDir(pkg: PackageJson, kind: ServiceKind): string {

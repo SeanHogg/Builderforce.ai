@@ -1,3 +1,15 @@
+## ✅ RESOLVED 2026-11-18: PRD 22 §3.2 — browser LoRA training runs off the interaction thread (merge of `builderforce/task-6652`)
+
+- **Was:** `AITrainingPanel` built `new WebGPUTrainer(...)` in a React callback, so tokenizer training, model construction, forward/backward and safetensors packaging all ran on the interaction thread.
+- **Now:** `AITrainingPanel` calls `useBrowserLoRARun` (`frontend/src/components/ai-training/useBrowserLoRARun.ts`). That hook drives `createBrowserLoRATrainer`, which starts the module Worker `frontend/src/lib/training/training.worker.ts`. The worker is transport only; `trainingWorkerHost.ts` / `loraEngineTrainer.ts` own the tokenizer, the model, the GPU device and the whole fine-tune on the `@webdit/torch` engine (`/autograd`, `/webgpu`), and `loraArtifact.ts` writes the adapter. `frontend/src/lib/webgpu-trainer.ts` is deleted. Every export it had (`canTrainInBrowser`, `TrainingDataMode`, `TrainingStep`, `BrowserLoRAArtifact`, `LoRAConfig`, `TrainingParams`, `exportLoRASafetensors`) lives on in `lib/training/protocol.ts` / `loraArtifact.ts`, and its kernels live once, in `@webdit/torch` (PRD 31 §W9 phase 7).
+- **Merge notes:** main's only change to `webgpu-trainer.ts` after the fork was importing its kernels from `@webdit/torch/kernels`. The branch's engine-backed trainer supersedes that, so the frontend and webview tsconfigs alias `@webdit/torch/autograd` + `/webgpu` instead. The branch also adds `F.indexAdd` with its op cases.
+- **Archived word for word from PRD 22:**
+
+### §3.2 P0 — Browser LoRA training leaves substantial CPU work on the interaction thread
+
+> Planned fix: [PRD 31 §W9 phase 7](./docs/specs/make.md#prd-31--build-run-and-ship-a-real-app-on-builderforce). `WebGPUTrainer`'s kernels move into one WebGPU tensor engine in `@webdit/torch`, which runs in a worker and is shared by `AITrainingPanel` and Python training in the WebContainer.
+
+Tokenizer training, model construction, tokenisation, base-model forward/loss/backprop, the CPU `lora.fit` fallback and safetensors packaging all run in the caller's thread. Introduce a training-domain worker adapter modelled on the Mamba worker (`presentation → RunBrowserTraining → browser-training-worker-client → browser-training.worker`). The worker must request its own GPU adapter/device; a `GPUDevice` is never created on the main thread and treated as transferable.
 ## ✅ RESOLVED 2026-11-18: The BYO pool follows the tenant's order, and models are picked by role (chat #153027)
 
 - **Bug:** VS Code's "use my connected accounts" always ran `local/kimi-code/kimi-for-coding`. `brain-embedded/src/hostModelStream.ts` tried the accounts the editor calls itself (Kimi Code) before the gateway on every `byo_pool` and Hybrid Auto turn, and `hybridAccounts()` never read the tenant's order. Unranked providers fell back to alphabetical order or catalog tier.

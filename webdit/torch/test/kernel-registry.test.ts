@@ -19,7 +19,7 @@ describe("kernel registry", () => {
   });
 
   it("the trainer's kernels keep their bindings and parameter slots", () => {
-    // `frontend/src/lib/webgpu-trainer.ts` drives these directly with its own 16-float block.
+    // The original trainer's direct-dispatch contract (16-float block); `frontend/src/lib/training/**` now uses them via the engine.
     expect(LORA_FORWARD_WGSL).toContain("merged[idx]=base[idx]+p[3]*delta;");
     expect(LORA_BACKWARD_WGSL).toContain("ga[idx]=ga[idx]+scale*sum;");
     // p[11] is never written by the trainer (stays 0) ⇒ the gradient is still consumed for it.

@@ -71,7 +71,7 @@ export async function detectBlueprintForProject(
 
     const files = await deps.readBlueprintSources({ ...coords, ref: sha });
     const blueprint = detectBlueprint(files, projectId, sha);
-    await deps.storeBlueprint(db, projectId, sha, blueprint);
+    await deps.storeBlueprint(db, projectId, sha, blueprint, env);
     return { ok: true, blueprint };
   } catch (error) {
     reportCaughtError(error, {

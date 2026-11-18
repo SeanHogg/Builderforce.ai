@@ -1,10 +1,10 @@
 import type { KernelEntry } from "./common";
 
 /**
- * LoRA adapter kernels, moved here from the frontend's browser trainer
- * (`frontend/src/lib/webgpu-trainer.ts`) so the engine and the trainer run one
- * copy (the trainer imports them from here). Consumers that drive them directly keep the
- * original parameter layout:
+ * LoRA adapter kernels, moved here from the frontend's old main-thread trainer.
+ * The browser trainer now runs on the engine itself (`frontend/src/lib/training/**`,
+ * through `F.loraMerge`), so there is one copy. Consumers that drive them
+ * directly keep the original parameter layout:
  *
  *   p: array<f32> = [rows, cols, rank, scale, …]
  *   A: [rank, cols]   B: [rows, rank]   base / merged / gw: [rows, cols]
