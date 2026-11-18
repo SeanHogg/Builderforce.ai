@@ -4,6 +4,7 @@ import { rand as cpuRand, randn as cpuRandn } from "../creation";
 import { productOf, type Shape } from "../shape";
 import type { Tensor } from "../tensor";
 import { DeviceTensor, type AnyBackend } from "./device-tensor";
+import { rememberHostIndices } from "./index-check";
 
 /**
  * Engine tensor constructors (`torch.tensor` / `zeros` / `randn` …). Each takes
@@ -37,6 +38,7 @@ export function nextSeed(): number {
 const make = (data: Float32Array | Int32Array, shape: Shape, dtype: "float32" | "int32", o: TensorOptions = {}) => {
   const backend = o.backend ?? cpu;
   const t = new DeviceTensor(backend, backend.upload(data, shape, dtype), false);
+  if (dtype === "int32") rememberHostIndices(t, Int32Array.from(data));
   return o.requiresGrad ? t.setRequiresGrad(true) : t;
 };
 

@@ -33,6 +33,7 @@ import { CHAT_DIAGNOSTICS_TOOLS } from './chatDiagnosticsToolCatalog';
 import { REPLAY_TOOLS } from './replayToolCatalog';
 import { AGENT_PERSONA_TOOLS } from './agentPersonaToolCatalog';
 import { APP_BLUEPRINT_TOOLS } from './appBlueprintToolCatalog';
+import { RUNTIME_PREVIEW_TOOLS } from './runtimeToolCatalog';
 import { SKILL_LIBRARY_TOOLS } from './skillLibraryToolCatalog';
 import { invalidateSkillAssignmentCaches } from '../skills/skillAssignmentCache';
 import { assertSkillAssignable } from '../marketplace/skillEntitlement';
@@ -4267,6 +4268,11 @@ const CATALOG: BuiltinTool[] = [
   // Tools for detecting, reading, and overriding project blueprints. These enable
   // the agent to understand the project's structure (framework, databases, services).
   ...APP_BLUEPRINT_TOOLS,
+  // ---- Run loop: see the running app (PRD 31 §W1 item 8) ---------------------
+  // `runtime.*` — status, URL, logs, restart, screenshot, verify. ONE definition per tool
+  // (creation-canvas-contract `RUNTIME_TOOLS`); this is the container executor, the
+  // browser run answers the same names in the user's tab.
+  ...RUNTIME_PREVIEW_TOOLS,
   // ---- Agent Skills: load a reviewed procedure on demand (agentskills.io) -----
   // The progressive-disclosure loader every catalog consumer shares — Brain (web, VS
   // Code, Rovr), canvas, Studio, external MCP clients and cloud runs. Its description

@@ -1,14 +1,22 @@
 import type { BackendTensor } from "../../backend/backend";
 import type { DeviceTensor } from "../device-tensor";
 
+/** Per-parameter optimizer state: buffers on the parameter's backend, and its own step count. */
+export interface ParamState {
+  buffers: BackendTensor[];
+  /** Updates applied to THIS parameter (a parameter without a gradient on a step is not advanced). */
+  step: number;
+}
+
 /**
  * Optimizer base: holds the trainable parameters (frozen ones are dropped) and
- * per-parameter state buffers on the parameter's own backend. `step()` runs one
- * in-place backend kernel per parameter — no readback.
+ * per-parameter state. `step()` runs one in-place backend kernel per parameter
+ * — no readback. Gradients are left intact (PyTorch semantics); `zeroGrad()`
+ * clears them.
  */
 export abstract class Optimizer {
   readonly params: DeviceTensor[];
-  protected readonly state = new Map<DeviceTensor, BackendTensor[]>();
+  protected readonly state = new Map<DeviceTensor, ParamState>();
 
   constructor(params: Iterable<DeviceTensor>) {
     this.params = [...params].filter((p) => p.requiresGrad);
@@ -24,11 +32,11 @@ export abstract class Optimizer {
     }
   }
 
-  /** Zero-filled state buffers for `p`, created on first use. */
-  protected stateOf(p: DeviceTensor, count: number): BackendTensor[] {
+  /** `p`'s state, created on first use with `count` zero-filled buffers. */
+  protected stateOf(p: DeviceTensor, count: number): ParamState {
     let s = this.state.get(p);
     if (!s) {
-      s = Array.from({ length: count }, () => p.backend.full(p.shape, 0));
+      s = { buffers: Array.from({ length: count }, () => p.backend.full(p.shape, 0)), step: 0 };
       this.state.set(p, s);
     }
     return s;
@@ -36,7 +44,7 @@ export abstract class Optimizer {
 
   /** Release every state buffer. */
   dispose(): void {
-    for (const [p, buffers] of this.state) for (const b of buffers) p.backend.release(b);
+    for (const [p, s] of this.state) for (const b of s.buffers) p.backend.release(b);
     this.state.clear();
   }
 }

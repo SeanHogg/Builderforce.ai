@@ -6,8 +6,8 @@
  *  - entry point `main`, workgroup size 256;
  *  - bindings are storage buffers in the order the backend passes them, with
  *    the parameter block LAST as `p: array<u32>` (floats travel bit-cast);
- *  - a "grid" kernel spills past 65 535 workgroups into `gid.y`, and recovers
- *    its flat index with `GRID_INDEX`.
+ *  - every kernel spills past 65 535 workgroups into `gid.y`, and recovers its
+ *    flat index with `GRID_INDEX` (the ported trainer kernels spell it inline).
  */
 
 export interface KernelEntry {
@@ -15,11 +15,8 @@ export interface KernelEntry {
   readonly wgsl: string;
   /** Storage bindings in order, parameter block included. */
   readonly bindings: number;
-  /**
-   * `grid`: one invocation per thread, dispatched over x then y (65 535 cap).
-   * `linear`: one invocation per thread over x only (the ported trainer kernels).
-   */
-  readonly dispatch: "grid" | "linear";
+  /** One invocation per thread, dispatched over x then spilled into y (65 535 cap per dim). */
+  readonly dispatch: "grid";
   /** Device feature the shader needs; absent = core WebGPU. */
   readonly requires?: "shader-f16";
 }
@@ -44,3 +41,14 @@ fn gelu_d(x: f32) -> f32 {
   let t = gelu_t(x);
   return 0.5 * (1.0 + t) + 0.5 * x * (1.0 - t * t) * GELU_C * (1.0 + 3.0 * 0.044715 * x * x);
 }`;
+
+/** Exact (erf) GELU and its derivative — the same A&S 7.1.26 erf as the CPU backend's `erf`. */
+export const GELU_ERF_FNS = `
+fn erf_f(x: f32) -> f32 {
+  let a = abs(x);
+  let t = 1.0 / (1.0 + 0.3275911 * a);
+  let y = 1.0 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * exp(-a * a);
+  return select(y, -y, x < 0.0);
+}
+fn gelu_erf_f(x: f32) -> f32 { return 0.5 * x * (1.0 + erf_f(x * 0.7071067811865476)); }
+fn gelu_erf_d(x: f32) -> f32 { return 0.5 * (1.0 + erf_f(x * 0.7071067811865476)) + x * exp(-0.5 * x * x) * 0.3989422804014327; }`;

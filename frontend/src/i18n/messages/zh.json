@@ -18884,7 +18884,7 @@
     "dataModeWorkspace": "工作区 — 通过 Builderforce 加载和保存",
     "datasetDescription": "用于 {prompt} 的数据集",
     "exactBrowserLoraCpu": "精确浏览器 LoRA · CPU 回退",
-    "hybridWebgpuLora": "混合 WebGPU LoRA · WGSL 适配器内核",
+    "hybridWebgpuLora": "WebGPU LoRA · 训练 Worker 中的引擎自动微分",
     "localEnforcedNotice": "本地强制执行：不会发起训练 API 任务、数据集请求、日志流或产物上传。",
     "localExamplesLabel": "本地训练样本",
     "localExamplesPlaceholder": "在此粘贴样本。样本之间用空行分隔。",
@@ -18987,6 +18987,7 @@
     "logJobCreated": "📋 任务已创建：{id}",
     "logWebgpuStart": "🎮 开始浏览器内 WebGPU 训练（真实的设备端梯度下降）…",
     "logEpochComplete": "📊 第 {epoch} 轮完成 —— 平均损失：{loss}",
+    "trainingProgressStatus": "第 {step} 步 —— 损失 {loss} · 每秒 {tokensPerSecond} 个词元",
     "logTrainingComplete": "✅ 训练完成！产物：{key}",
     "logTrainingError": "❌ 训练错误：{error}",
     "logCannotStart": "❌ 无法开始训练：{reason}",
@@ -29080,7 +29081,40 @@
     "open": "打开",
     "starting": "正在启动…",
     "expoQrLabel": "Expo 预览的二维码",
-    "expoQr": "在手机上用 Expo Go 打开此预览。"
+    "expoQr": "在手机上用 Expo Go 打开此预览。",
+    "logs": "日志",
+    "hideLogs": "隐藏日志",
+    "logsLabel": "服务输出",
+    "logsEmpty": "暂无输出。",
+    "serviceFailed": "{service} 因错误而停止。",
+    "runInBrowser": "在浏览器中运行",
+    "runInBrowserHint": "在此标签页中启动应用的各项服务，并使用它自己的数据库。不会在服务器上运行任何内容。",
+    "stopped": "应用已停止——编辑器接管了浏览器运行时。再次运行即可在此查看。",
+    "serviceState": {
+      "starting": "正在启动…",
+      "live": "正在运行，但尚未提供页面。",
+      "failed": "此服务因错误而停止。",
+      "stopped": "此服务已停止。"
+    },
+    "target": {
+      "browser": "正在你的浏览器中运行",
+      "container": "正在云端容器中运行"
+    },
+    "declinedBy": {
+      "browser": "无法在浏览器中运行：",
+      "container": "无法在容器中运行："
+    },
+    "reason": {
+      "noBlueprint": "尚未检测到此项目的应用蓝图。",
+      "serviceDeclined": "某个服务需要浏览器不具备的运行时。",
+      "databaseDeclined": "该数据库与 Postgres 不兼容。",
+      "invalidSpec": "按当前声明，应用的各项服务无法一起启动。",
+      "noFiles": "该项目没有可运行的文件。",
+      "noContainerPreview": "没有容器正在提供实时预览。",
+      "blueprintUnavailable": "无法读取应用蓝图。",
+      "runtimeUnavailable": "运行时无法启动。",
+      "superseded": "一次更新的运行取代了这次运行。"
+    }
   },
   "connectors": {
     "category": {

@@ -1,4 +1,5 @@
 import type { BufferPool } from "./buffer-pool";
+import type { DeviceHealth } from "./device-health";
 import { BUFFER_USAGE, MAP_MODE_READ } from "./device";
 import { WORKGROUP_SIZE } from "./kernels/common";
 import { KERNEL_REGISTRY, type KernelName } from "./kernels/registry";
@@ -26,9 +27,11 @@ export class Dispatcher {
     readonly device: GPUDevice,
     private readonly pool: BufferPool,
     private readonly features: ReadonlySet<string>,
+    private readonly health: DeviceHealth,
   ) {}
 
   run(name: KernelName, bindings: Binding[], params: Uint32Array | Float32Array, threads: number): void {
+    this.health.assertHealthy();
     const entry = KERNEL_REGISTRY[name];
     if (bindings.length + 1 !== entry.bindings) {
       throw new Error(`${name}: kernel binds ${entry.bindings} buffers, got ${bindings.length + 1}`);
@@ -48,29 +51,33 @@ export class Dispatcher {
     pass.setPipeline(pipeline);
     pass.setBindGroup(0, bindGroup);
     const groups = Math.ceil(threads / WORKGROUP_SIZE);
-    if (entry.dispatch === "linear") {
-      if (groups > MAX_GROUPS) throw new Error(`${name}: ${threads} threads exceed one dispatch row`);
-      pass.dispatchWorkgroups(groups, 1, 1);
-    } else {
-      pass.dispatchWorkgroups(Math.min(groups, MAX_GROUPS), Math.ceil(groups / MAX_GROUPS), 1);
-    }
+    pass.dispatchWorkgroups(Math.min(groups, MAX_GROUPS), Math.ceil(groups / MAX_GROUPS), 1);
     pass.end();
     this.device.queue.submit([encoder.finish()]);
     this.pool.release(paramBuffer);
   }
 
   write(buffer: GPUBuffer, data: ArrayBufferView): void {
+    this.health.assertHealthy();
     this.device.queue.writeBuffer(buffer, 0, data.buffer, data.byteOffset, data.byteLength);
   }
 
   async read(buffer: GPUBuffer, bytes: number): Promise<ArrayBuffer> {
+    this.health.assertHealthy();
     const size = Math.ceil(bytes / 4) * 4;
     const staging = this.device.createBuffer({ size, usage: BUFFER_USAGE.MAP_READ | BUFFER_USAGE.COPY_DST });
     const encoder = this.device.createCommandEncoder();
     encoder.copyBufferToBuffer(buffer, 0, staging, 0, size);
     this.device.queue.submit([encoder.finish()]);
     try {
-      await staging.mapAsync(MAP_MODE_READ);
+      try {
+        await staging.mapAsync(MAP_MODE_READ);
+      } catch (error) {
+        this.health.assertHealthy(); // a lost device rejects the map: report the loss, typed
+        throw error;
+      }
+      // An error raised by the work this read waited on surfaces here, not on the next op.
+      this.health.assertHealthy();
       return staging.getMappedRange().slice(0, bytes);
     } finally {
       staging.unmap();

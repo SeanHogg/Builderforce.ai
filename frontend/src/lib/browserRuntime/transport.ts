@@ -11,6 +11,7 @@
  */
 import { apiRequest } from '../apiClient';
 import type { BrowserRuntimeTransport, ClaimedDispatch, ModelCall } from './runner';
+import type { ModelTurn, ModelTurnCall, ToolCall } from './toolLoop';
 
 type RequestFn = <T>(path: string, opts?: { method?: string; body?: string; headers?: Record<string, string> }) => Promise<T>;
 
@@ -30,7 +31,19 @@ interface ClaimResponse {
 }
 
 interface ChatCompletionResponse {
-  choices?: Array<{ message?: { content?: string } }>;
+  choices?: Array<{
+    message?: {
+      content?: string | null;
+      tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }>;
+    };
+  }>;
+}
+
+/** A completion's tool calls, as the tool loop reads them (malformed entries dropped). */
+export function toolCallsOf(res: ChatCompletionResponse): ToolCall[] {
+  return (res.choices?.[0]?.message?.tool_calls ?? [])
+    .filter((c) => typeof c.function?.name === 'string')
+    .map((c, i) => ({ id: c.id ?? `call_${i}`, name: c.function!.name!, arguments: c.function?.arguments ?? '{}' }));
 }
 
 export function createBrowserAgentTransport(deps: { request?: RequestFn } = {}): BrowserRuntimeTransport {
@@ -64,6 +77,15 @@ export function createBrowserAgentTransport(deps: { request?: RequestFn } = {}):
         throw new Error('Gateway returned no completion content.');
       }
       return content;
+    },
+
+    async callModelTurn(call: ModelTurnCall): Promise<ModelTurn> {
+      const res = await request<ChatCompletionResponse>('/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: call.model, messages: call.messages, ...(call.tools ? { tools: call.tools } : {}) }),
+      });
+      return { content: res.choices?.[0]?.message?.content ?? null, toolCalls: toolCallsOf(res) };
     },
 
     async report(dispatchId, result): Promise<void> {

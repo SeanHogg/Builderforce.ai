@@ -13,7 +13,7 @@ function allAxes(x: DeviceTensor, axes?: number | number[]): number[] {
 export function sum(x: DeviceTensor, axes?: number | number[], keepDims = false): DeviceTensor {
   const be = backendOf("sum", x);
   const plan = reducePlan(x.shape, allAxes(x, axes), keepDims);
-  return record("sum", be.sum(x.handle, plan.axes, keepDims), [x], (gy) => [expandTo(be, gy, plan.keepShape, x.shape)]);
+  return record("sum", be.sum(x.handle, plan.axes, keepDims), [x], (gy) => [expandTo(be, gy, plan.keepShape, x.shape)], [], []);
 }
 
 export function mean(x: DeviceTensor, axes?: number | number[], keepDims = false): DeviceTensor {
@@ -28,5 +28,5 @@ export function mean(x: DeviceTensor, axes?: number | number[], keepDims = false
     const g = expandTo(be, scaled, plan.keepShape, x.shape);
     be.release(scaled);
     return [g];
-  });
+  }, [], []);
 }

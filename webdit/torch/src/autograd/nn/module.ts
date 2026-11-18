@@ -1,4 +1,5 @@
 import type { DeviceTensor } from "../device-tensor";
+import { keep } from "../scope";
 
 /**
  * PyTorch-style module base. Parameters and submodules are registered
@@ -12,8 +13,9 @@ export abstract class Module {
 
   abstract forward(...inputs: DeviceTensor[]): DeviceTensor;
 
+  /** Parameters outlive every `tidy` scope, even when the module is built inside one. */
   protected registerParameter<T extends DeviceTensor>(name: string, t: T): T {
-    this.params.set(name, t);
+    this.params.set(name, keep(t));
     return t;
   }
 

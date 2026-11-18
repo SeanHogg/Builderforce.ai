@@ -3,12 +3,13 @@
  * consumer that only runs the CPU path never needs the WebGPU type
  * declarations (`@webgpu/types`).
  */
-export { WebGPUBackend, createWebGPUBackend } from "./webgpu-backend";
+export { WebGPUBackend, createWebGPUBackend, type WebGPUBackendOptions } from "./webgpu-backend";
+export { DeviceLostError, GpuOperationError } from "./device-health";
 export {
   requestEngineDevice,
   WebGPUUnavailableError,
   type EngineDevice,
   type WebGPUDeviceOptions,
 } from "./device";
-export { BufferPool, VramBudgetError, type PoolStats } from "./buffer-pool";
-export { GpuTensor } from "./gpu-tensor";
+export { BufferPool, VramBudgetError, DEFAULT_MAX_POOLED_BYTES, type PoolStats } from "./buffer-pool";
+export { GpuTensor, type GpuDType } from "./gpu-tensor";

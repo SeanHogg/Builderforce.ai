@@ -1,4 +1,4 @@
-import { GELU_FNS, GRID_INDEX, MAIN, MAX_RANK, PARAM_FLOAT, type KernelEntry } from "./common";
+import { GELU_ERF_FNS, GELU_FNS, GRID_INDEX, MAIN, MAX_RANK, PARAM_FLOAT, type KernelEntry } from "./common";
 
 /**
  * Elementwise kernels: unary maps, the affine map, and broadcasting binaries.
@@ -65,9 +65,42 @@ ${MAIN} {
   };
 }
 
+/** target += src in place (same size) — gradient accumulation. Parameter block: [n]. */
+const ADD_INPLACE: KernelEntry = {
+  bindings: 3,
+  dispatch: "grid",
+  wgsl: `
+@group(0) @binding(0) var<storage, read_write> dst: array<f32>;
+@group(0) @binding(1) var<storage, read> src: array<f32>;
+@group(0) @binding(2) var<storage, read> p: array<u32>;
+${MAIN} {
+  ${GRID_INDEX}
+  if (idx >= p[0]) { return; }
+  dst[idx] = dst[idx] + src[idx];
+}`,
+};
+
+/** dst ← src in place, bit-exact as words (float32 and int32 alike). Parameter block: [n]. */
+const COPY_INPLACE: KernelEntry = {
+  bindings: 3,
+  dispatch: "grid",
+  wgsl: `
+@group(0) @binding(0) var<storage, read_write> dst: array<u32>;
+@group(0) @binding(1) var<storage, read> src: array<u32>;
+@group(0) @binding(2) var<storage, read> p: array<u32>;
+${MAIN} {
+  ${GRID_INDEX}
+  if (idx >= p[0]) { return; }
+  dst[idx] = src[idx];
+}`,
+};
+
 export const ELEMENTWISE_KERNELS = {
+  add_inplace: ADD_INPLACE,
+  copy_inplace: COPY_INPLACE,
   relu: unary("max(x, 0.0)"),
   gelu: unary("gelu_f(x)", GELU_FNS),
+  gelu_erf: unary("gelu_erf_f(x)", GELU_ERF_FNS),
   exp: unary("exp(x)"),
   log: unary("log(x)"),
   affine: unary("x * pf(1u) + pf(2u)"),
@@ -77,4 +110,5 @@ export const ELEMENTWISE_KERNELS = {
   div: binary("x / y"),
   relu_backward: binary("select(0.0, y, x > 0.0)"),
   gelu_backward: binary("y * gelu_d(x)", GELU_FNS),
+  gelu_erf_backward: binary("y * gelu_erf_d(x)", GELU_ERF_FNS),
 } satisfies Record<string, KernelEntry>;

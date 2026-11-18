@@ -29,6 +29,44 @@ export const SERVICE_KINDS = {
 
 export type ServiceKind = typeof SERVICE_KINDS[keyof typeof SERVICE_KINDS];
 
+/**
+ * The port each kind's dev server listens on by default — the ONE table detection
+ * writes into `AppService.ports` and a run target falls back to. `null` = no dev port
+ * (a container picks its own; Capacitor has no dev server of its own). Remix is the
+ * Vite-based dev server (5173); classic Remix (`remix dev`, 3000) is told apart by
+ * the detector, which sees the dependencies.
+ */
+export const SERVICE_KIND_DEV_PORTS: Readonly<Record<ServiceKind, number | null>> = {
+  worker: 8787,
+  spa: 5173,
+  node: 3000,
+  container: null,
+  'mobile-expo': 8081,
+  'mobile-capacitor': null,
+  nextjs: 3000,
+  'vite-react': 5173,
+  'vite-vue': 5173,
+  sveltekit: 5173,
+  remix: 5173,
+  astro: 4321,
+};
+
+/**
+ * The list package.json detection used to write for EVERY service ("common ports")
+ * before it knew the framework's port. A stored blueprint carrying exactly this list
+ * declared nothing, so a reader treats it as no port at all.
+ */
+export const LEGACY_PLACEHOLDER_PORTS: readonly number[] = [3000, 5173, 8787];
+
+/** The dev port a service runs on: its own declared port, else its kind's default. */
+export function serviceDevPort(service: Pick<AppService, 'kind' | 'ports'>): number | undefined {
+  const ports = service.ports ?? [];
+  const placeholder = ports.length === LEGACY_PLACEHOLDER_PORTS.length
+    && ports.every((port, index) => port === LEGACY_PLACEHOLDER_PORTS[index]);
+  if (!placeholder && ports.length > 0) return ports[0];
+  return SERVICE_KIND_DEV_PORTS[service.kind] ?? undefined;
+}
+
 /** A single service in the app. */
 export interface AppService {
   /** Unique identifier for this service within the app. */
@@ -57,7 +95,25 @@ export interface AppService {
   envVars: string[];
   /** Whether this service is the primary/entrypoint. */
   isPrimary: boolean;
+  /**
+   * Run-loop orchestration (PRD 31 §W9 decision 2) — optional; a run target derives
+   * defaults when absent (frontends after backends, backends after the database).
+   */
+  /** Ids of services that must be ready before this one starts. */
+  dependsOn?: string[];
+  /** When the service counts as ready. Default: its port opens. */
+  readiness?: AppServiceReadiness;
+  /** What happens when the service exits on its own. Default `on-failure`. */
+  restartPolicy?: 'never' | 'on-failure' | 'always';
+  /** `frontend` ships code to the browser and never receives database credentials. Default from `kind`. */
+  role?: 'frontend' | 'backend';
 }
+
+/** When a service counts as ready (the run loop starts its dependents then). */
+export type AppServiceReadiness =
+  | { kind: 'port' }
+  | { kind: 'http'; path: string }
+  | { kind: 'exit-zero' };
 
 /** Cloudflare binding types. */
 export const BINDING_KINDS = {
@@ -115,6 +171,11 @@ export interface AppDatabase {
   migrationsPath: string;
   /** Connection string secret name (for vault). */
   connectionSecretName: string;
+  /**
+   * Who hosts the database in a run (PRD 31 §W9 decision 2): `pglite` in the browser,
+   * `neon-branch` in the container. Optional; the run target picks its own when absent.
+   */
+  provider?: 'pglite' | 'neon-branch';
 }
 
 /** A secret the app requires. */

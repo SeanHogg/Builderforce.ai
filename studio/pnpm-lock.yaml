@@ -31,8 +31,8 @@ importers:
         specifier: ^0.8.1
         version: 0.8.2
       '@seanhogg/builderforce-webcontainers':
-        specifier: ^2026.10.14
-        version: 2026.10.14(@typescript/typescript6@6.0.2)
+        specifier: ^2026.11.1
+        version: 2026.11.1(@typescript/typescript6@6.0.2)
       '@types/node':
         specifier: ^24.7.2
         version: 24.13.2
@@ -728,12 +728,16 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@seanhogg/builderforce-memory-engine@2026.10.65':
+    resolution: {integrity: sha512-lzZJmvS80wE4SuM4mUfxncWKPBeCFn/HU2xNMhkfTxOG6YHxe4RexaN7YJWMgWGT/9BGSyJpSRhnjOSJ0itz8Q==}
+    engines: {node: '>=18.0.0'}
+
   '@seanhogg/builderforce-sdk@0.8.2':
     resolution: {integrity: sha512-zzkySkqTT514Ibxwc6S6ObPEIRTarp0mb4l5uD/rpzE5inHUfnBfPU8KicASmjKhmaUt/A5AYetckYx/nRAqrA==}
     engines: {node: '>=18'}
 
-  '@seanhogg/builderforce-webcontainers-core@2026.10.13':
-    resolution: {integrity: sha512-De9fYA+Q40qHbJblZr77ZlZMxJg31a68058k729Gn23h9A0IOWFk7cFkVJdXpcp/GiAQdfGF2exsWKtyOGB+9g==}
+  '@seanhogg/builderforce-webcontainers-core@2026.11.1':
+    resolution: {integrity: sha512-oUxzk+HUBMoIjVdTBmTvgXH+M7Aoy58ANVhBjon5yknzUwEOXG3WiyXYeA5YRvPPXHzMMcP+Ncpeyy3+dOHzWA==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       typescript: '>=5.0.0 <7'
@@ -741,8 +745,8 @@ packages:
       typescript:
         optional: true
 
-  '@seanhogg/builderforce-webcontainers@2026.10.14':
-    resolution: {integrity: sha512-jmYCO22I6f7QgGw8y0oKdyo/jyOMmBZF7Cwipw27GfPyTmEQqeEeuv1CvowM9aitUvcRgcJdypaScPVFzHCEXw==}
+  '@seanhogg/builderforce-webcontainers@2026.11.1':
+    resolution: {integrity: sha512-TIcu9a8qr8XbdMPcCL5DtM8tyt0mF64Hrs1EJupwRl+7VB5EWejK80ifj2HJUYCqIjxmjw4JTGzZXJU7MjcVVw==}
     engines: {node: '>=18.0.0'}
 
   '@standard-schema/spec@1.1.0':
@@ -1957,18 +1961,20 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.68.0':
     optional: true
 
+  '@seanhogg/builderforce-memory-engine@2026.10.65': {}
+
   '@seanhogg/builderforce-sdk@0.8.2': {}
 
-  '@seanhogg/builderforce-webcontainers-core@2026.10.13(@typescript/typescript6@6.0.2)':
+  '@seanhogg/builderforce-webcontainers-core@2026.11.1(@typescript/typescript6@6.0.2)':
     dependencies:
       es-module-lexer: 1.7.0
       fflate: 0.8.3
     optionalDependencies:
       typescript: '@typescript/typescript6@6.0.2'
 
-  '@seanhogg/builderforce-webcontainers@2026.10.14(@typescript/typescript6@6.0.2)':
+  '@seanhogg/builderforce-webcontainers@2026.11.1(@typescript/typescript6@6.0.2)':
     dependencies:
-      '@seanhogg/builderforce-webcontainers-core': 2026.10.13(@typescript/typescript6@6.0.2)
+      '@seanhogg/builderforce-webcontainers-core': 2026.11.1(@typescript/typescript6@6.0.2)
       esbuild-wasm: 0.24.2
     transitivePeerDependencies:
       - typescript
@@ -2115,7 +2121,9 @@ snapshots:
 
   '@webdit/shared@file:../webdit/shared': {}
 
-  '@webdit/torch@file:../webdit/torch': {}
+  '@webdit/torch@file:../webdit/torch':
+    dependencies:
+      '@seanhogg/builderforce-memory-engine': 2026.10.65
 
   '@webgpu/types@0.1.74': {}
 

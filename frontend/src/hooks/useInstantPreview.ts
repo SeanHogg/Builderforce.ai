@@ -1,8 +1,14 @@
 // No `'use client'`: this module exports a hook, not a component, so a directive marks no boundary (the `domainExtras.tsx` rule).
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { PreviewRuntime } from '@seanhogg/builderforce-webcontainers';
-import { bootSharedPreviewRuntime, replaceProjectFiles } from '@/lib/browserRuntime/previewRuntime';
+import {
+  bootSharedPreviewRuntime,
+  onWorkspaceRevoked,
+  replaceProjectFiles,
+  sharedPreviewRuntimeOwner,
+  WORKSPACE_OWNER,
+} from '@/lib/browserRuntime/previewRuntime';
 
 export type InstantPreviewResult =
   | { kind: 'ready'; url: string }
@@ -23,6 +29,9 @@ export type InstantPreviewResult =
 export function useInstantPreview() {
   const activeRef = useRef<PreviewRuntime | null>(null);
 
+  // A browser run took the runtime: its files are no longer ours to write.
+  useEffect(() => onWorkspaceRevoked(() => { activeRef.current = null; }), []);
+
   const start = useCallback(async (files: Record<string, string>): Promise<InstantPreviewResult> => {
     activeRef.current = null;
     let runtime: PreviewRuntime;
@@ -41,6 +50,9 @@ export function useInstantPreview() {
   const write = useCallback((path: string, contents: string): boolean => {
     const runtime = activeRef.current;
     if (!runtime) return false;
+    // Never write over another owner's files (a browser run holding the runtime).
+    const holder = sharedPreviewRuntimeOwner();
+    if (holder !== null && holder !== WORKSPACE_OWNER.id) return false;
     runtime.fs.writeFile(path, contents);
     return true;
   }, []);

@@ -41,6 +41,10 @@ const srcDir = resolve(here, '../src');
 const ALLOWED = new Map([
   ['apiClient.ts', 'It is the transport.'],
   [
+    'previewCapture/captureScript.ts',
+    'The fetch is the SOURCE TEXT of a script installed into the preview page (another origin), which reads the page\'s own images and fonts to inline them into a capture. It never runs in this app and never calls the API.',
+  ],
+  [
     'errors/transportFailure.ts',
     'It is the ONE `fetch` call in the browser bundle. Every other allowed file ' +
       'below now goes through `fetchWithTransportReport`, because a rejected fetch ' +

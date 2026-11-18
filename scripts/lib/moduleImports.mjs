@@ -204,8 +204,8 @@ export function isTestFile(file) {
  * @param {import('typescript')} options.ts
  * @param {string} options.repoRoot
  * @param {string[]} options.dirs Absolute directories (or files) to scan.
- * @param {string} [options.mustContain] Skip any file whose text does not contain
- *   this substring. A cheap pre-filter for the callers that only care about one
+ * @param {string | string[]} [options.mustContain] Skip any file whose text contains
+ *   none of these substrings. A cheap pre-filter for the callers that only care about one
  *   family of specifiers over a very large tree; preprocessing every file in
  *   `frontend/` to find nine `@builderforce/` imports is the whole cost of the run.
  * @param {(file: string, text: string) => void} [options.onFile] Sees every file read,
@@ -214,6 +214,7 @@ export function isTestFile(file) {
  * @returns {ImportSite[]}
  */
 export async function scanBareImports({ ts, repoRoot, dirs, mustContain, onFile }) {
+  const needles = mustContain === undefined ? null : [mustContain].flat();
   const files = [];
   const seen = new Set();
   for (const dir of dirs) {
@@ -239,7 +240,7 @@ export async function scanBareImports({ ts, repoRoot, dirs, mustContain, onFile 
       const file = files[index];
       const text = await readFile(file, 'utf8');
       onFile?.(file, text);
-      if (mustContain && !text.includes(mustContain)) {
+      if (needles && !needles.some((needle) => text.includes(needle))) {
         perFile[index] = [];
         continue;
       }
@@ -312,8 +313,8 @@ const PARENT_SPECIFIER = /['"`](\.\.\/[^'"`\n]+)['"`]/g;
  *
  * @param {{ ts: import('typescript'), repoRoot: string, limit?: number }} options
  * @returns {{
- *   scan: (dirs: string[], mustContain?: string) => Promise<ImportSite[]>,
- *   reachOutside: (dirs: string[], mustContain?: string) => Promise<string[]>,
+ *   scan: (dirs: string[], mustContain?: string | string[]) => Promise<ImportSite[]>,
+ *   reachOutside: (dirs: string[], mustContain?: string | string[]) => Promise<string[]>,
  * }}
  */
 export function createImportScanner({ ts, repoRoot, limit = 2000 }) {
@@ -360,7 +361,7 @@ export function createImportScanner({ ts, repoRoot, limit = 2000 }) {
   const scanner = {
     async scan(dirs, mustContain) {
       const pending = dirs.map((dir) => {
-        const key = [dir, mustContain ?? ''].join('|');
+        const key = [dir, [mustContain ?? ''].flat().join(',')].join('|');
         let sites = cache.get(key);
         if (!sites) {
           // A dir's files are recorded on its FIRST scan only, whatever its filter.

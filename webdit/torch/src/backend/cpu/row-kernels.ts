@@ -137,12 +137,13 @@ export function embeddingBackward(ids: Tensor, gy: Tensor, numEmbeddings: number
   const out = new Float32Array(numEmbeddings * D);
   for (let n = 0; n < I.length; n++) {
     const id = I[n]!;
+    if (id < 0 || id >= numEmbeddings) continue;
     for (let d = 0; d < D; d++) out[id * D + d]! += G[n * D + d]!;
   }
   return dense(out, [numEmbeddings, D]);
 }
 
-export function crossEntropy(logits: Tensor, targets: Tensor): CrossEntropyForward<Tensor> {
+export function crossEntropy(logits: Tensor, targets: Tensor, ignoreIndex: number): CrossEntropyForward<Tensor> {
   if (logits.shape.length !== 2) throw new Error("cross_entropy: logits must be [N, C]");
   const [N, C] = [logits.shape[0]!, logits.shape[1]!];
   const L = f32(logits);
@@ -150,27 +151,31 @@ export function crossEntropy(logits: Tensor, targets: Tensor): CrossEntropyForwa
   if (T.length !== N) throw new Error(`cross_entropy: ${T.length} targets for ${N} rows`);
   const probs = new Float32Array(N * C);
   const loss = new Float32Array(N);
+  const valid = new Float32Array(N);
   for (let n = 0; n < N; n++) {
     const base = n * C;
     const t = T[n]!;
-    if (t < 0 || t >= C) throw new Error(`cross_entropy: target ${t} out of range [0, ${C})`);
+    const ignored = t === ignoreIndex;
+    if (!ignored && (t < 0 || t >= C)) throw new Error(`cross_entropy: target ${t} out of range [0, ${C})`);
     let m = -Infinity;
     for (let c = 0; c < C; c++) m = Math.max(m, L[base + c]!);
     let s = 0;
     for (let c = 0; c < C; c++) s += Math.exp(L[base + c]! - m);
     for (let c = 0; c < C; c++) probs[base + c] = Math.exp(L[base + c]! - m) / s;
-    loss[n] = m + Math.log(s) - L[base + t]!;
+    loss[n] = ignored ? 0 : m + Math.log(s) - L[base + t]!;
+    valid[n] = ignored ? 0 : 1;
   }
-  return { loss: dense(loss, [N]), probs: dense(probs, [N, C]) };
+  return { loss: dense(loss, [N]), probs: dense(probs, [N, C]), valid: dense(valid, [N]) };
 }
 
-export function crossEntropyBackward(probs: Tensor, targets: Tensor, gLoss: Tensor): Tensor {
+export function crossEntropyBackward(probs: Tensor, targets: Tensor, gLoss: Tensor, ignoreIndex: number): Tensor {
   const [N, C] = [probs.shape[0]!, probs.shape[1]!];
   const P = f32(probs);
   const T = readIds(targets);
   const G = f32(gLoss);
   const out = new Float32Array(N * C);
   for (let n = 0; n < N; n++) {
+    if (T[n] === ignoreIndex) continue;
     for (let c = 0; c < C; c++) {
       out[n * C + c] = (P[n * C + c]! - (c === T[n] ? 1 : 0)) * G[n]!;
     }

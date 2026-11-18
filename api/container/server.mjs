@@ -53,6 +53,8 @@ import { promisify } from 'node:util';
 // Side-effect import, FIRST among our modules: spawned git/npm/pip must trust the egress CA.
 import './egressTrust.mjs';
 import { bootJobIdPrefix, closeSandboxBox, cloneWorkspace, createSandboxBox, runShell, serveSandbox, shellUser, spawnShell, verifyShellIsolation } from './sandboxCore.mjs';
+import { killTree } from './sandboxJobs.mjs';
+import { createPreviewProcess } from './previewProcess.mjs';
 
 const PORT = Number(process.env.PORT || 8080);
 
@@ -239,45 +241,71 @@ async function startPreviewDevServer(spec, box) {
 
   // 4. Spawn DETACHED and unref'd: the dev server outlives this call and must not hold
   //    the sandbox request, the command timeout, or the cancel-kill handle — those belong to
-  //    the agent's own shell commands. `proc.current` is deliberately NOT set.
-  let child;
+  //    the agent's own shell commands. `proc.current` is deliberately NOT set. Its output
+  //    goes to a bounded ring (`previewProcess.mjs`) so `preview_logs` can read it, and it
+  //    is kept by execution so `preview_restart` can bring it back.
+  // Through THE shell spawn: the dev server runs as the unprivileged shell user with the filtered env
+  // (never this process's own), plus the Worker's preview plan env (project secrets, by design).
+  const proc = createPreviewProcess({
+    command: chosen.command,
+    cwd: workdir,
+    extraEnv: step.env && typeof step.env === 'object' ? step.env : {},
+    spawn: spawnShell,
+    kill: killTree,
+  });
   try {
-    // Through THE shell spawn: the dev server runs as the unprivileged shell user with the filtered env
-    // (never this process's own), plus the Worker's preview plan env (project secrets, by design).
-    child = spawnShell(chosen.command, {
-      cwd: workdir,
-      extraEnv: step.env && typeof step.env === 'object' ? step.env : {},
-      stdio: 'ignore',
-    });
-    child.unref();
+    proc.start();
   } catch (e) {
     await fail(`could not start the dev server: ${e.message}`);
     return;
   }
+  previews.set(spec.executionId, { proc, spec, step });
+  await awaitPreviewHealth(spec, proc, step);
+}
 
-  // A command that dies immediately (missing dependency, port already bound) would
-  // otherwise sit "starting" until the health check gave up; say so straight away.
-  let exitedEarly = null;
-  child.on('exit', (code) => { exitedEarly = code; });
-  child.on('error', (e) => { exitedEarly = e.message; });
-
-  // 5. Hand the health check back to the Worker, which probes through the REAL public
-  //    path (ingress → container DO → dev server) rather than trusting localhost here —
-  //    a server bound to the wrong interface answers locally and 503s publicly.
+/**
+ * Hand the health check back to the Worker, which probes through the REAL public path
+ * (ingress → container DO → dev server) rather than trusting localhost here — a server
+ * bound to the wrong interface answers locally and 503s publicly. A command that dies
+ * immediately (missing dependency, port already bound) is reported straight away
+ * instead of sitting "starting" until the check gives up.
+ */
+async function awaitPreviewHealth(spec, proc, step) {
+  const fail = (detail) => op(spec, { op: 'preview', args: { action: 'failed', detail } }).catch(() => {});
   const health = step.health && typeof step.health === 'object' ? step.health : { attempts: 20, intervalMs: 1500 };
   const attempts = Number.isFinite(health.attempts) && health.attempts > 0 ? Math.min(Math.floor(health.attempts), 60) : 20;
   const intervalMs = Number.isFinite(health.intervalMs) && health.intervalMs > 0 ? Math.min(Math.floor(health.intervalMs), 10_000) : 1_500;
 
   for (let attempt = 0; attempt < attempts; attempt++) {
-    if (exitedEarly !== null) {
-      await fail(`the dev server exited immediately (${exitedEarly}) — command: ${chosen.command}`);
+    if (proc.exitCode() !== null) {
+      await fail(`the dev server exited immediately (${proc.exitCode()}) — command: ${proc.command}`);
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
     const ready = await op(spec, { op: 'preview', args: { action: 'ready' } }).catch(() => null);
     if (ready && ready.ok === true) return;
   }
-  await fail(`the dev server did not answer on port ${step.port ?? PREVIEW_PORT} within ${Math.round((attempts * intervalMs) / 1000)}s — command: ${chosen.command}`);
+  await fail(`the dev server did not answer on port ${step.port ?? PREVIEW_PORT} within ${Math.round((attempts * intervalMs) / 1000)}s — command: ${proc.command}`);
+}
+
+/** Lines `preview/logs` returns at most. */
+const PREVIEW_LOGS_MAX = 400;
+
+/**
+ * The preview's own control surface, beside the sandbox's: read the dev server's output
+ * tail, or restart it (then re-run the health check). Keyed by execution and kept past
+ * the run's close, because a live preview outlives its run.
+ */
+function servePreview(path, body) {
+  const entry = previews.get(body.executionId);
+  if (!entry) return [409, { ok: false, error: 'no_preview' }];
+  if (path === '/sandbox/preview/logs') {
+    const lines = Number.isInteger(body.lines) && body.lines > 0 ? Math.min(body.lines, PREVIEW_LOGS_MAX) : 80;
+    return [200, { ok: true, running: entry.proc.running(), exitCode: entry.proc.exitCode(), lines: entry.proc.tail(lines) }];
+  }
+  entry.proc.restart();
+  void awaitPreviewHealth(entry.spec, entry.proc, entry.step).catch((e) => console.error(`[container] preview health after restart crashed: ${e instanceof Error ? e.message : String(e)}`));
+  return [200, { ok: true, restarted: true, command: entry.proc.command }];
 }
 
 /** Post a timeline event for a local service; a missed event never affects the run. */
@@ -294,6 +322,8 @@ function localServiceEvent(spec, toolName, detail, result) {
  * practice; the map keeps a stray request for another id from touching this clone.
  */
 const sandboxes = new Map();
+/** Live previews by execution id: `{ proc, spec, step }` — they outlive the run's sandbox. */
+const previews = new Map();
 /** In-flight opens, so two concurrent first calls clone once. */
 const opening = new Map();
 
@@ -374,6 +404,7 @@ async function handleSandbox(path, body, res) {
     return [opened.ok ? 200 : 502, opened];
   }
   if (path === '/sandbox/close') return [200, await closeSandbox(body.executionId)];
+  if (path === '/sandbox/preview/logs' || path === '/sandbox/preview/restart') return servePreview(path, body);
   const box = sandboxes.get(body.executionId);
   if (!box) return [409, { ok: false, error: 'not_open' }];
   if (!['/sandbox/fs', '/sandbox/run', '/sandbox/checks', '/sandbox/git', '/sandbox/job/start', '/sandbox/job/poll', '/sandbox/job/kill', '/sandbox/job/active'].includes(path)) return [404, { ok: false, error: 'not found' }];

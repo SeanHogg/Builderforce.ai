@@ -32,6 +32,13 @@ export interface McpToolEntry {
   mutates?: boolean;
 }
 
+/**
+ * The host's say over where a catalog tool runs: return a runner for a tool the host
+ * answers itself (it decides, e.g. by where the app runs), or undefined to relay it
+ * through the gateway as usual. Kept generic so the package stays portable.
+ */
+export type LocalToolRouter = (entry: McpToolEntry) => ((args: unknown) => Promise<unknown>) | undefined;
+
 /** What a tool call resolved to — handed to the caller's `onToolResult`. */
 export interface McpToolResultInfo {
   /** Flat advertised name the model called (e.g. `builtin_tasks_create`). */
@@ -105,6 +112,7 @@ export function mcpActionsFrom(
   entries: readonly McpToolEntry[],
   transport: Pick<BrainTransport, 'baseUrl' | 'getToken'>,
   onToolResult?: (info: McpToolResultInfo) => void,
+  localTools?: LocalToolRouter,
 ): BrainAction[] {
   return entries.map((entry) => ({
     name: entry.name,
@@ -117,6 +125,15 @@ export function mcpActionsFrom(
     run: (args: unknown) => {
       const mutating = entry.mutates !== false;
       const exec = async (): Promise<unknown> => {
+        // A tool the HOST can answer where the work lives (a browser run's `runtime.*`
+        // tools, answered in the tab that holds the run) is routed there; the host's
+        // router falls back to the gateway itself when it cannot.
+        const local = localTools?.(entry);
+        if (local) {
+          const out = await local(args);
+          onToolResult?.({ name: entry.name, tool: entry.tool, extensionId: entry.extensionId, mutating, ok: !isErrorResult(out) });
+          return out;
+        }
         const token = transport.getToken();
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (token) headers.Authorization = `Bearer ${token}`;

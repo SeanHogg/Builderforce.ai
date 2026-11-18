@@ -45,7 +45,9 @@ async function runInBfsh(command: string): Promise<{ stdout: string; stderr: str
     listener({
       data: {
         type: 'start', pid: 1, command: 'bfsh', args: ['-c', command], cwd: '/', env: {}, ipc: false,
-        files: [['/app/a.txt', 'hi']], dirs: ['/app'], ports: [], previewOrigin: 'http://x', previewBase: '/x/', packageCache: false,
+        // 2026.11.1 starts a process from a VFS snapshot; a delta (no pack) is the journal ops alone.
+        snapshot: { ops: [{ op: 'mkdir', path: '/app' }, { op: 'write', path: '/app/a.txt', content: 'hi' }] },
+        ports: [], previewOrigin: 'http://x', previewBase: '/x/', packageCache: false,
       },
     });
   }

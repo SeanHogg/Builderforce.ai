@@ -26,6 +26,7 @@ import PageContainer from '@/components/PageContainer';
 import { createBrowserAgentTransport } from '@/lib/browserRuntime/transport';
 import { runCodingDispatch, toResultPayload } from '@/lib/browserRuntime/coding';
 import { createCodingDeps } from '@/lib/browserRuntime/factory';
+import { createRuntimeToolHost } from '@/lib/runTarget/runtimeTools/runtimeToolHost';
 import { getApiBaseUrl, getAuthHeaders } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 
@@ -78,7 +79,9 @@ export function AgentWorker({
     setError(null);
     try {
       const t = transport ?? createBrowserAgentTransport();
-      const h: RunHandlers = handlers ?? { code: defaultCodeHandler(t) };
+      // `tools`: the run loop's `runtime.*` tools, answered here for a browser run this
+      // tab holds and by the server for a container.
+      const h: RunHandlers = handlers ?? { code: defaultCodeHandler(t), tools: createRuntimeToolHost() };
       setOutcomes(await runLoop(t, { handlers: h }));
     } catch (e) {
       setError(errorMessage(e));

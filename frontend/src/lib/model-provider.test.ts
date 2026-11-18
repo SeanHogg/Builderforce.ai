@@ -1,19 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { MambaModelProvider } from './model-provider';
 
-// ---------------------------------------------------------------------------
-// Mock the API so the browser-LoRA tests can prove they make no network calls
-// ---------------------------------------------------------------------------
-
-vi.mock('./api', () => ({
-  downloadDataset: vi.fn().mockResolvedValue(''),
-  uploadArtifact: vi.fn().mockResolvedValue({ r2Key: 'adapters/test.bin' }),
-  updateTrainingJob: vi.fn().mockResolvedValue(undefined),
-  streamTrainingLogs: vi.fn().mockResolvedValue(undefined),
-}));
-
-import { WebGPUTrainer, type BrowserLoRAArtifact, type TrainingStep, type WebGPUTrainerOptions } from './webgpu-trainer';
-import { EvermindModelPackage } from '@seanhogg/builderforce-memory-engine';
+// The browser-LoRA suite that lived here ("WebGPUTrainer (exact browser LoRA)") moved,
+// assertions unchanged, to `training/browserLoRATrainer.test.ts`: the trainer now runs
+// in the training worker on the @webdit/torch engine (PRD 22 §3.2).
 
 // ---------------------------------------------------------------------------
 // MambaModelProvider
@@ -125,107 +115,5 @@ describe('MambaModelProvider', () => {
     expect(cfg.dModel).toBe(256);
     expect(cfg.numLayers).toBe(4);
     expect(cfg.wsla).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Browser LoRA — real frozen-base adapter training and portable artifacts
-// ---------------------------------------------------------------------------
-
-describe('WebGPUTrainer (exact browser LoRA)', () => {
-  function makeTrainer(overrides: Partial<WebGPUTrainerOptions> = {}) {
-    const logs: string[] = [];
-    const trainer = new WebGPUTrainer({
-      modelId: 'evermind-browser-test',
-      workerUrl: 'http://localhost',
-      projectId: 'proj-1',
-      onLog: (m) => logs.push(m),
-      onStep: () => {},
-      onEpochEnd: () => {},
-      onComplete: () => {},
-      onError: () => {},
-      ...overrides,
-    });
-    return { trainer, logs };
-  }
-
-  it('initialises the exact CPU path when WebGPU is unavailable', async () => {
-    const { trainer, logs } = makeTrainer();
-    await expect(trainer.init()).resolves.toBeUndefined();
-    expect(logs.join('\n')).toMatch(/exact-gradient browser LoRA/i);
-  });
-
-  it('train() refuses to run before a successful init() (no synthetic loop)', async () => {
-    const { trainer } = makeTrainer();
-    await expect(
-      trainer.train(
-        {
-          epochs: 2,
-          batchSize: 4,
-          learningRate: 1e-4,
-          gradientAccumulationSteps: 1,
-          precision: 'float16',
-          loraConfig: { rank: 8, alpha: 16, targetModules: ['q_proj'] },
-        },
-        ['example'],
-      ),
-    ).rejects.toThrow(/not initialised/i);
-  });
-
-  it('trains real LoRA matrices locally and emits a valid safetensors adapter without network calls', async () => {
-    const artifacts: BrowserLoRAArtifact[] = [];
-    let completedKey = '';
-    const steps: TrainingStep[] = [];
-    const { trainer } = makeTrainer({
-      dataMode: 'local-only',
-      modelConfig: { dModel: 8, numLayers: 1, hiddenDim: 16, numExperts: 2, topK: 1 },
-      onStep: (step) => steps.push(step),
-      onArtifact: (artifact) => artifacts.push(artifact),
-      onComplete: (key) => { completedKey = key; },
-    });
-    await trainer.init();
-    await trainer.train(
-      {
-        epochs: 1,
-        batchSize: 1,
-        learningRate: 1e-3,
-        gradientAccumulationSteps: 1,
-        precision: 'float16',
-        loraConfig: { rank: 2, alpha: 4, targetModules: ['embed_tokens'] },
-      },
-      ['hello browser adapter', 'hello private training'],
-    );
-
-    expect(steps).toHaveLength(1);
-    expect(Number.isFinite(steps[0]!.loss)).toBe(true);
-    expect(artifacts).toHaveLength(1);
-    expect(artifacts[0]!.filename).toMatch(/\.safetensors$/);
-    const view = new DataView(artifacts[0]!.bytes);
-    const headerLength = Number(view.getBigUint64(0, true));
-    const header = JSON.parse(new TextDecoder().decode(new Uint8Array(artifacts[0]!.bytes, 8, headerLength)));
-    expect(header.__metadata__.peft_type).toBe('LORA');
-    expect(header['base_model.model.embed_tokens.lora_A.weight'].shape).toEqual([2, 8]);
-    expect(header['base_model.model.embed_tokens.lora_B.weight'].shape[1]).toBe(2);
-    const runtimePackage = EvermindModelPackage.fromBlob(artifacts[0]!.evermindPackage);
-    expect(runtimePackage.validate()).toEqual({ ok: true, errors: [] });
-    expect(runtimePackage.loadLM().config.vocabSize).toBe(Object.keys(artifacts[0]!.tokenizer.vocab).length);
-    const api = await import('./api');
-    expect(api.downloadDataset).not.toHaveBeenCalled();
-    expect(api.uploadArtifact).not.toHaveBeenCalled();
-    expect(api.updateTrainingJob).not.toHaveBeenCalled();
-    expect(completedKey).toMatch(/^local:\/\//);
-  });
-
-  it('source contains no synthetic Math.exp / Math.random loss generation', async () => {
-    // Guard against regressions reintroducing the fake loss curve.
-    const fs = await import('node:fs');
-    const url = await import('node:url');
-    const path = await import('node:path');
-    const here = path.dirname(url.fileURLToPath(import.meta.url));
-    const src = fs.readFileSync(path.join(here, 'webgpu-trainer.ts'), 'utf8');
-    expect(src).not.toMatch(/Math\.exp/);
-    expect(src).not.toMatch(/Math\.random/);
-    // The old "prove GPU writing works" buffer hack must be gone.
-    expect(src).not.toMatch(/prove GPU/i);
   });
 });

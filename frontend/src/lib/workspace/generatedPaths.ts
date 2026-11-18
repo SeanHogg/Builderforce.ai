@@ -3,11 +3,13 @@
  * app's source: never worth a model's attention, and never saved back to the store from
  * a run (`npm install` and `npm run build` write thousands of them).
  *
- * One rule, shared by the Brain's build tools (`lib/canvasBuildTools.ts`) and the
- * in-browser shell (`lib/browserRuntime/workspaceShell.ts`), so what a model can list
- * and what a command may persist cannot disagree.
+ * One rule, shared by the Brain's build tools (`lib/canvasBuildTools.ts`), the
+ * in-browser shell (`lib/browserRuntime/workspaceShell.ts`) and the run loop's file
+ * mount (`lib/runTarget/projectRunFiles.ts`), so what a model can list, what a command
+ * may persist and what a run mounts cannot disagree. Framework caches (Next, SvelteKit,
+ * wrangler, Turborepo) are build output too.
  */
-const GENERATED_DIRECTORIES = ['node_modules/', 'dist/', '.git/'];
+const GENERATED_DIRECTORIES = ['node_modules/', 'dist/', '.git/', '.next/', '.svelte-kit/', '.wrangler/', '.turbo/'];
 
 /** True for a workspace-relative path inside dependencies or build output. */
 export function isGeneratedPath(path: string): boolean {

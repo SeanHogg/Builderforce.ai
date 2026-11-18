@@ -23,7 +23,7 @@ export class SGD extends Optimizer {
   step(): void {
     for (const p of this.params) {
       if (!p.grad) continue;
-      const buf = this.momentum > 0 ? this.stateOf(p, 1)[0]! : null;
+      const buf = this.momentum > 0 ? this.stateOf(p, 1).buffers[0]! : null;
       p.backend.sgdStep(p.handle, p.grad.handle, buf, {
         lr: this.lr,
         momentum: this.momentum,

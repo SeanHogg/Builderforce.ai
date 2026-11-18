@@ -6,6 +6,7 @@
  */
 export { DeviceTensor, type GradNode } from "./device-tensor";
 export { noGrad, isGradEnabled, setGradEnabled } from "./mode";
+export { tidy, keep, startScope, endScope, HostScope } from "./scope";
 export {
   tensor,
   intTensor,
@@ -25,6 +26,7 @@ export * as optim from "./optim";
 export { cpu, CpuBackend } from "../backend/cpu/cpu-backend";
 export {
   UnsupportedOpError,
+  DEFAULT_IGNORE_INDEX,
   type Backend,
   type BackendTensor,
   type EngineDType,

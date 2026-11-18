@@ -30,6 +30,11 @@ export interface EngineDevice {
   /** True when the device was created with `shader-f16`. */
   f16: boolean;
   adapterDescription: string;
+  /**
+   * The GPU entry point and adapter, held for the device's lifetime: with
+   * Dawn under Node, collecting the instance tears the device down mid-run.
+   */
+  readonly owners: { gpu: GPU; adapter: GPUAdapter };
 }
 
 export class WebGPUUnavailableError extends Error {
@@ -60,5 +65,10 @@ export async function requestEngineDevice(options: WebGPUDeviceOptions = {}): Pr
     },
   });
   const info = (adapter as { info?: { description?: string; vendor?: string } }).info;
-  return { device, f16, adapterDescription: info?.description || info?.vendor || "unknown adapter" };
+  return {
+    device,
+    f16,
+    adapterDescription: info?.description || info?.vendor || "unknown adapter",
+    owners: { gpu, adapter },
+  };
 }

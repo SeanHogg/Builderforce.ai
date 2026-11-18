@@ -36,7 +36,7 @@ import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
 import { readStoreFiles } from '@/lib/workspace/readStoreFiles';
 import type { WorkspaceId } from '@/lib/workspace/workspaceId';
 import { toolErrorMessage } from '@/lib/toolErrorMessage';
-import { bootSharedPreviewRuntime, replaceProjectFiles } from './previewRuntime';
+import { bootSharedPreviewRuntime, replaceProjectFiles, trackWorkspaceProcess } from './previewRuntime';
 import { hasInstalledPackages, installSnapshotKey, restoreInstalledPackages, saveInstalledPackages } from './installSnapshots';
 
 /** Default ceiling for one command: an install of a mid-sized app fits; a dev server never ends. */
@@ -211,7 +211,8 @@ async function runInRuntime(
   command: string,
   timeoutMs: number,
 ): Promise<{ exitCode: number | undefined; timedOut: boolean; stdout: string }> {
-  const child = runtime.run('bfsh', ['-c', command]);
+  // Tracked: when a browser run takes the runtime, the workspace's commands stop with it.
+  const child = trackWorkspaceProcess(runtime.run('bfsh', ['-c', command]));
   const output = collectTail(child.combinedOutput);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<'timeout'>((resolve) => { timer = setTimeout(() => resolve('timeout'), timeoutMs); });

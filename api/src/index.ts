@@ -276,6 +276,7 @@ import { createStudioRoutes }          from './presentation/routes/studioWeightR
 import { createEvermindModelRoutes }   from './presentation/routes/evermindModelRoutes';
 import { createProjectEvermindRoutes }  from './presentation/routes/projectEvermindRoutes';
 import { createProjectFactsRoutes }  from './presentation/routes/projectFactsRoutes';
+import { createProjectBlueprintRoutes } from './presentation/routes/projectBlueprintRoutes';
 import { createRunDeltaRoutes } from './presentation/routes/runDeltaRoutes';
 import { createAgentGovernanceRoutes } from './presentation/routes/agentGovernanceRoutes';
 import { createProjectKnowledgeRoutes } from './presentation/routes/projectKnowledgeRoutes';
@@ -1244,6 +1245,8 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/projects',  createProjectEvermindRoutes(db));
   app.route('/api/agent/projects', createProjectEvermindRoutes(db, agentHostDoor(db)));
   app.route('/api/projects',  createProjectFactsRoutes(db));
+  // PRD 31 §W9 phase 5: the detected AppBlueprint, read by the run loop's target choice.
+  app.route('/api/projects',  createProjectBlueprintRoutes(db));
   // PRD 41 §C14: what each agent run changed, per repository — `/projects/:projectId/run-deltas`
   // and `/run-deltas/:runId`. Auth is per route (the router is mounted at `/api`).
   app.route('/api',           createRunDeltaRoutes(db));

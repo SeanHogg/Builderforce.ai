@@ -250,7 +250,7 @@ export const PRODUCT_CAPABILITY_PROOF: Record<string, CapabilityProof> = {
   sessionLibrary: { status: 'beta', dataBoundary: 'workspace-cloud', prerequisites: ['account'], evidence: ['frontend/src/lib/builderforceApi.ts', 'frontend/src/components/creation-sessions/SessionActionBar.tsx'], lastVerified: '2026-08-22' },
   workflowsEvaluation: { status: 'beta', dataBoundary: 'hybrid', prerequisites: ['account'], evidence: ['frontend/src/lib/creationCanvasAi.test.ts'], lastVerified: '2026-08-04' },
   websitesDataPrototypes: { status: 'beta', dataBoundary: 'hybrid', prerequisites: [], evidence: ['frontend/src/components/creation-canvas/creationObjectRegistry.ts'], lastVerified: '2026-08-04' },
-  evermindLlmVoice: { status: 'beta', dataBoundary: 'hybrid', prerequisites: ['webgpuDevice'], evidence: ['frontend/src/lib/webgpu-trainer.ts', 'frontend/src/lib/mamba-engine.ts', 'frontend/src/components/AITrainingPanel.tsx', 'frontend/src/lib/voiceEngine.ts'], lastVerified: '2026-08-04' },
+  evermindLlmVoice: { status: 'beta', dataBoundary: 'hybrid', prerequisites: ['webgpuDevice'], evidence: ['frontend/src/lib/training/browserLoRATrainer.ts', 'frontend/src/lib/mamba-engine.ts', 'frontend/src/components/AITrainingPanel.tsx', 'frontend/src/lib/voiceEngine.ts'], lastVerified: '2026-08-04' },
   creationCanvasVsCode: { status: 'beta', dataBoundary: 'hybrid', prerequisites: ['vscodeExtension', 'sharedSessionsAccount'], evidence: ['packages/creation-canvas-contract/src/index.ts'], lastVerified: '2026-08-04' },
   workflowExecution: { status: 'beta', dataBoundary: 'workspace-cloud', prerequisites: ['account'], evidence: ['frontend/src/components/WorkflowDagView.tsx'], lastVerified: '2026-08-04' },
   projectsTasks: { status: 'available', dataBoundary: 'workspace-cloud', prerequisites: ['account'], evidence: ['frontend/src/components/TaskMgmtContent.tsx'], lastVerified: '2026-08-04' },
@@ -374,7 +374,7 @@ export const MARKETING_CLAIMS: readonly MarketingClaim[] = [
     status: 'beta',
     scope: 'Named WebGPU operations on compatible devices',
     dataBoundaries: ['browser', 'hybrid'],
-    evidence: ['frontend/src/lib/webgpu-trainer.ts', 'frontend/src/lib/mamba-engine.ts', 'frontend/src/components/AITrainingPanel.tsx'],
+    evidence: ['frontend/src/lib/training/browserLoRATrainer.ts', 'frontend/src/lib/mamba-engine.ts', 'frontend/src/components/AITrainingPanel.tsx'],
     owner: 'AI Studio', lastReviewed: '2026-11-07', reviewBy: '2027-02-05', complianceReview: 'required',
   },
   {

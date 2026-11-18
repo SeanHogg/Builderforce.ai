@@ -10,6 +10,7 @@ import { Tensor } from "../../tensor";
 import type { AdamWStep, Backend, BinaryOp, EngineDType, HostArray, SgdStep, UnaryOp } from "../backend";
 import { matmulShape, reducePlan } from "../shape-rules";
 import * as rows from "./row-kernels";
+import { bumpVersion } from "../storage-version";
 import * as updates from "./update-kernels";
 
 const GELU_C = Math.sqrt(2 / Math.PI);
@@ -20,6 +21,23 @@ export function geluGrad(x: number): number {
   const t = Math.tanh(u);
   return 0.5 * (1 + t) + 0.5 * x * (1 - t * t) * GELU_C * (1 + 3 * 0.044715 * x * x);
 }
+
+/**
+ * erf by Abramowitz & Stegun 7.1.26 (|error| ≤ 1.5e-7, below float32 resolution
+ * near 1). The WGSL `erf_f` in kernels/common.ts is the same polynomial, so the
+ * two backends agree on the exact GELU.
+ */
+export function erf(x: number): number {
+  const s = x < 0 ? -1 : 1;
+  const a = Math.abs(x);
+  const t = 1 / (1 + 0.3275911 * a);
+  const y = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-a * a);
+  return s * y;
+}
+
+/** Exact (erf) GELU, PyTorch's default `approximate="none"`. */
+export const geluErf = (x: number) => 0.5 * x * (1 + erf(x * Math.SQRT1_2));
+export const geluErfGrad = (x: number) => 0.5 * (1 + erf(x * Math.SQRT1_2)) + (x * Math.exp(-0.5 * x * x)) / Math.sqrt(2 * Math.PI);
 
 /**
  * The reference backend. Handles are the library's own CPU `Tensor`s, so the
@@ -49,6 +67,11 @@ export class CpuBackend implements Backend<Tensor> {
     // Garbage-collected storage: nothing to return.
   }
 
+  /** A CPU tensor's storage is its data array, which every reshape view shares. */
+  storageOf(h: Tensor): object {
+    return h.data;
+  }
+
   full(shape: Shape, value: number): Tensor {
     return full(shape, value);
   }
@@ -68,6 +91,8 @@ export class CpuBackend implements Backend<Tensor> {
         return relu(a);
       case "gelu":
         return gelu(a);
+      case "gelu_erf":
+        return unaryF32(a, geluErf, "gelu_erf");
       case "exp":
         return exp(a);
       case "log":
@@ -93,6 +118,8 @@ export class CpuBackend implements Backend<Tensor> {
         return binaryF32(a, b, (x, g) => (x > 0 ? g : 0), "relu_backward");
       case "gelu_backward":
         return binaryF32(a, b, (x, g) => g * geluGrad(x), "gelu_backward");
+      case "gelu_erf_backward":
+        return binaryF32(a, b, (x, g) => g * geluErfGrad(x), "gelu_erf_backward");
     }
   }
 
@@ -131,11 +158,22 @@ export class CpuBackend implements Backend<Tensor> {
   embeddingBackward(ids: Tensor, gy: Tensor, numEmbeddings: number): Tensor {
     return rows.embeddingBackward(ids, gy, numEmbeddings);
   }
-  crossEntropy(logits: Tensor, targets: Tensor) {
-    return rows.crossEntropy(logits, targets);
+  crossEntropy(logits: Tensor, targets: Tensor, ignoreIndex: number) {
+    return rows.crossEntropy(logits, targets, ignoreIndex);
   }
-  crossEntropyBackward(probs: Tensor, targets: Tensor, gLoss: Tensor): Tensor {
-    return rows.crossEntropyBackward(probs, targets, gLoss);
+  crossEntropyBackward(probs: Tensor, targets: Tensor, gLoss: Tensor, ignoreIndex: number): Tensor {
+    return rows.crossEntropyBackward(probs, targets, gLoss, ignoreIndex);
+  }
+  addInPlace(target: Tensor, src: Tensor): void {
+    updates.addInPlace(target, src);
+    bumpVersion(target.data);
+  }
+  copyInPlace(target: Tensor, src: Tensor): void {
+    updates.copyInPlace(target, src);
+    bumpVersion(target.data);
+  }
+  cast(a: Tensor, dtype: EngineDType): Tensor {
+    return updates.cast(a, dtype);
   }
 
   loraMerge(base: Tensor, a: Tensor, b: Tensor, scale: number): Tensor {
@@ -143,12 +181,17 @@ export class CpuBackend implements Backend<Tensor> {
   }
   loraBackward(gw: Tensor, a: Tensor, b: Tensor, scale: number, ga: Tensor, gb: Tensor): void {
     updates.loraBackward(gw, a, b, scale, ga, gb);
+    bumpVersion(ga.data);
+    bumpVersion(gb.data);
   }
   adamwStep(param: Tensor, grad: Tensor, m: Tensor, v: Tensor, step: AdamWStep): void {
     updates.adamwStep(param, grad, m, v, step);
+    for (const h of step.keepGrad ? [param, m, v] : [param, grad, m, v]) bumpVersion(h.data);
   }
   sgdStep(param: Tensor, grad: Tensor, momentumBuf: Tensor | null, step: SgdStep): void {
     updates.sgdStep(param, grad, momentumBuf, step);
+    bumpVersion(param.data);
+    if (momentumBuf) bumpVersion(momentumBuf.data);
   }
 }
 

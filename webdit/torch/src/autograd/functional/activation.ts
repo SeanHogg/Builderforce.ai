@@ -1,6 +1,6 @@
 import { UnsupportedOpError } from "../../backend/backend";
 import type { DeviceTensor } from "../device-tensor";
-import { backendOf, record, saved } from "../record";
+import { backendOf, record } from "../record";
 
 /** Pointwise activations and the last-dim softmax family, with grad rules. */
 
@@ -9,17 +9,18 @@ export function relu(x: DeviceTensor): DeviceTensor {
   return record("relu", be.unary("relu", x.handle), [x], (gy) => [be.binary("relu_backward", x.handle, gy)]);
 }
 
-/** Tanh-approximated GELU (PyTorch `approximate="tanh"`). */
-export function gelu(x: DeviceTensor): DeviceTensor {
+/** GELU: `"tanh"` (default here) is PyTorch's `approximate="tanh"`; `"none"` is the exact erf form, PyTorch's default. */
+export function gelu(x: DeviceTensor, approximate: "tanh" | "none" = "tanh"): DeviceTensor {
   const be = backendOf("gelu", x);
-  return record("gelu", be.unary("gelu", x.handle), [x], (gy) => [be.binary("gelu_backward", x.handle, gy)]);
+  const [fwd, bwd] = approximate === "none" ? (["gelu_erf", "gelu_erf_backward"] as const) : (["gelu", "gelu_backward"] as const);
+  return record("gelu", be.unary(fwd, x.handle), [x], (gy) => [be.binary(bwd, x.handle, gy)]);
 }
 
 export function exp(x: DeviceTensor): DeviceTensor {
   const be = backendOf("exp", x);
   const out = be.unary("exp", x.handle);
-  const y = saved(be, be.reshape(out, x.shape));
-  return record("exp", out, [x], (gy) => [be.binary("mul", gy, y.handle)]);
+  const y = be.reshape(out, x.shape);
+  return record("exp", out, [x], (gy) => [be.binary("mul", gy, y)], [y], []);
 }
 
 export function log(x: DeviceTensor): DeviceTensor {
@@ -38,14 +39,14 @@ export function softmax(x: DeviceTensor, dim = -1): DeviceTensor {
   lastAxis("softmax", x, dim);
   const be = backendOf("softmax", x);
   const out = be.softmax(x.handle);
-  const y = saved(be, be.reshape(out, x.shape));
-  return record("softmax", out, [x], (gy) => [be.softmaxBackward(y.handle, gy)]);
+  const y = be.reshape(out, x.shape);
+  return record("softmax", out, [x], (gy) => [be.softmaxBackward(y, gy)], [y], []);
 }
 
 export function logSoftmax(x: DeviceTensor, dim = -1): DeviceTensor {
   lastAxis("log_softmax", x, dim);
   const be = backendOf("log_softmax", x);
   const out = be.logSoftmax(x.handle);
-  const y = saved(be, be.reshape(out, x.shape));
-  return record("log_softmax", out, [x], (gy) => [be.logSoftmaxBackward(y.handle, gy)]);
+  const y = be.reshape(out, x.shape);
+  return record("log_softmax", out, [x], (gy) => [be.logSoftmaxBackward(y, gy)], [y], []);
 }

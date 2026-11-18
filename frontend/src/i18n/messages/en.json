@@ -18884,7 +18884,7 @@
     "dataModeWorkspace": "Workspace — load and save through Builderforce",
     "datasetDescription": "Dataset for {prompt}",
     "exactBrowserLoraCpu": "Exact browser LoRA · CPU fallback",
-    "hybridWebgpuLora": "Hybrid WebGPU LoRA · WGSL adapter kernels",
+    "hybridWebgpuLora": "WebGPU LoRA · engine autograd in a training worker",
     "localEnforcedNotice": "Enforced locally: no training API job, dataset request, log stream, or artifact upload.",
     "localExamplesLabel": "Local training examples",
     "localExamplesPlaceholder": "Paste examples here. Separate examples with a blank line.",
@@ -18987,6 +18987,7 @@
     "logJobCreated": "📋 Job created: {id}",
     "logWebgpuStart": "🎮 Starting in-browser WebGPU training (real on-device gradient descent)…",
     "logEpochComplete": "📊 Epoch {epoch} complete — avg loss: {loss}",
+    "trainingProgressStatus": "Step {step} — loss {loss} · {tokensPerSecond} tokens/s",
     "logTrainingComplete": "✅ Training complete! Artifact: {key}",
     "logTrainingError": "❌ Training error: {error}",
     "logCannotStart": "❌ Cannot start training: {reason}",
@@ -29080,7 +29081,40 @@
     "open": "Open",
     "starting": "Starting…",
     "expoQrLabel": "QR code for the Expo preview",
-    "expoQr": "Open this preview in Expo Go on your phone."
+    "expoQr": "Open this preview in Expo Go on your phone.",
+    "logs": "Logs",
+    "hideLogs": "Hide logs",
+    "logsLabel": "Service output",
+    "logsEmpty": "No output yet.",
+    "serviceFailed": "{service} stopped with an error.",
+    "runInBrowser": "Run in your browser",
+    "runInBrowserHint": "Starts the app's services in this tab, with its own database. Nothing runs on a server.",
+    "stopped": "The app stopped — the editor took over the browser runtime. Run it again to see it here.",
+    "serviceState": {
+      "starting": "Starting…",
+      "live": "Running, but not serving a page yet.",
+      "failed": "This service stopped with an error.",
+      "stopped": "This service is stopped."
+    },
+    "target": {
+      "browser": "Running in your browser",
+      "container": "Running in a cloud container"
+    },
+    "declinedBy": {
+      "browser": "Not in the browser:",
+      "container": "Not in a container:"
+    },
+    "reason": {
+      "noBlueprint": "No app blueprint has been detected for this project yet.",
+      "serviceDeclined": "A service needs a runtime the browser does not have.",
+      "databaseDeclined": "The database is not Postgres-compatible.",
+      "invalidSpec": "The app's services cannot be started together as declared.",
+      "noFiles": "The project has no files to run.",
+      "noContainerPreview": "No container is holding a live preview.",
+      "blueprintUnavailable": "The app blueprint could not be read.",
+      "runtimeUnavailable": "The runtime could not start.",
+      "superseded": "A newer run replaced this one."
+    }
   },
   "connectors": {
     "category": {

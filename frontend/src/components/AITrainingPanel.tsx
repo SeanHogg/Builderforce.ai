@@ -18,10 +18,10 @@ import {
   listTrainingJobs,
 } from '@/lib/api';
 import { evaluateDatasetUse, normalizeClassifications, normalizeUsePolicy } from '@builderforce/creation-canvas-contract';
-import { getApiBaseUrl } from '@/lib/apiClient';
 import { downloadBlob } from '@/lib/download';
 import { hasWebGPU } from '@seanhogg/builderforce-brain-embedded';
-import { WebGPUTrainer, canTrainInBrowser, type BrowserLoRAArtifact, type TrainingDataMode, type TrainingStep } from '@/lib/webgpu-trainer';
+import { useBrowserLoRARun } from '@/components/ai-training/useBrowserLoRARun';
+import { canTrainInBrowser, type BrowserLoRAArtifact, type TrainingDataMode, type TrainingStep } from '@/lib/training/protocol';
 import { benchmarkPublishedModel, listEvermindModels, publishEvermindModel, rollbackPublishedEvermindModel, testPublishedEvermindModel, type PublishedEvermindModel, type PublishedEvermindResult } from '@/lib/studioModelsApi';
 import { MambaEngine } from '@/lib/mamba-engine';
 import { initMambaProvider, type MambaProviderConfig, type MambaTrainingProvider } from '@/lib/mamba-worker-client';
@@ -102,10 +102,12 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
   const [isGenerating, setIsGenerating] = useState(false);
   const [isTraining, setIsTraining] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
-  const [webgpuAvailable] = useState(hasWebGPU);
+  const [webgpuHint] = useState(hasWebGPU);
   const [mambaWebGPU] = useState(hasWebGPU);
   const [memorySequences, setMemorySequences] = useState('');
-  const trainerRef = useRef<WebGPUTrainer | null>(null);
+  const { run: runBrowserLoRA, cancel: cancelBrowserLoRA, device: trainingDevice, status: trainingStatus } = useBrowserLoRARun();
+  /** What the training worker actually acquired once a run has started; the main-thread probe before that. */
+  const webgpuAvailable = trainingDevice ? trainingDevice === 'webgpu' : webgpuHint;
   const mambaRef = useRef<MambaEngine | null>(null);
   const mambaProviderRef = useRef<MambaTrainingProvider | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
@@ -142,8 +144,6 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
   }, [logs]);
 
   useEffect(() => () => {
-    trainerRef.current?.destroy();
-    trainerRef.current = null;
     mambaRef.current?.dispose();
     mambaRef.current = null;
     mambaProviderRef.current?.dispose();
@@ -205,10 +205,15 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
 
       if (canUseBrowserTraining) {
         appendLog(t('logStartingBrowserLora'));
-        const trainer = new WebGPUTrainer({
+        // Fallback examples used if no dataset is selected or download fails
+        const fallbackExamples = dataMode === 'local-only'
+          ? localTrainingText.split(/\n{2,}/).map((text) => text.trim()).filter(Boolean)
+          : config.capabilityPrompt
+            ? [`${config.capabilityPrompt} — example 1`, `${config.capabilityPrompt} — example 2`]
+            : ['General coding task example'];
+        const TARGET_EFFECTIVE_BATCH_SIZE = 16;
+        await runBrowserLoRA({
           modelId: config.baseModel,
-          workerUrl: getApiBaseUrl(),
-          projectId,
           jobId: job?.id,
           datasetId: dataMode === 'workspace' ? selectedDatasetId || undefined : undefined,
           dataMode,
@@ -253,29 +258,14 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
               onLocalArtifactCompleted?.({ filename: artifact.filename, trainableParams: artifact.trainableParams });
             }
           },
-        });
-        trainerRef.current = trainer;
-
-        await trainer.init();
-        // Fallback examples used if no dataset is selected or download fails
-        const fallbackExamples = dataMode === 'local-only'
-          ? localTrainingText.split(/\n{2,}/).map((text) => text.trim()).filter(Boolean)
-          : config.capabilityPrompt
-            ? [`${config.capabilityPrompt} — example 1`, `${config.capabilityPrompt} — example 2`]
-            : ['General coding task example'];
-        const TARGET_EFFECTIVE_BATCH_SIZE = 16;
-        await trainer.train(
-          {
-            epochs: config.epochs,
-            batchSize: config.batchSize,
-            learningRate: config.learningRate,
-            gradientAccumulationSteps: Math.max(1, Math.floor(TARGET_EFFECTIVE_BATCH_SIZE / config.batchSize)),
-            precision: 'float16',
-            loraConfig: { rank: config.loraRank, alpha: config.loraRank * 2, targetModules: ['q_proj', 'v_proj'] },
-          },
-          fallbackExamples,
-        );
-        trainerRef.current = null;
+        }, {
+          epochs: config.epochs,
+          batchSize: config.batchSize,
+          learningRate: config.learningRate,
+          gradientAccumulationSteps: Math.max(1, Math.floor(TARGET_EFFECTIVE_BATCH_SIZE / config.batchSize)),
+          precision: 'float16',
+          loraConfig: { rank: config.loraRank, alpha: config.loraRank * 2, targetModules: ['q_proj', 'v_proj'] },
+        }, fallbackExamples);
       } else {
         // In-browser WebGPU training only runs for models within the WebGPU
         // parameter budget. There is no real cloud-offload training pipeline
@@ -291,11 +281,10 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
       appendLog(t('logStartFailed', { error: e instanceof Error ? e.message : t('errUnknown') }));
       setIsTraining(false);
     }
-  }, [config, selectedModel, selectedDatasetId, projectId, dataMode, localTrainingText, baseCheckpoint, tokenizerSpec, canUseBrowserTraining, appendLog, onJobCompleted, onLocalArtifactCompleted, t]);
+  }, [config, selectedModel, selectedDatasetId, projectId, dataMode, localTrainingText, baseCheckpoint, tokenizerSpec, canUseBrowserTraining, appendLog, onJobCompleted, onLocalArtifactCompleted, t, fmt, runBrowserLoRA]);
 
   const handleStopTraining = useCallback(() => {
-    trainerRef.current?.destroy();
-    trainerRef.current = null;
+    cancelBrowserLoRA();
     setIsTraining(false);
     appendLog(t('logStopped'));
   }, [appendLog, t]);
@@ -852,6 +841,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
                 </button>
               )}
             </div>
+            {isTraining && trainingStatus && <div role="status" className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{trainingStatus}</div>}
 
             {/* Loss curve */}
             {lossHistory.length > 0 && (

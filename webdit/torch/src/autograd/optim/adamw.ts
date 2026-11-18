@@ -12,15 +12,15 @@ export interface AdamWOptions {
  * AdamW (decoupled weight decay), PyTorch defaults. Runs the moved
  * `ADAMW_WGSL` kernel on WebGPU and its CPU mirror otherwise.
  *
- * Like that kernel, a step CONSUMES the gradient: `.grad` is zero afterwards.
- * `gradScale` divides gradients accumulated over several backward passes.
+ * Bias correction uses each parameter's OWN step count, advanced only when
+ * that parameter has a gradient (PyTorch's `state['step']`). Gradients are left
+ * intact. `gradScale` divides gradients accumulated over several backward passes.
  */
 export class AdamW extends Optimizer {
   lr: number;
   readonly betas: [number, number];
   readonly eps: number;
   readonly weightDecay: number;
-  private stepCount = 0;
 
   constructor(params: Iterable<DeviceTensor>, options: AdamWOptions = {}) {
     super(params);
@@ -31,10 +31,11 @@ export class AdamW extends Optimizer {
   }
 
   step(gradScale = 1): void {
-    this.stepCount += 1;
     for (const p of this.params) {
       if (!p.grad) continue;
-      const [m, v] = this.stateOf(p, 2);
+      const s = this.stateOf(p, 2);
+      s.step += 1;
+      const [m, v] = s.buffers;
       p.backend.adamwStep(p.handle, p.grad.handle, m!, v!, {
         lr: this.lr,
         beta1: this.betas[0],
@@ -42,7 +43,8 @@ export class AdamW extends Optimizer {
         eps: this.eps,
         weightDecay: this.weightDecay,
         gradScale,
-        step: this.stepCount,
+        step: s.step,
+        keepGrad: true,
       });
     }
   }

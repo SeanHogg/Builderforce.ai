@@ -6681,7 +6681,7 @@ function createChatTicketsRestAdapter(opts) {
     const [mine, purchased, registered] = await Promise.all([
       req("/api/workforce/agents/mine").catch(() => []),
       req("/api/workforce/agents/purchased").catch(() => []),
-      req("/api/agents").catch(() => [])
+      req("/api/agent-registrations").then((r) => r.agents ?? []).catch(() => [])
     ]);
     const wfById = /* @__PURE__ */ new Map();
     for (const agent of [...mine, ...purchased]) wfById.set(String(agent.id), agent);
@@ -6691,7 +6691,7 @@ function createChatTicketsRestAdapter(opts) {
       name: a.name,
       meta: a.title || a.base_model || ""
     }));
-    const agents = registered.filter((a) => a.isActive).map((a) => ({ kind: "registered", ref: String(a.id), name: a.name, meta: a.type }));
+    const agents = registered.filter((a) => a.status === "active").map((a) => ({ kind: "registered", ref: String(a.id), name: a.name, meta: a.framework }));
     return [...workforce, ...agents];
   };
   return {

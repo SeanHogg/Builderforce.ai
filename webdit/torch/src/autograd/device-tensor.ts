@@ -1,6 +1,8 @@
 import type { Backend, BackendTensor, HostArray } from "../backend/backend";
+import { versionOf } from "../backend/storage-version";
 import { productOf, type Shape } from "../shape";
 import { runBackward } from "./engine";
+import { trackInScope } from "./scope";
 
 /**
  * A node of the recorded graph: the op that produced a tensor, its inputs, and
@@ -8,11 +10,17 @@ import { runBackward } from "./engine";
  * gradient per input (null where an input needs none). Every handle it returns
  * is owned by the caller — a fresh result or a `backend.reshape` view, never
  * the incoming gradient object itself.
+ *
+ * `release` frees the values the rule saved from the forward pass (softmax
+ * output, layernorm statistics, …). The engine calls it when it frees the
+ * graph after backward, and `dispose()` calls it for a graph never run;
+ * afterwards `backward` throws.
  */
 export interface GradNode {
   readonly name: string;
   readonly inputs: readonly DeviceTensor[];
   backward(gy: BackendTensor): Array<BackendTensor | null>;
+  release(): void;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -42,6 +50,7 @@ export class DeviceTensor {
     public requiresGrad = false,
   ) {
     finalizer.register(this, { backend, handle }, this);
+    trackInScope(this);
   }
 
   get shape(): Shape {
@@ -60,10 +69,16 @@ export class DeviceTensor {
     return this.gradFn === null;
   }
 
+  /** In-place writes to this tensor's storage so far (PyTorch `_version`), through any view of it. */
+  get version(): number {
+    return versionOf(this.backend.storageOf(this.handle));
+  }
+
   /**
    * Reverse-mode backward from this tensor. With no `gradient` the tensor must
    * hold one element (a loss). Leaf tensors that require grad accumulate into
-   * `.grad`. The graph is freed afterwards unless `retainGraph` is set.
+   * `.grad`, in place. The graph is freed afterwards unless `retainGraph` is
+   * set: its saved values are released, and a second backward through it throws.
    */
   backward(gradient?: DeviceTensor, options: { retainGraph?: boolean } = {}): void {
     runBackward(this, gradient, options.retainGraph ?? false);
@@ -105,7 +120,7 @@ export class DeviceTensor {
     return this;
   }
 
-  /** Release storage now instead of at collection. */
+  /** Release storage now instead of at collection — the values, `.grad`, and the producing op's saved values. */
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
@@ -113,6 +128,7 @@ export class DeviceTensor {
     this.backend.release(this.handle);
     this.grad?.dispose();
     this.grad = null;
+    this.gradFn?.release();
     this.gradFn = null;
   }
 

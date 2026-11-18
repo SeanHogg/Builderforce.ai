@@ -11,10 +11,15 @@ import { BUFFER_USAGE } from "./device";
  *
  * `maxBytes` is the VRAM budget: an acquire that would take live storage past
  * it first trims the idle pool, then throws `VramBudgetError`.
+ * `maxPooledBytes` is the idle high-water mark: a release that takes the pool
+ * past it trims the largest idle buffers back down, so the pool shrinks after
+ * a peak instead of holding it forever.
  */
 
 const STORAGE_USAGE = BUFFER_USAGE.STORAGE | BUFFER_USAGE.COPY_SRC | BUFFER_USAGE.COPY_DST;
 const MIN_CLASS = 16;
+/** Idle bytes the pool keeps before trimming (largest classes first). */
+export const DEFAULT_MAX_POOLED_BYTES = 256 * 1024 * 1024;
 
 export class VramBudgetError extends Error {
   constructor(requested: number, live: number, max: number) {
@@ -46,6 +51,7 @@ export class BufferPool {
   constructor(
     private readonly device: GPUDevice,
     private readonly maxBytes = Number.POSITIVE_INFINITY,
+    private readonly maxPooledBytes = DEFAULT_MAX_POOLED_BYTES,
   ) {}
 
   acquire(bytes: number): GPUBuffer {
@@ -72,13 +78,30 @@ export class BufferPool {
     const bucket = this.free.get(size);
     if (bucket) bucket.push(buffer);
     else this.free.set(size, [buffer]);
+    if (this.pooledBytes > this.maxPooledBytes) this.trimTo(this.maxPooledBytes);
   }
 
   /** Destroy every idle buffer. */
   trim(): void {
-    for (const bucket of this.free.values()) for (const b of bucket) b.destroy();
-    this.free.clear();
-    this.pooledBytes = 0;
+    this.trimTo(0);
+  }
+
+  /**
+   * High-water policy: destroy idle buffers, largest size class first, until
+   * at most `cap` bytes stay pooled. Large one-off allocations go first; the
+   * small classes a training step churns through stay warm.
+   */
+  trimTo(cap: number): void {
+    const classes = [...this.free.keys()].sort((a, b) => b - a);
+    for (const size of classes) {
+      const bucket = this.free.get(size)!;
+      while (bucket.length > 0 && this.pooledBytes > cap) {
+        bucket.pop()!.destroy();
+        this.pooledBytes -= size;
+      }
+      if (bucket.length === 0) this.free.delete(size);
+      if (this.pooledBytes <= cap) return;
+    }
   }
 
   stats(): PoolStats {
