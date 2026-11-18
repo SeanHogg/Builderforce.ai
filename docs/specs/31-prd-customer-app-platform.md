@@ -60,6 +60,8 @@ Everything an agent can do in these loops is also an **MCP tool** (§4.7), so th
 | D4 | Enable the **Cloudflare for SaaS** entitlement plus `CLOUDFLARE_ZONE_ID` / `CLOUDFLARE_SAAS_API_TOKEN` | domains (already an open ROADMAP item) | Yes. It is also needed for W5 custom domains. |
 | D5 | Register the **GitHub App** | smoother repo connect + secret push | Yes. The code is complete. |
 | D6 | A **container instance type** for run loops (the default is the smallest) | W1 | `standard` at least, since `npm install` + Vite + Miniflare on the smallest instance will OOM. Budget it per the `containerRuntime` entitlement. |
+| D7 | Is the **browser run tier (W9) the free-plan run loop**, with the container tier paid? | W9 Phase 5 gating | Yes. The browser tier costs Builderforce nothing per run, and the container tier keeps its `containerRuntime` entitlement. |
+| D8 | **Which runtimes beyond Node** does W9 commit to? | W9 Phase 6 | None up front. Python (Pyodide) is the first feasibility gate, and only once demand is measured. Rust and .NET are gates only. |
 
 ---
 
@@ -166,6 +168,80 @@ Most of it exists. This makes it real.
 
 `POST /api/projects` accepts an optional `companyId`, validated in the same use case as `linkProjectToCompany` (both sides in the tenant). The company workspace gets "New project" alongside "Attach". An MCP `projects.create` gains `companyId`. This is one path, not a second writer of `company_id`.
 
+### W9: Browser run tier (full-stack apps on our WebContainers runtime)
+
+*Added 2026-11-17, from the "Full-Stack Multi-Service Architecture" design review. W1 runs the app in a cloud container. W9 runs the **same blueprint** in the user's browser on `@seanhogg/builderforce-webcontainers`: frontend, API and a Postgres database, with no container, no server and no per-hour cost.*
+
+**Why.** The run loop is the highest-leverage workstream, but the container tier has a live image blocker, a per-tenant cap of 2, and a cost per preview-hour (§6). Most apps users build on the canvas are JS/TS frontends with a Node API and Postgres. The browser runtime already runs those pieces separately:
+- one Web Worker per process;
+- `runtime.run()` / `RuntimeProcess`;
+- virtual HTTP ports with in-runtime localhost routing;
+- streaming responses, WebSockets and cookies;
+- relay-origin isolation;
+- `npm`/`pnpm`/`yarn` installs, Next.js and SvelteKit dev servers, and WASI.
+
+What is missing is *the application*: starting several services as one app, connecting them, and giving them a database. W9 adds that.
+
+**One flow, two targets.** The run loop gets a `RunTarget` port with adapters `browser` (W9) and `container` (W1). Both read the same `AppBlueprint`, feed the same `LivePreviewPanel`, and back the same `runtime.*` MCP tools. The target is chosen from the blueprint, never a user branch:
+- **Browser:** every service's runtime accepts the project, and the database engine is Postgres-compatible.
+- **Container:** anything the browser runtime declines with a reason (`wrangler dev` / Miniflare, Docker, native-only addons, Nuxt). The decline reason is shown, never a half-broken preview.
+
+**Free tenants get the browser tier.** It costs Builderforce nothing to run. It is the free-plan answer to "run + see it". The container tier stays `containerRuntime`-entitled (D7).
+
+**Design decisions** (review outcome; ✅ = adopted as proposed, ✏️ = changed):
+
+| # | Proposal | Decision |
+|---|---|---|
+| 1 | ✅ Build orchestration **on top of** the existing process manager; don't replace the runtime, and don't emulate Docker or Linux. | Adopted. The goal is the developer experience: services, discovery, HTTP, a database, logs, persistence, coordinated start and stop. |
+| 2 | ✏️ A new `builderforce.app.json` manifest. | **Rejected as a second source of truth.** The manifest *is* `AppBlueprint` (W2), with the repo-root `builderforce.json` override that already exists. W9 adds what the blueprint lacks: per-service `dependsOn`, `readiness`, `restartPolicy`, and a database `provider` (`pglite` in the browser, a Neon branch in the container). The webcontainers package stays independent of Builderforce: it takes a plain `ApplicationSpec` input. The Builderforce adapter maps blueprint → spec. A standalone user passes the spec, or the runtime reads the `services` section of `builderforce.json`. |
+| 3 | ✏️ Project discovery in the runtime (package.json, csproj, Cargo.toml…). | **Not a second detector.** Detection is the W2 registry. The runtime only *accepts or declines* a service (`RuntimeProvider.accepts(service) → ok \| reason`). The existing core `detectProject.ts` becomes the browser runtime's accept check for frontends. |
+| 4 | ✅ Hybrid networking: ordinary HTTP frontend→API through virtual ports, and a project-scoped service map injected as env (`API_URL=http://localhost:8000`). | Adopted. It extends the existing in-runtime localhost routing. The dev-server proxy (`/api/*` → the API's virtual port) comes from the blueprint's ports. App code never sees worker ids or preview URLs. |
+| 5 | ✏️ The database is reached through a custom `bfdb://` RPC client and per-language adapter packages; Postgres wire compatibility comes later. | **Reordered for Node.** An app that has to import a Builderforce client is not the user's app. PGlite runs in its own Worker behind a MessagePort RPC; that internal transport is adopted as proposed. The *app-facing* contract is a real `DATABASE_URL=postgres://…@localhost:5432/…`. Node's `net` module gains a client `createConnection` to virtual TCP ports (today it only reserves ports for get-port/detect-port), and a Postgres wire gateway (`execProtocolRaw`) sits on that port. That makes unmodified `pg`, `postgres`, Drizzle and Prisma (driver adapters) work, and it is one piece of work, not one adapter per language. The `bfdb://` client stays as a fallback only if the wire gateway fails its gate. |
+| 6 | ✅ PGlite in a dedicated Worker, serialized queries with transaction-aware scheduling, and storage outside the project VFS (IndexedDB, per project + database id) with export, import, reset and restore. Not in source ZIP exports. | Adopted. The database outlives API and frontend restarts and closes only with the app. Multi-tab: one leader-elected owner per project database, other tabs proxy to it. The Worker starts in the relay frame, like process workers since 2026.10.3, so data never splits across origins. Preview code can reach only HTTP, never the database port. |
+| 7 | ✅ Shared, copy-on-read VFS with a change journal before more processes. | Adopted, and moved **first**. Every process gets a full filesystem snapshot today (webcontainers ROADMAP item 18), and Next's first page takes about 20–35 s. A three-service app multiplies that cost. |
+| 8 | ✏️ Python, PHP, Rust and .NET runtimes as phase 4. | **Kept as feasibility gates, not commitments.** Builderforce's run loop is JS/TS-first. Python on Pyodide is the first candidate, and only when demand is measured. Rust and .NET each need a real HTTP framework that serves a request and queries the database under browser networking before any work is scheduled. Each runtime declares supported project profiles and declines the rest. |
+| 9 | ✅ Lifecycle state machine (discovered → preparing → starting → ready → running → stopping/stopped, failed), readiness before dependents start, and restart policy per service. A failed API does not kill the frontend. | Adopted. Readiness means: database = accepts a query; API = health URL answers; frontend = port open. |
+| 10 | ✏️ Module layout of `application-manager.ts`, `startup-manager.ts`, `health-manager.ts`… | **Use cases, not managers** (no-god-class rule): `startApplication`, `stopApplication`, `restartService`, `serviceGraph`, `readiness`, `serviceEnv`, `databaseHost`, `pgGateway`. They live in the existing `core` / `browser` packages, exposed as a new `./app` subpath (like `./ml`) so preview-only consumers never load them. `startPreviewRuntime()` is unchanged. `startApplicationRuntime(spec)` is the new entry. |
+
+**Public contract** (`@seanhogg/builderforce-webcontainers/app`):
+- `startApplicationRuntime(spec)` returns an app object:
+  - `start()`, `stop()` and `restart(serviceId)`;
+  - `getService(id)` and `getUrl(serviceId)`;
+  - `logs(serviceId?)`, a `ReadableStream`;
+  - `onStateChange(cb)` and `onError(cb)`;
+  - `database(id)`, which returns `export()`, `import(blob)` and `reset()`.
+- Builderforce's `lib/browserRuntime/factory.ts` gains the browser `RunTarget` adapter. It maps `AppBlueprint` → `ApplicationSpec` and runs the blueprint's `migrationCommand` / `seedCommand` against the browser database before the API starts.
+
+**Phases** (each ships on its own, and each has an automated exit test, not a demo):
+
+| Phase | Contents | Exit condition |
+|---|---|---|
+| 0 | Baseline: reuse the webcontainers Phase-0 harness. Measure process start-up and snapshot cost, virtual HTTP and WebSocket latency, and concurrent Node processes. | Numbers recorded. The existing suite is the regression gate. |
+| 1 | Shared copy-on-read VFS with a change journal. Process start-up no longer copies the project. | Spawn cost is flat in project size. Next first-page time is measured against Phase 0. |
+| 2 | `ApplicationSpec`, the service graph, the lifecycle, readiness, per-service env and logs, `startApplicationRuntime`. | A Node frontend and a Node API start, stop and restart as independent services. |
+| 3 | Service networking: the project-scoped service map, the dev-server `/api` proxy, and connection cleanup when a service stops. | The frontend calls the API with relative `fetch('/api/…')`. Streaming and WebSocket regression tests pass. |
+| 4 | Database: the PGlite Worker, IndexedDB persistence, `net.createConnection` to virtual TCP ports, the Postgres wire gateway, blueprint migrations, export/import/reset, and the multi-tab leader. | An **unmodified** Express + `pg` (and Drizzle) API does CRUD with transactions and rollback. Data survives API restart, frontend restart and page reload. Two projects stay isolated. |
+| 5 | Builderforce wiring: the `RunTarget` port, the blueprint → spec mapping, `LivePreviewPanel` reading either target, and the `runtime.*` tools routed by target. | A canvas app with a Vite frontend, an Express API and Postgres runs in the panel on a free tenant. An agent edit hot-reloads it. The agent's `preview_screenshot` sees it. |
+| 6 | Feasibility gates: Python (Pyodide) first, then Rust and .NET. | Each gate passes only with a real framework serving requests against the same database. |
+
+**Acceptance (W9).** A developer opens one project and presses Run, and:
+1. The blueprint resolves to the browser target.
+2. PGlite starts and the migrations apply.
+3. The API starts once the database is ready.
+4. The frontend starts and calls the API through relative URLs.
+5. The app renders in `LivePreviewPanel`.
+
+Then they edit a component, edit API logic and restart the API. The database rows are intact, nothing reinstalls, and a page reload restores the data.
+
+**Engineering targets (to be re-based on Phase 0 numbers):**
+- Each added service starts in under 500 ms beyond its own boot.
+- A warm database starts in under 1 s.
+- A small API→database query round trip takes under 10 ms.
+- Cooperative shutdown takes under 1 s.
+- No database or runtime work runs on the main thread.
+- There are zero regressions in the existing suite: `run()`, `bfsh`, installs, Vite/React/Vue/Svelte/Next, HTTP/WS/streaming, cookies, relay mode, ZIP export/import and WASI.
+- Durability defaults to normal flush. Relaxed durability is opt-in, and its data-loss trade-off is documented.
+
 ### MCP tool surface (§4.7, spans W1–W8)
 
 Each tool below is added to `builtinMcpService.ts` catalogs, grouped as data, not a new catalog file per tool:
@@ -173,7 +249,7 @@ Each tool below is added to `builtinMcpService.ts` catalogs, grouped as data, no
 | Group | Tools |
 |---|---|
 | `app_blueprint.*` | `detect`, `get` (overrides: repo-root `builderforce.json`, applied on detect) |
-| `runtime.*` | `start_preview`, `preview_status`, `preview_url`, `preview_logs`, `preview_restart`, `preview_screenshot`, `run_verify` |
+| `runtime.*` | `start_preview`, `preview_status`, `preview_url`, `preview_logs`, `preview_restart`, `preview_screenshot`, `run_verify`. The same tools serve both run targets (W9). `preview_status` reports which target ran and why. |
 | `cloud_accounts.*` | `list`, `capabilities` (connect stays a human OAuth/token step) |
 | `infra.*` | `plan`, `apply` (confirm-gated), `destroy` (confirm-gated), `list_resources`, `drift` |
 | `secrets.*` | `list_names`, `missing`, `set` (value in, never out), `push` |
@@ -189,6 +265,8 @@ Each tool below is added to `builtinMcpService.ts` catalogs, grouped as data, no
 | Phase | Contents | Real blocker |
 |---|---|---|
 | **1** | W1 (run loop) + W2 (blueprint) + W8 | Container image deploy + D6. Everything else is code. |
+| **1b** | W9 phases 0–4 (browser runtime: shared VFS, application runtime, service networking, PGlite + wire gateway). They run in parallel with Phase 1 because they live in the webcontainers repo. | None. All of it is code in `builderforce-webcontainers`. |
+| **1c** | W9 phase 5 (the `RunTarget` port, so the browser and container targets share one panel and one tool set) | W2 blueprint landed. D7 for plan gating. |
 | **2** | W3 Cloudflare + Neon connections, W4 Cloudflare + Neon adapters, W6 against the **customer's** account | None beyond a test Cloudflare account and Neon key. |
 | **3** | W7 project listings + `external` launch + mobile kind (EAS) | Stripe secrets for *paid* listings (existing ROADMAP item). Free listings are not blocked. |
 | **4** | W5 Builderforce-hosted (WfP + Neon per app) | D1, D3, D4. |
@@ -209,6 +287,12 @@ Each tool below is added to `builtinMcpService.ts` catalogs, grouped as data, no
 ## 6. Risks
 
 - **Workers for Platforms feature parity with the DO + cron + WebSocket hibernation hired needs.** Verify first (Phase 4 gate).
+- **Browser tier limits (W9):**
+  - **PGlite is single-connection:** queries are serialized, and transactions are scheduled per connection.
+  - **IndexedDB flushes add latency:** benchmark both durability modes.
+  - **Browser memory caps:** each service's memory is watched, and result sets are bounded.
+  - **The Worker boundary is not a security boundary** against same-origin code: relay-origin isolation and preview code that can reach HTTP only carry that.
+  - **Mitigation:** an app that exceeds these limits falls back to the container target, with the reason shown.
 - **Container cost:** a live preview holds an instance. The existing per-tenant cap (2) and global budget (15) hold, the instance type raises cost per hour, and a run loop is `containerRuntime`-entitled.
 - **Neon quota:** Builderforce's own Free-tier pressure (ROADMAP 🔴) must not absorb customer databases. Per-app Neon lives in a separate Neon org/project set, never the core/apps endpoints.
 - **Secret blast radius:** the container gets secrets as env. The agent's `run_command` output is redacted, and the clone token issue (ROADMAP L242) is fixed in the same image pass (scoped git proxy).
