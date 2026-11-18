@@ -16,7 +16,7 @@
  * `.claude/hooks/source-package-graph-guard.mjs` PostToolUse hook runs this file,
  * so the editor, `npm test` and CI can never disagree about what the rule is.
  *
- * NINE RULES:
+ * TEN RULES:
  *
  *  1. DECLARED EXTERNALS. Every non-builtin import in a source-only package's
  *     `src/` that is not another source-only package must appear in that
@@ -61,6 +61,13 @@
  *     `paths`, onto an install whose manifest declares it, at a file that exists
  *     when that install is present (`scripts/lib/npmSubpaths.mjs`).
  *
+ * 10. A WRANGLER BUNDLE RESOLVES THROUGH ITS PROJECT. Rule 9 for esbuild under
+ *     `wrangler deploy`, which takes no plugin and applies each file's NEAREST
+ *     tsconfig: a wrangler config beside a project whose packages import npm
+ *     subpaths names that project's tsconfig (so its `paths` reach every file in
+ *     the bundle), and each of those subpaths lists a runtime file after its
+ *     declaration — esbuild skips a `.d.ts` candidate (`scripts/lib/wranglerBundles.mjs`).
+ *
  * Projects are DISCOVERED, not listed: the guard walks the repo for tsconfigs and
  * checks every one that resolves or imports these packages. The list it replaced
  * named three projects and there are nine.
@@ -80,6 +87,7 @@ import {
 import { SKIP_DIRS } from './lib/skipDirs.mjs';
 import { findTsconfigProjects, resolveThroughPaths, resolvesTo } from './lib/tsconfigPaths.mjs';
 import { suggestedSubpathTarget, unresolvedNpmSubpaths } from './lib/npmSubpaths.mjs';
+import { runtimeTwin, wranglerBundleProblems } from './lib/wranglerBundles.mjs';
 import { sourcePackageGraph } from './sourcePackageGraph.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -211,6 +219,31 @@ for (const project of relevant) {
           ? `Declare '${packageRoot(specifier)}' in ${problem.ownerDir}/package.json and refresh its lockfile.`
           : `Add "${specifier}": ["${suggested}"] to compilerOptions.paths in ${project.relative} — the declaration its install's \`exports\` names (a uniform \`<pkg>/*\` wildcard covers a package whose layout is uniform).`,
     });
+  }
+
+  // Rule 10: a wrangler config beside this project bundles through THESE `paths`
+  // (scripts/lib/wranglerBundles.mjs) — esbuild otherwise applies each package's own tsconfig.
+  for (const problem of wranglerBundleProblems({ project, nodes: compiled })) {
+    const config = toPosix(relative(repoRoot, problem.config));
+    failures.push(
+      problem.kind === 'tsconfig-not-forced'
+        ? {
+            rule: 'wrangler bundles through its project',
+            detail:
+              `${config} bundles ${project.relative}'s sources, whose source-only packages import npm subpaths, but does not ` +
+              'name that tsconfig — esbuild then resolves each package file through its OWN tsconfig and node walk, which CI never installs.',
+            remedy: `Add \`tsconfig = "${toPosix(relative(dirname(problem.config), project.file))}"\` at the top level of ${config}.`,
+          }
+        : {
+            rule: 'wrangler bundles through its project',
+            detail:
+              `${project.relative} maps '${problem.specifier}' (imported by ${problem.site?.relative}:${problem.site?.line}) onto a declaration, ` +
+              `${toPosix(relative(repoRoot, problem.target ?? ''))}; ${config} bundles through it and esbuild skips a .d.ts hit.`,
+            remedy:
+              `List the runtime file after the declaration: ["${toPosix(relative(project.dir, problem.target ?? ''))}", ` +
+              `"${toPosix(relative(project.dir, runtimeTwin(problem.target ?? '')))}"] — tsc takes the first, esbuild skips it for the second.`,
+          },
+    );
   }
 
   // Rule 4: a `@builderforce/` key that no longer names a real entry.

@@ -3,6 +3,13 @@ main = "src/index.ts"
 compatibility_date = "2026-01-01"
 compatibility_flags = ["nodejs_compat"]
 
+# esbuild applies the NEAREST tsconfig to each file, so a source-only package under
+# packages/* would resolve its npm imports (@seanhogg/builderforce-memory/stats) from its
+# own dir, which CI never installs. Naming ours makes its `paths` reach every file in the
+# bundle: those imports land on THIS install, once. Held by rule 10 of
+# scripts/check-source-package-graph.mjs.
+tsconfig = "tsconfig.json"
+
 # Run the Worker near its back end, not near the caller. Almost every request here
 # is a chain of Neon queries (auth, tenant, permissions, then the handler's own
 # reads), each an HTTPS round trip to ONE database region; from a far-away edge colo

@@ -17,6 +17,10 @@ main = "src/gatewayWorker.ts"
 compatibility_date = "2026-01-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Bundles through api/tsconfig.json paths for every file — see wrangler.toml and rule 10 of
+# scripts/check-source-package-graph.mjs.
+tsconfig = "tsconfig.json"
+
 # No [[routes]] in push 1 — workers.dev only. Push 2 adds the production routes
 # (api.builderforce.ai/llm/*, api.builderforce.ai/v1/*, builderforce.ai/gateway/llm/*,
 # builderforce.ai/gateway/v1/*) and removes the mounts from src/index.ts.

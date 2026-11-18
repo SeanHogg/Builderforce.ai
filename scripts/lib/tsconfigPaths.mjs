@@ -99,18 +99,31 @@ export function readTsconfig(file, seen = new Set()) {
  * @returns {string | null} Absolute, extensionless for a wildcard target.
  */
 export function resolveThroughPaths(paths, fromDir, specifier) {
-  const exact = paths[specifier]?.[0];
-  if (exact) return resolve(fromDir, exact);
+  return pathsCandidates(paths, fromDir, specifier)[0] ?? null;
+}
+
+/**
+ * Every target the matching `paths` key lists, in order — tsc stops at the first that
+ * exists, esbuild skips a `.d.ts` and tries the next (rule 10, `wranglerBundles.mjs`).
+ *
+ * @param {Record<string, string[]>} paths
+ * @param {string} fromDir Directory the `paths` are relative to.
+ * @param {string} specifier
+ * @returns {string[]} Absolute; empty when no key matches.
+ */
+export function pathsCandidates(paths, fromDir, specifier) {
+  const exact = paths[specifier];
+  if (exact?.length) return exact.map((target) => resolve(fromDir, target));
 
   const wildcards = Object.keys(paths)
     .filter((key) => key.endsWith('/*') && specifier.startsWith(key.slice(0, -1)))
     .sort((a, b) => b.length - a.length);
   for (const key of wildcards) {
-    const target = paths[key]?.[0];
-    if (!target) continue;
-    return resolve(fromDir, target.replace('*', specifier.slice(key.length - 1)));
+    const targets = paths[key];
+    if (!targets?.length) continue;
+    return targets.map((target) => resolve(fromDir, target.replace('*', specifier.slice(key.length - 1))));
   }
-  return null;
+  return [];
 }
 
 /**
