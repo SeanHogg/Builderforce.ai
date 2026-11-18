@@ -21,7 +21,7 @@
 import { Hono, type Context } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
-import { scope } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import { getOrSetCached, getCacheVersion, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { financeVersionKey, allocationVersionKey } from '../../application/insights/versionKeys';
 import type { Env, HonoEnv } from '../../env';

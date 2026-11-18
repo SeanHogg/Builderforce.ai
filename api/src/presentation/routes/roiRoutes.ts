@@ -25,7 +25,7 @@ import { notSystemTask } from '../../application/task/taskScope';
 import { ALL_TIME, readUsageBreakdown, readUsageTotals, tenantScope, type UsageFilter } from '../../application/llm/usageQuery';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { scope } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 import { HOUR_MS, WEEK_MS } from '../../domain/shared/time';
 

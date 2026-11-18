@@ -13,7 +13,7 @@
 import { Hono } from 'hono';
 import { requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
-import { scope } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { listAuditReportRuns } from '../../application/finops/auditReportRuns';

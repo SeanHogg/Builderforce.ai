@@ -10,7 +10,7 @@ import { Hono } from 'hono';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
-import { scope } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import {
   pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems,
 } from '../../infrastructure/database/schema';

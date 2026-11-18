@@ -23,7 +23,7 @@
 import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
-import { scope } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import { getAutonomySummary } from '../../application/activity/ticketLifecycleLedger';
 import { getAutonomyWiringAudit } from '../../application/activity/autonomyWiringAudit';
 import { getVerdictCompliance } from '../../application/activity/verdictCompliance';

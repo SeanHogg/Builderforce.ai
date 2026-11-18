@@ -2513,7 +2513,9 @@ export const securityIncidents = pgTable('security_incidents', {
   uniqueIndex('uq_security_incidents_finding_ref').on(t.tenantId, t.segmentId, t.sourceRef).where(sql`source_ref LIKE 'finding:%'`),
   /** One platform-opened incident per finding / runtime-shield ref (mig 1354), registry in
    *  application/security/findingIncidentKinds.ts. Declared `NULLS NOT DISTINCT` in SQL — drizzle
-   *  cannot express that qualifier on an index — so a NULL segment still dedupes. */
+   *  cannot express that qualifier on an index — so a NULL segment still dedupes. Do NOT use a
+   *  drizzle-kit diff/generate to "fix" the mismatch: it would rebuild the index WITHOUT `NULLS NOT
+   *  DISTINCT` and silently reopen NULL-segment duplicates. Migration 1354 is the source of truth. */
   uniqueIndex('uq_security_incidents_platform_ref').on(t.tenantId, t.segmentId, t.sourceRef)
     .where(sql`(source_ref LIKE 'finding:%' OR source_ref LIKE 'shield:%')`),
 ]);

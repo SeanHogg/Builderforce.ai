@@ -36,7 +36,7 @@ import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { legacyAliasNotice } from '../middleware/legacyAlias';
 import { TenantRole } from '../../domain/shared/types';
-import { scope } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { METRIC_REGISTRY, listMetricKeys } from '../../application/dashboards/metricRegistry';
 import {

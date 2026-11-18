@@ -19,7 +19,7 @@ import { and, desc, eq, inArray, gte, lte, or, isNull } from 'drizzle-orm';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { authMiddleware, isManager } from '../middleware/authMiddleware';
-import { scope } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import { meetings, meetingAttendees, userAvailability } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { relayToRoom } from './realtimeRelay';

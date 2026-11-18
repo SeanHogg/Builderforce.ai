@@ -39,6 +39,18 @@ SET LOCAL lock_timeout = '3s';
 ALTER TABLE security_incidents ADD COLUMN IF NOT EXISTS attestation VARCHAR(20);
 ALTER TABLE security_incidents ADD COLUMN IF NOT EXISTS evidence JSONB;
 
+-- DEFENSIVE DEDUPE. 1321's index treated NULL segments as distinct, so a NULL-segment row could repeat a
+-- `finding:` ref; the NULLS NOT DISTINCT index below would then fail to build and block the deploy. The
+-- current writers never pass a NULL segment, so this is expected to touch nothing. Non-destructive: the
+-- oldest row keeps the ref, later repeats get `:dup:<id>` appended (still unique, still auditable).
+UPDATE security_incidents si
+   SET source_ref = si.source_ref || ':dup:' || si.id::text
+  FROM (SELECT id, row_number() OVER (PARTITION BY tenant_id, source_ref ORDER BY created_at, id) AS rn
+          FROM security_incidents
+         WHERE segment_id IS NULL
+           AND (source_ref LIKE 'finding:%' OR source_ref LIKE 'shield:%')) d
+ WHERE si.id = d.id AND d.rn > 1;
+
 CREATE UNIQUE INDEX IF NOT EXISTS uq_security_incidents_platform_ref
   ON security_incidents(tenant_id, segment_id, source_ref) NULLS NOT DISTINCT
   WHERE (source_ref LIKE 'finding:%' OR source_ref LIKE 'shield:%');

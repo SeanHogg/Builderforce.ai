@@ -25,7 +25,7 @@ import { Hono, type Context } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { legacyAliasNotice } from '../middleware/legacyAlias';
 import { TenantRole } from '../../domain/shared/types';
-import { scope } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import { ProductReleaseService, type ReleaseInput } from '../../application/delivery/ProductReleaseService';
 import { summarizeReleaseSchedule } from '../../domain/delivery/releaseSchedule';
 import { bumpDeliveryInsightsVersion } from '../../application/insights/deliveryInsights';

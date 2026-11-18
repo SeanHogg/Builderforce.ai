@@ -22,7 +22,8 @@ import { Hono } from 'hono';
 import { and, eq, inArray } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
-import { mountTrackers, scope } from './segmentTrackerRoutes';
+import { mountTrackers } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import {
   bumpCacheVersion,
   getCacheVersion,

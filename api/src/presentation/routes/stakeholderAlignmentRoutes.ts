@@ -10,7 +10,7 @@ import {
   type StakeholderResponse,
 } from '../../application/stakeholderAlignment/stakeholderAlignment.types';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
-import { scope } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import { parseBody, z, zJsonObject } from './requestBody';
 
 // Bodies. Every field a handler answers its own "X is required" / "must be" message

@@ -23,7 +23,8 @@ import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { requirePlanFeature } from '../middleware/insightPlanGate';
 import { TenantRole } from '../../domain/shared/types';
 import { clamp, clampScore } from '../../domain/shared/numbers';
-import { mountTrackers, scope } from './segmentTrackerRoutes';
+import { mountTrackers } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import { getOrSetCached, getCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { and, desc, eq } from 'drizzle-orm';
 import {

@@ -19,7 +19,7 @@
 
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { scope } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import {
   addPin, cleanWidgetKey, listPins, removePin, reorderPins,
 } from '../../application/dashboards/dashboardPins';

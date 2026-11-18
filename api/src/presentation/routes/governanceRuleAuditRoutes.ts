@@ -15,7 +15,7 @@ import { requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { scope } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import { auditGovernanceMutation } from './governanceAudit';
 import { parseBody, parseQuery, z, zQueryInt } from './requestBody';
 import {

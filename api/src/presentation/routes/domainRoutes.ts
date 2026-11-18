@@ -26,7 +26,7 @@
 import { Hono, type Context } from 'hono';
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/authMiddleware';
 import { optionalTenantId } from '../middleware/tenantContext';
-import { scope } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import { isDomain, type Domain } from '../../application/kernel/ObjectRegistry';
 import type { DomainService } from '../../application/kernel/DomainService';
 import type { TeamRosterService } from '../../application/kernel/TeamRoster';

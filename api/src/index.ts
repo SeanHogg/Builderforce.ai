@@ -235,7 +235,8 @@ import { createLrsAuthMiddleware } from './presentation/middleware/lrsAuthMiddle
 import { createMeasurementRoutes } from './presentation/routes/measurementRoutes';
 import { createYouTubeRoutes }      from './presentation/routes/youtubeRoutes';
 import { maybeHandlePreviewIngress } from './application/runtime/previewIngress';
-import { serveBrowserPreviewOrigin } from './presentation/middleware/browserPreviewOrigin';
+import { handleBrowserPreviewOrigin } from './presentation/middleware/browserPreviewOrigin';
+import { createCspReportRoutes } from './presentation/routes/cspReportRoutes';
 import { createIdeRoutes }         from './presentation/routes/ideRoutes';
 import { createCompileRoutes }     from './presentation/routes/compileRoutes';
 import { createChallengeRoutes }   from './presentation/routes/challengeRoutes';
@@ -519,7 +520,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // In-browser canvas previews: the relay page and service worker of the isolated
   // preview origin (`preview.builderforce.ai/__bfwc/*`). Static, so it answers
   // before the container ingress, which owns the rest of that host.
-  app.use('*', async (c, next) => serveBrowserPreviewOrigin(c.req.raw, c.env.CORS_ORIGINS) ?? next());
+  // Every script there carries an egress CSP; a worker's signed `?policy=` adds the
+  // app's declared origins (make.md §4 W10, control 6).
+  app.use('*', async (c, next) => (await handleBrowserPreviewOrigin(c.req.raw, c.env.CORS_ORIGINS, c.env.JWT_SECRET)) ?? next());
 
   app.use('*', async (c, next) => {
     const res = await maybeHandlePreviewIngress(c.env, c.req.raw);
@@ -859,6 +862,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // NOT under authMiddleware — an Actions runner has no tenant JWT; it proves
   // identity with a short-lived GitHub OIDC token instead (see the route file).
   app.route('/api/runtime/github-actions', createGitHubActionsRoutes(db));
+  // CSP violation reports from the preview origin's scripts (W10 control 6). No JWT:
+  // browsers send reports without credentials. Rate-limited per IP; telemetry only.
+  app.route('/api/runtime/csp-report', createCspReportRoutes());
 
   // GitHub Actions deploy ingress — no JWT: a CI runner has no tenant token.
   // Authenticated by a GitHub OIDC token (which repo is calling) and authorized

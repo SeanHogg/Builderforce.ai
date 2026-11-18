@@ -13,9 +13,22 @@ describe('runtime shield evidence redaction', () => {
     [{ list: [{ ok: 1 }, { 'x-api-key': 'k' }] }, 'list.1.x-api-key'],
     [{ Authorization: 'Bearer' }, 'Authorization'],
     [{ clientSecret: 's' }, 'clientSecret'],
+    [{ pass: 'x' }, 'pass'],
+    [{ db_pass: 'x' }, 'db_pass'],
+    [{ 'pass-hash': 'x' }, 'pass-hash'],
+    [{ passwd: 'x' }, 'passwd'],
+    [{ userPassword: 'x' }, 'userPassword'],
+    [{ passphrase: 'x' }, 'passphrase'],
+    [{ PWD: 'x' }, 'PWD'],
   ])('refuses a credential key (%j)', (evidence, path) => {
     expect(findForbiddenEvidenceKey(evidence)).toBe(path);
   });
+
+  it.each(['bypass', 'bypassed', 'compass', 'passage', 'passenger', 'surpass', 'trespass'])(
+    'accepts %s, which only contains "pass"', (key) => {
+      expect(findForbiddenEvidenceKey({ [key]: true })).toBeNull();
+    },
+  );
 
   it('refuses evidence nested deeper than the bound', () => {
     let deep: Record<string, unknown> = { leaf: 1 };

@@ -20,7 +20,7 @@ import { Hono } from 'hono';
 import { and, eq, sql } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
-import { scope } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import {
   computeDevexInsights, computeDevexBenchmark, type BenchmarkPercentile,

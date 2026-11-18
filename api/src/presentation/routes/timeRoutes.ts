@@ -10,7 +10,7 @@
 import { Hono } from 'hono';
 import { and, eq } from 'drizzle-orm';
 import { authMiddleware, isManager } from '../middleware/authMiddleware';
-import { scope } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import { tasks, timeEntries } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';

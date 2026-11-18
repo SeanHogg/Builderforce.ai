@@ -11,7 +11,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  *   GET  /api/security/audits/:id          → one audit run + its finding tickets
  *   POST /api/security/audits/run          { projectId? } dispatch an audit now (manager+)
  *   POST /api/security/internal/web-scan-stage   container → API stage ingest (HMAC)
- *   POST /api/security/shield-incidents    runtime Security Shield report (member; runtimeShieldRoutes.ts)
+ *   POST /api/security/shield-incidents    runtime Security Shield report (developer+; runtimeShieldRoutes.ts)
  *
  * Access config + audit results are manager-gated: they name what the Security agent
  * found, which is exactly the need-to-know surface the config restricts. The one

@@ -8,7 +8,8 @@
 
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { mountTrackers, scope, type TrackerOpts } from './segmentTrackerRoutes';
+import { mountTrackers, type TrackerOpts } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import { createPokerRoutes, createRetroRoutes } from './pokerRetroRoutes';
 import { createCeremonyRoutes } from './ceremonyRoutes';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';

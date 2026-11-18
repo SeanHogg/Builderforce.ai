@@ -6,13 +6,15 @@
  *        → 201 { outcome: 'opened', incidentId }   a new incident, or a resolved one reopened
  *        → 200 { outcome: 'deduplicated' }         already open for this project/application/rule
  *        → 202 { outcome: 'ignored' }              below the severity floor, or a probe (not a block)
- *        → 404 { error }                           the project is not this tenant's
- *        → 400 / 429                               invalid body / over the shield bucket
+ *        → 202 { outcome: 'ignored', reason: 'cap' } the project holds the cap of open shield incidents
+ *        → 404 { error }                           the project is not this tenant's (or this segment's)
+ *        → 400 / 403 / 429                         invalid body / below developer / over the shield bucket
  *
  * Called by Builderforce's `SecurityEventSink` adapter for `@seanhogg/builderforce-webcontainers`
  * with the signed-in user's session — the tenant and segment come from the session, never the body.
- * Every report is CLIENT-ATTESTED. The floor and the probe rule are the server's (the `shield`
- * finding kind); nothing in the body can raise an incident above what the registry allows, and this
+ * Every report is CLIENT-ATTESTED. The severity, the dedupe rule, the floor and the probe rule are the
+ * server's (`SHIELD_REASON_POLICY` + the `shield` finding kind); the body's `severity` and `ruleId` are
+ * kept as evidence only, nothing in the body can raise an incident above what the registry allows, and this
  * is the ONLY way a `shield:` ref is written (the `/api/governance/incidents` tracker cannot set
  * `sourceRef` at all).
  *
@@ -30,8 +32,10 @@ import {
 } from '../../application/security/runtimeShieldEvent';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { TenantRole } from '../../domain/shared/types';
+import { requireRole } from '../middleware/authMiddleware';
 import { slidingWindowLimited } from '../middleware/rateLimitResponse';
-import { scope } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import { parseBody, zPositiveInt, z } from './requestBody';
 
 /** An identifier the runtime minted — it becomes part of `source_ref`, so no whitespace and no `:`. */
@@ -47,9 +51,13 @@ const ShieldEventBody = z.object({
   serviceId: zShieldId,
   projectId: zPositiveInt,
   evidence: z.record(z.string(), z.unknown()).superRefine((evidence, ctx) => {
+    // The size cap first: it is one serialization, and it bounds what the key walk then inspects.
+    if (evidenceByteLength(evidence) > SHIELD_EVIDENCE_MAX_BYTES) {
+      ctx.addIssue({ code: 'custom', message: `evidence must be at most ${SHIELD_EVIDENCE_MAX_BYTES} bytes` });
+      return;
+    }
     const forbidden = findForbiddenEvidenceKey(evidence);
     if (forbidden) ctx.addIssue({ code: 'custom', message: `evidence must be redacted: "${forbidden}" is a credential key or nests too deep` });
-    else if (evidenceByteLength(evidence) > SHIELD_EVIDENCE_MAX_BYTES) ctx.addIssue({ code: 'custom', message: `evidence must be at most ${SHIELD_EVIDENCE_MAX_BYTES} bytes` });
   }),
   occurredAt: z.string().datetime({ offset: true }),
 }).strict();
@@ -57,7 +65,8 @@ const ShieldEventBody = z.object({
 export function createRuntimeShieldRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
-  router.post('/', async (c) => {
+  // A viewer (or a contributor) never reports runtime events: the runtime runs for people who build.
+  router.post('/', requireRole(TenantRole.DEVELOPER), async (c) => {
     const ctx = scope(c);
     const limited = await slidingWindowLimited(c, shieldIngestBucketKey(ctx.tenantId), SHIELD_INGEST_RPM);
     if (limited) return limited;

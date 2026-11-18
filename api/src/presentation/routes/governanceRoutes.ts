@@ -44,7 +44,8 @@ import { and, eq } from 'drizzle-orm';
 import { gatesForWireLevel } from '@builderforce/agent-tools';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
-import { mountTrackers, scope, type TrackerOpts } from './segmentTrackerRoutes';
+import { mountTrackers, type TrackerOpts } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import {
   socControls,
   securityVendors, securityIncidents, piiDataAssets, securityDpas,

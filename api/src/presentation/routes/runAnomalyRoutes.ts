@@ -13,7 +13,7 @@ import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { requirePlanFeature } from '../middleware/insightPlanGate';
 import { TenantRole } from '../../domain/shared/types';
-import { scope } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import { getRunAnomalies } from '../../application/insights/runAnomalyInsights';
 import { PREMIUM_INSIGHTS_FEATURE } from '../../application/insights/insightsExportSources';
 import type { Env, HonoEnv } from '../../env';

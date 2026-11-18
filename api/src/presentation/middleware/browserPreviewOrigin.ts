@@ -72,4 +72,62 @@ const ASSETS: Record<string, PreviewAsset> = {
   // Node ones. They import their interpreters from jsDelivr at run time, which the
   // worker CSP allows.
   'python-worker.js': { body: pythonWorkerSource, contentType: 'text/javascript; charset=utf-8', cacheControl: 'public, max-age=300', csp: 'process-worker' },
-  'php-worker.js': { body: phpWorkerSource, contentType: 'text/javascript; charset=utf-8', cacheControl: 'public, max-age=300', csp: 'process-worker
+  'php-worker.js': { body: phpWorkerSource, contentType: 'text/javascript; charset=utf-8', cacheControl: 'public, max-age=300', csp: 'process-worker' },
+};
+
+function cspFor(kind: CspKind, corsOrigins: string | undefined, policy: WorkerEgressPolicy): string {
+  switch (kind) {
+    case 'relay': return relayCsp(appOrigins(corsOrigins));
+    case 'service-worker': return serviceWorkerCsp();
+    case 'process-worker': return workerScriptCsp(policy.connectSources);
+  }
+}
+
+/** Which asset a request names, or null when it is not one of ours. */
+function previewAssetOf(request: Request): PreviewAsset | null {
+  const url = new URL(request.url);
+  if (url.hostname !== PREVIEW_HOST || !url.pathname.startsWith(BROWSER_PREVIEW_PREFIX)) return null;
+  if (request.method !== 'GET' && request.method !== 'HEAD') return null;
+  const name = url.pathname.slice(BROWSER_PREVIEW_PREFIX.length);
+  // Own keys only: `constructor` or `__proto__` must not resolve to Object's.
+  return Object.hasOwn(ASSETS, name) ? ASSETS[name]! : null;
+}
+
+/**
+ * Serve a preview-origin file under `policy` (the default, most restrictive one unless
+ * the caller resolved a signed `?policy=`). Null when the request is not for one.
+ */
+export function serveBrowserPreviewOrigin(
+  request: Request,
+  corsOrigins: string | undefined,
+  policy: WorkerEgressPolicy = DEFAULT_WORKER_EGRESS_POLICY,
+): Response | null {
+  const asset = previewAssetOf(request);
+  if (!asset) return null;
+  return new Response(request.method === 'HEAD' ? null : asset.body, {
+    headers: {
+      ...EMBEDDABLE,
+      'Content-Type': asset.contentType,
+      'Cache-Control': asset.cacheControl,
+      'Content-Security-Policy': cspFor(asset.csp, corsOrigins, policy),
+      'Reporting-Endpoints': REPORTING_ENDPOINTS_HEADER,
+    },
+  });
+}
+
+/**
+ * The middleware entry: resolve a process worker's signed `?policy=` (a missing or
+ * invalid one is the default), then serve. Null when the request is not for this origin.
+ */
+export async function handleBrowserPreviewOrigin(
+  request: Request,
+  corsOrigins: string | undefined,
+  secret: string | undefined,
+): Promise<Response | null> {
+  const asset = previewAssetOf(request);
+  if (!asset) return null;
+  const policy = asset.csp === 'process-worker'
+    ? await resolveWorkerEgressPolicy(secret, new URL(request.url).searchParams.get('policy'))
+    : DEFAULT_WORKER_EGRESS_POLICY;
+  return serveBrowserPreviewOrigin(request, corsOrigins, policy);
+}

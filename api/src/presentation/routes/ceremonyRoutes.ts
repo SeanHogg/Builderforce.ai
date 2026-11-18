@@ -34,7 +34,7 @@ import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
-import { scope } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import { ceremonySessions, ceremonyParticipants, ceremonySchedules, boards, meetings } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';

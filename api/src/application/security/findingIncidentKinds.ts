@@ -25,7 +25,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { securityIncidents } from '../../infrastructure/database/schema';
 import type { ActorIdentity } from '../activity/activityLog';
 import { recordGovernanceMutation } from '../governance/mutationAudit';
-import { SHIELD_BLOCKING_ACTIONS, type RuntimeShieldEvent } from './runtimeShieldEvent';
+import { SHIELD_BLOCKING_ACTIONS, SHIELD_REASON_POLICY, type RuntimeShieldEvent } from './runtimeShieldEvent';
 
 export const INCIDENT_SEVERITIES = ['low', 'medium', 'high', 'critical'] as const;
 export type IncidentSeverity = (typeof INCIDENT_SEVERITIES)[number];
@@ -86,6 +86,11 @@ export interface FindingKind<S> {
 
 const SHIELD_ACTION_VERB: Record<string, string> = { reject: 'blocked', quarantine: 'quarantined' };
 
+/** How an incident's text names what the shield did: `blocked` / `quarantined`, else the raw action. */
+function shieldVerb(e: RuntimeShieldEvent): string {
+  return SHIELD_ACTION_VERB[e.action] ?? e.action;
+}
+
 export const FINDING_KINDS: { readonly [K in FindingKindName]: FindingKind<FindingKindSubjects[K]> } = {
   finding: {
     refPrefix: 'finding',
@@ -106,16 +111,21 @@ export const FINDING_KINDS: { readonly [K in FindingKindName]: FindingKind<Findi
     detectionSource: 'runtime-shield',
     severityFloor: 'high',
     attestation: 'client-attested',
-    refKey: (e) => `${e.projectId}:${e.applicationId}:${e.ruleId}`,
-    severity: (e) => e.severity,
+    // The SERVER's rule and severity for the reason code (runtimeShieldEvent.ts); the client's
+    // ruleId/severity ride along as evidence only, so a client can neither raise an event to an
+    // incident nor mint distinct refs by varying its ruleId.
+    refKey: (e) => `${e.projectId}:${e.applicationId}:${SHIELD_REASON_POLICY[e.reasonCode].ruleId}`,
+    severity: (e) => SHIELD_REASON_POLICY[e.reasonCode].severity,
     // A quarantine or a signature/boundary block; monitor/throttle/allow are probes.
     opens: (e) => SHIELD_BLOCKING_ACTIONS.has(e.action),
-    title: (e) => `Runtime shield ${SHIELD_ACTION_VERB[e.action] ?? e.action}: ${e.ruleId} (${e.reasonCode})`,
-    impact: (e) => `The browser runtime's Security Shield ${SHIELD_ACTION_VERB[e.action] ?? e.action} service "${e.serviceId}" `
-      + `of application "${e.applicationId}" in project ${e.projectId}: ${e.category} rule ${e.ruleId}, reason ${e.reasonCode}. `
+    title: (e) => `Runtime shield ${shieldVerb(e)}: ${SHIELD_REASON_POLICY[e.reasonCode].ruleId} (${e.reasonCode})`,
+    impact: (e) => `The browser runtime's Security Shield ${shieldVerb(e)} service "${e.serviceId}" `
+      + `of application "${e.applicationId}" in project ${e.projectId}: ${e.category} rule ${SHIELD_REASON_POLICY[e.reasonCode].ruleId}, `
+      + `reason ${e.reasonCode} (the runtime reported rule ${e.ruleId} at ${e.severity} severity). `
       + `Client-attested: reported by the runtime at ${e.occurredAt} and not verified by the server.`,
-    recurrence: (e) => `The runtime shield ${SHIELD_ACTION_VERB[e.action] ?? e.action} it again (${e.reasonCode}, reported at ${e.occurredAt}); incident reopened.`,
-    evidence: (e) => e.evidence,
+    recurrence: (e) => `The runtime shield ${shieldVerb(e)} it again (${e.reasonCode}, reported at ${e.occurredAt}); incident reopened.`,
+    // Server keys last, so a client evidence key can never overwrite what the client actually claimed.
+    evidence: (e) => ({ ...e.evidence, clientReported: { ruleId: e.ruleId, severity: e.severity } }),
   },
 };
 

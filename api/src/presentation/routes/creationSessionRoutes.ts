@@ -13,7 +13,7 @@ import {
 } from '../../application/creation/creationSessionModel';
 import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { scope } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import {
   creationSessionConnections,
   creationSessionClaims,

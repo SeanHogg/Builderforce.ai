@@ -1,7 +1,8 @@
 /**
  * POST /api/security/shield-incidents — body validation against the runtime's SecurityEvent
- * contract, tenant/segment from the session, and the outcome → status mapping. The use case is
- * stubbed; its floor/dedupe behaviour is covered in findingIncidentKinds.test.ts.
+ * contract, the developer role gate, tenant/segment from the session, and the outcome → status
+ * mapping. The use case is stubbed; its floor/dedupe behaviour is covered in
+ * findingIncidentKinds.test.ts and its scope/cap gates in runtimeShieldIncidents.test.ts.
  */
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -22,11 +23,12 @@ const valid = {
   occurredAt: '2026-11-18T10:00:00.000Z',
 };
 
-function harness() {
+function harness(role = 'developer') {
   const app = new Hono<HonoEnv>();
   app.use('*', async (c, next) => {
     c.set('tenantId' as never, 7 as never);
     c.set('segmentId' as never, 'seg' as never);
+    c.set('role' as never, role as never);
     await next();
   });
   app.route('/', createRuntimeShieldRoutes({} as never));
@@ -52,10 +54,38 @@ describe('POST /shield-incidents', () => {
   it.each([
     [{ outcome: 'deduplicated' }, 200],
     [{ outcome: 'ignored' }, 202],
+    [{ outcome: 'ignored', reason: 'cap' }, 202],
     [{ outcome: 'unknown_project' }, 404],
   ])('maps %j to %i', async (outcome, status) => {
     record.mockResolvedValue(outcome);
-    expect((await harness()(valid)).status).toBe(status);
+    const res = await harness()(valid);
+    expect(res.status).toBe(status);
+    if (status !== 404) expect(await res.json()).toEqual(outcome);
+  });
+
+  it.each(['viewer', 'contributor'])('refuses a %s with 403 and records nothing', async (role) => {
+    const res = await harness(role)(valid);
+    expect(res.status).toBe(403);
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it.each(['manager', 'owner'])('admits a %s', async (role) => {
+    record.mockResolvedValue({ outcome: 'deduplicated' });
+    expect((await harness(role)(valid)).status).toBe(200);
+  });
+
+  it('refuses oversized evidence on its size before walking its keys', async () => {
+    const res = await harness()({ ...valid, evidence: { password: 'x'.repeat(5000) } });
+    expect(res.status).toBe(400);
+    const text = await res.text();
+    expect(text).toContain('bytes');
+    expect(text).not.toContain('credential key');
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it('admits evidence keys that merely contain "pass" (bypass, compass)', async () => {
+    record.mockResolvedValue({ outcome: 'deduplicated' });
+    expect((await harness()({ ...valid, evidence: { bypass: true, compass: 'n' } })).status).toBe(200);
   });
 
   it.each([

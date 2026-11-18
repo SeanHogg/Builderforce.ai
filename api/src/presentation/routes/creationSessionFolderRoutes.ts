@@ -8,7 +8,7 @@ import { Hono, type Context } from 'hono';
 import { parseOptionalBody, z } from './requestBody';
 import { and, eq, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { scope } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import { creationSessionFolders, projects } from '../../infrastructure/database/schema';
 import { scopedToSegment } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';

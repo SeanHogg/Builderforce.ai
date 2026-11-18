@@ -14,7 +14,7 @@
 import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
-import { scope } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import { getOrSetCached, getCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import {
   computeBenchmarking,

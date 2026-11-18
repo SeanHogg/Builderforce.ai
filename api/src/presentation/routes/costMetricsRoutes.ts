@@ -20,7 +20,7 @@ import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { requirePlanFeature } from '../middleware/insightPlanGate';
 import { TenantRole } from '../../domain/shared/types';
-import { scope } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import { PREMIUM_INSIGHTS_FEATURE } from '../../application/insights/insightsExportSources';
 import { getCostMetrics, getRunCostBreakdown } from '../../application/costMetrics/costMetricsService';
 import { isCostMetricGroupBy, isCostMetricWindow } from '../../application/costMetrics/costMetricGroups';

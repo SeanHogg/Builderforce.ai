@@ -33,7 +33,7 @@
 
 import { Hono, type Context } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { scope } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import { DomainGatedRelationError, isDomain, type ObjectRegistry } from '../../application/kernel/ObjectRegistry';
 import type { HonoEnv } from '../../env';
 import { parseBody, z } from './requestBody';

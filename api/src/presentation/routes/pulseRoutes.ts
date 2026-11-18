@@ -19,7 +19,7 @@ import { Hono } from 'hono';
 import { and, desc, eq } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
-import { scope } from './segmentTrackerRoutes';
+import { scope } from './requestScope';
 import { pulseSurveys, pulseResponses } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { computePulseAggregate, computePulseAggregates, computePulseTrend } from '../../application/insights/pulseSurvey';

@@ -17,11 +17,7 @@ import { getOrSetCached, invalidateCached, bumpCacheVersion, trackerCacheKey, bu
 import { parseBody, zJsonObject } from './requestBody';
 import type { MutationAction } from '../../application/governance/mutationAudit';
 import { auditGovernanceMutation } from './governanceAudit';
-
-/** The (tenantId, segmentId) scope every tracker query filters by. */
-export function scope(c: Context<HonoEnv>): { tenantId: number; segmentId: string } {
-  return { tenantId: c.get('tenantId'), segmentId: c.get('segmentId') as string };
-}
+import { scope } from './requestScope';
 
 export interface TrackerOpts {
   /** Drizzle field names accepted on create/update (whitelist). */

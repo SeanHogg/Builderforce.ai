@@ -9,7 +9,7 @@ import {
   buildKindIncident, FINDING_KINDS, kindOpensIncident, meetsSeverityFloor, openKindIncident,
   PLATFORM_INCIDENT_REF_PREDICATE, type FindingKindName,
 } from './findingIncidentKinds';
-import type { RuntimeShieldEvent } from './runtimeShieldEvent';
+import { SHIELD_REASON_CODES, SHIELD_REASON_POLICY, type RuntimeShieldEvent } from './runtimeShieldEvent';
 
 const ctx = { tenantId: 7, segmentId: 'seg' };
 const actor = { type: 'human' as const, ref: 'u1', name: 'Dev' };
@@ -70,23 +70,57 @@ describe('finding-kind registry', () => {
 });
 
 describe('shield kind', () => {
-  it('builds a client-attested runtime-shield incident keyed by project, application and rule', () => {
+  it('builds a client-attested runtime-shield incident keyed by project, application and the server rule', () => {
     const row = buildKindIncident('shield', shieldEvent, ctx);
-    expect(row.sourceRef).toBe('shield:42:app-1:db-ownership');
+    expect(row.sourceRef).toBe('shield:42:app-1:shield.db.not-owner');
     expect(row.detectionSource).toBe('runtime-shield');
     expect(row.attestation).toBe('client-attested');
     expect(row.severity).toBe('high');
-    expect(row.evidence).toEqual({ database: 'orders', port: 5432 });
+    expect(row.evidence).toEqual({ database: 'orders', port: 5432, clientReported: { ruleId: 'db-ownership', severity: 'high' } });
     expect(row.title).toContain('quarantined');
     expect(row.impact).toContain('Client-attested');
+    expect(row.impact).toContain('db-ownership');
     expect(buildKindIncident('shield', { ...shieldEvent, serviceId: 'worker' }, ctx).sourceRef).toBe(row.sourceRef);
     expect(buildKindIncident('shield', { ...shieldEvent, applicationId: 'app-2' }, ctx).sourceRef).not.toBe(row.sourceRef);
+    expect(buildKindIncident('shield', { ...shieldEvent, reasonCode: 'db.auth_failed' }, ctx).sourceRef).not.toBe(row.sourceRef);
   });
 
-  it('opens only blocks and quarantines at or above the high floor — a probe never does', () => {
+  it('dedupes on the server rule — a client cannot mint distinct refs by varying its ruleId', () => {
+    const refs = new Set(['r1', 'r2', 'anything-else'].map((ruleId) => buildKindIncident('shield', { ...shieldEvent, ruleId }, ctx).sourceRef));
+    expect(refs).toEqual(new Set(['shield:42:app-1:shield.db.not-owner']));
+  });
+
+  it('takes the severity from the server table; the client severity is evidence only', () => {
+    const lowball = buildKindIncident('shield', { ...shieldEvent, severity: 'low' }, ctx);
+    expect(lowball.severity).toBe('high');
+    expect(lowball.evidence).toMatchObject({ clientReported: { severity: 'low' } });
+    const inflated = buildKindIncident('shield', { ...shieldEvent, reasonCode: 'process.spawn_quota', severity: 'critical' }, ctx);
+    expect(inflated.severity).toBe('medium');
+  });
+
+  it('a client evidence key cannot overwrite what the client reported', () => {
+    const row = buildKindIncident('shield', { ...shieldEvent, evidence: { clientReported: { severity: 'low' } } }, ctx);
+    expect(row.evidence).toEqual({ clientReported: { ruleId: 'db-ownership', severity: 'high' } });
+  });
+
+  it('every reason code has a server severity below critical and a ref-safe rule', () => {
+    const ruleIds = new Set<string>();
+    for (const code of SHIELD_REASON_CODES) {
+      const policy = SHIELD_REASON_POLICY[code];
+      expect(policy.severity).not.toBe('critical');
+      expect(policy.ruleId).toMatch(/^[\w.@/-]{1,128}$/);
+      ruleIds.add(policy.ruleId);
+    }
+    expect(ruleIds.size).toBe(SHIELD_REASON_CODES.length);
+  });
+
+  it('opens only blocks and quarantines of a high reason — a probe or a quota never does', () => {
     expect(kindOpensIncident('shield', shieldEvent)).toBe(true);
-    expect(kindOpensIncident('shield', { ...shieldEvent, action: 'reject', severity: 'critical' })).toBe(true);
-    expect(kindOpensIncident('shield', { ...shieldEvent, severity: 'medium' })).toBe(false);
+    expect(kindOpensIncident('shield', { ...shieldEvent, action: 'reject', reasonCode: 'ingress.attach_rejected' })).toBe(true);
+    expect(kindOpensIncident('shield', { ...shieldEvent, severity: 'medium' })).toBe(true);
+    for (const reasonCode of ['process.spawn_quota', 'process.depth_quota', 'ingress.body_too_large', 'fs.invalid_op'] as const) {
+      expect(kindOpensIncident('shield', { ...shieldEvent, reasonCode, severity: 'critical' })).toBe(false);
+    }
     for (const action of ['allow', 'monitor', 'throttle'] as const) {
       expect(kindOpensIncident('shield', { ...shieldEvent, action, severity: 'critical' })).toBe(false);
     }
@@ -105,7 +139,7 @@ describe('shield kind', () => {
     expect(await openKindIncident(undefined, db, actor, 'shield', { ...shieldEvent, occurredAt: '2026-11-18T10:05:00.000Z' }, ctx))
       .toEqual({ outcome: 'deduplicated' });
     expect(byRef.size).toBe(1);
-    byRef.get('7|seg|shield:42:app-1:db-ownership')!.status = 'resolved';
+    byRef.get('7|seg|shield:42:app-1:shield.db.not-owner')!.status = 'resolved';
     expect(await openKindIncident(undefined, db, actor, 'shield', shieldEvent, ctx)).toEqual({ outcome: 'opened', incidentId: 'inc-1' });
   });
 
