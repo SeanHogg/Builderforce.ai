@@ -3,8 +3,6 @@ import { BROWSER_PREVIEW_RELAY_URL, handleBrowserPreviewOrigin, serveBrowserPrev
 import {
   DEFAULT_WORKER_EGRESS_POLICY, mintWorkerEgressPolicyId, normalizeDeclaredOrigin, resolveWorkerEgressPolicy,
 } from '../../application/runtime/workerEgressPolicy';
-import { base64UrlEncode } from '../../domain/shared/bytes';
-import { hmacHex } from '../../infrastructure/crypto/hmac';
 
 const CORS = 'https://builderforce.ai,https://www.builderforce.ai';
 const get = (url: string, method = 'GET') => serveBrowserPreviewOrigin(new Request(url, { method }), CORS);
@@ -64,6 +62,8 @@ describe('serveBrowserPreviewOrigin', () => {
 
 const WORKERS = ['process-worker.js', 'python-worker.js', 'php-worker.js', 'dotnet-worker.js', 'rust-worker.js'] as const;
 const SECRET = 'test-secret';
+const APP_ID = 'app:42:0123456789abcdef';
+const APP_KEY = '96c02ff6106da114d069c7a8eff3c26a'; // previewOriginKey('42', APP_ID)
 
 /** `directive` → its source list, from a CSP header. */
 function directives(csp: string): Map<string, string[]> {
@@ -121,22 +121,13 @@ describe('egress CSP on the preview scripts (W10 control 6)', () => {
     expect(d.has('default-src')).toBe(false); // the relay's one inline script must still run
   });
 
-  it('a valid signed policy id extends connect-src with the app\'s declared origins', async () => {
-    const policy = await mintWorkerEgressPolicyId(SECRET, ['https://api.example.com', 'wss://stream.example.com']);
-    const res = (await handleBrowserPreviewOrigin(
-      new Request(`https://preview.builderforce.ai/__bfwc/process-worker.js?policy=${policy}`), CORS, SECRET,
-    ))!;
-    const connect = directives(res.headers.get('content-security-policy')!).get('connect-src')!;
-    expect(connect).toEqual(expect.arrayContaining(['https://registry.npmjs.org', 'https://api.example.com', 'wss://stream.example.com']));
-  });
-
-  it('a tampered, foreign-secret or absent policy id falls back to the default', async () => {
-    const policy = await mintWorkerEgressPolicyId(SECRET, ['https://api.example.com']);
-    const [id, sig] = [policy.slice(0, policy.lastIndexOf('.')), policy.slice(policy.lastIndexOf('.') + 1)];
-    const forged = `${base64UrlEncode('https://evil.example')}.${sig}`;
-    const flipped = `${id}.${sig.slice(0, -1)}${sig.endsWith('0') ? '1' : '0'}`;
+  // Policies are bound to an app origin (`<key>.preview.builderforce.ai`); binding, expiry, tamper and
+  // subkey cases are covered in workerEgressPolicy.test.ts. The bare preview host has no origin key,
+  // so even a valid policy is the default here.
+  it('a valid policy id presented on the bare preview host (no app origin key) is the default', async () => {
+    const { policy } = await mintWorkerEgressPolicyId(SECRET, { tenantId: 7, projectId: 42, applicationId: APP_ID, origins: ['https://api.example.com'] });
     const defaultCsp = get('https://preview.builderforce.ai/__bfwc/process-worker.js')!.headers.get('content-security-policy');
-    for (const [presented, secret] of [[forged, SECRET], [flipped, SECRET], [policy, 'other-secret'], ['garbage', SECRET], [policy, undefined]] as const) {
+    for (const [presented, secret] of [[policy, SECRET], ['garbage', SECRET], [policy, undefined]] as const) {
       const res = (await handleBrowserPreviewOrigin(
         new Request(`https://preview.builderforce.ai/__bfwc/process-worker.js?policy=${encodeURIComponent(presented)}`), CORS, secret,
       ))!;
@@ -150,16 +141,13 @@ describe('egress CSP on the preview scripts (W10 control 6)', () => {
     for (const bad of ['https://preview.builderforce.ai', 'https://api.builderforce.ai', 'https://127.0.0.1', 'https://localhost',
       'http://api.example.com', 'https://*.example.com', 'https://api.example.com/path', 'https://user@api.example.com']) {
       expect(normalizeDeclaredOrigin(bad)).toBeNull();
-      await expect(mintWorkerEgressPolicyId(SECRET, [bad])).rejects.toThrow();
+      await expect(mintWorkerEgressPolicyId(SECRET, { tenantId: 7, projectId: 42, applicationId: APP_ID, origins: [bad] })).rejects.toThrow();
     }
-    // Signed with the real secret but naming the platform: re-validated on verify, so still the default.
-    const id = base64UrlEncode('https://preview.builderforce.ai');
-    const signed = `${id}.${await hmacHex(SECRET, `bfwc-egress:${id}`)}`;
-    expect(await resolveWorkerEgressPolicy(SECRET, signed)).toBe(DEFAULT_WORKER_EGRESS_POLICY);
+    expect(await resolveWorkerEgressPolicy(SECRET, 'garbage', `${APP_KEY}.preview.builderforce.ai`)).toBe(DEFAULT_WORKER_EGRESS_POLICY);
   });
 
   it('applies the policy only to process workers, and leaves other hosts to the rest of the worker', async () => {
-    const policy = await mintWorkerEgressPolicyId(SECRET, ['https://api.example.com']);
+    const { policy } = await mintWorkerEgressPolicyId(SECRET, { tenantId: 7, projectId: 42, applicationId: APP_ID, origins: ['https://api.example.com'] });
     const sw = (await handleBrowserPreviewOrigin(new Request(`https://preview.builderforce.ai/__bfwc/sw.js?policy=${policy}`), CORS, SECRET))!;
     expect(sw.headers.get('content-security-policy')).not.toContain('example');
     expect(await handleBrowserPreviewOrigin(new Request('https://api.builderforce.ai/__bfwc/process-worker.js'), CORS, SECRET)).toBeNull();

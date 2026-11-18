@@ -2,7 +2,7 @@
  * The per-tenant rate-limit BUCKETS — plan allowances and bucket keys, shared by
  * the request middleware and the one handler that spends a fan-out budget itself.
  *
- * A tenant has four independent sliding windows, each a hard cap:
+ * A tenant has five independent sliding windows, each a hard cap:
  *
  *   `${tenantId}`           every counted request            1× plan rpm
  *   `${tenantId}:board`     board fan-out writes             4× plan rpm
@@ -12,6 +12,8 @@
  *                           reports (client-attested)         the ingest route ON TOP of the tenant
  *                                                             window, so a runtime under attack cannot
  *                                                             flood incidents within the tenant budget
+ *   `${tenantId}:worker-policy` worker egress policy mints  WORKER_POLICY_MINT_RPM, flat — spent by
+ *                                                             the mint route ON TOP of the tenant window
  *
  * TOTAL CEILING (decision, 2026-10-19): board writes are deliberately NOT also
  * counted against the tenant key — doing so would put the twelve-ticket fan-out
@@ -48,6 +50,12 @@ export const shieldIngestBucketKey = (tenantId: number): string => `${tenantId}:
 /** Runtime-shield incident reports per tenant per minute. Flat: the runtime batches and dedupes
  *  before it reports, and every accepted report is at most one incident write. */
 export const SHIELD_INGEST_RPM = 60;
+
+export const workerPolicyBucketKey = (tenantId: number): string => `${tenantId}:worker-policy`;
+
+/** Worker egress policy mints per tenant per minute. Flat: the runtime mints once per app start
+ *  (ids live 24 h), so a burst past this is a loop or abuse, not a team starting apps. */
+export const WORKER_POLICY_MINT_RPM = 60;
 
 /** The tenant's plan rpm; an unrecognised plan string falls back to FREE (an
  *  `undefined` limit would make the DO deny every request). Throws on lookup error. */

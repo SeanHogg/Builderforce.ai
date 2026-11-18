@@ -237,6 +237,7 @@ import { createYouTubeRoutes }      from './presentation/routes/youtubeRoutes';
 import { maybeHandlePreviewIngress } from './application/runtime/previewIngress';
 import { handleBrowserPreviewOrigin } from './presentation/middleware/browserPreviewOrigin';
 import { createCspReportRoutes } from './presentation/routes/cspReportRoutes';
+import { createWorkerPolicyRoutes } from './presentation/routes/workerPolicyRoutes';
 import { createIdeRoutes }         from './presentation/routes/ideRoutes';
 import { createCompileRoutes }     from './presentation/routes/compileRoutes';
 import { createChallengeRoutes }   from './presentation/routes/challengeRoutes';
@@ -865,6 +866,8 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // CSP violation reports from the preview origin's scripts (W10 control 6). No JWT:
   // browsers send reports without credentials. Rate-limited per IP; telemetry only.
   app.route('/api/runtime/csp-report', createCspReportRoutes());
+  // Signed per-app worker egress policy (W10 control 6). Its own authMiddleware; ahead of `/api/runtime`.
+  app.route('/api/runtime/worker-policy', createWorkerPolicyRoutes(db));
 
   // GitHub Actions deploy ingress — no JWT: a CI runner has no tenant token.
   // Authenticated by a GitHub OIDC token (which repo is calling) and authorized

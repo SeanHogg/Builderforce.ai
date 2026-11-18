@@ -33,9 +33,10 @@ export type ShieldIncidentResult =
 /**
  * True when the project is the caller's: the tenant's, and — when the session has a segment — that
  * segment's. A tenant-wide session keeps the cached tenant gate; a segment-scoped one reads the
- * project's segment through the same tenant-scoped gate, in one query.
+ * project's segment through the same tenant-scoped gate, in one query. Exported for the other
+ * runtime routes that take a project id from the browser runtime (`workerEgressGrant`).
  */
-async function projectInCallerScope(env: Env | undefined, db: Db, ctx: KindIncidentContext, projectId: number): Promise<boolean> {
+export async function projectInCallerScope(env: Env | undefined, db: Db, ctx: KindIncidentContext, projectId: number): Promise<boolean> {
   if (!ctx.segmentId) return projectInTenantCached(env, db, ctx.tenantId, projectId);
   const project = await loadProjectInTenant(db, ctx.tenantId, projectId, { segmentId: projects.segmentId });
   return project != null && project.segmentId === ctx.segmentId;
