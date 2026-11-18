@@ -1,7 +1,7 @@
 /**
  * Whether the browser runtime can run a blueprint — decided by the runtime's OWN
  * accept checks (`acceptsNodeService`, `acceptsPgliteService`, `acceptsPythonService`,
- * `acceptsPhpService`, `validateSpec`) and its own decline wording
+ * `acceptsPhpService`, `acceptsDotnetService`, `acceptsRustService`, `validateSpec`) and its own decline wording
  * (`NODE_DECLINED_COMMANDS`), never a second list of what the browser can run.
  * Runtimes are a table, not branches: a new browser runtime is one entry.
  *
@@ -16,10 +16,12 @@
 import type { AppBlueprint } from '@builderforce/creation-canvas-contract';
 import type { VirtualFileSystem } from '@seanhogg/builderforce-webcontainers';
 import {
+  acceptsDotnetService,
   acceptsNodeService,
   acceptsPgliteService,
   acceptsPhpService,
   acceptsPythonService,
+  acceptsRustService,
   describeIssue,
   expectedPlatform,
   NODE_DECLINED_COMMANDS,
@@ -44,6 +46,8 @@ export const BROWSER_RUNTIMES: Readonly<Record<string, BrowserAccepts>> = {
   pglite: acceptsPgliteService,
   python: acceptsPythonService,
   php: (service, files) => acceptsPhpService(service, files, PREVIEW_PHP_PLATFORM),
+  dotnet: acceptsDotnetService,
+  rust: acceptsRustService,
 };
 
 /** Runtimes with no browser provider whose reason the runtime already words, by the command it names. */

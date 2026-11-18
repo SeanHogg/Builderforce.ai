@@ -131,11 +131,11 @@ describe('startInBrowser', () => {
   it.each<{ name: string; app: typeof PYTHON_APP; files: RunFiles['files'] }>([
     { name: 'Python', app: PYTHON_APP, files: { 'api/requirements.txt': 'fastapi\n', 'api/main.py': 'app = None\n', 'web/index.html': '<div/>' } },
     { name: 'PHP', app: PHP_APP, files: { 'api/composer.json': '{"require":{"slim/slim":"^4.0"}}', 'api/public/index.php': '<?php' } },
-  ])('starts a $name app with the python and php providers beside node and pglite', async ({ app, files }) => {
+  ])('starts a $name app with the python, php, dotnet and rust providers beside node and pglite', async ({ app, files }) => {
     providerIds.length = 0;
     const started = await startInBrowser(app, context(async () => ({ files, unreadable: [] })));
     expect(started.ok).toBe(true);
-    expect(providerIds.at(-1)).toEqual(['node', 'pglite', 'python', 'php']);
+    expect(providerIds.at(-1)).toEqual(['node', 'pglite', 'python', 'php', 'dotnet', 'rust']);
     if (started.ok) await started.session.stop();
   });
 

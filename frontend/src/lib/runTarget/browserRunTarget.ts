@@ -1,8 +1,9 @@
 /**
  * The `browser` RunTarget (PRD 31 §W9) — the blueprint's services run in this tab on
  * our WebContainers application runtime: Node services on the `node` provider, Python
- * (Pyodide) on `python`, PHP (php-wasm) on `php`, the database as PGlite (persistent,
- * host origin) on the `pglite` provider.
+ * (Pyodide) on `python`, PHP (php-wasm) on `php`, .NET on `dotnet`, prebuilt Rust
+ * (wasm32-wasip1) modules on `rust`, the database as PGlite (persistent, host origin)
+ * on the `pglite` provider.
  *
  * It runs on THE page's one preview runtime, holding its lease
  * (`bootSharedPreviewRuntime(owner)`) — never a second instance. So:
@@ -99,6 +100,8 @@ async function startSerialised(blueprint: AppBlueprint | null, context: RunConte
       app.createPythonProvider(runtime, { fs: runtime.fs }),
       // The same PHP options the runtime booted with, and the PHP its processes report.
       app.createPhpProvider(runtime, { fs: runtime.fs, php: PREVIEW_PHP_OPTIONS, platform: runtime.phpPlatform }),
+      app.createDotnetProvider(runtime, { fs: runtime.fs }),
+      app.createRustProvider(runtime, { fs: runtime.fs }),
     ],
   });
   const handle = browserRunSession(application, () => {
