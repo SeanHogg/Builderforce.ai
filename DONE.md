@@ -1,3 +1,1688 @@
+## ✅ RESOLVED 2026-11-18: implementation guides, API contracts and the merge process folded into platform.md
+
+- **What changed:** `docs/guides/EMAIL_IMPLEMENTATION.md`, `docs/guides/MULTI_AUTH_IMPLEMENTATION.md`, `docs/guides/progress-handling.md`, `docs/specs/API-CONTRACTS.md` and `docs/specs/MERGE_PROCESS.md` were re-verified against the code and folded into `docs/specs/platform.md`. Still-true reference text (corrected where the code had moved on) and the open items live there; superseded and finished sections are archived word for word below. `docs/guides/` and the orphaned `docs/api/event-payload.schema.json` (it documented a ticket-progress push stream that never existed) are removed.
+
+### Email Implementation Guide: finished sections archived on consolidation (2026-11-18)
+
+Source: docs/guides/EMAIL_IMPLEMENTATION.md
+
+**Status on archive (verified 2026-11-18).** These sections describe the hired.video-era email service. Builderforce built the same ideas in a different shape, so every section below is either built or superseded and none is open:
+- Provider interface — built: `EmailMessage`/`EmailProvider` (`api/src/infrastructure/email/EmailService.ts:25-34`); Resend is primary over direct `fetch` (`:53-97`), SendPulse is an API-key quota fallback (`:115-168`, `getEmailProvider` `:180-189`). The SendPulse OAuth2 `client_credentials` token flow and `EMAIL_CLIENTID`/`EMAIL_SECRET`/`EMAIL_FROM`/`FRONTEND_URL` no longer exist; the env is `RESEND_API_KEY`, `SENDPULSE_API_KEY`, `NOTIFICATION_EMAIL_FROM`, `APP_URL` (`api/src/env.ts:717-724`, `:791`).
+- Layout + body templates — superseded by `HEADER` + `footer()` + `deliver()` (`EmailService.ts:261-348`) rendering copy from the five-locale catalog `emailMessages.ts`; `ctaButton` is `cta()` (`:250`).
+- Templates 1–4 — superseded: sign-up verification is a 6-digit emailed code (`sendVerificationCodeEmail`, `:389`; `email_otp_challenges`, `api/src/application/auth/EmailVerificationService.ts`); there is no self-serve password reset email — a magic link (`sendMagicLinkEmail`, `:364`) or the admin reset link (`sendAdminPasswordResetEmail`, `:547`) signs the user in; 2FA is TOTP + recovery codes (`/api/auth/mfa/*`, `authRoutes.ts:1082-1138`), not an emailed code. Template 5 is `sendWorkspaceInviteEmail` (`:577`).
+- Token tables `email_verification_tokens`, `password_reset_tokens`, `two_factor_codes` — never created here; one-time codes live in `email_otp_challenges`, links in `magic_link_tokens` (`identity.ts:776`).
+- Error handling — superseded by `EmailDeliveryError` and the `email_delivery_failures` ledger (`api/src/application/email/sendEmail.ts:100-111`).
+- Postmark / non-edge adapters — illustrative only, never planned.
+- The fire-and-forget rule and the add-an-email checklist stay in `docs/specs/platform.md` ("Design — Email Implementation Guide").
+
+**Email Implementation Guide** (the doc's opening, kept for context):
+
+This document covers the complete email architecture used in hired.video — provider setup, templates, token management, and patterns for adapting this system to any TypeScript application.
+
+---
+
+#### Architecture Overview
+
+The email system uses a **Provider Interface pattern** to decouple sending logic from the rest of the application. Swapping providers (SendPulse → Resend, Postmark, etc.) means changing a single implementation class.
+
+```
+EmailProvider (interface)
+    └── SendPulseEmailProvider (implementation)
+            └── sendpulse.com REST API (OAuth2 + SMTP endpoint)
+```
+
+##### Core types
+
+```typescript
+interface EmailMessage {
+  to: string;
+  subject: string;
+  html: string;
+  fromName?: string;
+  fromEmail?: string;
+}
+
+interface EmailProvider {
+  send(message: EmailMessage): Promise<void>;
+}
+```
+
+---
+
+#### SendPulse Setup
+
+##### 1. Create an account and API key
+
+1. Go to [sendpulse.com](https://sendpulse.com) → **Settings → API**
+2. Generate a Client ID and Client Secret
+3. Verify your sender domain/address under **Email → Senders**
+
+##### 2. Environment variables
+
+```bash
+# .env / wrangler secrets
+EMAIL_CLIENTID=your_sendpulse_client_id
+EMAIL_SECRET=your_sendpulse_client_secret
+EMAIL_FROM=noreply@yourdomain.com
+FRONTEND_URL=https://yourdomain.com
+```
+
+For Cloudflare Workers (wrangler), store secrets via:
+```bash
+wrangler secret put EMAIL_CLIENTID --env production
+wrangler secret put EMAIL_SECRET --env production
+```
+
+For non-sensitive values, use `[vars]` in `wrangler.toml`:
+```toml
+[vars]
+EMAIL_FROM = "noreply@yourdomain.com"
+FRONTEND_URL = "https://yourdomain.com"
+```
+
+##### 3. SendPulse OAuth2 token flow
+
+SendPulse uses OAuth2 `client_credentials` grant. Tokens expire after 3600 seconds. Cache them in memory and refresh 60 seconds before expiry.
+
+```typescript
+// Token cache (module-level singleton)
+let cachedToken: string | null = null;
+let tokenExpiresAt: number | null = null;
+
+async function getSendPulseToken(clientId: string, clientSecret: string): Promise<string> {
+  const now = Date.now();
+  // Refresh if expired or within 60s of expiry
+  if (cachedToken && tokenExpiresAt && now < tokenExpiresAt - 60_000) {
+    return cachedToken;
+  }
+
+  const response = await fetch('https://api.sendpulse.com/oauth/access_token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      grant_type: 'client_credentials',
+      client_id: clientId,
+      client_secret: clientSecret,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`SendPulse token request failed: ${response.status}`);
+  }
+
+  const data = await response.json() as { access_token: string; expires_in: number };
+  cachedToken = data.access_token;
+  tokenExpiresAt = now + data.expires_in * 1000;
+  return cachedToken;
+}
+```
+
+##### 4. Sending an email via SendPulse SMTP API
+
+SendPulse's SMTP endpoint requires the HTML body base64-encoded.
+
+```typescript
+async function sendViaSendPulse(
+  message: EmailMessage,
+  clientId: string,
+  clientSecret: string,
+  fromEmail: string,
+): Promise<void> {
+  const token = await getSendPulseToken(clientId, clientSecret);
+
+  const payload = {
+    email: {
+      html: btoa(unescape(encodeURIComponent(message.html))), // base64 encode UTF-8 HTML
+      text: '',
+      subject: message.subject,
+      from: {
+        name: message.fromName ?? 'Your App',
+        email: message.fromEmail ?? fromEmail,
+      },
+      to: [{ name: message.to, email: message.to }],
+    },
+  };
+
+  const response = await fetch('https://api.sendpulse.com/smtp/emails', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`SendPulse send failed: ${response.status} — ${body}`);
+  }
+}
+```
+
+> **Note on `btoa` encoding:** `btoa(unescape(encodeURIComponent(html)))` handles non-ASCII characters correctly. In Node.js you can use `Buffer.from(html).toString('base64')` instead.
+
+---
+
+#### Template System
+
+##### Layout + body composition
+
+All emails share a **layout** (header + footer) with the body swapped per email type. The layout is composed at render time — there are no external template files.
+
+```typescript
+const LAYOUT_HEADER = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0; padding:0; background:#f8fafc; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc; padding:40px 20px;">
+    <tr><td align="center">
+      <!-- Header bar -->
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#1e293b; border-radius:8px 8px 0 0; padding:24px 40px;">
+        <tr>
+          <td>
+            <a href="{{AppUrl}}" style="color:#ffffff; font-size:22px; font-weight:700; text-decoration:none;">
+              YourApp
+            </a>
+          </td>
+        </tr>
+      </table>
+      <!-- Body wrapper -->
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff; padding:40px;">
+        <tr><td>
+`;
+
+const LAYOUT_FOOTER = `
+        </td></tr>
+      </table>
+      <!-- Footer -->
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#f1f5f9; border-radius:0 0 8px 8px; padding:24px 40px;">
+        <tr>
+          <td style="color:#64748b; font-size:13px; text-align:center;">
+            <p style="margin:0 0 8px;">© {{Year}} YourApp. All rights reserved.</p>
+            <p style="margin:0; font-size:12px;">
+              You received this email because you have an account at YourApp.<br>
+              This is a transactional email — it cannot be unsubscribed from.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>
+`;
+```
+
+##### Variable substitution
+
+```typescript
+function render(body: string, vars: Record<string, string>): string {
+  let out = LAYOUT_HEADER + body + LAYOUT_FOOTER;
+  for (const [key, value] of Object.entries(vars)) {
+    out = out.replaceAll(`{{${key}}}`, value);
+  }
+  // Always inject year and app URL
+  out = out.replaceAll('{{Year}}', new Date().getFullYear().toString());
+  out = out.replaceAll('{{AppUrl}}', process.env.FRONTEND_URL ?? '');
+  return out;
+}
+```
+
+---
+
+#### Email Templates
+
+##### Reusable button component
+
+```typescript
+function ctaButton(href: string, label: string): string {
+  return `
+    <table cellpadding="0" cellspacing="0" style="margin:24px 0;">
+      <tr>
+        <td style="background:#2563eb; border-radius:6px;">
+          <a href="${href}" style="display:inline-block; padding:14px 28px; color:#ffffff; font-size:16px; font-weight:600; text-decoration:none; border-radius:6px;">
+            ${label}
+          </a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:8px 0 0; font-size:13px; color:#64748b;">
+      Or copy this link: <a href="${href}" style="color:#2563eb;">${href}</a>
+    </p>
+  `;
+}
+```
+
+---
+
+##### Template 1: Email Verification
+
+**Trigger:** User registers
+**Variables:** `RecipientName`, `VerifyUrl`
+
+```typescript
+const VERIFY_EMAIL_BODY = `
+  <h2 style="margin:0 0 8px; color:#1e293b; font-size:24px;">Verify your email</h2>
+  <p style="margin:0 0 16px; color:#475569;">Hi {{RecipientName}},</p>
+  <p style="margin:0 0 24px; color:#475569; line-height:1.6;">
+    Thanks for creating an account. Click the button below to verify your email address.
+    This link expires in <strong>24 hours</strong>.
+  </p>
+  {{VerifyButton}}
+  <p style="margin:24px 0 0; color:#94a3b8; font-size:13px;">
+    If you didn't create an account, you can safely ignore this email.
+  </p>
+`;
+
+export async function sendVerificationEmail(
+  to: string,
+  recipientName: string,
+  token: string,
+  env: Env,
+): Promise<void> {
+  const verifyUrl = `${env.FRONTEND_URL}/verify-email?token=${token}`;
+  const html = render(VERIFY_EMAIL_BODY, {
+    RecipientName: recipientName,
+    VerifyButton: ctaButton(verifyUrl, 'Verify Email Address'),
+  });
+  await sendViaSendPulse(
+    { to, subject: 'Verify your email address', html },
+    env.EMAIL_CLIENTID,
+    env.EMAIL_SECRET,
+    env.EMAIL_FROM,
+  );
+}
+```
+
+---
+
+##### Template 2: Password Reset
+
+**Trigger:** `POST /auth/forgot-password`
+**Variables:** `RecipientName`, `ResetUrl`
+**Token expiry:** 1 hour (enforced in DB)
+
+```typescript
+const PASSWORD_RESET_BODY = `
+  <h2 style="margin:0 0 8px; color:#1e293b; font-size:24px;">Reset your password</h2>
+  <p style="margin:0 0 16px; color:#475569;">Hi {{RecipientName}},</p>
+  <p style="margin:0 0 24px; color:#475569; line-height:1.6;">
+    We received a request to reset your password. Click the button below.
+    This link expires in <strong>1 hour</strong>.
+  </p>
+  {{ResetButton}}
+  <p style="margin:24px 0 0; color:#94a3b8; font-size:13px;">
+    If you didn't request a password reset, no action is needed — your account is safe.
+  </p>
+`;
+
+export async function sendPasswordResetEmail(
+  to: string,
+  recipientName: string,
+  token: string,
+  env: Env,
+): Promise<void> {
+  const resetUrl = `${env.FRONTEND_URL}/reset-password?token=${token}`;
+  const html = render(PASSWORD_RESET_BODY, {
+    RecipientName: recipientName,
+    ResetButton: ctaButton(resetUrl, 'Reset Password'),
+  });
+  await sendViaSendPulse(
+    { to, subject: 'Reset your password', html },
+    env.EMAIL_CLIENTID,
+    env.EMAIL_SECRET,
+    env.EMAIL_FROM,
+  );
+}
+```
+
+---
+
+##### Template 3: Two-Factor Authentication Code
+
+**Trigger:** Login when `mfaEnabled = true`
+**Variables:** `RecipientName`, `TwoFactorCode`, `CodeExpiryMinutes`
+**Token expiry:** 10 minutes (enforced in DB)
+
+```typescript
+const TWO_FACTOR_BODY = `
+  <h2 style="margin:0 0 8px; color:#1e293b; font-size:24px;">Your login code</h2>
+  <p style="margin:0 0 16px; color:#475569;">Hi {{RecipientName}},</p>
+  <p style="margin:0 0 24px; color:#475569; line-height:1.6;">
+    Use this code to complete your sign-in. It expires in <strong>{{CodeExpiryMinutes}} minutes</strong>.
+  </p>
+  <table cellpadding="0" cellspacing="0" style="margin:24px 0;">
+    <tr>
+      <td style="background:#f1f5f9; border:2px dashed #cbd5e1; border-radius:8px; padding:20px 40px;">
+        <span style="font-size:36px; font-weight:700; letter-spacing:12px; color:#1e293b; font-family:monospace;">
+          {{TwoFactorCode}}
+        </span>
+      </td>
+    </tr>
+  </table>
+  <p style="margin:0; color:#94a3b8; font-size:13px;">
+    If you didn't try to sign in, someone may have your password. Change it immediately.
+  </p>
+`;
+
+export async function sendTwoFactorEmail(
+  to: string,
+  recipientName: string,
+  code: string,
+  expiryMinutes: number = 10,
+  env: Env,
+): Promise<void> {
+  const html = render(TWO_FACTOR_BODY, {
+    RecipientName: recipientName,
+    TwoFactorCode: code,
+    CodeExpiryMinutes: String(expiryMinutes),
+  });
+  await sendViaSendPulse(
+    { to, subject: `${code} is your login code`, html },
+    env.EMAIL_CLIENTID,
+    env.EMAIL_SECRET,
+    env.EMAIL_FROM,
+  );
+}
+```
+
+---
+
+##### Template 4: Resend Email Verification
+
+Same structure as the initial verification email but with different copy.
+
+```typescript
+const RESEND_VERIFY_BODY = `
+  <h2 style="margin:0 0 8px; color:#1e293b; font-size:24px;">New verification link</h2>
+  <p style="margin:0 0 16px; color:#475569;">Hi {{RecipientName}},</p>
+  <p style="margin:0 0 24px; color:#475569; line-height:1.6;">
+    Here's a new link to verify your email. This link expires in <strong>24 hours</strong>.
+    Your previous verification link is now invalid.
+  </p>
+  {{VerifyButton}}
+`;
+```
+
+---
+
+##### Template 5: Team Invitation (if applicable)
+
+```typescript
+const TEAM_INVITE_BODY = `
+  <h2 style="margin:0 0 8px; color:#1e293b; font-size:24px;">You've been invited</h2>
+  <p style="margin:0 0 16px; color:#475569;">Hi there,</p>
+  <p style="margin:0 0 24px; color:#475569; line-height:1.6;">
+    <strong>{{InviterName}}</strong> has invited you to join their team on YourApp
+    as a <strong>{{Role}}</strong>. Click the button below to accept.
+    This invitation expires in <strong>7 days</strong>.
+  </p>
+  {{InviteButton}}
+  <p style="margin:24px 0 0; color:#94a3b8; font-size:13px;">
+    If you weren't expecting this invitation, you can ignore this email.
+  </p>
+`;
+```
+
+---
+
+#### Token Management
+
+All one-time tokens follow the same DB pattern.
+
+##### Schema (Drizzle ORM)
+
+```typescript
+export const emailVerificationTokens = pgTable('email_verification_tokens', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  token: varchar('token', { length: 64 }).notNull().unique(),
+  expiresAt: timestamp('expires_at').notNull(),
+  used: boolean('used').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const passwordResetTokens = pgTable('password_reset_tokens', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  token: varchar('token', { length: 64 }).notNull().unique(),
+  expiresAt: timestamp('expires_at').notNull(),
+  used: boolean('used').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const twoFactorCodes = pgTable('two_factor_codes', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  code: varchar('code', { length: 6 }).notNull(),
+  expiresAt: timestamp('expires_at').notNull(),
+  used: boolean('used').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+```
+
+##### Token generation
+
+```typescript
+import { randomBytes } from 'crypto'; // Node.js / Cloudflare Workers
+
+function generateToken(bytes: number = 32): string {
+  return randomBytes(bytes).toString('hex'); // 64-char hex string
+}
+
+function generate2FACode(): string {
+  return String(Math.floor(100000 + Math.random() * 900000)); // 6-digit numeric
+}
+```
+
+##### Token validation pattern
+
+```typescript
+// Generic: works for email verification, password reset, magic links
+async function validateToken(
+  db: Database,
+  table: TokenTable,
+  token: string,
+): Promise<{ userId: string } | null> {
+  const record = await db.query.table.findFirst({
+    where: and(
+      eq(table.token, token),
+      eq(table.used, false),
+      gt(table.expiresAt, new Date()),
+    ),
+  });
+
+  if (!record) return null;
+
+  // Mark used immediately to prevent replay attacks
+  await db.update(table).set({ used: true }).where(eq(table.id, record.id));
+
+  return { userId: record.userId };
+}
+```
+
+##### Rate limiting resend requests
+
+Prevent resend abuse at the DB level without a cache:
+
+```typescript
+async function canResendVerification(db: Database, userId: string): Promise<boolean> {
+  const oneMinuteAgo = new Date(Date.now() - 60_000);
+  const recent = await db.query.emailVerificationTokens.findFirst({
+    where: and(
+      eq(emailVerificationTokens.userId, userId),
+      gt(emailVerificationTokens.createdAt, oneMinuteAgo),
+    ),
+    orderBy: desc(emailVerificationTokens.createdAt),
+  });
+  return !recent; // true = can resend
+}
+```
+
+---
+
+#### Error Handling Strategy
+
+| Scenario | Handling |
+|---|---|
+| Token request fails (network) | Throw — caller will catch and log |
+| Token request fails (401 bad credentials) | Throw with descriptive message |
+| Send fails (invalid email address) | Throw — log, don't retry automatically |
+| Send fails (rate limit / 429) | Throw — implement exponential backoff if needed |
+| Email send failure on registration | Log, don't fail the registration response (user can resend) |
+| Email send failure on password reset | Log — the user will just see "if your email exists, we sent a link" |
+| 2FA send failure | Surface as error to user ("Failed to send code — try again") |
+
+---
+
+#### Adapting to Other Providers
+
+The `EmailProvider` interface makes switching trivial:
+
+##### Resend
+
+```typescript
+import { Resend } from 'resend';
+
+class ResendEmailProvider implements EmailProvider {
+  private client: Resend;
+  constructor(apiKey: string) {
+    this.client = new Resend(apiKey);
+  }
+  async send(message: EmailMessage): Promise<void> {
+    await this.client.emails.send({
+      from: message.fromEmail ?? 'noreply@yourdomain.com',
+      to: message.to,
+      subject: message.subject,
+      html: message.html,
+    });
+  }
+}
+```
+
+##### Postmark
+
+```typescript
+import * as postmark from 'postmark';
+
+class PostmarkEmailProvider implements EmailProvider {
+  private client: postmark.ServerClient;
+  constructor(serverToken: string) {
+    this.client = new postmark.ServerClient(serverToken);
+  }
+  async send(message: EmailMessage): Promise<void> {
+    await this.client.sendEmail({
+      From: message.fromEmail ?? 'noreply@yourdomain.com',
+      To: message.to,
+      Subject: message.subject,
+      HtmlBody: message.html,
+    });
+  }
+}
+```
+
+##### Provider factory
+
+```typescript
+function getEmailProvider(env: Env): EmailProvider {
+  switch (env.EMAIL_PROVIDER ?? 'sendpulse') {
+    case 'resend':
+      return new ResendEmailProvider(env.RESEND_API_KEY);
+    case 'postmark':
+      return new PostmarkEmailProvider(env.POSTMARK_SERVER_TOKEN);
+    case 'sendpulse':
+    default:
+      return new SendPulseEmailProvider(env.EMAIL_CLIENTID, env.EMAIL_SECRET, env.EMAIL_FROM);
+  }
+}
+```
+
+---
+
+#### Adapting to Non-Edge Runtimes
+
+##### Node.js / Express
+
+- Replace `c.executionCtx.waitUntil(...)` with `Promise.resolve().then(...)` or a job queue (BullMQ, etc.)
+- Replace `btoa(unescape(encodeURIComponent(html)))` with `Buffer.from(html).toString('base64')`
+- Replace `randomBytes` import from `'crypto'` (already the same)
+- Token caching in module-level variables works as-is
+
+##### Next.js (App Router)
+
+- Use `after()` (Next.js 15+) or a background job for fire-and-forget email
+- Keep the service layer as-is; just inject env vars from `process.env`
+
+---
+
+#### Full Service File Structure
+
+```
+api/src/services/email.ts
+├── Token cache (module-level variables)
+├── getSendPulseToken()
+├── sendViaSendPulse()
+├── render()
+├── ctaButton()
+├── buildVerifyUrl()
+├── buildPasswordResetUrl()
+├── LAYOUT_HEADER
+├── LAYOUT_FOOTER
+├── VERIFY_EMAIL_BODY
+├── RESEND_VERIFY_BODY
+├── PASSWORD_RESET_BODY
+├── TWO_FACTOR_BODY
+├── sendVerificationEmail()          ← exported
+├── sendResendVerificationEmail()    ← exported
+├── sendPasswordResetEmail()         ← exported
+└── sendTwoFactorEmail()             ← exported
+```
+
+Only the `send*` functions should be imported by routes. Everything else is internal.
+
+---
+
+### Multi-Auth Implementation Guide: finished sections archived on consolidation (2026-11-18)
+
+Source: docs/guides/MULTI_AUTH_IMPLEMENTATION.md
+
+**Status on archive (verified 2026-11-18).** Built. The routes were ported from this guide and still carry its comments: `api/src/presentation/routes/oauthRoutes.ts` (providers `:79-139`, signed state `:165-205` over `infrastructure/auth/oauthState.ts`, initiate `:308`, callback `:356`, magic link `:609`/`:675`, `linked-accounts` `:725`, `unlink` `:749`, `add-password` `:782`); tables `oauth_accounts` and `magic_link_tokens` (`api/src/infrastructure/database/schema/identity.ts:753`, `:776`); PBKDF2-SHA256 100k (`api/src/infrastructure/auth/HashService.ts:54`, `:62`); pages `frontend/src/app/auth/callback/page.tsx` and `frontend/src/app/auth/magic-link/page.tsx`; the Settings connect button sends `link_token` (`frontend/src/lib/auth/credentials.ts:286`). Drift from the text below, all deliberate:
+- The callback never puts the JWT in the URL: it redirects to `/auth/callback?code=` with a 60-second exchange code, swapped at `POST /api/auth/oauth/exchange` (`oauthRoutes.ts:535-604`).
+- The web JWT (`signWebJwt`, `api/src/infrastructure/auth/JwtService.ts:163`) lives 24 h (30 days with "trust this device"), carries `{ sub, email, username, sa?, act?, jti, sid, mfa?, amr }`, and every issued token is persisted as a revocable session (`persistWebSessionToken`, `auth_user_sessions`/`auth_tokens`, `identity.ts:217`, `:230`).
+- Password login is `POST /api/auth/web/login` with TOTP MFA (`authRoutes.ts:651`, `:740`); sign-up verification is an emailed 6-digit code (`email_otp_challenges`); `refresh_tokens`, `email_verification_tokens`, `password_reset_tokens`, `two_factor_codes` were never created.
+- `users` has `display_name`, `username`, `email_verified_at`, `is_suspended`, `locale`, `account_type` instead of `name`, `email_verified`, `role`, `is_active`; there is no `job_seeker` default role.
+- `API_URL` is not used (callback from the request origin); `FRONTEND_URL` is `APP_URL`; `redirect` is open-redirect-guarded; the chosen locale and the return origin ride the signed state.
+The Security Checklist, Environment Variables and Provider Setup sections stay in `docs/specs/platform.md` ("Design — Multi-Auth Implementation Guide") with this drift corrected.
+
+**Multi-Auth Implementation Guide** (the doc's opening, kept for context; its Table of Contents is dropped):
+
+A complete reference for implementing email/password, OAuth social login, and magic link authentication in a Hono + Cloudflare Workers + Drizzle ORM + React SPA stack. Every pattern here is derived from a working production implementation.
+
+---
+
+#### Architecture Overview
+
+```
+Browser
+  │
+  ├─ Email/Password ──────────────────────────────▶ POST /api/auth/login
+  │                                                  Returns JWT in JSON body
+  │
+  ├─ OAuth (login/signup) ────────────────────────▶ GET /api/auth/oauth/:provider?redirect=/dashboard
+  │                                                  302 → provider consent screen
+  │                                                  Provider → GET /api/auth/oauth/:provider/callback
+  │                                                  API finds/creates user by email, issues JWT
+  │                                                  302 → /auth/callback?token=JWT
+  │                                                  Frontend page writes token to localStorage
+  │
+  ├─ OAuth (connect from Settings) ───────────────▶ GET /api/auth/oauth/:provider?redirect=/settings&link_token=JWT
+  │                                                  JWT is verified, userId embedded in HMAC state
+  │                                                  Provider → GET /api/auth/oauth/:provider/callback
+  │                                                  API links provider to existing user (no email lookup)
+  │                                                  302 → /auth/callback?token=NEW_JWT
+  │
+  └─ Magic Link ──────────────────────────────────▶ POST /api/auth/magic-link
+                                                     Email sent with /auth/magic-link?token=...
+                                                     Frontend page calls GET /api/auth/magic-link/verify
+                                                     Returns JWT in JSON body
+```
+
+**Key design decisions:**
+
+- JWT stored in `localStorage` (not HttpOnly cookies) — required if you also support a browser extension or non-browser clients that share the same API
+- OAuth state is HMAC-signed (no DB) — works correctly in stateless edge runtimes
+- `passwordHash` is nullable — users who sign up via OAuth have no password
+- Magic link tokens are single-use and invalidated immediately on verify
+- All "not found" paths return the same generic message to prevent email enumeration
+- Connect flow (adding a provider to an existing account) uses `link_token` to bypass email matching — critical when the provider email differs from the account email
+
+---
+
+#### Database Schema
+
+##### Core users table
+
+```sql
+CREATE TABLE users (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email           VARCHAR(255) NOT NULL UNIQUE,
+  name            VARCHAR(255) NOT NULL,
+  password_hash   TEXT,                         -- NULL for OAuth-only users
+  email_verified  BOOLEAN NOT NULL DEFAULT FALSE,
+  role            VARCHAR(50)  NOT NULL DEFAULT 'job_seeker',
+  is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+  is_suspended    BOOLEAN NOT NULL DEFAULT FALSE,
+  mfa_enabled     BOOLEAN NOT NULL DEFAULT FALSE,
+  last_login_at   TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+##### OAuth accounts (one user → many providers)
+
+```sql
+CREATE TABLE oauth_accounts (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider            VARCHAR(50)  NOT NULL,   -- 'google' | 'linkedin' | 'github' | 'microsoft'
+  provider_account_id VARCHAR(255) NOT NULL,   -- the `sub` or `id` from the provider
+  email               VARCHAR(255),
+  display_name        VARCHAR(255),
+  avatar_url          TEXT,
+  access_token        TEXT,
+  refresh_token       TEXT,
+  token_expires_at    TIMESTAMPTZ,
+  scope               TEXT,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+##### Magic link tokens
+
+```sql
+CREATE TABLE magic_link_tokens (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email      VARCHAR(255) NOT NULL,
+  token      TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used       BOOLEAN NOT NULL DEFAULT FALSE,
+  redirect   VARCHAR(500) NOT NULL DEFAULT '/dashboard',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+##### Supporting tables (also needed)
+
+```sql
+-- Tracks active sessions; populated on every login
+CREATE TABLE refresh_tokens (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token      TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  revoked    BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Email verification tokens
+CREATE TABLE email_verification_tokens (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token      TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used       BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Password reset tokens
+CREATE TABLE password_reset_tokens (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token      TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used       BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- TOTP / email 2FA codes
+CREATE TABLE two_factor_codes (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code       VARCHAR(10) NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used       BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+---
+
+#### Password Authentication
+
+##### Hashing — PBKDF2 via Web Crypto API
+
+Works natively in Cloudflare Workers (no bcrypt npm dependency needed).
+
+```typescript
+async function hashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt, iterations: 100_000, hash: "SHA-256" },
+    keyMaterial, 256
+  );
+  const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, "0")).join("");
+  const hashHex = Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return `${saltHex}:${hashHex}`;
+}
+
+async function verifyPassword(password: string, stored: string | null | undefined): Promise<boolean> {
+  if (!stored) return false;           // OAuth-only accounts have no password
+  const [saltHex, hashHex] = stored.split(":");
+  if (!saltHex || !hashHex) return false;
+  const salt = new Uint8Array(saltHex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
+  const encoder = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt, iterations: 100_000, hash: "SHA-256" },
+    keyMaterial, 256
+  );
+  const candidateHex = Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return candidateHex === hashHex;
+}
+```
+
+> **Note:** Always return the same error message for wrong email AND wrong password — `"Invalid email or password"`. Never leak which one was wrong.
+
+##### Login endpoint
+
+```typescript
+// POST /api/auth/login
+app.post("/login", async (c) => {
+  const { email, password } = await c.req.json();
+
+  const [user] = await db.select().from(users)
+    .where(eq(users.email, email.toLowerCase()))
+    .limit(1);
+
+  if (!user || !user.isActive) {
+    return c.json({ error: "Invalid email or password" }, 401);
+  }
+
+  const valid = await verifyPassword(password, user.passwordHash);
+  if (!valid) {
+    return c.json({ error: "Invalid email or password" }, 401);
+  }
+
+  // Optional: 2FA step (see auth.ts)
+
+  const token = await createJwt(user.id, user.email, user.role, !!user.emailVerified);
+  return c.json({ token, user: { id: user.id, email: user.email } });
+});
+```
+
+---
+
+#### OAuth Social Login
+
+##### How it works
+
+```
+1. User clicks "Sign in with Google"
+2. Frontend redirects to: GET /api/auth/oauth/google?redirect=/dashboard
+3. API builds provider authorization URL with HMAC-signed state, redirects browser
+4. User authenticates with Google
+5. Google redirects to: GET /api/auth/oauth/google/callback?code=...&state=...
+6. API verifies state, exchanges code for access token, fetches user profile
+7. API upserts user + oauth_accounts row
+8. API issues JWT, redirects to: /auth/callback?token=JWT&redirect=/dashboard
+9. Frontend /auth/callback page calls loginWithToken(token), then navigates
+```
+
+##### HMAC-signed state (no DB required)
+
+Protects against CSRF without needing session storage — critical for stateless edge runtimes.
+
+```typescript
+async function createOAuthState(redirect: string): Promise<string> {
+  const secret = getEnv("JWT_SECRET");
+  const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+    .map(b => b.toString(16).padStart(2, "0")).join("");
+  const payload = JSON.stringify({ nonce, redirect: redirect || "/dashboard", ts: Date.now() });
+
+  const key = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
+  const sigHex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+
+  return btoa(payload + "|" + sigHex);
+}
+
+async function verifyOAuthState(state: string): Promise<{ redirect: string } | null> {
+  try {
+    const secret = getEnv("JWT_SECRET");
+    const decoded = atob(state);
+    const sepIdx = decoded.lastIndexOf("|");
+    const payload = decoded.slice(0, sepIdx);
+    const sigHex = decoded.slice(sepIdx + 1);
+
+    const key = await crypto.subtle.importKey(
+      "raw", new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" }, false, ["verify"]
+    );
+    const sigBytes = new Uint8Array(sigHex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
+    const valid = await crypto.subtle.verify("HMAC", key, sigBytes, new TextEncoder().encode(payload));
+
+    if (!valid) return null;
+    const { redirect, ts } = JSON.parse(payload);
+    if (Date.now() - ts > 10 * 60 * 1000) return null;   // 10-minute window
+    return { redirect };
+  } catch {
+    return null;
+  }
+}
+```
+
+##### Provider configuration
+
+```typescript
+interface ProviderCfg {
+  authUrl: string;
+  tokenUrl: string;
+  userInfoUrl: string;
+  scopes: string[];
+  clientId: () => string;
+  clientSecret: () => string;
+  parseUser: (d: any) => { id: string; email: string; name: string; avatar?: string };
+  extraAuthParams?: Record<string, string>;
+}
+
+const PROVIDERS: Record<string, ProviderCfg> = {
+  google: {
+    authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+    tokenUrl: "https://oauth2.googleapis.com/token",
+    userInfoUrl: "https://www.googleapis.com/oauth2/v3/userinfo",
+    scopes: ["openid", "email", "profile"],
+    clientId: () => getEnv("GOOGLE_CLIENT_ID"),
+    clientSecret: () => getEnv("GOOGLE_CLIENT_SECRET"),
+    extraAuthParams: { access_type: "offline", prompt: "select_account" },
+    parseUser: (d) => ({ id: d.sub, email: d.email, name: d.name ?? d.email, avatar: d.picture }),
+  },
+  linkedin: {
+    authUrl: "https://www.linkedin.com/oauth/v2/authorization",
+    tokenUrl: "https://www.linkedin.com/oauth/v2/accessToken",
+    userInfoUrl: "https://api.linkedin.com/v2/userinfo",   // OpenID Connect endpoint
+    scopes: ["openid", "profile", "email"],
+    clientId: () => getEnv("LINKEDIN_CLIENT_ID"),
+    clientSecret: () => getEnv("LINKEDIN_CLIENT_SECRET"),
+    parseUser: (d) => ({
+      id: d.sub,
+      email: d.email,
+      name: d.name ?? (`${d.given_name ?? ""} ${d.family_name ?? ""}`.trim() || d.email),
+      avatar: d.picture,
+    }),
+  },
+  github: {
+    authUrl: "https://github.com/login/oauth/authorize",
+    tokenUrl: "https://github.com/login/oauth/access_token",
+    userInfoUrl: "https://api.github.com/user",
+    scopes: ["read:user", "user:email"],
+    clientId: () => getEnv("GITHUB_CLIENT_ID"),
+    clientSecret: () => getEnv("GITHUB_CLIENT_SECRET"),
+    parseUser: (d) => ({
+      id: String(d.id),
+      email: d.email ?? "",
+      name: d.name ?? d.login ?? d.email,
+      avatar: d.avatar_url,
+    }),
+  },
+  microsoft: {
+    authUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+    tokenUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+    userInfoUrl: "https://graph.microsoft.com/v1.0/me",
+    scopes: ["openid", "profile", "email", "User.Read"],
+    clientId: () => getEnv("MICROSOFT_CLIENT_ID"),
+    clientSecret: () => getEnv("MICROSOFT_CLIENT_SECRET"),
+    parseUser: (d) => ({
+      id: d.id,
+      email: d.mail ?? d.userPrincipalName ?? "",
+      name: d.displayName ?? d.mail,
+    }),
+  },
+};
+```
+
+> **GitHub gotcha:** GitHub may not return email in `/user` if the user has set it private. Always call `/user/emails` as a fallback:
+>
+> ```typescript
+> async function getGitHubEmail(accessToken: string): Promise<string> {
+>   const res = await fetch("https://api.github.com/user/emails", {
+>     headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+>   });
+>   if (!res.ok) return "";
+>   const emails = await res.json() as Array<{ email: string; primary: boolean; verified: boolean }>;
+>   return emails.find(e => e.primary && e.verified)?.email ?? emails[0]?.email ?? "";
+> }
+> ```
+
+##### HMAC state — including userId for the connect flow
+
+The state payload carries an optional `linkUserId`. When present in the callback, it tells the API to link the new provider to that specific user rather than doing email-based lookup. This is critical when the provider uses a different email address than the user's account.
+
+```typescript
+async function createOAuthState(redirect: string, linkUserId?: string): Promise<string> {
+  const secret = getEnv("JWT_SECRET");
+  const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+    .map(b => b.toString(16).padStart(2, "0")).join("");
+  const payload = JSON.stringify({
+    nonce,
+    redirect: redirect || "/dashboard",
+    ts: Date.now(),
+    ...(linkUserId ? { linkUserId } : {}),
+  });
+  const key = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
+  const sigHex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return btoa(payload + "|" + sigHex);
+}
+
+async function verifyOAuthState(state: string): Promise<{ redirect: string; linkUserId?: string } | null> {
+  try {
+    const secret = getEnv("JWT_SECRET");
+    const decoded = atob(state);
+    const sepIdx = decoded.lastIndexOf("|");
+    const payload = decoded.slice(0, sepIdx);
+    const sigHex = decoded.slice(sepIdx + 1);
+    const key = await crypto.subtle.importKey(
+      "raw", new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" }, false, ["verify"]
+    );
+    const sigBytes = new Uint8Array(sigHex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
+    const valid = await crypto.subtle.verify("HMAC", key, sigBytes, new TextEncoder().encode(payload));
+    if (!valid) return null;
+    const { redirect, ts, linkUserId } = JSON.parse(payload);
+    if (Date.now() - ts > 10 * 60 * 1000) return null;
+    return { redirect, linkUserId };
+  } catch {
+    return null;
+  }
+}
+```
+
+##### Initiate route
+
+```typescript
+// GET /api/auth/oauth/:provider
+app.get("/:provider", async (c) => {
+  const name = c.req.param("provider").toLowerCase();
+  const cfg = PROVIDERS[name];
+  if (!cfg || !cfg.clientId()) return c.json({ error: "Provider not available" }, 503);
+
+  const redirect = c.req.query("redirect") || "/dashboard";
+
+  // Optional: if the user is already logged in (connecting from Settings),
+  // verify their JWT and embed the userId in state so the callback can link
+  // to the existing account without relying on email matching.
+  let linkUserId: string | undefined;
+  const linkToken = c.req.query("link_token");
+  if (linkToken) {
+    try {
+      const { jwtVerify } = await import("jose");
+      const { payload } = await jwtVerify(
+        linkToken,
+        new TextEncoder().encode(getEnv("JWT_SECRET")),
+        { algorithms: ["HS256"] }
+      );
+      linkUserId = payload.sub as string;
+    } catch { /* invalid token — fall through to normal login flow */ }
+  }
+
+  const state = await createOAuthState(redirect, linkUserId);
+  const callbackUrl = `${getEnv("API_URL")}/api/auth/oauth/${name}/callback`;
+
+  const params = new URLSearchParams({
+    client_id: cfg.clientId(),
+    redirect_uri: callbackUrl,
+    response_type: "code",
+    scope: cfg.scopes.join(" "),
+    state,
+    ...cfg.extraAuthParams,
+  });
+
+  return c.redirect(`${cfg.authUrl}?${params.toString()}`);
+});
+```
+
+##### Callback route — upsert user, issue JWT
+
+Three distinct paths depending on context:
+
+| Situation | How userId is resolved |
+|-----------|----------------------|
+| Provider account already in `oauth_accounts` | Use the `userId` from that row |
+| Connect flow (`linkUserId` in state) | Use `linkUserId` directly — skip email lookup |
+| New login, email exists in `users` | Link new provider to existing user |
+| New login, email not seen before | Create new user, link provider |
+
+```typescript
+// GET /api/auth/oauth/:provider/callback
+app.get("/:provider/callback", async (c) => {
+  const name = c.req.param("provider").toLowerCase();
+  const cfg = PROVIDERS[name];
+  const frontendBase = getEnv("FRONTEND_URL").split(",")[0].trim();
+
+  const code = c.req.query("code");
+  const state = c.req.query("state");
+  if (!code || !state) return c.redirect(`${frontendBase}/login?error=missing_params`);
+
+  const stateData = await verifyOAuthState(state);
+  if (!stateData) return c.redirect(`${frontendBase}/login?error=invalid_state`);
+
+  const callbackUrl = `${getEnv("API_URL")}/api/auth/oauth/${name}/callback`;
+
+  let tokens, providerUser;
+  try {
+    tokens = await exchangeCode(cfg, code, callbackUrl);
+    const raw = await fetchUserInfo(cfg, tokens.access_token);
+    providerUser = cfg.parseUser(raw);
+    if (name === "github" && !providerUser.email) {
+      providerUser.email = await getGitHubEmail(tokens.access_token);
+    }
+  } catch {
+    return c.redirect(`${frontendBase}/login?error=auth_failed`);
+  }
+
+  // Email is required for new login/signup; the connect flow (linkUserId) can proceed without it
+  if (!providerUser.email && !stateData.linkUserId) {
+    return c.redirect(`${frontendBase}/login?error=no_email`);
+  }
+
+  // 1. Check if this provider account is already linked to any user
+  const [existingOAuth] = await db.select().from(oauthAccounts)
+    .where(and(
+      eq(oauthAccounts.provider, name),
+      eq(oauthAccounts.providerAccountId, providerUser.id)
+    )).limit(1);
+
+  let userId: string;
+
+  if (existingOAuth) {
+    // Provider already linked — guard against linking to a different account
+    if (stateData.linkUserId && existingOAuth.userId !== stateData.linkUserId) {
+      return c.redirect(`${frontendBase}/settings?error=already_linked_other`);
+    }
+    userId = existingOAuth.userId;
+    await db.update(oauthAccounts).set({
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token ?? null,
+      updatedAt: new Date(),
+    }).where(eq(oauthAccounts.id, existingOAuth.id));
+
+  } else if (stateData.linkUserId) {
+    // Connect flow: user is logged in and adding a new provider.
+    // Use their existing userId directly — do NOT do email lookup.
+    // This is the key fix for multi-provider linking when emails differ.
+    userId = stateData.linkUserId;
+    await db.insert(oauthAccounts).values({
+      userId,
+      provider: name,
+      providerAccountId: providerUser.id,
+      email: providerUser.email?.toLowerCase() ?? null,
+      displayName: providerUser.name,
+      avatarUrl: providerUser.avatar ?? null,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token ?? null,
+    });
+
+  } else {
+    // Login/signup flow: find or create user by email
+    const [existing] = await db.select({ id: users.id }).from(users)
+      .where(eq(users.email, providerUser.email!.toLowerCase())).limit(1);
+
+    if (existing) {
+      userId = existing.id;
+    } else {
+      // New user — email pre-verified via OAuth
+      const [newUser] = await db.insert(users).values({
+        email: providerUser.email!.toLowerCase(),
+        name: providerUser.name,
+        passwordHash: null,
+        emailVerified: true,
+        role: "job_seeker",
+      }).returning({ id: users.id });
+      userId = newUser.id;
+    }
+
+    await db.insert(oauthAccounts).values({
+      userId,
+      provider: name,
+      providerAccountId: providerUser.id,
+      email: providerUser.email!.toLowerCase(),
+      displayName: providerUser.name,
+      avatarUrl: providerUser.avatar ?? null,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token ?? null,
+    });
+  }
+
+  const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  if (!user || !user.isActive || user.isSuspended) {
+    return c.redirect(`${frontendBase}/login?error=account_disabled`);
+  }
+
+  const jwt = await createJwt(user.id, user.email, user.role, true);
+  return c.redirect(
+    `${frontendBase}/auth/callback?token=${encodeURIComponent(jwt)}&redirect=${encodeURIComponent(stateData.redirect)}`
+  );
+});
+```
+
+---
+
+#### Magic Links
+
+##### Send endpoint
+
+```typescript
+// POST /api/auth/magic-link
+app.post("/magic-link", async (c) => {
+  const { email, redirect = "/dashboard" } = await c.req.json();
+  const normalizedEmail = email.toLowerCase().trim();
+
+  const [user] = await db.select({ id: users.id, name: users.name, isActive: users.isActive })
+    .from(users).where(eq(users.email, normalizedEmail)).limit(1);
+
+  // Always return 200 — never reveal whether the email exists
+  if (user?.isActive) {
+    const token = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+      .map(b => b.toString(16).padStart(2, "0")).join("");
+
+    // Invalidate any existing unused tokens for this email
+    await db.update(magicLinkTokens)
+      .set({ used: true })
+      .where(and(eq(magicLinkTokens.email, normalizedEmail), eq(magicLinkTokens.used, false)));
+
+    await db.insert(magicLinkTokens).values({
+      email: normalizedEmail,
+      token,
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000),  // 15 minutes
+      redirect,
+    });
+
+    // Fire-and-forget in Cloudflare Workers
+    c.executionCtx.waitUntil(
+      sendMagicLinkEmail(normalizedEmail, user.name, token)
+    );
+  }
+
+  return c.json({ message: "If an account exists for that email, a sign-in link has been sent" });
+});
+```
+
+##### Verify endpoint
+
+```typescript
+// GET /api/auth/magic-link/verify?token=...
+app.get("/magic-link/verify", async (c) => {
+  const token = c.req.query("token");
+  if (!token) return c.json({ error: "Token required" }, 400);
+
+  const [row] = await db.select().from(magicLinkTokens)
+    .where(and(eq(magicLinkTokens.token, token), eq(magicLinkTokens.used, false)))
+    .limit(1);
+
+  if (!row || row.expiresAt <= new Date()) {
+    return c.json({ error: "Magic link is invalid or has expired" }, 400);
+  }
+
+  // Mark used immediately — single use
+  await db.update(magicLinkTokens).set({ used: true }).where(eq(magicLinkTokens.id, row.id));
+
+  const [user] = await db.select().from(users)
+    .where(eq(users.email, row.email)).limit(1);
+
+  if (!user || !user.isActive || user.isSuspended) {
+    return c.json({ error: "Account not found or disabled" }, 401);
+  }
+
+  const jwt = await createJwt(user.id, user.email, user.role, !!user.emailVerified);
+  return c.json({
+    token: jwt,
+    user: { id: user.id, email: user.email, name: user.name },
+    redirect: row.redirect || "/dashboard",
+  });
+});
+```
+
+##### Email template
+
+The magic link email should include:
+- A large, prominent CTA button linking to: `{FRONTEND_URL}/auth/magic-link?token={token}`
+- Token expiry warning (e.g., "This link expires in 15 minutes")
+- Plain-text fallback URL below the button
+
+---
+
+#### JWT Token Strategy
+
+```typescript
+async function createJwt(
+  sub: string,
+  email: string,
+  role: string,
+  emailVerified: boolean
+): Promise<string> {
+  const secret = new TextEncoder().encode(getEnv("JWT_SECRET"));
+  return new SignJWT({ email, roles: [role], emailVerified, mustChangePassword: false })
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject(sub)         // user UUID
+    .setIssuedAt()
+    .setExpirationTime("7d")
+    .sign(secret);
+}
+```
+
+**JWT payload shape:**
+
+```json
+{
+  "sub": "user-uuid",
+  "email": "user@example.com",
+  "roles": ["job_seeker"],
+  "emailVerified": true,
+  "mustChangePassword": false,
+  "iat": 1700000000,
+  "exp": 1700604800
+}
+```
+
+**Verification (middleware):**
+
+```typescript
+import { jwtVerify } from "jose";
+
+async function authMiddleware(c, next) {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return c.json({ error: "Unauthorized" }, 401);
+
+  try {
+    const token = authHeader.slice(7);
+    const secret = new TextEncoder().encode(getEnv("JWT_SECRET"));
+    const { payload } = await jwtVerify(token, secret, { algorithms: ["HS256"] });
+    c.set("user", payload);
+    await next();
+  } catch {
+    return c.json({ error: "Invalid or expired token" }, 401);
+  }
+}
+```
+
+---
+
+#### Frontend Integration
+
+##### Why `/auth/callback` exists
+
+The API issues the JWT and redirects the browser. But only browser JavaScript can write to `localStorage`. So the API redirects to a thin frontend page that does nothing except:
+
+1. Read `?token=` from the URL
+2. Call `loginWithToken(token)` to store it
+3. Navigate to the redirect path
+
+```typescript
+// pages/OAuthCallback.tsx
+export default function OAuthCallback() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { loginWithToken } = useAuth();
+
+  useEffect(() => {
+    const token = searchParams.get("token");
+    const redirect = searchParams.get("redirect") || "/dashboard";
+    const errorParam = searchParams.get("error");
+
+    if (errorParam) {
+      // map error codes to human messages, then navigate to /login
+      return;
+    }
+
+    loginWithToken(token)
+      .then(() => navigate(redirect));
+  }, []);
+
+  return <LoadingSpinner />;
+}
+```
+
+##### `loginWithToken` in AuthContext
+
+```typescript
+const loginWithToken = async (token: string) => {
+  localStorage.setItem("auth_token", token);
+  const profile = await apiClient.get("/api/auth/me");
+  setUser(profile.data);
+};
+```
+
+##### Magic link verify page
+
+```typescript
+// pages/MagicLinkVerify.tsx
+export default function MagicLinkVerify() {
+  const [searchParams] = useSearchParams();
+  const { loginWithToken } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const token = searchParams.get("token");
+    apiClient.get(`/api/auth/magic-link/verify?token=${token}`)
+      .then(async res => {
+        await loginWithToken(res.data.token);
+        navigate(res.data.redirect || "/dashboard");
+      })
+      .catch(() => setStatus("error"));
+  }, []);
+}
+```
+
+##### OAuth buttons (React)
+
+Two different button implementations depending on context:
+
+**Login / Signup page** — no existing session:
+
+```typescript
+const API_BASE = import.meta.env.VITE_API_URL;   // e.g. https://api.example.com (no trailing /api)
+
+function OAuthButton({ provider, redirect }: { provider: string; redirect: string }) {
+  return (
+    <button onClick={() => {
+      window.location.href =
+        `${API_BASE}/api/auth/oauth/${provider}?redirect=${encodeURIComponent(redirect)}`;
+    }}>
+      Sign in with {provider}
+    </button>
+  );
+}
+```
+
+**Settings page (Connect)** — user is already logged in, pass `link_token`:
+
+```typescript
+function ConnectProviderButton({ provider }: { provider: string }) {
+  return (
+    <button onClick={() => {
+      const token = localStorage.getItem("auth_token") ?? "";
+      window.location.href =
+        `${API_BASE}/api/auth/oauth/${provider}?redirect=/settings&link_token=${encodeURIComponent(token)}`;
+    }}>
+      Connect
+    </button>
+  );
+}
+```
+
+> **Why `link_token` matters:** Without it, the callback resolves the user by email. If your Google account uses a different email than your LinkedIn account, it creates a second user instead of linking to the existing one. Passing the JWT lets the API skip email lookup entirely and link directly to the authenticated user.
+
+> **Common mistake:** `VITE_API_URL` is the base domain without `/api`. The `/api` prefix is part of every endpoint path — include it in the path, not the base.
+
+##### Routes to add
+
+```typescript
+// App.tsx / router
+<Route path="/auth/callback"   element={<OAuthCallback />} />
+<Route path="/auth/magic-link" element={<MagicLinkVerify />} />
+```
+
+---
+
+#### Account Management
+
+##### How 1-to-many linking works
+
+A user can connect multiple providers. Each provider is a separate row in `oauth_accounts` — all pointing to the same `user_id`. The flows are:
+
+```
+User signs up via LinkedIn
+  → users row created (passwordHash = null)
+  → oauth_accounts row: { provider: "linkedin", userId: X }
+
+User clicks Connect → Google in Settings (different email)
+  → GET /api/auth/oauth/google?link_token=JWT
+  → API verifies JWT, puts userId=X in HMAC state
+  → callback: linkUserId=X found in state → inserts oauth_accounts { provider: "google", userId: X }
+  → Both providers now linked to the same user
+
+User signs in with either provider → same account, same JWT
+```
+
+> **The bug without `link_token`:** If email matching is used for the connect flow, a user whose Google account has a different email than their primary account gets a brand new user created instead of linking — silently losing their existing session data.
+
+##### List linked providers + whether account has a password
+
+```
+GET /api/auth/linked-accounts   (requires JWT)
+
+Response:
+{
+  "accounts": [
+    { "provider": "google", "email": "user@gmail.com", "displayName": "..." }
+  ],
+  "hasPassword": false
+}
+```
+
+##### Unlink a provider
+
+```
+DELETE /api/auth/unlink/:provider   (requires JWT)
+
+Safety check: refuse if it would remove the user's only sign-in method.
+```
+
+```typescript
+app.delete("/unlink/:provider", async (c) => {
+  const userId = c.var.user.sub;
+  const [user] = await db.select({ passwordHash: users.passwordHash }).from(users)
+    .where(eq(users.id, userId)).limit(1);
+  const allLinked = await db.select().from(oauthAccounts)
+    .where(eq(oauthAccounts.userId, userId));
+
+  // Block if no password AND this is their last linked provider
+  if (!user?.passwordHash && allLinked.length <= 1) {
+    return c.json({ error: "Cannot disconnect your only sign-in method. Add a password first." }, 403);
+  }
+
+  await db.delete(oauthAccounts)
+    .where(and(eq(oauthAccounts.userId, userId), eq(oauthAccounts.provider, provider)));
+
+  return c.json({ success: true });
+});
+```
+
+##### Set password for OAuth-only accounts
+
+```
+POST /api/auth/add-password   (requires JWT)
+Body: { "password": "..." }
+```
+
+```typescript
+app.post("/add-password", async (c) => {
+  const userId = c.var.user.sub;
+  const [user] = await db.select({ passwordHash: users.passwordHash }).from(users)
+    .where(eq(users.id, userId)).limit(1);
+
+  if (user?.passwordHash) return c.json({ error: "Account already has a password" }, 409);
+
+  const hash = await hashPassword(body.password);
+  await db.update(users).set({ passwordHash: hash }).where(eq(users.id, userId));
+
+  return c.json({ success: true });
+});
+```
+
+---
+
+### Progress Handling Guide: finished sections archived on consolidation (2026-11-18)
+
+Source: docs/guides/progress-handling.md
+
+**Status on archive (verified 2026-11-18).** Retired, never built: both examples subscribe through `api.subscribeToTicketProgress(...)`, a push API that does not exist anywhere in the repository (no route, client or SDK). Ticket progress is a read model — `GET /api/brain/chats/:id/tickets` (`api/src/presentation/routes/brainRoutes.ts:409`) answers `TicketHealth` derived live on every read (`api/src/application/brain/chatTicketTypes.ts:64-122`), so `progressPct: 100` repeats on every read rather than arriving once. The corrected rule, terminal-status table, error cases, UI considerations and checklist stay in `docs/specs/platform.md` ("Design — Progress Handling Guide").
+
+#### Pattern: Register and Cleanup Progress Listener
+
+The correct pattern is to register a progress listener and tear it down (unsubscribe or remove the event handler) when `progressPct=100` is received.
+
+##### Example: JavaScript/TypeScript Client
+
+```typescript
+interface ProgressEvent {
+  kind: "task" | "epic" | "goal" | "objective" | "initiative" | "portfolio" | "roadmap" | "spec";
+  ref: string;
+  label: string;
+  status: string;
+  progressPct: number;
+  done: number;
+  total: number;
+  exists: boolean;
+}
+
+async function monitorTicketCompletion(ticketId: string): Promise<void> {
+  let cleanupRequired = false;
+
+  const onProgress = (data: ProgressEvent): void => {
+    if (data.progressPct === 100) {
+      // ↓ 100% is received: clean up the listener
+      cleanupRequired = true;
+      console.log(`✅ ${data.label} COMPLETE`);
+      return;
+    }
+
+    // Track progress for intermediate steps
+    console.log(`${data.label}: ${data.progressPct}% (${data.done}/${data.total})`);
+  };
+
+  // Subscribe to progress events
+  const subscription = api.subscribeToTicketProgress(ticketId, onProgress);
+
+  await new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      if (!cleanupRequired) {
+        subscription.unsubscribe();
+        console.log(`⚠️ No completion signal received for ${ticketId}`);
+      }
+      resolve(undefined);
+    }, 30000); // 30-second timeout for cleanup
+  });
+}
+
+// Example usage:
+await monitorTicketCompletion("42");
+```
+
+The key points in this example:
+- **Cleanup is triggered by the 100% signal**: The listener removes itself or its subscription when completion is detected
+- **Terminal guarantee**: Once 100% is hit, no more progress events of this type arrive
+- **Finite cleanup**: Even without a 100% signal, an optimal solution optionally exhaustively removes the subscription after a timeout
+
+#### Frontend / UI Considerations
+
+*(Only this example is archived; the section's list stays in platform.md.)*
+
+##### Example: React Component
+
+```tsx
+import { useEffect, useState } from 'react';
+
+interface ProgressEvent {
+  progressPct: number;
+  label: string;
+  status: string;
+}
+
+export function TicketProgress({ ticketId }: { ticketId: string }) {
+  const [progress, setProgress] = useState<ProgressEvent | undefined>(undefined);
+  const [isComplete, setIsComplete] = useState(false);
+
+  useEffect(() => {
+    const subscription = api.subscribeToTicketProgress(ticketId, (event) => {
+      setProgress(event);
+
+      if (event.progressPct === 100) {
+        setIsComplete(true);
+        subscription.unsubscribe(); // ← CLEANUP: remove listener
+      }
+    });
+
+    return () => subscription.unsubscribe(); // ← Fallback cleanup
+  }, [ticketId]);
+
+  if (isComplete) {
+    return <span className="status-complete">✅ Done</span>;
+  }
+
+  const pct = progress?.progressPct ?? 0;
+  return <span className="status-progress">{pct}% complete</span>;
+}
+```
+
 ## ✅ RESOLVED 2026-11-18: design docs folded into the domain PRDs; PRD 26 redirect removed
 
 - **What changed:** the end-state design docs under `docs/design/` (deterministic knowledge index, deterministic PreFetch, local-first closure G03/G21/G23/G27, the Web/Rovr/VSIX local-first review, cost-lever parity, typed entity ids) and the Creation Canvas set (`docs/design/creation-canvas/` README, delivery architecture, operations, outcome metrics) plus `docs/marketing/CLAIMS-PROCESS.md` were re-verified against the code and folded into `docs/specs/{idea,make,measure,reach,platform}.md`. Open sections and still-true reference material (contracts, runbooks, the claims process) live in the domain file; finished sections are archived word for word below. Code citations now name the domain file or this archive (applied migrations and generated `dist` files keep their old text).

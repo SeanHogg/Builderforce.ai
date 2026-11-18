@@ -20,6 +20,11 @@
 - [PRD 39 — Platform close-out](#prd-39--platform-close-out)
 - [Design — Internet search subsystem](#design--internet-search-subsystem)
 - [PRD 18 — hired.video → Builderforce.ai port (cutover and retirement)](#prd-18--hiredvideo--builderforceai-port-cutover-and-retirement)
+- [Design — Email Implementation Guide](#design--email-implementation-guide)
+- [Design — Multi-Auth Implementation Guide](#design--multi-auth-implementation-guide)
+- [Reference — API contracts](#reference--api-contracts)
+- [Design — Progress Handling Guide](#design--progress-handling-guide)
+- [Reference — Merge process](#reference--merge-process)
 
 ---
 
@@ -1805,3 +1810,379 @@ Port onto the site-backend custom-domain work (0412). Do not run two domain syst
 
 **Remaining (verified 2026-11-17):**
 - The table exists only in schema (`api/src/infrastructure/database/schema/commerce.ts`, migration 0425). No application or route code reads or writes it (git grep `whitelabel|white_label`: schema, entities and the migration only).
+
+---
+
+## Design — Email Implementation Guide
+
+> Consolidated 2026-11-18 from `docs/guides/EMAIL_IMPLEMENTATION.md`. Verified against code 2026-11-18: built and superseded (the guide described the hired.video-era SendPulse OAuth2 service; the live system is Resend with a SendPulse quota fallback, a localized catalog and two send seams). One rule is still unmet (fire-and-forget); one checklist kept as reference.
+> Finished/superseded sections are archived in DONE.md ("Email Implementation Guide: finished sections archived on consolidation (2026-11-18)").
+
+### Cloudflare Workers: Fire-and-Forget Pattern
+
+On Cloudflare Workers, async work must be registered with `executionCtx.waitUntil()` or it will be terminated when the response returns.
+
+```typescript
+// In a Hono route handler
+app.post('/auth/register', async (c) => {
+  // ... create user, generate token ...
+
+  // Fire-and-forget: don't await, don't block the response
+  c.executionCtx.waitUntil(
+    sendVerificationEmail(user.email, user.name, token, c.env).catch((err) => {
+      console.error('[register] Failed to send verification email:', err);
+      // Log to Sentry here if needed — but never throw
+    }),
+  );
+
+  return c.json({ message: 'Registration successful. Check your email.' }, 201);
+});
+```
+
+> **Critical:** Always `.catch()` inside `waitUntil`. An unhandled rejection inside `waitUntil` will silently terminate the Worker on some runtimes.
+
+Today's seam is `sendTransactionalEmail` / `sendLifecycleEmail` (`api/src/application/email/sendEmail.ts:117`, `:143`), not a per-template `sendXxxEmail(…, env)`. The rule above applies to every call site that does not await it.
+
+**Remaining (verified 2026-11-18):**
+- Five fire-and-forget sends are a bare `void sendTransactionalEmail(...)` with no `c.executionCtx.waitUntil(...)`, so the Worker may drop the send (and the `email_delivery_failures` row) once the response returns: `api/src/presentation/routes/oauthRoutes.ts:502` (OAuth welcome), `oauthRoutes.ts:652` (magic link — the sign-in itself depends on it), `api/src/presentation/routes/authRoutes.ts:571` (welcome after verify), `authRoutes.ts:907` (account-type-selected), `api/src/presentation/routes/adminRoutes.ts:2659` (admin password reset).
+- None of the five passes `onDeliveryFailure: 'return'`; the default is `'throw'` (`sendEmail.ts:128`, rethrown at `sendEmail.ts:108-109`), so a provider failure becomes an unhandled rejection rather than the logged, swallowed failure the rule requires.
+
+### Checklist: Adding a New Email
+
+*(Reference. Rewritten 2026-11-18 because every step of the original named code that no longer exists — `BODY` constants, `ctaButton`, per-email token tables, SendPulse sender confirmation. It condenses the module docblocks of `api/src/infrastructure/email/EmailService.ts:1-15`, `emailMessages.ts:1-24` and `api/src/application/email/sendEmail.ts:1-22`; those comments are the source of truth.)*
+
+1. [ ] Add the copy to the catalog `api/src/infrastructure/email/emailMessages.ts` (`EmailCopy`) in **every** locale — `Record<EmailLocale, EmailCopy>` (`emailMessages.ts:1225`) makes a missing locale a compile error. Use `{{Placeholder}}` markers; never pre-interpolate a value.
+2. [ ] Write the sender in `EmailService.ts` (or its own module, like `spawnParentEmail.ts`) and build the body from `greeting` / `p` / `cta` / `MUTED` (`EmailService.ts:242-255`); every sender funnels through `deliver()` (`EmailService.ts:318`) for the chrome, `{{Subject}}`/`{{Year}}`/`{{Lang}}` and the provider cascade. Take a trailing `locale` defaulting to `DEFAULT_EMAIL_LOCALE`.
+3. [ ] Pass `requireProvider: true` only for account-critical mail (the sign-up code does, `EmailService.ts:423`).
+4. [ ] Choose the seam, which is the declaration of what kind of mail it is: `sendTransactionalEmail` (the recipient triggered it; no opt-out) or `sendLifecycleEmail` (we decided to send it; consent-checked, must render the unsubscribe URL).
+5. [ ] One-time codes go in `email_otp_challenges` under their own `purpose` (`api/src/application/auth/EmailVerificationService.ts:13-22`); sign-in links reuse `magic_link_tokens`. Do not add a per-email token table.
+6. [ ] If the call is not awaited, register it with `c.executionCtx.waitUntil(...)` and handle its failure (see above).
+7. [ ] Cover it in `localizedEmails.test.ts` / `EmailService.providers.test.ts` (`api/src/infrastructure/email/`).
+
+---
+
+## Design — Multi-Auth Implementation Guide
+
+> Consolidated 2026-11-18 from `docs/guides/MULTI_AUTH_IMPLEMENTATION.md`. Verified against code 2026-11-18: built (`api/src/presentation/routes/oauthRoutes.ts`, `authRoutes.ts`, `identity.ts:753-787`), with drift — the session JWT is no longer put in the callback URL, it lives 24 h not 7 d, and the password login is `/api/auth/web/login`. Nothing open. The three reference sections below are kept with that drift corrected.
+> The built sections are archived word for word in DONE.md ("Multi-Auth Implementation Guide: finished sections archived on consolidation (2026-11-18)"); the code (`oauthRoutes.ts`) carries the same explanations as comments.
+
+### Security Checklist
+
+| Concern | Implementation |
+|---------|---------------|
+| State forgery (CSRF) | HMAC-SHA256 signed state, 10-min expiry, base64-encoded (`api/src/infrastructure/auth/oauthState.ts` `signState`/`verifyState`; also carries `linkUserId`, `locale`, `returnOrigin`) |
+| Session token in the URL | Never. The callback hands the browser a 60-second single-purpose exchange code (`/auth/callback?code=`); the page swaps it at `POST /api/auth/oauth/exchange` for the JWT in the response body (`oauthRoutes.ts:535-604`, `frontend/src/app/auth/callback/page.tsx:51`) |
+| Open redirect | `redirect` is accepted only as a same-origin relative path, else `/dashboard` (`oauthRoutes.ts:248-261`); `return_origin` must be on the CORS allow-list (`trustedReturnOrigin`) |
+| Email enumeration | `POST /api/auth/magic-link` always answers the same 200; password login answers one `"Invalid email or password"` 401 for unknown email and wrong password. `POST /api/auth/web/register` does answer `409 Email already registered` (`authRoutes.ts` register handler) |
+| OAuth-only login via password | `verifyPassword` returns `false` for `null` hash — same error message |
+| Token reuse (magic links) | Marked `used = true` immediately on first verify |
+| Stale magic links | Previous unused tokens invalidated when a new one is issued (15-min expiry; the admin reset link is 24 h) |
+| Last auth method | Block unlink if it would leave the account with no login method |
+| Multi-provider linking (different emails) | Connect flow passes `link_token` JWT so callback uses `linkUserId` from state, not email |
+| Provider stolen by another account | If `existingOAuth.userId !== linkUserId`, reject with error instead of silently overwriting |
+| Account takeover via email match | Email matching only used in the login/signup flow, never the connect flow |
+| Suspended accounts | `isSuspended` checked on the OAuth callback, the exchange, magic link verify and password login (there is no separate `is_active` flag) |
+| JWT secret strength | Minimum 32 random bytes; never commit to source control |
+| Token storage | `localStorage` (`bf_web_token`, `frontend/src/lib/auth.ts:31`) — acceptable if no XSS vectors; use HttpOnly cookies if you can |
+| Microsoft client secret vs secret ID | Azure shows both a Secret ID (GUID) and a Value — use the **Value** as `MICROSOFT_CLIENT_SECRET` |
+
+### Environment Variables
+
+```ini
+# Core
+JWT_SECRET=<min 32 random chars>
+APP_URL=https://builderforce.ai          # first value used for redirects (resolveAppBaseUrl, api/src/env.ts:791)
+
+# Google
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+
+# LinkedIn
+LINKEDIN_CLIENT_ID=...
+LINKEDIN_CLIENT_SECRET=...
+
+# GitHub
+GITHUB_CLIENT_ID=...
+GITHUB_CLIENT_SECRET=...
+
+# Microsoft
+MICROSOFT_CLIENT_ID=...
+MICROSOFT_CLIENT_SECRET=...
+```
+
+There is no `API_URL`: the callback URL is built from the incoming request's origin (`oauthRoutes.ts:339-342`), so it works in local dev and production without one. A provider with no client id/secret answers `503 Provider not available`.
+
+For Cloudflare Workers, set secrets via:
+
+```bash
+wrangler secret put JWT_SECRET
+wrangler secret put GOOGLE_CLIENT_ID
+# ... etc
+```
+
+For local dev, put them in `api/.dev.vars` (Wrangler loads this automatically).
+
+### Provider Setup
+
+#### Google
+
+1. [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials → Create OAuth 2.0 Client ID (Web application)
+2. Authorized redirect URIs: `https://api.example.com/api/auth/oauth/google/callback`
+3. OAuth consent screen: External, scopes: `email profile openid`, add test users while in test mode
+4. Copy Client ID + Client Secret
+
+#### LinkedIn
+
+1. [LinkedIn Developer Portal](https://developer.linkedin.com/) → Create app
+2. Auth tab → Redirect URLs: `https://api.example.com/api/auth/oauth/linkedin/callback`
+3. **Products tab → request "Sign In with LinkedIn using OpenID Connect"** — required for `email` scope
+4. Copy Client ID + Client Secret
+
+#### GitHub
+
+1. GitHub → Settings → Developer settings → OAuth Apps → New OAuth App
+2. Authorization callback URL: `https://api.example.com/api/auth/oauth/github/callback`
+3. Note: GitHub allows only **one** callback URL per app — create a separate dev app for local testing
+
+#### Microsoft
+
+1. [Azure Portal](https://portal.azure.com/) → Microsoft Entra ID → App registrations → New registration
+2. Supported account types: "Accounts in any organizational directory and personal Microsoft accounts"
+3. Redirect URI (Web): `https://api.example.com/api/auth/oauth/microsoft/callback`
+4. Certificates & secrets → New client secret (copy value immediately)
+5. Copy Application (client) ID from Overview
+
+#### Callback URL pattern
+
+```
+https://{API_HOST}/api/auth/oauth/{provider}/callback
+```
+
+Register this exact URL in each provider's dashboard. The `{provider}` segment is lowercase: `google`, `linkedin`, `github`, `microsoft` (`PROVIDER_DEFS`, `oauthRoutes.ts:79-139`). `{API_HOST}` is whichever host the initiate request reached, because the callback is derived from that request's origin.
+
+---
+
+## Reference — API contracts
+
+> Consolidated 2026-11-18 from `docs/specs/API-CONTRACTS.md`. Verified against code 2026-11-18 (`api/src/presentation/routes/projectKnowledgeRoutes.ts`, `projectKnowledgeSyncRoutes.ts`, `projectFactsRoutes.ts`): reference. Drift fixed: the write body's `root` and scope fields, the pack-sync routes, the sync and pack-root error codes were added; the `source_hash_mismatch` code and the "extracted 1 MB" upload limit (neither exists any more) were removed; the "no client cache header" line now names the sync routes' `no-store`.
+
+### Timestamps
+
+All JSON API timestamps use ISO 8601 in UTC, including the trailing `Z` (for example,
+`2026-07-25T07:11:00.123Z`). This applies to both camelCase and legacy snake_case fields.
+
+Database routes should project typed Drizzle timestamp columns and allow JSON
+serialization to produce the wire value. Do not cast timestamps to Postgres text: its
+timezone-less form is ambiguous and is not consistently parseable by browsers. Code that
+performs timestamp arithmetic must convert explicitly with `Date#getTime()` (or parse a
+documented external ISO string) rather than depending on a driver-specific representation.
+
+Read-through cached responses follow the same JSON shape on a loader miss and on L1/KV
+hits; `Date` instances are normalized to ISO strings before the fresh value is returned.
+
+### Knowledge graph API
+
+The knowledge graph API (PRD 38 §4.8, archived in `DONE.md`) is one router
+(`api/src/presentation/routes/projectKnowledgeRoutes.ts`) served at two front doors
+(`api/src/index.ts:1257-1258`):
+
+| Door | Prefix | Credential | Acts for |
+|---|---|---|---|
+| Person | `/api/projects/:projectId` | tenant JWT (people and VS Code) | a person: may write `human` and `model` origins |
+| Agent host | `/api/agent/projects/:projectId` | agent-host key | a machine: may write `agent` and `model` origins, never `human` |
+
+Every route below is relative to either prefix and serves the same shapes. Each handler
+checks that the project belongs to the caller's tenant before it does anything else, so a
+project in another tenant is `404 project not found`, never `403`.
+
+#### Routes
+
+| Method and path | Request | Response |
+|---|---|---|
+| `GET …/knowledge/scopes` | none | `{ scopes: [{ rootId, title, packs, lastDigest?, lastReviewedAt?, previousDigest? }] }`. A scope with no stored title reports its `rootId` as `title`. |
+| `GET …/knowledge/facts?root=` | `root` required | `{ facts, viewer }`. Each fact is `{ key, content, source, importance, origin, fileAnchors, updatedAt?, createdBy }`. `viewer` is `{ userId, canAdmin }` and states who the reader is for the delete rule below. |
+| `GET …/knowledge-graph?root=&focus=&maxNodes=&at=` | `root` required. `focus` may repeat (node refs). `maxNodes` is clamped to 1–2000 (default 400). `at` is a past review digest (hex, 8–64 characters) and builds the graph as that review saw it, with today's facts and relations. | `{ graph }`, a `KnowledgeGraph`: `{ scope: { rootId, packs, digest }, nodes, edges, findings, stats: { sources, nodes, edges, stale, truncated } }` |
+| `POST …/knowledge/write` | `{ root?, scope?, facts[], relations[], stale[] }`, at most 500 rows in total and 4 MB. `root` names the root every row of the chunk belongs to (a pack upload sends it on each chunk). A scope is `{ rootId, title, packs[], lastDigest?, lastReviewedAt?, provenance?, measured? }`. A fact is `{ key, content, source?, importance?, origin?, fileAnchors[] }`. A relation is `{ from, to, kind, weight, origin, confidence?, sourceHash?, staleAt? }`. A stale mark is `{ sourceRef, currentHash }`. A ref over 512 characters is capped with a hash discriminator, not refused. | `{ ok: true, factsWritten, factsSkipped?, relationsWritten, staleMarked }`. `factsSkipped` lists machine facts whose key a person authored; they are never overwritten, and the rest of the batch still lands. |
+| `GET …/knowledge/extracted/:hash` | none | `{ extracted }`, the `Extracted[]` stored under that content hash |
+| `POST …/knowledge/extracted/bulk` | `{ hashes: string[] }`, 1–500 content hashes, at most 4 MB. Reads many content hashes in one request (ranged reads over the bundle index when the cache supports it). Extracted output is written through the knowledge sync pack, not per hash. | `{ extracted: [{ hash, entries }] }`; `entries` is `null` for a hash with nothing stored |
+| `POST …/knowledge/sync?syncId=&part=&parts=` | one BFKP pack (or one part of one), `Content-Type: application/vnd.builderforce.kpack`, at most 8 MB per request | `{ ok: true, generation, digest, … }` |
+| `GET …/knowledge/sync/manifest?root=` | `root` required | the root digest and the 4,096 bucket digests (BFKP). With `&view=generation`: `{ generation, digest }` only (JSON), the quiet-root probe |
+| `POST …/knowledge/sync/manifest` | the buckets asked for (BFKP) | the leaves of those buckets (BFKP) |
+| `POST …/knowledge/sync/have` | a BFKP HASH section | a bitmap of the held hashes (`application/octet-stream`) |
+| `DELETE …/knowledge/scopes/:rootId` | none. Only an uploaded pack root (`pack:`); a reviewed root is refused. Allowed for the uploader, a manager or a superadmin, never a host key or machine token. | the delete result, or `{ error, code? }` with 400/403/404 |
+| `PUT …/code-analysis/:sha?root=` | a code-analysis snapshot (`{ version: 1, id, capturedAt, source, tools, nodes, edges, issues }`), at most 2 MB. `root` names the root the snapshot belongs to; without it the project's linked repository is the root. | `{ ok: true, sha, rootId }`. Snapshots are stored per `(root, sha)`. |
+| `POST …/knowledge/judge` | `{ kind: 'extract' \| 'compare', items: [{ ref, text, sourceHash }], clientResult? }`, 1–8 items, each `text` at most 20,000 characters, body at most 256 KB. `clientResult` (PRD 42 Part D) is admitted by `admitClientResult`, not by the schema. | a `JudgementResult`: `{ extract?: [{ ref, claims, entities }], compare?: [{ a, b, relation, confidence }], invalid }`. A routed, metered model call under the caller's tenant. |
+| `GET …/knowledge/judge/estimate` | none | `{ perCallUsd, model, local }`; see below |
+| `GET …/knowledge/search?root=&q=&k=` | `root` and `q` required. `k` defaults to 10 and caps at 50. | `{ hits: [{ id, score, tier }], tiers, digest }` |
+
+`DELETE …/facts/:key` (the project facts router, `projectFactsRoutes.ts:265`) retires one fact and every relation that
+names it, and answers `{ ok, removed, relationsRemoved, key }`. A project admin (tenant role
+manager or above, or a superadmin) may delete any fact. A fact's author may delete it. Any
+caller may delete a fact that has no recorded author. Anyone else gets `403`.
+
+#### The judge cost estimate
+
+`GET …/knowledge/judge/estimate` prices ONE judged section for a review's confirm chip. The
+server resolves the route a real judge call would take, without making a model call, and
+prices the head of that chain.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `perCallUsd` | number or `null` | ≈ USD of one judged section. `0` for a free model or a local engine. `null` when the price is unknown. |
+| `model` | string or `null` | The model the call routes to first. `null` when nothing is routable. |
+| `local` | boolean | `true` only when that model runs on the tenant's own hardware (an on-device engine such as a self-hosted Ollama or FreeToken). A cloud model that refuses the Worker's egress is priced and `local: false`. |
+
+A client multiplies `perCallUsd` by the review plan's `estimatedModelCalls`. The result is an
+estimate (≈), never a bill.
+
+#### Errors
+
+Error bodies are `{ error }`, plus `code` where a caller can branch on it. A body that fails
+schema validation answers `400 { error, issues: [{ path, message }] }`.
+
+| Status | `code` | When |
+|---|---|---|
+| 400 | | `root is required`; `root and q are required` (search); `invalid digest` (`at`); `invalid hash`; `invalid sha`; the analysis `PUT` with no `root` and no linked repository |
+| 400 | `invalid_pack_root` | `DELETE …/knowledge/scopes/:rootId` with a `pack:` id that is not well formed |
+| 400 | `origin_mismatch` | A row claims an origin the caller cannot write: `human` from an agent host, or `agent` from a person |
+| 400 | `extracted_not_stored` | A row carries `origin: 'extracted'`. Extracted output is recomputed from sources and never stored. |
+| 400 | `missing_source_hash` | A `model` relation on a source (`src:`) names no `sourceHash` |
+| 401 | | No valid credential for the door |
+| 404 | | `project not found` (not the caller's tenant); `unknown knowledge root` (graph, facts, search, including a graph `at` a digest with no snapshot); `not found` (an extracted hash never uploaded) |
+| 409 | `generation_mismatch` / `digest_mismatch` | A sync pack built against a generation the server has moved past, or one whose result does not reach the pack's target digest; the body carries `{ generation, digest }` to reconcile from |
+| 409 | `fact_owned_by_person` | `POST /api/projects/:projectId/evermind/learning/candidates/:candidateId/transfer`: the learning's fact key was authored by a person, and a machine write never overwrites it. The manager edits or retires that fact, or rejects the learning. |
+| 413 | `payload_too_large` | A body over its limit (write 4 MB, extracted bulk read 4 MB, sync 8 MB, analysis 2 MB, judge 256 KB) |
+| 413 | `too_many_rows` | A write carries more than 500 rows (facts, relations and stale marks together) |
+| 413 | `pack_too_large` | A sync pack inflates past the codec's cap |
+| 415 | `unsupported_media_type` | A sync `POST` not sent as `application/vnd.builderforce.kpack` |
+| 422 | `bad_pack` | A malformed BFKP frame or a failed CRC |
+| 503 | | The sync lock timed out; the response carries `Retry-After` |
+
+#### Caching
+
+Reads are cached server-side with `getOrSetCached`, keyed so that new data changes the key.
+No JSON read sets a client cache header (the binary sync reads answer `Cache-Control: no-store`), and no read waits on a TTL to see a write.
+
+| Read | Key | Invalidated by |
+|---|---|---|
+| graph | `kg:v6:{tenant}:{project}:{root}:{scopeDigest}:{knowledgeVersion}:{focusHash}:{maxNodes}` | a new review digest, a new commit of the linked repository, any knowledge write |
+| scopes | `ks:v1:{tenant}:{project}:{knowledgeVersion}` | any knowledge write |
+| facts | `kf:v1:{tenant}:{project}:{root}:{scopeDigest}:{knowledgeVersion}` | a new review digest, any knowledge write |
+| judge estimate | `kjc:v2:{tenant}:{routingInputsVersion}`, **300 s TTL** | a change to the tenant's providers, plan or model selection; otherwise the TTL |
+
+`knowledgeVersion` is the project's fact-store version token. A knowledge write, an applied
+sync pack, a fact write or delete, a root delete and an analysis-snapshot upload each bump it. A
+graph read with `at` is keyed on `@{at}` instead of the root's current digest, because that
+review snapshot is immutable. The judge estimate cannot see key health, cooldowns or price
+book changes, which is why it also expires.
+
+---
+
+## Design — Progress Handling Guide
+
+> Consolidated 2026-11-18 from `docs/guides/progress-handling.md`. Verified against code 2026-11-18 (`api/src/application/brain/chatTicketTypes.ts:64-122`, `taskTierTicketHealth.ts:226-246`, `packages/agent-loop/src/chatTicketHealth.ts:76-128`): reference, with major drift fixed. `progressPct` is not a pushed event stream that fires 100 exactly once; it is a field of the `TicketHealth` read model, derived live on every read, so 100 is an idempotent terminal state. The two listener examples (built on a `subscribeToTicketProgress` API that never existed) are archived in DONE.md ("Progress Handling Guide: finished sections archived on consolidation (2026-11-18)").
+> Kept in platform because it is a wire contract read by integrators, alongside the API contracts above.
+
+### Overview: The progressPct=100 Rule
+
+A chat's linked work items are read with `GET /api/brain/chats/:id/tickets` (`api/src/presentation/routes/brainRoutes.ts:409`), which answers `{ tickets }` where each ticket is a `TicketHealth` (plus `linkId`, `linkType`, `createdBy`, `createdAt`): `{ kind, ref, label, status, progressPct, unsupportedDelivery?, done, total, exists, parent? }`. `kind` is one of `portfolio`, `objective`, `initiative`, `roadmap`, `spec`, `epic`, `gap`, `task`, `retro`, `poker` (`chatTicketTypes.ts:22`). The Brain's built-in MCP ticket lookup reads the same health (`api/src/application/llm/builtinMcpService.ts:2247`).
+
+| Constraint | Explanation |
+|------------|-------------|
+| **Idempotent, not single emission** | Health is derived live on every read (deliberately uncached), so a completed item reports `progressPct: 100` on every subsequent read. Treat 100 as a terminal state, never as a one-shot event, and never assume it is delivered exactly once |
+| **Only after completion** | A leaf reads 100 only when marked done (`completedAt != null` or status ∈ {done, completed, archived}); a container only when every counted child is complete (`done === total`). An in-progress item reads below 100 (a leaf in progress or in review reads 50) |
+| **Agrees with `done`/`total`** | `progressPct === 100` corresponds to `done === total` and, for a leaf, to a terminal `status` |
+| **Unsupported-delivery cap** | An epic whose children read complete, but whose live execution left no non-documentation file, is capped at `UNSUPPORTED_DELIVERY_PROGRESS_CAP` (75) with `unsupportedDelivery: true` — until its lane closes; a closed lane reads 100 (`effectiveTicketProgress`) |
+
+> **⚠️ WARNING:** Do NOT Treat Intermediate Values as Completion
+>
+> Values such as 99, 99.9, 75 or "almost done" are **NOT** completion signals. Only an exact `progressPct=100` is the completion signal.
+
+### Distinguishing `progressPct=100` from Other Terminal Status Fields
+
+While `progressPct: 100` is the authoritative signal for consumers of ticket health, some work items have their own terminal status fields:
+
+| Work Item Type | Terminal Status Field | Notes |
+|----------------|----------------------|-------|
+| Task/Epic/Gap | `status: "done"` (also `completed`, `archived`) | May coexist with `progressPct: 100` |
+| Spec | `status: "complete"` | May coexist with `progressPct: 100` |
+| Roadmap Item | `status: "shipped"` (also `done`, `complete`, `completed`, `released` — `ticketHealth.ts:33`) | May coexist with `progressPct: 100` |
+| Strategy Tier | No dedicated status; rely on `progressPct` | Objectives (key-result rollup), Initiatives, Portfolios |
+
+**Best practice:** prefer `progressPct: 100` as the definitive completion signal. Use status fields for display purposes (e.g., human-readable text). `exists: false` (label `(deleted)`) means the referenced item is gone from the tenant.
+
+### Error Cases
+
+#### 1. No Completion Signal
+
+There is no stream to time out. A consumer polls (or re-reads on its own trigger) and stops when it sees 100. If an item it expects to be finished still reads below 100, re-read the ticket itself, and check `unsupportedDelivery` — a capped epic is waiting for delivery evidence or for its lane to close, not stuck.
+
+#### 2. Out-of-Range Values
+
+Value ranges other than 0–100 (e.g., negative values or >100) indicate a system error. Treat these as warnings and check integration configuration.
+
+### Frontend / UI Considerations
+
+When displaying progress to users:
+
+1. **Do not show "Complete" for 99% (or 75%)** – treat it as "Almost done" / "in review"
+2. **Stop polling after 100%** – no further reads are needed
+3. **A closed lane reads 100** – the in-app ticket rail uses `effectiveTicketProgress(status, pct, unsupportedDelivery, 'complete')` so a DONE badge and its ring can never disagree
+
+### Summary Checklist
+
+Before consuming ticket progress:
+
+- [ ] You understand that `progressPct=100` is the terminal, authoritative completion signal, and that it repeats on every read
+- [ ] You stop polling when 100 is read
+- [ ] You do NOT treat intermediate values (e.g., 99, or the 75 cap) as equivalent to completion
+- [ ] You re-read the ticket when an expected completion does not show
+- [ ] You distinguish 100% from other terminal status fields where applicable
+
+**Remaining (verified 2026-11-18):**
+- `docs/api/event-payload.schema.json` (the guide's "Event Payload Schema" link) still documents the retired contract: its `progressPct` description says it "MUST be emitted only once", its `kind` enum has `goal` and lacks `gap`, `retro`, `poker`, and it has no `unsupportedDelivery` or `parent`. Nothing else links it (`git grep event-payload.schema` → only the guide). Correct it to `TicketHealth` or delete it (decision for the planning model).
+
+---
+
+## Reference — Merge process
+
+> Consolidated 2026-11-18 from `docs/specs/MERGE_PROCESS.md`. Verified against the workflow, CI and guards 2026-11-18: reference, largely drifted. The checklist assumed a PR-gated `main` (required checks, required code-owner approval, coverage gate, security scan, branch auto-delete). None of those is enforced: `main` has no branch protection (GitHub API `branches/main/protection` → 404 "Branch not protected"), CI runs after the push, and the "Code Review & Merge Pipeline PRD" it operationalized is not in the repository. Rewritten below to what actually gates a change; the gates the checklist named but nothing enforces are listed as open.
+
+### 1. How a change reaches `main`
+
+- Work lands on `main` directly in the main checkout (no worktrees), or as a task branch (`builderforce/task-<id>`) merged into `main` and pushed. Outside contributors open a PR (`CONTRIBUTING.md:175`); `.github/pull_request_template.md` is the PR description.
+- Before committing: the change is reviewed by a fresh review agent over the diff (the working agreement), and the review's findings are fixed and re-verified.
+- Before pushing: run the guard suites CI runs — `npm run check` in `api/` (`api/scripts/checks.manifest.mjs`), `pnpm run check` in `frontend/`, the type-checks, and the targeted tests for the change. Do not push over a Release run that is still in progress.
+- Test oracles: `check:tests-unchanged` (`api/scripts/checks.manifest.mjs:88`, `scripts/check-tests-unchanged.mjs`) fails a change to a guarded test beyond an import / `vi.mock` path unless it has an approval entry, bound to the file's blob, in `scripts/tests-unchanged.approved.mjs`. An approval is the planning model's decision.
+- Commit message: what changed and why; for a merged branch, name the task (`Merge branch 'builderforce/task-6652': …`). Reference the ticket it closes.
+
+### 2. CI on `main` (post-push)
+
+`.github/workflows/release.yml` runs on every push to `main` (no PR trigger):
+
+- [ ] `Verify API` — type-check, guards (`npm run check`, including `check:tests-unchanged` judged against the last successful Release run, `release.yml:643-661`), vitest in 4 shards (`release.yml:627-696`).
+- [ ] `Verify kernel package` — the source-only packages' own suites (`release.yml:703`).
+- [ ] `Verify frontend` — type-check, `next lint`, guards, conformance and oracle suites (`release.yml:967`).
+- [ ] Deploys wait on them: `deploy-api` needs `verify-api` + `verify-kernel` (`release.yml:795-796`); `deploy-frontend` needs `build-frontend` + `verify-frontend` + `verify-kernel` (`release.yml:1126`). Both run in the `production` GitHub Environment, which has no protection rules until the operator adds them (`release.yml:797-803`).
+- `.github/workflows/native-apps.yml` is the only workflow that runs on pull requests, and only for `apps/**` and `agent-runtime/Swabble/**`.
+
+### 3. Post-merge
+
+- [ ] The Release run on `main` passes. If it goes red, fix forward on `main` in the next push (the next run re-judges everything since the last green release); there is no separate rollback runbook in the repository.
+- [ ] Link the change to its originating ticket and close it.
+
+### 4. Gates the old checklist named that nothing enforces
+
+| Old checklist item | Today |
+|---|---|
+| All CI status checks green before merge (AC-3, AC-11) | No PR checks except native apps; CI is post-push |
+| Non-author code-owner approval (AC-7) | `.github/CODEOWNERS` maps everything to one owner and only auto-requests; no branch protection requires it |
+| Coverage ≥ `main` baseline (FR-2.3, AC-5) | No coverage step in any workflow |
+| No new high/critical CVEs (AC-6) | `.github/dependabot.yml` only; `.github/codeql-config.yml` exists but no workflow runs CodeQL |
+| Configured merge strategy (FR-4.2) | Squash, merge commit and rebase are all enabled |
+| Delete the source branch after merge (AC-10) | `delete_branch_on_merge` is off |
+
+**Remaining (verified 2026-11-18):**
+- Decide whether `main` gets branch protection (required checks, required CODEOWNERS review) — the repo setting is absent (`gh api repos/SeanHogg/Builderforce.ai/branches/main/protection` → 404); `.github/CODEOWNERS:1-8` claims it "REQUIRE[s] an approving review", which is false until then.
+- Decide whether a coverage gate and a CodeQL/security-scan workflow exist; today neither runs (`.github/workflows/` holds only `builderforce-agent.yml`, `native-apps.yml`, `release.yml`), while `.github/pull_request_template.md` asks contributors to attest to both.
+- `.github/CODEOWNERS`, `.github/pull_request_template.md` and `.github/SECURITY.md:3` cite FR/AC numbers of a "Code Review & Merge Pipeline PRD" that is not in the repository; re-point them at this section or drop the numbers.

@@ -53,8 +53,8 @@ still open. If the section is missing there, it shipped, and you'll find it in D
 
 ## Also here
 
-- [API-CONTRACTS.md](./API-CONTRACTS.md): the standing wire contracts.
-- [MERGE_PROCESS.md](./MERGE_PROCESS.md): the merge checklist.
+- [API contracts](./platform.md#reference--api-contracts): the standing wire contracts (in `platform.md`).
+- [Merge process](./platform.md#reference--merge-process): how a change reaches `main` and what gates it (in `platform.md`).
 - [`data-model/`](./data-model/): the consolidation coverage map read by the `check:burnrate-parity` and
   model-coverage guards.
 - [`tasks/`](./tasks/): per-ticket PRDs (`task-<id>.md`) committed by the platform
@@ -62,4 +62,4 @@ still open. If the section is missing there, it shipped, and you'll find it in D
   use the table above.
 
 The end-state design docs were folded into the domain files on 2026-11-18. [`../design/`](../design/) keeps only
-the one-agent-one-kernel diagram and the Creation Canvas release-evidence folder and images. Implementation guides (email, multi-auth) live in [`../guides/`](../guides/).
+the one-agent-one-kernel diagram and the Creation Canvas release-evidence folder and images. The email and sign-in references are in `platform.md` ([email](./platform.md#design--email-implementation-guide), [multi-auth](./platform.md#design--multi-auth-implementation-guide)); the ticket-progress contract is [there too](./platform.md#design--progress-handling-guide).
