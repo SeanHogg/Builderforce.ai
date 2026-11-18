@@ -25,6 +25,7 @@ import { learnFromCanvasAnswer, recallCanvasMemory } from '@/lib/canvasAiEvermin
 import { formatPackBlock, learnedItems, packItems } from '@/lib/knowledge/packItems';
 import type { CanvasAiOptions, CanvasRun } from '@/lib/canvasAiRun';
 import { canvasRunPolicy, canvasRunPorts, canvasRunTask } from '@/lib/canvasRunPorts';
+import { localRuntimeToolRouter } from '@/lib/runTarget/runtimeTools/runtimeToolRoute';
 
 /**
  * Run one canvas turn on the one agent (`@builderforce/agent-run`) over the active canvas
@@ -78,7 +79,9 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   if (options.persistence === 'server') {
     try {
       const entries = await fetchMcpToolEntries(transport);
-      mcpActions = mcpActionsFrom(entries, transport);
+      // `runtime.*` tools answer where the app runs (a browser run in this tab or
+      // another), not always through the gateway relay.
+      mcpActions = mcpActionsFrom(entries, transport, undefined, localRuntimeToolRouter);
     } catch {
       // Canvas-native AI remains useful if an MCP extension is temporarily down.
     }

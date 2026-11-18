@@ -7,7 +7,7 @@
  * - `container` → the server's executor (the built-in tool catalog), over the gateway
  *                 relay — which also answers, plainly, when no target is reachable.
  */
-import { RUNTIME_TOOL_IDS, type RuntimeToolId } from '@builderforce/creation-canvas-contract';
+import type { RuntimeToolId } from '@builderforce/creation-canvas-contract';
 import { apiRequest } from '@/lib/apiClient';
 import { peekSharedPreviewRuntime, sharedPreviewRuntimeOwner } from '@/lib/browserRuntime/previewRuntime';
 import { activeRunFor, type ActiveRun } from '../activeRun';
@@ -15,11 +15,12 @@ import { RUN_TARGET_OWNER } from '../browserRunTarget';
 import type { RunTargetId } from '../runTarget';
 import { defaultBrowserToolDeps, runBrowserRuntimeTool } from './browserRuntimeTools';
 import { askRuntimeTools, serveRuntimeTools, type BridgeAnswer } from './runtimeToolBridge';
+import { BUILTIN_EXTENSION_ID } from './runtimeToolRoute';
+
+// The Brain's host hook lives in the light `runtimeToolRoute` (it loads this module on call).
+export { isRuntimeTool, localRuntimeToolRouter } from './runtimeToolRoute';
 
 type Json = Record<string, unknown>;
-
-/** The gateway extension id the server's built-in tools answer under. */
-const BUILTIN_EXTENSION_ID = 'builtin';
 
 export interface RuntimeToolRoutes {
   activeRunFor(projectId: string): ActiveRun | undefined;
@@ -56,10 +57,6 @@ export const DEFAULT_ROUTES: RuntimeToolRoutes = {
   },
 };
 
-export function isRuntimeTool(tool: string): tool is RuntimeToolId {
-  return (RUNTIME_TOOL_IDS as readonly string[]).includes(tool);
-}
-
 /** Answer a `runtime.*` call on the executor of the target the app runs on. */
 export async function executeRuntimeTool(tool: RuntimeToolId, args: Json, routes: RuntimeToolRoutes = DEFAULT_ROUTES): Promise<unknown> {
   const run = routes.activeRunFor(String(args.projectId ?? ''));
@@ -67,17 +64,6 @@ export async function executeRuntimeTool(tool: RuntimeToolId, args: Json, routes
   const elsewhere = await routes.ask(tool, args);
   if (elsewhere.answered) return elsewhere.result;
   return routes.executors.container(tool, args, undefined);
-}
-
-/**
- * The Brain's host hook (`brain-embedded` `LocalToolRouter`): the catalog's built-in
- * `runtime.*` tools are answered through THIS router — so a Brain chat in the tab that
- * holds a browser run reaches it — and everything else is relayed as usual.
- */
-export function localRuntimeToolRouter(entry: { extensionId: string; tool: string }): ((args: unknown) => Promise<unknown>) | undefined {
-  if (entry.extensionId !== BUILTIN_EXTENSION_ID || !isRuntimeTool(entry.tool)) return undefined;
-  const tool = entry.tool;
-  return (args) => executeRuntimeTool(tool, args && typeof args === 'object' ? (args as Json) : {});
 }
 
 let serving = 0;

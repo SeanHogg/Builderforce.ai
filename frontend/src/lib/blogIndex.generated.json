@@ -1,5 +1,19 @@
 [
   {
+    "slug": "your-full-stack-app-now-runs-in-your-browser-tab",
+    "title": "Your full-stack app now runs in the browser tab you built it in",
+    "date": "2026-11-18",
+    "description": "A frontend, an API and a Postgres database used to need a cloud container before you could see them work together. Now Run starts all three inside your browser tab — Node, Python and PHP services (FastAPI, Flask, Django, Laravel, Slim) with Postgres, with no container to boot or provision and no cloud compute — and the Brain reads its logs, restarts it and captures its preview the same way it does for a container.",
+    "tags": [
+      "app-development",
+      "runtime",
+      "browser",
+      "idea-to-real",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "your-audit-trail-can-finally-leave-the-platform",
     "title": "Your audit trail can finally leave the platform",
     "date": "2026-11-15",

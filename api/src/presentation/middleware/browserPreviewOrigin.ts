@@ -10,11 +10,11 @@
  * preview iframe loads from here too. Both files come from the npm package, so
  * the worker and the app's runtime are always the same version.
  *
- * Static and cheap: three constant strings, no database, no auth. `relay.html` may
+ * Static and cheap: constant strings, no database, no auth. `relay.html` may
  * only be framed by the app itself (`frame-ancestors`), because whoever frames it
  * can drive it.
  */
-import { processWorkerSource, relayHtml, serviceWorkerSource } from '@seanhogg/builderforce-webcontainers/assets';
+import { phpWorkerSource, processWorkerSource, pythonWorkerSource, relayHtml, serviceWorkerSource } from '@seanhogg/builderforce-webcontainers/assets';
 import { PREVIEW_HOST } from '../../application/runtime/previewIngress';
 import { appOrigins } from './cors';
 
@@ -52,6 +52,11 @@ const ASSETS: Record<string, PreviewAsset> = {
   // project's code runs on this origin and never on builderforce.ai. Versioned by
   // the package, so a short cache is enough.
   'process-worker.js': { body: processWorkerSource, contentType: 'text/javascript; charset=utf-8', cacheControl: 'public, max-age=300' },
+  // Python (Pyodide) and PHP (php-wasm) processes, started by the relay beside the
+  // Node ones. They import their interpreters from jsDelivr at run time; this origin
+  // sets no CSP on them, so nothing here has to allow those hosts.
+  'python-worker.js': { body: pythonWorkerSource, contentType: 'text/javascript; charset=utf-8', cacheControl: 'public, max-age=300' },
+  'php-worker.js': { body: phpWorkerSource, contentType: 'text/javascript; charset=utf-8', cacheControl: 'public, max-age=300' },
 };
 
 export function serveBrowserPreviewOrigin(request: Request, corsOrigins: string | undefined): Response | null {

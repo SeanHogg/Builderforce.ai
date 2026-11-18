@@ -13164,6 +13164,10 @@
       "no-account-no-gpu-you-choose-where-it-runs": {
         "title": "Sin cuenta, sin GPU, sin red: y tú eliges adónde van tus palabras",
         "description": "Studio y Rovr ahora se abren con un modelo funcionando y sin cuenta, sin llamada de registro y sin necesidad de GPU. Cada superficie —la web, la extensión de VS Code y el panel lateral de Rovr— hace una sola pregunta sobre dónde se ejecutan tus palabras: Solo local, Híbrido o un Modelo específico. Y Híbrido aprende, en tu dispositivo, qué turnos mantener en local."
+      },
+      "your-full-stack-app-now-runs-in-your-browser-tab": {
+        "title": "Tu app full-stack ahora se ejecuta en la pestaña del navegador donde la creaste",
+        "description": "Un frontend, una API y una base de datos Postgres necesitaban un contenedor en la nube antes de verlos funcionar juntos. Ahora Run inicia los tres dentro de tu pestaña del navegador —servicios Node, Python y PHP (FastAPI, Flask, Django, Laravel, Slim) con Postgres, sin contenedor que arrancar ni aprovisionar y sin cómputo en la nube— y el Brain lee sus logs, la reinicia y captura su vista previa igual que con un contenedor."
       }
     }
   },

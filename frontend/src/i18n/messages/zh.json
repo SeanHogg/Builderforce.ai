@@ -13135,6 +13135,10 @@
       "no-account-no-gpu-you-choose-where-it-runs": {
         "title": "无需账户，无需 GPU，无需网络——而且由你决定你的文字去向何处",
         "description": "Studio 和 Rovr 现在一打开就有可用的模型，无需账号、无需注册调用、无需 GPU。每个界面——网页、VS Code 扩展和 Rovr 侧边栏——都只问一个问题：你的文字在哪里运行？仅本地、混合，或某一个指定模型。混合模式还会在你的设备上学习哪些轮次该留在本地。"
+      },
+      "your-full-stack-app-now-runs-in-your-browser-tab": {
+        "title": "你的全栈应用现在就在你构建它的浏览器标签页里运行",
+        "description": "前端、API 和 Postgres 数据库过去需要云容器才能看到它们协同工作。现在 Run 会在浏览器标签页内同时启动这三者——Node、Python 和 PHP 服务（FastAPI、Flask、Django、Laravel、Slim）连同 Postgres，无需启动或配置容器，也不消耗云端算力——Brain 读取日志、重启服务、捕获预览的方式与对待容器时相同。"
       }
     }
   },

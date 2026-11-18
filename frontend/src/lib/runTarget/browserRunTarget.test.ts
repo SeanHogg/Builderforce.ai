@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { CANVAS_APP } from './blueprintFixtures';
+import { CANVAS_APP, PHP_APP, PYTHON_APP } from './blueprintFixtures';
 import type { RunContext, RunFiles } from './runTarget';
 
 /** The page's one runtime, faked at the package boundary so the REAL lease runs. */
@@ -7,9 +7,11 @@ const runtime = vi.hoisted(() => ({
   files: new Map<string, string>(),
   scripts: [] as string[][],
 }));
-vi.mock('@seanhogg/builderforce-webcontainers', () => ({
+vi.mock('@seanhogg/builderforce-webcontainers', async (importOriginal) => ({
+  // The real VirtualFileSystem: the start judges the loaded files on one before booting anything.
+  VirtualFileSystem: (await importOriginal<typeof import('@seanhogg/builderforce-webcontainers')>()).VirtualFileSystem,
   startPreviewRuntime: async () => ({
-    fs: { list: () => [...runtime.files.keys()], rm: (p: string) => runtime.files.delete(p), writeFile: () => undefined },
+    fs: { list: () => [...runtime.files.keys()], rm: (p: string) => runtime.files.delete(p), writeFile: () => undefined, readText: (p: string) => runtime.files.get(p) },
     writeTree: (tree: Record<string, string>) => { for (const [p, c] of Object.entries(tree)) runtime.files.set(`/${p}`, c); },
     setPreviewScripts: (scripts: string[]) => { runtime.scripts.push(scripts); },
     onError: () => () => undefined,
@@ -20,11 +22,14 @@ vi.mock('@seanhogg/builderforce-webcontainers', () => ({
 
 interface FakeApp { dispose: ReturnType<typeof vi.fn>; start: ReturnType<typeof vi.fn> }
 const apps = vi.hoisted(() => [] as FakeApp[]);
+/** The providers each application was started with, by id. */
+const providerIds = vi.hoisted(() => [] as string[][]);
 vi.mock('@seanhogg/builderforce-webcontainers/app', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@seanhogg/builderforce-webcontainers/app')>()),
   createNodeProvider: () => ({ id: 'node' }),
   createPgliteProvider: () => ({ id: 'pglite' }),
-  startApplicationRuntime: () => {
+  startApplicationRuntime: (_spec: unknown, options: { providers: Array<{ id: string }> }) => {
+    providerIds.push(options.providers.map((provider) => provider.id));
     const app = {
       start: vi.fn(async () => undefined),
       dispose: vi.fn(async () => undefined),
@@ -116,6 +121,53 @@ describe('startInBrowser', () => {
 
   it('declines without touching the runtime when the browser cannot run the blueprint', async () => {
     expect(await startInBrowser(null, context())).toEqual({ ok: false, code: 'noBlueprint' });
+    expect(apps).toHaveLength(0);
+  });
+
+  it.each<{ name: string; app: typeof PYTHON_APP; files: RunFiles['files'] }>([
+    { name: 'Python', app: PYTHON_APP, files: { 'api/requirements.txt': 'fastapi\n', 'api/main.py': 'app = None\n', 'web/index.html': '<div/>' } },
+    { name: 'PHP', app: PHP_APP, files: { 'api/composer.json': '{"require":{"slim/slim":"^4.0"}}', 'api/public/index.php': '<?php' } },
+  ])('starts a $name app with the python and php providers beside node and pglite', async ({ app, files }) => {
+    providerIds.length = 0;
+    const started = await startInBrowser(app, context(async () => ({ files, unreadable: [] })));
+    expect(started.ok).toBe(true);
+    expect(providerIds.at(-1)).toEqual(['node', 'pglite', 'python', 'php']);
+    if (started.ok) await started.session.stop();
+  });
+
+  it.each<{ name: string; app: typeof PYTHON_APP; files: RunFiles['files']; named: RegExp }>([
+    { name: 'a native-only Python package', app: PYTHON_APP, files: { 'api/requirements.txt': 'psycopg2\n' }, named: /psycopg2/ },
+    { name: 'a PHP extension php-wasm lacks', app: PHP_APP, files: { 'api/composer.json': '{"require":{"ext-redis":"*"}}' }, named: /redis/ },
+  ])('declines $name once the files show it, starting nothing and giving the runtime back', async ({ app, files, named }) => {
+    const out = await startInBrowser(app, context(async () => ({ files, unreadable: [] })));
+    expect(out).toMatchObject({ ok: false, code: 'serviceDeclined' });
+    if (!out.ok) expect(out.detail).toMatch(named);
+    expect(apps).toHaveLength(0);
+    expect(sharedPreviewRuntimeOwner()).toBeNull();
+  });
+
+  const DECLINED: RunFiles = { files: { 'api/requirements.txt': 'psycopg2\n', 'api/main.py': 'app = None\n' }, unreadable: [] };
+
+  it('judges the files before touching anything: a declined start keeps the current run, its lease and the runtime files', async () => {
+    const first = await startInBrowser(CANVAS_APP, context());
+    expect(first.ok).toBe(true);
+    const mounted = new Map(runtime.files);
+    const out = await startInBrowser(PYTHON_APP, context(async () => DECLINED));
+    expect(out).toMatchObject({ ok: false, code: 'serviceDeclined' });
+    expect(apps).toHaveLength(1);
+    expect(apps[0]!.dispose).not.toHaveBeenCalled();
+    expect(sharedPreviewRuntimeOwner()).toBe(RUN_TARGET_OWNER);
+    expect(runtime.files).toEqual(mounted);
+    if (first.ok) await first.session.stop();
+  });
+
+  it('a declined start never takes the runtime from the workspace', async () => {
+    await bootSharedPreviewRuntime(); // the editor's workspace
+    const mounted = new Map(runtime.files);
+    const out = await startInBrowser(PYTHON_APP, context(async () => DECLINED));
+    expect(out).toMatchObject({ ok: false, code: 'serviceDeclined' });
+    expect(sharedPreviewRuntimeOwner()).toBe('workspace');
+    expect(runtime.files).toEqual(mounted);
     expect(apps).toHaveLength(0);
   });
 });
