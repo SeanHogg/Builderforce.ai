@@ -176,6 +176,14 @@ export class ProxyDispatcher {
       // How much of each connected account is left, from the provider's own headers — a
       // nearly-spent account stops leading the next request (`providerHeadroom.ts`).
       onUpstreamHeaders: observeHeadroom,
+      // A connected vendor is ONE account and seeds several models (both flagships or the
+      // tenant's selection): once it refuses at the account level this turn (401/402, a 429
+      // on a subscription's shared quota, or a timeout/5xx streak — a 403, and a 429 on an
+      // API key's per-model limits, are model-level), its remaining models are skipped
+      // instead of each failing in turn. An OpenRouter connection is never a connected VENDOR — each
+      // registration carries its own key — so it is not scoped.
+      isAccountScoped: (vendor: VendorId) => this.funding.isOwnerServedVendor(vendor),
+      sharesAccountQuota: (vendor: VendorId) => this.funding.sharesAccountQuota(vendor),
     };
 
     return sanitizedBody.stream

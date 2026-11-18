@@ -97,6 +97,13 @@ describe('orderForRole — role ladders', () => {
     expect(orderForRole([OPUS, SONNET, FLASH], resolveRoleObjective('verify'), LADDERED, undefined, undefined, 'verify')[0]).toBe(FLASH);
   });
 
+  it('the ladder applies only to a quality-first objective: a cost-first laddered role reads tier and price', () => {
+    // `code` has a ladder, but an objective < 0 (cost-first) must not be led by its
+    // strongest-coder rung — the cheapest leads, exactly as for verify.
+    expect(orderForRole([SONNET, OPUS, FLASH], -1, LADDERED, undefined, undefined, 'code')[0]).toBe(FLASH);
+    expect(orderForRole([FLASH, SONNET], -1, LADDERED, undefined, undefined, 'plan')).toEqual([FLASH, SONNET]);
+  });
+
   it('an off-ladder model follows every on-ladder one; health still outranks the ladder', () => {
     expect(orderForRole([FLASH, SONNET], resolveRoleObjective('code'), LADDERED, undefined, undefined, 'code')).toEqual([SONNET, FLASH]);
     expect(orderForRole([SONNET, K3], resolveRoleObjective('code'), LADDERED, new Set(['anthropic']), undefined, 'code')[0]).toBe(K3);

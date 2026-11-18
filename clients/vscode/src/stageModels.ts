@@ -18,13 +18,14 @@ import type { RunPipelineSettings, RunStageModels } from "@seanhogg/builderforce
 export interface StageModels {
   plan?: string;
   code?: string;
-  verify?: string;
+  /** The model that reviews the run's change (the run's verify phase). */
+  review?: string;
   subagent?: string;
   /** The model a QUICK run codes on (else the code model). */
   quick?: string;
 }
 
-/** The settings as written — `review` is the verify stage's user-facing name. */
+/** The settings as written (`builderforce.models.*`). */
 export interface StageModelSettings {
   plan?: string;
   code?: string;
@@ -43,7 +44,7 @@ export function stageModels(settings: StageModelSettings, envPins: StageModels =
   };
   set("plan", id(settings.plan) ?? id(envPins.plan));
   set("code", id(settings.code) ?? id(envPins.code));
-  set("verify", id(settings.review) ?? id(envPins.verify));
+  set("review", id(settings.review) ?? id(envPins.review));
   set("subagent", id(settings.subagent) ?? id(envPins.subagent));
   set("quick", id(settings.quick) ?? id(envPins.quick));
   return out;
@@ -70,7 +71,7 @@ export function editorRunSettingsFrom(stages: StageModels, raw: RunRoutingSettin
   const phaseModels: RunStageModels = {
     ...(stages.plan ? { plan: stages.plan } : {}),
     ...(stages.code ? { code: stages.code } : {}),
-    ...(stages.verify ? { verify: stages.verify } : {}),
+    ...(stages.review ? { review: stages.review } : {}),
   };
   const threshold = typeof raw.routeThreshold === "number" && Number.isFinite(raw.routeThreshold)
     ? Math.min(1, Math.max(0, raw.routeThreshold))

@@ -17,6 +17,8 @@ describe("staffDelegation", () => {
     expect(s.note).toContain("builtin_cloud_agents_create");
     const qa = staffDelegation({ name: "Ada", roleKeys: ["developer"] }, "verify");
     expect(qa.kind === "on-demand" && qa.persona.name).toBe("QA Tester");
+    const reviewer = staffDelegation({ name: "Ada", roleKeys: ["developer"] }, "review");
+    expect(reviewer.kind === "on-demand" && reviewer.persona.name).toBe("QA Tester");
   });
 
   it("leaves open slices (explore, plan, chat) to any teammate", () => {

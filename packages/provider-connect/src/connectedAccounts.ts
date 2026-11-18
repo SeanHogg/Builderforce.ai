@@ -21,13 +21,15 @@ import {
   clientPinOf,
   formatLocalModelRef,
   localRuntime,
+  type ByoOrderQuery,
   type LocalEndpoint,
   type LocalFirstAccount,
+  type LocalFirstAccounts,
   type LocalRuntimeId,
 } from '@builderforce/local-inference';
 import { createLocalCredentialStore, type CredentialStringStore, type LocalCredentialStore } from './localCredential.js';
 import type { GatewayRequest } from './port.js';
-import { DEFAULT_BYO_ROLE, createByoOrderCache, placeAccount } from './byoOrder.js';
+import { createByoOrderCache, placeAccount, type ByoOrderOutcome } from './byoOrder.js';
 
 /** Where a connected account's runtime is called, or what stands in the way. */
 export type AccountEndpointOutcome =
@@ -60,15 +62,20 @@ export interface ConnectedAccounts {
   pinFor(ref: string): Promise<(AccountEndpointOutcome & { model: string }) | null>;
   /**
    * The connected accounts this host calls itself, placed in the tenant's BYO order for the
-   * call's `role` (absent = `code`) — the SERVER's order (`GET /llm/byo-order`, see
-   * `byoOrder.ts`), cached per role for a minute. An account LEADS (after this device, before
-   * the gateway) only when its provider is the role's first healthy entry, on that entry's
-   * model; otherwise it TRAILS the gateway, tried only when the gateway fails before any
-   * output. With the order unreadable it leads on the credential's first model, as before.
-   * Never prompts: an account that is not connected is simply absent — asked of the gateway
-   * once per session, so an unconnected workspace costs no round trip per call.
+   * call's context (`query`: its role — absent = none, the tenant's precedence, exactly as
+   * the gateway orders a role-less call — project, arc stage and whether it carries tools) —
+   * the SERVER's order (`GET /llm/byo-order`, see `byoOrder.ts`), cached per context for a
+   * minute (an unreadable answer only for seconds). An account LEADS (after this device,
+   * before the gateway) only when its provider is the order's first healthy entry and the
+   * tenant funds its accounts first (`freeFirst: false`), on that entry's model; otherwise
+   * it TRAILS the gateway, tried only when the gateway fails before any output. With the order unreadable it leads on the credential's
+   * first model, as before. The result carries the order's `freeFirst` (absent when
+   * unreadable or when no account was placed), which decides where a trailing account sits
+   * relative to the plan pool. Never prompts: an account that is not connected is simply
+   * absent — asked of the gateway once per session, so an unconnected workspace costs no
+   * round trip per call.
    */
-  hybridAccounts(role?: string): Promise<LocalFirstAccount[]>;
+  hybridAccounts(query?: ByoOrderQuery): Promise<LocalFirstAccounts>;
   /** Forget every held credential — sign-out; the next account starts clean. */
   clear(): Promise<void>;
 }
@@ -128,7 +135,10 @@ export function createConnectedAccounts(deps: {
   /** Providers already asked this session — a store with no credential after that is
    *  not connected, and is not asked again until a credential arrives. */
   const asked = new Set<string>();
-  const hybridAccount = async (runtime: (typeof LOCAL_RUNTIMES)[number], role: string): Promise<LocalFirstAccount[]> => {
+  const hybridAccount = async (
+    runtime: (typeof LOCAL_RUNTIMES)[number],
+    readOrder: () => Promise<ByoOrderOutcome>,
+  ): Promise<LocalFirstAccount[]> => {
     const provider = runtime.accountProvider;
     if (!provider) return [];
     const held = store(provider);
@@ -138,7 +148,7 @@ export function createConnectedAccounts(deps: {
     if (outcome.kind !== 'credential') return [];
     const listed = outcome.credential.models.map((m) => m.model);
     if (listed.length === 0) return [];
-    const placed = placeAccount(await orders.read(role), { provider, runtime: runtime.id, listed });
+    const placed = placeAccount(await readOrder(), { provider, runtime: runtime.id, listed });
     if (!placed) return [];
     return [{
       ref: formatLocalModelRef(runtime.id, placed.model),
@@ -164,8 +174,14 @@ export function createConnectedAccounts(deps: {
       const outcome = await endpointFor(pin.provider);
       return outcome ? { ...outcome, model: pin.model } : null;
     },
-    hybridAccounts: async (role) =>
-      (await Promise.all(LOCAL_RUNTIMES.map((runtime) => hybridAccount(runtime, role || DEFAULT_BYO_ROLE)))).flat(),
+    hybridAccounts: async (query = {}) => {
+      // Read once per call, and only when some account is connected to place.
+      let order: Promise<ByoOrderOutcome> | undefined;
+      const readOrder = (): Promise<ByoOrderOutcome> => (order ??= orders.read(query));
+      const accounts = (await Promise.all(LOCAL_RUNTIMES.map((runtime) => hybridAccount(runtime, readOrder)))).flat();
+      const outcome = order && accounts.length > 0 ? await order : null;
+      return outcome?.kind === 'order' ? { accounts, freeFirst: outcome.freeFirst } : { accounts };
+    },
     clear: async () => {
       asked.clear();
       orders.clear();

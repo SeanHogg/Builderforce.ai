@@ -41,7 +41,7 @@ import { encryptSecretForStorage, decryptSecretFromStorage } from '../../infrast
 import { credentialSecret } from '../integrations/credentialCrypto';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { invalidateByoRoleOrder } from './byoRoleOrderCache';
+import { bumpRoutingInputsVersion } from './routingInputsVersion';
 
 type Env = HonoEnv['Bindings'];
 
@@ -515,13 +515,14 @@ export async function deleteOpenRouterConnection(env: Env, tenantId: number, id:
 /** Drop the cached connection list for a tenant. Exported because `byoPrecedence` writes this
  *  table's `priority` column and must invalidate the same key. */
 export async function invalidateOpenRouterConnections(env: Env, tenantId: number): Promise<void> {
-  await Promise.all([
-    invalidateCached(env, cacheKey(tenantId)).catch((error: unknown) => {
-      reportCaughtError(error, { source: 'application/llm/openRouterConnectionService.ts', operation: 'invalidateOpenRouterConnections' });
-    }),
-    // Connections interleave with the providers in the BYO seed order the editor reads.
-    invalidateByoRoleOrder(env, tenantId),
-  ]);
+  await invalidateCached(env, cacheKey(tenantId)).catch((error: unknown) => {
+    reportCaughtError(error, { source: 'application/llm/openRouterConnectionService.ts', operation: 'invalidateOpenRouterConnections' });
+  });
+  // Connections interleave with the providers in the BYO seed order (the editor reads it
+  // through `GET /llm/byo-order`), and they have no row in the derived half of the routing
+  // token — so bump it, AFTER the invalidation: a reader that mints the new token then
+  // reloads the connections rather than caching the old list under it.
+  await bumpRoutingInputsVersion(env, tenantId);
 }
 
 /** Stamp one connection's precedence. Used only by `byoPrecedence.setByoPrecedence`, which

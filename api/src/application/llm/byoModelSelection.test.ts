@@ -40,12 +40,12 @@ describe('byoAutoSeedModels — with a provider model selection', () => {
       vendorPriority: ['qwen', 'anthropic'],
       selectedModels: { qwen: QWEN_SELECTION },
     });
-    expect(seeds).toEqual([...QWEN_SELECTION, OPUS_FLAGSHIP]);
+    expect(seeds).toEqual([...QWEN_SELECTION, OPUS_FLAGSHIP, vendorFlagship('anthropic', false)]);
   });
 
-  it('a vendor with no selection keeps its flagship', () => {
+  it('a vendor with no selection keeps its flagships (turn shape first)', () => {
     expect(byoAutoSeedModels(new Set(['qwen']), { agentic: true, selectedModels: {} }))
-      .toEqual(['direct/qwen/qwen3.8-max']);
+      .toEqual(['direct/qwen/qwen3.8-max', 'direct/qwen/qwen3.7-plus']);
   });
 });
 

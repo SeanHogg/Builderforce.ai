@@ -37,8 +37,9 @@ import {
 } from '@seanhogg/builderforce-brain-embedded';
 import type { InferenceMode } from '@builderforce/local-first';
 import type {
+  ByoOrderQuery,
   LocalEndpoints,
-  LocalFirstAccount,
+  LocalFirstAccounts,
   LocalFirstAttemptRecord,
   LocalRuntimeProbe,
   LocalRuntimeProber,
@@ -73,11 +74,12 @@ export interface RovrRouteDeps {
   accountPin?(ref: string): Promise<HostLocalPin | null>;
   /**
    * The connected accounts this host calls itself (Kimi), read per Auto call with the call's
-   * role and placed in the tenant's order for it (before the gateway when they lead it,
-   * after it when they trail); never prompts — an account not connected (or its origin not
-   * granted) is simply absent.
+   * context (role, project, arc stage, agentic) and placed in the tenant's order for it
+   * (before the gateway when they lead it, after it when they trail), with the tenant's
+   * funding order; never prompts — an account not connected (or its origin not granted) is
+   * simply absent.
    */
-  accounts?(role?: string): Promise<readonly LocalFirstAccount[]>;
+  accounts?(query: ByoOrderQuery): Promise<LocalFirstAccounts>;
   onAttempt?(record: LocalFirstAttemptRecord): void;
   /** The person's inference mode, read per call; absent = Hybrid. */
   mode?(): InferenceMode;

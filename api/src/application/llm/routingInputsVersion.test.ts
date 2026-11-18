@@ -1,6 +1,7 @@
 /**
  * routingInputsVersion changes when anything the gateway routes by does — including a connected
- * provider's selected-models list, which has no row-level stamp of its own.
+ * provider's selected-models list, which has no row-level stamp of its own, and the writes
+ * with no row at all that bump it.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../env';
@@ -14,7 +15,7 @@ vi.mock('./tenantProviderRows', () => ({ loadTenantProviderRows: mocks.rows }));
 vi.mock('../tenant/tenantPlanSnapshot', () => ({ resolveTenantPlan: mocks.plan }));
 vi.mock('./providerModelSelection', () => ({ listProviderModelSelections: mocks.selections }));
 
-import { routingInputsVersion } from './routingInputsVersion';
+import { bumpRoutingInputsVersion, routingInputsVersion } from './routingInputsVersion';
 
 const env = {} as Env;
 const version = () => routingInputsVersion(env, 7);
@@ -59,6 +60,17 @@ describe('routingInputsVersion', () => {
     const pro = await version();
     mocks.plan.mockResolvedValueOnce({ effectivePlan: 'free', premiumOverride: false });
     expect(await version()).not.toBe(pro);
+  });
+
+  it('changes when a writer with no row of its own bumps it (connection, auth alert, headroom)', async () => {
+    const before = await version();
+    expect(await version()).toBe(before);
+    await bumpRoutingInputsVersion(env, 7);
+    const after = await version();
+    expect(after).not.toBe(before);
+    // Per tenant: another tenant's bump leaves this token alone.
+    await bumpRoutingInputsVersion(env, 8);
+    expect(await version()).toBe(after);
   });
 
   it('changes with the premium override (the gateway routes the premium pool by it)', async () => {

@@ -92,7 +92,7 @@ export function policyOf(host: CloudRunHost): RunPolicy {
       model: host.pick.model,
       strict: host.pick.strict,
       ...(opts.delegation?.spec?.role ? { delegatedRole: opts.delegation.spec.role } : {}),
-      ...(host.verifyPin ? { phaseModels: { verify: host.verifyPin } } : {}),
+      ...(host.reviewPin ? { phaseModels: { review: host.reviewPin } } : {}),
     },
   };
 }

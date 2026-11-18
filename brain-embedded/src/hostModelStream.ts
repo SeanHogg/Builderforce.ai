@@ -28,9 +28,15 @@
  *    through `createLocalFirstStream`, which owns which calls are open to local-first
  *    (`localFirstApplies`) and the invisible failover; with nothing probed, the gateway.
  *    A connected subscription this host calls itself (`accounts` — Kimi, which refuses our
- *    cloud) takes its place in the tenant's BYO order for the turn's role (the server's
- *    order): it is tried after this device and before the gateway only when it LEADS that
- *    order, else after the gateway, only when the gateway fails before any output.
+ *    cloud) takes its place in the tenant's BYO order for the turn's context (the server's
+ *    order (heads it, with the tenant funding its accounts first — free first, the gateway
+ *    tries the free tier before any account, so a heading account trails). A TRAILING one sits by the tenant's funding order: free first → after the
+ *    gateway's Auto, only when it fails before any output; account-first → device → leading
+ *    accounts → the gateway over the tenant's other accounts only (`byo_pool`, strict) →
+ *    the trailing account → the gateway's Auto (the pool) last, so the pool — which almost
+ *    never fails — cannot strand the person's own subscription. Each later leg runs only when
+ *    the one before failed before any output; with everything failing the last cloud leg's
+ *    error (Auto's) surfaces. Unreadable order: every account leads, as before.
  *    With a `localSuccess` store, the engine's `run.local-success` predictor is consulted
  *    before the local attempt — skipped when it is confident the turn would fail there —
  *    and every outcome (local served, local failed → gateway, skipped) trains it. Only
@@ -64,8 +70,9 @@
 import {
   isLocalModelRef,
   runsOnDevice,
+  type ByoOrderQuery,
   type LocalEndpoint,
-  type LocalFirstAccount,
+  type LocalFirstAccounts,
   type LocalFirstAttemptRecord,
   type LocalRuntimeProbe,
 } from '@builderforce/local-inference';
@@ -119,12 +126,14 @@ export interface HostModelStreamInput {
   probes?: () => Promise<readonly LocalRuntimeProbe[]>;
   /**
    * The connected accounts this host calls itself (Kimi), read per Hybrid Auto call and per
-   * "use my connected accounts" call (Hybrid or Specific) with the call's `role` (absent =
-   * a coding turn), each `placement`d in the tenant's order for that role — never
-   * prompting; an account that is not connected is simply absent. Absent = none (the web
-   * app, which cannot reach Kimi).
+   * "use my connected accounts" call (Hybrid or Specific) with the call's context
+   * ({@link byoOrderQuery}: role — absent = none, the tenant's precedence, exactly as the
+   * gateway orders a role-less call — project, arc stage, agentic),
+   * each `placement`d in the tenant's order for it, with the tenant's funding order
+   * (`freeFirst`) — never prompting; an account that is not connected is simply absent.
+   * Absent = none (the web app, which cannot reach Kimi).
    */
-  accounts?: (role?: string) => Promise<readonly LocalFirstAccount[]>;
+  accounts?: (query: ByoOrderQuery) => Promise<LocalFirstAccounts>;
   /** The gateway stream for this call, or null signed out. */
   cloud: () => MaybePromise<StreamFn | null>;
   /** The local fetch (page engines' shim, the editor's bridge…); the global by default. */
@@ -171,9 +180,23 @@ export interface HostModelStreamInput {
  * The connected accounts could not be read (a storage or permission failure): the turn goes
  * on without them — device, then the gateway — and the reason is logged, not dropped.
  */
-function accountsUnavailable(error: unknown): LocalFirstAccount[] {
+const NO_ACCOUNTS: LocalFirstAccounts = { accounts: [] };
+
+function accountsUnavailable(error: unknown): LocalFirstAccounts {
   console.warn(`Hybrid: connected accounts unavailable for this call (${error instanceof Error ? error.message : String(error)})`);
-  return [];
+  return NO_ACCOUNTS;
+}
+
+/** The call's context the tenant's BYO order is read with — the server's
+ *  `GET /llm/byo-order?role=&projectId=&arcStage=&agentic=`. */
+function byoOrderQuery(call: CallOpts): ByoOrderQuery {
+  const projectId = call.metadata?.projectId;
+  return {
+    ...(call.role ? { role: call.role } : {}),
+    ...(typeof projectId === 'number' ? { projectId } : {}),
+    ...(call.arcStage ? { arcStage: call.arcStage } : {}),
+    agentic: (call.tools?.length ?? 0) > 0,
+  };
 }
 
 /** Packs a local attempt for its model's window — `@seanhogg/builderforce-memory/handoff`.
@@ -213,18 +236,19 @@ export function createHostModelStream(input: HostModelStreamInput): StreamFn {
     const signedIn = !localOnly && (input.signedIn ? await input.signedIn() : cloud !== null);
     const noModel = localOnly || signedIn ? NO_LOCAL_MODEL : NOT_SIGNED_IN;
 
-    /** The connected accounts this host calls itself, placed for the call's role; none when unreadable or unlent. */
-    const readAccounts = async (role: string | undefined): Promise<readonly LocalFirstAccount[]> =>
-      input.accounts ? input.accounts(role).catch(accountsUnavailable) : [];
+    /** The connected accounts this host calls itself, placed for the call's context; none when unreadable or unlent. */
+    const readAccounts = async (call: CallOpts): Promise<LocalFirstAccounts> =>
+      input.accounts ? input.accounts(byoOrderQuery(call)).catch(accountsUnavailable) : NO_ACCOUNTS;
     /** The one local-first stream assembly — Auto's, and the account pool's (no probes, no predictor). */
     const localFirst = (
       probes: readonly LocalRuntimeProbe[],
-      accounts: readonly LocalFirstAccount[],
+      { accounts, freeFirst }: LocalFirstAccounts,
       onAttempt: ((record: LocalFirstAttemptRecord) => void) | undefined = input.onAttempt,
       gate?: LocalFirstStreamInput['gate'],
     ): StreamFn => createLocalFirstStream({
       probes,
       ...(accounts.length > 0 ? { accounts } : {}),
+      ...(freeFirst !== undefined ? { freeFirst } : {}),
       cloud,
       fit,
       noModel,
@@ -245,8 +269,10 @@ export function createHostModelStream(input: HostModelStreamInput): StreamFn {
       }
       const probes = input.probes ? await input.probes() : [];
       // Hybrid only: Local only never leaves the device, and Specific makes no Auto attempt.
-      const accounts = mode === 'hybrid' ? await readAccounts(call.role) : [];
-      if (probes.length === 0 && accounts.length === 0) {
+      // The order's funding decides where a TRAILING account sits: free first → after the
+      // Auto cloud leg; account-first → before the pool (see `localFirstPlan`'s `accountFirst`).
+      const accounts = mode === 'hybrid' ? await readAccounts(call) : NO_ACCOUNTS;
+      if (probes.length === 0 && accounts.accounts.length === 0) {
         if (!cloud) throw new Error(noModel);
         return cloud(call, h);
       }
@@ -289,8 +315,8 @@ export function createHostModelStream(input: HostModelStreamInput): StreamFn {
       // (still strict) only when it leads that order, else after it as the fallback. Never a
       // device runtime and never the free pool, so no probes and no local-success predictor.
       if (isAccountPoolCall(opts)) {
-        const accounts = await readAccounts(opts.role);
-        if (accounts.length > 0) return localFirst([], accounts)(opts, handlers);
+        const accounts = await readAccounts(opts);
+        if (accounts.accounts.length > 0) return localFirst([], accounts)(opts, handlers);
       }
       if (strict) {
         if (!cloud) throw new Error(noModel);

@@ -26,6 +26,7 @@ import { registerSchemaDialectResolver } from '../jsonSchemaSanitize';
 import { registerStrictShapeResolver } from '../messageShapeSanitizer';
 import { reasoningIntentOpts, reasoningParamsForModel } from '../reasoningCapability';
 import { declaredAttemptTimeoutMs, resolveAttemptTimeoutMs } from './attemptTimeout';
+import { createCascadeAccounts, type AccountScopeParams } from './accountFailure';
 import { ModelInputUnsupportedError, entryRefusesImages, requestCarriesImages } from './capabilityGate';
 import {
   VendorRetryableError,
@@ -446,27 +447,24 @@ export function kindForStatus(status: number, error?: string): string {
  * record is lost in `Error.message`.
  */
 export class CascadeExhaustedError extends Error {
-  public readonly attempts: ReadonlyArray<DispatchAttempt>;
-  public readonly skippedNoKey: ReadonlyArray<string>;
-  public readonly skippedNoStream: ReadonlyArray<string>;
-  public readonly skippedCooled: ReadonlyArray<string>;
-  public readonly skippedNoEgress: ReadonlyArray<string>;
-  public readonly skippedNoVision: ReadonlyArray<string>;
   constructor(
     kind: 'json' | 'stream',
-    attempts: ReadonlyArray<DispatchAttempt>,
-    skippedNoKey: ReadonlyArray<string>,
-    skippedNoStream: ReadonlyArray<string> = [],
+    public readonly attempts: ReadonlyArray<DispatchAttempt>,
+    public readonly skippedNoKey: ReadonlyArray<string>,
+    public readonly skippedNoStream: ReadonlyArray<string> = [],
     /** Candidates skipped by the mid-cascade cooldown re-check. Named in the message
      *  because "0 attempts" with nothing else said reads as a bug in the composer. */
-    skippedCooled: ReadonlyArray<string> = [],
+    public readonly skippedCooled: ReadonlyArray<string> = [],
     /** Candidates whose vendor declares `requiresLocalEgress` while this tenant has no
      *  runtime online. Named separately because the remedy is "connect a runtime", not
      *  "reconnect the account" — the credential was never even presented. */
-    skippedNoEgress: ReadonlyArray<string> = [],
+    public readonly skippedNoEgress: ReadonlyArray<string> = [],
     /** Candidates the catalog declares text-only, skipped because the request carries
      *  image input (see `capabilityGate.ts`). */
-    skippedNoVision: ReadonlyArray<string> = [],
+    public readonly skippedNoVision: ReadonlyArray<string> = [],
+    /** Candidates on a connected account that already failed at the account level earlier
+     *  in this cascade (`accountFailure.ts`) — the earlier attempt carries the reason. */
+    public readonly skippedAccountFailed: ReadonlyArray<string> = [],
   ) {
     const summary = attempts.map((a) => `${a.vendor}/${a.model}=${a.status}`).join(', ');
     const noKey = skippedNoKey.length    > 0 ? ` (skipped no-key: ${skippedNoKey.join(', ')})` : '';
@@ -474,19 +472,16 @@ export class CascadeExhaustedError extends Error {
     const cooled = skippedCooled.length  > 0 ? ` (skipped cooled: ${skippedCooled.join(', ')})` : '';
     const noEgr = skippedNoEgress.length > 0 ? ` (skipped no-local-egress: ${skippedNoEgress.join(', ')})` : '';
     const noVis = skippedNoVision.length > 0 ? ` (skipped no-vision: ${skippedNoVision.join(', ')})` : '';
+    const acct  = skippedAccountFailed.length > 0 ? ` (skipped account-failed: ${skippedAccountFailed.join(', ')})` : '';
     const head  = kind === 'stream' ? 'AI streaming vendor cascade exhausted' : 'AI vendor cascade exhausted';
-    super(`${head} (${attempts.length} attempts: ${summary})${noKey}${noStr}${cooled}${noEgr}${noVis}`);
+    super(`${head} (${attempts.length} attempts: ${summary})${noKey}${noStr}${cooled}${noEgr}${noVis}${acct}`);
     this.name = 'CascadeExhaustedError';
-    this.attempts = attempts;
-    this.skippedNoKey = skippedNoKey;
-    this.skippedNoStream = skippedNoStream;
-    this.skippedCooled = skippedCooled;
-    this.skippedNoEgress = skippedNoEgress;
-    this.skippedNoVision = skippedNoVision;
   }
 }
 
-export interface DispatchParams extends DispatchBody {
+/** `AccountScopeParams`: which vendors are ONE connected account, and whose quota is
+ *  shared — so an account-level failure skips its remaining models (`accountFailure.ts`). */
+export interface DispatchParams extends DispatchBody, AccountScopeParams {
   env: VendorEnv;
   modelChain: string[];
   /**
@@ -571,7 +566,7 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
   params: DispatchParams,
   cfg: SurfaceConfig<R>,
 ): Promise<R & { modelUsed: string; vendorUsed: VendorId; attempts: DispatchAttempt[] }> {
-  const { env, modelChain, reasoningIntent, isCooled, onUpstreamHeaders, ...rest } = params;
+  const { env, modelChain, reasoningIntent, isCooled, onUpstreamHeaders, isAccountScoped, sharesAccountQuota, ...rest } = params;
   if (modelChain.length === 0) {
     throw new Error(`${cfg.fnName}: modelChain is empty`);
   }
@@ -583,6 +578,8 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
   const skippedCooled: string[] = [];
   const skippedNoEgress: string[] = [];
   const skippedNoVision: string[] = [];
+  // Account-level failures seen in THIS cascade — see `AccountScopeParams`.
+  const accounts = createCascadeAccounts(attempts, { isAccountScoped, sharesAccountQuota });
   // Loop-invariant: does this request carry image input? Decides the vision gate below.
   const needsVision = requestCarriesImages(rest.messages);
 
@@ -596,6 +593,7 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
   for (const model of modelChain) {
     const { vendorId, vendorModel } = resolveVendorAndModel(model);
     const mod = MODULES_BY_ID[vendorId];
+    if (accounts.skips(vendorId, model)) continue;
     if (!cfg.supports(mod)) {
       skippedNoStream.push(`${vendorId}:${model}`);
       continue;
@@ -695,7 +693,7 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
       // + the real upstream status. If EVERY candidate rejects it, the proxy
       // surfaces a terminal `schema_too_complex` 4xx instead of a 429.
       if (err instanceof VendorSchemaError) {
-        attempts.push({
+        accounts.recordFailed({
           model, vendor: vendorId, status: 422, error: err.message, durationMs,
           kind: 'schema', reason: SCHEMA_TOO_COMPLEX_REASON, upstreamStatus: err.status,
           ...diagnosticOf(err),
@@ -704,7 +702,7 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
         continue;
       }
       if (err instanceof VendorRetryableError) {
-        attempts.push({ model, vendor: vendorId, status: err.status, error: err.message, durationMs, kind: kindForStatus(err.status, err.message), ...diagnosticOf(err) });
+        accounts.recordFailed({ model, vendor: vendorId, status: err.status, error: err.message, durationMs, kind: kindForStatus(err.status, err.message), ...diagnosticOf(err) });
         reportCaughtError(err, { source: "application/llm/vendors/registry.ts", operation: "dispatchInternal", level: 'warning', context: { logMessage: `[vendors] ${cfg.logTag}${vendorId}/${model} returned ${err.status}; trying next in chain (${attempts.length}/${modelChain.length} failed)` } });
         continue;
       }
@@ -715,7 +713,7 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
       // these attempts and the proxy's exhaustedResponse surfaces a real 4xx (not
       // a misleading 429). recordFailure no-ops request_error, so no model cools.
       if (err instanceof VendorFatalError && (err.status === 400 || err.status === 422)) {
-        attempts.push({ model, vendor: vendorId, status: err.status, error: err.message, durationMs, kind: kindForStatus(err.status, err.message), ...diagnosticOf(err) });
+        accounts.recordFailed({ model, vendor: vendorId, status: err.status, error: err.message, durationMs, kind: kindForStatus(err.status, err.message), ...diagnosticOf(err) });
         reportCaughtError(err, { source: "application/llm/vendors/registry.ts", operation: "dispatchInternal", level: 'warning', context: { logMessage: `[vendors] ${cfg.logTag}${vendorId}/${model} returned ${err.status} (request error); trying next vendor (${attempts.length}/${modelChain.length})` } });
         continue;
       }
@@ -730,7 +728,7 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
     const first = resolveVendorAndModel(modelChain[0]!);
     throw new ModelInputUnsupportedError(first.vendorId, [...new Set(modelChain)]);
   }
-  throw new CascadeExhaustedError(cfg.kind, attempts, skippedNoKey, skippedNoStream, skippedCooled, skippedNoEgress, skippedNoVision);
+  throw new CascadeExhaustedError(cfg.kind, attempts, skippedNoKey, skippedNoStream, skippedCooled, skippedNoEgress, skippedNoVision, accounts.skipped);
 }
 
 /** Walk a model chain non-streaming. Throws if every model in the chain fails. */

@@ -138,7 +138,7 @@
   "command.pipelineRouteReport": "Pipeline Route Report",
   "config.models.plan.desc": "Model for the **planning** stage of a run. Empty: the `ROLE_MODELS` env `plan` entry, else the gateway orders your models for planning. Applies while the run holds no model of its own (Auto, and `#builderforce.defaultModel#` empty).",
   "config.models.code.desc": "Model for the **coding** stage of a run. Empty: the `ROLE_MODELS` env `code` entry, else the gateway leads with your strongest coding model. Applies while the run holds no model of its own (Auto, and `#builderforce.defaultModel#` empty).",
-  "config.models.review.desc": "Model for the **review** (verify) stage, after a run changed code. Always a different model from the one that wrote the change. Empty: the `ROLE_MODELS` env `verify` entry, else the gateway picks a cheaper capable reviewer.",
+  "config.models.review.desc": "Model for the **review** stage, after a run changed code. Always a different model from the one that wrote the change. Empty: the `ROLE_MODELS` env `review` entry, else the gateway leads with your strongest reviewer.",
   "config.models.subagent.desc": "Model every **sub-agent** runs on, unless your model pick is explicit. Empty: the `ROLE_MODELS` entry for the sub-agent's role, else the gateway orders by that role.",
   "config.pipeline.routing.desc": "How runs are routed between the **full pipeline** (plan → code → review) and a **quick pass** (one coding pass, no planning or review stage). Writing \"full pipeline\" in a request always takes the full pipeline. See **BuilderForce: Pipeline Route Report**.",
   "config.pipeline.routing.auto": "Score each request and take the quick pass below the route threshold.",

@@ -26,7 +26,7 @@ import { callBuiltinTool } from '../llm/builtinMcpService';
 import { codingFallbackSurface } from '../llm/codingFallbackSurface';
 import { readProxyChoice, type LlmProxyService } from '../llm/LlmProxyService';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { requestedModelForRole } from '../runtime/cloudAgent/routing';
+import { requestedReviewModel } from '../runtime/cloudAgent/routing';
 import { applyVerifyPhase, describeVerifyOutcome, runVerifyPhase } from '@builderforce/agent-run';
 import { commitRunMemory, recordRunVerifyEvents } from '../runtime/cloudAgent/runEndMemory';
 import { toGatewayMessage } from '../runtime/cloudAdapterModel';
@@ -61,7 +61,7 @@ const textOf = (row: Record<string, unknown> | undefined): string => (typeof row
 export async function runAgentReply(input: AgentReplyRunInput): Promise<ReplyTurnState> {
   const { db, env, tenantId, userId, agentRef, opts, service, convo, userRequest, replyTemp, pinnedModel, byoVendors, call } = input;
   const { tools, nameToTool } = input.toolset;
-  const verifyPin = requestedModelForRole(env, 'verify');
+  const reviewPin = requestedReviewModel(env);
   let wroteFiles = false;
 
   const s: ReplyTurnState = {
@@ -164,9 +164,9 @@ export async function runAgentReply(input: AgentReplyRunInput): Promise<ReplyTur
     // A stall with nothing left to try posts what the reply said and why it stopped.
     stallExhausted: 'finish',
     inference: 'hybrid', verify: 'none', approvalGates: [], delegation: { requested: false, readsBeforeNudge: DEFAULT_READS_BEFORE_NUDGE },
-    // The reply's own routing, as its loop always asked for it: the plain policy over the pin and the verify model — no lock
+    // The reply's own routing, as its loop always asked for it: the plain policy over the pin and the review model — no lock
     // after the first success, no releasable pin, no decline list.
-    modelStart: { plain: true, ...(pinnedModel ? { model: pinnedModel } : {}), ...(verifyPin && verifyPin !== pinnedModel ? { phaseModels: { verify: verifyPin } } : {}) },
+    modelStart: { plain: true, ...(pinnedModel ? { model: pinnedModel } : {}), ...(reviewPin && reviewPin !== pinnedModel ? { phaseModels: { review: reviewPin } } : {}) },
   };
   const outcome = await runAgent({
     // `request` is the newest user turn: the stall gate tells a change request from a question by IT, not by the whole transcript.

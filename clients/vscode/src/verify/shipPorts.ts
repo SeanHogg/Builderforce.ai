@@ -101,11 +101,13 @@ export function parseReviewReply(text: string): ReviewSubRunResult | { failed: s
  */
 function reviewerDeps(run: ShipPortsRun, deps: ShipPortsDeps): ReviewerDeps {
   const phase = run.settings?.phaseModels;
+  // `verify` is the review stage's legacy name (`RunStageModels`).
+  const reviewPin = phase?.review || phase?.verify;
   const available = [phase?.code, phase?.plan, run.settings?.subagentModel, run.settings?.pipeline?.quickModel]
     .filter((m): m is string => typeof m === "string" && !!m);
   const getCatalog = deps.getCatalog;
   return {
-    ...(phase?.verify ? { verifyStagePin: phase.verify } : {}),
+    ...(reviewPin ? { verifyStagePin: reviewPin } : {}),
     availableModels: [...new Set(available)],
     ...(getCatalog
       ? {
@@ -116,7 +118,7 @@ function reviewerDeps(run: ShipPortsRun, deps: ShipPortsDeps): ReviewerDeps {
         }
       : {}),
     runReviewSubRun: async ({ model, prompt }) => {
-      const result = await run.stream({ messages: [{ role: "user", content: prompt }], model, modelStrict: true, role: "verify" });
+      const result = await run.stream({ messages: [{ role: "user", content: prompt }], model, modelStrict: true, role: "review" });
       return parseReviewReply(result.text);
     },
     hashDiff: (diff) => createHash("sha256").update(diff, "utf8").digest("hex"),

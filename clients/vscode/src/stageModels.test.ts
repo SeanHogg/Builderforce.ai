@@ -7,8 +7,9 @@ describe("stageModels", () => {
   it("takes the settings over the env pins, stage by stage", () => {
     expect(stageModels(
       { plan: "set-plan", review: " set-review " },
-      { plan: "env-plan", code: "env-code", verify: "env-verify", subagent: "env-sub" },
-    )).toEqual({ plan: "set-plan", code: "env-code", verify: "set-review", subagent: "env-sub" });
+      { plan: "env-plan", code: "env-code", review: "env-review", subagent: "env-sub" },
+    )).toEqual({ plan: "set-plan", code: "env-code", review: "set-review", subagent: "env-sub" });
+    expect(stageModels({}, { review: "env-review" })).toEqual({ review: "env-review" });
   });
 
   it("is empty when nothing is configured — the gateway orders by role", () => {
@@ -35,10 +36,10 @@ describe("modelForChildRun with a sub-agent stage model", () => {
 describe("editorRunSettingsFrom", () => {
   it("maps stages to phase models, routing, the cap and the sub-agent model", () => {
     expect(editorRunSettingsFrom(
-      { plan: "p", code: "c", verify: "v", subagent: "s", quick: "q" },
+      { plan: "p", code: "c", review: "r", subagent: "s", quick: "q" },
       { routing: "always", routeThreshold: 0.65, maxRunBudgetUsd: 2.5 },
     )).toEqual({
-      phaseModels: { plan: "p", code: "c", verify: "v" },
+      phaseModels: { plan: "p", code: "c", review: "r" },
       pipeline: { routing: "always", threshold: 0.65, quickModel: "q" },
       maxRunBudgetUsd: 2.5,
       subagentModel: "s",

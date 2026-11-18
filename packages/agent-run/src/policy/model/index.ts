@@ -40,6 +40,7 @@ import {
   nextTurn,
   reduceRunPolicy,
   resolveStallStep,
+  reviewPhaseModel,
   type RunPhase,
   type RunPolicyEvent,
   type RunPolicyOptions,
@@ -92,12 +93,15 @@ type ModelRole = TurnRequest["role"];
 /**
  * The phase rule: where a run starts, and whether its delegated role pins every turn.
  * A run implementing a ticket codes; a `plan` or `verify` child starts in that phase;
- * a child delegated one kind of non-phase work (`explore`, `utility`, `chat`) asks for
- * that role on every turn; anything else (a board delivery role such as `reviewer`)
- * is not a model role, so the run still codes.
+ * a `verify` child also keeps the `verify` role on every turn (it runs the checks — the
+ * cheap role — where a coding run's verify phase REVIEWS its change); a child delegated
+ * one kind of non-phase work (`review`, `explore`, `utility`, `chat`) asks for that role
+ * on every turn; anything else (a board delivery role such as `reviewer`) is not a model
+ * role, so the run still codes.
  */
 export function policyRole(delegatedRole: string | null | undefined): Pick<RunPolicyOptions, "startPhase" | "fixedRole"> {
   const role = typeof delegatedRole === "string" ? delegatedRole.trim() : "";
+  if (role === "verify") return { startPhase: "verify", fixedRole: "verify" };
   if (RUN_PHASES.has(role)) return { startPhase: role as RunPhase };
   if (isModelRole(role)) return { startPhase: "code", fixedRole: role as ModelRole };
   return { startPhase: "code" };
@@ -123,8 +127,7 @@ function startOptions(
   delegatedRole: string | null | undefined,
   phaseModels?: RunPolicyOptions["phaseModels"],
 ): RunPolicyOptions {
-  const verify = phaseModels?.verify;
-  const reviewModel = typeof verify === "string" && verify.trim() ? verify.trim() : null;
+  const reviewModel = reviewPhaseModel(phaseModels) ?? null;
   return {
     pinnedModel: pick.model,
     strictPin: pick.strict,
@@ -177,8 +180,7 @@ export function resumeModelRunState(
 ): ModelRunState {
   if (saved?.policy) {
     if (!phaseModels) return saved;
-    const verify = phaseModels.verify;
-    const reviewModel = typeof verify === "string" && verify.trim() ? verify.trim() : (saved.policy.options.reviewModel ?? null);
+    const reviewModel = reviewPhaseModel(phaseModels, saved.policy.options.reviewModel) ?? null;
     return {
       ...saved,
       policy: {

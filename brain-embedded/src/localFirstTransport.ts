@@ -112,6 +112,15 @@ export interface LocalFirstStreamInput {
    *  after the device and before the cloud, a `trail` account after the cloud, tried only
    *  when the cloud fails before any output (the cloud's error is then the one surfaced). */
   accounts?: readonly LocalFirstAccount[];
+  /**
+   * The tenant's funding order, read with the accounts (`LocalFirstAccounts.freeFirst`).
+   * `false` (account-first) on a call open to local-first: a trailing account is tried
+   * BEFORE the plan pool — the cloud first over the tenant's other accounts only
+   * (`byo_pool`), then the trailing accounts, then the cloud as the call names it (Auto)
+   * last (`localFirstPlan`'s `accountFirst`). Absent or `true`: the one cloud leg, then the
+   * trailing accounts. Ignored for "use my connected accounts", which is the pool already.
+   */
+  freeFirst?: boolean;
   /** The gateway stream, or null when signed out (local-only). */
   cloud: StreamFn | null;
   /** Lent to the local attempts; the global `fetch` by default. */
@@ -199,52 +208,63 @@ export function createLocalFirstStream(input: LocalFirstStreamInput): StreamFn {
     // run's model exactly as before (not gateway Auto): a non-local model stays on it.
     const cloudOpts = opts.model && !isLocalModelRef(opts.model) ? opts : routed;
     const probes = accountPool ? [] : input.probes;
-    const failedAccounts: LocalFirstAttemptRecord[] = [];
     const planned = localFirstPlan({
       probes,
       ...(input.accounts?.length ? { accounts: input.accounts } : {}),
       workload: localFirstWorkload(input.fit ? { ...routed, messages: coreMessages(routed.messages) } : routed),
       cloud: input.cloud ? {} : null,
+      // The account pool IS the strict BYO leg already; only an Auto cloud leg is split.
+      ...(!accountPool && input.freeFirst === false ? { accountFirst: true } : {}),
     });
     const plan = input.gate ? await input.gate(planned, routed) : planned;
     if (plan.length === 0) throw new Error(input.noModel ?? NOT_SIGNED_IN);
+    // A `trail` account runs only after a cloud leg failed before any output. Unless it then
+    // streamed (and so owns the turn), a CLOUD error is the one surfaced, not the fallback's —
+    // and of those, the LAST cloud leg's: with account-first funding that is the Auto leg (the
+    // pool), whose verdict covers the tenant's accounts too (the gateway re-runs its
+    // account-first order), so it is never the accounts-only leg's routine "no other account
+    // is connected". Every state flag is set INSIDE `run`, so it is an object (narrowing).
+    const state = { cloudError: undefined as { error: unknown } | undefined, trailCommitted: false, servingCloud: false };
+    // The account pool's failed accounts, by where they sat: before the cloud, or after it.
+    const failedAccounts = { lead: [] as LocalFirstAttemptRecord[], trail: [] as LocalFirstAttemptRecord[] };
     const onAttempt = (record: LocalFirstAttemptRecord): void => {
-      if (accountPool && record.outcome !== 'served' && record.attempt.kind === 'local') failedAccounts.push(record);
+      if (accountPool && record.outcome !== 'served' && record.attempt.kind === 'local') {
+        (state.cloudError ? failedAccounts.trail : failedAccounts.lead).push(record);
+      }
       input.onAttempt?.(record);
     };
-    // Only an error the CLOUD attempt threw is re-worded with the accounts that failed first;
-    // an account's own final error already says why it failed.
-    let cloudStarted = false;
-    // A `trail` account runs only after the cloud failed before any output. Unless it then
-    // streamed (and so owns the turn), the CLOUD's error is the one surfaced, not the fallback's.
-    const trailing = { cloudError: undefined as { error: unknown } | undefined, committed: false, servingCloud: false };
     let ran: LocalFirstRunResult<StreamChatResult>;
     try {
       ran = await runLocalFirst(
         plan,
         async (attempt, commit) => {
-          trailing.servingCloud = attempt.kind === 'cloud';
+          state.servingCloud = attempt.kind === 'cloud';
           if (attempt.kind === 'cloud') {
-            cloudStarted = true;
+            // A leg with its own routing (account-first's accounts-only leg) names no model.
+            const leg = attempt.routingMode ? { ...routed, routingMode: attempt.routingMode } : cloudOpts;
             try {
-              return await input.cloud!(cloudOpts, committingHandlers(handlers, commit));
+              return await input.cloud!(leg, committingHandlers(handlers, commit));
             } catch (e) {
-              trailing.cloudError = { error: e };
+              state.cloudError = { error: e };
               throw e;
             }
           }
-          const afterCloud = trailing.cloudError !== undefined;
-          const commitOwn = afterCloud ? () => { trailing.committed = true; commit(); } : commit;
+          const commitOwn = state.cloudError ? () => { state.trailCommitted = true; commit(); } : commit;
           const transport = localTransport(attempt.endpoint, input.fetch, { failFast: true, runtime: attempt.provider });
           const messages = await fittedFor(attempt, routed, input.fit, probes);
           return streamOnLocal(attempt, routed, committingHandlers(handlers, commitOwn, attempt.ref), transport, messages, false);
         },
-        // The cloud's answer is final, as when it was always last: an empty one is not failed over.
-        { signal: opts.signal, accept: (r) => trailing.servingCloud || answered(r), onAttempt },
+        // A cloud answer is final, as when it was always last: an empty one is not failed over.
+        { signal: opts.signal, accept: (r) => state.servingCloud || answered(r), onAttempt },
       );
     } catch (e) {
-      const surfaced = trailing.cloudError && !trailing.committed && !opts.signal?.aborted ? trailing.cloudError.error : e;
-      throw accountPool && cloudStarted ? withFailedAccounts(surfaced, failedAccounts) : surfaced;
+      const cloudError = state.cloudError?.error;
+      const surfaced = state.cloudError && !state.trailCommitted && !opts.signal?.aborted ? cloudError : e;
+      // Only a CLOUD error is re-worded with the accounts that failed around it; an account's
+      // own final error (one that streamed, then failed) already says why — never listed twice.
+      throw accountPool && state.cloudError && surfaced === cloudError
+        ? withFailedAccounts(surfaced, failedAccounts.lead, failedAccounts.trail)
+        : surfaced;
     }
     const { result, attempts } = ran;
     const summaries: LocalFirstAttemptSummary[] = attempts.map(summarizeLocalFirstAttempt);

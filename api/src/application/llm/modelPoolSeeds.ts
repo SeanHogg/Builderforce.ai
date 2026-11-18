@@ -7,7 +7,8 @@
  */
 
 import { catalogEntry, parseVendorPrefix, tierForModel, vendorForModel } from './vendors';
-import { bestLadderRank, tierRank } from '@builderforce/model-catalog';
+import { tierRank } from '@builderforce/model-catalog';
+import { codeLadderRung } from './byoProviderLadder';
 import { providerFrontierFlagship } from './modelPoolComposition';
 
 /**
@@ -101,16 +102,14 @@ export function byoAutoSeedModels(
     const p = priorityRank(a) - priorityRank(b);
     if (p !== 0) return p;
     // Un-ranked vendors: the coding-quality ladder first, catalog tier only after it — a
-    // price band is not a judgement of which account codes best.
-    const l = codeRung(groupA) - codeRung(groupB);
+    // price band is not a judgement of which account codes best. Live, not dead: the
+    // gateway passes `byoVendorPriority` (every configured vendor), but the coding
+    // fallback surface, a cloud run without precedence and the credential probe call
+    // with none, and a vendor outside the list ties at `priority.length`.
+    const l = codeLadderRung(groupA) - codeLadderRung(groupB);
     if (l !== 0) return l;
     return tierRank(tierForModel(a)) - tierRank(tierForModel(b));
   }).flat();
-}
-
-/** A group's best rung on the CODE ladder; off-ladder groups sort after every rung. */
-function codeRung(group: readonly string[]): number {
-  return bestLadderRank('code', group) ?? Number.MAX_SAFE_INTEGER;
 }
 
 /**

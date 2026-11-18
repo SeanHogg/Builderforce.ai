@@ -23,6 +23,7 @@
 import type { ModelRole } from '@builderforce/agent-tools';
 import type { ActionModelRankStat, RoutingExploration } from '@builderforce/learned-routing';
 import type { CatalogView } from '@builderforce/model-catalog';
+import type { LatencyGuardInput } from '@builderforce/model-router';
 import type { ArcStage } from '@builderforce/workload';
 import { byoAutoSeedModels } from './modelPool';
 import { rankConnectedForRole } from './modelRoles';
@@ -53,6 +54,9 @@ export interface ByoSeedCall {
   demotedVendors: ReadonlySet<string>;
   stats?: ReadonlyArray<ActionModelRankStat>;
   explore?: RoutingExploration;
+  /** Latency-guard input for the role order. Absent = the router's default (this isolate's
+   *  p50 snapshot) — what the gateway uses; `GET /llm/byo-order` passes a neutral one. */
+  latency?: LatencyGuardInput;
 }
 
 export interface ByoSeedOrder {
@@ -108,6 +112,7 @@ export function orderByoSeeds(accounts: ByoSeedAccounts, call: ByoSeedCall, view
     demotedVendors: call.demotedVendors,
     ...(call.stats ? { stats: call.stats } : {}),
     ...(call.explore ? { explore: call.explore } : {}),
+    ...(call.latency ? { latency: call.latency } : {}),
   }, view);
   return { merged, ordered };
 }

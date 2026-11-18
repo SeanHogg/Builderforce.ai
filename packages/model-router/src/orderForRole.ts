@@ -56,7 +56,9 @@ export function orderForRole(
   role?: string,
 ): string[] {
   const byTier = !isBalancedObjective(objective);
-  const ladder = byTier ? ladderKey(view, role) : undefined;
+  // A ladder ranks by strength for the role, so it applies only to a quality-first call:
+  // a cost-first one (an arc stage that turns `code` cheap) reads tier and price alone.
+  const ladder = objective > 0 && byTier ? ladderKey(view, role) : undefined;
   if (!byTier && !demotedVendors?.size && !latency) return [...models];
   const costFirst = byTier && objective < 0;
   const health = (m: string): number => (demotedVendors?.has(view.vendorOf(m)) ? 1 : 0);

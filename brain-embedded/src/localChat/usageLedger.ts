@@ -53,7 +53,7 @@ export interface RunUsageValue {
   /** The call's transport (see {@link UsageRoute}) — not its pipeline route. */
   route: UsageRoute;
   mode?: 'chat' | 'work';
-  /** What kind of call it was (plan / code / verify / explore / chat / utility). */
+  /** What kind of call it was (plan / code / review / verify / explore / chat / utility). */
   role?: string;
   /** The run's pipeline route and the router's score, when the run was routed. */
   pipelineRoute?: UsagePipelineRoute;

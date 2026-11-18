@@ -47,7 +47,8 @@ export async function listAgentPool(secrets: vscode.SecretStorage): Promise<BfAg
       // PRD 39 §3 push 1: `/api/agent-registrations` returns `{agents}` with
       // `status`/`framework` (not the legacy bare array with `isActive`).
       authed<{ agents: Array<{ id: string | number; name: string; status?: string }> }>(secrets, '/api/agent-registrations')
-        .then((r) => r.agents)
+        // Signed out, `authed` answers undefined — no registrations, like the two reads above.
+        .then((r) => r?.agents)
         .catch(() => undefined),
     ]);
     const byRef = new Map<string, string>();

@@ -17,12 +17,22 @@ import { bestLadderRank } from '@builderforce/model-catalog';
 import { byoVendorIdFor, type LlmProvider, type ProviderAuthType } from './llmProviderCatalog';
 import { vendorFlagship } from './vendors';
 
+/**
+ * THE code-ladder rung of a set of models — the best rung any of them holds — with
+ * off-ladder sets after every rung. One derivation for both readers: a provider's rung
+ * from its flagships ({@link providerCodeRung}) and a seed group's rung in
+ * `byoAutoSeedModels` (its selection or flagships). Pure.
+ */
+export function codeLadderRung(models: Iterable<string>): number {
+  return bestLadderRank('code', models) ?? Number.MAX_SAFE_INTEGER;
+}
+
 /** The provider's best CODE-ladder rung; providers with no flagship on it sort last. */
 export function providerCodeRung(provider: LlmProvider, authType: ProviderAuthType): number {
   const vendor = byoVendorIdFor(provider, authType);
   const flagships = [vendorFlagship(vendor, true), vendorFlagship(vendor, false)]
     .filter((id): id is string => id !== null);
-  return bestLadderRank('code', flagships) ?? Number.MAX_SAFE_INTEGER;
+  return codeLadderRung(flagships);
 }
 
 /**

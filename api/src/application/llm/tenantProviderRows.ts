@@ -19,7 +19,6 @@ import type { Env } from '../../env';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { tenantLlmProviderKeys } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
-import { invalidateByoRoleOrder } from './byoRoleOrderCache';
 
 export interface TenantProviderRow {
   id: string;
@@ -31,13 +30,14 @@ export interface TenantProviderRow {
 
 export const tenantProviderRowsCacheKey = (tenantId: number): string => `byo-rows:${tenantId}`;
 
+/**
+ * Drop the cached rows. No routing-version bump goes with it: the rows ARE the derived half
+ * of `routingInputsVersion` (each row's id, auth type and priority), so the next read of
+ * that token reloads them and every cache keyed on it — the editor's per-role order
+ * (`GET /llm/byo-order`) among them — misses on its own.
+ */
 export async function invalidateTenantProviderRows(env: Env, tenantId: number): Promise<void> {
-  // The rows ARE the connected set and its precedence, so the per-role order the editor
-  // reads (`GET /llm/byo-order`) goes with them.
-  await Promise.all([
-    invalidateCached(env, tenantProviderRowsCacheKey(tenantId)),
-    invalidateByoRoleOrder(env, tenantId),
-  ]);
+  await invalidateCached(env, tenantProviderRowsCacheKey(tenantId));
 }
 
 /** All of the tenant's provider rows, ordered by BYO precedence (`priority` ASC, unset last,

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   parseRoleModelConfig,
   resolveModelForRole,
+  resolveReviewModel,
   ROLE_MODEL_DEFAULT_ENV,
   ROLE_MODELS_ENV,
 } from './roleModels.js';
@@ -47,6 +48,19 @@ describe('resolveModelForRole', () => {
   it('trims role keys and model ids', () => {
     expect(resolveModelForRole('  code  ', { byRole: { code: '  claude-opus-4-8  ' } })).toBe('claude-opus-4-8');
     expect(resolveModelForRole('verify', { defaultModel: '  gpt-4.1-mini  ' })).toBe('gpt-4.1-mini');
+  });
+});
+
+describe('resolveReviewModel', () => {
+  it('review wins over the legacy verify entry and the default', () => {
+    expect(resolveReviewModel({ byRole: { review: 'opus', verify: 'mini' }, defaultModel: 'sonnet' })).toBe('opus');
+  });
+
+  it('falls back to the legacy verify entry, then the default', () => {
+    expect(resolveReviewModel({ byRole: { verify: 'mini' }, defaultModel: 'sonnet' })).toBe('mini');
+    expect(resolveReviewModel({ byRole: { review: '  ' }, defaultModel: 'sonnet' })).toBe('sonnet');
+    expect(resolveReviewModel({ byRole: { code: 'opus' } })).toBeUndefined();
+    expect(resolveReviewModel()).toBeUndefined();
   });
 });
 

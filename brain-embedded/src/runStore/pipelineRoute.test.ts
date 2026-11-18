@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { initialRunPolicy, nextTurn } from '@builderforce/run-policy';
+import { initialRunPolicy, nextTurn, reviewPhaseModel } from '@builderforce/run-policy';
 import { decideRunPipeline, pipelineMetadata, pipelinePolicyOptions, skipsVerifyStage } from './pipelineRoute';
 import type { RunLineage } from '../runLineage';
 
@@ -59,6 +59,13 @@ describe('pipelinePolicyOptions — stage resolution', () => {
     expect(strict).not.toHaveProperty('pinnedModel');
     const full = decideRunPipeline({ pipeline: { routing: 'always' } }, SMALL, { followUp: false });
     expect(pipelinePolicyOptions({ pipeline: { routing: 'always', quickModel: 'fast' } }, full)).not.toHaveProperty('pinnedModel');
+  });
+
+  it('the review stage model passes through; run-policy prefers it over a legacy verify entry', () => {
+    const full = decideRunPipeline({ pipeline: { routing: 'always' } }, SMALL, { followUp: false });
+    const opts = pipelinePolicyOptions({ phaseModels: { code: 'coder', review: 'judge', verify: 'legacy' }, pipeline: { routing: 'always' } }, full);
+    expect(opts.phaseModels).toEqual({ code: 'coder', review: 'judge', verify: 'legacy' });
+    expect(reviewPhaseModel(opts.phaseModels)).toBe('judge');
   });
 
   it('quick with no quick model codes on the code model', () => {

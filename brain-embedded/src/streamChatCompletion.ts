@@ -223,7 +223,7 @@ export interface StreamChatOptions {
    */
   prompt_cache_key?: string;
   /**
-   * What kind of call this is (plan/code/verify/explore/chat/utility), emitted as the
+   * What kind of call this is (plan/code/review/verify/explore/chat/utility), emitted as the
    * body's `role`. Under auto-routing the gateway orders the tenant's connected
    * accounts for it — analysis on the tenant's own order, code on the strongest
    * connected model. Omitted when unset, so the body stays byte-identical.

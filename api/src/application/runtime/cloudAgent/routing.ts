@@ -38,7 +38,7 @@ import { resolveTenantPlan } from '../../tenant/tenantPlanSnapshot';
 import { recordCloudToolEvent } from '../cloudToolEvents';
 import { submittingUserId } from '../dispatcherLabel';
 import {
-  learnedRoutingEnabled, normalizeActionType, parseRoleModelConfig, resolveModelForRole,
+  learnedRoutingEnabled, normalizeActionType, parseRoleModelConfig, resolveModelForRole, resolveReviewModel,
   type ActionModelRankStat, type ActionType,
 } from '@builderforce/learned-routing';
 import type { Env } from '../../../env';
@@ -79,6 +79,16 @@ export function requestedModelForRole(
   const pin = typeof explicit === 'string' ? explicit.trim() : '';
   if (pin) return pin;
   return resolveModelForRole(role, parseRoleModelConfig(env));
+}
+
+/**
+ * The operator's pin for the model that REVIEWS a run's change (its verify phase):
+ * `ROLE_MODELS.review`, else the legacy `ROLE_MODELS.verify` entry, else `ROLE_MODEL_DEFAULT`.
+ * Hosts send it as `phaseModels.review`. The fallback rule is `resolveReviewModel`, shared
+ * with the editor's stage models (`clients/vscode/src/modelState.ts`).
+ */
+export function requestedReviewModel(env: unknown): string | undefined {
+  return resolveReviewModel(parseRoleModelConfig(env));
 }
 
 /** The ONE agent commit-message convention is PER RUN —

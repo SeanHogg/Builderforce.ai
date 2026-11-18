@@ -35,7 +35,7 @@ vi.mock("./gateway", () => ({
   getLocalModelsConfig: () => ({ enabled: false, localFirst: false, endpoints: { "kimi-code": { baseUrl: "https://kimi.example" } } }),
 }));
 vi.mock("./localEndpointAuth", () => ({ authorizeLocalEndpoint: async () => ({ ok: false, detail: "Kimi is not connected." }) }));
-vi.mock("./providerConnect", () => ({ editorAccounts: () => ({ hybridAccounts: async () => [] }) }));
+vi.mock("./providerConnect", () => ({ editorAccounts: () => ({ hybridAccounts: async () => ({ accounts: [] }) }) }));
 vi.mock("./errorReporter", () => ({ logLine: vi.fn() }));
 vi.mock("./localModels", () => ({ probeLocalFirstRuntimes: async () => [], probeOnDeviceRuntimes: async () => [] }));
 vi.mock("./modelState", () => ({ resolveEffectiveModelChoice: async () => ({ model: "direct/kimi-code/k3" }) }));

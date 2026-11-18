@@ -75,7 +75,7 @@ export function delegationRole(raw: unknown): ModelRole {
 
 /**
  * The DELIVERY role (the board's role key) a named agent must hold to take a delegated
- * slice of this kind. A code slice runs as a Developer and a verify slice as QA. The other
+ * slice of this kind. A code slice runs as a Developer; a review or verify slice as QA. The other
  * call purposes (planning, reading, chat) are open to any teammate.
  *
  * WHY: `as_agent` used to accept any agent for any slice, so a run could hand a code
@@ -85,6 +85,7 @@ export function delegationRole(raw: unknown): ModelRole {
  */
 export const DELEGATION_DELIVERY_ROLES: Readonly<Partial<Record<ModelRole, string>>> = {
   code: "developer",
+  review: "qa-tester",
   verify: "qa-tester",
 };
 
@@ -97,7 +98,7 @@ export interface DelegationPersonaRoles {
 
 /**
  * The on-demand teammate a slice runs as when no named agent holds its delivery role. A
- * Developer for a code slice, a QA Tester for a verify slice — the role, not a person, so
+ * Developer for a code slice, a QA Tester for a review or verify slice — the role, not a person, so
  * the work is never attributed to an agent who did not do it.
  */
 export const DELEGATION_ROLE_PERSONAS: Readonly<Record<string, { name: string; brief: string }>> = {

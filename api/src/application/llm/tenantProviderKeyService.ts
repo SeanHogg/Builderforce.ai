@@ -27,6 +27,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 
 import { and, eq, inArray, ne, sql } from 'drizzle-orm';
+import { supportsSubscription } from '@builderforce/model-catalog';
 import type { HonoEnv } from '../../env';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { tenantLlmProviderKeys, tenantMembers } from '../../infrastructure/database/schema';
@@ -179,6 +180,30 @@ export function byoVendorIdsFromCredentials(creds: ResolvedByoCredentials): Set<
   }
   for (const { provider, resolved } of OAUTH_RESOLVERS) {
     if (resolved(creds)) set.add(byoVendorIdFor(provider, 'oauth'));
+  }
+  return set;
+}
+
+/**
+ * The connected vendors whose credential THIS call is a consumer SUBSCRIPTION — one quota
+ * every model on the account draws on, so a 429 on one model is the whole account's
+ * (`vendors/accountFailure.ts`). An API key is not: providers meter its limits per model.
+ *
+ * Derived from the same provider data as {@link byoVendorIdsFromCredentials}: every
+ * subscription that resolved on its OAuth slot ({@link OAUTH_RESOLVERS} — Claude on
+ * `anthropic`, ChatGPT on `openai-codex`, SuperGrok on `xai-oauth`), plus a provider that
+ * offers a subscription (`supportsSubscription`) but has no OAuth slot of its own — its
+ * subscription is delivered in its key slot (Kimi Code: `resolveKimiOAuthResolution`), so
+ * its key IS the subscription. An Anthropic API key is never in the set.
+ */
+export function subscriptionVendorIdsFromCredentials(creds: ResolvedByoCredentials): Set<string> {
+  const set = new Set<string>();
+  for (const { provider, resolved } of OAUTH_RESOLVERS) {
+    if (resolved(creds)) set.add(byoVendorIdFor(provider, 'oauth'));
+  }
+  const keys = creds.vendorKeys ?? {};
+  for (const p of Object.keys(keys) as LlmProvider[]) {
+    if (keys[p] && supportsSubscription(p) && !OAUTH_CAPABLE_PROVIDERS.has(p)) set.add(byoVendorIdFor(p, 'api_key'));
   }
   return set;
 }

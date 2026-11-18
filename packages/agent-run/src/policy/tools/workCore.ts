@@ -17,8 +17,8 @@
  */
 
 import type { ToolSchema } from "@builderforce/agent-tools";
-import { coreToolNames } from "./catalog.js";
-import { ROLE_COMPANION_TOOLS, type CappedToolRole } from "./roleCap.js";
+import { coreToolNames, deferredToolRole } from "./catalog.js";
+import { ROLE_COMPANION_TOOLS } from "./roleCap.js";
 
 /**
  * The work-mode floor: the shared role-core edit/read/run/search names plus the
@@ -28,7 +28,8 @@ export function workCoreToolNames(role: string): string[] {
   return [
     ...new Set([
       ...coreToolNames(role),
-      ...ROLE_COMPANION_TOOLS[(role === "verify" ? "verify" : "code") as CappedToolRole],
+      // The companions follow the core row: `verify` and `review` read; every other role codes.
+      ...ROLE_COMPANION_TOOLS[deferredToolRole(role) === "verify" ? "verify" : "code"],
     ]),
   ];
 }

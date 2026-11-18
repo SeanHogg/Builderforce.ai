@@ -1,19 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { delegationRole } from '@builderforce/agent-tools';
+import { delegationRole, type ModelRole } from '@builderforce/agent-tools';
 import { codingModelsForPlan, pickCloudModel } from './LlmProxyService';
 import { orderForRole as orderForRoleIn, resolveRoleObjective, roleUsesLearnedRanking } from '@builderforce/model-router';
 import { REGISTRY_CATALOG_VIEW } from './catalogView';
 import { rankConnectedForRole } from './modelRoles';
 
 /** The router bound to this Worker's registry — exactly what the gateway ranks with. */
-const orderForRole = (models: readonly string[], objective: number, demoted?: ReadonlySet<string>): string[] =>
-  orderForRoleIn(models, objective, REGISTRY_CATALOG_VIEW, demoted);
+const orderForRole = (models: readonly string[], role: ModelRole, demoted?: ReadonlySet<string>): string[] =>
+  orderForRoleIn(models, resolveRoleObjective(role), REGISTRY_CATALOG_VIEW, demoted, undefined, role);
 import { parseModelShorthand } from './vendors/openaiCompatibleVendors';
 import { tierForModel } from './vendors';
 import { vendorFlagship } from './vendors';
 /** The CURRENT Anthropic flagships, read from the catalog — never a version literal, so a
  *  model release is a catalog edit and these tests follow it. */
 const OPUS_FLAGSHIP = vendorFlagship('anthropic', true)!;
+const SONNET = vendorFlagship('anthropic', false)!;
 
 const QWEN_MAX = 'direct/qwen/qwen3.8-max';
 const QWEN_FLASH = 'direct/qwen/qwen3.8-flash';
@@ -21,16 +22,18 @@ const OPUS = OPUS_FLAGSHIP;
 const MINIMAX = 'direct/minimax/MiniMax-M2.7';
 
 describe('resolveRoleObjective', () => {
-  it('code pulls to the strongest model, analysis keeps the tenant order, cheap roles pull down', () => {
+  it('plan, review and code pull to the strongest models, chat keeps the tenant order, mechanical roles pull down', () => {
     expect(resolveRoleObjective('code')).toBe(1);
-    expect(resolveRoleObjective('plan')).toBe(0);
+    expect(resolveRoleObjective('plan')).toBe(1);
+    expect(resolveRoleObjective('review')).toBe(1);
     expect(resolveRoleObjective('chat')).toBe(0);
+    expect(resolveRoleObjective('verify')).toBe(-1);
     expect(resolveRoleObjective('explore')).toBe(-1);
     expect(resolveRoleObjective(undefined, 'make')).toBe(0);
   });
 
   it('an arc stage nudges the role objective and is clamped', () => {
-    expect(resolveRoleObjective('plan', 'make')).toBeCloseTo(0.3);
+    expect(resolveRoleObjective('chat', 'make')).toBeCloseTo(0.3);
     expect(resolveRoleObjective('code', 'make')).toBe(1);
     expect(resolveRoleObjective('explore', 'idea')).toBe(-1);
   });
@@ -40,28 +43,34 @@ describe('orderForRole', () => {
   // The tenant ranked MiniMax, then Qwen, then Anthropic.
   const precedence = [MINIMAX, QWEN_MAX, OPUS];
 
-  it('a coding turn leads with the strongest CONNECTED model across vendors', () => {
-    expect(orderForRole(precedence, resolveRoleObjective('code'))[0]).toBe(OPUS);
+  it('a coding turn leads with the best connected coder per cost — MiniMax M2.x (the rung after M3) and Qwen Max ahead of a pricier Opus', () => {
+    expect(orderForRole(precedence, 'code')).toEqual([MINIMAX, QWEN_MAX, OPUS]);
+    expect(orderForRole([...precedence, SONNET], 'code')[0]).toBe(SONNET);
   });
 
-  it('an analysis turn keeps the tenant precedence exactly', () => {
-    expect(orderForRole(precedence, resolveRoleObjective('plan'))).toEqual(precedence);
+  it('a planning or review turn leads with the strongest connected judge', () => {
+    expect(orderForRole(precedence, 'plan')[0]).toBe(OPUS);
+    expect(orderForRole(precedence, 'review')[0]).toBe(OPUS);
+  });
+
+  it('a chat turn keeps the tenant precedence exactly', () => {
+    expect(orderForRole(precedence, 'chat')).toEqual(precedence);
   });
 
   it('a cost-first turn leads with the cheapest connected model', () => {
-    const ordered = orderForRole([QWEN_MAX, OPUS, QWEN_FLASH], resolveRoleObjective('explore'));
+    const ordered = orderForRole([QWEN_MAX, OPUS, QWEN_FLASH], 'explore');
     expect(ordered[0]).toBe(QWEN_FLASH);
     expect(ordered.at(-1)).toBe(OPUS);
   });
 
   it('a vendor known to be failing never leads, whatever its tier', () => {
-    const ordered = orderForRole(precedence, resolveRoleObjective('code'), new Set(['anthropic']));
+    const ordered = orderForRole(precedence, 'plan', new Set(['anthropic']));
     expect(ordered[0]).not.toBe(OPUS);
     expect(ordered.at(-1)).toBe(OPUS);
   });
 
   it('never adds or drops a model, and keeps precedence among equal tiers', () => {
-    const ordered = orderForRole([MINIMAX, QWEN_FLASH], resolveRoleObjective('code'));
+    const ordered = orderForRole([MINIMAX, QWEN_FLASH], 'code');
     expect(ordered).toEqual([MINIMAX, QWEN_FLASH]);
   });
 });
@@ -73,22 +82,30 @@ describe('rankConnectedForRole — evidence where the system chooses, the tenant
 
   it('only roles the system chooses for take learned evidence', () => {
     expect(roleUsesLearnedRanking('code')).toBe(true);
+    expect(roleUsesLearnedRanking('plan')).toBe(true);
+    expect(roleUsesLearnedRanking('review')).toBe(true);
     expect(roleUsesLearnedRanking('explore')).toBe(true);
-    expect(roleUsesLearnedRanking('plan')).toBe(false);
     expect(roleUsesLearnedRanking('chat')).toBe(false);
     expect(roleUsesLearnedRanking(undefined)).toBe(false);
   });
 
-  it('with no evidence a coding call keeps the tier order', () => {
-    expect(rankConnectedForRole(connected, { role: 'code' })[0]).toBe(OPUS);
+  it('with no evidence a coding call keeps the code-ladder order', () => {
+    expect(rankConnectedForRole(connected, { role: 'code' })).toEqual([MINIMAX, QWEN_MAX, OPUS]);
+    expect(rankConnectedForRole([OPUS, SONNET], { role: 'code' })).toEqual([SONNET, OPUS]);
   });
 
   it('a coding call leads with the model that has actually delivered best as a coder', () => {
-    expect(rankConnectedForRole(connected, { role: 'code', stats: [proven(QWEN_MAX), weak(OPUS)] })[0]).toBe(QWEN_MAX);
+    // Every connected coder measured: an UNTRIED model on a stronger rung would otherwise
+    // keep the lead (`liftUntriedStronger`), and MiniMax M2.x now sits on the code ladder.
+    expect(rankConnectedForRole(connected, { role: 'code', stats: [proven(OPUS), weak(QWEN_MAX), weak(MINIMAX)] })[0]).toBe(OPUS);
   });
 
-  it('an analysis call keeps the tenant order whatever the evidence says', () => {
-    expect(rankConnectedForRole(connected, { role: 'plan', stats: [proven(MINIMAX), weak(QWEN_MAX)] })).toEqual(connected);
+  it('an untried Opus does not unseat a measured Sonnet on a coding call', () => {
+    expect(rankConnectedForRole([OPUS, SONNET], { role: 'code', stats: [proven(SONNET)] })[0]).toBe(SONNET);
+  });
+
+  it('a chat call keeps the tenant order whatever the evidence says', () => {
+    expect(rankConnectedForRole(connected, { role: 'chat', stats: [proven(MINIMAX), weak(QWEN_MAX)] })).toEqual(connected);
   });
 
   it('evidence cannot lift a vendor that is failing right now back to the lead', () => {
@@ -101,8 +118,12 @@ describe('pickCloudModel — role over precedence', () => {
   const byoVendors = new Set(['minimax', 'qwen', 'anthropic']);
   const byoVendorPriority = ['minimax', 'qwen', 'anthropic'];
 
-  it('a code turn seeds the strongest connected coder, not the precedence-first account', () => {
-    expect(pickCloudModel(undefined, 'free', false, { byoVendors, byoVendorPriority, role: 'code' }).model).toBe(OPUS);
+  it('a code turn seeds the best connected coder per cost (Sonnet), not the precedence-first account', () => {
+    expect(pickCloudModel(undefined, 'free', false, { byoVendors, byoVendorPriority, role: 'code' }).model).toBe(SONNET);
+  });
+
+  it('a review turn seeds the strongest connected judge (Opus)', () => {
+    expect(pickCloudModel(undefined, 'free', false, { byoVendors, byoVendorPriority, role: 'review' }).model).toBe(OPUS);
   });
 
   it('an explore delegation keeps off the strongest (priciest) model', () => {

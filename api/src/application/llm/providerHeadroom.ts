@@ -31,7 +31,7 @@
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { invalidateByoRoleOrder } from './byoRoleOrderCache';
+import { bumpRoutingInputsVersion } from './routingInputsVersion';
 import { deferPastResponse } from '../shared/requestScope';
 
 /** Used share of the tightest window at which an account stops leading. */
@@ -185,12 +185,16 @@ export async function recordLowHeadroom(env: HeadroomEnv, tenantId: number, vend
   const ttl = recordSeconds(h);
   memoryRecords.set(key, Date.now() + ttl * 1000);
   try {
-    // The editor's per-role order (`GET /llm/byo-order`) marks this account unhealthy too.
-    await Promise.all([invalidateCached(env as unknown as Env, key), invalidateByoRoleOrder(env as unknown as Env, tenantId)]);
+    // WRITE first, then invalidate and bump: a reader that misses in between reloads the
+    // stored record, never a "not low" it would cache under the fresh routing token. The
+    // bump moves the editor's per-role order (`GET /llm/byo-order`), which marks this
+    // account unhealthy too.
     if (env.AUTH_CACHE_KV) await env.AUTH_CACHE_KV.put(key, JSON.stringify(h), { expirationTtl: ttl });
+    await invalidateCached(env as unknown as Env, key);
   } catch (error) { /* advisory — routing still works without the record */
     reportCaughtError(error, { source: 'application/llm/providerHeadroom.ts', operation: 'recordLowHeadroom' });
   }
+  await bumpRoutingInputsVersion(env as unknown as Env, tenantId);
 }
 
 async function isRecordedLow(env: HeadroomEnv, tenantId: number, vendor: string): Promise<boolean> {

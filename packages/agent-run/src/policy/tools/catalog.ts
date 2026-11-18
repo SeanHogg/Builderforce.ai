@@ -33,8 +33,13 @@ export const ROLE_CORE_TOOLS: Readonly<Record<DeferredToolRole, readonly string[
   plan: ["spawn_agents", "wait_agents", "message_agent", "update_prd", "memory_recall", "memory_remember", "workspace_note", "workspace_read"],
 };
 
-/** A run role → its core-set row (anything unknown codes). */
+/**
+ * A run role → its core-set row (anything unknown codes). A `review` run judges a change it
+ * did not write, so it takes the same read-only row `verify` does — never the code row's
+ * write tools.
+ */
 export function deferredToolRole(role: string | null | undefined): DeferredToolRole {
+  if (role === "review") return "verify";
   return role === "explore" || role === "verify" || role === "plan" ? role : "code";
 }
 

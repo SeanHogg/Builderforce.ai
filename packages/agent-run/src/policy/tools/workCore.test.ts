@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ensureWorkCoreSet, workCoreToolNames } from "./workCore.js";
 import { selectToolsForTurn } from "./selectTools.js";
-import { coreToolNames } from "./catalog.js";
+import { coreToolNames, deferredToolRole } from "./catalog.js";
 import type { ToolSchema } from "@builderforce/agent-tools";
 
 const schema = (name: string, description = ""): ToolSchema => ({ type: "function", function: { name, description, parameters: { type: "object", properties: {} } } });
@@ -63,5 +63,21 @@ describe("ensureWorkCoreSet — work mode never advertises fewer than the core e
         expect(workCoreToolNames(role)).toContain(core);
       }
     }
+  });
+});
+
+describe("a delegated review child is read-only", () => {
+  it("review maps to the verify row, never the code row's write tools", () => {
+    expect(deferredToolRole("review")).toBe("verify");
+    expect(coreToolNames("review")).toEqual(coreToolNames("verify"));
+    for (const write of ["write_file", "delete_file", "update_prd", "memory_remember", "claim_resource"]) {
+      expect(coreToolNames("review")).not.toContain(write);
+      expect(coreToolNames("code")).toContain(write);
+    }
+  });
+
+  it("the review work floor is the verify floor (read-only companions)", () => {
+    expect(workCoreToolNames("review")).toEqual(workCoreToolNames("verify"));
+    expect(workCoreToolNames("review")).not.toContain("write_file");
   });
 });

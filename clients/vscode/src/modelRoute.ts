@@ -8,7 +8,8 @@
 import {
   localRuntime,
   type LocalEndpoint,
-  type LocalFirstAccount,
+  type ByoOrderQuery,
+  type LocalFirstAccounts,
   type LocalRuntimeId,
   type LocalRuntimeProbe,
 } from "@builderforce/local-inference";
@@ -54,12 +55,12 @@ export interface ModelRoute {
   pickUnavailable?: { model: string; detail: string };
   /**
    * The connected accounts this editor calls itself (Kimi), read per call with the call's
-   * role (Hybrid Auto, and "use my connected accounts" — `byo_pool`, Hybrid or Specific),
-   * each placed in the tenant's order for that role: before the gateway when it leads it,
-   * after the gateway as its fallback when it trails (`createHostModelStream`). Never set
-   * for Local only.
+   * context (role, project, arc stage, agentic — Hybrid Auto, and "use my connected
+   * accounts" — `byo_pool`, Hybrid or Specific), each placed in the tenant's order for it:
+   * before the gateway when it leads it, after the gateway as its fallback when it trails
+   * (`createHostModelStream`), with the tenant's funding order. Never set for Local only.
    */
-  accounts?: (role?: string) => Promise<readonly LocalFirstAccount[]>;
+  accounts?: (query: ByoOrderQuery) => Promise<LocalFirstAccounts>;
 }
 
 /** Who is asking for a route. */

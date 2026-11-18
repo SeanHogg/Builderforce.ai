@@ -2,6 +2,13 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.191] — Your connected accounts are used in your order, and each kind of turn gets a model suited to it
+
+- **Fixed: "use my connected accounts" always ran Kimi Code first.** The editor tried the Kimi Code subscription it calls itself before the gateway on every turn, so the order you set on the server never applied. The editor now reads that order (`GET /llm/byo-order`) for each turn and puts Kimi Code where the order puts it: first only when it heads your healthy accounts, otherwise after the gateway as a fallback. In Hybrid Auto your own accounts are tried before the platform pool.
+- **Changed: models are picked by the kind of turn.** Planning and code review lead with the strongest models (Claude Opus, GPT‑5.x, Kimi K3). Writing code leads with the best coder for its cost (Claude Sonnet ahead of Opus). Builds, compiles and test runs use the cheapest capable model. Chat keeps your own order. Providers you have not ranked follow the coding order instead of alphabetical order.
+- **Changed: code review is its own role.** The ship reviewer and a run's diff review are sent as `review` (strong models); a delegated build-and-test child stays `verify` (cheap) and keeps a read-only tool set. A `ROLE_MODELS.verify` pin still applies to reviews when no `review` pin is set.
+- **Fixed: a refused model no longer skips the rest of its account.** A 403 (for example a model your plan does not include) or an API-key 429 drops only that model; 401, 402 and a subscription's 429 still skip the account for the turn.
+
 ## [2026.10.190] — The agent never switches branches over your uncommitted changes
 
 - **Fixed: an agent run could switch the branch of a checkout that had uncommitted changes.** `run_command` ran `git checkout <branch>` / `git switch` / `git checkout -b` as written, so git either carried your pending edits onto the other branch or stopped halfway. It now checks the working tree of the checkout the switch would affect (including one reached with `cd`, `pushd`, `git -C`, a subshell or `bash -c`) and, when anything is pending, refuses without running it. The refusal tells the agent what to do instead: put the work on a branch with `git_commit` and `branch` (which commits through a worktree and never moves your checkout), read another branch with `git show` / `git diff`, or work on it side by side in a git worktree. Restoring a file (`git checkout -- path`, `git checkout src/a.ts`, `--ours` / `--theirs`) still works. When the checkout's state cannot be read (the status check times out, or the directory cannot be passed to git safely) the switch is refused rather than let through.

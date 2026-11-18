@@ -10,7 +10,7 @@
  */
 
 import { pipelineFeaturesOf, scorePipeline, type PipelineScore } from '@builderforce/pipeline-route';
-import type { RunPhase, RunPolicyOptions } from '@builderforce/run-policy';
+import type { PhaseModels, RunPhase, RunPolicyOptions } from '@builderforce/run-policy';
 import { classifyRunAction } from '@builderforce/workload';
 import type { CompletionMetadata } from '../streamChatCompletion';
 import type { BrainRunRequest } from './runTypes';
@@ -47,7 +47,9 @@ export function pipelinePolicyOptions(
 ): Pick<RunPolicyOptions, 'startPhase' | 'phaseModels' | 'pinnedModel'> {
   const quick = pipeline?.route === 'quick';
   const startPhase: RunPhase = req.lineage || quick ? 'code' : 'plan';
-  const phaseModels: Partial<Record<RunPhase, string>> = { ...(req.phaseModels ?? {}) };
+  // Passed through as the host sent it: run-policy reads `review` (over a legacy `verify`
+  // entry) for the verify phase itself (`reviewPhaseModel`).
+  const phaseModels: PhaseModels = { ...req.phaseModels };
   const quickModel = req.pipeline?.quickModel?.trim();
   if (quick && quickModel) phaseModels.code = quickModel;
   return {

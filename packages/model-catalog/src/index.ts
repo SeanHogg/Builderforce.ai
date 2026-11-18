@@ -48,7 +48,7 @@ export {
 export { snapshotPriceBook } from './snapshotPriceBook.js';
 export { isWeakerModel } from './weakerModel.js';
 export { residencyOf, type CatalogView, type ModelResidency } from './view.js';
-export { bareModelId, bestLadderRank, ladderRankOf, roleHasLadder } from './roleLadders.js';
+export { bestLadderRank, ladderModelId, ladderRankOf } from './roleLadders.js';
 export {
   LLM_PROVIDERS,
   LLM_PROVIDER_INFO,

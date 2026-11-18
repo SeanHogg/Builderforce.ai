@@ -4,7 +4,7 @@ import { getProjectEvermindHead } from "./bfApi";
 import { getModels, isModelAllowed } from "./gateway";
 import { isLocalModelRef } from "./localModels";
 import { getSelectedProject } from "./projectState";
-import { explicitRoleModelPin, NATIVE_RUN_ROLE, roleModelPin } from "./roleModelPin";
+import { explicitRoleModelPin, NATIVE_RUN_ROLE, reviewModelPin, roleModelPin } from "./roleModelPin";
 import { stageModels, type StageModels } from "./stageModels";
 
 /**
@@ -145,7 +145,7 @@ export async function resolveStageModels(secrets: vscode.SecretStorage): Promise
   const resolved = stageModels(stageModelSettings(), {
     plan: roleModelPin("plan"),
     code: roleModelPin(NATIVE_RUN_ROLE),
-    verify: roleModelPin("verify"),
+    review: reviewModelPin(),
     // Never the operator's catch-all default: it would shadow every per-role child pin.
     subagent: explicitRoleModelPin("subagent"),
     quick: explicitRoleModelPin("quick"),

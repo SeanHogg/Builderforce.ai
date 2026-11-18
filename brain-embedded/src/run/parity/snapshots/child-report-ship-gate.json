@@ -801,7 +801,7 @@
     }
    ],
    "tool_choice": "auto",
-   "role": "verify",
+   "role": "review",
    "excludeModels": [
     "pinned/model"
    ],
@@ -1024,7 +1024,7 @@
     }
    ],
    "tool_choice": "auto",
-   "role": "verify",
+   "role": "review",
    "excludeModels": [
     "pinned/model"
    ],
@@ -1266,7 +1266,7 @@
     }
    ],
    "tool_choice": "auto",
-   "role": "verify",
+   "role": "review",
    "excludeModels": [
     "pinned/model"
    ],
@@ -1603,7 +1603,7 @@
      "model": "fake-model",
      "requestedModel": "default",
      "step": 3,
-     "role": "verify",
+     "role": "review",
      "toolCalls": 1,
      "argBytes": 61,
      "advertisedTools": 9,
@@ -1662,7 +1662,7 @@
      "model": "fake-model",
      "requestedModel": "default",
      "step": 4,
-     "role": "verify",
+     "role": "review",
      "toolCalls": 1,
      "argBytes": 24,
      "advertisedTools": 9,
@@ -1719,7 +1719,7 @@
      "model": "fake-model",
      "requestedModel": "default",
      "step": 5,
-     "role": "verify",
+     "role": "review",
      "toolCalls": 0,
      "advertisedTools": 9,
      "catalogTools": 10,
@@ -2019,7 +2019,7 @@
      "model": "fake-model",
      "requestedModel": "default",
      "step": 3,
-     "role": "verify",
+     "role": "review",
      "toolCalls": 1,
      "argBytes": 61,
      "advertisedTools": 9,
@@ -2062,7 +2062,7 @@
      "model": "fake-model",
      "requestedModel": "default",
      "step": 4,
-     "role": "verify",
+     "role": "review",
      "toolCalls": 1,
      "argBytes": 24,
      "advertisedTools": 9,
@@ -2103,7 +2103,7 @@
      "model": "fake-model",
      "requestedModel": "default",
      "step": 5,
-     "role": "verify",
+     "role": "review",
      "toolCalls": 0,
      "advertisedTools": 9,
      "catalogTools": 10,

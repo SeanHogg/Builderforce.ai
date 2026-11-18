@@ -9,7 +9,7 @@
  * explicit caller-supplied `max_tokens` when it is lower.
  */
 
-export type OutputCapRole = 'explore' | 'utility' | 'verify' | 'chat' | 'plan' | 'code';
+export type OutputCapRole = 'explore' | 'utility' | 'verify' | 'chat' | 'plan' | 'review' | 'code';
 
 export const ROLE_OUTPUT_CAPS: Readonly<Record<OutputCapRole, number>> = {
   explore: 2_048,
@@ -17,6 +17,8 @@ export const ROLE_OUTPUT_CAPS: Readonly<Record<OutputCapRole, number>> = {
   verify: 2_048,
   chat: 4_096,
   plan: 4_096,
+  // A review writes a verdict and its findings — a plan's length, not a check's.
+  review: 4_096,
   code: 8_192,
 };
 

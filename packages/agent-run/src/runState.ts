@@ -3,7 +3,7 @@
  * transcript read back out of it, and the two facts the turns record into it.
  */
 
-import { initialRunPolicy, type RunPolicyState } from "@builderforce/run-policy";
+import { initialRunPolicy, reviewPhaseModel, type RunPolicyState } from "@builderforce/run-policy";
 import type { ParsedToolCall } from "@builderforce/agent-loop";
 import type { ReadCoverageState, RunMessage, RunPolicy, RunState, RunTask } from "./contract.js";
 import { initialFinishGateState } from "./policy/finish/gates.js";
@@ -44,13 +44,13 @@ function initialModelState(policy: RunPolicy): RunPolicyState {
   if (!start) return initialRunPolicy({ pinnedModel: policy.pinnedModel, ...(policy.modelOptions ?? {}) });
   const model = start.model ?? policy.pinnedModel ?? "";
   if (start.plain) {
-    const verify = start.phaseModels?.verify;
+    const review = reviewPhaseModel(start.phaseModels);
     return initialRunPolicy({
       pinnedModel: model,
       ...(start.strict ? { strictPin: true } : {}),
       ...(start.startPhase ? { startPhase: start.startPhase } : {}),
       ...(policy.modelOptions ?? {}),
-      ...(start.phaseModels ? { phaseModels: start.phaseModels, ...(verify ? { reviewModel: verify } : {}) } : {}),
+      ...(start.phaseModels ? { phaseModels: start.phaseModels, ...(review ? { reviewModel: review } : {}) } : {}),
     });
   }
   return initialModelRunState({
