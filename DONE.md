@@ -1,3 +1,11 @@
+## ✅ RESOLVED 2026-11-18: PRD 31 §W9 phases 6c (.NET) and 6d (Rust) released in builderforce-webcontainers v2026.11.4
+
+- **6c .NET** — Mono `browser-wasm` runtime: Roslyn compiles inside the runtime (`dotnet build`/`run`), ASP.NET Core minimal APIs run on an in-memory `IServer`, `Npgsql` (async) reaches the Postgres wire gateway over virtual TCP. SDK pinned at 10.0.115 (`global.json`, `packages.lock.json`); the ~73 MiB bundle ships a format-2 manifest with a sha256 per file. Exit test: a minimal-API service builds in the browser and does CRUD.
+- **6d Rust** — prebuilt `wasm32-wasip1` reactors on the versioned `bfwc-wasi` guest ABI v1 (`bfwc_abi_version`, `bfwc_start`/`request`/`poll`, socket imports); axum + `tokio-postgres` CRUD fixture built in CI. In-browser `rustc` gate result recorded: **fails** — it needs SharedArrayBuffer, which the runtime refuses to require — so Rust services arrive prebuilt (W6).
+- Released as one version with the W10 runtime controls (port policy with caller/owner security context, per-service database credentials, fs scope, process quota, service-worker routing guard and relay-only ATTACH). Breaking: `startApplicationRuntime(spec, { runtime })` now requires an `ApplicationHost` (a `PreviewRuntime` satisfies it).
+- Commit `5bc385b`, tag `v2026.11.4`; CI green (typecheck, .NET bundle, Rust fixtures, 567 tests); Release run 44291571927 published both packages.
+- Builderforce consumption (bump to ^2026.11.4, .NET/Rust providers and detectors in the browser run target, preview-origin worker files) stays open in make.md §W9.
+
 ## ✅ RESOLVED 2026-11-18: implementation guides, API contracts and the merge process folded into platform.md
 
 - **What changed:** `docs/guides/EMAIL_IMPLEMENTATION.md`, `docs/guides/MULTI_AUTH_IMPLEMENTATION.md`, `docs/guides/progress-handling.md`, `docs/specs/API-CONTRACTS.md` and `docs/specs/MERGE_PROCESS.md` were re-verified against the code and folded into `docs/specs/platform.md`. Still-true reference text (corrected where the code had moved on) and the open items live there; superseded and finished sections are archived word for word below. `docs/guides/` and the orphaned `docs/api/event-payload.schema.json` (it documented a ticket-progress push stream that never existed) are removed.
