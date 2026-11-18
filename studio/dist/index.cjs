@@ -7,7 +7,7 @@ var _chunkVKVEFIZWcjs = require('./chunk-VKVEFIZW.cjs');
 var _onnxruntimeweb = require('onnxruntime-web'); var ort4 = _interopRequireWildcard(_onnxruntimeweb); var ort3 = _interopRequireWildcard(_onnxruntimeweb); var ort2 = _interopRequireWildcard(_onnxruntimeweb); var ort = _interopRequireWildcard(_onnxruntimeweb);
 var _transformers = require('@huggingface/transformers');
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_36e503b1775a99ff25d9ee3c66453ae4/node_modules/@seanhogg/builderforce-webcontainers/dist/shared/idb.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_c17536c8556e3d4afd4e1b262b78d9f2/node_modules/@seanhogg/builderforce-webcontainers/dist/shared/idb.js
 var blockedOpens = /* @__PURE__ */ new WeakMap();
 function isBlocked(factory, name) {
   return _nullishCoalesce(_optionalChain([blockedOpens, 'access', _2 => _2.get, 'call', _3 => _3(factory), 'optionalAccess', _4 => _4.has, 'call', _5 => _5(name)]), () => ( false));
@@ -141,7 +141,7 @@ function lazyIdbStore(factory, config) {
   };
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_36e503b1775a99ff25d9ee3c66453ae4/node_modules/@seanhogg/builderforce-webcontainers/dist/inference/modelCache.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_c17536c8556e3d4afd4e1b262b78d9f2/node_modules/@seanhogg/builderforce-webcontainers/dist/inference/modelCache.js
 function isArrayBuffer(value) {
   return value instanceof ArrayBuffer || Object.prototype.toString.call(value) === "[object ArrayBuffer]";
 }
@@ -193,7 +193,7 @@ function createModelCache(options = {}) {
   };
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_36e503b1775a99ff25d9ee3c66453ae4/node_modules/@seanhogg/builderforce-webcontainers/dist/shared/hardwareProbe.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_c17536c8556e3d4afd4e1b262b78d9f2/node_modules/@seanhogg/builderforce-webcontainers/dist/shared/hardwareProbe.js
 var SIMD_PROBE = new Uint8Array([
   0,
   97,
@@ -231,7 +231,7 @@ function probeDeviceMemoryBytes() {
   return typeof deviceMemory === "number" && deviceMemory > 0 ? deviceMemory * GIB : void 0;
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_36e503b1775a99ff25d9ee3c66453ae4/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/estimates.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_c17536c8556e3d4afd4e1b262b78d9f2/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/estimates.js
 var DEFAULT_THROUGHPUT = {
   // A RAM hit is not a reload; callers should not ask. Kept non-zero for safety.
   ram: 1e6,
@@ -248,19 +248,19 @@ function estimateReloadCostMs(input) {
   return bytes / throughput;
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_36e503b1775a99ff25d9ee3c66453ae4/node_modules/@seanhogg/builderforce-webcontainers/dist/shared/clock.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_c17536c8556e3d4afd4e1b262b78d9f2/node_modules/@seanhogg/builderforce-webcontainers/dist/shared/clock.js
 function now() {
   const g = globalThis;
   return _nullishCoalesce(_optionalChain([g, 'access', _16 => _16.performance, 'optionalAccess', _17 => _17.now, 'optionalCall', _18 => _18()]), () => ( Date.now()));
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_36e503b1775a99ff25d9ee3c66453ae4/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/envProbe.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_c17536c8556e3d4afd4e1b262b78d9f2/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/envProbe.js
 var DEFAULT_RAM_BYTES = 4 * 1024 * 1024 * 1024;
 function probeRamBytes() {
   return _nullishCoalesce(probeDeviceMemoryBytes(), () => ( DEFAULT_RAM_BYTES));
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_36e503b1775a99ff25d9ee3c66453ae4/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/eviction.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_c17536c8556e3d4afd4e1b262b78d9f2/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/eviction.js
 function byNumber(pick, direction2) {
   const sign = direction2 === "asc" ? 1 : -1;
   return (a, b) => {
@@ -289,7 +289,7 @@ function clamp01(value) {
   return Math.min(1, Math.max(0, value));
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_36e503b1775a99ff25d9ee3c66453ae4/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/pressure.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_c17536c8556e3d4afd4e1b262b78d9f2/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/pressure.js
 function detectPressure(input) {
   const budget = input.byteBudget > 0 ? input.byteBudget : 1;
   const used = Math.max(0, input.usedBytes);
@@ -345,7 +345,7 @@ function clamp012(value) {
   return Math.min(1, Math.max(0, value));
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_36e503b1775a99ff25d9ee3c66453ae4/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/spillTier.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_c17536c8556e3d4afd4e1b262b78d9f2/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/spillTier.js
 function resolveStorageBudget(configured2, storageQuotaBytes, byteBudget) {
   if (configured2 === 0)
     return 0;
@@ -452,7 +452,7 @@ function createSpillTier(options) {
   };
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_36e503b1775a99ff25d9ee3c66453ae4/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/victims.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_c17536c8556e3d4afd4e1b262b78d9f2/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/victims.js
 function quotaApplies(quota, entry) {
   if (quota.group !== entry.group)
     return false;
@@ -509,7 +509,7 @@ function selectVictims(query) {
   return void 0;
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_36e503b1775a99ff25d9ee3c66453ae4/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/workspace.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_c17536c8556e3d4afd4e1b262b78d9f2/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/workspace.js
 function createWorkspaceController(options) {
   const { bounds, byteBudget } = options;
   const active = bounds.maxBytes > 0 || bounds.minBytes > 0;
@@ -553,7 +553,7 @@ function createWorkspaceController(options) {
   };
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_36e503b1775a99ff25d9ee3c66453ae4/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/manager.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_c17536c8556e3d4afd4e1b262b78d9f2/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/manager.js
 var DEFAULT_PRESSURE = 0.85;
 var DEFAULT_WATERMARK = 0.7;
 var DEFAULT_EVENT_LIMIT = 256;
@@ -858,7 +858,7 @@ function snapshot(entry) {
   return { ...entry };
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_36e503b1775a99ff25d9ee3c66453ae4/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/admission.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_c17536c8556e3d4afd4e1b262b78d9f2/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/admission.js
 function createAdmissionGate(options) {
   const { ledger } = options;
   const counters = ledger.counters;
@@ -891,7 +891,7 @@ function createAdmissionGate(options) {
   };
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_36e503b1775a99ff25d9ee3c66453ae4/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/loadRegistry.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_c17536c8556e3d4afd4e1b262b78d9f2/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/loadRegistry.js
 function abortErrorOf(signal) {
   const reason = signal.reason;
   if (reason instanceof Error)
@@ -988,7 +988,7 @@ function createLoadRegistry(options) {
   };
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_36e503b1775a99ff25d9ee3c66453ae4/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/predictor.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_c17536c8556e3d4afd4e1b262b78d9f2/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/predictor.js
 function targetFor(index, id) {
   const known = index.get(id);
   if (known)
@@ -1127,7 +1127,7 @@ function clamp013(value) {
   return Math.min(1, Math.max(0, value));
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_36e503b1775a99ff25d9ee3c66453ae4/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/residentStore.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_c17536c8556e3d4afd4e1b262b78d9f2/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/residentStore.js
 function isUnclaimedPrefetch(entry) {
   return entry.source === "prefetch" && !entry.claimed;
 }
@@ -1202,7 +1202,7 @@ function createResidentStore(options) {
   };
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_36e503b1775a99ff25d9ee3c66453ae4/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/selfTuner.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_c17536c8556e3d4afd4e1b262b78d9f2/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/selfTuner.js
 function createSelfTuner(options) {
   const maxTracked = Math.max(1, options.maxTrackedLoads);
   let outstanding = [];
@@ -1266,7 +1266,7 @@ function createSelfTuner(options) {
   };
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_36e503b1775a99ff25d9ee3c66453ae4/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/stats.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_c17536c8556e3d4afd4e1b262b78d9f2/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/stats.js
 function createPrefetchLedger(options) {
   const counters = {
     hits: 0,
@@ -1333,7 +1333,7 @@ function createPrefetchLedger(options) {
   };
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_36e503b1775a99ff25d9ee3c66453ae4/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/targetIndex.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_c17536c8556e3d4afd4e1b262b78d9f2/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/targetIndex.js
 function createTargetIndex(declared, maxLearned) {
   const index = /* @__PURE__ */ new Map();
   for (const target of declared)
@@ -1358,7 +1358,7 @@ function createTargetIndex(declared, maxLearned) {
   };
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_36e503b1775a99ff25d9ee3c66453ae4/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/prefetcher.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_c17536c8556e3d4afd4e1b262b78d9f2/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/prefetcher.js
 var DEFAULT_MAX_CONCURRENT = 2;
 var DEFAULT_MAX_TARGETS_PER_REQUEST = 8;
 var DEFAULT_HISTORY_WINDOW = 32;

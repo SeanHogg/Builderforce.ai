@@ -74,7 +74,7 @@
     "@seanhogg/builderforce-memory": "^2026.10.82",
     "@seanhogg/builderforce-memory-engine": "^2026.10.65",
     "@seanhogg/builderforce-quality": "^2026.8.0",
-    "@seanhogg/builderforce-webcontainers": "^2026.11.3",
+    "@seanhogg/builderforce-webcontainers": "^2026.11.4",
     "drizzle-orm": "^0.45.4",
     "fflate": "^0.8.2",
     "hono": "^4.13.16",

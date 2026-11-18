@@ -38,7 +38,7 @@ describe('serveBrowserPreviewOrigin', () => {
     expect((await res.text()).length).toBeGreaterThan(1000);
   });
 
-  it.each(['python-worker.js', 'php-worker.js'])('serves the %s process worker beside the relay too', async (name) => {
+  it.each(['python-worker.js', 'php-worker.js', 'dotnet-worker.js', 'rust-worker.js'])('serves the %s process worker beside the relay too', async (name) => {
     const res = get(`https://preview.builderforce.ai/__bfwc/${name}`)!;
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toMatch(/javascript/);
@@ -62,7 +62,7 @@ describe('serveBrowserPreviewOrigin', () => {
   });
 });
 
-const WORKERS = ['process-worker.js', 'python-worker.js', 'php-worker.js'] as const;
+const WORKERS = ['process-worker.js', 'python-worker.js', 'php-worker.js', 'dotnet-worker.js', 'rust-worker.js'] as const;
 const SECRET = 'test-secret';
 
 /** `directive` → its source list, from a CSP header. */
@@ -114,6 +114,8 @@ describe('egress CSP on the preview scripts (W10 control 6)', () => {
       'https://preview.builderforce.ai/__bfwc/process-worker.js',
       'https://preview.builderforce.ai/__bfwc/python-worker.js',
       'https://preview.builderforce.ai/__bfwc/php-worker.js',
+      'https://preview.builderforce.ai/__bfwc/dotnet-worker.js',
+      'https://preview.builderforce.ai/__bfwc/rust-worker.js',
     ]);
     expect(d.get('connect-src')).toEqual(["'none'"]);
     expect(d.has('default-src')).toBe(false); // the relay's one inline script must still run

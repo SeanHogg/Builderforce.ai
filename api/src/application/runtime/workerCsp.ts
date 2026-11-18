@@ -1,7 +1,8 @@
 /**
  * Egress CSP for the in-browser preview origin's scripts (make.md §4 W10, control 6).
  *
- * The process Workers (`process-worker.js`, `python-worker.js`, `php-worker.js`) run the
+ * The process Workers (`process-worker.js`, `python-worker.js`, `php-worker.js`,
+ * `dotnet-worker.js`, `rust-worker.js`) run the
  * user's app code on `preview.builderforce.ai`. Nothing inside them is a security
  * boundary (W10 principle 2), so egress is decided by the browser: the CSP header on the
  * worker script's own response becomes the Worker global's policy (CSP3). `connect-src`
@@ -49,7 +50,7 @@
  * imports nothing (`script-src` falls back to `'none'`).
  *
  * `relay.html` keeps `frame-ancestors` first and adds `worker-src` naming exactly the
- * four scripts it starts (the query, e.g. `?policy=`, is ignored by CSP path matching),
+ * scripts it starts ({@link PREVIEW_WORKER_SCRIPTS}; the query, e.g. `?policy=`, is ignored by CSP path matching),
  * `connect-src 'none'`, `object-src 'none'` and `base-uri 'none'`. It has one inline
  * script, so neither `default-src` nor `script-src` is set on it.
  *
@@ -109,8 +110,10 @@ export const DEFAULT_CONNECT_SOURCES: readonly string[] = [
 /** Where the runtimes import interpreter and library scripts from. */
 export const WORKER_SCRIPT_SOURCES: readonly string[] = ["'unsafe-eval'", "'wasm-unsafe-eval'", 'https://cdn.jsdelivr.net'];
 
-/** The scripts the relay may start: the service worker and the three process Workers. */
-export const PREVIEW_WORKER_SCRIPTS = ['sw.js', 'process-worker.js', 'python-worker.js', 'php-worker.js'] as const;
+/** The scripts the relay may start: the service worker and the five process Workers. */
+export const PREVIEW_WORKER_SCRIPTS = [
+  'sw.js', 'process-worker.js', 'python-worker.js', 'php-worker.js', 'dotnet-worker.js', 'rust-worker.js',
+] as const;
 
 const reporting = `report-uri ${CSP_REPORT_URL}; report-to ${CSP_REPORT_GROUP}`;
 

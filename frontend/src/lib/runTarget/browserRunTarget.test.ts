@@ -17,6 +17,8 @@ vi.mock('@seanhogg/builderforce-webcontainers', async (importOriginal) => ({
     onError: () => () => undefined,
     onPreviewConsole: () => () => undefined,
     listProcesses: () => [],
+    portPolicy: { register: () => () => undefined },
+    killApplication: () => undefined,
   }),
 }));
 
@@ -28,7 +30,9 @@ vi.mock('@seanhogg/builderforce-webcontainers/app', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@seanhogg/builderforce-webcontainers/app')>()),
   createNodeProvider: () => ({ id: 'node' }),
   createPgliteProvider: () => ({ id: 'pglite' }),
-  startApplicationRuntime: (_spec: unknown, options: { providers: Array<{ id: string }> }) => {
+  startApplicationRuntime: (_spec: unknown, options: { runtime: { portPolicy: unknown }; providers: Array<{ id: string }> }) => {
+    // The application runs on the page's one preview runtime (its port policy and processes).
+    if (!options.runtime?.portPolicy) throw new Error('startApplicationRuntime needs the preview runtime');
     providerIds.push(options.providers.map((provider) => provider.id));
     const app = {
       start: vi.fn(async () => undefined),

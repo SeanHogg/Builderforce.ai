@@ -90,6 +90,9 @@ async function startSerialised(blueprint: AppBlueprint | null, context: RunConte
   runtime.setPreviewScripts([PREVIEW_CAPTURE_SCRIPT]);
 
   const application = app.startApplicationRuntime(judged.spec, {
+    // The runtime the services spawn on: its port policy puts the app's `dependsOn`
+    // graph in force while it runs, and its attributed processes end when it stops.
+    runtime,
     providers: [
       app.createNodeProvider(runtime),
       app.createPgliteProvider(runtime),

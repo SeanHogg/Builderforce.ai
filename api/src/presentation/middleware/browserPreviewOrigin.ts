@@ -21,7 +21,9 @@
  * declared origins (`application/runtime/workerEgressPolicy`). The URL, query included,
  * is the cache key, so responses for different policies never share a cache entry.
  */
-import { phpWorkerSource, processWorkerSource, pythonWorkerSource, relayHtml, serviceWorkerSource } from '@seanhogg/builderforce-webcontainers/assets';
+import {
+  dotnetWorkerSource, phpWorkerSource, processWorkerSource, pythonWorkerSource, relayHtml, rustWorkerSource, serviceWorkerSource,
+} from '@seanhogg/builderforce-webcontainers/assets';
 import { PREVIEW_HOST } from '../../application/runtime/previewIngress';
 import {
   PREVIEW_SCRIPT_PREFIX, REPORTING_ENDPOINTS_HEADER, relayCsp, serviceWorkerCsp, workerScriptCsp,
@@ -73,6 +75,10 @@ const ASSETS: Record<string, PreviewAsset> = {
   // worker CSP allows.
   'python-worker.js': { body: pythonWorkerSource, contentType: 'text/javascript; charset=utf-8', cacheControl: 'public, max-age=300', csp: 'process-worker' },
   'php-worker.js': { body: phpWorkerSource, contentType: 'text/javascript; charset=utf-8', cacheControl: 'public, max-age=300', csp: 'process-worker' },
+  // .NET and Rust processes, started by the same relay: the same origin and the same
+  // egress CSP as the other process Workers.
+  'dotnet-worker.js': { body: dotnetWorkerSource, contentType: 'text/javascript; charset=utf-8', cacheControl: 'public, max-age=300', csp: 'process-worker' },
+  'rust-worker.js': { body: rustWorkerSource, contentType: 'text/javascript; charset=utf-8', cacheControl: 'public, max-age=300', csp: 'process-worker' },
 };
 
 function cspFor(kind: CspKind, corsOrigins: string | undefined, policy: WorkerEgressPolicy): string {
