@@ -1177,7 +1177,7 @@ Binding (2026-09-26): (1) hired.video still ports; (2) **paid tenants may choose
 **Acceptance:** a fork of hired.video connected to a PRO project runs `wrangler dev` + `vite dev` in a container; the SPA renders in `LivePreviewPanel` with login working against the local Worker and a Neon branch; an agent's React edit hot-reloads in the panel; the agent calls `preview_screenshot` to confirm it and opens a PR whose `verify` (tsc for api + frontend) ran green in the container.
 
 **Remaining (verified 2026-11-17):**
-- W1.1: container declared (`api/wrangler.toml:160-164`) but no `instance_type`; live preview is off (`PREVIEW_INGRESS_ENABLED` unset — ROADMAP "Live container preview off").
+- W1.1: container declared with `instance_type = "standard-1"` (D6); live preview is off (`PREVIEW_INGRESS_ENABLED` unset — ROADMAP "Live container preview off").
 - W1.2: `api/container/Dockerfile:7-13` installs only git/ca-certificates/bash/sudo on `node:24-bookworm-slim`.
 - W1.3: install is hard-coded `npm install --prefer-offline` (`api/src/application/runtime/previewDevServer.ts:229`); not blueprint-driven, not lockfile-aware, single root.
 - W1.4: the generated-Vite-marker bug is fixed (`previewDevServer.ts:238` keys on the user's `VITE_CONFIG_FILES`), but candidates remain a hard-coded list (`:230-240`) and `application/runtime` never reads the blueprint.

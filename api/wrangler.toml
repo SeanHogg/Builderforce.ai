@@ -160,6 +160,8 @@ class_name = "TenantRateLimiterDO"
 [[containers]]
 class_name = "AgentContainerDO"
 image = "./container/Dockerfile"
+# D6 (make.md PRD 31 §2): run loops need at least `standard` (renamed `standard-1` in wrangler 4.x).
+instance_type = "standard-1"
 max_instances = 25
 name = "builderforce-agent-container"
 
