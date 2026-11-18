@@ -21,6 +21,27 @@ export const APPROVED_BY = 'planning model';
  */
 export const APPROVED_PERMANENT = [
   {
+    file: 'api/src/application/runtime/cloudAdapter.sharedTask.test.ts',
+    blob: 'af4f9ea349fcacd0efb94f8433ccb1e1c6c6ca13',
+    changed: "The host fixture's `verifyPin: undefined` becomes `reviewPin: undefined`; every expectation is unchanged.",
+    reason: "Intended change (6e6911185, BYO role routing, chat #153027): code review is its own `review` role, so the cloud host's review pin is named for it. A rename only.",
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'brain-embedded/src/hostModelStream.test.ts',
+    blob: '726564e0efe4e55e697db66e87f95ba7ad5f2ae0',
+    changed: "Ten account mocks change from `async () => [kimi]` to `async () => ({ accounts: [kimi] })`; the import gains `ByoOrderQuery`; cases are added for lead/trail placement, free-first and the Hybrid Auto account-first order. Every original routing outcome is asserted as before.",
+    reason: "Intended change (6e6911185, BYO role routing, chat #153027): the accounts port now returns the server-ordered `{ accounts, freeFirst }` so a host-called account takes its place in the tenant's order instead of always leading.",
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'packages/agent-run/test/model/model.test.ts',
+    blob: 'a790f6155aa942a9097945ce2b832ecc5812654d',
+    changed: "`policyRole(\"verify\")` now expects `{ startPhase: \"verify\", fixedRole: \"verify\" }`; `review` cases are added.",
+    reason: "Intended change (6e6911185, BYO role routing, chat #153027): verify-phase review turns are sent as `review` (strongest models), so a delegated build-and-test `verify` child pins `fixedRole: 'verify'` to stay on the cheapest model.",
+    approvedBy: APPROVED_BY,
+  },
+  {
     file: 'brain-embedded/src/run/brainCloseOut.test.ts',
     blob: 'b6d6df92d116604a91c4ae1ccb7b01cc39448a69',
     changed: "Four expectations: a close-out over a self-review now finishes with reviewRecorded false (was true) and records no review, while the ticket still moves to done.",
