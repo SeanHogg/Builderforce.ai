@@ -48,6 +48,7 @@ export interface WorkloadInput {
 export const TYPICAL_OUTPUT_TOKENS: Readonly<Record<ModelRole, number>> = {
   code: 4000,
   plan: 1500,
+  review: 1200,
   verify: 800,
   explore: 1000,
   chat: 800,

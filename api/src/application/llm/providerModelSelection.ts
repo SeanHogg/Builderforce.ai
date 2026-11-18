@@ -14,6 +14,7 @@ import { tenantLlmProviderModels } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { isSupportedProvider, type LlmProvider } from './llmProviderCatalog';
 import { providerModelSelectionCacheKey } from './providerModelCacheKeys';
+import { invalidateByoRoleOrder } from './byoRoleOrderCache';
 
 /** Same ceiling as an OpenRouter connection's model set — a failover list, not a catalog. */
 export const MAX_SELECTED_PROVIDER_MODELS = 25;
@@ -103,5 +104,8 @@ export async function replaceProviderModelSelection(
         AND model_id NOT IN (SELECT model_id FROM chosen)
     `);
   }
-  await invalidateCached(env, providerModelSelectionCacheKey(tenantId));
+  await Promise.all([
+    invalidateCached(env, providerModelSelectionCacheKey(tenantId)),
+    invalidateByoRoleOrder(env, tenantId),
+  ]);
 }

@@ -24,3 +24,5 @@ export {
 } from "./shape";
 export * from "./ops";
 export * as nn from "./nn";
+/** Training engine (autograd, nn, optim) — also at `@webdit/torch/autograd`. */
+export * as autograd from "./autograd";

@@ -31,6 +31,7 @@
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { invalidateByoRoleOrder } from './byoRoleOrderCache';
 import { deferPastResponse } from '../shared/requestScope';
 
 /** Used share of the tightest window at which an account stops leading. */
@@ -184,7 +185,8 @@ export async function recordLowHeadroom(env: HeadroomEnv, tenantId: number, vend
   const ttl = recordSeconds(h);
   memoryRecords.set(key, Date.now() + ttl * 1000);
   try {
-    await invalidateCached(env as unknown as Env, key);
+    // The editor's per-role order (`GET /llm/byo-order`) marks this account unhealthy too.
+    await Promise.all([invalidateCached(env as unknown as Env, key), invalidateByoRoleOrder(env as unknown as Env, tenantId)]);
     if (env.AUTH_CACHE_KV) await env.AUTH_CACHE_KV.put(key, JSON.stringify(h), { expirationTtl: ttl });
   } catch (error) { /* advisory — routing still works without the record */
     reportCaughtError(error, { source: 'application/llm/providerHeadroom.ts', operation: 'recordLowHeadroom' });

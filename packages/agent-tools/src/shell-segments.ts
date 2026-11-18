@@ -85,13 +85,16 @@ export function commandWords(words: readonly string[]): string[] {
   return words.slice(i);
 }
 
-/** A `git` invocation's arguments split at its subcommand: global options (`-C <dir>`, `-c k=v`, `--no-pager`, …) skipped, `-C`'s directory kept. */
+/** git's global options that take their value as the NEXT word (`--git-dir=/x` is one word and needs no entry). */
+const GIT_VALUED_GLOBALS = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--super-prefix", "--config-env"]);
+
+/** A `git` invocation's arguments split at its subcommand: global options (`-C <dir>`, `-c k=v`, `--git-dir <x>`, `--no-pager`, …) skipped, `-C`'s directory kept. */
 export function gitSubcommand(args: readonly string[]): { sub?: string; rest: string[]; dir?: string } {
   let i = 0;
   let dir: string | undefined;
   while (i < args.length && (args[i] ?? "").startsWith("-")) {
     if (args[i] === "-C") dir = args[i + 1];
-    i += args[i] === "-C" || args[i] === "-c" ? 2 : 1;
+    i += GIT_VALUED_GLOBALS.has(args[i] ?? "") ? 2 : 1;
   }
   return { ...(args[i] !== undefined ? { sub: args[i] } : {}), rest: args.slice(i + 1), ...(dir !== undefined ? { dir } : {}) };
 }

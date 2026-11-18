@@ -9,7 +9,7 @@
     "declaration": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": []
+    "types": ["@webgpu/types"]
   },
   "include": ["src/**/*"]
 }

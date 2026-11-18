@@ -5,6 +5,7 @@
  *
  * GET    /provider-keys                       → configured providers + auth type + priority
  * GET    /byo-precedence                      → the mixed provider/connection precedence
+ * GET    /byo-order?role=<ModelRole>          → connected models in the gateway's order for that role
  * GET    /provider-keys/:provider/status      → credential health + 30-day usage
  * POST   /provider-keys/:provider/test        → one tiny strict-pinned probe
  * PUT    /provider-keys/priority              → set BYO precedence { order: ref[] }
@@ -26,6 +27,8 @@ import {
 } from '../../../application/llm/tenantProviderKeyService';
 import { USAGE_WINDOW_DAYS } from '../../../application/llm/openRouterConnectionService';
 import { listByoPrecedence, parsePrecedenceRef, setByoPrecedence } from '../../../application/llm/byoPrecedence';
+import { loadByoRoleOrder, parseByoOrderRole } from '../../../application/llm/byoRoleOrder';
+import { requestDb } from '../../../application/shared/dbHandle';
 import { clearProviderAuthAlert, loadProviderAuthAlert } from '../../../application/llm/providerAuthAlerts';
 import { probeByoProvider } from '../../../application/llm/byoCredentialHealth';
 import { resolveProviderKeyHealth, withOtherWorkspaceVerdict } from '../../../application/llm/providerKeyHealth';
@@ -71,6 +74,16 @@ export function mountProviderKeyRoutes(router: Hono<HonoEnv>): void {
     let access: TenantAccess;
     try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
     return c.json({ entries: await listByoPrecedence(c.env, access.tenantId) });
+  });
+
+  // The connected accounts' models in the order the gateway tries them for a `byo_pool`
+  // call of `role` (absent/unknown → code), so the editor calls its own accounts in the
+  // server's order. The use case is `loadByoRoleOrder`; the order is the gateway's own.
+  router.get('/byo-order', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const role = parseByoOrderRole(c.req.query('role'));
+    return c.json(await loadByoRoleOrder(c.env, requestDb(c), access.tenantId, role));
   });
 
   // Credential health plus tenant-observed usage for the provider details drawer.

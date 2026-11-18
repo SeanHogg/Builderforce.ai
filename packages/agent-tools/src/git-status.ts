@@ -153,21 +153,42 @@ function parseHeader(line: string | undefined): Header {
 
 const CONFLICT = new Set(["DD", "AU", "UD", "UA", "DU", "AA", "UU"]);
 
+/** One porcelain v1 entry line (`XY path`, `XY from -> to`, `?? path`); undefined for a header, an ignored (`!!`) or a malformed line. */
+function porcelainEntry(line: string): { xy: string; path: string; from?: string } | undefined {
+  if (line.startsWith("##")) return undefined;
+  const m = /^(..) (.+)$/.exec(line);
+  if (!m || m[1] === "!!") return undefined;
+  const [, xy = "", rest = ""] = m;
+  if (xy === "??") return { xy, path: unquoteGitPath(rest) };
+  const arrow = rest.indexOf(" -> ");
+  return arrow === -1 ? { xy, path: unquoteGitPath(rest) } : { xy, path: unquoteGitPath(rest.slice(arrow + 4)), from: unquoteGitPath(rest.slice(0, arrow)) };
+}
+
+/** THE changed paths of `git status --porcelain` output, in order (a rename is its NEW path). */
+export function parsePorcelainPaths(stdout: string): string[] {
+  return stdout.split(/\r?\n/).flatMap((line) => {
+    const entry = porcelainEntry(line);
+    return entry ? [entry.path] : [];
+  });
+}
+
+/** THE pending-changes phrase the branch-switch refusals share: `4 uncommitted change(s) (a, b, c, and 1 more)`. */
+export function pendingChangesSummary(paths: readonly string[], named = 3): string {
+  const more = paths.length > named ? `, and ${paths.length - named} more` : "";
+  return `${paths.length} uncommitted change(s) (${paths.slice(0, named).join(", ")}${more})`;
+}
+
 /** Parse the entry lines (`XY path`, `XY from -> to`, `?? path`) into the four lists. */
 function parseEntries(lines: readonly string[]): Pick<GitStatusReport, "staged" | "unstaged" | "untracked" | "conflicted"> {
   const out = { staged: [] as GitStatusEntry[], unstaged: [] as GitStatusEntry[], untracked: [] as string[], conflicted: [] as string[] };
   for (const line of lines) {
-    if (line.length < 4 || line.startsWith("##")) continue;
-    const xy = line.slice(0, 2);
-    const rest = line.slice(3);
-    if (xy === "!!") continue;
+    const entry = line.length < 4 ? undefined : porcelainEntry(line);
+    if (!entry) continue;
+    const { xy, path, from } = entry;
     if (xy === "??") {
-      out.untracked.push(unquoteGitPath(rest));
+      out.untracked.push(path);
       continue;
     }
-    const arrow = rest.indexOf(" -> ");
-    const path = unquoteGitPath(arrow === -1 ? rest : rest.slice(arrow + 4));
-    const from = arrow === -1 ? undefined : unquoteGitPath(rest.slice(0, arrow));
     if (CONFLICT.has(xy)) {
       out.conflicted.push(path);
       continue;

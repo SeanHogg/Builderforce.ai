@@ -60,6 +60,7 @@ vi.mock('./openRouterConnectionService', () => ({
 }));
 
 import {
+  listTenantProviderKeys,
   setTenantProviderPriorityRanks,
   resolveTenantLlmCredentials,
   OAUTH_CAPABLE_PROVIDERS,
@@ -113,6 +114,29 @@ describe('setTenantProviderPriorityRanks — atomic re-rank', () => {
     await setTenantProviderPriorityRanks(env, 1, new Map());
     await setTenantProviderPriorityRanks(env, 1, new Map([['bogus' as LlmProvider, 0]]));
     expect(updates).toHaveLength(0);
+  });
+});
+
+describe('listTenantProviderKeys — the default order of UN-RANKED providers', () => {
+  const row = (provider: string, priority: number | null, authType = 'api_key') =>
+    ({ id: provider, provider, keyEnc: 'enc', authType, priority });
+
+  it('orders un-ranked providers by the code ladder, not the alphabet — Anthropic first', async () => {
+    // The loader returns un-ranked rows alphabetically (its SQL ORDER BY).
+    rowsBox.current = ['anthropic', 'kimi', 'minimax', 'moonshot', 'qwen', 'xai'].map((p) => row(p, null));
+    const order = (await listTenantProviderKeys(env, 31)).map((p) => p.provider);
+    expect(order[0]).toBe('anthropic');
+    // Every provider kept, none invented.
+    expect([...order].sort()).toEqual(['anthropic', 'kimi', 'minimax', 'moonshot', 'qwen', 'xai']);
+    // Kimi Code (kimi-for-coding) and Moonshot (Kimi K3) both code ahead of Grok.
+    expect(order.indexOf('moonshot')).toBeLessThan(order.indexOf('xai'));
+    expect(order.indexOf('kimi')).toBeLessThan(order.indexOf('xai'));
+  });
+
+  it('an explicit tenant rank still wins over the default', async () => {
+    rowsBox.current = [row('xai', 0), row('minimax', 1), row('anthropic', null), row('kimi', null)];
+    const order = (await listTenantProviderKeys(env, 32)).map((p) => p.provider);
+    expect(order).toEqual(['xai', 'minimax', 'anthropic', 'kimi']);
   });
 });
 

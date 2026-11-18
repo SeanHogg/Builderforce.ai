@@ -59,7 +59,7 @@ export class CpuBackend implements Backend<Tensor> {
 
   stridedCopy(a: Tensor, shape: Shape, strides: Shape, offset: number): Tensor {
     const src = a.contiguous();
-    return new Tensor(src.data, shape, strides, offset, src.dtype).contiguous();
+    return new Tensor(src.data, shape, strides, src.offset + offset, src.dtype).contiguous();
   }
 
   unary(op: UnaryOp, a: Tensor): Tensor {

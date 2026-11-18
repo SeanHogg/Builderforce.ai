@@ -2166,7 +2166,7 @@ export const llmUsageLog = pgTable('llm_usage_log', {
    *  'on_prem' | 'cloud' | 'sdk'. Drives the BYO metering exemption above so
    *  own-machine (on-prem/VSIX) BYO usage is free while cloud BYO is charged. */
   surface:          varchar('surface', { length: 16 }).notNull().default('web'),
-  /** What kind of call this row was (plan/code/verify/explore/chat/utility) —
+  /** What kind of call this row was (plan/code/review/verify/explore/chat/utility) —
    *  migration 1167. Stamped by every producer that knows it (the gateway from the
    *  request's `role`, a cloud run per turn); null for callers that send none. */
   role:             varchar('role', { length: 16 }),

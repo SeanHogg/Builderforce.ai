@@ -2,13 +2,16 @@
   "name": "@webdit/torch",
   "version": "0.0.1",
   "private": true,
-  "description": "PyTorch-style tensor library in TypeScript. Strided tensors, broadcasting, matmul, activations, NN modules. Pure JS, no native deps. CPU backend only (V0).",
+  "description": "PyTorch-style tensor library in TypeScript. Strided tensors, broadcasting, matmul, activations, NN modules, reverse-mode autograd and optimizers over a Backend port: the CPU reference backend and a WebGPU backend (pooled GPU storage, WGSL kernel registry). Pure JS, no native runtime deps.",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./nn": "./src/nn/index.ts"
+    "./nn": "./src/nn/index.ts",
+    "./autograd": "./src/autograd/index.ts",
+    "./webgpu": "./src/backend/webgpu/index.ts",
+    "./kernels": "./src/backend/webgpu/kernels/index.ts"
   },
   "files": [
     "src"

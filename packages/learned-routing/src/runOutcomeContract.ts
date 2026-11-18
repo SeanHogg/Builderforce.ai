@@ -48,7 +48,7 @@ export interface RunOutcomeRequest extends RunOutcomeTelemetry {
   /** Alias for `terminalStatus`: true → completed, false → failed. */
   success?: boolean;
   actionType?: string;
-  /** The model ROLE `model` played in this run (plan · code · verify · explore · chat ·
+  /** The model ROLE `model` played in this run (plan · code · review · verify · explore · chat ·
    *  utility) — lets the router rank per role. The route validates it; unknown → dropped. */
   role?: string;
   projectId?: number | null;

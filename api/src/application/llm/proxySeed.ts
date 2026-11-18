@@ -25,10 +25,8 @@ import {
 } from './poolRouting';
 import { composeFreeCappedCascade, buildCooldownPredicate } from './cascadeComposer';
 import { loadCooldowns, loadCooledVendors } from '../../infrastructure/auth/cooldownStore';
-import { connectionModelRefs } from './openRouterConnectionService';
-import { loadDemotedVendors } from './vendors/vendorHealth';
-import { COOLDOWN_PREFETCH_LIMIT, byoAutoSeedModels, explicitModelPreemptsByo, resolveStrictPin } from './modelPool';
-import { rankConnectedForRole } from './modelRoles';
+import { COOLDOWN_PREFETCH_LIMIT, explicitModelPreemptsByo, resolveStrictPin } from './modelPool';
+import { loadByoDemotedVendors, orderByoSeeds } from './byoSeedOrder';
 import { registryCatalogView, type PriceBook } from './catalogView';
 import { fundedFloorHintDemoted, modelsFittingContext } from './requestFit';
 import { cheaperTwinsOf, orderFreeFirst, preferFreeTwins } from './freeTier';
@@ -200,74 +198,37 @@ export async function composeCompletionSeed(
   //    branch; reuse it here for the chained path. With NO caller model, the
   //    owner's connected accounts lead the pool (soft seed) so an auto-select turn
   //    uses the tenant's OWN premium frontier model(s) before the free/paid tiers —
-  //    registration-driven (one flagship per connected provider, strongest tier
-  //    first), NOT a fixed vendor; Opus/Sonnet for Anthropic per turn shape. The
+  //    registration-driven (each connected provider's flagships, ordered by the
+  //    role's model ladder), NOT a fixed vendor; Sonnet leads a coding turn, Opus a
+  //    review. The
   //    cascade then fails over across the owner's other connected accounts, and the
   //    plan pool stays behind them all as final fallback. See byoAutoSeedModels.
   // Demote any connected vendor we KNOW is currently unhealthy out of the LEAD
   // position (it stays in the seed — see `byoAutoSeedModels`). Two independent
   // sources, unioned, because they answer different questions:
-  //   • `loadDemotedVendors` — a 5xx streak against the VENDOR, keyspace global.
-  //     It cannot speak for one owner's account, which is why it alone left a
-  //     tenant whose account returned 401 leading the seed on every request.
-  //   • `byoAlertedVendors` — a 401/403/out-of-budget recorded for THIS TENANT's
-  //     account (`providerAuthAlerts`), resolved by the caller alongside
-  //     `byoVendorPriority`. This is the half that makes a broken BYO account cost
-  //     one wasted attempt in total instead of one per run.
+  //   a 5xx streak against the VENDOR (global) and a 401/403/out-of-budget recorded
+  //   for THIS TENANT's account (`byoAlertedVendors`) — see `loadByoDemotedVendors`.
+  //   The second is what makes a broken BYO account cost one wasted attempt in total
+  //   instead of one per run.
   // Returns an empty set and issues no reads when nothing is connected, so the
   // non-BYO path is untouched.
-  const streakDemoted = await loadDemotedVendors(cfg.env, connectedByo);
-  const demotedVendors = cfg.byoAlertedVendors.length
-    ? new Set([...streakDemoted, ...cfg.byoAlertedVendors])
-    : streakDemoted;
-  const providerSeeds = byoAutoSeedModels(connectedByo, {
-    agentic: cfg.codingOnly,
+  const demotedVendors = await loadByoDemotedVendors(cfg.env, connectedByo, cfg.byoAlertedVendors);
+  // THE BYO seed order (`byoSeedOrder.ts`) — the same function `GET /llm/byo-order` hands
+  // the editor, so the accounts it calls itself are tried in the gateway's order. Each
+  // connected vendor's group, merged with the OpenRouter connections by their shared rank,
+  // then ordered for the role: the model ladder for plan / review / code (the best coder
+  // per cost leads a coding turn — or, once there is evidence, the one that has delivered
+  // best in that role), cheapest-first for verify / explore, the tenant's order for chat.
+  const { merged: rankMerged, ordered: byoSeeds } = orderByoSeeds({
+    connectedByo,
     vendorPriority: cfg.byoVendorPriority,
-    ...(demotedVendors.size ? { demotedVendors } : {}),
-    // A provider the tenant chose models for contributes that ordered list, not its flagship.
-    ...(Object.keys(cfg.byoSelectedModels).length ? { selectedModels: cfg.byoSelectedModels } : {}),
-  });
-  // Merge provider flagships and named OpenRouter model sets by their SHARED
-  // persisted rank. This is the core product behavior: "Cheap coders, then my
-  // Claude account, then Frontier" is one list, not two unrelated priorities.
-  // Grouped per vendor: a vendor with a model SELECTION contributes several models, and a
-  // one-model-per-vendor map would keep only the last of them.
-  const providerSeedsByVendor = new Map<string, string[]>();
-  for (const model of providerSeeds) {
-    const vendor = vendorForModel(model);
-    providerSeedsByVendor.set(vendor, [...(providerSeedsByVendor.get(vendor) ?? []), model]);
-  }
-  const rankedSeeds: Array<{ priority: number | null; tie: number; models: string[] }> = [
-    ...cfg.byoProviderPriorities.map((entry, tie) => ({
-      priority: entry.priority,
-      tie,
-      models: providerSeedsByVendor.get(entry.vendor) ?? [],
-    })),
-    ...cfg.openRouterConnections.map((connection, tie) => ({
-      priority: connection.priority,
-      tie: cfg.byoProviderPriorities.length + tie,
-      models: connectionModelRefs([connection]),
-    })),
-  ];
-  rankedSeeds.sort((a, b) => {
-    const ar = a.priority ?? Number.POSITIVE_INFINITY;
-    const br = b.priority ?? Number.POSITIVE_INFINITY;
-    return ar === br ? a.tie - b.tie : ar - br;
-  });
-  const rankedModels = rankedSeeds.flatMap((entry) => entry.models);
-  const rankMerged = [...new Set([
-    ...rankedModels,
-    ...providerSeeds.filter((model) => !rankedModels.includes(model)),
-  ])];
-  // Order for what this call is FOR, with health re-applied as the outermost key:
-  // the rank merge above re-sorts by persisted priority alone, which is how a vendor
-  // `byoAutoSeedModels` had demoted for faulting got pulled back to the lead whenever
-  // the tenant ranked it first. A coding turn then leads with the strongest connected
-  // model — or, once there is evidence, the one that has delivered best in that role;
-  // a planning turn keeps the tenant's order.
-  const byoSeeds = rankConnectedForRole(rankMerged, {
-    role: workload.role,
-    arcStage: workload.arcStage,
+    providerPriorities: cfg.byoProviderPriorities,
+    openRouterConnections: cfg.openRouterConnections,
+    selectedModels: cfg.byoSelectedModels,
+  }, {
+    agentic: cfg.codingOnly,
+    ...(workload.role ? { role: workload.role } : {}),
+    ...(workload.arcStage ? { arcStage: workload.arcStage } : {}),
     demotedVendors,
     ...(opts?.roleStats ? { stats: opts.roleStats } : {}),
     ...(explore ? { explore } : {}),

@@ -63,6 +63,7 @@ import { listProviderModelSelections, type ProviderModelSelections } from './pro
 import { invalidateProviderModelCaches } from './providerModelCacheKeys';
 import { loadTenantProviderRows, invalidateTenantProviderRows } from './tenantProviderRows';
 import { byoSelectedModelRefs } from './byoModelRouting';
+import { compareByoPrecedence } from './byoProviderLadder';
 
 export {
   SUPPORTED_PROVIDERS,
@@ -768,13 +769,13 @@ export async function providersConnectedInOtherWorkspaces(
 }
 
 /** List which providers a tenant has configured + how each authenticates (no secrets).
- *  Ordered by tenant-set BYO precedence (`priority` ascending; unset rows last), then
- *  provider id — so the caller can read the precedence straight off the array order. */
+ *  Ordered by tenant-set BYO precedence (`priority` ascending), then the UN-RANKED rows by
+ *  how well each provider codes (`compareByoPrecedence` — the catalog's code ladder, not
+ *  the alphabet) — so the caller can read the precedence straight off the array order. */
 export async function listTenantProviderKeys(
   env: Env,
   tenantId: number,
 ): Promise<ProviderKeySummary[]> {
-  // Already ordered by precedence (priority ASC, unset last, then provider).
   return (await loadTenantProviderRows(env, tenantId))
     .filter((r) => isSupportedProvider(r.provider))
     .map((r) => ({
@@ -782,7 +783,8 @@ export async function listTenantProviderKeys(
       provider: r.provider as LlmProvider,
       authType: ((r.authType ?? 'api_key') === 'oauth' ? 'oauth' : 'api_key') as ProviderAuthType,
       priority: r.priority,
-    }));
+    }))
+    .sort(compareByoPrecedence);
 }
 
 /**

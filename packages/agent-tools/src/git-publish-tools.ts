@@ -18,6 +18,7 @@ import {
   type GitShellCtx,
 } from "./git-repo-scope.js";
 import { REPO_PARAM, RESOLVE_BASE } from "./git-script-parts.js";
+import { worktreeNameShell, worktreePathFor } from "./worktree-path.js";
 
 // ── Publishing: commit → push → pull request ─────────────────────────────────────
 //
@@ -99,7 +100,8 @@ function buildCommitCommand(opts: { message: string; paths: string[]; branch?: s
     ...(branch
       ? [
           'ORIG="$(git rev-parse --show-toplevel)"',
-          `WT="$ORIG/../$(echo "${branch}" | tr '/' '-')-wt"`,
+          // THE worktree convention (`worktree-path.ts`) — the run_command refusal names the same path.
+          `WT="$ORIG/${worktreePathFor(branch)}"`,
           // This checkout's git-common-dir, physical and absolute: the identity of the
           // repository. A worktree of THIS repo shares it; a foreign checkout does not.
           'COMMON="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)"',
@@ -233,8 +235,10 @@ function buildCleanupCommand(opts: { branch?: string; baseBranch?: string; force
     // checkout), and git refuses to delete a branch that is checked out anywhere — so
     // remove the worktree first. Best-effort: if it is gone the branch delete below is
     // what matters.
-    'WT="$(git rev-parse --show-toplevel)/../$(echo "$TARGET" | tr / -)-wt"',
-    'if git worktree list --porcelain 2>/dev/null | grep -q "^worktree $WT$"; then git worktree remove --force "$WT" 2>/dev/null || true; fi',
+    // THE convention's path (`worktree-path.ts`), physical — git lists worktrees by their
+    // resolved absolute path, so each listed one is resolved the same way before comparing.
+    `WT="$(cd "$(git rev-parse --show-toplevel)/.." && pwd -P)/${worktreeNameShell("TARGET")}"`,
+    'git worktree list --porcelain 2>/dev/null | sed -n "s/^worktree //p" | while IFS= read -r W; do [ "$(cd "$W" 2>/dev/null && pwd -P)" = "$WT" ] && { git worktree remove --force "$W" 2>/dev/null || true; }; done; true',
     // `-D`, not `-d`: the merged-ness check above is STRICTER than git's own (it also
     // accepts the squash-merge case git cannot see), so `-d` would refuse exactly the
     // branches this tool exists to remove. Nothing reaches this line unmerged.

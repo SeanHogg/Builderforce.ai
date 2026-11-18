@@ -41,6 +41,7 @@ import { encryptSecretForStorage, decryptSecretFromStorage } from '../../infrast
 import { credentialSecret } from '../integrations/credentialCrypto';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { invalidateByoRoleOrder } from './byoRoleOrderCache';
 
 type Env = HonoEnv['Bindings'];
 
@@ -514,9 +515,13 @@ export async function deleteOpenRouterConnection(env: Env, tenantId: number, id:
 /** Drop the cached connection list for a tenant. Exported because `byoPrecedence` writes this
  *  table's `priority` column and must invalidate the same key. */
 export async function invalidateOpenRouterConnections(env: Env, tenantId: number): Promise<void> {
-  await invalidateCached(env, cacheKey(tenantId)).catch((error: unknown) => {
-    reportCaughtError(error, { source: 'application/llm/openRouterConnectionService.ts', operation: 'invalidateOpenRouterConnections' });
-  });
+  await Promise.all([
+    invalidateCached(env, cacheKey(tenantId)).catch((error: unknown) => {
+      reportCaughtError(error, { source: 'application/llm/openRouterConnectionService.ts', operation: 'invalidateOpenRouterConnections' });
+    }),
+    // Connections interleave with the providers in the BYO seed order the editor reads.
+    invalidateByoRoleOrder(env, tenantId),
+  ]);
 }
 
 /** Stamp one connection's precedence. Used only by `byoPrecedence.setByoPrecedence`, which
