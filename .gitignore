@@ -1,7 +1,7 @@
 # Builderforce.ai root .gitignore
 
-# Node
-node_modules/
+# Node (glob also catches renamed copies such as node_modules.ci-off/)
+node_modules*/
 
 # Logs
 *.log
