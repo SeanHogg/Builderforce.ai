@@ -47,6 +47,15 @@ describe('serveBrowserPreviewOrigin', () => {
     expect((await res.text()).length).toBeGreaterThan(1000);
   });
 
+  it.each(['python-worker.js', 'php-worker.js'])('serves the %s process worker beside the relay too', async (name) => {
+    const res = get(`https://preview.builderforce.ai/__bfwc/${name}`)!;
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/javascript/);
+    expect(res.headers.get('content-security-policy')).toBeNull();
+    expect(res.headers.get('cross-origin-resource-policy')).toBe('cross-origin');
+    expect((await res.text()).length).toBeGreaterThan(1000);
+  });
+
   it('never names "*" as an app origin, even when CORS is open', () => {
     const res = serveBrowserPreviewOrigin(new Request(BROWSER_PREVIEW_RELAY_URL), '*')!;
     expect(res.headers.get('content-security-policy')).not.toContain('*');
